@@ -67,6 +67,6 @@ where
 
     fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
         let fut = self.inner.call(req);
-        Box::pin(async move { fut.await })
+        Box::pin(fut)
     }
 }

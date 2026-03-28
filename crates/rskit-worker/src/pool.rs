@@ -109,7 +109,7 @@ struct Envelope<I, O: Clone + Send + 'static> {
 /// A bounded async worker pool.
 ///
 /// Internally:
-/// - One `mpsc` channel accepts [`Envelope`]s from callers.
+/// - One `mpsc` channel accepts envelopes from callers.
 /// - A [`Semaphore`] limits concurrency to `config.size`.
 /// - A [`JoinSet`] tracks spawned tasks and detects panics.
 /// - Each task gets an `mpsc::Sender<Event<O>>` to emit progress; a small

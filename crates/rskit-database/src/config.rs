@@ -28,21 +28,16 @@ impl std::fmt::Display for DbDriver {
 }
 
 /// TLS / SSL connection mode.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SslMode {
     /// Do not use TLS.
     Disable,
     /// Use TLS if the server supports it.
+    #[default]
     Prefer,
     /// Require TLS; fail if unavailable.
     Require,
-}
-
-impl Default for SslMode {
-    fn default() -> Self {
-        Self::Prefer
-    }
 }
 
 impl std::fmt::Display for SslMode {

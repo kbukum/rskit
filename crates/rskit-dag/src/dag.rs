@@ -1,13 +1,11 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 
+use crate::node::DagNode;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use tokio::sync::Mutex;
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
-use tracing;
-
-use crate::node::DagNode;
 
 /// A directed acyclic graph of executable nodes.
 ///
@@ -15,10 +13,16 @@ use crate::node::DagNode;
 /// all nodes whose dependencies are satisfied run concurrently.
 pub struct Dag {
     nodes: HashMap<String, Arc<dyn DagNode>>,
-    /// Forward edges: from_id → [to_ids] (downstream dependents)
+    /// Forward edges: `from_id` → downstream dependents
     edges: HashMap<String, Vec<String>>,
-    /// Reverse edges: to_id → [from_ids] (upstream dependencies)
+    /// Reverse edges: `to_id` → upstream dependencies
     reverse_edges: HashMap<String, Vec<String>>,
+}
+
+impl Default for Dag {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Dag {

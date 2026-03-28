@@ -4,7 +4,7 @@
 //!
 //! - [`DatabaseConfig`] — connection pool configuration with serde support.
 //! - [`Database`] — an async pool wrapping [`sqlx::AnyPool`] that implements
-//!   the [`Component`](rskit_bootstrap::Component) lifecycle trait.
+//!   the `Component` lifecycle trait.
 //! - [`Repository`] — a generic trait for entity CRUD operations.
 //! - [`FindOpts`] — builder for paginated / filtered queries.
 //! - [`SqlRepository`] — base helper struct for SQL-backed repositories.
@@ -13,7 +13,7 @@
 
 /// Database configuration types.
 pub mod config;
-/// Database pool and [`Component`](rskit_bootstrap::Component) implementation.
+/// Database pool and `Component` implementation.
 pub mod database;
 /// Repository trait and helpers.
 pub mod repository;

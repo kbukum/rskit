@@ -1,10 +1,4 @@
-use rskit_config::{ConfigLoader, ServiceConfig};
-use serde::Deserialize;
-
-#[derive(Deserialize)]
-struct TestConfig {
-    service: ServiceConfig,
-}
+use rskit_config::ConfigLoader;
 
 #[test]
 fn loader_defaults_to_empty_config() {

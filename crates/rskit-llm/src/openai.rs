@@ -3,7 +3,6 @@ use std::time::Duration;
 use async_trait::async_trait;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use serde::{Deserialize, Serialize};
-use tracing;
 
 use crate::traits::LlmProvider;
 use crate::types::{CompletionRequest, CompletionResponse, Role, TokenUsage};

@@ -286,6 +286,7 @@ mod tests {
 
     // ── Helper: service_fn that counts calls and returns a preset result ───────
 
+    #[allow(dead_code)]
     fn counting_service(
         results: Arc<std::sync::Mutex<Vec<AppResult<i32>>>>,
     ) -> impl Service<

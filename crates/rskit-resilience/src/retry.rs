@@ -58,9 +58,11 @@ pub struct RetryPolicy {
     pub jitter: bool,
     /// Predicate that decides whether a given error is worth retrying.
     /// When `None`, defaults to `AppError::is_retryable()`.
+    #[allow(clippy::type_complexity)]
     pub retry_if: Option<Arc<dyn Fn(&AppError) -> bool + Send + Sync>>,
     /// Called after each failed attempt before the next backoff sleep.
     /// Arguments: `(attempt_number, error)`.
+    #[allow(clippy::type_complexity)]
     pub on_retry: Option<Arc<dyn Fn(u32, &AppError) + Send + Sync>>,
 }
 

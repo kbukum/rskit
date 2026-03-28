@@ -1,13 +1,13 @@
 use rskit::resilience::{CbConfig, CircuitBreaker, RetryPolicy};
 /// Facade integration tests — verify that types from all sub-crates
 /// are accessible through the `rskit` facade.
-use rskit::{AppError, AppResult, ErrorCode};
+use rskit::{AppError, ErrorCode};
 use rskit::{Health, HealthStatus};
 
 #[test]
 fn errors_accessible_via_facade() {
-    let e: AppResult<()> = Err(AppError::not_found("item", Some("1")));
-    assert_eq!(e.unwrap_err().code, ErrorCode::NotFound);
+    let e = AppError::not_found("item", Some("1"));
+    assert_eq!(e.code, ErrorCode::NotFound);
 }
 
 #[test]

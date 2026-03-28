@@ -1,4 +1,4 @@
-//! Database pool and [`Component`] implementation.
+//! Database pool and `Component` implementation.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
@@ -15,7 +15,7 @@ use crate::config::DatabaseConfig;
 
 /// Async connection pool wrapping [`sqlx::AnyPool`].
 ///
-/// Implements the [`Component`] trait for lifecycle management and health
+/// Implements the `Component` trait for lifecycle management and health
 /// reporting.  Queries that exceed the configured `slow_query_threshold` are
 /// automatically logged at `WARN` level.
 pub struct Database {

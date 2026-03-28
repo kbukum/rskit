@@ -31,18 +31,10 @@ impl Default for RegistryConfig {
 ///
 /// Components start in registration order and stop in reverse — ensuring
 /// dependants shut down before their dependencies.
+#[derive(Default)]
 pub struct Registry {
     components: Vec<Arc<dyn Component>>,
     config: RegistryConfig,
-}
-
-impl Default for Registry {
-    fn default() -> Self {
-        Self {
-            components: Vec::new(),
-            config: RegistryConfig::default(),
-        }
-    }
 }
 
 impl Registry {

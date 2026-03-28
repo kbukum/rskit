@@ -6,7 +6,7 @@ use rskit_errors::AppResult;
 /// an action on a resource.
 #[async_trait]
 pub trait Checker: Send + Sync {
-    /// Returns `Ok(())` when the action is permitted, or an
-    /// [`AppError::forbidden`] when denied.
+    /// Returns `Ok(())` when the action is permitted, or a forbidden
+    /// error when denied.
     async fn check(&self, subject: &str, action: &str, resource: &str) -> AppResult<()>;
 }
