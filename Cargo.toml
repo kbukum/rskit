@@ -158,6 +158,7 @@ which        = "7"
 
 # CLI progress bars (rskit-cli)
 indicatif    = "0.17"
+crossterm    = "0.28"
 
 # Benchmarking & snapshot testing
 criterion    = { version = "0.5", features = ["html_reports", "async_tokio"] }

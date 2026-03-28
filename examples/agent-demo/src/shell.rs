@@ -61,38 +61,30 @@ pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
 
     // Async stdin reader
     let (line_tx, mut line_rx) = tokio::sync::mpsc::channel::<String>(1);
+    let cancel_for_stdin = cancel.clone();
     tokio::task::spawn_blocking(move || {
+        let stdin = io::stdin();
         loop {
-            let mut buf = String::new();
-            if io::stdin().lock().read_line(&mut buf).is_err() {
+            if cancel_for_stdin.is_cancelled() {
                 break;
             }
-            let trimmed = buf.trim().to_string();
-            if line_tx.blocking_send(trimmed).is_err() {
-                break;
+            let mut buf = String::new();
+            match stdin.lock().read_line(&mut buf) {
+                Ok(0) | Err(_) => break,
+                Ok(_) => {
+                    let trimmed = buf.trim().to_string();
+                    if line_tx.blocking_send(trimmed).is_err() {
+                        break;
+                    }
+                }
             }
         }
     });
 
-    // Persistent status bar — always the LAST item in MultiProgress
-    let status_bar = multi.add(ProgressBar::new_spinner());
-    status_bar.set_style(ProgressStyle::with_template("  {wide_msg}").unwrap());
-    status_bar.set_message(dashboard::format_status_bar(
-        &tasks,
-        0,
-        POOL_SIZE,
-        Duration::ZERO,
-    ));
-    status_bar.enable_steady_tick(Duration::from_millis(500));
-
-    // Timer to update status bar periodically
-    let mut status_tick = tokio::time::interval(Duration::from_millis(500));
-
-    // Banner
-    multi.println(BANNER).ok();
-    multi
-        .println("  \x1b[2mType\x1b[0m \x1b[1m/help\x1b[0m \x1b[2mor\x1b[0m \x1b[1m?\x1b[0m \x1b[2mfor commands. Prefix with\x1b[0m \x1b[1m/\x1b[0m \x1b[2mfor menu style.\x1b[0m\n")
-        .ok();
+    // Banner + instructions
+    println!("{BANNER}");
+    println!("  \x1b[2mType\x1b[0m \x1b[1m/help\x1b[0m \x1b[2mor\x1b[0m \x1b[1m?\x1b[0m \x1b[2mfor commands. Prefix with\x1b[0m \x1b[1m/\x1b[0m \x1b[2mfor menu style.\x1b[0m");
+    print_status_line(&tasks, &pool, start_time);
     print_prompt();
 
     loop {
@@ -124,7 +116,7 @@ pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
                                 &format!("Analyzing {} for MIME type, metadata, and structural properties.", parts[1])
                             )).ok();
                             let task = AgentTask::Analyze { path };
-                            submit_task(&pool, &multi, &status_bar, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task, start_time).await?;
+                            submit_task(&pool, &multi, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task).await?;
                         }
                     }
 
@@ -145,7 +137,7 @@ pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
                                 &format!("Resizing {} to {}×{} using Fit mode.", parts[1], w, h)
                             )).ok();
                             let task = AgentTask::Resize { path, width: w, height: h };
-                            submit_task(&pool, &multi, &status_bar, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task, start_time).await?;
+                            submit_task(&pool, &multi, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task).await?;
                         }
                     }
 
@@ -161,7 +153,7 @@ pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
                                 &format!("Running 3-step pipeline on {}: resize → crop → rotate.", parts[1])
                             )).ok();
                             let task = AgentTask::Pipeline { path };
-                            submit_task(&pool, &multi, &status_bar, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task, start_time).await?;
+                            submit_task(&pool, &multi, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task).await?;
                         }
                     }
 
@@ -171,7 +163,7 @@ pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
                             &format!("Starting batch processing of {count} items.")
                         )).ok();
                         let task = AgentTask::BatchProcess { count };
-                        submit_task(&pool, &multi, &status_bar, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task, start_time).await?;
+                        submit_task(&pool, &multi, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task).await?;
                     }
 
                     "review" | "rv" if parts.len() >= 2 => {
@@ -186,7 +178,7 @@ pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
                                 &format!("Running code review on {}: AST analysis, security, complexity.", parts[1])
                             )).ok();
                             let task = AgentTask::CodeReview { path };
-                            submit_task(&pool, &multi, &status_bar, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task, start_time).await?;
+                            submit_task(&pool, &multi, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task).await?;
                         }
                     }
 
@@ -218,7 +210,7 @@ pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
                             },
                         ];
                         for task in demo_tasks {
-                            submit_task(&pool, &multi, &status_bar, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task, start_time).await?;
+                            submit_task(&pool, &multi, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task).await?;
                         }
                         multi.println("").ok();
                     }
@@ -333,11 +325,6 @@ pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
                     handles[pos].spinner.finish_and_clear();
                     handles.remove(pos);
                 }
-                // Immediately refresh status bar
-                let st = pool.stats();
-                status_bar.set_message(dashboard::format_status_bar(
-                    &tasks, st.running, st.capacity, start_time.elapsed()
-                ));
             }
 
             // ── Progress updates ──────────────────────────────
@@ -346,14 +333,6 @@ pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
                     t.progress = Some((update.current, update.total));
                     t.message = update.message;
                 }
-            }
-
-            // ── Status bar periodic refresh ───────────────────
-            _ = status_tick.tick() => {
-                let st = pool.stats();
-                status_bar.set_message(dashboard::format_status_bar(
-                    &tasks, st.running, st.capacity, start_time.elapsed()
-                ));
             }
 
             // ── Ctrl+C ───────────────────────────────────────
@@ -368,22 +347,19 @@ pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
     }
 
     // Graceful shutdown
-    let running: Vec<_> = tasks
-        .iter()
-        .filter(|t| t.status == TaskStatus::Running)
-        .collect();
-    if !running.is_empty() {
-        multi
-            .println(format!(
-                "  \x1b[2mWaiting for {} task(s) to finish...\x1b[0m",
-                running.len()
-            ))
-            .ok();
+    cancel.cancel();
+    for h in &handles {
+        h.spinner.finish_and_clear();
+    }
+    let running = tasks.iter().filter(|t| t.status == TaskStatus::Running).count();
+    if running > 0 {
+        println!("  \x1b[2mWaiting for {} task(s) to finish...\x1b[0m", running);
     }
     pool.shutdown().await.ok();
-    status_bar.finish_and_clear();
-    multi.println("  \x1b[1;32m👋 Done.\x1b[0m\n".to_string()).ok();
-    Ok(())
+    println!("  \x1b[1;32m👋 Done.\x1b[0m");
+
+    // Force exit — the blocking stdin thread can't be interrupted
+    std::process::exit(0);
 }
 
 // ── Task submission ───────────────────────────────────────────────────
@@ -391,21 +367,19 @@ pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
 async fn submit_task(
     pool: &Pool<AgentTask, TaskOutput>,
     multi: &MultiProgress,
-    status_bar: &ProgressBar,
     tasks: &mut Vec<TrackedTask>,
     handles: &mut Vec<RunningHandle>,
     done_tx: &tokio::sync::mpsc::UnboundedSender<Completion>,
     prog_tx: &tokio::sync::mpsc::UnboundedSender<ProgressUpdate>,
     next_id: &mut usize,
     task: AgentTask,
-    start_time: Instant,
 ) -> AppResult<()> {
     let id = *next_id;
     *next_id += 1;
     let label = task.to_string();
 
-    // Add spinner ABOVE the status bar so it stays at bottom
-    let spinner = multi.insert_before(status_bar, ProgressBar::new_spinner());
+    // Add spinner to MultiProgress
+    let spinner = multi.add(ProgressBar::new_spinner());
     spinner.set_style(
         ProgressStyle::with_template(
             "  {spinner:.cyan} \x1b[1mAgent #{prefix}\x1b[0m {wide_msg}",
@@ -489,12 +463,6 @@ async fn submit_task(
         spinner,
     });
 
-    // Immediately refresh status bar so it reflects the new task
-    let st = pool.stats();
-    status_bar.set_message(dashboard::format_status_bar(
-        tasks, st.running, st.capacity, start_time.elapsed()
-    ));
-
     Ok(())
 }
 
@@ -539,6 +507,12 @@ fn drain_completions(
 fn print_prompt() {
     print!("\x1b[1;36m❯\x1b[0m ");
     io::stdout().flush().ok();
+}
+
+fn print_status_line(tasks: &[TrackedTask], pool: &Pool<AgentTask, TaskOutput>, start_time: Instant) {
+    let st = pool.stats();
+    let bar = dashboard::format_status_bar(tasks, st.running, st.capacity, start_time.elapsed());
+    println!("  {bar}");
 }
 
 fn format_help() -> String {
