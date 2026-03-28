@@ -124,7 +124,7 @@ pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
                                 &format!("Analyzing {} for MIME type, metadata, and structural properties.", parts[1])
                             )).ok();
                             let task = AgentTask::Analyze { path };
-                            submit_task(&pool, &multi, &status_bar, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task).await?;
+                            submit_task(&pool, &multi, &status_bar, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task, start_time).await?;
                         }
                     }
 
@@ -145,7 +145,7 @@ pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
                                 &format!("Resizing {} to {}×{} using Fit mode.", parts[1], w, h)
                             )).ok();
                             let task = AgentTask::Resize { path, width: w, height: h };
-                            submit_task(&pool, &multi, &status_bar, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task).await?;
+                            submit_task(&pool, &multi, &status_bar, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task, start_time).await?;
                         }
                     }
 
@@ -161,7 +161,7 @@ pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
                                 &format!("Running 3-step pipeline on {}: resize → crop → rotate.", parts[1])
                             )).ok();
                             let task = AgentTask::Pipeline { path };
-                            submit_task(&pool, &multi, &status_bar, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task).await?;
+                            submit_task(&pool, &multi, &status_bar, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task, start_time).await?;
                         }
                     }
 
@@ -171,7 +171,7 @@ pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
                             &format!("Starting batch processing of {count} items.")
                         )).ok();
                         let task = AgentTask::BatchProcess { count };
-                        submit_task(&pool, &multi, &status_bar, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task).await?;
+                        submit_task(&pool, &multi, &status_bar, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task, start_time).await?;
                     }
 
                     "review" | "rv" if parts.len() >= 2 => {
@@ -186,7 +186,7 @@ pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
                                 &format!("Running code review on {}: AST analysis, security, complexity.", parts[1])
                             )).ok();
                             let task = AgentTask::CodeReview { path };
-                            submit_task(&pool, &multi, &status_bar, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task).await?;
+                            submit_task(&pool, &multi, &status_bar, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task, start_time).await?;
                         }
                     }
 
@@ -218,7 +218,7 @@ pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
                             },
                         ];
                         for task in demo_tasks {
-                            submit_task(&pool, &multi, &status_bar, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task).await?;
+                            submit_task(&pool, &multi, &status_bar, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task, start_time).await?;
                         }
                         multi.println("").ok();
                     }
@@ -333,6 +333,11 @@ pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
                     handles[pos].spinner.finish_and_clear();
                     handles.remove(pos);
                 }
+                // Immediately refresh status bar
+                let st = pool.stats();
+                status_bar.set_message(dashboard::format_status_bar(
+                    &tasks, st.running, st.capacity, start_time.elapsed()
+                ));
             }
 
             // ── Progress updates ──────────────────────────────
@@ -393,6 +398,7 @@ async fn submit_task(
     prog_tx: &tokio::sync::mpsc::UnboundedSender<ProgressUpdate>,
     next_id: &mut usize,
     task: AgentTask,
+    start_time: Instant,
 ) -> AppResult<()> {
     let id = *next_id;
     *next_id += 1;
@@ -441,21 +447,27 @@ async fn submit_task(
         let event_label = label.clone();
         let event_prog_tx = prog_tx;
         let event_loop = tokio::spawn(async move {
-            while let Ok(event) = events.recv().await {
-                if event.kind == EventKind::Progress {
-                    if let Some(ref p) = event.progress {
-                        let pct = p.percent.unwrap_or(0.0) as u32;
-                        let step_msg = p.message.as_deref().unwrap_or("Working...");
-                        event_spinner.set_message(format!(
-                            "({event_label}) \x1b[2m— {step_msg}\x1b[0m \x1b[36m[{pct}%]\x1b[0m"
-                        ));
-                        let _ = event_prog_tx.send(ProgressUpdate {
-                            id,
-                            current: p.current,
-                            total: p.total.unwrap_or(0),
-                            message: step_msg.to_string(),
-                        });
+            loop {
+                match events.recv().await {
+                    Ok(event) => {
+                        if event.kind == EventKind::Progress {
+                            if let Some(ref p) = event.progress {
+                                let pct = p.percent.unwrap_or(0.0) as u32;
+                                let step_msg = p.message.as_deref().unwrap_or("Working...");
+                                event_spinner.set_message(format!(
+                                    "({event_label}) \x1b[2m— {step_msg}\x1b[0m \x1b[36m[{pct}%]\x1b[0m"
+                                ));
+                                let _ = event_prog_tx.send(ProgressUpdate {
+                                    id,
+                                    current: p.current,
+                                    total: p.total.unwrap_or(0),
+                                    message: step_msg.to_string(),
+                                });
+                            }
+                        }
                     }
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(_) => break,
                 }
             }
         });
@@ -476,6 +488,12 @@ async fn submit_task(
         cancel: task_cancel,
         spinner,
     });
+
+    // Immediately refresh status bar so it reflects the new task
+    let st = pool.stats();
+    status_bar.set_message(dashboard::format_status_bar(
+        tasks, st.running, st.capacity, start_time.elapsed()
+    ));
 
     Ok(())
 }

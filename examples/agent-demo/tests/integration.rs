@@ -348,3 +348,45 @@ fn resolve_path_finds_fixtures() {
     let p = shell::resolve_path("image/real-photo.jpg");
     assert!(p.exists(), "fixture should exist at {:?}", p);
 }
+
+// ── Full demo scenario: all 4 task types in parallel ──────────────────
+
+#[tokio::test]
+async fn demo_tasks_all_complete_in_parallel() -> AppResult<()> {
+    let pool = Pool::new(
+        Arc::new(AgentHandler),
+        PoolConfig::new("demo-test").with_size(4),
+    );
+
+    let start = Instant::now();
+    let fdir = fixture_dir();
+
+    let h1 = pool.submit(AgentTask::Analyze { path: fdir.join("image/real-photo.jpg") }).await?;
+    let h2 = pool.submit(AgentTask::Resize { path: fdir.join("image/sample.png"), width: 64, height: 64 }).await?;
+    let h3 = pool.submit(AgentTask::Pipeline { path: fdir.join("image/ai-generated.jpg") }).await?;
+    let h4 = pool.submit(AgentTask::CodeReview { path: fdir.join("image/real-photo.jpg") }).await?;
+
+    let r1 = h1.result().await?;
+    let r2 = h2.result().await?;
+    let r3 = h3.result().await?;
+    let r4 = h4.result().await?;
+
+    let elapsed = start.elapsed();
+
+    // Verify each task produced correct output
+    assert!(r1.summary.contains("image/jpeg"), "analyze: {}", r1.summary);
+    assert!(r2.summary.contains("64×64"), "resize: {}", r2.summary);
+    assert!(r3.summary.contains("Pipeline"), "pipeline: {}", r3.summary);
+    assert!(r4.summary.contains("Review"), "review: {}", r4.summary);
+
+    // The longest single task is CodeReview (~20s). If run sequentially, total would be ~57s.
+    // In parallel (4 workers), should complete within the longest single task + overhead.
+    assert!(
+        elapsed < Duration::from_secs(30),
+        "4 demo tasks in parallel took {:?}, expected < 30s (sequential would be ~57s)",
+        elapsed
+    );
+
+    pool.shutdown().await.ok();
+    Ok(())
+}
