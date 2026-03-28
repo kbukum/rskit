@@ -1,6 +1,7 @@
 //! Vega-Lite spec generation for bench visualizations.
 
 use super::Reporter;
+use rskit_errors::AppResult;
 use crate::result::BenchRunResult;
 use std::io::Write;
 
