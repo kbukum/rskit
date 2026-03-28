@@ -1,0 +1,11 @@
+[build]
+# Pass --cfg docsrs when building documentation so #[cfg_attr(docsrs, ...)]
+# attributes are activated on docs.rs.
+# rustdocflags = ["--cfg", "docsrs"]   # uncomment when publishing to docs.rs
+
+[alias]
+# Convenience aliases
+xtcheck = "clippy --workspace -- -D warnings"
+xttest  = "test --workspace"
+xtdoc   = "doc --workspace --no-deps"
+xtdeny  = "deny check"

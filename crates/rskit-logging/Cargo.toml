@@ -8,9 +8,14 @@ rust-version.workspace = true
 authors.workspace      = true
 repository.workspace   = true
 homepage.workspace     = true
-documentation.workspace = true
+documentation = "https://docs.rs/rskit-logging"
+readme = "README.md"
 categories = ["development-tools"]
 keywords   = ["logging", "tracing", "observability"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 rskit-config       = { path = "../rskit-config" }

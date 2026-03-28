@@ -8,9 +8,14 @@ rust-version.workspace = true
 authors.workspace      = true
 repository.workspace   = true
 homepage.workspace     = true
-documentation.workspace = true
+documentation = "https://docs.rs/rskit-errors"
+readme = "README.md"
 categories = ["development-tools"]
 keywords   = ["error", "error-handling", "async"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 thiserror  = { workspace = true }

@@ -8,9 +8,14 @@ rust-version.workspace = true
 authors.workspace      = true
 repository.workspace   = true
 homepage.workspace     = true
-documentation.workspace = true
+documentation = "https://docs.rs/rskit-pipeline"
+readme = "README.md"
 categories = ["asynchronous"]
 keywords   = ["stream", "pipeline", "async", "futures"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 rskit-errors     = { path = "../rskit-errors" }
