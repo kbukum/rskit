@@ -74,6 +74,27 @@ jobs:
       - run: cargo doc --workspace --no-deps --document-private-items
 
   # ---------------------------------------------------------------------------
+  # Coverage (runs on stable Linux only, uploads LCOV)
+  # ---------------------------------------------------------------------------
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - run: cargo llvm-cov --workspace --lcov --output-path coverage.lcov
+      - uses: codecov/codecov-action@v4
+        with:
+          files: coverage.lcov
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  # ---------------------------------------------------------------------------
   # Supply-chain audit (cargo-deny)
   # ---------------------------------------------------------------------------
   deny:
