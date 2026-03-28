@@ -54,4 +54,10 @@ impl<O: Clone + Send + 'static> TaskHandle<O> {
     pub fn cancel(&self) {
         self.cancel.cancel();
     }
+
+    /// Clone the cancellation token so it can be stored separately
+    /// (e.g., for cancelling after the handle is consumed by `result()`).
+    pub fn cancel_token(&self) -> CancellationToken {
+        self.cancel.clone()
+    }
 }
