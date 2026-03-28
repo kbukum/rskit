@@ -34,7 +34,11 @@ pub struct Health {
 impl Health {
     /// Create a healthy report for the named component.
     pub fn healthy(name: impl Into<String>) -> Self {
-        Self { name: name.into(), status: HealthStatus::Healthy, message: None }
+        Self {
+            name: name.into(),
+            status: HealthStatus::Healthy,
+            message: None,
+        }
     }
 
     /// Create a degraded report with an explanatory message.

@@ -36,7 +36,10 @@ impl std::fmt::Debug for CbConfig {
             .field("max_failures", &self.max_failures)
             .field("timeout", &self.timeout)
             .field("half_open_max_calls", &self.half_open_max_calls)
-            .field("on_state_change", &self.on_state_change.as_ref().map(|_| "<fn>"))
+            .field(
+                "on_state_change",
+                &self.on_state_change.as_ref().map(|_| "<fn>"),
+            )
             .field("name", &self.name)
             .finish()
     }
@@ -57,7 +60,10 @@ impl Default for CbConfig {
 impl CbConfig {
     /// Create a new config with the given `name` and all other fields at defaults.
     pub fn new(name: impl Into<String>) -> Self {
-        Self { name: name.into(), ..Default::default() }
+        Self {
+            name: name.into(),
+            ..Default::default()
+        }
     }
 
     /// Set the consecutive failure threshold that trips the breaker.
@@ -210,21 +216,19 @@ impl CircuitBreaker {
         {
             let mut inner = self.inner.lock();
             match &result {
-                Ok(_) => {
-                    match inner.state {
-                        CbState::HalfOpen => {
-                            inner.successes += 1;
-                            if inner.successes >= self.config.half_open_max_calls {
-                                inner.failures = 0;
-                                self.transition(&mut inner, CbState::Closed);
-                            }
-                        }
-                        CbState::Closed => {
+                Ok(_) => match inner.state {
+                    CbState::HalfOpen => {
+                        inner.successes += 1;
+                        if inner.successes >= self.config.half_open_max_calls {
                             inner.failures = 0;
+                            self.transition(&mut inner, CbState::Closed);
                         }
-                        CbState::Open => {}
                     }
-                }
+                    CbState::Closed => {
+                        inner.failures = 0;
+                    }
+                    CbState::Open => {}
+                },
                 Err(_) => {
                     inner.failures += 1;
                     inner.last_failure = Some(Instant::now());
@@ -263,13 +267,11 @@ impl CircuitBreaker {
 
 #[cfg(test)]
 mod tests {
-    use rskit_errors::{AppError, ErrorCode};
     use super::*;
+    use rskit_errors::{AppError, ErrorCode};
 
     fn make_cb(max_failures: usize) -> CircuitBreaker {
-        CircuitBreaker::new(
-            CbConfig::new("test-cb").with_max_failures(max_failures),
-        )
+        CircuitBreaker::new(CbConfig::new("test-cb").with_max_failures(max_failures))
     }
 
     #[tokio::test]
@@ -291,9 +293,11 @@ mod tests {
         let cb = make_cb(3);
 
         for _ in 0..3 {
-            let _ = cb.execute(|| async {
-                Err::<i32, AppError>(AppError::new(ErrorCode::ConnectionFailed, "fail"))
-            }).await;
+            let _ = cb
+                .execute(|| async {
+                    Err::<i32, AppError>(AppError::new(ErrorCode::ConnectionFailed, "fail"))
+                })
+                .await;
         }
 
         assert_eq!(cb.state(), CbState::Open);
@@ -305,9 +309,11 @@ mod tests {
 
         // Trip the breaker
         for _ in 0..2 {
-            let _ = cb.execute(|| async {
-                Err::<i32, AppError>(AppError::new(ErrorCode::Internal, "fail"))
-            }).await;
+            let _ = cb
+                .execute(|| async {
+                    Err::<i32, AppError>(AppError::new(ErrorCode::Internal, "fail"))
+                })
+                .await;
         }
         assert_eq!(cb.state(), CbState::Open);
 
@@ -322,9 +328,11 @@ mod tests {
 
         // Cause some failures but not enough to open
         for _ in 0..2 {
-            let _ = cb.execute(|| async {
-                Err::<i32, AppError>(AppError::new(ErrorCode::Internal, "fail"))
-            }).await;
+            let _ = cb
+                .execute(|| async {
+                    Err::<i32, AppError>(AppError::new(ErrorCode::Internal, "fail"))
+                })
+                .await;
         }
         assert_eq!(cb.failures(), 2);
 
@@ -339,9 +347,11 @@ mod tests {
         let cb = make_cb(2);
 
         for _ in 0..2 {
-            let _ = cb.execute(|| async {
-                Err::<i32, AppError>(AppError::new(ErrorCode::Internal, "fail"))
-            }).await;
+            let _ = cb
+                .execute(|| async {
+                    Err::<i32, AppError>(AppError::new(ErrorCode::Internal, "fail"))
+                })
+                .await;
         }
         assert_eq!(cb.state(), CbState::Open);
 

@@ -1,7 +1,6 @@
 use argon2::{
-    password_hash::{PasswordHash, PasswordHasher as Argon2Hasher,
-                    PasswordVerifier, SaltString},
     Argon2,
+    password_hash::{PasswordHash, PasswordHasher as Argon2Hasher, PasswordVerifier, SaltString},
 };
 use rskit_errors::{AppError, AppResult};
 
@@ -34,13 +33,22 @@ impl PasswordHasher {
         argon2
             .hash_password(password.as_bytes(), &salt)
             .map(|h| h.to_string())
-            .map_err(|e| AppError::new(rskit_errors::ErrorCode::Internal, format!("password hash error: {e}")))
+            .map_err(|e| {
+                AppError::new(
+                    rskit_errors::ErrorCode::Internal,
+                    format!("password hash error: {e}"),
+                )
+            })
     }
 
     /// Verify that `password` matches the stored `hash`.
     pub fn verify(&self, password: &str, hash: &str) -> AppResult<bool> {
-        let parsed = PasswordHash::new(hash)
-            .map_err(|e| AppError::new(rskit_errors::ErrorCode::Internal, format!("invalid hash format: {e}")))?;
+        let parsed = PasswordHash::new(hash).map_err(|e| {
+            AppError::new(
+                rskit_errors::ErrorCode::Internal,
+                format!("invalid hash format: {e}"),
+            )
+        })?;
         Ok(Argon2::default()
             .verify_password(password.as_bytes(), &parsed)
             .is_ok())

@@ -42,7 +42,8 @@ where
     stream.then(move |item| {
         let fns = fns.clone();
         async move {
-            let handles: Vec<_> = fns.iter()
+            let handles: Vec<_> = fns
+                .iter()
                 .map(|f| {
                     let fut = f(item.clone());
                     tokio::spawn(fut)
@@ -50,9 +51,10 @@ where
                 .collect();
             let mut results = Vec::with_capacity(handles.len());
             for h in handles {
-                results.push(h.await.unwrap_or_else(|e| {
-                    Err(rskit_errors::AppError::internal(e))
-                }));
+                results.push(
+                    h.await
+                        .unwrap_or_else(|e| Err(rskit_errors::AppError::internal(e))),
+                );
             }
             results
         }

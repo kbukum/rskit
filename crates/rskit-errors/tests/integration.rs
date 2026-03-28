@@ -22,11 +22,16 @@ fn error_with_detail_and_cause_roundtrip() {
         .with_cause(cause);
     assert_eq!(err.code, ErrorCode::Timeout);
     assert!(err.cause.is_some());
-    assert_eq!(err.details.get("query").and_then(|s| s.as_str()), Some("SELECT 1"));
+    assert_eq!(
+        err.details.get("query").and_then(|s| s.as_str()),
+        Some("SELECT 1")
+    );
 }
 
 #[test]
 fn app_result_ok_passes_through() {
-    fn ok_fn() -> AppResult<u32> { Ok(42) }
+    fn ok_fn() -> AppResult<u32> {
+        Ok(42)
+    }
     assert_eq!(ok_fn().unwrap(), 42);
 }

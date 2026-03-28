@@ -25,8 +25,9 @@ pub(crate) type ServeFn = Arc<
     dyn Fn(
             SocketAddr,
             std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>>,
-        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), tonic::transport::Error>> + Send>>
-        + Send
+        ) -> std::pin::Pin<
+            Box<dyn std::future::Future<Output = Result<(), tonic::transport::Error>> + Send>,
+        > + Send
         + Sync,
 >;
 
@@ -47,7 +48,11 @@ pub struct GrpcServerBuilder {
 impl GrpcServerBuilder {
     /// Create a new builder with the given server configuration.
     pub fn new(config: GrpcServerConfig) -> Self {
-        Self { name: "grpc-server".into(), config, serve_fns: Vec::new() }
+        Self {
+            name: "grpc-server".into(),
+            config,
+            serve_fns: Vec::new(),
+        }
     }
 
     /// Override the component name (default: `"grpc-server"`).
@@ -78,7 +83,10 @@ impl GrpcServerBuilder {
         let serve_fn: ServeFn = Arc::new(move |addr, signal| {
             let s = svc.clone();
             Box::pin(async move {
-                Server::builder().add_service(s).serve_with_shutdown(addr, signal).await
+                Server::builder()
+                    .add_service(s)
+                    .serve_with_shutdown(addr, signal)
+                    .await
             })
         });
         self.serve_fns.push(serve_fn);

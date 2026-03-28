@@ -3,7 +3,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use axum::Router;
 use rskit_bootstrap::{Component, Health, Registry};
-use rskit_errors::{AppResult, AppError, ErrorCode};
+use rskit_errors::{AppError, AppResult, ErrorCode};
 use tokio_util::sync::CancellationToken;
 use tower_http::{
     cors::CorsLayer,
@@ -50,9 +50,9 @@ impl HttpServerBuilder {
     /// Add automatic `X-Request-Id` injection.
     #[must_use]
     pub fn with_request_id(mut self) -> Self {
-        self.router = self.router.layer(
-            SetRequestIdLayer::x_request_id(MakeRequestUuid),
-        );
+        self.router = self
+            .router
+            .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid));
         self
     }
 
@@ -111,15 +111,15 @@ impl Component for HttpServer {
             .take()
             .ok_or_else(|| AppError::new(ErrorCode::Internal, "HTTP server already started"))?;
 
-        let addr: std::net::SocketAddr = self
-            .config
-            .bind_addr()
-            .parse()
-            .map_err(|e| AppError::new(ErrorCode::Internal, format!("invalid bind address: {e}")))?;
+        let addr: std::net::SocketAddr = self.config.bind_addr().parse().map_err(|e| {
+            AppError::new(ErrorCode::Internal, format!("invalid bind address: {e}"))
+        })?;
 
         let cancel = self.cancel.clone();
         tokio::spawn(async move {
-            let listener = tokio::net::TcpListener::bind(addr).await.expect("bind failed");
+            let listener = tokio::net::TcpListener::bind(addr)
+                .await
+                .expect("bind failed");
             tracing::info!(%addr, "HTTP server listening");
             axum::serve(listener, router)
                 .with_graceful_shutdown(async move { cancel.cancelled().await })
@@ -142,7 +142,7 @@ impl Component for HttpServer {
 
 /// Add a `/health` endpoint returning JSON from a [`Registry`].
 pub fn health_router(registry: Arc<Registry>) -> Router {
-    use axum::{routing::get, Json};
+    use axum::{Json, routing::get};
 
     Router::new().route(
         "/health",

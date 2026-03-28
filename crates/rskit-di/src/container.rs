@@ -75,9 +75,7 @@ impl Container {
         T: Send + Sync + 'static,
         F: Fn() -> AppResult<Arc<T>> + Send + Sync + 'static,
     {
-        let f: Factory = Arc::new(move || {
-            factory().map(|v| v as ArcAny)
-        });
+        let f: Factory = Arc::new(move || factory().map(|v| v as ArcAny));
         self.registrations
             .write()
             .insert(TypeId::of::<T>(), Registration::Lazy(f));
@@ -89,9 +87,7 @@ impl Container {
         T: Send + Sync + 'static,
         F: Fn() -> AppResult<Arc<T>> + Send + Sync + 'static,
     {
-        let f: Factory = Arc::new(move || {
-            factory().map(|v| v as ArcAny)
-        });
+        let f: Factory = Arc::new(move || factory().map(|v| v as ArcAny));
         self.registrations.write().insert(
             TypeId::of::<T>(),
             Registration::Singleton {
@@ -124,9 +120,12 @@ impl Container {
                 }
             }
         };
-        arc_any
-            .downcast::<T>()
-            .map_err(|_| AppError::new(rskit_errors::ErrorCode::Internal, "type downcast failed in DI container"))
+        arc_any.downcast::<T>().map_err(|_| {
+            AppError::new(
+                rskit_errors::ErrorCode::Internal,
+                "type downcast failed in DI container",
+            )
+        })
     }
 
     /// Returns `true` if `T` has been registered.
@@ -148,7 +147,9 @@ impl Container {
 mod tests {
     use super::*;
 
-    struct Svc { val: i32 }
+    struct Svc {
+        val: i32,
+    }
 
     #[test]
     fn register_and_resolve_eager() {

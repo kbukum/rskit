@@ -39,9 +39,9 @@ impl RateLimiter {
     /// Non-blocking check: returns `Ok(())` if a token was acquired, or
     /// `Err(AppError::rate_limited())` if the bucket is empty.
     pub fn check(&self) -> AppResult<()> {
-        self.inner.check().map_err(|_| {
-            AppError::rate_limited().with_detail("rate_limiter", self.name.clone())
-        })
+        self.inner
+            .check()
+            .map_err(|_| AppError::rate_limited().with_detail("rate_limiter", self.name.clone()))
     }
 
     /// Async wait: blocks until a token is available or `cancel` fires.

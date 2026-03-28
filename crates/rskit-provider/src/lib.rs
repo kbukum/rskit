@@ -6,14 +6,14 @@
 pub mod adapt;
 /// Tower middleware layers: logging, tracing, resilience.
 pub mod middleware;
-/// Core provider traits.
-pub mod traits;
 /// [`TowerProvider`] — bridge from `tower::Service` to [`traits::RequestResponse`].
 pub mod tower_bridge;
+/// Core provider traits.
+pub mod traits;
 
 pub use adapt::{request_response_fn, sink_fn};
-pub use traits::{Duplex, DuplexChannel, Provider, RequestResponse, Sink, StreamProvider};
 pub use tower_bridge::TowerProvider;
+pub use traits::{Duplex, DuplexChannel, Provider, RequestResponse, Sink, StreamProvider};
 
 #[cfg(test)]
 mod tests {
@@ -24,7 +24,7 @@ mod tests {
     use crate::middleware::logging::LoggingLayer;
     use crate::middleware::resilience::{ResilienceConfig, ResilienceLayer};
     use crate::traits::{Provider, RequestResponse, Sink};
-    use crate::{request_response_fn, sink_fn, TowerProvider};
+    use crate::{TowerProvider, request_response_fn, sink_fn};
     use rskit_resilience::RateLimiter;
 
     // ── 1. request_response_fn_executes ──────────────────────────────────────
@@ -80,8 +80,7 @@ mod tests {
         use tower::Service;
 
         let inner = tower::service_fn(|req: i32| async move { Ok::<i32, AppError>(req) });
-        let config = ResilienceConfig::new()
-            .with_rate_limiter(RateLimiter::new("test-rl", 1, 1));
+        let config = ResilienceConfig::new().with_rate_limiter(RateLimiter::new("test-rl", 1, 1));
 
         let mut svc = ServiceBuilder::new()
             .layer(ResilienceLayer::new(config))

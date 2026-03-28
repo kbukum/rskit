@@ -47,7 +47,11 @@ async fn resolve_unknown_service_returns_empty() {
 #[test]
 fn round_robin_distributes_across_instances() {
     let rr = RoundRobin::new();
-    let instances = vec![instance("a", "svc"), instance("b", "svc"), instance("c", "svc")];
+    let instances = vec![
+        instance("a", "svc"),
+        instance("b", "svc"),
+        instance("c", "svc"),
+    ];
 
     assert_eq!(rr.pick(&instances).unwrap().id, "a");
     assert_eq!(rr.pick(&instances).unwrap().id, "b");

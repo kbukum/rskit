@@ -46,7 +46,11 @@ impl Default for GrpcServerConfig {
 impl GrpcServerConfig {
     /// Create a config with the given `host` and `port`.
     pub fn new(host: impl Into<String>, port: u16) -> Self {
-        Self { host: host.into(), port, ..Default::default() }
+        Self {
+            host: host.into(),
+            port,
+            ..Default::default()
+        }
     }
 
     /// Returns the `host:port` socket address string.
@@ -57,8 +61,8 @@ impl GrpcServerConfig {
 
 #[cfg(test)]
 mod tests {
-    use validator::Validate;
     use super::*;
+    use validator::Validate;
 
     #[test]
     fn default_config_is_valid() {
@@ -84,7 +88,10 @@ mod tests {
 
     #[test]
     fn empty_host_fails_validation() {
-        let cfg = GrpcServerConfig { host: String::new(), ..Default::default() };
+        let cfg = GrpcServerConfig {
+            host: String::new(),
+            ..Default::default()
+        };
         assert!(cfg.validate().is_err());
     }
 
@@ -94,7 +101,10 @@ mod tests {
             cert_path: "/certs/server.crt".into(),
             key_path: "/certs/server.key".into(),
         };
-        let cfg = GrpcServerConfig { tls: Some(tls.clone()), ..Default::default() };
+        let cfg = GrpcServerConfig {
+            tls: Some(tls.clone()),
+            ..Default::default()
+        };
         let stored = cfg.tls.unwrap();
         assert_eq!(stored.cert_path, "/certs/server.crt");
         assert_eq!(stored.key_path, "/certs/server.key");

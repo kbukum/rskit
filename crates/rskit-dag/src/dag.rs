@@ -59,7 +59,10 @@ impl Dag {
             ));
         }
 
-        self.edges.entry(from.to_owned()).or_default().push(to.to_owned());
+        self.edges
+            .entry(from.to_owned())
+            .or_default()
+            .push(to.to_owned());
         self.reverse_edges
             .entry(to.to_owned())
             .or_default()
@@ -178,9 +181,9 @@ impl Dag {
 
         // Process completions and schedule downstream nodes
         while let Some(result) = join_set.join_next().await {
-            let (finished_id, value) = result
-                .map_err(|e| AppError::new(ErrorCode::Internal, format!("DAG task panicked: {e}")))?
-                ?;
+            let (finished_id, value) = result.map_err(|e| {
+                AppError::new(ErrorCode::Internal, format!("DAG task panicked: {e}"))
+            })??;
 
             tracing::debug!(node = %finished_id, "DAG node completed");
             {
@@ -258,11 +261,7 @@ mod tests {
             _cancel: CancellationToken,
         ) -> Pin<Box<dyn Future<Output = AppResult<serde_json::Value>> + Send + '_>> {
             Box::pin(async move {
-                let sum: i64 = inputs
-                    .values()
-                    .filter_map(|v| v.as_i64())
-                    .sum::<i64>()
-                    + self.value;
+                let sum: i64 = inputs.values().filter_map(|v| v.as_i64()).sum::<i64>() + self.value;
                 Ok(serde_json::json!(sum))
             })
         }

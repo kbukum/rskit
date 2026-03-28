@@ -55,7 +55,10 @@ impl ResilienceLayer {
 impl<S> tower::Layer<S> for ResilienceLayer {
     type Service = ResilienceService<S>;
     fn layer(&self, inner: S) -> Self::Service {
-        ResilienceService { inner, config: self.0.clone() }
+        ResilienceService {
+            inner,
+            config: self.0.clone(),
+        }
     }
 }
 

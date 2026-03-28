@@ -54,7 +54,10 @@ where
     O: Send + Clone + 'static,
     P: RequestResponse<I, O> + Send + Sync + 'static,
 {
-    ProviderHandler { provider, _ph: std::marker::PhantomData }
+    ProviderHandler {
+        provider,
+        _ph: std::marker::PhantomData,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -89,9 +92,7 @@ where
 
         // Drain events in background — callers using the provider interface
         // have no event subscription.
-        tokio::spawn(async move {
-            while emit_rx.recv().await.is_some() {}
-        });
+        tokio::spawn(async move { while emit_rx.recv().await.is_some() {} });
 
         self.handler.handle(input, emit_tx, cancel).await
     }

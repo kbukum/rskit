@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::sync::{broadcast, mpsc, oneshot, Semaphore};
+use tokio::sync::{Semaphore, broadcast, mpsc, oneshot};
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -56,7 +56,10 @@ impl Default for PoolConfig {
 impl PoolConfig {
     /// Create a named pool configuration with sensible defaults.
     pub fn new(name: impl Into<String>) -> Self {
-        Self { name: name.into(), ..Default::default() }
+        Self {
+            name: name.into(),
+            ..Default::default()
+        }
     }
 
     /// Set the maximum number of concurrent tasks.
@@ -82,7 +85,9 @@ impl PoolConfig {
 }
 
 fn available_parallelism() -> usize {
-    std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4)
+    std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4)
 }
 
 // ---------------------------------------------------------------------------
@@ -141,7 +146,13 @@ where
             shutdown.clone(),
         ));
 
-        Pool { name: config.name, tx, semaphore, capacity: config.size, shutdown }
+        Pool {
+            name: config.name,
+            tx,
+            semaphore,
+            capacity: config.size,
+            shutdown,
+        }
     }
 
     /// Submit a task; returns a [`TaskHandle`] immediately.
@@ -155,7 +166,13 @@ where
         let handle = TaskHandle::new(id, bcast_rx, result_rx, cancel.clone());
 
         self.tx
-            .send(Envelope { id, input, events_bcast: bcast_tx, result_tx, cancel })
+            .send(Envelope {
+                id,
+                input,
+                events_bcast: bcast_tx,
+                result_tx,
+                cancel,
+            })
             .await
             .map_err(|_| {
                 AppError::new(
@@ -169,8 +186,14 @@ where
 
     /// Snapshot of pool activity.
     pub fn stats(&self) -> PoolStats {
-        let running = self.capacity.saturating_sub(self.semaphore.available_permits());
-        PoolStats { name: self.name.clone(), running, capacity: self.capacity }
+        let running = self
+            .capacity
+            .saturating_sub(self.semaphore.available_permits());
+        PoolStats {
+            name: self.name.clone(),
+            running,
+            capacity: self.capacity,
+        }
     }
 
     /// Cancel all in-flight tasks and shut down the runner loop.
@@ -249,11 +272,8 @@ async fn runner_loop<I, O>(
 ///
 /// Creates an `mpsc` channel pair for events, spawns a tiny forwarder task
 /// that copies from `mpsc` → `broadcast`, then calls the handler.
-async fn run_task<I, O>(
-    pool_name: String,
-    handler: Arc<dyn Handler<I, O>>,
-    env: Envelope<I, O>,
-) where
+async fn run_task<I, O>(pool_name: String, handler: Arc<dyn Handler<I, O>>, env: Envelope<I, O>)
+where
     I: Send + 'static,
     O: Send + Clone + 'static,
 {

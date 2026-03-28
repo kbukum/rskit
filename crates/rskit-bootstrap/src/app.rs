@@ -16,9 +16,8 @@ pub struct Unconfigured;
 
 // ─── Hook type ───────────────────────────────────────────────────────────────
 
-type Hook = Arc<
-    dyn Fn(CancellationToken) -> BoxFuture<'static, AppResult<()>> + Send + Sync + 'static,
->;
+type Hook =
+    Arc<dyn Fn(CancellationToken) -> BoxFuture<'static, AppResult<()>> + Send + Sync + 'static>;
 
 fn make_hook<F, Fut>(f: F) -> Hook
 where
@@ -303,7 +302,10 @@ mod tests {
     async fn app_builder_builds_successfully() {
         let cfg = TestCfg::default();
         let result = AppBuilder::new(cfg).build();
-        assert!(result.is_ok(), "AppBuilder::build should succeed with a valid config");
+        assert!(
+            result.is_ok(),
+            "AppBuilder::build should succeed with a valid config"
+        );
     }
 
     #[tokio::test]
@@ -312,9 +314,11 @@ mod tests {
         let app = AppBuilder::new(cfg).build().expect("build should succeed");
 
         let result = app
-            .run_task(|_cfg: Arc<TestCfg>, _cancel: CancellationToken| async move {
-                Ok::<(), rskit_errors::AppError>(())
-            })
+            .run_task(
+                |_cfg: Arc<TestCfg>, _cancel: CancellationToken| async move {
+                    Ok::<(), rskit_errors::AppError>(())
+                },
+            )
             .await;
 
         assert!(result.is_ok(), "run_task should complete with Ok(())");

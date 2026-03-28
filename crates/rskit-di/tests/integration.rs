@@ -116,9 +116,7 @@ fn is_registered_reflects_state() {
     let c = Container::new();
     assert!(!c.is_registered::<Config>());
 
-    c.register(Arc::new(Config {
-        db_url: "x".into(),
-    }));
+    c.register(Arc::new(Config { db_url: "x".into() }));
     assert!(c.is_registered::<Config>());
 }
 

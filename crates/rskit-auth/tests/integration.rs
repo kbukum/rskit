@@ -1,6 +1,8 @@
 use std::time::Duration;
 
-use rskit_auth::{JwtConfig, JwtService, PasswordHasher, ResetTokenGenerator, TokenGenerator, TokenValidator};
+use rskit_auth::{
+    JwtConfig, JwtService, PasswordHasher, ResetTokenGenerator, TokenGenerator, TokenValidator,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -29,7 +31,10 @@ fn jwt_service() -> JwtService<Claims> {
 #[tokio::test]
 async fn jwt_sign_then_validate_roundtrip() {
     let svc = jwt_service();
-    let claims = Claims { sub: "user-1".into(), exp: future_exp() };
+    let claims = Claims {
+        sub: "user-1".into(),
+        exp: future_exp(),
+    };
 
     let token = svc.generate(&claims).await.unwrap();
     let decoded = svc.validate(&token).await.unwrap();
@@ -40,7 +45,10 @@ async fn jwt_sign_then_validate_roundtrip() {
 #[tokio::test]
 async fn jwt_expired_token_fails_validation() {
     let svc = jwt_service();
-    let claims = Claims { sub: "user-1".into(), exp: 1 };
+    let claims = Claims {
+        sub: "user-1".into(),
+        exp: 1,
+    };
 
     let token = svc.generate(&claims).await.unwrap();
     let result = svc.validate(&token).await;
@@ -55,7 +63,11 @@ fn password_hash_and_verify() {
     let hasher = PasswordHasher::default();
     let hash = hasher.hash("correct-horse-battery-staple").unwrap();
 
-    assert!(hasher.verify("correct-horse-battery-staple", &hash).unwrap());
+    assert!(
+        hasher
+            .verify("correct-horse-battery-staple", &hash)
+            .unwrap()
+    );
     assert!(!hasher.verify("wrong-password", &hash).unwrap());
 }
 

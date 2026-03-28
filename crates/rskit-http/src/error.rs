@@ -18,8 +18,8 @@ impl From<AppError> for HttpError {
 
 impl IntoResponse for HttpError {
     fn into_response(self) -> Response {
-        let status =
-            StatusCode::from_u16(self.0.http_status.as_u16()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+        let status = StatusCode::from_u16(self.0.http_status.as_u16())
+            .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
         let body = serde_json::to_string(&ErrorResponse::from(&self.0)).unwrap_or_default();
         (status, [("content-type", "application/problem+json")], body).into_response()
     }
@@ -55,7 +55,8 @@ where
 {
     type Response = Response;
     type Error = std::convert::Infallible;
-    type Future = std::pin::Pin<Box<dyn std::future::Future<Output = Result<Response, Self::Error>> + Send>>;
+    type Future =
+        std::pin::Pin<Box<dyn std::future::Future<Output = Result<Response, Self::Error>> + Send>>;
 
     fn poll_ready(
         &mut self,

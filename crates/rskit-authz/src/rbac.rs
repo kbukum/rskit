@@ -53,9 +53,8 @@ impl RbacChecker {
 
     /// Remove the first policy matching the given (subject, action, resource) triple.
     pub fn remove_policy(&mut self, subject: &str, action: &str, resource: &str) {
-        self.policies.retain(|p| {
-            !(p.subject == subject && p.action == action && p.resource == resource)
-        });
+        self.policies
+            .retain(|p| !(p.subject == subject && p.action == action && p.resource == resource));
     }
 }
 

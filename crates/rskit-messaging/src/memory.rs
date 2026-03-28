@@ -109,10 +109,7 @@ impl<T: Clone + Send + Sync + 'static> MessageConsumer<T> for InMemoryConsumer<T
             let msg = {
                 let mut rx = self.rx.lock().await;
                 rx.recv().await.map_err(|e| {
-                    AppError::new(
-                        ErrorCode::ExternalService,
-                        format!("receive failed: {e}"),
-                    )
+                    AppError::new(ErrorCode::ExternalService, format!("receive failed: {e}"))
                 })?
             };
 
@@ -195,9 +192,6 @@ mod tests {
     async fn flush_is_noop() {
         let broker: InMemoryBroker<()> = InMemoryBroker::new(4);
         let producer = broker.producer();
-        producer
-            .flush(Duration::from_secs(1))
-            .await
-            .unwrap();
+        producer.flush(Duration::from_secs(1)).await.unwrap();
     }
 }

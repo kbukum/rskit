@@ -2,7 +2,6 @@
 /// Full gRPC server integration tests require a live listener and are
 /// marked `#[ignore]`. Run with `cargo test -- --ignored` when a
 /// test gRPC server is available.
-
 use rskit_server::config::GrpcServerConfig;
 
 #[test]

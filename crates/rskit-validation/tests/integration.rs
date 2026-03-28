@@ -1,4 +1,4 @@
-use rskit_validation::{validate_email, validate_url, validate_uuid, Validator};
+use rskit_validation::{Validator, validate_email, validate_url, validate_uuid};
 
 // ── required ──────────────────────────────────────────────────────────────────
 
@@ -10,14 +10,20 @@ fn required_passes_for_non_empty_value() {
 
 #[test]
 fn required_fails_for_empty_string() {
-    let err = Validator::new().required("name", "").validate().unwrap_err();
+    let err = Validator::new()
+        .required("name", "")
+        .validate()
+        .unwrap_err();
     assert_eq!(err.code, rskit_errors::ErrorCode::InvalidInput);
     assert!(err.message.contains("name"));
 }
 
 #[test]
 fn required_fails_for_whitespace_only() {
-    let err = Validator::new().required("name", "   ").validate().unwrap_err();
+    let err = Validator::new()
+        .required("name", "   ")
+        .validate()
+        .unwrap_err();
     assert!(err.message.contains("name"));
 }
 
@@ -57,7 +63,9 @@ fn max_length_fails_above_boundary() {
 
 #[test]
 fn email_passes_for_valid_address() {
-    let result = Validator::new().email("email", "user@example.com").validate();
+    let result = Validator::new()
+        .email("email", "user@example.com")
+        .validate();
     assert!(result.is_ok());
 }
 
@@ -72,10 +80,7 @@ fn email_fails_for_missing_at() {
 
 #[test]
 fn email_fails_for_empty_string() {
-    let err = Validator::new()
-        .email("email", "")
-        .validate()
-        .unwrap_err();
+    let err = Validator::new().email("email", "").validate().unwrap_err();
     assert!(err.message.contains("email"));
 }
 

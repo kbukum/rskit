@@ -63,7 +63,11 @@ impl Default for BulkheadConfig {
 impl BulkheadConfig {
     /// Create a bulkhead named `name` with the given concurrency limit.
     pub fn new(name: impl Into<String>, max_concurrent: usize) -> Self {
-        Self { name: name.into(), max_concurrent, ..Default::default() }
+        Self {
+            name: name.into(),
+            max_concurrent,
+            ..Default::default()
+        }
     }
 
     /// Set the maximum wait time for a permit before returning [`AppError::rate_limited`].
@@ -114,7 +118,10 @@ impl Bulkhead {
     /// Create a new [`Bulkhead`] from the given configuration.
     pub fn new(config: BulkheadConfig) -> Self {
         let sem = Arc::new(Semaphore::new(config.max_concurrent));
-        Self { sem, config: Arc::new(config) }
+        Self {
+            sem,
+            config: Arc::new(config),
+        }
     }
 
     /// Number of free permits (available slots).
@@ -134,15 +141,12 @@ impl Bulkhead {
         Fut: std::future::Future<Output = AppResult<T>>,
     {
         let permit_result = match self.config.max_wait {
-            Some(timeout) => {
-                tokio::time::timeout(timeout, self.sem.acquire())
-                    .await
-                    .map_err(|_| {
-                        AppError::rate_limited()
-                            .with_detail("bulkhead", self.config.name.clone())
-                    })
-                    .and_then(|r| r.map_err(|_| AppError::service_unavailable("bulkhead closed")))
-            }
+            Some(timeout) => tokio::time::timeout(timeout, self.sem.acquire())
+                .await
+                .map_err(|_| {
+                    AppError::rate_limited().with_detail("bulkhead", self.config.name.clone())
+                })
+                .and_then(|r| r.map_err(|_| AppError::service_unavailable("bulkhead closed"))),
             None => self
                 .sem
                 .acquire()
@@ -176,8 +180,8 @@ impl Bulkhead {
 
 #[cfg(test)]
 mod tests {
-    use rskit_errors::AppError;
     use super::*;
+    use rskit_errors::AppError;
 
     #[tokio::test]
     async fn execute_allows_call_within_limit() {
@@ -199,9 +203,8 @@ mod tests {
 
     #[tokio::test]
     async fn execute_allows_concurrent_calls_up_to_limit() {
-        let bh = Bulkhead::new(
-            BulkheadConfig::new("test", 3).with_max_wait(Duration::from_millis(100)),
-        );
+        let bh =
+            Bulkhead::new(BulkheadConfig::new("test", 3).with_max_wait(Duration::from_millis(100)));
 
         // Spawn 3 concurrent tasks; all should succeed
         let mut handles = Vec::new();
@@ -220,10 +223,8 @@ mod tests {
     #[tokio::test]
     async fn execute_rejects_when_all_slots_occupied_and_wait_expires() {
         // max_concurrent=1, very short wait so the blocked call times out
-        let bh = Bulkhead::new(
-            BulkheadConfig::new("test", 1)
-                .with_max_wait(Duration::from_millis(10)),
-        );
+        let bh =
+            Bulkhead::new(BulkheadConfig::new("test", 1).with_max_wait(Duration::from_millis(10)));
 
         // Hold the single permit for a long time using a channel
         let (tx, rx) = tokio::sync::oneshot::channel::<()>();

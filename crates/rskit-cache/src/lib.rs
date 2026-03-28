@@ -9,10 +9,10 @@
 //! The client implements the [`rskit_bootstrap::Component`] trait, making it
 //! easy to integrate into the rskit application lifecycle.
 
-/// Redis connection and pool configuration.
-pub mod config;
 /// Async Redis client with string, hash, list, scan, and pub/sub operations.
 pub mod client;
+/// Redis connection and pool configuration.
+pub mod config;
 /// Generic JSON-serialised typed store backed by [`RedisClient`].
 pub mod typed_store;
 

@@ -1,5 +1,5 @@
 use rskit_errors::{AppError, ErrorCode};
-use rskit_testutil::{assert_err_code, assert_ok, MockProvider};
+use rskit_testutil::{MockProvider, assert_err_code, assert_ok};
 
 // ── Assertion helpers ───────────────────────────────────────────────
 

@@ -215,22 +215,34 @@ mod tests {
 
     #[test]
     fn http_status_not_found_is_404() {
-        assert_eq!(ErrorCode::NotFound.http_status(), http::StatusCode::NOT_FOUND);
+        assert_eq!(
+            ErrorCode::NotFound.http_status(),
+            http::StatusCode::NOT_FOUND
+        );
     }
 
     #[test]
     fn http_status_unauthorized_is_401() {
-        assert_eq!(ErrorCode::Unauthorized.http_status(), http::StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            ErrorCode::Unauthorized.http_status(),
+            http::StatusCode::UNAUTHORIZED
+        );
     }
 
     #[test]
     fn http_status_internal_is_500() {
-        assert_eq!(ErrorCode::Internal.http_status(), http::StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(
+            ErrorCode::Internal.http_status(),
+            http::StatusCode::INTERNAL_SERVER_ERROR
+        );
     }
 
     #[test]
     fn http_status_rate_limited_is_429() {
-        assert_eq!(ErrorCode::RateLimited.http_status(), http::StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(
+            ErrorCode::RateLimited.http_status(),
+            http::StatusCode::TOO_MANY_REQUESTS
+        );
     }
 
     // ── as_str ────────────────────────────────────────────────────────────────

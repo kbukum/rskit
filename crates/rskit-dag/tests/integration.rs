@@ -1,6 +1,6 @@
 use rskit_dag::{Dag, DagNode};
 use rskit_errors::AppResult;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
@@ -38,7 +38,9 @@ impl DagNode for TestNode {
 
 #[tokio::test]
 async fn create_dag_and_add_nodes() {
-    let dag = Dag::new().add_node(TestNode::new("a", 1)).add_node(TestNode::new("b", 2));
+    let dag = Dag::new()
+        .add_node(TestNode::new("a", 1))
+        .add_node(TestNode::new("b", 2));
 
     let sorted = dag.topological_sort().unwrap();
     assert_eq!(sorted.len(), 2);

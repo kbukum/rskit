@@ -21,7 +21,10 @@ impl TracingLayer {
 impl<S> tower::Layer<S> for TracingLayer {
     type Service = TracingService<S>;
     fn layer(&self, inner: S) -> Self::Service {
-        TracingService { inner, provider_name: self.provider_name }
+        TracingService {
+            inner,
+            provider_name: self.provider_name,
+        }
     }
 }
 

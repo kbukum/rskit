@@ -50,11 +50,21 @@ impl Default for HttpServerConfig {
 }
 
 impl HttpServerConfig {
-    fn default_host() -> String { "0.0.0.0".to_string() }
-    fn default_port() -> u16 { 8080 }
-    fn default_timeout() -> Duration { Duration::from_secs(30) }
-    fn default_idle_timeout() -> Duration { Duration::from_secs(60) }
-    fn default_h2c() -> bool { true }
+    fn default_host() -> String {
+        "0.0.0.0".to_string()
+    }
+    fn default_port() -> u16 {
+        8080
+    }
+    fn default_timeout() -> Duration {
+        Duration::from_secs(30)
+    }
+    fn default_idle_timeout() -> Duration {
+        Duration::from_secs(60)
+    }
+    fn default_h2c() -> bool {
+        true
+    }
 
     /// Returns the bind address as `"host:port"`.
     pub fn bind_addr(&self) -> String {

@@ -26,7 +26,7 @@ pub mod global;
 
 use rskit_config::{LogFormat, LoggingConfig};
 use tracing::dispatcher::DefaultGuard;
-use tracing_subscriber::{fmt, layer::SubscriberExt, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt};
 
 pub use global::{GlobalLoggingGuard, init_global, is_global_init};
 
@@ -43,12 +43,14 @@ pub struct LoggingGuard(#[allow(dead_code)] DefaultGuard);
 ///
 /// The `RUST_LOG` env var takes precedence over `cfg.level` when set.
 pub fn init_logging(cfg: &LoggingConfig) -> LoggingGuard {
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(&cfg.level));
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&cfg.level));
 
     let guard = match cfg.format {
         LogFormat::Json => {
-            let layer = fmt::layer().json().with_current_span(true).with_span_list(true);
+            let layer = fmt::layer()
+                .json()
+                .with_current_span(true)
+                .with_span_list(true);
             let dispatcher = tracing_subscriber::registry()
                 .with(filter)
                 .with(layer)
@@ -70,8 +72,7 @@ pub fn init_logging(cfg: &LoggingConfig) -> LoggingGuard {
 
 /// Initialize logging from `RUST_LOG` only (no config struct needed).
 pub fn init_logging_env() -> LoggingGuard {
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info"));
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
     let layer = fmt::layer().pretty();
     let dispatcher = tracing_subscriber::registry()
         .with(filter)

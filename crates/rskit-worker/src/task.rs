@@ -26,7 +26,12 @@ impl<O: Clone + Send + 'static> TaskHandle<O> {
         result_rx: oneshot::Receiver<AppResult<O>>,
         cancel: CancellationToken,
     ) -> Self {
-        Self { id, events_rx, result_rx, cancel }
+        Self {
+            id,
+            events_rx,
+            result_rx,
+            cancel,
+        }
     }
 
     /// Await the final result of the task.

@@ -1,7 +1,7 @@
-use rskit_resilience::{RetryPolicy, CircuitBreaker, CbConfig, CbState, Bulkhead, BulkheadConfig};
 use rskit_errors::ErrorCode;
-use std::sync::atomic::{AtomicU32, Ordering};
+use rskit_resilience::{Bulkhead, BulkheadConfig, CbConfig, CbState, CircuitBreaker, RetryPolicy};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 
 #[tokio::test]
@@ -16,7 +16,10 @@ async fn retry_policy_retries_on_failure() {
             async move {
                 let n = c.fetch_add(1, Ordering::SeqCst);
                 if n < 2 {
-                    Err(rskit_errors::AppError::new(ErrorCode::ServiceUnavailable, "fail"))
+                    Err(rskit_errors::AppError::new(
+                        ErrorCode::ServiceUnavailable,
+                        "fail",
+                    ))
                 } else {
                     Ok("ok")
                 }

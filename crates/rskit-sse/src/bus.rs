@@ -25,7 +25,10 @@ impl<T: Clone + Send + Sync + Serialize + 'static> SseBus<T> {
     /// Publish an event to all active subscribers.
     pub fn publish(&self, event: T) -> AppResult<()> {
         self.tx.send(event).map_err(|_| {
-            AppError::new(ErrorCode::Internal, "SSE publish failed: no active subscribers")
+            AppError::new(
+                ErrorCode::Internal,
+                "SSE publish failed: no active subscribers",
+            )
         })?;
         Ok(())
     }

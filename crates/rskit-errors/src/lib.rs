@@ -4,10 +4,10 @@
 
 /// Machine-readable error classification codes.
 pub mod code;
-/// Structured [`AppError`] type with rich context.
-pub mod error;
 /// Conversions between [`AppError`] and gRPC / HTTP status types.
 pub mod convert;
+/// Structured [`AppError`] type with rich context.
+pub mod error;
 /// RFC 7807 Problem Details response body.
 pub mod response;
 

@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use async_trait::async_trait;
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation};
 use rskit_errors::{AppError, AppResult};
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 
 use super::config::JwtConfig;
 use crate::traits::{TokenGenerator, TokenValidator};
@@ -21,7 +21,12 @@ impl<C> JwtService<C> {
     pub fn new(config: JwtConfig) -> Self {
         let encoding_key = EncodingKey::from_secret(config.secret.as_bytes());
         let decoding_key = DecodingKey::from_secret(config.secret.as_bytes());
-        Self { config, encoding_key, decoding_key, _claims: PhantomData }
+        Self {
+            config,
+            encoding_key,
+            decoding_key,
+            _claims: PhantomData,
+        }
     }
 }
 
@@ -31,7 +36,10 @@ impl<C: Serialize + DeserializeOwned + Send + Sync> TokenGenerator<C> for JwtSer
         let algo = (&self.config.algorithm).into();
         let header = Header::new(algo);
         jsonwebtoken::encode(&header, claims, &self.encoding_key).map_err(|e| {
-            AppError::new(rskit_errors::ErrorCode::Internal, format!("JWT encode error: {e}"))
+            AppError::new(
+                rskit_errors::ErrorCode::Internal,
+                format!("JWT encode error: {e}"),
+            )
         })
     }
 }
@@ -49,13 +57,12 @@ impl<C: Serialize + DeserializeOwned + Send + Sync> TokenValidator<C> for JwtSer
             validation.set_audience(aud);
         }
 
-        let data = jsonwebtoken::decode::<C>(token, &self.decoding_key, &validation)
-            .map_err(|e| match e.kind() {
-                jsonwebtoken::errors::ErrorKind::ExpiredSignature => {
-                    AppError::token_expired()
-                }
+        let data = jsonwebtoken::decode::<C>(token, &self.decoding_key, &validation).map_err(
+            |e| match e.kind() {
+                jsonwebtoken::errors::ErrorKind::ExpiredSignature => AppError::token_expired(),
                 _ => AppError::invalid_token(),
-            })?;
+            },
+        )?;
 
         Ok(data.claims)
     }

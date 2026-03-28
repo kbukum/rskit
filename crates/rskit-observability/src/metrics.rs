@@ -3,7 +3,7 @@ use std::time::Duration;
 use opentelemetry::metrics::{Counter, Gauge, Histogram, UpDownCounter};
 use serde::Deserialize;
 
-use rskit_errors::{AppError, ErrorCode, AppResult};
+use rskit_errors::{AppError, AppResult, ErrorCode};
 
 /// Configuration for the OpenTelemetry metrics pipeline.
 #[derive(Debug, Clone, Deserialize)]
@@ -32,7 +32,11 @@ impl MetricsHandle {
     }
 
     /// Create a `Histogram<f64>` for latency distributions etc.
-    pub fn histogram(&self, name: impl Into<String>, description: impl Into<String>) -> Histogram<f64> {
+    pub fn histogram(
+        &self,
+        name: impl Into<String>,
+        description: impl Into<String>,
+    ) -> Histogram<f64> {
         self.meter
             .f64_histogram(name.into())
             .with_description(description.into())
@@ -48,7 +52,11 @@ impl MetricsHandle {
     }
 
     /// Create an `UpDownCounter<i64>` for values that go up and down.
-    pub fn up_down_counter(&self, name: impl Into<String>, description: impl Into<String>) -> UpDownCounter<i64> {
+    pub fn up_down_counter(
+        &self,
+        name: impl Into<String>,
+        description: impl Into<String>,
+    ) -> UpDownCounter<i64> {
         self.meter
             .i64_up_down_counter(name.into())
             .with_description(description.into())
@@ -60,12 +68,13 @@ impl MetricsHandle {
 pub fn init_metrics(cfg: &MetricsConfig) -> AppResult<MetricsHandle> {
     use opentelemetry::metrics::MeterProvider as _;
     use opentelemetry::{InstrumentationScope, KeyValue};
-    use opentelemetry_sdk::metrics::SdkMeterProvider;
     use opentelemetry_sdk::Resource;
+    use opentelemetry_sdk::metrics::SdkMeterProvider;
 
-    let resource = Resource::new(vec![
-        KeyValue::new("service.name", cfg.service_name.clone()),
-    ]);
+    let resource = Resource::new(vec![KeyValue::new(
+        "service.name",
+        cfg.service_name.clone(),
+    )]);
 
     let mut builder = SdkMeterProvider::builder().with_resource(resource);
 

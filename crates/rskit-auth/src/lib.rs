@@ -2,16 +2,16 @@
 
 #![warn(missing_docs)]
 
-/// Core `TokenValidator` and `TokenGenerator` traits.
-pub mod traits;
+/// Auth claims stored in request extensions / task-locals.
+pub mod context;
 /// JWT sign/verify service.
 pub mod jwt;
 /// Password hashing and reset-token generation.
 pub mod password;
-/// Auth claims stored in request extensions / task-locals.
-pub mod context;
+/// Core `TokenValidator` and `TokenGenerator` traits.
+pub mod traits;
 
-pub use traits::{TokenGenerator, TokenValidator};
+pub use context::AuthClaims;
 pub use jwt::{JwtConfig, JwtService};
 pub use password::{HashAlgorithm, PasswordHasher, ResetTokenGenerator};
-pub use context::AuthClaims;
+pub use traits::{TokenGenerator, TokenValidator};

@@ -39,7 +39,12 @@ impl Progress {
                 (current as f32 / t as f32) * 100.0
             }
         });
-        Self { current, total, percent, message: None }
+        Self {
+            current,
+            total,
+            percent,
+            message: None,
+        }
     }
 
     /// Attach a human-readable status message to this progress value.

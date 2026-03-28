@@ -57,10 +57,7 @@ impl AppError {
     // ── Fluent builder methods ──────────────────────────────────────────
 
     /// Attach an underlying cause to this error.
-    pub fn with_cause(
-        mut self,
-        cause: impl std::error::Error + Send + Sync + 'static,
-    ) -> Self {
+    pub fn with_cause(mut self, cause: impl std::error::Error + Send + Sync + 'static) -> Self {
         self.cause = Some(Box::new(cause));
         self
     }
@@ -87,17 +84,26 @@ impl AppError {
 
     /// Create a `ServiceUnavailable` error for the named service.
     pub fn service_unavailable(service: impl Into<String>) -> Self {
-        Self::new(ErrorCode::ServiceUnavailable, format!("service unavailable: {}", service.into()))
+        Self::new(
+            ErrorCode::ServiceUnavailable,
+            format!("service unavailable: {}", service.into()),
+        )
     }
 
     /// Create a `ConnectionFailed` error for the named service.
     pub fn connection_failed(service: impl Into<String>) -> Self {
-        Self::new(ErrorCode::ConnectionFailed, format!("connection failed: {}", service.into()))
+        Self::new(
+            ErrorCode::ConnectionFailed,
+            format!("connection failed: {}", service.into()),
+        )
     }
 
     /// Create a `Timeout` error for the named operation.
     pub fn timeout(operation: impl Into<String>) -> Self {
-        Self::new(ErrorCode::Timeout, format!("operation timed out: {}", operation.into()))
+        Self::new(
+            ErrorCode::Timeout,
+            format!("operation timed out: {}", operation.into()),
+        )
     }
 
     /// Create a `RateLimited` error.
@@ -116,7 +122,10 @@ impl AppError {
 
     /// Create an `AlreadyExists` error for the named resource.
     pub fn already_exists(resource: impl Into<String>) -> Self {
-        Self::new(ErrorCode::AlreadyExists, format!("{} already exists", resource.into()))
+        Self::new(
+            ErrorCode::AlreadyExists,
+            format!("{} already exists", resource.into()),
+        )
     }
 
     /// Create a `Conflict` error with the given reason.
@@ -126,19 +135,29 @@ impl AppError {
 
     /// Create an `InvalidInput` error for the named field.
     pub fn invalid_input(field: impl Into<String>, reason: impl Into<String>) -> Self {
-        Self::new(ErrorCode::InvalidInput, format!("invalid {}: {}", field.into(), reason.into()))
+        Self::new(
+            ErrorCode::InvalidInput,
+            format!("invalid {}: {}", field.into(), reason.into()),
+        )
     }
 
     /// Create a `MissingField` error for the named required field.
     pub fn missing_field(field: impl Into<String>) -> Self {
-        Self::new(ErrorCode::MissingField, format!("missing required field: {}", field.into()))
+        Self::new(
+            ErrorCode::MissingField,
+            format!("missing required field: {}", field.into()),
+        )
     }
 
     /// Create an `InvalidFormat` error for the named field.
     pub fn invalid_format(field: impl Into<String>, expected: impl Into<String>) -> Self {
         Self::new(
             ErrorCode::InvalidFormat,
-            format!("invalid format for {}: expected {}", field.into(), expected.into()),
+            format!(
+                "invalid format for {}: expected {}",
+                field.into(),
+                expected.into()
+            ),
         )
     }
 
@@ -273,9 +292,11 @@ mod tests {
 
     #[test]
     fn with_detail_stores_single_kv() {
-        let err = AppError::new(ErrorCode::InvalidInput, "bad field")
-            .with_detail("field", "email");
-        assert_eq!(err.details.get("field").and_then(|v| v.as_str()), Some("email"));
+        let err = AppError::new(ErrorCode::InvalidInput, "bad field").with_detail("field", "email");
+        assert_eq!(
+            err.details.get("field").and_then(|v| v.as_str()),
+            Some("email")
+        );
     }
 
     #[test]
@@ -360,7 +381,11 @@ mod tests {
     fn display_includes_message() {
         let err = AppError::new(ErrorCode::NotFound, "item not found");
         let display = format!("{}", err);
-        assert!(display.contains("item not found"), "display was: {}", display);
+        assert!(
+            display.contains("item not found"),
+            "display was: {}",
+            display
+        );
     }
 
     #[test]

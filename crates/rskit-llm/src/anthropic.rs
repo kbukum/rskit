@@ -141,7 +141,11 @@ impl LlmProvider for AnthropicProvider {
         for attempt in 0..=self.config.max_retries {
             if attempt > 0 {
                 let backoff = Duration::from_millis(100 * 2u64.pow(attempt - 1));
-                tracing::debug!(attempt, backoff_ms = backoff.as_millis(), "retrying Anthropic request");
+                tracing::debug!(
+                    attempt,
+                    backoff_ms = backoff.as_millis(),
+                    "retrying Anthropic request"
+                );
                 tokio::time::sleep(backoff).await;
             }
 

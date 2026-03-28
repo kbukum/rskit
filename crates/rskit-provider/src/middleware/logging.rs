@@ -22,7 +22,10 @@ impl LoggingLayer {
 impl<S> tower::Layer<S> for LoggingLayer {
     type Service = LoggingService<S>;
     fn layer(&self, inner: S) -> Self::Service {
-        LoggingService { inner, provider_name: self.provider_name }
+        LoggingService {
+            inner,
+            provider_name: self.provider_name,
+        }
     }
 }
 

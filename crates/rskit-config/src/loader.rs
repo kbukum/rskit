@@ -60,9 +60,7 @@ impl ConfigLoader {
 
         // TOML file
         if let Some(path) = &self.config_file {
-            builder = builder.add_source(
-                config::File::from(path.as_path()).required(false),
-            );
+            builder = builder.add_source(config::File::from(path.as_path()).required(false));
         } else {
             // Auto-discover common locations
             for candidate in &["config.toml", "config/config.toml"] {

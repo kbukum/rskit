@@ -149,10 +149,7 @@ impl RetryPolicy {
 
     /// Override the predicate used to decide whether an error is retryable.
     #[must_use]
-    pub fn with_retry_if(
-        mut self,
-        f: impl Fn(&AppError) -> bool + Send + Sync + 'static,
-    ) -> Self {
+    pub fn with_retry_if(mut self, f: impl Fn(&AppError) -> bool + Send + Sync + 'static) -> Self {
         self.retry_if = Some(Arc::new(f));
         self
     }
@@ -160,10 +157,7 @@ impl RetryPolicy {
     /// Register a callback called after each failed attempt before the next
     /// backoff sleep.  Arguments passed: `(attempt_number, error)`.
     #[must_use]
-    pub fn with_on_retry(
-        mut self,
-        f: impl Fn(u32, &AppError) + Send + Sync + 'static,
-    ) -> Self {
+    pub fn with_on_retry(mut self, f: impl Fn(u32, &AppError) + Send + Sync + 'static) -> Self {
         self.on_retry = Some(Arc::new(f));
         self
     }
@@ -188,7 +182,10 @@ impl RetryPolicy {
                         .map(|f| f(&e))
                         .unwrap_or_else(|| e.is_retryable());
                     if attempt >= self.max_attempts || !should_retry {
-                        return Err(RetryError { attempts: attempt, last_error: e });
+                        return Err(RetryError {
+                            attempts: attempt,
+                            last_error: e,
+                        });
                     }
                     if let Some(cb) = &self.on_retry {
                         cb(attempt as u32, &e);
@@ -225,9 +222,12 @@ impl RetryPolicy {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
-    use rskit_errors::{AppError, ErrorCode};
     use super::*;
+    use rskit_errors::{AppError, ErrorCode};
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
 
     fn make_policy() -> RetryPolicy {
         RetryPolicy::new()
@@ -248,17 +248,19 @@ mod tests {
         let counter = Arc::new(AtomicUsize::new(0));
         let policy = make_policy();
 
-        let result = policy.execute(|| {
-            let counter = counter.clone();
-            async move {
-                let attempt = counter.fetch_add(1, Ordering::SeqCst);
-                if attempt == 0 {
-                    Err(AppError::new(ErrorCode::ConnectionFailed, "test"))
-                } else {
-                    Ok(99)
+        let result = policy
+            .execute(|| {
+                let counter = counter.clone();
+                async move {
+                    let attempt = counter.fetch_add(1, Ordering::SeqCst);
+                    if attempt == 0 {
+                        Err(AppError::new(ErrorCode::ConnectionFailed, "test"))
+                    } else {
+                        Ok(99)
+                    }
                 }
-            }
-        }).await;
+            })
+            .await;
 
         assert_eq!(result.unwrap(), 99);
         assert_eq!(counter.load(Ordering::SeqCst), 2);
@@ -269,13 +271,15 @@ mod tests {
         let counter = Arc::new(AtomicUsize::new(0));
         let policy = make_policy(); // max_attempts = 3
 
-        let result = policy.execute(|| {
-            let counter = counter.clone();
-            async move {
-                counter.fetch_add(1, Ordering::SeqCst);
-                Err::<i32, AppError>(AppError::new(ErrorCode::ConnectionFailed, "test"))
-            }
-        }).await;
+        let result = policy
+            .execute(|| {
+                let counter = counter.clone();
+                async move {
+                    counter.fetch_add(1, Ordering::SeqCst);
+                    Err::<i32, AppError>(AppError::new(ErrorCode::ConnectionFailed, "test"))
+                }
+            })
+            .await;
 
         assert!(result.is_err());
         let retry_err = result.unwrap_err();
@@ -288,13 +292,15 @@ mod tests {
         let counter = Arc::new(AtomicUsize::new(0));
         let policy = make_policy();
 
-        let result = policy.execute(|| {
-            let counter = counter.clone();
-            async move {
-                counter.fetch_add(1, Ordering::SeqCst);
-                Err::<i32, AppError>(AppError::new(ErrorCode::NotFound, "test"))
-            }
-        }).await;
+        let result = policy
+            .execute(|| {
+                let counter = counter.clone();
+                async move {
+                    counter.fetch_add(1, Ordering::SeqCst);
+                    Err::<i32, AppError>(AppError::new(ErrorCode::NotFound, "test"))
+                }
+            })
+            .await;
 
         assert!(result.is_err());
         // Should have stopped after first attempt because error is not retryable
@@ -309,13 +315,15 @@ mod tests {
             .with_initial_backoff(Duration::from_millis(1))
             .with_jitter(false);
 
-        let result = policy.execute(|| {
-            let counter = counter.clone();
-            async move {
-                counter.fetch_add(1, Ordering::SeqCst);
-                Err::<i32, AppError>(AppError::new(ErrorCode::ConnectionFailed, "test"))
-            }
-        }).await;
+        let result = policy
+            .execute(|| {
+                let counter = counter.clone();
+                async move {
+                    counter.fetch_add(1, Ordering::SeqCst);
+                    Err::<i32, AppError>(AppError::new(ErrorCode::ConnectionFailed, "test"))
+                }
+            })
+            .await;
 
         assert!(result.is_err());
         assert_eq!(counter.load(Ordering::SeqCst), 1);

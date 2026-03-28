@@ -8,7 +8,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use rskit_config::{LogFormat, LogOutput, LoggingConfig};
-use tracing_subscriber::{fmt, layer::SubscriberExt, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt};
 
 static GLOBAL_INIT: AtomicBool = AtomicBool::new(false);
 
@@ -33,8 +33,7 @@ pub fn init_global(cfg: &LoggingConfig) -> GlobalLoggingGuard {
         return GlobalLoggingGuard { _private: () };
     }
 
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(&cfg.level));
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&cfg.level));
 
     let make_writer = make_writer_for(&cfg.output);
 

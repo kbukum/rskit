@@ -148,7 +148,11 @@ impl LlmProvider for OpenAiProvider {
         for attempt in 0..=self.config.max_retries {
             if attempt > 0 {
                 let backoff = Duration::from_millis(100 * 2u64.pow(attempt - 1));
-                tracing::debug!(attempt, backoff_ms = backoff.as_millis(), "retrying OpenAI request");
+                tracing::debug!(
+                    attempt,
+                    backoff_ms = backoff.as_millis(),
+                    "retrying OpenAI request"
+                );
                 tokio::time::sleep(backoff).await;
             }
 
@@ -204,9 +208,8 @@ impl LlmProvider for OpenAiProvider {
             }
         }
 
-        Err(last_error.unwrap_or_else(|| {
-            AppError::new(ErrorCode::ExternalService, "OpenAI request failed")
-        }))
+        Err(last_error
+            .unwrap_or_else(|| AppError::new(ErrorCode::ExternalService, "OpenAI request failed")))
     }
 
     async fn embed(&self, texts: Vec<String>) -> AppResult<Vec<Vec<f32>>> {

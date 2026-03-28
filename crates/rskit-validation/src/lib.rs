@@ -185,14 +185,13 @@ impl Validator {
 
     /// Fail if `value` is not in `allowed`.
     #[must_use]
-    pub fn one_of<T: PartialEq + Display>(
-        mut self,
-        field: &str,
-        value: &T,
-        allowed: &[T],
-    ) -> Self {
+    pub fn one_of<T: PartialEq + Display>(mut self, field: &str, value: &T, allowed: &[T]) -> Self {
         if !allowed.iter().any(|a| a == value) {
-            let list = allowed.iter().map(|a| a.to_string()).collect::<Vec<_>>().join(", ");
+            let list = allowed
+                .iter()
+                .map(|a| a.to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
             self.add(field, format!("must be one of: {list}"));
         }
         self
@@ -296,15 +295,18 @@ mod tests {
 
     #[test]
     fn email_passes_on_valid() {
-        let r = Validator::new().email("email", "user@example.com").validate();
+        let r = Validator::new()
+            .email("email", "user@example.com")
+            .validate();
         assert!(r.is_ok());
     }
 
     #[test]
     fn multiple_errors_collected() {
-        let v = Validator::new()
-            .required("name", "")
-            .max_length("bio", "x".repeat(201).as_str(), 200);
+        let v =
+            Validator::new()
+                .required("name", "")
+                .max_length("bio", "x".repeat(201).as_str(), 200);
         assert_eq!(v.errors().len(), 2);
     }
 

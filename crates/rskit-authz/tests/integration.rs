@@ -80,8 +80,18 @@ async fn rbac_wildcard_subject_matches_any_user() {
 #[tokio::test]
 async fn rbac_wildcard_action_matches_any_action() {
     let checker = RbacChecker::new(vec![allow_policy("superadmin", "*", "everything")]);
-    assert!(checker.check("superadmin", "read", "everything").await.is_ok());
-    assert!(checker.check("superadmin", "delete", "everything").await.is_ok());
+    assert!(
+        checker
+            .check("superadmin", "read", "everything")
+            .await
+            .is_ok()
+    );
+    assert!(
+        checker
+            .check("superadmin", "delete", "everything")
+            .await
+            .is_ok()
+    );
 }
 
 #[tokio::test]

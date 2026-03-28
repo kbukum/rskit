@@ -39,9 +39,7 @@ where
     {
         self.then(f).flat_map(|result| match result {
             Ok(s) => s.left_stream(),
-            Err(e) => {
-                futures::stream::once(futures::future::ready(Err(e))).right_stream()
-            }
+            Err(e) => futures::stream::once(futures::future::ready(Err(e))).right_stream(),
         })
     }
 

@@ -4,8 +4,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 use async_trait::async_trait;
-use sqlx::any::{AnyPoolOptions, AnyQueryResult};
 use sqlx::AnyPool;
+use sqlx::any::{AnyPoolOptions, AnyQueryResult};
 use tracing::{error, info, warn};
 
 use rskit_bootstrap::{Component, Health};
@@ -107,7 +107,10 @@ impl Component for Database {
         self.pool.acquire().await.map_err(|e| {
             self.connected.store(false, Ordering::SeqCst);
             error!(error = %e, "database ping failed during start");
-            AppError::new(ErrorCode::DatabaseError, format!("database ping failed: {e}"))
+            AppError::new(
+                ErrorCode::DatabaseError,
+                format!("database ping failed: {e}"),
+            )
         })?;
 
         self.connected.store(true, Ordering::SeqCst);

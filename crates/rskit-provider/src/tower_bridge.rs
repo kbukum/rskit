@@ -24,10 +24,7 @@ pub struct TowerProvider<S, I, O> {
 
 impl<S, I, O> TowerProvider<S, I, O>
 where
-    S: tower::Service<I, Response = O, Error = rskit_errors::AppError>
-        + Send
-        + Clone
-        + 'static,
+    S: tower::Service<I, Response = O, Error = rskit_errors::AppError> + Send + Clone + 'static,
     S::Future: Send + 'static,
     I: Send + 'static,
     O: Send + 'static,
@@ -45,10 +42,7 @@ where
 #[async_trait::async_trait]
 impl<S, I, O> Provider for TowerProvider<S, I, O>
 where
-    S: tower::Service<I, Response = O, Error = rskit_errors::AppError>
-        + Send
-        + Clone
-        + 'static,
+    S: tower::Service<I, Response = O, Error = rskit_errors::AppError> + Send + Clone + 'static,
     S::Future: Send + 'static,
     I: Send + 'static,
     O: Send + 'static,
@@ -61,10 +55,7 @@ where
 #[async_trait::async_trait]
 impl<S, I, O> RequestResponse<I, O> for TowerProvider<S, I, O>
 where
-    S: tower::Service<I, Response = O, Error = rskit_errors::AppError>
-        + Send
-        + Clone
-        + 'static,
+    S: tower::Service<I, Response = O, Error = rskit_errors::AppError> + Send + Clone + 'static,
     S::Future: Send + 'static,
     I: Send + 'static,
     O: Send + 'static,

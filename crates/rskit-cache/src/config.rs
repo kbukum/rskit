@@ -61,7 +61,10 @@ impl RedisConfig {
     /// Build the `redis://` connection URL from the config fields.
     pub fn connection_url(&self) -> String {
         match &self.password {
-            Some(pw) => format!("redis://:{}@{}:{}/{}", pw, self.host, self.port, self.database),
+            Some(pw) => format!(
+                "redis://:{}@{}:{}/{}",
+                pw, self.host, self.port, self.database
+            ),
             None => format!("redis://{}:{}/{}", self.host, self.port, self.database),
         }
     }
@@ -116,7 +119,10 @@ mod tests {
 
     #[test]
     fn connection_url_with_password() {
-        let cfg = RedisConfig { password: Some("secret".into()), ..Default::default() };
+        let cfg = RedisConfig {
+            password: Some("secret".into()),
+            ..Default::default()
+        };
         assert_eq!(cfg.connection_url(), "redis://:secret@127.0.0.1:6379/0");
     }
 

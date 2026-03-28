@@ -1,8 +1,8 @@
+use rskit::resilience::{CbConfig, CircuitBreaker, RetryPolicy};
 /// Facade integration tests — verify that types from all sub-crates
 /// are accessible through the `rskit` facade.
 use rskit::{AppError, AppResult, ErrorCode};
 use rskit::{Health, HealthStatus};
-use rskit::resilience::{RetryPolicy, CircuitBreaker, CbConfig};
 
 #[test]
 fn errors_accessible_via_facade() {

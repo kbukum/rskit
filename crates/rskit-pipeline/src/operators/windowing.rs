@@ -103,10 +103,7 @@ where
 /// Only emit an item if no new item arrives within `delay`.
 ///
 /// Useful for rate-limiting high-frequency event streams.
-pub fn debounce<S, T>(
-    stream: S,
-    delay: Duration,
-) -> impl Stream<Item = T> + Send + 'static
+pub fn debounce<S, T>(stream: S, delay: Duration) -> impl Stream<Item = T> + Send + 'static
 where
     S: Stream<Item = T> + Send + 'static,
     T: Send + 'static,
@@ -144,10 +141,7 @@ where
 }
 
 /// Emit at most one item per `interval`, dropping faster arrivals.
-pub fn throttle<S, T>(
-    stream: S,
-    interval: Duration,
-) -> impl Stream<Item = T> + Send + 'static
+pub fn throttle<S, T>(stream: S, interval: Duration) -> impl Stream<Item = T> + Send + 'static
 where
     S: Stream<Item = T> + Send + 'static,
     T: Send + 'static,

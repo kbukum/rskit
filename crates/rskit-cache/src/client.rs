@@ -24,14 +24,22 @@ impl RedisClient {
     pub async fn new(config: RedisConfig) -> AppResult<Self> {
         let url = config.connection_url();
         let client = redis::Client::open(url.as_str()).map_err(|e| {
-            AppError::new(ErrorCode::ConnectionFailed, format!("invalid redis URL: {e}"))
-                .with_cause(e)
+            AppError::new(
+                ErrorCode::ConnectionFailed,
+                format!("invalid redis URL: {e}"),
+            )
+            .with_cause(e)
         })?;
 
-        let manager = redis::aio::ConnectionManager::new(client).await.map_err(|e| {
-            AppError::new(ErrorCode::ConnectionFailed, format!("redis connection failed: {e}"))
+        let manager = redis::aio::ConnectionManager::new(client)
+            .await
+            .map_err(|e| {
+                AppError::new(
+                    ErrorCode::ConnectionFailed,
+                    format!("redis connection failed: {e}"),
+                )
                 .with_cause(e)
-        })?;
+            })?;
 
         tracing::info!(host = %config.host, port = %config.port, db = %config.database, "redis connected");
 
@@ -71,7 +79,9 @@ impl RedisClient {
         match ttl {
             Some(dur) => {
                 let secs = dur.as_secs().max(1);
-                conn.set_ex::<_, _, ()>(&k, val, secs).await.map_err(redis_err)?;
+                conn.set_ex::<_, _, ()>(&k, val, secs)
+                    .await
+                    .map_err(redis_err)?;
             }
             None => {
                 conn.set::<_, _, ()>(&k, val).await.map_err(redis_err)?;
@@ -178,7 +188,11 @@ impl RedisClient {
     /// LRANGE — retrieve elements from a list by index range.
     pub async fn lrange(&self, key: &str, start: i64, stop: i64) -> AppResult<Vec<String>> {
         let k = self.prefixed_key(key);
-        let items: Vec<String> = self.conn().lrange(&k, start as isize, stop as isize).await.map_err(redis_err)?;
+        let items: Vec<String> = self
+            .conn()
+            .lrange(&k, start as isize, stop as isize)
+            .await
+            .map_err(redis_err)?;
         Ok(items)
     }
 

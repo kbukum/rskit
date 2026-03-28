@@ -21,7 +21,8 @@ use crate::config::GrpcServerConfig;
 pub struct GrpcServer {
     name: String,
     config: GrpcServerConfig,
-    start_fn: Arc<dyn Fn(SocketAddr, CancellationToken) -> tokio::task::JoinHandle<()> + Send + Sync>,
+    start_fn:
+        Arc<dyn Fn(SocketAddr, CancellationToken) -> tokio::task::JoinHandle<()> + Send + Sync>,
     cancel: CancellationToken,
     handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
@@ -30,7 +31,9 @@ impl GrpcServer {
     pub(crate) fn new(
         name: String,
         config: GrpcServerConfig,
-        start_fn: Arc<dyn Fn(SocketAddr, CancellationToken) -> tokio::task::JoinHandle<()> + Send + Sync>,
+        start_fn: Arc<
+            dyn Fn(SocketAddr, CancellationToken) -> tokio::task::JoinHandle<()> + Send + Sync,
+        >,
     ) -> Self {
         Self {
             name,
@@ -49,12 +52,16 @@ impl Component for GrpcServer {
     }
 
     async fn start(&self) -> AppResult<()> {
-        let addr: SocketAddr = self.config.addr().parse().map_err(|e: std::net::AddrParseError| {
-            AppError::new(
-                rskit_errors::ErrorCode::Internal,
-                format!("invalid gRPC address '{}': {}", self.config.addr(), e),
-            )
-        })?;
+        let addr: SocketAddr =
+            self.config
+                .addr()
+                .parse()
+                .map_err(|e: std::net::AddrParseError| {
+                    AppError::new(
+                        rskit_errors::ErrorCode::Internal,
+                        format!("invalid gRPC address '{}': {}", self.config.addr(), e),
+                    )
+                })?;
 
         tracing::info!(component = %self.name, addr = %addr, "starting gRPC server");
 
@@ -79,7 +86,12 @@ impl Component for GrpcServer {
     }
 
     fn health(&self) -> Health {
-        let running = self.handle.lock().as_ref().map(|h| !h.is_finished()).unwrap_or(false);
+        let running = self
+            .handle
+            .lock()
+            .as_ref()
+            .map(|h| !h.is_finished())
+            .unwrap_or(false);
         if running {
             Health::healthy(&self.name)
         } else {

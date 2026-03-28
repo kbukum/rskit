@@ -1,8 +1,6 @@
 use std::time::Duration;
 
-use rskit_llm::{
-    AnthropicConfig, ChatMessage, CompletionRequest, OpenAiConfig, Role,
-};
+use rskit_llm::{AnthropicConfig, ChatMessage, CompletionRequest, OpenAiConfig, Role};
 
 // ── Role enum ───────────────────────────────────────────────────────────────
 
@@ -55,8 +53,14 @@ fn completion_request_construction() {
     let req = CompletionRequest {
         model: "gpt-4".into(),
         messages: vec![
-            ChatMessage { role: Role::System, content: "Be concise.".into() },
-            ChatMessage { role: Role::User, content: "Hi".into() },
+            ChatMessage {
+                role: Role::System,
+                content: "Be concise.".into(),
+            },
+            ChatMessage {
+                role: Role::User,
+                content: "Hi".into(),
+            },
         ],
         max_tokens: Some(100),
         temperature: Some(0.7),
@@ -72,7 +76,10 @@ fn completion_request_construction() {
 fn completion_request_serde_roundtrip() {
     let req = CompletionRequest {
         model: "claude-3".into(),
-        messages: vec![ChatMessage { role: Role::User, content: "test".into() }],
+        messages: vec![ChatMessage {
+            role: Role::User,
+            content: "test".into(),
+        }],
         max_tokens: None,
         temperature: None,
         stream: true,
@@ -98,7 +105,8 @@ fn openai_config_deserialise_with_defaults() {
 
 #[test]
 fn openai_config_custom_base_url() {
-    let json = r#"{"api_key":"sk-test","base_url":"http://localhost:8080","timeout":60,"max_retries":1}"#;
+    let json =
+        r#"{"api_key":"sk-test","base_url":"http://localhost:8080","timeout":60,"max_retries":1}"#;
     let cfg: OpenAiConfig = serde_json::from_str(json).unwrap();
     assert_eq!(cfg.base_url, "http://localhost:8080");
     assert_eq!(cfg.timeout, Duration::from_secs(60));
@@ -162,13 +170,14 @@ fn anthropic_provider_constructs_with_valid_config() {
 async fn openai_complete_request() {
     use rskit_llm::LlmProvider;
 
-    let cfg: OpenAiConfig = serde_json::from_str(
-        r#"{"api_key":"sk-real-key"}"#,
-    ).unwrap();
+    let cfg: OpenAiConfig = serde_json::from_str(r#"{"api_key":"sk-real-key"}"#).unwrap();
     let provider = rskit_llm::OpenAiProvider::new(cfg).unwrap();
     let req = CompletionRequest {
         model: "gpt-4o-mini".into(),
-        messages: vec![ChatMessage { role: Role::User, content: "Say hello.".into() }],
+        messages: vec![ChatMessage {
+            role: Role::User,
+            content: "Say hello.".into(),
+        }],
         max_tokens: Some(10),
         temperature: Some(0.0),
         stream: false,
@@ -182,13 +191,14 @@ async fn openai_complete_request() {
 async fn anthropic_complete_request() {
     use rskit_llm::LlmProvider;
 
-    let cfg: AnthropicConfig = serde_json::from_str(
-        r#"{"api_key":"sk-ant-real-key"}"#,
-    ).unwrap();
+    let cfg: AnthropicConfig = serde_json::from_str(r#"{"api_key":"sk-ant-real-key"}"#).unwrap();
     let provider = rskit_llm::AnthropicProvider::new(cfg).unwrap();
     let req = CompletionRequest {
         model: "claude-3-haiku-20240307".into(),
-        messages: vec![ChatMessage { role: Role::User, content: "Say hello.".into() }],
+        messages: vec![ChatMessage {
+            role: Role::User,
+            content: "Say hello.".into(),
+        }],
         max_tokens: Some(10),
         temperature: Some(0.0),
         stream: false,

@@ -42,17 +42,18 @@ where
 }
 
 /// Create a [`RequestResponse`] provider from an async function.
-pub fn request_response_fn<I, O, F, Fut>(
-    name: &'static str,
-    f: F,
-) -> impl RequestResponse<I, O>
+pub fn request_response_fn<I, O, F, Fut>(name: &'static str, f: F) -> impl RequestResponse<I, O>
 where
     I: Send + 'static,
     O: Send + 'static,
     F: Fn(I) -> Fut + Send + Sync + 'static,
     Fut: Future<Output = AppResult<O>> + Send + 'static,
 {
-    FnRR { name, f, _ph: PhantomData }
+    FnRR {
+        name,
+        f,
+        _ph: PhantomData,
+    }
 }
 
 // ─── sink_fn ─────────────────────────────────────────────────────────────────
@@ -88,14 +89,15 @@ where
 }
 
 /// Create a [`Sink`] provider from an async function.
-pub fn sink_fn<I, F, Fut>(
-    name: &'static str,
-    f: F,
-) -> impl Sink<I>
+pub fn sink_fn<I, F, Fut>(name: &'static str, f: F) -> impl Sink<I>
 where
     I: Send + 'static,
     F: Fn(I) -> Fut + Send + Sync + 'static,
     Fut: Future<Output = AppResult<()>> + Send + 'static,
 {
-    FnSink { name, f, _ph: PhantomData }
+    FnSink {
+        name,
+        f,
+        _ph: PhantomData,
+    }
 }

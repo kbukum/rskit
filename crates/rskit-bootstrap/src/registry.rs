@@ -53,7 +53,10 @@ impl Registry {
 
     /// Create a registry with custom [`RegistryConfig`].
     pub fn with_config(config: RegistryConfig) -> Self {
-        Self { components: Vec::new(), config }
+        Self {
+            components: Vec::new(),
+            config,
+        }
     }
 
     /// Register a component. Order of registration = order of startup.
@@ -140,8 +143,7 @@ impl Registry {
 #[cfg(test)]
 mod tests {
     use std::sync::{
-        Arc,
-        Mutex,
+        Arc, Mutex,
         atomic::{AtomicUsize, Ordering},
     };
 
@@ -236,9 +238,21 @@ mod tests {
 
         reg.start_all().await.expect("start_all should succeed");
 
-        assert_eq!(sc1.load(Ordering::SeqCst), 1, "component 'a' should start once");
-        assert_eq!(sc2.load(Ordering::SeqCst), 1, "component 'b' should start once");
-        assert_eq!(sc3.load(Ordering::SeqCst), 1, "component 'c' should start once");
+        assert_eq!(
+            sc1.load(Ordering::SeqCst),
+            1,
+            "component 'a' should start once"
+        );
+        assert_eq!(
+            sc2.load(Ordering::SeqCst),
+            1,
+            "component 'b' should start once"
+        );
+        assert_eq!(
+            sc3.load(Ordering::SeqCst),
+            1,
+            "component 'c' should start once"
+        );
     }
 
     #[tokio::test]
@@ -291,8 +305,15 @@ mod tests {
         reg.register(c3);
 
         let result = reg.start_all().await;
-        assert!(result.is_err(), "start_all must propagate the component error");
+        assert!(
+            result.is_err(),
+            "start_all must propagate the component error"
+        );
         // The third component must NOT have been started.
-        assert_eq!(sc3.load(Ordering::SeqCst), 0, "component after failed one must not start");
+        assert_eq!(
+            sc3.load(Ordering::SeqCst),
+            0,
+            "component after failed one must not start"
+        );
     }
 }

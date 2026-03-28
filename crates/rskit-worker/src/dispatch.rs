@@ -1,5 +1,5 @@
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// Strategy used to pick a worker slot in the pool.
 #[derive(Debug, Clone, Default)]
@@ -21,7 +21,10 @@ pub struct RoundRobinDispatcher {
 impl RoundRobinDispatcher {
     /// Create a new dispatcher that distributes work across `slots` worker slots.
     pub fn new(slots: usize) -> Self {
-        Self { counter: Arc::new(AtomicUsize::new(0)), slots }
+        Self {
+            counter: Arc::new(AtomicUsize::new(0)),
+            slots,
+        }
     }
 
     /// Return the next worker index.

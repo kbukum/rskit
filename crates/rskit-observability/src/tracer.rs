@@ -6,7 +6,7 @@ use serde::Deserialize;
 use tracing::Span;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
-use rskit_errors::{AppError, ErrorCode, AppResult};
+use rskit_errors::{AppError, AppResult, ErrorCode};
 
 /// Configuration for an OTLP trace exporter.
 #[derive(Debug, Clone, Deserialize)]
@@ -40,8 +40,8 @@ pub fn init_tracer(cfg: &TracingConfig) -> AppResult<TracerGuard> {
     use opentelemetry::trace::TracerProvider as _;
     use opentelemetry::{InstrumentationScope, KeyValue};
     use opentelemetry_otlp::{SpanExporter, WithExportConfig};
-    use opentelemetry_sdk::trace::{TracerProvider, Sampler};
     use opentelemetry_sdk::Resource;
+    use opentelemetry_sdk::trace::{Sampler, TracerProvider};
     use tracing_subscriber::layer::SubscriberExt;
     use tracing_subscriber::util::SubscriberInitExt;
 
@@ -60,9 +60,10 @@ pub fn init_tracer(cfg: &TracingConfig) -> AppResult<TracerGuard> {
         Sampler::TraceIdRatioBased(cfg.sample_rate)
     };
 
-    let resource = Resource::new(vec![
-        KeyValue::new("service.name", cfg.service_name.clone()),
-    ]);
+    let resource = Resource::new(vec![KeyValue::new(
+        "service.name",
+        cfg.service_name.clone(),
+    )]);
 
     let provider = TracerProvider::builder()
         .with_batch_exporter(exporter, opentelemetry_sdk::runtime::Tokio)
@@ -79,7 +80,9 @@ pub fn init_tracer(cfg: &TracingConfig) -> AppResult<TracerGuard> {
         .try_init()
         .map_err(|e| AppError::new(ErrorCode::Internal, format!("subscriber init: {e}")))?;
 
-    Ok(TracerGuard { _provider: provider })
+    Ok(TracerGuard {
+        _provider: provider,
+    })
 }
 
 /// Inject the current trace context into HTTP headers (W3C Trace-Context).

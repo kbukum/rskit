@@ -12,9 +12,9 @@ pub mod sink;
 pub mod source;
 
 pub use ext::RskitStreamExt;
+pub use operators::combine::{concat, merge};
 pub use sink::{collect, drain, for_each};
 pub use source::{from_channel, from_fn, from_slice};
-pub use operators::combine::{concat, merge};
 
 #[cfg(test)]
 mod tests {
@@ -115,7 +115,10 @@ mod tests {
         let results: Vec<_> = stream
             .rmap(|x| async move {
                 if x == 2 {
-                    Err(rskit_errors::AppError::new(rskit_errors::ErrorCode::Internal, "bad item"))
+                    Err(rskit_errors::AppError::new(
+                        rskit_errors::ErrorCode::Internal,
+                        "bad item",
+                    ))
                 } else {
                     Ok(x)
                 }
@@ -194,7 +197,10 @@ mod tests {
     async fn test_rparallel_collects_all_results() {
         let stream = from_slice(vec![1u32, 2, 3, 4, 5]);
         let mut results: Vec<u32> = stream
-            .rparallel(3, |x| async move { Ok::<u32, rskit_errors::AppError>(x * 2) })
+            .rparallel(
+                3,
+                |x| async move { Ok::<u32, rskit_errors::AppError>(x * 2) },
+            )
             .collect::<Vec<_>>()
             .await
             .into_iter()
@@ -211,7 +217,10 @@ mod tests {
         let results: Vec<_> = stream
             .rparallel(2, |x| async move {
                 if x == 2 {
-                    Err(rskit_errors::AppError::new(rskit_errors::ErrorCode::Internal, "parallel error"))
+                    Err(rskit_errors::AppError::new(
+                        rskit_errors::ErrorCode::Internal,
+                        "parallel error",
+                    ))
                 } else {
                     Ok(x)
                 }

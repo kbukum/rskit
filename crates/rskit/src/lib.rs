@@ -119,12 +119,12 @@ pub use rskit_llm as llm;
 
 // ── Convenience re-exports at root ──────────────────────────────────────────
 
-pub use rskit_errors::{AppError, AppResult, ErrorCode};
 pub use rskit_bootstrap::{App, AppBuilder, Component, Health, HealthStatus, Registry};
 pub use rskit_config::{AppConfig, ConfigLoader, ServiceConfig};
-pub use rskit_logging::{init_logging, init_logging_env, LoggingGuard};
-pub use rskit_resilience::{CircuitBreaker, RateLimiter, RetryPolicy};
+pub use rskit_errors::{AppError, AppResult, ErrorCode};
+pub use rskit_logging::{LoggingGuard, init_logging, init_logging_env};
 pub use rskit_provider::traits::{Provider, RequestResponse, Sink};
+pub use rskit_resilience::{CircuitBreaker, RateLimiter, RetryPolicy};
 pub use rskit_worker::{Handler, Pool, PoolConfig, TaskHandle};
 
 #[cfg(test)]
@@ -160,11 +160,11 @@ mod tests {
 
     #[tokio::test]
     async fn pool_accessible_from_facade() {
+        use rskit_errors::AppResult;
+        use rskit_worker::Event;
         use std::sync::Arc;
         use tokio::sync::mpsc;
         use tokio_util::sync::CancellationToken;
-        use rskit_errors::AppResult;
-        use rskit_worker::Event;
 
         struct EchoHandler;
         #[async_trait::async_trait]
