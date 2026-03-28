@@ -24,8 +24,9 @@ allow = [
     "Unicode-DFS-2016",
     "Zlib",
     "CC0-1.0",
+    "Unicode-3.0",
+    "CDLA-Permissive-2.0",
 ]
-deny = ["GPL-2.0", "GPL-3.0", "LGPL-2.0", "LGPL-2.1", "LGPL-3.0", "AGPL-3.0"]
 # Allow confidence threshold for license detection
 confidence-threshold = 0.8
 
@@ -42,8 +43,6 @@ license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
 multiple-versions = "warn"
 # Deny crates with known security advisories.
 deny = []
-# Do not allow git dependencies in release builds.
-allow-git = []
 
 # ---------------------------------------------------------------------------
 # Advisories
@@ -53,7 +52,9 @@ allow-git = []
 db-urls = ["https://github.com/rustsec/advisory-db"]
 version = 2
 # Deny all unmaintained crates (upgrade or replace them).
-ignore = []
+ignore = [
+    "RUSTSEC-2023-0071", # rsa: Marvin Attack — transitive via sqlx-mysql, no fix available yet
+]
 
 # ---------------------------------------------------------------------------
 # Sources
