@@ -146,3 +146,102 @@ impl RetryPolicy {
         Duration::from_millis(ms)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+    use rskit_errors::{AppError, ErrorCode};
+    use super::*;
+
+    fn make_policy() -> RetryPolicy {
+        RetryPolicy::new()
+            .with_max_attempts(3)
+            .with_initial_backoff(Duration::from_millis(1))
+            .with_jitter(false)
+    }
+
+    #[tokio::test]
+    async fn execute_succeeds_immediately_on_first_success() {
+        let policy = make_policy();
+        let result = policy.execute(|| async { Ok::<i32, AppError>(42) }).await;
+        assert_eq!(result.unwrap(), 42);
+    }
+
+    #[tokio::test]
+    async fn execute_retries_and_succeeds_on_second_attempt() {
+        let counter = Arc::new(AtomicUsize::new(0));
+        let policy = make_policy();
+
+        let result = policy.execute(|| {
+            let counter = counter.clone();
+            async move {
+                let attempt = counter.fetch_add(1, Ordering::SeqCst);
+                if attempt == 0 {
+                    Err(AppError::new(ErrorCode::ConnectionFailed, "test"))
+                } else {
+                    Ok(99)
+                }
+            }
+        }).await;
+
+        assert_eq!(result.unwrap(), 99);
+        assert_eq!(counter.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn execute_returns_err_after_exhausting_all_attempts() {
+        let counter = Arc::new(AtomicUsize::new(0));
+        let policy = make_policy(); // max_attempts = 3
+
+        let result = policy.execute(|| {
+            let counter = counter.clone();
+            async move {
+                counter.fetch_add(1, Ordering::SeqCst);
+                Err::<i32, AppError>(AppError::new(ErrorCode::ConnectionFailed, "test"))
+            }
+        }).await;
+
+        assert!(result.is_err());
+        let retry_err = result.unwrap_err();
+        assert_eq!(retry_err.attempts, 3);
+        assert_eq!(counter.load(Ordering::SeqCst), 3);
+    }
+
+    #[tokio::test]
+    async fn execute_does_not_retry_non_retryable_error() {
+        let counter = Arc::new(AtomicUsize::new(0));
+        let policy = make_policy();
+
+        let result = policy.execute(|| {
+            let counter = counter.clone();
+            async move {
+                counter.fetch_add(1, Ordering::SeqCst);
+                Err::<i32, AppError>(AppError::new(ErrorCode::NotFound, "test"))
+            }
+        }).await;
+
+        assert!(result.is_err());
+        // Should have stopped after first attempt because error is not retryable
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn execute_with_max_attempts_one_does_not_retry() {
+        let counter = Arc::new(AtomicUsize::new(0));
+        let policy = RetryPolicy::new()
+            .with_max_attempts(1)
+            .with_initial_backoff(Duration::from_millis(1))
+            .with_jitter(false);
+
+        let result = policy.execute(|| {
+            let counter = counter.clone();
+            async move {
+                counter.fetch_add(1, Ordering::SeqCst);
+                Err::<i32, AppError>(AppError::new(ErrorCode::ConnectionFailed, "test"))
+            }
+        }).await;
+
+        assert!(result.is_err());
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
+    }
+}

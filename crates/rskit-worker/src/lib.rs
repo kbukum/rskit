@@ -11,3 +11,159 @@ pub use event::{Event, EventKind, Progress};
 pub use handler::Handler;
 pub use pool::{Pool, PoolConfig, PoolStats};
 pub use task::TaskHandle;
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use tokio::sync::mpsc;
+    use tokio_util::sync::CancellationToken;
+
+    use rskit_errors::{AppError, AppResult, ErrorCode};
+    use rskit_provider::request_response_fn;
+    use rskit_provider::traits::RequestResponse;
+
+    use crate::bridge::{as_provider, from_provider};
+    use crate::event::{Event, Progress};
+    use crate::handler::Handler;
+    use crate::pool::{Pool, PoolConfig};
+
+    // ── Shared test handler: doubles its input ────────────────────────────────
+
+    struct DoubleHandler;
+
+    #[async_trait::async_trait]
+    impl Handler<i32, i32> for DoubleHandler {
+        async fn handle(
+            &self,
+            task: i32,
+            _emit: mpsc::Sender<Event<i32>>,
+            _cancel: CancellationToken,
+        ) -> AppResult<i32> {
+            Ok(task * 2)
+        }
+    }
+
+    // ── Handler that always errors ────────────────────────────────────────────
+
+    struct ErrorHandler;
+
+    #[async_trait::async_trait]
+    impl Handler<i32, i32> for ErrorHandler {
+        async fn handle(
+            &self,
+            _task: i32,
+            _emit: mpsc::Sender<Event<i32>>,
+            _cancel: CancellationToken,
+        ) -> AppResult<i32> {
+            Err(AppError::new(ErrorCode::Internal, "boom"))
+        }
+    }
+
+    // ── Handler that emits one Progress event ─────────────────────────────────
+
+    struct ProgressHandler;
+
+    #[async_trait::async_trait]
+    impl Handler<i32, i32> for ProgressHandler {
+        async fn handle(
+            &self,
+            task: i32,
+            emit: mpsc::Sender<Event<i32>>,
+            _cancel: CancellationToken,
+        ) -> AppResult<i32> {
+            // Use a placeholder UUID; the pool assigns the real task_id, so here
+            // we just need any valid UUID for the emitted event.
+            let fake_id = uuid::Uuid::new_v4();
+            let p = Progress::new(1, Some(1));
+            let ev = Event::progress(fake_id, "progress-handler", p);
+            let _ = emit.send(ev).await;
+            Ok(task * 2)
+        }
+    }
+
+    // ── Handler that adds 1 ───────────────────────────────────────────────────
+
+    struct PlusOneHandler;
+
+    #[async_trait::async_trait]
+    impl Handler<i32, i32> for PlusOneHandler {
+        async fn handle(
+            &self,
+            task: i32,
+            _emit: mpsc::Sender<Event<i32>>,
+            _cancel: CancellationToken,
+        ) -> AppResult<i32> {
+            Ok(task + 1)
+        }
+    }
+
+    // ── 1. pool_submit_and_await_result ───────────────────────────────────────
+
+    #[tokio::test]
+    async fn pool_submit_and_await_result() {
+        let pool = Pool::new(Arc::new(DoubleHandler), PoolConfig::new("test-pool"));
+        let handle = pool.submit(21).await.unwrap();
+        let result = handle.result().await;
+        assert_eq!(result.unwrap(), 42);
+    }
+
+    // ── 2. pool_submit_error_propagates ──────────────────────────────────────
+
+    #[tokio::test]
+    async fn pool_submit_error_propagates() {
+        let pool = Pool::new(Arc::new(ErrorHandler), PoolConfig::new("error-pool"));
+        let handle = pool.submit(1).await.unwrap();
+        let result = handle.result().await;
+        assert!(result.is_err(), "expected Err but got {:?}", result);
+    }
+
+    // ── 3. pool_task_handle_events ────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn pool_task_handle_events() {
+        let pool = Pool::new(Arc::new(ProgressHandler), PoolConfig::new("event-pool"));
+        let handle = pool.submit(5).await.unwrap();
+        let task_id = handle.id;
+        let mut event_rx = handle.events();
+
+        // Await the final result so the task has fully run
+        let result = handle.result().await;
+        assert!(result.is_ok());
+
+        // Collect all events received (progress + the auto-emitted Result event)
+        let mut received = Vec::new();
+        while let Ok(ev) = event_rx.try_recv() {
+            received.push(ev);
+        }
+
+        // The pool always emits at least a final Result event with the correct task_id
+        let has_result_event = received.iter().any(|ev| ev.task_id == task_id);
+        assert!(
+            has_result_event,
+            "expected at least one event with task_id {task_id}, got: {received:?}"
+        );
+    }
+
+    // ── 4. from_provider_bridge ───────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn from_provider_bridge() {
+        let provider = Arc::new(request_response_fn("p", |x: i32| async move { Ok(x + 1) }));
+        let handler = from_provider(provider);
+        let pool = Pool::new(Arc::new(handler), PoolConfig::new("bridge-pool"));
+        let handle = pool.submit(9).await.unwrap();
+        let result = handle.result().await;
+        assert_eq!(result.unwrap(), 10);
+    }
+
+    // ── 5. as_provider_bridge ─────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn as_provider_bridge() {
+        let handler: Arc<dyn Handler<i32, i32>> = Arc::new(PlusOneHandler);
+        let provider = as_provider("name", handler);
+        let result = provider.execute(5).await;
+        assert_eq!(result.unwrap(), 6);
+    }
+}

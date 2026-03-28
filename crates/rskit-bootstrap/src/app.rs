@@ -258,3 +258,51 @@ async fn wait_for_signal(token: CancellationToken) {
 async fn wait_for_signal_owned(token: CancellationToken) {
     wait_for_signal(token).await
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use rskit_config::ServiceConfig;
+    use tokio_util::sync::CancellationToken;
+
+    use super::AppBuilder;
+
+    // ── Minimal AppConfig implementation for tests ─────────────────────────
+
+    #[derive(Debug, Default, serde::Deserialize, validator::Validate)]
+    struct TestCfg {
+        #[serde(default)]
+        service: rskit_config::ServiceConfig,
+    }
+
+    impl rskit_config::AppConfig for TestCfg {
+        fn apply_defaults(&mut self) {}
+        fn service_config(&self) -> &ServiceConfig {
+            &self.service
+        }
+    }
+
+    // ── Tests ──────────────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn app_builder_builds_successfully() {
+        let cfg = TestCfg::default();
+        let result = AppBuilder::new(cfg).build();
+        assert!(result.is_ok(), "AppBuilder::build should succeed with a valid config");
+    }
+
+    #[tokio::test]
+    async fn app_run_task_executes_and_exits() {
+        let cfg = TestCfg::default();
+        let app = AppBuilder::new(cfg).build().expect("build should succeed");
+
+        let result = app
+            .run_task(|_cfg: Arc<TestCfg>, _cancel: CancellationToken| async move {
+                Ok::<(), rskit_errors::AppError>(())
+            })
+            .await;
+
+        assert!(result.is_ok(), "run_task should complete with Ok(())");
+    }
+}

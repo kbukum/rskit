@@ -16,3 +16,7 @@ tracing      = { workspace = true }
 async-trait  = { workspace = true }
 futures-util = { workspace = true }
 validator    = { workspace = true }
+
+[dev-dependencies]
+serde        = { workspace = true }
+tokio        = { workspace = true, features = ["full"] }

@@ -54,3 +54,58 @@ impl RateLimiter {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn check_allows_up_to_burst_limit() {
+        // 1 per second, burst of 5 — all 5 should succeed immediately
+        let rl = RateLimiter::new("test", 1, 5);
+        for _ in 0..5 {
+            assert!(rl.check().is_ok());
+        }
+    }
+
+    #[tokio::test]
+    async fn check_rejects_when_bucket_exhausted() {
+        // 1 per second, burst of 3
+        let rl = RateLimiter::new("test", 1, 3);
+        // Drain the burst
+        for _ in 0..3 {
+            let _ = rl.check();
+        }
+        // Next call should be rejected
+        let result = rl.check();
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn check_returns_rate_limited_error_code() {
+        use rskit_errors::ErrorCode;
+        let rl = RateLimiter::new("test", 1, 1);
+        // Drain the one token
+        let _ = rl.check();
+        let err = rl.check().unwrap_err();
+        assert_eq!(err.code, ErrorCode::RateLimited);
+    }
+
+    #[tokio::test]
+    async fn until_ready_cancels_when_token_cancelled() {
+        use tokio_util::sync::CancellationToken;
+        // Very slow limiter: 1/second, burst of 0 effectively — already drained
+        let rl = RateLimiter::new("test", 1, 1);
+        // Drain the single token so until_ready would wait forever
+        let _ = rl.check();
+
+        let cancel = CancellationToken::new();
+        let cancel_clone = cancel.clone();
+
+        // Cancel immediately
+        cancel_clone.cancel();
+
+        let result = rl.until_ready(Some(cancel)).await;
+        assert!(result.is_err());
+    }
+}

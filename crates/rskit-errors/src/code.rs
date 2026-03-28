@@ -102,3 +102,144 @@ impl std::fmt::Display for ErrorCode {
         f.write_str(self.as_str())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── is_retryable ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn retryable_service_unavailable() {
+        assert!(ErrorCode::ServiceUnavailable.is_retryable());
+    }
+
+    #[test]
+    fn retryable_connection_failed() {
+        assert!(ErrorCode::ConnectionFailed.is_retryable());
+    }
+
+    #[test]
+    fn retryable_timeout() {
+        assert!(ErrorCode::Timeout.is_retryable());
+    }
+
+    #[test]
+    fn retryable_rate_limited() {
+        assert!(ErrorCode::RateLimited.is_retryable());
+    }
+
+    #[test]
+    fn retryable_external_service() {
+        assert!(ErrorCode::ExternalService.is_retryable());
+    }
+
+    #[test]
+    fn not_retryable_not_found() {
+        assert!(!ErrorCode::NotFound.is_retryable());
+    }
+
+    #[test]
+    fn not_retryable_already_exists() {
+        assert!(!ErrorCode::AlreadyExists.is_retryable());
+    }
+
+    #[test]
+    fn not_retryable_conflict() {
+        assert!(!ErrorCode::Conflict.is_retryable());
+    }
+
+    #[test]
+    fn not_retryable_invalid_input() {
+        assert!(!ErrorCode::InvalidInput.is_retryable());
+    }
+
+    #[test]
+    fn not_retryable_missing_field() {
+        assert!(!ErrorCode::MissingField.is_retryable());
+    }
+
+    #[test]
+    fn not_retryable_invalid_format() {
+        assert!(!ErrorCode::InvalidFormat.is_retryable());
+    }
+
+    #[test]
+    fn not_retryable_unauthorized() {
+        assert!(!ErrorCode::Unauthorized.is_retryable());
+    }
+
+    #[test]
+    fn not_retryable_forbidden() {
+        assert!(!ErrorCode::Forbidden.is_retryable());
+    }
+
+    #[test]
+    fn not_retryable_token_expired() {
+        assert!(!ErrorCode::TokenExpired.is_retryable());
+    }
+
+    #[test]
+    fn not_retryable_invalid_token() {
+        assert!(!ErrorCode::InvalidToken.is_retryable());
+    }
+
+    #[test]
+    fn not_retryable_internal() {
+        assert!(!ErrorCode::Internal.is_retryable());
+    }
+
+    #[test]
+    fn not_retryable_database_error() {
+        assert!(!ErrorCode::DatabaseError.is_retryable());
+    }
+
+    // ── http_status ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn http_status_not_found_is_404() {
+        assert_eq!(ErrorCode::NotFound.http_status(), http::StatusCode::NOT_FOUND);
+    }
+
+    #[test]
+    fn http_status_unauthorized_is_401() {
+        assert_eq!(ErrorCode::Unauthorized.http_status(), http::StatusCode::UNAUTHORIZED);
+    }
+
+    #[test]
+    fn http_status_internal_is_500() {
+        assert_eq!(ErrorCode::Internal.http_status(), http::StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[test]
+    fn http_status_rate_limited_is_429() {
+        assert_eq!(ErrorCode::RateLimited.http_status(), http::StatusCode::TOO_MANY_REQUESTS);
+    }
+
+    // ── as_str ────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn as_str_connection_failed() {
+        assert_eq!(ErrorCode::ConnectionFailed.as_str(), "CONNECTION_FAILED");
+    }
+
+    #[test]
+    fn as_str_not_found() {
+        assert_eq!(ErrorCode::NotFound.as_str(), "NOT_FOUND");
+    }
+
+    #[test]
+    fn as_str_unauthorized() {
+        assert_eq!(ErrorCode::Unauthorized.as_str(), "UNAUTHORIZED");
+    }
+
+    #[test]
+    fn as_str_internal() {
+        assert_eq!(ErrorCode::Internal.as_str(), "INTERNAL");
+    }
+
+    #[test]
+    fn display_uses_as_str() {
+        assert_eq!(format!("{}", ErrorCode::Timeout), "TIMEOUT");
+    }
+}

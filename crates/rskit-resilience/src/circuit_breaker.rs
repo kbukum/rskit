@@ -235,3 +235,93 @@ impl CircuitBreaker {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use rskit_errors::{AppError, ErrorCode};
+    use super::*;
+
+    fn make_cb(max_failures: usize) -> CircuitBreaker {
+        CircuitBreaker::new(
+            CbConfig::new("test-cb").with_max_failures(max_failures),
+        )
+    }
+
+    #[tokio::test]
+    async fn execute_passes_through_success() {
+        let cb = make_cb(3);
+        let result = cb.execute(|| async { Ok::<i32, AppError>(7) }).await;
+        assert_eq!(result.unwrap(), 7);
+        assert_eq!(cb.state(), CbState::Closed);
+    }
+
+    #[tokio::test]
+    async fn state_is_closed_initially() {
+        let cb = make_cb(3);
+        assert_eq!(cb.state(), CbState::Closed);
+    }
+
+    #[tokio::test]
+    async fn execute_opens_after_max_failures_consecutive_failures() {
+        let cb = make_cb(3);
+
+        for _ in 0..3 {
+            let _ = cb.execute(|| async {
+                Err::<i32, AppError>(AppError::new(ErrorCode::ConnectionFailed, "fail"))
+            }).await;
+        }
+
+        assert_eq!(cb.state(), CbState::Open);
+    }
+
+    #[tokio::test]
+    async fn execute_rejects_immediately_when_open() {
+        let cb = make_cb(2);
+
+        // Trip the breaker
+        for _ in 0..2 {
+            let _ = cb.execute(|| async {
+                Err::<i32, AppError>(AppError::new(ErrorCode::Internal, "fail"))
+            }).await;
+        }
+        assert_eq!(cb.state(), CbState::Open);
+
+        // Next call should be rejected without calling the function
+        let result = cb.execute(|| async { Ok::<i32, AppError>(42) }).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn failures_resets_to_zero_on_success_in_closed_state() {
+        let cb = make_cb(5);
+
+        // Cause some failures but not enough to open
+        for _ in 0..2 {
+            let _ = cb.execute(|| async {
+                Err::<i32, AppError>(AppError::new(ErrorCode::Internal, "fail"))
+            }).await;
+        }
+        assert_eq!(cb.failures(), 2);
+
+        // A success should reset failures
+        let _ = cb.execute(|| async { Ok::<i32, AppError>(1) }).await;
+        assert_eq!(cb.failures(), 0);
+        assert_eq!(cb.state(), CbState::Closed);
+    }
+
+    #[tokio::test]
+    async fn reset_restores_closed_state() {
+        let cb = make_cb(2);
+
+        for _ in 0..2 {
+            let _ = cb.execute(|| async {
+                Err::<i32, AppError>(AppError::new(ErrorCode::Internal, "fail"))
+            }).await;
+        }
+        assert_eq!(cb.state(), CbState::Open);
+
+        cb.reset();
+        assert_eq!(cb.state(), CbState::Closed);
+        assert_eq!(cb.failures(), 0);
+    }
+}

@@ -194,3 +194,180 @@ impl serde::Serialize for AppError {
         s.end()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── AppError::new ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn new_sets_code_and_message() {
+        let err = AppError::new(ErrorCode::NotFound, "item not found");
+        assert_eq!(err.code, ErrorCode::NotFound);
+        assert_eq!(err.message, "item not found");
+    }
+
+    #[test]
+    fn new_sets_retryable_true_for_retryable_code() {
+        let err = AppError::new(ErrorCode::ConnectionFailed, "conn error");
+        assert!(err.retryable);
+    }
+
+    #[test]
+    fn new_sets_retryable_false_for_non_retryable_code() {
+        let err = AppError::new(ErrorCode::Unauthorized, "no access");
+        assert!(!err.retryable);
+    }
+
+    #[test]
+    fn new_sets_http_status_from_code() {
+        let err = AppError::new(ErrorCode::NotFound, "missing");
+        assert_eq!(err.http_status, http::StatusCode::NOT_FOUND);
+    }
+
+    #[test]
+    fn new_starts_with_empty_details() {
+        let err = AppError::new(ErrorCode::Internal, "oops");
+        assert!(err.details.is_empty());
+    }
+
+    #[test]
+    fn new_starts_with_no_cause() {
+        let err = AppError::new(ErrorCode::Internal, "oops");
+        assert!(err.cause.is_none());
+    }
+
+    // ── with_detail ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn with_detail_stores_single_kv() {
+        let err = AppError::new(ErrorCode::InvalidInput, "bad field")
+            .with_detail("field", "email");
+        assert_eq!(err.details.get("field").and_then(|v| v.as_str()), Some("email"));
+    }
+
+    #[test]
+    fn with_detail_stores_multiple_kv() {
+        let err = AppError::new(ErrorCode::InvalidInput, "bad")
+            .with_detail("field", "email")
+            .with_detail("reason", "invalid format");
+        assert_eq!(err.details.len(), 2);
+        assert!(err.details.contains_key("field"));
+        assert!(err.details.contains_key("reason"));
+    }
+
+    // ── with_cause ────────────────────────────────────────────────────────────
+
+    #[test]
+    fn with_cause_stores_cause() {
+        use std::io;
+        let io_err = io::Error::new(io::ErrorKind::TimedOut, "timed out");
+        let err = AppError::new(ErrorCode::Timeout, "timed out").with_cause(io_err);
+        assert!(err.cause.is_some());
+    }
+
+    #[test]
+    fn with_cause_source_returns_cause() {
+        use std::error::Error;
+        use std::io;
+        let io_err = io::Error::new(io::ErrorKind::ConnectionRefused, "refused");
+        let err = AppError::new(ErrorCode::ConnectionFailed, "conn failed").with_cause(io_err);
+        assert!(err.source().is_some());
+    }
+
+    // ── Convenience constructors ──────────────────────────────────────────────
+
+    #[test]
+    fn not_found_without_id() {
+        let err = AppError::not_found("User", None);
+        assert_eq!(err.code, ErrorCode::NotFound);
+        assert!(err.message.contains("User"));
+        assert!(!err.retryable);
+    }
+
+    #[test]
+    fn not_found_with_id() {
+        let err = AppError::not_found("User", Some("42"));
+        assert_eq!(err.code, ErrorCode::NotFound);
+        assert!(err.message.contains("42"));
+    }
+
+    #[test]
+    fn unauthorized_sets_code_and_not_retryable() {
+        let err = AppError::unauthorized("token missing");
+        assert_eq!(err.code, ErrorCode::Unauthorized);
+        assert!(!err.retryable);
+    }
+
+    #[test]
+    fn invalid_input_sets_code() {
+        let err = AppError::invalid_input("email", "must contain @");
+        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert!(err.message.contains("email"));
+        assert!(err.message.contains("must contain @"));
+    }
+
+    #[test]
+    fn timeout_is_retryable() {
+        let err = AppError::timeout("db query");
+        assert_eq!(err.code, ErrorCode::Timeout);
+        assert!(err.retryable);
+        assert!(err.message.contains("db query"));
+    }
+
+    #[test]
+    fn rate_limited_is_retryable() {
+        let err = AppError::rate_limited();
+        assert_eq!(err.code, ErrorCode::RateLimited);
+        assert!(err.retryable);
+    }
+
+    // ── Display ───────────────────────────────────────────────────────────────
+
+    #[test]
+    fn display_includes_message() {
+        let err = AppError::new(ErrorCode::NotFound, "item not found");
+        let display = format!("{}", err);
+        assert!(display.contains("item not found"), "display was: {}", display);
+    }
+
+    #[test]
+    fn display_includes_code() {
+        let err = AppError::new(ErrorCode::NotFound, "item not found");
+        let display = format!("{}", err);
+        assert!(display.contains("NOT_FOUND"), "display was: {}", display);
+    }
+
+    // ── Query helpers ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn is_retryable_reflects_retryable_field() {
+        let err = AppError::new(ErrorCode::ServiceUnavailable, "down");
+        assert!(err.is_retryable());
+    }
+
+    #[test]
+    fn is_not_found_true_for_not_found_code() {
+        let err = AppError::not_found("Resource", None);
+        assert!(err.is_not_found());
+    }
+
+    #[test]
+    fn is_not_found_false_for_other_code() {
+        let err = AppError::new(ErrorCode::Internal, "err");
+        assert!(!err.is_not_found());
+    }
+
+    #[test]
+    fn is_unauthorized_true_for_unauthorized_code() {
+        let err = AppError::unauthorized("denied");
+        assert!(err.is_unauthorized());
+    }
+
+    #[test]
+    fn is_unauthorized_true_for_token_expired() {
+        let err = AppError::token_expired();
+        assert!(err.is_unauthorized());
+    }
+}

@@ -89,3 +89,79 @@ impl Bulkhead {
         f().await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use rskit_errors::AppError;
+    use super::*;
+
+    #[tokio::test]
+    async fn execute_allows_call_within_limit() {
+        let bh = Bulkhead::new(BulkheadConfig::new("test", 2));
+        let result = bh.execute(|| async { Ok::<i32, AppError>(1) }).await;
+        assert_eq!(result.unwrap(), 1);
+    }
+
+    #[tokio::test]
+    async fn available_decrements_while_executing() {
+        let bh = Bulkhead::new(BulkheadConfig::new("test", 2));
+        assert_eq!(bh.available(), 2);
+        assert_eq!(bh.in_use(), 0);
+
+        // After execution completes the permit is released
+        let _ = bh.execute(|| async { Ok::<i32, AppError>(1) }).await;
+        assert_eq!(bh.available(), 2);
+    }
+
+    #[tokio::test]
+    async fn execute_allows_concurrent_calls_up_to_limit() {
+        let bh = Bulkhead::new(
+            BulkheadConfig::new("test", 3).with_max_wait(Duration::from_millis(100)),
+        );
+
+        // Spawn 3 concurrent tasks; all should succeed
+        let mut handles = Vec::new();
+        for i in 0..3usize {
+            let bh = bh.clone();
+            handles.push(tokio::spawn(async move {
+                bh.execute(|| async move { Ok::<usize, AppError>(i) }).await
+            }));
+        }
+
+        for h in handles {
+            assert!(h.await.unwrap().is_ok());
+        }
+    }
+
+    #[tokio::test]
+    async fn execute_rejects_when_all_slots_occupied_and_wait_expires() {
+        // max_concurrent=1, very short wait so the blocked call times out
+        let bh = Bulkhead::new(
+            BulkheadConfig::new("test", 1)
+                .with_max_wait(Duration::from_millis(10)),
+        );
+
+        // Hold the single permit for a long time using a channel
+        let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+        let bh_clone = bh.clone();
+        let holder = tokio::spawn(async move {
+            bh_clone
+                .execute(|| async move {
+                    let _ = rx.await;
+                    Ok::<i32, AppError>(0)
+                })
+                .await
+        });
+
+        // Give the holder a moment to acquire the permit
+        tokio::time::sleep(Duration::from_millis(5)).await;
+
+        // This call should time out because the only slot is taken
+        let result = bh.execute(|| async { Ok::<i32, AppError>(1) }).await;
+        assert!(result.is_err());
+
+        // Clean up
+        let _ = tx.send(());
+        let _ = holder.await;
+    }
+}

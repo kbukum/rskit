@@ -17,6 +17,11 @@ rskit-resilience = { path = "../rskit-resilience" }
 rskit-worker     = { path = "../rskit-worker" }
 rskit-server     = { path = "../rskit-server", optional = true }
 
+[dev-dependencies]
+tokio       = { workspace = true, features = ["full"] }
+tokio-util  = { workspace = true }
+async-trait = { workspace = true }
+
 [features]
 default = []
 server  = ["dep:rskit-server"]

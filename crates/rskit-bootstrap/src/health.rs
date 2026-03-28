@@ -49,3 +49,63 @@ impl Health {
         self.status == HealthStatus::Healthy
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn healthy_sets_status_and_no_message() {
+        let h = Health::healthy("db");
+        assert_eq!(h.status, HealthStatus::Healthy);
+        assert_eq!(h.name, "db");
+        assert!(h.message.is_none());
+    }
+
+    #[test]
+    fn healthy_is_healthy_returns_true() {
+        let h = Health::healthy("cache");
+        assert!(h.is_healthy());
+    }
+
+    #[test]
+    fn degraded_sets_status_and_message() {
+        let h = Health::degraded("queue", "high latency");
+        assert_eq!(h.status, HealthStatus::Degraded);
+        assert_eq!(h.message, Some("high latency".to_string()));
+    }
+
+    #[test]
+    fn degraded_is_healthy_returns_false() {
+        let h = Health::degraded("queue", "slow");
+        assert!(!h.is_healthy());
+    }
+
+    #[test]
+    fn unhealthy_sets_status_and_message() {
+        let h = Health::unhealthy("db", "connection refused");
+        assert_eq!(h.status, HealthStatus::Unhealthy);
+        assert_eq!(h.message, Some("connection refused".to_string()));
+    }
+
+    #[test]
+    fn unhealthy_is_healthy_returns_false() {
+        let h = Health::unhealthy("db", "down");
+        assert!(!h.is_healthy());
+    }
+
+    #[test]
+    fn health_status_display_healthy() {
+        assert_eq!(format!("{}", HealthStatus::Healthy), "healthy");
+    }
+
+    #[test]
+    fn health_status_display_degraded() {
+        assert_eq!(format!("{}", HealthStatus::Degraded), "degraded");
+    }
+
+    #[test]
+    fn health_status_display_unhealthy() {
+        assert_eq!(format!("{}", HealthStatus::Unhealthy), "unhealthy");
+    }
+}

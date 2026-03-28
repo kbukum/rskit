@@ -115,6 +115,9 @@ mod tests {
     use serde::Deserialize;
     use validator::Validate;
 
+    // Serialise env-mutating tests — parallel tests share the same process env.
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[derive(Debug, Deserialize, Validate)]
     struct TestConfig {
         #[serde(flatten)]
@@ -136,17 +139,33 @@ mod tests {
 
     #[test]
     fn loads_defaults_with_no_file() {
-        // Should succeed even with no file — all fields have defaults
+        let _guard = ENV_LOCK.lock().unwrap();
+        // Ensure the override var is absent for this test.
+        unsafe { std::env::remove_var("APP__PORT") };
         let cfg: TestConfig = ConfigLoader::new().load().expect("should load");
         assert_eq!(cfg.port, 8080);
     }
 
     #[test]
     fn env_prefix_override() {
-        // APP__PORT=9090 should set port=9090
-        std::env::set_var("APP__PORT", "9090");
+        let _guard = ENV_LOCK.lock().unwrap();
+        // APP__PORT=9090 should override the default.
+        // SAFETY: serialised by ENV_LOCK; no other thread mutates this var.
+        unsafe { std::env::set_var("APP__PORT", "9090") };
         let cfg: TestConfig = ConfigLoader::new().load().expect("should load");
         assert_eq!(cfg.port, 9090);
-        std::env::remove_var("APP__PORT");
+        unsafe { std::env::remove_var("APP__PORT") };
+    }
+
+    #[test]
+    fn custom_prefix_is_respected() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        unsafe { std::env::set_var("SVC__PORT", "7777") };
+        let cfg: TestConfig = ConfigLoader::new()
+            .with_env_prefix("SVC")
+            .load()
+            .expect("should load");
+        assert_eq!(cfg.port, 7777);
+        unsafe { std::env::remove_var("SVC__PORT") };
     }
 }
