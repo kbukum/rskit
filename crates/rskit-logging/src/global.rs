@@ -67,7 +67,7 @@ pub fn is_global_init() -> bool {
 
 // ── Internal helpers ─────────────────────────────────────────────────────────
 
-fn make_writer_for(output: &LogOutput) -> impl tracing_subscriber::fmt::MakeWriter<'static> + Clone {
+fn make_writer_for(output: &LogOutput) -> WriterKind {
     // We only support Stdout/Stderr directly; File requires boxing and is
     // deferred to a non-Send context — use Stdout as safe fallback for now.
     match output {

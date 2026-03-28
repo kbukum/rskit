@@ -6,6 +6,19 @@
 //! | Feature | Extra crate |
 //! |---------|-------------|
 //! | `server` | `rskit-server` (tonic gRPC) |
+//! | `http`   | `rskit-http` (axum HTTP) |
+//! | `auth`   | `rskit-auth` (JWT, OIDC, password) |
+//! | `di`     | `rskit-di` (dependency injection) |
+//! | `database` | `rskit-database` (sqlx) |
+//! | `cache`  | `rskit-cache` (Redis) |
+//! | `messaging` | `rskit-messaging` (Kafka) |
+//! | `observability` | `rskit-observability` (OpenTelemetry) |
+//! | `authz`  | `rskit-authz` (RBAC/ABAC) |
+//! | `discovery` | `rskit-discovery` (service discovery) |
+//! | `testutil` | `rskit-testutil` (test helpers) |
+//! | `sse`    | `rskit-sse` (Server-Sent Events) |
+//! | `dag`    | `rskit-dag` (DAG orchestration) |
+//! | `llm`    | `rskit-llm` (LLM providers) |
 //! | `full`   | all features |
 //!
 //! # Quick start
@@ -17,7 +30,7 @@
 
 #![warn(missing_docs)]
 
-// ── Sub-crate facades ────────────────────────────────────────────────────────
+// ── Always-on sub-crate facades ──────────────────────────────────────────────
 
 /// Error types, `ErrorCode`, `AppError`, `AppResult`.
 pub use rskit_errors as errors;
@@ -43,9 +56,66 @@ pub use rskit_bootstrap as bootstrap;
 /// Worker pool, `Handler` trait, typed events.
 pub use rskit_worker as worker;
 
+/// Fluent field-level validation.
+pub use rskit_validation as validation;
+
+// ── Feature-gated sub-crate facades ──────────────────────────────────────────
+
 /// gRPC server component (opt-in via `server` feature).
 #[cfg(feature = "server")]
 pub use rskit_server as server;
+
+/// Axum HTTP server with CORS, request-ID, and Component lifecycle.
+#[cfg(feature = "http")]
+pub use rskit_http as http;
+
+/// JWT, OIDC, password hashing, and request-context auth helpers.
+#[cfg(feature = "auth")]
+pub use rskit_auth as auth;
+
+/// Lightweight runtime dependency injection container.
+#[cfg(feature = "di")]
+pub use rskit_di as di;
+
+/// sqlx-based async database pool with repository pattern.
+#[cfg(feature = "database")]
+pub use rskit_database as database;
+
+/// Redis client with typed store and Component lifecycle.
+#[cfg(feature = "cache")]
+pub use rskit_cache as cache;
+
+/// Message broker abstractions (Kafka, in-memory).
+#[cfg(feature = "messaging")]
+pub use rskit_messaging as messaging;
+
+/// OpenTelemetry tracing, metrics, and context propagation.
+#[cfg(feature = "observability")]
+pub use rskit_observability as observability;
+
+/// RBAC and ABAC authorization engine.
+#[cfg(feature = "authz")]
+pub use rskit_authz as authz;
+
+/// Service discovery with load balancing strategies.
+#[cfg(feature = "discovery")]
+pub use rskit_discovery as discovery;
+
+/// Test utilities, mock providers, and assertion helpers.
+#[cfg(feature = "testutil")]
+pub use rskit_testutil as testutil;
+
+/// Server-Sent Events bus with axum integration.
+#[cfg(feature = "sse")]
+pub use rskit_sse as sse;
+
+/// DAG task orchestrator with parallel execution.
+#[cfg(feature = "dag")]
+pub use rskit_dag as dag;
+
+/// LLM provider abstractions for OpenAI and Anthropic.
+#[cfg(feature = "llm")]
+pub use rskit_llm as llm;
 
 // ── Convenience re-exports at root ──────────────────────────────────────────
 

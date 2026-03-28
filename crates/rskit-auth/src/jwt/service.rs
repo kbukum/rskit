@@ -31,7 +31,7 @@ impl<C: Serialize + DeserializeOwned + Send + Sync> TokenGenerator<C> for JwtSer
         let algo = (&self.config.algorithm).into();
         let header = Header::new(algo);
         jsonwebtoken::encode(&header, claims, &self.encoding_key).map_err(|e| {
-            AppError::internal(format!("JWT encode error: {e}"))
+            AppError::new(rskit_errors::ErrorCode::Internal, format!("JWT encode error: {e}"))
         })
     }
 }
@@ -54,7 +54,7 @@ impl<C: Serialize + DeserializeOwned + Send + Sync> TokenValidator<C> for JwtSer
                 jsonwebtoken::errors::ErrorKind::ExpiredSignature => {
                     AppError::token_expired()
                 }
-                _ => AppError::invalid_token(e.to_string()),
+                _ => AppError::invalid_token(),
             })?;
 
         Ok(data.claims)

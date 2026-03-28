@@ -1,6 +1,6 @@
 [package]
-name        = "rskit-validation"
-description = "Fluent field-level validator that collects errors and converts to AppError"
+name        = "rskit-authz"
+description = "RBAC and ABAC authorization engine"
 version.workspace     = true
 edition.workspace     = true
 license.workspace     = true
@@ -8,10 +8,10 @@ rust-version.workspace = true
 authors.workspace      = true
 repository.workspace   = true
 homepage.workspace     = true
-documentation = "https://docs.rs/rskit-validation"
+documentation = "https://docs.rs/rskit-authz"
 readme = "README.md"
-categories = ["development-tools"]
-keywords   = ["validation", "validator"]
+categories = ["authentication"]
+keywords   = ["authorization", "rbac", "abac", "policy"]
 
 [package.metadata.docs.rs]
 all-features = true
@@ -20,7 +20,9 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 rskit-errors = { path = "../rskit-errors" }
 serde        = { workspace = true }
-regex        = "1"
-once_cell    = "1"
-uuid         = { workspace = true }
-chrono       = { workspace = true }
+serde_json   = { workspace = true }
+async-trait  = { workspace = true }
+tracing      = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

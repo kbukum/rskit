@@ -1,0 +1,33 @@
+[package]
+name        = "rskit-observability"
+description = "OpenTelemetry tracing, metrics, and context propagation"
+version.workspace     = true
+edition.workspace     = true
+license.workspace     = true
+rust-version.workspace = true
+authors.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+documentation = "https://docs.rs/rskit-observability"
+readme = "README.md"
+categories = ["development-tools::profiling"]
+keywords   = ["opentelemetry", "tracing", "metrics", "prometheus"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+rskit-errors    = { path = "../rskit-errors" }
+rskit-bootstrap = { path = "../rskit-bootstrap" }
+rskit-logging   = { path = "../rskit-logging" }
+serde           = { workspace = true }
+async-trait     = { workspace = true }
+tokio           = { workspace = true }
+tracing         = { workspace = true }
+tracing-subscriber = { workspace = true }
+opentelemetry            = { workspace = true }
+opentelemetry_sdk        = { workspace = true }
+opentelemetry-otlp       = { workspace = true }
+tracing-opentelemetry    = { workspace = true }
+http            = { workspace = true }

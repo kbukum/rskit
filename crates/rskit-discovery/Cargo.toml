@@ -1,6 +1,6 @@
 [package]
-name        = "rskit-sse"
-description = "Server-Sent Events bus with axum integration"
+name        = "rskit-discovery"
+description = "Service discovery with load balancing strategies"
 version.workspace     = true
 edition.workspace     = true
 license.workspace     = true
@@ -8,10 +8,10 @@ rust-version.workspace = true
 authors.workspace      = true
 repository.workspace   = true
 homepage.workspace     = true
-documentation = "https://docs.rs/rskit-sse"
+documentation = "https://docs.rs/rskit-discovery"
 readme = "README.md"
-categories = ["web-programming"]
-keywords   = ["sse", "server-sent-events", "axum"]
+categories = ["network-programming"]
+keywords   = ["discovery", "service-mesh", "load-balancer"]
 
 [package.metadata.docs.rs]
 all-features = true
@@ -23,7 +23,8 @@ serde        = { workspace = true }
 serde_json   = { workspace = true }
 async-trait  = { workspace = true }
 tokio        = { workspace = true }
-tokio-stream = { workspace = true, features = ["sync"] }
+tokio-stream = { workspace = true }
 tracing      = { workspace = true }
-axum         = { workspace = true }
-futures-util = { workspace = true }
+dashmap      = { workspace = true }
+rand         = { workspace = true }
+parking_lot  = { workspace = true }

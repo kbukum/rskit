@@ -107,7 +107,7 @@ impl Container {
             let guard = self.registrations.read();
             match guard.get(&TypeId::of::<T>()) {
                 None => {
-                    return Err(AppError::not_found(std::any::type_name::<T>()));
+                    return Err(AppError::not_found(std::any::type_name::<T>(), None));
                 }
                 Some(Registration::Eager(v)) => v.clone(),
                 Some(Registration::Lazy(f)) => f()?,
@@ -126,7 +126,7 @@ impl Container {
         };
         arc_any
             .downcast::<T>()
-            .map_err(|_| AppError::internal("type downcast failed in DI container"))
+            .map_err(|_| AppError::new(rskit_errors::ErrorCode::Internal, "type downcast failed in DI container"))
     }
 
     /// Returns `true` if `T` has been registered.

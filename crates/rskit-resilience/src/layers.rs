@@ -76,7 +76,11 @@ where
                 match s.call(r).await {
                     Ok(v) => return Ok(v),
                     Err(e) => {
-                        let retryable = (policy.retry_if)(&e);
+                        let retryable = if let Some(ref pred) = policy.retry_if {
+                            pred(&e)
+                        } else {
+                            e.is_retryable()
+                        };
                         if !retryable || attempt + 1 >= policy.max_attempts {
                             return Err(e);
                         }
