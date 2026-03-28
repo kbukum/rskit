@@ -7,10 +7,12 @@ use rskit_errors::AppError;
 /// Tower layer that wraps each call in a [`tracing::Span`].
 #[derive(Clone)]
 pub struct TracingLayer {
+    /// Name of the provider being wrapped, used as a span field.
     pub provider_name: &'static str,
 }
 
 impl TracingLayer {
+    /// Create a new [`TracingLayer`] for the named provider.
     pub fn new(provider_name: &'static str) -> Self {
         Self { provider_name }
     }
@@ -23,6 +25,7 @@ impl<S> tower::Layer<S> for TracingLayer {
     }
 }
 
+/// Tower service that wraps each call in a tracing span.
 #[derive(Clone)]
 pub struct TracingService<S> {
     inner: S,

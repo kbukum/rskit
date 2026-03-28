@@ -1,6 +1,14 @@
+//! Composable async data pipelines built on `futures::Stream`.
+
+#![warn(missing_docs)]
+
+/// Extension trait adding `rskit` operators to any `Stream`.
 pub mod ext;
+/// Higher-level stream operators (map, filter, fan-out, windowing, etc.).
 pub mod operators;
+/// Terminal sink combinators (`collect`, `drain`, `for_each`).
 pub mod sink;
+/// Stream source constructors (`from_slice`, `from_fn`, `from_channel`).
 pub mod source;
 
 pub use ext::RskitStreamExt;

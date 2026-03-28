@@ -5,7 +5,9 @@ use rskit_errors::{AppError, AppResult};
 /// Error returned when all retry attempts are exhausted.
 #[derive(Debug)]
 pub struct RetryError {
+    /// Total number of attempts made.
     pub attempts: usize,
+    /// The error returned by the last attempt.
     pub last_error: AppError,
 }
 
@@ -44,11 +46,17 @@ impl std::error::Error for RetryError {
 /// ```
 #[derive(Debug, Clone)]
 pub struct RetryPolicy {
+    /// Maximum number of attempts before giving up (including the first call).
     pub max_attempts: usize,
+    /// Delay before the first retry.
     pub initial_backoff: Duration,
+    /// Upper bound on any single backoff delay.
     pub max_backoff: Duration,
+    /// Multiplier applied on each successive retry.
     pub backoff_factor: f64,
+    /// Whether to add uniform jitter to each backoff delay.
     pub jitter: bool,
+    /// Predicate that decides whether a given error is worth retrying.
     pub retry_if: fn(&AppError) -> bool,
 }
 
@@ -66,35 +74,48 @@ impl Default for RetryPolicy {
 }
 
 impl RetryPolicy {
+    /// Create a new [`RetryPolicy`] with default settings.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Set the maximum number of attempts (including the first call).
+    #[must_use]
     pub fn with_max_attempts(mut self, n: usize) -> Self {
         self.max_attempts = n;
         self
     }
 
+    /// Set the initial backoff delay before the first retry.
+    #[must_use]
     pub fn with_initial_backoff(mut self, d: Duration) -> Self {
         self.initial_backoff = d;
         self
     }
 
+    /// Set the upper bound on any single backoff delay.
+    #[must_use]
     pub fn with_max_backoff(mut self, d: Duration) -> Self {
         self.max_backoff = d;
         self
     }
 
+    /// Set the exponential backoff multiplication factor.
+    #[must_use]
     pub fn with_backoff_factor(mut self, f: f64) -> Self {
         self.backoff_factor = f;
         self
     }
 
+    /// Enable or disable uniform jitter on each backoff delay.
+    #[must_use]
     pub fn with_jitter(mut self, enabled: bool) -> Self {
         self.jitter = enabled;
         self
     }
 
+    /// Override the predicate used to decide whether an error is retryable.
+    #[must_use]
     pub fn with_retry_if(mut self, f: fn(&AppError) -> bool) -> Self {
         self.retry_if = f;
         self

@@ -19,6 +19,7 @@ pub struct ConfigLoader {
 }
 
 impl ConfigLoader {
+    /// Create a new [`ConfigLoader`] with default settings (prefix `"APP"`).
     pub fn new() -> Self {
         Self {
             config_file: None,
@@ -28,12 +29,14 @@ impl ConfigLoader {
     }
 
     /// Explicitly set the TOML config file path.
+    #[must_use]
     pub fn with_config_file(mut self, path: impl Into<PathBuf>) -> Self {
         self.config_file = Some(path.into());
         self
     }
 
     /// Explicitly set the `.env` file path.
+    #[must_use]
     pub fn with_env_file(mut self, path: impl Into<PathBuf>) -> Self {
         self.env_file = Some(path.into());
         self
@@ -41,6 +44,7 @@ impl ConfigLoader {
 
     /// Override the env-var prefix (default: `"APP"`).
     /// Separator is always `"__"`.
+    #[must_use]
     pub fn with_env_prefix(mut self, prefix: impl Into<String>) -> Self {
         self.env_prefix = prefix.into();
         self

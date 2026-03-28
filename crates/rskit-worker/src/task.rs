@@ -12,6 +12,7 @@ use crate::event::Event;
 /// - `events()` returns a broadcast receiver for intermediate [`Event`]s.
 /// - `cancel()` requests cooperative cancellation.
 pub struct TaskHandle<O: Clone + Send + 'static> {
+    /// Unique identifier assigned to this task by the pool.
     pub id: Uuid,
     events_rx: broadcast::Receiver<Event<O>>,
     result_rx: oneshot::Receiver<AppResult<O>>,

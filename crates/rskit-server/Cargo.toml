@@ -5,6 +5,12 @@ version.workspace     = true
 edition.workspace     = true
 license.workspace     = true
 rust-version.workspace = true
+authors.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+documentation.workspace = true
+categories = ["network-programming"]
+keywords   = ["grpc", "tonic", "server"]
 
 [dependencies]
 rskit-errors     = { path = "../rskit-errors" }

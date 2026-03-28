@@ -27,6 +27,7 @@ use crate::{Bulkhead, CircuitBreaker, RateLimiter, RetryPolicy};
 pub struct RetryLayer(pub RetryPolicy);
 
 impl RetryLayer {
+    /// Create a new [`RetryLayer`] from the given policy.
     pub fn new(policy: RetryPolicy) -> Self {
         Self(policy)
     }
@@ -39,6 +40,7 @@ impl<S> tower::Layer<S> for RetryLayer {
     }
 }
 
+/// Tower service that retries failed requests using a [`RetryPolicy`].
 #[derive(Clone)]
 pub struct RetryService<S> {
     inner: S,
@@ -104,6 +106,7 @@ where
 pub struct CircuitBreakerLayer(pub CircuitBreaker);
 
 impl CircuitBreakerLayer {
+    /// Create a new [`CircuitBreakerLayer`] from the given breaker.
     pub fn new(cb: CircuitBreaker) -> Self {
         Self(cb)
     }
@@ -116,6 +119,7 @@ impl<S> tower::Layer<S> for CircuitBreakerLayer {
     }
 }
 
+/// Tower service that gates calls through a [`CircuitBreaker`].
 #[derive(Clone)]
 pub struct CircuitBreakerService<S> {
     inner: S,
@@ -151,6 +155,7 @@ where
 pub struct BulkheadLayer(pub Bulkhead);
 
 impl BulkheadLayer {
+    /// Create a new [`BulkheadLayer`] from the given bulkhead.
     pub fn new(bh: Bulkhead) -> Self {
         Self(bh)
     }
@@ -163,6 +168,7 @@ impl<S> tower::Layer<S> for BulkheadLayer {
     }
 }
 
+/// Tower service that limits concurrency via a [`Bulkhead`].
 #[derive(Clone)]
 pub struct BulkheadService<S> {
     inner: S,
@@ -198,6 +204,7 @@ where
 pub struct RateLimitLayer(pub RateLimiter);
 
 impl RateLimitLayer {
+    /// Create a new [`RateLimitLayer`] from the given limiter.
     pub fn new(rl: RateLimiter) -> Self {
         Self(rl)
     }
@@ -210,6 +217,7 @@ impl<S> tower::Layer<S> for RateLimitLayer {
     }
 }
 
+/// Tower service that rate-limits calls using a [`RateLimiter`].
 #[derive(Clone)]
 pub struct RateLimitService<S> {
     inner: S,

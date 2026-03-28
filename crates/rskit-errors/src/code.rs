@@ -7,30 +7,47 @@
 #[non_exhaustive]
 pub enum ErrorCode {
     // ── Connection / availability (all retryable) ──────────────────────
+    /// The downstream service is unavailable; retryable.
     ServiceUnavailable,
+    /// Could not establish a connection to a dependency; retryable.
     ConnectionFailed,
+    /// An operation exceeded its deadline; retryable.
     Timeout,
+    /// Request was rejected because a rate limit was exceeded; retryable.
     RateLimited,
 
     // ── Resource ───────────────────────────────────────────────────────
+    /// The requested resource does not exist.
     NotFound,
+    /// A resource with the same identity already exists.
     AlreadyExists,
+    /// The request conflicts with the current state of a resource.
     Conflict,
 
     // ── Validation ─────────────────────────────────────────────────────
+    /// One or more input fields failed validation.
     InvalidInput,
+    /// A required field was absent from the request.
     MissingField,
+    /// A field value could not be parsed into the expected format.
     InvalidFormat,
 
     // ── Auth ───────────────────────────────────────────────────────────
+    /// The caller has not been authenticated.
     Unauthorized,
+    /// The caller is authenticated but does not have permission.
     Forbidden,
+    /// The authentication token has expired.
     TokenExpired,
+    /// The authentication token is malformed or unrecognised.
     InvalidToken,
 
     // ── Internal ───────────────────────────────────────────────────────
+    /// An unexpected internal error occurred.
     Internal,
+    /// A database operation failed.
     DatabaseError,
+    /// An external service returned an error; retryable.
     ExternalService,
 }
 

@@ -8,26 +8,33 @@ use rskit_resilience::{CircuitBreaker, RateLimiter, RetryPolicy};
 /// Resilience configuration for a provider layer.
 #[derive(Clone, Default)]
 pub struct ResilienceConfig {
+    /// Optional retry policy applied to each call.
     pub retry: Option<RetryPolicy>,
+    /// Optional circuit breaker guarding the inner service.
     pub circuit_breaker: Option<CircuitBreaker>,
+    /// Optional rate limiter checked before every call.
     pub rate_limiter: Option<RateLimiter>,
 }
 
 impl ResilienceConfig {
+    /// Create an empty [`ResilienceConfig`] with no primitives enabled.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Enable retry with the given policy.
     pub fn with_retry(mut self, p: RetryPolicy) -> Self {
         self.retry = Some(p);
         self
     }
 
+    /// Enable circuit breaker protection.
     pub fn with_circuit_breaker(mut self, cb: CircuitBreaker) -> Self {
         self.circuit_breaker = Some(cb);
         self
     }
 
+    /// Enable rate limiting.
     pub fn with_rate_limiter(mut self, rl: RateLimiter) -> Self {
         self.rate_limiter = Some(rl);
         self
@@ -39,6 +46,7 @@ impl ResilienceConfig {
 pub struct ResilienceLayer(pub ResilienceConfig);
 
 impl ResilienceLayer {
+    /// Create a new [`ResilienceLayer`] from the given config.
     pub fn new(config: ResilienceConfig) -> Self {
         Self(config)
     }
@@ -51,6 +59,7 @@ impl<S> tower::Layer<S> for ResilienceLayer {
     }
 }
 
+/// Tower service that applies retry, circuit-breaker, and rate-limit logic.
 #[derive(Clone)]
 pub struct ResilienceService<S> {
     inner: S,

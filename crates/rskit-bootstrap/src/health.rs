@@ -1,8 +1,11 @@
 /// Liveness state of a component.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HealthStatus {
+    /// Component is operating normally.
     Healthy,
+    /// Component is functional but operating in a reduced capacity.
     Degraded,
+    /// Component is not functioning correctly.
     Unhealthy,
 }
 
@@ -17,18 +20,23 @@ impl std::fmt::Display for HealthStatus {
 }
 
 /// Health report from a single component.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Health {
+    /// Component name as returned by [`crate::Component::name`].
     pub name: String,
+    /// Overall health status of the component.
     pub status: HealthStatus,
+    /// Optional human-readable explanation for non-healthy status.
     pub message: Option<String>,
 }
 
 impl Health {
+    /// Create a healthy report for the named component.
     pub fn healthy(name: impl Into<String>) -> Self {
         Self { name: name.into(), status: HealthStatus::Healthy, message: None }
     }
 
+    /// Create a degraded report with an explanatory message.
     pub fn degraded(name: impl Into<String>, msg: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -37,6 +45,7 @@ impl Health {
         }
     }
 
+    /// Create an unhealthy report with an explanatory message.
     pub fn unhealthy(name: impl Into<String>, msg: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -45,6 +54,7 @@ impl Health {
         }
     }
 
+    /// Returns `true` if the status is [`HealthStatus::Healthy`].
     pub fn is_healthy(&self) -> bool {
         self.status == HealthStatus::Healthy
     }

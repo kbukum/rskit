@@ -45,6 +45,7 @@ pub struct AppBuilder<C: AppConfig> {
 }
 
 impl<C: AppConfig> AppBuilder<C> {
+    /// Create a new builder with the given application configuration.
     pub fn new(config: C) -> Self {
         Self {
             config,
@@ -53,11 +54,15 @@ impl<C: AppConfig> AppBuilder<C> {
         }
     }
 
+    /// Set the graceful shutdown timeout (default: 30 s).
+    #[must_use]
     pub fn with_graceful_timeout(mut self, t: Duration) -> Self {
         self.graceful_timeout = t;
         self
     }
 
+    /// Register a component to be started and stopped by the app.
+    #[must_use]
     pub fn with_component(mut self, c: Arc<dyn Component>) -> Self {
         self.components.push(c);
         self
@@ -124,6 +129,8 @@ impl<C: AppConfig> App<Unconfigured, C> {
 
     // ── Hook registration ─────────────────────────────────────────────
 
+    /// Register a hook called after all components start, before `on_start`.
+    #[must_use]
     pub fn on_configure<F, Fut>(mut self, f: F) -> Self
     where
         F: Fn(CancellationToken) -> Fut + Send + Sync + 'static,
@@ -133,6 +140,8 @@ impl<C: AppConfig> App<Unconfigured, C> {
         self
     }
 
+    /// Register a hook called after `on_configure`, before `on_ready`.
+    #[must_use]
     pub fn on_start<F, Fut>(mut self, f: F) -> Self
     where
         F: Fn(CancellationToken) -> Fut + Send + Sync + 'static,
@@ -142,6 +151,8 @@ impl<C: AppConfig> App<Unconfigured, C> {
         self
     }
 
+    /// Register a hook called after `on_start` — service is now fully ready.
+    #[must_use]
     pub fn on_ready<F, Fut>(mut self, f: F) -> Self
     where
         F: Fn(CancellationToken) -> Fut + Send + Sync + 'static,
@@ -151,6 +162,8 @@ impl<C: AppConfig> App<Unconfigured, C> {
         self
     }
 
+    /// Register a hook called during graceful shutdown, before components stop.
+    #[must_use]
     pub fn on_stop<F, Fut>(mut self, f: F) -> Self
     where
         F: Fn(CancellationToken) -> Fut + Send + Sync + 'static,
@@ -162,6 +175,7 @@ impl<C: AppConfig> App<Unconfigured, C> {
 
     // ── Accessors ─────────────────────────────────────────────────────
 
+    /// Return a clone of the shared application configuration.
     pub fn config(&self) -> Arc<C> {
         self.config.clone()
     }

@@ -8,10 +8,12 @@ use rskit_errors::AppError;
 /// Tower layer that logs request duration and success/failure.
 #[derive(Clone, Default)]
 pub struct LoggingLayer {
+    /// Name of the provider being wrapped, used in log fields.
     pub provider_name: &'static str,
 }
 
 impl LoggingLayer {
+    /// Create a new [`LoggingLayer`] for the named provider.
     pub fn new(provider_name: &'static str) -> Self {
         Self { provider_name }
     }
@@ -24,6 +26,7 @@ impl<S> tower::Layer<S> for LoggingLayer {
     }
 }
 
+/// Tower service that logs each request's duration and outcome.
 #[derive(Clone)]
 pub struct LoggingService<S> {
     inner: S,

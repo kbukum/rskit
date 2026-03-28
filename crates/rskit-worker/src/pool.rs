@@ -16,8 +16,11 @@ use crate::task::TaskHandle;
 /// Statistics snapshot for the pool.
 #[derive(Debug, Clone)]
 pub struct PoolStats {
+    /// Human-readable name of the pool.
     pub name: String,
+    /// Number of tasks currently executing.
     pub running: usize,
+    /// Maximum concurrent tasks the pool allows.
     pub capacity: usize,
 }
 
@@ -51,20 +54,27 @@ impl Default for PoolConfig {
 }
 
 impl PoolConfig {
+    /// Create a named pool configuration with sensible defaults.
     pub fn new(name: impl Into<String>) -> Self {
         Self { name: name.into(), ..Default::default() }
     }
 
+    /// Set the maximum number of concurrent tasks.
+    #[must_use]
     pub fn with_size(mut self, size: usize) -> Self {
         self.size = size;
         self
     }
 
+    /// Set the capacity of the internal submit queue.
+    #[must_use]
     pub fn with_queue_size(mut self, queue_size: usize) -> Self {
         self.queue_size = queue_size;
         self
     }
 
+    /// Set the grace period given to in-flight tasks during shutdown.
+    #[must_use]
     pub fn with_grace_period(mut self, d: Duration) -> Self {
         self.grace_period = d;
         self

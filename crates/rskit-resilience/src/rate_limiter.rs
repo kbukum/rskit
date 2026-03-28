@@ -15,6 +15,14 @@ pub struct RateLimiter {
     name: String,
 }
 
+impl std::fmt::Debug for RateLimiter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RateLimiter")
+            .field("name", &self.name)
+            .finish()
+    }
+}
+
 impl RateLimiter {
     /// Create a rate limiter that allows `per_second` requests/second with a
     /// burst capacity of `burst`.

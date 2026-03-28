@@ -15,6 +15,8 @@
 //! rskit = { version = "0.1", features = ["full"] }
 //! ```
 
+#![warn(missing_docs)]
+
 // ── Sub-crate facades ────────────────────────────────────────────────────────
 
 /// Error types, `ErrorCode`, `AppError`, `AppResult`.

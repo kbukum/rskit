@@ -1,3 +1,7 @@
+//! TOML + environment-variable configuration loading with validation.
+
+#![warn(missing_docs)]
+
 mod loader;
 mod service;
 
@@ -28,6 +32,8 @@ pub use service::{Environment, LogFormat, LoggingConfig, ServiceConfig};
 pub trait AppConfig:
     serde::de::DeserializeOwned + validator::Validate + Send + Sync + 'static
 {
+    /// Apply any programmatic defaults after deserialization.
     fn apply_defaults(&mut self);
+    /// Return a reference to the embedded [`ServiceConfig`].
     fn service_config(&self) -> &ServiceConfig;
 }

@@ -11,11 +11,17 @@ use crate::code::ErrorCode;
 /// cause chain compatible with `std::error::Error`.
 #[derive(Debug)]
 pub struct AppError {
+    /// Machine-readable error classification.
     pub code: ErrorCode,
+    /// Human-readable description of the error.
     pub message: String,
+    /// Whether the operation that produced this error is safe to retry.
     pub retryable: bool,
+    /// Canonical HTTP status code for this error.
     pub http_status: http::StatusCode,
+    /// Arbitrary key-value pairs for rich error responses.
     pub details: HashMap<String, Value>,
+    /// Optional underlying error that caused this one.
     pub cause: Option<Box<dyn std::error::Error + Send + Sync + 'static>>,
 }
 
@@ -34,6 +40,7 @@ impl std::error::Error for AppError {
 impl AppError {
     // ── Core constructor ────────────────────────────────────────────────
 
+    /// Create a new [`AppError`] from `code` and a human-readable `message`.
     pub fn new(code: ErrorCode, message: impl Into<String>) -> Self {
         let retryable = code.is_retryable();
         let http_status = code.http_status();
@@ -49,6 +56,7 @@ impl AppError {
 
     // ── Fluent builder methods ──────────────────────────────────────────
 
+    /// Attach an underlying cause to this error.
     pub fn with_cause(
         mut self,
         cause: impl std::error::Error + Send + Sync + 'static,
@@ -57,16 +65,19 @@ impl AppError {
         self
     }
 
+    /// Add a single key-value detail entry.
     pub fn with_detail(mut self, key: impl Into<String>, value: impl Into<Value>) -> Self {
         self.details.insert(key.into(), value.into());
         self
     }
 
+    /// Merge a map of detail entries into this error.
     pub fn with_details(mut self, details: HashMap<String, Value>) -> Self {
         self.details.extend(details);
         self
     }
 
+    /// Override whether this error is considered retryable.
     pub fn retryable(mut self, r: bool) -> Self {
         self.retryable = r;
         self
@@ -74,22 +85,27 @@ impl AppError {
 
     // ── Convenience constructors (mirror gokit's API surface) ───────────
 
+    /// Create a `ServiceUnavailable` error for the named service.
     pub fn service_unavailable(service: impl Into<String>) -> Self {
         Self::new(ErrorCode::ServiceUnavailable, format!("service unavailable: {}", service.into()))
     }
 
+    /// Create a `ConnectionFailed` error for the named service.
     pub fn connection_failed(service: impl Into<String>) -> Self {
         Self::new(ErrorCode::ConnectionFailed, format!("connection failed: {}", service.into()))
     }
 
+    /// Create a `Timeout` error for the named operation.
     pub fn timeout(operation: impl Into<String>) -> Self {
         Self::new(ErrorCode::Timeout, format!("operation timed out: {}", operation.into()))
     }
 
+    /// Create a `RateLimited` error.
     pub fn rate_limited() -> Self {
         Self::new(ErrorCode::RateLimited, "rate limit exceeded")
     }
 
+    /// Create a `NotFound` error for `resource`, optionally including an `id`.
     pub fn not_found(resource: impl Into<String>, id: Option<&str>) -> Self {
         let msg = match id {
             Some(id) => format!("{} '{}' not found", resource.into(), id),
@@ -98,22 +114,27 @@ impl AppError {
         Self::new(ErrorCode::NotFound, msg)
     }
 
+    /// Create an `AlreadyExists` error for the named resource.
     pub fn already_exists(resource: impl Into<String>) -> Self {
         Self::new(ErrorCode::AlreadyExists, format!("{} already exists", resource.into()))
     }
 
+    /// Create a `Conflict` error with the given reason.
     pub fn conflict(reason: impl Into<String>) -> Self {
         Self::new(ErrorCode::Conflict, reason)
     }
 
+    /// Create an `InvalidInput` error for the named field.
     pub fn invalid_input(field: impl Into<String>, reason: impl Into<String>) -> Self {
         Self::new(ErrorCode::InvalidInput, format!("invalid {}: {}", field.into(), reason.into()))
     }
 
+    /// Create a `MissingField` error for the named required field.
     pub fn missing_field(field: impl Into<String>) -> Self {
         Self::new(ErrorCode::MissingField, format!("missing required field: {}", field.into()))
     }
 
+    /// Create an `InvalidFormat` error for the named field.
     pub fn invalid_format(field: impl Into<String>, expected: impl Into<String>) -> Self {
         Self::new(
             ErrorCode::InvalidFormat,
@@ -121,32 +142,39 @@ impl AppError {
         )
     }
 
+    /// Create an `Unauthorized` error with the given reason.
     pub fn unauthorized(reason: impl Into<String>) -> Self {
         Self::new(ErrorCode::Unauthorized, reason)
     }
 
+    /// Create a `Forbidden` error with the given reason.
     pub fn forbidden(reason: impl Into<String>) -> Self {
         Self::new(ErrorCode::Forbidden, reason)
     }
 
+    /// Create a `TokenExpired` error.
     pub fn token_expired() -> Self {
         Self::new(ErrorCode::TokenExpired, "authentication token has expired")
     }
 
+    /// Create an `InvalidToken` error.
     pub fn invalid_token() -> Self {
         Self::new(ErrorCode::InvalidToken, "authentication token is invalid")
     }
 
+    /// Wrap an arbitrary error as an `Internal` application error.
     pub fn internal(cause: impl std::error::Error + Send + Sync + 'static) -> Self {
         let msg = cause.to_string();
         Self::new(ErrorCode::Internal, msg).with_cause(cause)
     }
 
+    /// Wrap a database error.
     pub fn database_error(cause: impl std::error::Error + Send + Sync + 'static) -> Self {
         let msg = format!("database error: {}", cause);
         Self::new(ErrorCode::DatabaseError, msg).with_cause(cause)
     }
 
+    /// Wrap an external service error, naming the dependency.
     pub fn external_service(
         service: impl Into<String>,
         cause: impl std::error::Error + Send + Sync + 'static,
@@ -165,14 +193,17 @@ impl AppError {
 
     // ── Query helpers ───────────────────────────────────────────────────
 
+    /// Returns `true` if the operation that produced this error is safe to retry.
     pub fn is_retryable(&self) -> bool {
         self.retryable
     }
 
+    /// Returns `true` if this error indicates a missing resource.
     pub fn is_not_found(&self) -> bool {
         self.code == ErrorCode::NotFound
     }
 
+    /// Returns `true` if this error is an authentication/authorisation failure.
     pub fn is_unauthorized(&self) -> bool {
         matches!(
             self.code,

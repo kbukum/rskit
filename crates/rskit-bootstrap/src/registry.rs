@@ -14,6 +14,7 @@ pub struct Registry {
 }
 
 impl Registry {
+    /// Create an empty [`Registry`].
     pub fn new() -> Self {
         Self::default()
     }
@@ -48,10 +49,12 @@ impl Registry {
         self.components.iter().map(|c| c.health()).collect()
     }
 
+    /// Return the number of registered components.
     pub fn len(&self) -> usize {
         self.components.len()
     }
 
+    /// Return `true` if no components have been registered.
     pub fn is_empty(&self) -> bool {
         self.components.is_empty()
     }

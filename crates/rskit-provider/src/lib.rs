@@ -1,6 +1,14 @@
+//! Provider traits (request-response, stream, sink, duplex) with tower middleware.
+
+#![warn(missing_docs)]
+
+/// Closure-based provider adapters.
 pub mod adapt;
+/// Tower middleware layers: logging, tracing, resilience.
 pub mod middleware;
+/// Core provider traits.
 pub mod traits;
+/// [`TowerProvider`] — bridge from `tower::Service` to [`traits::RequestResponse`].
 pub mod tower_bridge;
 
 pub use adapt::{request_response_fn, sink_fn};

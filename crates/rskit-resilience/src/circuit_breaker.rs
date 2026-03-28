@@ -43,25 +43,34 @@ impl Default for CbConfig {
 }
 
 impl CbConfig {
+    /// Create a new config with the given `name` and all other fields at defaults.
     pub fn new(name: impl Into<String>) -> Self {
         Self { name: name.into(), ..Default::default() }
     }
 
+    /// Set the consecutive failure threshold that trips the breaker.
+    #[must_use]
     pub fn with_max_failures(mut self, n: usize) -> Self {
         self.max_failures = n;
         self
     }
 
+    /// Set how long the breaker stays open before entering half-open.
+    #[must_use]
     pub fn with_timeout(mut self, t: Duration) -> Self {
         self.timeout = t;
         self
     }
 
+    /// Set the maximum number of probe calls allowed in the half-open state.
+    #[must_use]
     pub fn with_half_open_max_calls(mut self, n: usize) -> Self {
         self.half_open_max_calls = n;
         self
     }
 
+    /// Register a callback invoked on every state transition.
+    #[must_use]
     pub fn with_on_state_change(
         mut self,
         f: fn(name: &str, from: CbState, to: CbState),
@@ -114,6 +123,7 @@ pub struct CircuitBreaker {
 }
 
 impl CircuitBreaker {
+    /// Create a new [`CircuitBreaker`] with the given configuration.
     pub fn new(config: CbConfig) -> Self {
         Self {
             inner: Arc::new(Mutex::new(Inner::new())),
@@ -121,14 +131,17 @@ impl CircuitBreaker {
         }
     }
 
+    /// Return the current observable state of the breaker.
     pub fn state(&self) -> CbState {
         self.inner.lock().state
     }
 
+    /// Return the current consecutive failure count.
     pub fn failures(&self) -> usize {
         self.inner.lock().failures
     }
 
+    /// Reset the breaker to closed state with all counters zeroed.
     pub fn reset(&self) {
         let mut inner = self.inner.lock();
         *inner = Inner::new();

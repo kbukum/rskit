@@ -4,23 +4,30 @@ use validator::Validate;
 /// TLS configuration for the gRPC server.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TlsConfig {
+    /// Path to the PEM-encoded TLS certificate file.
     pub cert_path: String,
+    /// Path to the PEM-encoded TLS private key file.
     pub key_path: String,
 }
 
 /// Configuration for the gRPC server component.
 #[derive(Debug, Clone, Deserialize, Serialize, Validate)]
 pub struct GrpcServerConfig {
+    /// Bind address (e.g. `"0.0.0.0"` or `"127.0.0.1"`).
     #[validate(length(min = 1))]
     pub host: String,
 
+    /// TCP port to listen on (1–65535).
     #[validate(range(min = 1, max = 65535))]
     pub port: u16,
 
+    /// Optional maximum number of concurrent connections.
     pub max_connections: Option<usize>,
 
+    /// Optional TCP keep-alive interval in seconds.
     pub keep_alive_secs: Option<u64>,
 
+    /// Optional TLS configuration.
     pub tls: Option<TlsConfig>,
 }
 
@@ -37,6 +44,7 @@ impl Default for GrpcServerConfig {
 }
 
 impl GrpcServerConfig {
+    /// Create a config with the given `host` and `port`.
     pub fn new(host: impl Into<String>, port: u16) -> Self {
         Self { host: host.into(), port, ..Default::default() }
     }

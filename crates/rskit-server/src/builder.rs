@@ -45,10 +45,13 @@ pub struct GrpcServerBuilder {
 }
 
 impl GrpcServerBuilder {
+    /// Create a new builder with the given server configuration.
     pub fn new(config: GrpcServerConfig) -> Self {
         Self { name: "grpc-server".into(), config, serve_fns: Vec::new() }
     }
 
+    /// Override the component name (default: `"grpc-server"`).
+    #[must_use]
     pub fn with_name(mut self, name: impl Into<String>) -> Self {
         self.name = name.into();
         self
@@ -58,6 +61,7 @@ impl GrpcServerBuilder {
     ///
     /// The service is captured in a closure that later calls
     /// `Server::builder().add_service(svc).serve_with_shutdown(addr, signal)`.
+    #[must_use]
     pub fn add_service<S>(mut self, svc: S) -> Self
     where
         S: tonic::codegen::Service<

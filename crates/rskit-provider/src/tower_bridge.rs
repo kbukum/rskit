@@ -32,6 +32,7 @@ where
     I: Send + 'static,
     O: Send + 'static,
 {
+    /// Create a new [`TowerProvider`] wrapping `service` with the given `name`.
     pub fn new(name: &'static str, service: S) -> Self {
         Self {
             name,

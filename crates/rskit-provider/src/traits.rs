@@ -11,6 +11,7 @@ pub type BoxStream<O> = Pin<Box<dyn Stream<Item = AppResult<O>> + Send + 'static
 /// Identity and availability for a provider.
 #[async_trait::async_trait]
 pub trait Provider: Send + Sync {
+    /// Stable name identifying this provider instance (used in logs and spans).
     fn name(&self) -> &'static str;
 
     /// Non-blocking availability check (e.g. connection pool not exhausted).
@@ -28,6 +29,7 @@ where
     I: Send + 'static,
     O: Send + 'static,
 {
+    /// Execute the request and return a single response.
     async fn execute(&self, input: I) -> AppResult<O>;
 }
 
@@ -38,6 +40,7 @@ where
     I: Send + 'static,
     O: Send + 'static,
 {
+    /// Open a stream of responses for the given input.
     async fn stream(&self, input: I) -> AppResult<BoxStream<O>>;
 }
 
@@ -47,6 +50,7 @@ pub trait Sink<I>: Provider
 where
     I: Send + 'static,
 {
+    /// Send a single item downstream.
     async fn send(&self, input: I) -> AppResult<()>;
 }
 
@@ -57,6 +61,7 @@ where
     I: Send + 'static,
     O: Send + 'static,
 {
+    /// Open a new bidirectional channel.
     async fn open(&self) -> AppResult<Box<dyn DuplexChannel<I, O>>>;
 }
 
@@ -67,8 +72,11 @@ where
     I: Send + 'static,
     O: Send + 'static,
 {
+    /// Send a message to the remote end.
     async fn send(&mut self, input: I) -> AppResult<()>;
+    /// Receive the next message from the remote end; `None` means the channel is closed.
     async fn recv(&mut self) -> AppResult<Option<O>>;
+    /// Close the channel gracefully.
     async fn close(&mut self) -> AppResult<()>;
 }
 
@@ -77,11 +85,13 @@ where
 /// Providers that need async initialisation before first use.
 #[async_trait::async_trait]
 pub trait Initializable: Provider {
+    /// Perform async initialisation (e.g. establish a connection pool).
     async fn init(&self) -> AppResult<()>;
 }
 
 /// Providers that hold resources needing explicit cleanup.
 #[async_trait::async_trait]
 pub trait Closeable: Provider {
+    /// Release resources held by this provider.
     async fn close(&self) -> AppResult<()>;
 }

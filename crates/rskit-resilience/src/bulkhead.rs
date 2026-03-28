@@ -7,6 +7,7 @@ use tokio::sync::Semaphore;
 /// Bulkhead configuration.
 #[derive(Debug, Clone)]
 pub struct BulkheadConfig {
+    /// Human-readable name used in tracing and error details.
     pub name: String,
     /// Maximum number of concurrent in-flight operations.
     pub max_concurrent: usize,
@@ -26,15 +27,20 @@ impl Default for BulkheadConfig {
 }
 
 impl BulkheadConfig {
+    /// Create a bulkhead named `name` with the given concurrency limit.
     pub fn new(name: impl Into<String>, max_concurrent: usize) -> Self {
         Self { name: name.into(), max_concurrent, ..Default::default() }
     }
 
+    /// Set the maximum wait time for a permit before returning [`AppError::rate_limited`].
+    #[must_use]
     pub fn with_max_wait(mut self, d: Duration) -> Self {
         self.max_wait = Some(d);
         self
     }
 
+    /// Disable the wait limit — callers will block until a permit is available.
+    #[must_use]
     pub fn without_wait_limit(mut self) -> Self {
         self.max_wait = None;
         self
@@ -49,6 +55,7 @@ pub struct Bulkhead {
 }
 
 impl Bulkhead {
+    /// Create a new [`Bulkhead`] from the given configuration.
     pub fn new(config: BulkheadConfig) -> Self {
         let sem = Arc::new(Semaphore::new(config.max_concurrent));
         Self { sem, config: Arc::new(config) }

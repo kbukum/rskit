@@ -19,6 +19,7 @@ pub struct RoundRobinDispatcher {
 }
 
 impl RoundRobinDispatcher {
+    /// Create a new dispatcher that distributes work across `slots` worker slots.
     pub fn new(slots: usize) -> Self {
         Self { counter: Arc::new(AtomicUsize::new(0)), slots }
     }

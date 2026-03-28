@@ -9,15 +9,19 @@ pub struct ServiceConfig {
     #[serde(default = "ServiceConfig::default_name")]
     pub name: String,
 
+    /// Deployment environment (development, staging, production).
     #[serde(default)]
     pub environment: Environment,
 
+    /// Semver version string, defaults to `CARGO_PKG_VERSION`.
     #[serde(default = "ServiceConfig::default_version")]
     pub version: String,
 
+    /// Enable verbose debug output.
     #[serde(default)]
     pub debug: bool,
 
+    /// Logging configuration.
     #[serde(default)]
     pub logging: LoggingConfig,
 }
@@ -47,13 +51,17 @@ impl Default for ServiceConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum Environment {
+    /// Local development environment (default).
     #[default]
     Development,
+    /// Pre-production / staging environment.
     Staging,
+    /// Live production environment.
     Production,
 }
 
 impl Environment {
+    /// Returns `true` if this is the production environment.
     pub fn is_production(&self) -> bool {
         *self == Environment::Production
     }
@@ -76,6 +84,7 @@ pub struct LoggingConfig {
     #[serde(default = "LoggingConfig::default_level")]
     pub level: String,
 
+    /// Log output format (JSON or console).
     #[serde(default)]
     pub format: LogFormat,
 

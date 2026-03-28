@@ -17,6 +17,8 @@
 //! `init_logging` sets up the global subscriber once; the returned guard restores
 //! the previous subscriber on drop (useful in tests).
 
+#![warn(missing_docs)]
+
 use rskit_config::{LogFormat, LoggingConfig};
 use tracing::dispatcher::DefaultGuard;
 use tracing_subscriber::{fmt, layer::SubscriberExt, EnvFilter};
