@@ -1,5 +1,6 @@
 /// Liveness state of a component.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum HealthStatus {
     /// Component is operating normally.
     Healthy,
@@ -20,7 +21,7 @@ impl std::fmt::Display for HealthStatus {
 }
 
 /// Health report from a single component.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct Health {
     /// Component name as returned by [`crate::Component::name`].
     pub name: String,

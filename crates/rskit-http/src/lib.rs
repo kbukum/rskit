@@ -8,6 +8,6 @@ mod extractors;
 mod server;
 
 pub use config::{CorsConfig, HttpServerConfig};
-pub use error::ErrorHandlerLayer;
+pub use error::{ErrorHandlerLayer, HttpError};
 pub use extractors::{CorrelationId, RequestId};
 pub use server::{HttpServer, HttpServerBuilder};

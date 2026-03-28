@@ -3,15 +3,13 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use axum::Router;
 use rskit_bootstrap::{Component, Health, Registry};
-use rskit_errors::{AppResult, AppError};
+use rskit_errors::{AppResult, AppError, ErrorCode};
 use tokio_util::sync::CancellationToken;
-use tower::ServiceBuilder;
 use tower_http::{
     cors::CorsLayer,
     request_id::{MakeRequestUuid, SetRequestIdLayer},
     trace::TraceLayer,
 };
-use tracing::instrument;
 
 use crate::config::{CorsConfig, HttpServerConfig};
 
@@ -111,13 +109,13 @@ impl Component for HttpServer {
             .lock()
             .await
             .take()
-            .ok_or_else(|| AppError::internal("HTTP server already started"))?;
+            .ok_or_else(|| AppError::new(ErrorCode::Internal, "HTTP server already started"))?;
 
         let addr: std::net::SocketAddr = self
             .config
             .bind_addr()
             .parse()
-            .map_err(|e| AppError::internal(format!("invalid bind address: {e}")))?;
+            .map_err(|e| AppError::new(ErrorCode::Internal, format!("invalid bind address: {e}")))?;
 
         let cancel = self.cancel.clone();
         tokio::spawn(async move {
@@ -148,17 +146,20 @@ pub fn health_router(registry: Arc<Registry>) -> Router {
 
     Router::new().route(
         "/health",
-        get(move || {
+        get({
             let registry = registry.clone();
-            async move {
-                let healths = registry.health_all();
-                let all_ok = healths.iter().all(|h| h.is_healthy());
-                let status = if all_ok {
-                    axum::http::StatusCode::OK
-                } else {
-                    axum::http::StatusCode::SERVICE_UNAVAILABLE
-                };
-                (status, Json(healths))
+            move || {
+                let registry = registry.clone();
+                async move {
+                    let healths = registry.health_all();
+                    let all_ok = healths.iter().all(|h| h.is_healthy());
+                    let status = if all_ok {
+                        axum::http::StatusCode::OK
+                    } else {
+                        axum::http::StatusCode::SERVICE_UNAVAILABLE
+                    };
+                    (status, Json(healths))
+                }
             }
         }),
     )

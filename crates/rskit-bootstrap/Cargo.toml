@@ -29,7 +29,7 @@ futures-util = { workspace = true }
 futures      = { workspace = true }
 validator    = { workspace = true }
 parking_lot  = { workspace = true }
+serde        = { workspace = true }
 
 [dev-dependencies]
-serde        = { workspace = true }
 tokio        = { workspace = true, features = ["full"] }
