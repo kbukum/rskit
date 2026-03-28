@@ -1,5 +1,6 @@
 ---
 source: crates/rskit-bench/tests/golden.rs
+assertion_line: 551
 expression: output
 ---
 # Bench Run: run-golden-001
