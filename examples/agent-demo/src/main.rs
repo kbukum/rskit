@@ -7,10 +7,6 @@
 //!
 //! Run: cargo run -p agent-demo
 
-mod dashboard;
-mod shell;
-mod tasks;
-
 use rskit_errors::AppResult;
 
 #[tokio::main]
@@ -24,5 +20,5 @@ async fn main() -> AppResult<()> {
         cancel_clone.cancel();
     });
 
-    shell::run(cancel).await
+    agent_demo::shell::run(cancel).await
 }

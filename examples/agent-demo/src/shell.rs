@@ -1,31 +1,31 @@
-//! Interactive command shell — dispatches tasks, shows progress, handles Ctrl+C.
+//! Interactive command shell with Copilot-inspired UI.
 //!
-//! Key UX features:
-//! - Spinners at the bottom show running tasks with step messages
-//! - Completions print above active spinners via MultiProgress
-//! - Async input: completions appear immediately, not after pressing Enter
-//! - `/` prefix shows command menu (like Copilot's slash commands)
-//! - `cancel <id>` to cancel running tasks
+//! Terminal layout (bottom of visible area):
+//!   [activity log — scrolls up via multi.println()]
+//!   ⠋ Agent #1 (Analyze …) — step message [37%]     ← task spinners
+//!   ⠋ Agent #2 (Resize …)  — step message [50%]
+//!   ─── 2 running · 1 done │ pool: 2/4 │ 12.5s      ← persistent status bar
+//!   ❯ [user input]                                    ← prompt
 
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
-use rskit_cli::MultiProgress;
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rskit_errors::AppResult;
 use rskit_worker::{EventKind, Pool, PoolConfig};
 
 use crate::dashboard::{self, TaskStatus, TrackedTask};
 use crate::tasks::{AgentHandler, AgentTask, TaskOutput};
 
-/// Completion notification sent from background task listeners.
+// ── Channel message types ─────────────────────────────────────────────
+
 struct Completion {
     id: usize,
     result: Result<TaskOutput, String>,
 }
 
-/// Progress update from a running task.
 struct ProgressUpdate {
     id: usize,
     current: u64,
@@ -33,29 +33,33 @@ struct ProgressUpdate {
     message: String,
 }
 
-/// Handle to a running task's cancel token.
 struct RunningHandle {
     id: usize,
     cancel: tokio_util::sync::CancellationToken,
+    spinner: ProgressBar,
 }
+
+const POOL_SIZE: usize = 4;
+
+// ── Main loop ─────────────────────────────────────────────────────────
 
 pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
     let pool = Pool::new(
         Arc::new(AgentHandler),
-        PoolConfig::new("agent-pool").with_size(4),
+        PoolConfig::new("agent-pool").with_size(POOL_SIZE),
     );
 
     let multi = MultiProgress::new();
     let mut tasks: Vec<TrackedTask> = Vec::new();
     let mut handles: Vec<RunningHandle> = Vec::new();
     let mut next_id: usize = 1;
+    let start_time = Instant::now();
 
-    // Channel for background task completions
+    // Channels
     let (done_tx, mut done_rx) = tokio::sync::mpsc::unbounded_channel::<Completion>();
-    // Channel for progress updates (keeps TrackedTask in sync)
     let (prog_tx, mut prog_rx) = tokio::sync::mpsc::unbounded_channel::<ProgressUpdate>();
 
-    // Channel for stdin lines (async reading)
+    // Async stdin reader
     let (line_tx, mut line_rx) = tokio::sync::mpsc::channel::<String>(1);
     tokio::task::spawn_blocking(move || {
         loop {
@@ -70,46 +74,64 @@ pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
         }
     });
 
-    // Print initial banner via multi so it appears above any bars
+    // Persistent status bar — always the LAST item in MultiProgress
+    let status_bar = multi.add(ProgressBar::new_spinner());
+    status_bar.set_style(ProgressStyle::with_template("  {wide_msg}").unwrap());
+    status_bar.set_message(dashboard::format_status_bar(
+        &tasks,
+        0,
+        POOL_SIZE,
+        Duration::ZERO,
+    ));
+    status_bar.enable_steady_tick(Duration::from_millis(500));
+
+    // Timer to update status bar periodically
+    let mut status_tick = tokio::time::interval(Duration::from_millis(500));
+
+    // Banner
     multi.println(BANNER).ok();
-    multi.println(&format_help()).ok();
+    multi
+        .println("  \x1b[2mType\x1b[0m \x1b[1m/help\x1b[0m \x1b[2mor\x1b[0m \x1b[1m?\x1b[0m \x1b[2mfor commands. Prefix with\x1b[0m \x1b[1m/\x1b[0m \x1b[2mfor menu style.\x1b[0m\n")
+        .ok();
     print_prompt();
 
     loop {
         tokio::select! {
-            // Handle user input
+            // ── User input ────────────────────────────────────
             Some(line) = line_rx.recv() => {
                 if line.is_empty() {
                     print_prompt();
                     continue;
                 }
 
-                // Strip optional / prefix
                 let cmd_line = line.strip_prefix('/').unwrap_or(&line);
                 let parts: Vec<&str> = cmd_line.splitn(3, ' ').collect();
 
                 match parts[0] {
                     "help" | "h" | "?" | "" => {
-                        multi.println(&format_help()).ok();
+                        multi.println(format_help()).ok();
                     }
 
                     "analyze" | "a" if parts.len() >= 2 => {
                         let path = resolve_path(parts[1]);
                         if !path.exists() {
-                            multi.println(&format!(
+                            multi.println(format!(
                                 "  \x1b[31m✗ File not found:\x1b[0m {}",
                                 path.display()
                             )).ok();
                         } else {
+                            multi.println(dashboard::log_thinking(
+                                &format!("Analyzing {} for MIME type, metadata, and structural properties.", parts[1])
+                            )).ok();
                             let task = AgentTask::Analyze { path };
-                            submit_task(&pool, &multi, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task).await?;
+                            submit_task(&pool, &multi, &status_bar, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task).await?;
                         }
                     }
 
                     "resize" | "r" if parts.len() >= 2 => {
                         let path = resolve_path(parts[1]);
                         if !path.exists() {
-                            multi.println(&format!(
+                            multi.println(format!(
                                 "  \x1b[31m✗ File not found:\x1b[0m {}",
                                 path.display()
                             )).ok();
@@ -119,66 +141,86 @@ pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
                             } else {
                                 (200, 200)
                             };
+                            multi.println(dashboard::log_thinking(
+                                &format!("Resizing {} to {}×{} using Fit mode.", parts[1], w, h)
+                            )).ok();
                             let task = AgentTask::Resize { path, width: w, height: h };
-                            submit_task(&pool, &multi, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task).await?;
+                            submit_task(&pool, &multi, &status_bar, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task).await?;
                         }
                     }
 
                     "pipeline" | "p" if parts.len() >= 2 => {
                         let path = resolve_path(parts[1]);
                         if !path.exists() {
-                            multi.println(&format!(
+                            multi.println(format!(
                                 "  \x1b[31m✗ File not found:\x1b[0m {}",
                                 path.display()
                             )).ok();
                         } else {
+                            multi.println(dashboard::log_thinking(
+                                &format!("Running 3-step pipeline on {}: resize → crop → rotate.", parts[1])
+                            )).ok();
                             let task = AgentTask::Pipeline { path };
-                            submit_task(&pool, &multi, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task).await?;
+                            submit_task(&pool, &multi, &status_bar, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task).await?;
                         }
                     }
 
                     "batch" | "b" => {
-                        let count = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(20);
+                        let count = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(30);
+                        multi.println(dashboard::log_thinking(
+                            &format!("Starting batch processing of {count} items.")
+                        )).ok();
                         let task = AgentTask::BatchProcess { count };
-                        submit_task(&pool, &multi, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task).await?;
+                        submit_task(&pool, &multi, &status_bar, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task).await?;
                     }
 
                     "review" | "rv" if parts.len() >= 2 => {
                         let path = resolve_path(parts[1]);
                         if !path.exists() {
-                            multi.println(&format!(
+                            multi.println(format!(
                                 "  \x1b[31m✗ File not found:\x1b[0m {}",
                                 path.display()
                             )).ok();
                         } else {
+                            multi.println(dashboard::log_thinking(
+                                &format!("Running code review on {}: AST analysis, security, complexity.", parts[1])
+                            )).ok();
                             let task = AgentTask::CodeReview { path };
-                            submit_task(&pool, &multi, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task).await?;
+                            submit_task(&pool, &multi, &status_bar, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task).await?;
                         }
                     }
 
                     "demo" | "d" => {
-                        multi.println("  \x1b[1;33m⚡ Launching demo\x1b[0m — 4 parallel agents on real fixtures\n").ok();
-                        let fixtures = fixture_dir();
+                        multi.println("").ok();
+                        multi.println(dashboard::log_thinking(
+                            "Spawning 4 parallel agents to process real media fixtures."
+                        )).ok();
+                        multi.println(dashboard::log_thinking(
+                            "Each agent runs independently — watch spinners and completions."
+                        )).ok();
+                        multi.println("").ok();
 
-                        let t1 = AgentTask::Analyze {
-                            path: fixtures.join("image/real-photo.jpg"),
-                        };
-                        let t2 = AgentTask::Resize {
-                            path: fixtures.join("image/sample.png"),
-                            width: 150,
-                            height: 150,
-                        };
-                        let t3 = AgentTask::Pipeline {
-                            path: fixtures.join("image/ai-generated.jpg"),
-                        };
-                        let t4 = AgentTask::CodeReview {
-                            path: fixtures.join("image/real-photo.jpg"),
-                        };
-
-                        submit_task(&pool, &multi, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, t1).await?;
-                        submit_task(&pool, &multi, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, t2).await?;
-                        submit_task(&pool, &multi, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, t3).await?;
-                        submit_task(&pool, &multi, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, t4).await?;
+                        let fix = fixture_dir();
+                        let demo_tasks = vec![
+                            AgentTask::Analyze {
+                                path: fix.join("image/real-photo.jpg"),
+                            },
+                            AgentTask::Resize {
+                                path: fix.join("image/sample.png"),
+                                width: 150,
+                                height: 150,
+                            },
+                            AgentTask::Pipeline {
+                                path: fix.join("image/ai-generated.jpg"),
+                            },
+                            AgentTask::CodeReview {
+                                path: fix.join("image/real-photo.jpg"),
+                            },
+                        ];
+                        for task in demo_tasks {
+                            submit_task(&pool, &multi, &status_bar, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task).await?;
+                        }
+                        multi.println("").ok();
                     }
 
                     "cancel" if parts.len() >= 2 => {
@@ -188,30 +230,29 @@ pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
                                 if let Some(t) = tasks.iter_mut().find(|t| t.id == id) {
                                     t.status = TaskStatus::Cancelled;
                                     t.message = "Cancelled by user".into();
-                                    let msg = dashboard::render_completion(t);
-                                    if !msg.is_empty() {
-                                        multi.println(&msg).ok();
-                                    }
+                                    multi.println(dashboard::log_cancel(t)).ok();
                                 }
                             } else {
-                                multi.println(&format!("  \x1b[31m✗ No running task with ID {id}\x1b[0m")).ok();
+                                multi.println(format!(
+                                    "  \x1b[31m✗ No running task with ID {id}\x1b[0m"
+                                )).ok();
                             }
                         }
                     }
 
                     "status" | "s" => {
-                        drain_completions(&mut done_rx, &mut tasks, &multi);
-                        let table = dashboard::render_status_table(&tasks);
-                        multi.println(&table).ok();
+                        drain_completions(&mut done_rx, &mut tasks, &mut handles, &multi);
+                        multi.println(dashboard::render_status_table(&tasks)).ok();
                     }
 
                     "detail" if parts.len() >= 2 => {
                         if let Ok(id) = parts[1].parse::<usize>() {
                             if let Some(t) = tasks.iter().find(|t| t.id == id) {
-                                let details = dashboard::render_task_details(t);
-                                multi.println(&details).ok();
+                                multi.println(dashboard::render_task_details(t)).ok();
                             } else {
-                                multi.println(&format!("  \x1b[31m✗ Unknown task ID:\x1b[0m {id}")).ok();
+                                multi.println(format!(
+                                    "  \x1b[31m✗ Unknown task ID:\x1b[0m {id}"
+                                )).ok();
                             }
                         }
                     }
@@ -222,18 +263,18 @@ pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
                         let done = tasks.iter().filter(|t| t.status == TaskStatus::Done).count();
                         let failed = tasks.iter().filter(|t| t.status == TaskStatus::Failed).count();
                         let cancelled = tasks.iter().filter(|t| t.status == TaskStatus::Cancelled).count();
-                        let msg = format!(
-                            "\n  \x1b[1mWorker Pool\x1b[0m: {} active / {} capacity\n  \x1b[1mTasks\x1b[0m: {} running, {} done, {} failed, {} cancelled, {} total\n",
-                            st.running, st.capacity, running, done, failed, cancelled, tasks.len()
-                        );
-                        multi.println(&msg).ok();
+                        multi.println(format!(
+                            "\n  \x1b[1mWorker Pool\x1b[0m: {} active / {} capacity\n  \x1b[1mTasks\x1b[0m: {} running, {} done, {} failed, {} cancelled, {} total\n  \x1b[1mUptime\x1b[0m: {}\n",
+                            st.running, st.capacity, running, done, failed, cancelled, tasks.len(),
+                            dashboard::format_duration(start_time.elapsed())
+                        )).ok();
                     }
 
                     "clear" | "c" => {
                         let before = tasks.len();
                         tasks.retain(|t| t.status == TaskStatus::Running);
                         handles.retain(|h| tasks.iter().any(|t| t.id == h.id));
-                        multi.println(&format!(
+                        multi.println(format!(
                             "  \x1b[2mCleared {} completed task(s).\x1b[0m",
                             before - tasks.len()
                         )).ok();
@@ -242,8 +283,8 @@ pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
                     "quit" | "q" | "exit" => {
                         let running = tasks.iter().filter(|t| t.status == TaskStatus::Running).count();
                         if running > 0 {
-                            multi.println(&format!(
-                                "  \x1b[33mShutting down... cancelling {} running task(s)\x1b[0m",
+                            multi.println(format!(
+                                "  \x1b[33m⚠ Shutting down — cancelling {} running task(s)\x1b[0m",
                                 running
                             )).ok();
                             for h in &handles {
@@ -254,8 +295,8 @@ pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
                     }
 
                     other => {
-                        multi.println(&format!(
-                            "  \x1b[31m✗ Unknown command:\x1b[0m {other}\n  Type \x1b[1m/help\x1b[0m or \x1b[1m?\x1b[0m for commands."
+                        multi.println(format!(
+                            "  \x1b[31m✗ Unknown command:\x1b[0m {other}\n  Type \x1b[1m/help\x1b[0m for commands."
                         )).ok();
                     }
                 }
@@ -263,10 +304,9 @@ pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
                 print_prompt();
             }
 
-            // Handle background task completions (appear immediately!)
+            // ── Task completion (appears immediately!) ────────
             Some(comp) = done_rx.recv() => {
                 if let Some(t) = tasks.iter_mut().find(|t| t.id == comp.id) {
-                    // Don't overwrite Cancelled status
                     if t.status == TaskStatus::Running {
                         match comp.result {
                             Ok(output) => {
@@ -285,16 +325,17 @@ pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
                                 });
                             }
                         }
-                        let msg = dashboard::render_completion(t);
-                        if !msg.is_empty() {
-                            multi.println(&msg).ok();
-                        }
+                        multi.println(dashboard::log_result(t)).ok();
                     }
                 }
-                handles.retain(|h| h.id != comp.id);
+                // Clean up spinner for completed task
+                if let Some(pos) = handles.iter().position(|h| h.id == comp.id) {
+                    handles[pos].spinner.finish_and_clear();
+                    handles.remove(pos);
+                }
             }
 
-            // Handle progress updates from running tasks
+            // ── Progress updates ──────────────────────────────
             Some(update) = prog_rx.recv() => {
                 if let Some(t) = tasks.iter_mut().find(|t| t.id == update.id) {
                     t.progress = Some((update.current, update.total));
@@ -302,10 +343,20 @@ pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
                 }
             }
 
-            // Ctrl+C
+            // ── Status bar periodic refresh ───────────────────
+            _ = status_tick.tick() => {
+                let st = pool.stats();
+                status_bar.set_message(dashboard::format_status_bar(
+                    &tasks, st.running, st.capacity, start_time.elapsed()
+                ));
+            }
+
+            // ── Ctrl+C ───────────────────────────────────────
             _ = cancel.cancelled() => {
-                multi.println("  \x1b[33m⚠ Interrupted\x1b[0m").ok();
-                for h in &handles { h.cancel.cancel(); }
+                multi.println("  \x1b[33m⚠ Interrupted\x1b[0m".to_string()).ok();
+                for h in &handles {
+                    h.cancel.cancel();
+                }
                 break;
             }
         }
@@ -318,21 +369,24 @@ pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
         .collect();
     if !running.is_empty() {
         multi
-            .println(&format!(
+            .println(format!(
                 "  \x1b[2mWaiting for {} task(s) to finish...\x1b[0m",
                 running.len()
             ))
             .ok();
     }
     pool.shutdown().await.ok();
-    multi.println("  \x1b[1;32m👋 Done.\x1b[0m\n").ok();
+    status_bar.finish_and_clear();
+    multi.println("  \x1b[1;32m👋 Done.\x1b[0m\n".to_string()).ok();
     Ok(())
 }
 
-/// Submit a task to the pool and attach a spinner + event listener.
+// ── Task submission ───────────────────────────────────────────────────
+
 async fn submit_task(
     pool: &Pool<AgentTask, TaskOutput>,
     multi: &MultiProgress,
+    status_bar: &ProgressBar,
     tasks: &mut Vec<TrackedTask>,
     handles: &mut Vec<RunningHandle>,
     done_tx: &tokio::sync::mpsc::UnboundedSender<Completion>,
@@ -344,23 +398,26 @@ async fn submit_task(
     *next_id += 1;
     let label = task.to_string();
 
-    // Use a spinner — it shows "{spinner} {prefix} {wide_msg}" with animation
-    let spinner = multi.add_spinner(&format!("\x1b[33mTask #{id}\x1b[0m"));
-    spinner.set_message(format!("({label}) — \x1b[2mSpawning...\x1b[0m"));
+    // Add spinner ABOVE the status bar so it stays at bottom
+    let spinner = multi.insert_before(status_bar, ProgressBar::new_spinner());
+    spinner.set_style(
+        ProgressStyle::with_template(
+            "  {spinner:.cyan} \x1b[1mAgent #{prefix}\x1b[0m {wide_msg}",
+        )
+        .unwrap()
+        .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏", " "]),
+    );
+    spinner.set_prefix(id.to_string());
+    spinner.set_message(format!(
+        "({label}) \x1b[2m— Spawning...\x1b[0m"
+    ));
+    spinner.enable_steady_tick(Duration::from_millis(80));
 
     let handle = pool.submit(task).await?;
-
-    // Clone the pool's cancel token BEFORE consuming the handle — this is the
-    // same token the handler receives, so cancelling it actually stops work.
     let task_cancel = handle.cancel_token();
-    handles.push(RunningHandle {
-        id,
-        cancel: task_cancel,
-    });
 
-    multi.println(&format!(
-        "  \x1b[33m● Agent #{id}\x1b[0m ({label}) — \x1b[33mSpawned\x1b[0m"
-    )).ok();
+    // Activity log: spawn notification
+    multi.println(dashboard::log_spawn(id, &label)).ok();
 
     tasks.push(TrackedTask {
         id,
@@ -372,37 +429,30 @@ async fn submit_task(
         result: None,
     });
 
-    // Spawn listener for events and result
+    // Spawn event listener
     let done_tx = done_tx.clone();
     let prog_tx = prog_tx.clone();
-    let spinner_inner = spinner.inner().clone();
-    let label_clone = label;
+    let spinner_clone = spinner.clone();
     tokio::spawn(async move {
         let mut events = handle.events();
 
-        // Listen for progress events — update spinner message AND tracked progress
-        let event_spinner = spinner_inner.clone();
-        let event_label = label_clone.clone();
+        // Listen for progress events → update spinner + tracked progress
+        let event_spinner = spinner_clone.clone();
+        let event_label = label.clone();
         let event_prog_tx = prog_tx;
         let event_loop = tokio::spawn(async move {
             while let Ok(event) = events.recv().await {
                 if event.kind == EventKind::Progress {
                     if let Some(ref p) = event.progress {
                         let pct = p.percent.unwrap_or(0.0) as u32;
-                        let step_msg = p
-                            .message
-                            .as_deref()
-                            .unwrap_or("Working...");
+                        let step_msg = p.message.as_deref().unwrap_or("Working...");
                         event_spinner.set_message(format!(
-                            "({event_label}) — \x1b[2m{step_msg}\x1b[0m [{pct}%]"
+                            "({event_label}) \x1b[2m— {step_msg}\x1b[0m \x1b[36m[{pct}%]\x1b[0m"
                         ));
-                        // Also update the TrackedTask so /status shows progress
-                        let current = p.current;
-                        let total = p.total.unwrap_or(0);
                         let _ = event_prog_tx.send(ProgressUpdate {
                             id,
-                            current,
-                            total,
+                            current: p.current,
+                            total: p.total.unwrap_or(0),
                             message: step_msg.to_string(),
                         });
                     }
@@ -410,24 +460,32 @@ async fn submit_task(
             }
         });
 
-        // Wait for the final result
+        // Wait for final result
         let result = match handle.result().await {
             Ok(output) => Ok(output),
             Err(e) => Err(e.message),
         };
 
         event_loop.abort();
-        spinner_inner.finish_and_clear();
+        // Spinner cleanup handled by completion handler in main loop
         let _ = done_tx.send(Completion { id, result });
+    });
+
+    handles.push(RunningHandle {
+        id,
+        cancel: task_cancel,
+        spinner,
     });
 
     Ok(())
 }
 
-/// Drain pending completions from the channel (non-blocking).
+// ── Helpers ───────────────────────────────────────────────────────────
+
 fn drain_completions(
     done_rx: &mut tokio::sync::mpsc::UnboundedReceiver<Completion>,
     tasks: &mut Vec<TrackedTask>,
+    handles: &mut Vec<RunningHandle>,
     multi: &MultiProgress,
 ) {
     while let Ok(comp) = done_rx.try_recv() {
@@ -450,11 +508,12 @@ fn drain_completions(
                         });
                     }
                 }
-                let msg = dashboard::render_completion(t);
-                if !msg.is_empty() {
-                    multi.println(&msg).ok();
-                }
+                multi.println(dashboard::log_result(t)).ok();
             }
+        }
+        if let Some(pos) = handles.iter().position(|h| h.id == comp.id) {
+            handles[pos].spinner.finish_and_clear();
+            handles.remove(pos);
         }
     }
 }
@@ -466,27 +525,27 @@ fn print_prompt() {
 
 fn format_help() -> String {
     let mut s = String::new();
-    s.push_str("\n  \x1b[1;36m┌─────────────────────────────────────────────┐\x1b[0m\n");
-    s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[1mAgent Commands\x1b[0m                             \x1b[1;36m│\x1b[0m\n");
-    s.push_str("  \x1b[1;36m├─────────────────────────────────────────────┤\x1b[0m\n");
-    s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[36m/demo\x1b[0m              Launch 4 parallel agents \x1b[1;36m│\x1b[0m\n");
-    s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[36m/analyze\x1b[0m <file>     Detect MIME & metadata  \x1b[1;36m│\x1b[0m\n");
-    s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[36m/resize\x1b[0m  <file>     Resize image (200×200)  \x1b[1;36m│\x1b[0m\n");
-    s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[36m/pipeline\x1b[0m <file>    Resize → crop → rotate  \x1b[1;36m│\x1b[0m\n");
-    s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[36m/review\x1b[0m  <file>     Code review simulation  \x1b[1;36m│\x1b[0m\n");
-    s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[36m/batch\x1b[0m   [count]    Batch processing (×20)  \x1b[1;36m│\x1b[0m\n");
-    s.push_str("  \x1b[1;36m├─────────────────────────────────────────────┤\x1b[0m\n");
-    s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[36m/status\x1b[0m             Show all tasks          \x1b[1;36m│\x1b[0m\n");
-    s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[36m/detail\x1b[0m  <id>       Task details            \x1b[1;36m│\x1b[0m\n");
-    s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[36m/cancel\x1b[0m  <id>       Cancel running task     \x1b[1;36m│\x1b[0m\n");
-    s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[36m/stats\x1b[0m              Worker pool stats       \x1b[1;36m│\x1b[0m\n");
-    s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[36m/clear\x1b[0m              Clear completed tasks   \x1b[1;36m│\x1b[0m\n");
-    s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[36m/quit\x1b[0m               Exit                    \x1b[1;36m│\x1b[0m\n");
-    s.push_str("  \x1b[1;36m└─────────────────────────────────────────────┘\x1b[0m\n");
+    s.push_str("\n  \x1b[1;36m┌─────────────────────────────────────────────────┐\x1b[0m\n");
+    s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[1mAgent Commands\x1b[0m                                 \x1b[1;36m│\x1b[0m\n");
+    s.push_str("  \x1b[1;36m├─────────────────────────────────────────────────┤\x1b[0m\n");
+    s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[36m/demo\x1b[0m                Launch 4 parallel agents  \x1b[1;36m│\x1b[0m\n");
+    s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[36m/analyze\x1b[0m <file>      Detect MIME & metadata    \x1b[1;36m│\x1b[0m\n");
+    s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[36m/resize\x1b[0m  <file> [WxH] Resize image             \x1b[1;36m│\x1b[0m\n");
+    s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[36m/pipeline\x1b[0m <file>     Resize → crop → rotate    \x1b[1;36m│\x1b[0m\n");
+    s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[36m/review\x1b[0m  <file>      Code review simulation    \x1b[1;36m│\x1b[0m\n");
+    s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[36m/batch\x1b[0m   [count]     Batch processing (×30)    \x1b[1;36m│\x1b[0m\n");
+    s.push_str("  \x1b[1;36m├─────────────────────────────────────────────────┤\x1b[0m\n");
+    s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[36m/status\x1b[0m              Show all tasks             \x1b[1;36m│\x1b[0m\n");
+    s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[36m/detail\x1b[0m  <id>        Task details               \x1b[1;36m│\x1b[0m\n");
+    s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[36m/cancel\x1b[0m  <id>        Cancel running task        \x1b[1;36m│\x1b[0m\n");
+    s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[36m/stats\x1b[0m               Worker pool stats          \x1b[1;36m│\x1b[0m\n");
+    s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[36m/clear\x1b[0m               Clear completed tasks      \x1b[1;36m│\x1b[0m\n");
+    s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[36m/quit\x1b[0m                Exit                       \x1b[1;36m│\x1b[0m\n");
+    s.push_str("  \x1b[1;36m└─────────────────────────────────────────────────┘\x1b[0m\n");
     s
 }
 
-fn resolve_path(input: &str) -> PathBuf {
+pub fn resolve_path(input: &str) -> PathBuf {
     let p = PathBuf::from(input);
     if p.is_absolute() {
         p
@@ -497,7 +556,7 @@ fn resolve_path(input: &str) -> PathBuf {
     }
 }
 
-fn fixture_dir() -> PathBuf {
+pub fn fixture_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap()
@@ -506,7 +565,7 @@ fn fixture_dir() -> PathBuf {
         .join("tests/fixtures")
 }
 
-fn parse_dimensions(s: &str) -> Option<(u32, u32)> {
+pub fn parse_dimensions(s: &str) -> Option<(u32, u32)> {
     let parts: Vec<&str> = s.split('x').collect();
     if parts.len() == 2 {
         let w = parts[0].parse().ok()?;
@@ -522,5 +581,55 @@ const BANNER: &str = concat!(
     "  \x1b[1;36m🚀 rskit Agent Demo\x1b[0m — Media Processing Pipeline\n",
     "  \x1b[2mShowcasing background workers, progress tracking, and stream processing\x1b[0m\n",
     "  \x1b[2mrskit-worker │ rskit-cli │ rskit-pipeline │ rskit-file │ rskit-media-image\x1b[0m\n",
-    "  \x1b[2mType /help or ? for commands. Prefix commands with / for menu style.\x1b[0m\n",
 );
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolve_path_uses_fixtures_for_relative() {
+        let p = resolve_path("image/real-photo.jpg");
+        assert!(p.to_string_lossy().contains("tests/fixtures/image/real-photo.jpg"));
+    }
+
+    #[test]
+    fn resolve_path_keeps_absolute() {
+        let p = resolve_path("/tmp/test.jpg");
+        assert_eq!(p, PathBuf::from("/tmp/test.jpg"));
+    }
+
+    #[test]
+    fn parse_dimensions_valid() {
+        assert_eq!(parse_dimensions("200x150"), Some((200, 150)));
+        assert_eq!(parse_dimensions("1920x1080"), Some((1920, 1080)));
+    }
+
+    #[test]
+    fn parse_dimensions_invalid() {
+        assert_eq!(parse_dimensions("abc"), None);
+        assert_eq!(parse_dimensions("200"), None);
+        assert_eq!(parse_dimensions("200xabc"), None);
+    }
+
+    #[test]
+    fn fixture_dir_exists() {
+        let dir = fixture_dir();
+        assert!(dir.exists(), "fixtures dir should exist at {:?}", dir);
+    }
+
+    #[test]
+    fn format_help_contains_all_commands() {
+        let help = format_help();
+        for cmd in &["/demo", "/analyze", "/resize", "/pipeline", "/review", "/batch",
+                     "/status", "/detail", "/cancel", "/stats", "/clear", "/quit"] {
+            assert!(help.contains(cmd), "help should contain {cmd}");
+        }
+    }
+
+    #[test]
+    fn banner_is_not_empty() {
+        assert!(!BANNER.is_empty());
+        assert!(BANNER.contains("rskit"));
+    }
+}
