@@ -1,0 +1,23 @@
+[package]
+name        = "rskit-server"
+description = "tonic gRPC server bootstrap as a lifecycle-managed Component"
+version.workspace     = true
+edition.workspace     = true
+license.workspace     = true
+rust-version.workspace = true
+
+[dependencies]
+rskit-errors     = { path = "../rskit-errors" }
+rskit-config     = { path = "../rskit-config" }
+rskit-bootstrap  = { path = "../rskit-bootstrap" }
+rskit-resilience = { path = "../rskit-resilience" }
+tonic            = { workspace = true }
+tonic-health     = { workspace = true }
+tonic-reflection = { workspace = true }
+tokio            = { workspace = true }
+tokio-util       = { workspace = true }
+tower            = { workspace = true }
+tracing          = { workspace = true }
+async-trait      = { workspace = true }
+serde            = { workspace = true }
+validator        = { workspace = true }

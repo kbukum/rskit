@@ -1,0 +1,20 @@
+[package]
+name        = "rskit-config"
+description = "TOML + environment variable configuration loading with validation"
+version.workspace     = true
+edition.workspace     = true
+license.workspace     = true
+rust-version.workspace = true
+
+[dependencies]
+rskit-errors = { path = "../rskit-errors" }
+serde        = { workspace = true }
+serde_json   = { workspace = true }
+config       = { workspace = true }
+dotenvy      = { workspace = true }
+validator    = { workspace = true }
+tracing      = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
+tokio    = { workspace = true }

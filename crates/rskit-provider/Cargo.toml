@@ -1,0 +1,21 @@
+[package]
+name        = "rskit-provider"
+description = "Provider traits (request-response, stream, sink, duplex) with tower middleware"
+version.workspace     = true
+edition.workspace     = true
+license.workspace     = true
+rust-version.workspace = true
+
+[dependencies]
+rskit-errors     = { path = "../rskit-errors" }
+rskit-resilience = { path = "../rskit-resilience" }
+tokio            = { workspace = true }
+futures          = { workspace = true }
+futures-util     = { workspace = true }
+tower            = { workspace = true }
+tower-layer      = { workspace = true }
+tower-service    = { workspace = true }
+tracing          = { workspace = true }
+pin-project-lite = { workspace = true }
+async-trait      = { workspace = true }
+bytes            = { workspace = true }

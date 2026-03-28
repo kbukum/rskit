@@ -1,0 +1,17 @@
+[package]
+name        = "rskit-pipeline"
+description = "Composable async data pipelines via futures::Stream extension operators"
+version.workspace     = true
+edition.workspace     = true
+license.workspace     = true
+rust-version.workspace = true
+
+[dependencies]
+rskit-errors     = { path = "../rskit-errors" }
+tokio            = { workspace = true }
+futures          = { workspace = true }
+futures-util     = { workspace = true }
+async-stream     = { workspace = true }
+pin-project-lite = { workspace = true }
+tracing          = { workspace = true }
+tokio-stream     = "0.1"

@@ -1,0 +1,23 @@
+[package]
+name        = "rskit"
+description = "Production Rust toolkit — modular facade for rskit-* crates"
+version.workspace     = true
+edition.workspace     = true
+license.workspace     = true
+rust-version.workspace = true
+
+[dependencies]
+rskit-errors     = { path = "../rskit-errors" }
+rskit-config     = { path = "../rskit-config" }
+rskit-logging    = { path = "../rskit-logging" }
+rskit-bootstrap  = { path = "../rskit-bootstrap" }
+rskit-provider   = { path = "../rskit-provider" }
+rskit-pipeline   = { path = "../rskit-pipeline" }
+rskit-resilience = { path = "../rskit-resilience" }
+rskit-worker     = { path = "../rskit-worker" }
+rskit-server     = { path = "../rskit-server", optional = true }
+
+[features]
+default = []
+server  = ["dep:rskit-server"]
+full    = ["server"]

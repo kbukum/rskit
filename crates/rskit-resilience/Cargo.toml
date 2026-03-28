@@ -1,0 +1,21 @@
+[package]
+name        = "rskit-resilience"
+description = "Fault-tolerance: retry, circuit breaker, bulkhead, rate limiter + tower layers"
+version.workspace     = true
+edition.workspace     = true
+license.workspace     = true
+rust-version.workspace = true
+
+[dependencies]
+rskit-errors  = { path = "../rskit-errors" }
+tokio         = { workspace = true }
+tokio-util    = { workspace = true }
+governor      = { workspace = true }
+rand          = { workspace = true }
+parking_lot   = { workspace = true }
+tracing       = { workspace = true }
+tower         = { workspace = true }
+tower-layer   = { workspace = true }
+tower-service = { workspace = true }
+futures-util  = { workspace = true }
+pin-project-lite = { workspace = true }

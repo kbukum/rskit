@@ -1,0 +1,17 @@
+[package]
+name        = "rskit-bootstrap"
+description = "Application lifecycle orchestration: typestate App, Component registry, hooks"
+version.workspace     = true
+edition.workspace     = true
+license.workspace     = true
+rust-version.workspace = true
+
+[dependencies]
+rskit-errors = { path = "../rskit-errors" }
+rskit-config = { path = "../rskit-config" }
+rskit-logging = { path = "../rskit-logging" }
+tokio        = { workspace = true }
+tokio-util   = { workspace = true }
+tracing      = { workspace = true }
+async-trait  = { workspace = true }
+futures-util = { workspace = true }
