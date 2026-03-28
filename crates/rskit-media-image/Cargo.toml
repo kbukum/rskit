@@ -1,0 +1,32 @@
+[package]
+name        = "rskit-media-image"
+description = "Native image processing backend using the image crate"
+version.workspace      = true
+edition.workspace      = true
+license.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+documentation          = "https://docs.rs/rskit-media-image"
+readme                 = "README.md"
+categories             = ["multimedia", "graphics"]
+keywords               = ["image", "resize", "crop", "processing"]
+
+[dependencies]
+rskit-errors = { path = "../rskit-errors" }
+rskit-file   = { path = "../rskit-file" }
+rskit-media  = { path = "../rskit-media" }
+image        = "0.25"
+webp         = "0.3"
+bytes        = { workspace = true }
+tokio        = { workspace = true }
+tracing      = { workspace = true }
+async-trait  = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

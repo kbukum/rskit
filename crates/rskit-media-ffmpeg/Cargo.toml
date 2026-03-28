@@ -1,0 +1,33 @@
+[package]
+name        = "rskit-media-ffmpeg"
+description = "FFmpeg CLI backend for video/audio processing"
+version.workspace      = true
+edition.workspace      = true
+license.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+documentation          = "https://docs.rs/rskit-media-ffmpeg"
+readme                 = "README.md"
+categories             = ["multimedia", "asynchronous"]
+keywords               = ["ffmpeg", "video", "audio", "transcoding"]
+
+[dependencies]
+rskit-errors = { path = "../rskit-errors" }
+rskit-file   = { path = "../rskit-file" }
+rskit-media  = { path = "../rskit-media" }
+tokio        = { workspace = true, features = ["process", "io-util"] }
+serde        = { workspace = true }
+serde_json   = { workspace = true }
+tracing      = { workspace = true }
+async-trait  = { workspace = true }
+bytes        = { workspace = true }
+which        = "7"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

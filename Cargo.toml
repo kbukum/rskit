@@ -30,6 +30,11 @@ members = [
     "crates/rskit-sse",
     "crates/rskit-dag",
     "crates/rskit-llm",
+    # phase 6 media & file
+    "crates/rskit-file",
+    "crates/rskit-media",
+    "crates/rskit-media-ffmpeg",
+    "crates/rskit-media-image",
 ]
 
 [workspace.package]
@@ -131,6 +136,19 @@ reqwest      = { version = "0.12", features = ["json", "rustls-tls"], default-fe
 
 # Concurrent hash map (discovery)
 dashmap      = "6"
+
+# File I/O (rskit-file)
+tempfile     = "3"
+mime_guess   = "2"
+infer        = "0.19"
+futures-core = "0.3"
+
+# Image processing (rskit-media-image)
+image        = "0.25"
+webp         = "0.3"
+
+# FFmpeg binary lookup (rskit-media-ffmpeg)
+which        = "7"
 
 [profile.release]
 lto           = true

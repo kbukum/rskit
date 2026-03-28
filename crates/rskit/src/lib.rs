@@ -19,6 +19,13 @@
 //! | `sse`    | `rskit-sse` (Server-Sent Events) |
 //! | `dag`    | `rskit-dag` (DAG orchestration) |
 //! | `llm`    | `rskit-llm` (LLM providers) |
+//! | `file`   | `rskit-file` (File I/O, storage) |
+//! | `media`  | `rskit-media` (media types, pipeline) |
+//! | `media-ffmpeg` | `rskit-media-ffmpeg` (FFmpeg backend) |
+//! | `media-image`  | `rskit-media-image` (image processing) |
+//! | `media-full` | ffmpeg + image backends |
+//! | `file-s3` | S3 storage backend |
+//! | `file-gcs` | GCS storage backend |
 //! | `full`   | all features |
 //!
 //! # Quick start
@@ -116,6 +123,22 @@ pub use rskit_dag as dag;
 /// LLM provider abstractions for OpenAI and Anthropic.
 #[cfg(feature = "llm")]
 pub use rskit_llm as llm;
+
+/// File I/O, storage backends, MIME detection, temp files.
+#[cfg(feature = "file")]
+pub use rskit_file as file;
+
+/// Media types, codec/format registry, pipeline builder.
+#[cfg(feature = "media")]
+pub use rskit_media as media;
+
+/// FFmpeg CLI backend for video/audio processing.
+#[cfg(feature = "media-ffmpeg")]
+pub use rskit_media_ffmpeg as media_ffmpeg;
+
+/// Native image processing backend using the `image` crate.
+#[cfg(feature = "media-image")]
+pub use rskit_media_image as media_image;
 
 // ── Convenience re-exports at root ──────────────────────────────────────────
 

@@ -1,0 +1,30 @@
+[package]
+name        = "rskit-media"
+description = "Media types, codec/format registry, pipeline builder, and processing traits"
+version.workspace      = true
+edition.workspace      = true
+license.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+documentation          = "https://docs.rs/rskit-media"
+readme                 = "README.md"
+categories             = ["multimedia", "asynchronous"]
+keywords               = ["media", "video", "audio", "pipeline"]
+
+[dependencies]
+rskit-errors = { path = "../rskit-errors" }
+rskit-file   = { path = "../rskit-file" }
+serde        = { workspace = true, features = ["rc"] }
+serde_json   = { workspace = true }
+chrono       = { workspace = true }
+tracing      = { workspace = true }
+async-trait  = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

@@ -44,6 +44,10 @@ rskit-testutil      = { path = "../rskit-testutil",      optional = true }
 rskit-sse           = { path = "../rskit-sse",           optional = true }
 rskit-dag           = { path = "../rskit-dag",           optional = true }
 rskit-llm           = { path = "../rskit-llm",           optional = true }
+rskit-file          = { path = "../rskit-file",          optional = true }
+rskit-media         = { path = "../rskit-media",         optional = true }
+rskit-media-ffmpeg  = { path = "../rskit-media-ffmpeg",  optional = true }
+rskit-media-image   = { path = "../rskit-media-image",   optional = true }
 
 [dev-dependencies]
 tokio       = { workspace = true, features = ["full"] }
@@ -66,7 +70,15 @@ testutil      = ["dep:rskit-testutil"]
 sse           = ["dep:rskit-sse"]
 dag           = ["dep:rskit-dag"]
 llm           = ["dep:rskit-llm"]
+file          = ["dep:rskit-file"]
+media         = ["dep:rskit-media", "file"]
+media-ffmpeg  = ["dep:rskit-media-ffmpeg", "media"]
+media-image   = ["dep:rskit-media-image", "media"]
+media-full    = ["media-ffmpeg", "media-image"]
+file-s3       = ["file", "rskit-file/s3"]
+file-gcs      = ["file", "rskit-file/gcs"]
 full          = [
     "server", "http", "auth", "di", "database", "cache", "messaging",
     "observability", "authz", "discovery", "testutil", "sse", "dag", "llm",
+    "media-full", "file",
 ]

@@ -1,0 +1,54 @@
+[package]
+name        = "rskit-file"
+description = "File I/O, storage backends, temp files, and MIME detection"
+version.workspace      = true
+edition.workspace      = true
+license.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+documentation          = "https://docs.rs/rskit-file"
+readme                 = "README.md"
+categories             = ["filesystem", "asynchronous"]
+keywords               = ["file", "storage", "async", "streaming"]
+
+[dependencies]
+rskit-errors    = { path = "../rskit-errors" }
+tokio           = { workspace = true, features = ["fs", "io-util"] }
+bytes           = { workspace = true }
+serde           = { workspace = true }
+serde_json      = { workspace = true }
+tracing         = { workspace = true }
+chrono          = { workspace = true }
+async-trait     = { workspace = true }
+futures         = { workspace = true }
+futures-util    = { workspace = true }
+pin-project-lite = { workspace = true }
+tempfile        = "3"
+mime_guess      = "2"
+infer           = "0.19"
+
+[features]
+default = []
+s3  = ["dep:aws-sdk-s3", "dep:aws-config"]
+gcs = ["dep:google-cloud-storage"]
+
+[dependencies.aws-sdk-s3]
+version  = "1"
+optional = true
+
+[dependencies.aws-config]
+version  = "1"
+optional = true
+
+[dependencies.google-cloud-storage]
+version  = "0.22"
+optional = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
