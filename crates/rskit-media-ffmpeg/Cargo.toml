@@ -27,6 +27,10 @@ which        = "7"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "full"] }
+insta = { workspace = true }
+serde_json = { workspace = true }
+rskit-file = { path = "../rskit-file" }
+rskit-media = { path = "../rskit-media" }
 
 [package.metadata.docs.rs]
 all-features = true

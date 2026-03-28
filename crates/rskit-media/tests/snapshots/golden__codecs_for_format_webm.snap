@@ -1,0 +1,11 @@
+---
+source: crates/rskit-media/tests/golden.rs
+expression: codecs
+---
+[
+    "av1",
+    "opus",
+    "vorbis",
+    "vp8",
+    "vp9",
+]

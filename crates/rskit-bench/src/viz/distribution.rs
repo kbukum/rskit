@@ -34,7 +34,6 @@ pub fn render_distribution(dists: &[ScoreDistribution], width: usize, height: us
     // Axes
     draw_axes(&mut svg, PAD_LEFT, PAD_TOP, plot_w, plot_h);
 
-    // Find max count across all distributions for Y scaling
     let max_count = dists
         .iter()
         .flat_map(|d| d.counts.iter())
@@ -43,7 +42,7 @@ pub fn render_distribution(dists: &[ScoreDistribution], width: usize, height: us
         .unwrap_or(1)
         .max(1) as f64;
 
-    // Y grid: 4 divisions
+    // Y grid
     for i in 0..=4 {
         let frac = i as f64 / 4.0;
         let y = top + plot_h - frac * plot_h;
@@ -59,7 +58,7 @@ pub fn render_distribution(dists: &[ScoreDistribution], width: usize, height: us
         );
     }
 
-    // X labels: 0.0 to 1.0 in 0.1 increments
+    // X labels
     for i in 0..=10 {
         let frac = i as f64 / 10.0;
         let x = left + frac * plot_w;
@@ -73,7 +72,6 @@ pub fn render_distribution(dists: &[ScoreDistribution], width: usize, height: us
         );
     }
 
-    // Determine number of bins from first distribution
     let n_bins = dists[0].counts.len();
     if n_bins == 0 {
         return svg.render();
@@ -82,7 +80,6 @@ pub fn render_distribution(dists: &[ScoreDistribution], width: usize, height: us
     let bin_width = plot_w / n_bins as f64;
     let bar_width = bin_width / (n_labels as f64 + 1.0);
 
-    // Grouped bars
     for (li, dist) in dists.iter().enumerate() {
         let color = color_at(li);
         for (bi, &count) in dist.counts.iter().enumerate() {
@@ -93,7 +90,7 @@ pub fn render_distribution(dists: &[ScoreDistribution], width: usize, height: us
         }
     }
 
-    // Legend: upper-left
+    // Legend
     for (i, dist) in dists.iter().enumerate() {
         let lx = left + 10.0;
         let ly = top + 14.0 + i as f64 * 18.0;

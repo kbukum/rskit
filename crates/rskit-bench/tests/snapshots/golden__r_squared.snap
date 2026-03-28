@@ -1,0 +1,12 @@
+---
+source: crates/rskit-bench/tests/golden.rs
+expression: stable_metric(&result)
+---
+{
+  "name": "r_squared",
+  "value": 0.966667,
+  "values": {
+    "ss_res": 0.93,
+    "ss_tot": 27.9
+  }
+}

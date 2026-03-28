@@ -1,0 +1,9 @@
+---
+source: crates/rskit-media-image/tests/golden.rs
+assertion_line: 117
+expression: "serde_json::json!({ \"width\": w, \"height\": h, })"
+---
+{
+  "height": 100,
+  "width": 100
+}

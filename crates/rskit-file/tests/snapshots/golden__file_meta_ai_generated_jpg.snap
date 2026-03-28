@@ -1,0 +1,13 @@
+---
+source: crates/rskit-file/tests/golden.rs
+expression: meta
+---
+{
+  "name": "ai-generated.jpg",
+  "extension": "jpg",
+  "mime_type": "image/jpeg",
+  "size": 15448,
+  "created_at": "[timestamp]",
+  "modified_at": "[timestamp]",
+  "checksum": null
+}

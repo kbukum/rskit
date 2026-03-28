@@ -23,8 +23,14 @@ tracing        = { workspace = true }
 async-trait    = { workspace = true }
 
 [dev-dependencies]
-tokio    = { workspace = true, features = ["test-util", "full"] }
-tempfile = { workspace = true }
+tokio     = { workspace = true, features = ["test-util", "full"] }
+tempfile  = { workspace = true }
+insta     = { workspace = true }
+criterion = { workspace = true }
+
+[[bench]]
+name    = "metrics"
+harness = false
 
 [package.metadata.docs.rs]
 all-features = true

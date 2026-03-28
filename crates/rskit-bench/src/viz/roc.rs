@@ -36,12 +36,9 @@ pub fn render_roc(roc: &RocCurve, width: usize, height: usize) -> String {
         let x = left + frac * plot_w;
         let y = top + plot_h - frac * plot_h;
 
-        // Vertical grid
         svg.line(x, top, x, top + plot_h, "#eee", 1.0, "");
-        // Horizontal grid
         svg.line(left, y, left + plot_w, y, "#eee", 1.0, "");
 
-        // X tick labels
         svg.text(
             x,
             top + plot_h + 16.0,
@@ -50,7 +47,6 @@ pub fn render_roc(roc: &RocCurve, width: usize, height: usize) -> String {
             10,
             r#"text-anchor="middle""#,
         );
-        // Y tick labels
         svg.text(
             left - 8.0,
             y + 4.0,

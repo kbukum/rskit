@@ -1,0 +1,17 @@
+---
+source: crates/rskit-media/tests/golden.rs
+expression: info
+---
+FormatInfo {
+    id: Format(
+        "png",
+    ),
+    extension: "png",
+    mime_type: "image/png",
+    is_container: false,
+    supported_media_types: [
+        Image,
+    ],
+    default_video_codec: None,
+    default_audio_codec: None,
+}

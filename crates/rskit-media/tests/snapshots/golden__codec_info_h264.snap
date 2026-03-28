@@ -1,0 +1,34 @@
+---
+source: crates/rskit-media/tests/golden.rs
+expression: info
+---
+CodecInfo {
+    id: Codec(
+        "h264",
+    ),
+    kind: Video,
+    display_name: "H.264 / AVC",
+    ffmpeg_encoder: Some(
+        "libx264",
+    ),
+    ffmpeg_decoder: Some(
+        "h264",
+    ),
+    compatible_formats: [
+        Format(
+            "mp4",
+        ),
+        Format(
+            "mkv",
+        ),
+        Format(
+            "avi",
+        ),
+        Format(
+            "mov",
+        ),
+        Format(
+            "ts",
+        ),
+    ],
+}

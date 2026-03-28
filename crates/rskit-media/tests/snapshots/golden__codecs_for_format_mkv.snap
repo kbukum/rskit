@@ -1,0 +1,16 @@
+---
+source: crates/rskit-media/tests/golden.rs
+expression: codecs
+---
+[
+    "aac",
+    "av1",
+    "flac",
+    "h264",
+    "h265",
+    "mp3",
+    "opus",
+    "vorbis",
+    "vp8",
+    "vp9",
+]

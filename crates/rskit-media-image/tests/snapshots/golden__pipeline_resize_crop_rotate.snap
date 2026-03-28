@@ -1,0 +1,14 @@
+---
+source: crates/rskit-media-image/tests/golden.rs
+assertion_line: 190
+expression: "serde_json::json!({\n    \"final_width\": w, \"final_height\": h, \"pipeline_steps\":\n    [\"resize(200x200)\", \"crop(100x100)\", \"rotate(90)\"],\n})"
+---
+{
+  "final_height": 100,
+  "final_width": 100,
+  "pipeline_steps": [
+    "resize(200x200)",
+    "crop(100x100)",
+    "rotate(90)"
+  ]
+}

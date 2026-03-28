@@ -1,0 +1,31 @@
+---
+source: crates/rskit-media/tests/golden.rs
+expression: info
+---
+CodecInfo {
+    id: Codec(
+        "opus",
+    ),
+    kind: Audio,
+    display_name: "Opus",
+    ffmpeg_encoder: Some(
+        "libopus",
+    ),
+    ffmpeg_decoder: Some(
+        "opus",
+    ),
+    compatible_formats: [
+        Format(
+            "mp4",
+        ),
+        Format(
+            "mkv",
+        ),
+        Format(
+            "webm",
+        ),
+        Format(
+            "ogg",
+        ),
+    ],
+}

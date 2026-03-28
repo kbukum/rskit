@@ -1,0 +1,21 @@
+---
+source: crates/rskit-media/tests/golden.rs
+expression: info
+---
+FormatInfo {
+    id: Format(
+        "mp3",
+    ),
+    extension: "mp3",
+    mime_type: "audio/mpeg",
+    is_container: false,
+    supported_media_types: [
+        Audio,
+    ],
+    default_video_codec: None,
+    default_audio_codec: Some(
+        Codec(
+            "mp3",
+        ),
+    ),
+}

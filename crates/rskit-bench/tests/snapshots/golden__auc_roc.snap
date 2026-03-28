@@ -1,0 +1,8 @@
+---
+source: crates/rskit-bench/tests/golden.rs
+expression: "serde_json::json!({ \"name\": result.name, \"value\": round(result.value, 6), })"
+---
+{
+  "name": "aucroc",
+  "value": 0.85
+}

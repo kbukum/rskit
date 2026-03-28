@@ -1,0 +1,31 @@
+---
+source: crates/rskit-media/tests/golden.rs
+expression: info
+---
+CodecInfo {
+    id: Codec(
+        "aac",
+    ),
+    kind: Audio,
+    display_name: "AAC",
+    ffmpeg_encoder: Some(
+        "aac",
+    ),
+    ffmpeg_decoder: Some(
+        "aac",
+    ),
+    compatible_formats: [
+        Format(
+            "mp4",
+        ),
+        Format(
+            "mkv",
+        ),
+        Format(
+            "mov",
+        ),
+        Format(
+            "ts",
+        ),
+    ],
+}

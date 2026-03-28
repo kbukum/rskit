@@ -1,0 +1,7 @@
+---
+source: crates/rskit-media/tests/golden.rs
+expression: codecs
+---
+[
+    "pcm",
+]

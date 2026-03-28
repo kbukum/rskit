@@ -1,0 +1,31 @@
+---
+source: crates/rskit-media/tests/golden.rs
+expression: info
+---
+CodecInfo {
+    id: Codec(
+        "h265",
+    ),
+    kind: Video,
+    display_name: "H.265 / HEVC",
+    ffmpeg_encoder: Some(
+        "libx265",
+    ),
+    ffmpeg_decoder: Some(
+        "hevc",
+    ),
+    compatible_formats: [
+        Format(
+            "mp4",
+        ),
+        Format(
+            "mkv",
+        ),
+        Format(
+            "mov",
+        ),
+        Format(
+            "ts",
+        ),
+    ],
+}

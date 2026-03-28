@@ -1,0 +1,13 @@
+---
+source: crates/rskit-bench/tests/golden.rs
+expression: stable_metric(&result)
+---
+{
+  "name": "ndcg",
+  "value": 0.887843,
+  "values": {
+    "dcg": 2.934024,
+    "ideal_dcg": 3.304666,
+    "k": 10.0
+  }
+}

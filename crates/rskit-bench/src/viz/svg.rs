@@ -119,7 +119,6 @@ impl Svg {
             self.width, self.height, self.width, self.height
         );
         out.push('\n');
-        // White background
         write!(
             out,
             r#"<rect width="{}" height="{}" fill="white"/>"#,
@@ -154,7 +153,6 @@ pub(crate) fn xml_escape(s: &str) -> String {
 pub(crate) fn draw_axes(svg: &mut Svg, pad_left: usize, pad_top: usize, plot_w: f64, plot_h: f64) {
     let left = pad_left as f64;
     let top = pad_top as f64;
-    // X axis
     svg.line(
         left,
         top + plot_h,
@@ -164,7 +162,6 @@ pub(crate) fn draw_axes(svg: &mut Svg, pad_left: usize, pad_top: usize, plot_w: 
         1.0,
         "",
     );
-    // Y axis
     svg.line(left, top, left, top + plot_h, "#333", 1.0, "");
 }
 

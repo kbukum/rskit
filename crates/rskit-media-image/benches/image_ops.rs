@@ -227,6 +227,100 @@ fn bench_blur(c: &mut Criterion) {
     group.finish();
 }
 
+fn real_fixture_path(name: &str) -> std::path::PathBuf {
+    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("tests/fixtures/image")
+        .join(name)
+}
+
+fn bench_real_fixtures(c: &mut Criterion) {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let processor = ImageProcessor::new();
+    let ops = vec![MediaOp::Resize(ResizeOp {
+        resolution: Resolution::new(200, 200),
+        mode: ResizeMode::Exact,
+    })];
+
+    let mut group = c.benchmark_group("real_fixture_resize");
+    group.sample_size(10);
+
+    let jpeg_path = real_fixture_path("real-photo.jpg");
+    let png_path = real_fixture_path("sample.png");
+
+    if jpeg_path.exists() {
+        let source = FileSource::from_path(&jpeg_path);
+        group.bench_function("real_jpeg_500x378", |b| {
+            b.iter(|| {
+                rt.block_on(async {
+                    processor.execute(&source, &ops, None).await.unwrap()
+                })
+            })
+        });
+    }
+
+    if png_path.exists() {
+        let source = FileSource::from_path(&png_path);
+        group.bench_function("real_png_600x600", |b| {
+            b.iter(|| {
+                rt.block_on(async {
+                    processor.execute(&source, &ops, None).await.unwrap()
+                })
+            })
+        });
+    }
+
+    group.finish();
+}
+
+fn bench_real_fixture_pipeline(c: &mut Criterion) {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let processor = ImageProcessor::new();
+
+    let ops = vec![
+        MediaOp::Resize(ResizeOp {
+            resolution: Resolution::new(200, 200),
+            mode: ResizeMode::Exact,
+        }),
+        MediaOp::Crop(CropRegion::new(10, 10, 150, 150)),
+        MediaOp::Rotate(Rotation::Degrees90),
+        MediaOp::Flip(FlipDirection::Horizontal),
+    ];
+
+    let mut group = c.benchmark_group("real_fixture_pipeline");
+    group.sample_size(10);
+
+    let jpeg_path = real_fixture_path("real-photo.jpg");
+    let png_path = real_fixture_path("sample.png");
+
+    if jpeg_path.exists() {
+        let source = FileSource::from_path(&jpeg_path);
+        group.bench_function("real_jpeg_pipeline", |b| {
+            b.iter(|| {
+                rt.block_on(async {
+                    processor.execute(&source, &ops, None).await.unwrap()
+                })
+            })
+        });
+    }
+
+    if png_path.exists() {
+        let source = FileSource::from_path(&png_path);
+        group.bench_function("real_png_pipeline", |b| {
+            b.iter(|| {
+                rt.block_on(async {
+                    processor.execute(&source, &ops, None).await.unwrap()
+                })
+            })
+        });
+    }
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_resize,
@@ -235,5 +329,7 @@ criterion_group!(
     bench_rotate,
     bench_pipeline,
     bench_blur,
+    bench_real_fixtures,
+    bench_real_fixture_pipeline,
 );
 criterion_main!(benches);

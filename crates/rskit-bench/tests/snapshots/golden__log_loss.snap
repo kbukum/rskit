@@ -1,0 +1,9 @@
+---
+source: crates/rskit-bench/tests/golden.rs
+expression: stable_metric(&result)
+---
+{
+  "name": "log_loss",
+  "value": 0.507112,
+  "values": {}
+}

@@ -1,4 +1,7 @@
 //! ML benchmarking framework: evaluators, metrics, reports, visualization.
+//!
+//! Migrated from sentinel/rs-services/ruskit to use rskit-errors (AppResult/AppError)
+//! instead of anyhow, and rskit-provider for the Provider/RequestResponse traits.
 
 pub mod cli;
 pub mod compare;
@@ -18,3 +21,10 @@ pub mod schema;
 pub mod storage;
 pub mod types;
 pub mod viz;
+
+// Re-export key types for convenience.
+pub use evaluator::{Evaluator, EvaluatorFunc, FromProvider};
+pub use result::{BenchRunResult, MetricResult};
+pub use run_storage::{FileRunStorage, ListOptions, RunStorage};
+pub use runner::{BenchRunner, RunOptions};
+pub use types::{BenchSample, Prediction, ScoredSample};

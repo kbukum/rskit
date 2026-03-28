@@ -1,0 +1,13 @@
+---
+source: crates/rskit-file/tests/golden.rs
+expression: meta
+---
+{
+  "name": "real-voice.wav",
+  "extension": "wav",
+  "mime_type": "audio/x-wav",
+  "size": 28204,
+  "created_at": "[timestamp]",
+  "modified_at": "[timestamp]",
+  "checksum": null
+}

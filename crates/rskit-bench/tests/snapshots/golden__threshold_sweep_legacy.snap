@@ -1,0 +1,132 @@
+---
+source: crates/rskit-bench/tests/golden.rs
+expression: "&results"
+---
+[
+  {
+    "threshold": 0.1,
+    "precision": 0.5556,
+    "recall": 1.0,
+    "f1": 0.7143,
+    "accuracy": 0.6,
+    "fpr": 0.8,
+    "confusion": {
+      "tp": 5,
+      "fp": 4,
+      "tn": 1,
+      "fn_count": 0
+    }
+  },
+  {
+    "threshold": 0.2,
+    "precision": 0.625,
+    "recall": 1.0,
+    "f1": 0.7692,
+    "accuracy": 0.7,
+    "fpr": 0.6,
+    "confusion": {
+      "tp": 5,
+      "fp": 3,
+      "tn": 2,
+      "fn_count": 0
+    }
+  },
+  {
+    "threshold": 0.30000000000000004,
+    "precision": 0.7143,
+    "recall": 1.0,
+    "f1": 0.8333,
+    "accuracy": 0.8,
+    "fpr": 0.4,
+    "confusion": {
+      "tp": 5,
+      "fp": 2,
+      "tn": 3,
+      "fn_count": 0
+    }
+  },
+  {
+    "threshold": 0.4,
+    "precision": 0.8333,
+    "recall": 1.0,
+    "f1": 0.9091,
+    "accuracy": 0.9,
+    "fpr": 0.2,
+    "confusion": {
+      "tp": 5,
+      "fp": 1,
+      "tn": 4,
+      "fn_count": 0
+    }
+  },
+  {
+    "threshold": 0.5,
+    "precision": 0.8,
+    "recall": 0.8,
+    "f1": 0.8,
+    "accuracy": 0.8,
+    "fpr": 0.2,
+    "confusion": {
+      "tp": 4,
+      "fp": 1,
+      "tn": 4,
+      "fn_count": 1
+    }
+  },
+  {
+    "threshold": 0.6000000000000001,
+    "precision": 1.0,
+    "recall": 0.6,
+    "f1": 0.75,
+    "accuracy": 0.8,
+    "fpr": 0.0,
+    "confusion": {
+      "tp": 3,
+      "fp": 0,
+      "tn": 5,
+      "fn_count": 2
+    }
+  },
+  {
+    "threshold": 0.7000000000000001,
+    "precision": 1.0,
+    "recall": 0.4,
+    "f1": 0.5714,
+    "accuracy": 0.7,
+    "fpr": 0.0,
+    "confusion": {
+      "tp": 2,
+      "fp": 0,
+      "tn": 5,
+      "fn_count": 3
+    }
+  },
+  {
+    "threshold": 0.8,
+    "precision": 1.0,
+    "recall": 0.4,
+    "f1": 0.5714,
+    "accuracy": 0.7,
+    "fpr": 0.0,
+    "confusion": {
+      "tp": 2,
+      "fp": 0,
+      "tn": 5,
+      "fn_count": 3
+    }
+  },
+  {
+    "threshold": 0.9,
+    "precision": 1.0,
+    "recall": 0.2,
+    "f1": 0.3333,
+    "accuracy": 0.6,
+    "fpr": 0.0,
+    "confusion": {
+      "tp": 1,
+      "fp": 0,
+      "tn": 5,
+      "fn_count": 4
+    }
+  }
+]

@@ -1,0 +1,5 @@
+---
+source: crates/rskit-media/tests/golden.rs
+expression: "Format::new(format::PNG)"
+---
+"png"

@@ -1,0 +1,9 @@
+---
+source: crates/rskit-bench/tests/golden.rs
+expression: stable_metric(&result)
+---
+{
+  "name": "confusion_matrix",
+  "value": 0.0,
+  "values": {}
+}

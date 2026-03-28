@@ -1,0 +1,11 @@
+---
+source: crates/rskit-bench/tests/golden.rs
+expression: stable_metric(&result)
+---
+{
+  "name": "precision_at_k",
+  "value": 0.6,
+  "values": {
+    "k": 5.0
+  }
+}

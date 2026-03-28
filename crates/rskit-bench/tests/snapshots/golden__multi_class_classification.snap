@@ -1,0 +1,17 @@
+---
+source: crates/rskit-bench/tests/golden.rs
+expression: stable_metric(&result)
+---
+{
+  "name": "multi_class_classification",
+  "value": 0.5,
+  "values": {
+    "accuracy": 0.5,
+    "macro_f1": 0.5,
+    "macro_precision": 0.5,
+    "macro_recall": 0.5,
+    "micro_f1": 0.5,
+    "micro_precision": 0.5,
+    "micro_recall": 0.5
+  }
+}

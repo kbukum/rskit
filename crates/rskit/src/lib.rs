@@ -26,6 +26,9 @@
 //! | `media-full` | ffmpeg + image backends |
 //! | `file-s3` | S3 storage backend |
 //! | `file-gcs` | GCS storage backend |
+//! | `cli`    | `rskit-cli` (CLI helpers) |
+//! | `dataset` | `rskit-dataset` (dataset collection) |
+//! | `bench`  | `rskit-bench` (ML benchmarking) |
 //! | `full`   | all features |
 //!
 //! # Quick start
@@ -139,6 +142,18 @@ pub use rskit_media_ffmpeg as media_ffmpeg;
 /// Native image processing backend using the `image` crate.
 #[cfg(feature = "media-image")]
 pub use rskit_media_image as media_image;
+
+/// CLI helpers: progress bars, cancellation tokens, output formatting.
+#[cfg(feature = "cli")]
+pub use rskit_cli as cli;
+
+/// Dataset collection: sources, transforms, targets, manifest caching.
+#[cfg(feature = "dataset")]
+pub use rskit_dataset as dataset;
+
+/// ML benchmarking: evaluators, metrics, reports, visualization.
+#[cfg(feature = "bench")]
+pub use rskit_bench as bench;
 
 // ── Convenience re-exports at root ──────────────────────────────────────────
 

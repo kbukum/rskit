@@ -1,0 +1,10 @@
+---
+source: crates/rskit-media-ffmpeg/tests/golden.rs
+assertion_line: 134
+expression: "serde_json::json!({\n    \"output_width\": res.width, \"output_height\": res.height, \"has_video_track\":\n    meta.has_video(),\n})"
+---
+{
+  "has_video_track": true,
+  "output_height": 100,
+  "output_width": 100
+}

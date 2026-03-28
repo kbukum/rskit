@@ -1,0 +1,33 @@
+---
+source: crates/rskit-media-ffmpeg/tests/golden.rs
+assertion_line: 76
+expression: "&meta"
+---
+{
+  "media_type": "Audio",
+  "format": "wav",
+  "duration": "[duration]",
+  "size": "[size]",
+  "bitrate": "[bitrate]",
+  "tracks": [
+    {
+      "index": 0,
+      "kind": "Audio",
+      "codec": "pcm_s16le",
+      "bitrate": "[bitrate]",
+      "language": null,
+      "is_default": false,
+      "title": null,
+      "duration": "[duration]",
+      "video": null,
+      "audio": {
+        "sample_rate": 16000,
+        "channels": "Mono",
+        "bit_depth": null
+      },
+      "subtitle": null
+    }
+  ],
+  "tags": "[tags]",
+  "created_at": "[created_at]"
+}

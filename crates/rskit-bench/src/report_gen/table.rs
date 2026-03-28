@@ -1,8 +1,8 @@
 //! ASCII table report generation for terminal output.
 
-use super::Reporter;
-use rskit_errors::AppResult;
+use super::{Reporter, io_err};
 use crate::result::BenchRunResult;
+use rskit_errors::AppResult;
 use std::io::Write;
 
 /// Generates ASCII box-drawing tables for terminal output.
@@ -18,32 +18,37 @@ impl Reporter for TableReporter {
         writeln!(
             w,
             "╔══════════════════════════════════════════════════════════════╗"
-        )?;
-        writeln!(w, "║  BENCH RUN: {:<48}║", result.id)?;
+        )
+        .map_err(io_err)?;
+        writeln!(w, "║  BENCH RUN: {:<48}║", result.id).map_err(io_err)?;
         writeln!(
             w,
             "╠══════════════════════════════════════════════════════════════╣"
-        )?;
-        writeln!(w, "║  Timestamp : {:<47}║", result.timestamp)?;
+        )
+        .map_err(io_err)?;
+        writeln!(w, "║  Timestamp : {:<47}║", result.timestamp).map_err(io_err)?;
         if !result.tag.is_empty() {
-            writeln!(w, "║  Tag       : {:<47}║", result.tag)?;
+            writeln!(w, "║  Tag       : {:<47}║", result.tag).map_err(io_err)?;
         }
         writeln!(
             w,
             "║  Dataset   : {:<47}║",
             format!("{} (v{})", result.dataset.name, result.dataset.version)
-        )?;
-        writeln!(w, "║  Samples   : {:<47}║", result.dataset.sample_count)?;
+        )
+        .map_err(io_err)?;
+        writeln!(w, "║  Samples   : {:<47}║", result.dataset.sample_count).map_err(io_err)?;
         writeln!(
             w,
             "║  Duration  : {:<47}║",
             format!("{}ms", result.duration_ms)
-        )?;
+        )
+        .map_err(io_err)?;
         writeln!(
             w,
             "╚══════════════════════════════════════════════════════════════╝"
-        )?;
-        writeln!(w)?;
+        )
+        .map_err(io_err)?;
+        writeln!(w).map_err(io_err)?;
 
         // Metrics table
         if !result.metrics.is_empty() {
@@ -55,15 +60,16 @@ impl Reporter for TableReporter {
                 .unwrap_or(10)
                 .max(10);
 
-            writeln!(w, "┌─{}─┬────────────┐", "─".repeat(name_width))?;
+            writeln!(w, "┌─{}─┬────────────┐", "─".repeat(name_width)).map_err(io_err)?;
             writeln!(
                 w,
                 "│ {:<nw$} │ {:>10} │",
                 "Metric",
                 "Value",
                 nw = name_width
-            )?;
-            writeln!(w, "├─{}─┼────────────┤", "─".repeat(name_width))?;
+            )
+            .map_err(io_err)?;
+            writeln!(w, "├─{}─┼────────────┤", "─".repeat(name_width)).map_err(io_err)?;
             for m in &result.metrics {
                 writeln!(
                     w,
@@ -71,14 +77,16 @@ impl Reporter for TableReporter {
                     m.name,
                     m.value,
                     nw = name_width
-                )?;
+                )
+                .map_err(io_err)?;
                 for (k, v) in &m.values {
                     let sub_name = format!("  .{}", k);
-                    writeln!(w, "│ {:<nw$} │ {:>10.4} │", sub_name, v, nw = name_width)?;
+                    writeln!(w, "│ {:<nw$} │ {:>10.4} │", sub_name, v, nw = name_width)
+                        .map_err(io_err)?;
                 }
             }
-            writeln!(w, "└─{}─┴────────────┘", "─".repeat(name_width))?;
-            writeln!(w)?;
+            writeln!(w, "└─{}─┴────────────┘", "─".repeat(name_width)).map_err(io_err)?;
+            writeln!(w).map_err(io_err)?;
         }
 
         // Branches
@@ -86,15 +94,18 @@ impl Reporter for TableReporter {
             writeln!(
                 w,
                 "┌────────────────────┬──────┬────────┬────────┬──────────┐"
-            )?;
+            )
+            .map_err(io_err)?;
             writeln!(
                 w,
                 "│ Branch             │ Tier │   Avg+ │   Avg- │ Duration │"
-            )?;
+            )
+            .map_err(io_err)?;
             writeln!(
                 w,
                 "├────────────────────┼──────┼────────┼────────┼──────────┤"
-            )?;
+            )
+            .map_err(io_err)?;
             let mut branches: Vec<_> = result.branches.iter().collect();
             branches.sort_by_key(|(a, _)| *a);
             for (name, br) in &branches {
@@ -106,13 +117,15 @@ impl Reporter for TableReporter {
                     br.avg_score_positive,
                     br.avg_score_negative,
                     br.duration_ms
-                )?;
+                )
+                .map_err(io_err)?;
             }
             writeln!(
                 w,
                 "└────────────────────┴──────┴────────┴────────┴──────────┘"
-            )?;
-            writeln!(w)?;
+            )
+            .map_err(io_err)?;
+            writeln!(w).map_err(io_err)?;
         }
 
         // Sample summary
@@ -131,7 +144,8 @@ impl Reporter for TableReporter {
                 correct,
                 pct,
                 errors
-            )?;
+            )
+            .map_err(io_err)?;
         }
 
         Ok(())

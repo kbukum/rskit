@@ -39,7 +39,6 @@ pub fn render_comparison(
     // Axes
     draw_axes(&mut svg, PAD_LEFT, PAD_TOP, plot_w, plot_h);
 
-    // Sort branches and collect all metric names alphabetically
     let mut branch_names: Vec<&String> = branches.keys().collect();
     branch_names.sort();
 
@@ -55,7 +54,6 @@ pub fn render_comparison(
         return svg.render();
     }
 
-    // Find max metric value for Y scaling
     let mut max_val: f64 = 0.0;
     for br in branches.values() {
         for v in br.metrics.values() {
@@ -68,7 +66,7 @@ pub fn render_comparison(
         max_val = 1.0;
     }
 
-    // Y grid: 4 divisions
+    // Y grid
     for i in 0..=4 {
         let frac = i as f64 / 4.0;
         let y = top + plot_h - frac * plot_h;
@@ -83,7 +81,6 @@ pub fn render_comparison(
         );
     }
 
-    // Bar grouping
     let n_branches = branch_names.len();
     let n_metrics = metric_names.len();
     let group_width = plot_w / n_branches as f64;
@@ -101,7 +98,6 @@ pub fn render_comparison(
             svg.rect_f(x, y, bar_width * 0.7, bar_h, color_at(mi), "");
         }
 
-        // Branch label under group
         svg.text(
             group_x + group_width / 2.0,
             top + plot_h + 18.0,
@@ -112,7 +108,7 @@ pub fn render_comparison(
         );
     }
 
-    // Legend: metric name + color (upper-left)
+    // Legend
     for (i, mname) in metric_names.iter().enumerate() {
         let lx = left + 10.0;
         let ly = top + 14.0 + i as f64 * 18.0;

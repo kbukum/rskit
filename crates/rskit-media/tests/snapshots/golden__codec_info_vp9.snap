@@ -1,0 +1,25 @@
+---
+source: crates/rskit-media/tests/golden.rs
+expression: info
+---
+CodecInfo {
+    id: Codec(
+        "vp9",
+    ),
+    kind: Video,
+    display_name: "VP9",
+    ffmpeg_encoder: Some(
+        "libvpx-vp9",
+    ),
+    ffmpeg_decoder: Some(
+        "vp9",
+    ),
+    compatible_formats: [
+        Format(
+            "mkv",
+        ),
+        Format(
+            "webm",
+        ),
+    ],
+}

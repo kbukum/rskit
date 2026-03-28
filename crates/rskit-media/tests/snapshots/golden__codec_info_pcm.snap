@@ -1,0 +1,28 @@
+---
+source: crates/rskit-media/tests/golden.rs
+expression: info
+---
+CodecInfo {
+    id: Codec(
+        "pcm",
+    ),
+    kind: Audio,
+    display_name: "PCM",
+    ffmpeg_encoder: Some(
+        "pcm_s16le",
+    ),
+    ffmpeg_decoder: Some(
+        "pcm_s16le",
+    ),
+    compatible_formats: [
+        Format(
+            "avi",
+        ),
+        Format(
+            "mov",
+        ),
+        Format(
+            "wav",
+        ),
+    ],
+}

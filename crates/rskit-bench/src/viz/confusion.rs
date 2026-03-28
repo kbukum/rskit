@@ -59,7 +59,6 @@ pub fn render_confusion(cm: &ConfusionMatrixDetail, width: usize, height: usize)
                 r#"stroke="white" stroke-width="2""#,
             );
 
-            // Cell value text — dark on light cells, white on dark cells
             let text_color = if intensity <= 0.5 { "#333" } else { "white" };
             svg.text(
                 x + cell_w / 2.0,
@@ -72,7 +71,7 @@ pub fn render_confusion(cm: &ConfusionMatrixDetail, width: usize, height: usize)
         }
     }
 
-    // Row labels (actual) — left side
+    // Row labels (actual)
     for (i, label) in cm.labels.iter().enumerate() {
         svg.text(
             left - 8.0,
@@ -84,7 +83,7 @@ pub fn render_confusion(cm: &ConfusionMatrixDetail, width: usize, height: usize)
         );
     }
 
-    // Column labels (predicted) — top
+    // Column labels (predicted)
     for (i, label) in cm.labels.iter().enumerate() {
         svg.text(
             left + i as f64 * cell_w + cell_w / 2.0,

@@ -31,6 +31,8 @@ rskit-file = { path = "../rskit-file" }
 rskit-media = { path = "../rskit-media" }
 bytes = { workspace = true }
 criterion = { workspace = true }
+insta = { workspace = true }
+serde_json = { workspace = true }
 
 [[bench]]
 name = "image_ops"

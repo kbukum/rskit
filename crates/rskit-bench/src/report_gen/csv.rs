@@ -1,8 +1,8 @@
 //! CSV report generation.
 
-use super::Reporter;
-use rskit_errors::AppResult;
+use super::{Reporter, io_err};
 use crate::result::BenchRunResult;
+use rskit_errors::AppResult;
 use std::io::Write;
 
 /// Generates flat CSV with metric_name, value, details columns.
@@ -14,7 +14,7 @@ impl Reporter for CsvReporter {
     }
 
     fn generate(&self, w: &mut dyn Write, result: &BenchRunResult) -> AppResult<()> {
-        writeln!(w, "metric_name,value,details")?;
+        writeln!(w, "metric_name,value,details").map_err(io_err)?;
 
         for m in &result.metrics {
             let detail_str = match &m.detail {
@@ -27,9 +27,11 @@ impl Reporter for CsvReporter {
                 csv_escape(&m.name),
                 m.value,
                 csv_escape(&detail_str)
-            )?;
+            )
+            .map_err(io_err)?;
             for (k, v) in &m.values {
-                writeln!(w, "{}.{},{:.6},", csv_escape(&m.name), csv_escape(k), v)?;
+                writeln!(w, "{}.{},{:.6},", csv_escape(&m.name), csv_escape(k), v)
+                    .map_err(io_err)?;
             }
         }
 
@@ -42,7 +44,8 @@ impl Reporter for CsvReporter {
                     csv_escape(name),
                     csv_escape(mk),
                     mv
-                )?;
+                )
+                .map_err(io_err)?;
             }
         }
 

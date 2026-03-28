@@ -1,0 +1,26 @@
+---
+source: crates/rskit-media/tests/golden.rs
+expression: info
+---
+FormatInfo {
+    id: Format(
+        "mp4",
+    ),
+    extension: "mp4",
+    mime_type: "video/mp4",
+    is_container: true,
+    supported_media_types: [
+        Video,
+        Audio,
+    ],
+    default_video_codec: Some(
+        Codec(
+            "h264",
+        ),
+    ),
+    default_audio_codec: Some(
+        Codec(
+            "aac",
+        ),
+    ),
+}

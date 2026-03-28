@@ -1,0 +1,31 @@
+---
+source: crates/rskit-bench/tests/golden.rs
+expression: "serde_json::json!({\n    \"name\": result.name, \"ece\": round(result.value, 6), \"curve\": detail_val,\n})"
+---
+{
+  "curve": {
+    "actual_frequency": [
+      0.0,
+      0.2,
+      0.5,
+      0.75,
+      0.8
+    ],
+    "bin_count": [
+      2,
+      5,
+      4,
+      4,
+      5
+    ],
+    "predicted_probability": [
+      0.125,
+      0.27999999999999997,
+      0.48750000000000004,
+      0.7,
+      0.86
+    ]
+  },
+  "ece": 0.06,
+  "name": "calibration"
+}

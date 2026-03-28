@@ -1,0 +1,43 @@
+---
+source: crates/rskit-media-ffmpeg/tests/golden.rs
+assertion_line: 97
+expression: "&meta"
+---
+{
+  "media_type": "Video",
+  "format": "mp4",
+  "duration": "[duration]",
+  "size": "[size]",
+  "bitrate": "[bitrate]",
+  "tracks": [
+    {
+      "index": 0,
+      "kind": "Video",
+      "codec": "h264",
+      "bitrate": "[bitrate]",
+      "language": "und",
+      "is_default": true,
+      "title": null,
+      "duration": "[duration]",
+      "video": {
+        "resolution": {
+          "width": 1920,
+          "height": 1080
+        },
+        "frame_rate": {
+          "num": 24,
+          "den": 1
+        },
+        "pixel_format": "yuv420p",
+        "rotation": null,
+        "color_space": null,
+        "bit_depth": null,
+        "hdr": false
+      },
+      "audio": null,
+      "subtitle": null
+    }
+  ],
+  "tags": "[tags]",
+  "created_at": "[created_at]"
+}

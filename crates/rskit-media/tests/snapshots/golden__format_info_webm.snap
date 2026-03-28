@@ -1,0 +1,26 @@
+---
+source: crates/rskit-media/tests/golden.rs
+expression: info
+---
+FormatInfo {
+    id: Format(
+        "webm",
+    ),
+    extension: "webm",
+    mime_type: "video/webm",
+    is_container: true,
+    supported_media_types: [
+        Video,
+        Audio,
+    ],
+    default_video_codec: Some(
+        Codec(
+            "vp9",
+        ),
+    ),
+    default_audio_codec: Some(
+        Codec(
+            "opus",
+        ),
+    ),
+}

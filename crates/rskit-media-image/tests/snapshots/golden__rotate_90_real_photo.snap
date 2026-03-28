@@ -1,0 +1,11 @@
+---
+source: crates/rskit-media-image/tests/golden.rs
+assertion_line: 137
+expression: "serde_json::json!({\n    \"original_width\": 500, \"original_height\": 378, \"rotated_width\": w,\n    \"rotated_height\": h,\n})"
+---
+{
+  "original_height": 378,
+  "original_width": 500,
+  "rotated_height": 500,
+  "rotated_width": 378
+}

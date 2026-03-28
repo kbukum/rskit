@@ -1,0 +1,11 @@
+---
+source: crates/rskit-media/tests/golden.rs
+expression: ids
+---
+[
+    "avi",
+    "mkv",
+    "mov",
+    "mp4",
+    "ts",
+]

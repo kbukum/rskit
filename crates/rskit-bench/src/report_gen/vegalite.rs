@@ -1,8 +1,8 @@
 //! Vega-Lite spec generation for bench visualizations.
 
-use super::Reporter;
-use rskit_errors::AppResult;
+use super::{Reporter, io_err};
 use crate::result::BenchRunResult;
+use rskit_errors::{AppError, AppResult, ErrorCode};
 use std::io::Write;
 
 /// Generates a Vega-Lite JSON spec document from bench results.
@@ -15,8 +15,9 @@ impl Reporter for VegaLiteReporter {
 
     fn generate(&self, w: &mut dyn Write, result: &BenchRunResult) -> AppResult<()> {
         let specs = vegalite_specs(result);
-        let json = serde_json::to_string_pretty(&specs)?;
-        write!(w, "{}", json)?;
+        let json = serde_json::to_string_pretty(&specs)
+            .map_err(|e| AppError::new(ErrorCode::Internal, format!("serialize: {e}")))?;
+        write!(w, "{}", json).map_err(io_err)?;
         Ok(())
     }
 }

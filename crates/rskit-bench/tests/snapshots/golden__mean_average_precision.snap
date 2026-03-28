@@ -1,0 +1,9 @@
+---
+source: crates/rskit-bench/tests/golden.rs
+expression: stable_metric(&result)
+---
+{
+  "name": "mean_average_precision",
+  "value": 0.722619,
+  "values": {}
+}

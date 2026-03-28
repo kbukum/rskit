@@ -48,6 +48,9 @@ rskit-file          = { path = "../rskit-file",          optional = true }
 rskit-media         = { path = "../rskit-media",         optional = true }
 rskit-media-ffmpeg  = { path = "../rskit-media-ffmpeg",  optional = true }
 rskit-media-image   = { path = "../rskit-media-image",   optional = true }
+rskit-cli           = { path = "../rskit-cli",           optional = true }
+rskit-dataset       = { path = "../rskit-dataset",       optional = true }
+rskit-bench         = { path = "../rskit-bench",         optional = true }
 
 [dev-dependencies]
 tokio       = { workspace = true, features = ["full"] }
@@ -77,8 +80,11 @@ media-image   = ["dep:rskit-media-image", "media"]
 media-full    = ["media-ffmpeg", "media-image"]
 file-s3       = ["file", "rskit-file/s3"]
 file-gcs      = ["file", "rskit-file/gcs"]
+cli           = ["dep:rskit-cli"]
+dataset       = ["dep:rskit-dataset", "cli"]
+bench         = ["dep:rskit-bench"]
 full          = [
     "server", "http", "auth", "di", "database", "cache", "messaging",
     "observability", "authz", "discovery", "testutil", "sse", "dag", "llm",
-    "media-full", "file",
+    "media-full", "file", "cli", "dataset", "bench",
 ]

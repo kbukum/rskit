@@ -157,8 +157,9 @@ which        = "7"
 # CLI progress bars (rskit-cli)
 indicatif    = "0.17"
 
-# Benchmarking
+# Benchmarking & snapshot testing
 criterion    = { version = "0.5", features = ["html_reports", "async_tokio"] }
+insta        = { version = "1.42", features = ["json", "yaml", "redactions"] }
 
 [profile.release]
 lto           = true

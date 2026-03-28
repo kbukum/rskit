@@ -1,0 +1,9 @@
+---
+source: crates/rskit-bench/tests/golden.rs
+expression: stable_metric(&result)
+---
+{
+  "name": "mse",
+  "value": 0.093,
+  "values": {}
+}

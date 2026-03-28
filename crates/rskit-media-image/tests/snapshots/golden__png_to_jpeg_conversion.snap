@@ -1,0 +1,12 @@
+---
+source: crates/rskit-media-image/tests/golden.rs
+assertion_line: 160
+expression: "serde_json::json!({\n    \"is_jpeg\": is_jpeg, \"width\": w, \"height\": h, \"size_bytes\": bytes.len(),\n    \"size_reasonable\": bytes.len() > 1000 && bytes.len() < 500_000,\n})"
+---
+{
+  "height": 600,
+  "is_jpeg": true,
+  "size_bytes": 52764,
+  "size_reasonable": true,
+  "width": 600
+}

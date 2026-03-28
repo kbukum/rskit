@@ -1,0 +1,12 @@
+---
+source: crates/rskit-bench/tests/golden.rs
+expression: stable_metric(&result)
+---
+{
+  "name": "exact_match",
+  "value": 0.6,
+  "values": {
+    "correct": 3.0,
+    "total": 5.0
+  }
+}

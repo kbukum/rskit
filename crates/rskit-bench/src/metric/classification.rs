@@ -7,7 +7,6 @@ fn safe_divide(a: f64, b: f64) -> f64 {
     if b == 0.0 { 0.0 } else { a / b }
 }
 
-/// Binary classification: precision, recall, F1, accuracy, FPR.
 pub fn binary_classification<L>(positive_label: L, threshold: f64) -> Box<dyn Metric<L>>
 where
     L: PartialEq + Display + Clone + Send + Sync + 'static,
@@ -81,7 +80,6 @@ impl<L: PartialEq + Display + Clone + Send + Sync + 'static> Metric<L> for Binar
     }
 }
 
-/// Full NxN confusion matrix for any number of labels.
 pub fn confusion_matrix<L>(labels: Vec<L>) -> Box<dyn Metric<L>>
 where
     L: PartialEq + Display + Clone + Send + Sync + 'static,
@@ -125,7 +123,6 @@ impl<L: PartialEq + Display + Clone + Send + Sync + 'static> Metric<L>
     }
 }
 
-/// Threshold sweep: metrics at multiple thresholds.
 pub fn threshold_sweep<L>(positive_label: L, thresholds: Option<Vec<f64>>) -> Box<dyn Metric<L>>
 where
     L: PartialEq + Display + Clone + Send + Sync + 'static,
@@ -186,7 +183,6 @@ impl<L: PartialEq + Display + Clone + Send + Sync + 'static> Metric<L> for Thres
     }
 }
 
-/// Multi-class classification: macro/micro averages.
 pub fn multi_class_classification<L>(labels: Vec<L>) -> Box<dyn Metric<L>>
 where
     L: PartialEq + Display + Clone + Send + Sync + 'static,
