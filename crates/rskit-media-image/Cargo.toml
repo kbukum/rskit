@@ -25,7 +25,16 @@ tracing      = { workspace = true }
 async-trait  = { workspace = true }
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["test-util"] }
+tokio = { workspace = true, features = ["test-util", "full"] }
+image = "0.25"
+rskit-file = { path = "../rskit-file" }
+rskit-media = { path = "../rskit-media" }
+bytes = { workspace = true }
+criterion = { workspace = true }
+
+[[bench]]
+name = "image_ops"
+harness = false
 
 [package.metadata.docs.rs]
 all-features = true

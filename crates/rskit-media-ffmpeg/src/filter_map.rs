@@ -142,3 +142,97 @@ impl FilterMap {
         );
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rskit_media::filter::{Filter, FilterTarget, ParamValue, Params};
+
+    fn video_filter(name: &str, params: Params) -> Filter {
+        Filter {
+            name: name.into(),
+            target: FilterTarget::Video,
+            params,
+        }
+    }
+
+    fn audio_filter(name: &str, params: Params) -> Filter {
+        Filter {
+            name: name.into(),
+            target: FilterTarget::Audio,
+            params,
+        }
+    }
+
+    #[test]
+    fn golden_denoise() {
+        let f = video_filter("denoise", Params::new().set("strength", ParamValue::Int(5)));
+        assert_eq!(to_ffmpeg_filter(&f), "hqdn3d=5");
+    }
+
+    #[test]
+    fn golden_sharpen() {
+        let f = video_filter("sharpen", Params::new().set("amount", ParamValue::Float(1.5)));
+        assert_eq!(to_ffmpeg_filter(&f), "unsharp=5:5:1.5");
+    }
+
+    #[test]
+    fn golden_blur() {
+        let f = video_filter("blur", Params::new().set("radius", ParamValue::Float(3.0)));
+        assert_eq!(to_ffmpeg_filter(&f), "boxblur=3");
+    }
+
+    #[test]
+    fn golden_brightness() {
+        let f = video_filter("brightness", Params::new().set("value", ParamValue::Float(0.2)));
+        assert_eq!(to_ffmpeg_filter(&f), "eq=brightness=0.2");
+    }
+
+    #[test]
+    fn golden_grayscale() {
+        let f = video_filter("grayscale", Params::new());
+        assert_eq!(to_ffmpeg_filter(&f), "format=gray");
+    }
+
+    #[test]
+    fn golden_sepia() {
+        let f = video_filter("sepia", Params::new());
+        let result = to_ffmpeg_filter(&f);
+        assert!(result.starts_with("colorchannelmixer="), "got: {result}");
+    }
+
+    #[test]
+    fn golden_deinterlace() {
+        let f = video_filter("deinterlace", Params::new());
+        assert_eq!(to_ffmpeg_filter(&f), "yadif");
+    }
+
+    #[test]
+    fn golden_high_pass() {
+        let f = audio_filter("high_pass", Params::new().set("frequency", ParamValue::Int(200)));
+        assert_eq!(to_ffmpeg_filter(&f), "highpass=f=200");
+    }
+
+    #[test]
+    fn golden_low_pass() {
+        let f = audio_filter("low_pass", Params::new().set("frequency", ParamValue::Int(3000)));
+        assert_eq!(to_ffmpeg_filter(&f), "lowpass=f=3000");
+    }
+
+    #[test]
+    fn golden_compressor() {
+        let f = audio_filter(
+            "compressor",
+            Params::new()
+                .set("threshold", ParamValue::Float(-20.0))
+                .set("ratio", ParamValue::Float(4.0)),
+        );
+        assert_eq!(to_ffmpeg_filter(&f), "acompressor=threshold=-20:ratio=4");
+    }
+
+    #[test]
+    fn golden_unknown_filter_passthrough() {
+        let f = video_filter("custom_unknown", Params::new());
+        assert_eq!(to_ffmpeg_filter(&f), "custom_unknown");
+    }
+}

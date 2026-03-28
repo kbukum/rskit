@@ -26,7 +26,7 @@ bytes        = { workspace = true }
 which        = "7"
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["test-util"] }
+tokio = { workspace = true, features = ["test-util", "full"] }
 
 [package.metadata.docs.rs]
 all-features = true

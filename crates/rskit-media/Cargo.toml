@@ -23,7 +23,9 @@ tracing      = { workspace = true }
 async-trait  = { workspace = true }
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["test-util"] }
+tokio      = { workspace = true, features = ["test-util"] }
+serde_json = { workspace = true }
+rskit-file = { path = "../rskit-file" }
 
 [package.metadata.docs.rs]
 all-features = true

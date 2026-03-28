@@ -95,3 +95,70 @@ fn parse_ffmpeg_time(s: &str) -> Option<u64> {
 
     Some(h * 3_600_000 + m * 60_000 + sec * 1000 + frac)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_progress_line_with_time_and_speed() {
+        let parser = FfmpegProgressParser::new(Some(Duration::from_secs(60)));
+        let line = "frame= 1234 fps=120.0 q=23.0 size=   12345kB time=00:00:30.00 bitrate=1234.5kbits/s speed=2.00x";
+        let progress = parser.parse_line(line).expect("should parse");
+        assert_eq!(progress.position.unwrap().as_millis(), 30000);
+        assert!((progress.speed.unwrap() - 2.0).abs() < f64::EPSILON);
+        assert!(progress.percent.is_some());
+        let pct = progress.percent.unwrap();
+        assert!((pct - 50.0).abs() < 1.0, "expected ~50%, got {pct}");
+    }
+
+    #[test]
+    fn parse_progress_line_no_speed() {
+        let parser = FfmpegProgressParser::new(None);
+        let line = "frame=  100 fps=30.0 size=   500kB time=00:01:00.50 bitrate=100kbits/s speed=N/A";
+        let progress = parser.parse_line(line).expect("should parse");
+        assert_eq!(progress.position.unwrap().as_millis(), 60500);
+        assert!(progress.speed.is_none()); // N/A should fail parse
+        assert!(progress.percent.is_none()); // no total_duration
+    }
+
+    #[test]
+    fn parse_non_progress_line_returns_none() {
+        let parser = FfmpegProgressParser::new(None);
+        assert!(parser.parse_line("  Duration: 00:01:30.00").is_none());
+        assert!(parser.parse_line("Stream #0:0: Video: h264").is_none());
+        assert!(parser.parse_line("").is_none());
+    }
+
+    #[test]
+    fn parse_ffmpeg_time_hms() {
+        assert_eq!(parse_ffmpeg_time("00:00:00.000"), Some(0));
+        assert_eq!(parse_ffmpeg_time("00:01:00.000"), Some(60000));
+        assert_eq!(parse_ffmpeg_time("01:30:15.500"), Some(5415500));
+        assert_eq!(parse_ffmpeg_time("00:00:01.50"), Some(1500));
+    }
+
+    #[test]
+    fn parse_ffmpeg_time_invalid() {
+        assert!(parse_ffmpeg_time("invalid").is_none());
+        assert!(parse_ffmpeg_time("00:00").is_none());
+    }
+
+    #[test]
+    fn extract_value_from_line() {
+        let line = "frame=100 fps=30 time=00:01:00.00 speed=2x";
+        assert_eq!(extract_value(line, "time="), Some("00:01:00.00".into()));
+        assert_eq!(extract_value(line, "speed="), Some("2x".into()));
+        assert_eq!(extract_value(line, "missing="), None);
+    }
+
+    #[test]
+    fn progress_with_output_size() {
+        let parser = FfmpegProgressParser::new(None);
+        // Real ffmpeg format has no space after size=
+        let line = "frame=50 fps=25 size=2048kB time=00:00:10.00 bitrate=100kbits/s speed=1x";
+        let progress = parser.parse_line(line).unwrap();
+        assert_eq!(progress.output_size, Some(2048 * 1024));
+    }
+}
+

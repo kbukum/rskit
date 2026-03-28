@@ -1,0 +1,28 @@
+[package]
+name        = "rskit-cli"
+description = "CLI framework: progress bars, structured output, signal handling"
+version.workspace      = true
+edition.workspace      = true
+license.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+documentation          = "https://docs.rs/rskit-cli"
+readme                 = "README.md"
+categories             = ["command-line-interface"]
+keywords               = ["cli", "progress", "signal", "terminal"]
+
+[dependencies]
+rskit-errors    = { path = "../rskit-errors" }
+rskit-bootstrap = { path = "../rskit-bootstrap" }
+indicatif       = { workspace = true }
+tokio           = { workspace = true }
+tokio-util      = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "full"] }
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

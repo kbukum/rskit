@@ -462,3 +462,207 @@ impl FfmpegCommand {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rskit_media::{
+        ops::{CropRegion, FlipDirection, ResizeMode, ResizeOp, Rotation},
+        spatial::Resolution,
+        time::TimeRange,
+    };
+
+    fn default_config() -> FfmpegConfig {
+        FfmpegConfig {
+            overwrite: true,
+            ..FfmpegConfig::default()
+        }
+    }
+
+    fn default_registry() -> Registry {
+        Registry::default()
+    }
+
+    fn compile_args(ops: &[MediaOp]) -> Vec<String> {
+        let source = FileSource::from_path("/tmp/input.mp4");
+        let cmd = FfmpegCommand::compile(&source, ops, None, &default_config(), &default_registry())
+            .expect("compile");
+        cmd.to_args()
+    }
+
+    // ── Golden tests: verify exact CLI args for each operation ────────
+
+    #[test]
+    fn golden_resize_exact() {
+        let ops = vec![MediaOp::Resize(ResizeOp {
+            resolution: Resolution::new(1280, 720),
+            mode: ResizeMode::Exact,
+        })];
+        let args = compile_args(&ops);
+        assert!(args.contains(&"-vf".to_string()), "args: {args:?}");
+        let vf_idx = args.iter().position(|a| a == "-vf").unwrap();
+        assert_eq!(args[vf_idx + 1], "scale=1280:720");
+    }
+
+    #[test]
+    fn golden_resize_fit() {
+        let ops = vec![MediaOp::Resize(ResizeOp {
+            resolution: Resolution::new(640, 480),
+            mode: ResizeMode::Fit,
+        })];
+        let args = compile_args(&ops);
+        let vf_idx = args.iter().position(|a| a == "-vf").unwrap();
+        let filter = &args[vf_idx + 1];
+        assert!(filter.contains("force_original_aspect_ratio=decrease"), "got: {filter}");
+        assert!(filter.contains("pad=640:480"), "got: {filter}");
+    }
+
+    #[test]
+    fn golden_resize_fill() {
+        let ops = vec![MediaOp::Resize(ResizeOp {
+            resolution: Resolution::new(640, 480),
+            mode: ResizeMode::Fill,
+        })];
+        let args = compile_args(&ops);
+        let vf_idx = args.iter().position(|a| a == "-vf").unwrap();
+        let filter = &args[vf_idx + 1];
+        assert!(filter.contains("force_original_aspect_ratio=increase"), "got: {filter}");
+        assert!(filter.contains("crop=640:480"), "got: {filter}");
+    }
+
+    #[test]
+    fn golden_crop() {
+        let ops = vec![MediaOp::Crop(CropRegion::new(10, 20, 640, 480))];
+        let args = compile_args(&ops);
+        let vf_idx = args.iter().position(|a| a == "-vf").unwrap();
+        assert_eq!(args[vf_idx + 1], "crop=640:480:10:20");
+    }
+
+    #[test]
+    fn golden_rotate_90() {
+        let ops = vec![MediaOp::Rotate(Rotation::Degrees90)];
+        let args = compile_args(&ops);
+        let vf_idx = args.iter().position(|a| a == "-vf").unwrap();
+        assert_eq!(args[vf_idx + 1], "transpose=1");
+    }
+
+    #[test]
+    fn golden_rotate_180() {
+        let ops = vec![MediaOp::Rotate(Rotation::Degrees180)];
+        let args = compile_args(&ops);
+        let vf_idx = args.iter().position(|a| a == "-vf").unwrap();
+        assert_eq!(args[vf_idx + 1], "hflip,vflip");
+    }
+
+    #[test]
+    fn golden_flip_horizontal() {
+        let ops = vec![MediaOp::Flip(FlipDirection::Horizontal)];
+        let args = compile_args(&ops);
+        let vf_idx = args.iter().position(|a| a == "-vf").unwrap();
+        assert_eq!(args[vf_idx + 1], "hflip");
+    }
+
+    #[test]
+    fn golden_flip_both() {
+        let ops = vec![MediaOp::Flip(FlipDirection::Both)];
+        let args = compile_args(&ops);
+        let vf_idx = args.iter().position(|a| a == "-vf").unwrap();
+        // Both hflip and vflip joined
+        assert_eq!(args[vf_idx + 1], "hflip,vflip");
+    }
+
+    #[test]
+    fn golden_extract_time_range() {
+        let ops = vec![MediaOp::Extract(TimeRange::from_seconds(10.0, 30.0))];
+        let args = compile_args(&ops);
+        // Should have -ss and -t
+        assert!(args.contains(&"-ss".to_string()), "missing -ss in: {args:?}");
+        assert!(args.contains(&"-t".to_string()), "missing -t in: {args:?}");
+    }
+
+    #[test]
+    fn golden_speed() {
+        let ops = vec![MediaOp::Speed(2.0)];
+        let args = compile_args(&ops);
+        let vf_idx = args.iter().position(|a| a == "-vf").unwrap();
+        assert_eq!(args[vf_idx + 1], "setpts=PTS/2");
+        let af_idx = args.iter().position(|a| a == "-af").unwrap();
+        assert!(args[af_idx + 1].contains("atempo"), "got: {}", args[af_idx + 1]);
+    }
+
+    #[test]
+    fn golden_volume() {
+        let ops = vec![MediaOp::Volume(0.5)];
+        let args = compile_args(&ops);
+        let af_idx = args.iter().position(|a| a == "-af").unwrap();
+        assert_eq!(args[af_idx + 1], "volume=0.5");
+    }
+
+    #[test]
+    fn golden_strip_audio() {
+        let ops = vec![MediaOp::StripAudio];
+        let args = compile_args(&ops);
+        assert!(args.contains(&"-an".to_string()));
+    }
+
+    #[test]
+    fn golden_strip_video() {
+        let ops = vec![MediaOp::StripVideo];
+        let args = compile_args(&ops);
+        assert!(args.contains(&"-vn".to_string()));
+    }
+
+    #[test]
+    fn golden_reverse() {
+        let ops = vec![MediaOp::Reverse];
+        let args = compile_args(&ops);
+        let vf_idx = args.iter().position(|a| a == "-vf").unwrap();
+        assert_eq!(args[vf_idx + 1], "reverse");
+        let af_idx = args.iter().position(|a| a == "-af").unwrap();
+        assert_eq!(args[af_idx + 1], "areverse");
+    }
+
+    #[test]
+    fn golden_normalize_audio() {
+        let ops = vec![MediaOp::NormalizeAudio];
+        let args = compile_args(&ops);
+        let af_idx = args.iter().position(|a| a == "-af").unwrap();
+        assert_eq!(args[af_idx + 1], "loudnorm");
+    }
+
+    #[test]
+    fn golden_multiple_video_filters_chained() {
+        let ops = vec![
+            MediaOp::Resize(ResizeOp {
+                resolution: Resolution::p720(),
+                mode: ResizeMode::Exact,
+            }),
+            MediaOp::Crop(CropRegion::new(0, 0, 640, 360)),
+            MediaOp::Flip(FlipDirection::Horizontal),
+        ];
+        let args = compile_args(&ops);
+        let vf_idx = args.iter().position(|a| a == "-vf").unwrap();
+        let vf = &args[vf_idx + 1];
+        // All filters joined with commas
+        assert!(vf.contains("scale=1280:720"), "got: {vf}");
+        assert!(vf.contains("crop=640:360:0:0"), "got: {vf}");
+        assert!(vf.contains("hflip"), "got: {vf}");
+        assert_eq!(vf.matches(',').count(), 2, "expected 2 commas in: {vf}");
+    }
+
+    #[test]
+    fn golden_global_opts() {
+        let args = compile_args(&[]);
+        assert!(args.contains(&"-y".to_string()), "should have -y (overwrite)");
+        assert!(args.contains(&"-loglevel".to_string()), "should have -loglevel");
+        assert!(args.contains(&"-progress".to_string()), "should have -progress");
+    }
+
+    #[test]
+    fn golden_input_path() {
+        let args = compile_args(&[]);
+        let i_idx = args.iter().position(|a| a == "-i").unwrap();
+        assert_eq!(args[i_idx + 1], "/tmp/input.mp4");
+    }
+}
+
