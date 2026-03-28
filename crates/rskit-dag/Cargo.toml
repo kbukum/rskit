@@ -1,0 +1,27 @@
+[package]
+name        = "rskit-dag"
+description = "DAG task orchestrator with parallel execution"
+version.workspace     = true
+edition.workspace     = true
+license.workspace     = true
+rust-version.workspace = true
+authors.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+documentation = "https://docs.rs/rskit-dag"
+readme = "README.md"
+categories = ["concurrency"]
+keywords   = ["dag", "orchestration", "pipeline"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+rskit-errors = { path = "../rskit-errors" }
+serde_json   = { workspace = true }
+async-trait  = { workspace = true }
+tokio        = { workspace = true }
+tracing      = { workspace = true }
+futures      = { workspace = true }
+tokio-util   = { workspace = true }

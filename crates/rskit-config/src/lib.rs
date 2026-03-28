@@ -6,7 +6,7 @@ mod loader;
 mod service;
 
 pub use loader::{load_config, ConfigLoader};
-pub use service::{Environment, LogFormat, LoggingConfig, ServiceConfig};
+pub use service::{Environment, LogFormat, LogOutput, LoggingConfig, ServiceConfig};
 
 /// Trait that every application config struct must implement.
 ///

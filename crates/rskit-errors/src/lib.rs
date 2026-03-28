@@ -8,9 +8,12 @@ pub mod code;
 pub mod error;
 /// Conversions between [`AppError`] and gRPC / HTTP status types.
 pub mod convert;
+/// RFC 7807 Problem Details response body.
+pub mod response;
 
 pub use code::ErrorCode;
 pub use error::AppError;
+pub use response::ErrorResponse;
 
 /// Convenience alias used throughout rskit crates.
 pub type AppResult<T> = Result<T, AppError>;

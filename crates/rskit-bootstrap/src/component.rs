@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use rskit_errors::AppResult;
 
 use crate::Health;
@@ -24,4 +26,64 @@ pub trait Component: Send + Sync {
 
     /// Instant (synchronous) health snapshot.
     fn health(&self) -> Health;
+}
+
+// ── LazyComponent ─────────────────────────────────────────────────────────────
+
+/// Wraps a component factory: the inner component is not constructed until
+/// `start()` is first called.
+///
+/// Useful when the concrete component requires I/O during construction (e.g.
+/// establishing a connection) and you want to defer that work to startup.
+pub struct LazyComponent<F> {
+    name: &'static str,
+    factory: F,
+    inner: parking_lot::Mutex<Option<Arc<dyn Component>>>,
+}
+
+impl<F: Fn() -> Arc<dyn Component> + Send + Sync> LazyComponent<F> {
+    /// Create a new lazy component with the given `name` and `factory`.
+    pub fn new(name: &'static str, factory: F) -> Self {
+        Self {
+            name,
+            factory,
+            inner: parking_lot::Mutex::new(None),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl<F: Fn() -> Arc<dyn Component> + Send + Sync> Component for LazyComponent<F> {
+    fn name(&self) -> &str {
+        self.name
+    }
+
+    async fn start(&self) -> AppResult<()> {
+        let component = {
+            let mut guard = self.inner.lock();
+            if guard.is_none() {
+                *guard = Some((self.factory)());
+            }
+            guard.as_ref().unwrap().clone()
+        };
+        component.start().await
+    }
+
+    async fn stop(&self) -> AppResult<()> {
+        let component = self.inner.lock().clone();
+        if let Some(c) = component {
+            c.stop().await
+        } else {
+            Ok(())
+        }
+    }
+
+    fn health(&self) -> Health {
+        let component = self.inner.lock().clone();
+        if let Some(c) = component {
+            c.health()
+        } else {
+            Health::healthy(self.name)
+        }
+    }
 }

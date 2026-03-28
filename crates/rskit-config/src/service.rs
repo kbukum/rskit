@@ -90,6 +90,14 @@ pub struct LoggingConfig {
 
     /// Override service name in log output (defaults to [`ServiceConfig::name`]).
     pub service_name: Option<String>,
+
+    /// Where to write log output.
+    #[serde(default)]
+    pub output: LogOutput,
+
+    /// Include `file:line` caller location in every log line.
+    #[serde(default)]
+    pub with_caller: bool,
 }
 
 impl Default for LoggingConfig {
@@ -98,6 +106,8 @@ impl Default for LoggingConfig {
             level: Self::default_level(),
             format: LogFormat::default(),
             service_name: None,
+            output: LogOutput::default(),
+            with_caller: false,
         }
     }
 }
@@ -117,4 +127,20 @@ pub enum LogFormat {
     /// Human-readable coloured output (default, use in development).
     #[default]
     Console,
+}
+
+/// Where log output is written.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Default)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum LogOutput {
+    /// Write to standard output (default).
+    #[default]
+    Stdout,
+    /// Write to standard error.
+    Stderr,
+    /// Write to a file at the given path.
+    File {
+        /// Absolute or relative path to the log file.
+        path: String,
+    },
 }

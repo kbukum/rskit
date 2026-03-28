@@ -14,9 +14,9 @@ pub mod registry;
 pub mod summary;
 
 pub use app::{App, AppBuilder, Unconfigured};
-pub use component::Component;
+pub use component::{Component, LazyComponent};
 pub use health::{Health, HealthStatus};
-pub use registry::Registry;
+pub use registry::{Registry, RegistryConfig};
 
 // Re-export CancellationToken so downstream crates don't need tokio-util directly
 pub use tokio_util::sync::CancellationToken;

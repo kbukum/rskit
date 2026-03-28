@@ -1,0 +1,31 @@
+[package]
+name        = "rskit-database"
+description = "sqlx-based async database pool with repository pattern and slow-query logging"
+version.workspace     = true
+edition.workspace     = true
+license.workspace     = true
+rust-version.workspace = true
+authors.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+documentation = "https://docs.rs/rskit-database"
+readme = "README.md"
+categories = ["database"]
+keywords   = ["database", "sqlx", "repository"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+rskit-errors    = { path = "../rskit-errors" }
+rskit-bootstrap = { path = "../rskit-bootstrap" }
+serde           = { workspace = true }
+serde_json      = { workspace = true }
+async-trait     = { workspace = true }
+tokio           = { workspace = true }
+tracing         = { workspace = true }
+sqlx            = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "postgres", "mysql", "sqlite", "uuid", "chrono", "json"] }
+chrono          = { workspace = true }
+uuid            = { workspace = true }
+validator       = { workspace = true }

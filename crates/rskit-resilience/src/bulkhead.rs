@@ -5,7 +5,6 @@ use rskit_errors::{AppError, AppResult};
 use tokio::sync::Semaphore;
 
 /// Bulkhead configuration.
-#[derive(Debug, Clone)]
 pub struct BulkheadConfig {
     /// Human-readable name used in tracing and error details.
     pub name: String,
@@ -14,6 +13,38 @@ pub struct BulkheadConfig {
     /// How long to wait for a permit before returning `RateLimited`.
     /// `None` means wait forever.
     pub max_wait: Option<Duration>,
+    /// Called when a permit cannot be acquired (bulkhead full).
+    pub on_reject: Option<Arc<dyn Fn() + Send + Sync>>,
+    /// Called when a permit is successfully acquired.
+    pub on_acquire: Option<Arc<dyn Fn() + Send + Sync>>,
+    /// Called when a permit is released after the operation completes.
+    pub on_release: Option<Arc<dyn Fn() + Send + Sync>>,
+}
+
+impl std::fmt::Debug for BulkheadConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BulkheadConfig")
+            .field("name", &self.name)
+            .field("max_concurrent", &self.max_concurrent)
+            .field("max_wait", &self.max_wait)
+            .field("on_reject", &self.on_reject.as_ref().map(|_| "<fn>"))
+            .field("on_acquire", &self.on_acquire.as_ref().map(|_| "<fn>"))
+            .field("on_release", &self.on_release.as_ref().map(|_| "<fn>"))
+            .finish()
+    }
+}
+
+impl Clone for BulkheadConfig {
+    fn clone(&self) -> Self {
+        Self {
+            name: self.name.clone(),
+            max_concurrent: self.max_concurrent,
+            max_wait: self.max_wait,
+            on_reject: self.on_reject.clone(),
+            on_acquire: self.on_acquire.clone(),
+            on_release: self.on_release.clone(),
+        }
+    }
 }
 
 impl Default for BulkheadConfig {
@@ -22,6 +53,9 @@ impl Default for BulkheadConfig {
             name: "bulkhead".to_string(),
             max_concurrent: 32,
             max_wait: Some(Duration::from_secs(5)),
+            on_reject: None,
+            on_acquire: None,
+            on_release: None,
         }
     }
 }
@@ -43,6 +77,28 @@ impl BulkheadConfig {
     #[must_use]
     pub fn without_wait_limit(mut self) -> Self {
         self.max_wait = None;
+        self
+    }
+
+    /// Register a callback invoked when the bulkhead rejects a caller
+    /// because all slots are occupied and the wait timeout expires.
+    #[must_use]
+    pub fn with_on_reject(mut self, f: impl Fn() + Send + Sync + 'static) -> Self {
+        self.on_reject = Some(Arc::new(f));
+        self
+    }
+
+    /// Register a callback invoked each time a permit is successfully acquired.
+    #[must_use]
+    pub fn with_on_acquire(mut self, f: impl Fn() + Send + Sync + 'static) -> Self {
+        self.on_acquire = Some(Arc::new(f));
+        self
+    }
+
+    /// Register a callback invoked each time a permit is released.
+    #[must_use]
+    pub fn with_on_release(mut self, f: impl Fn() + Send + Sync + 'static) -> Self {
+        self.on_release = Some(Arc::new(f));
         self
     }
 }
@@ -77,23 +133,44 @@ impl Bulkhead {
         F: FnOnce() -> Fut,
         Fut: std::future::Future<Output = AppResult<T>>,
     {
-        let _permit = match self.config.max_wait {
+        let permit_result = match self.config.max_wait {
             Some(timeout) => {
                 tokio::time::timeout(timeout, self.sem.acquire())
                     .await
                     .map_err(|_| {
                         AppError::rate_limited()
                             .with_detail("bulkhead", self.config.name.clone())
-                    })?
-                    .map_err(|_| AppError::service_unavailable("bulkhead closed"))?
+                    })
+                    .and_then(|r| r.map_err(|_| AppError::service_unavailable("bulkhead closed")))
             }
             None => self
                 .sem
                 .acquire()
                 .await
-                .map_err(|_| AppError::service_unavailable("bulkhead closed"))?,
+                .map_err(|_| AppError::service_unavailable("bulkhead closed")),
         };
-        f().await
+
+        let _permit = match permit_result {
+            Ok(p) => p,
+            Err(e) => {
+                if let Some(cb) = &self.config.on_reject {
+                    cb();
+                }
+                return Err(e);
+            }
+        };
+
+        if let Some(cb) = &self.config.on_acquire {
+            cb();
+        }
+
+        let result = f().await;
+
+        if let Some(cb) = &self.config.on_release {
+            cb();
+        }
+
+        result
     }
 }
 

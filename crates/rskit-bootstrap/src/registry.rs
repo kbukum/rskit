@@ -1,22 +1,59 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use rskit_errors::AppResult;
 
 use crate::{Component, Health};
 
+/// Configuration for the component registry.
+#[derive(Debug, Clone)]
+pub struct RegistryConfig {
+    /// Maximum number of components to start in parallel.
+    /// `0` means start all concurrently without any limit.
+    pub concurrency: usize,
+    /// Timeout applied to each component's `start()` call.
+    pub start_timeout: Duration,
+    /// Timeout applied to each component's `stop()` call.
+    pub stop_timeout: Duration,
+}
+
+impl Default for RegistryConfig {
+    fn default() -> Self {
+        Self {
+            concurrency: 1,
+            start_timeout: Duration::from_secs(30),
+            stop_timeout: Duration::from_secs(30),
+        }
+    }
+}
+
 /// Ordered component registry.
 ///
 /// Components start in registration order and stop in reverse — ensuring
 /// dependants shut down before their dependencies.
-#[derive(Default)]
 pub struct Registry {
     components: Vec<Arc<dyn Component>>,
+    config: RegistryConfig,
+}
+
+impl Default for Registry {
+    fn default() -> Self {
+        Self {
+            components: Vec::new(),
+            config: RegistryConfig::default(),
+        }
+    }
 }
 
 impl Registry {
-    /// Create an empty [`Registry`].
+    /// Create an empty [`Registry`] with default (sequential) settings.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Create a registry with custom [`RegistryConfig`].
+    pub fn with_config(config: RegistryConfig) -> Self {
+        Self { components: Vec::new(), config }
     }
 
     /// Register a component. Order of registration = order of startup.
@@ -24,7 +61,7 @@ impl Registry {
         self.components.push(c);
     }
 
-    /// Start all components in registration order.
+    /// Start all components in registration order (sequential).
     pub async fn start_all(&self) -> AppResult<()> {
         for c in &self.components {
             tracing::info!(component = c.name(), "starting component");
@@ -32,6 +69,46 @@ impl Registry {
             tracing::info!(component = c.name(), "component started");
         }
         Ok(())
+    }
+
+    /// Start all components concurrently, up to `self.config.concurrency` at a
+    /// time.  Startup order is still deterministic: components are processed in
+    /// registration order, batched by the concurrency limit.
+    ///
+    /// If any component fails to start the error is returned immediately and
+    /// remaining components are not started.
+    pub async fn start_all_concurrent(
+        &self,
+        cancel: tokio_util::sync::CancellationToken,
+    ) -> AppResult<()> {
+        use futures::stream::{self, StreamExt, TryStreamExt};
+
+        let concurrency = if self.config.concurrency == 0 {
+            self.components.len().max(1)
+        } else {
+            self.config.concurrency
+        };
+
+        stream::iter(self.components.iter())
+            .map(Ok::<_, rskit_errors::AppError>)
+            .try_for_each_concurrent(concurrency, |c| {
+                let cancel = cancel.clone();
+                async move {
+                    tracing::info!(component = c.name(), "starting component (concurrent)");
+                    tokio::select! {
+                        r = c.start() => {
+                            r?;
+                            tracing::info!(component = c.name(), "component started");
+                            Ok(())
+                        }
+                        _ = cancel.cancelled() => {
+                            tracing::warn!(component = c.name(), "startup cancelled");
+                            Ok(())
+                        }
+                    }
+                }
+            })
+            .await
     }
 
     /// Stop all components in reverse registration order (LIFO).

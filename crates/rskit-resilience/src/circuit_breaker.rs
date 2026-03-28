@@ -16,7 +16,7 @@ pub enum CbState {
 }
 
 /// Circuit breaker configuration.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct CbConfig {
     /// How many consecutive failures open the breaker.
     pub max_failures: usize,
@@ -24,10 +24,22 @@ pub struct CbConfig {
     pub timeout: Duration,
     /// Max probe calls allowed in half-open state before closing.
     pub half_open_max_calls: usize,
-    /// Optional callback invoked on every state transition.
-    pub on_state_change: Option<fn(name: &str, from: CbState, to: CbState)>,
+    /// Optional closure invoked on every state transition `(from, to)`.
+    pub on_state_change: Option<Arc<dyn Fn(CbState, CbState) + Send + Sync>>,
     /// Name for logging.
     pub name: String,
+}
+
+impl std::fmt::Debug for CbConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CbConfig")
+            .field("max_failures", &self.max_failures)
+            .field("timeout", &self.timeout)
+            .field("half_open_max_calls", &self.half_open_max_calls)
+            .field("on_state_change", &self.on_state_change.as_ref().map(|_| "<fn>"))
+            .field("name", &self.name)
+            .finish()
+    }
 }
 
 impl Default for CbConfig {
@@ -69,13 +81,13 @@ impl CbConfig {
         self
     }
 
-    /// Register a callback invoked on every state transition.
+    /// Register a closure invoked on every state transition `(from, to)`.
     #[must_use]
     pub fn with_on_state_change(
         mut self,
-        f: fn(name: &str, from: CbState, to: CbState),
+        f: impl Fn(CbState, CbState) + Send + Sync + 'static,
     ) -> Self {
-        self.on_state_change = Some(f);
+        self.on_state_change = Some(Arc::new(f));
         self
     }
 }
@@ -243,8 +255,8 @@ impl CircuitBreaker {
             to = ?to,
             "circuit breaker state transition"
         );
-        if let Some(cb) = self.config.on_state_change {
-            cb(&self.config.name, from, to);
+        if let Some(cb) = &self.config.on_state_change {
+            cb(from, to);
         }
     }
 }

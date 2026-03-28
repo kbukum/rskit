@@ -19,9 +19,16 @@
 
 #![warn(missing_docs)]
 
+/// Span-level context helpers — component tagging, request enrichment.
+pub mod context;
+/// Global tracing subscriber initialisation.
+pub mod global;
+
 use rskit_config::{LogFormat, LoggingConfig};
 use tracing::dispatcher::DefaultGuard;
 use tracing_subscriber::{fmt, layer::SubscriberExt, EnvFilter};
+
+pub use global::{GlobalLoggingGuard, init_global, is_global_init};
 
 /// Opaque guard — drop to restore the previous tracing subscriber.
 ///

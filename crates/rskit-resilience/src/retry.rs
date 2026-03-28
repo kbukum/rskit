@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::time::Duration;
 
 use rskit_errors::{AppError, AppResult};
@@ -44,7 +45,6 @@ impl std::error::Error for RetryError {
 /// }).await;
 /// # }
 /// ```
-#[derive(Debug, Clone)]
 pub struct RetryPolicy {
     /// Maximum number of attempts before giving up (including the first call).
     pub max_attempts: usize,
@@ -57,7 +57,39 @@ pub struct RetryPolicy {
     /// Whether to add uniform jitter to each backoff delay.
     pub jitter: bool,
     /// Predicate that decides whether a given error is worth retrying.
-    pub retry_if: fn(&AppError) -> bool,
+    /// When `None`, defaults to `AppError::is_retryable()`.
+    pub retry_if: Option<Arc<dyn Fn(&AppError) -> bool + Send + Sync>>,
+    /// Called after each failed attempt before the next backoff sleep.
+    /// Arguments: `(attempt_number, error)`.
+    pub on_retry: Option<Arc<dyn Fn(u32, &AppError) + Send + Sync>>,
+}
+
+impl std::fmt::Debug for RetryPolicy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RetryPolicy")
+            .field("max_attempts", &self.max_attempts)
+            .field("initial_backoff", &self.initial_backoff)
+            .field("max_backoff", &self.max_backoff)
+            .field("backoff_factor", &self.backoff_factor)
+            .field("jitter", &self.jitter)
+            .field("retry_if", &self.retry_if.as_ref().map(|_| "<fn>"))
+            .field("on_retry", &self.on_retry.as_ref().map(|_| "<fn>"))
+            .finish()
+    }
+}
+
+impl Clone for RetryPolicy {
+    fn clone(&self) -> Self {
+        Self {
+            max_attempts: self.max_attempts,
+            initial_backoff: self.initial_backoff,
+            max_backoff: self.max_backoff,
+            backoff_factor: self.backoff_factor,
+            jitter: self.jitter,
+            retry_if: self.retry_if.clone(),
+            on_retry: self.on_retry.clone(),
+        }
+    }
 }
 
 impl Default for RetryPolicy {
@@ -68,7 +100,8 @@ impl Default for RetryPolicy {
             max_backoff: Duration::from_secs(10),
             backoff_factor: 2.0,
             jitter: true,
-            retry_if: |e| e.is_retryable(),
+            retry_if: None,
+            on_retry: None,
         }
     }
 }
@@ -116,8 +149,22 @@ impl RetryPolicy {
 
     /// Override the predicate used to decide whether an error is retryable.
     #[must_use]
-    pub fn with_retry_if(mut self, f: fn(&AppError) -> bool) -> Self {
-        self.retry_if = f;
+    pub fn with_retry_if(
+        mut self,
+        f: impl Fn(&AppError) -> bool + Send + Sync + 'static,
+    ) -> Self {
+        self.retry_if = Some(Arc::new(f));
+        self
+    }
+
+    /// Register a callback called after each failed attempt before the next
+    /// backoff sleep.  Arguments passed: `(attempt_number, error)`.
+    #[must_use]
+    pub fn with_on_retry(
+        mut self,
+        f: impl Fn(u32, &AppError) + Send + Sync + 'static,
+    ) -> Self {
+        self.on_retry = Some(Arc::new(f));
         self
     }
 
@@ -135,8 +182,16 @@ impl RetryPolicy {
             match f().await {
                 Ok(v) => return Ok(v),
                 Err(e) => {
-                    if attempt >= self.max_attempts || !(self.retry_if)(&e) {
+                    let should_retry = self
+                        .retry_if
+                        .as_ref()
+                        .map(|f| f(&e))
+                        .unwrap_or_else(|| e.is_retryable());
+                    if attempt >= self.max_attempts || !should_retry {
                         return Err(RetryError { attempts: attempt, last_error: e });
+                    }
+                    if let Some(cb) = &self.on_retry {
+                        cb(attempt as u32, &e);
                     }
                     let delay = self.backoff(attempt);
                     tracing::debug!(

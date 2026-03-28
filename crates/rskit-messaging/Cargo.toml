@@ -1,0 +1,39 @@
+[package]
+name        = "rskit-messaging"
+description = "Message broker abstractions with Kafka support"
+version.workspace     = true
+edition.workspace     = true
+license.workspace     = true
+rust-version.workspace = true
+authors.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+documentation = "https://docs.rs/rskit-messaging"
+readme = "README.md"
+categories = ["asynchronous"]
+keywords   = ["kafka", "messaging", "producer", "consumer"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[features]
+default = []
+kafka = ["dep:rdkafka"]
+
+[dependencies]
+rskit-errors    = { path = "../rskit-errors" }
+rskit-bootstrap = { path = "../rskit-bootstrap" }
+serde           = { workspace = true }
+serde_json      = { workspace = true }
+async-trait     = { workspace = true }
+tokio           = { workspace = true }
+tokio-stream    = { workspace = true }
+tracing         = { workspace = true }
+chrono          = { workspace = true }
+uuid            = { workspace = true }
+
+[dependencies.rdkafka]
+version = "0.37"
+features = ["tokio"]
+optional = true

@@ -1,0 +1,31 @@
+[package]
+name        = "rskit-auth"
+description = "JWT, OIDC, password hashing, and request-context auth helpers"
+version.workspace     = true
+edition.workspace     = true
+license.workspace     = true
+rust-version.workspace = true
+authors.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+documentation = "https://docs.rs/rskit-auth"
+readme = "README.md"
+categories = ["authentication"]
+keywords   = ["auth", "jwt", "oidc", "password"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+rskit-errors  = { path = "../rskit-errors" }
+serde         = { workspace = true }
+serde_json    = { workspace = true }
+async-trait   = { workspace = true }
+tokio         = { workspace = true }
+jsonwebtoken  = "9"
+argon2        = "0.5"
+rand          = { workspace = true }
+base64        = "0.22"
+chrono        = { workspace = true }
+uuid          = { workspace = true }
