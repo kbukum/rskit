@@ -2,10 +2,10 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::sync::oneshot;
+use parking_lot::Mutex;
 use tokio_util::sync::CancellationToken;
 
-use rskit_bootstrap::component::{Component, Health, HealthStatus};
+use rskit_bootstrap::{Component, Health};
 use rskit_errors::{AppError, AppResult};
 
 use crate::config::GrpcServerConfig;
@@ -21,11 +21,9 @@ use crate::config::GrpcServerConfig;
 pub struct GrpcServer {
     name: String,
     config: GrpcServerConfig,
-    // The tonic Router is type-erased once built. We store it as a boxed future
-    // factory so we can re-create it on start (components may be started once).
     start_fn: Arc<dyn Fn(SocketAddr, CancellationToken) -> tokio::task::JoinHandle<()> + Send + Sync>,
     cancel: CancellationToken,
-    handle: parking_lot::Mutex<Option<tokio::task::JoinHandle<()>>>,
+    handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
 impl GrpcServer {
@@ -39,7 +37,7 @@ impl GrpcServer {
             config,
             start_fn,
             cancel: CancellationToken::new(),
-            handle: parking_lot::Mutex::new(None),
+            handle: Mutex::new(None),
         }
     }
 }
@@ -52,7 +50,10 @@ impl Component for GrpcServer {
 
     async fn start(&self) -> AppResult<()> {
         let addr: SocketAddr = self.config.addr().parse().map_err(|e: std::net::AddrParseError| {
-            AppError::internal(format!("invalid gRPC address '{}': {}", self.config.addr(), e))
+            AppError::new(
+                rskit_errors::ErrorCode::Internal,
+                format!("invalid gRPC address '{}': {}", self.config.addr(), e),
+            )
         })?;
 
         tracing::info!(component = %self.name, addr = %addr, "starting gRPC server");
@@ -71,7 +72,6 @@ impl Component for GrpcServer {
 
         let handle = self.handle.lock().take();
         if let Some(jh) = handle {
-            // Give the server a moment to drain connections.
             let _ = tokio::time::timeout(Duration::from_secs(10), jh).await;
         }
 
@@ -83,7 +83,7 @@ impl Component for GrpcServer {
         if running {
             Health::healthy(&self.name)
         } else {
-            Health::new(&self.name, HealthStatus::Unhealthy, Some("server not running".into()))
+            Health::unhealthy(&self.name, "server not running")
         }
     }
 }

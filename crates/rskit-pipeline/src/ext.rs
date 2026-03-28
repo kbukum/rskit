@@ -34,11 +34,13 @@ where
         O: Send + 'static,
         F: FnMut(Self::Item) -> Fut + Send + 'static,
         Fut: Future<Output = AppResult<St>> + Send + 'static,
-        St: Stream<Item = AppResult<O>> + Send + 'static,
+        St: Stream<Item = AppResult<O>> + Send + Unpin + 'static,
     {
         self.then(f).flat_map(|result| match result {
-            Ok(s) => futures::stream::Either::Left(s),
-            Err(e) => futures::stream::Either::Right(futures::stream::once(async move { Err(e) })),
+            Ok(s) => s.left_stream(),
+            Err(e) => {
+                futures::stream::once(futures::future::ready(Err(e))).right_stream()
+            }
         })
     }
 
@@ -75,8 +77,10 @@ where
         F: FnMut(Acc, Self::Item) -> Acc + Send + 'static,
     {
         let mut acc = init;
-        tokio::pin!(self);
-        while let Some(item) = self.next().await {
+        // `self` can't be used with `tokio::pin!` — bind to a named variable first.
+        let mut this = self;
+        tokio::pin!(this);
+        while let Some(item) = this.next().await {
             acc = f(acc, item);
         }
         acc

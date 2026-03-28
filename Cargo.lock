@@ -1266,6 +1266,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+ "validator",
 ]
 
 [[package]]
@@ -1325,6 +1326,7 @@ dependencies = [
  "bytes",
  "futures",
  "futures-util",
+ "parking_lot",
  "pin-project-lite",
  "rskit-errors",
  "rskit-resilience",
@@ -1358,6 +1360,8 @@ name = "rskit-server"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "http",
+ "parking_lot",
  "rskit-bootstrap",
  "rskit-config",
  "rskit-errors",

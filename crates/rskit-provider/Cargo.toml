@@ -19,3 +19,4 @@ tracing          = { workspace = true }
 pin-project-lite = { workspace = true }
 async-trait      = { workspace = true }
 bytes            = { workspace = true }
+parking_lot      = { workspace = true }

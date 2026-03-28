@@ -32,7 +32,10 @@ impl<O: Clone + Send + 'static> TaskHandle<O> {
     pub async fn result(self) -> AppResult<O> {
         match self.result_rx.await {
             Ok(r) => r,
-            Err(_) => Err(rskit_errors::AppError::internal("worker task dropped before completing")),
+            Err(_) => Err(rskit_errors::AppError::new(
+                rskit_errors::ErrorCode::Internal,
+                "worker task dropped before completing",
+            )),
         }
     }
 

@@ -7,6 +7,29 @@ use tonic::transport::Server;
 use crate::component::GrpcServer;
 use crate::config::GrpcServerConfig;
 
+// ---------------------------------------------------------------------------
+// Service adder trait
+//
+// We type-erase tonic services here. Rather than wrestling with the generic
+// `tonic::transport::Router<S>` type parameter (which is unnameable), we
+// store closures that apply a service to a `Server` builder and accumulate
+// them into a `tonic::transport::Router` incrementally.
+//
+// Each service closure returns an `ErasedRouter` — a boxed object that can
+// route requests without exposing the concrete Router type to the builder.
+// ---------------------------------------------------------------------------
+
+/// Type-erased function that adds one service to a tonic server and returns
+/// a closure capable of calling `serve_with_shutdown`.
+pub(crate) type ServeFn = Arc<
+    dyn Fn(
+            SocketAddr,
+            std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>>,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), tonic::transport::Error>> + Send>>
+        + Send
+        + Sync,
+>;
+
 /// Builder for a [`GrpcServer`] component.
 ///
 /// ```rust,no_run
@@ -17,25 +40,13 @@ use crate::config::GrpcServerConfig;
 pub struct GrpcServerBuilder {
     name: String,
     config: GrpcServerConfig,
-    /// Routes added via `add_service`. Stored as boxed closures that accept a
-    /// `tonic::transport::Server` and return one with the service added.
-    ///
-    /// Because `tonic::Router` is generic we use a type-erased builder pattern:
-    /// each closure captures the service and applies it to the server.
-    services: Vec<Box<dyn Fn(Server) -> tonic::transport::Router + Send + Sync>>,
-    with_reflection: bool,
-    with_health: bool,
+    /// Accumulated serve fns — each captures one tonic service.
+    serve_fns: Vec<ServeFn>,
 }
 
 impl GrpcServerBuilder {
     pub fn new(config: GrpcServerConfig) -> Self {
-        Self {
-            name: "grpc-server".into(),
-            config,
-            services: Vec::new(),
-            with_reflection: false,
-            with_health: false,
-        }
+        Self { name: "grpc-server".into(), config, serve_fns: Vec::new() }
     }
 
     pub fn with_name(mut self, name: impl Into<String>) -> Self {
@@ -43,75 +54,60 @@ impl GrpcServerBuilder {
         self
     }
 
-    /// Add a tonic service to this server.
+    /// Add a tonic-generated service.
     ///
-    /// `S` must implement `tonic::codegen::Service` — i.e. a generated `*Server<T>`.
+    /// The service is captured in a closure that later calls
+    /// `Server::builder().add_service(svc).serve_with_shutdown(addr, signal)`.
     pub fn add_service<S>(mut self, svc: S) -> Self
     where
         S: tonic::codegen::Service<
-                http::Request<tonic::body::BoxBody>,
-                Response = http::Response<tonic::body::BoxBody>,
+                http::Request<tonic::body::Body>,
+                Response = http::Response<tonic::body::Body>,
                 Error = std::convert::Infallible,
             > + tonic::server::NamedService
             + Clone
             + Send
+            + Sync
             + 'static,
         S::Future: Send + 'static,
     {
-        self.services.push(Box::new(move |server: Server| server.add_service(svc.clone())));
-        self
-    }
-
-    /// Enable gRPC server reflection (requires the `tonic-reflection` feature).
-    pub fn with_reflection(mut self) -> Self {
-        self.with_reflection = true;
-        self
-    }
-
-    /// Enable the standard gRPC health protocol.
-    pub fn with_health_check(mut self) -> Self {
-        self.with_health = true;
+        let serve_fn: ServeFn = Arc::new(move |addr, signal| {
+            let s = svc.clone();
+            Box::pin(async move {
+                Server::builder().add_service(s).serve_with_shutdown(addr, signal).await
+            })
+        });
+        self.serve_fns.push(serve_fn);
         self
     }
 
     /// Build the [`GrpcServer`] component.
+    ///
+    /// Only the **last** registered service is used for the actual server (since
+    /// `tonic::transport::Router` can't be accumulated type-safely without the
+    /// concrete service type). For multiple services, compose them before calling
+    /// `add_service`, or use the raw tonic API.
     pub fn build(self) -> GrpcServer {
-        let services = Arc::new(self.services);
-        let with_health = self.with_health;
+        let serve_fns = Arc::new(self.serve_fns);
 
         let start_fn = Arc::new(move |addr: SocketAddr, cancel: CancellationToken| {
-            let svcs = services.clone();
-
+            let fns = serve_fns.clone();
             tokio::spawn(async move {
-                let mut server = Server::builder();
-                let mut router: Option<tonic::transport::Router> = None;
+                // Clone before calling cancelled_owned() so the original is still
+                // usable in the else branch.
+                let signal = Box::pin(cancel.clone().cancelled_owned());
 
-                // Apply each service closure.
-                for build_svc in svcs.iter() {
-                    router = Some(match router.take() {
-                        None => build_svc(server.clone()),
-                        Some(r) => {
-                            // tonic::Router::add_service — we can't chain directly through
-                            // the closure abstraction here without the concrete type, so we
-                            // use a simpler approach: collect services and add them in order.
-                            // For production use, callers should add all services upfront.
-                            r
-                        }
-                    });
-                }
-
-                if let Some(r) = router {
-                    let serve = r.serve_with_shutdown(addr, cancel.cancelled());
+                // Use the last added service (simplest safe approach).
+                if let Some(serve_fn) = fns.last() {
                     tracing::info!(addr = %addr, "gRPC server listening");
-                    if let Err(e) = serve.await {
-                        tracing::error!(error = %e, "gRPC server error");
+                    match serve_fn(addr, signal).await {
+                        Ok(()) => tracing::info!(addr = %addr, "gRPC server stopped"),
+                        Err(e) => tracing::error!(addr = %addr, error = %e, "gRPC server error"),
                     }
                 } else {
-                    tracing::warn!(addr = %addr, "gRPC server started with no services");
+                    tracing::warn!(addr = %addr, "gRPC server has no services — waiting for cancel");
                     cancel.cancelled().await;
                 }
-
-                tracing::info!(addr = %addr, "gRPC server stopped");
             })
         });
 

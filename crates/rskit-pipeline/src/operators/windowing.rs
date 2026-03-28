@@ -59,28 +59,16 @@ where
     async_stream::stream! {
         tokio::pin!(stream);
         let mut buf: Vec<T> = Vec::with_capacity(size);
-        let mut deadline: Option<tokio::time::Sleep> = None;
+        // Track deadline as Instant to avoid storing a !Unpin Sleep future.
+        let mut deadline: Option<tokio::time::Instant> = None;
 
         loop {
-            // Build a future that fires when the deadline is set
-            let timer_expired = async {
-                match &mut deadline {
-                    Some(sleep) => {
-                        std::future::poll_fn(|cx| {
-                            use std::pin::Pin;
-                            Pin::new(sleep).poll(cx)
-                        }).await
-                    }
-                    None => std::future::pending().await,
-                }
-            };
-
             tokio::select! {
                 item = futures::StreamExt::next(&mut stream) => {
                     match item {
                         Some(v) => {
                             if buf.is_empty() {
-                                deadline = Some(Box::pin(tokio::time::sleep(timeout)));
+                                deadline = Some(tokio::time::Instant::now() + timeout);
                             }
                             buf.push(v);
                             if buf.len() >= size {
@@ -96,7 +84,12 @@ where
                         }
                     }
                 }
-                _ = timer_expired => {
+                _ = async {
+                    match deadline {
+                        Some(d) => tokio::time::sleep_until(d).await,
+                        None => std::future::pending::<()>().await,
+                    }
+                } => {
                     deadline = None;
                     if !buf.is_empty() {
                         yield std::mem::take(&mut buf);
@@ -123,14 +116,7 @@ where
         let mut pending: Option<T> = None;
 
         loop {
-            let timer = async {
-                if pending.is_some() {
-                    tokio::time::sleep(delay).await;
-                } else {
-                    std::future::pending::<()>().await;
-                }
-            };
-
+            let has_pending = pending.is_some();
             tokio::select! {
                 item = futures::StreamExt::next(&mut stream) => {
                     match item {
@@ -141,7 +127,15 @@ where
                         }
                     }
                 }
-                _ = timer => {
+                _ = async move {
+                    // Capture only a bool — avoids borrowing &Option<T> which
+                    // would require T: Sync for the async block to be Send.
+                    if has_pending {
+                        tokio::time::sleep(delay).await;
+                    } else {
+                        std::future::pending::<()>().await;
+                    }
+                } => {
                     if let Some(v) = pending.take() { yield v; }
                 }
             }
