@@ -5,7 +5,7 @@
 /// # Example
 ///
 /// ```rust
-/// # use rskit_logging::context_span::component_span;
+/// # use rskit_logging::context::component_span;
 /// let _span = component_span("auth-service").entered();
 /// tracing::info!("component log");
 /// ```

@@ -6,7 +6,7 @@ use rskit::resilience::{RetryPolicy, CircuitBreaker, CbConfig};
 
 #[test]
 fn errors_accessible_via_facade() {
-    let e: AppResult<()> = Err(AppError::not_found("item", "1"));
+    let e: AppResult<()> = Err(AppError::not_found("item", Some("1")));
     assert_eq!(e.unwrap_err().code, ErrorCode::NotFound);
 }
 

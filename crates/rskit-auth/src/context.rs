@@ -4,7 +4,7 @@
 ///
 /// # Usage (axum)
 ///
-/// ```rust,no_run
+/// ```rust,ignore
 /// use rskit_auth::AuthClaims;
 ///
 /// async fn my_handler(

@@ -29,12 +29,15 @@ async fn pool_doubles_values() {
 
 #[tokio::test]
 async fn pool_handles_multiple_concurrent_tasks() {
-    let pool = Pool::new(
+    let pool = Arc::new(Pool::new(
         Arc::new(DoubleHandler),
         PoolConfig::new("concurrent-pool").with_size(4),
-    );
+    ));
     let handles: Vec<_> = (1u32..=8)
-        .map(|n| async { pool.submit(n).await.unwrap() })
+        .map(|n| {
+            let pool = pool.clone();
+            async move { pool.submit(n).await.unwrap() }
+        })
         .collect();
     // futures::future::join_all would be ideal but keep deps minimal
     for (i, h) in handles.into_iter().enumerate() {

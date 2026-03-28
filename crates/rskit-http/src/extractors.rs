@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use axum::{
     extract::FromRequestParts,
     http::{request::Parts, StatusCode},
@@ -8,7 +7,6 @@ use axum::{
 #[derive(Debug, Clone)]
 pub struct RequestId(pub String);
 
-#[async_trait]
 impl<S: Send + Sync> FromRequestParts<S> for RequestId {
     type Rejection = (StatusCode, &'static str);
 
@@ -27,7 +25,6 @@ impl<S: Send + Sync> FromRequestParts<S> for RequestId {
 #[derive(Debug, Clone)]
 pub struct CorrelationId(pub String);
 
-#[async_trait]
 impl<S: Send + Sync> FromRequestParts<S> for CorrelationId {
     type Rejection = (StatusCode, &'static str);
 

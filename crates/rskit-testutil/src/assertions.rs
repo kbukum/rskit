@@ -40,13 +40,13 @@ mod tests {
     #[test]
     #[should_panic(expected = "expected Ok")]
     fn assert_ok_panics_on_err() {
-        let val: AppResult<i32> = Err(AppError::internal("boom"));
+        let val: AppResult<i32> = Err(AppError::new(ErrorCode::Internal, "boom"));
         assert_ok(val);
     }
 
     #[test]
     fn assert_err_code_passes() {
-        let val: AppResult<i32> = Err(AppError::not_found("gone"));
+        let val: AppResult<i32> = Err(AppError::not_found("gone", None));
         assert_err_code(val, ErrorCode::NotFound);
     }
 
@@ -60,7 +60,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "expected error code")]
     fn assert_err_code_panics_on_wrong_code() {
-        let val: AppResult<i32> = Err(AppError::not_found("nope"));
+        let val: AppResult<i32> = Err(AppError::not_found("nope", None));
         assert_err_code(val, ErrorCode::Internal);
     }
 }

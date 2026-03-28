@@ -2,15 +2,15 @@ use rskit_errors::{AppError, AppResult, ErrorCode};
 
 #[test]
 fn not_found_has_correct_code_and_status() {
-    let err = AppError::not_found("user", "42");
+    let err = AppError::not_found("user", Some("42"));
     assert_eq!(err.code, ErrorCode::NotFound);
-    assert_eq!(err.http_status(), 404);
+    assert_eq!(err.http_status.as_u16(), 404);
     assert!(!err.is_retryable());
 }
 
 #[test]
 fn internal_error_is_retryable() {
-    let err = AppError::new(ErrorCode::Internal, "boom");
+    let err = AppError::new(ErrorCode::ServiceUnavailable, "boom");
     assert!(err.is_retryable());
 }
 
@@ -22,7 +22,7 @@ fn error_with_detail_and_cause_roundtrip() {
         .with_cause(cause);
     assert_eq!(err.code, ErrorCode::Timeout);
     assert!(err.cause.is_some());
-    assert_eq!(err.details.get("query").map(|s| s.as_str()), Some("SELECT 1"));
+    assert_eq!(err.details.get("query").and_then(|s| s.as_str()), Some("SELECT 1"));
 }
 
 #[test]

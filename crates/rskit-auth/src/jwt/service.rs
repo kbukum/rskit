@@ -104,7 +104,7 @@ mod tests {
             exp: 1, // already expired
         };
         let token = svc.generate(&claims).await.unwrap();
-        let result = svc.validate::<TestClaims>(&token).await;
+        let result = svc.validate(&token).await;
         assert!(result.is_err());
     }
 }
