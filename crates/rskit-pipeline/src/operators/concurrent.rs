@@ -19,7 +19,7 @@ where
     Fut: Future<Output = AppResult<O>> + Send + 'static,
 {
     use futures::StreamExt;
-    stream.map(move |item| f(item)).buffer_unordered(concurrency)
+    stream.map(f).buffer_unordered(concurrency)
 }
 
 /// Apply multiple functions to the same item concurrently, collecting results.
