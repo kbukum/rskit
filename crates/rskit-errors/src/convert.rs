@@ -30,6 +30,7 @@ impl From<AppError> for tonic::Status {
             ErrorCode::Internal | ErrorCode::DatabaseError | ErrorCode::ExternalService => {
                 tonic::Code::Internal
             }
+            #[allow(unreachable_patterns)]
             _ => tonic::Code::Unknown,
         };
         tonic::Status::new(code, e.message)

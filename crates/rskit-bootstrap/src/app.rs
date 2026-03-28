@@ -65,7 +65,6 @@ impl<C: AppConfig> AppBuilder<C> {
 
     /// Validate config and build the App.
     pub fn build(self) -> AppResult<App<Unconfigured, C>> {
-        use validator::Validate;
         self.config
             .validate()
             .map_err(|e| AppError::invalid_input("config", e.to_string()))?;

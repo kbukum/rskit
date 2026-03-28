@@ -66,6 +66,7 @@ impl ErrorCode {
             ErrorCode::Internal | ErrorCode::DatabaseError | ErrorCode::ExternalService => {
                 http::StatusCode::INTERNAL_SERVER_ERROR
             }
+            #[allow(unreachable_patterns)]
             _ => http::StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -90,6 +91,7 @@ impl ErrorCode {
             ErrorCode::Internal => "INTERNAL",
             ErrorCode::DatabaseError => "DATABASE_ERROR",
             ErrorCode::ExternalService => "EXTERNAL_SERVICE",
+            #[allow(unreachable_patterns)]
             _ => "UNKNOWN",
         }
     }

@@ -73,7 +73,7 @@ where
     }
 
     fn call(&mut self, req: Req) -> Self::Future {
-        let mut svc = self.inner.clone();
+        let svc = self.inner.clone();
         let config = self.config.clone();
 
         Box::pin(async move {

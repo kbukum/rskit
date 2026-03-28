@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use rskit_errors::{AppError, AppResult};
-use validator::Validate;
 
 use crate::AppConfig;
 

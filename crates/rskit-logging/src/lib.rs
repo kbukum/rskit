@@ -19,13 +19,13 @@
 
 use rskit_config::{LogFormat, LoggingConfig};
 use tracing::dispatcher::DefaultGuard;
-use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+use tracing_subscriber::{fmt, layer::SubscriberExt, EnvFilter};
 
 /// Opaque guard — drop to restore the previous tracing subscriber.
 ///
 /// Keep this alive for the lifetime of your service (e.g. bind it to a
 /// variable in `main`).
-pub struct LoggingGuard(DefaultGuard);
+pub struct LoggingGuard(#[allow(dead_code)] DefaultGuard);
 
 /// Initialize structured logging from a [`LoggingConfig`].
 ///

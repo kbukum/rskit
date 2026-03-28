@@ -12,6 +12,7 @@ use crate::operators::{concurrent, windowing};
 /// Extension trait adding rskit-specific operators to any [`Stream`].
 ///
 /// Imported with `use rskit_pipeline::RskitStreamExt;`.
+#[allow(async_fn_in_trait)]
 pub trait RskitStreamExt: Stream + Sized + Send + 'static
 where
     Self::Item: Send + 'static,
@@ -78,7 +79,7 @@ where
     {
         let mut acc = init;
         // `self` can't be used with `tokio::pin!` — bind to a named variable first.
-        let mut this = self;
+        let this = self;
         tokio::pin!(this);
         while let Some(item) = this.next().await {
             acc = f(acc, item);
