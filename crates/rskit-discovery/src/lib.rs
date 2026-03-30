@@ -8,6 +8,9 @@
 
 /// Load balancing strategies.
 pub mod balancer;
+/// Consul-backed service discovery.
+#[cfg(feature = "consul")]
+pub mod consul;
 /// Service instance representation.
 pub mod instance;
 /// In-memory discovery for testing.
@@ -16,6 +19,8 @@ pub mod memory;
 pub mod traits;
 
 pub use balancer::{LeastConnections, LoadBalancer, Random, RoundRobin};
+#[cfg(feature = "consul")]
+pub use consul::ConsulDiscovery;
 pub use instance::ServiceInstance;
 pub use memory::InMemoryDiscovery;
 pub use traits::Discovery;

@@ -4234,6 +4234,7 @@ dependencies = [
  "dashmap",
  "parking_lot",
  "rand 0.10.0",
+ "reqwest",
  "rskit-errors",
  "serde",
  "serde_json",
