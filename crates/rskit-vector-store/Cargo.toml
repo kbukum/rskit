@@ -1,0 +1,28 @@
+[package]
+name        = "rskit-vector-store"
+description = "Vector store abstractions with Qdrant and in-memory implementations"
+version.workspace     = true
+edition.workspace     = true
+license.workspace     = true
+rust-version.workspace = true
+authors.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+documentation = "https://docs.rs/rskit-vector-store"
+categories = ["database"]
+keywords   = ["vector", "qdrant", "similarity", "search"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+rskit-errors  = { path = "../rskit-errors" }
+serde         = { workspace = true }
+serde_json    = { workspace = true }
+async-trait   = { workspace = true }
+tracing       = { workspace = true }
+qdrant-client = ">=1.13, <1.16"
+
+[dev-dependencies]
+tokio = { workspace = true }

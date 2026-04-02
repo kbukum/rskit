@@ -1,0 +1,25 @@
+[package]
+name        = "rskit-embedding"
+description = "Embedding provider abstractions for vector search"
+version.workspace     = true
+edition.workspace     = true
+license.workspace     = true
+rust-version.workspace = true
+authors.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+documentation = "https://docs.rs/rskit-embedding"
+categories = ["api-bindings"]
+keywords   = ["embedding", "vector", "openai", "ai"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+rskit-errors = { path = "../rskit-errors" }
+serde        = { workspace = true }
+serde_json   = { workspace = true }
+async-trait  = { workspace = true }
+tracing      = { workspace = true }
+reqwest      = { workspace = true }

@@ -30,6 +30,9 @@ members = [
     "crates/rskit-sse",
     "crates/rskit-dag",
     "crates/rskit-llm",
+    "crates/rskit-embedding",
+    "crates/rskit-inference",
+    "crates/rskit-vector-store",
     # phase 6 media & file
     "crates/rskit-file",
     "crates/rskit-media",
