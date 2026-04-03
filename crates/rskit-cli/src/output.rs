@@ -40,7 +40,7 @@ impl fmt::Display for OutputTable {
         }
 
         if let Some(title) = &self.title {
-            writeln!(f, "\n{}", title)?;
+            writeln!(f, "\n{title}")?;
         }
 
         let separator: String = widths
@@ -48,7 +48,7 @@ impl fmt::Display for OutputTable {
             .map(|w| "─".repeat(w + 2))
             .collect::<Vec<_>>()
             .join("┬");
-        writeln!(f, "┌{}┐", separator)?;
+        writeln!(f, "┌{separator}┐")?;
 
         let header: String = self
             .columns
@@ -57,14 +57,14 @@ impl fmt::Display for OutputTable {
             .map(|(i, c)| format!(" {:width$} ", c, width = widths[i]))
             .collect::<Vec<_>>()
             .join("│");
-        writeln!(f, "│{}│", header)?;
+        writeln!(f, "│{header}│")?;
 
         let separator: String = widths
             .iter()
             .map(|w| "─".repeat(w + 2))
             .collect::<Vec<_>>()
             .join("┼");
-        writeln!(f, "├{}┤", separator)?;
+        writeln!(f, "├{separator}┤")?;
 
         for row in &self.rows {
             let cells: String = row
@@ -72,11 +72,11 @@ impl fmt::Display for OutputTable {
                 .enumerate()
                 .map(|(i, c)| {
                     let w = widths.get(i).copied().unwrap_or(0);
-                    format!(" {:width$} ", c, width = w)
+                    format!(" {c:w$} ")
                 })
                 .collect::<Vec<_>>()
                 .join("│");
-            writeln!(f, "│{}│", cells)?;
+            writeln!(f, "│{cells}│")?;
         }
 
         let separator: String = widths
@@ -84,7 +84,7 @@ impl fmt::Display for OutputTable {
             .map(|w| "─".repeat(w + 2))
             .collect::<Vec<_>>()
             .join("┴");
-        write!(f, "└{}┘", separator)?;
+        write!(f, "└{separator}┘")?;
 
         Ok(())
     }
@@ -116,7 +116,7 @@ impl fmt::Display for OutputKV {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let max_key = self.pairs.iter().map(|(k, _)| k.len()).max().unwrap_or(0);
         for (key, value) in &self.pairs {
-            writeln!(f, "  {:>width$}:  {}", key, value, width = max_key)?;
+            writeln!(f, "  {key:>max_key$}:  {value}")?;
         }
         Ok(())
     }

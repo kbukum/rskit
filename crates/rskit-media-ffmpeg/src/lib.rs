@@ -6,15 +6,15 @@
 
 #![warn(missing_docs)]
 
-mod config;
-mod probe;
-mod executor;
 mod command;
+mod config;
+mod executor;
 mod filter_map;
-mod progress;
 mod hw_accel;
+mod probe;
+mod progress;
 
 pub use config::{FfmpegConfig, FfmpegLogLevel};
-pub use probe::FfmpegProbe;
 pub use executor::FfmpegExecutor;
 pub use hw_accel::HwAccel;
+pub use probe::FfmpegProbe;

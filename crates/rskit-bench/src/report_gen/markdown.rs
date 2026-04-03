@@ -68,10 +68,10 @@ impl Reporter for MarkdownReporter {
                         writeln!(w).map_err(io_err)?;
                         for (i, row) in matrix.iter().enumerate() {
                             let label = labels.get(i).and_then(|v| v.as_str()).unwrap_or("?");
-                            write!(w, "| **{}** |", label).map_err(io_err)?;
+                            write!(w, "| **{label}** |").map_err(io_err)?;
                             if let Some(cells) = row.as_array() {
                                 for cell in cells {
-                                    write!(w, " {} |", cell).map_err(io_err)?;
+                                    write!(w, " {cell} |").map_err(io_err)?;
                                 }
                             }
                             writeln!(w).map_err(io_err)?;

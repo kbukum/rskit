@@ -24,7 +24,7 @@ impl ResizeTransform {
             width,
             height,
             quality: 85,
-            name: format!("resize-{}x{}", width, height),
+            name: format!("resize-{width}x{height}"),
         }
     }
 

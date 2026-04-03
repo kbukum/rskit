@@ -94,15 +94,23 @@ impl FileWriter {
         match self.inner {
             WriterInner::Path(p) => {
                 tokio::fs::write(&p, &self.buffer).await.map_err(|e| {
-                    AppError::new(ErrorCode::Internal, format!("failed to write {}: {e}", p.display()))
+                    AppError::new(
+                        ErrorCode::Internal,
+                        format!("failed to write {}: {e}", p.display()),
+                    )
                 })?;
                 Ok(FileSource::Path(p))
             }
             WriterInner::Temp => {
                 let tmp = TempFile::new()?;
-                tokio::fs::write(tmp.path(), &self.buffer).await.map_err(|e| {
-                    AppError::new(ErrorCode::Internal, format!("failed to write temp file: {e}"))
-                })?;
+                tokio::fs::write(tmp.path(), &self.buffer)
+                    .await
+                    .map_err(|e| {
+                        AppError::new(
+                            ErrorCode::Internal,
+                            format!("failed to write temp file: {e}"),
+                        )
+                    })?;
                 Ok(FileSource::Temp(tmp))
             }
             WriterInner::Memory => Ok(FileSource::Bytes(Bytes::from(self.buffer))),

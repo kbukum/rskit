@@ -78,7 +78,8 @@ impl MediaPipeline {
     /// Resize the video/image.
     #[must_use]
     pub fn resize(mut self, resolution: Resolution, mode: ResizeMode) -> Self {
-        self.ops.push(MediaOp::Resize(ResizeOp { resolution, mode }));
+        self.ops
+            .push(MediaOp::Resize(ResizeOp { resolution, mode }));
         self
     }
 
@@ -210,11 +211,7 @@ impl MediaPipeline {
 
     /// Concatenate another source with a transition.
     #[must_use]
-    pub fn concat_with_transition(
-        mut self,
-        source: &FileSource,
-        transition: Transition,
-    ) -> Self {
+    pub fn concat_with_transition(mut self, source: &FileSource, transition: Transition) -> Self {
         self.ops.push(MediaOp::Concat(ConcatOp {
             source: source.clone(),
             transition: Some(transition),

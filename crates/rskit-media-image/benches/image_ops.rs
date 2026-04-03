@@ -3,12 +3,12 @@
 //! Run:  cargo bench -p rskit-media-image
 //! Report: target/criterion/report/index.html
 
-use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
-use image::{RgbImage, Rgb, DynamicImage, imageops};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
+use image::{Rgb, RgbImage, imageops};
 use rskit_file::{FileSource, TempFile};
 use rskit_media::{
     executor::MediaExecutor,
-    ops::{MediaOp, ResizeOp, ResizeMode, CropRegion, Rotation, FlipDirection},
+    ops::{CropRegion, FlipDirection, MediaOp, ResizeMode, ResizeOp, Rotation},
     spatial::Resolution,
 };
 use rskit_media_image::ImageProcessor;
@@ -41,11 +41,7 @@ fn bench_resize(c: &mut Criterion) {
     let mut group = c.benchmark_group("resize_1000_to_200");
 
     group.bench_function("ImageProcessor", |b| {
-        b.iter(|| {
-            rt.block_on(async {
-                processor.execute(&source, &ops, None).await.unwrap()
-            })
-        })
+        b.iter(|| rt.block_on(async { processor.execute(&source, &ops, None).await.unwrap() }))
     });
 
     group.bench_function("raw_image_crate", |b| {
@@ -78,9 +74,7 @@ fn bench_resize_sizes(c: &mut Criterion) {
             &(src_size, dst_size),
             |b, _| {
                 b.iter(|| {
-                    rt.block_on(async {
-                        processor.execute(&source, &ops, None).await.unwrap()
-                    })
+                    rt.block_on(async { processor.execute(&source, &ops, None).await.unwrap() })
                 })
             },
         );
@@ -111,11 +105,7 @@ fn bench_crop(c: &mut Criterion) {
     let mut group = c.benchmark_group("crop_1000_to_500");
 
     group.bench_function("ImageProcessor", |b| {
-        b.iter(|| {
-            rt.block_on(async {
-                processor.execute(&source, &ops, None).await.unwrap()
-            })
-        })
+        b.iter(|| rt.block_on(async { processor.execute(&source, &ops, None).await.unwrap() }))
     });
 
     group.bench_function("raw_image_crate", |b| {
@@ -138,11 +128,7 @@ fn bench_rotate(c: &mut Criterion) {
     let mut group = c.benchmark_group("rotate90_500");
 
     group.bench_function("ImageProcessor", |b| {
-        b.iter(|| {
-            rt.block_on(async {
-                processor.execute(&source, &ops, None).await.unwrap()
-            })
-        })
+        b.iter(|| rt.block_on(async { processor.execute(&source, &ops, None).await.unwrap() }))
     });
 
     group.bench_function("raw_image_crate", |b| {
@@ -174,11 +160,7 @@ fn bench_pipeline(c: &mut Criterion) {
     let mut group = c.benchmark_group("pipeline_4ops");
 
     group.bench_function("ImageProcessor", |b| {
-        b.iter(|| {
-            rt.block_on(async {
-                processor.execute(&source, &ops, None).await.unwrap()
-            })
-        })
+        b.iter(|| rt.block_on(async { processor.execute(&source, &ops, None).await.unwrap() }))
     });
 
     group.bench_function("raw_image_crate", |b| {
@@ -210,11 +192,7 @@ fn bench_blur(c: &mut Criterion) {
     let mut group = c.benchmark_group("blur_500");
 
     group.bench_function("ImageProcessor", |b| {
-        b.iter(|| {
-            rt.block_on(async {
-                processor.execute(&source, &ops, None).await.unwrap()
-            })
-        })
+        b.iter(|| rt.block_on(async { processor.execute(&source, &ops, None).await.unwrap() }))
     });
 
     group.bench_function("raw_image_crate", |b| {
@@ -254,22 +232,14 @@ fn bench_real_fixtures(c: &mut Criterion) {
     if jpeg_path.exists() {
         let source = FileSource::from_path(&jpeg_path);
         group.bench_function("real_jpeg_500x378", |b| {
-            b.iter(|| {
-                rt.block_on(async {
-                    processor.execute(&source, &ops, None).await.unwrap()
-                })
-            })
+            b.iter(|| rt.block_on(async { processor.execute(&source, &ops, None).await.unwrap() }))
         });
     }
 
     if png_path.exists() {
         let source = FileSource::from_path(&png_path);
         group.bench_function("real_png_600x600", |b| {
-            b.iter(|| {
-                rt.block_on(async {
-                    processor.execute(&source, &ops, None).await.unwrap()
-                })
-            })
+            b.iter(|| rt.block_on(async { processor.execute(&source, &ops, None).await.unwrap() }))
         });
     }
 
@@ -299,22 +269,14 @@ fn bench_real_fixture_pipeline(c: &mut Criterion) {
     if jpeg_path.exists() {
         let source = FileSource::from_path(&jpeg_path);
         group.bench_function("real_jpeg_pipeline", |b| {
-            b.iter(|| {
-                rt.block_on(async {
-                    processor.execute(&source, &ops, None).await.unwrap()
-                })
-            })
+            b.iter(|| rt.block_on(async { processor.execute(&source, &ops, None).await.unwrap() }))
         });
     }
 
     if png_path.exists() {
         let source = FileSource::from_path(&png_path);
         group.bench_function("real_png_pipeline", |b| {
-            b.iter(|| {
-                rt.block_on(async {
-                    processor.execute(&source, &ops, None).await.unwrap()
-                })
-            })
+            b.iter(|| rt.block_on(async { processor.execute(&source, &ops, None).await.unwrap() }))
         });
     }
 

@@ -80,9 +80,8 @@ impl Reporter for TableReporter {
                 )
                 .map_err(io_err)?;
                 for (k, v) in &m.values {
-                    let sub_name = format!("  .{}", k);
-                    writeln!(w, "│ {:<nw$} │ {:>10.4} │", sub_name, v, nw = name_width)
-                        .map_err(io_err)?;
+                    let sub_name = format!("  .{k}");
+                    writeln!(w, "│ {sub_name:<name_width$} │ {v:>10.4} │").map_err(io_err)?;
                 }
             }
             writeln!(w, "└─{}─┴────────────┘", "─".repeat(name_width)).map_err(io_err)?;

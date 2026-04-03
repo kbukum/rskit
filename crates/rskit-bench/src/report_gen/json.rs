@@ -16,7 +16,7 @@ impl Reporter for JsonReporter {
     fn generate(&self, w: &mut dyn Write, result: &BenchRunResult) -> AppResult<()> {
         let json = serde_json::to_string_pretty(result)
             .map_err(|e| AppError::new(ErrorCode::Internal, format!("serialize: {e}")))?;
-        write!(w, "{}", json).map_err(io_err)?;
+        write!(w, "{json}").map_err(io_err)?;
         Ok(())
     }
 }

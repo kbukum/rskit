@@ -83,7 +83,9 @@ pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
 
     // Banner + instructions
     println!("{BANNER}");
-    println!("  \x1b[2mType\x1b[0m \x1b[1m/help\x1b[0m \x1b[2mor\x1b[0m \x1b[1m?\x1b[0m \x1b[2mfor commands. Prefix with\x1b[0m \x1b[1m/\x1b[0m \x1b[2mfor menu style.\x1b[0m");
+    println!(
+        "  \x1b[2mType\x1b[0m \x1b[1m/help\x1b[0m \x1b[2mor\x1b[0m \x1b[1m?\x1b[0m \x1b[2mfor commands. Prefix with\x1b[0m \x1b[1m/\x1b[0m \x1b[2mfor menu style.\x1b[0m"
+    );
     print_status_line(&tasks, &pool, start_time);
     print_prompt();
 
@@ -276,8 +278,7 @@ pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
                         let running = tasks.iter().filter(|t| t.status == TaskStatus::Running).count();
                         if running > 0 {
                             multi.println(format!(
-                                "  \x1b[33m⚠ Shutting down — cancelling {} running task(s)\x1b[0m",
-                                running
+                                "  \x1b[33m⚠ Shutting down — cancelling {running} running task(s)\x1b[0m"
                             )).ok();
                             for h in &handles {
                                 h.cancel.cancel();
@@ -337,7 +338,7 @@ pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
 
             // ── Ctrl+C ───────────────────────────────────────
             _ = cancel.cancelled() => {
-                multi.println("  \x1b[33m⚠ Interrupted\x1b[0m".to_string()).ok();
+                multi.println("  \x1b[33m⚠ Interrupted\x1b[0m").ok();
                 for h in &handles {
                     h.cancel.cancel();
                 }
@@ -351,9 +352,12 @@ pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
     for h in &handles {
         h.spinner.finish_and_clear();
     }
-    let running = tasks.iter().filter(|t| t.status == TaskStatus::Running).count();
+    let running = tasks
+        .iter()
+        .filter(|t| t.status == TaskStatus::Running)
+        .count();
     if running > 0 {
-        println!("  \x1b[2mWaiting for {} task(s) to finish...\x1b[0m", running);
+        println!("  \x1b[2mWaiting for {running} task(s) to finish...\x1b[0m");
     }
     pool.shutdown().await.ok();
     println!("  \x1b[1;32m👋 Done.\x1b[0m");
@@ -381,16 +385,12 @@ async fn submit_task(
     // Add spinner to MultiProgress
     let spinner = multi.add(ProgressBar::new_spinner());
     spinner.set_style(
-        ProgressStyle::with_template(
-            "  {spinner:.cyan} \x1b[1mAgent #{prefix}\x1b[0m {wide_msg}",
-        )
-        .unwrap()
-        .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏", " "]),
+        ProgressStyle::with_template("  {spinner:.cyan} \x1b[1mAgent #{prefix}\x1b[0m {wide_msg}")
+            .unwrap()
+            .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏", " "]),
     );
     spinner.set_prefix(id.to_string());
-    spinner.set_message(format!(
-        "({label}) \x1b[2m— Spawning...\x1b[0m"
-    ));
+    spinner.set_message(format!("({label}) \x1b[2m— Spawning...\x1b[0m"));
     spinner.enable_steady_tick(Duration::from_millis(80));
 
     let handle = pool.submit(task).await?;
@@ -509,7 +509,11 @@ fn print_prompt() {
     io::stdout().flush().ok();
 }
 
-fn print_status_line(tasks: &[TrackedTask], pool: &Pool<AgentTask, TaskOutput>, start_time: Instant) {
+fn print_status_line(
+    tasks: &[TrackedTask],
+    pool: &Pool<AgentTask, TaskOutput>,
+    start_time: Instant,
+) {
     let st = pool.stats();
     let bar = dashboard::format_status_bar(tasks, st.running, st.capacity, start_time.elapsed());
     println!("  {bar}");
@@ -582,7 +586,10 @@ mod tests {
     #[test]
     fn resolve_path_uses_fixtures_for_relative() {
         let p = resolve_path("image/real-photo.jpg");
-        assert!(p.to_string_lossy().contains("tests/fixtures/image/real-photo.jpg"));
+        assert!(
+            p.to_string_lossy()
+                .contains("tests/fixtures/image/real-photo.jpg")
+        );
     }
 
     #[test]
@@ -607,14 +614,26 @@ mod tests {
     #[test]
     fn fixture_dir_exists() {
         let dir = fixture_dir();
-        assert!(dir.exists(), "fixtures dir should exist at {:?}", dir);
+        assert!(dir.exists(), "fixtures dir should exist at {dir:?}");
     }
 
     #[test]
     fn format_help_contains_all_commands() {
         let help = format_help();
-        for cmd in &["/demo", "/analyze", "/resize", "/pipeline", "/review", "/batch",
-                     "/status", "/detail", "/cancel", "/stats", "/clear", "/quit"] {
+        for cmd in &[
+            "/demo",
+            "/analyze",
+            "/resize",
+            "/pipeline",
+            "/review",
+            "/batch",
+            "/status",
+            "/detail",
+            "/cancel",
+            "/stats",
+            "/clear",
+            "/quit",
+        ] {
             assert!(help.contains(cmd), "help should contain {cmd}");
         }
     }

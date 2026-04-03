@@ -42,7 +42,7 @@ pub fn render_roc(roc: &RocCurve, width: usize, height: usize) -> String {
         svg.text(
             x,
             top + plot_h + 16.0,
-            &format!("{:.2}", frac),
+            &format!("{frac:.2}"),
             "#666",
             10,
             r#"text-anchor="middle""#,
@@ -50,7 +50,7 @@ pub fn render_roc(roc: &RocCurve, width: usize, height: usize) -> String {
         svg.text(
             left - 8.0,
             y + 4.0,
-            &format!("{:.2}", frac),
+            &format!("{frac:.2}"),
             "#666",
             10,
             r#"text-anchor="end""#,

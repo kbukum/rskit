@@ -27,9 +27,8 @@ impl FfmpegProgressParser {
         }
 
         let time_ms = extract_value(line, "time=").and_then(|v| parse_ffmpeg_time(&v));
-        let speed = extract_value(line, "speed=").and_then(|v| {
-            v.trim_end_matches('x').parse::<f64>().ok()
-        });
+        let speed =
+            extract_value(line, "speed=").and_then(|v| v.trim_end_matches('x').parse::<f64>().ok());
         let size_kb = extract_value(line, "size=").and_then(|v| {
             let v = v.trim().trim_end_matches("kB").trim();
             v.parse::<u64>().ok()
@@ -115,7 +114,8 @@ mod tests {
     #[test]
     fn parse_progress_line_no_speed() {
         let parser = FfmpegProgressParser::new(None);
-        let line = "frame=  100 fps=30.0 size=   500kB time=00:01:00.50 bitrate=100kbits/s speed=N/A";
+        let line =
+            "frame=  100 fps=30.0 size=   500kB time=00:01:00.50 bitrate=100kbits/s speed=N/A";
         let progress = parser.parse_line(line).expect("should parse");
         assert_eq!(progress.position.unwrap().as_millis(), 60500);
         assert!(progress.speed.is_none()); // N/A should fail parse
@@ -161,4 +161,3 @@ mod tests {
         assert_eq!(progress.output_size, Some(2048 * 1024));
     }
 }
-

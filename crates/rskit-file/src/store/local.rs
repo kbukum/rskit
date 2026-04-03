@@ -33,7 +33,10 @@ impl LocalStore {
             std::fs::create_dir_all(&config.root_dir).map_err(|e| {
                 AppError::new(
                     ErrorCode::Internal,
-                    format!("failed to create store root {}: {e}", config.root_dir.display()),
+                    format!(
+                        "failed to create store root {}: {e}",
+                        config.root_dir.display()
+                    ),
                 )
             })?;
         } else if !config.root_dir.exists() {
@@ -69,7 +72,10 @@ impl FileStore for LocalStore {
         let data = source.read_all().await?;
         let size = data.len() as u64;
         tokio::fs::write(&target, &data).await.map_err(|e| {
-            AppError::new(ErrorCode::Internal, format!("failed to write {}: {e}", target.display()))
+            AppError::new(
+                ErrorCode::Internal,
+                format!("failed to write {}: {e}", target.display()),
+            )
         })?;
 
         let ct = content_type.unwrap_or("application/octet-stream");
@@ -106,9 +112,9 @@ impl FileStore for LocalStore {
 
     async fn delete(&self, key: &str) -> AppResult<()> {
         let path = self.resolve_path(key);
-        tokio::fs::remove_file(&path).await.map_err(|e| {
-            AppError::new(ErrorCode::NotFound, format!("failed to delete {key}: {e}"))
-        })
+        tokio::fs::remove_file(&path)
+            .await
+            .map_err(|e| AppError::new(ErrorCode::NotFound, format!("failed to delete {key}: {e}")))
     }
 
     async fn exists(&self, key: &str) -> AppResult<bool> {
@@ -145,11 +151,17 @@ impl FileStore for LocalStore {
         }
 
         let mut entries = tokio::fs::read_dir(&dir).await.map_err(|e| {
-            AppError::new(ErrorCode::Internal, format!("failed to list {}: {e}", dir.display()))
+            AppError::new(
+                ErrorCode::Internal,
+                format!("failed to list {}: {e}", dir.display()),
+            )
         })?;
 
         while let Some(entry) = entries.next_entry().await.map_err(|e| {
-            AppError::new(ErrorCode::Internal, format!("failed to read dir entry: {e}"))
+            AppError::new(
+                ErrorCode::Internal,
+                format!("failed to read dir entry: {e}"),
+            )
         })? {
             if let Some(max) = limit {
                 if results.len() >= max {
@@ -162,11 +174,7 @@ impl FileStore for LocalStore {
             })?;
 
             if meta.is_file() {
-                let key = format!(
-                    "{}/{}",
-                    prefix,
-                    entry.file_name().to_string_lossy()
-                );
+                let key = format!("{}/{}", prefix, entry.file_name().to_string_lossy());
                 results.push(StoredFile {
                     key,
                     size: meta.len(),
@@ -199,7 +207,10 @@ impl FileStore for LocalStore {
         }
 
         tokio::fs::copy(&from, &to).await.map_err(|e| {
-            AppError::new(ErrorCode::Internal, format!("failed to copy {from_key} to {to_key}: {e}"))
+            AppError::new(
+                ErrorCode::Internal,
+                format!("failed to copy {from_key} to {to_key}: {e}"),
+            )
         })?;
 
         self.head(to_key).await
@@ -216,7 +227,10 @@ impl FileStore for LocalStore {
         }
 
         tokio::fs::rename(&from, &to).await.map_err(|e| {
-            AppError::new(ErrorCode::Internal, format!("failed to rename {from_key} to {to_key}: {e}"))
+            AppError::new(
+                ErrorCode::Internal,
+                format!("failed to rename {from_key} to {to_key}: {e}"),
+            )
         })?;
 
         self.head(to_key).await

@@ -36,7 +36,10 @@ impl FfmpegProbe {
             .output()
             .await
             .map_err(|e| {
-                AppError::new(ErrorCode::ServiceUnavailable, format!("ffprobe not found: {e}"))
+                AppError::new(
+                    ErrorCode::ServiceUnavailable,
+                    format!("ffprobe not found: {e}"),
+                )
             })?;
 
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -51,8 +54,10 @@ impl FfmpegProbe {
 
         let output = tokio::process::Command::new(self.config.ffprobe_bin())
             .args([
-                "-v", "quiet",
-                "-print_format", "json",
+                "-v",
+                "quiet",
+                "-print_format",
+                "json",
                 "-show_format",
                 "-show_streams",
             ])
@@ -60,7 +65,10 @@ impl FfmpegProbe {
             .output()
             .await
             .map_err(|e| {
-                AppError::new(ErrorCode::Internal, format!("ffprobe execution failed: {e}"))
+                AppError::new(
+                    ErrorCode::Internal,
+                    format!("ffprobe execution failed: {e}"),
+                )
             })?;
 
         if !output.status.success() {
@@ -71,10 +79,12 @@ impl FfmpegProbe {
             ));
         }
 
-        let json: serde_json::Value =
-            serde_json::from_slice(&output.stdout).map_err(|e| {
-                AppError::new(ErrorCode::Internal, format!("ffprobe output is not valid JSON: {e}"))
-            })?;
+        let json: serde_json::Value = serde_json::from_slice(&output.stdout).map_err(|e| {
+            AppError::new(
+                ErrorCode::Internal,
+                format!("ffprobe output is not valid JSON: {e}"),
+            )
+        })?;
 
         Ok(json)
     }
@@ -96,7 +106,7 @@ impl FfmpegProbe {
             .get("duration")
             .and_then(|v| v.as_str())
             .and_then(|s| s.parse::<f64>().ok())
-            .map(|s| Duration::from_secs_f64(s));
+            .map(Duration::from_secs_f64);
 
         let size = format_obj
             .get("size")
@@ -146,7 +156,7 @@ impl FfmpegProbe {
             let codec_name = stream
                 .get("codec_name")
                 .and_then(|v| v.as_str())
-                .map(|s| Codec::new(s));
+                .map(Codec::new);
 
             let bit_rate = stream
                 .get("bit_rate")
@@ -177,7 +187,11 @@ impl FfmpegProbe {
                         if parts.len() == 2 {
                             let num = parts[0].parse::<u32>().ok()?;
                             let den = parts[1].parse::<u32>().ok()?;
-                            if den > 0 { Some(FrameRate::new(num, den)) } else { None }
+                            if den > 0 {
+                                Some(FrameRate::new(num, den))
+                            } else {
+                                None
+                            }
                         } else {
                             None
                         }
@@ -214,10 +228,7 @@ impl FfmpegProbe {
                     .and_then(|s| s.parse::<u32>().ok())
                     .unwrap_or(44100);
 
-                let channels = stream
-                    .get("channels")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(2) as u16;
+                let channels = stream.get("channels").and_then(|v| v.as_u64()).unwrap_or(2) as u16;
 
                 let layout = match channels {
                     1 => ChannelLayout::Mono,
@@ -255,7 +266,8 @@ impl FfmpegProbe {
                 .get("disposition")
                 .and_then(|d| d.get("default"))
                 .and_then(|v| v.as_u64())
-                .unwrap_or(0) == 1;
+                .unwrap_or(0)
+                == 1;
 
             tracks.push(Track {
                 index: i,
@@ -393,7 +405,10 @@ impl MediaProbe for FfmpegProbe {
             .output()
             .await
             .map_err(|e| {
-                AppError::new(ErrorCode::Internal, format!("ffmpeg thumbnails failed: {e}"))
+                AppError::new(
+                    ErrorCode::Internal,
+                    format!("ffmpeg thumbnails failed: {e}"),
+                )
             })?;
 
         if !output.status.success() {
@@ -407,13 +422,18 @@ impl MediaProbe for FfmpegProbe {
         // Collect generated thumbnails
         let mut results = Vec::new();
         let mut entries = tokio::fs::read_dir(tmp_dir.path()).await.map_err(|e| {
-            AppError::new(ErrorCode::Internal, format!("failed to read thumb dir: {e}"))
+            AppError::new(
+                ErrorCode::Internal,
+                format!("failed to read thumb dir: {e}"),
+            )
         })?;
 
         let mut paths = Vec::new();
-        while let Some(entry) = entries.next_entry().await.map_err(|e| {
-            AppError::new(ErrorCode::Internal, format!("failed to read entry: {e}"))
-        })? {
+        while let Some(entry) = entries
+            .next_entry()
+            .await
+            .map_err(|e| AppError::new(ErrorCode::Internal, format!("failed to read entry: {e}")))?
+        {
             let p = entry.path();
             if p.extension().is_some_and(|e| e == "jpg") {
                 paths.push(p);

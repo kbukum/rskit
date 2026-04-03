@@ -84,10 +84,8 @@ impl FilterMap {
             "saturation".into(),
             Box::new(|p| format!("eq=saturation={}", get_f64(p, "value"))),
         );
-        self.video.insert(
-            "grayscale".into(),
-            Box::new(|_| "format=gray".into()),
-        );
+        self.video
+            .insert("grayscale".into(), Box::new(|_| "format=gray".into()));
         self.video.insert(
             "sepia".into(),
             Box::new(|_| {
@@ -98,10 +96,8 @@ impl FilterMap {
             "stabilize".into(),
             Box::new(|_| "vidstabdetect,vidstabtransform".into()),
         );
-        self.video.insert(
-            "deinterlace".into(),
-            Box::new(|_| "yadif".into()),
-        );
+        self.video
+            .insert("deinterlace".into(), Box::new(|_| "yadif".into()));
 
         // Audio filters
         self.audio.insert(
@@ -172,7 +168,10 @@ mod tests {
 
     #[test]
     fn golden_sharpen() {
-        let f = video_filter("sharpen", Params::new().set("amount", ParamValue::Float(1.5)));
+        let f = video_filter(
+            "sharpen",
+            Params::new().set("amount", ParamValue::Float(1.5)),
+        );
         assert_eq!(to_ffmpeg_filter(&f), "unsharp=5:5:1.5");
     }
 
@@ -184,7 +183,10 @@ mod tests {
 
     #[test]
     fn golden_brightness() {
-        let f = video_filter("brightness", Params::new().set("value", ParamValue::Float(0.2)));
+        let f = video_filter(
+            "brightness",
+            Params::new().set("value", ParamValue::Float(0.2)),
+        );
         assert_eq!(to_ffmpeg_filter(&f), "eq=brightness=0.2");
     }
 
@@ -209,13 +211,19 @@ mod tests {
 
     #[test]
     fn golden_high_pass() {
-        let f = audio_filter("high_pass", Params::new().set("frequency", ParamValue::Int(200)));
+        let f = audio_filter(
+            "high_pass",
+            Params::new().set("frequency", ParamValue::Int(200)),
+        );
         assert_eq!(to_ffmpeg_filter(&f), "highpass=f=200");
     }
 
     #[test]
     fn golden_low_pass() {
-        let f = audio_filter("low_pass", Params::new().set("frequency", ParamValue::Int(3000)));
+        let f = audio_filter(
+            "low_pass",
+            Params::new().set("frequency", ParamValue::Int(3000)),
+        );
         assert_eq!(to_ffmpeg_filter(&f), "lowpass=f=3000");
     }
 

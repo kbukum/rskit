@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use rskit_file::{detect_kind, detect_mime, file_meta, FileSource};
+use rskit_file::{FileSource, detect_kind, detect_mime, file_meta};
 
 fn fixture_path(rel: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -227,5 +227,8 @@ async fn file_source_read_all_returns_bytes() {
     let source = fixture_source("image/ai-generated.jpg");
     let bytes = source.read_all().await.unwrap();
     assert!(!bytes.is_empty());
-    insta::assert_snapshot!("file_source_read_all_len_ai_generated_jpg", bytes.len().to_string());
+    insta::assert_snapshot!(
+        "file_source_read_all_len_ai_generated_jpg",
+        bytes.len().to_string()
+    );
 }

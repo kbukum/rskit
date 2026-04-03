@@ -1,10 +1,10 @@
 //! Media operation types for pipeline building.
 
-mod spatial;
 mod compose;
+mod spatial;
 
-pub use spatial::*;
 pub use compose::*;
+pub use spatial::*;
 
 use crate::{
     filter::Filter,

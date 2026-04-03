@@ -14,7 +14,10 @@ impl TempFile {
     /// Create a new temporary file in the system temp directory.
     pub fn new() -> AppResult<Self> {
         let inner = tempfile::NamedTempFile::new().map_err(|e| {
-            AppError::new(ErrorCode::Internal, format!("failed to create temp file: {e}"))
+            AppError::new(
+                ErrorCode::Internal,
+                format!("failed to create temp file: {e}"),
+            )
         })?;
         Ok(Self { inner })
     }
@@ -36,7 +39,10 @@ impl TempFile {
     /// Create a temporary file in the given directory.
     pub fn in_dir(dir: &Path) -> AppResult<Self> {
         let inner = tempfile::NamedTempFile::new_in(dir).map_err(|e| {
-            AppError::new(ErrorCode::Internal, format!("failed to create temp file in {}: {e}", dir.display()))
+            AppError::new(
+                ErrorCode::Internal,
+                format!("failed to create temp file in {}: {e}", dir.display()),
+            )
         })?;
         Ok(Self { inner })
     }
@@ -49,7 +55,10 @@ impl TempFile {
             .map_err(|e| {
                 AppError::new(
                     ErrorCode::Internal,
-                    format!("failed to create temp file in {} with extension .{ext}: {e}", dir.display()),
+                    format!(
+                        "failed to create temp file in {} with extension .{ext}: {e}",
+                        dir.display()
+                    ),
                 )
             })?;
         Ok(Self { inner })
@@ -70,7 +79,10 @@ impl TempFile {
     pub fn persist(self, target: impl AsRef<Path>) -> AppResult<PathBuf> {
         let target = target.as_ref().to_path_buf();
         self.inner.persist(&target).map_err(|e| {
-            AppError::new(ErrorCode::Internal, format!("failed to persist temp file to {}: {e}", target.display()))
+            AppError::new(
+                ErrorCode::Internal,
+                format!("failed to persist temp file to {}: {e}", target.display()),
+            )
         })?;
         Ok(target)
     }
@@ -97,7 +109,10 @@ impl TempDir {
     /// Create a new temporary directory.
     pub fn new() -> AppResult<Self> {
         let inner = tempfile::TempDir::new().map_err(|e| {
-            AppError::new(ErrorCode::Internal, format!("failed to create temp dir: {e}"))
+            AppError::new(
+                ErrorCode::Internal,
+                format!("failed to create temp dir: {e}"),
+            )
         })?;
         Ok(Self { inner })
     }
@@ -113,7 +128,10 @@ impl TempDir {
             .prefix(name)
             .tempfile_in(self.path())
             .map_err(|e| {
-                AppError::new(ErrorCode::Internal, format!("failed to create file {name} in temp dir: {e}"))
+                AppError::new(
+                    ErrorCode::Internal,
+                    format!("failed to create file {name} in temp dir: {e}"),
+                )
             })?;
         Ok(TempFile { inner })
     }

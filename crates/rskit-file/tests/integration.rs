@@ -10,10 +10,12 @@ fn tiny_png_bytes() -> Vec<u8> {
     let encoder = image::codecs::png::PngEncoder::new(&mut buf);
     image::ImageEncoder::write_image(
         encoder,
-        &[255, 0, 0],           // RGB red
-        1, 1,
+        &[255, 0, 0], // RGB red
+        1,
+        1,
         image::ExtendedColorType::Rgb8,
-    ).expect("encode tiny PNG");
+    )
+    .expect("encode tiny PNG");
     buf
 }
 
@@ -21,7 +23,8 @@ fn tiny_png_bytes() -> Vec<u8> {
 fn tiny_jpeg_bytes() -> Vec<u8> {
     let img = image::RgbImage::from_pixel(1, 1, image::Rgb([0, 0, 255]));
     let mut buf = std::io::Cursor::new(Vec::new());
-    img.write_to(&mut buf, image::ImageFormat::Jpeg).expect("encode tiny JPEG");
+    img.write_to(&mut buf, image::ImageFormat::Jpeg)
+        .expect("encode tiny JPEG");
     buf.into_inner()
 }
 
@@ -182,10 +185,7 @@ async fn detect_mime_png() {
     let tmp = write_temp_fixture(&png_data, "png");
     let source = FileSource::from_path(tmp.path());
     let mime = detect_mime(&source).await.expect("detect mime");
-    assert!(
-        mime.contains("png"),
-        "expected PNG mime, got: {mime}"
-    );
+    assert!(mime.contains("png"), "expected PNG mime, got: {mime}");
 }
 
 #[tokio::test]
@@ -289,7 +289,10 @@ async fn local_store_delete() {
     .expect("create store");
 
     let source = FileSource::from_bytes(bytes::Bytes::from_static(b"delete me"));
-    store.upload(&source, "del.txt", None, None).await.expect("upload");
+    store
+        .upload(&source, "del.txt", None, None)
+        .await
+        .expect("upload");
     assert!(store.exists("del.txt").await.unwrap());
 
     store.delete("del.txt").await.expect("delete");
@@ -307,11 +310,18 @@ async fn local_store_list() {
 
     for name in &["a.txt", "b.txt", "c.txt"] {
         let source = FileSource::from_bytes(bytes::Bytes::from_static(b"x"));
-        store.upload(&source, name, None, None).await.expect("upload");
+        store
+            .upload(&source, name, None, None)
+            .await
+            .expect("upload");
     }
 
     let all = store.list("", None).await.expect("list all");
-    assert!(all.len() >= 3, "expected at least 3, got {} items", all.len());
+    assert!(
+        all.len() >= 3,
+        "expected at least 3, got {} items",
+        all.len()
+    );
 }
 
 #[tokio::test]
@@ -324,13 +334,25 @@ async fn local_store_copy() {
     .expect("create store");
 
     let source = FileSource::from_bytes(bytes::Bytes::from_static(b"copy me"));
-    store.upload(&source, "original.txt", None, None).await.expect("upload");
+    store
+        .upload(&source, "original.txt", None, None)
+        .await
+        .expect("upload");
 
-    store.copy("original.txt", "copied.txt").await.expect("copy");
+    store
+        .copy("original.txt", "copied.txt")
+        .await
+        .expect("copy");
     assert!(store.exists("original.txt").await.unwrap());
     assert!(store.exists("copied.txt").await.unwrap());
 
-    let content = store.download("copied.txt").await.unwrap().read_all().await.unwrap();
+    let content = store
+        .download("copied.txt")
+        .await
+        .unwrap()
+        .read_all()
+        .await
+        .unwrap();
     assert_eq!(content.as_ref(), b"copy me");
 }
 
@@ -344,7 +366,10 @@ async fn local_store_rename() {
     .expect("create store");
 
     let source = FileSource::from_bytes(bytes::Bytes::from_static(b"rename me"));
-    store.upload(&source, "old.txt", None, None).await.expect("upload");
+    store
+        .upload(&source, "old.txt", None, None)
+        .await
+        .expect("upload");
 
     store.rename("old.txt", "new.txt").await.expect("rename");
     assert!(!store.exists("old.txt").await.unwrap());

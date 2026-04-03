@@ -136,7 +136,11 @@ where
         self
     }
 
-    pub async fn run(&self, loader: &DatasetLoader<L>, opts: RunOptions) -> AppResult<BenchRunResult> {
+    pub async fn run(
+        &self,
+        loader: &DatasetLoader<L>,
+        opts: RunOptions,
+    ) -> AppResult<BenchRunResult> {
         let start = Instant::now();
 
         let samples = loader.all()?;
@@ -168,11 +172,10 @@ where
             let mut errors = 0usize;
 
             for sample in &samples {
-                let _permit = semaphore
-                    .clone()
-                    .acquire_owned()
-                    .await
-                    .map_err(|e| AppError::new(ErrorCode::Internal, format!("semaphore: {e}")))?;
+                let _permit =
+                    semaphore.clone().acquire_owned().await.map_err(|e| {
+                        AppError::new(ErrorCode::Internal, format!("semaphore: {e}"))
+                    })?;
                 let input = sample.input.clone();
                 let timeout = tokio::time::Duration::from_secs(opts.timeout_secs);
 

@@ -74,7 +74,7 @@ impl RunStorage for FileRunStorage {
         let content = std::fs::read_to_string(&path).map_err(|e| {
             AppError::new(
                 ErrorCode::NotFound,
-                format!("Run not found: {} ({})", run_id, e),
+                format!("Run not found: {run_id} ({e})"),
             )
         })?;
         serde_json::from_str(&content)

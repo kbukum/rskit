@@ -118,10 +118,16 @@ impl SubtitleTrack {
             }
 
             let start = parse_srt_time(parts[0].trim()).ok_or_else(|| {
-                AppError::new(ErrorCode::InvalidFormat, format!("invalid SRT time: {}", parts[0]))
+                AppError::new(
+                    ErrorCode::InvalidFormat,
+                    format!("invalid SRT time: {}", parts[0]),
+                )
             })?;
             let end = parse_srt_time(parts[1].trim()).ok_or_else(|| {
-                AppError::new(ErrorCode::InvalidFormat, format!("invalid SRT time: {}", parts[1]))
+                AppError::new(
+                    ErrorCode::InvalidFormat,
+                    format!("invalid SRT time: {}", parts[1]),
+                )
             })?;
 
             let text = lines[2..].join("\n");
@@ -165,13 +171,19 @@ impl SubtitleTrack {
             }
 
             let start_str = parts[0].trim();
-            let end_str = parts[1].trim().split_whitespace().next().unwrap_or("");
+            let end_str = parts[1].split_whitespace().next().unwrap_or("");
 
             let start = parse_vtt_time(start_str).ok_or_else(|| {
-                AppError::new(ErrorCode::InvalidFormat, format!("invalid VTT time: {start_str}"))
+                AppError::new(
+                    ErrorCode::InvalidFormat,
+                    format!("invalid VTT time: {start_str}"),
+                )
             })?;
             let end = parse_vtt_time(end_str).ok_or_else(|| {
-                AppError::new(ErrorCode::InvalidFormat, format!("invalid VTT time: {end_str}"))
+                AppError::new(
+                    ErrorCode::InvalidFormat,
+                    format!("invalid VTT time: {end_str}"),
+                )
             })?;
 
             let text = lines[time_idx + 1..].join("\n");

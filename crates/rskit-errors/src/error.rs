@@ -189,7 +189,7 @@ impl AppError {
 
     /// Wrap a database error.
     pub fn database_error(cause: impl std::error::Error + Send + Sync + 'static) -> Self {
-        let msg = format!("database error: {}", cause);
+        let msg = format!("database error: {cause}");
         Self::new(ErrorCode::DatabaseError, msg).with_cause(cause)
     }
 
@@ -199,7 +199,7 @@ impl AppError {
         cause: impl std::error::Error + Send + Sync + 'static,
     ) -> Self {
         let svc = service.into();
-        let msg = format!("external service error ({}): {}", svc, cause);
+        let msg = format!("external service error ({svc}): {cause}");
         Self::new(ErrorCode::ExternalService, msg)
             .with_cause(cause)
             .with_detail("service", svc)
@@ -380,19 +380,15 @@ mod tests {
     #[test]
     fn display_includes_message() {
         let err = AppError::new(ErrorCode::NotFound, "item not found");
-        let display = format!("{}", err);
-        assert!(
-            display.contains("item not found"),
-            "display was: {}",
-            display
-        );
+        let display = format!("{err}");
+        assert!(display.contains("item not found"), "display was: {display}");
     }
 
     #[test]
     fn display_includes_code() {
         let err = AppError::new(ErrorCode::NotFound, "item not found");
-        let display = format!("{}", err);
-        assert!(display.contains("NOT_FOUND"), "display was: {}", display);
+        let display = format!("{err}");
+        assert!(display.contains("NOT_FOUND"), "display was: {display}");
     }
 
     // ── Query helpers ─────────────────────────────────────────────────────────

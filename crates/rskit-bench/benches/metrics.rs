@@ -4,7 +4,7 @@ use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_ma
 use std::collections::HashMap;
 use std::io::Cursor;
 
-use rskit_bench::metric::{binary_classification, mae, mse, r_squared, rmse, Metric};
+use rskit_bench::metric::{Metric, binary_classification, mae, mse, r_squared, rmse};
 use rskit_bench::metrics::compute_metrics;
 use rskit_bench::report_gen::{JsonReporter, MarkdownReporter, Reporter};
 use rskit_bench::result::{BenchRunResult, BenchSampleResult, DatasetInfo, MetricResult};
@@ -100,7 +100,11 @@ fn make_bench_run_result(n_samples: usize) -> BenchRunResult {
         .map(|i| BenchSampleResult {
             id: format!("s{i}"),
             label: "pos".into(),
-            predicted: if i % 5 == 0 { "neg".into() } else { "pos".into() },
+            predicted: if i % 5 == 0 {
+                "neg".into()
+            } else {
+                "pos".into()
+            },
             score: (i as f64) / (n_samples as f64),
             correct: i % 5 != 0,
             branch_scores: HashMap::new(),

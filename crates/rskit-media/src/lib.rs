@@ -6,51 +6,51 @@
 
 #![warn(missing_docs)]
 
-/// Core media type enumerations.
-pub mod types;
-/// Timestamp, time range, and segment types.
-pub mod time;
-/// Resolution and frame rate types.
-pub mod spatial;
 /// Audio sample rate and channel layout types.
 pub mod audio;
-/// Track and track info types.
-pub mod track;
 /// Codec identifiers and well-known constants.
 pub mod codec;
-/// Container/file format identifiers and well-known constants.
-pub mod format;
-/// Codec/format compatibility registry.
-pub mod registry;
+/// Executor trait for media processing backends.
+pub mod executor;
 /// Filter types and convenience constructors.
 pub mod filter;
+/// Container/file format identifiers and well-known constants.
+pub mod format;
+/// Media operation types for pipeline building.
+pub mod ops;
 /// Output configuration, quality, and encoding settings.
 pub mod output;
+/// Pipeline builder for chaining media operations.
+pub mod pipeline;
 /// Preset output configurations for common formats.
 pub mod presets;
 /// Media probing traits and metadata types.
 pub mod probe;
-/// Media operation types for pipeline building.
-pub mod ops;
-/// Pipeline builder for chaining media operations.
-pub mod pipeline;
-/// Executor trait for media processing backends.
-pub mod executor;
+/// Codec/format compatibility registry.
+pub mod registry;
+/// Resolution and frame rate types.
+pub mod spatial;
 /// Subtitle types and SRT/VTT parsing.
 pub mod subtitle;
+/// Timestamp, time range, and segment types.
+pub mod time;
+/// Track and track info types.
+pub mod track;
+/// Core media type enumerations.
+pub mod types;
 
-pub use types::{MediaType, TrackKind};
-pub use time::{Timestamp, TimeRange, Segment};
-pub use spatial::{Resolution, FrameRate};
-pub use audio::{SampleRate, ChannelLayout};
-pub use track::{Track, VideoTrackInfo, AudioTrackInfo, SubtitleTrackInfo};
+pub use audio::{ChannelLayout, SampleRate};
 pub use codec::{Codec, CodecKind};
-pub use format::Format;
-pub use registry::{Registry, CodecInfo, FormatInfo};
-pub use filter::{Filter, FilterTarget, Params, ParamValue};
-pub use output::{OutputConfig, VideoSettings, AudioSettings, Quality, Bitrate, EncodingSpeed};
-pub use probe::{MediaMetadata, MediaProbe};
-pub use ops::MediaOp;
-pub use pipeline::{MediaPipeline, Progress};
 pub use executor::MediaExecutor;
-pub use subtitle::{SubtitleEntry, SubtitleStyle, SubtitlePosition, SubtitleTrack};
+pub use filter::{Filter, FilterTarget, ParamValue, Params};
+pub use format::Format;
+pub use ops::MediaOp;
+pub use output::{AudioSettings, Bitrate, EncodingSpeed, OutputConfig, Quality, VideoSettings};
+pub use pipeline::{MediaPipeline, Progress};
+pub use probe::{MediaMetadata, MediaProbe};
+pub use registry::{CodecInfo, FormatInfo, Registry};
+pub use spatial::{FrameRate, Resolution};
+pub use subtitle::{SubtitleEntry, SubtitlePosition, SubtitleStyle, SubtitleTrack};
+pub use time::{Segment, TimeRange, Timestamp};
+pub use track::{AudioTrackInfo, SubtitleTrackInfo, Track, VideoTrackInfo};
+pub use types::{MediaType, TrackKind};

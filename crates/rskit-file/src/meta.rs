@@ -95,10 +95,7 @@ pub async fn detect_mime(source: &FileSource) -> AppResult<String> {
     // Try magic-byte detection first
     let bytes = match source {
         FileSource::Bytes(b) => Some(b.clone()),
-        FileSource::Path(_) | FileSource::Temp(_) => {
-            let data = source.read_all().await.ok();
-            data
-        }
+        FileSource::Path(_) | FileSource::Temp(_) => source.read_all().await.ok(),
         FileSource::Url(_) => None,
     };
 

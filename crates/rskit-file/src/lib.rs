@@ -6,23 +6,22 @@
 
 #![warn(missing_docs)]
 
-mod source;
-mod sink;
 mod meta;
-mod temp;
-mod transfer;
+mod sink;
+mod source;
 /// Storage backends for file persistence.
 pub mod store;
+mod temp;
+mod transfer;
 
-pub use source::{FileSource, ResolvedPath};
+pub use meta::{FileKind, FileMeta, detect_kind, detect_mime, file_meta};
 pub use sink::{FileSink, FileWriter};
-pub use meta::{FileMeta, FileKind, detect_mime, detect_kind, file_meta};
-pub use temp::{TempFile, TempDir};
-pub use transfer::{copy_file, transfer};
+pub use source::{FileSource, ResolvedPath};
 pub use store::{
-    FileStore, StoredFile, UploadProgress, ProgressCallback,
-    LocalStore, LocalStoreConfig,
+    FileStore, LocalStore, LocalStoreConfig, ProgressCallback, StoredFile, UploadProgress,
 };
+pub use temp::{TempDir, TempFile};
+pub use transfer::{copy_file, transfer};
 
 #[cfg(feature = "s3")]
 pub use store::{S3Store, S3StoreConfig};

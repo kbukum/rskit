@@ -3,25 +3,40 @@
 
 use std::time::Duration;
 
-use rskit_file::{FileSource, FileSink, TempDir, TempFile};
+use rskit_file::{FileSink, FileSource, TempDir, TempFile};
 use rskit_media::{
+    executor::MediaExecutor,
     ops::{MediaOp, ResizeMode, ResizeOp},
     probe::MediaProbe,
     spatial::Resolution,
     time::TimeRange,
-    executor::MediaExecutor,
 };
-use rskit_media_ffmpeg::{FfmpegConfig, FfmpegProbe, FfmpegExecutor};
+use rskit_media_ffmpeg::{FfmpegConfig, FfmpegExecutor, FfmpegProbe};
 
 /// Generate a 1-second test video (320×240, 25fps, with audio) using ffmpeg.
 async fn generate_test_video() -> TempFile {
     let tmp = TempFile::with_extension("mp4").expect("create temp");
     let status = tokio::process::Command::new("ffmpeg")
         .args([
-            "-y", "-f", "lavfi", "-i", "testsrc2=duration=1:size=320x240:rate=25",
-            "-f", "lavfi", "-i", "sine=frequency=440:duration=1",
-            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28",
-            "-c:a", "aac", "-b:a", "64k",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc2=duration=1:size=320x240:rate=25",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:duration=1",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-crf",
+            "28",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "64k",
             "-shortest",
         ])
         .arg(tmp.path())
@@ -40,8 +55,13 @@ async fn generate_test_audio() -> TempFile {
     let tmp = TempFile::with_extension("wav").expect("create temp");
     let status = tokio::process::Command::new("ffmpeg")
         .args([
-            "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=1",
-            "-c:a", "pcm_s16le",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:duration=1",
+            "-c:a",
+            "pcm_s16le",
         ])
         .arg(tmp.path())
         .stdout(std::process::Stdio::null())
@@ -79,7 +99,10 @@ macro_rules! skip_without_ffmpeg {
 async fn probe_check_available() {
     skip_without_ffmpeg!();
     let probe = FfmpegProbe::new(FfmpegConfig::default());
-    let version = probe.check_available().await.expect("ffprobe should be available");
+    let version = probe
+        .check_available()
+        .await
+        .expect("ffprobe should be available");
     assert!(version.contains("ffprobe"), "got: {version}");
 }
 
@@ -97,7 +120,10 @@ async fn probe_video_file() {
     assert!(meta.duration.is_some(), "should have duration");
 
     let dur = meta.duration.unwrap();
-    assert!(dur.as_secs_f64() >= 0.9 && dur.as_secs_f64() <= 1.5, "duration: {dur:?}");
+    assert!(
+        dur.as_secs_f64() >= 0.9 && dur.as_secs_f64() <= 1.5,
+        "duration: {dur:?}"
+    );
 
     let res = meta.resolution().expect("should have resolution");
     assert_eq!(res.width, 320);
@@ -232,7 +258,10 @@ async fn executor_preview_returns_args() {
     let preview = executor.preview(&source, &ops).expect("preview");
     assert!(!preview.is_empty());
     let joined = preview.join(" ");
-    assert!(joined.contains("scale=1280:720") || joined.contains("ffmpeg"), "got: {joined}");
+    assert!(
+        joined.contains("scale=1280:720") || joined.contains("ffmpeg"),
+        "got: {joined}"
+    );
 }
 
 // ── Performance: video processing timing ────────────────────────────────────
@@ -260,6 +289,9 @@ async fn perf_resize_timing() {
     let elapsed = start.elapsed();
 
     // 1-second 320×240 resize should complete quickly
-    println!("FFmpeg resize 320x240→160x120: {:?}", elapsed);
-    assert!(elapsed < Duration::from_secs(10), "resize took too long: {elapsed:?}");
+    println!("FFmpeg resize 320x240→160x120: {elapsed:?}");
+    assert!(
+        elapsed < Duration::from_secs(10),
+        "resize took too long: {elapsed:?}"
+    );
 }

@@ -57,7 +57,8 @@ impl FfmpegCommand {
         }
         cmd.global_opts
             .extend(["-loglevel".into(), config.log_level.as_ffmpeg_arg().into()]);
-        cmd.global_opts.extend(["-progress".into(), "pipe:2".into()]);
+        cmd.global_opts
+            .extend(["-progress".into(), "pipe:2".into()]);
 
         if let Some(threads) = config.threads {
             cmd.global_opts
@@ -101,20 +102,18 @@ impl FfmpegCommand {
                         Rotation::Degrees90 => "transpose=1".to_string(),
                         Rotation::Degrees180 => "hflip,vflip".to_string(),
                         Rotation::Degrees270 => "transpose=2".to_string(),
-                        Rotation::Arbitrary(deg) => format!("rotate={}*PI/180", deg),
+                        Rotation::Arbitrary(deg) => format!("rotate={deg}*PI/180"),
                     };
                     cmd.video_filters.push(filter);
                 }
-                MediaOp::Flip(dir) => {
-                    match dir {
-                        FlipDirection::Horizontal => cmd.video_filters.push("hflip".into()),
-                        FlipDirection::Vertical => cmd.video_filters.push("vflip".into()),
-                        FlipDirection::Both => {
-                            cmd.video_filters.push("hflip".into());
-                            cmd.video_filters.push("vflip".into());
-                        }
+                MediaOp::Flip(dir) => match dir {
+                    FlipDirection::Horizontal => cmd.video_filters.push("hflip".into()),
+                    FlipDirection::Vertical => cmd.video_filters.push("vflip".into()),
+                    FlipDirection::Both => {
+                        cmd.video_filters.push("hflip".into());
+                        cmd.video_filters.push("vflip".into());
                     }
-                }
+                },
                 MediaOp::Pad(pad) => {
                     cmd.video_filters.push(format!(
                         "pad={}:{}:(ow-iw)/2:(oh-ih)/2:{}",
@@ -122,8 +121,7 @@ impl FfmpegCommand {
                     ));
                 }
                 MediaOp::Speed(factor) => {
-                    cmd.video_filters
-                        .push(format!("setpts=PTS/{factor}"));
+                    cmd.video_filters.push(format!("setpts=PTS/{factor}"));
                     // FFmpeg atempo only supports 0.5–100.0 per filter
                     let mut remaining = *factor;
                     while remaining > 2.0 {
@@ -194,8 +192,7 @@ impl FfmpegCommand {
                     });
                     let n = cmd.inputs.len();
                     let pads: String = (0..n).map(|i| format!("[{i}]")).collect();
-                    cmd.complex_filter =
-                        Some(format!("{pads}concat=n={n}:v=1:a=1"));
+                    cmd.complex_filter = Some(format!("{pads}concat=n={n}:v=1:a=1"));
                 }
                 MediaOp::ReplaceAudio(replace) => {
                     cmd.inputs.push(FfmpegInput {
@@ -204,10 +201,8 @@ impl FfmpegCommand {
                         duration: None,
                     });
                     cmd.output_opts.extend(["-map".into(), "0:v".into()]);
-                    cmd.output_opts.extend([
-                        "-map".into(),
-                        format!("{}:a", cmd.inputs.len() - 1),
-                    ]);
+                    cmd.output_opts
+                        .extend(["-map".into(), format!("{}:a", cmd.inputs.len() - 1)]);
                 }
                 MediaOp::MixAudio(mix) => {
                     cmd.inputs.push(FfmpegInput {
@@ -225,8 +220,7 @@ impl FfmpegCommand {
                 }
                 MediaOp::SelectTracks(indices) => {
                     for idx in indices {
-                        cmd.output_opts
-                            .extend(["-map".into(), format!("0:{idx}")]);
+                        cmd.output_opts.extend(["-map".into(), format!("0:{idx}")]);
                     }
                 }
                 MediaOp::SelectTracksByKind(kinds) => {
@@ -292,8 +286,7 @@ impl FfmpegCommand {
                     }
                     Bitrate::Constrained { target, max } => {
                         cmd.output_opts.extend(["-b:v".into(), target.to_string()]);
-                        cmd.output_opts
-                            .extend(["-maxrate".into(), max.to_string()]);
+                        cmd.output_opts.extend(["-maxrate".into(), max.to_string()]);
                     }
                 }
             }
@@ -485,8 +478,9 @@ mod tests {
 
     fn compile_args(ops: &[MediaOp]) -> Vec<String> {
         let source = FileSource::from_path("/tmp/input.mp4");
-        let cmd = FfmpegCommand::compile(&source, ops, None, &default_config(), &default_registry())
-            .expect("compile");
+        let cmd =
+            FfmpegCommand::compile(&source, ops, None, &default_config(), &default_registry())
+                .expect("compile");
         cmd.to_args()
     }
 
@@ -513,7 +507,10 @@ mod tests {
         let args = compile_args(&ops);
         let vf_idx = args.iter().position(|a| a == "-vf").unwrap();
         let filter = &args[vf_idx + 1];
-        assert!(filter.contains("force_original_aspect_ratio=decrease"), "got: {filter}");
+        assert!(
+            filter.contains("force_original_aspect_ratio=decrease"),
+            "got: {filter}"
+        );
         assert!(filter.contains("pad=640:480"), "got: {filter}");
     }
 
@@ -526,7 +523,10 @@ mod tests {
         let args = compile_args(&ops);
         let vf_idx = args.iter().position(|a| a == "-vf").unwrap();
         let filter = &args[vf_idx + 1];
-        assert!(filter.contains("force_original_aspect_ratio=increase"), "got: {filter}");
+        assert!(
+            filter.contains("force_original_aspect_ratio=increase"),
+            "got: {filter}"
+        );
         assert!(filter.contains("crop=640:480"), "got: {filter}");
     }
 
@@ -576,7 +576,10 @@ mod tests {
         let ops = vec![MediaOp::Extract(TimeRange::from_seconds(10.0, 30.0))];
         let args = compile_args(&ops);
         // Should have -ss and -t
-        assert!(args.contains(&"-ss".to_string()), "missing -ss in: {args:?}");
+        assert!(
+            args.contains(&"-ss".to_string()),
+            "missing -ss in: {args:?}"
+        );
         assert!(args.contains(&"-t".to_string()), "missing -t in: {args:?}");
     }
 
@@ -587,7 +590,11 @@ mod tests {
         let vf_idx = args.iter().position(|a| a == "-vf").unwrap();
         assert_eq!(args[vf_idx + 1], "setpts=PTS/2");
         let af_idx = args.iter().position(|a| a == "-af").unwrap();
-        assert!(args[af_idx + 1].contains("atempo"), "got: {}", args[af_idx + 1]);
+        assert!(
+            args[af_idx + 1].contains("atempo"),
+            "got: {}",
+            args[af_idx + 1]
+        );
     }
 
     #[test]
@@ -653,9 +660,18 @@ mod tests {
     #[test]
     fn golden_global_opts() {
         let args = compile_args(&[]);
-        assert!(args.contains(&"-y".to_string()), "should have -y (overwrite)");
-        assert!(args.contains(&"-loglevel".to_string()), "should have -loglevel");
-        assert!(args.contains(&"-progress".to_string()), "should have -progress");
+        assert!(
+            args.contains(&"-y".to_string()),
+            "should have -y (overwrite)"
+        );
+        assert!(
+            args.contains(&"-loglevel".to_string()),
+            "should have -loglevel"
+        );
+        assert!(
+            args.contains(&"-progress".to_string()),
+            "should have -progress"
+        );
     }
 
     #[test]
@@ -665,4 +681,3 @@ mod tests {
         assert_eq!(args[i_idx + 1], "/tmp/input.mp4");
     }
 }
-

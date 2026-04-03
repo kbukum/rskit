@@ -253,7 +253,10 @@ fn registry_compatibility_h264_mp4() {
     let reg = Registry::default();
     let h264 = Codec::new("h264");
     let mp4 = Format::new("mp4");
-    assert!(reg.is_compatible(&h264, &mp4), "h264 should be compatible with mp4");
+    assert!(
+        reg.is_compatible(&h264, &mp4),
+        "h264 should be compatible with mp4"
+    );
 }
 
 #[test]
@@ -304,7 +307,10 @@ fn filter_with_params() {
         .set("enabled", ParamValue::Bool(true));
 
     assert!(matches!(params.get("strength"), Some(ParamValue::Int(5))));
-    assert!(matches!(params.get("enabled"), Some(ParamValue::Bool(true))));
+    assert!(matches!(
+        params.get("enabled"),
+        Some(ParamValue::Bool(true))
+    ));
 }
 
 // ── OutputConfig & Presets ──────────────────────────────────────────────────
@@ -404,8 +410,7 @@ fn pipeline_builder_chaining() {
 #[test]
 fn pipeline_extract() {
     let source = rskit_file::FileSource::from_path("/tmp/test.mp4");
-    let pipe = pipeline::MediaPipeline::from(&source)
-        .extract(TimeRange::from_seconds(1.0, 5.0));
+    let pipe = pipeline::MediaPipeline::from(&source).extract(TimeRange::from_seconds(1.0, 5.0));
     assert_eq!(pipe.operations().len(), 1);
     assert!(matches!(pipe.operations()[0], MediaOp::Extract(_)));
 }
@@ -413,8 +418,7 @@ fn pipeline_extract() {
 #[test]
 fn pipeline_transcode() {
     let source = rskit_file::FileSource::from_path("/tmp/test.mp4");
-    let pipe = pipeline::MediaPipeline::from(&source)
-        .transcode(presets::webm_vp9());
+    let pipe = pipeline::MediaPipeline::from(&source).transcode(presets::webm_vp9());
     assert_eq!(pipe.operations().len(), 1);
     assert!(matches!(pipe.operations()[0], MediaOp::Transcode(_)));
 }

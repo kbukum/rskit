@@ -8,17 +8,30 @@ use std::io::Cursor;
 
 use rskit_bench::compare::RunComparator;
 use rskit_bench::metric::{
-    // classification
-    binary_classification, confusion_matrix, multi_class_classification, threshold_sweep,
-    // regression
-    mae, mse, r_squared, rmse,
-    // ranking
-    mean_average_precision, ndcg, precision_at_k, recall_at_k,
-    // probability
-    auc_roc, brier_score, calibration, log_loss,
-    // matching
-    exact_match, fuzzy_match,
     Suite,
+    // probability
+    auc_roc,
+    // classification
+    binary_classification,
+    brier_score,
+    calibration,
+    confusion_matrix,
+    // matching
+    exact_match,
+    fuzzy_match,
+    log_loss,
+    // regression
+    mae,
+    // ranking
+    mean_average_precision,
+    mse,
+    multi_class_classification,
+    ndcg,
+    precision_at_k,
+    r_squared,
+    recall_at_k,
+    rmse,
+    threshold_sweep,
 };
 use rskit_bench::metrics::compute_metrics;
 use rskit_bench::report_gen::{JsonReporter, MarkdownReporter, Reporter};
@@ -105,7 +118,11 @@ fn round(v: f64, d: i32) -> f64 {
 /// Convert a MetricResult into a deterministic JSON value with sorted keys
 /// and floats rounded to 6 decimal places.
 fn stable_metric(m: &MetricResult) -> serde_json::Value {
-    let mut sorted_values: Vec<(String, f64)> = m.values.iter().map(|(k, v)| (k.clone(), round(*v, 6))).collect();
+    let mut sorted_values: Vec<(String, f64)> = m
+        .values
+        .iter()
+        .map(|(k, v)| (k.clone(), round(*v, 6)))
+        .collect();
     sorted_values.sort_by(|a, b| a.0.cmp(&b.0));
     let values_map: serde_json::Map<String, serde_json::Value> = sorted_values
         .into_iter()
@@ -192,10 +209,13 @@ fn golden_threshold_sweep() {
     let result = m.compute(&data);
     // Snapshot value (best F1) and the detail array of ThresholdPoints
     let detail_val: serde_json::Value = result.detail.clone().unwrap_or_default();
-    insta::assert_json_snapshot!("threshold_sweep", serde_json::json!({
-        "best_f1": round(result.value, 6),
-        "points": detail_val,
-    }));
+    insta::assert_json_snapshot!(
+        "threshold_sweep",
+        serde_json::json!({
+            "best_f1": round(result.value, 6),
+            "points": detail_val,
+        })
+    );
 }
 
 #[test]
@@ -210,11 +230,11 @@ fn golden_multi_class_classification() {
         binary_sample("m05", "bird", "bird", 0.95),
         binary_sample("m06", "bird", "bird", 0.6),
         // Incorrect predictions
-        binary_sample("m07", "cat", "dog", 0.4),   // cat misclassified as dog
-        binary_sample("m08", "cat", "bird", 0.3),  // cat misclassified as bird
-        binary_sample("m09", "dog", "cat", 0.45),  // dog misclassified as cat
+        binary_sample("m07", "cat", "dog", 0.4), // cat misclassified as dog
+        binary_sample("m08", "cat", "bird", 0.3), // cat misclassified as bird
+        binary_sample("m09", "dog", "cat", 0.45), // dog misclassified as cat
         binary_sample("m10", "dog", "bird", 0.35), // dog misclassified as bird
-        binary_sample("m11", "bird", "cat", 0.5),  // bird misclassified as cat
+        binary_sample("m11", "bird", "cat", 0.5), // bird misclassified as cat
         binary_sample("m12", "bird", "dog", 0.25), // bird misclassified as dog
     ];
     let m = multi_class_classification(vec![
@@ -379,10 +399,13 @@ fn golden_auc_roc() {
     let m = auc_roc("pos".to_string());
     let result = m.compute(&data);
     // Snapshot the scalar AUC value
-    insta::assert_json_snapshot!("auc_roc", serde_json::json!({
-        "name": result.name,
-        "value": round(result.value, 6),
-    }));
+    insta::assert_json_snapshot!(
+        "auc_roc",
+        serde_json::json!({
+            "name": result.name,
+            "value": round(result.value, 6),
+        })
+    );
 }
 
 #[test]
@@ -408,11 +431,14 @@ fn golden_calibration() {
     let result = m.compute(&data);
     // ECE value + calibration curve detail
     let detail_val = result.detail.clone().unwrap_or_default();
-    insta::assert_json_snapshot!("calibration", serde_json::json!({
-        "name": result.name,
-        "ece": round(result.value, 6),
-        "curve": detail_val,
-    }));
+    insta::assert_json_snapshot!(
+        "calibration",
+        serde_json::json!({
+            "name": result.name,
+            "ece": round(result.value, 6),
+            "curve": detail_val,
+        })
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -436,11 +462,11 @@ fn golden_exact_match() {
 #[test]
 fn golden_fuzzy_match() {
     let data = vec![
-        binary_sample("fm01", "hello", "helo", 1.0),   // similarity ≈ 0.8
-        binary_sample("fm02", "world", "world", 1.0),   // similarity = 1.0
+        binary_sample("fm01", "hello", "helo", 1.0), // similarity ≈ 0.8
+        binary_sample("fm02", "world", "world", 1.0), // similarity = 1.0
         binary_sample("fm03", "kitten", "sitting", 0.5), // different
-        binary_sample("fm04", "test", "tset", 0.8),     // similarity ≈ 0.5
-        binary_sample("fm05", "abc", "abc", 1.0),       // exact
+        binary_sample("fm04", "test", "tset", 0.8),  // similarity ≈ 0.5
+        binary_sample("fm05", "abc", "abc", 1.0),    // exact
     ];
     let m = fuzzy_match::<String>(0.7);
     let result = m.compute(&data);
@@ -455,7 +481,9 @@ fn golden_fuzzy_match() {
 fn golden_compute_metrics() {
     // 10 scores and labels
     let scores = vec![0.9, 0.8, 0.7, 0.6, 0.55, 0.45, 0.35, 0.25, 0.15, 0.05];
-    let labels = vec![true, true, true, true, false, true, false, false, false, false];
+    let labels = vec![
+        true, true, true, true, false, true, false, false, false, false,
+    ];
 
     let result = compute_metrics(&scores, &labels, 0.5);
     insta::assert_json_snapshot!("compute_metrics_0.5", &result);
@@ -464,7 +492,9 @@ fn golden_compute_metrics() {
 #[test]
 fn golden_threshold_sweep_legacy() {
     let scores = vec![0.9, 0.8, 0.7, 0.6, 0.55, 0.45, 0.35, 0.25, 0.15, 0.05];
-    let labels = vec![true, true, true, true, false, true, false, false, false, false];
+    let labels = vec![
+        true, true, true, true, false, true, false, false, false, false,
+    ];
 
     let results = rskit_bench::metrics::threshold_sweep(&scores, &labels);
     insta::assert_json_snapshot!("threshold_sweep_legacy", &results);
@@ -685,6 +715,6 @@ fn golden_suite_binary() {
     suite.add(exact_match::<String>());
 
     let results = suite.compute(&data);
-    let stable: Vec<serde_json::Value> = results.iter().map(|m| stable_metric(m)).collect();
+    let stable: Vec<serde_json::Value> = results.iter().map(stable_metric).collect();
     insta::assert_json_snapshot!("suite_binary", stable);
 }

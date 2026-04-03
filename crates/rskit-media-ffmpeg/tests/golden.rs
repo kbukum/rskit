@@ -131,11 +131,14 @@ async fn golden_process_real_image() {
     let meta = probe.probe(&result).await.expect("probe resized image");
     let res = meta.resolution().expect("should have resolution");
 
-    insta::assert_json_snapshot!("process_real_image_resize", serde_json::json!({
-        "output_width": res.width,
-        "output_height": res.height,
-        "has_video_track": meta.has_video(),
-    }));
+    insta::assert_json_snapshot!(
+        "process_real_image_resize",
+        serde_json::json!({
+            "output_width": res.width,
+            "output_height": res.height,
+            "has_video_track": meta.has_video(),
+        })
+    );
 }
 
 // ── Test 5: Process real audio (extract segment) ─────────────────────────────

@@ -71,7 +71,9 @@ impl FileStore for GcsStore {
         Ok(StoredFile {
             key: key.to_string(),
             size,
-            content_type: content_type.unwrap_or("application/octet-stream").to_string(),
+            content_type: content_type
+                .unwrap_or("application/octet-stream")
+                .to_string(),
             stored_at: chrono::Utc::now(),
             metadata: metadata.unwrap_or_default(),
         })

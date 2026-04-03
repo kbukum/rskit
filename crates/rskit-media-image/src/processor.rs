@@ -5,12 +5,7 @@ use std::io::Cursor;
 use image::{DynamicImage, ImageFormat, imageops};
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_file::{FileSink, FileSource, TempFile};
-use rskit_media::{
-    executor::MediaExecutor,
-    filter::FilterTarget,
-    ops::*,
-    pipeline::Progress,
-};
+use rskit_media::{executor::MediaExecutor, filter::FilterTarget, ops::*, pipeline::Progress};
 
 /// Image-specific executor using the `image` crate.
 ///
@@ -31,18 +26,24 @@ impl ImageProcessor {
             })?,
             FileSource::Bytes(b) => b.to_vec(),
             FileSource::Temp(t) => std::fs::read(t.path()).map_err(|e| {
-                AppError::new(ErrorCode::Internal, format!("failed to read temp image: {e}"))
+                AppError::new(
+                    ErrorCode::Internal,
+                    format!("failed to read temp image: {e}"),
+                )
             })?,
             FileSource::Url(_) => {
                 return Err(AppError::new(
                     ErrorCode::InvalidInput,
                     "URL sources not supported; use to_local_path() first",
-                ))
+                ));
             }
         };
 
         image::load_from_memory(&data).map_err(|e| {
-            AppError::new(ErrorCode::InvalidFormat, format!("failed to decode image: {e}"))
+            AppError::new(
+                ErrorCode::InvalidFormat,
+                format!("failed to decode image: {e}"),
+            )
         })
     }
 
@@ -105,15 +106,10 @@ impl MediaExecutor for ImageProcessor {
                 MediaOp::Resize(resize_op) => {
                     let (w, h) = (resize_op.resolution.width, resize_op.resolution.height);
                     img = match resize_op.mode {
-                        ResizeMode::Exact => {
-                            img.resize_exact(w, h, imageops::FilterType::Lanczos3)
-                        }
-                        ResizeMode::Fit => {
-                            img.resize(w, h, imageops::FilterType::Lanczos3)
-                        }
+                        ResizeMode::Exact => img.resize_exact(w, h, imageops::FilterType::Lanczos3),
+                        ResizeMode::Fit => img.resize(w, h, imageops::FilterType::Lanczos3),
                         ResizeMode::Fill => {
-                            let resized = img.resize_to_fill(w, h, imageops::FilterType::Lanczos3);
-                            resized
+                            img.resize_to_fill(w, h, imageops::FilterType::Lanczos3)
                         }
                         ResizeMode::FitWidth => {
                             let ratio = w as f64 / img.width() as f64;
@@ -159,7 +155,9 @@ impl MediaExecutor for ImageProcessor {
                                     .params
                                     .get("radius")
                                     .and_then(|v| match v {
-                                        rskit_media::filter::ParamValue::Float(f) => Some(*f as f32),
+                                        rskit_media::filter::ParamValue::Float(f) => {
+                                            Some(*f as f32)
+                                        }
                                         rskit_media::filter::ParamValue::Int(i) => Some(*i as f32),
                                         _ => None,
                                     })
@@ -171,7 +169,9 @@ impl MediaExecutor for ImageProcessor {
                                     .params
                                     .get("value")
                                     .and_then(|v| match v {
-                                        rskit_media::filter::ParamValue::Float(f) => Some(*f as i32),
+                                        rskit_media::filter::ParamValue::Float(f) => {
+                                            Some(*f as i32)
+                                        }
                                         rskit_media::filter::ParamValue::Int(i) => Some(*i as i32),
                                         _ => None,
                                     })
@@ -183,7 +183,9 @@ impl MediaExecutor for ImageProcessor {
                                     .params
                                     .get("value")
                                     .and_then(|v| match v {
-                                        rskit_media::filter::ParamValue::Float(f) => Some(*f as f32),
+                                        rskit_media::filter::ParamValue::Float(f) => {
+                                            Some(*f as f32)
+                                        }
                                         rskit_media::filter::ParamValue::Int(i) => Some(*i as f32),
                                         _ => None,
                                     })

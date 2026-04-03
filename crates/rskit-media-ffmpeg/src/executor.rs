@@ -2,12 +2,7 @@
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_file::{FileSink, FileSource, TempFile};
-use rskit_media::{
-    executor::MediaExecutor,
-    ops::MediaOp,
-    pipeline::Progress,
-    registry::Registry,
-};
+use rskit_media::{executor::MediaExecutor, ops::MediaOp, pipeline::Progress, registry::Registry};
 
 use crate::{command::FfmpegCommand, config::FfmpegConfig};
 
@@ -30,7 +25,10 @@ impl FfmpegExecutor {
             .output()
             .await
             .map_err(|e| {
-                AppError::new(ErrorCode::ServiceUnavailable, format!("ffmpeg not found: {e}"))
+                AppError::new(
+                    ErrorCode::ServiceUnavailable,
+                    format!("ffmpeg not found: {e}"),
+                )
             })?;
 
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -100,7 +98,8 @@ impl MediaExecutor for FfmpegExecutor {
         };
 
         let cmd = FfmpegCommand::compile(source, ops, sink, &self.config, &self.registry)?;
-        cmd.run(&self.config, Some(on_progress), &output_file).await?;
+        cmd.run(&self.config, Some(on_progress), &output_file)
+            .await?;
 
         match sink {
             Some(FileSink::Path(p)) => Ok(FileSource::Path(p.clone())),
@@ -124,8 +123,7 @@ impl MediaExecutor for FfmpegExecutor {
     }
 
     fn preview(&self, source: &FileSource, ops: &[MediaOp]) -> AppResult<Vec<String>> {
-        let cmd =
-            FfmpegCommand::compile(source, ops, None, &self.config, &self.registry)?;
+        let cmd = FfmpegCommand::compile(source, ops, None, &self.config, &self.registry)?;
         let mut args = vec![self.config.ffmpeg_bin().to_string_lossy().to_string()];
         args.extend(cmd.to_args());
         args.push("<output>".into());

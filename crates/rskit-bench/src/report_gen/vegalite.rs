@@ -17,7 +17,7 @@ impl Reporter for VegaLiteReporter {
         let specs = vegalite_specs(result);
         let json = serde_json::to_string_pretty(&specs)
             .map_err(|e| AppError::new(ErrorCode::Internal, format!("serialize: {e}")))?;
-        write!(w, "{}", json).map_err(io_err)?;
+        write!(w, "{json}").map_err(io_err)?;
         Ok(())
     }
 }

@@ -9,9 +9,9 @@ use rskit_file::FileSource;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    audio::SampleRate,
     format::Format,
     spatial::{FrameRate, Resolution},
-    audio::SampleRate,
     time::Timestamp,
     track::Track,
     types::{MediaType, TrackKind},

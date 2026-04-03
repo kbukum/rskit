@@ -23,12 +23,10 @@ impl Svg {
     }
 
     pub fn rect_f(&mut self, x: f64, y: f64, w: f64, h: f64, fill: &str, attrs: &str) {
-        let mut s = format!(
-            r#"<rect x="{:.2}" y="{:.2}" width="{:.2}" height="{:.2}" fill="{}""#,
-            x, y, w, h, fill
-        );
+        let mut s =
+            format!(r#"<rect x="{x:.2}" y="{y:.2}" width="{w:.2}" height="{h:.2}" fill="{fill}""#);
         if !attrs.is_empty() {
-            write!(s, " {}", attrs).unwrap();
+            write!(s, " {attrs}").unwrap();
         }
         s.push_str("/>");
         self.elements.push(s);
@@ -45,11 +43,10 @@ impl Svg {
         attrs: &str,
     ) {
         let mut s = format!(
-            r#"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="{}" stroke-width="{:.1}""#,
-            x1, y1, x2, y2, stroke, stroke_width
+            r#"<line x1="{x1:.2}" y1="{y1:.2}" x2="{x2:.2}" y2="{y2:.2}" stroke="{stroke}" stroke-width="{stroke_width:.1}""#
         );
         if !attrs.is_empty() {
-            write!(s, " {}", attrs).unwrap();
+            write!(s, " {attrs}").unwrap();
         }
         s.push_str("/>");
         self.elements.push(s);
@@ -64,24 +61,18 @@ impl Svg {
         font_size: usize,
         attrs: &str,
     ) {
-        let mut s = format!(
-            r#"<text x="{:.2}" y="{:.2}" fill="{}" font-size="{}""#,
-            x, y, fill, font_size
-        );
+        let mut s = format!(r#"<text x="{x:.2}" y="{y:.2}" fill="{fill}" font-size="{font_size}""#);
         if !attrs.is_empty() {
-            write!(s, " {}", attrs).unwrap();
+            write!(s, " {attrs}").unwrap();
         }
         write!(s, ">{}</text>", xml_escape(content)).unwrap();
         self.elements.push(s);
     }
 
     pub fn circle(&mut self, cx: f64, cy: f64, r: f64, fill: &str, attrs: &str) {
-        let mut s = format!(
-            r#"<circle cx="{:.2}" cy="{:.2}" r="{:.1}" fill="{}""#,
-            cx, cy, r, fill
-        );
+        let mut s = format!(r#"<circle cx="{cx:.2}" cy="{cy:.2}" r="{r:.1}" fill="{fill}""#);
         if !attrs.is_empty() {
-            write!(s, " {}", attrs).unwrap();
+            write!(s, " {attrs}").unwrap();
         }
         s.push_str("/>");
         self.elements.push(s);
@@ -103,11 +94,10 @@ impl Svg {
             write!(pts, "{:.2},{:.2}", p.x, p.y).unwrap();
         }
         let mut s = format!(
-            r#"<polyline points="{}" stroke="{}" stroke-width="{:.1}" fill="{}""#,
-            pts, stroke, stroke_width, fill
+            r#"<polyline points="{pts}" stroke="{stroke}" stroke-width="{stroke_width:.1}" fill="{fill}""#
         );
         if !attrs.is_empty() {
-            write!(s, " {}", attrs).unwrap();
+            write!(s, " {attrs}").unwrap();
         }
         s.push_str("/>");
         self.elements.push(s);
@@ -180,7 +170,7 @@ pub(crate) fn heat_color(t: f64) -> String {
     let r = (227.0 - t * 114.0) as u8;
     let g = (242.0 - t * 141.0) as u8;
     let b = (253.0 - t * 61.0) as u8;
-    format!("#{:02X}{:02X}{:02X}", r, g, b)
+    format!("#{r:02X}{g:02X}{b:02X}")
 }
 
 pub(crate) fn clamp01(v: f64) -> f64 {

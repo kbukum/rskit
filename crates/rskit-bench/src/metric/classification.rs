@@ -108,7 +108,7 @@ impl<L: PartialEq + Display + Clone + Send + Sync + 'static> Metric<L>
                 matrix[a][p] += 1;
             }
         }
-        let label_strings: Vec<String> = self.labels.iter().map(|l| format!("{}", l)).collect();
+        let label_strings: Vec<String> = self.labels.iter().map(|l| format!("{l}")).collect();
         let detail = ConfusionMatrixDetail {
             labels: label_strings,
             matrix,

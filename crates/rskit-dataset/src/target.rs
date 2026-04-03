@@ -60,9 +60,8 @@ fn walkdir(dir: &Path) -> AppResult<Vec<std::path::PathBuf>> {
         for entry in std::fs::read_dir(dir)
             .map_err(|e| AppError::new(ErrorCode::Internal, format!("read dir failed: {e}")))?
         {
-            let entry = entry.map_err(|e| {
-                AppError::new(ErrorCode::Internal, format!("dir entry error: {e}"))
-            })?;
+            let entry = entry
+                .map_err(|e| AppError::new(ErrorCode::Internal, format!("dir entry error: {e}")))?;
             let path = entry.path();
             if path.is_dir() {
                 files.extend(walkdir(&path)?);

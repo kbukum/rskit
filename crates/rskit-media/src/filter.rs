@@ -77,23 +77,33 @@ pub enum ParamValue {
 }
 
 impl From<i64> for ParamValue {
-    fn from(v: i64) -> Self { Self::Int(v) }
+    fn from(v: i64) -> Self {
+        Self::Int(v)
+    }
 }
 
 impl From<f64> for ParamValue {
-    fn from(v: f64) -> Self { Self::Float(v) }
+    fn from(v: f64) -> Self {
+        Self::Float(v)
+    }
 }
 
 impl From<String> for ParamValue {
-    fn from(v: String) -> Self { Self::Str(v) }
+    fn from(v: String) -> Self {
+        Self::Str(v)
+    }
 }
 
 impl From<&str> for ParamValue {
-    fn from(v: &str) -> Self { Self::Str(v.to_string()) }
+    fn from(v: &str) -> Self {
+        Self::Str(v.to_string())
+    }
 }
 
 impl From<bool> for ParamValue {
-    fn from(v: bool) -> Self { Self::Bool(v) }
+    fn from(v: bool) -> Self {
+        Self::Bool(v)
+    }
 }
 
 /// Convenience constructors for well-known filters.

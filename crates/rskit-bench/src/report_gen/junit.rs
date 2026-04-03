@@ -37,8 +37,7 @@ impl Reporter for JUnitReporter {
         writeln!(w, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>").map_err(io_err)?;
         writeln!(
             w,
-            "<testsuites tests=\"{}\" failures=\"{}\" time=\"{:.3}\">",
-            total, failures, duration_secs
+            "<testsuites tests=\"{total}\" failures=\"{failures}\" time=\"{duration_secs:.3}\">"
         )
         .map_err(io_err)?;
         writeln!(

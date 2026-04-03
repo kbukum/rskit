@@ -89,14 +89,16 @@ impl FileStore for S3Store {
             }
         }
 
-        req.send().await.map_err(|e| {
-            AppError::new(ErrorCode::Internal, format!("S3 upload failed: {e}"))
-        })?;
+        req.send()
+            .await
+            .map_err(|e| AppError::new(ErrorCode::Internal, format!("S3 upload failed: {e}")))?;
 
         Ok(StoredFile {
             key: key.to_string(),
             size,
-            content_type: content_type.unwrap_or("application/octet-stream").to_string(),
+            content_type: content_type
+                .unwrap_or("application/octet-stream")
+                .to_string(),
             stored_at: chrono::Utc::now(),
             metadata: metadata.unwrap_or_default(),
         })
@@ -123,9 +125,10 @@ impl FileStore for S3Store {
             .await
             .map_err(|e| AppError::new(ErrorCode::NotFound, format!("S3 download failed: {e}")))?;
 
-        let data = resp.body.collect().await.map_err(|e| {
-            AppError::new(ErrorCode::Internal, format!("S3 read body failed: {e}"))
-        })?;
+        let data =
+            resp.body.collect().await.map_err(|e| {
+                AppError::new(ErrorCode::Internal, format!("S3 read body failed: {e}"))
+            })?;
 
         Ok(FileSource::Bytes(bytes::Bytes::from(data.to_vec())))
     }
@@ -195,19 +198,22 @@ impl FileStore for S3Store {
             req = req.max_keys(max as i32);
         }
 
-        let resp = req.send().await.map_err(|e| {
-            AppError::new(ErrorCode::Internal, format!("S3 list failed: {e}"))
-        })?;
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| AppError::new(ErrorCode::Internal, format!("S3 list failed: {e}")))?;
 
-        let items = resp.contents().iter().map(|obj| {
-            StoredFile {
+        let items = resp
+            .contents()
+            .iter()
+            .map(|obj| StoredFile {
                 key: obj.key().unwrap_or("").to_string(),
                 size: obj.size().unwrap_or(0) as u64,
                 content_type: "application/octet-stream".to_string(),
                 stored_at: chrono::Utc::now(),
                 metadata: HashMap::new(),
-            }
-        }).collect();
+            })
+            .collect();
 
         Ok(items)
     }

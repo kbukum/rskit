@@ -65,9 +65,10 @@ fn matches_filter(payload: &PointPayload, filter: &SearchFilter) -> bool {
 #[async_trait]
 impl VectorStore for InMemoryVectorStore {
     async fn ensure_collection(&self, collection: &str, dimensions: usize) -> AppResult<()> {
-        let mut collections = self.collections.lock().map_err(|_| {
-            AppError::new(ErrorCode::Internal, "in-memory store lock poisoned")
-        })?;
+        let mut collections = self
+            .collections
+            .lock()
+            .map_err(|_| AppError::new(ErrorCode::Internal, "in-memory store lock poisoned"))?;
         collections
             .entry(collection.to_string())
             .or_insert_with(|| Collection {
@@ -86,9 +87,10 @@ impl VectorStore for InMemoryVectorStore {
     ) -> AppResult<()> {
         debug!(collection, id, "InMemory: upserting vector point");
 
-        let mut collections = self.collections.lock().map_err(|_| {
-            AppError::new(ErrorCode::Internal, "in-memory store lock poisoned")
-        })?;
+        let mut collections = self
+            .collections
+            .lock()
+            .map_err(|_| AppError::new(ErrorCode::Internal, "in-memory store lock poisoned"))?;
 
         let col = collections.get_mut(collection).ok_or_else(|| {
             AppError::new(
@@ -132,9 +134,10 @@ impl VectorStore for InMemoryVectorStore {
     ) -> AppResult<Vec<SearchResult>> {
         debug!(collection, limit, "InMemory: searching vectors");
 
-        let collections = self.collections.lock().map_err(|_| {
-            AppError::new(ErrorCode::Internal, "in-memory store lock poisoned")
-        })?;
+        let collections = self
+            .collections
+            .lock()
+            .map_err(|_| AppError::new(ErrorCode::Internal, "in-memory store lock poisoned"))?;
 
         let col = collections.get(collection).ok_or_else(|| {
             AppError::new(
@@ -149,7 +152,7 @@ impl VectorStore for InMemoryVectorStore {
             .filter(|p| {
                 filter
                     .as_ref()
-                    .map_or(true, |f| matches_filter(&p.payload, f))
+                    .is_none_or(|f| matches_filter(&p.payload, f))
             })
             .map(|p| SearchResult {
                 id: p.id.clone(),
@@ -159,7 +162,11 @@ impl VectorStore for InMemoryVectorStore {
             .collect();
 
         // Sort descending by score
-        scored.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        scored.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         scored.truncate(limit);
 
         Ok(scored)
@@ -168,9 +175,10 @@ impl VectorStore for InMemoryVectorStore {
     async fn delete(&self, collection: &str, id: &str) -> AppResult<()> {
         debug!(collection, id, "InMemory: deleting vector point");
 
-        let mut collections = self.collections.lock().map_err(|_| {
-            AppError::new(ErrorCode::Internal, "in-memory store lock poisoned")
-        })?;
+        let mut collections = self
+            .collections
+            .lock()
+            .map_err(|_| AppError::new(ErrorCode::Internal, "in-memory store lock poisoned"))?;
 
         let col = collections.get_mut(collection).ok_or_else(|| {
             AppError::new(

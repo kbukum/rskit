@@ -65,7 +65,7 @@ pub fn render_distribution(dists: &[ScoreDistribution], width: usize, height: us
         svg.text(
             x,
             top + plot_h + 16.0,
-            &format!("{:.1}", frac),
+            &format!("{frac:.1}"),
             "#666",
             10,
             r#"text-anchor="middle""#,

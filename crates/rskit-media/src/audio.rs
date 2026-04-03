@@ -8,13 +8,21 @@ pub struct SampleRate(pub u32);
 
 impl SampleRate {
     /// Create from Hz value.
-    pub fn hz(n: u32) -> Self { Self(n) }
+    pub fn hz(n: u32) -> Self {
+        Self(n)
+    }
     /// CD quality (44,100 Hz).
-    pub fn cd() -> Self { Self(44100) }
+    pub fn cd() -> Self {
+        Self(44100)
+    }
     /// DVD quality (48,000 Hz).
-    pub fn dvd() -> Self { Self(48000) }
+    pub fn dvd() -> Self {
+        Self(48000)
+    }
     /// HD audio (96,000 Hz).
-    pub fn hd() -> Self { Self(96000) }
+    pub fn hd() -> Self {
+        Self(96000)
+    }
 }
 
 /// Audio channel layout.

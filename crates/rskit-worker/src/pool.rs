@@ -278,7 +278,7 @@ where
     O: Send + Clone + 'static,
 {
     let task_id = env.id;
-    let worker_id = format!("{}/{}", pool_name, task_id);
+    let worker_id = format!("{pool_name}/{task_id}");
 
     // mpsc channel: handler → forwarder → broadcast
     let (emit_tx, mut emit_rx) = mpsc::channel::<Event<O>>(64);

@@ -70,7 +70,10 @@ impl Manifest {
     pub fn save(&self, output_dir: &Path) -> AppResult<()> {
         let path = output_dir.join(MANIFEST_FILE);
         let content = serde_json::to_string_pretty(self).map_err(|e| {
-            AppError::new(ErrorCode::Internal, format!("manifest serialize failed: {e}"))
+            AppError::new(
+                ErrorCode::Internal,
+                format!("manifest serialize failed: {e}"),
+            )
         })?;
         std::fs::write(path, content).map_err(|e| {
             AppError::new(ErrorCode::Internal, format!("manifest write failed: {e}"))
@@ -79,11 +82,7 @@ impl Manifest {
     }
 
     /// Check if a source has usable cached data (completed or partial with items).
-    pub fn is_cached(
-        &self,
-        source_name: &str,
-        config: &serde_json::Value,
-    ) -> Option<&SourceStats> {
+    pub fn is_cached(&self, source_name: &str, config: &serde_json::Value) -> Option<&SourceStats> {
         let entry = self.sources.get(source_name)?;
         if &entry.config != config {
             return None;
@@ -292,7 +291,7 @@ mod tests {
                 assert_eq!(stats.fetched_offset, 600);
                 assert_eq!(stats.total, 500);
             }
-            other => panic!("expected Partial, got {:?}", other),
+            other => panic!("expected Partial, got {other:?}"),
         }
     }
 
@@ -317,7 +316,7 @@ mod tests {
         let loaded = Manifest::load(dir.path());
         match loaded.cache_status("src", &config, Some(1000)) {
             CacheStatus::Done(stats) => assert_eq!(stats.total, 1000),
-            other => panic!("expected Done, got {:?}", other),
+            other => panic!("expected Done, got {other:?}"),
         }
     }
 }

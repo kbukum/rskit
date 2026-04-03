@@ -13,7 +13,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use rskit_errors::{AppError, AppResult, ErrorCode};
-use rskit_file::{detect_mime, file_meta, FileSink, FileSource, TempFile};
+use rskit_file::{FileSink, FileSource, TempFile, detect_mime, file_meta};
 use rskit_media::executor::MediaExecutor;
 use rskit_media::ops::{CropRegion, MediaOp, ResizeMode, ResizeOp, Rotation};
 use rskit_media::spatial::Resolution;
@@ -188,9 +188,9 @@ impl Handler<AgentTask, TaskOutput> for AgentHandler {
                 emit_progress(&emit, task_id, wid, total, total, "Done").await;
 
                 Ok(TaskOutput {
-                    summary: format!("Resized to {}×{} ({})", width, height, out_size),
+                    summary: format!("Resized to {width}×{height} ({out_size})"),
                     details: vec![
-                        ("Target".into(), format!("{}×{}", width, height)),
+                        ("Target".into(), format!("{width}×{height}")),
                         ("Mode".into(), "Fit".into()),
                         ("Output size".into(), out_size),
                     ],
@@ -309,7 +309,9 @@ impl Handler<AgentTask, TaskOutput> for AgentHandler {
 
                 // Real file analysis mixed in
                 let source = FileSource::from_path(&path);
-                let mime = detect_mime(&source).await.unwrap_or_else(|_| "unknown".into());
+                let mime = detect_mime(&source)
+                    .await
+                    .unwrap_or_else(|_| "unknown".into());
                 let meta = file_meta(&source).await.ok();
 
                 for (i, &(msg, delay_ms)) in steps.iter().enumerate() {

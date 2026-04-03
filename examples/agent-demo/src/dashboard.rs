@@ -31,9 +31,9 @@ pub enum TaskStatus {
 impl std::fmt::Display for TaskStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Running   => write!(f, "\x1b[33m⟳ Running\x1b[0m"),
-            Self::Done      => write!(f, "\x1b[32m✓ Done\x1b[0m"),
-            Self::Failed    => write!(f, "\x1b[31m✗ Failed\x1b[0m"),
+            Self::Running => write!(f, "\x1b[33m⟳ Running\x1b[0m"),
+            Self::Done => write!(f, "\x1b[32m✓ Done\x1b[0m"),
+            Self::Failed => write!(f, "\x1b[31m✗ Failed\x1b[0m"),
             Self::Cancelled => write!(f, "\x1b[2m⊘ Cancelled\x1b[0m"),
         }
     }
@@ -48,9 +48,7 @@ pub fn log_thinking(msg: &str) -> String {
 
 /// Task spawned — green bullet with "└ Running" sub-status.
 pub fn log_spawn(id: usize, label: &str) -> String {
-    format!(
-        "  \x1b[32m●\x1b[0m \x1b[1mAgent #{id}\x1b[0m ({label})\n    \x1b[2m└ Running\x1b[0m"
-    )
+    format!("  \x1b[32m●\x1b[0m \x1b[1mAgent #{id}\x1b[0m ({label})\n    \x1b[2m└ Running\x1b[0m")
 }
 
 /// Task completed — green check with summary and duration.
@@ -109,9 +107,18 @@ pub fn format_status_bar(
     pool_capacity: usize,
     elapsed: Duration,
 ) -> String {
-    let running = tasks.iter().filter(|t| t.status == TaskStatus::Running).count();
-    let done = tasks.iter().filter(|t| t.status == TaskStatus::Done).count();
-    let failed = tasks.iter().filter(|t| t.status == TaskStatus::Failed).count();
+    let running = tasks
+        .iter()
+        .filter(|t| t.status == TaskStatus::Running)
+        .count();
+    let done = tasks
+        .iter()
+        .filter(|t| t.status == TaskStatus::Done)
+        .count();
+    let failed = tasks
+        .iter()
+        .filter(|t| t.status == TaskStatus::Failed)
+        .count();
     let elapsed_str = format_duration(elapsed);
 
     let mut parts = Vec::new();

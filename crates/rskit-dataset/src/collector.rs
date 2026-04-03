@@ -18,8 +18,8 @@ use crate::transform::Transform;
 use crate::{DataItem, Label};
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 
@@ -185,10 +185,7 @@ impl Collector {
             )
         })?;
         std::fs::create_dir_all(&ai_dir).map_err(|e| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!("failed to create ai dir: {e}"),
-            )
+            AppError::new(ErrorCode::Internal, format!("failed to create ai dir: {e}"))
         })?;
 
         let mut result = CollectorResult {
@@ -220,9 +217,12 @@ impl Collector {
                             .source_stats
                             .insert(source.name().to_string(), stats.clone());
                         result.cached_sources.push(source.name().to_string());
-                        self.progress
-                            .on_source_cached(idx, source.name(), &stats);
-                        tracing::debug!(source = source.name(), total = stats.total, "cached, skipping");
+                        self.progress.on_source_cached(idx, source.name(), &stats);
+                        tracing::debug!(
+                            source = source.name(),
+                            total = stats.total,
+                            "cached, skipping"
+                        );
                         continue;
                     }
                     CacheStatus::Partial(stats) => {
@@ -388,11 +388,7 @@ impl Collector {
                             result.total_items += stats.total;
                             result.real_count += stats.real;
                             result.ai_count += stats.ai;
-                            manifest.mark_partial(
-                                name.clone(),
-                                cache_key.clone(),
-                                stats.clone(),
-                            );
+                            manifest.mark_partial(name.clone(), cache_key.clone(), stats.clone());
                         }
                         self.progress.on_source_error(index, name, error);
                     }
@@ -410,8 +406,7 @@ impl Collector {
             tracing::debug!(target = target.name(), "publishing");
             match target.publish(out, None).await {
                 Ok(pub_result) => {
-                    self.progress
-                        .on_publish_done(target.name(), &pub_result);
+                    self.progress.on_publish_done(target.name(), &pub_result);
                     result.publish_results.push(pub_result);
                 }
                 Err(e) => {

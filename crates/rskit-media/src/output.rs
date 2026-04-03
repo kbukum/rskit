@@ -5,11 +5,11 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    audio::{ChannelLayout, SampleRate},
     codec::Codec,
     format::Format,
     registry::Registry,
     spatial::{FrameRate, Resolution},
-    audio::{ChannelLayout, SampleRate},
 };
 use rskit_errors::{AppError, AppResult, ErrorCode};
 

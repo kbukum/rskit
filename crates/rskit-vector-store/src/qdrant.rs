@@ -3,11 +3,11 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
+use qdrant_client::Qdrant;
 use qdrant_client::qdrant::{
     Condition, CreateCollectionBuilder, DeletePointsBuilder, Distance, Filter, PointStruct,
     SearchPointsBuilder, UpsertPointsBuilder, VectorParamsBuilder,
 };
-use qdrant_client::Qdrant;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use tracing::{debug, info};
 
@@ -70,11 +70,9 @@ impl VectorStore for QdrantVectorStore {
         if !exists {
             info!(collection, dimensions, "Creating Qdrant collection");
             self.client
-                .create_collection(
-                    CreateCollectionBuilder::new(collection).vectors_config(
-                        VectorParamsBuilder::new(dimensions as u64, Distance::Cosine),
-                    ),
-                )
+                .create_collection(CreateCollectionBuilder::new(collection).vectors_config(
+                    VectorParamsBuilder::new(dimensions as u64, Distance::Cosine),
+                ))
                 .await
                 .map_err(|e| {
                     AppError::new(
@@ -137,10 +135,8 @@ impl VectorStore for QdrantVectorStore {
                     .filter_map(|(field, value)| {
                         if let Some(s) = value.as_str() {
                             Some(Condition::matches(field, s.to_string()))
-                        } else if let Some(n) = value.as_i64() {
-                            Some(Condition::matches(field, n))
                         } else {
-                            None
+                            value.as_i64().map(|n| Condition::matches(field, n))
                         }
                     })
                     .collect();
@@ -182,8 +178,8 @@ impl VectorStore for QdrantVectorStore {
     async fn delete(&self, collection: &str, id: &str) -> AppResult<()> {
         debug!(collection, id, "Deleting vector point");
 
-        use qdrant_client::qdrant::point_id::PointIdOptions;
         use qdrant_client::qdrant::PointId;
+        use qdrant_client::qdrant::point_id::PointIdOptions;
 
         let point_id = PointId {
             point_id_options: Some(PointIdOptions::Uuid(id.to_string())),

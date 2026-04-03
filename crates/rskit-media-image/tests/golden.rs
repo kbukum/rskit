@@ -64,11 +64,14 @@ async fn golden_resize_real_jpeg() {
     let result = processor.execute(&source, &ops, None).await.unwrap();
     let (w, h) = read_dimensions(&result);
 
-    insta::assert_json_snapshot!("resize_real_jpeg", serde_json::json!({
-        "width": w,
-        "height": h,
-        "format": "jpeg",
-    }));
+    insta::assert_json_snapshot!(
+        "resize_real_jpeg",
+        serde_json::json!({
+            "width": w,
+            "height": h,
+            "format": "jpeg",
+        })
+    );
 }
 
 // ── Test 2: Multi-format processing ──────────────────────────────────────────
@@ -94,10 +97,13 @@ async fn golden_multi_format_pipeline() {
     let png_result = processor.execute(&png_source, &ops, None).await.unwrap();
     let (pw, ph) = read_dimensions(&png_result);
 
-    insta::assert_json_snapshot!("multi_format_pipeline", serde_json::json!({
-        "jpeg": { "width": jw, "height": jh },
-        "png":  { "width": pw, "height": ph },
-    }));
+    insta::assert_json_snapshot!(
+        "multi_format_pipeline",
+        serde_json::json!({
+            "jpeg": { "width": jw, "height": jh },
+            "png":  { "width": pw, "height": ph },
+        })
+    );
 }
 
 // ── Test 3: Crop real image ──────────────────────────────────────────────────
@@ -114,10 +120,13 @@ async fn golden_crop_center_real_photo() {
     let result = processor.execute(&source, &ops, None).await.unwrap();
     let (w, h) = read_dimensions(&result);
 
-    insta::assert_json_snapshot!("crop_center_real_photo", serde_json::json!({
-        "width": w,
-        "height": h,
-    }));
+    insta::assert_json_snapshot!(
+        "crop_center_real_photo",
+        serde_json::json!({
+            "width": w,
+            "height": h,
+        })
+    );
 }
 
 // ── Test 4: Rotate real image ────────────────────────────────────────────────
@@ -134,12 +143,15 @@ async fn golden_rotate_90() {
     let (w, h) = read_dimensions(&result);
 
     // 500x378 rotated 90° → 378x500
-    insta::assert_json_snapshot!("rotate_90_real_photo", serde_json::json!({
-        "original_width": 500,
-        "original_height": 378,
-        "rotated_width": w,
-        "rotated_height": h,
-    }));
+    insta::assert_json_snapshot!(
+        "rotate_90_real_photo",
+        serde_json::json!({
+            "original_width": 500,
+            "original_height": 378,
+            "rotated_width": w,
+            "rotated_height": h,
+        })
+    );
 }
 
 // ── Test 5: Format conversion ────────────────────────────────────────────────
@@ -187,9 +199,12 @@ async fn golden_pipeline_resize_crop_rotate() {
     let (w, h) = read_dimensions(&result);
 
     // 200x200 → crop center 100x100 → rotate 90° → 100x100 (square stays square)
-    insta::assert_json_snapshot!("pipeline_resize_crop_rotate", serde_json::json!({
-        "final_width": w,
-        "final_height": h,
-        "pipeline_steps": ["resize(200x200)", "crop(100x100)", "rotate(90)"],
-    }));
+    insta::assert_json_snapshot!(
+        "pipeline_resize_crop_rotate",
+        serde_json::json!({
+            "final_width": w,
+            "final_height": h,
+            "pipeline_steps": ["resize(200x200)", "crop(100x100)", "rotate(90)"],
+        })
+    );
 }

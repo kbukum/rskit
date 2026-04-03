@@ -125,7 +125,7 @@ mod tests {
         let pool = Pool::new(Arc::new(ErrorHandler), PoolConfig::new("error-pool"));
         let handle = pool.submit(1).await.unwrap();
         let result = handle.result().await;
-        assert!(result.is_err(), "expected Err but got {:?}", result);
+        assert!(result.is_err(), "expected Err but got {result:?}");
     }
 
     // ── 3. pool_task_handle_events ────────────────────────────────────────────

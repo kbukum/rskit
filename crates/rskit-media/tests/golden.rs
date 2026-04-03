@@ -1,7 +1,7 @@
 use rskit_media::{
+    Registry,
     codec::{self, Codec, CodecKind},
     format::{self, Format},
-    Registry,
 };
 
 // ── Registry Codec Lookups ──────────────────────────────────────────

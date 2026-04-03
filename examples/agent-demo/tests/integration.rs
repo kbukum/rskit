@@ -11,8 +11,8 @@ use rskit_errors::AppResult;
 use rskit_worker::{EventKind, Pool, PoolConfig};
 
 use agent_demo::dashboard::{self, TaskStatus, TrackedTask};
-use agent_demo::tasks::{AgentHandler, AgentTask, TaskOutput};
 use agent_demo::shell;
+use agent_demo::tasks::{AgentHandler, AgentTask, TaskOutput};
 
 fn fixture_dir() -> PathBuf {
     shell::fixture_dir()
@@ -156,7 +156,11 @@ async fn four_tasks_run_in_parallel() -> AppResult<()> {
 
     // At least some should be running in parallel
     let stats = pool.stats();
-    assert!(stats.running >= 2, "expected parallel execution, got {} running", stats.running);
+    assert!(
+        stats.running >= 2,
+        "expected parallel execution, got {} running",
+        stats.running
+    );
 
     // Wait for all
     for h in task_handles {
@@ -169,8 +173,7 @@ async fn four_tasks_run_in_parallel() -> AppResult<()> {
     // Each 5-item batch takes ~1.5-2.5s, so all 4 in parallel should take < 5s
     assert!(
         elapsed < Duration::from_secs(8),
-        "4 parallel tasks took {:?}, expected < 8s (sequential would be ~10s)",
-        elapsed
+        "4 parallel tasks took {elapsed:?}, expected < 8s (sequential would be ~10s)"
     );
 
     pool.shutdown().await.ok();
@@ -244,8 +247,7 @@ async fn tasks_emit_progress_events() -> AppResult<()> {
 
     assert!(
         progress_count >= 5,
-        "expected at least 5 progress events, got {}",
-        progress_count
+        "expected at least 5 progress events, got {progress_count}"
     );
 
     // Clean up
@@ -346,7 +348,7 @@ fn fixture_dir_has_images() {
 #[test]
 fn resolve_path_finds_fixtures() {
     let p = shell::resolve_path("image/real-photo.jpg");
-    assert!(p.exists(), "fixture should exist at {:?}", p);
+    assert!(p.exists(), "fixture should exist at {p:?}");
 }
 
 // ── Full demo scenario: all 4 task types in parallel ──────────────────
@@ -361,10 +363,28 @@ async fn demo_tasks_all_complete_in_parallel() -> AppResult<()> {
     let start = Instant::now();
     let fdir = fixture_dir();
 
-    let h1 = pool.submit(AgentTask::Analyze { path: fdir.join("image/real-photo.jpg") }).await?;
-    let h2 = pool.submit(AgentTask::Resize { path: fdir.join("image/sample.png"), width: 64, height: 64 }).await?;
-    let h3 = pool.submit(AgentTask::Pipeline { path: fdir.join("image/ai-generated.jpg") }).await?;
-    let h4 = pool.submit(AgentTask::CodeReview { path: fdir.join("image/real-photo.jpg") }).await?;
+    let h1 = pool
+        .submit(AgentTask::Analyze {
+            path: fdir.join("image/real-photo.jpg"),
+        })
+        .await?;
+    let h2 = pool
+        .submit(AgentTask::Resize {
+            path: fdir.join("image/sample.png"),
+            width: 64,
+            height: 64,
+        })
+        .await?;
+    let h3 = pool
+        .submit(AgentTask::Pipeline {
+            path: fdir.join("image/ai-generated.jpg"),
+        })
+        .await?;
+    let h4 = pool
+        .submit(AgentTask::CodeReview {
+            path: fdir.join("image/real-photo.jpg"),
+        })
+        .await?;
 
     let r1 = h1.result().await?;
     let r2 = h2.result().await?;
@@ -383,8 +403,7 @@ async fn demo_tasks_all_complete_in_parallel() -> AppResult<()> {
     // In parallel (4 workers), should complete within the longest single task + overhead.
     assert!(
         elapsed < Duration::from_secs(30),
-        "4 demo tasks in parallel took {:?}, expected < 30s (sequential would be ~57s)",
-        elapsed
+        "4 demo tasks in parallel took {elapsed:?}, expected < 30s (sequential would be ~57s)"
     );
 
     pool.shutdown().await.ok();

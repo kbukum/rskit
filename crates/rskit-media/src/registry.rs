@@ -144,7 +144,13 @@ impl Registry {
             display_name: "H.264 / AVC".into(),
             ffmpeg_encoder: Some("libx264".into()),
             ffmpeg_decoder: Some("h264".into()),
-            compatible_formats: vec![mp4.clone(), mkv.clone(), avi.clone(), mov.clone(), ts.clone()],
+            compatible_formats: vec![
+                mp4.clone(),
+                mkv.clone(),
+                avi.clone(),
+                mov.clone(),
+                ts.clone(),
+            ],
         });
         self.register_codec(CodecInfo {
             id: Codec::new(codec::video::H265),
@@ -234,7 +240,13 @@ impl Registry {
             display_name: "MP3".into(),
             ffmpeg_encoder: Some("libmp3lame".into()),
             ffmpeg_decoder: Some("mp3".into()),
-            compatible_formats: vec![mp4.clone(), mkv.clone(), avi.clone(), ts.clone(), mp3f.clone()],
+            compatible_formats: vec![
+                mp4.clone(),
+                mkv.clone(),
+                avi.clone(),
+                ts.clone(),
+                mp3f.clone(),
+            ],
         });
         self.register_codec(CodecInfo {
             id: Codec::new(codec::audio::FLAC),

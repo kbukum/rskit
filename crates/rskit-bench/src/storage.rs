@@ -16,8 +16,12 @@ pub fn save_run(dir: &Path, result: &RunResult) -> AppResult<String> {
 /// Load a run result by ID.
 pub fn load_run(dir: &Path, run_id: &str) -> AppResult<RunResult> {
     let path = dir.join(format!("{run_id}.json"));
-    let content = std::fs::read_to_string(&path)
-        .map_err(|e| AppError::new(ErrorCode::NotFound, format!("Run not found: {} ({})", run_id, e)))?;
+    let content = std::fs::read_to_string(&path).map_err(|e| {
+        AppError::new(
+            ErrorCode::NotFound,
+            format!("Run not found: {run_id} ({e})"),
+        )
+    })?;
     Ok(serde_json::from_str(&content)?)
 }
 
@@ -40,9 +44,12 @@ pub fn latest_run(dir: &Path) -> AppResult<RunResult> {
         mb.cmp(&ma)
     });
 
-    let latest = entries
-        .first()
-        .ok_or_else(|| AppError::new(ErrorCode::NotFound, format!("No runs found in {}", dir.display())))?;
+    let latest = entries.first().ok_or_else(|| {
+        AppError::new(
+            ErrorCode::NotFound,
+            format!("No runs found in {}", dir.display()),
+        )
+    })?;
 
     let run_id = latest
         .path()

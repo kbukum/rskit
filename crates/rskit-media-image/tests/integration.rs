@@ -1,12 +1,12 @@
 //! Integration tests for rskit-media-image: ImageProcessor with real image fixtures.
 
-use image::{DynamicImage, RgbImage, Rgb, ImageFormat};
-use rskit_file::{FileSource, FileSink, TempFile, TempDir};
+use image::{ImageFormat, Rgb, RgbImage};
+use rskit_file::{FileSink, FileSource, TempDir, TempFile};
 use rskit_media::{
     executor::MediaExecutor,
     filter::{Filter, FilterTarget, ParamValue, Params},
     format::Format,
-    ops::{MediaOp, ResizeOp, ResizeMode, CropRegion, Rotation, FlipDirection},
+    ops::{CropRegion, FlipDirection, MediaOp, ResizeMode, ResizeOp, Rotation},
     output::OutputConfig,
     spatial::Resolution,
 };
@@ -60,15 +60,9 @@ fn read_dimensions(source: &FileSource) -> (u32, u32) {
 /// Read image format from bytes.
 fn detect_image_format(source: &FileSource) -> ImageFormat {
     match source {
-        FileSource::Path(p) => {
-            ImageFormat::from_path(p).expect("detect format")
-        }
-        FileSource::Bytes(b) => {
-            image::guess_format(b).expect("guess format")
-        }
-        FileSource::Temp(t) => {
-            ImageFormat::from_path(t.path()).expect("detect format from temp")
-        }
+        FileSource::Path(p) => ImageFormat::from_path(p).expect("detect format"),
+        FileSource::Bytes(b) => image::guess_format(b).expect("guess format"),
+        FileSource::Temp(t) => ImageFormat::from_path(t.path()).expect("detect format from temp"),
         _ => panic!("unsupported source type"),
     }
 }
@@ -86,7 +80,10 @@ async fn resize_exact() {
         mode: ResizeMode::Exact,
     })];
 
-    let result = processor.execute(&source, &ops, None).await.expect("resize");
+    let result = processor
+        .execute(&source, &ops, None)
+        .await
+        .expect("resize");
     let (w, h) = read_dimensions(&result);
     assert_eq!((w, h), (50, 30));
 }
@@ -102,7 +99,10 @@ async fn resize_fit() {
         mode: ResizeMode::Fit,
     })];
 
-    let result = processor.execute(&source, &ops, None).await.expect("resize fit");
+    let result = processor
+        .execute(&source, &ops, None)
+        .await
+        .expect("resize fit");
     let (w, h) = read_dimensions(&result);
     // 200×100 fitting into 100×100 → should be 100×50 (preserving 2:1 ratio)
     assert!(w <= 100 && h <= 100, "got: {w}×{h}");
@@ -121,7 +121,10 @@ async fn resize_fill() {
         mode: ResizeMode::Fill,
     })];
 
-    let result = processor.execute(&source, &ops, None).await.expect("resize fill");
+    let result = processor
+        .execute(&source, &ops, None)
+        .await
+        .expect("resize fill");
     let (w, h) = read_dimensions(&result);
     assert_eq!((w, h), (100, 100));
 }
@@ -137,7 +140,10 @@ async fn resize_fit_width() {
         mode: ResizeMode::FitWidth,
     })];
 
-    let result = processor.execute(&source, &ops, None).await.expect("resize fit width");
+    let result = processor
+        .execute(&source, &ops, None)
+        .await
+        .expect("resize fit width");
     let (w, h) = read_dimensions(&result);
     assert_eq!(w, 100);
     assert_eq!(h, 50, "should maintain 2:1 ratio");
@@ -154,7 +160,10 @@ async fn resize_fit_height() {
         mode: ResizeMode::FitHeight,
     })];
 
-    let result = processor.execute(&source, &ops, None).await.expect("resize fit height");
+    let result = processor
+        .execute(&source, &ops, None)
+        .await
+        .expect("resize fit height");
     let (w, h) = read_dimensions(&result);
     assert_eq!(h, 50);
     assert_eq!(w, 100, "should maintain 2:1 ratio");
@@ -184,7 +193,10 @@ async fn rotate_90() {
     let processor = ImageProcessor::new();
 
     let ops = vec![MediaOp::Rotate(Rotation::Degrees90)];
-    let result = processor.execute(&source, &ops, None).await.expect("rotate 90");
+    let result = processor
+        .execute(&source, &ops, None)
+        .await
+        .expect("rotate 90");
     let (w, h) = read_dimensions(&result);
     assert_eq!((w, h), (50, 100), "90° rotation should swap dimensions");
 }
@@ -196,7 +208,10 @@ async fn rotate_180() {
     let processor = ImageProcessor::new();
 
     let ops = vec![MediaOp::Rotate(Rotation::Degrees180)];
-    let result = processor.execute(&source, &ops, None).await.expect("rotate 180");
+    let result = processor
+        .execute(&source, &ops, None)
+        .await
+        .expect("rotate 180");
     let (w, h) = read_dimensions(&result);
     assert_eq!((w, h), (100, 50), "180° should keep same dimensions");
 }
@@ -208,7 +223,10 @@ async fn rotate_270() {
     let processor = ImageProcessor::new();
 
     let ops = vec![MediaOp::Rotate(Rotation::Degrees270)];
-    let result = processor.execute(&source, &ops, None).await.expect("rotate 270");
+    let result = processor
+        .execute(&source, &ops, None)
+        .await
+        .expect("rotate 270");
     let (w, h) = read_dimensions(&result);
     assert_eq!((w, h), (50, 100));
 }
@@ -222,7 +240,10 @@ async fn flip_horizontal() {
     let processor = ImageProcessor::new();
 
     let ops = vec![MediaOp::Flip(FlipDirection::Horizontal)];
-    let result = processor.execute(&source, &ops, None).await.expect("flip h");
+    let result = processor
+        .execute(&source, &ops, None)
+        .await
+        .expect("flip h");
     let (w, h) = read_dimensions(&result);
     assert_eq!((w, h), (100, 100), "flip should not change dimensions");
 }
@@ -234,7 +255,10 @@ async fn flip_vertical() {
     let processor = ImageProcessor::new();
 
     let ops = vec![MediaOp::Flip(FlipDirection::Vertical)];
-    let result = processor.execute(&source, &ops, None).await.expect("flip v");
+    let result = processor
+        .execute(&source, &ops, None)
+        .await
+        .expect("flip v");
     let (w, h) = read_dimensions(&result);
     assert_eq!((w, h), (100, 100));
 }
@@ -253,7 +277,10 @@ async fn filter_grayscale() {
         params: Params::new(),
     })];
 
-    let result = processor.execute(&source, &ops, None).await.expect("grayscale");
+    let result = processor
+        .execute(&source, &ops, None)
+        .await
+        .expect("grayscale");
     let (w, h) = read_dimensions(&result);
     assert_eq!((w, h), (50, 50));
 }
@@ -287,7 +314,10 @@ async fn filter_brightness() {
         params: Params::new().set("value", ParamValue::Int(30)),
     })];
 
-    let result = processor.execute(&source, &ops, None).await.expect("brightness");
+    let result = processor
+        .execute(&source, &ops, None)
+        .await
+        .expect("brightness");
     let (w, h) = read_dimensions(&result);
     assert_eq!((w, h), (50, 50));
 }
@@ -304,7 +334,10 @@ async fn filter_contrast() {
         params: Params::new().set("value", ParamValue::Float(1.5)),
     })];
 
-    let result = processor.execute(&source, &ops, None).await.expect("contrast");
+    let result = processor
+        .execute(&source, &ops, None)
+        .await
+        .expect("contrast");
     let (w, h) = read_dimensions(&result);
     assert_eq!((w, h), (50, 50));
 }
@@ -330,7 +363,10 @@ async fn transcode_png_to_jpeg() {
     };
 
     let ops = vec![MediaOp::Transcode(config)];
-    let result = processor.execute(&source, &ops, Some(&sink)).await.expect("transcode");
+    let result = processor
+        .execute(&source, &ops, Some(&sink))
+        .await
+        .expect("transcode");
 
     match &result {
         FileSource::Path(p) => {
@@ -360,7 +396,10 @@ async fn transcode_png_to_webp() {
     };
 
     let ops = vec![MediaOp::Transcode(config)];
-    let result = processor.execute(&source, &ops, Some(&sink)).await.expect("transcode webp");
+    let result = processor
+        .execute(&source, &ops, Some(&sink))
+        .await
+        .expect("transcode webp");
 
     // Verify output file exists and is valid
     match &result {
@@ -386,7 +425,10 @@ async fn multi_op_resize_then_crop_then_rotate() {
         MediaOp::Rotate(Rotation::Degrees90),
     ];
 
-    let result = processor.execute(&source, &ops, None).await.expect("multi-op");
+    let result = processor
+        .execute(&source, &ops, None)
+        .await
+        .expect("multi-op");
     let (w, h) = read_dimensions(&result);
     // 200×200 → 100×100 → crop 50×50 → rotate 90° → 50×50
     assert_eq!((w, h), (50, 50));
@@ -405,7 +447,10 @@ async fn output_to_path() {
     let sink = FileSink::Path(out_path.clone());
 
     let ops = vec![MediaOp::Flip(FlipDirection::Horizontal)];
-    let result = processor.execute(&source, &ops, Some(&sink)).await.expect("output path");
+    let result = processor
+        .execute(&source, &ops, Some(&sink))
+        .await
+        .expect("output path");
 
     match result {
         FileSource::Path(p) => {
@@ -423,7 +468,10 @@ async fn output_to_memory() {
     let processor = ImageProcessor::new();
 
     let ops = vec![MediaOp::Flip(FlipDirection::Horizontal)];
-    let result = processor.execute(&source, &ops, Some(&FileSink::Memory)).await.expect("output memory");
+    let result = processor
+        .execute(&source, &ops, Some(&FileSink::Memory))
+        .await
+        .expect("output memory");
 
     match &result {
         FileSource::Bytes(b) => {
@@ -443,11 +491,17 @@ async fn output_to_temp() {
     let processor = ImageProcessor::new();
 
     let ops = vec![MediaOp::Flip(FlipDirection::Horizontal)];
-    let result = processor.execute(&source, &ops, Some(&FileSink::Temp)).await.expect("output temp");
+    let result = processor
+        .execute(&source, &ops, Some(&FileSink::Temp))
+        .await
+        .expect("output temp");
 
     match &result {
         FileSource::Temp(t) => assert!(t.path().exists()),
-        _ => panic!("expected Temp result, got: {:?}", std::mem::discriminant(&result)),
+        _ => panic!(
+            "expected Temp result, got: {:?}",
+            std::mem::discriminant(&result)
+        ),
     }
 }
 
@@ -503,7 +557,10 @@ async fn perf_resize_comparison() {
     // Measure ImageProcessor
     let start = std::time::Instant::now();
     for _ in 0..5 {
-        let _ = processor.execute(&source, &ops, None).await.expect("resize");
+        let _ = processor
+            .execute(&source, &ops, None)
+            .await
+            .expect("resize");
     }
     let processor_time = start.elapsed() / 5;
 
@@ -516,21 +573,19 @@ async fn perf_resize_comparison() {
     let raw_time = start.elapsed() / 5;
 
     println!("=== Image Resize Performance (1000×1000 → 200×200, avg of 5) ===");
-    println!("  ImageProcessor:   {:?}", processor_time);
-    println!("  Raw image crate:  {:?}", raw_time);
+    println!("  ImageProcessor:   {processor_time:?}");
+    println!("  Raw image crate:  {raw_time:?}");
     let overhead_pct = if raw_time.as_nanos() > 0 {
         ((processor_time.as_nanos() as f64 / raw_time.as_nanos() as f64) - 1.0) * 100.0
     } else {
         0.0
     };
-    println!("  Overhead:         {:.1}%", overhead_pct);
+    println!("  Overhead:         {overhead_pct:.1}%");
 
     // ImageProcessor should not be more than 50% slower than raw
     assert!(
         processor_time < raw_time * 3,
-        "ImageProcessor is too slow: {:?} vs {:?}",
-        processor_time,
-        raw_time
+        "ImageProcessor is too slow: {processor_time:?} vs {raw_time:?}"
     );
 }
 
@@ -558,14 +613,14 @@ async fn perf_crop_comparison() {
     let raw_time = start.elapsed() / 5;
 
     println!("=== Image Crop Performance (1000×1000 → 500×500, avg of 5) ===");
-    println!("  ImageProcessor:   {:?}", processor_time);
-    println!("  Raw image crate:  {:?}", raw_time);
+    println!("  ImageProcessor:   {processor_time:?}");
+    println!("  Raw image crate:  {raw_time:?}");
     let overhead_pct = if raw_time.as_nanos() > 0 {
         ((processor_time.as_nanos() as f64 / raw_time.as_nanos() as f64) - 1.0) * 100.0
     } else {
         0.0
     };
-    println!("  Overhead:         {:.1}%", overhead_pct);
+    println!("  Overhead:         {overhead_pct:.1}%");
 }
 
 #[tokio::test]
@@ -586,10 +641,13 @@ async fn perf_multi_op_pipeline() {
 
     let start = std::time::Instant::now();
     for _ in 0..5 {
-        let _ = processor.execute(&source, &ops, None).await.expect("multi-op");
+        let _ = processor
+            .execute(&source, &ops, None)
+            .await
+            .expect("multi-op");
     }
     let avg = start.elapsed() / 5;
 
     println!("=== Multi-Op Pipeline (resize+crop+rotate+flip, avg of 5) ===");
-    println!("  Average time: {:?}", avg);
+    println!("  Average time: {avg:?}");
 }
