@@ -8,8 +8,9 @@ use async_trait::async_trait;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use tokio::sync::{Mutex, broadcast};
 
+use crate::event::Event;
 use crate::message::Message;
-use crate::traits::{MessageConsumer, MessageProducer};
+use crate::traits::{EventConsumer, EventProducer, MessageConsumer, MessageProducer};
 
 /// An in-memory message broker backed by a `tokio::sync::broadcast` channel.
 ///
@@ -123,6 +124,43 @@ impl<T: Clone + Send + Sync + 'static> MessageConsumer<T> for InMemoryConsumer<T
     }
 }
 
+#[async_trait]
+impl EventProducer for InMemoryProducer<serde_json::Value> {
+    async fn publish(&self, topic: &str, event: Event) -> AppResult<()> {
+        let value = serde_json::to_value(&event).map_err(|e| {
+            AppError::new(
+                ErrorCode::Internal,
+                format!("Failed to serialize event: {e}"),
+            )
+        })?;
+        self.send(Message::new(topic, value)).await
+    }
+
+    async fn publish_batch(&self, topic: &str, events: Vec<Event>) -> AppResult<()> {
+        for event in events {
+            self.publish(topic, event).await?;
+        }
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl EventConsumer for InMemoryConsumer<serde_json::Value> {
+    async fn subscribe(&self, topics: &[&str]) -> AppResult<()> {
+        MessageConsumer::subscribe(self, topics).await
+    }
+
+    async fn recv_event(&self) -> AppResult<Event> {
+        let msg = self.recv().await?;
+        serde_json::from_value(msg.payload).map_err(|e| {
+            AppError::new(
+                ErrorCode::Internal,
+                format!("Failed to deserialize event: {e}"),
+            )
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -193,5 +231,56 @@ mod tests {
         let broker: InMemoryBroker<()> = InMemoryBroker::new(4);
         let producer = broker.producer();
         producer.flush(Duration::from_secs(1)).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn event_publish_and_receive() {
+        let broker: InMemoryBroker<serde_json::Value> = InMemoryBroker::new(16);
+        let producer = broker.producer();
+        let consumer = broker.consumer();
+
+        EventConsumer::subscribe(&consumer, &["events"])
+            .await
+            .unwrap();
+
+        let event = Event::new("user.created", "auth-service")
+            .with_subject("user-42")
+            .with_data(serde_json::json!({"name": "Alice"}))
+            .unwrap();
+        let original_id = event.id.clone();
+
+        producer.publish("events", event).await.unwrap();
+
+        let received = consumer.recv_event().await.unwrap();
+        assert_eq!(received.id, original_id);
+        assert_eq!(received.event_type, "user.created");
+        assert_eq!(received.source, "auth-service");
+        assert_eq!(received.subject, "user-42");
+        assert_eq!(received.data, serde_json::json!({"name": "Alice"}));
+    }
+
+    #[tokio::test]
+    async fn event_publish_batch_and_receive() {
+        let broker: InMemoryBroker<serde_json::Value> = InMemoryBroker::new(16);
+        let producer = broker.producer();
+        let consumer = broker.consumer();
+
+        EventConsumer::subscribe(&consumer, &["batch"])
+            .await
+            .unwrap();
+
+        let events = vec![
+            Event::new("a", "src"),
+            Event::new("b", "src"),
+            Event::new("c", "src"),
+        ];
+        producer.publish_batch("batch", events).await.unwrap();
+
+        let a = consumer.recv_event().await.unwrap();
+        let b = consumer.recv_event().await.unwrap();
+        let c = consumer.recv_event().await.unwrap();
+        assert_eq!(a.event_type, "a");
+        assert_eq!(b.event_type, "b");
+        assert_eq!(c.event_type, "c");
     }
 }

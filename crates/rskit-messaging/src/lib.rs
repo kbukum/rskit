@@ -24,11 +24,16 @@
 //! ```
 
 pub mod config;
+pub mod event;
 pub mod memory;
 pub mod message;
 pub mod traits;
 
-pub use config::{Compression, KafkaConfig, OffsetReset};
+#[cfg(feature = "kafka")]
+pub mod kafka;
+
+pub use config::{Compression, KafkaConfig, OffsetReset, SecurityProtocol};
+pub use event::Event;
 pub use memory::{InMemoryBroker, InMemoryConsumer, InMemoryProducer};
 pub use message::Message;
-pub use traits::{MessageConsumer, MessageProducer};
+pub use traits::{EventConsumer, EventProducer, MessageConsumer, MessageProducer};
