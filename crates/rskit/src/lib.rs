@@ -79,6 +79,10 @@ pub use rskit_server as server;
 #[cfg(feature = "http")]
 pub use rskit_http as http;
 
+/// Async HTTP client with auth, retries, and error handling.
+#[cfg(feature = "httpclient")]
+pub use rskit_httpclient as httpclient;
+
 /// JWT, OIDC, password hashing, and request-context auth helpers.
 #[cfg(feature = "auth")]
 pub use rskit_auth as auth;

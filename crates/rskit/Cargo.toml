@@ -31,6 +31,7 @@ rskit-validation = { path = "../rskit-validation" }
 
 # Feature-gated crates
 rskit-server        = { path = "../rskit-server",        optional = true }
+rskit-grpc-client   = { path = "../rskit-grpc-client",   optional = true }
 rskit-encryption    = { path = "../rskit-encryption",    optional = true }
 rskit-http          = { path = "../rskit-http",          optional = true }
 rskit-httpclient    = { path = "../rskit-httpclient",    optional = true }
@@ -63,6 +64,7 @@ async-trait = { workspace = true }
 [features]
 default       = []
 server        = ["dep:rskit-server"]
+grpc-client   = ["dep:rskit-grpc-client"]
 encryption    = ["dep:rskit-encryption"]
 http          = ["dep:rskit-http"]
 httpclient    = ["dep:rskit-httpclient"]
@@ -89,7 +91,7 @@ cli           = ["dep:rskit-cli"]
 dataset       = ["dep:rskit-dataset", "cli"]
 bench         = ["dep:rskit-bench"]
 full          = [
-    "server", "encryption", "http", "httpclient", "auth", "di", "database", "cache", "messaging",
+    "server", "grpc-client", "encryption", "http", "httpclient", "auth", "di", "database", "cache", "messaging",
     "observability", "authz", "discovery", "testutil", "sse", "dag", "llm",
     "media-full", "file", "cli", "dataset", "bench",
 ]
