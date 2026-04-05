@@ -131,6 +131,10 @@ pub use rskit_llm as llm;
 #[cfg(feature = "file")]
 pub use rskit_file as file;
 
+/// Amazon S3 and S3-compatible (MinIO, LocalStack) storage backend.
+#[cfg(feature = "file-s3")]
+pub use rskit_file_s3 as file_s3;
+
 /// Media types, codec/format registry, pipeline builder.
 #[cfg(feature = "media")]
 pub use rskit_media as media;

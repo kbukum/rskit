@@ -23,8 +23,5 @@ pub use store::{
 pub use temp::{TempDir, TempFile};
 pub use transfer::{copy_file, transfer};
 
-#[cfg(feature = "s3")]
-pub use store::{S3Store, S3StoreConfig};
-
 #[cfg(feature = "gcs")]
 pub use store::{GcsStore, GcsStoreConfig};

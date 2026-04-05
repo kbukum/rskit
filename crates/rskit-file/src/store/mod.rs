@@ -2,16 +2,10 @@
 
 mod local;
 
-#[cfg(feature = "s3")]
-mod s3;
-
 #[cfg(feature = "gcs")]
 mod gcs;
 
 pub use local::{LocalStore, LocalStoreConfig};
-
-#[cfg(feature = "s3")]
-pub use s3::{S3Store, S3StoreConfig};
 
 #[cfg(feature = "gcs")]
 pub use gcs::{GcsStore, GcsStoreConfig};

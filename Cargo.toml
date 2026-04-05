@@ -35,6 +35,7 @@ members = [
     "crates/rskit-vector-store",
     # phase 6 media & file
     "crates/rskit-file",
+    "crates/rskit-file-s3",
     "crates/rskit-media",
     "crates/rskit-media-ffmpeg",
     "crates/rskit-media-image",

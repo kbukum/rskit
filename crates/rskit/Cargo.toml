@@ -45,6 +45,7 @@ rskit-sse           = { path = "../rskit-sse",           optional = true }
 rskit-dag           = { path = "../rskit-dag",           optional = true }
 rskit-llm           = { path = "../rskit-llm",           optional = true }
 rskit-file          = { path = "../rskit-file",          optional = true }
+rskit-file-s3       = { path = "../rskit-file-s3",       optional = true }
 rskit-media         = { path = "../rskit-media",         optional = true }
 rskit-media-ffmpeg  = { path = "../rskit-media-ffmpeg",  optional = true }
 rskit-media-image   = { path = "../rskit-media-image",   optional = true }
@@ -78,7 +79,7 @@ media         = ["dep:rskit-media", "file"]
 media-ffmpeg  = ["dep:rskit-media-ffmpeg", "media"]
 media-image   = ["dep:rskit-media-image", "media"]
 media-full    = ["media-ffmpeg", "media-image"]
-file-s3       = ["file", "rskit-file/s3"]
+file-s3       = ["file", "dep:rskit-file-s3"]
 file-gcs      = ["file", "rskit-file/gcs"]
 cli           = ["dep:rskit-cli"]
 dataset       = ["dep:rskit-dataset", "cli"]
