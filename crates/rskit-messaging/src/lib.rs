@@ -60,6 +60,7 @@ pub use memory::{
 };
 pub use message::Message;
 pub use metrics::{MetricsCollector, NoopMetrics};
+pub use middleware::StackBuilder;
 pub use router::MessageRouter;
 pub use runner::ConsumerRunner;
 pub use traits::{BrokerComponent, EventConsumer, EventProducer, MessageConsumer, MessageProducer};
