@@ -24,6 +24,7 @@
 //! ```
 
 pub mod config;
+pub mod errors;
 pub mod event;
 pub mod memory;
 pub mod message;
@@ -32,8 +33,11 @@ pub mod traits;
 #[cfg(feature = "kafka")]
 pub mod kafka;
 
-pub use config::{Compression, KafkaConfig, OffsetReset, SecurityProtocol};
+pub use config::{
+    BrokerConfig, BrokerConfigExt, Compression, KafkaConfig, OffsetReset, SecurityProtocol,
+};
+pub use errors::{ErrorClassifier, NoopErrorClassifier};
 pub use event::Event;
 pub use memory::{InMemoryBroker, InMemoryConsumer, InMemoryProducer};
 pub use message::Message;
-pub use traits::{EventConsumer, EventProducer, MessageConsumer, MessageProducer};
+pub use traits::{BrokerComponent, EventConsumer, EventProducer, MessageConsumer, MessageProducer};

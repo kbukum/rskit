@@ -2,13 +2,82 @@ use std::fmt;
 use std::str::FromStr;
 use std::time::Duration;
 
+use rskit_errors::{AppError, AppResult, ErrorCode};
 use serde::Deserialize;
 
+// ── Base broker configuration ────────────────────────────────────────────────
+
+/// Configuration shared by all message-broker backends.
+///
+/// Concrete broker configs (e.g. [`KafkaConfig`]) embed this struct via
+/// `#[serde(flatten)]` so that end-users see a single, flat configuration
+/// surface while generic code can work through [`BrokerConfigExt`].
+#[derive(Debug, Clone, Deserialize)]
+pub struct BrokerConfig {
+    /// Logical name for this configuration.
+    #[serde(default = "default_name")]
+    pub name: String,
+    /// Whether this configuration is enabled.
+    #[serde(default = "default_enabled")]
+    pub enabled: bool,
+    /// Broker addresses (e.g. `["localhost:9092"]`).
+    #[serde(default = "default_brokers")]
+    pub brokers: Vec<String>,
+    /// Number of retries for failed requests.
+    #[serde(default = "default_retries")]
+    pub retries: u32,
+    /// Request timeout in milliseconds (`None` = use broker default).
+    #[serde(default)]
+    pub request_timeout: Option<u64>,
+    /// Default topics to subscribe to.
+    #[serde(default)]
+    pub topics: Vec<String>,
+}
+
+impl BrokerConfig {
+    /// Return the request timeout as a [`Duration`], if configured.
+    pub fn request_timeout_duration(&self) -> Option<Duration> {
+        self.request_timeout.map(Duration::from_millis)
+    }
+}
+
+impl Default for BrokerConfig {
+    fn default() -> Self {
+        Self {
+            name: default_name(),
+            enabled: default_enabled(),
+            brokers: default_brokers(),
+            retries: default_retries(),
+            request_timeout: None,
+            topics: Vec::new(),
+        }
+    }
+}
+
+/// Extension trait for broker-specific configurations.
+///
+/// Every backend configuration struct should implement this so that generic
+/// infrastructure (retry policies, health checks, service discovery) can
+/// access the common [`BrokerConfig`] and perform validation without knowing
+/// the concrete broker type.
+pub trait BrokerConfigExt {
+    /// Access the shared broker configuration.
+    fn base(&self) -> &BrokerConfig;
+    /// Validate the complete configuration (base + backend-specific fields).
+    fn validate(&self) -> AppResult<()>;
+}
+
+// ── Kafka configuration ──────────────────────────────────────────────────────
+
 /// Configuration for connecting to a Kafka cluster.
+///
+/// The broker-agnostic fields live in the embedded [`BrokerConfig`]
+/// (flattened for serde) while Kafka-specific knobs remain here.
 #[derive(Debug, Clone, Deserialize)]
 pub struct KafkaConfig {
-    /// Broker addresses (e.g. `["localhost:9092"]`).
-    pub brokers: Vec<String>,
+    /// Shared broker settings (name, enabled, brokers, retries, …).
+    #[serde(flatten)]
+    pub base: BrokerConfig,
     /// Consumer group identifier.
     pub group_id: Option<String>,
     /// Compression algorithm for produced messages.
@@ -38,21 +107,6 @@ pub struct KafkaConfig {
     /// SASL password.
     #[serde(default)]
     pub sasl_password: Option<String>,
-    /// Request timeout in milliseconds.
-    #[serde(default)]
-    pub request_timeout: Option<u64>,
-    /// Number of retries for failed requests.
-    #[serde(default = "default_retries")]
-    pub retries: u32,
-    /// Default topics to subscribe to.
-    #[serde(default)]
-    pub topics: Vec<String>,
-    /// Logical name for this configuration.
-    #[serde(default = "default_name")]
-    pub name: String,
-    /// Whether this configuration is enabled.
-    #[serde(default = "default_enabled")]
-    pub enabled: bool,
 }
 
 fn default_session_timeout() -> Duration {
@@ -79,10 +133,14 @@ fn default_enabled() -> bool {
     true
 }
 
+fn default_brokers() -> Vec<String> {
+    vec!["localhost:9092".to_string()]
+}
+
 impl Default for KafkaConfig {
     fn default() -> Self {
         Self {
-            brokers: vec!["localhost:9092".to_string()],
+            base: BrokerConfig::default(),
             group_id: None,
             compression: Compression::default(),
             auto_offset_reset: OffsetReset::default(),
@@ -93,12 +151,23 @@ impl Default for KafkaConfig {
             sasl_mechanism: None,
             sasl_username: None,
             sasl_password: None,
-            request_timeout: None,
-            retries: default_retries(),
-            topics: Vec::new(),
-            name: default_name(),
-            enabled: default_enabled(),
         }
+    }
+}
+
+impl BrokerConfigExt for KafkaConfig {
+    fn base(&self) -> &BrokerConfig {
+        &self.base
+    }
+
+    fn validate(&self) -> AppResult<()> {
+        if self.base.brokers.is_empty() {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                "brokers list cannot be empty",
+            ));
+        }
+        Ok(())
     }
 }
 
@@ -107,7 +176,7 @@ impl KafkaConfig {
     #[cfg(feature = "kafka")]
     pub fn to_client_config(&self) -> rdkafka::config::ClientConfig {
         let mut cfg = rdkafka::config::ClientConfig::new();
-        cfg.set("bootstrap.servers", self.brokers.join(","));
+        cfg.set("bootstrap.servers", self.base.brokers.join(","));
 
         if let Some(ref group) = self.group_id {
             cfg.set("group.id", group);
@@ -145,10 +214,10 @@ impl KafkaConfig {
         if let Some(ref password) = self.sasl_password {
             cfg.set("sasl.password", password);
         }
-        if let Some(timeout) = self.request_timeout {
+        if let Some(timeout) = self.base.request_timeout {
             cfg.set("request.timeout.ms", timeout.to_string());
         }
-        cfg.set("message.send.max.retries", self.retries.to_string());
+        cfg.set("message.send.max.retries", self.base.retries.to_string());
 
         cfg
     }

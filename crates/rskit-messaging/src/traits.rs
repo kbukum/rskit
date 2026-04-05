@@ -6,6 +6,8 @@ use rskit_errors::AppResult;
 use crate::event::Event;
 use crate::message::Message;
 
+// ── Messaging traits ─────────────────────────────────────────────────────────
+
 /// A producer that sends messages to a broker.
 #[async_trait]
 pub trait MessageProducer<T: Send + Sync>: Send + Sync {
@@ -47,4 +49,23 @@ pub trait EventConsumer: Send + Sync {
 
     /// Receive the next event. Blocks until an event is available.
     async fn recv_event(&self) -> AppResult<Event>;
+}
+
+// ── Broker lifecycle trait ───────────────────────────────────────────────────
+
+/// Lifecycle management for a message-broker connection.
+///
+/// This is intentionally simpler than [`rskit_bootstrap::Component`] — it
+/// captures the start / stop / health contract that every broker backend
+/// needs without pulling in the full component registry.  Implementations
+/// can bridge to the bootstrap `Component` trait where needed.
+#[async_trait]
+pub trait BrokerComponent: Send + Sync {
+    /// Establish the broker connection and perform any setup.
+    async fn start(&self) -> AppResult<()>;
+    /// Gracefully disconnect from the broker.
+    async fn stop(&self) -> AppResult<()>;
+    /// Instant health check — returns `true` when the broker connection is
+    /// usable.
+    fn is_healthy(&self) -> bool;
 }
