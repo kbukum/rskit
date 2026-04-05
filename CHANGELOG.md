@@ -17,6 +17,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **rskit-messaging**: Extended `KafkaConfig` with security, SASL, retry fields
 - **rskit-messaging**: `InMemoryBroker` Event support
 
+#### Messaging Enhancement
+
+- **rskit-messaging**: `ManagedProducer` — wraps any `MessageProducer` with lifecycle (start/stop), metrics collection, and running state
+- **rskit-messaging**: `ManagedConsumer` — wraps any `MessageConsumer` with lifecycle, handler dispatch, and graceful shutdown
+- **rskit-messaging**: `ConsumerRunner` — manages consumption loop as a tokio task with run/stop interface
+- **rskit-messaging**: `MetricsCollector` trait with `record_publish()`/`record_consume()` and `NoopMetrics` impl
+- **rskit-messaging**: `MessageTranslator` trait with `JsonTranslator` and `JsonStringTranslator` implementations
+- **rskit-messaging**: `MessageHandler` trait + `FnHandler` adapter + `HandlerMiddleware` trait + `chain_handlers()` + `middleware_fn()`
+- **rskit-messaging**: `MessageRouter` — topic routing with wildcard (`*`) pattern matching and default handler
+- **rskit-messaging**: `BatchProducer` — buffered producer with size-based and time-based flush triggers
+- **rskit-messaging**: Provider bridge (feature-gated `provider-bridge`):
+  - `ProducerSink` — wraps `MessageProducer` as `Sink<Message<T>>`
+  - `ConsumerStream` — wraps `MessageConsumer` as `StreamProvider<(), Message<T>>`
+- **rskit-messaging**: Full middleware stack:
+  - `RetryMiddleware` — exponential backoff with configurable max_attempts and backoff_factor
+  - `DeadLetterMiddleware` — routes failed messages to `<topic>.dlq` via producer
+  - `instrument()` — metrics middleware recording consume metrics via `MetricsCollector`
+  - `tracing_middleware()` — OpenTelemetry spans with messaging.topic and messaging.key attributes
+  - `DedupMiddleware` — deduplication with sliding window (size + TTL)
+  - `CircuitBreakerMiddleware` — fail-fast using `rskit_resilience::CircuitBreaker`
+- **rskit-messaging**: Enhanced `InMemoryBroker` with message history, topic tracking, and reset
+- **rskit-messaging**: Test assertions — `assert_published()`, `assert_published_n()`, `assert_no_messages()`, `wait_for_message()`
+
 ## [0.1.0] - 2024-01-01
 
 ### Added
