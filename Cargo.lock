@@ -4557,6 +4557,7 @@ dependencies = [
  "futures",
  "futures-util",
  "parking_lot",
+ "rskit-bootstrap",
  "rskit-errors",
  "rskit-pipeline",
  "rskit-provider",
