@@ -4499,6 +4499,7 @@ dependencies = [
  "rskit-errors",
  "rskit-logging",
  "serde",
+ "serde_json",
  "tokio",
  "tracing",
  "tracing-opentelemetry",
