@@ -138,21 +138,44 @@ assert_eq!(result, "HELLO");
 
 ---
 
-## Crate Map
+### Crate Map
 
-```
-rskit/
-├── rskit              — facade re-exporting all sub-crates
-├── rskit-errors       — AppError + ErrorCode + AppResult<T>
-├── rskit-config       — layered config loading (TOML, .env, env vars)
-├── rskit-logging      — tracing subscriber setup
-├── rskit-bootstrap    — App lifecycle, Component trait, Registry
-├── rskit-resilience   — retry, circuit breaker, bulkhead, rate limiter + Tower layers
-├── rskit-provider     — async I/O interaction traits + Tower bridge
-├── rskit-pipeline     — futures::Stream extension trait (13 operators)
-├── rskit-worker       — bounded async worker pool with events
-└── rskit-server       — tonic gRPC server as a Component
-```
+| Phase | Crate | Description |
+|-------|-------|-------------|
+| Core | `rskit` | Production Rust toolkit — modular facade for rskit-* crates |
+| Core | `rskit-errors` | Structured application error types with HTTP/gRPC status mapping |
+| Core | `rskit-config` | TOML + environment variable configuration loading with validation |
+| Core | `rskit-logging` | Structured logging setup using tracing — JSON in production, pretty in dev |
+| Core | `rskit-bootstrap` | Application lifecycle orchestration: typestate App, Component registry, hooks |
+| Core | `rskit-provider` | Provider traits (request-response, stream, sink, duplex) with tower middleware |
+| Core | `rskit-pipeline` | Composable async data pipelines via futures::Stream extension operators |
+| Core | `rskit-resilience` | Fault-tolerance: retry, circuit breaker, bulkhead, rate limiter + tower layers |
+| Core | `rskit-worker` | Task worker pool with JoinSet, typed events, and provider bridges |
+| Core | `rskit-server` | tonic gRPC server bootstrap as a lifecycle-managed Component |
+| Foundation | `rskit-validation` | Fluent field-level validator that collects errors and converts to AppError |
+| Foundation | `rskit-http` | Axum HTTP server with graceful shutdown, CORS, request-ID, and Component lifecycle |
+| Foundation | `rskit-di` | Lightweight Arc-based runtime dependency injection container |
+| Foundation | `rskit-auth` | JWT, OIDC, password hashing, and request-context auth helpers |
+| Adapters | `rskit-database` | sqlx-based async database pool with repository pattern and slow-query logging |
+| Adapters | `rskit-cache` | Redis client with typed store, connection management, and Component lifecycle |
+| Adapters | `rskit-messaging` | Message broker abstractions with Kafka support |
+| Platform | `rskit-observability` | OpenTelemetry tracing, metrics, and context propagation |
+| Platform | `rskit-authz` | RBAC and ABAC authorization engine |
+| Platform | `rskit-discovery` | Service discovery with load balancing strategies |
+| Specialist | `rskit-testutil` | Test utilities, mock providers, and assertion helpers |
+| Specialist | `rskit-sse` | Server-Sent Events bus with axum integration |
+| Specialist | `rskit-dag` | DAG task orchestrator with parallel execution |
+| Specialist | `rskit-llm` | LLM provider abstractions for OpenAI and Anthropic |
+| Specialist | `rskit-embedding` | Embedding provider abstractions for vector search |
+| Specialist | `rskit-inference` | Inference provider abstractions for LLM chat completions |
+| Specialist | `rskit-vector-store` | Vector store abstractions with Qdrant and in-memory implementations |
+| Media & File | `rskit-file` | File I/O, storage backends, temp files, and MIME detection |
+| Media & File | `rskit-media` | Media types, codec/format registry, pipeline builder, and processing traits |
+| Media & File | `rskit-media-ffmpeg` | FFmpeg CLI backend for video/audio processing |
+| Media & File | `rskit-media-image` | Native image processing backend using the image crate |
+| CLI & Data | `rskit-cli` | CLI framework: progress bars, structured output, signal handling |
+| CLI & Data | `rskit-dataset` | Dataset collection framework: source, transform, target, collector |
+| CLI & Data | `rskit-bench` | ML benchmarking framework: evaluators, metrics, reports, visualization |
 
 ### Dependency graph
 

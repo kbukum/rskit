@@ -127,6 +127,7 @@ help:
 	@echo "  C=rskit-auth          Target auth crate"
 	@echo "  C=rskit-http          Target http crate"
 	@echo "  C=rskit-database      Target database crate"
+	@echo "  C=rskit-messaging     Target messaging crate"
 	@echo ""
 	@echo "Examples:"
 	@echo "  make test                            Test everything"
