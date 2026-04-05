@@ -28,6 +28,7 @@ pub mod bridge;
 pub mod config;
 pub mod errors;
 pub mod event;
+pub mod event_publisher;
 pub mod handler;
 pub mod managed_consumer;
 pub mod managed_producer;
@@ -49,6 +50,7 @@ pub use config::{
 };
 pub use errors::{ErrorClassifier, NoopErrorClassifier};
 pub use event::Event;
+pub use event_publisher::EventPublisher;
 pub use handler::{FnHandler, HandlerMiddleware, MessageHandler, chain_handlers, middleware_fn};
 pub use managed_consumer::{ManagedConsumer, ManagedConsumerBuilder};
 pub use managed_producer::{ManagedProducer, ManagedProducerBuilder};
