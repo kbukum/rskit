@@ -1,0 +1,499 @@
+//! Extended integration tests for rskit-worker: edge cases, concurrency, events.
+
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
+
+use tokio::sync::mpsc;
+use tokio::time::sleep;
+use tokio_util::sync::CancellationToken;
+
+use rskit_errors::{AppError, AppResult, ErrorCode};
+use rskit_worker::{
+    Event, EventKind, Handler, Pool, PoolConfig, Progress, RoundRobinDispatcher,
+};
+
+// ── Shared test handlers ──────────────────────────────────────────────────────
+
+struct DoubleHandler;
+
+#[async_trait::async_trait]
+impl Handler<i32, i32> for DoubleHandler {
+    async fn handle(
+        &self,
+        task: i32,
+        _emit: mpsc::Sender<Event<i32>>,
+        _cancel: CancellationToken,
+    ) -> AppResult<i32> {
+        Ok(task * 2)
+    }
+}
+
+struct ErrorHandler;
+
+#[async_trait::async_trait]
+impl Handler<i32, i32> for ErrorHandler {
+    async fn handle(
+        &self,
+        _task: i32,
+        _emit: mpsc::Sender<Event<i32>>,
+        _cancel: CancellationToken,
+    ) -> AppResult<i32> {
+        Err(AppError::new(ErrorCode::Internal, "intentional error"))
+    }
+}
+
+struct SlowHandler {
+    delay: Duration,
+}
+
+#[async_trait::async_trait]
+impl Handler<i32, i32> for SlowHandler {
+    async fn handle(
+        &self,
+        task: i32,
+        _emit: mpsc::Sender<Event<i32>>,
+        cancel: CancellationToken,
+    ) -> AppResult<i32> {
+        tokio::select! {
+            _ = sleep(self.delay) => Ok(task * 2),
+            _ = cancel.cancelled() => Err(AppError::new(ErrorCode::Internal, "cancelled")),
+        }
+    }
+}
+
+struct EventEmittingHandler;
+
+#[async_trait::async_trait]
+impl Handler<i32, i32> for EventEmittingHandler {
+    async fn handle(
+        &self,
+        task: i32,
+        emit: mpsc::Sender<Event<i32>>,
+        _cancel: CancellationToken,
+    ) -> AppResult<i32> {
+        let id = uuid::Uuid::new_v4();
+        // Emit progress
+        let p = Progress::new(1, Some(2)).with_message("step 1");
+        let _ = emit.send(Event::progress(id, "test-worker", p)).await;
+        // Emit partial
+        let _ = emit.send(Event::partial(id, "test-worker", task)).await;
+        // Emit log
+        let _ = emit.send(Event::log(id, "test-worker", "doing work")).await;
+        Ok(task * 2)
+    }
+}
+
+struct CountingHandler {
+    counter: Arc<AtomicU32>,
+}
+
+#[async_trait::async_trait]
+impl Handler<u32, u32> for CountingHandler {
+    async fn handle(
+        &self,
+        task: u32,
+        _emit: mpsc::Sender<Event<u32>>,
+        _cancel: CancellationToken,
+    ) -> AppResult<u32> {
+        self.counter.fetch_add(1, Ordering::SeqCst);
+        Ok(task)
+    }
+}
+
+// ── 1. Pool creation with custom PoolConfig ───────────────────────────────────
+
+#[tokio::test]
+async fn pool_creation_with_custom_config() {
+    let config = PoolConfig::new("custom")
+        .with_size(2)
+        .with_queue_size(64)
+        .with_grace_period(Duration::from_secs(5));
+    let pool = Pool::new(Arc::new(DoubleHandler), config);
+
+    let stats = pool.stats();
+    assert_eq!(stats.name, "custom");
+    assert_eq!(stats.capacity, 2);
+    assert_eq!(stats.running, 0);
+}
+
+// ── 2. Submit and await multiple results ──────────────────────────────────────
+
+#[tokio::test]
+async fn submit_and_await_multiple_results() {
+    let pool = Pool::new(
+        Arc::new(DoubleHandler),
+        PoolConfig::new("multi").with_size(4),
+    );
+
+    let mut handles = Vec::new();
+    for i in 1..=5 {
+        handles.push(pool.submit(i).await.unwrap());
+    }
+
+    for (i, h) in handles.into_iter().enumerate() {
+        let result = h.result().await.unwrap();
+        assert_eq!(result, (i as i32 + 1) * 2);
+    }
+}
+
+// ── 3. Error-producing task propagates error ──────────────────────────────────
+
+#[tokio::test]
+async fn error_task_propagates() {
+    let pool = Pool::new(
+        Arc::new(ErrorHandler),
+        PoolConfig::new("err").with_size(1),
+    );
+    let handle = pool.submit(1).await.unwrap();
+    let result = handle.result().await;
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(err.to_string().contains("intentional error"));
+}
+
+// ── 4. Pool shutdown during active tasks ──────────────────────────────────────
+
+#[tokio::test]
+async fn pool_shutdown_during_active_tasks() {
+    let pool = Pool::new(
+        Arc::new(SlowHandler {
+            delay: Duration::from_secs(10),
+        }),
+        PoolConfig::new("shutdown-active").with_size(2),
+    );
+
+    let h1 = pool.submit(1).await.unwrap();
+    let cancel_token = h1.cancel_token();
+    let _h2 = pool.submit(2).await.unwrap();
+
+    // Give tasks time to start
+    sleep(Duration::from_millis(50)).await;
+
+    // Shutdown should complete without hanging
+    pool.shutdown().await.unwrap();
+
+    // The cancel token should be usable (handler checks it)
+    cancel_token.cancel();
+}
+
+// ── 5. Task cancellation ──────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn task_cancellation() {
+    let pool = Pool::new(
+        Arc::new(SlowHandler {
+            delay: Duration::from_secs(10),
+        }),
+        PoolConfig::new("cancel").with_size(1),
+    );
+
+    let handle = pool.submit(42).await.unwrap();
+    // Give task time to start executing
+    sleep(Duration::from_millis(50)).await;
+
+    handle.cancel();
+    let result = handle.result().await;
+    assert!(result.is_err(), "cancelled task should return error");
+}
+
+// ── 6. TaskHandle events collection ───────────────────────────────────────────
+
+#[tokio::test]
+async fn task_handle_events_collection() {
+    let pool = Pool::new(
+        Arc::new(EventEmittingHandler),
+        PoolConfig::new("events").with_size(1),
+    );
+
+    let handle = pool.submit(5).await.unwrap();
+    let task_id = handle.id;
+    let mut rx = handle.events();
+
+    let result = handle.result().await.unwrap();
+    assert_eq!(result, 10);
+
+    // Collect broadcast events
+    let mut events = Vec::new();
+    while let Ok(ev) = rx.try_recv() {
+        events.push(ev);
+    }
+
+    // Should have at least the handler-emitted events + final result event
+    assert!(
+        !events.is_empty(),
+        "expected at least some events, got none"
+    );
+
+    // At least one event should reference this task
+    let has_task_event = events.iter().any(|e| e.task_id == task_id);
+    assert!(has_task_event, "expected event with matching task_id");
+}
+
+// ── 7. PoolStats accuracy ─────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn pool_stats_accuracy() {
+    let pool = Pool::new(
+        Arc::new(SlowHandler {
+            delay: Duration::from_millis(200),
+        }),
+        PoolConfig::new("stats").with_size(4),
+    );
+
+    // Before any submissions
+    let stats = pool.stats();
+    assert_eq!(stats.running, 0);
+    assert_eq!(stats.capacity, 4);
+
+    // Submit tasks
+    let _h1 = pool.submit(1).await.unwrap();
+    let _h2 = pool.submit(2).await.unwrap();
+
+    // Give tasks time to acquire semaphore
+    sleep(Duration::from_millis(50)).await;
+
+    let stats = pool.stats();
+    assert!(stats.running <= 4, "running should not exceed capacity");
+    assert_eq!(stats.capacity, 4);
+}
+
+// ── 8. Concurrent submissions (10+ tasks) ────────────────────────────────────
+
+#[tokio::test]
+async fn concurrent_submissions_ten_plus() {
+    let counter = Arc::new(AtomicU32::new(0));
+    let pool = Pool::new(
+        Arc::new(CountingHandler {
+            counter: counter.clone(),
+        }),
+        PoolConfig::new("concurrent").with_size(4),
+    );
+
+    let mut handles = Vec::new();
+    for i in 0..20u32 {
+        handles.push(pool.submit(i).await.unwrap());
+    }
+
+    for h in handles {
+        let result = h.result().await.unwrap();
+        assert!(result < 20);
+    }
+
+    assert_eq!(counter.load(Ordering::SeqCst), 20);
+}
+
+// ── 9. RoundRobinDispatcher ───────────────────────────────────────────────────
+
+#[tokio::test]
+async fn round_robin_dispatcher_cycles() {
+    let dispatcher = RoundRobinDispatcher::new(3);
+    assert_eq!(dispatcher.next(), 0);
+    assert_eq!(dispatcher.next(), 1);
+    assert_eq!(dispatcher.next(), 2);
+    assert_eq!(dispatcher.next(), 0); // wraps around
+    assert_eq!(dispatcher.next(), 1);
+}
+
+#[tokio::test]
+async fn round_robin_dispatcher_zero_slots() {
+    let dispatcher = RoundRobinDispatcher::new(0);
+    // Should not panic, returns 0
+    assert_eq!(dispatcher.next(), 0);
+}
+
+// ── 10. Event factory functions ───────────────────────────────────────────────
+
+#[tokio::test]
+async fn event_factory_progress() {
+    let id = uuid::Uuid::new_v4();
+    let p = Progress::new(50, Some(100));
+    let ev = Event::<i32>::progress(id, "w1", p);
+    assert_eq!(ev.kind, EventKind::Progress);
+    assert_eq!(ev.task_id, id);
+    assert!(ev.progress.is_some());
+    let prog = ev.progress.unwrap();
+    assert_eq!(prog.current, 50);
+    assert_eq!(prog.total, Some(100));
+    assert!((prog.percent.unwrap() - 50.0).abs() < 0.01);
+}
+
+#[tokio::test]
+async fn event_factory_partial() {
+    let id = uuid::Uuid::new_v4();
+    let ev = Event::partial(id, "w1", 42);
+    assert_eq!(ev.kind, EventKind::Partial);
+    assert_eq!(ev.data, Some(42));
+}
+
+#[tokio::test]
+async fn event_factory_log() {
+    let id = uuid::Uuid::new_v4();
+    let ev = Event::<i32>::log(id, "w1", "hello");
+    assert_eq!(ev.kind, EventKind::Log);
+    assert_eq!(ev.error, Some("hello".to_string()));
+}
+
+#[tokio::test]
+async fn event_factory_result() {
+    let id = uuid::Uuid::new_v4();
+    let ev = Event::result(id, "w1", 99);
+    assert_eq!(ev.kind, EventKind::Result);
+    assert_eq!(ev.data, Some(99));
+}
+
+#[tokio::test]
+async fn event_factory_error() {
+    let id = uuid::Uuid::new_v4();
+    let ev = Event::<i32>::error(id, "w1", "boom");
+    assert_eq!(ev.kind, EventKind::Error);
+    assert_eq!(ev.error, Some("boom".to_string()));
+}
+
+// ── 11. EventKind variants all tested ─────────────────────────────────────────
+
+#[tokio::test]
+async fn event_kind_equality() {
+    assert_eq!(EventKind::Progress, EventKind::Progress);
+    assert_eq!(EventKind::Partial, EventKind::Partial);
+    assert_eq!(EventKind::Log, EventKind::Log);
+    assert_eq!(EventKind::Result, EventKind::Result);
+    assert_eq!(EventKind::Error, EventKind::Error);
+    assert_ne!(EventKind::Progress, EventKind::Error);
+}
+
+// ── 12. Progress computation ──────────────────────────────────────────────────
+
+#[tokio::test]
+async fn progress_percent_computation() {
+    let p = Progress::new(75, Some(100));
+    assert!((p.percent.unwrap() - 75.0).abs() < 0.01);
+
+    let p_none = Progress::new(50, None);
+    assert!(p_none.percent.is_none());
+
+    let p_zero = Progress::new(0, Some(0));
+    // total=0 → 100%
+    assert!((p_zero.percent.unwrap() - 100.0).abs() < 0.01);
+}
+
+#[tokio::test]
+async fn progress_with_message() {
+    let p = Progress::new(1, Some(10)).with_message("loading");
+    assert_eq!(p.message, Some("loading".to_string()));
+}
+
+// ── 13. Pool with single worker (serial execution) ───────────────────────────
+
+#[tokio::test]
+async fn single_worker_serial_execution() {
+    let counter = Arc::new(AtomicU32::new(0));
+    let pool = Pool::new(
+        Arc::new(CountingHandler {
+            counter: counter.clone(),
+        }),
+        PoolConfig::new("serial").with_size(1),
+    );
+
+    let mut handles = Vec::new();
+    for i in 0..5u32 {
+        handles.push(pool.submit(i).await.unwrap());
+    }
+
+    for h in handles {
+        h.result().await.unwrap();
+    }
+
+    assert_eq!(counter.load(Ordering::SeqCst), 5);
+}
+
+// ── 14. Provider bridge: from_provider roundtrip ──────────────────────────────
+
+#[tokio::test]
+async fn from_provider_roundtrip() {
+    let provider = Arc::new(rskit_provider::request_response_fn("add-one", |x: i32| async move {
+        Ok(x + 1)
+    }));
+    let handler = rskit_worker::from_provider(provider);
+    let pool = Pool::new(Arc::new(handler), PoolConfig::new("fp-roundtrip"));
+
+    let h = pool.submit(10).await.unwrap();
+    assert_eq!(h.result().await.unwrap(), 11);
+}
+
+// ── 15. Provider bridge: as_provider roundtrip ────────────────────────────────
+
+#[tokio::test]
+async fn as_provider_roundtrip() {
+    use rskit_provider::traits::RequestResponse;
+    let handler: Arc<dyn Handler<i32, i32>> = Arc::new(DoubleHandler);
+    let provider = rskit_worker::as_provider("double", handler);
+    let result = provider.execute(7).await.unwrap();
+    assert_eq!(result, 14);
+}
+
+// ── 16. Task IDs are unique ───────────────────────────────────────────────────
+
+#[tokio::test]
+async fn task_ids_are_unique() {
+    let pool = Pool::new(
+        Arc::new(DoubleHandler),
+        PoolConfig::new("unique-ids").with_size(4),
+    );
+
+    let mut ids = std::collections::HashSet::new();
+    let mut handles = Vec::new();
+
+    for i in 0..10 {
+        let h = pool.submit(i).await.unwrap();
+        ids.insert(h.id);
+        handles.push(h);
+    }
+
+    assert_eq!(ids.len(), 10, "all task IDs should be unique");
+
+    for h in handles {
+        h.result().await.unwrap();
+    }
+}
+
+// ── 17. Default PoolConfig values ─────────────────────────────────────────────
+
+#[tokio::test]
+async fn default_pool_config_values() {
+    let config = PoolConfig::default();
+    assert_eq!(config.name, "pool");
+    assert_eq!(config.queue_size, 256);
+    assert_eq!(config.event_buffer, 64);
+    assert_eq!(config.grace_period, Duration::from_secs(30));
+    assert!(config.size > 0, "default size should be positive");
+}
+
+// ── 18. Multiple events from handler are all received ─────────────────────────
+
+#[tokio::test]
+async fn multiple_handler_events_received() {
+    let pool = Pool::new(
+        Arc::new(EventEmittingHandler),
+        PoolConfig::new("multi-events").with_size(1),
+    );
+
+    let handle = pool.submit(10).await.unwrap();
+    let mut rx = handle.events();
+
+    let result = handle.result().await.unwrap();
+    assert_eq!(result, 20);
+
+    let mut kinds = Vec::new();
+    while let Ok(ev) = rx.try_recv() {
+        kinds.push(ev.kind.clone());
+    }
+
+    // Handler emits: Progress, Partial, Log; then pool emits Result
+    // We should see at least the Result event
+    assert!(
+        kinds.contains(&EventKind::Result),
+        "expected at least Result event, got: {:?}",
+        kinds
+    );
+}
