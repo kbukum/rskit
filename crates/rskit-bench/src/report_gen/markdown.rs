@@ -42,7 +42,10 @@ impl Reporter for MarkdownReporter {
             writeln!(w, "|--------|------:|").map_err(io_err)?;
             for m in &result.metrics {
                 writeln!(w, "| {} | {:.4} |", m.name, m.value).map_err(io_err)?;
-                for (k, v) in &m.values {
+                let mut sub_keys: Vec<_> = m.values.keys().collect();
+                sub_keys.sort();
+                for k in sub_keys {
+                    let v = m.values[k];
                     writeln!(w, "| {}.{} | {:.4} |", m.name, k, v).map_err(io_err)?;
                 }
             }
