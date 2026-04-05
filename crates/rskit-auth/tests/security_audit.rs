@@ -7,7 +7,6 @@
 //! - Send+Sync bounds on all public types
 //! - Panic safety (no silent failures)
 
-use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use rskit_auth::jwt::{JwtConfig, JwtService};
@@ -159,13 +158,14 @@ async fn jwt_expired_token_rejected() {
 async fn jwt_malformed_tokens_rejected() {
     let svc = make_jwt_service();
 
+    let long_token = "a".repeat(100_000);
     let malformed_tokens = vec![
         "",
         "not-a-jwt",
         "a.b",
         "a.b.c",
         "   ",
-        &"a".repeat(100_000),
+        &long_token,
     ];
 
     for token in malformed_tokens {
@@ -266,16 +266,16 @@ fn argon2_unicode_password_roundtrip() {
 
 #[test]
 fn reset_tokens_are_unique() {
-    let gen = ResetTokenGenerator::new(std::time::Duration::from_secs(300));
-    let (t1, _) = gen.generate();
-    let (t2, _) = gen.generate();
+    let generator = ResetTokenGenerator::new(std::time::Duration::from_secs(300));
+    let (t1, _) = generator.generate();
+    let (t2, _) = generator.generate();
     assert_ne!(t1, t2, "Reset tokens should be unique");
 }
 
 #[test]
 fn reset_token_has_sufficient_entropy() {
-    let gen = ResetTokenGenerator::new(std::time::Duration::from_secs(300));
-    let (token, _) = gen.generate();
+    let generator = ResetTokenGenerator::new(std::time::Duration::from_secs(300));
+    let (token, _) = generator.generate();
     // base64url of 32 bytes = 43 characters
     assert!(
         token.len() >= 40,
@@ -286,8 +286,8 @@ fn reset_token_has_sufficient_entropy() {
 
 #[test]
 fn reset_token_expiry_is_in_future() {
-    let gen = ResetTokenGenerator::new(std::time::Duration::from_secs(300));
-    let (_, exp) = gen.generate();
+    let generator = ResetTokenGenerator::new(std::time::Duration::from_secs(300));
+    let (_, exp) = generator.generate();
     assert!(exp > chrono::Utc::now(), "Reset token expiry should be in the future");
 }
 
