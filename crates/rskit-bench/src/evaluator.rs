@@ -46,6 +46,7 @@ where
 /// ```
 pub struct EvaluatorFunc<L = String> {
     name: &'static str,
+    #[allow(clippy::type_complexity)]
     func: Box<dyn Fn(Vec<u8>) -> BoxFuture<'static, AppResult<Prediction<L>>> + Send + Sync>,
 }
 

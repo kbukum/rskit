@@ -7,6 +7,7 @@ use std::path::PathBuf;
 
 pub struct DatasetLoaderConfig {
     pub manifest_file: String,
+    #[allow(clippy::type_complexity)]
     pub filter: Option<Box<dyn Fn(&Sample) -> bool + Send + Sync>>,
 }
 

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **rskit-messaging**: Event type with builder pattern and JSON serialization
+- **rskit-messaging**: `EventProducer` and `EventConsumer` async traits
+- **rskit-messaging**: Kafka backend (feature-gated with `kafka` feature)
+  - `KafkaProducer` implementing `MessageProducer` + `EventProducer`
+  - `KafkaConsumer` implementing `MessageConsumer` + `EventConsumer`
+- **rskit-messaging**: Extended `KafkaConfig` with security, SASL, retry fields
+- **rskit-messaging**: `InMemoryBroker` Event support
+
 ## [0.1.0] - 2024-01-01
 
 ### Added

@@ -31,6 +31,7 @@ fn create_gradient_png(width: u32, height: u32) -> TempFile {
 }
 
 /// Create a JPEG fixture.
+#[allow(dead_code)]
 fn create_jpeg(width: u32, height: u32) -> TempFile {
     let img = RgbImage::from_pixel(width, height, Rgb([100, 150, 200]));
     let tmp = TempFile::with_extension("jpg").expect("create temp");
@@ -58,6 +59,7 @@ fn read_dimensions(source: &FileSource) -> (u32, u32) {
 }
 
 /// Read image format from bytes.
+#[allow(dead_code)]
 fn detect_image_format(source: &FileSource) -> ImageFormat {
     match source {
         FileSource::Path(p) => ImageFormat::from_path(p).expect("detect format"),

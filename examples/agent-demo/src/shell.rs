@@ -368,6 +368,7 @@ pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
 
 // ── Task submission ───────────────────────────────────────────────────
 
+#[allow(clippy::too_many_arguments)]
 async fn submit_task(
     pool: &Pool<AgentTask, TaskOutput>,
     multi: &MultiProgress,
@@ -470,7 +471,7 @@ async fn submit_task(
 
 fn drain_completions(
     done_rx: &mut tokio::sync::mpsc::UnboundedReceiver<Completion>,
-    tasks: &mut Vec<TrackedTask>,
+    tasks: &mut [TrackedTask],
     handles: &mut Vec<RunningHandle>,
     multi: &MultiProgress,
 ) {
@@ -543,9 +544,7 @@ fn format_help() -> String {
 
 pub fn resolve_path(input: &str) -> PathBuf {
     let p = PathBuf::from(input);
-    if p.is_absolute() {
-        p
-    } else if p.exists() {
+    if p.is_absolute() || p.exists() {
         p
     } else {
         fixture_dir().join(input)
@@ -640,7 +639,7 @@ mod tests {
 
     #[test]
     fn banner_is_not_empty() {
-        assert!(!BANNER.is_empty());
+        assert!(BANNER.len() > 1);
         assert!(BANNER.contains("rskit"));
     }
 }

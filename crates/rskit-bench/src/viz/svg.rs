@@ -32,6 +32,7 @@ impl Svg {
         self.elements.push(s);
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn line(
         &mut self,
         x1: f64,

@@ -43,7 +43,7 @@ mod tests {
     async fn sink_fn_sends_value() {
         let sink = sink_fn("sink", |_x: i32| async move { Ok(()) });
         let result = sink.send(1).await;
-        assert_eq!(result.unwrap(), ());
+        assert!(result.is_ok());
     }
 
     // ── 3. tower_provider_executes ────────────────────────────────────────────

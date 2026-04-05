@@ -8,7 +8,7 @@
 //! - CodeReview:  ~20s  (16 steps)
 //! - BatchProcess: ~12s (30 items × ~400ms)
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -59,7 +59,7 @@ impl std::fmt::Display for AgentTask {
     }
 }
 
-fn short_name(p: &PathBuf) -> String {
+fn short_name(p: &Path) -> String {
     p.file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| p.display().to_string())
