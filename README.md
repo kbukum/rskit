@@ -320,10 +320,10 @@ rskit mirrors gokit's package structure and lifecycle philosophy. Key difference
 | `sync.Mutex` in CB | `parking_lot::Mutex` | Non-poisoning |
 | `context.Context` cancellation | `CancellationToken` | Rust-idiomatic |
 | Goroutine-per-worker pool | `JoinSet` pool | Idiomatic Tokio |
-| Runtime DI container | No DI — typed owned construction | Type system does it better |
+| Runtime DI container | `rskit-di` container | Lightweight `Arc`-based, opt-in |
 
-**Out of scope for v0.1** (future roadmap): `rskit-di`, `rskit-observability`
-(metrics/OTEL), `rskit-discovery`, database/Redis/Kafka adapters.
+All 34 workspace crates are implemented and included in v0.1, covering DI,
+observability (OTEL), service discovery, database, Redis, and Kafka adapters.
 
 ---
 
