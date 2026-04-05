@@ -79,7 +79,29 @@ impl Closeable for LifecycleProvider {
 
 /// A StreamProvider impl for BoxStream tests.
 struct VecStreamProvider {
-    items: Vec<AppResult<i32>>,
+    items: Vec<i32>,
+    error_at: Option<usize>, // inject error at this index
+}
+
+impl VecStreamProvider {
+    fn from_items(items: Vec<i32>) -> Self {
+        Self {
+            items,
+            error_at: None,
+        }
+    }
+    fn with_error_at(items: Vec<i32>, idx: usize) -> Self {
+        Self {
+            items,
+            error_at: Some(idx),
+        }
+    }
+    fn empty() -> Self {
+        Self {
+            items: vec![],
+            error_at: None,
+        }
+    }
 }
 
 #[async_trait::async_trait]
@@ -92,8 +114,14 @@ impl Provider for VecStreamProvider {
 #[async_trait::async_trait]
 impl StreamProvider<(), i32> for VecStreamProvider {
     async fn stream(&self, _input: ()) -> AppResult<BoxStream<i32>> {
-        let items = self.items.clone();
-        Ok(Box::pin(stream::iter(items)))
+        let mut results: Vec<AppResult<i32>> = Vec::new();
+        for (i, item) in self.items.iter().enumerate() {
+            if self.error_at == Some(i) {
+                results.push(Err(AppError::new(ErrorCode::Internal, "mid-error")));
+            }
+            results.push(Ok(*item));
+        }
+        Ok(Box::pin(stream::iter(results)))
     }
 }
 
@@ -314,9 +342,7 @@ async fn send_sync_verification() {
 
 #[tokio::test]
 async fn boxstream_multiple_items() {
-    let sp = VecStreamProvider {
-        items: vec![Ok(1), Ok(2), Ok(3)],
-    };
+    let sp = VecStreamProvider::from_items(vec![1, 2, 3]);
     let mut s = sp.stream(()).await.unwrap();
     assert_eq!(s.next().await.unwrap().unwrap(), 1);
     assert_eq!(s.next().await.unwrap().unwrap(), 2);
@@ -326,15 +352,9 @@ async fn boxstream_multiple_items() {
 
 #[tokio::test]
 async fn boxstream_with_error_midstream() {
-    let sp = VecStreamProvider {
-        items: vec![
-            Ok(10),
-            Err(AppError::new(ErrorCode::Internal, "mid-error")),
-            Ok(30),
-        ],
-    };
+    let sp = VecStreamProvider::with_error_at(vec![10, 30], 1);
     let mut s = sp.stream(()).await.unwrap();
-    assert!(s.next().await.unwrap().is_ok());
+    assert_eq!(s.next().await.unwrap().unwrap(), 10);
     let err = s.next().await.unwrap().unwrap_err();
     assert_eq!(err.code, ErrorCode::Internal);
     // Stream continues after error
@@ -343,16 +363,14 @@ async fn boxstream_with_error_midstream() {
 
 #[tokio::test]
 async fn boxstream_empty() {
-    let sp = VecStreamProvider { items: vec![] };
+    let sp = VecStreamProvider::empty();
     let mut s = sp.stream(()).await.unwrap();
     assert!(s.next().await.is_none());
 }
 
 #[tokio::test]
 async fn boxstream_collect_all() {
-    let sp = VecStreamProvider {
-        items: vec![Ok(1), Ok(2), Ok(3), Ok(4), Ok(5)],
-    };
+    let sp = VecStreamProvider::from_items(vec![1, 2, 3, 4, 5]);
     let s = sp.stream(()).await.unwrap();
     let collected: Vec<i32> = s.filter_map(|r| async { r.ok() }).collect().await;
     assert_eq!(collected, vec![1, 2, 3, 4, 5]);
@@ -497,9 +515,10 @@ async fn logging_layer_error_passthrough() {
 
 #[tokio::test]
 async fn logging_layer_provider_name_propagation() {
+    use tower::Layer;
     let layer = LoggingLayer::new("custom-name");
     let inner = tower::service_fn(|_: ()| async { Ok::<_, AppError>(()) });
-    let svc = layer.layer(&inner);
+    let svc = layer.layer(inner);
     // The LoggingService wraps inner — just verify it compiles and has correct name
     let _ = svc;
 }
