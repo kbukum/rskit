@@ -7,7 +7,7 @@ use tokio::sync::RwLock;
 use rskit_errors::{AppError, AppResult};
 
 use crate::instance::ServiceInstance;
-use crate::traits::Discovery;
+use crate::traits::{Discovery, Registry};
 
 /// In-memory service registry useful for testing and local development.
 pub struct InMemoryDiscovery {
@@ -51,7 +51,10 @@ impl Discovery for InMemoryDiscovery {
         let map = self.instances.read().await;
         Ok(map.get(service).cloned().unwrap_or_default())
     }
+}
 
+#[async_trait]
+impl Registry for InMemoryDiscovery {
     async fn register(&self, instance: &ServiceInstance) -> AppResult<()> {
         self.add(&instance.name, instance.clone()).await;
         Ok(())
@@ -78,6 +81,7 @@ impl Discovery for InMemoryDiscovery {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::traits::Registry;
 
     fn instance(id: &str, name: &str) -> ServiceInstance {
         ServiceInstance {

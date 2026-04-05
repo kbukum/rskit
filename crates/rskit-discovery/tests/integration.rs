@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use rskit_discovery::{
-    Discovery, InMemoryDiscovery, LoadBalancer, Random, RoundRobin, ServiceInstance,
+    Discovery, InMemoryDiscovery, LoadBalancer, Random, Registry, RoundRobin, ServiceInstance,
 };
 
 fn instance(id: &str, name: &str) -> ServiceInstance {

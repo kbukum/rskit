@@ -4493,6 +4493,7 @@ dependencies = [
  "opentelemetry",
  "opentelemetry-otlp",
  "opentelemetry_sdk",
+ "parking_lot",
  "rskit-bootstrap",
  "rskit-errors",
  "rskit-logging",

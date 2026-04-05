@@ -1,8 +1,9 @@
 //! Service discovery with load balancing strategies.
 //!
-//! Register, resolve, and deregister [`ServiceInstance`]s through the
-//! [`Discovery`] trait. Pick an instance using one of the built-in
-//! load balancers: [`RoundRobin`], [`Random`], or [`LeastConnections`].
+//! Resolve [`ServiceInstance`]s through the [`Discovery`] trait and
+//! manage registrations via [`Registry`]. Pick an instance using one
+//! of the built-in load balancers: [`RoundRobin`], [`Random`], or
+//! [`LeastConnections`].
 
 #![warn(missing_docs)]
 
@@ -15,7 +16,7 @@ pub mod consul;
 pub mod instance;
 /// In-memory discovery for testing.
 pub mod memory;
-/// Core discovery trait.
+/// Core discovery and registry traits.
 pub mod traits;
 
 pub use balancer::{LeastConnections, LoadBalancer, Random, RoundRobin};
@@ -23,4 +24,4 @@ pub use balancer::{LeastConnections, LoadBalancer, Random, RoundRobin};
 pub use consul::ConsulDiscovery;
 pub use instance::ServiceInstance;
 pub use memory::InMemoryDiscovery;
-pub use traits::Discovery;
+pub use traits::{Discovery, Registry};

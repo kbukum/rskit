@@ -8,7 +8,7 @@ use tracing::{debug, warn};
 use rskit_errors::{AppError, AppResult};
 
 use crate::instance::ServiceInstance;
-use crate::traits::Discovery;
+use crate::traits::{Discovery, Registry};
 
 // ── Consul API request/response types ────────────────────────────────────────
 
@@ -143,7 +143,10 @@ impl Discovery for ConsulDiscovery {
 
         Ok(instances)
     }
+}
 
+#[async_trait]
+impl Registry for ConsulDiscovery {
     async fn register(&self, instance: &ServiceInstance) -> AppResult<()> {
         debug!(id = %instance.id, name = %instance.name, "registering instance with consul");
 
