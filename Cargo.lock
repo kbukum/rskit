@@ -4466,6 +4466,7 @@ dependencies = [
  "pin-project-lite",
  "rand 0.10.0",
  "rskit-errors",
+ "serde",
  "tokio",
  "tokio-util",
  "tower 0.5.3",
