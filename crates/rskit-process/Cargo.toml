@@ -1,0 +1,28 @@
+[package]
+name        = "rskit-process"
+description = "Process and subprocess execution with timeout and signal handling"
+version.workspace     = true
+edition.workspace     = true
+license.workspace     = true
+rust-version.workspace = true
+authors.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+documentation = "https://docs.rs/rskit-process"
+readme = "README.md"
+categories = ["development-tools"]
+keywords   = ["process", "subprocess", "timeout", "signal"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+tokio      = { workspace = true, features = ["process", "time", "signal", "sync"] }
+rskit-errors = { path = "../rskit-errors" }
+thiserror  = { workspace = true }
+tracing    = { workspace = true }
+libc       = "0.2"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }

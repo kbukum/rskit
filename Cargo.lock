@@ -4156,6 +4156,7 @@ dependencies = [
  "rskit-errors",
  "rskit-file",
  "rskit-file-s3",
+ "rskit-grpc-client",
  "rskit-http",
  "rskit-httpclient",
  "rskit-llm",

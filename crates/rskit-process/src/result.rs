@@ -1,0 +1,77 @@
+//! Process execution result.
+
+use std::time::Duration;
+
+/// Result of a completed subprocess execution.
+#[derive(Debug, Clone)]
+pub struct ProcessResult {
+    /// Process exit code. None if the process was killed.
+    pub exit_code: Option<i32>,
+    /// Captured standard output as a string.
+    pub stdout: String,
+    /// Captured standard error as a string.
+    pub stderr: String,
+    /// Total duration the process ran.
+    pub duration: Duration,
+    /// Whether the process was killed due to timeout.
+    pub timed_out: bool,
+}
+
+impl ProcessResult {
+    /// Check if the process exited successfully (exit code 0).
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use rskit_process::ProcessResult;
+    /// use std::time::Duration;
+    ///
+    /// let result = ProcessResult {
+    ///     exit_code: Some(0),
+    ///     stdout: "output".to_string(),
+    ///     stderr: "".to_string(),
+    ///     duration: Duration::from_secs(1),
+    ///     timed_out: false,
+    /// };
+    ///
+    /// assert!(result.success());
+    /// ```
+    pub fn success(&self) -> bool {
+        self.exit_code == Some(0)
+    }
+
+    /// Verify the process exited successfully, returning an error if not.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use rskit_process::{Command, ProcessConfig, run};
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let cmd = Command::new("echo").arg("hello");
+    /// let result = run(&cmd, &ProcessConfig::default()).await?;
+    /// result.check()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn check(&self) -> crate::AppResult<&Self> {
+        if self.timed_out {
+            return Err(crate::AppError::new(
+                crate::ErrorCode::Timeout,
+                "process timed out",
+            ));
+        }
+
+        match self.exit_code {
+            Some(0) => Ok(self),
+            Some(code) => Err(crate::AppError::new(
+                crate::ErrorCode::Internal,
+                format!("process exited with code {}", code),
+            )),
+            None => Err(crate::AppError::new(
+                crate::ErrorCode::Internal,
+                "process was killed",
+            )),
+        }
+    }
+}
