@@ -29,3 +29,8 @@ rand          = { workspace = true }
 base64        = "0.22"
 chrono        = { workspace = true }
 uuid          = { workspace = true }
+
+[dev-dependencies]
+tokio         = { workspace = true, features = ["full", "macros", "rt-multi-thread"] }
+serde_json    = { workspace = true }
+chrono        = { workspace = true }

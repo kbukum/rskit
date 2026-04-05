@@ -4388,6 +4388,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "rskit-integration"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "futures",
+ "http 1.4.0",
+ "parking_lot",
+ "rskit-auth",
+ "rskit-authz",
+ "rskit-bootstrap",
+ "rskit-config",
+ "rskit-di",
+ "rskit-errors",
+ "rskit-pipeline",
+ "rskit-provider",
+ "rskit-resilience",
+ "rskit-validation",
+ "serde",
+ "serde_json",
+ "tokio",
+ "validator",
+]
+
+[[package]]
 name = "rskit-llm"
 version = "0.1.0"
 dependencies = [
