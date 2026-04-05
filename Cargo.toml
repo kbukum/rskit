@@ -10,11 +10,14 @@ members = [
     "crates/rskit-provider",
     "crates/rskit-pipeline",
     "crates/rskit-resilience",
+    "crates/rskit-process",
     "crates/rskit-worker",
     "crates/rskit-server",
     # phase 2 new crates
     "crates/rskit-validation",
+    "crates/rskit-encryption",
     "crates/rskit-http",
+    "crates/rskit-httpclient",
     "crates/rskit-di",
     "crates/rskit-auth",
     # phase 3 adapters
@@ -25,6 +28,7 @@ members = [
     "crates/rskit-observability",
     "crates/rskit-authz",
     "crates/rskit-discovery",
+    "crates/rskit-grpc-client",
     "crates/rskit-testutil",
     # phase 5 specialist
     "crates/rskit-sse",
