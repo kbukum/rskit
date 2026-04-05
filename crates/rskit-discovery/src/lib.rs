@@ -16,6 +16,8 @@ pub mod consul;
 pub mod instance;
 /// In-memory discovery for testing.
 pub mod memory;
+/// Discovery-integrated server component.
+pub mod server;
 /// Core discovery and registry traits.
 pub mod traits;
 
@@ -24,4 +26,5 @@ pub use balancer::{LeastConnections, LoadBalancer, Random, RoundRobin};
 pub use consul::ConsulDiscovery;
 pub use instance::ServiceInstance;
 pub use memory::InMemoryDiscovery;
+pub use server::DiscoveryServer;
 pub use traits::{Discovery, Registry};

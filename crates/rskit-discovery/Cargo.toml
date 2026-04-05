@@ -22,6 +22,7 @@ default = []
 consul = ["dep:reqwest"]
 
 [dependencies]
+rskit-bootstrap = { path = "../rskit-bootstrap" }
 rskit-errors = { path = "../rskit-errors" }
 serde        = { workspace = true }
 serde_json   = { workspace = true }

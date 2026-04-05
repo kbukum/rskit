@@ -4176,6 +4176,7 @@ dependencies = [
  "parking_lot",
  "rand 0.10.0",
  "reqwest",
+ "rskit-bootstrap",
  "rskit-errors",
  "serde",
  "serde_json",
