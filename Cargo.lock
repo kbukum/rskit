@@ -4465,15 +4465,21 @@ dependencies = [
 name = "rskit-messaging"
 version = "0.1.0"
 dependencies = [
+ "async-stream",
  "async-trait",
  "chrono",
+ "futures",
+ "parking_lot",
  "rdkafka",
  "rskit-bootstrap",
  "rskit-errors",
+ "rskit-provider",
+ "rskit-resilience",
  "serde",
  "serde_json",
  "tokio",
  "tokio-stream",
+ "tokio-util",
  "tracing",
  "uuid",
 ]

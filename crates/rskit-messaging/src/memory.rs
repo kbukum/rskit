@@ -16,22 +16,38 @@ use crate::traits::{EventConsumer, EventProducer, MessageConsumer, MessageProduc
 ///
 /// Create one broker and hand out producers / consumers via
 /// [`InMemoryBroker::producer`] and [`InMemoryBroker::consumer`].
+///
+/// Every message sent through the broker is recorded in an internal history
+/// so that test assertion helpers can inspect what was published.
 #[derive(Debug, Clone)]
 pub struct InMemoryBroker<T: Clone + Send + Sync + 'static> {
     tx: broadcast::Sender<Message<T>>,
+    history: Arc<Mutex<Vec<Message<T>>>>,
+    topics: Arc<Mutex<HashSet<String>>>,
+    /// Notified after every publish so that [`wait_for_message`] can wake
+    /// without polling.
+    notify: Arc<tokio::sync::Notify>,
 }
 
 impl<T: Clone + Send + Sync + 'static> InMemoryBroker<T> {
     /// Create a broker with the given channel capacity.
     pub fn new(capacity: usize) -> Self {
         let (tx, _) = broadcast::channel(capacity);
-        Self { tx }
+        Self {
+            tx,
+            history: Arc::new(Mutex::new(Vec::new())),
+            topics: Arc::new(Mutex::new(HashSet::new())),
+            notify: Arc::new(tokio::sync::Notify::new()),
+        }
     }
 
     /// Create a producer attached to this broker.
     pub fn producer(&self) -> InMemoryProducer<T> {
         InMemoryProducer {
             tx: self.tx.clone(),
+            history: self.history.clone(),
+            topics: self.topics.clone(),
+            notify: self.notify.clone(),
         }
     }
 
@@ -41,6 +57,55 @@ impl<T: Clone + Send + Sync + 'static> InMemoryBroker<T> {
             rx: Arc::new(Mutex::new(self.tx.subscribe())),
             topics: Arc::new(Mutex::new(HashSet::new())),
         }
+    }
+
+    /// Return a clone of all messages published to `topic`.
+    pub async fn messages(&self, topic: &str) -> Vec<Message<T>> {
+        self.history
+            .lock()
+            .await
+            .iter()
+            .filter(|m| m.topic == topic)
+            .cloned()
+            .collect()
+    }
+
+    /// Return a clone of every message published to any topic.
+    pub async fn all_messages(&self) -> Vec<Message<T>> {
+        self.history.lock().await.clone()
+    }
+
+    /// Return the number of messages published to `topic`.
+    pub async fn message_count(&self, topic: &str) -> usize {
+        self.history
+            .lock()
+            .await
+            .iter()
+            .filter(|m| m.topic == topic)
+            .count()
+    }
+
+    /// Clear the recorded message history.
+    pub async fn reset(&self) {
+        self.history.lock().await.clear();
+    }
+
+    /// Pre-create a topic so that it appears in [`InMemoryBroker::topic_names`].
+    pub async fn create_topic(&self, topic: &str) {
+        self.topics.lock().await.insert(topic.to_string());
+    }
+
+    /// Return the sorted set of topic names that have been created or published to.
+    pub async fn topic_names(&self) -> Vec<String> {
+        let explicit = self.topics.lock().await;
+        let hist = self.history.lock().await;
+        let mut set: HashSet<String> = explicit.clone();
+        for m in hist.iter() {
+            set.insert(m.topic.clone());
+        }
+        let mut out: Vec<String> = set.into_iter().collect();
+        out.sort();
+        out
     }
 }
 
@@ -54,14 +119,29 @@ impl<T: Clone + Send + Sync + 'static> Default for InMemoryBroker<T> {
 #[derive(Debug, Clone)]
 pub struct InMemoryProducer<T: Clone + Send + Sync + 'static> {
     tx: broadcast::Sender<Message<T>>,
+    history: Arc<Mutex<Vec<Message<T>>>>,
+    topics: Arc<Mutex<HashSet<String>>>,
+    notify: Arc<tokio::sync::Notify>,
 }
 
 #[async_trait]
 impl<T: Clone + Send + Sync + 'static> MessageProducer<T> for InMemoryProducer<T> {
     async fn send(&self, msg: Message<T>) -> AppResult<()> {
+        // Record in history before broadcasting.
+        {
+            let mut hist = self.history.lock().await;
+            hist.push(msg.clone());
+        }
+        {
+            let mut set = self.topics.lock().await;
+            set.insert(msg.topic.clone());
+        }
+
         self.tx.send(msg).map_err(|_| {
             AppError::new(ErrorCode::ExternalService, "no active consumers on channel")
         })?;
+
+        self.notify.notify_waiters();
         Ok(())
     }
 
@@ -159,6 +239,85 @@ impl EventConsumer for InMemoryConsumer<serde_json::Value> {
             )
         })
     }
+}
+
+/// Assert that at least one message on `topic` satisfies the predicate.
+///
+/// # Panics
+///
+/// Panics when no matching message is found.
+pub async fn assert_published<T: Clone + Send + Sync + 'static>(
+    broker: &InMemoryBroker<T>,
+    topic: &str,
+    predicate: impl Fn(&Message<T>) -> bool,
+) {
+    let msgs = broker.messages(topic).await;
+    assert!(
+        msgs.iter().any(&predicate),
+        "assert_published: no message on topic {topic:?} matched the predicate ({} checked)",
+        msgs.len(),
+    );
+}
+
+/// Assert that exactly `n` messages were published to `topic`.
+///
+/// # Panics
+///
+/// Panics when the count does not match.
+pub async fn assert_published_n<T: Clone + Send + Sync + 'static>(
+    broker: &InMemoryBroker<T>,
+    topic: &str,
+    n: usize,
+) {
+    let got = broker.message_count(topic).await;
+    assert_eq!(
+        got, n,
+        "assert_published_n: topic {topic:?} has {got} messages, want {n}",
+    );
+}
+
+/// Wait until at least one message appears on `topic` or the timeout expires.
+///
+/// Returns the first message on the topic.
+///
+/// # Panics
+///
+/// Panics if the timeout elapses before any message arrives.
+pub async fn wait_for_message<T: Clone + Send + Sync + 'static>(
+    broker: &InMemoryBroker<T>,
+    topic: &str,
+    timeout: Duration,
+) -> Message<T> {
+    let deadline = tokio::time::Instant::now() + timeout;
+
+    loop {
+        let msgs = broker.messages(topic).await;
+        if let Some(m) = msgs.into_iter().next() {
+            return m;
+        }
+        tokio::select! {
+            _ = broker.notify.notified() => { /* re-check */ }
+            _ = tokio::time::sleep_until(deadline) => {
+                panic!("wait_for_message: timed out after {timeout:?} waiting for message on topic {topic:?}");
+            }
+        }
+    }
+}
+
+/// Assert that zero messages were published to `topic`.
+///
+/// # Panics
+///
+/// Panics when the topic is not empty.
+pub async fn assert_no_messages<T: Clone + Send + Sync + 'static>(
+    broker: &InMemoryBroker<T>,
+    topic: &str,
+) {
+    let n = broker.message_count(topic).await;
+    assert_eq!(
+        n, 0,
+        "assert_no_messages: topic {topic:?} has {n} messages, want 0",
+    );
 }
 
 #[cfg(test)]
@@ -282,5 +441,136 @@ mod tests {
         assert_eq!(a.event_type, "a");
         assert_eq!(b.event_type, "b");
         assert_eq!(c.event_type, "c");
+    }
+
+    // ── History & topic helper tests ────────────────────────────────────────
+
+    #[tokio::test]
+    async fn messages_returns_topic_history() {
+        let broker: InMemoryBroker<String> = InMemoryBroker::new(16);
+        let producer = broker.producer();
+        // Need a consumer so broadcast::send succeeds.
+        let _consumer = broker.consumer();
+
+        producer
+            .send(Message::new("t1", "a".to_string()))
+            .await
+            .unwrap();
+        producer
+            .send(Message::new("t1", "b".to_string()))
+            .await
+            .unwrap();
+        producer
+            .send(Message::new("t2", "c".to_string()))
+            .await
+            .unwrap();
+
+        let t1 = broker.messages("t1").await;
+        assert_eq!(t1.len(), 2);
+        assert_eq!(t1[0].payload, "a");
+        assert_eq!(t1[1].payload, "b");
+
+        let all = broker.all_messages().await;
+        assert_eq!(all.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn message_count_and_reset() {
+        let broker: InMemoryBroker<i32> = InMemoryBroker::new(16);
+        let producer = broker.producer();
+        let _consumer = broker.consumer();
+
+        assert_eq!(broker.message_count("t").await, 0);
+        producer.send(Message::new("t", 1)).await.unwrap();
+        assert_eq!(broker.message_count("t").await, 1);
+
+        broker.reset().await;
+        assert_eq!(broker.message_count("t").await, 0);
+    }
+
+    #[tokio::test]
+    async fn create_topic_and_topic_names() {
+        let broker: InMemoryBroker<String> = InMemoryBroker::new(16);
+        let _consumer = broker.consumer();
+
+        broker.create_topic("z-topic").await;
+        broker.create_topic("a-topic").await;
+
+        producer_send_helper(&broker, "m-topic").await;
+
+        let names = broker.topic_names().await;
+        assert_eq!(names, vec!["a-topic", "m-topic", "z-topic"]);
+    }
+
+    /// Helper: send a dummy message so that the topic appears in history.
+    async fn producer_send_helper(broker: &InMemoryBroker<String>, topic: &str) {
+        let producer = broker.producer();
+        producer
+            .send(Message::new(topic, "x".to_string()))
+            .await
+            .unwrap();
+    }
+
+    // ── Assertion helper tests ──────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_assert_published() {
+        let broker: InMemoryBroker<String> = InMemoryBroker::new(16);
+        let producer = broker.producer();
+        let _consumer = broker.consumer();
+
+        producer
+            .send(Message::new("t1", "hello".to_string()))
+            .await
+            .unwrap();
+        producer
+            .send(Message::new("t1", "world".to_string()))
+            .await
+            .unwrap();
+
+        assert_published(&broker, "t1", |m| m.payload == "world").await;
+    }
+
+    #[tokio::test]
+    async fn test_assert_published_n() {
+        let broker: InMemoryBroker<String> = InMemoryBroker::new(16);
+        let producer = broker.producer();
+        let _consumer = broker.consumer();
+
+        producer
+            .send(Message::new("t1", "a".to_string()))
+            .await
+            .unwrap();
+        producer
+            .send(Message::new("t1", "b".to_string()))
+            .await
+            .unwrap();
+
+        assert_published_n(&broker, "t1", 2).await;
+    }
+
+    #[tokio::test]
+    async fn test_assert_no_messages() {
+        let broker: InMemoryBroker<String> = InMemoryBroker::new(16);
+        assert_no_messages(&broker, "empty-topic").await;
+    }
+
+    #[tokio::test]
+    async fn test_wait_for_message() {
+        let broker: InMemoryBroker<String> = InMemoryBroker::new(16);
+        let _consumer = broker.consumer();
+
+        let broker_clone = broker.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            let producer = broker_clone.producer();
+            producer
+                .send(Message::new("t1", "delayed".to_string()))
+                .await
+                .unwrap();
+        });
+
+        let msg = wait_for_message(&broker, "t1", Duration::from_secs(2)).await;
+        assert_eq!(msg.payload, "delayed");
     }
 }

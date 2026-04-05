@@ -20,16 +20,24 @@ rustdoc-args = ["--cfg", "docsrs"]
 [features]
 default = []
 kafka = ["dep:rdkafka"]
+provider-bridge = ["dep:rskit-provider"]
+bridges = ["provider-bridge"]
 
 [dependencies]
-rskit-errors    = { path = "../rskit-errors" }
-rskit-bootstrap = { path = "../rskit-bootstrap" }
+rskit-errors      = { path = "../rskit-errors" }
+rskit-bootstrap   = { path = "../rskit-bootstrap" }
+rskit-resilience  = { path = "../rskit-resilience" }
+rskit-provider  = { path = "../rskit-provider", optional = true }
 serde           = { workspace = true }
 serde_json      = { workspace = true }
 async-trait     = { workspace = true }
+async-stream    = { workspace = true }
 tokio           = { workspace = true }
+tokio-util      = { workspace = true }
 tokio-stream    = { workspace = true }
+futures         = { workspace = true }
 tracing         = { workspace = true }
+parking_lot     = { workspace = true }
 chrono          = { workspace = true }
 uuid            = { workspace = true }
 
