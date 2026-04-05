@@ -44,6 +44,8 @@ members = [
     "crates/rskit-bench",
     # examples
     "examples/agent-demo",
+    # integration tests
+    "crates/rskit-integration",
 ]
 
 [workspace.package]
@@ -166,6 +168,7 @@ crossterm    = "0.28"
 # Benchmarking & snapshot testing
 criterion    = { version = "0.5", features = ["html_reports", "async_tokio"] }
 insta        = { version = "1.42", features = ["json", "yaml", "redactions"] }
+
 
 [profile.release]
 lto           = true
