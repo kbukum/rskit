@@ -144,3 +144,252 @@ pub enum LogOutput {
         path: String,
     },
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── Environment enum ────────────────────────────────────────────
+
+    #[test]
+    fn environment_display_development() {
+        assert_eq!(Environment::Development.to_string(), "development");
+    }
+
+    #[test]
+    fn environment_display_staging() {
+        assert_eq!(Environment::Staging.to_string(), "staging");
+    }
+
+    #[test]
+    fn environment_display_production() {
+        assert_eq!(Environment::Production.to_string(), "production");
+    }
+
+    #[test]
+    fn environment_default_is_development() {
+        assert_eq!(Environment::default(), Environment::Development);
+    }
+
+    #[test]
+    fn environment_is_production_returns_true_for_production() {
+        assert!(Environment::Production.is_production());
+    }
+
+    #[test]
+    fn environment_is_production_returns_false_for_development() {
+        assert!(!Environment::Development.is_production());
+    }
+
+    #[test]
+    fn environment_is_production_returns_false_for_staging() {
+        assert!(!Environment::Staging.is_production());
+    }
+
+    #[test]
+    fn environment_deserialize_from_lowercase_string() {
+        let dev: Environment = serde_json::from_str(r#""development""#).unwrap();
+        assert_eq!(dev, Environment::Development);
+
+        let stg: Environment = serde_json::from_str(r#""staging""#).unwrap();
+        assert_eq!(stg, Environment::Staging);
+
+        let prd: Environment = serde_json::from_str(r#""production""#).unwrap();
+        assert_eq!(prd, Environment::Production);
+    }
+
+    #[test]
+    fn environment_deserialize_unknown_string_fails() {
+        let result: Result<Environment, _> = serde_json::from_str(r#""unknown""#);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn environment_clone_and_eq() {
+        let env = Environment::Staging;
+        let cloned = env.clone();
+        assert_eq!(env, cloned);
+    }
+
+    // ── ServiceConfig ───────────────────────────────────────────────
+
+    #[test]
+    fn service_config_default_name() {
+        let cfg = ServiceConfig::default();
+        assert_eq!(cfg.name, "service");
+    }
+
+    #[test]
+    fn service_config_default_environment() {
+        let cfg = ServiceConfig::default();
+        assert_eq!(cfg.environment, Environment::Development);
+    }
+
+    #[test]
+    fn service_config_default_debug_false() {
+        let cfg = ServiceConfig::default();
+        assert!(!cfg.debug);
+    }
+
+    #[test]
+    fn service_config_default_version_is_cargo_pkg() {
+        let cfg = ServiceConfig::default();
+        assert_eq!(cfg.version, env!("CARGO_PKG_VERSION"));
+    }
+
+    #[test]
+    fn service_config_default_logging() {
+        let cfg = ServiceConfig::default();
+        assert_eq!(cfg.logging.level, "info");
+        assert_eq!(cfg.logging.format, LogFormat::Console);
+        assert_eq!(cfg.logging.output, LogOutput::Stdout);
+    }
+
+    #[test]
+    fn service_config_validation_empty_name_fails() {
+        use validator::Validate;
+        let mut cfg = ServiceConfig::default();
+        cfg.name = String::new();
+        assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn service_config_validation_valid_name_passes() {
+        use validator::Validate;
+        let cfg = ServiceConfig::default();
+        assert!(cfg.validate().is_ok());
+    }
+
+    #[test]
+    fn service_config_validation_long_name_passes() {
+        use validator::Validate;
+        let mut cfg = ServiceConfig::default();
+        cfg.name = "a".repeat(1000);
+        assert!(cfg.validate().is_ok());
+    }
+
+    #[test]
+    fn service_config_all_fields_accessible() {
+        let cfg = ServiceConfig::default();
+        let _ = &cfg.name;
+        let _ = &cfg.environment;
+        let _ = &cfg.version;
+        let _ = cfg.debug;
+        let _ = &cfg.logging;
+    }
+
+    #[test]
+    fn service_config_debug_format() {
+        let cfg = ServiceConfig::default();
+        let debug_str = format!("{:?}", cfg);
+        assert!(debug_str.contains("ServiceConfig"));
+        assert!(debug_str.contains("service"));
+    }
+
+    // ── LoggingConfig ───────────────────────────────────────────────
+
+    #[test]
+    fn logging_config_default_level() {
+        let cfg = LoggingConfig::default();
+        assert_eq!(cfg.level, "info");
+    }
+
+    #[test]
+    fn logging_config_default_format() {
+        let cfg = LoggingConfig::default();
+        assert_eq!(cfg.format, LogFormat::Console);
+    }
+
+    #[test]
+    fn logging_config_default_output() {
+        let cfg = LoggingConfig::default();
+        assert_eq!(cfg.output, LogOutput::Stdout);
+    }
+
+    #[test]
+    fn logging_config_default_service_name_is_none() {
+        let cfg = LoggingConfig::default();
+        assert!(cfg.service_name.is_none());
+    }
+
+    #[test]
+    fn logging_config_default_with_caller_false() {
+        let cfg = LoggingConfig::default();
+        assert!(!cfg.with_caller);
+    }
+
+    // ── LogFormat ───────────────────────────────────────────────────
+
+    #[test]
+    fn log_format_default_is_console() {
+        assert_eq!(LogFormat::default(), LogFormat::Console);
+    }
+
+    #[test]
+    fn log_format_json_variant() {
+        let fmt = LogFormat::Json;
+        assert_ne!(fmt, LogFormat::Console);
+    }
+
+    #[test]
+    fn log_format_deserialize_json() {
+        let fmt: LogFormat = serde_json::from_str(r#""json""#).unwrap();
+        assert_eq!(fmt, LogFormat::Json);
+    }
+
+    #[test]
+    fn log_format_deserialize_console() {
+        let fmt: LogFormat = serde_json::from_str(r#""console""#).unwrap();
+        assert_eq!(fmt, LogFormat::Console);
+    }
+
+    // ── LogOutput ───────────────────────────────────────────────────
+
+    #[test]
+    fn log_output_default_is_stdout() {
+        assert_eq!(LogOutput::default(), LogOutput::Stdout);
+    }
+
+    #[test]
+    fn log_output_stderr_variant() {
+        let out = LogOutput::Stderr;
+        assert_ne!(out, LogOutput::Stdout);
+    }
+
+    #[test]
+    fn log_output_file_variant() {
+        let out = LogOutput::File {
+            path: "/var/log/app.log".to_string(),
+        };
+        assert_eq!(
+            out,
+            LogOutput::File {
+                path: "/var/log/app.log".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn log_output_deserialize_stdout() {
+        let out: LogOutput = serde_json::from_str(r#"{"type":"stdout"}"#).unwrap();
+        assert_eq!(out, LogOutput::Stdout);
+    }
+
+    #[test]
+    fn log_output_deserialize_stderr() {
+        let out: LogOutput = serde_json::from_str(r#"{"type":"stderr"}"#).unwrap();
+        assert_eq!(out, LogOutput::Stderr);
+    }
+
+    #[test]
+    fn log_output_deserialize_file() {
+        let out: LogOutput =
+            serde_json::from_str(r#"{"type":"file","path":"/logs/app.log"}"#).unwrap();
+        assert_eq!(
+            out,
+            LogOutput::File {
+                path: "/logs/app.log".to_string()
+            }
+        );
+    }
+}

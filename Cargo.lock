@@ -4407,6 +4407,7 @@ name = "rskit-logging"
 version = "0.1.0"
 dependencies = [
  "rskit-config",
+ "serde_json",
  "tracing",
  "tracing-subscriber",
 ]
