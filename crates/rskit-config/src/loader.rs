@@ -142,7 +142,9 @@ mod tests {
     #[test]
     fn loads_defaults_with_no_file() {
         let _guard = ENV_LOCK.lock().unwrap();
-        // Ensure the override var is absent for this test.
+        // SAFETY: `std::env::remove_var` is unsafe because concurrent calls can cause data races.
+        // We hold `ENV_LOCK` (a `std::sync::Mutex`) for the duration of this test,
+        // serializing all environment variable mutations. No other test runs concurrently.
         unsafe { std::env::remove_var("APP__PORT") };
         let cfg: TestConfig = ConfigLoader::new().load().expect("should load");
         assert_eq!(cfg.port, 8080);
@@ -152,22 +154,31 @@ mod tests {
     fn env_prefix_override() {
         let _guard = ENV_LOCK.lock().unwrap();
         // APP__PORT=9090 should override the default.
-        // SAFETY: serialised by ENV_LOCK; no other thread mutates this var.
+        // SAFETY: `std::env::set_var` is unsafe because concurrent calls can cause data races.
+        // We hold `ENV_LOCK` (a `std::sync::Mutex`) for the duration of this test,
+        // serializing all environment variable mutations. No other test runs concurrently.
         unsafe { std::env::set_var("APP__PORT", "9090") };
         let cfg: TestConfig = ConfigLoader::new().load().expect("should load");
         assert_eq!(cfg.port, 9090);
+        // SAFETY: `std::env::remove_var` is unsafe because concurrent calls can cause data races.
+        // We hold `ENV_LOCK` for the duration of this test, serializing all env mutations.
         unsafe { std::env::remove_var("APP__PORT") };
     }
 
     #[test]
     fn custom_prefix_is_respected() {
         let _guard = ENV_LOCK.lock().unwrap();
+        // SAFETY: `std::env::set_var` is unsafe because concurrent calls can cause data races.
+        // We hold `ENV_LOCK` (a `std::sync::Mutex`) for the duration of this test,
+        // serializing all environment variable mutations. No other test runs concurrently.
         unsafe { std::env::set_var("SVC__PORT", "7777") };
         let cfg: TestConfig = ConfigLoader::new()
             .with_env_prefix("SVC")
             .load()
             .expect("should load");
         assert_eq!(cfg.port, 7777);
+        // SAFETY: `std::env::remove_var` is unsafe because concurrent calls can cause data races.
+        // We hold `ENV_LOCK` for the duration of this test, serializing all env mutations.
         unsafe { std::env::remove_var("SVC__PORT") };
     }
 }
