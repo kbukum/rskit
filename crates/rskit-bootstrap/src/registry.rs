@@ -59,9 +59,9 @@ impl Registry {
     /// Start all components in registration order (sequential).
     pub async fn start_all(&self) -> AppResult<()> {
         for c in &self.components {
-            tracing::info!(component = c.name(), "starting component");
+            tracing::debug!(component = c.name(), "starting component");
             c.start().await?;
-            tracing::info!(component = c.name(), "component started");
+            tracing::debug!(component = c.name(), "component started");
         }
         Ok(())
     }
@@ -89,11 +89,11 @@ impl Registry {
             .try_for_each_concurrent(concurrency, |c| {
                 let cancel = cancel.clone();
                 async move {
-                    tracing::info!(component = c.name(), "starting component (concurrent)");
+                    tracing::debug!(component = c.name(), "starting component (concurrent)");
                     tokio::select! {
                         r = c.start() => {
                             r?;
-                            tracing::info!(component = c.name(), "component started");
+                            tracing::debug!(component = c.name(), "component started");
                             Ok(())
                         }
                         _ = cancel.cancelled() => {
@@ -109,7 +109,7 @@ impl Registry {
     /// Stop all components in reverse registration order (LIFO).
     pub async fn stop_all(&self) {
         for c in self.components.iter().rev() {
-            tracing::info!(component = c.name(), "stopping component");
+            tracing::debug!(component = c.name(), "stopping component");
             if let Err(e) = c.stop().await {
                 tracing::warn!(component = c.name(), error = %e, "error stopping component");
             }

@@ -41,7 +41,7 @@ impl RedisClient {
                 .with_cause(e)
             })?;
 
-        tracing::info!(host = %config.host, port = %config.port, db = %config.database, "redis connected");
+        tracing::debug!(host = %config.host, port = %config.port, db = %config.database, "redis connected");
 
         Ok(Self {
             manager,
@@ -259,13 +259,13 @@ impl Component for RedisClient {
             .query_async(&mut self.conn())
             .await
             .map_err(redis_err)?;
-        tracing::info!(response = %pong, "redis PING ok");
+        tracing::debug!(response = %pong, "redis PING ok");
         self.connected.store(true, Ordering::Relaxed);
         Ok(())
     }
 
     async fn stop(&self) -> AppResult<()> {
-        tracing::info!("redis client stopping");
+        tracing::debug!("redis client stopping");
         self.connected.store(false, Ordering::Relaxed);
         Ok(())
     }

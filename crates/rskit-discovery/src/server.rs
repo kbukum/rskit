@@ -64,7 +64,7 @@ impl<S: Component + ?Sized + 'static> Component for DiscoveryServer<S> {
 
     async fn start(&self) -> AppResult<()> {
         // Start the inner server first
-        tracing::info!(
+        tracing::debug!(
             component = %self.name,
             "Starting inner server component"
         );
@@ -76,7 +76,7 @@ impl<S: Component + ?Sized + 'static> Component for DiscoveryServer<S> {
         })?;
 
         // Then register with discovery
-        tracing::info!(
+        tracing::debug!(
             component = %self.name,
             service_id = %self.instance.id,
             service_name = %self.instance.name,
@@ -107,7 +107,7 @@ impl<S: Component + ?Sized + 'static> Component for DiscoveryServer<S> {
             ));
         }
 
-        tracing::info!(
+        tracing::debug!(
             component = %self.name,
             service_id = %self.instance.id,
             "Service registered successfully"
@@ -116,7 +116,7 @@ impl<S: Component + ?Sized + 'static> Component for DiscoveryServer<S> {
     }
 
     async fn stop(&self) -> AppResult<()> {
-        tracing::info!(
+        tracing::debug!(
             component = %self.name,
             service_id = %self.instance.id,
             "Stopping discovery-server component"
@@ -141,7 +141,7 @@ impl<S: Component + ?Sized + 'static> Component for DiscoveryServer<S> {
             )
         })?;
 
-        tracing::info!(
+        tracing::debug!(
             component = %self.name,
             "Discovery-server component stopped"
         );
