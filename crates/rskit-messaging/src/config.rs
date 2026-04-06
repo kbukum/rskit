@@ -172,37 +172,12 @@ impl BrokerConfigExt for KafkaConfig {
 }
 
 impl KafkaConfig {
-    /// Build an `rdkafka::config::ClientConfig` from this configuration.
+    /// Build a base `rdkafka::config::ClientConfig` with properties shared
+    /// by both producers and consumers (brokers, security, timeouts).
     #[cfg(feature = "kafka")]
-    pub fn to_client_config(&self) -> rdkafka::config::ClientConfig {
+    fn base_client_config(&self) -> rdkafka::config::ClientConfig {
         let mut cfg = rdkafka::config::ClientConfig::new();
         cfg.set("bootstrap.servers", self.base.brokers.join(","));
-
-        if let Some(ref group) = self.group_id {
-            cfg.set("group.id", group);
-        }
-
-        let compression = match self.compression {
-            Compression::None => "none",
-            Compression::Gzip => "gzip",
-            Compression::Snappy => "snappy",
-            Compression::Lz4 => "lz4",
-            Compression::Zstd => "zstd",
-        };
-        cfg.set("compression.type", compression);
-
-        let offset = match self.auto_offset_reset {
-            OffsetReset::Latest => "latest",
-            OffsetReset::Earliest => "earliest",
-        };
-        cfg.set("auto.offset.reset", offset);
-
-        cfg.set(
-            "session.timeout.ms",
-            self.session_timeout.as_millis().to_string(),
-        );
-        cfg.set("batch.size", self.batch_size.to_string());
-        cfg.set("linger.ms", self.linger_ms.to_string());
         cfg.set("security.protocol", self.security_protocol.to_string());
 
         if let Some(ref mechanism) = self.sasl_mechanism {
@@ -217,7 +192,48 @@ impl KafkaConfig {
         if let Some(timeout) = self.base.request_timeout {
             cfg.set("request.timeout.ms", timeout.to_string());
         }
+
+        cfg
+    }
+
+    /// Build a producer-specific `ClientConfig` (compression, batching, retries).
+    #[cfg(feature = "kafka")]
+    pub fn to_producer_config(&self) -> rdkafka::config::ClientConfig {
+        let mut cfg = self.base_client_config();
+
+        let compression = match self.compression {
+            Compression::None => "none",
+            Compression::Gzip => "gzip",
+            Compression::Snappy => "snappy",
+            Compression::Lz4 => "lz4",
+            Compression::Zstd => "zstd",
+        };
+        cfg.set("compression.type", compression);
+        cfg.set("batch.size", self.batch_size.to_string());
+        cfg.set("linger.ms", self.linger_ms.to_string());
         cfg.set("message.send.max.retries", self.base.retries.to_string());
+
+        cfg
+    }
+
+    /// Build a consumer-specific `ClientConfig` (group, offsets, session timeout).
+    #[cfg(feature = "kafka")]
+    pub fn to_consumer_config(&self) -> rdkafka::config::ClientConfig {
+        let mut cfg = self.base_client_config();
+
+        if let Some(ref group) = self.group_id {
+            cfg.set("group.id", group);
+        }
+
+        let offset = match self.auto_offset_reset {
+            OffsetReset::Latest => "latest",
+            OffsetReset::Earliest => "earliest",
+        };
+        cfg.set("auto.offset.reset", offset);
+        cfg.set(
+            "session.timeout.ms",
+            self.session_timeout.as_millis().to_string(),
+        );
 
         cfg
     }

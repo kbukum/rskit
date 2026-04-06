@@ -18,7 +18,7 @@ pub struct KafkaConsumer {
 impl KafkaConsumer {
     /// Create a new `KafkaConsumer` from the given configuration.
     pub fn new(config: &KafkaConfig) -> AppResult<Self> {
-        let consumer: StreamConsumer = config.to_client_config().create().map_err(|e| {
+        let consumer: StreamConsumer = config.to_consumer_config().create().map_err(|e| {
             AppError::new(
                 ErrorCode::Internal,
                 format!("Failed to create Kafka consumer: {e}"),

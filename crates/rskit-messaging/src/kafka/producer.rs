@@ -18,7 +18,7 @@ pub struct KafkaProducer {
 impl KafkaProducer {
     /// Create a new `KafkaProducer` from the given configuration.
     pub fn new(config: &KafkaConfig) -> AppResult<Self> {
-        let producer: FutureProducer = config.to_client_config().create().map_err(|e| {
+        let producer: FutureProducer = config.to_producer_config().create().map_err(|e| {
             AppError::new(
                 ErrorCode::Internal,
                 format!("Failed to create Kafka producer: {e}"),
