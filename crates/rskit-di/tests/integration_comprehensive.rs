@@ -131,6 +131,7 @@ async fn high_concurrent_resolve_eager() {
 async fn high_concurrent_resolve_factory() {
     static FACTORY_CALLS: AtomicU32 = AtomicU32::new(0);
 
+    #[allow(dead_code)]
     struct CountSvc {
         id: u32,
     }
@@ -159,6 +160,7 @@ async fn high_concurrent_resolve_factory() {
 
 // ── 4. Closeable trait and close() ───────────────────────────────────────────
 
+#[allow(dead_code)]
 struct MockCloseable {
     closed: std::sync::Mutex<bool>,
 }
@@ -285,7 +287,7 @@ fn re_register_factory_overwrites() {
 macro_rules! define_types {
     ($($name:ident),*) => {
         $(
-            struct $name { val: u32 }
+            struct $name { #[allow(dead_code)] val: u32 }
         )*
     };
 }
@@ -356,6 +358,7 @@ fn container_default_creates_empty() {
 fn singleton_arc_ptr_eq() {
     static SINGLETON_CTR: AtomicU32 = AtomicU32::new(0);
 
+    #[allow(dead_code)]
     struct SingleSvc {
         id: u32,
     }
@@ -617,9 +620,11 @@ async fn concurrent_mixed_singleton_and_factory() {
     static MIX_FACTORY_CALLS: AtomicU32 = AtomicU32::new(0);
     static MIX_SINGLETON_CALLS: AtomicU32 = AtomicU32::new(0);
 
+    #[allow(dead_code)]
     struct FactoryItem {
         id: u32,
     }
+    #[allow(dead_code)]
     struct SingletonItem {
         id: u32,
     }

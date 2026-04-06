@@ -29,6 +29,7 @@ struct CapturedEvent {
     message: String,
     level: tracing::Level,
     target: String,
+    #[allow(dead_code)]
     fields: Vec<(String, String)>,
 }
 
