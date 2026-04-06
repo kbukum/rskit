@@ -58,6 +58,7 @@ impl<T: Send + Sync + Clone + 'static> ManagedConsumer<T> {
 
         let task = tokio::spawn(async move {
             tracing::info!(consumer = %name, "managed consumer loop started");
+            let mut consecutive_errors: u32 = 0;
             loop {
                 tokio::select! {
                     _ = cancel.cancelled() => {
@@ -67,6 +68,7 @@ impl<T: Send + Sync + Clone + 'static> ManagedConsumer<T> {
                     result = consumer.recv() => {
                         match result {
                             Ok(msg) => {
+                                consecutive_errors = 0;
                                 let topic = msg.topic.clone();
                                 let start = Instant::now();
                                 let handle_result = handler.handle(msg).await;
@@ -87,13 +89,19 @@ impl<T: Send + Sync + Clone + 'static> ManagedConsumer<T> {
                                 if cancel.is_cancelled() {
                                     break;
                                 }
-                                tracing::error!(
-                                    consumer = %name,
-                                    error = %e,
-                                    "recv error"
-                                );
-                                // Brief pause before retrying to avoid tight-loop on errors
-                                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                                consecutive_errors += 1;
+                                // Log first error and then only every 10th to avoid spam
+                                if consecutive_errors == 1 || consecutive_errors % 10 == 0 {
+                                    tracing::warn!(
+                                        consumer = %name,
+                                        error = %e,
+                                        consecutive = consecutive_errors,
+                                        "recv error (retrying)"
+                                    );
+                                }
+                                // Exponential backoff: 500ms, 1s, 2s, 4s, capped at 5s
+                                let backoff_ms = (500u64 * (1u64 << consecutive_errors.min(3))).min(5000);
+                                tokio::time::sleep(std::time::Duration::from_millis(backoff_ms)).await;
                             }
                         }
                     }
