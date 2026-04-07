@@ -1,21 +1,36 @@
 //! FFmpeg executor implementation.
 
+use std::sync::Arc;
+
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_file::{FileSink, FileSource, TempFile};
 use rskit_media::{executor::MediaExecutor, ops::MediaOp, pipeline::Progress, registry::Registry};
+use tokio::sync::Semaphore;
 
-use crate::{command::FfmpegCommand, config::FfmpegConfig};
+use crate::{
+    command::FfmpegCommand,
+    config::FfmpegConfig,
+    error,
+    hw_accel::HwAccel,
+};
 
-/// FFmpeg-based media executor.
+/// FFmpeg-based media executor with concurrency control and hw accel fallback.
 pub struct FfmpegExecutor {
     config: FfmpegConfig,
     registry: Registry,
+    semaphore: Arc<Semaphore>,
 }
 
 impl FfmpegExecutor {
     /// Create a new executor with the given configuration and registry.
     pub fn new(config: FfmpegConfig, registry: Registry) -> Self {
-        Self { config, registry }
+        let max = config.effective_max_concurrent();
+        tracing::info!(max_concurrent = max, "FfmpegExecutor initialized");
+        Self {
+            semaphore: Arc::new(Semaphore::new(max)),
+            config,
+            registry,
+        }
     }
 
     /// Check that ffmpeg is available and return its version.
@@ -36,15 +51,95 @@ impl FfmpegExecutor {
         Ok(version)
     }
 
-    fn determine_output_extension(&self, ops: &[MediaOp]) -> &str {
+    fn determine_output_extension(&self, ops: &[MediaOp]) -> String {
         for op in ops.iter().rev() {
             if let MediaOp::Transcode(config) = op {
                 if let Some(info) = self.registry.format_info(&config.format) {
-                    return Box::leak(info.extension.clone().into_boxed_str());
+                    return info.extension.clone();
                 }
             }
         }
-        "mkv" // default container
+        "mkv".to_string()
+    }
+
+    /// Run an FFmpeg command with concurrency control and optional hw accel fallback.
+    async fn run_with_retry(
+        &self,
+        source: &FileSource,
+        ops: &[MediaOp],
+        sink: Option<&FileSink>,
+        on_progress: Option<Box<dyn Fn(Progress) + Send + Sync>>,
+    ) -> AppResult<std::path::PathBuf> {
+        let ext = self.determine_output_extension(ops);
+        let output_file = match sink {
+            Some(FileSink::Path(p)) => {
+                if let Some(parent) = p.parent() {
+                    tokio::fs::create_dir_all(parent).await.map_err(|e| {
+                        AppError::new(ErrorCode::Internal, format!("create dir failed: {e}"))
+                    })?;
+                }
+                p.clone()
+            }
+            _ => TempFile::with_extension(&ext)?.path().to_path_buf(),
+        };
+
+        // Acquire semaphore permit (blocks if max concurrent reached)
+        let _permit = self
+            .semaphore
+            .acquire()
+            .await
+            .map_err(|_| AppError::new(ErrorCode::Internal, "semaphore closed"))?;
+
+        tracing::debug!(
+            available_permits = self.semaphore.available_permits(),
+            "acquired FFmpeg semaphore permit"
+        );
+
+        // First attempt with configured hw_accel
+        let cmd = FfmpegCommand::compile(source, ops, sink, &self.config, &self.registry)?;
+        let result = cmd.run(&self.config, on_progress, &output_file).await;
+
+        match result {
+            Ok(()) => Ok(output_file),
+            Err(err) => {
+                // Check if we should retry with hw accel fallback
+                let should_fallback = self.config.hw_accel_fallback
+                    && self.config.hw_accel.as_ref().is_some_and(|hw| hw.is_hardware())
+                    && err.is_retryable();
+
+                // Parse error kind from the message (the run() method now includes stderr)
+                let err_msg = &err.message;
+                let kind = error::classify_error(None, err_msg);
+
+                if should_fallback && kind.should_fallback_hw_accel() {
+                    tracing::warn!(
+                        error = %err_msg,
+                        "FFmpeg hw accel failed, retrying with software decode"
+                    );
+
+                    // Build a config with hw accel disabled
+                    let mut fallback_config = self.config.clone();
+                    fallback_config.hw_accel = Some(HwAccel::None);
+
+                    // Clean up any partial output from the failed attempt
+                    let _ = tokio::fs::remove_file(&output_file).await;
+
+                    let cmd_fallback = FfmpegCommand::compile(
+                        source,
+                        ops,
+                        sink,
+                        &fallback_config,
+                        &self.registry,
+                    )?;
+                    cmd_fallback
+                        .run(&fallback_config, None, &output_file)
+                        .await?;
+                    Ok(output_file)
+                } else {
+                    Err(err)
+                }
+            }
+        }
     }
 }
 
@@ -56,21 +151,7 @@ impl MediaExecutor for FfmpegExecutor {
         ops: &[MediaOp],
         sink: Option<&FileSink>,
     ) -> AppResult<FileSource> {
-        let ext = self.determine_output_extension(ops);
-        let output_file = match sink {
-            Some(FileSink::Path(p)) => {
-                if let Some(parent) = p.parent() {
-                    tokio::fs::create_dir_all(parent).await.map_err(|e| {
-                        AppError::new(ErrorCode::Internal, format!("create dir failed: {e}"))
-                    })?;
-                }
-                p.clone()
-            }
-            _ => TempFile::with_extension(ext)?.path().to_path_buf(),
-        };
-
-        let cmd = FfmpegCommand::compile(source, ops, sink, &self.config, &self.registry)?;
-        cmd.run(&self.config, None, &output_file).await?;
+        let output_file = self.run_with_retry(source, ops, sink, None).await?;
 
         match sink {
             Some(FileSink::Path(p)) => Ok(FileSource::Path(p.clone())),
@@ -91,14 +172,8 @@ impl MediaExecutor for FfmpegExecutor {
         sink: Option<&FileSink>,
         on_progress: Box<dyn Fn(Progress) + Send + Sync>,
     ) -> AppResult<FileSource> {
-        let ext = self.determine_output_extension(ops);
-        let output_file = match sink {
-            Some(FileSink::Path(p)) => p.clone(),
-            _ => TempFile::with_extension(ext)?.path().to_path_buf(),
-        };
-
-        let cmd = FfmpegCommand::compile(source, ops, sink, &self.config, &self.registry)?;
-        cmd.run(&self.config, Some(on_progress), &output_file)
+        let output_file = self
+            .run_with_retry(source, ops, sink, Some(on_progress))
             .await?;
 
         match sink {
@@ -114,7 +189,6 @@ impl MediaExecutor for FfmpegExecutor {
     }
 
     fn supports(&self, op: &MediaOp) -> bool {
-        // FFmpeg supports all operations
         match op {
             MediaOp::BurnSubtitles(_) => true,
             MediaOp::ExtractMany(_) => true,

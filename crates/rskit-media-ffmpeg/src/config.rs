@@ -16,16 +16,38 @@ pub struct FfmpegConfig {
     pub ffprobe_path: Option<PathBuf>,
     /// Directory for temporary files.
     pub temp_dir: Option<PathBuf>,
-    /// Number of threads to use.
+    /// Number of threads to use per FFmpeg process.
     pub threads: Option<u32>,
     /// Hardware acceleration mode.
     pub hw_accel: Option<HwAccel>,
-    /// Maximum execution timeout.
+    /// Maximum execution timeout per FFmpeg invocation.
     pub timeout: Option<Duration>,
     /// Whether to overwrite existing output files (`-y` flag).
     pub overwrite: bool,
     /// FFmpeg log level.
     pub log_level: FfmpegLogLevel,
+    /// Maximum number of concurrent FFmpeg processes.
+    /// Defaults to `num_cpus / 2` (minimum 1) if `None`.
+    pub max_concurrent: Option<usize>,
+    /// When `true`, if an FFmpeg invocation fails due to hardware acceleration
+    /// issues (e.g., macOS exit code 69 / VideoToolbox exhaustion), automatically
+    /// retry with software-only decoding (`-hwaccel none`).
+    /// Defaults to `true`.
+    #[serde(default = "default_hw_accel_fallback")]
+    pub hw_accel_fallback: bool,
+    /// Maximum number of retries for transient failures (hw accel exhaustion,
+    /// timeouts). Does not retry permanent failures (invalid input, bad codec).
+    /// Defaults to `1`.
+    #[serde(default = "default_max_retries")]
+    pub max_retries: u32,
+}
+
+fn default_hw_accel_fallback() -> bool {
+    true
+}
+
+fn default_max_retries() -> u32 {
+    1
 }
 
 impl Default for FfmpegConfig {
@@ -39,6 +61,9 @@ impl Default for FfmpegConfig {
             timeout: None,
             overwrite: true,
             log_level: FfmpegLogLevel::Warning,
+            max_concurrent: None,
+            hw_accel_fallback: true,
+            max_retries: 1,
         }
     }
 }
@@ -56,6 +81,17 @@ impl FfmpegConfig {
         self.ffprobe_path
             .clone()
             .unwrap_or_else(|| which::which("ffprobe").unwrap_or_else(|_| PathBuf::from("ffprobe")))
+    }
+
+    /// Effective max concurrent processes.
+    pub fn effective_max_concurrent(&self) -> usize {
+        self.max_concurrent
+            .unwrap_or_else(|| {
+                let cpus = std::thread::available_parallelism()
+                    .map(|n| n.get())
+                    .unwrap_or(4);
+                (cpus / 2).max(1)
+            })
     }
 }
 

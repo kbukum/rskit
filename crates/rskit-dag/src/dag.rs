@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use crate::node::DagNode;
 use rskit_errors::{AppError, AppResult, ErrorCode};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Semaphore};
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 
@@ -11,12 +11,16 @@ use tokio_util::sync::CancellationToken;
 ///
 /// Nodes are executed in topological order with maximum parallelism:
 /// all nodes whose dependencies are satisfied run concurrently.
+/// Use [`with_max_parallelism`](Dag::with_max_parallelism) to limit
+/// how many nodes execute simultaneously.
 pub struct Dag {
     nodes: HashMap<String, Arc<dyn DagNode>>,
     /// Forward edges: `from_id` → downstream dependents
     edges: HashMap<String, Vec<String>>,
     /// Reverse edges: `to_id` → upstream dependencies
     reverse_edges: HashMap<String, Vec<String>>,
+    /// Optional limit on concurrent node execution.
+    max_parallelism: Option<usize>,
 }
 
 impl Default for Dag {
@@ -32,7 +36,18 @@ impl Dag {
             nodes: HashMap::new(),
             edges: HashMap::new(),
             reverse_edges: HashMap::new(),
+            max_parallelism: None,
         }
+    }
+
+    /// Set the maximum number of nodes that can execute concurrently.
+    ///
+    /// By default there is no limit — all ready nodes run in parallel.
+    /// Setting this to `Some(n)` caps concurrency to `n` nodes.
+    #[must_use]
+    pub fn with_max_parallelism(mut self, max: usize) -> Self {
+        self.max_parallelism = Some(max.max(1));
+        self
     }
 
     /// Add a node to the DAG.
@@ -129,6 +144,8 @@ impl Dag {
     /// Execute all nodes respecting dependency order with maximum parallelism.
     ///
     /// Nodes with no pending dependencies are launched concurrently.
+    /// If [`with_max_parallelism`](Dag::with_max_parallelism) was called,
+    /// at most that many nodes will run at the same time.
     /// When a node completes, any downstream nodes whose dependencies are
     /// now fully satisfied are started immediately.
     pub async fn execute(
@@ -140,6 +157,12 @@ impl Dag {
 
         let outputs: Arc<Mutex<HashMap<String, serde_json::Value>>> =
             Arc::new(Mutex::new(HashMap::new()));
+
+        // Optional concurrency semaphore
+        let semaphore = self.max_parallelism.map(|n| {
+            tracing::debug!(max_parallelism = n, "DAG concurrency limited");
+            Arc::new(Semaphore::new(n))
+        });
 
         // Track remaining in-degree for scheduling
         let mut remaining_in_degree: HashMap<String, usize> = HashMap::new();
@@ -163,9 +186,18 @@ impl Dag {
                 let outputs = Arc::clone(&outputs);
                 let reverse = self.reverse_edges.get(id).cloned().unwrap_or_default();
                 let node_id = id.clone();
+                let sem = semaphore.clone();
 
                 pending.insert(id.clone());
                 join_set.spawn(async move {
+                    // Acquire semaphore if max_parallelism is set
+                    let _permit = match sem {
+                        Some(ref s) => Some(s.acquire().await.map_err(|_| {
+                            AppError::new(ErrorCode::Internal, "DAG semaphore closed")
+                        })?),
+                        None => None,
+                    };
+
                     let inputs = {
                         let out = outputs.lock().await;
                         reverse
@@ -212,9 +244,20 @@ impl Dag {
                             let reverse =
                                 self.reverse_edges.get(dep_id).cloned().unwrap_or_default();
                             let node_id = dep_id.clone();
+                            let sem = semaphore.clone();
 
                             pending.insert(dep_id.clone());
                             join_set.spawn(async move {
+                                let _permit = match sem {
+                                    Some(ref s) => Some(s.acquire().await.map_err(|_| {
+                                        AppError::new(
+                                            ErrorCode::Internal,
+                                            "DAG semaphore closed",
+                                        )
+                                    })?),
+                                    None => None,
+                                };
+
                                 let inputs = {
                                     let out = outputs.lock().await;
                                     reverse
