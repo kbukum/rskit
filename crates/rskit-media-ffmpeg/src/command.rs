@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use rskit_errors::{AppError, AppResult, ErrorCode};
+use rskit_errors::AppResult;
 use rskit_file::{FileSink, FileSource};
 use rskit_media::{
     filter::FilterTarget,
@@ -417,7 +417,7 @@ impl FfmpegCommand {
         config: &FfmpegConfig,
         on_progress: Option<Box<dyn Fn(Progress) + Send + Sync>>,
         output_path: &std::path::Path,
-    ) -> AppResult<()> {
+    ) -> Result<(), crate::error::FfmpegError> {
         let mut args = self.to_args();
         args.push(output_path.to_string_lossy().to_string());
 
@@ -441,7 +441,12 @@ impl FfmpegCommand {
         }
 
         let mut child = command.spawn().map_err(|e| {
-            AppError::new(ErrorCode::Internal, format!("failed to spawn ffmpeg: {e}"))
+            crate::error::FfmpegError {
+                kind: crate::error::FfmpegErrorKind::SpawnFailed,
+                exit_code: None,
+                stderr: String::new(),
+                message: format!("failed to spawn ffmpeg: {e}"),
+            }
         })?;
 
         let child_pid = child.id();
@@ -478,22 +483,33 @@ impl FfmpegCommand {
         let wait_result = if let Some(timeout_dur) = config.timeout {
             match tokio::time::timeout(timeout_dur, child.wait()).await {
                 Ok(result) => result.map_err(|e| {
-                    AppError::new(ErrorCode::Internal, format!("ffmpeg process error: {e}"))
+                    crate::error::FfmpegError {
+                        kind: crate::error::FfmpegErrorKind::Unknown,
+                        exit_code: None,
+                        stderr: String::new(),
+                        message: format!("ffmpeg process error: {e}"),
+                    }
                 }),
                 Err(_) => {
                     // Timeout — kill the process
                     tracing::warn!("FFmpeg process timed out after {:?}, killing", timeout_dur);
                     Self::kill_process(&mut child, child_pid);
-                    return Err(AppError::new(
-                        ErrorCode::Timeout,
-                        format!("ffmpeg timed out after {timeout_dur:?}"),
-                    )
-                    .retryable(true));
+                    return Err(crate::error::FfmpegError {
+                        kind: crate::error::FfmpegErrorKind::Timeout,
+                        exit_code: None,
+                        stderr: String::new(),
+                        message: format!("ffmpeg timed out after {timeout_dur:?}"),
+                    });
                 }
             }
         } else {
             child.wait().await.map_err(|e| {
-                AppError::new(ErrorCode::Internal, format!("ffmpeg process error: {e}"))
+                crate::error::FfmpegError {
+                    kind: crate::error::FfmpegErrorKind::Unknown,
+                    exit_code: None,
+                    stderr: String::new(),
+                    message: format!("ffmpeg process error: {e}"),
+                }
             })
         };
 
@@ -527,7 +543,7 @@ impl FfmpegCommand {
                 message,
             };
 
-            return Err(err.into_app_error());
+            return Err(err);
         }
 
         Ok(())

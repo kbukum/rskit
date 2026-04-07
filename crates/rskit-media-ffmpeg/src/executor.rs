@@ -10,7 +10,6 @@ use tokio::sync::Semaphore;
 use crate::{
     command::FfmpegCommand,
     config::FfmpegConfig,
-    error,
     hw_accel::HwAccel,
 };
 
@@ -101,19 +100,17 @@ impl FfmpegExecutor {
 
         match result {
             Ok(()) => Ok(output_file),
-            Err(err) => {
-                // Check if we should retry with hw accel fallback
+            Err(ffmpeg_err) => {
+                // Direct access to classified error kind (no information loss)
                 let should_fallback = self.config.hw_accel_fallback
                     && self.config.hw_accel.as_ref().is_some_and(|hw| hw.is_hardware())
-                    && err.is_retryable();
+                    && ffmpeg_err.kind.is_retryable();
 
-                // Parse error kind from the message (the run() method now includes stderr)
-                let err_msg = &err.message;
-                let kind = error::classify_error(None, err_msg);
-
-                if should_fallback && kind.should_fallback_hw_accel() {
+                if should_fallback && ffmpeg_err.kind.should_fallback_hw_accel() {
                     tracing::warn!(
-                        error = %err_msg,
+                        error = %ffmpeg_err.message,
+                        kind = ?ffmpeg_err.kind,
+                        exit_code = ?ffmpeg_err.exit_code,
                         "FFmpeg hw accel failed, retrying with software decode"
                     );
 
@@ -133,10 +130,11 @@ impl FfmpegExecutor {
                     )?;
                     cmd_fallback
                         .run(&fallback_config, None, &output_file)
-                        .await?;
+                        .await
+                        .map_err(|e| e.into_app_error())?;
                     Ok(output_file)
                 } else {
-                    Err(err)
+                    Err(ffmpeg_err.into_app_error())
                 }
             }
         }
