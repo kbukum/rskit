@@ -25,10 +25,9 @@ pub enum HwAccel {
 
 impl HwAccel {
     /// Convert to the FFmpeg `-hwaccel` argument value.
-    /// Returns `None` for [`HwAccel::None`] since no flag should be emitted.
     pub fn ffmpeg_arg(&self) -> Option<&str> {
         match self {
-            Self::None => Option::None,
+            Self::None => Some("none"),
             Self::VideoToolbox => Some("videotoolbox"),
             Self::Cuda => Some("cuda"),
             Self::Qsv => Some("qsv"),
@@ -72,5 +71,32 @@ impl HwAccel {
         }
 
         available
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn none_emits_hwaccel_none_flag() {
+        // HwAccel::None must emit "-hwaccel none" to explicitly force software decoding.
+        // Without this, FFmpeg may auto-select hardware decoders (e.g., VideoToolbox for AV1
+        // on macOS) even when the intent is a pure software fallback.
+        assert_eq!(HwAccel::None.ffmpeg_arg(), Some("none"));
+    }
+
+    #[test]
+    fn hardware_variants_emit_flags() {
+        assert_eq!(HwAccel::VideoToolbox.ffmpeg_arg(), Some("videotoolbox"));
+        assert_eq!(HwAccel::Cuda.ffmpeg_arg(), Some("cuda"));
+        assert_eq!(HwAccel::Auto.ffmpeg_arg(), Some("auto"));
+    }
+
+    #[test]
+    fn none_is_not_hardware() {
+        assert!(!HwAccel::None.is_hardware());
+        assert!(HwAccel::Auto.is_hardware());
+        assert!(HwAccel::VideoToolbox.is_hardware());
     }
 }
