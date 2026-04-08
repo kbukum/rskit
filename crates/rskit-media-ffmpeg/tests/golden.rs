@@ -44,6 +44,26 @@ macro_rules! skip_without_ffmpeg {
     };
 }
 
+fn has_subtitles_filter() -> bool {
+    std::process::Command::new("ffmpeg")
+        .args(["-filters", "-v", "quiet"])
+        .output()
+        .map(|o| {
+            let stdout = String::from_utf8_lossy(&o.stdout);
+            stdout.contains("subtitles")
+        })
+        .unwrap_or(false)
+}
+
+macro_rules! skip_without_subtitles {
+    () => {
+        if !has_subtitles_filter() {
+            eprintln!("Skipping: ffmpeg subtitles filter not available (needs libass)");
+            return;
+        }
+    };
+}
+
 // ── Test 1: Probe real JPEG ──────────────────────────────────────────────────
 
 #[tokio::test]
@@ -288,6 +308,7 @@ async fn golden_filter_chain_video() {
 #[tokio::test]
 async fn golden_burn_subtitles() {
     skip_without_ffmpeg!();
+    skip_without_subtitles!();
 
     let source = FileSource::from_path(fixtures_dir().join("video/ai-generated.mp4"));
     let dir = TempDir::new().expect("temp dir");

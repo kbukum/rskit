@@ -1,0 +1,10 @@
+---
+source: crates/rskit-media-ffmpeg/tests/golden.rs
+expression: "serde_json::json!({\n    \"has_video\": meta.has_video(), \"has_audio\": meta.has_audio(),\n    \"duration_secs\": meta.duration.map(|d| d.as_secs_f64()), \"track_count\":\n    meta.tracks.len(),\n})"
+---
+{
+  "duration_secs": 0.7,
+  "has_audio": false,
+  "has_video": true,
+  "track_count": 1
+}

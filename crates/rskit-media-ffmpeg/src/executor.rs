@@ -9,7 +9,7 @@ use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    command::FfmpegCommand,
+    command::{FfmpegCommand, SourceHints},
     config::FfmpegConfig,
     hw_accel::HwAccel,
 };
@@ -95,12 +95,17 @@ impl FfmpegExecutor {
             "acquired FFmpeg semaphore permit"
         );
 
+        // Build source hints by quick-probing when concat-style ops are present
+        let hints = self.build_source_hints(source, ops).await;
+
         // Wrap in Arc so the callback survives hw accel fallback retry
         let on_progress: Option<Arc<dyn Fn(Progress) + Send + Sync>> =
             on_progress.map(Arc::from);
 
         // First attempt with configured hw_accel
-        let cmd = FfmpegCommand::compile(source, ops, sink, &self.config, &self.registry)?;
+        let cmd = FfmpegCommand::compile_with_hints(
+            source, ops, sink, &self.config, &self.registry, &hints,
+        )?;
         let progress_cb = on_progress.as_ref().map(|cb| {
             let cb = Arc::clone(cb);
             Box::new(move |p: Progress| cb(p)) as Box<dyn Fn(Progress) + Send + Sync>
@@ -130,12 +135,13 @@ impl FfmpegExecutor {
                     // Clean up any partial output from the failed attempt
                     let _ = tokio::fs::remove_file(&output_file).await;
 
-                    let cmd_fallback = FfmpegCommand::compile(
+                    let cmd_fallback = FfmpegCommand::compile_with_hints(
                         source,
                         ops,
                         sink,
                         &fallback_config,
                         &self.registry,
+                        &hints,
                     )?;
 
                     // Re-wrap the callback for the retry attempt
@@ -154,6 +160,48 @@ impl FfmpegExecutor {
                     Err(ffmpeg_err.into_app_error())
                 }
             }
+        }
+    }
+
+    /// Build source hints by quick-probing when concat/extract-many ops need stream info.
+    async fn build_source_hints(&self, source: &FileSource, ops: &[MediaOp]) -> SourceHints {
+        let needs_hints = ops.iter().any(|op| {
+            matches!(
+                op,
+                MediaOp::ExtractMany(_) | MediaOp::Concat(_)
+            )
+        });
+        if !needs_hints {
+            return SourceHints::default();
+        }
+
+        // Quick ffprobe to detect stream types
+        let path = match source {
+            FileSource::Path(p) => p.clone(),
+            _ => return SourceHints::default(),
+        };
+
+        let output = tokio::process::Command::new(self.config.ffprobe_bin())
+            .args([
+                "-v", "quiet",
+                "-show_entries", "stream=codec_type",
+                "-of", "csv=p=0",
+            ])
+            .arg(&path)
+            .output()
+            .await;
+
+        match output {
+            Ok(out) => {
+                let stdout = String::from_utf8_lossy(&out.stdout);
+                let has_audio = stdout.lines().any(|l| l.trim() == "audio");
+                let has_video = stdout.lines().any(|l| l.trim() == "video");
+                SourceHints {
+                    has_audio: Some(has_audio),
+                    has_video: Some(has_video),
+                }
+            }
+            Err(_) => SourceHints::default(),
         }
     }
 }
