@@ -5,12 +5,14 @@ use std::path::PathBuf;
 use rskit_file::FileSource;
 use rskit_media::{
     executor::MediaExecutor,
+    filter::{Filter, FilterTarget, ParamValue, Params},
     format::Format,
-    ops::{CropRegion, MediaOp, ResizeMode, ResizeOp, Rotation},
+    ops::{CropRegion, FlipDirection, MediaOp, ResizeMode, ResizeOp, Rotation},
     output::OutputConfig,
+    probe::MediaProbe,
     spatial::Resolution,
 };
-use rskit_media_image::ImageProcessor;
+use rskit_media_image::{ImageProcessor, ImageProbe};
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -207,4 +209,116 @@ async fn golden_pipeline_resize_crop_rotate() {
             "pipeline_steps": ["resize(200x200)", "crop(100x100)", "rotate(90)"],
         })
     );
+}
+
+// ── Test 7: New image filters (sharpen, sepia, invert, pixelate) ─────────────
+
+#[tokio::test]
+async fn golden_image_filters_new() {
+    let source = FileSource::from_path(fixtures_dir().join("image/sample.png"));
+    let processor = ImageProcessor::new();
+
+    // Apply sharpen filter
+    let sharpen_ops = vec![MediaOp::Filter(Filter {
+        name: "sharpen".into(),
+        target: FilterTarget::Video,
+        params: Params::new().set("amount", ParamValue::Float(1.5)),
+    })];
+    let sharpen_result = processor.execute(&source, &sharpen_ops, None).await.unwrap();
+    let (sw, sh) = read_dimensions(&sharpen_result);
+
+    // Apply sepia filter
+    let sepia_ops = vec![MediaOp::Filter(Filter {
+        name: "sepia".into(),
+        target: FilterTarget::Video,
+        params: Params::new(),
+    })];
+    let sepia_result = processor.execute(&source, &sepia_ops, None).await.unwrap();
+    let (ew, eh) = read_dimensions(&sepia_result);
+
+    // Apply invert filter
+    let invert_ops = vec![MediaOp::Filter(Filter {
+        name: "invert".into(),
+        target: FilterTarget::Video,
+        params: Params::new(),
+    })];
+    let invert_result = processor.execute(&source, &invert_ops, None).await.unwrap();
+    let (iw, ih) = read_dimensions(&invert_result);
+
+    // Apply pixelate filter
+    let pixelate_ops = vec![MediaOp::Filter(Filter {
+        name: "pixelate".into(),
+        target: FilterTarget::Video,
+        params: Params::new().set("block_size", ParamValue::Int(8)),
+    })];
+    let pixelate_result = processor.execute(&source, &pixelate_ops, None).await.unwrap();
+    let (pw, ph) = read_dimensions(&pixelate_result);
+
+    // sample.png dimensions
+    let original = image::open(fixtures_dir().join("image/sample.png")).unwrap();
+    let (ow, oh) = (original.width(), original.height());
+
+    insta::assert_json_snapshot!("image_filters_new", serde_json::json!({
+        "original": { "width": ow, "height": oh },
+        "sharpen": { "width": sw, "height": sh, "dims_preserved": sw == ow && sh == oh },
+        "sepia": { "width": ew, "height": eh, "dims_preserved": ew == ow && eh == oh },
+        "invert": { "width": iw, "height": ih, "dims_preserved": iw == ow && ih == oh },
+        "pixelate": { "width": pw, "height": ph, "dims_preserved": pw == ow && ph == oh },
+    }));
+}
+
+// ── Test 8: ImageProbe with real fixtures ────────────────────────────────────
+
+#[tokio::test]
+async fn golden_image_probe_jpeg() {
+    let source = FileSource::from_path(fixtures_dir().join("image/real-photo.jpg"));
+    let probe = ImageProbe::new();
+    let meta = probe.probe(&source).await.expect("probe JPEG");
+
+    insta::assert_json_snapshot!("image_probe_jpeg", {
+        ".duration" => "[duration]",
+        ".size" => "[size]",
+        ".bitrate" => "[bitrate]",
+        ".tags" => "[tags]",
+        ".created_at" => "[created_at]",
+    }, &meta);
+}
+
+#[tokio::test]
+async fn golden_image_probe_png() {
+    let source = FileSource::from_path(fixtures_dir().join("image/sample.png"));
+    let probe = ImageProbe::new();
+    let meta = probe.probe(&source).await.expect("probe PNG");
+
+    let res = meta.resolution().expect("should have resolution");
+
+    insta::assert_json_snapshot!("image_probe_png", serde_json::json!({
+        "has_video": meta.has_video(),
+        "has_audio": meta.has_audio(),
+        "width": res.width,
+        "height": res.height,
+        "track_count": meta.tracks.len(),
+        "format": meta.format.id(),
+    }));
+}
+
+// ── Test 9: Flip real image ──────────────────────────────────────────────────
+
+#[tokio::test]
+async fn golden_flip_horizontal() {
+    let source = FileSource::from_path(fixtures_dir().join("image/real-photo.jpg"));
+    let processor = ImageProcessor::new();
+    let ops = vec![MediaOp::Flip(FlipDirection::Horizontal)];
+
+    let result = processor.execute(&source, &ops, None).await.unwrap();
+    let (w, h) = read_dimensions(&result);
+    let result_bytes = source_bytes(&result);
+    let original_bytes = std::fs::read(fixtures_dir().join("image/real-photo.jpg")).unwrap();
+
+    insta::assert_json_snapshot!("flip_horizontal", serde_json::json!({
+        "width": w,
+        "height": h,
+        "dimensions_preserved": w == 500 && h == 378,
+        "content_changed": result_bytes != original_bytes,
+    }));
 }

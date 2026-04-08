@@ -1,0 +1,30 @@
+---
+source: crates/rskit-media-image/tests/golden.rs
+expression: "serde_json::json!({\n    \"original\": { \"width\": ow, \"height\": oh }, \"sharpen\":\n    { \"width\": sw, \"height\": sh, \"dims_preserved\": sw == ow && sh == oh },\n    \"sepia\":\n    { \"width\": ew, \"height\": eh, \"dims_preserved\": ew == ow && eh == oh },\n    \"invert\":\n    { \"width\": iw, \"height\": ih, \"dims_preserved\": iw == ow && ih == oh },\n    \"pixelate\":\n    { \"width\": pw, \"height\": ph, \"dims_preserved\": pw == ow && ph == oh },\n})"
+---
+{
+  "invert": {
+    "dims_preserved": true,
+    "height": 600,
+    "width": 600
+  },
+  "original": {
+    "height": 600,
+    "width": 600
+  },
+  "pixelate": {
+    "dims_preserved": true,
+    "height": 600,
+    "width": 600
+  },
+  "sepia": {
+    "dims_preserved": true,
+    "height": 600,
+    "width": 600
+  },
+  "sharpen": {
+    "dims_preserved": true,
+    "height": 600,
+    "width": 600
+  }
+}

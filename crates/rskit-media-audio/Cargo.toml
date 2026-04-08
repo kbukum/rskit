@@ -26,6 +26,7 @@ async-trait  = { workspace = true }
 tokio  = { workspace = true, features = ["test-util", "full"] }
 bytes  = { workspace = true }
 insta  = { workspace = true }
+serde_json = { workspace = true }
 
 [package.metadata.docs.rs]
 all-features = true

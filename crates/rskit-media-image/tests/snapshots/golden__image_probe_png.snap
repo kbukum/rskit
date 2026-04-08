@@ -1,0 +1,12 @@
+---
+source: crates/rskit-media-image/tests/golden.rs
+expression: "serde_json::json!({\n    \"has_video\": meta.has_video(), \"has_audio\": meta.has_audio(), \"width\":\n    res.width, \"height\": res.height, \"track_count\": meta.tracks.len(),\n    \"format\": meta.format.id(),\n})"
+---
+{
+  "format": "png",
+  "has_audio": false,
+  "has_video": true,
+  "height": 600,
+  "track_count": 1,
+  "width": 600
+}

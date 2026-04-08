@@ -5,12 +5,14 @@ use std::path::PathBuf;
 use rskit_file::{FileSink, FileSource, TempDir};
 use rskit_media::{
     executor::MediaExecutor,
+    filter::filters,
     ops::{MediaOp, ResizeMode, ResizeOp},
     probe::MediaProbe,
     spatial::Resolution,
-    time::TimeRange,
+    subtitle::{SubtitleEntry, SubtitleTrack},
+    time::{Segment, TimeRange},
 };
-use rskit_media_ffmpeg::{FfmpegConfig, FfmpegExecutor, FfmpegProbe};
+use rskit_media_ffmpeg::{FfmpegCommand, FfmpegConfig, FfmpegExecutor, FfmpegProbe};
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -207,3 +209,234 @@ async fn golden_process_real_video() {
         "duration_secs": meta.duration.map(|d| d.as_secs_f64()),
     }));
 }
+
+// ── Test 7: ExtractMany (multi-segment extraction) ───────────────────────────
+
+#[tokio::test]
+async fn golden_extract_many() {
+    skip_without_ffmpeg!();
+
+    let source = FileSource::from_path(fixtures_dir().join("video/ai-generated.mp4"));
+    let dir = TempDir::new().expect("temp dir");
+    let out_path = dir.path().join("multi_seg.mp4");
+
+    let executor = FfmpegExecutor::new(FfmpegConfig::default(), rskit_media::Registry::default());
+
+    // ai-generated.mp4 is ~1.375s — extract two small segments
+    let segments = vec![
+        Segment::new(TimeRange::from_seconds(0.0, 0.3)),
+        Segment::new(TimeRange::from_seconds(0.5, 0.8)),
+    ];
+    let ops = vec![MediaOp::ExtractMany(segments)];
+
+    let result = executor
+        .execute(&source, &ops, Some(&FileSink::Path(out_path.clone())))
+        .await
+        .expect("execute extract-many");
+
+    let probe = FfmpegProbe::new(FfmpegConfig::default());
+    let meta = probe.probe(&result).await.expect("probe extract-many output");
+
+    insta::assert_json_snapshot!("extract_many_two_segments", {
+        ".duration_secs" => insta::rounded_redaction(1),
+    }, serde_json::json!({
+        "has_video": meta.has_video(),
+        "has_audio": meta.has_audio(),
+        "duration_secs": meta.duration.map(|d| d.as_secs_f64()),
+        "track_count": meta.tracks.len(),
+    }));
+}
+
+// ── Test 8: Video filter chain (grayscale + blur) ────────────────────────────
+
+#[tokio::test]
+async fn golden_filter_chain_video() {
+    skip_without_ffmpeg!();
+
+    let source = FileSource::from_path(fixtures_dir().join("video/ai-generated.mp4"));
+    let dir = TempDir::new().expect("temp dir");
+    let out_path = dir.path().join("filtered.mp4");
+
+    let executor = FfmpegExecutor::new(FfmpegConfig::default(), rskit_media::Registry::default());
+    let ops = vec![
+        MediaOp::Filter(filters::grayscale()),
+        MediaOp::Filter(filters::blur(2.0)),
+    ];
+
+    let result = executor
+        .execute(&source, &ops, Some(&FileSink::Path(out_path.clone())))
+        .await
+        .expect("execute filter chain");
+
+    let probe = FfmpegProbe::new(FfmpegConfig::default());
+    let meta = probe.probe(&result).await.expect("probe filtered video");
+    let res = meta.resolution().expect("should have resolution");
+
+    insta::assert_json_snapshot!("filter_chain_grayscale_blur", {
+        ".duration_secs" => insta::rounded_redaction(1),
+    }, serde_json::json!({
+        "has_video": meta.has_video(),
+        "has_audio": meta.has_audio(),
+        "width": res.width,
+        "height": res.height,
+        "duration_secs": meta.duration.map(|d| d.as_secs_f64()),
+    }));
+}
+
+// ── Test 9: BurnSubtitles ────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn golden_burn_subtitles() {
+    skip_without_ffmpeg!();
+
+    let source = FileSource::from_path(fixtures_dir().join("video/ai-generated.mp4"));
+    let dir = TempDir::new().expect("temp dir");
+    let out_path = dir.path().join("subtitled.mp4");
+
+    let srt = SubtitleTrack {
+        entries: vec![SubtitleEntry {
+            range: TimeRange::from_seconds(0.0, 1.0),
+            text: "Hello world".into(),
+            style: None,
+        }],
+        language: None,
+        default_style: None,
+    };
+
+    let executor = FfmpegExecutor::new(FfmpegConfig::default(), rskit_media::Registry::default());
+    let ops = vec![MediaOp::BurnSubtitles(srt)];
+
+    let result = executor
+        .execute(&source, &ops, Some(&FileSink::Path(out_path.clone())))
+        .await
+        .expect("execute burn subtitles");
+
+    let probe = FfmpegProbe::new(FfmpegConfig::default());
+    let meta = probe.probe(&result).await.expect("probe subtitled video");
+    let res = meta.resolution().expect("should have resolution");
+
+    insta::assert_json_snapshot!("burn_subtitles", {
+        ".duration_secs" => insta::rounded_redaction(1),
+    }, serde_json::json!({
+        "has_video": meta.has_video(),
+        "has_audio": meta.has_audio(),
+        "width": res.width,
+        "height": res.height,
+        "duration_secs": meta.duration.map(|d| d.as_secs_f64()),
+    }));
+}
+
+// ── Test 10: Command compilation snapshot (streaming config) ─────────────────
+
+#[test]
+fn golden_command_compile_hls() {
+    use rskit_media::output::{
+        Bitrate, EncodingSpeed, HlsConfig, HlsPlaylistType,
+        OutputConfig, Quality, StreamingConfig, VideoSettings,
+    };
+    use rskit_media::codec::Codec;
+    use rskit_media::format::Format;
+
+    let source = FileSource::from_path("/dev/null");
+    let config = FfmpegConfig::default();
+    let registry = rskit_media::Registry::default();
+
+    let output = OutputConfig {
+        format: Format::new("mp4"),
+        video: Some(VideoSettings {
+            codec: Codec::new("libx264"),
+            resolution: None,
+            frame_rate: None,
+            quality: Some(Quality::Custom(23)),
+            bitrate: Some(Bitrate::Constant(2_000_000)),
+            speed: Some(EncodingSpeed::Fast),
+            profile: None,
+            level: None,
+        }),
+        audio: None,
+        streaming: Some(StreamingConfig::Hls(HlsConfig {
+            segment_duration: 4,
+            playlist_size: 5,
+            playlist_type: HlsPlaylistType::Vod,
+            segment_filename: Some("seg_%03d.ts".into()),
+        })),
+        strip_metadata: false,
+        extra: Default::default(),
+    };
+
+    let ops = vec![MediaOp::Transcode(output)];
+    let cmd = FfmpegCommand::compile(&source, &ops, None, &config, &registry)
+        .expect("compile HLS command");
+    let args = cmd.to_args();
+
+    // Redact the input path which is absolute
+    let args: Vec<String> = args
+        .into_iter()
+        .map(|a| if a.starts_with('/') && a != "/dev/null" { "[PATH]".into() } else { a })
+        .collect();
+
+    insta::assert_json_snapshot!("command_compile_hls", &args);
+}
+
+// ── Test 11: Command compilation snapshot (extract-many + filters) ───────────
+
+#[test]
+fn golden_command_compile_extract_many_with_filters() {
+    let source = FileSource::from_path("/dev/null");
+    let config = FfmpegConfig::default();
+    let registry = rskit_media::Registry::default();
+
+    let segments = vec![
+        Segment::new(TimeRange::from_seconds(0.0, 5.0)),
+        Segment::new(TimeRange::from_seconds(10.0, 15.0)),
+        Segment::new(TimeRange::from_seconds(20.0, 25.0)),
+    ];
+
+    let ops = vec![
+        MediaOp::ExtractMany(segments),
+        MediaOp::Filter(filters::denoise(3)),
+    ];
+
+    let cmd = FfmpegCommand::compile(&source, &ops, None, &config, &registry)
+        .expect("compile extract-many command");
+    let args = cmd.to_args();
+
+    let args: Vec<String> = args
+        .into_iter()
+        .map(|a| if a.starts_with('/') && a != "/dev/null" { "[PATH]".into() } else { a })
+        .collect();
+
+    insta::assert_json_snapshot!("command_compile_extract_many_filters", &args);
+}
+
+// ── Test 12: optimize_ops snapshot ───────────────────────────────────────────
+
+#[test]
+fn golden_optimize_ops() {
+    // Consecutive resizes — only last should survive
+    let ops = vec![
+        MediaOp::Resize(ResizeOp {
+            resolution: Resolution::new(1920, 1080),
+            mode: ResizeMode::Exact,
+        }),
+        MediaOp::Resize(ResizeOp {
+            resolution: Resolution::new(1280, 720),
+            mode: ResizeMode::Fit,
+        }),
+        MediaOp::Volume(0.5),
+        MediaOp::Volume(0.8),
+        MediaOp::Speed(2.0),
+        MediaOp::Speed(1.0), // no-op, should be folded in
+        MediaOp::Filter(filters::grayscale()),
+    ];
+
+    let optimized = FfmpegCommand::optimize_ops(&ops);
+
+    let summary: Vec<String> = optimized
+        .iter()
+        .map(|op| format!("{op:?}"))
+        .collect();
+
+    insta::assert_json_snapshot!("optimize_ops", &summary);
+}
+

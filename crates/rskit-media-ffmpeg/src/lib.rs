@@ -15,6 +15,7 @@ mod hw_accel;
 mod probe;
 mod progress;
 
+pub use command::FfmpegCommand;
 pub use config::{FfmpegConfig, FfmpegLogLevel};
 pub use error::{classify_error, FfmpegError, FfmpegErrorKind};
 pub use executor::FfmpegExecutor;

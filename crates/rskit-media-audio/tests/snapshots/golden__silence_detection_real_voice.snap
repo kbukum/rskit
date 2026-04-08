@@ -1,0 +1,20 @@
+---
+source: crates/rskit-media-audio/tests/golden.rs
+expression: "serde_json::json!({\n    \"total_duration_secs\": wav.duration_secs(), \"silence_region_count\":\n    regions.len(), \"regions\": region_summaries,\n})"
+---
+{
+  "regions": [
+    {
+      "duration": 0.1,
+      "end": 0.1,
+      "start": 0.0
+    },
+    {
+      "duration": 0.12,
+      "end": 0.77,
+      "start": 0.65
+    }
+  ],
+  "silence_region_count": 2,
+  "total_duration_secs": 0.88
+}

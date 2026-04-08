@@ -1,0 +1,10 @@
+---
+source: crates/rskit-media-image/tests/golden.rs
+expression: "serde_json::json!({\n    \"width\": w, \"height\": h, \"dimensions_preserved\": w == 500 && h == 378,\n    \"content_changed\": result_bytes != original_bytes,\n})"
+---
+{
+  "content_changed": true,
+  "dimensions_preserved": true,
+  "height": 378,
+  "width": 500
+}

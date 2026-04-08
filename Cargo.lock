@@ -4588,6 +4588,7 @@ dependencies = [
  "rskit-errors",
  "rskit-file",
  "rskit-media",
+ "serde_json",
  "tokio",
  "tracing",
 ]

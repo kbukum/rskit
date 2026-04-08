@@ -1,0 +1,42 @@
+---
+source: crates/rskit-media-image/tests/golden.rs
+expression: "&meta"
+---
+{
+  "media_type": "Image",
+  "format": "jpeg",
+  "duration": "[duration]",
+  "size": "[size]",
+  "bitrate": "[bitrate]",
+  "tracks": [
+    {
+      "index": 0,
+      "kind": "Video",
+      "codec": "mjpeg",
+      "bitrate": null,
+      "language": null,
+      "is_default": true,
+      "title": null,
+      "duration": null,
+      "video": {
+        "resolution": {
+          "width": 500,
+          "height": 378
+        },
+        "frame_rate": null,
+        "pixel_format": null,
+        "rotation": null,
+        "color_space": null,
+        "color_range": null,
+        "bit_depth": 8,
+        "profile": null,
+        "level": null,
+        "hdr": null
+      },
+      "audio": null,
+      "subtitle": null
+    }
+  ],
+  "tags": "[tags]",
+  "created_at": "[created_at]"
+}

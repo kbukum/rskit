@@ -25,7 +25,25 @@ pub(crate) struct FfmpegInput {
     pub duration: Option<Duration>,
 }
 
-pub(crate) struct FfmpegCommand {
+/// Optional hints about the source media, used to make smarter compilation decisions.
+///
+/// When available (e.g., from a prior probe), these hints let the command builder
+/// generate more accurate filter graphs. Without hints, the builder uses conservative
+/// defaults.
+#[derive(Debug, Clone, Default)]
+pub struct SourceHints {
+    /// Whether the primary source has at least one audio stream.
+    /// `None` means unknown — the builder will assume audio exists (common case).
+    pub has_audio: Option<bool>,
+    /// Whether the primary source has at least one video stream.
+    pub has_video: Option<bool>,
+}
+
+/// Compiled FFmpeg command ready for execution.
+///
+/// Holds all inputs, filters, output options, and global flags. Use
+/// [`compile`](FfmpegCommand::compile) to construct from media operations.
+pub struct FfmpegCommand {
     pub inputs: Vec<FfmpegInput>,
     pub video_filters: Vec<String>,
     pub audio_filters: Vec<String>,
@@ -178,6 +196,18 @@ impl FfmpegCommand {
         sink: Option<&FileSink>,
         config: &FfmpegConfig,
         registry: &Registry,
+    ) -> AppResult<Self> {
+        Self::compile_with_hints(source, ops, sink, config, registry, &SourceHints::default())
+    }
+
+    /// Compile operations into an FFmpeg command, using source hints for smarter output.
+    pub fn compile_with_hints(
+        source: &FileSource,
+        ops: &[MediaOp],
+        sink: Option<&FileSink>,
+        config: &FfmpegConfig,
+        registry: &Registry,
+        hints: &SourceHints,
     ) -> AppResult<Self> {
         // Optimize and validate
         let ops = Self::optimize_ops(ops);
@@ -338,8 +368,14 @@ impl FfmpegCommand {
                         duration: None,
                     });
                     let n = cmd.inputs.len();
-                    let pads: String = (0..n).map(|i| format!("[{i}]")).collect();
-                    cmd.complex_filter = Some(format!("{pads}concat=n={n}:v=1:a=1"));
+                    let include_audio = hints.has_audio.unwrap_or(true);
+                    let a_flag = if include_audio { 1 } else { 0 };
+                    let pads: String = if include_audio {
+                        (0..n).map(|i| format!("[{i}:v][{i}:a]")).collect()
+                    } else {
+                        (0..n).map(|i| format!("[{i}:v]")).collect()
+                    };
+                    cmd.complex_filter = Some(format!("{pads}concat=n={n}:v=1:a={a_flag}"));
                 }
                 MediaOp::ReplaceAudio(replace) => {
                     cmd.inputs.push(FfmpegInput {
@@ -407,11 +443,23 @@ impl FfmpegCommand {
                             });
                         }
                         let n = cmd.inputs.len();
-                        let pads: String = (0..n).map(|i| format!("[{i}:v][{i}:a]")).collect();
-                        cmd.complex_filter =
-                            Some(format!("{pads}concat=n={n}:v=1:a=1[outv][outa]"));
-                        cmd.output_opts.extend(["-map".into(), "[outv]".into()]);
-                        cmd.output_opts.extend(["-map".into(), "[outa]".into()]);
+                        let include_audio = hints.has_audio.unwrap_or(true);
+                        let a_flag = if include_audio { 1 } else { 0 };
+                        let pads: String = if include_audio {
+                            (0..n).map(|i| format!("[{i}:v][{i}:a]")).collect()
+                        } else {
+                            (0..n).map(|i| format!("[{i}:v]")).collect()
+                        };
+                        if include_audio {
+                            cmd.complex_filter =
+                                Some(format!("{pads}concat=n={n}:v=1:a=1[outv][outa]"));
+                            cmd.output_opts.extend(["-map".into(), "[outv]".into()]);
+                            cmd.output_opts.extend(["-map".into(), "[outa]".into()]);
+                        } else {
+                            cmd.complex_filter =
+                                Some(format!("{pads}concat=n={n}:v=1:a=0[outv]"));
+                            cmd.output_opts.extend(["-map".into(), "[outv]".into()]);
+                        }
                     }
                 }
                 MediaOp::BurnSubtitles(subs) => {
@@ -431,9 +479,9 @@ impl FfmpegCommand {
                     })?;
                     // Escape colons and backslashes in the path for FFmpeg filter syntax
                     let path_str = temp.path().to_string_lossy().replace('\\', "/");
-                    let escaped = path_str.replace(':', "\\:");
+                    let escaped = path_str.replace(':', "\\:").replace("'", "\\'");
                     cmd.video_filters
-                        .push(format!("subtitles='{escaped}'"));
+                        .push(format!("subtitles=filename={escaped}"));
                     // Keep temp file alive until command finishes
                     cmd.temp_files.push(temp);
                 }

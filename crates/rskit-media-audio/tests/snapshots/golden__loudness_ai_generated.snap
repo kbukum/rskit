@@ -1,0 +1,12 @@
+---
+source: crates/rskit-media-audio/tests/golden.rs
+expression: "serde_json::json!({\n    \"peak\": info.peak, \"peak_db\": info.peak_db, \"rms\": info.rms, \"rms_db\":\n    info.rms_db, \"lufs\": info.lufs, \"has_audio\": info.peak > 0.0,\n})"
+---
+{
+  "has_audio": true,
+  "lufs": -22.9,
+  "peak": 0.553,
+  "peak_db": -5.1,
+  "rms": 0.077,
+  "rms_db": -22.2
+}

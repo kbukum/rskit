@@ -1,0 +1,11 @@
+---
+source: crates/rskit-media-audio/tests/golden.rs
+expression: "serde_json::json!({\n    \"channels\": wav.spec.channels, \"sample_rate\": wav.spec.sample_rate,\n    \"bits_per_sample\": wav.spec.bits_per_sample, \"frame_count\":\n    wav.frame_count(), \"duration_secs\": wav.duration_secs(),\n})"
+---
+{
+  "bits_per_sample": 16,
+  "channels": 1,
+  "duration_secs": 0.88,
+  "frame_count": 14080,
+  "sample_rate": 16000
+}
