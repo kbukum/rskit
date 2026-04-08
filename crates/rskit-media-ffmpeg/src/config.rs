@@ -44,6 +44,11 @@ pub struct FfmpegConfig {
     /// Defaults to `100`.
     #[serde(default = "default_max_stderr_lines")]
     pub max_stderr_lines: usize,
+    /// Override the input video decoder (e.g., `"libdav1d"` for software AV1 decode).
+    /// When set, emits `-c:v <decoder>` before the input, forcing FFmpeg to use
+    /// this specific decoder instead of the default one.
+    #[serde(default)]
+    pub input_video_decoder: Option<String>,
 }
 
 fn default_hw_accel_fallback() -> bool {
@@ -73,6 +78,7 @@ impl Default for FfmpegConfig {
             hw_accel_fallback: true,
             max_retries: 1,
             max_stderr_lines: 100,
+            input_video_decoder: None,
         }
     }
 }

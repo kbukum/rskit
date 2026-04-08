@@ -257,6 +257,11 @@ impl FfmpegCommand {
             }
         }
 
+        // Force a specific input video decoder (e.g., libdav1d for software AV1 decode)
+        if let Some(decoder) = &config.input_video_decoder {
+            cmd.global_opts.extend(["-c:v".into(), decoder.clone()]);
+        }
+
         for op in &ops {
             match op {
                 MediaOp::Extract(range) => {

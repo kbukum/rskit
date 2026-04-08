@@ -132,6 +132,25 @@ impl FfmpegExecutor {
                     let mut fallback_config = self.config.clone();
                     fallback_config.hw_accel = Some(HwAccel::None);
 
+                    // If stderr indicates AV1 decode failure, try to find a software
+                    // AV1 decoder (libdav1d preferred, libaom-av1 as alternative).
+                    // The native av1 decoder on macOS delegates to VideoToolbox which
+                    // may not support AV1 hardware decode on all chips.
+                    if Self::is_av1_decode_failure(&ffmpeg_err.stderr) {
+                        if let Some(sw_decoder) = Self::find_sw_av1_decoder(&self.config).await {
+                            tracing::info!(
+                                decoder = %sw_decoder,
+                                "Using software AV1 decoder for fallback"
+                            );
+                            fallback_config.input_video_decoder = Some(sw_decoder);
+                        } else {
+                            tracing::error!(
+                                "No software AV1 decoder available (libdav1d, libaom-av1). \
+                                 Install FFmpeg with libdav1d support or download H.264 content."
+                            );
+                        }
+                    }
+
                     // Clean up any partial output from the failed attempt
                     let _ = tokio::fs::remove_file(&output_file).await;
 
@@ -203,6 +222,38 @@ impl FfmpegExecutor {
             }
             Err(_) => SourceHints::default(),
         }
+    }
+
+    /// Check if FFmpeg stderr indicates an AV1-specific decode failure.
+    fn is_av1_decode_failure(stderr: &str) -> bool {
+        let lower = stderr.to_lowercase();
+        // macOS native av1 decoder fails when VideoToolbox doesn't support AV1 hw decode
+        (lower.contains("av1") || lower.contains("av01"))
+            && (lower.contains("hardware accelerated")
+                || lower.contains("failed to get pixel format")
+                || lower.contains("function not implemented")
+                || lower.contains("decode error rate"))
+    }
+
+    /// Query FFmpeg for available software AV1 decoders.
+    /// Returns the best available one, or None if none are compiled in.
+    async fn find_sw_av1_decoder(config: &FfmpegConfig) -> Option<String> {
+        let output = tokio::process::Command::new(config.ffmpeg_bin())
+            .args(["-hide_banner", "-decoders"])
+            .output()
+            .await
+            .ok()?;
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+
+        // Prefer libdav1d (fastest), then libaom-av1, then libgav1
+        for decoder in &["libdav1d", "libaom-av1", "libgav1"] {
+            if stdout.lines().any(|line| line.contains(decoder)) {
+                return Some((*decoder).to_string());
+            }
+        }
+
+        None
     }
 }
 
@@ -295,5 +346,47 @@ impl MediaExecutor for FfmpegExecutor {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_av1_decode_failure_macos_videotoolbox() {
+        let stderr = "Your platform doesn't support hardware accelerated AV1 decoding. \
+                       Please use another codec or try software decode.";
+        assert!(FfmpegExecutor::is_av1_decode_failure(stderr));
+    }
+
+    #[test]
+    fn test_av1_decode_failure_pixel_format() {
+        let stderr = "av1_videotoolbox: failed to get pixel format from hardware output";
+        assert!(FfmpegExecutor::is_av1_decode_failure(stderr));
+    }
+
+    #[test]
+    fn test_av1_decode_failure_av01_codec() {
+        let stderr = "Stream #0:0: Video: av01, hardware accelerated decode not available";
+        assert!(FfmpegExecutor::is_av1_decode_failure(stderr));
+    }
+
+    #[test]
+    fn test_not_av1_decode_failure_h264() {
+        let stderr = "h264: hardware accelerated decode failed";
+        assert!(!FfmpegExecutor::is_av1_decode_failure(stderr));
+    }
+
+    #[test]
+    fn test_not_av1_decode_failure_unrelated() {
+        let stderr = "Error muxing: permission denied";
+        assert!(!FfmpegExecutor::is_av1_decode_failure(stderr));
+    }
+
+    #[test]
+    fn test_config_input_video_decoder_default_is_none() {
+        let config = FfmpegConfig::default();
+        assert!(config.input_video_decoder.is_none());
     }
 }
