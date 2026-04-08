@@ -25,7 +25,7 @@ impl FfmpegExecutor {
     /// Create a new executor with the given configuration and registry.
     pub fn new(config: FfmpegConfig, registry: Registry) -> Self {
         let max = config.effective_max_concurrent();
-        tracing::info!(max_concurrent = max, "FfmpegExecutor initialized");
+        tracing::debug!(max_concurrent = max, "FfmpegExecutor initialized");
         Self {
             semaphore: Arc::new(Semaphore::new(max)),
             config,

@@ -41,7 +41,7 @@ impl<T: Send + Sync + 'static> ManagedProducer<T> {
                 format!("producer '{}' is already running", self.name),
             ));
         }
-        tracing::info!(producer = %self.name, "managed producer started");
+        tracing::debug!(producer = %self.name, "managed producer started");
         Ok(())
     }
 
@@ -53,7 +53,7 @@ impl<T: Send + Sync + 'static> ManagedProducer<T> {
                 format!("producer '{}' is not running", self.name),
             ));
         }
-        tracing::info!(producer = %self.name, "managed producer stopped");
+        tracing::debug!(producer = %self.name, "managed producer stopped");
         Ok(())
     }
 

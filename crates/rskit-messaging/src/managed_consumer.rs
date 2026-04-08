@@ -57,7 +57,7 @@ impl<T: Send + Sync + Clone + 'static> ManagedConsumer<T> {
         running.store(true, Ordering::SeqCst);
 
         let task = tokio::spawn(async move {
-            tracing::info!(consumer = %name, "managed consumer loop started");
+            tracing::debug!(consumer = %name, "managed consumer loop started");
             let mut consecutive_errors: u32 = 0;
             loop {
                 tokio::select! {
@@ -108,7 +108,7 @@ impl<T: Send + Sync + Clone + 'static> ManagedConsumer<T> {
                 }
             }
             running.store(false, Ordering::SeqCst);
-            tracing::info!(consumer = %name, "managed consumer loop exited");
+            tracing::debug!(consumer = %name, "managed consumer loop exited");
         });
 
         let mut guard = self.handle.lock();
@@ -147,7 +147,7 @@ impl<T: Send + Sync + Clone + 'static> ManagedConsumer<T> {
         }
 
         self.running.store(false, Ordering::SeqCst);
-        tracing::info!(consumer = %self.name, "managed consumer stopped");
+        tracing::debug!(consumer = %self.name, "managed consumer stopped");
         Ok(())
     }
 }

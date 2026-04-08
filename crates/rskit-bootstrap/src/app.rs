@@ -199,7 +199,7 @@ impl<C: AppConfig> App<Unconfigured, C> {
         run_hooks(&self.on_start, self.shutdown_token.clone()).await?;
         run_hooks(&self.on_ready, self.shutdown_token.clone()).await?;
 
-        tracing::info!("service ready — waiting for shutdown signal");
+        tracing::debug!("service ready — waiting for shutdown signal");
         wait_for_signal(self.shutdown_token.clone()).await;
 
         self.graceful_shutdown().await
