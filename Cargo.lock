@@ -2846,6 +2846,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "media-demo"
+version = "0.0.0"
+dependencies = [
+ "rskit-errors",
+ "rskit-file",
+ "rskit-media",
+ "rskit-media-audio",
+ "rskit-media-ffmpeg",
+ "rskit-media-image",
+ "tokio",
+]
+
+[[package]]
 name = "memchr"
 version = "2.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4560,6 +4573,21 @@ dependencies = [
  "rskit-file",
  "serde",
  "serde_json",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "rskit-media-audio"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "insta",
+ "rskit-errors",
+ "rskit-file",
+ "rskit-media",
  "tokio",
  "tracing",
 ]

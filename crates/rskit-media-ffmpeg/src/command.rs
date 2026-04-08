@@ -7,7 +7,7 @@ use rskit_file::{FileSink, FileSource};
 use rskit_media::{
     filter::FilterTarget,
     ops::*,
-    output::{Bitrate, EncodingSpeed, OutputConfig, Quality},
+    output::{Bitrate, EncodingSpeed, OutputConfig, Quality, StreamingConfig},
     pipeline::Progress,
     registry::Registry,
     time::Timestamp,
@@ -32,9 +32,146 @@ pub(crate) struct FfmpegCommand {
     pub output_opts: Vec<String>,
     pub complex_filter: Option<String>,
     pub global_opts: Vec<String>,
+    /// Temp files kept alive for the duration of the command (e.g., subtitle files).
+    #[allow(dead_code)]
+    pub temp_files: Vec<rskit_file::TempFile>,
 }
 
 impl FfmpegCommand {
+    /// Optimize a list of operations by removing redundancies.
+    ///
+    /// - Consecutive resizes: keep only the last one
+    /// - Consecutive crops: keep only the last one
+    /// - Multiple volume adjustments: multiply factors
+    /// - Speed(1.0): remove (no-op)
+    /// - Multiple consecutive Extract: keep only the last
+    pub fn optimize_ops(ops: &[MediaOp]) -> Vec<MediaOp> {
+        let mut result: Vec<MediaOp> = Vec::with_capacity(ops.len());
+
+        for op in ops {
+            match op {
+                MediaOp::Resize(_) => {
+                    // If the last op is also a resize, replace it
+                    if matches!(result.last(), Some(MediaOp::Resize(_))) {
+                        result.pop();
+                    }
+                    result.push(op.clone());
+                }
+                MediaOp::Crop(_) => {
+                    if matches!(result.last(), Some(MediaOp::Crop(_))) {
+                        result.pop();
+                    }
+                    result.push(op.clone());
+                }
+                MediaOp::Volume(factor) => {
+                    if let Some(MediaOp::Volume(prev)) = result.last_mut() {
+                        *prev *= factor;
+                    } else {
+                        result.push(op.clone());
+                    }
+                }
+                MediaOp::Speed(factor) => {
+                    // Skip no-op speed changes
+                    if (*factor - 1.0).abs() < f64::EPSILON {
+                        continue;
+                    }
+                    if let Some(MediaOp::Speed(prev)) = result.last_mut() {
+                        *prev *= factor;
+                    } else {
+                        result.push(op.clone());
+                    }
+                }
+                _ => result.push(op.clone()),
+            }
+        }
+
+        result
+    }
+
+    /// Pre-flight validation of operations before spawning FFmpeg.
+    ///
+    /// Catches invalid combinations that would cause FFmpeg to fail with
+    /// cryptic errors or produce incorrect output.
+    pub fn validate_ops(ops: &[MediaOp]) -> AppResult<()> {
+        let mut has_strip_audio = false;
+        let mut has_strip_video = false;
+        let mut has_audio_op = false;
+        let mut has_video_op = false;
+        let mut extract_count = 0;
+        let mut extract_many_count = 0;
+        let mut concat_count = 0;
+        let mut overlay_count = 0;
+
+        for op in ops {
+            match op {
+                MediaOp::StripAudio => has_strip_audio = true,
+                MediaOp::StripVideo => has_strip_video = true,
+                MediaOp::Volume(_) | MediaOp::NormalizeAudio | MediaOp::MixAudio(_)
+                | MediaOp::ReplaceAudio(_) => has_audio_op = true,
+                MediaOp::Resize(_) | MediaOp::Crop(_) | MediaOp::Rotate(_)
+                | MediaOp::Flip(_) | MediaOp::Pad(_)
+                | MediaOp::BurnSubtitles(_) => has_video_op = true,
+                MediaOp::Overlay(_) => {
+                    has_video_op = true;
+                    overlay_count += 1;
+                }
+                MediaOp::Extract(_) => extract_count += 1,
+                MediaOp::ExtractMany(_) => extract_many_count += 1,
+                MediaOp::Concat(_) => concat_count += 1,
+                MediaOp::Filter(f) => match f.target {
+                    FilterTarget::Video => has_video_op = true,
+                    FilterTarget::Audio => has_audio_op = true,
+                },
+                _ => {}
+            }
+        }
+
+        if has_strip_audio && has_audio_op {
+            return Err(rskit_errors::AppError::new(
+                rskit_errors::ErrorCode::InvalidInput,
+                "Cannot apply audio operations after stripping audio (StripAudio + audio filter/volume/mix)",
+            ));
+        }
+
+        if has_strip_video && has_video_op {
+            return Err(rskit_errors::AppError::new(
+                rskit_errors::ErrorCode::InvalidInput,
+                "Cannot apply video operations after stripping video (StripVideo + video filter/resize/crop)",
+            ));
+        }
+
+        if extract_count > 1 {
+            return Err(rskit_errors::AppError::new(
+                rskit_errors::ErrorCode::InvalidInput,
+                "Multiple Extract ops found — use ExtractMany for multi-segment extraction",
+            ));
+        }
+
+        if extract_many_count > 1 {
+            return Err(rskit_errors::AppError::new(
+                rskit_errors::ErrorCode::InvalidInput,
+                "Multiple ExtractMany ops not supported",
+            ));
+        }
+
+        if (extract_count > 0 || extract_many_count > 0) && concat_count > 0 {
+            return Err(rskit_errors::AppError::new(
+                rskit_errors::ErrorCode::InvalidInput,
+                "Cannot combine Extract/ExtractMany with Concat — these use conflicting input strategies",
+            ));
+        }
+
+        if overlay_count > 1 || (overlay_count > 0 && concat_count > 0) {
+            // Multiple complex_filter ops would overwrite each other
+            return Err(rskit_errors::AppError::new(
+                rskit_errors::ErrorCode::InvalidInput,
+                "Only one complex-filter operation allowed per pipeline (overlay, concat, or multi-segment extract)",
+            ));
+        }
+
+        Ok(())
+    }
+
     pub fn compile(
         source: &FileSource,
         ops: &[MediaOp],
@@ -42,6 +179,10 @@ impl FfmpegCommand {
         config: &FfmpegConfig,
         registry: &Registry,
     ) -> AppResult<Self> {
+        // Optimize and validate
+        let ops = Self::optimize_ops(ops);
+        Self::validate_ops(&ops)?;
+
         let _ = sink; // used for output path in future
         let mut cmd = Self {
             inputs: vec![FfmpegInput {
@@ -54,6 +195,7 @@ impl FfmpegCommand {
             output_opts: Vec::new(),
             complex_filter: None,
             global_opts: Vec::new(),
+            temp_files: Vec::new(),
         };
 
         if config.overwrite {
@@ -75,7 +217,7 @@ impl FfmpegCommand {
             }
         }
 
-        for op in ops {
+        for op in &ops {
             match op {
                 MediaOp::Extract(range) => {
                     cmd.inputs[0].seek_to = Some(range.start);
@@ -240,9 +382,60 @@ impl FfmpegCommand {
                             .extend(["-map".into(), format!("0:{stream_type}")]);
                     }
                 }
-                // Multi-segment extract and burn subtitles are more complex
-                MediaOp::ExtractMany(_) | MediaOp::BurnSubtitles(_) => {
-                    // TODO: implement multi-pass operations
+                // Multi-segment extraction: concatenate extracted segments
+                MediaOp::ExtractMany(segments) => {
+                    if segments.is_empty() {
+                        return Err(rskit_errors::AppError::new(
+                            rskit_errors::ErrorCode::InvalidInput,
+                            "ExtractMany requires at least one segment",
+                        ));
+                    }
+                    if segments.len() == 1 {
+                        // Single segment → simple extract
+                        let range = segments[0].range;
+                        cmd.inputs[0].seek_to = Some(range.start);
+                        cmd.inputs[0].duration = Some(range.duration());
+                    } else {
+                        // Multiple segments → separate inputs per segment, concat
+                        let base_source = cmd.inputs[0].source.clone();
+                        cmd.inputs.clear();
+                        for seg in segments {
+                            cmd.inputs.push(FfmpegInput {
+                                source: base_source.clone(),
+                                seek_to: Some(seg.range.start),
+                                duration: Some(seg.range.duration()),
+                            });
+                        }
+                        let n = cmd.inputs.len();
+                        let pads: String = (0..n).map(|i| format!("[{i}:v][{i}:a]")).collect();
+                        cmd.complex_filter =
+                            Some(format!("{pads}concat=n={n}:v=1:a=1[outv][outa]"));
+                        cmd.output_opts.extend(["-map".into(), "[outv]".into()]);
+                        cmd.output_opts.extend(["-map".into(), "[outa]".into()]);
+                    }
+                }
+                MediaOp::BurnSubtitles(subs) => {
+                    // Write subtitles to a temp SRT file and use the subtitles filter
+                    let srt_content = subs.to_srt();
+                    let temp = rskit_file::TempFile::with_extension("srt").map_err(|e| {
+                        rskit_errors::AppError::new(
+                            rskit_errors::ErrorCode::Internal,
+                            format!("failed to create temp subtitle file: {e}"),
+                        )
+                    })?;
+                    std::fs::write(temp.path(), &srt_content).map_err(|e| {
+                        rskit_errors::AppError::new(
+                            rskit_errors::ErrorCode::Internal,
+                            format!("failed to write subtitle file: {e}"),
+                        )
+                    })?;
+                    // Escape colons and backslashes in the path for FFmpeg filter syntax
+                    let path_str = temp.path().to_string_lossy().replace('\\', "/");
+                    let escaped = path_str.replace(':', "\\:");
+                    cmd.video_filters
+                        .push(format!("subtitles='{escaped}'"));
+                    // Keep temp file alive until command finishes
+                    cmd.temp_files.push(temp);
                 }
             }
         }
@@ -318,6 +511,16 @@ impl FfmpegCommand {
                 cmd.output_opts
                     .extend(["-r".into(), format!("{}/{}", fps.num, fps.den)]);
             }
+
+            if let Some(profile) = &video.profile {
+                cmd.output_opts
+                    .extend(["-profile:v".into(), profile.as_ffmpeg_arg().into()]);
+            }
+
+            if let Some(level) = &video.level {
+                cmd.output_opts
+                    .extend(["-level".into(), level.to_string()]);
+            }
         }
 
         if let Some(audio) = &config.audio {
@@ -362,6 +565,59 @@ impl FfmpegCommand {
 
         for (k, v) in &config.extra {
             cmd.output_opts.extend([format!("-{k}"), v.clone()]);
+        }
+
+        // Streaming output configuration
+        if let Some(streaming) = &config.streaming {
+            match streaming {
+                StreamingConfig::Hls(hls) => {
+                    cmd.output_opts.extend(["-f".into(), "hls".into()]);
+                    cmd.output_opts.extend([
+                        "-hls_time".into(),
+                        hls.segment_duration.to_string(),
+                    ]);
+                    cmd.output_opts.extend([
+                        "-hls_list_size".into(),
+                        hls.playlist_size.to_string(),
+                    ]);
+                    match hls.playlist_type {
+                        rskit_media::output::HlsPlaylistType::Vod => {
+                            cmd.output_opts
+                                .extend(["-hls_playlist_type".into(), "vod".into()]);
+                        }
+                        rskit_media::output::HlsPlaylistType::Event => {
+                            cmd.output_opts
+                                .extend(["-hls_playlist_type".into(), "event".into()]);
+                        }
+                    }
+                    if let Some(seg_fn) = &hls.segment_filename {
+                        cmd.output_opts
+                            .extend(["-hls_segment_filename".into(), seg_fn.clone()]);
+                    }
+                }
+                StreamingConfig::Dash(dash) => {
+                    cmd.output_opts.extend(["-f".into(), "dash".into()]);
+                    cmd.output_opts.extend([
+                        "-seg_duration".into(),
+                        dash.segment_duration.to_string(),
+                    ]);
+                    if dash.use_template {
+                        cmd.output_opts
+                            .extend(["-use_template".into(), "1".into()]);
+                    }
+                    if dash.use_timeline {
+                        cmd.output_opts
+                            .extend(["-use_timeline".into(), "1".into()]);
+                    }
+                }
+                StreamingConfig::Rtmp(rtmp) => {
+                    cmd.output_opts.extend(["-f".into(), "flv".into()]);
+                    // The RTMP URL is the output destination — handled at run time
+                    cmd.output_opts
+                        .extend(["-rtmp_live".into(), "live".into()]);
+                    cmd.output_opts.push(rtmp.url.clone());
+                }
+            }
         }
 
         Ok(())
@@ -528,7 +784,7 @@ impl FfmpegCommand {
         if !status.success() {
             let exit_code = status.code();
             let truncated_stderr =
-                crate::error::truncate_stderr(&stderr_output, 30);
+                crate::error::truncate_stderr(&stderr_output, config.max_stderr_lines);
             let kind = crate::error::classify_error(exit_code, &stderr_output);
 
             let message = format!(

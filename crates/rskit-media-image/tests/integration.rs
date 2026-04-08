@@ -360,6 +360,7 @@ async fn transcode_png_to_jpeg() {
         format: Format::new("jpeg"),
         video: None,
         audio: None,
+        streaming: None,
         strip_metadata: false,
         extra: Default::default(),
     };
@@ -393,6 +394,7 @@ async fn transcode_png_to_webp() {
         format: Format::new("webp"),
         video: None,
         audio: None,
+        streaming: None,
         strip_metadata: false,
         extra: Default::default(),
     };

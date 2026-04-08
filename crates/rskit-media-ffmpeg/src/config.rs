@@ -40,6 +40,10 @@ pub struct FfmpegConfig {
     /// Defaults to `1`.
     #[serde(default = "default_max_retries")]
     pub max_retries: u32,
+    /// Maximum number of stderr lines to include in error messages.
+    /// Defaults to `100`.
+    #[serde(default = "default_max_stderr_lines")]
+    pub max_stderr_lines: usize,
 }
 
 fn default_hw_accel_fallback() -> bool {
@@ -48,6 +52,10 @@ fn default_hw_accel_fallback() -> bool {
 
 fn default_max_retries() -> u32 {
     1
+}
+
+fn default_max_stderr_lines() -> usize {
+    100
 }
 
 impl Default for FfmpegConfig {
@@ -64,6 +72,7 @@ impl Default for FfmpegConfig {
             max_concurrent: None,
             hw_accel_fallback: true,
             max_retries: 1,
+            max_stderr_lines: 100,
         }
     }
 }

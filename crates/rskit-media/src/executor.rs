@@ -2,6 +2,7 @@
 
 use rskit_errors::AppResult;
 use rskit_file::{FileSink, FileSource};
+use tokio_util::sync::CancellationToken;
 
 use crate::{ops::MediaOp, pipeline::Progress};
 
@@ -24,6 +25,25 @@ pub trait MediaExecutor: Send + Sync {
         sink: Option<&FileSink>,
         on_progress: Box<dyn Fn(Progress) + Send + Sync>,
     ) -> AppResult<FileSource>;
+
+    /// Execute with cancellation support.
+    ///
+    /// The default implementation ignores the token and delegates to
+    /// [`execute`](MediaExecutor::execute). Backends should override this
+    /// to honour cancellation (e.g. kill a subprocess).
+    async fn execute_cancellable(
+        &self,
+        source: &FileSource,
+        ops: &[MediaOp],
+        sink: Option<&FileSink>,
+        on_progress: Option<Box<dyn Fn(Progress) + Send + Sync>>,
+        _cancel: CancellationToken,
+    ) -> AppResult<FileSource> {
+        match on_progress {
+            Some(cb) => self.execute_with_progress(source, ops, sink, cb).await,
+            None => self.execute(source, ops, sink).await,
+        }
+    }
 
     /// Check if this executor supports a given operation.
     fn supports(&self, op: &MediaOp) -> bool;

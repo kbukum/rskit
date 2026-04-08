@@ -110,4 +110,50 @@ pub trait MediaProbe: Send + Sync {
         interval: Duration,
         resolution: Option<Resolution>,
     ) -> AppResult<Vec<FileSource>>;
+
+    /// Generate a thumbnail sprite sheet (contact sheet).
+    ///
+    /// Returns a single image containing a grid of thumbnails at regular
+    /// intervals. Useful for video scrubbing UIs.
+    async fn sprite_sheet(
+        &self,
+        _source: &FileSource,
+        _interval: Duration,
+        _thumb_resolution: Resolution,
+        _columns: u32,
+    ) -> AppResult<FileSource> {
+        Err(rskit_errors::AppError::new(
+            rskit_errors::ErrorCode::InvalidInput,
+            "sprite_sheet not supported by this backend",
+        ))
+    }
+
+    /// Detect scene changes and return their timestamps.
+    ///
+    /// `threshold` is 0.0–1.0 where lower values detect more scenes.
+    /// Typical values: 0.3 (sensitive) to 0.5 (conservative).
+    async fn scene_detect(
+        &self,
+        _source: &FileSource,
+        _threshold: f64,
+    ) -> AppResult<Vec<Timestamp>> {
+        Err(rskit_errors::AppError::new(
+            rskit_errors::ErrorCode::InvalidInput,
+            "scene_detect not supported by this backend",
+        ))
+    }
+
+    /// Generate an audio waveform image.
+    ///
+    /// Returns a PNG image of the audio waveform.
+    async fn waveform(
+        &self,
+        _source: &FileSource,
+        _resolution: Resolution,
+    ) -> AppResult<FileSource> {
+        Err(rskit_errors::AppError::new(
+            rskit_errors::ErrorCode::InvalidInput,
+            "waveform not supported by this backend",
+        ))
+    }
 }

@@ -6,6 +6,8 @@ mod spatial;
 pub use compose::*;
 pub use spatial::*;
 
+use serde::{Deserialize, Serialize};
+
 use crate::{
     filter::Filter,
     output::OutputConfig,
@@ -19,7 +21,7 @@ use std::time::Duration;
 ///
 /// Each variant is a data-only description — no execution logic.
 /// The pipeline records these and a backend executor compiles them.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MediaOp {
     // ── Temporal ─────────────────────────────────────────────────────
     /// Extract a time range from the source.

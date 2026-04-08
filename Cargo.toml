@@ -43,12 +43,14 @@ members = [
     "crates/rskit-media",
     "crates/rskit-media-ffmpeg",
     "crates/rskit-media-image",
+    "crates/rskit-media-audio",
     # phase 7 cli, dataset, bench
     "crates/rskit-cli",
     "crates/rskit-dataset",
     "crates/rskit-bench",
     # examples
     "examples/agent-demo",
+    "examples/media-demo",
     # integration tests
     "crates/rskit-integration",
 ]

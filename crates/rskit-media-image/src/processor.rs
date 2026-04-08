@@ -131,9 +131,14 @@ impl MediaExecutor for ImageProcessor {
                         Rotation::Degrees90 => img.rotate90(),
                         Rotation::Degrees180 => img.rotate180(),
                         Rotation::Degrees270 => img.rotate270(),
-                        Rotation::Arbitrary(_) => {
-                            // image crate only supports 90° increments natively
-                            img
+                        Rotation::Arbitrary(degrees) => {
+                            return Err(AppError::new(
+                                ErrorCode::InvalidInput,
+                                format!(
+                                    "arbitrary rotation ({degrees}°) is not supported by the \
+                                     image backend; use 90°/180°/270° or the FFmpeg backend"
+                                ),
+                            ));
                         }
                     };
                 }
@@ -145,8 +150,16 @@ impl MediaExecutor for ImageProcessor {
                     };
                 }
                 MediaOp::Filter(filter) => {
-                    if filter.target == FilterTarget::Video {
-                        match filter.name.as_str() {
+                    if filter.target != FilterTarget::Video {
+                        return Err(AppError::new(
+                            ErrorCode::InvalidInput,
+                            format!(
+                                "audio filter \"{}\" cannot be applied to images",
+                                filter.name
+                            ),
+                        ));
+                    }
+                    match filter.name.as_str() {
                             "grayscale" => {
                                 img = DynamicImage::ImageLuma8(img.to_luma8());
                             }
@@ -192,11 +205,122 @@ impl MediaExecutor for ImageProcessor {
                                     .unwrap_or(0.0);
                                 img = img.adjust_contrast(value);
                             }
-                            _ => {
-                                tracing::warn!(filter = %filter.name, "unsupported image filter, skipping");
+                            "sharpen" => {
+                                let sigma = filter
+                                    .params
+                                    .get("sigma")
+                                    .and_then(|v| match v {
+                                        rskit_media::filter::ParamValue::Float(f) => {
+                                            Some(*f as f32)
+                                        }
+                                        rskit_media::filter::ParamValue::Int(i) => Some(*i as f32),
+                                        _ => None,
+                                    })
+                                    .unwrap_or(1.0);
+                                let threshold = filter
+                                    .params
+                                    .get("threshold")
+                                    .and_then(|v| match v {
+                                        rskit_media::filter::ParamValue::Int(i) => Some(*i),
+                                        rskit_media::filter::ParamValue::Float(f) => {
+                                            Some(*f as i64)
+                                        }
+                                        _ => None,
+                                    })
+                                    .unwrap_or(1);
+                                img = img.unsharpen(sigma, threshold as i32);
+                            }
+                            "hue" => {
+                                let degrees = filter
+                                    .params
+                                    .get("degrees")
+                                    .and_then(|v| match v {
+                                        rskit_media::filter::ParamValue::Int(i) => Some(*i as i32),
+                                        rskit_media::filter::ParamValue::Float(f) => {
+                                            Some(*f as i32)
+                                        }
+                                        _ => None,
+                                    })
+                                    .unwrap_or(0);
+                                img = img.huerotate(degrees);
+                            }
+                            "invert" => {
+                                img.invert();
+                            }
+                            "sepia" => {
+                                // Sepia tone: convert to RGB, apply matrix
+                                let mut rgba = img.to_rgba8();
+                                for pixel in rgba.pixels_mut() {
+                                    let [r, g, b, a] = pixel.0;
+                                    let rf = r as f64;
+                                    let gf = g as f64;
+                                    let bf = b as f64;
+                                    let new_r =
+                                        (0.393 * rf + 0.769 * gf + 0.189 * bf).min(255.0) as u8;
+                                    let new_g =
+                                        (0.349 * rf + 0.686 * gf + 0.168 * bf).min(255.0) as u8;
+                                    let new_b =
+                                        (0.272 * rf + 0.534 * gf + 0.131 * bf).min(255.0) as u8;
+                                    pixel.0 = [new_r, new_g, new_b, a];
+                                }
+                                img = DynamicImage::ImageRgba8(rgba);
+                            }
+                            "posterize" => {
+                                let levels = filter
+                                    .params
+                                    .get("levels")
+                                    .and_then(|v| match v {
+                                        rskit_media::filter::ParamValue::Int(i) => {
+                                            Some((*i as u8).max(2))
+                                        }
+                                        _ => None,
+                                    })
+                                    .unwrap_or(4);
+                                let step = 255u16 / (levels as u16 - 1);
+                                let mut rgba = img.to_rgba8();
+                                for pixel in rgba.pixels_mut() {
+                                    for c in 0..3 {
+                                        let val = pixel.0[c] as u16;
+                                        let quantized =
+                                            ((val * (levels as u16 - 1) + 127) / 255) * step;
+                                        pixel.0[c] = quantized.min(255) as u8;
+                                    }
+                                }
+                                img = DynamicImage::ImageRgba8(rgba);
+                            }
+                            "pixelate" => {
+                                let block_size = filter
+                                    .params
+                                    .get("size")
+                                    .and_then(|v| match v {
+                                        rskit_media::filter::ParamValue::Int(i) => {
+                                            Some((*i as u32).max(1))
+                                        }
+                                        _ => None,
+                                    })
+                                    .unwrap_or(8);
+                                let (w, h) = (img.width(), img.height());
+                                let small_w = (w / block_size).max(1);
+                                let small_h = (h / block_size).max(1);
+                                img = img
+                                    .resize_exact(
+                                        small_w,
+                                        small_h,
+                                        imageops::FilterType::Nearest,
+                                    )
+                                    .resize_exact(w, h, imageops::FilterType::Nearest);
+                            }
+                            other => {
+                                return Err(AppError::new(
+                                    ErrorCode::InvalidInput,
+                                    format!(
+                                        "unsupported image filter: \"{other}\"; supported \
+                                         filters: grayscale, blur, brightness, contrast, \
+                                         sharpen, hue, invert, sepia, posterize, pixelate"
+                                    ),
+                                ));
                             }
                         }
-                    }
                 }
                 MediaOp::Transcode(config) => {
                     let format_id = config.format.id();

@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use rskit_errors::AppResult;
 use rskit_file::{FileSink, FileSource};
+use tokio_util::sync::CancellationToken;
 
 use crate::{
     executor::MediaExecutor,
@@ -272,11 +273,70 @@ impl MediaPipeline {
         self
     }
 
+    /// Configure streaming output (HLS, DASH, or RTMP).
+    ///
+    /// This is a convenience wrapper around `transcode()` that configures
+    /// the output for streaming.
+    #[must_use]
+    pub fn stream_to(
+        mut self,
+        config: OutputConfig,
+    ) -> Self {
+        self.ops.push(MediaOp::Transcode(config));
+        self
+    }
+
     /// Set the output destination.
     #[must_use]
     pub fn output_to(mut self, sink: FileSink) -> Self {
         self.sink = Some(sink);
         self
+    }
+
+    // ── Validation ───────────────────────────────────────────────────
+
+    /// Validate the pipeline without executing it.
+    ///
+    /// Checks operation compatibility, ordering conflicts, and whether
+    /// the executor supports all operations.
+    pub fn validate(&self, executor: &dyn MediaExecutor) -> AppResult<()> {
+        // Check that all ops are supported by the executor
+        for op in &self.ops {
+            if !executor.supports(op) {
+                return Err(rskit_errors::AppError::new(
+                    rskit_errors::ErrorCode::InvalidInput,
+                    format!("executor does not support operation: {op:?}"),
+                ));
+            }
+        }
+
+        // Check for conflicting operations
+        let mut has_strip_audio = false;
+        let mut has_strip_video = false;
+
+        for op in &self.ops {
+            match op {
+                MediaOp::StripAudio => has_strip_audio = true,
+                MediaOp::StripVideo => has_strip_video = true,
+                MediaOp::Volume(_) | MediaOp::NormalizeAudio | MediaOp::MixAudio(_)
+                | MediaOp::ReplaceAudio(_) if has_strip_audio => {
+                    return Err(rskit_errors::AppError::new(
+                        rskit_errors::ErrorCode::InvalidInput,
+                        "audio operation after StripAudio has no effect",
+                    ));
+                }
+                MediaOp::Resize(_) | MediaOp::Crop(_) | MediaOp::Rotate(_)
+                | MediaOp::Flip(_) if has_strip_video => {
+                    return Err(rskit_errors::AppError::new(
+                        rskit_errors::ErrorCode::InvalidInput,
+                        "video operation after StripVideo has no effect",
+                    ));
+                }
+                _ => {}
+            }
+        }
+
+        Ok(())
     }
 
     // ── Execution ────────────────────────────────────────────────────
@@ -304,6 +364,24 @@ impl MediaPipeline {
             .await
     }
 
+    /// Execute with cancellation support and optional progress reporting.
+    pub async fn execute_cancellable(
+        self,
+        executor: &dyn MediaExecutor,
+        on_progress: Option<Box<dyn Fn(Progress) + Send + Sync>>,
+        cancel: CancellationToken,
+    ) -> AppResult<FileSource> {
+        executor
+            .execute_cancellable(
+                &self.source,
+                &self.ops,
+                self.sink.as_ref(),
+                on_progress,
+                cancel,
+            )
+            .await
+    }
+
     // ── Inspection ───────────────────────────────────────────────────
 
     /// Get the list of recorded operations.
@@ -319,9 +397,22 @@ impl MediaPipeline {
                 MediaOp::Extract(range) => {
                     duration = range.duration();
                 }
+                MediaOp::ExtractMany(segments) => {
+                    let total_us: u64 = segments
+                        .iter()
+                        .map(|s| s.range.duration().as_micros() as u64)
+                        .sum();
+                    duration = Duration::from_micros(total_us);
+                }
+                MediaOp::Concat(_) => {
+                    // Each concat appends one source — duration unknown, estimate double
+                    duration = duration.saturating_mul(2);
+                }
                 MediaOp::Speed(factor) => {
-                    let ms = (duration.as_millis() as f64 / factor) as u64;
-                    duration = Duration::from_millis(ms);
+                    if *factor > 0.0 {
+                        let us = (duration.as_micros() as f64 / factor) as u64;
+                        duration = Duration::from_micros(us);
+                    }
                 }
                 _ => {}
             }

@@ -8,8 +8,10 @@
 
 /// Audio sample rate and channel layout types.
 pub mod audio;
-/// Codec identifiers and well-known constants.
+/// Codec identifiers, profiles, levels, and well-known constants.
 pub mod codec;
+/// Color space, color range, and pixel format types.
+pub mod color;
 /// Executor trait for media processing backends.
 pub mod executor;
 /// Filter types and convenience constructors.
@@ -40,17 +42,24 @@ pub mod track;
 pub mod types;
 
 pub use audio::{ChannelLayout, SampleRate};
-pub use codec::{Codec, CodecKind};
+pub use codec::{Codec, CodecKind, CodecLevel, CodecProfile};
+pub use color::{ColorRange, ColorSpace, PixelFormat};
 pub use executor::MediaExecutor;
 pub use filter::{Filter, FilterTarget, ParamValue, Params};
 pub use format::Format;
 pub use ops::MediaOp;
-pub use output::{AudioSettings, Bitrate, EncodingSpeed, OutputConfig, Quality, VideoSettings};
+pub use output::{
+    AudioSettings, Bitrate, DashConfig, EncodingSpeed, HlsConfig, HlsPlaylistType, OutputConfig,
+    Quality, RtmpConfig, StreamingConfig, VideoSettings,
+};
 pub use pipeline::{MediaPipeline, Progress};
 pub use probe::{MediaMetadata, MediaProbe};
 pub use registry::{CodecInfo, FormatInfo, Registry};
 pub use spatial::{FrameRate, Resolution};
 pub use subtitle::{SubtitleEntry, SubtitlePosition, SubtitleStyle, SubtitleTrack};
 pub use time::{Segment, TimeRange, Timestamp};
-pub use track::{AudioTrackInfo, SubtitleTrackInfo, Track, VideoTrackInfo};
+pub use track::{
+    AudioTrackInfo, ContentLightLevel, HdrFormat, HdrMetadata, MasteringDisplay, SubtitleTrackInfo,
+    Track, VideoTrackInfo,
+};
 pub use types::{MediaType, TrackKind};

@@ -1,9 +1,11 @@
 //! Spatial operations for video/image processing.
 
+use serde::{Deserialize, Serialize};
+
 use crate::spatial::Resolution;
 
 /// Resize operation.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResizeOp {
     /// Target resolution.
     pub resolution: Resolution,
@@ -12,7 +14,7 @@ pub struct ResizeOp {
 }
 
 /// How to handle aspect ratio when resizing.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum ResizeMode {
     /// Stretch to exact dimensions (may distort).
     Exact,
@@ -27,7 +29,7 @@ pub enum ResizeMode {
 }
 
 /// A rectangular region for cropping.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CropRegion {
     /// X offset from top-left.
     pub x: u32,
@@ -79,7 +81,7 @@ impl CropRegion {
 }
 
 /// Rotation angle.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum Rotation {
     /// 90° clockwise.
     Degrees90,
@@ -92,7 +94,7 @@ pub enum Rotation {
 }
 
 /// Flip direction.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum FlipDirection {
     /// Mirror horizontally.
     Horizontal,
@@ -103,7 +105,7 @@ pub enum FlipDirection {
 }
 
 /// Pad the video/image to a target size with a background color.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PadOp {
     /// Target width.
     pub width: u32,

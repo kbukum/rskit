@@ -6,7 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     audio::{ChannelLayout, SampleRate},
-    codec::Codec,
+    codec::{Codec, CodecLevel, CodecProfile},
+    color::{ColorRange, ColorSpace, PixelFormat},
     spatial::{FrameRate, Resolution},
     types::TrackKind,
 };
@@ -45,16 +46,69 @@ pub struct VideoTrackInfo {
     pub resolution: Resolution,
     /// Frame rate.
     pub frame_rate: Option<FrameRate>,
-    /// Pixel format (e.g., "yuv420p").
-    pub pixel_format: Option<String>,
+    /// Pixel format.
+    pub pixel_format: Option<PixelFormat>,
     /// Rotation in degrees (e.g., 90 for portrait video on mobile).
     pub rotation: Option<i16>,
-    /// Color space (e.g., "bt709").
-    pub color_space: Option<String>,
+    /// Color space.
+    pub color_space: Option<ColorSpace>,
+    /// Color range (limited / full).
+    pub color_range: Option<ColorRange>,
     /// Bit depth per channel.
     pub bit_depth: Option<u8>,
-    /// Whether the video uses HDR.
-    pub hdr: bool,
+    /// Codec profile (e.g., H264High, HevcMain10).
+    pub profile: Option<CodecProfile>,
+    /// Codec level (e.g., "4.1", "5.1").
+    pub level: Option<CodecLevel>,
+    /// HDR metadata (None for SDR content).
+    pub hdr: Option<HdrMetadata>,
+}
+
+/// HDR metadata attached to a video track.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HdrMetadata {
+    /// HDR format.
+    pub format: HdrFormat,
+    /// Mastering display metadata.
+    pub mastering_display: Option<MasteringDisplay>,
+    /// Content light level info.
+    pub content_light_level: Option<ContentLightLevel>,
+}
+
+/// HDR format variant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum HdrFormat {
+    /// HDR10 (static metadata).
+    Hdr10,
+    /// HDR10+ (dynamic metadata).
+    Hdr10Plus,
+    /// Dolby Vision.
+    DolbyVision,
+    /// Hybrid Log-Gamma.
+    Hlg,
+    /// Generic PQ (SMPTE ST 2084) without specific format.
+    Pq,
+}
+
+/// SMPTE ST 2086 mastering display metadata.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MasteringDisplay {
+    /// Display primaries as CIE 1931 chromaticity coordinates (x, y)
+    /// in the order: Green, Blue, Red.
+    pub primaries: Option<[(f64, f64); 3]>,
+    /// White point as CIE 1931 chromaticity (x, y).
+    pub white_point: Option<(f64, f64)>,
+    /// Min/max luminance in cd/m² (nits).
+    pub luminance: Option<(f64, f64)>,
+}
+
+/// Content light level info (CTA-861.3).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct ContentLightLevel {
+    /// Maximum Content Light Level in cd/m².
+    pub max_cll: u32,
+    /// Maximum Frame-Average Light Level in cd/m².
+    pub max_fall: u32,
 }
 
 /// Audio-specific track information.

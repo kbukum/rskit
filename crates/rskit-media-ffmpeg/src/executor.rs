@@ -6,6 +6,7 @@ use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_file::{FileSink, FileSource, TempFile};
 use rskit_media::{executor::MediaExecutor, ops::MediaOp, pipeline::Progress, registry::Registry};
 use tokio::sync::Semaphore;
+use tokio_util::sync::CancellationToken;
 
 use crate::{
     command::FfmpegCommand,
@@ -94,9 +95,17 @@ impl FfmpegExecutor {
             "acquired FFmpeg semaphore permit"
         );
 
+        // Wrap in Arc so the callback survives hw accel fallback retry
+        let on_progress: Option<Arc<dyn Fn(Progress) + Send + Sync>> =
+            on_progress.map(Arc::from);
+
         // First attempt with configured hw_accel
         let cmd = FfmpegCommand::compile(source, ops, sink, &self.config, &self.registry)?;
-        let result = cmd.run(&self.config, on_progress, &output_file).await;
+        let progress_cb = on_progress.as_ref().map(|cb| {
+            let cb = Arc::clone(cb);
+            Box::new(move |p: Progress| cb(p)) as Box<dyn Fn(Progress) + Send + Sync>
+        });
+        let result = cmd.run(&self.config, progress_cb, &output_file).await;
 
         match result {
             Ok(()) => Ok(output_file),
@@ -128,8 +137,16 @@ impl FfmpegExecutor {
                         &fallback_config,
                         &self.registry,
                     )?;
+
+                    // Re-wrap the callback for the retry attempt
+                    let progress_cb = on_progress.as_ref().map(|cb| {
+                        let cb = Arc::clone(cb);
+                        Box::new(move |p: Progress| cb(p))
+                            as Box<dyn Fn(Progress) + Send + Sync>
+                    });
+
                     cmd_fallback
-                        .run(&fallback_config, None, &output_file)
+                        .run(&fallback_config, progress_cb, &output_file)
                         .await
                         .map_err(|e| e.into_app_error())?;
                     Ok(output_file)
@@ -187,11 +204,9 @@ impl MediaExecutor for FfmpegExecutor {
     }
 
     fn supports(&self, op: &MediaOp) -> bool {
-        match op {
-            MediaOp::BurnSubtitles(_) => true,
-            MediaOp::ExtractMany(_) => true,
-            _ => true,
-        }
+        // All ops are now implemented
+        let _ = op;
+        true
     }
 
     fn preview(&self, source: &FileSource, ops: &[MediaOp]) -> AppResult<Vec<String>> {
@@ -200,5 +215,37 @@ impl MediaExecutor for FfmpegExecutor {
         args.extend(cmd.to_args());
         args.push("<output>".into());
         Ok(vec![args.join(" ")])
+    }
+
+    async fn execute_cancellable(
+        &self,
+        source: &FileSource,
+        ops: &[MediaOp],
+        sink: Option<&FileSink>,
+        on_progress: Option<Box<dyn Fn(Progress) + Send + Sync>>,
+        cancel: CancellationToken,
+    ) -> AppResult<FileSource> {
+        let run_fut = self.run_with_retry(source, ops, sink, on_progress);
+
+        tokio::select! {
+            biased;
+            _ = cancel.cancelled() => {
+                tracing::info!("media pipeline cancelled by token");
+                Err(AppError::new(ErrorCode::Cancelled, "media pipeline cancelled"))
+            }
+            result = run_fut => {
+                let output_file = result?;
+                match sink {
+                    Some(FileSink::Path(p)) => Ok(FileSource::Path(p.clone())),
+                    Some(FileSink::Memory) => {
+                        let data = tokio::fs::read(&output_file).await.map_err(|e| {
+                            AppError::new(ErrorCode::Internal, format!("read output failed: {e}"))
+                        })?;
+                        Ok(FileSource::Bytes(bytes::Bytes::from(data)))
+                    }
+                    _ => Ok(FileSource::Path(output_file)),
+                }
+            }
+        }
     }
 }

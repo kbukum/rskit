@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     audio::{ChannelLayout, SampleRate},
-    codec::Codec,
+    codec::{Codec, CodecLevel, CodecProfile},
     format::Format,
     registry::Registry,
     spatial::{FrameRate, Resolution},
@@ -82,6 +82,10 @@ pub struct VideoSettings {
     pub bitrate: Option<Bitrate>,
     /// Encoding speed.
     pub speed: Option<EncodingSpeed>,
+    /// Codec profile (e.g., H264High, HevcMain10).
+    pub profile: Option<CodecProfile>,
+    /// Codec level (e.g., "4.1").
+    pub level: Option<CodecLevel>,
 }
 
 impl VideoSettings {
@@ -94,6 +98,8 @@ impl VideoSettings {
             quality: None,
             bitrate: None,
             speed: None,
+            profile: None,
+            level: None,
         }
     }
 
@@ -129,6 +135,20 @@ impl VideoSettings {
     #[must_use]
     pub fn with_speed(mut self, speed: EncodingSpeed) -> Self {
         self.speed = Some(speed);
+        self
+    }
+
+    /// Set the codec profile.
+    #[must_use]
+    pub fn with_profile(mut self, profile: CodecProfile) -> Self {
+        self.profile = Some(profile);
+        self
+    }
+
+    /// Set the codec level.
+    #[must_use]
+    pub fn with_level(mut self, level: CodecLevel) -> Self {
+        self.level = Some(level);
         self
     }
 }
@@ -188,10 +208,84 @@ pub struct OutputConfig {
     pub video: Option<VideoSettings>,
     /// Audio encoding settings (None for video-only).
     pub audio: Option<AudioSettings>,
+    /// Streaming output settings (HLS, DASH, RTMP).
+    pub streaming: Option<StreamingConfig>,
     /// Whether to strip metadata from output.
     pub strip_metadata: bool,
     /// Extra backend-specific parameters.
     pub extra: HashMap<String, String>,
+}
+
+/// Streaming output configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum StreamingConfig {
+    /// HTTP Live Streaming (HLS) output.
+    Hls(HlsConfig),
+    /// MPEG-DASH output.
+    Dash(DashConfig),
+    /// RTMP push output.
+    Rtmp(RtmpConfig),
+}
+
+/// HLS output configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HlsConfig {
+    /// Segment duration in seconds (default: 6).
+    pub segment_duration: u32,
+    /// Number of segments in playlist (0 = all).
+    pub playlist_size: u32,
+    /// Playlist type.
+    pub playlist_type: HlsPlaylistType,
+    /// Segment filename pattern (default: "segment_%03d.ts").
+    pub segment_filename: Option<String>,
+}
+
+impl Default for HlsConfig {
+    fn default() -> Self {
+        Self {
+            segment_duration: 6,
+            playlist_size: 0,
+            playlist_type: HlsPlaylistType::Vod,
+            segment_filename: None,
+        }
+    }
+}
+
+/// HLS playlist type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum HlsPlaylistType {
+    /// Video on demand — all segments in playlist.
+    Vod,
+    /// Live/event — sliding window.
+    Event,
+}
+
+/// DASH output configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DashConfig {
+    /// Segment duration in seconds (default: 4).
+    pub segment_duration: u32,
+    /// Use segment template mode.
+    pub use_template: bool,
+    /// Use segment timeline.
+    pub use_timeline: bool,
+}
+
+impl Default for DashConfig {
+    fn default() -> Self {
+        Self {
+            segment_duration: 4,
+            use_template: true,
+            use_timeline: true,
+        }
+    }
+}
+
+/// RTMP push configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RtmpConfig {
+    /// RTMP server URL (e.g., "rtmp://live.example.com/app/stream_key").
+    pub url: String,
 }
 
 impl OutputConfig {
@@ -201,6 +295,7 @@ impl OutputConfig {
             format,
             video: None,
             audio: None,
+            streaming: None,
             strip_metadata: false,
             extra: HashMap::new(),
         }
@@ -217,6 +312,13 @@ impl OutputConfig {
     #[must_use]
     pub fn with_audio(mut self, audio: AudioSettings) -> Self {
         self.audio = Some(audio);
+        self
+    }
+
+    /// Set streaming output configuration.
+    #[must_use]
+    pub fn with_streaming(mut self, streaming: StreamingConfig) -> Self {
+        self.streaming = Some(streaming);
         self
     }
 

@@ -8,6 +8,7 @@ use rskit_file::FileSource;
 use rskit_media::{
     audio::{ChannelLayout, SampleRate},
     codec::Codec,
+    color::{ColorRange, ColorSpace, PixelFormat},
     format::Format,
     probe::{MediaMetadata, MediaProbe},
     spatial::{FrameRate, Resolution},
@@ -60,6 +61,7 @@ impl FfmpegProbe {
                 "json",
                 "-show_format",
                 "-show_streams",
+                "-show_chapters",
             ])
             .arg(path)
             .output()
@@ -208,14 +210,57 @@ impl FfmpegProbe {
                     .and_then(|v| v.as_str())
                     .and_then(|s| s.parse::<i16>().ok());
 
+                // Parse color space from ffprobe's color_space field
+                let color_space = stream
+                    .get("color_space")
+                    .and_then(|v| v.as_str())
+                    .map(ColorSpace::from_ffmpeg)
+                    .filter(|cs| *cs != ColorSpace::Unknown);
+
+                // Parse color range (tv=Limited, pc=Full)
+                let color_range = stream
+                    .get("color_range")
+                    .and_then(|v| v.as_str())
+                    .map(|r| match r {
+                        "pc" | "jpeg" | "full" => ColorRange::Full,
+                        _ => ColorRange::Limited,
+                    });
+
+                // Parse bit depth from bits_per_raw_sample
+                let bit_depth = stream
+                    .get("bits_per_raw_sample")
+                    .and_then(|v| v.as_str())
+                    .and_then(|s| s.parse::<u8>().ok())
+                    .or_else(|| {
+                        // Infer from pixel format name
+                        pix_fmt.as_deref().and_then(|fmt| {
+                            if fmt.contains("10le") || fmt.contains("10be") || fmt.ends_with("p10") {
+                                Some(10)
+                            } else if fmt.contains("12le") || fmt.contains("12be") || fmt.ends_with("p12") {
+                                Some(12)
+                            } else {
+                                Some(8)
+                            }
+                        })
+                    });
+
+                // Parse codec profile from ffprobe
+                let profile = stream
+                    .get("profile")
+                    .and_then(|v| v.as_str())
+                    .and_then(rskit_media::CodecProfile::from_ffprobe);
+
                 Some(VideoTrackInfo {
                     resolution: Resolution::new(width, height),
                     frame_rate,
-                    pixel_format: pix_fmt,
+                    pixel_format: pix_fmt.map(PixelFormat::new),
                     rotation,
-                    color_space: None,
-                    bit_depth: None,
-                    hdr: false,
+                    color_space,
+                    color_range,
+                    bit_depth,
+                    profile,
+                    level: None,
+                    hdr: None,
                 })
             } else {
                 None
@@ -254,10 +299,14 @@ impl FfmpegProbe {
                     .unwrap_or("unknown")
                     .to_string();
 
-                Some(SubtitleTrackInfo {
-                    format: fmt,
-                    forced: false,
-                })
+                let forced = stream
+                    .get("disposition")
+                    .and_then(|d| d.get("forced"))
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0)
+                    == 1;
+
+                Some(SubtitleTrackInfo { format: fmt, forced })
             } else {
                 None
             };
@@ -269,6 +318,12 @@ impl FfmpegProbe {
                 .unwrap_or(0)
                 == 1;
 
+            let title = stream
+                .get("tags")
+                .and_then(|t| t.get("title"))
+                .and_then(|v| v.as_str())
+                .map(String::from);
+
             tracks.push(Track {
                 index: i,
                 kind,
@@ -276,7 +331,7 @@ impl FfmpegProbe {
                 bitrate: bit_rate,
                 language,
                 is_default,
-                title: None,
+                title,
                 duration: track_duration,
                 video,
                 audio,
@@ -449,5 +504,139 @@ impl MediaProbe for FfmpegProbe {
         }
 
         Ok(results)
+    }
+
+    async fn sprite_sheet(
+        &self,
+        source: &FileSource,
+        interval: Duration,
+        thumb_resolution: Resolution,
+        columns: u32,
+    ) -> AppResult<FileSource> {
+        let resolved = source.to_local_path().await?;
+        let tmp = rskit_file::TempFile::with_extension("jpg")?;
+
+        let vf = format!(
+            "fps=1/{},scale={}:{},tile={}x0",
+            interval.as_secs().max(1),
+            thumb_resolution.width,
+            thumb_resolution.height,
+            columns,
+        );
+
+        let output = tokio::process::Command::new(self.config.ffmpeg_bin())
+            .args([
+                "-i",
+                &resolved.path().to_string_lossy(),
+                "-vf",
+                &vf,
+                "-frames:v",
+                "1",
+                "-y",
+                &tmp.path().to_string_lossy(),
+            ])
+            .output()
+            .await
+            .map_err(|e| {
+                AppError::new(
+                    ErrorCode::Internal,
+                    format!("ffmpeg sprite_sheet failed: {e}"),
+                )
+            })?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(AppError::new(
+                ErrorCode::Internal,
+                format!("ffmpeg sprite_sheet failed: {stderr}"),
+            ));
+        }
+
+        Ok(tmp.into_source())
+    }
+
+    async fn scene_detect(
+        &self,
+        source: &FileSource,
+        threshold: f64,
+    ) -> AppResult<Vec<Timestamp>> {
+        let resolved = source.to_local_path().await?;
+        let threshold = threshold.clamp(0.0, 1.0);
+
+        let output = tokio::process::Command::new(self.config.ffmpeg_bin())
+            .args([
+                "-i",
+                &resolved.path().to_string_lossy(),
+                "-vf",
+                &format!("select='gt(scene\\,{threshold})',showinfo"),
+                "-f",
+                "null",
+                "-",
+            ])
+            .output()
+            .await
+            .map_err(|e| {
+                AppError::new(
+                    ErrorCode::Internal,
+                    format!("ffmpeg scene_detect failed: {e}"),
+                )
+            })?;
+
+        // Parse timestamps from showinfo output lines in stderr
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let mut timestamps = Vec::new();
+
+        for line in stderr.lines() {
+            if let Some(pts_idx) = line.find("pts_time:") {
+                let after = &line[pts_idx + 9..];
+                let end = after
+                    .find(|c: char| !c.is_ascii_digit() && c != '.' && c != '-')
+                    .unwrap_or(after.len());
+                if let Ok(secs) = after[..end].trim().parse::<f64>() {
+                    timestamps.push(Timestamp::from_millis((secs * 1000.0) as u64));
+                }
+            }
+        }
+
+        Ok(timestamps)
+    }
+
+    async fn waveform(
+        &self,
+        source: &FileSource,
+        resolution: Resolution,
+    ) -> AppResult<FileSource> {
+        let resolved = source.to_local_path().await?;
+        let tmp = rskit_file::TempFile::with_extension("png")?;
+
+        let output = tokio::process::Command::new(self.config.ffmpeg_bin())
+            .args([
+                "-i",
+                &resolved.path().to_string_lossy(),
+                "-filter_complex",
+                &format!(
+                    "showwavespic=s={}x{}:colors=#4080ff",
+                    resolution.width, resolution.height,
+                ),
+                "-frames:v",
+                "1",
+                "-y",
+                &tmp.path().to_string_lossy(),
+            ])
+            .output()
+            .await
+            .map_err(|e| {
+                AppError::new(ErrorCode::Internal, format!("ffmpeg waveform failed: {e}"))
+            })?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(AppError::new(
+                ErrorCode::Internal,
+                format!("ffmpeg waveform failed: {stderr}"),
+            ));
+        }
+
+        Ok(tmp.into_source())
     }
 }

@@ -99,19 +99,39 @@ impl SubtitleTrack {
     }
 
     /// Parse SRT format subtitle content.
+    ///
+    /// Handles common malformations:
+    /// - Extra blank lines between entries
+    /// - Windows (`\r\n`) and Unix (`\n`) line endings
+    /// - Missing or non-numeric sequence numbers
+    /// - BOM markers
     pub fn from_srt(content: &str) -> AppResult<Self> {
         let mut entries = Vec::new();
-        let blocks: Vec<&str> = content.split("\n\n").collect();
+        // Normalize line endings and strip BOM
+        let content = content
+            .strip_prefix('\u{feff}')
+            .unwrap_or(content)
+            .replace("\r\n", "\n");
+
+        // Split on 2+ consecutive newlines to handle extra blank lines
+        let blocks: Vec<&str> = content
+            .split("\n\n")
+            .filter(|b| !b.trim().is_empty())
+            .collect();
 
         for block in blocks {
             let lines: Vec<&str> = block.trim().lines().collect();
-            if lines.len() < 3 {
+            if lines.is_empty() {
                 continue;
             }
 
-            // Line 0: index (ignored)
-            // Line 1: timestamps "HH:MM:SS,mmm --> HH:MM:SS,mmm"
-            let time_line = lines[1];
+            // Find the timestamp line (contains " --> ")
+            let time_idx = lines.iter().position(|l| l.contains(" --> "));
+            let Some(time_idx) = time_idx else {
+                continue;
+            };
+
+            let time_line = lines[time_idx];
             let parts: Vec<&str> = time_line.split(" --> ").collect();
             if parts.len() != 2 {
                 continue;
@@ -130,7 +150,12 @@ impl SubtitleTrack {
                 )
             })?;
 
-            let text = lines[2..].join("\n");
+            // Text is everything after the timestamp line
+            let text_lines = &lines[time_idx + 1..];
+            if text_lines.is_empty() {
+                continue;
+            }
+            let text = strip_html_tags(&text_lines.join("\n"));
 
             entries.push(SubtitleEntry {
                 range: TimeRange::from_millis(start, end),
@@ -147,10 +172,26 @@ impl SubtitleTrack {
     }
 
     /// Parse WebVTT format subtitle content.
+    ///
+    /// Handles common malformations:
+    /// - BOM markers, `\r\n` line endings
+    /// - Extra blank lines between cues
+    /// - HTML tags in cue text (stripped)
+    /// - Position/alignment settings on the timestamp line (ignored)
     pub fn from_vtt(content: &str) -> AppResult<Self> {
-        let content = content.strip_prefix("WEBVTT").unwrap_or(content);
+        let content = content
+            .strip_prefix('\u{feff}')
+            .unwrap_or(content)
+            .replace("\r\n", "\n");
+        let content = content
+            .strip_prefix("WEBVTT")
+            .unwrap_or(&content)
+            .trim_start();
         let mut entries = Vec::new();
-        let blocks: Vec<&str> = content.split("\n\n").collect();
+        let blocks: Vec<&str> = content
+            .split("\n\n")
+            .filter(|b| !b.trim().is_empty())
+            .collect();
 
         for block in blocks {
             let lines: Vec<&str> = block.trim().lines().collect();
@@ -171,6 +212,7 @@ impl SubtitleTrack {
             }
 
             let start_str = parts[0].trim();
+            // End timestamp may have position settings after it
             let end_str = parts[1].split_whitespace().next().unwrap_or("");
 
             let start = parse_vtt_time(start_str).ok_or_else(|| {
@@ -186,10 +228,12 @@ impl SubtitleTrack {
                 )
             })?;
 
-            let text = lines[time_idx + 1..].join("\n");
-            if text.is_empty() {
+            let text_lines = &lines[time_idx + 1..];
+            if text_lines.is_empty() {
                 continue;
             }
+            let raw_text = text_lines.join("\n");
+            let text = decode_html_entities(&strip_html_tags(&raw_text));
 
             entries.push(SubtitleEntry {
                 range: TimeRange::from_millis(start, end),
@@ -320,4 +364,31 @@ fn parse_time_dotted(s: &str) -> Option<u64> {
     };
 
     Some(h * 3_600_000 + m * 60_000 + sec * 1000 + frac)
+}
+
+/// Strip HTML/VTT tags like <b>, <i>, <c>, <u>, <ruby>, etc.
+fn strip_html_tags(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut in_tag = false;
+    for ch in s.chars() {
+        match ch {
+            '<' => in_tag = true,
+            '>' => in_tag = false,
+            _ if !in_tag => result.push(ch),
+            _ => {}
+        }
+    }
+    result
+}
+
+/// Decode common HTML entities in VTT text.
+fn decode_html_entities(s: &str) -> String {
+    s.replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&apos;", "'")
+        .replace("&nbsp;", " ")
+        .replace("&#x200B;", "")
 }

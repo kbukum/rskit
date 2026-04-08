@@ -1,6 +1,5 @@
 ---
 source: crates/rskit-media-ffmpeg/tests/golden.rs
-assertion_line: 55
 expression: "&meta"
 ---
 {
@@ -30,9 +29,12 @@ expression: "&meta"
         },
         "pixel_format": "yuvj420p",
         "rotation": null,
-        "color_space": null,
-        "bit_depth": null,
-        "hdr": false
+        "color_space": "Bt601",
+        "color_range": "Full",
+        "bit_depth": 8,
+        "profile": "H264Baseline",
+        "level": null,
+        "hdr": null
       },
       "audio": null,
       "subtitle": null

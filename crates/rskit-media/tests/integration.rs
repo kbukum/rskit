@@ -591,13 +591,22 @@ fn timestamp_zero() {
 
 #[test]
 fn timestamp_large_value() {
-    let big = u64::MAX / 2;
+    // u64::MAX / 1000 is the maximum millisecond value that fits in μs storage
+    let big = u64::MAX / 1000;
     let ts = Timestamp::from_millis(big);
     assert_eq!(ts.as_millis(), big);
     // Should not panic
     let _ = ts.as_seconds();
     let _ = ts.to_ffmpeg_time();
     let _ = ts.as_duration();
+}
+
+#[test]
+fn timestamp_large_value_saturates() {
+    // Values that would overflow μs storage are saturated to u64::MAX
+    let huge = u64::MAX / 2;
+    let ts = Timestamp::from_millis(huge);
+    assert_eq!(ts.as_micros(), u64::MAX); // saturated
 }
 
 #[test]

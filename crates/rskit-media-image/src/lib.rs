@@ -5,6 +5,8 @@
 
 #![warn(missing_docs)]
 
+mod probe;
 mod processor;
 
+pub use probe::ImageProbe;
 pub use processor::ImageProcessor;

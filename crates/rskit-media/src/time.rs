@@ -5,19 +5,27 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
-/// A time point in milliseconds from the start of the media.
+/// A time point in microseconds from the start of the media.
+///
+/// Microsecond precision matches FFmpeg's internal timestamp resolution,
+/// avoiding precision loss during conversion.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Timestamp(pub u64);
 
 impl Timestamp {
     /// Create from milliseconds.
     pub fn from_millis(ms: u64) -> Self {
-        Self(ms)
+        Self(ms.saturating_mul(1000))
+    }
+
+    /// Create from microseconds.
+    pub fn from_micros(us: u64) -> Self {
+        Self(us)
     }
 
     /// Create from seconds (floating point).
     pub fn from_seconds(s: f64) -> Self {
-        Self((s * 1000.0) as u64)
+        Self((s * 1_000_000.0) as u64)
     }
 
     /// Create from hours, minutes, and seconds.
@@ -26,26 +34,31 @@ impl Timestamp {
         Self::from_seconds(total_secs)
     }
 
-    /// Get the value in milliseconds.
+    /// Get the value in milliseconds (truncates sub-millisecond part).
     pub fn as_millis(&self) -> u64 {
+        self.0 / 1000
+    }
+
+    /// Get the value in microseconds.
+    pub fn as_micros(&self) -> u64 {
         self.0
     }
 
     /// Get the value in seconds (floating point).
     pub fn as_seconds(&self) -> f64 {
-        self.0 as f64 / 1000.0
+        self.0 as f64 / 1_000_000.0
     }
 
     /// Convert to a [`Duration`].
     pub fn as_duration(&self) -> Duration {
-        Duration::from_millis(self.0)
+        Duration::from_micros(self.0)
     }
 
     /// Format as "HH:MM:SS.mmm" (FFmpeg-compatible).
     pub fn to_ffmpeg_time(&self) -> String {
-        let total_ms = self.0;
-        let ms = total_ms % 1000;
-        let total_secs = total_ms / 1000;
+        let total_us = self.0;
+        let ms = (total_us / 1000) % 1000;
+        let total_secs = total_us / 1_000_000;
         let secs = total_secs % 60;
         let total_mins = total_secs / 60;
         let mins = total_mins % 60;
@@ -93,12 +106,12 @@ impl TimeRange {
 
     /// Duration of this range.
     pub fn duration(&self) -> Duration {
-        Duration::from_millis(self.duration_ms())
+        Duration::from_micros(self.end.0.saturating_sub(self.start.0))
     }
 
     /// Duration of this range in milliseconds.
     pub fn duration_ms(&self) -> u64 {
-        self.end.0.saturating_sub(self.start.0)
+        self.end.as_millis().saturating_sub(self.start.as_millis())
     }
 
     /// Check if a timestamp falls within this range.
@@ -138,12 +151,13 @@ impl TimeRange {
     }
 
     /// Shift this range by a signed millisecond offset.
-    pub fn shift(&self, offset: i64) -> Self {
+    pub fn shift(&self, offset_ms: i64) -> Self {
+        let offset_us = offset_ms * 1000;
         let shift = |ts: Timestamp| {
-            if offset >= 0 {
-                Timestamp(ts.0.saturating_add(offset as u64))
+            if offset_us >= 0 {
+                Timestamp(ts.0.saturating_add(offset_us as u64))
             } else {
-                Timestamp(ts.0.saturating_sub(offset.unsigned_abs()))
+                Timestamp(ts.0.saturating_sub(offset_us.unsigned_abs()))
             }
         };
         Self {
@@ -184,10 +198,10 @@ impl Segment {
         self
     }
 
-    /// Set the confidence score.
+    /// Set the confidence score (clamped to 0.0–1.0).
     #[must_use]
     pub fn with_confidence(mut self, c: f32) -> Self {
-        self.confidence = Some(c);
+        self.confidence = Some(c.clamp(0.0, 1.0));
         self
     }
 

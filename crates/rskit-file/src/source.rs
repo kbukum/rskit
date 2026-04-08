@@ -11,6 +11,11 @@ use crate::TempFile;
 
 /// A reference to file content that can be read.
 /// Does NOT load content eagerly — all reads are lazy/streamed.
+///
+/// Serialization notes:
+/// - `Temp` serializes as `Path` (temp file's path).
+/// - `Bytes` serializes as a byte array.
+/// - Deserialized `Temp` becomes `Path` (temp ownership is not restored).
 #[derive(Debug, Clone)]
 pub enum FileSource {
     /// Local filesystem path.
@@ -21,6 +26,45 @@ pub enum FileSource {
     Bytes(Bytes),
     /// Managed temporary file (auto-deleted on drop).
     Temp(TempFile),
+}
+
+// -- Custom serde: Temp serializes as Path, Bytes as a byte vec --
+
+mod serde_impl {
+    use super::*;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    #[derive(Serialize, Deserialize)]
+    #[serde(tag = "type", content = "value")]
+    enum FileSourceRepr {
+        Path(PathBuf),
+        Url(String),
+        Bytes(Vec<u8>),
+    }
+
+    impl Serialize for FileSource {
+        fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
+            match self {
+                FileSource::Path(p) => FileSourceRepr::Path(p.clone()).serialize(ser),
+                FileSource::Url(u) => FileSourceRepr::Url(u.clone()).serialize(ser),
+                FileSource::Bytes(b) => FileSourceRepr::Bytes(b.to_vec()).serialize(ser),
+                FileSource::Temp(t) => {
+                    FileSourceRepr::Path(t.path().to_path_buf()).serialize(ser)
+                }
+            }
+        }
+    }
+
+    impl<'de> Deserialize<'de> for FileSource {
+        fn deserialize<D: Deserializer<'de>>(de: D) -> Result<Self, D::Error> {
+            let repr = FileSourceRepr::deserialize(de)?;
+            Ok(match repr {
+                FileSourceRepr::Path(p) => FileSource::Path(p),
+                FileSourceRepr::Url(u) => FileSource::Url(u),
+                FileSourceRepr::Bytes(b) => FileSource::Bytes(Bytes::from(b)),
+            })
+        }
+    }
 }
 
 impl FileSource {

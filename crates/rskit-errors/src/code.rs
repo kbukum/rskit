@@ -49,6 +49,8 @@ pub enum ErrorCode {
     DatabaseError,
     /// An external service returned an error; retryable.
     ExternalService,
+    /// The operation was cancelled before completion.
+    Cancelled,
 }
 
 impl ErrorCode {
@@ -83,6 +85,9 @@ impl ErrorCode {
             ErrorCode::Internal | ErrorCode::DatabaseError | ErrorCode::ExternalService => {
                 http::StatusCode::INTERNAL_SERVER_ERROR
             }
+            // 499 Client Closed Request (non-standard but widely used for cancellation)
+            ErrorCode::Cancelled => http::StatusCode::from_u16(499)
+                .unwrap_or(http::StatusCode::INTERNAL_SERVER_ERROR),
             #[allow(unreachable_patterns)]
             _ => http::StatusCode::INTERNAL_SERVER_ERROR,
         }
@@ -108,6 +113,7 @@ impl ErrorCode {
             ErrorCode::Internal => "INTERNAL",
             ErrorCode::DatabaseError => "DATABASE_ERROR",
             ErrorCode::ExternalService => "EXTERNAL_SERVICE",
+            ErrorCode::Cancelled => "CANCELLED",
             #[allow(unreachable_patterns)]
             _ => "UNKNOWN",
         }

@@ -134,3 +134,214 @@ pub mod subtitle {
     /// MOV text (mp4 subtitles).
     pub const MOV_TEXT: &str = "mov_text";
 }
+
+/// Codec profile for quality/compatibility targeting.
+///
+/// Profiles define feature subsets of a codec. Higher profiles enable more
+/// features but require more processing power and may reduce compatibility.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum CodecProfile {
+    // ── H.264 / AVC ─────────────────────────────────────────────────
+    /// H.264 Baseline (mobile, video conferencing).
+    H264Baseline,
+    /// H.264 Main (broadcast, streaming).
+    H264Main,
+    /// H.264 High (Blu-ray, high-quality streaming).
+    H264High,
+    /// H.264 High 10-bit.
+    H264High10,
+    /// H.264 High 4:2:2.
+    H264High422,
+    /// H.264 High 4:4:4 Predictive.
+    H264High444,
+
+    // ── H.265 / HEVC ────────────────────────────────────────────────
+    /// HEVC Main (8-bit SDR).
+    HevcMain,
+    /// HEVC Main 10 (10-bit, HDR).
+    HevcMain10,
+    /// HEVC Main 12.
+    HevcMain12,
+    /// HEVC Main Still Picture.
+    HevcMainStillPicture,
+
+    // ── VP9 ─────────────────────────────────────────────────────────
+    /// VP9 Profile 0 (4:2:0 8-bit).
+    Vp9Profile0,
+    /// VP9 Profile 1 (4:2:2/4:4:4 8-bit).
+    Vp9Profile1,
+    /// VP9 Profile 2 (4:2:0 10/12-bit).
+    Vp9Profile2,
+    /// VP9 Profile 3 (4:2:2/4:4:4 10/12-bit).
+    Vp9Profile3,
+
+    // ── AV1 ─────────────────────────────────────────────────────────
+    /// AV1 Main (4:2:0 8/10-bit).
+    Av1Main,
+    /// AV1 High (4:4:4 8/10-bit).
+    Av1High,
+    /// AV1 Professional (4:2:2, 12-bit).
+    Av1Professional,
+
+    // ── AAC ─────────────────────────────────────────────────────────
+    /// AAC Low Complexity (most common).
+    AacLc,
+    /// AAC High Efficiency (HE-AAC v1).
+    AacHe,
+    /// AAC High Efficiency v2 (HE-AAC v2).
+    AacHeV2,
+
+    // ── ProRes ──────────────────────────────────────────────────────
+    /// ProRes 422 Proxy.
+    ProResProxy,
+    /// ProRes 422 LT.
+    ProResLt,
+    /// ProRes 422.
+    ProRes422,
+    /// ProRes 422 HQ.
+    ProResHq,
+    /// ProRes 4444.
+    ProRes4444,
+
+    /// Custom/other profile string.
+    Other(String),
+}
+
+impl CodecProfile {
+    /// Convert to FFmpeg `-profile:v` or `-profile:a` argument value.
+    pub fn as_ffmpeg_arg(&self) -> &str {
+        match self {
+            Self::H264Baseline => "baseline",
+            Self::H264Main => "main",
+            Self::H264High => "high",
+            Self::H264High10 => "high10",
+            Self::H264High422 => "high422",
+            Self::H264High444 => "high444p",
+            Self::HevcMain => "main",
+            Self::HevcMain10 => "main10",
+            Self::HevcMain12 => "main12",
+            Self::HevcMainStillPicture => "mainstillpicture",
+            Self::Vp9Profile0 => "0",
+            Self::Vp9Profile1 => "1",
+            Self::Vp9Profile2 => "2",
+            Self::Vp9Profile3 => "3",
+            Self::Av1Main => "0",
+            Self::Av1High => "1",
+            Self::Av1Professional => "2",
+            Self::AacLc => "aac_low",
+            Self::AacHe => "aac_he",
+            Self::AacHeV2 => "aac_he_v2",
+            Self::ProResProxy => "0",
+            Self::ProResLt => "1",
+            Self::ProRes422 => "2",
+            Self::ProResHq => "3",
+            Self::ProRes4444 => "4",
+            Self::Other(s) => s.as_str(),
+        }
+    }
+
+    /// Parse from ffprobe's `profile` field.
+    ///
+    /// ffprobe returns human-readable strings like "High", "Main", "Baseline",
+    /// "High 10", "High 4:4:4 Predictive", etc.
+    pub fn from_ffprobe(s: &str) -> Option<Self> {
+        // Normalize for matching
+        let lower = s.to_lowercase();
+        let trimmed = lower.trim();
+
+        match trimmed {
+            // H.264
+            "constrained baseline" | "baseline" => Some(Self::H264Baseline),
+            "main" => Some(Self::H264Main),
+            "high" => Some(Self::H264High),
+            "high 10" | "high10" => Some(Self::H264High10),
+            "high 4:2:2" | "high422" => Some(Self::H264High422),
+            "high 4:4:4 predictive" | "high444" | "high 4:4:4" => Some(Self::H264High444),
+            // H.265 / HEVC
+            "main still picture" => Some(Self::HevcMainStillPicture),
+            "main 10" | "main10" => Some(Self::HevcMain10),
+            "main 12" | "main12" => Some(Self::HevcMain12),
+            // VP9
+            "profile 0" => Some(Self::Vp9Profile0),
+            "profile 1" => Some(Self::Vp9Profile1),
+            "profile 2" => Some(Self::Vp9Profile2),
+            "profile 3" => Some(Self::Vp9Profile3),
+            // AAC
+            "lc" | "aac-lc" => Some(Self::AacLc),
+            "he-aac" | "he-aacv1" => Some(Self::AacHe),
+            "he-aacv2" => Some(Self::AacHeV2),
+            // ProRes
+            "apco" | "proxy" => Some(Self::ProResProxy),
+            "apcs" | "lt" => Some(Self::ProResLt),
+            "apcn" | "standard" | "422" => Some(Self::ProRes422),
+            "apch" | "hq" => Some(Self::ProResHq),
+            "ap4h" | "4444" => Some(Self::ProRes4444),
+            _ => {
+                if trimmed.is_empty() || trimmed == "unknown" {
+                    None
+                } else {
+                    Some(Self::Other(s.into()))
+                }
+            }
+        }
+    }
+}
+
+/// Codec level constraining resolution, bitrate, and framerate.
+///
+/// Levels are codec-specific. For H.264/H.265 they map directly to the
+/// standard levels (e.g., 3.0, 4.1, 5.1).
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct CodecLevel(Arc<str>);
+
+impl CodecLevel {
+    /// Create a new codec level.
+    pub fn new(level: impl Into<Arc<str>>) -> Self {
+        Self(level.into())
+    }
+
+    /// The level string.
+    pub fn id(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for CodecLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+/// Well-known H.264 levels.
+pub mod levels {
+    use super::CodecLevel;
+
+    /// H.264 Level 3.0 (SD video).
+    pub fn h264_3_0() -> CodecLevel {
+        CodecLevel::new("3.0")
+    }
+    /// H.264 Level 3.1 (720p30).
+    pub fn h264_3_1() -> CodecLevel {
+        CodecLevel::new("3.1")
+    }
+    /// H.264 Level 4.0 (1080p30).
+    pub fn h264_4_0() -> CodecLevel {
+        CodecLevel::new("4.0")
+    }
+    /// H.264 Level 4.1 (1080p30 + higher bitrate).
+    pub fn h264_4_1() -> CodecLevel {
+        CodecLevel::new("4.1")
+    }
+    /// H.264 Level 5.0 (1080p60 / 4K30).
+    pub fn h264_5_0() -> CodecLevel {
+        CodecLevel::new("5.0")
+    }
+    /// H.264 Level 5.1 (4K30).
+    pub fn h264_5_1() -> CodecLevel {
+        CodecLevel::new("5.1")
+    }
+    /// H.264 Level 5.2 (4K60).
+    pub fn h264_5_2() -> CodecLevel {
+        CodecLevel::new("5.2")
+    }
+}

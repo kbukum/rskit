@@ -1,12 +1,13 @@
 //! Composition operations for combining multiple media sources.
 
 use rskit_file::FileSource;
+use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
 use crate::time::{TimeRange, Timestamp};
 
 /// Overlay another source on top of the current video.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OverlayOp {
     /// The overlay source (image or video).
     pub source: FileSource,
@@ -21,7 +22,7 @@ pub struct OverlayOp {
 }
 
 /// Position for overlay placement.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum OverlayPosition {
     /// Offset from top-left corner.
     TopLeft(u32, u32),
@@ -43,7 +44,7 @@ pub enum OverlayPosition {
 }
 
 /// Concatenate another source after the current one.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConcatOp {
     /// Source to append.
     pub source: FileSource,
@@ -52,7 +53,7 @@ pub struct ConcatOp {
 }
 
 /// Transition between concatenated segments.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Transition {
     /// Cross-fade between segments.
     CrossFade(Duration),
@@ -63,7 +64,7 @@ pub enum Transition {
 }
 
 /// Replace the audio track entirely.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReplaceAudioOp {
     /// New audio source.
     pub audio_source: FileSource,
@@ -72,7 +73,7 @@ pub struct ReplaceAudioOp {
 }
 
 /// Mix additional audio on top of existing audio.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MixAudioOp {
     /// Audio source to mix in.
     pub audio_source: FileSource,
