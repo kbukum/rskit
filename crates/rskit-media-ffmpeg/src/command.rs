@@ -44,15 +44,21 @@ pub struct SourceHints {
 /// Holds all inputs, filters, output options, and global flags. Use
 /// [`compile`](FfmpegCommand::compile) to construct from media operations.
 pub struct FfmpegCommand {
-    pub inputs: Vec<FfmpegInput>,
-    pub video_filters: Vec<String>,
-    pub audio_filters: Vec<String>,
-    pub output_opts: Vec<String>,
-    pub complex_filter: Option<String>,
-    pub global_opts: Vec<String>,
+    /// Input file specifications.
+    pub(crate) inputs: Vec<FfmpegInput>,
+    /// Video filter expressions (joined with `,` into a `-vf` chain).
+    pub(crate) video_filters: Vec<String>,
+    /// Audio filter expressions (joined with `,` into an `-af` chain).
+    pub(crate) audio_filters: Vec<String>,
+    /// Additional output options (codec flags, maps, etc.).
+    pub(crate) output_opts: Vec<String>,
+    /// Complex filter graph (used for concat, overlay, etc.).
+    pub(crate) complex_filter: Option<String>,
+    /// Global options applied before inputs (`-y`, `-loglevel`, etc.).
+    pub(crate) global_opts: Vec<String>,
     /// Temp files kept alive for the duration of the command (e.g., subtitle files).
     #[allow(dead_code)]
-    pub temp_files: Vec<rskit_file::TempFile>,
+    pub(crate) temp_files: Vec<rskit_file::TempFile>,
 }
 
 impl FfmpegCommand {
@@ -190,6 +196,10 @@ impl FfmpegCommand {
         Ok(())
     }
 
+    /// Compile a list of media operations into an FFmpeg command.
+    ///
+    /// Uses default [`SourceHints`] (assumes audio present). For more accurate
+    /// compilation when stream info is known, use [`compile_with_hints`](Self::compile_with_hints).
     pub fn compile(
         source: &FileSource,
         ops: &[MediaOp],
@@ -444,7 +454,6 @@ impl FfmpegCommand {
                         }
                         let n = cmd.inputs.len();
                         let include_audio = hints.has_audio.unwrap_or(true);
-                        let a_flag = if include_audio { 1 } else { 0 };
                         let pads: String = if include_audio {
                             (0..n).map(|i| format!("[{i}:v][{i}:a]")).collect()
                         } else {
@@ -671,6 +680,7 @@ impl FfmpegCommand {
         Ok(())
     }
 
+    /// Build the final FFmpeg CLI argument list (excluding the output path).
     pub fn to_args(&self) -> Vec<String> {
         let mut args = Vec::new();
 
