@@ -4399,6 +4399,7 @@ dependencies = [
  "async-trait",
  "futures",
  "rskit-errors",
+ "rskit-provider",
  "serde_json",
  "tokio",
  "tokio-util",

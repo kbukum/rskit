@@ -152,6 +152,26 @@ impl Dag {
         &self,
         cancel: CancellationToken,
     ) -> AppResult<HashMap<String, serde_json::Value>> {
+        self.execute_inner(HashMap::new(), cancel).await
+    }
+
+    /// Execute with initial inputs provided to root nodes.
+    ///
+    /// Root nodes (those with no dependencies) receive `initial_inputs`
+    /// as their input HashMap instead of an empty one.
+    pub async fn execute_with_inputs(
+        &self,
+        initial_inputs: HashMap<String, serde_json::Value>,
+        cancel: CancellationToken,
+    ) -> AppResult<HashMap<String, serde_json::Value>> {
+        self.execute_inner(initial_inputs, cancel).await
+    }
+
+    async fn execute_inner(
+        &self,
+        initial_inputs: HashMap<String, serde_json::Value>,
+        cancel: CancellationToken,
+    ) -> AppResult<HashMap<String, serde_json::Value>> {
         // Validate the DAG is acyclic first
         let _ = self.topological_sort()?;
 
@@ -184,9 +204,9 @@ impl Dag {
                 let node = Arc::clone(self.nodes.get(id).unwrap());
                 let cancel = cancel.clone();
                 let outputs = Arc::clone(&outputs);
-                let reverse = self.reverse_edges.get(id).cloned().unwrap_or_default();
                 let node_id = id.clone();
                 let sem = semaphore.clone();
+                let root_inputs = initial_inputs.clone();
 
                 pending.insert(id.clone());
                 join_set.spawn(async move {
@@ -198,18 +218,10 @@ impl Dag {
                         None => None,
                     };
 
-                    let inputs = {
-                        let out = outputs.lock().await;
-                        reverse
-                            .iter()
-                            .filter_map(|dep_id| {
-                                out.get(dep_id).map(|v| (dep_id.clone(), v.clone()))
-                            })
-                            .collect()
-                    };
-
+                    // Root nodes receive initial_inputs instead of upstream outputs
+                    let _ = outputs;
                     tracing::debug!(node = %node_id, "executing DAG node");
-                    let result = node.execute(inputs, cancel).await?;
+                    let result = node.execute(root_inputs, cancel).await?;
                     Ok((node_id, result))
                 });
             }
