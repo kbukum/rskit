@@ -1,0 +1,30 @@
+[package]
+name        = "rskit-hook"
+description = "Event hook system for agentic pipelines — pre/post tool calls, LLM calls, errors, turns"
+version.workspace      = true
+edition.workspace      = true
+license.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+documentation = "https://docs.rs/rskit-hook"
+readme = "README.md"
+categories = ["api-bindings"]
+keywords   = ["hook", "event", "agent", "middleware"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+rskit-errors = { path = "../rskit-errors" }
+rskit-llm    = { path = "../rskit-llm" }
+rskit-tool   = { path = "../rskit-tool" }
+serde        = { workspace = true }
+serde_json   = { workspace = true }
+parking_lot  = { workspace = true }
+tracing      = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

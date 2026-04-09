@@ -44,6 +44,8 @@ members = [
     "crates/rskit-anthropic",
     # phase 5 AI modules
     "crates/rskit-explain",
+    # phase 5 agent/hook modules
+    "crates/rskit-hook",
     # phase 6 media & file
     "crates/rskit-file",
     "crates/rskit-file-s3",
