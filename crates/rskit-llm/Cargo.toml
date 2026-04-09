@@ -23,6 +23,7 @@ rskit-tool   = { path = "../rskit-tool" }
 serde        = { workspace = true }
 serde_json   = { workspace = true }
 async-trait  = { workspace = true }
+futures      = { workspace = true }
 
 [dev-dependencies]
 rskit-openai     = { path = "../rskit-openai" }
