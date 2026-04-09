@@ -1,0 +1,27 @@
+[package]
+name        = "rskit-anthropic"
+description = "Anthropic Claude provider implementation for rskit LLM trait"
+version.workspace      = true
+edition.workspace      = true
+license.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+documentation = "https://docs.rs/rskit-anthropic"
+categories = ["api-bindings"]
+keywords   = ["anthropic", "claude", "llm", "ai"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+rskit-llm    = { path = "../rskit-llm" }
+rskit-errors = { path = "../rskit-errors" }
+reqwest      = { workspace = true }
+serde        = { workspace = true }
+serde_json   = { workspace = true }
+async-trait  = { workspace = true }
+tokio        = { workspace = true }
+tracing      = { workspace = true }

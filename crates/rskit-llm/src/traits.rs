@@ -7,6 +7,8 @@ use crate::types::{CompletionRequest, CompletionResponse};
 ///
 /// Tool calling is handled through `CompletionRequest.tools` and
 /// `CompletionResponse.tool_calls` — no separate trait needed.
+///
+/// For embeddings, use [`rskit_embedding::EmbeddingProvider`] instead.
 #[async_trait]
 pub trait LlmProvider: Send + Sync {
     /// Send a chat completion request and return the response.
@@ -14,7 +16,4 @@ pub trait LlmProvider: Send + Sync {
     /// When `req.tools` is populated, the provider should include tool
     /// definitions in the API call and parse tool calls from the response.
     async fn complete(&self, req: CompletionRequest) -> AppResult<CompletionResponse>;
-
-    /// Generate embeddings for the given texts.
-    async fn embed(&self, texts: Vec<String>) -> AppResult<Vec<Vec<f32>>>;
 }

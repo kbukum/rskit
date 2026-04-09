@@ -1,0 +1,28 @@
+[package]
+name        = "rskit-openai"
+description = "OpenAI provider implementations for rskit LLM and embedding traits"
+version.workspace      = true
+edition.workspace      = true
+license.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+documentation = "https://docs.rs/rskit-openai"
+categories = ["api-bindings"]
+keywords   = ["openai", "llm", "embedding", "ai"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+rskit-llm       = { path = "../rskit-llm" }
+rskit-embedding = { path = "../rskit-embedding" }
+rskit-errors    = { path = "../rskit-errors" }
+reqwest         = { workspace = true }
+serde           = { workspace = true }
+serde_json      = { workspace = true }
+async-trait     = { workspace = true }
+tokio           = { workspace = true }
+tracing         = { workspace = true }

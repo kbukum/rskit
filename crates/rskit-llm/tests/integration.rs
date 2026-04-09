@@ -1,8 +1,8 @@
 use std::time::Duration;
 
-use rskit_llm::{
-    AnthropicConfig, CompletionRequest, Message, OpenAiConfig, assistant, system, user,
-};
+use rskit_anthropic::AnthropicConfig;
+use rskit_llm::{CompletionRequest, Message, assistant, system, user};
+use rskit_openai::OpenAiConfig;
 
 // ── Message enum ────────────────────────────────────────────────────────────
 
@@ -113,7 +113,7 @@ fn openai_provider_constructs_with_valid_config() {
         timeout: Duration::from_secs(10),
         max_retries: 1,
     };
-    let provider = rskit_llm::OpenAiProvider::new(cfg);
+    let provider = rskit_openai::OpenAiProvider::new(cfg);
     assert!(provider.is_ok());
 }
 
@@ -126,7 +126,7 @@ fn anthropic_provider_constructs_with_valid_config() {
         timeout: Duration::from_secs(10),
         max_retries: 1,
     };
-    let provider = rskit_llm::AnthropicProvider::new(cfg);
+    let provider = rskit_anthropic::AnthropicProvider::new(cfg);
     assert!(provider.is_ok());
 }
 
@@ -138,7 +138,7 @@ async fn openai_complete_request() {
     use rskit_llm::LlmProvider;
 
     let cfg: OpenAiConfig = serde_json::from_str(r#"{"api_key":"sk-real-key"}"#).unwrap();
-    let provider = rskit_llm::OpenAiProvider::new(cfg).unwrap();
+    let provider = rskit_openai::OpenAiProvider::new(cfg).unwrap();
     let req = CompletionRequest {
         model: "gpt-4o-mini".into(),
         messages: vec![user("Say hello.")],
@@ -158,7 +158,7 @@ async fn anthropic_complete_request() {
     use rskit_llm::LlmProvider;
 
     let cfg: AnthropicConfig = serde_json::from_str(r#"{"api_key":"sk-ant-real-key"}"#).unwrap();
-    let provider = rskit_llm::AnthropicProvider::new(cfg).unwrap();
+    let provider = rskit_anthropic::AnthropicProvider::new(cfg).unwrap();
     let req = CompletionRequest {
         model: "claude-3-haiku-20240307".into(),
         messages: vec![user("Say hello.")],

@@ -1,44 +1,17 @@
+//! Anthropic Claude LLM provider.
+
 use std::time::Duration;
 
 use async_trait::async_trait;
 use rskit_errors::{AppError, AppResult, ErrorCode};
-use serde::{Deserialize, Serialize};
-
-use crate::traits::LlmProvider;
-use crate::types::{
+use rskit_llm::LlmProvider;
+use rskit_llm::types::{
     AssistantMessage, CompletionRequest, CompletionResponse, ContentBlock, Message, StopReason,
     Usage,
 };
+use serde::{Deserialize, Serialize};
 
-/// Configuration for the Anthropic provider.
-#[derive(Debug, Clone, Deserialize)]
-pub struct AnthropicConfig {
-    pub api_key: String,
-    #[serde(default = "default_anthropic_base_url")]
-    pub base_url: String,
-    #[serde(default = "default_anthropic_version")]
-    pub version: String,
-    #[serde(default = "default_timeout", with = "humantime_serde")]
-    pub timeout: Duration,
-    #[serde(default = "default_max_retries")]
-    pub max_retries: u32,
-}
-
-fn default_anthropic_base_url() -> String {
-    "https://api.anthropic.com".into()
-}
-
-fn default_anthropic_version() -> String {
-    "2023-06-01".into()
-}
-
-fn default_timeout() -> Duration {
-    Duration::from_secs(30)
-}
-
-fn default_max_retries() -> u32 {
-    3
-}
+use crate::config::AnthropicConfig;
 
 /// Anthropic Claude LLM provider.
 pub struct AnthropicProvider {
@@ -105,14 +78,14 @@ struct AnthropicUsage {
 fn message_to_anthropic(msg: &Message) -> Option<AnthropicMessage> {
     match msg {
         Message::User(u) => {
-            let text = crate::types::text_of(&u.content);
+            let text = rskit_llm::types::text_of(&u.content);
             Some(AnthropicMessage {
                 role: "user".to_string(),
                 content: text,
             })
         }
         Message::Assistant(a) => {
-            let text = crate::types::text_of(&a.content);
+            let text = rskit_llm::types::text_of(&a.content);
             Some(AnthropicMessage {
                 role: "assistant".to_string(),
                 content: text,
@@ -225,26 +198,35 @@ impl LlmProvider for AnthropicProvider {
             AppError::new(ErrorCode::ExternalService, "Anthropic request failed")
         }))
     }
-
-    async fn embed(&self, _texts: Vec<String>) -> AppResult<Vec<Vec<f32>>> {
-        Err(AppError::new(
-            ErrorCode::InvalidInput,
-            "Anthropic does not support embeddings; use OpenAI or another provider",
-        ))
-    }
 }
 
-/// Serde helper module for `Duration` using seconds as u64.
-mod humantime_serde {
-    use std::time::Duration;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    use serde::{self, Deserialize, Deserializer};
+    #[test]
+    fn provider_constructs_with_valid_config() {
+        let cfg = AnthropicConfig {
+            api_key: "sk-ant-fake".into(),
+            base_url: "https://api.anthropic.com".into(),
+            version: "2023-06-01".into(),
+            timeout: Duration::from_secs(10),
+            max_retries: 1,
+        };
+        let provider = AnthropicProvider::new(cfg);
+        assert!(provider.is_ok());
+    }
 
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Duration, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let secs = u64::deserialize(deserializer)?;
-        Ok(Duration::from_secs(secs))
+    #[test]
+    fn provider_is_object_safe() {
+        let cfg = AnthropicConfig {
+            api_key: "sk-ant".into(),
+            base_url: "https://api.anthropic.com".into(),
+            version: "2023-06-01".into(),
+            timeout: Duration::from_secs(10),
+            max_retries: 1,
+        };
+        let provider = AnthropicProvider::new(cfg).unwrap();
+        let _boxed: Box<dyn LlmProvider> = Box::new(provider);
     }
 }

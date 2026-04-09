@@ -4218,6 +4218,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "rskit-anthropic"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "reqwest",
+ "rskit-errors",
+ "rskit-llm",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "rskit-auth"
 version = "0.1.0"
 dependencies = [
@@ -4398,11 +4412,9 @@ name = "rskit-embedding"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "reqwest",
  "rskit-errors",
  "serde",
  "serde_json",
- "tracing",
 ]
 
 [[package]]
@@ -4428,6 +4440,18 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "tonic 0.14.5",
+]
+
+[[package]]
+name = "rskit-explain"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "rskit-errors",
+ "rskit-llm",
+ "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -4568,15 +4592,13 @@ name = "rskit-llm"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "futures-util",
- "reqwest",
+ "rskit-anthropic",
  "rskit-errors",
+ "rskit-openai",
  "rskit-tool",
  "serde",
  "serde_json",
  "tokio",
- "tokio-stream",
- "tracing",
 ]
 
 [[package]]
@@ -4699,6 +4721,21 @@ dependencies = [
  "tracing",
  "tracing-opentelemetry",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "rskit-openai"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "reqwest",
+ "rskit-embedding",
+ "rskit-errors",
+ "rskit-llm",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

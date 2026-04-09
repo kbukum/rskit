@@ -4,35 +4,12 @@
 //! that exposes the `/v1/embeddings` endpoint.
 
 use async_trait::async_trait;
+use rskit_embedding::EmbeddingProvider;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
-use crate::provider::EmbeddingProvider;
-
-/// Configuration for the OpenAI-compatible embedding provider.
-#[derive(Debug, Clone)]
-pub struct OpenAiEmbeddingConfig {
-    /// Base URL for the API (e.g., `https://api.openai.com`).
-    pub endpoint: String,
-    /// API key for authentication. Empty string disables the header.
-    pub api_key: String,
-    /// Model name (e.g., `text-embedding-3-small`).
-    pub model: String,
-    /// Expected embedding dimensions.
-    pub dimensions: usize,
-}
-
-impl Default for OpenAiEmbeddingConfig {
-    fn default() -> Self {
-        Self {
-            endpoint: "https://api.openai.com".to_owned(),
-            api_key: String::new(),
-            model: "text-embedding-3-small".to_owned(),
-            dimensions: 1536,
-        }
-    }
-}
+use crate::config::OpenAiEmbeddingConfig;
 
 /// OpenAI-compatible embedding provider.
 pub struct OpenAiEmbeddingProvider {
@@ -139,10 +116,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_default_config() {
+    fn provider_constructs_with_default_config() {
         let cfg = OpenAiEmbeddingConfig::default();
-        assert_eq!(cfg.endpoint, "https://api.openai.com");
-        assert_eq!(cfg.model, "text-embedding-3-small");
-        assert_eq!(cfg.dimensions, 1536);
+        let provider = OpenAiEmbeddingProvider::new(cfg);
+        assert_eq!(provider.dimensions(), 1536);
     }
 }

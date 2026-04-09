@@ -1,10 +1,8 @@
-mod anthropic;
-mod openai;
 mod traits;
-mod types;
 
-pub use anthropic::{AnthropicConfig, AnthropicProvider};
-pub use openai::{OpenAiConfig, OpenAiProvider};
+/// LLM message types, request/response structs, and helper constructors.
+pub mod types;
+
 pub use traits::LlmProvider;
 pub use types::{
     AssistantMessage, CompletionRequest, CompletionResponse, ContentBlock, FunctionCall, Message,

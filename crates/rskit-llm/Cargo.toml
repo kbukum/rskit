@@ -23,8 +23,9 @@ rskit-tool   = { path = "../rskit-tool" }
 serde        = { workspace = true }
 serde_json   = { workspace = true }
 async-trait  = { workspace = true }
-tokio        = { workspace = true }
-tokio-stream = { workspace = true }
-tracing      = { workspace = true }
-reqwest      = { workspace = true }
-futures-util = { workspace = true }
+
+[dev-dependencies]
+rskit-openai     = { path = "../rskit-openai" }
+rskit-anthropic  = { path = "../rskit-anthropic" }
+tokio            = { workspace = true }
+serde_json       = { workspace = true }

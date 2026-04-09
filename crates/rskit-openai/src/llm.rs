@@ -1,38 +1,17 @@
+//! OpenAI-compatible LLM provider.
+
 use std::time::Duration;
 
 use async_trait::async_trait;
 use rskit_errors::{AppError, AppResult, ErrorCode};
-use serde::{Deserialize, Serialize};
-
-use crate::traits::LlmProvider;
-use crate::types::{
+use rskit_llm::LlmProvider;
+use rskit_llm::types::{
     AssistantMessage, CompletionRequest, CompletionResponse, ContentBlock, Message, StopReason,
     Usage,
 };
+use serde::{Deserialize, Serialize};
 
-/// Configuration for the OpenAI provider.
-#[derive(Debug, Clone, Deserialize)]
-pub struct OpenAiConfig {
-    pub api_key: String,
-    #[serde(default = "default_openai_base_url")]
-    pub base_url: String,
-    #[serde(default = "default_timeout", with = "humantime_serde")]
-    pub timeout: Duration,
-    #[serde(default = "default_max_retries")]
-    pub max_retries: u32,
-}
-
-fn default_openai_base_url() -> String {
-    "https://api.openai.com/v1".into()
-}
-
-fn default_timeout() -> Duration {
-    Duration::from_secs(30)
-}
-
-fn default_max_retries() -> u32 {
-    3
-}
+use crate::config::OpenAiConfig;
 
 /// OpenAI-compatible LLM provider.
 pub struct OpenAiProvider {
@@ -101,22 +80,6 @@ struct OpenAiUsage {
     completion_tokens: u32,
 }
 
-#[derive(Serialize)]
-struct OpenAiEmbeddingRequest {
-    model: String,
-    input: Vec<String>,
-}
-
-#[derive(Deserialize)]
-struct OpenAiEmbeddingResponse {
-    data: Vec<OpenAiEmbeddingData>,
-}
-
-#[derive(Deserialize)]
-struct OpenAiEmbeddingData {
-    embedding: Vec<f32>,
-}
-
 fn message_to_openai(msg: &Message) -> OpenAiMessage {
     match msg {
         Message::System(s) => OpenAiMessage {
@@ -125,11 +88,11 @@ fn message_to_openai(msg: &Message) -> OpenAiMessage {
         },
         Message::User(u) => OpenAiMessage {
             role: "user".to_string(),
-            content: crate::types::text_of(&u.content),
+            content: rskit_llm::types::text_of(&u.content),
         },
         Message::Assistant(a) => OpenAiMessage {
             role: "assistant".to_string(),
-            content: crate::types::text_of(&a.content),
+            content: rskit_llm::types::text_of(&a.content),
         },
         Message::ToolResult(tr) => OpenAiMessage {
             role: "tool".to_string(),
@@ -224,60 +187,21 @@ impl LlmProvider for OpenAiProvider {
         Err(last_error
             .unwrap_or_else(|| AppError::new(ErrorCode::ExternalService, "OpenAI request failed")))
     }
-
-    async fn embed(&self, texts: Vec<String>) -> AppResult<Vec<Vec<f32>>> {
-        let url = format!("{}/embeddings", self.config.base_url);
-
-        let body = OpenAiEmbeddingRequest {
-            model: "text-embedding-3-small".into(),
-            input: texts,
-        };
-
-        let resp = self
-            .client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", self.config.api_key))
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| {
-                AppError::new(
-                    ErrorCode::ExternalService,
-                    format!("OpenAI embeddings request failed: {e}"),
-                )
-            })?;
-
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let body_text = resp.text().await.unwrap_or_default();
-            return Err(AppError::new(
-                ErrorCode::ExternalService,
-                format!("OpenAI embeddings API returned {status}: {body_text}"),
-            ));
-        }
-
-        let api_resp: OpenAiEmbeddingResponse = resp.json().await.map_err(|e| {
-            AppError::new(
-                ErrorCode::ExternalService,
-                format!("failed to parse OpenAI embeddings response: {e}"),
-            )
-        })?;
-
-        Ok(api_resp.data.into_iter().map(|d| d.embedding).collect())
-    }
 }
 
-/// Serde helper module for `Duration` using human-readable strings.
-mod humantime_serde {
-    use std::time::Duration;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    use serde::{self, Deserialize, Deserializer};
-
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Duration, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let secs = u64::deserialize(deserializer)?;
-        Ok(Duration::from_secs(secs))
+    #[test]
+    fn provider_constructs_with_valid_config() {
+        let cfg = OpenAiConfig {
+            api_key: "sk-fake".into(),
+            base_url: "https://api.openai.com/v1".into(),
+            timeout: Duration::from_secs(10),
+            max_retries: 1,
+        };
+        let provider = OpenAiProvider::new(cfg);
+        assert!(provider.is_ok());
     }
 }

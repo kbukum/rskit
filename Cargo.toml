@@ -39,6 +39,11 @@ members = [
     "crates/rskit-vector-store",
     "crates/rskit-schema",
     "crates/rskit-tool",
+    # phase 5 vendor providers
+    "crates/rskit-openai",
+    "crates/rskit-anthropic",
+    # phase 5 AI modules
+    "crates/rskit-explain",
     # phase 6 media & file
     "crates/rskit-file",
     "crates/rskit-file-s3",
