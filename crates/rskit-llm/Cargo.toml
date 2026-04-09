@@ -26,7 +26,6 @@ async-trait  = { workspace = true }
 futures      = { workspace = true }
 
 [dev-dependencies]
-rskit-openai     = { path = "../rskit-openai" }
-rskit-anthropic  = { path = "../rskit-anthropic" }
-tokio            = { workspace = true }
-serde_json       = { workspace = true }
+rskit-llm-providers = { path = "../rskit-llm-providers" }
+tokio               = { workspace = true }
+serde_json          = { workspace = true }

@@ -40,8 +40,7 @@ members = [
     "crates/rskit-schema",
     "crates/rskit-tool",
     # phase 5 vendor providers
-    "crates/rskit-openai",
-    "crates/rskit-anthropic",
+    "crates/rskit-llm-providers",
     # phase 5 AI modules
     "crates/rskit-explain",
     # phase 5 agent/hook modules

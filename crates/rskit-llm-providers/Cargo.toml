@@ -1,0 +1,22 @@
+[package]
+name        = "rskit-llm-providers"
+description = "LLM provider implementations (OpenAI, Anthropic, Gemini) for rskit"
+version.workspace      = true
+edition.workspace      = true
+license.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+
+[dependencies]
+rskit-llm        = { path = "../rskit-llm" }
+rskit-embedding  = { path = "../rskit-embedding" }
+rskit-httpclient = { path = "../rskit-httpclient" }
+rskit-errors     = { path = "../rskit-errors" }
+reqwest          = { workspace = true }
+serde            = { workspace = true }
+serde_json       = { workspace = true }
+async-trait      = { workspace = true }
+tokio            = { workspace = true }
+tracing          = { workspace = true }

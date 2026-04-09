@@ -1,8 +1,6 @@
-use std::time::Duration;
-
-use rskit_anthropic::AnthropicConfig;
 use rskit_llm::{CompletionRequest, Message, assistant, system, user};
-use rskit_openai::OpenAiConfig;
+use rskit_llm_providers::anthropic;
+use rskit_llm_providers::openai;
 
 // ── Message enum ────────────────────────────────────────────────────────────
 
@@ -58,76 +56,68 @@ fn completion_request_serde_roundtrip() {
     assert!(back.max_tokens.is_none());
 }
 
-// ── OpenAiConfig ────────────────────────────────────────────────────────────
+// ── OpenAI Config ───────────────────────────────────────────────────────────
 
 #[test]
 fn openai_config_deserialise_with_defaults() {
     let json = r#"{"api_key":"sk-test"}"#;
-    let cfg: OpenAiConfig = serde_json::from_str(json).unwrap();
+    let cfg: openai::Config = serde_json::from_str(json).unwrap();
     assert_eq!(cfg.api_key, "sk-test");
     assert_eq!(cfg.base_url, "https://api.openai.com/v1");
-    assert_eq!(cfg.timeout, Duration::from_secs(30));
-    assert_eq!(cfg.max_retries, 3);
+    assert_eq!(cfg.model, "gpt-4o");
 }
 
 #[test]
 fn openai_config_custom_base_url() {
-    let json =
-        r#"{"api_key":"sk-test","base_url":"http://localhost:8080","timeout":60,"max_retries":1}"#;
-    let cfg: OpenAiConfig = serde_json::from_str(json).unwrap();
+    let json = r#"{"api_key":"sk-test","base_url":"http://localhost:8080"}"#;
+    let cfg: openai::Config = serde_json::from_str(json).unwrap();
     assert_eq!(cfg.base_url, "http://localhost:8080");
-    assert_eq!(cfg.timeout, Duration::from_secs(60));
-    assert_eq!(cfg.max_retries, 1);
 }
 
-// ── AnthropicConfig ─────────────────────────────────────────────────────────
+// ── Anthropic Config ────────────────────────────────────────────────────────
 
 #[test]
 fn anthropic_config_deserialise_with_defaults() {
     let json = r#"{"api_key":"sk-ant-test"}"#;
-    let cfg: AnthropicConfig = serde_json::from_str(json).unwrap();
+    let cfg: anthropic::Config = serde_json::from_str(json).unwrap();
     assert_eq!(cfg.api_key, "sk-ant-test");
     assert_eq!(cfg.base_url, "https://api.anthropic.com");
-    assert_eq!(cfg.version, "2023-06-01");
-    assert_eq!(cfg.timeout, Duration::from_secs(30));
-    assert_eq!(cfg.max_retries, 3);
+    assert_eq!(cfg.api_version, "2023-06-01");
 }
 
 #[test]
 fn anthropic_config_custom_values() {
-    let json = r#"{"api_key":"key","base_url":"http://proxy","version":"2024-01-01","timeout":10,"max_retries":0}"#;
-    let cfg: AnthropicConfig = serde_json::from_str(json).unwrap();
+    let json = r#"{"api_key":"key","base_url":"http://proxy","api_version":"2024-01-01"}"#;
+    let cfg: anthropic::Config = serde_json::from_str(json).unwrap();
     assert_eq!(cfg.base_url, "http://proxy");
-    assert_eq!(cfg.version, "2024-01-01");
-    assert_eq!(cfg.timeout, Duration::from_secs(10));
-    assert_eq!(cfg.max_retries, 0);
+    assert_eq!(cfg.api_version, "2024-01-01");
 }
 
-// ── Provider construction ───────────────────────────────────────────────────
+// ── Adapter construction ────────────────────────────────────────────────────
 
 #[test]
-fn openai_provider_constructs_with_valid_config() {
-    let cfg = OpenAiConfig {
+fn openai_adapter_constructs_with_valid_config() {
+    let cfg = openai::Config {
         api_key: "sk-fake".into(),
         base_url: "https://api.openai.com/v1".into(),
-        timeout: Duration::from_secs(10),
-        max_retries: 1,
+        model: "gpt-4o".into(),
+        embedding_model: "text-embedding-3-small".into(),
+        embedding_dimensions: 1536,
     };
-    let provider = rskit_openai::OpenAiProvider::new(cfg);
-    assert!(provider.is_ok());
+    let adapter = openai::new_adapter(&cfg);
+    assert!(adapter.is_ok());
 }
 
 #[test]
-fn anthropic_provider_constructs_with_valid_config() {
-    let cfg = AnthropicConfig {
+fn anthropic_adapter_constructs_with_valid_config() {
+    let cfg = anthropic::Config {
         api_key: "sk-ant-fake".into(),
         base_url: "https://api.anthropic.com".into(),
-        version: "2023-06-01".into(),
-        timeout: Duration::from_secs(10),
-        max_retries: 1,
+        model: "claude-sonnet-4-20250514".into(),
+        api_version: "2023-06-01".into(),
     };
-    let provider = rskit_anthropic::AnthropicProvider::new(cfg);
-    assert!(provider.is_ok());
+    let adapter = anthropic::new_adapter(&cfg);
+    assert!(adapter.is_ok());
 }
 
 // ── API call tests (require live API keys) ──────────────────────────────────
@@ -137,8 +127,8 @@ fn anthropic_provider_constructs_with_valid_config() {
 async fn openai_complete_request() {
     use rskit_llm::LlmProvider;
 
-    let cfg: OpenAiConfig = serde_json::from_str(r#"{"api_key":"sk-real-key"}"#).unwrap();
-    let provider = rskit_openai::OpenAiProvider::new(cfg).unwrap();
+    let cfg: openai::Config = serde_json::from_str(r#"{"api_key":"sk-real-key"}"#).unwrap();
+    let provider = openai::new_adapter(&cfg).unwrap();
     let req = CompletionRequest {
         model: "gpt-4o-mini".into(),
         messages: vec![user("Say hello.")],
@@ -157,8 +147,9 @@ async fn openai_complete_request() {
 async fn anthropic_complete_request() {
     use rskit_llm::LlmProvider;
 
-    let cfg: AnthropicConfig = serde_json::from_str(r#"{"api_key":"sk-ant-real-key"}"#).unwrap();
-    let provider = rskit_anthropic::AnthropicProvider::new(cfg).unwrap();
+    let cfg: anthropic::Config =
+        serde_json::from_str(r#"{"api_key":"sk-ant-real-key"}"#).unwrap();
+    let provider = anthropic::new_adapter(&cfg).unwrap();
     let req = CompletionRequest {
         model: "claude-3-haiku-20240307".into(),
         messages: vec![user("Say hello.")],
