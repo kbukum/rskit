@@ -46,6 +46,7 @@ members = [
     "crates/rskit-explain",
     # phase 5 agent/hook modules
     "crates/rskit-hook",
+    "crates/rskit-agent",
     # phase 6 media & file
     "crates/rskit-file",
     "crates/rskit-file-s3",
