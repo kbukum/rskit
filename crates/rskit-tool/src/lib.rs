@@ -15,7 +15,9 @@ pub use callable::Callable;
 pub use context::Context;
 pub use definition::{Annotations, Definition};
 pub use from_fn::{from_fn, from_fn_simple};
-pub use middleware::{Middleware, chain, with_logging, with_result_limit, with_timeout, with_validation};
+pub use middleware::{
+    Middleware, chain, with_logging, with_result_limit, with_timeout, with_validation,
+};
 pub use registry::Registry;
 pub use result::{ToolResult, error_result, json_result, text_result};
 
@@ -41,9 +43,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_from_fn_basic() {
-        let tool = from_fn("add", "Add two numbers", |_ctx: Context, input: AddInput| async move {
-            Ok(text_result(&format!("{}", input.a + input.b)))
-        });
+        let tool = from_fn(
+            "add",
+            "Add two numbers",
+            |_ctx: Context, input: AddInput| async move {
+                Ok(text_result(&format!("{}", input.a + input.b)))
+            },
+        );
 
         assert_eq!(tool.definition().name, "add");
         assert_eq!(tool.definition().description, "Add two numbers");
@@ -116,9 +122,13 @@ mod tests {
         let registry = Registry::new();
         assert!(registry.is_empty());
 
-        let tool = from_fn("add", "Add two numbers", |_ctx: Context, input: AddInput| async move {
-            Ok(text_result(&format!("{}", input.a + input.b)))
-        });
+        let tool = from_fn(
+            "add",
+            "Add two numbers",
+            |_ctx: Context, input: AddInput| async move {
+                Ok(text_result(&format!("{}", input.a + input.b)))
+            },
+        );
 
         registry.register(tool).unwrap();
         assert_eq!(registry.len(), 1);
@@ -182,14 +192,18 @@ mod tests {
     async fn test_registry_search() {
         let registry = Registry::new();
         registry
-            .register(from_fn("file_read", "Read a file", |_ctx: Context, _: AddInput| async move {
-                Ok(text_result(""))
-            }))
+            .register(from_fn(
+                "file_read",
+                "Read a file",
+                |_ctx: Context, _: AddInput| async move { Ok(text_result("")) },
+            ))
             .unwrap();
         registry
-            .register(from_fn("web_search", "Search the web", |_ctx: Context, _: AddInput| async move {
-                Ok(text_result(""))
-            }))
+            .register(from_fn(
+                "web_search",
+                "Search the web",
+                |_ctx: Context, _: AddInput| async move { Ok(text_result("")) },
+            ))
             .unwrap();
 
         let results = registry.search("file");

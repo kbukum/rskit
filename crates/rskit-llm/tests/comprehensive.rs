@@ -41,7 +41,10 @@ fn message_clone() {
 fn message_debug_format() {
     let msg = system("debug");
     let dbg = format!("{:?}", msg);
-    assert!(dbg.contains("System") || dbg.contains("system"), "Debug format = {dbg}");
+    assert!(
+        dbg.contains("System") || dbg.contains("system"),
+        "Debug format = {dbg}"
+    );
 }
 
 #[test]
@@ -151,13 +154,17 @@ fn content_block_thinking_serde() {
 #[test]
 fn text_of_concatenates_text_blocks() {
     let blocks = vec![
-        ContentBlock::Text { text: "Hello ".into() },
+        ContentBlock::Text {
+            text: "Hello ".into(),
+        },
         ContentBlock::ToolUse {
             id: "x".into(),
             name: "y".into(),
             input: serde_json::json!({}),
         },
-        ContentBlock::Text { text: "world".into() },
+        ContentBlock::Text {
+            text: "world".into(),
+        },
     ];
     assert_eq!(text_of(&blocks), "Hello world");
 }
@@ -169,9 +176,7 @@ fn text_of_empty_blocks() {
 
 #[test]
 fn text_of_no_text_blocks() {
-    let blocks = vec![ContentBlock::Thinking {
-        text: "hmm".into(),
-    }];
+    let blocks = vec![ContentBlock::Thinking { text: "hmm".into() }];
     assert_eq!(text_of(&blocks), "");
 }
 
@@ -318,9 +323,7 @@ fn completion_request_deserialize_minimal_json() {
 fn make_response(text: &str) -> CompletionResponse {
     CompletionResponse {
         message: AssistantMessage {
-            content: vec![ContentBlock::Text {
-                text: text.into(),
-            }],
+            content: vec![ContentBlock::Text { text: text.into() }],
             tool_calls: vec![],
             usage: None,
         },

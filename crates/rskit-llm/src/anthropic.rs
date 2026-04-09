@@ -190,9 +190,7 @@ impl LlmProvider for AnthropicProvider {
 
                     return Ok(CompletionResponse {
                         message: AssistantMessage {
-                            content: vec![ContentBlock::Text {
-                                text: content_text,
-                            }],
+                            content: vec![ContentBlock::Text { text: content_text }],
                             tool_calls: vec![],
                             usage: None,
                         },

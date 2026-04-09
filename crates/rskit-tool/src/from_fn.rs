@@ -89,11 +89,7 @@ where
 ///
 /// The handler takes only the input (no Context) and returns `AppResult<O>`.
 /// The output is automatically serialized to JSON.
-pub fn from_fn_simple<I, O, F, Fut>(
-    name: &str,
-    description: &str,
-    handler: F,
-) -> Box<dyn Callable>
+pub fn from_fn_simple<I, O, F, Fut>(name: &str, description: &str, handler: F) -> Box<dyn Callable>
 where
     I: DeserializeOwned + JsonSchema + Send + 'static,
     O: Serialize + Send + 'static,

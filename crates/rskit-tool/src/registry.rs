@@ -108,7 +108,11 @@ impl Registry {
                     serial_calls.push((name.to_string(), tool, input.clone()));
                 }
             } else {
-                serial_calls.push((name.to_string(), Arc::from(Box::new(NotFoundTool(name.to_string())) as Box<dyn Callable>), input.clone()));
+                serial_calls.push((
+                    name.to_string(),
+                    Arc::from(Box::new(NotFoundTool(name.to_string())) as Box<dyn Callable>),
+                    input.clone(),
+                ));
             }
         }
 
@@ -185,17 +189,18 @@ impl Callable for NotFoundTool {
         // This is only used for the not-found case; we use a static-like approach
         // by leaking a definition. Since this is transient, we construct it inline.
         // A better approach: we handle not-found above. This is a fallback.
-        static EMPTY_DEF: std::sync::LazyLock<Definition> = std::sync::LazyLock::new(|| Definition {
-            name: String::new(),
-            description: String::new(),
-            input_schema: serde_json::Value::Null,
-            output_schema: None,
-            annotations: None,
-            read_only: false,
-            destructive: false,
-            max_result_size: 0,
-            timeout_secs: 0.0,
-        });
+        static EMPTY_DEF: std::sync::LazyLock<Definition> =
+            std::sync::LazyLock::new(|| Definition {
+                name: String::new(),
+                description: String::new(),
+                input_schema: serde_json::Value::Null,
+                output_schema: None,
+                annotations: None,
+                read_only: false,
+                destructive: false,
+                max_result_size: 0,
+                timeout_secs: 0.0,
+            });
         &EMPTY_DEF
     }
 

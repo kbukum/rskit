@@ -174,9 +174,7 @@ impl Callable for ResultLimitWrapper {
         let mut result = self.inner.call(ctx, input).await?;
         if self.max_bytes > 0 && result.content.len() > self.max_bytes {
             result.content.truncate(self.max_bytes);
-            result
-                .content
-                .push_str("\n... [truncated to size limit]");
+            result.content.push_str("\n... [truncated to size limit]");
         }
         Ok(result)
     }
@@ -200,9 +198,13 @@ mod tests {
     }
 
     fn make_echo_tool() -> Box<dyn Callable> {
-        from_fn("echo", "Echo tool", |_ctx: Context, input: EchoInput| async move {
-            Ok(crate::result::text_result(&input.message))
-        })
+        from_fn(
+            "echo",
+            "Echo tool",
+            |_ctx: Context, input: EchoInput| async move {
+                Ok(crate::result::text_result(&input.message))
+            },
+        )
     }
 
     #[tokio::test]
@@ -231,10 +233,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_timeout_exceeded() {
-        let tool = from_fn("slow", "Slow tool", |_ctx: Context, _input: EchoInput| async move {
-            tokio::time::sleep(Duration::from_secs(10)).await;
-            Ok(crate::result::text_result("done"))
-        });
+        let tool = from_fn(
+            "slow",
+            "Slow tool",
+            |_ctx: Context, _input: EchoInput| async move {
+                tokio::time::sleep(Duration::from_secs(10)).await;
+                Ok(crate::result::text_result("done"))
+            },
+        );
 
         let timed = with_timeout(Duration::from_millis(10))(tool);
         let ctx = Context::new();
@@ -279,9 +285,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_result_limit() {
-        let tool = from_fn("big", "Big result", |_ctx: Context, _input: EchoInput| async move {
-            Ok(crate::result::text_result(&"x".repeat(1000)))
-        });
+        let tool = from_fn(
+            "big",
+            "Big result",
+            |_ctx: Context, _input: EchoInput| async move {
+                Ok(crate::result::text_result(&"x".repeat(1000)))
+            },
+        );
 
         let limited = with_result_limit(100)(tool);
         let ctx = Context::new();
