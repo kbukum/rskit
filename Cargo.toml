@@ -53,6 +53,8 @@ members = [
     "crates/rskit-media-ffmpeg",
     "crates/rskit-media-image",
     "crates/rskit-media-audio",
+    # phase 6 MCP bridge
+    "crates/rskit-mcp",
     # phase 7 cli, dataset, bench
     "crates/rskit-cli",
     "crates/rskit-dataset",

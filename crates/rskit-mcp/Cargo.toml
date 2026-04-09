@@ -1,0 +1,38 @@
+[package]
+name        = "rskit-mcp"
+description = "Bridge between rskit tool registry and Model Context Protocol (MCP)"
+version.workspace      = true
+edition.workspace      = true
+license.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+documentation = "https://docs.rs/rskit-mcp"
+readme = "README.md"
+categories = ["api-bindings"]
+keywords   = ["mcp", "tool", "agent", "model-context-protocol"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[features]
+default = ["server", "client"]
+server  = ["rmcp/server", "rmcp/transport-io"]
+client  = ["rmcp/client", "rmcp/transport-child-process"]
+
+[dependencies]
+rskit-tool   = { path = "../rskit-tool" }
+rskit-schema = { path = "../rskit-schema" }
+rskit-errors = { path = "../rskit-errors" }
+rmcp         = { version = "1.3", default-features = false, features = ["transport-async-rw"] }
+serde        = { workspace = true }
+serde_json   = { workspace = true }
+tokio        = { workspace = true }
+tracing      = { workspace = true }
+async-trait  = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }
+schemars = { workspace = true }
