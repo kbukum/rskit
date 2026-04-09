@@ -8,6 +8,8 @@ pub mod context;
 mod definition;
 mod from_fn;
 mod middleware;
+mod middleware_metrics;
+mod middleware_retry;
 pub mod registry;
 pub mod result;
 
@@ -18,6 +20,8 @@ pub use from_fn::{from_fn, from_fn_simple};
 pub use middleware::{
     Middleware, chain, with_logging, with_result_limit, with_timeout, with_validation,
 };
+pub use middleware_metrics::{InMemoryMetrics, MetricRecord, MetricsCollector, with_metrics};
+pub use middleware_retry::{RetryConfig, RetryPredicate, with_retry};
 pub use registry::Registry;
 pub use result::{ToolResult, error_result, json_result, text_result};
 
