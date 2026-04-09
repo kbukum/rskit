@@ -640,8 +640,14 @@ fn time_range_zero_duration() {
 #[test]
 fn time_range_contains_boundary() {
     let r = TimeRange::from_millis(1000, 5000);
-    assert!(r.contains(Timestamp::from_millis(1000)), "should contain start");
-    assert!(r.contains(Timestamp::from_millis(5000)), "should contain end");
+    assert!(
+        r.contains(Timestamp::from_millis(1000)),
+        "should contain start"
+    );
+    assert!(
+        r.contains(Timestamp::from_millis(5000)),
+        "should contain end"
+    );
 }
 
 #[test]
@@ -941,7 +947,12 @@ fn format_all_constants() {
 #[test]
 fn registry_format_from_extension() {
     let reg = Registry::default();
-    for (ext, expected_id) in [("mp4", "mp4"), ("wav", "wav"), ("png", "png"), ("webm", "webm")] {
+    for (ext, expected_id) in [
+        ("mp4", "mp4"),
+        ("wav", "wav"),
+        ("png", "png"),
+        ("webm", "webm"),
+    ] {
         let info = reg.format_from_extension(ext);
         assert!(info.is_some(), "extension {ext} should be found");
         assert_eq!(info.unwrap().id, Format::new(expected_id));
@@ -1000,7 +1011,10 @@ fn registry_formats_for_codec_h264() {
     let formats = reg.formats_for_codec(&Codec::new("h264"));
     let ids: Vec<&str> = formats.iter().map(|f| f.extension.as_str()).collect();
     for expected in ["mp4", "mkv", "avi", "mov", "ts"] {
-        assert!(ids.contains(&expected), "h264 should be in {expected}, got: {ids:?}");
+        assert!(
+            ids.contains(&expected),
+            "h264 should be in {expected}, got: {ids:?}"
+        );
     }
 }
 
@@ -1114,7 +1128,10 @@ fn filter_convenience_high_pass() {
     let f = filter::filters::high_pass(300);
     assert_eq!(f.name, "high_pass");
     assert_eq!(f.target, FilterTarget::Audio);
-    assert!(matches!(f.params.get("frequency"), Some(ParamValue::Int(300))));
+    assert!(matches!(
+        f.params.get("frequency"),
+        Some(ParamValue::Int(300))
+    ));
 }
 
 #[test]
@@ -1122,7 +1139,10 @@ fn filter_convenience_low_pass() {
     let f = filter::filters::low_pass(8000);
     assert_eq!(f.name, "low_pass");
     assert_eq!(f.target, FilterTarget::Audio);
-    assert!(matches!(f.params.get("frequency"), Some(ParamValue::Int(8000))));
+    assert!(matches!(
+        f.params.get("frequency"),
+        Some(ParamValue::Int(8000))
+    ));
 }
 
 #[test]
@@ -1130,7 +1150,10 @@ fn filter_convenience_equalizer() {
     let f = filter::filters::equalizer(1000, 1.5, 3.0);
     assert_eq!(f.name, "equalizer");
     assert_eq!(f.target, FilterTarget::Audio);
-    assert!(matches!(f.params.get("frequency"), Some(ParamValue::Int(1000))));
+    assert!(matches!(
+        f.params.get("frequency"),
+        Some(ParamValue::Int(1000))
+    ));
     assert!(f.params.get("width").is_some());
     assert!(f.params.get("gain").is_some());
 }
@@ -1213,16 +1236,16 @@ fn output_config_validate_compatible() {
 #[test]
 fn output_config_validate_incompatible_video() {
     let reg = Registry::default();
-    let config = OutputConfig::new(Format::new("webm"))
-        .with_video(VideoSettings::new(Codec::new("h264")));
+    let config =
+        OutputConfig::new(Format::new("webm")).with_video(VideoSettings::new(Codec::new("h264")));
     assert!(config.validate(&reg).is_err());
 }
 
 #[test]
 fn output_config_validate_incompatible_audio() {
     let reg = Registry::default();
-    let config = OutputConfig::new(Format::new("mp3"))
-        .with_video(VideoSettings::new(Codec::new("vp9")));
+    let config =
+        OutputConfig::new(Format::new("mp3")).with_video(VideoSettings::new(Codec::new("vp9")));
     assert!(config.validate(&reg).is_err());
 }
 
@@ -1437,8 +1460,7 @@ fn pipeline_select_tracks() {
 #[test]
 fn pipeline_estimated_duration_extract() {
     let source = rskit_file::FileSource::from_path("/tmp/test.mp4");
-    let pipe =
-        pipeline::MediaPipeline::from(&source).extract(TimeRange::from_seconds(10.0, 60.0));
+    let pipe = pipeline::MediaPipeline::from(&source).extract(TimeRange::from_seconds(10.0, 60.0));
     let est = pipe.estimated_duration(Duration::from_secs(120));
     assert_eq!(est, Duration::from_secs(50));
 }
@@ -1465,11 +1487,7 @@ fn pipeline_concat_and_overlay() {
     let other = rskit_file::FileSource::from_path("/tmp/other.mp4");
     let pipe = pipeline::MediaPipeline::from(&source)
         .concat(&other)
-        .overlay(
-            &other,
-            ops::OverlayPosition::Center,
-            0.8,
-        );
+        .overlay(&other, ops::OverlayPosition::Center, 0.8);
 
     let ops_list = pipe.operations();
     assert_eq!(ops_list.len(), 2);
@@ -1519,8 +1537,7 @@ fn subtitle_track_shift_positive() {
 
 #[test]
 fn subtitle_track_shift_negative() {
-    let mut track = SubtitleTrack::new()
-        .add(TimeRange::from_millis(2000, 4000), "Sub 1");
+    let mut track = SubtitleTrack::new().add(TimeRange::from_millis(2000, 4000), "Sub 1");
     track.shift(-1000);
     assert_eq!(track.entries[0].range.start, Timestamp::from_millis(1000));
     assert_eq!(track.entries[0].range.end, Timestamp::from_millis(3000));
@@ -1705,7 +1722,10 @@ fn segment_with_meta() {
     let seg = time::Segment::new(TimeRange::from_millis(0, 5000))
         .with_meta("scene", "outdoor")
         .with_meta("score", 42);
-    assert_eq!(seg.metadata.get("scene").and_then(|v| v.as_str()), Some("outdoor"));
+    assert_eq!(
+        seg.metadata.get("scene").and_then(|v| v.as_str()),
+        Some("outdoor")
+    );
     assert_eq!(seg.metadata.get("score").and_then(|v| v.as_i64()), Some(42));
 }
 
@@ -1718,9 +1738,7 @@ fn segment_serde_roundtrip() {
     let seg2: time::Segment = serde_json::from_str(&json).unwrap();
     assert_eq!(seg.range, seg2.range);
     assert_eq!(seg.label, seg2.label);
-    assert!(
-        (seg.confidence.unwrap() - seg2.confidence.unwrap()).abs() < f32::EPSILON
-    );
+    assert!((seg.confidence.unwrap() - seg2.confidence.unwrap()).abs() < f32::EPSILON);
 }
 
 #[test]

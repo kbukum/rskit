@@ -12,7 +12,7 @@ use rskit_media::{
     probe::MediaProbe,
     spatial::Resolution,
 };
-use rskit_media_image::{ImageProcessor, ImageProbe};
+use rskit_media_image::{ImageProbe, ImageProcessor};
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -224,7 +224,10 @@ async fn golden_image_filters_new() {
         target: FilterTarget::Video,
         params: Params::new().set("amount", ParamValue::Float(1.5)),
     })];
-    let sharpen_result = processor.execute(&source, &sharpen_ops, None).await.unwrap();
+    let sharpen_result = processor
+        .execute(&source, &sharpen_ops, None)
+        .await
+        .unwrap();
     let (sw, sh) = read_dimensions(&sharpen_result);
 
     // Apply sepia filter
@@ -251,20 +254,26 @@ async fn golden_image_filters_new() {
         target: FilterTarget::Video,
         params: Params::new().set("block_size", ParamValue::Int(8)),
     })];
-    let pixelate_result = processor.execute(&source, &pixelate_ops, None).await.unwrap();
+    let pixelate_result = processor
+        .execute(&source, &pixelate_ops, None)
+        .await
+        .unwrap();
     let (pw, ph) = read_dimensions(&pixelate_result);
 
     // sample.png dimensions
     let original = image::open(fixtures_dir().join("image/sample.png")).unwrap();
     let (ow, oh) = (original.width(), original.height());
 
-    insta::assert_json_snapshot!("image_filters_new", serde_json::json!({
-        "original": { "width": ow, "height": oh },
-        "sharpen": { "width": sw, "height": sh, "dims_preserved": sw == ow && sh == oh },
-        "sepia": { "width": ew, "height": eh, "dims_preserved": ew == ow && eh == oh },
-        "invert": { "width": iw, "height": ih, "dims_preserved": iw == ow && ih == oh },
-        "pixelate": { "width": pw, "height": ph, "dims_preserved": pw == ow && ph == oh },
-    }));
+    insta::assert_json_snapshot!(
+        "image_filters_new",
+        serde_json::json!({
+            "original": { "width": ow, "height": oh },
+            "sharpen": { "width": sw, "height": sh, "dims_preserved": sw == ow && sh == oh },
+            "sepia": { "width": ew, "height": eh, "dims_preserved": ew == ow && eh == oh },
+            "invert": { "width": iw, "height": ih, "dims_preserved": iw == ow && ih == oh },
+            "pixelate": { "width": pw, "height": ph, "dims_preserved": pw == ow && ph == oh },
+        })
+    );
 }
 
 // ── Test 8: ImageProbe with real fixtures ────────────────────────────────────
@@ -292,14 +301,17 @@ async fn golden_image_probe_png() {
 
     let res = meta.resolution().expect("should have resolution");
 
-    insta::assert_json_snapshot!("image_probe_png", serde_json::json!({
-        "has_video": meta.has_video(),
-        "has_audio": meta.has_audio(),
-        "width": res.width,
-        "height": res.height,
-        "track_count": meta.tracks.len(),
-        "format": meta.format.id(),
-    }));
+    insta::assert_json_snapshot!(
+        "image_probe_png",
+        serde_json::json!({
+            "has_video": meta.has_video(),
+            "has_audio": meta.has_audio(),
+            "width": res.width,
+            "height": res.height,
+            "track_count": meta.tracks.len(),
+            "format": meta.format.id(),
+        })
+    );
 }
 
 // ── Test 9: Flip real image ──────────────────────────────────────────────────
@@ -315,10 +327,13 @@ async fn golden_flip_horizontal() {
     let result_bytes = source_bytes(&result);
     let original_bytes = std::fs::read(fixtures_dir().join("image/real-photo.jpg")).unwrap();
 
-    insta::assert_json_snapshot!("flip_horizontal", serde_json::json!({
-        "width": w,
-        "height": h,
-        "dimensions_preserved": w == 500 && h == 378,
-        "content_changed": result_bytes != original_bytes,
-    }));
+    insta::assert_json_snapshot!(
+        "flip_horizontal",
+        serde_json::json!({
+            "width": w,
+            "height": h,
+            "dimensions_preserved": w == 500 && h == 378,
+            "content_changed": result_bytes != original_bytes,
+        })
+    );
 }

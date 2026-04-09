@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use futures_util::StreamExt;
 use rskit_errors::{AppError, AppResult, ErrorCode};
-use rskit_pipeline::{concat, from_slice, merge, RskitStreamExt};
+use rskit_pipeline::{RskitStreamExt, concat, from_slice, merge};
 
 // ── 1. Empty stream through rmap ──────────────────────────────────────────
 
@@ -134,8 +134,12 @@ async fn test_rfan_out_with_errors() {
     // that conditionally errors based on a captured flag.
     // Instead, use non-capturing closures that error based on input.
     let ok_fn = |x: u32| std::future::ready(Ok::<u32, AppError>(x + 1));
-    let err_fn =
-        |_x: u32| std::future::ready(Err::<u32, AppError>(AppError::new(ErrorCode::Internal, "fan_out error")));
+    let err_fn = |_x: u32| {
+        std::future::ready(Err::<u32, AppError>(AppError::new(
+            ErrorCode::Internal,
+            "fan_out error",
+        )))
+    };
 
     let results: Vec<Vec<AppResult<u32>>> = from_slice(vec![10u32, 20])
         .rfan_out(vec![ok_fn, err_fn])

@@ -20,11 +20,7 @@ pub struct Response {
 
 impl Response {
     /// Creates a new response.
-    pub(crate) fn new(
-        status: StatusCode,
-        headers: HashMap<String, String>,
-        body: Bytes,
-    ) -> Self {
+    pub(crate) fn new(status: StatusCode, headers: HashMap<String, String>, body: Bytes) -> Self {
         Self {
             status,
             headers,
@@ -134,7 +130,11 @@ mod tests {
         let resp = Response::new(StatusCode::OK, HashMap::new(), Bytes::from("ok"));
         assert!(resp.is_success());
 
-        let resp = Response::new(StatusCode::NOT_FOUND, HashMap::new(), Bytes::from("not found"));
+        let resp = Response::new(
+            StatusCode::NOT_FOUND,
+            HashMap::new(),
+            Bytes::from("not found"),
+        );
         assert!(!resp.is_success());
     }
 

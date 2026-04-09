@@ -3,20 +3,18 @@
 //! Tests verify that modules work together correctly across architectural layers.
 //! Each test exercises at least 2 crates from different layers using real APIs.
 
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::time::Duration;
 
 use async_trait::async_trait;
 use rskit_auth::{JwtConfig, JwtService, TokenGenerator, TokenValidator};
 use rskit_authz::{Checker, Effect, Policy, RbacChecker};
-use rskit_bootstrap::{
-    AppBuilder, Component, Health, HealthStatus, Registry,
-};
+use rskit_bootstrap::{AppBuilder, Component, Health, HealthStatus, Registry};
 use rskit_di::Container;
 use rskit_errors::{AppError, AppResult, ErrorCode};
-use rskit_pipeline::{from_slice, RskitStreamExt};
-use rskit_provider::{request_response_fn, Provider, RequestResponse};
+use rskit_pipeline::{RskitStreamExt, from_slice};
+use rskit_provider::{Provider, RequestResponse, request_response_fn};
 use rskit_resilience::{CbConfig, CbState, CircuitBreaker};
 use rskit_validation::Validator;
 use serde::{Deserialize, Serialize};
@@ -222,9 +220,7 @@ async fn config_bootstrap_components_start_in_order() {
         .build()
         .expect("build should succeed");
 
-    let result = app
-        .run_task(|_cfg, _token| async { Ok(()) })
-        .await;
+    let result = app.run_task(|_cfg, _token| async { Ok(()) }).await;
     assert!(result.is_ok());
 
     let events = tracker.events();
@@ -414,7 +410,11 @@ fn di_component_singleton_returns_same_instance() {
 
     assert_eq!(*v1, "singleton-value");
     assert_eq!(*v2, "singleton-value");
-    assert_eq!(call_count.load(Ordering::SeqCst), 1, "factory should be called only once");
+    assert_eq!(
+        call_count.load(Ordering::SeqCst),
+        1,
+        "factory should be called only once"
+    );
 }
 
 // ─── 6. Auth → Authz ────────────────────────────────────────────────────────
@@ -467,8 +467,18 @@ async fn auth_authz_jwt_claims_feed_rbac() {
     ]);
 
     // Admin should have wildcard access
-    assert!(checker.check(&decoded.role, "delete", "users").await.is_ok());
-    assert!(checker.check(&decoded.role, "write", "articles").await.is_ok());
+    assert!(
+        checker
+            .check(&decoded.role, "delete", "users")
+            .await
+            .is_ok()
+    );
+    assert!(
+        checker
+            .check(&decoded.role, "write", "articles")
+            .await
+            .is_ok()
+    );
 }
 
 #[tokio::test]
@@ -486,17 +496,25 @@ async fn auth_authz_restricted_role() {
     let token = jwt_svc.generate(&claims).await.unwrap();
     let decoded = jwt_svc.validate(&token).await.unwrap();
 
-    let checker = RbacChecker::new(vec![
-        Policy {
-            subject: "viewer".into(),
-            action: "read".into(),
-            resource: "*".into(),
-            effect: Effect::Allow,
-        },
-    ]);
+    let checker = RbacChecker::new(vec![Policy {
+        subject: "viewer".into(),
+        action: "read".into(),
+        resource: "*".into(),
+        effect: Effect::Allow,
+    }]);
 
-    assert!(checker.check(&decoded.role, "read", "articles").await.is_ok());
-    assert!(checker.check(&decoded.role, "write", "articles").await.is_err());
+    assert!(
+        checker
+            .check(&decoded.role, "read", "articles")
+            .await
+            .is_ok()
+    );
+    assert!(
+        checker
+            .check(&decoded.role, "write", "articles")
+            .await
+            .is_err()
+    );
 }
 
 #[tokio::test]
@@ -529,10 +547,25 @@ async fn auth_authz_deny_overrides_allow() {
         },
     ]);
 
-    assert!(checker.check(&decoded.role, "read", "articles").await.is_ok());
-    assert!(checker.check(&decoded.role, "write", "articles").await.is_ok());
+    assert!(
+        checker
+            .check(&decoded.role, "read", "articles")
+            .await
+            .is_ok()
+    );
+    assert!(
+        checker
+            .check(&decoded.role, "write", "articles")
+            .await
+            .is_ok()
+    );
     // Deny should override the wildcard allow
-    assert!(checker.check(&decoded.role, "delete", "articles").await.is_err());
+    assert!(
+        checker
+            .check(&decoded.role, "delete", "articles")
+            .await
+            .is_err()
+    );
 }
 
 // ─── 7. Errors → Validation → Pipeline ─────────────────────────────────────
@@ -543,7 +576,7 @@ async fn errors_validation_pipeline_integration() {
 
     let inputs = vec![
         ("Alice", "alice@example.com"),
-        ("", "bob@example.com"),       // invalid: empty name
+        ("", "bob@example.com"), // invalid: empty name
         ("Charlie", "charlie@test.com"),
     ];
 
@@ -582,9 +615,7 @@ async fn di_resilience_circuit_breaker_in_container() {
     container.register::<CircuitBreaker>(cb.clone());
     let resolved: Arc<CircuitBreaker> = container.resolve().unwrap();
 
-    let result: AppResult<String> = resolved
-        .execute(|| async { Ok("hello".to_string()) })
-        .await;
+    let result: AppResult<String> = resolved.execute(|| async { Ok("hello".to_string()) }).await;
     assert_eq!(result.unwrap(), "hello");
     assert_eq!(resolved.state(), CbState::Closed);
 }

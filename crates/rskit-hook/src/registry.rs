@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use parking_lot::RwLock;
 
-use crate::types::{Action, EventType, HookEvent, HookHandler, HookResult};
+use crate::types::{Action, Event, EventType, HookHandler, HookResult};
 
 type HandlerMap = Arc<RwLock<HashMap<EventType, Vec<(usize, HookHandler)>>>>;
 
@@ -24,8 +24,8 @@ pub struct HookRegistry {
 impl std::fmt::Debug for HookRegistry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let handlers = self.handlers.read();
-        let counts: HashMap<EventType, usize> =
-            handlers.iter().map(|(k, v)| (*k, v.len())).collect();
+        let counts: HashMap<&EventType, usize> =
+            handlers.iter().map(|(k, v)| (k, v.len())).collect();
         f.debug_struct("HookRegistry")
             .field("handler_counts", &counts)
             .finish()
@@ -54,12 +54,12 @@ impl HookRegistry {
     pub fn on(
         &self,
         event_type: EventType,
-        handler: impl Fn(&HookEvent) -> HookResult + Send + Sync + 'static,
+        handler: impl Fn(&dyn Event) -> HookResult + Send + Sync + 'static,
     ) -> Box<dyn FnOnce() + Send> {
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
         self.handlers
             .write()
-            .entry(event_type)
+            .entry(event_type.clone())
             .or_default()
             .push((id, Box::new(handler)));
 
@@ -76,7 +76,7 @@ impl HookRegistry {
     ///
     /// Returns the combined result: the first `Abort` wins; otherwise the last
     /// `Modify` is returned; if none, `Continue`.
-    pub fn emit(&self, event: &HookEvent) -> HookResult {
+    pub fn emit(&self, event: &dyn Event) -> HookResult {
         let event_type = event.event_type();
         let handlers = self.handlers.read();
 
@@ -101,9 +101,9 @@ impl HookRegistry {
     }
 
     /// Check whether any handlers are registered for the given event type.
-    pub fn has_handlers(&self, event_type: EventType) -> bool {
+    pub fn has_handlers(&self, event_type: &EventType) -> bool {
         let handlers = self.handlers.read();
-        handlers.get(&event_type).is_some_and(|vec| !vec.is_empty())
+        handlers.get(event_type).is_some_and(|vec| !vec.is_empty())
     }
 
     /// Remove all handlers for the specified event types.
@@ -118,13 +118,47 @@ impl HookRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::any::Any;
     use std::sync::atomic::AtomicU32;
+
+    // ── Test-local event types ──────────────────────────────────────────
+
+    struct Ping;
+
+    impl Event for Ping {
+        fn event_type(&self) -> EventType {
+            EventType::new("ping")
+        }
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+    }
+
+    struct Pong;
+
+    impl Event for Pong {
+        fn event_type(&self) -> EventType {
+            EventType::new("pong")
+        }
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+    }
+
+    fn ping_type() -> EventType {
+        EventType::new("ping")
+    }
+    fn pong_type() -> EventType {
+        EventType::new("pong")
+    }
+
+    // ── Tests ───────────────────────────────────────────────────────────
 
     #[test]
     fn test_registry_new_empty() {
         let reg = HookRegistry::new();
-        assert!(!reg.has_handlers(EventType::PreToolCall));
-        assert!(!reg.has_handlers(EventType::PostToolCall));
+        assert!(!reg.has_handlers(&ping_type()));
+        assert!(!reg.has_handlers(&pong_type()));
     }
 
     #[test]
@@ -133,19 +167,15 @@ mod tests {
         let counter = Arc::new(AtomicU32::new(0));
         let counter_clone = counter.clone();
 
-        let _unsub = reg.on(EventType::PreToolCall, move |_event| {
+        let _unsub = reg.on(ping_type(), move |_event| {
             counter_clone.fetch_add(1, Ordering::SeqCst);
             HookResult::ok()
         });
 
-        assert!(reg.has_handlers(EventType::PreToolCall));
-        assert!(!reg.has_handlers(EventType::PostToolCall));
+        assert!(reg.has_handlers(&ping_type()));
+        assert!(!reg.has_handlers(&pong_type()));
 
-        let event = HookEvent::PreToolCall {
-            name: "test".to_string(),
-            input: serde_json::json!({}),
-        };
-        let result = reg.emit(&event);
+        let result = reg.emit(&Ping);
         assert_eq!(result.action, Action::Continue);
         assert_eq!(counter.load(Ordering::SeqCst), 1);
     }
@@ -153,8 +183,7 @@ mod tests {
     #[test]
     fn test_emit_no_handlers() {
         let reg = HookRegistry::new();
-        let event = HookEvent::TurnStart { turn: 1 };
-        let result = reg.emit(&event);
+        let result = reg.emit(&Pong);
         assert_eq!(result.action, Action::Continue);
     }
 
@@ -164,25 +193,20 @@ mod tests {
         let counter = Arc::new(AtomicU32::new(0));
 
         let c1 = counter.clone();
-        let _unsub1 = reg.on(EventType::PreToolCall, move |_| {
+        let _unsub1 = reg.on(ping_type(), move |_| {
             c1.fetch_add(1, Ordering::SeqCst);
             HookResult::abort("blocked")
         });
 
         let c2 = counter.clone();
-        let _unsub2 = reg.on(EventType::PreToolCall, move |_| {
+        let _unsub2 = reg.on(ping_type(), move |_| {
             c2.fetch_add(1, Ordering::SeqCst);
             HookResult::ok()
         });
 
-        let event = HookEvent::PreToolCall {
-            name: "test".to_string(),
-            input: serde_json::json!({}),
-        };
-        let result = reg.emit(&event);
+        let result = reg.emit(&Ping);
         assert_eq!(result.action, Action::Abort);
         assert_eq!(result.reason, "blocked");
-        // Second handler should not run
         assert_eq!(counter.load(Ordering::SeqCst), 1);
     }
 
@@ -190,28 +214,12 @@ mod tests {
     fn test_emit_modify_continues() {
         let reg = HookRegistry::new();
 
-        let _unsub1 = reg.on(EventType::PreLLMCall, |_| {
-            HookResult::modify(serde_json::json!({"temp": 0.5}), "lower temp")
-        });
+        let _unsub1 = reg.on(ping_type(), |_| HookResult::modify(0.5_f64, "lower temp"));
 
-        let _unsub2 = reg.on(EventType::PreLLMCall, |_| {
-            HookResult::modify(serde_json::json!({"temp": 0.3}), "even lower")
-        });
+        let _unsub2 = reg.on(ping_type(), |_| HookResult::modify(0.3_f64, "even lower"));
 
-        let event = HookEvent::PreLLMCall {
-            request: rskit_llm::CompletionRequest {
-                model: "test".to_string(),
-                messages: vec![],
-                max_tokens: None,
-                temperature: None,
-                stream: false,
-                tools: None,
-                tool_choice: None,
-            },
-        };
-        let result = reg.emit(&event);
+        let result = reg.emit(&Ping);
         assert_eq!(result.action, Action::Modify);
-        // Last modify wins
         assert_eq!(result.reason, "even lower");
     }
 
@@ -221,22 +229,30 @@ mod tests {
         let counter = Arc::new(AtomicU32::new(0));
         let counter_clone = counter.clone();
 
-        let unsub = reg.on(EventType::OnError, move |_| {
+        let error_type = EventType::new("error");
+        let unsub = reg.on(error_type.clone(), move |_| {
             counter_clone.fetch_add(1, Ordering::SeqCst);
             HookResult::ok()
         });
 
-        assert!(reg.has_handlers(EventType::OnError));
+        assert!(reg.has_handlers(&error_type));
 
         unsub();
 
-        assert!(!reg.has_handlers(EventType::OnError));
+        assert!(!reg.has_handlers(&error_type));
 
-        let event = HookEvent::OnError {
-            error: "boom".to_string(),
-            source: "test".to_string(),
-        };
-        reg.emit(&event);
+        // Define a simple error event for the emit call
+        struct ErrorEvent;
+        impl Event for ErrorEvent {
+            fn event_type(&self) -> EventType {
+                EventType::new("error")
+            }
+            fn as_any(&self) -> &dyn Any {
+                self
+            }
+        }
+
+        reg.emit(&ErrorEvent);
         assert_eq!(counter.load(Ordering::SeqCst), 0);
     }
 
@@ -244,19 +260,23 @@ mod tests {
     fn test_clear() {
         let reg = HookRegistry::new();
 
-        let _unsub1 = reg.on(EventType::TurnStart, |_| HookResult::ok());
-        let _unsub2 = reg.on(EventType::TurnEnd, |_| HookResult::ok());
-        let _unsub3 = reg.on(EventType::OnError, |_| HookResult::ok());
+        let a = EventType::new("a");
+        let b = EventType::new("b");
+        let c = EventType::new("c");
 
-        assert!(reg.has_handlers(EventType::TurnStart));
-        assert!(reg.has_handlers(EventType::TurnEnd));
-        assert!(reg.has_handlers(EventType::OnError));
+        let _unsub1 = reg.on(a.clone(), |_| HookResult::ok());
+        let _unsub2 = reg.on(b.clone(), |_| HookResult::ok());
+        let _unsub3 = reg.on(c.clone(), |_| HookResult::ok());
 
-        reg.clear(&[EventType::TurnStart, EventType::TurnEnd]);
+        assert!(reg.has_handlers(&a));
+        assert!(reg.has_handlers(&b));
+        assert!(reg.has_handlers(&c));
 
-        assert!(!reg.has_handlers(EventType::TurnStart));
-        assert!(!reg.has_handlers(EventType::TurnEnd));
-        assert!(reg.has_handlers(EventType::OnError));
+        reg.clear(&[a.clone(), b.clone()]);
+
+        assert!(!reg.has_handlers(&a));
+        assert!(!reg.has_handlers(&b));
+        assert!(reg.has_handlers(&c));
     }
 
     #[test]
@@ -266,26 +286,20 @@ mod tests {
 
         for _ in 0..3 {
             let c = counter.clone();
-            let _unsub = reg.on(EventType::PostToolCall, move |_| {
+            let _unsub = reg.on(pong_type(), move |_| {
                 c.fetch_add(1, Ordering::SeqCst);
                 HookResult::ok()
             });
         }
 
-        let event = HookEvent::PostToolCall {
-            name: "test".to_string(),
-            input: serde_json::json!({}),
-            result: None,
-            error: None,
-        };
-        reg.emit(&event);
+        reg.emit(&Pong);
         assert_eq!(counter.load(Ordering::SeqCst), 3);
     }
 
     #[test]
     fn test_debug_format() {
         let reg = HookRegistry::new();
-        let _unsub = reg.on(EventType::PreToolCall, |_| HookResult::ok());
+        let _unsub = reg.on(ping_type(), |_| HookResult::ok());
         let debug = format!("{reg:?}");
         assert!(debug.contains("HookRegistry"));
     }
@@ -293,6 +307,6 @@ mod tests {
     #[test]
     fn test_default() {
         let reg = HookRegistry::default();
-        assert!(!reg.has_handlers(EventType::PreToolCall));
+        assert!(!reg.has_handlers(&ping_type()));
     }
 }

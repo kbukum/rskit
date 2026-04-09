@@ -19,8 +19,8 @@
 //! // Register with bootstrap registry, then start via registry.start_all()
 //! ```
 
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
 use parking_lot::RwLock;
@@ -195,7 +195,9 @@ mod tests {
 
     #[tokio::test]
     async fn health_after_start_is_healthy() {
-        let tw = TickerWorker::new("h", Duration::from_millis(10), || Box::pin(async { Ok(()) }));
+        let tw = TickerWorker::new("h", Duration::from_millis(10), || {
+            Box::pin(async { Ok(()) })
+        });
         tw.start().await.unwrap();
         tokio::time::sleep(Duration::from_millis(25)).await;
         assert_eq!(tw.health().status, HealthStatus::Healthy);
@@ -205,9 +207,7 @@ mod tests {
     #[tokio::test]
     async fn health_degraded_on_error() {
         let tw = TickerWorker::new("err", Duration::from_millis(10), || {
-            Box::pin(async {
-                Err(AppError::new(ErrorCode::Internal, "boom"))
-            })
+            Box::pin(async { Err(AppError::new(ErrorCode::Internal, "boom")) })
         });
         tw.start().await.unwrap();
         tokio::time::sleep(Duration::from_millis(25)).await;
@@ -218,7 +218,9 @@ mod tests {
 
     #[tokio::test]
     async fn stop_is_idempotent() {
-        let tw = TickerWorker::new("idem", Duration::from_secs(1), || Box::pin(async { Ok(()) }));
+        let tw = TickerWorker::new("idem", Duration::from_secs(1), || {
+            Box::pin(async { Ok(()) })
+        });
         tw.stop().await.unwrap(); // before start
         tw.start().await.unwrap();
         tw.stop().await.unwrap();
@@ -227,13 +229,17 @@ mod tests {
 
     #[test]
     fn name_accessor() {
-        let tw = TickerWorker::new("my-worker", Duration::from_secs(1), || Box::pin(async { Ok(()) }));
+        let tw = TickerWorker::new("my-worker", Duration::from_secs(1), || {
+            Box::pin(async { Ok(()) })
+        });
         assert_eq!(tw.name(), "my-worker");
     }
 
     #[tokio::test]
     async fn run_count_tracks() {
-        let tw = TickerWorker::new("cnt", Duration::from_millis(10), || Box::pin(async { Ok(()) }));
+        let tw = TickerWorker::new("cnt", Duration::from_millis(10), || {
+            Box::pin(async { Ok(()) })
+        });
         tw.start().await.unwrap();
         tokio::time::sleep(Duration::from_millis(35)).await;
         tw.stop().await.unwrap();
@@ -243,9 +249,7 @@ mod tests {
     #[tokio::test]
     async fn fail_count_tracks() {
         let tw = TickerWorker::new("fail", Duration::from_millis(10), || {
-            Box::pin(async {
-                Err(AppError::new(ErrorCode::Internal, "test error"))
-            })
+            Box::pin(async { Err(AppError::new(ErrorCode::Internal, "test error")) })
         });
         tw.start().await.unwrap();
         tokio::time::sleep(Duration::from_millis(35)).await;

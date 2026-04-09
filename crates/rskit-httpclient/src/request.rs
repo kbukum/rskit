@@ -122,10 +122,7 @@ impl Request {
     }
 
     /// Sets the request body from a JSON-serializable value.
-    pub fn json_body<T: serde::Serialize>(
-        mut self,
-        value: &T,
-    ) -> Result<Self, serde_json::Error> {
+    pub fn json_body<T: serde::Serialize>(mut self, value: &T) -> Result<Self, serde_json::Error> {
         self.body = Some(RequestBody::json(value)?);
         Ok(self)
     }

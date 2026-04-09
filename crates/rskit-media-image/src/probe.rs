@@ -34,7 +34,10 @@ impl ImageProbe {
             }),
             FileSource::Bytes(b) => Ok(b.to_vec()),
             FileSource::Temp(t) => std::fs::read(t.path()).map_err(|e| {
-                AppError::new(ErrorCode::Internal, format!("failed to read temp image: {e}"))
+                AppError::new(
+                    ErrorCode::Internal,
+                    format!("failed to read temp image: {e}"),
+                )
             }),
             FileSource::Url(_) => Err(AppError::new(
                 ErrorCode::InvalidInput,
@@ -87,9 +90,13 @@ impl MediaProbe for ImageProbe {
         let (width, height) = (img.width(), img.height());
 
         let bit_depth = match img.color() {
-            image::ColorType::L8 | image::ColorType::La8 | image::ColorType::Rgb8
+            image::ColorType::L8
+            | image::ColorType::La8
+            | image::ColorType::Rgb8
             | image::ColorType::Rgba8 => Some(8u8),
-            image::ColorType::L16 | image::ColorType::La16 | image::ColorType::Rgb16
+            image::ColorType::L16
+            | image::ColorType::La16
+            | image::ColorType::Rgb16
             | image::ColorType::Rgba16 => Some(16),
             image::ColorType::Rgb32F | image::ColorType::Rgba32F => Some(32),
             _ => None,
@@ -163,7 +170,10 @@ impl MediaProbe for ImageProbe {
                 image::ImageFormat::Jpeg,
             )
             .map_err(|e| {
-                AppError::new(ErrorCode::Internal, format!("failed to encode thumbnail: {e}"))
+                AppError::new(
+                    ErrorCode::Internal,
+                    format!("failed to encode thumbnail: {e}"),
+                )
             })?;
 
         Ok(FileSource::Bytes(bytes::Bytes::from(buf)))
@@ -176,7 +186,9 @@ impl MediaProbe for ImageProbe {
         resolution: Option<Resolution>,
     ) -> AppResult<Vec<FileSource>> {
         // For a single image, just return one thumbnail
-        let thumb = self.thumbnail(source, Timestamp::from_millis(0), resolution).await?;
+        let thumb = self
+            .thumbnail(source, Timestamp::from_millis(0), resolution)
+            .await?;
         Ok(vec![thumb])
     }
 }

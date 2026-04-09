@@ -7,8 +7,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use rskit_bootstrap::component::Component;
 use rskit_bootstrap::{
-    AppBuilder, CancellationToken, Health, HealthStatus, LazyComponent, Registry,
-    RegistryConfig,
+    AppBuilder, CancellationToken, Health, HealthStatus, LazyComponent, Registry, RegistryConfig,
 };
 use rskit_config::{AppConfig, ServiceConfig};
 use rskit_errors::{AppError, AppResult};
@@ -253,9 +252,7 @@ async fn lifecycle_hooks_execute_in_order() {
             }
         });
 
-    let result = app
-        .run_task(|_cfg, _cancel| async move { Ok(()) })
-        .await;
+    let result = app.run_task(|_cfg, _cancel| async move { Ok(()) }).await;
     assert!(result.is_ok());
 
     let executed = order.lock().unwrap();
@@ -271,39 +268,36 @@ async fn lifecycle_hooks_execute_in_order() {
 #[tokio::test]
 async fn configure_hook_error_propagates() {
     let cfg = TestCfg::default();
-    let app = AppBuilder::new(cfg).build().unwrap().on_configure(|_tok| async {
-        Err(AppError::service_unavailable("configure boom"))
-    });
+    let app = AppBuilder::new(cfg)
+        .build()
+        .unwrap()
+        .on_configure(|_tok| async { Err(AppError::service_unavailable("configure boom")) });
 
-    let result = app
-        .run_task(|_cfg, _cancel| async move { Ok(()) })
-        .await;
+    let result = app.run_task(|_cfg, _cancel| async move { Ok(()) }).await;
     assert!(result.is_err());
 }
 
 #[tokio::test]
 async fn start_hook_error_propagates() {
     let cfg = TestCfg::default();
-    let app = AppBuilder::new(cfg).build().unwrap().on_start(|_tok| async {
-        Err(AppError::service_unavailable("start boom"))
-    });
+    let app = AppBuilder::new(cfg)
+        .build()
+        .unwrap()
+        .on_start(|_tok| async { Err(AppError::service_unavailable("start boom")) });
 
-    let result = app
-        .run_task(|_cfg, _cancel| async move { Ok(()) })
-        .await;
+    let result = app.run_task(|_cfg, _cancel| async move { Ok(()) }).await;
     assert!(result.is_err());
 }
 
 #[tokio::test]
 async fn stop_hook_error_propagates() {
     let cfg = TestCfg::default();
-    let app = AppBuilder::new(cfg).build().unwrap().on_stop(|_tok| async {
-        Err(AppError::service_unavailable("stop boom"))
-    });
+    let app = AppBuilder::new(cfg)
+        .build()
+        .unwrap()
+        .on_stop(|_tok| async { Err(AppError::service_unavailable("stop boom")) });
 
-    let result = app
-        .run_task(|_cfg, _cancel| async move { Ok(()) })
-        .await;
+    let result = app.run_task(|_cfg, _cancel| async move { Ok(()) }).await;
     assert!(result.is_err());
 }
 
@@ -325,9 +319,7 @@ async fn hook_error_stops_subsequent_hooks() {
             }
         });
 
-    let _ = app
-        .run_task(|_cfg, _cancel| async move { Ok(()) })
-        .await;
+    let _ = app.run_task(|_cfg, _cancel| async move { Ok(()) }).await;
     assert!(
         !second_called.load(Ordering::SeqCst),
         "second hook should not run after first fails"
@@ -447,7 +439,9 @@ fn health_all_empty_registry() {
 fn health_all_mixed_statuses() {
     let mut reg = Registry::new();
     reg.register(Arc::new(MockComponent::new("healthy-comp")));
-    reg.register(Arc::new(MockComponent::new("unhealthy-comp").with_unhealthy()));
+    reg.register(Arc::new(
+        MockComponent::new("unhealthy-comp").with_unhealthy(),
+    ));
 
     let healths = reg.health_all();
     assert_eq!(healths.len(), 2);
@@ -643,9 +637,7 @@ async fn run_task_completes_and_stops() {
 
     let app = AppBuilder::new(cfg).with_component(comp).build().unwrap();
 
-    let result = app
-        .run_task(|_cfg, _cancel| async { Ok(()) })
-        .await;
+    let result = app.run_task(|_cfg, _cancel| async { Ok(()) }).await;
 
     assert!(result.is_ok());
     let order = stop_order.lock().unwrap();
@@ -810,17 +802,12 @@ async fn full_lifecycle_with_components_and_hooks() {
             }
         });
 
-    let result = app
-        .run_task(|_cfg, _cancel| async { Ok(()) })
-        .await;
+    let result = app.run_task(|_cfg, _cancel| async { Ok(()) }).await;
     assert!(result.is_ok());
 
     let executed = order.lock().unwrap();
     // Components start before hooks, hooks stop before components
-    assert_eq!(
-        *executed,
-        vec!["db", "hook:start", "hook:stop", "db"],
-    );
+    assert_eq!(*executed, vec!["db", "hook:start", "hook:stop", "db"],);
 }
 
 #[tokio::test]

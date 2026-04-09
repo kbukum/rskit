@@ -1,81 +1,51 @@
-//! Hook event types, actions, and handler definitions.
+//! Generic hook types: event trait, actions, results, and handler definitions.
+//!
+//! This module provides domain-agnostic primitives. Domain-specific event types
+//! (e.g. tool calls, LLM calls) should be defined in the consuming crate and
+//! implement the [`Event`] trait.
 
-use rskit_llm::types::{AssistantMessage, CompletionRequest, CompletionResponse};
-use rskit_tool::ToolResult;
-use serde::{Deserialize, Serialize};
+use std::any::Any;
+use std::fmt;
 
 // ── EventType ───────────────────────────────────────────────────────────────
 
-/// Discriminator for the kind of event being emitted.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum EventType {
-    /// Before a tool is invoked.
-    PreToolCall,
-    /// After a tool completes (success or failure).
-    PostToolCall,
-    /// Before an LLM completion request is sent.
-    #[serde(rename = "pre_llm_call")]
-    PreLLMCall,
-    /// After an LLM completion response is received.
-    #[serde(rename = "post_llm_call")]
-    PostLLMCall,
-    /// When an error occurs in the pipeline.
-    OnError,
-    /// At the start of an agent turn.
-    TurnStart,
-    /// At the end of an agent turn.
-    TurnEnd,
-}
+/// A string-based event type identifier.
+///
+/// Using a newtype over `String` rather than a fixed enum keeps the hook module
+/// free of domain knowledge — callers define their own event type constants.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct EventType(String);
 
-// ── HookEvent ───────────────────────────────────────────────────────────────
-
-/// The concrete event payload delivered to hook handlers.
-#[derive(Debug, Clone)]
-pub enum HookEvent {
-    /// Fired before a tool call is executed.
-    PreToolCall {
-        name: String,
-        input: serde_json::Value,
-    },
-    /// Fired after a tool call completes.
-    PostToolCall {
-        name: String,
-        input: serde_json::Value,
-        result: Option<ToolResult>,
-        error: Option<String>,
-    },
-    /// Fired before an LLM completion request is sent.
-    PreLLMCall { request: CompletionRequest },
-    /// Fired after an LLM completion response is received.
-    PostLLMCall {
-        response: CompletionResponse,
-        error: Option<String>,
-    },
-    /// Fired when an error occurs anywhere in the pipeline.
-    OnError { error: String, source: String },
-    /// Fired at the start of an agent turn.
-    TurnStart { turn: u32 },
-    /// Fired at the end of an agent turn.
-    TurnEnd {
-        turn: u32,
-        message: AssistantMessage,
-    },
-}
-
-impl HookEvent {
-    /// Return the [`EventType`] discriminator for this event.
-    pub fn event_type(&self) -> EventType {
-        match self {
-            HookEvent::PreToolCall { .. } => EventType::PreToolCall,
-            HookEvent::PostToolCall { .. } => EventType::PostToolCall,
-            HookEvent::PreLLMCall { .. } => EventType::PreLLMCall,
-            HookEvent::PostLLMCall { .. } => EventType::PostLLMCall,
-            HookEvent::OnError { .. } => EventType::OnError,
-            HookEvent::TurnStart { .. } => EventType::TurnStart,
-            HookEvent::TurnEnd { .. } => EventType::TurnEnd,
-        }
+impl EventType {
+    /// Create a new event type from any string-like value.
+    pub fn new(name: impl Into<String>) -> Self {
+        Self(name.into())
     }
+
+    /// Return the inner string slice.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for EventType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+// ── Event trait ─────────────────────────────────────────────────────────────
+
+/// Trait that all hook events must implement.
+///
+/// Provides a discriminator via [`Event::event_type`] and allows downcasting
+/// through [`Any`] so handlers can inspect the concrete type when needed.
+pub trait Event: Any + Send + Sync {
+    /// The event type discriminator for this event.
+    fn event_type(&self) -> EventType;
+
+    /// Upcast to `&dyn Any` for downcasting in handlers.
+    fn as_any(&self) -> &dyn Any;
 }
 
 // ── Action / HookResult ────────────────────────────────────────────────────
@@ -92,14 +62,23 @@ pub enum Action {
 }
 
 /// The outcome returned by a hook handler.
-#[derive(Debug, Clone)]
 pub struct HookResult {
     /// The action the pipeline should take.
     pub action: Action,
-    /// Optional modified payload (JSON-serialised) for `Action::Modify`.
-    pub modified_data: Option<serde_json::Value>,
+    /// Optional modified payload for `Action::Modify`.
+    pub modified_data: Option<Box<dyn Any + Send>>,
     /// Human-readable explanation.
     pub reason: String,
+}
+
+impl fmt::Debug for HookResult {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("HookResult")
+            .field("action", &self.action)
+            .field("has_modified_data", &self.modified_data.is_some())
+            .field("reason", &self.reason)
+            .finish()
+    }
 }
 
 impl HookResult {
@@ -121,11 +100,11 @@ impl HookResult {
         }
     }
 
-    /// Convenience: modify with new data.
-    pub fn modify(data: serde_json::Value, reason: impl Into<String>) -> Self {
+    /// Convenience: modify with typed data.
+    pub fn modify(data: impl Any + Send + 'static, reason: impl Into<String>) -> Self {
         Self {
             action: Action::Modify,
-            modified_data: Some(data),
+            modified_data: Some(Box::new(data)),
             reason: reason.into(),
         }
     }
@@ -138,55 +117,53 @@ impl Default for HookResult {
 }
 
 /// A boxed function that handles a hook event.
-pub type HookHandler = Box<dyn Fn(&HookEvent) -> HookResult + Send + Sync>;
+pub type HookHandler = Box<dyn Fn(&dyn Event) -> HookResult + Send + Sync>;
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_event_type_serde() {
-        let json = serde_json::to_string(&EventType::PreToolCall).unwrap();
-        assert_eq!(json, r#""pre_tool_call""#);
+    // ── Test-local event types ──────────────────────────────────────────
 
-        let deser: EventType = serde_json::from_str(r#""post_llm_call""#).unwrap();
-        assert_eq!(deser, EventType::PostLLMCall);
+    struct Ping {
+        count: u32,
     }
 
-    #[test]
-    fn test_event_type_all_variants() {
-        let variants = [
-            EventType::PreToolCall,
-            EventType::PostToolCall,
-            EventType::PreLLMCall,
-            EventType::PostLLMCall,
-            EventType::OnError,
-            EventType::TurnStart,
-            EventType::TurnEnd,
-        ];
-        for v in &variants {
-            let json = serde_json::to_value(v).unwrap();
-            let deser: EventType = serde_json::from_value(json).unwrap();
-            assert_eq!(*v, deser);
+    impl Event for Ping {
+        fn event_type(&self) -> EventType {
+            EventType::new("ping")
+        }
+        fn as_any(&self) -> &dyn Any {
+            self
         }
     }
 
+    // ── Tests ───────────────────────────────────────────────────────────
+
     #[test]
-    fn test_hook_event_type_mapping() {
-        let pre_tool = HookEvent::PreToolCall {
-            name: "test".to_string(),
-            input: serde_json::json!({}),
-        };
-        assert_eq!(pre_tool.event_type(), EventType::PreToolCall);
+    fn test_event_type_equality() {
+        let a = EventType::new("ping");
+        let b = EventType::new("ping");
+        let c = EventType::new("pong");
+        assert_eq!(a, b);
+        assert_ne!(a, c);
+    }
 
-        let on_error = HookEvent::OnError {
-            error: "err".to_string(),
-            source: "src".to_string(),
-        };
-        assert_eq!(on_error.event_type(), EventType::OnError);
+    #[test]
+    fn test_event_type_display() {
+        let et = EventType::new("pre_tool_call");
+        assert_eq!(et.to_string(), "pre_tool_call");
+        assert_eq!(et.as_str(), "pre_tool_call");
+    }
 
-        let turn_start = HookEvent::TurnStart { turn: 1 };
-        assert_eq!(turn_start.event_type(), EventType::TurnStart);
+    #[test]
+    fn test_event_trait() {
+        let ping = Ping { count: 42 };
+        assert_eq!(ping.event_type(), EventType::new("ping"));
+
+        let any = ping.as_any();
+        let downcasted = any.downcast_ref::<Ping>().unwrap();
+        assert_eq!(downcasted.count, 42);
     }
 
     #[test]
@@ -206,10 +183,11 @@ mod tests {
 
     #[test]
     fn test_hook_result_modify() {
-        let data = serde_json::json!({"temperature": 0.5});
-        let r = HookResult::modify(data.clone(), "lowered temperature");
+        let r = HookResult::modify(42_u32, "changed value");
         assert_eq!(r.action, Action::Modify);
-        assert_eq!(r.modified_data.unwrap(), data);
+        assert_eq!(r.reason, "changed value");
+        let val = r.modified_data.unwrap();
+        assert_eq!(*val.downcast_ref::<u32>().unwrap(), 42);
     }
 
     #[test]
@@ -223,5 +201,12 @@ mod tests {
         assert_eq!(Action::Continue, Action::Continue);
         assert_ne!(Action::Continue, Action::Abort);
         assert_ne!(Action::Abort, Action::Modify);
+    }
+
+    #[test]
+    fn test_hook_result_debug() {
+        let r = HookResult::ok();
+        let dbg = format!("{r:?}");
+        assert!(dbg.contains("HookResult"));
     }
 }

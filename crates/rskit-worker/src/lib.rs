@@ -23,7 +23,7 @@ pub use event::{Event, EventKind, Progress};
 pub use handler::Handler;
 pub use pool::{Pool, PoolConfig, PoolStats};
 pub use task::TaskHandle;
-pub use ticker::{TickerWorker, TickFuture};
+pub use ticker::{TickFuture, TickerWorker};
 
 #[cfg(test)]
 mod tests {

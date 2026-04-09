@@ -4,9 +4,7 @@
 //!   cargo run --bin audio_analysis -- path/to/audio.wav
 
 use rskit_media_audio::{
-    LoudnessMeter, WavReader,
-    detect_silence, generate_waveform,
-    SilenceConfig, WaveformConfig,
+    LoudnessMeter, SilenceConfig, WavReader, WaveformConfig, detect_silence, generate_waveform,
 };
 
 fn main() -> rskit_errors::AppResult<()> {
@@ -14,8 +12,9 @@ fn main() -> rskit_errors::AppResult<()> {
         .nth(1)
         .unwrap_or_else(|| "input.wav".into());
 
-    let data = std::fs::read(&path)
-        .map_err(|e| rskit_errors::AppError::new(rskit_errors::ErrorCode::NotFound, e.to_string()))?;
+    let data = std::fs::read(&path).map_err(|e| {
+        rskit_errors::AppError::new(rskit_errors::ErrorCode::NotFound, e.to_string())
+    })?;
 
     let wav = WavReader::from_bytes(&data)?;
 
@@ -37,11 +36,22 @@ fn main() -> rskit_errors::AppResult<()> {
     let silences = detect_silence(&wav, &SilenceConfig::default());
     println!("\n=== Silence regions ({}) ===", silences.len());
     for (i, s) in silences.iter().enumerate() {
-        println!("  {i}: {:.2}s – {:.2}s ({:.2}s)", s.start_secs, s.end_secs, s.duration_secs());
+        println!(
+            "  {i}: {:.2}s – {:.2}s ({:.2}s)",
+            s.start_secs,
+            s.end_secs,
+            s.duration_secs()
+        );
     }
 
     // Waveform summary
-    let waveform = generate_waveform(&wav, &WaveformConfig { bins: 20, channel: None });
+    let waveform = generate_waveform(
+        &wav,
+        &WaveformConfig {
+            bins: 20,
+            channel: None,
+        },
+    );
     println!("\n=== Waveform (20 bins) ===");
     for (i, p) in waveform.iter().enumerate() {
         let bar_len = (p.rms * 50.0) as usize;

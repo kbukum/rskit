@@ -86,8 +86,9 @@ impl ErrorCode {
                 http::StatusCode::INTERNAL_SERVER_ERROR
             }
             // 499 Client Closed Request (non-standard but widely used for cancellation)
-            ErrorCode::Cancelled => http::StatusCode::from_u16(499)
-                .unwrap_or(http::StatusCode::INTERNAL_SERVER_ERROR),
+            ErrorCode::Cancelled => {
+                http::StatusCode::from_u16(499).unwrap_or(http::StatusCode::INTERNAL_SERVER_ERROR)
+            }
             #[allow(unreachable_patterns)]
             _ => http::StatusCode::INTERNAL_SERVER_ERROR,
         }

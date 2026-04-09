@@ -48,9 +48,7 @@ mod serde_impl {
                 FileSource::Path(p) => FileSourceRepr::Path(p.clone()).serialize(ser),
                 FileSource::Url(u) => FileSourceRepr::Url(u.clone()).serialize(ser),
                 FileSource::Bytes(b) => FileSourceRepr::Bytes(b.to_vec()).serialize(ser),
-                FileSource::Temp(t) => {
-                    FileSourceRepr::Path(t.path().to_path_buf()).serialize(ser)
-                }
+                FileSource::Temp(t) => FileSourceRepr::Path(t.path().to_path_buf()).serialize(ser),
             }
         }
     }

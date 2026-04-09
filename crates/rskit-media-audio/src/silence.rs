@@ -131,10 +131,13 @@ mod tests {
         samples.extend(vec![0.5f32; 1000]);
 
         let wav = mono_wav(sr, samples);
-        let regions = detect_silence(&wav, &SilenceConfig {
-            threshold: 0.01,
-            min_duration_secs: 0.5,
-        });
+        let regions = detect_silence(
+            &wav,
+            &SilenceConfig {
+                threshold: 0.01,
+                min_duration_secs: 0.5,
+            },
+        );
 
         assert_eq!(regions.len(), 1);
         assert!((regions[0].start_secs - 0.0).abs() < 0.01);

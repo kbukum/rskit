@@ -81,15 +81,17 @@ fn internal_error_message_is_generic_when_displayed_via_error_response() {
     // The ErrorResponse detail should not contain "s3cret" since it comes
     // from the AppError message field which includes the cause string.
     // This test documents current behavior — if it fails, the code may need fixing.
-    assert!(!response.detail.contains("s3cret") || {
-        // If it does contain it, flag as a known concern but don't block CI.
-        // The actual HTTP layer should sanitize before sending to clients.
-        eprintln!(
-            "SECURITY NOTE: ErrorResponse.detail contains cause details: {}",
-            response.detail
-        );
-        true
-    });
+    assert!(
+        !response.detail.contains("s3cret") || {
+            // If it does contain it, flag as a known concern but don't block CI.
+            // The actual HTTP layer should sanitize before sending to clients.
+            eprintln!(
+                "SECURITY NOTE: ErrorResponse.detail contains cause details: {}",
+                response.detail
+            );
+            true
+        }
+    );
 }
 
 #[test]
@@ -134,7 +136,10 @@ async fn jwt_wrong_secret_rejected() {
 
     let token = svc1.generate(&claims).await.unwrap();
     let result = svc2.validate(&token).await;
-    assert!(result.is_err(), "Token signed with different secret should be rejected");
+    assert!(
+        result.is_err(),
+        "Token signed with different secret should be rejected"
+    );
 }
 
 #[tokio::test]
@@ -159,14 +164,7 @@ async fn jwt_malformed_tokens_rejected() {
     let svc = make_jwt_service();
 
     let long_token = "a".repeat(100_000);
-    let malformed_tokens = vec![
-        "",
-        "not-a-jwt",
-        "a.b",
-        "a.b.c",
-        "   ",
-        &long_token,
-    ];
+    let malformed_tokens = vec!["", "not-a-jwt", "a.b", "a.b.c", "   ", &long_token];
 
     for token in malformed_tokens {
         let result = svc.validate(token).await;
@@ -235,7 +233,10 @@ fn argon2_same_password_different_hashes() {
     let hasher = PasswordHasher::default();
     let h1 = hasher.hash("securepassword1").unwrap();
     let h2 = hasher.hash("securepassword1").unwrap();
-    assert_ne!(h1, h2, "Same password should produce different hashes (random salt)");
+    assert_ne!(
+        h1, h2,
+        "Same password should produce different hashes (random salt)"
+    );
 }
 
 #[test]
@@ -258,7 +259,10 @@ fn argon2_unicode_password_roundtrip() {
     let passwords = ["pässwörd-ünïcödé", "密码测试密码测试", "p@$$w0rd!#%^&*()"];
     for pw in &passwords {
         let hash = hasher.hash(pw).unwrap();
-        assert!(hasher.verify(pw, &hash).unwrap(), "Unicode password verify failed: {pw}");
+        assert!(
+            hasher.verify(pw, &hash).unwrap(),
+            "Unicode password verify failed: {pw}"
+        );
     }
 }
 
@@ -288,7 +292,10 @@ fn reset_token_has_sufficient_entropy() {
 fn reset_token_expiry_is_in_future() {
     let generator = ResetTokenGenerator::new(std::time::Duration::from_secs(300));
     let (_, exp) = generator.generate();
-    assert!(exp > chrono::Utc::now(), "Reset token expiry should be in the future");
+    assert!(
+        exp > chrono::Utc::now(),
+        "Reset token expiry should be in the future"
+    );
 }
 
 // ─── 5. Send+Sync Bounds ──────────────────────────────────────────────────
@@ -342,8 +349,7 @@ fn error_response_serialization_excludes_cause() {
     // The serialized form should not contain the cause's internal message
     // if the message field itself includes it, that's a known concern
     assert!(
-        !json.contains("secret connection string")
-            || json.contains("secret connection string"),
+        !json.contains("secret connection string") || json.contains("secret connection string"),
         // This test documents behavior — cause text flows into message
     );
 }

@@ -68,8 +68,7 @@ impl HttpClientConfig {
 
     /// Adds a default header.
     pub fn with_header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
-        self.default_headers
-            .insert(name.into(), value.into());
+        self.default_headers.insert(name.into(), value.into());
         self
     }
 

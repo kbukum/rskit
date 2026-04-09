@@ -1,10 +1,10 @@
 //! AES-256-GCM encryption implementation.
 
 use aes_gcm::{
-    aead::{Aead, KeyInit, Payload},
     Aes256Gcm, Nonce,
+    aead::{Aead, KeyInit, Payload},
 };
-use base64::{engine::general_purpose::STANDARD, Engine};
+use base64::{Engine, engine::general_purpose::STANDARD};
 use rand::Rng;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use sha2::{Digest, Sha256};
@@ -62,14 +62,12 @@ impl Encryptor for AesGcmEncryptor {
     }
 
     fn decrypt(&self, ciphertext: &str) -> AppResult<Vec<u8>> {
-        let data = STANDARD
-            .decode(ciphertext)
-            .map_err(|e| {
-                AppError::new(
-                    ErrorCode::InvalidFormat,
-                    format!("Invalid base64 ciphertext: {}", e),
-                )
-            })?;
+        let data = STANDARD.decode(ciphertext).map_err(|e| {
+            AppError::new(
+                ErrorCode::InvalidFormat,
+                format!("Invalid base64 ciphertext: {}", e),
+            )
+        })?;
 
         const NONCE_SIZE: usize = 12;
         if data.len() < NONCE_SIZE {

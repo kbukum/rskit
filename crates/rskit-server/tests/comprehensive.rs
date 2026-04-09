@@ -218,12 +218,18 @@ async fn health_transitions() {
     let server = build_no_service_server(0);
 
     // Before start: unhealthy
-    assert_eq!(server.health().status, rskit_bootstrap::HealthStatus::Unhealthy);
+    assert_eq!(
+        server.health().status,
+        rskit_bootstrap::HealthStatus::Unhealthy
+    );
 
     server.start().await.expect("start");
 
     // After start: healthy
-    assert_eq!(server.health().status, rskit_bootstrap::HealthStatus::Healthy);
+    assert_eq!(
+        server.health().status,
+        rskit_bootstrap::HealthStatus::Healthy
+    );
 
     server.stop().await.expect("stop");
 
@@ -231,7 +237,10 @@ async fn health_transitions() {
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     // After stop: unhealthy
-    assert_eq!(server.health().status, rskit_bootstrap::HealthStatus::Unhealthy);
+    assert_eq!(
+        server.health().status,
+        rskit_bootstrap::HealthStatus::Unhealthy
+    );
 }
 
 #[tokio::test]
@@ -269,7 +278,10 @@ async fn graceful_shutdown_via_stop() {
     server.start().await.expect("start");
 
     // Health is healthy while running
-    assert_eq!(server.health().status, rskit_bootstrap::HealthStatus::Healthy);
+    assert_eq!(
+        server.health().status,
+        rskit_bootstrap::HealthStatus::Healthy
+    );
 
     server.stop().await.expect("stop");
 
@@ -277,7 +289,10 @@ async fn graceful_shutdown_via_stop() {
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     // After cancel, the task should have finished
-    assert_eq!(server.health().status, rskit_bootstrap::HealthStatus::Unhealthy);
+    assert_eq!(
+        server.health().status,
+        rskit_bootstrap::HealthStatus::Unhealthy
+    );
 }
 
 #[tokio::test]
@@ -290,7 +305,11 @@ async fn stop_completes_within_timeout() {
     let elapsed = start.elapsed();
 
     // Should complete well within the 10s timeout
-    assert!(elapsed < Duration::from_secs(5), "stop took too long: {:?}", elapsed);
+    assert!(
+        elapsed < Duration::from_secs(5),
+        "stop took too long: {:?}",
+        elapsed
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -310,7 +329,10 @@ async fn builder_no_services_server_waits_for_cancel() {
 
     // Server with no services should be running (waiting for cancel)
     tokio::time::sleep(Duration::from_millis(50)).await;
-    assert_eq!(server.health().status, rskit_bootstrap::HealthStatus::Healthy);
+    assert_eq!(
+        server.health().status,
+        rskit_bootstrap::HealthStatus::Healthy
+    );
 
     server.stop().await.expect("stop");
 }

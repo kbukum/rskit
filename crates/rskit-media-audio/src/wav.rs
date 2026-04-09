@@ -130,12 +130,9 @@ impl WavReader {
                 let available = data.len().saturating_sub(data_start);
                 return Ok((data_start, size.min(available)));
             }
-            let chunk_size = u32::from_le_bytes([
-                data[pos + 4],
-                data[pos + 5],
-                data[pos + 6],
-                data[pos + 7],
-            ]) as usize;
+            let chunk_size =
+                u32::from_le_bytes([data[pos + 4], data[pos + 5], data[pos + 6], data[pos + 7]])
+                    as usize;
             // Chunks are word-aligned
             pos += 8 + ((chunk_size + 1) & !1);
         }
@@ -172,7 +169,8 @@ impl WavReader {
                     val as f32 / i16::MAX as f32
                 }
                 24 => {
-                    let val = i32::from_le_bytes([0, data[offset], data[offset + 1], data[offset + 2]]);
+                    let val =
+                        i32::from_le_bytes([0, data[offset], data[offset + 1], data[offset + 2]]);
                     // Sign-extend from 24-bit
                     let val = if val & 0x0080_0000 != 0 {
                         val | (0xFF << 24) as i32

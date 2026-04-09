@@ -6,7 +6,7 @@
 
 use axum::{
     extract::FromRequestParts,
-    http::{request::Parts, StatusCode},
+    http::{StatusCode, request::Parts},
 };
 
 /// Newtype wrapping a tenant ID string.

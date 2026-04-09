@@ -5,13 +5,8 @@
 
 use rskit_file::{FileSink, FileSource};
 use rskit_media::{
-    filter::filters,
-    ops::ResizeMode,
-    pipeline::MediaPipeline,
-    presets,
-    spatial::Resolution,
-    time::TimeRange,
-    Registry,
+    Registry, filter::filters, ops::ResizeMode, pipeline::MediaPipeline, presets,
+    spatial::Resolution, time::TimeRange,
 };
 use rskit_media_ffmpeg::{FfmpegConfig, FfmpegExecutor};
 

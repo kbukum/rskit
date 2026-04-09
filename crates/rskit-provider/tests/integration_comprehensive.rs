@@ -3,11 +3,11 @@
 //! Covers: traits, adapt helpers, TowerProvider, middleware (logging, resilience, tracing),
 //! composition, edge cases, and concurrency.
 
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 
-use futures::{stream, StreamExt};
+use futures::{StreamExt, stream};
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_provider::middleware::logging::LoggingLayer;
 use rskit_provider::middleware::resilience::{ResilienceConfig, ResilienceLayer};
@@ -16,7 +16,7 @@ use rskit_provider::traits::{
     BoxStream, Closeable, Duplex, DuplexChannel, Initializable, Provider, RequestResponse, Sink,
     StreamProvider,
 };
-use rskit_provider::{request_response_fn, sink_fn, TowerProvider};
+use rskit_provider::{TowerProvider, request_response_fn, sink_fn};
 use rskit_resilience::{CbConfig, CircuitBreaker, RateLimiter, RetryPolicy};
 use tower::ServiceBuilder;
 
@@ -440,8 +440,7 @@ async fn tower_provider_name_and_available() {
 
 #[tokio::test]
 async fn tower_provider_string_types() {
-    let svc =
-        tower::service_fn(|s: String| async move { Ok::<_, AppError>(format!("echo: {s}")) });
+    let svc = tower::service_fn(|s: String| async move { Ok::<_, AppError>(format!("echo: {s}")) });
     let p = TowerProvider::new("echo-tower", svc);
     assert_eq!(
         p.execute("hi".into()).await.unwrap(),

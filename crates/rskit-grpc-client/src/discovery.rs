@@ -7,8 +7,8 @@ use tokio::sync::RwLock;
 use tonic::transport::Channel;
 use tracing::{debug, warn};
 
-use crate::config::GrpcClientConfig;
 use crate::channel::GrpcChannel;
+use crate::config::GrpcClientConfig;
 
 /// Discovery-enabled gRPC channel that resolves service instances dynamically.
 ///

@@ -44,10 +44,7 @@ fn config_connection_url_custom_host_port_db() {
         database: 5,
         ..Default::default()
     };
-    assert_eq!(
-        cfg.connection_url(),
-        "redis://redis.prod.internal:6380/5"
-    );
+    assert_eq!(cfg.connection_url(), "redis://redis.prod.internal:6380/5");
 }
 
 #[test]
@@ -266,9 +263,7 @@ fn json_round_trip_nested_struct() {
         name: "test".into(),
         score: 99.5,
         active: true,
-        inner: Some(Inner {
-            key: "deep".into(),
-        }),
+        inner: Some(Inner { key: "deep".into() }),
         metadata: meta,
     };
     let json = serde_json::to_string(&val).unwrap();
@@ -338,10 +333,7 @@ fn app_error_from_redis_error() {
     use rskit_errors::{AppError, ErrorCode};
 
     // Verify we can construct the same error type used by redis_err helper
-    let err = AppError::new(
-        ErrorCode::ExternalService,
-        "redis error: test".to_string(),
-    );
+    let err = AppError::new(ErrorCode::ExternalService, "redis error: test".to_string());
     assert_eq!(err.code, ErrorCode::ExternalService);
     assert!(err.message.contains("redis error"));
 }

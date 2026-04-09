@@ -100,13 +100,12 @@ impl FfmpegConfig {
 
     /// Effective max concurrent processes.
     pub fn effective_max_concurrent(&self) -> usize {
-        self.max_concurrent
-            .unwrap_or_else(|| {
-                let cpus = std::thread::available_parallelism()
-                    .map(|n| n.get())
-                    .unwrap_or(4);
-                (cpus / 2).max(1)
-            })
+        self.max_concurrent.unwrap_or_else(|| {
+            let cpus = std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(4);
+            (cpus / 2).max(1)
+        })
     }
 }
 

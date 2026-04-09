@@ -3,8 +3,8 @@
 //! Covers: CircuitBreaker, RetryPolicy, Bulkhead, RateLimiter,
 //! Tower layers, and multi-pattern composition.
 
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use rskit_errors::{AppError, ErrorCode};
@@ -308,11 +308,7 @@ async fn retry_success_on_nth_attempt() {
             let c = c.clone();
             async move {
                 let n = c.fetch_add(1, Ordering::SeqCst);
-                if n < 3 {
-                    Err(fail_err())
-                } else {
-                    Ok(100)
-                }
+                if n < 3 { Err(fail_err()) } else { Ok(100) }
             }
         })
         .await;
@@ -486,9 +482,8 @@ async fn retry_non_retryable_immediate_failure() {
 
 #[tokio::test]
 async fn bh_exactly_max_concurrent_succeed() {
-    let bh = Bulkhead::new(
-        BulkheadConfig::new("exact", 3).with_max_wait(Duration::from_millis(100)),
-    );
+    let bh =
+        Bulkhead::new(BulkheadConfig::new("exact", 3).with_max_wait(Duration::from_millis(100)));
     let running = Arc::new(AtomicUsize::new(0));
     let max_running = Arc::new(AtomicUsize::new(0));
     let barrier = Arc::new(tokio::sync::Notify::new());
@@ -522,9 +517,8 @@ async fn bh_exactly_max_concurrent_succeed() {
 
 #[tokio::test]
 async fn bh_overflow_rate_limited_after_timeout() {
-    let bh = Bulkhead::new(
-        BulkheadConfig::new("overflow", 1).with_max_wait(Duration::from_millis(20)),
-    );
+    let bh =
+        Bulkhead::new(BulkheadConfig::new("overflow", 1).with_max_wait(Duration::from_millis(20)));
     let barrier = Arc::new(tokio::sync::Notify::new());
 
     let bh2 = bh.clone();
@@ -596,8 +590,7 @@ async fn bh_available_in_use_accuracy() {
 
 #[tokio::test]
 async fn bh_callback_ordering() {
-    let events: Arc<parking_lot::Mutex<Vec<&str>>> =
-        Arc::new(parking_lot::Mutex::new(Vec::new()));
+    let events: Arc<parking_lot::Mutex<Vec<&str>>> = Arc::new(parking_lot::Mutex::new(Vec::new()));
     let e1 = events.clone();
     let e2 = events.clone();
     let e3 = events.clone();
@@ -682,9 +675,7 @@ async fn bh_without_wait_limit_waits_for_slot() {
 
 #[tokio::test]
 async fn bh_concurrent_stress_100_tasks_10_slots() {
-    let bh = Bulkhead::new(
-        BulkheadConfig::new("stress", 10).with_max_wait(Duration::from_secs(5)),
-    );
+    let bh = Bulkhead::new(BulkheadConfig::new("stress", 10).with_max_wait(Duration::from_secs(5)));
     let completed = Arc::new(AtomicUsize::new(0));
     let peak = Arc::new(AtomicUsize::new(0));
     let running = Arc::new(AtomicUsize::new(0));
@@ -832,11 +823,7 @@ async fn layer_retry_wraps_service() {
         let c = c.clone();
         async move {
             let n = c.fetch_add(1, Ordering::SeqCst);
-            if n < 2 {
-                Err(fail_err())
-            } else {
-                Ok(99)
-            }
+            if n < 2 { Err(fail_err()) } else { Ok(99) }
         }
     });
 
@@ -868,9 +855,8 @@ async fn layer_cb_opens_on_failures() {
 
 #[tokio::test]
 async fn layer_bulkhead_limits_concurrency() {
-    let bh = Bulkhead::new(
-        BulkheadConfig::new("layer-bh", 1).with_max_wait(Duration::from_millis(20)),
-    );
+    let bh =
+        Bulkhead::new(BulkheadConfig::new("layer-bh", 1).with_max_wait(Duration::from_millis(20)));
     let barrier = Arc::new(tokio::sync::Notify::new());
 
     let svc = {
@@ -1063,15 +1049,17 @@ async fn multi_cb_plus_retry_exhausts_then_fast_fail() {
     assert!(result.is_err());
     // After 3 failures the CB opens — remaining retries get fast-fail
     let calls = counter.load(Ordering::SeqCst);
-    assert_eq!(calls, 3, "only 3 actual calls should execute before CB opens");
+    assert_eq!(
+        calls, 3,
+        "only 3 actual calls should execute before CB opens"
+    );
     assert_eq!(cb.state(), CbState::Open);
 }
 
 #[tokio::test]
 async fn multi_bulkhead_plus_rate_limiter_both_limits_enforced() {
-    let bh = Bulkhead::new(
-        BulkheadConfig::new("bh-rl", 2).with_max_wait(Duration::from_millis(50)),
-    );
+    let bh =
+        Bulkhead::new(BulkheadConfig::new("bh-rl", 2).with_max_wait(Duration::from_millis(50)));
     let rl = RateLimiter::new("rl-bh", 1, 3);
 
     let mut successes = 0;
@@ -1152,7 +1140,10 @@ async fn multi_load_test_sustained_traffic() {
         h.await.unwrap();
     }
 
-    assert!(completed.load(Ordering::SeqCst) >= 50, "most should succeed");
+    assert!(
+        completed.load(Ordering::SeqCst) >= 50,
+        "most should succeed"
+    );
     assert_eq!(cb.state(), CbState::Closed);
 }
 
@@ -1168,9 +1159,8 @@ async fn multi_error_types_from_each_pattern() {
     assert_eq!(cb_err.code, ErrorCode::ServiceUnavailable);
 
     // Bulkhead timeout error
-    let bh = Bulkhead::new(
-        BulkheadConfig::new("err-bh", 1).with_max_wait(Duration::from_millis(10)),
-    );
+    let bh =
+        Bulkhead::new(BulkheadConfig::new("err-bh", 1).with_max_wait(Duration::from_millis(10)));
     let barrier = Arc::new(tokio::sync::Notify::new());
     let bh2 = bh.clone();
     let b = barrier.clone();

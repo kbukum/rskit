@@ -7,10 +7,12 @@
 use std::sync::{Arc, Mutex};
 
 use rskit_config::{LogFormat, LogOutput, LoggingConfig};
-use rskit_logging::context::{component_span, request_span, set_correlation_id, set_trace_id, set_user_id};
+use rskit_logging::context::{
+    component_span, request_span, set_correlation_id, set_trace_id, set_user_id,
+};
 use rskit_logging::init_logging;
 use tracing::subscriber::with_default;
-use tracing::{info_span, Subscriber};
+use tracing::{Subscriber, info_span};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::{EnvFilter, Layer, Registry};
 
@@ -46,7 +48,11 @@ struct CapturingLayer {
 impl<S: Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>> Layer<S>
     for CapturingLayer
 {
-    fn on_event(&self, event: &tracing::Event<'_>, _ctx: tracing_subscriber::layer::Context<'_, S>) {
+    fn on_event(
+        &self,
+        event: &tracing::Event<'_>,
+        _ctx: tracing_subscriber::layer::Context<'_, S>,
+    ) {
         let mut visitor = FieldVisitor::default();
         event.record(&mut visitor);
 
@@ -104,9 +110,7 @@ fn test_subscriber(filter: &str) -> (impl Subscriber + Send + Sync, CapturedLogs
     let layer = CapturingLayer {
         logs: captured.clone(),
     };
-    let subscriber = Registry::default()
-        .with(EnvFilter::new(filter))
-        .with(layer);
+    let subscriber = Registry::default().with(EnvFilter::new(filter)).with(layer);
     (subscriber, captured)
 }
 
@@ -420,11 +424,19 @@ fn request_span_captures_http_metadata() {
     assert!(!spans.is_empty());
     assert_eq!(spans[0].name, "request");
 
-    let field_map: std::collections::HashMap<_, _> =
-        spans[0].fields.iter().cloned().collect();
-    assert_eq!(field_map.get("http.method").map(|s| s.as_str()), Some("GET"));
-    assert_eq!(field_map.get("http.path").map(|s| s.as_str()), Some("/api/v1/health"));
-    assert_eq!(field_map.get("request_id").map(|s| s.as_str()), Some("req-001"));
+    let field_map: std::collections::HashMap<_, _> = spans[0].fields.iter().cloned().collect();
+    assert_eq!(
+        field_map.get("http.method").map(|s| s.as_str()),
+        Some("GET")
+    );
+    assert_eq!(
+        field_map.get("http.path").map(|s| s.as_str()),
+        Some("/api/v1/health")
+    );
+    assert_eq!(
+        field_map.get("request_id").map(|s| s.as_str()),
+        Some("req-001")
+    );
 }
 
 #[test]
@@ -560,10 +572,15 @@ fn unicode_in_span_fields() {
         tracing::info!("unicode span test");
     });
     let spans = captured.spans.lock().unwrap();
-    let field_map: std::collections::HashMap<_, _> =
-        spans[0].fields.iter().cloned().collect();
-    assert_eq!(field_map.get("http.path").map(|s| s.as_str()), Some("/路径/テスト"));
-    assert_eq!(field_map.get("request_id").map(|s| s.as_str()), Some("req-ünïcödé"));
+    let field_map: std::collections::HashMap<_, _> = spans[0].fields.iter().cloned().collect();
+    assert_eq!(
+        field_map.get("http.path").map(|s| s.as_str()),
+        Some("/路径/テスト")
+    );
+    assert_eq!(
+        field_map.get("request_id").map(|s| s.as_str()),
+        Some("req-ünïcödé")
+    );
 }
 
 #[test]

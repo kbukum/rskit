@@ -250,10 +250,7 @@ impl Dag {
                             join_set.spawn(async move {
                                 let _permit = match sem {
                                     Some(ref s) => Some(s.acquire().await.map_err(|_| {
-                                        AppError::new(
-                                            ErrorCode::Internal,
-                                            "DAG semaphore closed",
-                                        )
+                                        AppError::new(ErrorCode::Internal, "DAG semaphore closed")
                                     })?),
                                     None => None,
                                 };

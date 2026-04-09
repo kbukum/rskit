@@ -278,10 +278,7 @@ impl MediaPipeline {
     /// This is a convenience wrapper around `transcode()` that configures
     /// the output for streaming.
     #[must_use]
-    pub fn stream_to(
-        mut self,
-        config: OutputConfig,
-    ) -> Self {
+    pub fn stream_to(mut self, config: OutputConfig) -> Self {
         self.ops.push(MediaOp::Transcode(config));
         self
     }
@@ -318,15 +315,20 @@ impl MediaPipeline {
             match op {
                 MediaOp::StripAudio => has_strip_audio = true,
                 MediaOp::StripVideo => has_strip_video = true,
-                MediaOp::Volume(_) | MediaOp::NormalizeAudio | MediaOp::MixAudio(_)
-                | MediaOp::ReplaceAudio(_) if has_strip_audio => {
+                MediaOp::Volume(_)
+                | MediaOp::NormalizeAudio
+                | MediaOp::MixAudio(_)
+                | MediaOp::ReplaceAudio(_)
+                    if has_strip_audio =>
+                {
                     return Err(rskit_errors::AppError::new(
                         rskit_errors::ErrorCode::InvalidInput,
                         "audio operation after StripAudio has no effect",
                     ));
                 }
-                MediaOp::Resize(_) | MediaOp::Crop(_) | MediaOp::Rotate(_)
-                | MediaOp::Flip(_) if has_strip_video => {
+                MediaOp::Resize(_) | MediaOp::Crop(_) | MediaOp::Rotate(_) | MediaOp::Flip(_)
+                    if has_strip_video =>
+                {
                     return Err(rskit_errors::AppError::new(
                         rskit_errors::ErrorCode::InvalidInput,
                         "video operation after StripVideo has no effect",

@@ -50,7 +50,12 @@ fn required_passes_for_single_char() {
 
 #[test]
 fn min_length_passes_at_boundary() {
-    assert!(Validator::new().min_length("pw", "abc", 3).validate().is_ok());
+    assert!(
+        Validator::new()
+            .min_length("pw", "abc", 3)
+            .validate()
+            .is_ok()
+    );
 }
 
 #[test]
@@ -65,7 +70,12 @@ fn min_length_fails_below_boundary() {
 
 #[test]
 fn min_length_passes_above_boundary() {
-    assert!(Validator::new().min_length("pw", "abcd", 3).validate().is_ok());
+    assert!(
+        Validator::new()
+            .min_length("pw", "abcd", 3)
+            .validate()
+            .is_ok()
+    );
 }
 
 #[test]
@@ -80,7 +90,12 @@ fn min_length_passes_with_zero_min() {
 
 #[test]
 fn max_length_passes_at_boundary() {
-    assert!(Validator::new().max_length("bio", "abc", 3).validate().is_ok());
+    assert!(
+        Validator::new()
+            .max_length("bio", "abc", 3)
+            .validate()
+            .is_ok()
+    );
 }
 
 #[test]
@@ -95,27 +110,57 @@ fn max_length_fails_above_boundary() {
 
 #[test]
 fn max_length_passes_below_boundary() {
-    assert!(Validator::new().max_length("bio", "ab", 3).validate().is_ok());
+    assert!(
+        Validator::new()
+            .max_length("bio", "ab", 3)
+            .validate()
+            .is_ok()
+    );
 }
 
 #[test]
 fn max_length_passes_on_empty_string() {
-    assert!(Validator::new().max_length("bio", "", 10).validate().is_ok());
+    assert!(
+        Validator::new()
+            .max_length("bio", "", 10)
+            .validate()
+            .is_ok()
+    );
 }
 
 #[test]
 fn min_length_counts_unicode_chars_not_bytes() {
     // "héllo" is 5 chars but 6 bytes (é = 2 bytes)
-    assert!(Validator::new().min_length("f", "héllo", 5).validate().is_ok());
-    assert!(Validator::new().min_length("f", "héllo", 6).validate().is_err());
+    assert!(
+        Validator::new()
+            .min_length("f", "héllo", 5)
+            .validate()
+            .is_ok()
+    );
+    assert!(
+        Validator::new()
+            .min_length("f", "héllo", 6)
+            .validate()
+            .is_err()
+    );
 }
 
 #[test]
 fn max_length_counts_unicode_chars_not_bytes() {
     // 4 emoji chars (each 4 bytes = 16 bytes total, but 4 chars)
     let emoji = "🎉🎊🎈🎁";
-    assert!(Validator::new().max_length("f", emoji, 4).validate().is_ok());
-    assert!(Validator::new().max_length("f", emoji, 3).validate().is_err());
+    assert!(
+        Validator::new()
+            .max_length("f", emoji, 4)
+            .validate()
+            .is_ok()
+    );
+    assert!(
+        Validator::new()
+            .max_length("f", emoji, 3)
+            .validate()
+            .is_err()
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -124,7 +169,12 @@ fn max_length_counts_unicode_chars_not_bytes() {
 
 #[test]
 fn email_passes_for_valid_address() {
-    assert!(Validator::new().email("email", "user@example.com").validate().is_ok());
+    assert!(
+        Validator::new()
+            .email("email", "user@example.com")
+            .validate()
+            .is_ok()
+    );
 }
 
 #[test]
@@ -187,17 +237,32 @@ fn email_passes_for_dots_in_local() {
 
 #[test]
 fn url_passes_for_https() {
-    assert!(Validator::new().url("site", "https://example.com").validate().is_ok());
+    assert!(
+        Validator::new()
+            .url("site", "https://example.com")
+            .validate()
+            .is_ok()
+    );
 }
 
 #[test]
 fn url_passes_for_http() {
-    assert!(Validator::new().url("site", "http://example.com").validate().is_ok());
+    assert!(
+        Validator::new()
+            .url("site", "http://example.com")
+            .validate()
+            .is_ok()
+    );
 }
 
 #[test]
 fn url_fails_for_ftp() {
-    assert!(Validator::new().url("site", "ftp://example.com").validate().is_err());
+    assert!(
+        Validator::new()
+            .url("site", "ftp://example.com")
+            .validate()
+            .is_err()
+    );
 }
 
 #[test]
@@ -207,7 +272,12 @@ fn url_fails_for_empty() {
 
 #[test]
 fn url_fails_for_plain_text() {
-    assert!(Validator::new().url("site", "not a url").validate().is_err());
+    assert!(
+        Validator::new()
+            .url("site", "not a url")
+            .validate()
+            .is_err()
+    );
 }
 
 #[test]
@@ -226,7 +296,12 @@ fn url_fails_for_javascript_protocol() {
 
 #[test]
 fn pattern_passes_when_value_matches_regex() {
-    assert!(Validator::new().pattern("zip", "90210", r"^\d{5}$").validate().is_ok());
+    assert!(
+        Validator::new()
+            .pattern("zip", "90210", r"^\d{5}$")
+            .validate()
+            .is_ok()
+    );
 }
 
 #[test]
@@ -255,7 +330,12 @@ fn pattern_passes_on_empty_string_matching_empty_pattern() {
 
 #[test]
 fn pattern_matches_unicode() {
-    assert!(Validator::new().pattern("f", "café", r"café").validate().is_ok());
+    assert!(
+        Validator::new()
+            .pattern("f", "café", r"café")
+            .validate()
+            .is_ok()
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -295,8 +375,18 @@ fn one_of_fails_for_empty_allowed_list() {
 
 #[test]
 fn one_of_works_with_integers() {
-    assert!(Validator::new().one_of("level", &3, &[1, 2, 3]).validate().is_ok());
-    assert!(Validator::new().one_of("level", &4, &[1, 2, 3]).validate().is_err());
+    assert!(
+        Validator::new()
+            .one_of("level", &3, &[1, 2, 3])
+            .validate()
+            .is_ok()
+    );
+    assert!(
+        Validator::new()
+            .one_of("level", &4, &[1, 2, 3])
+            .validate()
+            .is_err()
+    );
 }
 
 #[test]
@@ -316,17 +406,32 @@ fn one_of_error_message_lists_allowed_values() {
 
 #[test]
 fn in_range_passes_within_bounds() {
-    assert!(Validator::new().in_range("age", 25, 1, 120).validate().is_ok());
+    assert!(
+        Validator::new()
+            .in_range("age", 25, 1, 120)
+            .validate()
+            .is_ok()
+    );
 }
 
 #[test]
 fn in_range_passes_at_min_boundary() {
-    assert!(Validator::new().in_range("age", 1, 1, 120).validate().is_ok());
+    assert!(
+        Validator::new()
+            .in_range("age", 1, 1, 120)
+            .validate()
+            .is_ok()
+    );
 }
 
 #[test]
 fn in_range_passes_at_max_boundary() {
-    assert!(Validator::new().in_range("age", 120, 1, 120).validate().is_ok());
+    assert!(
+        Validator::new()
+            .in_range("age", 120, 1, 120)
+            .validate()
+            .is_ok()
+    );
 }
 
 #[test]
@@ -341,20 +446,50 @@ fn in_range_fails_below_min() {
 
 #[test]
 fn in_range_fails_above_max() {
-    assert!(Validator::new().in_range("age", 200, 1, 120).validate().is_err());
+    assert!(
+        Validator::new()
+            .in_range("age", 200, 1, 120)
+            .validate()
+            .is_err()
+    );
 }
 
 #[test]
 fn in_range_works_with_floats() {
-    assert!(Validator::new().in_range("score", 0.5_f64, 0.0, 1.0).validate().is_ok());
-    assert!(Validator::new().in_range("score", 1.1_f64, 0.0, 1.0).validate().is_err());
-    assert!(Validator::new().in_range("score", -0.1_f64, 0.0, 1.0).validate().is_err());
+    assert!(
+        Validator::new()
+            .in_range("score", 0.5_f64, 0.0, 1.0)
+            .validate()
+            .is_ok()
+    );
+    assert!(
+        Validator::new()
+            .in_range("score", 1.1_f64, 0.0, 1.0)
+            .validate()
+            .is_err()
+    );
+    assert!(
+        Validator::new()
+            .in_range("score", -0.1_f64, 0.0, 1.0)
+            .validate()
+            .is_err()
+    );
 }
 
 #[test]
 fn in_range_works_with_negative_values() {
-    assert!(Validator::new().in_range("temp", -10, -20, 50).validate().is_ok());
-    assert!(Validator::new().in_range("temp", -21, -20, 50).validate().is_err());
+    assert!(
+        Validator::new()
+            .in_range("temp", -10, -20, 50)
+            .validate()
+            .is_ok()
+    );
+    assert!(
+        Validator::new()
+            .in_range("temp", -21, -20, 50)
+            .validate()
+            .is_err()
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -388,7 +523,12 @@ fn required_uuid_fails_for_empty_string() {
 
 #[test]
 fn optional_uuid_passes_for_none() {
-    assert!(Validator::new().optional_uuid("id", None).validate().is_ok());
+    assert!(
+        Validator::new()
+            .optional_uuid("id", None)
+            .validate()
+            .is_ok()
+    );
 }
 
 #[test]
@@ -534,7 +674,12 @@ fn after_skips_when_floor_is_invalid() {
 
 #[test]
 fn custom_passes_when_check_is_true() {
-    assert!(Validator::new().custom("tos", true, "must accept terms").validate().is_ok());
+    assert!(
+        Validator::new()
+            .custom("tos", true, "must accept terms")
+            .validate()
+            .is_ok()
+    );
 }
 
 #[test]
@@ -883,7 +1028,12 @@ fn empty_string_max_length_zero_passes() {
 
 #[test]
 fn required_passes_for_unicode_content() {
-    assert!(Validator::new().required("name", "日本語").validate().is_ok());
+    assert!(
+        Validator::new()
+            .required("name", "日本語")
+            .validate()
+            .is_ok()
+    );
 }
 
 #[test]
@@ -911,15 +1061,30 @@ fn unicode_field_names_work() {
 fn zero_width_space_is_not_empty_for_required() {
     // Zero-width space (U+200B) is not whitespace per Unicode,
     // so trim() won't remove it => it should pass required
-    assert!(Validator::new().required("f", "\u{200B}").validate().is_ok());
+    assert!(
+        Validator::new()
+            .required("f", "\u{200B}")
+            .validate()
+            .is_ok()
+    );
 }
 
 #[test]
 fn combining_characters_count_as_individual_chars() {
     // "é" as e + combining acute = 2 chars
     let decomposed = "e\u{0301}"; // 2 chars
-    assert!(Validator::new().min_length("f", decomposed, 2).validate().is_ok());
-    assert!(Validator::new().max_length("f", decomposed, 1).validate().is_err());
+    assert!(
+        Validator::new()
+            .min_length("f", decomposed, 2)
+            .validate()
+            .is_ok()
+    );
+    assert!(
+        Validator::new()
+            .max_length("f", decomposed, 1)
+            .validate()
+            .is_err()
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -935,19 +1100,39 @@ fn very_long_string_passes_required() {
 #[test]
 fn very_long_string_fails_max_length() {
     let long = "a".repeat(1_000_000);
-    assert!(Validator::new().max_length("f", &long, 999_999).validate().is_err());
+    assert!(
+        Validator::new()
+            .max_length("f", &long, 999_999)
+            .validate()
+            .is_err()
+    );
 }
 
 #[test]
 fn very_long_string_passes_min_length() {
     let long = "a".repeat(1_000_000);
-    assert!(Validator::new().min_length("f", &long, 999_999).validate().is_ok());
+    assert!(
+        Validator::new()
+            .min_length("f", &long, 999_999)
+            .validate()
+            .is_ok()
+    );
 }
 
 #[test]
 fn very_large_range_values() {
-    assert!(Validator::new().in_range("x", i64::MAX, i64::MIN, i64::MAX).validate().is_ok());
-    assert!(Validator::new().in_range("x", i64::MIN, i64::MIN, i64::MAX).validate().is_ok());
+    assert!(
+        Validator::new()
+            .in_range("x", i64::MAX, i64::MIN, i64::MAX)
+            .validate()
+            .is_ok()
+    );
+    assert!(
+        Validator::new()
+            .in_range("x", i64::MIN, i64::MIN, i64::MAX)
+            .validate()
+            .is_ok()
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -956,17 +1141,32 @@ fn very_large_range_values() {
 
 #[test]
 fn optional_uuid_none_always_passes() {
-    assert!(Validator::new().optional_uuid("id", None).validate().is_ok());
+    assert!(
+        Validator::new()
+            .optional_uuid("id", None)
+            .validate()
+            .is_ok()
+    );
 }
 
 #[test]
 fn optional_uuid_some_empty_fails() {
-    assert!(Validator::new().optional_uuid("id", Some("")).validate().is_err());
+    assert!(
+        Validator::new()
+            .optional_uuid("id", Some(""))
+            .validate()
+            .is_err()
+    );
 }
 
 #[test]
 fn optional_uuid_some_whitespace_fails() {
-    assert!(Validator::new().optional_uuid("id", Some("  ")).validate().is_err());
+    assert!(
+        Validator::new()
+            .optional_uuid("id", Some("  "))
+            .validate()
+            .is_err()
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

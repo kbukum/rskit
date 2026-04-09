@@ -1,6 +1,6 @@
 [package]
 name        = "rskit-hook"
-description = "Event hook system for agentic pipelines — pre/post tool calls, LLM calls, errors, turns"
+description = "Generic event hook system — register handlers and emit events with zero domain dependencies"
 version.workspace      = true
 edition.workspace      = true
 license.workspace      = true
@@ -18,13 +18,5 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-rskit-errors = { path = "../rskit-errors" }
-rskit-llm    = { path = "../rskit-llm" }
-rskit-tool   = { path = "../rskit-tool" }
-serde        = { workspace = true }
-serde_json   = { workspace = true }
 parking_lot  = { workspace = true }
 tracing      = { workspace = true }
-
-[dev-dependencies]
-tokio = { workspace = true }

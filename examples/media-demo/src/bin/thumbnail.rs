@@ -5,12 +5,8 @@
 
 use rskit_file::{FileSink, FileSource};
 use rskit_media::{
-    ops::ResizeMode,
-    pipeline::MediaPipeline,
-    presets,
-    spatial::Resolution,
+    Registry, ops::ResizeMode, pipeline::MediaPipeline, presets, spatial::Resolution,
     time::TimeRange,
-    Registry,
 };
 use rskit_media_ffmpeg::{FfmpegConfig, FfmpegExecutor};
 
@@ -19,10 +15,7 @@ async fn main() -> rskit_errors::AppResult<()> {
     let args: Vec<String> = std::env::args().collect();
     let input = args.get(1).map(String::as_str).unwrap_or("input.mp4");
     let output = args.get(2).map(String::as_str).unwrap_or("thumb.jpg");
-    let time: f64 = args
-        .get(3)
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(5.0);
+    let time: f64 = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(5.0);
 
     let source = FileSource::from_path(input);
     let sink = FileSink::Path(output.into());

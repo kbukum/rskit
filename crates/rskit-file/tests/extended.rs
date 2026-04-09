@@ -307,7 +307,9 @@ async fn detect_kind_document_variants() {
         FileKind::Document
     );
     assert_eq!(
-        FileKind::from_mime("application/vnd.openxmlformats-officedocument.presentationml.presentation"),
+        FileKind::from_mime(
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        ),
         FileKind::Document
     );
 }
@@ -331,10 +333,7 @@ async fn detect_kind_archive_variants() {
 #[tokio::test]
 async fn detect_kind_text_application_variants() {
     assert_eq!(FileKind::from_mime("application/xml"), FileKind::Text);
-    assert_eq!(
-        FileKind::from_mime("application/x-yaml"),
-        FileKind::Text
-    );
+    assert_eq!(FileKind::from_mime("application/x-yaml"), FileKind::Text);
     assert_eq!(
         FileKind::from_mime("application/javascript"),
         FileKind::Text
@@ -594,18 +593,11 @@ async fn store_list_empty_prefix_returns_root_files() {
     let store = make_store(dir.path());
 
     let source = FileSource::from_bytes(Bytes::from_static(b"root"));
-    store
-        .upload(&source, "root.txt", None, None)
-        .await
-        .unwrap();
+    store.upload(&source, "root.txt", None, None).await.unwrap();
 
     // List with empty prefix — lists the root dir
     let items = store.list("", None).await.unwrap();
-    assert!(
-        items.len() >= 1,
-        "expected at least 1, got {}",
-        items.len()
-    );
+    assert!(items.len() >= 1, "expected at least 1, got {}", items.len());
 }
 
 #[tokio::test]
@@ -647,8 +639,20 @@ async fn store_copy_preserves_content() {
     assert_eq!(copied.size, data.len() as u64);
 
     // Verify both exist with correct content
-    let orig = store.download("orig.txt").await.unwrap().read_all().await.unwrap();
-    let copy = store.download("copy.txt").await.unwrap().read_all().await.unwrap();
+    let orig = store
+        .download("orig.txt")
+        .await
+        .unwrap()
+        .read_all()
+        .await
+        .unwrap();
+    let copy = store
+        .download("copy.txt")
+        .await
+        .unwrap()
+        .read_all()
+        .await
+        .unwrap();
     assert_eq!(orig, copy);
 }
 
@@ -658,10 +662,7 @@ async fn store_copy_to_nested_dir() {
     let store = make_store(dir.path());
 
     let source = FileSource::from_bytes(Bytes::from_static(b"nested copy"));
-    store
-        .upload(&source, "flat.txt", None, None)
-        .await
-        .unwrap();
+    store.upload(&source, "flat.txt", None, None).await.unwrap();
 
     store
         .copy("flat.txt", "deep/nested/copy.txt")
@@ -702,14 +703,8 @@ async fn store_rename_to_nested() {
     let store = make_store(dir.path());
 
     let source = FileSource::from_bytes(Bytes::from_static(b"nested rename"));
-    store
-        .upload(&source, "old.txt", None, None)
-        .await
-        .unwrap();
-    store
-        .rename("old.txt", "sub/dir/new.txt")
-        .await
-        .unwrap();
+    store.upload(&source, "old.txt", None, None).await.unwrap();
+    store.rename("old.txt", "sub/dir/new.txt").await.unwrap();
     assert!(store.exists("sub/dir/new.txt").await.unwrap());
 }
 

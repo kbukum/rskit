@@ -39,7 +39,12 @@ struct AlwaysAllowChecker;
 
 #[async_trait]
 impl Checker for AlwaysAllowChecker {
-    async fn check(&self, _subject: &str, _action: &str, _resource: &str) -> rskit_errors::AppResult<()> {
+    async fn check(
+        &self,
+        _subject: &str,
+        _action: &str,
+        _resource: &str,
+    ) -> rskit_errors::AppResult<()> {
         Ok(())
     }
 }
@@ -48,7 +53,12 @@ struct AlwaysDenyChecker;
 
 #[async_trait]
 impl Checker for AlwaysDenyChecker {
-    async fn check(&self, _subject: &str, _action: &str, _resource: &str) -> rskit_errors::AppResult<()> {
+    async fn check(
+        &self,
+        _subject: &str,
+        _action: &str,
+        _resource: &str,
+    ) -> rskit_errors::AppResult<()> {
         Err(rskit_errors::AppError::forbidden("always denied"))
     }
 }
@@ -71,7 +81,12 @@ async fn checker_trait_custom_logic() {
 
     #[async_trait]
     impl Checker for AdminOnlyChecker {
-        async fn check(&self, subject: &str, _action: &str, _resource: &str) -> rskit_errors::AppResult<()> {
+        async fn check(
+            &self,
+            subject: &str,
+            _action: &str,
+            _resource: &str,
+        ) -> rskit_errors::AppResult<()> {
             if subject == "admin" {
                 Ok(())
             } else {
@@ -143,13 +158,23 @@ async fn rbac_deny_specific_action_allow_wildcard() {
 #[tokio::test]
 async fn rbac_wildcard_all_three() {
     let checker = RbacChecker::new(vec![allow("*", "*", "*")]);
-    assert!(checker.check("anyone", "anything", "anywhere").await.is_ok());
+    assert!(
+        checker
+            .check("anyone", "anything", "anywhere")
+            .await
+            .is_ok()
+    );
 }
 
 #[tokio::test]
 async fn rbac_wildcard_deny_all() {
     let checker = RbacChecker::new(vec![deny("*", "*", "*")]);
-    assert!(checker.check("anyone", "anything", "anywhere").await.is_err());
+    assert!(
+        checker
+            .check("anyone", "anything", "anywhere")
+            .await
+            .is_err()
+    );
 }
 
 #[tokio::test]
@@ -221,17 +246,24 @@ async fn rbac_large_policy_set() {
     let checker = RbacChecker::new(policies);
 
     assert!(checker.check("user_0", "read", "resource_0").await.is_ok());
-    assert!(checker.check("user_499", "read", "resource_499").await.is_ok());
+    assert!(
+        checker
+            .check("user_499", "read", "resource_499")
+            .await
+            .is_ok()
+    );
     assert!(checker.check("user_0", "read", "resource_1").await.is_err());
-    assert!(checker.check("nonexistent", "read", "resource_0").await.is_err());
+    assert!(
+        checker
+            .check("nonexistent", "read", "resource_0")
+            .await
+            .is_err()
+    );
 }
 
 #[tokio::test]
 async fn rbac_wildcard_does_not_cross_subjects() {
-    let checker = RbacChecker::new(vec![
-        allow("admin", "*", "*"),
-        allow("viewer", "read", "*"),
-    ]);
+    let checker = RbacChecker::new(vec![allow("admin", "*", "*"), allow("viewer", "read", "*")]);
     // viewer must NOT get write access through admin's wildcard
     assert!(checker.check("viewer", "write", "anything").await.is_err());
     assert!(checker.check("viewer", "read", "anything").await.is_ok());
@@ -462,10 +494,7 @@ async fn security_rbac_wildcard_in_requested_value_no_auto_grant() {
 #[tokio::test]
 async fn security_rbac_deny_escalation_via_wildcard() {
     // A deny("*", "*", "*") must block everything even if allows exist
-    let checker = RbacChecker::new(vec![
-        allow("admin", "*", "*"),
-        deny("*", "*", "*"),
-    ]);
+    let checker = RbacChecker::new(vec![allow("admin", "*", "*"), deny("*", "*", "*")]);
     assert!(checker.check("admin", "read", "anything").await.is_err());
 }
 
@@ -480,16 +509,13 @@ async fn security_abac_privilege_escalation_via_claims() {
             _action: &str,
             _resource: &str,
         ) -> Option<Effect> {
-            claims
-                .get("role")
-                .and_then(|v| v.as_str())
-                .map(|role| {
-                    if role == "admin" {
-                        Effect::Allow
-                    } else {
-                        Effect::Deny
-                    }
-                })
+            claims.get("role").and_then(|v| v.as_str()).map(|role| {
+                if role == "admin" {
+                    Effect::Allow
+                } else {
+                    Effect::Deny
+                }
+            })
         }
     }
 

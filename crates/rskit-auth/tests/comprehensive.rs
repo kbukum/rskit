@@ -309,7 +309,9 @@ fn reset_token_is_base64url() {
     let (token, _) = generator.generate();
     // base64url-no-pad: only [A-Za-z0-9_-]
     assert!(
-        token.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-'),
+        token
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-'),
         "token should be base64url: {token}"
     );
 }

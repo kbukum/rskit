@@ -14,11 +14,11 @@ pub mod dedup;
 pub mod metrics;
 /// Retry with exponential backoff.
 pub mod retry;
+/// Middleware stack builder for composing handler pipelines.
+pub mod stack;
 /// Tracing span instrumentation.
 #[allow(clippy::module_inception)]
 pub mod tracing;
-/// Middleware stack builder for composing handler pipelines.
-pub mod stack;
 
 pub use self::tracing::tracing_middleware;
 pub use circuit_breaker::{CircuitBreakerConfig, circuit_breaker};

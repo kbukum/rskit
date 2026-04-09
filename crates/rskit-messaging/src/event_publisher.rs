@@ -128,9 +128,9 @@ impl<P: EventProducer> EventPublisher<P> {
 
 #[cfg(test)]
 mod tests {
-    use async_trait::async_trait;
     use super::*;
     use crate::traits::EventProducer;
+    use async_trait::async_trait;
     use serde::{Deserialize, Serialize};
 
     #[derive(Debug, Serialize, Deserialize, PartialEq)]

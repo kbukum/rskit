@@ -3,8 +3,8 @@
 //! These tests exercise public APIs via `rskit_messaging::*` imports and
 //! complement the 62 inline + 8 integration tests already in the crate.
 
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 
 use rskit_messaging::config::{BrokerConfigExt, KafkaConfig, SecurityProtocol};
@@ -253,8 +253,8 @@ async fn chain_handlers_multiple_middleware_ordering() {
     let order = Arc::new(tokio::sync::Mutex::new(Vec::<String>::new()));
 
     let order_a = order.clone();
-    let mw_a: Arc<dyn HandlerMiddleware<String>> =
-        Arc::new(middleware_fn(move |next: Arc<dyn MessageHandler<String>>| {
+    let mw_a: Arc<dyn HandlerMiddleware<String>> = Arc::new(middleware_fn(
+        move |next: Arc<dyn MessageHandler<String>>| {
             let order_a = order_a.clone();
             let handler: Arc<dyn MessageHandler<String>> =
                 Arc::new(FnHandler::new(move |msg: Message<String>| {
@@ -266,11 +266,12 @@ async fn chain_handlers_multiple_middleware_ordering() {
                     }
                 }));
             handler
-        }));
+        },
+    ));
 
     let order_b = order.clone();
-    let mw_b: Arc<dyn HandlerMiddleware<String>> =
-        Arc::new(middleware_fn(move |next: Arc<dyn MessageHandler<String>>| {
+    let mw_b: Arc<dyn HandlerMiddleware<String>> = Arc::new(middleware_fn(
+        move |next: Arc<dyn MessageHandler<String>>| {
             let order_b = order_b.clone();
             let handler: Arc<dyn MessageHandler<String>> =
                 Arc::new(FnHandler::new(move |msg: Message<String>| {
@@ -282,7 +283,8 @@ async fn chain_handlers_multiple_middleware_ordering() {
                     }
                 }));
             handler
-        }));
+        },
+    ));
 
     let order_base = order.clone();
     let base: Arc<dyn MessageHandler<String>> =
@@ -311,8 +313,8 @@ async fn middleware_fn_works_as_middleware() {
     let counter = Arc::new(AtomicU32::new(0));
     let mw_counter = counter.clone();
 
-    let mw: Arc<dyn HandlerMiddleware<String>> =
-        Arc::new(middleware_fn(move |next: Arc<dyn MessageHandler<String>>| {
+    let mw: Arc<dyn HandlerMiddleware<String>> = Arc::new(middleware_fn(
+        move |next: Arc<dyn MessageHandler<String>>| {
             let mw_counter = mw_counter.clone();
             let handler: Arc<dyn MessageHandler<String>> =
                 Arc::new(FnHandler::new(move |msg: Message<String>| {
@@ -324,7 +326,8 @@ async fn middleware_fn_works_as_middleware() {
                     }
                 }));
             handler
-        }));
+        },
+    ));
 
     let base_counter = Arc::new(AtomicU32::new(0));
     let bc = base_counter.clone();

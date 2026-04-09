@@ -98,12 +98,7 @@ impl DegradationManager {
     }
 
     /// Set the health status for a named service.
-    pub fn update_service(
-        &self,
-        name: &str,
-        health: ServiceHealth,
-        error: Option<String>,
-    ) {
+    pub fn update_service(&self, name: &str, health: ServiceHealth, error: Option<String>) {
         let mut inner = self.inner.write();
         let now = Instant::now();
         let existing = inner.services.get(name);
@@ -129,17 +124,13 @@ impl DegradationManager {
     /// Returns a default Healthy status if the service is not tracked.
     pub fn service_status(&self, name: &str) -> ServiceStatus {
         let inner = self.inner.read();
-        inner
-            .services
-            .get(name)
-            .cloned()
-            .unwrap_or(ServiceStatus {
-                name: name.to_string(),
-                health: ServiceHealth::Healthy,
-                last_check: None,
-                last_change: None,
-                error: None,
-            })
+        inner.services.get(name).cloned().unwrap_or(ServiceStatus {
+            name: name.to_string(),
+            health: ServiceHealth::Healthy,
+            last_check: None,
+            last_change: None,
+            error: None,
+        })
     }
 
     /// Return a snapshot of all tracked service statuses.
@@ -149,13 +140,21 @@ impl DegradationManager {
 
     /// Enable or disable a feature flag.
     pub fn set_feature(&self, name: &str, enabled: bool) {
-        self.inner.write().features.insert(name.to_string(), enabled);
+        self.inner
+            .write()
+            .features
+            .insert(name.to_string(), enabled);
     }
 
     /// Return whether a feature flag is enabled.
     /// Returns `false` for unknown features.
     pub fn feature_enabled(&self, name: &str) -> bool {
-        self.inner.read().features.get(name).copied().unwrap_or(false)
+        self.inner
+            .read()
+            .features
+            .get(name)
+            .copied()
+            .unwrap_or(false)
     }
 
     /// Return `true` only if all tracked services are [`Healthy`](ServiceHealth::Healthy).
@@ -217,7 +216,11 @@ mod tests {
     fn unhealthy_service_makes_aggregate_unhealthy() {
         let dm = DegradationManager::new();
         dm.update_service("db", ServiceHealth::Healthy, None);
-        dm.update_service("redis", ServiceHealth::Unhealthy, Some("connection refused".into()));
+        dm.update_service(
+            "redis",
+            ServiceHealth::Unhealthy,
+            Some("connection refused".into()),
+        );
 
         assert!(!dm.is_healthy());
         let s = dm.service_status("redis");

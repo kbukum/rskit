@@ -4218,6 +4218,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "rskit-agent"
+version = "0.1.0"
+dependencies = [
+ "async-stream",
+ "async-trait",
+ "futures",
+ "rskit-errors",
+ "rskit-hook",
+ "rskit-llm",
+ "rskit-tool",
+ "schemars",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "rskit-anthropic"
 version = "0.1.0"
 dependencies = [
@@ -4511,6 +4529,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "rskit-hook"
+version = "0.1.0"
+dependencies = [
+ "parking_lot",
+ "tracing",
+]
+
+[[package]]
 name = "rskit-http"
 version = "0.1.0"
 dependencies = [
@@ -4592,6 +4618,7 @@ name = "rskit-llm"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "futures",
  "rskit-anthropic",
  "rskit-errors",
  "rskit-openai",

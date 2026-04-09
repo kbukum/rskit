@@ -1,7 +1,7 @@
 //! Extended integration tests for rskit-worker: edge cases, concurrency, events.
 
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 
 use tokio::sync::mpsc;
@@ -9,9 +9,7 @@ use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
-use rskit_worker::{
-    Event, EventKind, Handler, Pool, PoolConfig, Progress, RoundRobinDispatcher,
-};
+use rskit_worker::{Event, EventKind, Handler, Pool, PoolConfig, Progress, RoundRobinDispatcher};
 
 // ── Shared test handlers ──────────────────────────────────────────────────────
 
@@ -141,10 +139,7 @@ async fn submit_and_await_multiple_results() {
 
 #[tokio::test]
 async fn error_task_propagates() {
-    let pool = Pool::new(
-        Arc::new(ErrorHandler),
-        PoolConfig::new("err").with_size(1),
-    );
+    let pool = Pool::new(Arc::new(ErrorHandler), PoolConfig::new("err").with_size(1));
     let handle = pool.submit(1).await.unwrap();
     let result = handle.result().await;
     assert!(result.is_err());
@@ -411,9 +406,10 @@ async fn single_worker_serial_execution() {
 
 #[tokio::test]
 async fn from_provider_roundtrip() {
-    let provider = Arc::new(rskit_provider::request_response_fn("add-one", |x: i32| async move {
-        Ok(x + 1)
-    }));
+    let provider = Arc::new(rskit_provider::request_response_fn(
+        "add-one",
+        |x: i32| async move { Ok(x + 1) },
+    ));
     let handler = rskit_worker::from_provider(provider);
     let pool = Pool::new(Arc::new(handler), PoolConfig::new("fp-roundtrip"));
 

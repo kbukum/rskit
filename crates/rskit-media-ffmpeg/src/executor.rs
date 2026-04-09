@@ -99,12 +99,16 @@ impl FfmpegExecutor {
         let hints = self.build_source_hints(source, ops).await;
 
         // Wrap in Arc so the callback survives hw accel fallback retry
-        let on_progress: Option<Arc<dyn Fn(Progress) + Send + Sync>> =
-            on_progress.map(Arc::from);
+        let on_progress: Option<Arc<dyn Fn(Progress) + Send + Sync>> = on_progress.map(Arc::from);
 
         // First attempt with configured hw_accel
         let cmd = FfmpegCommand::compile_with_hints(
-            source, ops, sink, &self.config, &self.registry, &hints,
+            source,
+            ops,
+            sink,
+            &self.config,
+            &self.registry,
+            &hints,
         )?;
         let progress_cb = on_progress.as_ref().map(|cb| {
             let cb = Arc::clone(cb);
@@ -117,7 +121,11 @@ impl FfmpegExecutor {
             Err(ffmpeg_err) => {
                 // Direct access to classified error kind (no information loss)
                 let should_fallback = self.config.hw_accel_fallback
-                    && self.config.hw_accel.as_ref().is_some_and(|hw| hw.is_hardware())
+                    && self
+                        .config
+                        .hw_accel
+                        .as_ref()
+                        .is_some_and(|hw| hw.is_hardware())
                     && ffmpeg_err.kind.is_retryable();
 
                 if should_fallback && ffmpeg_err.kind.should_fallback_hw_accel() {
@@ -166,8 +174,7 @@ impl FfmpegExecutor {
                     // Re-wrap the callback for the retry attempt
                     let progress_cb = on_progress.as_ref().map(|cb| {
                         let cb = Arc::clone(cb);
-                        Box::new(move |p: Progress| cb(p))
-                            as Box<dyn Fn(Progress) + Send + Sync>
+                        Box::new(move |p: Progress| cb(p)) as Box<dyn Fn(Progress) + Send + Sync>
                     });
 
                     cmd_fallback
@@ -184,12 +191,9 @@ impl FfmpegExecutor {
 
     /// Build source hints by quick-probing when concat/extract-many ops need stream info.
     async fn build_source_hints(&self, source: &FileSource, ops: &[MediaOp]) -> SourceHints {
-        let needs_hints = ops.iter().any(|op| {
-            matches!(
-                op,
-                MediaOp::ExtractMany(_) | MediaOp::Concat(_)
-            )
-        });
+        let needs_hints = ops
+            .iter()
+            .any(|op| matches!(op, MediaOp::ExtractMany(_) | MediaOp::Concat(_)));
         if !needs_hints {
             return SourceHints::default();
         }
@@ -202,9 +206,12 @@ impl FfmpegExecutor {
 
         let output = tokio::process::Command::new(self.config.ffprobe_bin())
             .args([
-                "-v", "quiet",
-                "-show_entries", "stream=codec_type",
-                "-of", "csv=p=0",
+                "-v",
+                "quiet",
+                "-show_entries",
+                "stream=codec_type",
+                "-of",
+                "csv=p=0",
             ])
             .arg(&path)
             .output()

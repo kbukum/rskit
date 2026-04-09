@@ -59,8 +59,7 @@ impl Auth {
             }
             Auth::Basic { username, password } => {
                 let credentials = format!("{}:{}", username, password);
-                let encoded = base64::engine::general_purpose::STANDARD
-                    .encode(&credentials);
+                let encoded = base64::engine::general_purpose::STANDARD.encode(&credentials);
                 if let Ok(value) = format!("Basic {}", encoded).parse() {
                     headers.insert(reqwest::header::AUTHORIZATION, value);
                 }

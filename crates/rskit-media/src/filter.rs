@@ -421,10 +421,7 @@ pub mod filters {
         Filter {
             name: "colorbalance".into(),
             target: FilterTarget::Video,
-            params: Params::new()
-                .set("rs", rs)
-                .set("gs", gs)
-                .set("bs", bs),
+            params: Params::new().set("rs", rs).set("gs", gs).set("bs", bs),
         }
     }
 

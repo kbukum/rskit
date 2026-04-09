@@ -352,8 +352,7 @@ fn with_cause_preserves_cause() {
 
 #[test]
 fn with_detail_adds_entry() {
-    let err =
-        AppError::new(ErrorCode::InvalidInput, "bad").with_detail("field", "name");
+    let err = AppError::new(ErrorCode::InvalidInput, "bad").with_detail("field", "name");
     assert_eq!(
         err.details.get("field").and_then(|v| v.as_str()),
         Some("name")
@@ -646,10 +645,7 @@ fn error_response_with_extensions_roundtrip() {
     let deserialized: ErrorResponse = serde_json::from_str(&json_str).unwrap();
 
     assert_eq!(deserialized.extensions.get("trace_id").unwrap(), "abc-123");
-    assert_eq!(
-        deserialized.instance.as_deref(),
-        Some("/api/v1/users/42")
-    );
+    assert_eq!(deserialized.instance.as_deref(), Some("/api/v1/users/42"));
 }
 
 #[test]
@@ -758,7 +754,12 @@ fn error_code_serde_all_variants() {
     ];
     for (code, expected_str) in all_codes {
         let json = serde_json::to_string(&code).unwrap();
-        assert_eq!(json, format!("\"{}\"", expected_str), "serialize {:?}", code);
+        assert_eq!(
+            json,
+            format!("\"{}\"", expected_str),
+            "serialize {:?}",
+            code
+        );
         let back: ErrorCode = serde_json::from_str(&json).unwrap();
         assert_eq!(back, code, "deserialize {:?}", code);
     }
@@ -843,8 +844,7 @@ fn app_error_serialize_without_details() {
 
 #[test]
 fn app_error_serialize_with_details() {
-    let err = AppError::new(ErrorCode::InvalidInput, "bad")
-        .with_detail("field", "email");
+    let err = AppError::new(ErrorCode::InvalidInput, "bad").with_detail("field", "email");
     let json = serde_json::to_value(&err).unwrap();
     assert_eq!(json["code"], "INVALID_INPUT");
     assert!(json.get("details").is_some());

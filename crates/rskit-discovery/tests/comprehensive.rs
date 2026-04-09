@@ -284,8 +284,14 @@ async fn memory_full_lifecycle() {
     let disco = InMemoryDiscovery::new();
 
     // Register
-    disco.register(&make_instance("lc-1", "lifecycle-svc")).await.unwrap();
-    disco.register(&make_instance("lc-2", "lifecycle-svc")).await.unwrap();
+    disco
+        .register(&make_instance("lc-1", "lifecycle-svc"))
+        .await
+        .unwrap();
+    disco
+        .register(&make_instance("lc-2", "lifecycle-svc"))
+        .await
+        .unwrap();
     assert_eq!(disco.resolve("lifecycle-svc").await.unwrap().len(), 2);
 
     // Deregister one
@@ -343,7 +349,9 @@ fn round_robin_default_trait() {
 #[test]
 fn round_robin_fairness() {
     let rr = RoundRobin::new();
-    let instances: Vec<_> = (0..5).map(|i| make_instance(&format!("n{i}"), "svc")).collect();
+    let instances: Vec<_> = (0..5)
+        .map(|i| make_instance(&format!("n{i}"), "svc"))
+        .collect();
     let mut counts: HashMap<String, usize> = HashMap::new();
 
     for _ in 0..100 {
@@ -389,7 +397,9 @@ fn random_single_instance() {
 
 #[test]
 fn random_distribution() {
-    let instances: Vec<_> = (0..3).map(|i| make_instance(&format!("r{i}"), "svc")).collect();
+    let instances: Vec<_> = (0..3)
+        .map(|i| make_instance(&format!("r{i}"), "svc"))
+        .collect();
     let mut seen: HashSet<String> = HashSet::new();
 
     for _ in 0..100 {
@@ -398,7 +408,11 @@ fn random_distribution() {
     }
 
     // With 100 picks from 3, we should see at least 2
-    assert!(seen.len() >= 2, "only saw {} unique IDs from 100 picks", seen.len());
+    assert!(
+        seen.len() >= 2,
+        "only saw {} unique IDs from 100 picks",
+        seen.len()
+    );
 }
 
 // ── LoadBalancer: LeastConnections ──────────────────────────────────

@@ -36,10 +36,10 @@
 //! [`gokit/grpc/client`]: https://github.com/kbukum/gokit/tree/main/grpc/client
 //! [`pykit-grpc`]: https://github.com/kbukum/pykit/tree/main/packages/pykit-grpc
 
-/// gRPC client configuration.
-pub mod config;
 /// gRPC channel wrapper with lazy connection.
 pub mod channel;
+/// gRPC client configuration.
+pub mod config;
 /// Error mapping between tonic Status and AppError.
 pub mod errors;
 
@@ -53,4 +53,3 @@ pub use errors::{app_error_to_status, status_to_app_error};
 
 #[cfg(feature = "discovery")]
 pub use discovery::DiscoveryChannel;
-

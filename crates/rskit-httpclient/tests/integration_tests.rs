@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod integration_tests {
-    use rskit_httpclient::{HttpClient, HttpClientConfig, Request, Auth};
+    use rskit_httpclient::{Auth, HttpClient, HttpClientConfig, Request};
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -12,12 +12,13 @@ mod integration_tests {
 
         Mock::given(method("GET"))
             .and(path("/api/users"))
-            .respond_with(ResponseTemplate::new(200).set_body_string(r#"[{"id": 1, "name": "Alice"}]"#))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_string(r#"[{"id": 1, "name": "Alice"}]"#),
+            )
             .mount(&mock_server)
             .await;
 
-        let config = HttpClientConfig::new()
-            .with_base_url(mock_server.uri());
+        let config = HttpClientConfig::new().with_base_url(mock_server.uri());
 
         let client = HttpClient::new(config).unwrap();
         let resp = client.get("/api/users").await.unwrap();
@@ -33,12 +34,13 @@ mod integration_tests {
 
         Mock::given(method("POST"))
             .and(path("/api/users"))
-            .respond_with(ResponseTemplate::new(201).set_body_string(r#"{"id": 42, "name": "Bob"}"#))
+            .respond_with(
+                ResponseTemplate::new(201).set_body_string(r#"{"id": 42, "name": "Bob"}"#),
+            )
             .mount(&mock_server)
             .await;
 
-        let config = HttpClientConfig::new()
-            .with_base_url(mock_server.uri());
+        let config = HttpClientConfig::new().with_base_url(mock_server.uri());
 
         let client = HttpClient::new(config).unwrap();
 
@@ -60,14 +62,13 @@ mod integration_tests {
             .mount(&mock_server)
             .await;
 
-        let config = HttpClientConfig::new()
-            .with_base_url(mock_server.uri());
+        let config = HttpClientConfig::new().with_base_url(mock_server.uri());
 
         let client = HttpClient::new(config).unwrap();
-        let resp = client.send(
-            Request::get("/api/protected")
-                .bearer_token("secret-token")
-        ).await.unwrap();
+        let resp = client
+            .send(Request::get("/api/protected").bearer_token("secret-token"))
+            .await
+            .unwrap();
 
         assert!(resp.is_success());
     }
@@ -82,8 +83,7 @@ mod integration_tests {
             .mount(&mock_server)
             .await;
 
-        let config = HttpClientConfig::new()
-            .with_base_url(mock_server.uri());
+        let config = HttpClientConfig::new().with_base_url(mock_server.uri());
 
         let client = HttpClient::new(config).unwrap();
         let resp = client.get("/api/missing").await.unwrap();

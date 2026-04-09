@@ -218,13 +218,14 @@ impl FfmpegProbe {
                     .filter(|cs| *cs != ColorSpace::Unknown);
 
                 // Parse color range (tv=Limited, pc=Full)
-                let color_range = stream
-                    .get("color_range")
-                    .and_then(|v| v.as_str())
-                    .map(|r| match r {
-                        "pc" | "jpeg" | "full" => ColorRange::Full,
-                        _ => ColorRange::Limited,
-                    });
+                let color_range =
+                    stream
+                        .get("color_range")
+                        .and_then(|v| v.as_str())
+                        .map(|r| match r {
+                            "pc" | "jpeg" | "full" => ColorRange::Full,
+                            _ => ColorRange::Limited,
+                        });
 
                 // Parse bit depth from bits_per_raw_sample
                 let bit_depth = stream
@@ -234,9 +235,13 @@ impl FfmpegProbe {
                     .or_else(|| {
                         // Infer from pixel format name
                         pix_fmt.as_deref().and_then(|fmt| {
-                            if fmt.contains("10le") || fmt.contains("10be") || fmt.ends_with("p10") {
+                            if fmt.contains("10le") || fmt.contains("10be") || fmt.ends_with("p10")
+                            {
                                 Some(10)
-                            } else if fmt.contains("12le") || fmt.contains("12be") || fmt.ends_with("p12") {
+                            } else if fmt.contains("12le")
+                                || fmt.contains("12be")
+                                || fmt.ends_with("p12")
+                            {
                                 Some(12)
                             } else {
                                 Some(8)
@@ -306,7 +311,10 @@ impl FfmpegProbe {
                     .unwrap_or(0)
                     == 1;
 
-                Some(SubtitleTrackInfo { format: fmt, forced })
+                Some(SubtitleTrackInfo {
+                    format: fmt,
+                    forced,
+                })
             } else {
                 None
             };
@@ -555,11 +563,7 @@ impl MediaProbe for FfmpegProbe {
         Ok(tmp.into_source())
     }
 
-    async fn scene_detect(
-        &self,
-        source: &FileSource,
-        threshold: f64,
-    ) -> AppResult<Vec<Timestamp>> {
+    async fn scene_detect(&self, source: &FileSource, threshold: f64) -> AppResult<Vec<Timestamp>> {
         let resolved = source.to_local_path().await?;
         let threshold = threshold.clamp(0.0, 1.0);
 
@@ -601,11 +605,7 @@ impl MediaProbe for FfmpegProbe {
         Ok(timestamps)
     }
 
-    async fn waveform(
-        &self,
-        source: &FileSource,
-        resolution: Resolution,
-    ) -> AppResult<FileSource> {
+    async fn waveform(&self, source: &FileSource, resolution: Resolution) -> AppResult<FileSource> {
         let resolved = source.to_local_path().await?;
         let tmp = rskit_file::TempFile::with_extension("png")?;
 

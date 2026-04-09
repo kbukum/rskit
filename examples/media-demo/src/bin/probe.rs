@@ -30,10 +30,7 @@ async fn main() -> rskit_errors::AppResult<()> {
                 if let Some(v) = &track.video {
                     println!(
                         "    {}×{} @ {:?} fps, bit_depth={:?}",
-                        v.resolution.width,
-                        v.resolution.height,
-                        v.frame_rate,
-                        v.bit_depth,
+                        v.resolution.width, v.resolution.height, v.frame_rate, v.bit_depth,
                     );
                 }
             }

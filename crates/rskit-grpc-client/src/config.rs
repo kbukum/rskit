@@ -45,7 +45,7 @@ impl Default for GrpcClientConfig {
             connect_timeout: Duration::from_secs(10),
             keepalive_interval: Some(Duration::from_secs(30)),
             keepalive_timeout: Some(Duration::from_secs(10)),
-            max_message_size: 4 * 1024 * 1024, // 4 MB
+            max_message_size: 4 * 1024 * 1024,      // 4 MB
             max_send_message_size: 4 * 1024 * 1024, // 4 MB
         }
     }

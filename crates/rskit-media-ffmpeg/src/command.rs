@@ -130,10 +130,15 @@ impl FfmpegCommand {
             match op {
                 MediaOp::StripAudio => has_strip_audio = true,
                 MediaOp::StripVideo => has_strip_video = true,
-                MediaOp::Volume(_) | MediaOp::NormalizeAudio | MediaOp::MixAudio(_)
+                MediaOp::Volume(_)
+                | MediaOp::NormalizeAudio
+                | MediaOp::MixAudio(_)
                 | MediaOp::ReplaceAudio(_) => has_audio_op = true,
-                MediaOp::Resize(_) | MediaOp::Crop(_) | MediaOp::Rotate(_)
-                | MediaOp::Flip(_) | MediaOp::Pad(_)
+                MediaOp::Resize(_)
+                | MediaOp::Crop(_)
+                | MediaOp::Rotate(_)
+                | MediaOp::Flip(_)
+                | MediaOp::Pad(_)
                 | MediaOp::BurnSubtitles(_) => has_video_op = true,
                 MediaOp::Overlay(_) => {
                     has_video_op = true;
@@ -470,8 +475,7 @@ impl FfmpegCommand {
                             cmd.output_opts.extend(["-map".into(), "[outv]".into()]);
                             cmd.output_opts.extend(["-map".into(), "[outa]".into()]);
                         } else {
-                            cmd.complex_filter =
-                                Some(format!("{pads}concat=n={n}:v=1:a=0[outv]"));
+                            cmd.complex_filter = Some(format!("{pads}concat=n={n}:v=1:a=0[outv]"));
                             cmd.output_opts.extend(["-map".into(), "[outv]".into()]);
                         }
                     }
@@ -580,8 +584,7 @@ impl FfmpegCommand {
             }
 
             if let Some(level) = &video.level {
-                cmd.output_opts
-                    .extend(["-level".into(), level.to_string()]);
+                cmd.output_opts.extend(["-level".into(), level.to_string()]);
             }
         }
 
@@ -634,14 +637,10 @@ impl FfmpegCommand {
             match streaming {
                 StreamingConfig::Hls(hls) => {
                     cmd.output_opts.extend(["-f".into(), "hls".into()]);
-                    cmd.output_opts.extend([
-                        "-hls_time".into(),
-                        hls.segment_duration.to_string(),
-                    ]);
-                    cmd.output_opts.extend([
-                        "-hls_list_size".into(),
-                        hls.playlist_size.to_string(),
-                    ]);
+                    cmd.output_opts
+                        .extend(["-hls_time".into(), hls.segment_duration.to_string()]);
+                    cmd.output_opts
+                        .extend(["-hls_list_size".into(), hls.playlist_size.to_string()]);
                     match hls.playlist_type {
                         rskit_media::output::HlsPlaylistType::Vod => {
                             cmd.output_opts
@@ -659,24 +658,19 @@ impl FfmpegCommand {
                 }
                 StreamingConfig::Dash(dash) => {
                     cmd.output_opts.extend(["-f".into(), "dash".into()]);
-                    cmd.output_opts.extend([
-                        "-seg_duration".into(),
-                        dash.segment_duration.to_string(),
-                    ]);
+                    cmd.output_opts
+                        .extend(["-seg_duration".into(), dash.segment_duration.to_string()]);
                     if dash.use_template {
-                        cmd.output_opts
-                            .extend(["-use_template".into(), "1".into()]);
+                        cmd.output_opts.extend(["-use_template".into(), "1".into()]);
                     }
                     if dash.use_timeline {
-                        cmd.output_opts
-                            .extend(["-use_timeline".into(), "1".into()]);
+                        cmd.output_opts.extend(["-use_timeline".into(), "1".into()]);
                     }
                 }
                 StreamingConfig::Rtmp(rtmp) => {
                     cmd.output_opts.extend(["-f".into(), "flv".into()]);
                     // The RTMP URL is the output destination — handled at run time
-                    cmd.output_opts
-                        .extend(["-rtmp_live".into(), "live".into()]);
+                    cmd.output_opts.extend(["-rtmp_live".into(), "live".into()]);
                     cmd.output_opts.push(rtmp.url.clone());
                 }
             }
@@ -759,13 +753,11 @@ impl FfmpegCommand {
             });
         }
 
-        let mut child = command.spawn().map_err(|e| {
-            crate::error::FfmpegError {
-                kind: crate::error::FfmpegErrorKind::SpawnFailed,
-                exit_code: None,
-                stderr: String::new(),
-                message: format!("failed to spawn ffmpeg: {e}"),
-            }
+        let mut child = command.spawn().map_err(|e| crate::error::FfmpegError {
+            kind: crate::error::FfmpegErrorKind::SpawnFailed,
+            exit_code: None,
+            stderr: String::new(),
+            message: format!("failed to spawn ffmpeg: {e}"),
         })?;
 
         let child_pid = child.id();
@@ -801,13 +793,11 @@ impl FfmpegCommand {
         // Wait for child with optional timeout
         let wait_result = if let Some(timeout_dur) = config.timeout {
             match tokio::time::timeout(timeout_dur, child.wait()).await {
-                Ok(result) => result.map_err(|e| {
-                    crate::error::FfmpegError {
-                        kind: crate::error::FfmpegErrorKind::Unknown,
-                        exit_code: None,
-                        stderr: String::new(),
-                        message: format!("ffmpeg process error: {e}"),
-                    }
+                Ok(result) => result.map_err(|e| crate::error::FfmpegError {
+                    kind: crate::error::FfmpegErrorKind::Unknown,
+                    exit_code: None,
+                    stderr: String::new(),
+                    message: format!("ffmpeg process error: {e}"),
                 }),
                 Err(_) => {
                     // Timeout — kill the process
@@ -822,13 +812,11 @@ impl FfmpegCommand {
                 }
             }
         } else {
-            child.wait().await.map_err(|e| {
-                crate::error::FfmpegError {
-                    kind: crate::error::FfmpegErrorKind::Unknown,
-                    exit_code: None,
-                    stderr: String::new(),
-                    message: format!("ffmpeg process error: {e}"),
-                }
+            child.wait().await.map_err(|e| crate::error::FfmpegError {
+                kind: crate::error::FfmpegErrorKind::Unknown,
+                exit_code: None,
+                stderr: String::new(),
+                message: format!("ffmpeg process error: {e}"),
             })
         };
 

@@ -203,10 +203,7 @@ mod tests {
 
     #[test]
     fn classify_signal_kill() {
-        assert_eq!(
-            classify_error(Some(137), ""),
-            FfmpegErrorKind::Cancelled
-        );
+        assert_eq!(classify_error(Some(137), ""), FfmpegErrorKind::Cancelled);
     }
 
     #[test]

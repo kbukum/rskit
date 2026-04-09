@@ -5,8 +5,8 @@ use crate::request::{Request, RequestBody};
 use crate::response::Response;
 use reqwest::Client;
 use rskit_errors::{AppError, AppResult, ErrorCode};
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 /// Async HTTP client with auth, headers, and error handling.
 pub struct HttpClient {
@@ -30,9 +30,12 @@ impl HttpClient {
             builder = builder.user_agent(ua.clone());
         }
 
-        let client = builder
-            .build()
-            .map_err(|e| AppError::new(ErrorCode::Internal, format!("failed to build http client: {}", e)))?;
+        let client = builder.build().map_err(|e| {
+            AppError::new(
+                ErrorCode::Internal,
+                format!("failed to build http client: {}", e),
+            )
+        })?;
 
         Ok(Self { client, config })
     }
@@ -56,7 +59,7 @@ impl HttpClient {
                 return Err(AppError::new(
                     ErrorCode::InvalidInput,
                     format!("unsupported http method: {}", method),
-                ))
+                ));
             }
         };
 
@@ -272,6 +275,9 @@ mod tests {
 
         let client = HttpClient::new(config).unwrap();
         assert!(client.config.base_url.is_some());
-        assert_eq!(client.config.user_agent, Some("test-client/1.0".to_string()));
+        assert_eq!(
+            client.config.user_agent,
+            Some("test-client/1.0".to_string())
+        );
     }
 }

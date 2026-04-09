@@ -296,9 +296,7 @@ fn invalid_toml_syntax_returns_error() {
     let toml_path = dir.path().join("bad.toml");
     std::fs::write(&toml_path, b"this is [[[invalid toml\n").unwrap();
 
-    let result: Result<TestConfig, _> = ConfigLoader::new()
-        .with_config_file(&toml_path)
-        .load();
+    let result: Result<TestConfig, _> = ConfigLoader::new().with_config_file(&toml_path).load();
     assert!(result.is_err());
 }
 
@@ -425,8 +423,6 @@ fn validation_rejects_empty_service_name_via_toml() {
     let toml_path = dir.path().join("empty_name.toml");
     std::fs::write(&toml_path, b"name = \"\"\nport = 8080\n").unwrap();
 
-    let result: Result<TestConfig, _> = ConfigLoader::new()
-        .with_config_file(&toml_path)
-        .load();
+    let result: Result<TestConfig, _> = ConfigLoader::new().with_config_file(&toml_path).load();
     assert!(result.is_err(), "empty service name should fail validation");
 }

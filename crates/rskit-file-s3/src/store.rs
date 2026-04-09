@@ -135,9 +135,9 @@ impl S3Store {
             req = req.content_type(ct);
         }
 
-        req.send().await.map_err(|e| {
-            AppError::new(ErrorCode::Internal, format!("S3 upload failed: {e}"))
-        })?;
+        req.send()
+            .await
+            .map_err(|e| AppError::new(ErrorCode::Internal, format!("S3 upload failed: {e}")))?;
 
         Ok(self.object_url(key))
     }
@@ -223,11 +223,10 @@ impl FileStore for S3Store {
             .await
             .map_err(|e| AppError::new(ErrorCode::NotFound, format!("S3 download failed: {e}")))?;
 
-        let data = resp
-            .body
-            .collect()
-            .await
-            .map_err(|e| AppError::new(ErrorCode::Internal, format!("S3 read body failed: {e}")))?;
+        let data =
+            resp.body.collect().await.map_err(|e| {
+                AppError::new(ErrorCode::Internal, format!("S3 read body failed: {e}"))
+            })?;
 
         Ok(FileSource::Bytes(bytes::Bytes::from(data.to_vec())))
     }
@@ -319,8 +318,8 @@ impl FileStore for S3Store {
 
     async fn presigned_url(&self, key: &str, expires_in: Duration) -> AppResult<String> {
         let full_key = self.full_key(key);
-        let presigning_config =
-            aws_sdk_s3::presigning::PresigningConfig::expires_in(expires_in).map_err(|e| {
+        let presigning_config = aws_sdk_s3::presigning::PresigningConfig::expires_in(expires_in)
+            .map_err(|e| {
                 AppError::new(
                     ErrorCode::InvalidInput,
                     format!("Invalid presigning duration: {e}"),

@@ -1,6 +1,6 @@
 use rskit_dag::{Dag, DagNode};
 use rskit_errors::{AppError, AppResult, ErrorCode};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;

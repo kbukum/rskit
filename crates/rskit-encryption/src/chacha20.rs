@@ -1,9 +1,9 @@
 //! ChaCha20-Poly1305 encryption implementation.
 
-use base64::{engine::general_purpose::STANDARD, Engine};
+use base64::{Engine, engine::general_purpose::STANDARD};
 use chacha20poly1305::{
-    aead::{Aead, KeyInit, Payload},
     ChaCha20Poly1305, Nonce,
+    aead::{Aead, KeyInit, Payload},
 };
 use rand::Rng;
 use rskit_errors::{AppError, AppResult, ErrorCode};
@@ -63,14 +63,12 @@ impl Encryptor for ChaCha20Encryptor {
     }
 
     fn decrypt(&self, ciphertext: &str) -> AppResult<Vec<u8>> {
-        let data = STANDARD
-            .decode(ciphertext)
-            .map_err(|e| {
-                AppError::new(
-                    ErrorCode::InvalidFormat,
-                    format!("Invalid base64 ciphertext: {}", e),
-                )
-            })?;
+        let data = STANDARD.decode(ciphertext).map_err(|e| {
+            AppError::new(
+                ErrorCode::InvalidFormat,
+                format!("Invalid base64 ciphertext: {}", e),
+            )
+        })?;
 
         const NONCE_SIZE: usize = 12;
         if data.len() < NONCE_SIZE {

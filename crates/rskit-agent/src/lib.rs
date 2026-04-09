@@ -5,9 +5,15 @@
 //! lifecycle point, and manages context size via a pluggable [`ContextStrategy`].
 
 pub mod agent;
+pub mod hooks;
 pub mod types;
 
 pub use agent::{Agent, AgentConfig};
+pub use hooks::{
+    OnError, PostLLMCall, PostToolCall, PreLLMCall, PreToolCall, TurnEnd, TurnStart, on_error_type,
+    post_llm_call_type, post_tool_call_type, pre_llm_call_type, pre_tool_call_type, turn_end_type,
+    turn_start_type,
+};
 pub use types::{
     AgentEvent, AgentResult, ContextStrategy, FailStrategy, StopReason, TruncateStrategy,
 };

@@ -6,11 +6,12 @@ use std::sync::Arc;
 use async_stream::stream;
 use futures::Stream;
 use rskit_errors::AppResult;
-use rskit_hook::{HookEvent, HookRegistry};
+use rskit_hook::{Action, HookRegistry};
 use rskit_llm::provider::{Provider, count_tokens_approx};
 use rskit_llm::types::{AssistantMessage, CompletionRequest, CompletionResponse, Message, Usage};
 use rskit_tool::{Context, Registry, ToolResult};
 
+use crate::hooks;
 use crate::types::{AgentEvent, AgentResult, ContextStrategy, FailStrategy, StopReason};
 
 // ── AgentConfig ─────────────────────────────────────────────────────────────
@@ -65,8 +66,8 @@ impl Agent {
         for turn in 0..self.config.max_turns {
             // ── TurnStart hook ──────────────────────────────────────────
             if let Some(ref hooks) = self.config.hooks {
-                let result = hooks.emit(&HookEvent::TurnStart { turn });
-                if result.action == rskit_hook::Action::Abort {
+                let result = hooks.emit(&hooks::TurnStart { turn });
+                if result.action == Action::Abort {
                     return Ok(AgentResult {
                         messages: all_messages,
                         final_message: last_assistant,
@@ -91,11 +92,11 @@ impl Agent {
 
             // ── PreLLMCall hook (allow Modify) ──────────────────────────
             if let Some(ref hooks) = self.config.hooks {
-                let result = hooks.emit(&HookEvent::PreLLMCall {
+                let result = hooks.emit(&hooks::PreLLMCall {
                     request: request.clone(),
                 });
                 match result.action {
-                    rskit_hook::Action::Abort => {
+                    Action::Abort => {
                         return Ok(AgentResult {
                             messages: all_messages,
                             final_message: last_assistant,
@@ -104,15 +105,14 @@ impl Agent {
                             stop_reason: StopReason::Aborted,
                         });
                     }
-                    rskit_hook::Action::Modify => {
+                    Action::Modify => {
                         if let Some(data) = result.modified_data {
-                            if let Ok(modified) = serde_json::from_value::<CompletionRequest>(data)
-                            {
-                                request = modified;
+                            if let Some(modified) = data.downcast_ref::<CompletionRequest>() {
+                                request = modified.clone();
                             }
                         }
                     }
-                    rskit_hook::Action::Continue => {}
+                    Action::Continue => {}
                 }
             }
 
@@ -121,11 +121,11 @@ impl Agent {
 
             // ── PostLLMCall hook ─────────────────────────────────────────
             if let Some(ref hooks) = self.config.hooks {
-                let result = hooks.emit(&HookEvent::PostLLMCall {
+                let result = hooks.emit(&hooks::PostLLMCall {
                     response: response.clone(),
                     error: None,
                 });
-                if result.action == rskit_hook::Action::Abort {
+                if result.action == Action::Abort {
                     return Ok(AgentResult {
                         messages: all_messages,
                         final_message: response.message,
@@ -162,11 +162,11 @@ impl Agent {
 
                     // PreToolCall hook
                     if let Some(ref hooks) = self.config.hooks {
-                        let result = hooks.emit(&HookEvent::PreToolCall {
+                        let result = hooks.emit(&hooks::PreToolCall {
                             name: tc.function.name.clone(),
                             input: input.clone(),
                         });
-                        if result.action == rskit_hook::Action::Abort {
+                        if result.action == Action::Abort {
                             return Ok(AgentResult {
                                 messages: all_messages,
                                 final_message: last_assistant,
@@ -188,7 +188,7 @@ impl Agent {
 
                     // PostToolCall hook
                     if let Some(ref hooks) = self.config.hooks {
-                        hooks.emit(&HookEvent::PostToolCall {
+                        hooks.emit(&hooks::PostToolCall {
                             name: tc.function.name.clone(),
                             input: input.clone(),
                             result: result_opt.clone(),
@@ -234,11 +234,11 @@ impl Agent {
 
             // ── TurnEnd hook ────────────────────────────────────────────
             if let Some(ref hooks) = self.config.hooks {
-                let result = hooks.emit(&HookEvent::TurnEnd {
+                let result = hooks.emit(&hooks::TurnEnd {
                     turn,
                     message: last_assistant.clone(),
                 });
-                if result.action == rskit_hook::Action::Abort {
+                if result.action == Action::Abort {
                     return Ok(AgentResult {
                         messages: all_messages,
                         final_message: last_assistant,
@@ -292,6 +292,7 @@ mod tests {
     use async_trait::async_trait;
     use futures::StreamExt;
     use rskit_errors::AppError;
+    use rskit_hook::HookResult;
     use rskit_llm::provider::Capabilities;
     use rskit_llm::stream_events::StreamEvent;
     use rskit_llm::types;
@@ -555,8 +556,8 @@ mod tests {
         let provider = Arc::new(MockProvider::single_text("Hello"));
         let hooks = Arc::new(HookRegistry::new());
 
-        let _unsub = hooks.on(rskit_hook::EventType::TurnStart, |_| {
-            rskit_hook::HookResult::abort("blocked by policy")
+        let _unsub = hooks.on(crate::turn_start_type(), |_| {
+            HookResult::abort("blocked by policy")
         });
 
         let agent = Agent::new(AgentConfig {
@@ -583,15 +584,15 @@ mod tests {
         let post_count = Arc::new(AtomicU32::new(0));
 
         let pc = pre_count.clone();
-        let _unsub1 = hooks.on(rskit_hook::EventType::PreLLMCall, move |_| {
+        let _unsub1 = hooks.on(crate::pre_llm_call_type(), move |_| {
             pc.fetch_add(1, Ordering::SeqCst);
-            rskit_hook::HookResult::ok()
+            HookResult::ok()
         });
 
         let poc = post_count.clone();
-        let _unsub2 = hooks.on(rskit_hook::EventType::PostLLMCall, move |_| {
+        let _unsub2 = hooks.on(crate::post_llm_call_type(), move |_| {
             poc.fetch_add(1, Ordering::SeqCst);
-            rskit_hook::HookResult::ok()
+            HookResult::ok()
         });
 
         let agent = Agent::new(AgentConfig {

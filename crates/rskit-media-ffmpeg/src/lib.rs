@@ -17,7 +17,7 @@ mod progress;
 
 pub use command::{FfmpegCommand, SourceHints};
 pub use config::{FfmpegConfig, FfmpegLogLevel};
-pub use error::{classify_error, FfmpegError, FfmpegErrorKind};
+pub use error::{FfmpegError, FfmpegErrorKind, classify_error};
 pub use executor::FfmpegExecutor;
 pub use hw_accel::HwAccel;
 pub use probe::FfmpegProbe;

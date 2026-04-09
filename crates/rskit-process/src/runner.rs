@@ -2,7 +2,7 @@
 
 #![allow(unused_imports)]
 
-use crate::{AppError, AppResult, Command, ProcessConfig, ProcessResult, ErrorCode};
+use crate::{AppError, AppResult, Command, ErrorCode, ProcessConfig, ProcessResult};
 use std::io;
 use std::os::unix::process::CommandExt;
 use std::time::Instant;
@@ -133,7 +133,7 @@ pub async fn run(command: &Command, config: &ProcessConfig) -> AppResult<Process
                 let duration = start.elapsed();
                 let mut stdout = String::new();
                 let mut stderr = String::new();
-                
+
                 if let Some(mut reader) = child.stdout.take() {
                     let _ = reader.read_to_string(&mut stdout).await;
                 }
@@ -153,7 +153,7 @@ pub async fn run(command: &Command, config: &ProcessConfig) -> AppResult<Process
                 return Err(AppError::new(
                     ErrorCode::Internal,
                     format!("process execution error: {}", e),
-                ))
+                ));
             }
             Err(_) => {
                 // Timeout occurred - kill the process
@@ -185,7 +185,7 @@ pub async fn run(command: &Command, config: &ProcessConfig) -> AppResult<Process
                         let duration = start.elapsed();
                         let mut stdout = String::new();
                         let mut stderr = String::new();
-                        
+
                         if let Some(mut reader) = child.stdout.take() {
                             let _ = reader.read_to_string(&mut stdout).await;
                         }
@@ -254,7 +254,7 @@ pub async fn run(command: &Command, config: &ProcessConfig) -> AppResult<Process
                 let duration = start.elapsed();
                 let mut stdout = String::new();
                 let mut stderr = String::new();
-                
+
                 if let Some(mut reader) = child.stdout.take() {
                     let _ = reader.read_to_string(&mut stdout).await;
                 }
@@ -274,7 +274,7 @@ pub async fn run(command: &Command, config: &ProcessConfig) -> AppResult<Process
                 return Err(AppError::new(
                     ErrorCode::Internal,
                     format!("process execution error: {}", e),
-                ))
+                ));
             }
         }
     };

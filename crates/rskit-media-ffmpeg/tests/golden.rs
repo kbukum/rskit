@@ -255,7 +255,10 @@ async fn golden_extract_many() {
         .expect("execute extract-many");
 
     let probe = FfmpegProbe::new(FfmpegConfig::default());
-    let meta = probe.probe(&result).await.expect("probe extract-many output");
+    let meta = probe
+        .probe(&result)
+        .await
+        .expect("probe extract-many output");
 
     insta::assert_json_snapshot!("extract_many_two_segments", {
         ".duration_secs" => insta::rounded_redaction(1),
@@ -351,12 +354,12 @@ async fn golden_burn_subtitles() {
 
 #[test]
 fn golden_command_compile_hls() {
-    use rskit_media::output::{
-        Bitrate, EncodingSpeed, HlsConfig, HlsPlaylistType,
-        OutputConfig, Quality, StreamingConfig, VideoSettings,
-    };
     use rskit_media::codec::Codec;
     use rskit_media::format::Format;
+    use rskit_media::output::{
+        Bitrate, EncodingSpeed, HlsConfig, HlsPlaylistType, OutputConfig, Quality, StreamingConfig,
+        VideoSettings,
+    };
 
     let source = FileSource::from_path("/dev/null");
     let config = FfmpegConfig::default();
@@ -393,7 +396,13 @@ fn golden_command_compile_hls() {
     // Redact the input path which is absolute
     let args: Vec<String> = args
         .into_iter()
-        .map(|a| if a.starts_with('/') && a != "/dev/null" { "[PATH]".into() } else { a })
+        .map(|a| {
+            if a.starts_with('/') && a != "/dev/null" {
+                "[PATH]".into()
+            } else {
+                a
+            }
+        })
         .collect();
 
     insta::assert_json_snapshot!("command_compile_hls", &args);
@@ -424,7 +433,13 @@ fn golden_command_compile_extract_many_with_filters() {
 
     let args: Vec<String> = args
         .into_iter()
-        .map(|a| if a.starts_with('/') && a != "/dev/null" { "[PATH]".into() } else { a })
+        .map(|a| {
+            if a.starts_with('/') && a != "/dev/null" {
+                "[PATH]".into()
+            } else {
+                a
+            }
+        })
         .collect();
 
     insta::assert_json_snapshot!("command_compile_extract_many_filters", &args);
@@ -453,11 +468,7 @@ fn golden_optimize_ops() {
 
     let optimized = FfmpegCommand::optimize_ops(&ops);
 
-    let summary: Vec<String> = optimized
-        .iter()
-        .map(|op| format!("{op:?}"))
-        .collect();
+    let summary: Vec<String> = optimized.iter().map(|op| format!("{op:?}")).collect();
 
     insta::assert_json_snapshot!("optimize_ops", &summary);
 }
-

@@ -7,7 +7,7 @@ use axum::{Json, Router, routing::get};
 use rskit_bootstrap::{Component, Health, Registry};
 use rskit_errors::{AppError, ErrorCode};
 use rskit_http::{
-    CorsConfig, CorrelationId, ErrorHandlerLayer, HttpError, HttpServerBuilder, HttpServerConfig,
+    CorrelationId, CorsConfig, ErrorHandlerLayer, HttpError, HttpServerBuilder, HttpServerConfig,
     RequestId, health_router,
 };
 use tokio_util::sync::CancellationToken;
@@ -270,10 +270,22 @@ async fn http_error_response_body_is_json() {
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
     // RFC 7807 ErrorResponse fields: type, title, status, detail
-    assert!(json.get("type").is_some(), "expected 'type' field in error response");
-    assert!(json.get("title").is_some(), "expected 'title' field in error response");
-    assert!(json.get("status").is_some(), "expected 'status' field in error response");
-    assert!(json.get("detail").is_some(), "expected 'detail' field in error response");
+    assert!(
+        json.get("type").is_some(),
+        "expected 'type' field in error response"
+    );
+    assert!(
+        json.get("title").is_some(),
+        "expected 'title' field in error response"
+    );
+    assert!(
+        json.get("status").is_some(),
+        "expected 'status' field in error response"
+    );
+    assert!(
+        json.get("detail").is_some(),
+        "expected 'detail' field in error response"
+    );
     assert_eq!(json["detail"], "item not found");
     assert_eq!(json["status"], 404);
 }
@@ -291,10 +303,7 @@ fn http_error_from_conversion() {
 
 #[tokio::test]
 async fn request_id_from_header() {
-    let app = Router::new().route(
-        "/test",
-        get(|id: RequestId| async move { id.0 }),
-    );
+    let app = Router::new().route("/test", get(|id: RequestId| async move { id.0 }));
 
     let response = app
         .oneshot(
@@ -315,10 +324,7 @@ async fn request_id_from_header() {
 
 #[tokio::test]
 async fn request_id_generates_uuid_when_missing() {
-    let app = Router::new().route(
-        "/test",
-        get(|id: RequestId| async move { id.0 }),
-    );
+    let app = Router::new().route("/test", get(|id: RequestId| async move { id.0 }));
 
     let response = app
         .oneshot(
@@ -341,10 +347,7 @@ async fn request_id_generates_uuid_when_missing() {
 
 #[tokio::test]
 async fn correlation_id_from_header() {
-    let app = Router::new().route(
-        "/test",
-        get(|id: CorrelationId| async move { id.0 }),
-    );
+    let app = Router::new().route("/test", get(|id: CorrelationId| async move { id.0 }));
 
     let response = app
         .oneshot(
@@ -365,10 +368,7 @@ async fn correlation_id_from_header() {
 
 #[tokio::test]
 async fn correlation_id_generates_uuid_when_missing() {
-    let app = Router::new().route(
-        "/test",
-        get(|id: CorrelationId| async move { id.0 }),
-    );
+    let app = Router::new().route("/test", get(|id: CorrelationId| async move { id.0 }));
 
     let response = app
         .oneshot(
@@ -440,10 +440,7 @@ async fn error_handler_layer_passes_through_ok_response() {
 #[tokio::test]
 async fn error_handler_layer_passes_through_error_response() {
     let app = Router::new()
-        .route(
-            "/err",
-            get(|| async { StatusCode::INTERNAL_SERVER_ERROR }),
-        )
+        .route("/err", get(|| async { StatusCode::INTERNAL_SERVER_ERROR }))
         .layer(ErrorHandlerLayer);
 
     let response = app
@@ -689,7 +686,9 @@ async fn builder_with_request_id() {
     let cfg = HttpServerConfig::default();
 
     // Should not panic
-    let _server = HttpServerBuilder::new(cfg, cancel).with_request_id().build();
+    let _server = HttpServerBuilder::new(cfg, cancel)
+        .with_request_id()
+        .build();
 }
 
 #[tokio::test]
@@ -896,7 +895,7 @@ fn error_code_to_status_mapping() {
         (ErrorCode::NotFound, 404),
         (ErrorCode::Unauthorized, 401),
         (ErrorCode::Forbidden, 403),
-        (ErrorCode::InvalidInput, 422),  // maps to UNPROCESSABLE_ENTITY
+        (ErrorCode::InvalidInput, 422), // maps to UNPROCESSABLE_ENTITY
         (ErrorCode::Conflict, 409),
         (ErrorCode::RateLimited, 429),
         (ErrorCode::Internal, 500),

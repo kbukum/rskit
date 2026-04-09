@@ -49,16 +49,14 @@ impl GrpcChannel {
             "Connecting gRPC channel"
         );
 
-        let mut endpoint = Endpoint::from_shared(
-            format!("http://{}", self.config.target)
-        )
-        .map_err(|e| {
-            rskit_errors::AppError::new(
-                rskit_errors::ErrorCode::InvalidInput,
-                format!("invalid gRPC endpoint: {}", e),
-            )
-            .with_cause(e)
-        })?;
+        let mut endpoint = Endpoint::from_shared(format!("http://{}", self.config.target))
+            .map_err(|e| {
+                rskit_errors::AppError::new(
+                    rskit_errors::ErrorCode::InvalidInput,
+                    format!("invalid gRPC endpoint: {}", e),
+                )
+                .with_cause(e)
+            })?;
 
         // Set timeouts
         endpoint = endpoint.timeout(self.config.timeout);
@@ -80,8 +78,7 @@ impl GrpcChannel {
                 error = %e,
                 "Failed to connect gRPC channel"
             );
-            rskit_errors::AppError::service_unavailable(&self.config.target)
-                .with_cause(e)
+            rskit_errors::AppError::service_unavailable(&self.config.target).with_cause(e)
         })?;
 
         // Store the channel

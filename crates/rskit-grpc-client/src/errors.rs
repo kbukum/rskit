@@ -20,9 +20,7 @@ pub fn status_to_app_error(status: tonic::Status) -> AppError {
             format!("request cancelled{}", format_message(message)),
         ),
 
-        Code::Unknown => {
-            AppError::new(ErrorCode::Internal, format_message(message))
-        }
+        Code::Unknown => AppError::new(ErrorCode::Internal, format_message(message)),
 
         Code::InvalidArgument => AppError::new(
             ErrorCode::InvalidInput,
@@ -61,15 +59,15 @@ pub fn status_to_app_error(status: tonic::Status) -> AppError {
 
         Code::ResourceExhausted => AppError::new(
             ErrorCode::RateLimited,
-            format!("resource exhausted (rate limited){}", format_message(message)),
+            format!(
+                "resource exhausted (rate limited){}",
+                format_message(message)
+            ),
         ),
 
         Code::FailedPrecondition => AppError::new(
             ErrorCode::Conflict,
-            format!(
-                "failed precondition{}",
-                format_message(message)
-            ),
+            format!("failed precondition{}", format_message(message)),
         ),
 
         Code::Aborted => AppError::new(
@@ -98,7 +96,10 @@ pub fn status_to_app_error(status: tonic::Status) -> AppError {
             if is_connection_error_message(message) {
                 AppError::new(
                     ErrorCode::ConnectionFailed,
-                    format!("service unavailable (connection failed){}", format_message(message)),
+                    format!(
+                        "service unavailable (connection failed){}",
+                        format_message(message)
+                    ),
                 )
             } else {
                 AppError::new(
@@ -115,7 +116,10 @@ pub fn status_to_app_error(status: tonic::Status) -> AppError {
 
         Code::Unauthenticated => AppError::new(
             ErrorCode::Unauthorized,
-            format!("unauthenticated (missing or invalid credentials){}", format_message(message)),
+            format!(
+                "unauthenticated (missing or invalid credentials){}",
+                format_message(message)
+            ),
         ),
     }
     .with_cause(status)
@@ -131,17 +135,17 @@ pub fn app_error_to_status(err: &AppError) -> tonic::Status {
         ErrorCode::InvalidInput | ErrorCode::MissingField | ErrorCode::InvalidFormat => {
             Code::InvalidArgument
         }
-        ErrorCode::Unauthorized
-        | ErrorCode::TokenExpired
-        | ErrorCode::InvalidToken => Code::Unauthenticated,
+        ErrorCode::Unauthorized | ErrorCode::TokenExpired | ErrorCode::InvalidToken => {
+            Code::Unauthenticated
+        }
         ErrorCode::Forbidden => Code::PermissionDenied,
         ErrorCode::Conflict => Code::FailedPrecondition,
         ErrorCode::Timeout => Code::DeadlineExceeded,
         ErrorCode::RateLimited => Code::ResourceExhausted,
         ErrorCode::ServiceUnavailable | ErrorCode::ConnectionFailed => Code::Unavailable,
-        ErrorCode::DatabaseError
-        | ErrorCode::ExternalService
-        | ErrorCode::Internal => Code::Internal,
+        ErrorCode::DatabaseError | ErrorCode::ExternalService | ErrorCode::Internal => {
+            Code::Internal
+        }
         _ => Code::Internal,
     };
 

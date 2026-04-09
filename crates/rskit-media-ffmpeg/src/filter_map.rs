@@ -86,10 +86,8 @@ impl FilterMap {
             "stabilize".into(),
             Box::new(|_| "vidstabdetect,vidstabtransform".into()),
         );
-        self.video.insert(
-            "deshake".into(),
-            Box::new(|_| "deshake".into()),
-        );
+        self.video
+            .insert("deshake".into(), Box::new(|_| "deshake".into()));
         self.video.insert(
             "removegrain".into(),
             Box::new(|p| format!("removegrain=m={}", get_i64(p, "mode"))),
@@ -138,10 +136,8 @@ impl FilterMap {
                 "colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131".into()
             }),
         );
-        self.video.insert(
-            "invert".into(),
-            Box::new(|_| "negate".into()),
-        );
+        self.video
+            .insert("invert".into(), Box::new(|_| "negate".into()));
         self.video.insert(
             "colorbalance".into(),
             Box::new(|p| {
@@ -164,10 +160,8 @@ impl FilterMap {
                 }
             }),
         );
-        self.video.insert(
-            "normalize".into(),
-            Box::new(|_| "normalize".into()),
-        );
+        self.video
+            .insert("normalize".into(), Box::new(|_| "normalize".into()));
         self.video.insert(
             "lut3d".into(),
             Box::new(|p| format!("lut3d='{}'", get_str(p, "file"))),
@@ -224,10 +218,14 @@ impl FilterMap {
             Box::new(|p| {
                 format!(
                     "perspective=x0={}:y0={}:x1={}:y1={}:x2={}:y2={}:x3={}:y3={}",
-                    get_str(p, "x0"), get_str(p, "y0"),
-                    get_str(p, "x1"), get_str(p, "y1"),
-                    get_str(p, "x2"), get_str(p, "y2"),
-                    get_str(p, "x3"), get_str(p, "y3"),
+                    get_str(p, "x0"),
+                    get_str(p, "y0"),
+                    get_str(p, "x1"),
+                    get_str(p, "y1"),
+                    get_str(p, "x2"),
+                    get_str(p, "y2"),
+                    get_str(p, "x3"),
+                    get_str(p, "y3"),
                 )
             }),
         );
@@ -241,7 +239,9 @@ impl FilterMap {
                 let y = get_str_or(p, "y", "(h-text_h)/2");
                 let fontsize = get_i64(p, "fontsize");
                 let fontcolor = get_str_or(p, "fontcolor", "white");
-                format!("drawtext=text='{text}':x={x}:y={y}:fontsize={fontsize}:fontcolor={fontcolor}")
+                format!(
+                    "drawtext=text='{text}':x={x}:y={y}:fontsize={fontsize}:fontcolor={fontcolor}"
+                )
             }),
         );
         self.video.insert(
@@ -287,9 +287,7 @@ impl FilterMap {
         // Tiling / splitting
         self.video.insert(
             "tile".into(),
-            Box::new(|p| {
-                format!("tile={}x{}", get_i64(p, "cols"), get_i64(p, "rows"))
-            }),
+            Box::new(|p| format!("tile={}x{}", get_i64(p, "cols"), get_i64(p, "rows"))),
         );
 
         // ── Audio filters ────────────────────────────────────────────
@@ -374,7 +372,8 @@ impl FilterMap {
                 let tp = get_f64(p, "TP");
                 let lra = get_f64(p, "LRA");
                 if i != 0.0 || tp != 0.0 || lra != 0.0 {
-                    format!("loudnorm=I={}:TP={}:LRA={}", 
+                    format!(
+                        "loudnorm=I={}:TP={}:LRA={}",
                         if i != 0.0 { i } else { -24.0 },
                         if tp != 0.0 { tp } else { -2.0 },
                         if lra != 0.0 { lra } else { 7.0 },
@@ -426,23 +425,14 @@ impl FilterMap {
         // Stereo tools
         self.audio.insert(
             "stereotools".into(),
-            Box::new(|p| {
-                format!(
-                    "stereotools=balance_out={}",
-                    get_f64(p, "balance"),
-                )
-            }),
+            Box::new(|p| format!("stereotools=balance_out={}", get_f64(p, "balance"),)),
         );
 
         // Analysis (detect-only filters)
-        self.audio.insert(
-            "volumedetect".into(),
-            Box::new(|_| "volumedetect".into()),
-        );
-        self.audio.insert(
-            "astats".into(),
-            Box::new(|_| "astats".into()),
-        );
+        self.audio
+            .insert("volumedetect".into(), Box::new(|_| "volumedetect".into()));
+        self.audio
+            .insert("astats".into(), Box::new(|_| "astats".into()));
     }
 }
 
