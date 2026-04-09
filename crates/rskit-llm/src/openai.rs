@@ -5,7 +5,10 @@ use rskit_errors::{AppError, AppResult, ErrorCode};
 use serde::{Deserialize, Serialize};
 
 use crate::traits::LlmProvider;
-use crate::types::{CompletionRequest, CompletionResponse, Role, TokenUsage};
+use crate::types::{
+    AssistantMessage, CompletionRequest, CompletionResponse, ContentBlock, Message, StopReason,
+    Usage,
+};
 
 /// Configuration for the OpenAI provider.
 #[derive(Debug, Clone, Deserialize)]
@@ -75,6 +78,7 @@ struct OpenAiMessage {
 
 #[derive(Deserialize)]
 struct OpenAiChatResponse {
+    #[allow(dead_code)]
     id: String,
     model: String,
     choices: Vec<OpenAiChoice>,
@@ -113,11 +117,24 @@ struct OpenAiEmbeddingData {
     embedding: Vec<f32>,
 }
 
-fn role_to_openai(role: &Role) -> &'static str {
-    match role {
-        Role::System => "system",
-        Role::User => "user",
-        Role::Assistant => "assistant",
+fn message_to_openai(msg: &Message) -> OpenAiMessage {
+    match msg {
+        Message::System(s) => OpenAiMessage {
+            role: "system".to_string(),
+            content: s.content.clone(),
+        },
+        Message::User(u) => OpenAiMessage {
+            role: "user".to_string(),
+            content: crate::types::text_of(&u.content),
+        },
+        Message::Assistant(a) => OpenAiMessage {
+            role: "assistant".to_string(),
+            content: crate::types::text_of(&a.content),
+        },
+        Message::ToolResult(tr) => OpenAiMessage {
+            role: "tool".to_string(),
+            content: tr.content.clone(),
+        },
     }
 }
 
@@ -126,14 +143,7 @@ impl LlmProvider for OpenAiProvider {
     async fn complete(&self, req: CompletionRequest) -> AppResult<CompletionResponse> {
         let url = format!("{}/chat/completions", self.config.base_url);
 
-        let messages: Vec<OpenAiMessage> = req
-            .messages
-            .iter()
-            .map(|m| OpenAiMessage {
-                role: role_to_openai(&m.role).to_owned(),
-                content: m.content.clone(),
-            })
-            .collect();
+        let messages: Vec<OpenAiMessage> = req.messages.iter().map(message_to_openai).collect();
 
         let body = OpenAiChatRequest {
             model: req.model,
@@ -179,13 +189,17 @@ impl LlmProvider for OpenAiProvider {
                         .unwrap_or_default();
 
                     return Ok(CompletionResponse {
-                        id: api_resp.id,
-                        content,
+                        message: AssistantMessage {
+                            content: vec![ContentBlock::Text { text: content }],
+                            tool_calls: vec![],
+                            usage: None,
+                        },
                         model: api_resp.model,
-                        usage: TokenUsage {
+                        usage: Usage {
                             input_tokens: api_resp.usage.prompt_tokens,
                             output_tokens: api_resp.usage.completion_tokens,
                         },
+                        stop_reason: Some(StopReason::EndTurn),
                     });
                 }
                 Ok(resp) => {

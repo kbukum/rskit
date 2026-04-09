@@ -5,7 +5,10 @@ use rskit_errors::{AppError, AppResult, ErrorCode};
 use serde::{Deserialize, Serialize};
 
 use crate::traits::LlmProvider;
-use crate::types::{CompletionRequest, CompletionResponse, Role, TokenUsage};
+use crate::types::{
+    AssistantMessage, CompletionRequest, CompletionResponse, ContentBlock, Message, StopReason,
+    Usage,
+};
 
 /// Configuration for the Anthropic provider.
 #[derive(Debug, Clone, Deserialize)]
@@ -81,6 +84,7 @@ struct AnthropicMessage {
 
 #[derive(Deserialize)]
 struct AnthropicChatResponse {
+    #[allow(dead_code)]
     id: String,
     model: String,
     content: Vec<AnthropicContent>,
@@ -98,11 +102,27 @@ struct AnthropicUsage {
     output_tokens: u32,
 }
 
-fn role_to_anthropic(role: &Role) -> &'static str {
-    match role {
-        Role::System => "user", // system is handled separately in Anthropic API
-        Role::User => "user",
-        Role::Assistant => "assistant",
+fn message_to_anthropic(msg: &Message) -> Option<AnthropicMessage> {
+    match msg {
+        Message::User(u) => {
+            let text = crate::types::text_of(&u.content);
+            Some(AnthropicMessage {
+                role: "user".to_string(),
+                content: text,
+            })
+        }
+        Message::Assistant(a) => {
+            let text = crate::types::text_of(&a.content);
+            Some(AnthropicMessage {
+                role: "assistant".to_string(),
+                content: text,
+            })
+        }
+        Message::ToolResult(tr) => Some(AnthropicMessage {
+            role: "user".to_string(),
+            content: tr.content.clone(),
+        }),
+        Message::System(_) => None, // handled separately
     }
 }
 
@@ -111,21 +131,15 @@ impl LlmProvider for AnthropicProvider {
     async fn complete(&self, req: CompletionRequest) -> AppResult<CompletionResponse> {
         let url = format!("{}/v1/messages", self.config.base_url);
 
-        // Extract system message (Anthropic uses a separate field)
-        let system_message: Option<String> = req
-            .messages
-            .iter()
-            .find(|m| m.role == Role::System)
-            .map(|m| m.content.clone());
+        let system_message: Option<String> = req.messages.iter().find_map(|m| match m {
+            Message::System(s) => Some(s.content.clone()),
+            _ => None,
+        });
 
         let messages: Vec<AnthropicMessage> = req
             .messages
             .iter()
-            .filter(|m| m.role != Role::System)
-            .map(|m| AnthropicMessage {
-                role: role_to_anthropic(&m.role).to_owned(),
-                content: m.content.clone(),
-            })
+            .filter_map(message_to_anthropic)
             .collect();
 
         let body = AnthropicChatRequest {
@@ -167,7 +181,7 @@ impl LlmProvider for AnthropicProvider {
                         )
                     })?;
 
-                    let content = api_resp
+                    let content_text = api_resp
                         .content
                         .into_iter()
                         .filter_map(|c| c.text)
@@ -175,13 +189,19 @@ impl LlmProvider for AnthropicProvider {
                         .join("");
 
                     return Ok(CompletionResponse {
-                        id: api_resp.id,
-                        content,
+                        message: AssistantMessage {
+                            content: vec![ContentBlock::Text {
+                                text: content_text,
+                            }],
+                            tool_calls: vec![],
+                            usage: None,
+                        },
                         model: api_resp.model,
-                        usage: TokenUsage {
+                        usage: Usage {
                             input_tokens: api_resp.usage.input_tokens,
                             output_tokens: api_resp.usage.output_tokens,
                         },
+                        stop_reason: Some(StopReason::EndTurn),
                     });
                 }
                 Ok(resp) => {

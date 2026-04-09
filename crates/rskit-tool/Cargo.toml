@@ -1,0 +1,30 @@
+[package]
+name        = "rskit-tool"
+description = "Tool definition, auto-wiring, registry and middleware for agentic systems"
+version.workspace      = true
+edition.workspace      = true
+license.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+documentation = "https://docs.rs/rskit-tool"
+readme = "README.md"
+categories = ["api-bindings"]
+keywords   = ["tool", "agent", "mcp", "function-calling"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+rskit-schema   = { path = "../rskit-schema" }
+rskit-errors   = { path = "../rskit-errors" }
+serde          = { workspace = true }
+serde_json     = { workspace = true }
+async-trait    = { workspace = true }
+tokio          = { workspace = true }
+tokio-util     = { workspace = true, features = ["rt"] }
+parking_lot    = { workspace = true }
+tracing        = { workspace = true }
+schemars       = { workspace = true }

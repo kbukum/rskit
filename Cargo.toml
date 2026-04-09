@@ -37,6 +37,8 @@ members = [
     "crates/rskit-embedding",
     "crates/rskit-inference",
     "crates/rskit-vector-store",
+    "crates/rskit-schema",
+    "crates/rskit-tool",
     # phase 6 media & file
     "crates/rskit-file",
     "crates/rskit-file-s3",
@@ -121,6 +123,7 @@ http         = "1"
 regex        = "1"
 once_cell    = "1"
 base64       = "0.22"
+schemars     = "1"
 
 # HTTP server (Phase 2)
 axum         = { version = "0.8", features = ["http2", "ws"] }

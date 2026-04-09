@@ -1,0 +1,25 @@
+[package]
+name        = "rskit-schema"
+description = "JSON Schema generation from Rust types via schemars"
+version.workspace      = true
+edition.workspace      = true
+license.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+documentation = "https://docs.rs/rskit-schema"
+readme = "README.md"
+categories = ["encoding"]
+keywords   = ["json-schema", "schemars", "schema", "validation"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+schemars   = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+serde = { workspace = true }

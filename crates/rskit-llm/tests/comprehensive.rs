@@ -1,176 +1,178 @@
 use std::time::Duration;
 
 use rskit_llm::{
-    AnthropicConfig, AnthropicProvider, ChatMessage, CompletionRequest, CompletionResponse,
-    LlmProvider, OpenAiConfig, OpenAiProvider, Role, TokenUsage,
+    AnthropicConfig, AnthropicProvider, AssistantMessage, CompletionRequest, CompletionResponse,
+    ContentBlock, FunctionCall, LlmProvider, Message, OpenAiConfig, OpenAiProvider, StopReason,
+    ToolCall, ToolChoice, Usage, assistant, system, text_of, tool_result_msg, user,
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Role enum — comprehensive tests
+// Message enum — role helpers
 // ═══════════════════════════════════════════════════════════════════════════
 
 #[test]
-fn role_system_variant() {
-    let r = Role::System;
-    assert_eq!(r, Role::System);
+fn message_user_role() {
+    assert_eq!(user("hi").role(), "user");
 }
 
 #[test]
-fn role_user_variant() {
-    let r = Role::User;
-    assert_eq!(r, Role::User);
+fn message_assistant_role() {
+    assert_eq!(assistant("hi").role(), "assistant");
 }
 
 #[test]
-fn role_assistant_variant() {
-    let r = Role::Assistant;
-    assert_eq!(r, Role::Assistant);
+fn message_system_role() {
+    assert_eq!(system("hi").role(), "system");
 }
 
 #[test]
-fn role_clone() {
-    let r = Role::User;
-    let r2 = r.clone();
-    assert_eq!(r, r2);
+fn message_tool_result_role() {
+    assert_eq!(tool_result_msg("id", "ok", false).role(), "tool_result");
 }
 
 #[test]
-fn role_debug_format() {
-    let r = Role::System;
-    let dbg = format!("{:?}", r);
-    assert!(dbg.contains("System"), "Debug format = {dbg}");
+fn message_clone() {
+    let msg = user("clone me");
+    let msg2 = msg.clone();
+    assert_eq!(msg.role(), msg2.role());
 }
 
 #[test]
-fn role_serialize_all_variants() {
-    for (role, expected) in [
-        (Role::System, "\"System\""),
-        (Role::User, "\"User\""),
-        (Role::Assistant, "\"Assistant\""),
-    ] {
-        let json = serde_json::to_string(&role).unwrap();
-        assert_eq!(json, expected, "serialized {role:?}");
-    }
+fn message_debug_format() {
+    let msg = system("debug");
+    let dbg = format!("{:?}", msg);
+    assert!(dbg.contains("System") || dbg.contains("system"), "Debug format = {dbg}");
 }
 
 #[test]
-fn role_deserialize_all_variants() {
-    for (json_str, expected) in [
-        ("\"System\"", Role::System),
-        ("\"User\"", Role::User),
-        ("\"Assistant\"", Role::Assistant),
-    ] {
-        let role: Role = serde_json::from_str(json_str).unwrap();
-        assert_eq!(role, expected, "deserialized {json_str}");
-    }
+fn message_serde_roundtrip_user() {
+    let msg = user("round trip");
+    let json = serde_json::to_string(&msg).unwrap();
+    let back: Message = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.role(), "user");
 }
 
 #[test]
-fn role_deserialize_invalid() {
-    let result = serde_json::from_str::<Role>("\"Admin\"");
+fn message_serde_roundtrip_assistant() {
+    let msg = assistant("hello");
+    let json = serde_json::to_string(&msg).unwrap();
+    let back: Message = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.role(), "assistant");
+}
+
+#[test]
+fn message_serde_roundtrip_system() {
+    let msg = system("sys prompt");
+    let json = serde_json::to_string(&msg).unwrap();
+    let back: Message = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.role(), "system");
+}
+
+#[test]
+fn message_serde_roundtrip_tool_result() {
+    let msg = tool_result_msg("call_1", "output", false);
+    let json = serde_json::to_string(&msg).unwrap();
+    let back: Message = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.role(), "tool_result");
+}
+
+#[test]
+fn message_deserialize_invalid_role() {
+    let json = r#"{"role":"Admin","content":"hi"}"#;
+    let result = serde_json::from_str::<Message>(json);
     assert!(result.is_err(), "expected error for invalid role");
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// ContentBlock — serde, variants
+// ═══════════════════════════════════════════════════════════════════════════
+
 #[test]
-fn role_serde_roundtrip_all() {
-    for role in [Role::System, Role::User, Role::Assistant] {
-        let json = serde_json::to_string(&role).unwrap();
-        let back: Role = serde_json::from_str(&json).unwrap();
-        assert_eq!(back, role);
+fn content_block_text_serde() {
+    let block = ContentBlock::Text { text: "hi".into() };
+    let json = serde_json::to_value(&block).unwrap();
+    assert_eq!(json["type"], "text");
+    assert_eq!(json["text"], "hi");
+}
+
+#[test]
+fn content_block_image_serde() {
+    let block = ContentBlock::Image {
+        source: "base64data".into(),
+        mime_type: "image/png".into(),
+        data: None,
+    };
+    let json = serde_json::to_value(&block).unwrap();
+    assert_eq!(json["type"], "image");
+    assert_eq!(json["mime_type"], "image/png");
+}
+
+#[test]
+fn content_block_tool_use_serde() {
+    let block = ContentBlock::ToolUse {
+        id: "call_1".into(),
+        name: "search".into(),
+        input: serde_json::json!({"q": "rust"}),
+    };
+    let json = serde_json::to_value(&block).unwrap();
+    assert_eq!(json["type"], "tool_use");
+    assert_eq!(json["name"], "search");
+    let back: ContentBlock = serde_json::from_value(json).unwrap();
+    match back {
+        ContentBlock::ToolUse { name, .. } => assert_eq!(name, "search"),
+        _ => panic!("expected ToolUse"),
     }
 }
 
+#[test]
+fn content_block_tool_result_serde() {
+    let block = ContentBlock::ToolResult {
+        tool_use_id: "call_1".into(),
+        content: "42".into(),
+        is_error: false,
+    };
+    let json = serde_json::to_value(&block).unwrap();
+    assert_eq!(json["type"], "tool_result");
+}
+
+#[test]
+fn content_block_thinking_serde() {
+    let block = ContentBlock::Thinking {
+        text: "let me think...".into(),
+    };
+    let json = serde_json::to_value(&block).unwrap();
+    assert_eq!(json["type"], "thinking");
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
-// ChatMessage — construction, clone, serde
+// text_of helper
 // ═══════════════════════════════════════════════════════════════════════════
 
 #[test]
-fn chat_message_basic_construction() {
-    let msg = ChatMessage {
-        role: Role::User,
-        content: "Hello!".into(),
-    };
-    assert_eq!(msg.role, Role::User);
-    assert_eq!(msg.content, "Hello!");
+fn text_of_concatenates_text_blocks() {
+    let blocks = vec![
+        ContentBlock::Text { text: "Hello ".into() },
+        ContentBlock::ToolUse {
+            id: "x".into(),
+            name: "y".into(),
+            input: serde_json::json!({}),
+        },
+        ContentBlock::Text { text: "world".into() },
+    ];
+    assert_eq!(text_of(&blocks), "Hello world");
 }
 
 #[test]
-fn chat_message_system() {
-    let msg = ChatMessage {
-        role: Role::System,
-        content: "You are helpful.".into(),
-    };
-    assert_eq!(msg.role, Role::System);
+fn text_of_empty_blocks() {
+    assert_eq!(text_of(&[]), "");
 }
 
 #[test]
-fn chat_message_assistant() {
-    let msg = ChatMessage {
-        role: Role::Assistant,
-        content: "Sure, I can help.".into(),
-    };
-    assert_eq!(msg.role, Role::Assistant);
-}
-
-#[test]
-fn chat_message_empty_content() {
-    let msg = ChatMessage {
-        role: Role::User,
-        content: String::new(),
-    };
-    assert!(msg.content.is_empty());
-}
-
-#[test]
-fn chat_message_large_content() {
-    let big = "x".repeat(100_000);
-    let msg = ChatMessage {
-        role: Role::User,
-        content: big.clone(),
-    };
-    assert_eq!(msg.content.len(), 100_000);
-}
-
-#[test]
-fn chat_message_clone() {
-    let msg = ChatMessage {
-        role: Role::User,
-        content: "clone me".into(),
-    };
-    let msg2 = msg.clone();
-    assert_eq!(msg.content, msg2.content);
-    assert_eq!(msg.role, msg2.role);
-}
-
-#[test]
-fn chat_message_serialize() {
-    let msg = ChatMessage {
-        role: Role::User,
-        content: "hi".into(),
-    };
-    let json = serde_json::to_value(&msg).unwrap();
-    assert_eq!(json["role"], "User");
-    assert_eq!(json["content"], "hi");
-}
-
-#[test]
-fn chat_message_deserialize() {
-    let json = r#"{"role":"Assistant","content":"ok"}"#;
-    let msg: ChatMessage = serde_json::from_str(json).unwrap();
-    assert_eq!(msg.role, Role::Assistant);
-    assert_eq!(msg.content, "ok");
-}
-
-#[test]
-fn chat_message_serde_roundtrip() {
-    let msg = ChatMessage {
-        role: Role::System,
-        content: "Round trip test.".into(),
-    };
-    let json = serde_json::to_string(&msg).unwrap();
-    let back: ChatMessage = serde_json::from_str(&json).unwrap();
-    assert_eq!(back.role, msg.role);
-    assert_eq!(back.content, msg.content);
+fn text_of_no_text_blocks() {
+    let blocks = vec![ContentBlock::Thinking {
+        text: "hmm".into(),
+    }];
+    assert_eq!(text_of(&blocks), "");
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -185,6 +187,8 @@ fn completion_request_minimal() {
         max_tokens: None,
         temperature: None,
         stream: false,
+        tools: None,
+        tool_choice: None,
     };
     assert!(req.model.is_empty());
     assert!(req.messages.is_empty());
@@ -195,31 +199,38 @@ fn completion_request_minimal() {
 
 #[test]
 fn completion_request_all_fields() {
+    let tool_def = rskit_tool::Definition {
+        name: "get_weather".into(),
+        description: "Get weather for a city".into(),
+        input_schema: serde_json::json!({"type": "object", "properties": {"city": {"type": "string"}}}),
+        output_schema: None,
+        annotations: None,
+        read_only: false,
+        destructive: false,
+        max_result_size: 0,
+        timeout_secs: 0.0,
+    };
     let req = CompletionRequest {
         model: "gpt-4o".into(),
         messages: vec![
-            ChatMessage {
-                role: Role::System,
-                content: "Be concise.".into(),
-            },
-            ChatMessage {
-                role: Role::User,
-                content: "Explain rust.".into(),
-            },
-            ChatMessage {
-                role: Role::Assistant,
-                content: "Rust is a systems language.".into(),
-            },
+            system("Be concise."),
+            user("Explain rust."),
+            assistant("Rust is a systems language."),
         ],
         max_tokens: Some(4096),
         temperature: Some(0.8),
         stream: true,
+        tools: Some(vec![tool_def]),
+        tool_choice: Some(ToolChoice::auto()),
     };
     assert_eq!(req.model, "gpt-4o");
     assert_eq!(req.messages.len(), 3);
     assert_eq!(req.max_tokens, Some(4096));
     assert_eq!(req.temperature, Some(0.8));
     assert!(req.stream);
+    assert_eq!(req.tools.as_ref().unwrap().len(), 1);
+    assert_eq!(req.tools.as_ref().unwrap()[0].name, "get_weather");
+    assert_eq!(req.tool_choice.as_ref().unwrap().mode, "auto");
 }
 
 #[test]
@@ -230,6 +241,8 @@ fn completion_request_zero_temperature() {
         max_tokens: None,
         temperature: Some(0.0),
         stream: false,
+        tools: None,
+        tool_choice: None,
     };
     assert_eq!(req.temperature, Some(0.0));
 }
@@ -238,20 +251,19 @@ fn completion_request_zero_temperature() {
 fn completion_request_serialize() {
     let req = CompletionRequest {
         model: "gpt-4".into(),
-        messages: vec![ChatMessage {
-            role: Role::User,
-            content: "hi".into(),
-        }],
+        messages: vec![user("hi")],
         max_tokens: Some(100),
         temperature: Some(0.5),
         stream: false,
+        tools: None,
+        tool_choice: None,
     };
     let json = serde_json::to_value(&req).unwrap();
     assert_eq!(json["model"], "gpt-4");
     assert_eq!(json["max_tokens"], 100);
     assert_eq!(json["temperature"], 0.5);
     assert_eq!(json["stream"], false);
-    assert_eq!(json["messages"][0]["role"], "User");
+    assert_eq!(json["messages"][0]["role"], "user");
 }
 
 #[test]
@@ -262,9 +274,10 @@ fn completion_request_serialize_none_fields() {
         max_tokens: None,
         temperature: None,
         stream: false,
+        tools: None,
+        tool_choice: None,
     };
     let json = serde_json::to_value(&req).unwrap();
-    // None serializes as null in serde_json
     assert!(json["max_tokens"].is_null());
     assert!(json["temperature"].is_null());
 }
@@ -273,19 +286,12 @@ fn completion_request_serialize_none_fields() {
 fn completion_request_serde_roundtrip() {
     let req = CompletionRequest {
         model: "claude-3".into(),
-        messages: vec![
-            ChatMessage {
-                role: Role::System,
-                content: "sys".into(),
-            },
-            ChatMessage {
-                role: Role::User,
-                content: "usr".into(),
-            },
-        ],
+        messages: vec![system("sys"), user("usr")],
         max_tokens: Some(500),
         temperature: Some(0.9),
         stream: true,
+        tools: None,
+        tool_choice: None,
     };
     let json = serde_json::to_string(&req).unwrap();
     let back: CompletionRequest = serde_json::from_str(&json).unwrap();
@@ -306,106 +312,138 @@ fn completion_request_deserialize_minimal_json() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// CompletionResponse — deserialization
+// CompletionResponse — construction, helpers
 // ═══════════════════════════════════════════════════════════════════════════
 
+fn make_response(text: &str) -> CompletionResponse {
+    CompletionResponse {
+        message: AssistantMessage {
+            content: vec![ContentBlock::Text {
+                text: text.into(),
+            }],
+            tool_calls: vec![],
+            usage: None,
+        },
+        model: "test".into(),
+        usage: Usage {
+            input_tokens: 10,
+            output_tokens: 5,
+        },
+        stop_reason: Some(StopReason::EndTurn),
+    }
+}
+
 #[test]
-fn completion_response_deserialize() {
-    let json = r#"{
-        "id": "resp-1",
-        "content": "Hello world!",
-        "model": "gpt-4",
-        "usage": {
-            "input_tokens": 10,
-            "output_tokens": 5
-        }
-    }"#;
-    let resp: CompletionResponse = serde_json::from_str(json).unwrap();
-    assert_eq!(resp.id, "resp-1");
-    assert_eq!(resp.content, "Hello world!");
-    assert_eq!(resp.model, "gpt-4");
+fn completion_response_text_helper() {
+    let resp = make_response("Hello world!");
+    assert_eq!(resp.text(), "Hello world!");
+    assert_eq!(resp.model, "test");
     assert_eq!(resp.usage.input_tokens, 10);
     assert_eq!(resp.usage.output_tokens, 5);
 }
 
 #[test]
 fn completion_response_empty_content() {
-    let json = r#"{
-        "id": "resp-2",
-        "content": "",
-        "model": "m",
-        "usage": {"input_tokens": 0, "output_tokens": 0}
-    }"#;
-    let resp: CompletionResponse = serde_json::from_str(json).unwrap();
-    assert!(resp.content.is_empty());
+    let resp = make_response("");
+    assert!(resp.text().is_empty());
 }
 
 #[test]
 fn completion_response_clone() {
-    let json = r#"{
-        "id": "resp-3",
-        "content": "test",
-        "model": "m",
-        "usage": {"input_tokens": 1, "output_tokens": 2}
-    }"#;
-    let resp: CompletionResponse = serde_json::from_str(json).unwrap();
+    let resp = make_response("test");
     let resp2 = resp.clone();
-    assert_eq!(resp.id, resp2.id);
-    assert_eq!(resp.content, resp2.content);
+    assert_eq!(resp.text(), resp2.text());
+    assert_eq!(resp.model, resp2.model);
 }
 
 #[test]
-fn completion_response_missing_field_errors() {
-    // Missing required "id" field
-    let json = r#"{"content":"hi","model":"m","usage":{"input_tokens":0,"output_tokens":0}}"#;
-    let result = serde_json::from_str::<CompletionResponse>(json);
-    assert!(result.is_err(), "expected error when id is missing");
+fn completion_response_has_tool_calls() {
+    let mut resp = make_response("");
+    resp.message.tool_calls = vec![ToolCall {
+        id: "c1".into(),
+        call_type: "function".into(),
+        function: FunctionCall {
+            name: "f".into(),
+            arguments: "{}".into(),
+        },
+    }];
+    resp.stop_reason = Some(StopReason::ToolUse);
+    assert!(resp.has_tool_calls());
+}
+
+#[test]
+fn completion_response_no_tool_calls() {
+    let resp = make_response("done");
+    assert!(!resp.has_tool_calls());
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// TokenUsage — deserialization, edge cases
+// Usage — deserialization, edge cases
 // ═══════════════════════════════════════════════════════════════════════════
 
 #[test]
-fn token_usage_deserialize() {
+fn usage_deserialize() {
     let json = r#"{"input_tokens": 100, "output_tokens": 50}"#;
-    let usage: TokenUsage = serde_json::from_str(json).unwrap();
+    let usage: Usage = serde_json::from_str(json).unwrap();
     assert_eq!(usage.input_tokens, 100);
     assert_eq!(usage.output_tokens, 50);
 }
 
 #[test]
-fn token_usage_zero_values() {
+fn usage_zero_values() {
     let json = r#"{"input_tokens": 0, "output_tokens": 0}"#;
-    let usage: TokenUsage = serde_json::from_str(json).unwrap();
+    let usage: Usage = serde_json::from_str(json).unwrap();
     assert_eq!(usage.input_tokens, 0);
     assert_eq!(usage.output_tokens, 0);
 }
 
 #[test]
-fn token_usage_large_values() {
+fn usage_large_values() {
     let json = r#"{"input_tokens": 1000000, "output_tokens": 500000}"#;
-    let usage: TokenUsage = serde_json::from_str(json).unwrap();
+    let usage: Usage = serde_json::from_str(json).unwrap();
     assert_eq!(usage.input_tokens, 1_000_000);
     assert_eq!(usage.output_tokens, 500_000);
 }
 
 #[test]
-fn token_usage_clone() {
-    let json = r#"{"input_tokens": 10, "output_tokens": 5}"#;
-    let usage: TokenUsage = serde_json::from_str(json).unwrap();
+fn usage_clone() {
+    let usage = Usage {
+        input_tokens: 10,
+        output_tokens: 5,
+    };
     let usage2 = usage.clone();
     assert_eq!(usage.input_tokens, usage2.input_tokens);
     assert_eq!(usage.output_tokens, usage2.output_tokens);
 }
 
 #[test]
-fn token_usage_debug() {
-    let json = r#"{"input_tokens": 10, "output_tokens": 5}"#;
-    let usage: TokenUsage = serde_json::from_str(json).unwrap();
+fn usage_debug() {
+    let usage = Usage {
+        input_tokens: 10,
+        output_tokens: 5,
+    };
     let dbg = format!("{:?}", usage);
     assert!(dbg.contains("10"));
     assert!(dbg.contains("5"));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// StopReason
+// ═══════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn stop_reason_variants() {
+    let reasons = [
+        StopReason::EndTurn,
+        StopReason::MaxTokens,
+        StopReason::ToolUse,
+        StopReason::StopSequence,
+    ];
+    for r in &reasons {
+        let json = serde_json::to_value(r).unwrap();
+        let back: StopReason = serde_json::from_value(json).unwrap();
+        assert_eq!(format!("{:?}", r), format!("{:?}", back));
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -557,7 +595,6 @@ fn openai_provider_as_trait_object() {
         max_retries: 1,
     };
     let provider = OpenAiProvider::new(cfg).unwrap();
-    // Verify we can create a trait object (Send + Sync)
     let _boxed: Box<dyn LlmProvider> = Box::new(provider);
 }
 
@@ -607,31 +644,24 @@ fn multi_turn_conversation() {
     let req = CompletionRequest {
         model: "gpt-4".into(),
         messages: vec![
-            ChatMessage {
-                role: Role::System,
-                content: "You are a math tutor.".into(),
-            },
-            ChatMessage {
-                role: Role::User,
-                content: "What is 2+2?".into(),
-            },
-            ChatMessage {
-                role: Role::Assistant,
-                content: "4".into(),
-            },
-            ChatMessage {
-                role: Role::User,
-                content: "And 3+3?".into(),
-            },
+            system("You are a math tutor."),
+            user("What is 2+2?"),
+            assistant("Let me use a tool."),
+            tool_result_msg("call_1", "4", false),
+            user("And 3+3?"),
         ],
         max_tokens: Some(50),
         temperature: Some(0.0),
         stream: false,
+        tools: None,
+        tool_choice: None,
     };
-    assert_eq!(req.messages.len(), 4);
-    assert_eq!(req.messages[0].role, Role::System);
-    assert_eq!(req.messages[3].role, Role::User);
-    assert_eq!(req.messages[3].content, "And 3+3?");
+    assert_eq!(req.messages.len(), 5);
+    assert_eq!(req.messages[0].role(), "system");
+    assert_eq!(req.messages[1].role(), "user");
+    assert_eq!(req.messages[2].role(), "assistant");
+    assert_eq!(req.messages[3].role(), "tool_result");
+    assert_eq!(req.messages[4].role(), "user");
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -646,9 +676,10 @@ fn completion_request_json_field_names() {
         max_tokens: Some(10),
         temperature: Some(0.5),
         stream: true,
+        tools: None,
+        tool_choice: None,
     };
     let val = serde_json::to_value(&req).unwrap();
-    // Check that serde field names are as expected
     assert!(val.get("model").is_some());
     assert!(val.get("messages").is_some());
     assert!(val.get("max_tokens").is_some());
@@ -657,24 +688,9 @@ fn completion_request_json_field_names() {
 }
 
 #[test]
-fn token_usage_json_field_names() {
+fn usage_json_field_names() {
     let json = r#"{"input_tokens": 1, "output_tokens": 2}"#;
-    let usage: TokenUsage = serde_json::from_str(json).unwrap();
+    let usage: Usage = serde_json::from_str(json).unwrap();
     assert_eq!(usage.input_tokens, 1);
     assert_eq!(usage.output_tokens, 2);
-}
-
-#[test]
-fn completion_response_json_field_names() {
-    let json = serde_json::json!({
-        "id": "test",
-        "content": "hello",
-        "model": "m",
-        "usage": {
-            "input_tokens": 0,
-            "output_tokens": 0
-        }
-    });
-    let resp: CompletionResponse = serde_json::from_value(json).unwrap();
-    assert_eq!(resp.id, "test");
 }
