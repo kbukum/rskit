@@ -10,8 +10,8 @@
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_llm::types::{
-    AssistantMessage, CompletionRequest, CompletionResponse, ContentBlock, Message, StopReason,
-    Usage,
+    AssistantMessage, CompletionRequest, CompletionResponse, ContentBlock, FunctionCall, Message,
+    StopReason, StreamChunk, ToolCall, Usage,
 };
 use serde::{Deserialize, Serialize};
 
@@ -205,6 +205,73 @@ impl GeminiDialect {
         common::parse_gemini_error(status, body).into()
     }
 
+    /// Parse a single SSE data payload from the streaming `generateContent` API.
+    ///
+    /// Gemini streams JSON objects with `candidates[].content.parts[]`.
+    pub fn parse_stream_chunk(data: &[u8]) -> AppResult<StreamChunk> {
+        let s = std::str::from_utf8(data).map_err(|e| {
+            AppError::new(
+                ErrorCode::InvalidFormat,
+                format!("invalid UTF-8 in Gemini stream chunk: {e}"),
+            )
+        })?;
+
+        let v: serde_json::Value = serde_json::from_str(s).map_err(|e| {
+            AppError::new(
+                ErrorCode::ExternalService,
+                format!("failed to parse Gemini stream chunk: {e}"),
+            )
+        })?;
+
+        let candidate = v.get("candidates").and_then(|c| c.get(0));
+
+        let parts = candidate
+            .and_then(|c| c.get("content"))
+            .and_then(|c| c.get("parts"))
+            .and_then(|p| p.as_array());
+
+        let mut content = String::new();
+        let mut tool_calls = Vec::new();
+
+        if let Some(parts) = parts {
+            for part in parts {
+                if let Some(text) = part.get("text").and_then(|t| t.as_str()) {
+                    content.push_str(text);
+                }
+                if let Some(fc) = part.get("functionCall") {
+                    let name = fc
+                        .get("name")
+                        .and_then(|n| n.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let args = fc
+                        .get("args")
+                        .map(|a| a.to_string())
+                        .unwrap_or_else(|| "{}".to_string());
+                    tool_calls.push(ToolCall {
+                        id: String::new(),
+                        call_type: "function".to_string(),
+                        function: FunctionCall {
+                            name,
+                            arguments: args,
+                        },
+                    });
+                }
+            }
+        }
+
+        let done = candidate
+            .and_then(|c| c.get("finishReason"))
+            .and_then(|r| r.as_str())
+            .is_some_and(|r| !r.is_empty() && r != "NONE");
+
+        Ok(StreamChunk {
+            content,
+            tool_calls,
+            done,
+        })
+    }
+
     /// Build the endpoint path for a given model.
     pub fn endpoint(model: &str) -> String {
         format!("/v1beta/models/{}:generateContent", model)
@@ -314,5 +381,51 @@ mod tests {
             GeminiDialect::endpoint("gemini-2.5-flash"),
             "/v1beta/models/gemini-2.5-flash:generateContent"
         );
+    }
+
+    // -- parse_stream_chunk tests --
+
+    #[test]
+    fn stream_chunk_text_content() {
+        let data = br#"{"candidates":[{"content":{"parts":[{"text":"Hello"}],"role":"model"}}]}"#;
+        let chunk = GeminiDialect::parse_stream_chunk(data).unwrap();
+        assert_eq!(chunk.content, "Hello");
+        assert!(chunk.tool_calls.is_empty());
+        assert!(!chunk.done);
+    }
+
+    #[test]
+    fn stream_chunk_function_call() {
+        let data = br#"{"candidates":[{"content":{"parts":[{"functionCall":{"name":"get_weather","args":{"location":"NYC"}}}],"role":"model"}}]}"#;
+        let chunk = GeminiDialect::parse_stream_chunk(data).unwrap();
+        assert!(chunk.content.is_empty());
+        assert_eq!(chunk.tool_calls.len(), 1);
+        assert_eq!(chunk.tool_calls[0].function.name, "get_weather");
+        let args: serde_json::Value =
+            serde_json::from_str(&chunk.tool_calls[0].function.arguments).unwrap();
+        assert_eq!(args["location"], "NYC");
+    }
+
+    #[test]
+    fn stream_chunk_finish_reason_stop() {
+        let data = br#"{"candidates":[{"content":{"parts":[{"text":"done"}],"role":"model"},"finishReason":"STOP"}]}"#;
+        let chunk = GeminiDialect::parse_stream_chunk(data).unwrap();
+        assert_eq!(chunk.content, "done");
+        assert!(chunk.done);
+    }
+
+    #[test]
+    fn stream_chunk_no_candidates() {
+        let data = br#"{"candidates":[]}"#;
+        let chunk = GeminiDialect::parse_stream_chunk(data).unwrap();
+        assert!(chunk.content.is_empty());
+        assert!(!chunk.done);
+    }
+
+    #[test]
+    fn stream_chunk_finish_reason_none_is_not_done() {
+        let data = br#"{"candidates":[{"content":{"parts":[{"text":"hi"}],"role":"model"},"finishReason":"NONE"}]}"#;
+        let chunk = GeminiDialect::parse_stream_chunk(data).unwrap();
+        assert!(!chunk.done);
     }
 }

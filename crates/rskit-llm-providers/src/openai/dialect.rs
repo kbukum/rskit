@@ -2,8 +2,8 @@
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_llm::types::{
-    AssistantMessage, CompletionRequest, CompletionResponse, ContentBlock, Message, StopReason,
-    Usage,
+    AssistantMessage, CompletionRequest, CompletionResponse, ContentBlock, FunctionCall, Message,
+    StopReason, StreamChunk, ToolCall, Usage,
 };
 use serde::{Deserialize, Serialize};
 
@@ -133,6 +133,89 @@ impl OpenAiDialect {
         common::parse_openai_error(status, body).into()
     }
 
+    /// Parse a single SSE data payload from the streaming chat-completions API.
+    ///
+    /// The caller is responsible for stripping the `data: ` prefix; `data` is the
+    /// raw bytes after that prefix.
+    pub fn parse_stream_chunk(data: &[u8]) -> AppResult<StreamChunk> {
+        let s = std::str::from_utf8(data).map_err(|e| {
+            AppError::new(
+                ErrorCode::InvalidFormat,
+                format!("invalid UTF-8 in OpenAI stream chunk: {e}"),
+            )
+        })?;
+
+        if s.trim() == "[DONE]" {
+            return Ok(StreamChunk {
+                done: true,
+                ..Default::default()
+            });
+        }
+
+        let v: serde_json::Value = serde_json::from_str(s).map_err(|e| {
+            AppError::new(
+                ErrorCode::ExternalService,
+                format!("failed to parse OpenAI stream chunk: {e}"),
+            )
+        })?;
+
+        let choice = match v.get("choices").and_then(|c| c.get(0)) {
+            Some(c) => c,
+            None => return Ok(StreamChunk::default()),
+        };
+
+        let delta = choice.get("delta").unwrap_or(&serde_json::Value::Null);
+
+        let content = delta
+            .get("content")
+            .and_then(|c| c.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        let mut tool_calls = Vec::new();
+        if let Some(tcs) = delta.get("tool_calls").and_then(|t| t.as_array()) {
+            for tc in tcs {
+                let id = tc
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let call_type = tc
+                    .get("type")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("function")
+                    .to_string();
+                let func = tc.get("function").unwrap_or(&serde_json::Value::Null);
+                let name = func
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let arguments = func
+                    .get("arguments")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                tool_calls.push(ToolCall {
+                    id,
+                    call_type,
+                    function: FunctionCall { name, arguments },
+                });
+            }
+        }
+
+        let done = choice
+            .get("finish_reason")
+            .and_then(|v| v.as_str())
+            .is_some_and(|r| !r.is_empty());
+
+        Ok(StreamChunk {
+            content,
+            tool_calls,
+            done,
+        })
+    }
+
     /// Returns the chat completions endpoint path.
     pub fn endpoint() -> &'static str {
         "/chat/completions"
@@ -180,5 +263,51 @@ mod tests {
     #[test]
     fn endpoint_is_correct() {
         assert_eq!(OpenAiDialect::endpoint(), "/chat/completions");
+    }
+
+    // -- parse_stream_chunk tests --
+
+    #[test]
+    fn stream_chunk_content_delta() {
+        let data = br#"{"choices":[{"delta":{"content":"Hello"},"finish_reason":null}]}"#;
+        let chunk = OpenAiDialect::parse_stream_chunk(data).unwrap();
+        assert_eq!(chunk.content, "Hello");
+        assert!(chunk.tool_calls.is_empty());
+        assert!(!chunk.done);
+    }
+
+    #[test]
+    fn stream_chunk_tool_call() {
+        let data = br#"{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"get_weather","arguments":"{\"loc\":"}}]},"finish_reason":null}]}"#;
+        let chunk = OpenAiDialect::parse_stream_chunk(data).unwrap();
+        assert!(chunk.content.is_empty());
+        assert_eq!(chunk.tool_calls.len(), 1);
+        assert_eq!(chunk.tool_calls[0].id, "call_1");
+        assert_eq!(chunk.tool_calls[0].function.name, "get_weather");
+        assert_eq!(chunk.tool_calls[0].function.arguments, r#"{"loc":"#);
+        assert!(!chunk.done);
+    }
+
+    #[test]
+    fn stream_chunk_done_signal() {
+        let data = b"[DONE]";
+        let chunk = OpenAiDialect::parse_stream_chunk(data).unwrap();
+        assert!(chunk.done);
+        assert!(chunk.content.is_empty());
+    }
+
+    #[test]
+    fn stream_chunk_finish_reason_stop() {
+        let data = br#"{"choices":[{"delta":{},"finish_reason":"stop"}]}"#;
+        let chunk = OpenAiDialect::parse_stream_chunk(data).unwrap();
+        assert!(chunk.done);
+    }
+
+    #[test]
+    fn stream_chunk_empty_choices() {
+        let data = br#"{"choices":[]}"#;
+        let chunk = OpenAiDialect::parse_stream_chunk(data).unwrap();
+        assert!(chunk.content.is_empty());
+        assert!(!chunk.done);
     }
 }

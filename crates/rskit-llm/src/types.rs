@@ -226,6 +226,23 @@ pub enum StopReason {
     StopSequence,
 }
 
+// ── Stream chunk ────────────────────────────────────────────────────────────
+
+/// A single parsed chunk from a streaming completion response.
+///
+/// Each provider dialect parses its wire format into this unified type so the
+/// caller can accumulate content and tool-call fragments without knowing which
+/// provider is behind the stream.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct StreamChunk {
+    /// Incremental text content from this chunk (empty when absent).
+    pub content: String,
+    /// Tool-call fragments contained in this chunk.
+    pub tool_calls: Vec<ToolCall>,
+    /// `true` when the provider signals the stream is finished.
+    pub done: bool,
+}
+
 // ── Request / Response ──────────────────────────────────────────────────────
 
 /// Request to generate a chat completion.

@@ -147,8 +147,7 @@ async fn openai_complete_request() {
 async fn anthropic_complete_request() {
     use rskit_llm::LlmProvider;
 
-    let cfg: anthropic::Config =
-        serde_json::from_str(r#"{"api_key":"sk-ant-real-key"}"#).unwrap();
+    let cfg: anthropic::Config = serde_json::from_str(r#"{"api_key":"sk-ant-real-key"}"#).unwrap();
     let provider = anthropic::new_adapter(&cfg).unwrap();
     let req = CompletionRequest {
         model: "claude-3-haiku-20240307".into(),

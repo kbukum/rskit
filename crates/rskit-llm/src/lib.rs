@@ -14,6 +14,6 @@ pub use stream_events::StreamEvent;
 pub use traits::LlmProvider;
 pub use types::{
     AssistantMessage, CompletionRequest, CompletionResponse, ContentBlock, FunctionCall, Message,
-    StopReason, SystemMessage, ToolCall, ToolChoice, ToolResultMessage, Usage, UserMessage,
-    assistant, system, text_content, text_of, tool_result_msg, user,
+    StopReason, StreamChunk, SystemMessage, ToolCall, ToolChoice, ToolResultMessage, Usage,
+    UserMessage, assistant, system, text_content, text_of, tool_result_msg, user,
 };

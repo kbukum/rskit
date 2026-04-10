@@ -2,8 +2,8 @@
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_llm::types::{
-    AssistantMessage, CompletionRequest, CompletionResponse, ContentBlock, Message, StopReason,
-    Usage,
+    AssistantMessage, CompletionRequest, CompletionResponse, ContentBlock, FunctionCall, Message,
+    StopReason, StreamChunk, ToolCall, Usage,
 };
 use serde::{Deserialize, Serialize};
 
@@ -130,6 +130,98 @@ impl AnthropicDialect {
         common::parse_anthropic_error(status, body).into()
     }
 
+    /// Parse a single SSE data payload from the streaming Messages API.
+    ///
+    /// Anthropic streams events with a `type` discriminator.  The caller is
+    /// responsible for stripping the `data: ` prefix.
+    pub fn parse_stream_chunk(data: &[u8]) -> AppResult<StreamChunk> {
+        let s = std::str::from_utf8(data).map_err(|e| {
+            AppError::new(
+                ErrorCode::InvalidFormat,
+                format!("invalid UTF-8 in Anthropic stream chunk: {e}"),
+            )
+        })?;
+
+        let v: serde_json::Value = serde_json::from_str(s).map_err(|e| {
+            AppError::new(
+                ErrorCode::ExternalService,
+                format!("failed to parse Anthropic stream chunk: {e}"),
+            )
+        })?;
+
+        let event_type = v.get("type").and_then(|t| t.as_str()).unwrap_or("");
+
+        match event_type {
+            "content_block_delta" => {
+                let delta = v.get("delta").unwrap_or(&serde_json::Value::Null);
+                let delta_type = delta.get("type").and_then(|t| t.as_str()).unwrap_or("");
+
+                match delta_type {
+                    "text_delta" => {
+                        let text = delta.get("text").and_then(|t| t.as_str()).unwrap_or("");
+                        Ok(StreamChunk {
+                            content: text.to_string(),
+                            ..Default::default()
+                        })
+                    }
+                    "input_json_delta" => {
+                        let partial = delta
+                            .get("partial_json")
+                            .and_then(|p| p.as_str())
+                            .unwrap_or("");
+                        Ok(StreamChunk {
+                            tool_calls: vec![ToolCall {
+                                id: String::new(),
+                                call_type: "function".to_string(),
+                                function: FunctionCall {
+                                    name: String::new(),
+                                    arguments: partial.to_string(),
+                                },
+                            }],
+                            ..Default::default()
+                        })
+                    }
+                    _ => Ok(StreamChunk::default()),
+                }
+            }
+            "content_block_start" => {
+                let block = v.get("content_block").unwrap_or(&serde_json::Value::Null);
+                let block_type = block.get("type").and_then(|t| t.as_str()).unwrap_or("");
+
+                if block_type == "tool_use" {
+                    let id = block
+                        .get("id")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let name = block
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    Ok(StreamChunk {
+                        tool_calls: vec![ToolCall {
+                            id,
+                            call_type: "function".to_string(),
+                            function: FunctionCall {
+                                name,
+                                arguments: String::new(),
+                            },
+                        }],
+                        ..Default::default()
+                    })
+                } else {
+                    Ok(StreamChunk::default())
+                }
+            }
+            "message_stop" => Ok(StreamChunk {
+                done: true,
+                ..Default::default()
+            }),
+            _ => Ok(StreamChunk::default()),
+        }
+    }
+
     /// Returns the messages endpoint path.
     pub fn endpoint() -> &'static str {
         "/v1/messages"
@@ -174,5 +266,52 @@ mod tests {
     #[test]
     fn endpoint_is_correct() {
         assert_eq!(AnthropicDialect::endpoint(), "/v1/messages");
+    }
+
+    // -- parse_stream_chunk tests --
+
+    #[test]
+    fn stream_chunk_text_delta() {
+        let data = br#"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}"#;
+        let chunk = AnthropicDialect::parse_stream_chunk(data).unwrap();
+        assert_eq!(chunk.content, "Hello");
+        assert!(chunk.tool_calls.is_empty());
+        assert!(!chunk.done);
+    }
+
+    #[test]
+    fn stream_chunk_tool_use_start() {
+        let data = br#"{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_1","name":"get_weather"}}"#;
+        let chunk = AnthropicDialect::parse_stream_chunk(data).unwrap();
+        assert!(chunk.content.is_empty());
+        assert_eq!(chunk.tool_calls.len(), 1);
+        assert_eq!(chunk.tool_calls[0].id, "toolu_1");
+        assert_eq!(chunk.tool_calls[0].function.name, "get_weather");
+        assert!(chunk.tool_calls[0].function.arguments.is_empty());
+    }
+
+    #[test]
+    fn stream_chunk_tool_input_delta() {
+        let data = br#"{"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"loc\":"}}"#;
+        let chunk = AnthropicDialect::parse_stream_chunk(data).unwrap();
+        assert_eq!(chunk.tool_calls.len(), 1);
+        assert_eq!(chunk.tool_calls[0].function.arguments, r#"{"loc":"#);
+    }
+
+    #[test]
+    fn stream_chunk_message_stop() {
+        let data = br#"{"type":"message_stop"}"#;
+        let chunk = AnthropicDialect::parse_stream_chunk(data).unwrap();
+        assert!(chunk.done);
+        assert!(chunk.content.is_empty());
+    }
+
+    #[test]
+    fn stream_chunk_unknown_event_type() {
+        let data = br#"{"type":"ping"}"#;
+        let chunk = AnthropicDialect::parse_stream_chunk(data).unwrap();
+        assert!(chunk.content.is_empty());
+        assert!(chunk.tool_calls.is_empty());
+        assert!(!chunk.done);
     }
 }
