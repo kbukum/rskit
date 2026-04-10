@@ -88,6 +88,27 @@ impl Registry {
             .collect()
     }
 
+    /// Filter tools by execution_hint annotation.
+    ///
+    /// Returns definitions whose `annotations.execution_hint` matches the given
+    /// hint value. Tools without annotations or without an execution_hint are
+    /// excluded.
+    pub fn filter_by_execution_hint(&self, hint: &str) -> Vec<Definition> {
+        self.tools
+            .read()
+            .values()
+            .filter_map(|t| {
+                let def = t.definition();
+                match &def.annotations {
+                    Some(ann) if ann.execution_hint.as_deref() == Some(hint) => {
+                        Some(def.clone())
+                    }
+                    _ => None,
+                }
+            })
+            .collect()
+    }
+
     /// Call multiple tools concurrently.
     ///
     /// Read-only tools are executed concurrently via `tokio::join!`.

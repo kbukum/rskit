@@ -26,6 +26,13 @@ pub struct Annotations {
     /// Freeform tags for filtering.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<Vec<String>>,
+    /// Tells the frontend how to handle the tool result.
+    /// "ui"      — tool only validates/extracts params; frontend drives the action.
+    /// "backend" — tool executes a real operation; result is authoritative.
+    /// "hybrid"  — tool executes backend AND frontend should refresh/navigate.
+    /// None defaults to "backend" for backward compatibility.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub execution_hint: Option<String>,
 }
 
 /// Describes a tool — MCP-aligned metadata.

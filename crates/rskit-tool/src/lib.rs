@@ -244,6 +244,130 @@ mod tests {
     }
 
     #[test]
+    fn test_annotations_execution_hint() {
+        let ann = Annotations {
+            execution_hint: Some("ui".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(ann.execution_hint.as_deref(), Some("ui"));
+
+        let default_ann = Annotations::default();
+        assert!(default_ann.execution_hint.is_none());
+    }
+
+    #[test]
+    fn test_execution_hint_serialization() {
+        // execution_hint present — included in JSON
+        let ann = Annotations {
+            title: Some("My Tool".to_string()),
+            execution_hint: Some("hybrid".to_string()),
+            ..Default::default()
+        };
+        let json = serde_json::to_value(&ann).unwrap();
+        assert_eq!(json["execution_hint"], "hybrid");
+        assert_eq!(json["title"], "My Tool");
+
+        // execution_hint None — omitted from JSON (skip_serializing_if)
+        let ann_none = Annotations {
+            title: Some("Other".to_string()),
+            ..Default::default()
+        };
+        let json_none = serde_json::to_value(&ann_none).unwrap();
+        assert!(json_none.get("execution_hint").is_none());
+    }
+
+    #[test]
+    fn test_execution_hint_deserialization() {
+        let json = serde_json::json!({
+            "title": "T",
+            "execution_hint": "backend"
+        });
+        let ann: Annotations = serde_json::from_value(json).unwrap();
+        assert_eq!(ann.execution_hint.as_deref(), Some("backend"));
+
+        // Missing field deserializes as None
+        let json_missing = serde_json::json!({"title": "T"});
+        let ann2: Annotations = serde_json::from_value(json_missing).unwrap();
+        assert!(ann2.execution_hint.is_none());
+    }
+
+    /// Minimal Callable for tests that need custom annotations.
+    struct StubTool(Definition);
+
+    #[async_trait::async_trait]
+    impl Callable for StubTool {
+        fn definition(&self) -> &Definition {
+            &self.0
+        }
+        fn validate(&self, _input: &serde_json::Value) -> rskit_schema::ValidationResult {
+            rskit_schema::ValidationResult {
+                valid: true,
+                errors: vec![],
+            }
+        }
+        async fn call(
+            &self,
+            _ctx: &Context,
+            _input: serde_json::Value,
+        ) -> AppResult<ToolResult> {
+            Ok(text_result("stub"))
+        }
+    }
+
+    fn stub_def(name: &str, annotations: Option<Annotations>) -> Box<dyn Callable> {
+        Box::new(StubTool(Definition {
+            name: name.to_string(),
+            description: name.to_string(),
+            input_schema: serde_json::json!({"type": "object"}),
+            output_schema: None,
+            annotations,
+            read_only: false,
+            destructive: false,
+            max_result_size: 0,
+            timeout_secs: 0.0,
+        }))
+    }
+
+    #[tokio::test]
+    async fn test_registry_filter_by_execution_hint() {
+        let registry = Registry::new();
+
+        registry
+            .register(stub_def(
+                "validate_form",
+                Some(Annotations {
+                    execution_hint: Some("ui".to_string()),
+                    ..Default::default()
+                }),
+            ))
+            .unwrap();
+
+        registry
+            .register(stub_def(
+                "run_query",
+                Some(Annotations {
+                    execution_hint: Some("backend".to_string()),
+                    ..Default::default()
+                }),
+            ))
+            .unwrap();
+
+        // Tool with no annotations at all
+        registry.register(stub_def("noop", None)).unwrap();
+
+        let ui = registry.filter_by_execution_hint("ui");
+        assert_eq!(ui.len(), 1);
+        assert_eq!(ui[0].name, "validate_form");
+
+        let backend = registry.filter_by_execution_hint("backend");
+        assert_eq!(backend.len(), 1);
+        assert_eq!(backend[0].name, "run_query");
+
+        let hybrid = registry.filter_by_execution_hint("hybrid");
+        assert!(hybrid.is_empty());
+    }
+
+    #[test]
     fn test_context_metadata() {
         let mut ctx = Context::new();
         ctx.set("key", serde_json::json!("value"));
