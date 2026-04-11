@@ -1,7 +1,9 @@
-//! Authentication — JWT, OIDC, password hashing, request-context helpers.
+//! Authentication — JWT, OIDC, password hashing, API key management, request-context helpers.
 
 #![warn(missing_docs)]
 
+/// API key generation, hashing, validation, and rotation with grace periods.
+pub mod apikey;
 /// Auth claims stored in request extensions / task-locals.
 pub mod context;
 /// JWT sign/verify service.

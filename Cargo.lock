@@ -4297,12 +4297,17 @@ dependencies = [
  "async-trait",
  "base64 0.22.1",
  "chrono",
+ "hex",
+ "http 1.4.0",
  "jsonwebtoken",
  "rand 0.10.0",
  "rskit-errors",
  "serde",
  "serde_json",
+ "sha2",
+ "thiserror 2.0.18",
  "tokio",
+ "tower 0.5.3",
  "uuid",
 ]
 

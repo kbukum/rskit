@@ -89,6 +89,7 @@ pub fn tool_to_definition(tool: &Tool, prefix: &str) -> Definition {
         destructive_hint: a.destructive_hint,
         idempotent_hint: a.idempotent_hint,
         open_world_hint: a.open_world_hint,
+        execution_hint: None,
         category: None,
         tags: None,
     });
