@@ -4585,6 +4585,7 @@ dependencies = [
  "axum 0.8.8",
  "hyper 1.8.1",
  "hyper-util",
+ "parking_lot",
  "rskit-bootstrap",
  "rskit-errors",
  "rskit-logging",
