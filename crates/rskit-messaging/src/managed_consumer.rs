@@ -90,8 +90,28 @@ impl<T: Send + Sync + Clone + 'static> ManagedConsumer<T> {
                                     break;
                                 }
                                 consecutive_errors += 1;
-                                // Log first error and then only every 10th to avoid spam
-                                if consecutive_errors == 1 || consecutive_errors % 10 == 0 {
+
+                                let err_msg = e.to_string();
+                                let is_topic_missing = err_msg.contains("UnknownTopicOrPartition")
+                                    || err_msg.contains("UNKNOWN_TOPIC_OR_PARTITION")
+                                    || err_msg.contains("unknown topic");
+
+                                if is_topic_missing {
+                                    // Topic-not-found is expected during startup; log sparingly at debug.
+                                    if consecutive_errors == 1 {
+                                        tracing::debug!(
+                                            consumer = %name,
+                                            consecutive = consecutive_errors,
+                                            "topic not yet available, waiting for creation"
+                                        );
+                                    } else if consecutive_errors % 30 == 0 {
+                                        tracing::info!(
+                                            consumer = %name,
+                                            consecutive = consecutive_errors,
+                                            "topic still not available"
+                                        );
+                                    }
+                                } else if consecutive_errors == 1 || consecutive_errors % 10 == 0 {
                                     tracing::warn!(
                                         consumer = %name,
                                         error = %e,
