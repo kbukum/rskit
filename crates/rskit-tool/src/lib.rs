@@ -305,11 +305,7 @@ mod tests {
                 errors: vec![],
             }
         }
-        async fn call(
-            &self,
-            _ctx: &Context,
-            _input: serde_json::Value,
-        ) -> AppResult<ToolResult> {
+        async fn call(&self, _ctx: &Context, _input: serde_json::Value) -> AppResult<ToolResult> {
             Ok(text_result("stub"))
         }
     }

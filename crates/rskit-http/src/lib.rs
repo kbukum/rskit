@@ -5,8 +5,8 @@
 mod config;
 mod error;
 mod extractors;
-mod server;
 mod ratelimit;
+mod server;
 mod tenant;
 
 pub use config::{CorsConfig, HttpServerConfig};

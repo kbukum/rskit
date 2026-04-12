@@ -223,6 +223,7 @@ mod tests {
                 open_world_hint: Some(true),
                 category: Some("web".to_string()),
                 tags: Some(vec!["search".to_string()]),
+                execution_hint: None,
             }),
             read_only: true,
             destructive: false,

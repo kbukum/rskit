@@ -167,14 +167,8 @@ mod tests {
     #[tokio::test]
     async fn test_in_memory_store_append() {
         let store = InMemoryStore::new();
-        store
-            .save("s1", &[types::user("hello")])
-            .await
-            .unwrap();
-        store
-            .append("s1", &[types::assistant("hi")])
-            .await
-            .unwrap();
+        store.save("s1", &[types::user("hello")]).await.unwrap();
+        store.append("s1", &[types::assistant("hi")]).await.unwrap();
 
         let loaded = store.load("s1").await.unwrap();
         assert_eq!(loaded.len(), 2);
@@ -183,10 +177,7 @@ mod tests {
     #[tokio::test]
     async fn test_in_memory_store_clear() {
         let store = InMemoryStore::new();
-        store
-            .save("s1", &[types::user("hello")])
-            .await
-            .unwrap();
+        store.save("s1", &[types::user("hello")]).await.unwrap();
         store.clear("s1").await.unwrap();
 
         let loaded = store.load("s1").await.unwrap();

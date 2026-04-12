@@ -510,7 +510,7 @@ mod tests {
     fn validate_integer_rejects_float() {
         let schema = json!({"type": "integer"});
         assert!(validate(&schema, &json!(42)).valid);
-        assert!(!validate(&schema, &json!(3.14)).valid);
+        assert!(!validate(&schema, &json!(3.25)).valid);
     }
 
     #[test]

@@ -100,9 +100,7 @@ impl Registry {
             .filter_map(|t| {
                 let def = t.definition();
                 match &def.annotations {
-                    Some(ann) if ann.execution_hint.as_deref() == Some(hint) => {
-                        Some(def.clone())
-                    }
+                    Some(ann) if ann.execution_hint.as_deref() == Some(hint) => Some(def.clone()),
                     _ => None,
                 }
             })

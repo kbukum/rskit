@@ -3,7 +3,7 @@
 use chrono::{DateTime, Duration, Utc};
 use rskit_errors::AppError;
 
-use super::{generate, validate, GenerateResult, Store};
+use super::{GenerateResult, Store, generate, validate};
 
 /// Default grace period: 7 days.
 pub const DEFAULT_GRACE_PERIOD: Duration = Duration::days(7);

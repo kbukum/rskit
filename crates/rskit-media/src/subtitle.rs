@@ -54,7 +54,6 @@ pub enum SubtitlePosition {
     },
 }
 
-
 /// A collection of subtitle entries.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubtitleTrack {

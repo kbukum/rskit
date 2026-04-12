@@ -5,7 +5,7 @@ mod middleware;
 mod rotation;
 mod store;
 
-pub use key::{generate, hash_key, validate, GenerateResult, Key, KeyValidationError};
+pub use key::{GenerateResult, Key, KeyValidationError, generate, hash_key, validate};
 pub use middleware::{ApiKeyLayer, KeyValidator};
-pub use rotation::{rotate, RotationConfig, RotationResult, DEFAULT_GRACE_PERIOD};
+pub use rotation::{DEFAULT_GRACE_PERIOD, RotationConfig, RotationResult, rotate};
 pub use store::Store;

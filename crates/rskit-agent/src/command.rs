@@ -111,10 +111,7 @@ impl CommandRegistry {
         })?;
 
         let cmd = self.get(name).ok_or_else(|| {
-            AppError::new(
-                ErrorCode::InvalidInput,
-                format!("unknown command: /{name}"),
-            )
+            AppError::new(ErrorCode::InvalidInput, format!("unknown command: /{name}"))
         })?;
 
         cmd.handler.execute(args)

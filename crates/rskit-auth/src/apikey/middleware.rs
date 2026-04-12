@@ -1,7 +1,7 @@
 //! Tower middleware for API key validation.
 
 use async_trait::async_trait;
-use http::{header::HeaderName, Request, Response, StatusCode};
+use http::{Request, Response, StatusCode, header::HeaderName};
 use rskit_errors::AppError;
 use std::sync::Arc;
 use tower::{Layer, Service};

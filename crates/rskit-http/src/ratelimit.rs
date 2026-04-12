@@ -279,10 +279,7 @@ pub struct HttpRateLimitService<S> {
 
 impl<S, ReqBody> Service<Request<ReqBody>> for HttpRateLimitService<S>
 where
-    S: Service<Request<ReqBody>, Response = Response, Error = Infallible>
-        + Clone
-        + Send
-        + 'static,
+    S: Service<Request<ReqBody>, Response = Response, Error = Infallible> + Clone + Send + 'static,
     S::Future: Send + 'static,
     ReqBody: Send + 'static,
 {
@@ -307,8 +304,7 @@ where
             // otherwise we resolve with defaults.
             let (key, rpm) = resolve_key_and_rpm(&req, &limiter.cfg);
 
-            let (allowed, limit, remaining, retry_after, reset_unix) =
-                limiter.allow(&key, rpm);
+            let (allowed, limit, remaining, retry_after, reset_unix) = limiter.allow(&key, rpm);
 
             if !allowed {
                 let body = serde_json::json!({"error": "rate limit exceeded"}).to_string();
@@ -331,18 +327,16 @@ where
 
             // Attach rate-limit headers to the successful response.
             let (mut parts, body) = resp.into_parts();
-            parts.headers.insert(
-                "x-ratelimit-limit",
-                limit.to_string().parse().unwrap(),
-            );
+            parts
+                .headers
+                .insert("x-ratelimit-limit", limit.to_string().parse().unwrap());
             parts.headers.insert(
                 "x-ratelimit-remaining",
                 remaining.to_string().parse().unwrap(),
             );
-            parts.headers.insert(
-                "x-ratelimit-reset",
-                reset_unix.to_string().parse().unwrap(),
-            );
+            parts
+                .headers
+                .insert("x-ratelimit-reset", reset_unix.to_string().parse().unwrap());
             Ok(Response::from_parts(parts, body))
         })
     }
@@ -361,7 +355,8 @@ fn resolve_key_and_rpm<B: 'static>(req: &Request<B>, cfg: &RateLimitConfig) -> (
     if is_body {
         // SAFETY: We checked the TypeId matches. We only read the request by
         // reference through the func so there is no ownership transfer.
-        let req_ref: &Request<Body> = unsafe { &*(req as *const Request<B> as *const Request<Body>) };
+        let req_ref: &Request<Body> =
+            unsafe { &*(req as *const Request<B> as *const Request<Body>) };
 
         if let Some(ref lf) = cfg.limit_func {
             return lf(req_ref);
