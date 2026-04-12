@@ -13,8 +13,15 @@ use serde::Deserialize;
 pub struct DiscoveryConfig {
     /// Whether discovery is active.
     pub enabled: bool,
-    /// Discovery backend: `"consul"` or `"static"`.
+    /// Discovery backend: `"consul"`, `"static"`, etc.
     pub provider: String,
+    /// Provider address (e.g. `"localhost:8500"` for Consul).
+    /// Generic — every remote provider needs an address.
+    pub addr: String,
+    /// URI scheme for the provider connection (`"http"`, `"https"`).
+    pub scheme: String,
+    /// Auth token for the discovery provider.
+    pub token: String,
     /// Self-registration settings.
     pub registration: RegistrationConfig,
     /// Health check settings for registered services.
@@ -24,9 +31,13 @@ pub struct DiscoveryConfig {
     /// Remote services this application depends on.
     #[serde(default)]
     pub services: Vec<DiscoveredService>,
-    /// Static endpoint fallback (used by the static provider or when consul is unavailable).
+    /// Static endpoint fallback (used by the static provider or when the backend is unavailable).
     #[serde(default)]
     pub static_endpoints: Vec<StaticEndpoint>,
+    /// Exotic provider-specific settings (e.g. datacenter, TLS, pool for Consul).
+    /// Generic fields like addr/scheme/token are on the config directly.
+    #[serde(default)]
+    pub provider_options: toml::Table,
 }
 
 impl Default for DiscoveryConfig {
@@ -34,11 +45,15 @@ impl Default for DiscoveryConfig {
         Self {
             enabled: false,
             provider: "static".to_string(),
+            addr: String::new(),
+            scheme: "http".to_string(),
+            token: String::new(),
             registration: RegistrationConfig::default(),
             health: HealthConfig::default(),
             cache_ttl: "30s".to_string(),
             services: Vec::new(),
             static_endpoints: Vec::new(),
+            provider_options: toml::Table::new(),
         }
     }
 }
@@ -48,6 +63,9 @@ impl DiscoveryConfig {
     pub fn apply_defaults(&mut self) {
         if self.provider.is_empty() {
             self.provider = "static".to_string();
+        }
+        if self.scheme.is_empty() {
+            self.scheme = "http".to_string();
         }
         self.registration.apply_defaults();
         self.health.apply_defaults();
@@ -90,11 +108,20 @@ impl DiscoveryConfig {
 }
 
 /// Self-registration settings.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct RegistrationConfig {
     /// Toggle self-registration.
     pub enabled: bool,
+    /// When true (the default), the service will retry with backoff and
+    /// fail to start if registration cannot be completed — appropriate for
+    /// staging/production. When false, logs a warning and continues in
+    /// degraded mode — convenient for local development.
+    pub required: bool,
+    /// Number of registration retries before giving up. Defaults to 3.
+    pub max_retries: u32,
+    /// Base interval between retries (e.g. `"2s"`). Doubles each retry.
+    pub retry_interval: String,
     /// Name used when registering.
     pub service_name: String,
     /// Unique instance ID; defaults to `service_name` if empty.
@@ -111,12 +138,40 @@ pub struct RegistrationConfig {
     pub metadata: HashMap<String, String>,
 }
 
+impl Default for RegistrationConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            required: true,
+            max_retries: 3,
+            retry_interval: "2s".to_string(),
+            service_name: String::new(),
+            service_id: String::new(),
+            service_address: String::new(),
+            service_port: 0,
+            tags: Vec::new(),
+            metadata: HashMap::new(),
+        }
+    }
+}
+
 impl RegistrationConfig {
     /// Apply defaults to zero-valued fields.
     pub fn apply_defaults(&mut self) {
         if self.service_id.is_empty() && !self.service_name.is_empty() {
             self.service_id = self.service_name.clone();
         }
+        if self.max_retries == 0 {
+            self.max_retries = 3;
+        }
+        if self.retry_interval.is_empty() {
+            self.retry_interval = "2s".to_string();
+        }
+    }
+
+    /// Parse the retry interval as a [`Duration`](std::time::Duration).
+    pub fn retry_duration(&self) -> std::time::Duration {
+        parse_duration(&self.retry_interval).unwrap_or(std::time::Duration::from_secs(2))
     }
 }
 
@@ -224,4 +279,21 @@ impl Default for StaticEndpoint {
 
 fn default_protocol() -> String {
     "grpc".to_string()
+}
+
+/// Parse a human-readable duration string like `"2s"`, `"500ms"`, `"1m"`.
+fn parse_duration(s: &str) -> Option<std::time::Duration> {
+    let s = s.trim();
+    if s.is_empty() {
+        return None;
+    }
+    if let Some(rest) = s.strip_suffix("ms") {
+        rest.parse::<u64>().ok().map(std::time::Duration::from_millis)
+    } else if let Some(rest) = s.strip_suffix('s') {
+        rest.parse::<u64>().ok().map(std::time::Duration::from_secs)
+    } else if let Some(rest) = s.strip_suffix('m') {
+        rest.parse::<u64>().ok().map(|v| std::time::Duration::from_secs(v * 60))
+    } else {
+        s.parse::<u64>().ok().map(std::time::Duration::from_secs)
+    }
 }

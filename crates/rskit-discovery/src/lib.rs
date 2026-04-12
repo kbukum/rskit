@@ -7,13 +7,17 @@
 
 #![warn(missing_docs)]
 
-/// Service discovery configuration.
-pub mod config;
 /// Load balancing strategies.
 pub mod balancer;
+/// Lifecycle-managed discovery component.
+pub mod component;
+/// Service discovery configuration.
+pub mod config;
 /// Consul-backed service discovery.
 #[cfg(feature = "consul")]
 pub mod consul;
+/// Provider factory registry.
+pub mod factory;
 /// Service instance representation.
 pub mod instance;
 /// In-memory discovery for testing.
@@ -24,9 +28,11 @@ pub mod server;
 pub mod traits;
 
 pub use balancer::{LeastConnections, LoadBalancer, Random, RoundRobin};
+pub use component::DiscoveryComponent;
 pub use config::DiscoveryConfig;
 #[cfg(feature = "consul")]
 pub use consul::ConsulDiscovery;
+pub use factory::{create_provider, register_provider, ProviderFactory, ProviderPair};
 pub use instance::ServiceInstance;
 pub use memory::InMemoryDiscovery;
 pub use server::DiscoveryServer;
