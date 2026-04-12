@@ -155,8 +155,9 @@ rdkafka      = { version = "0.37", features = ["tokio"] }
 
 # Observability (Phase 4)
 opentelemetry            = "0.27"
-opentelemetry_sdk        = { version = "0.27", features = ["rt-tokio"] }
-opentelemetry-otlp       = { version = "0.27", features = ["grpc-tonic", "metrics"] }
+opentelemetry_sdk        = { version = "0.27", features = ["rt-tokio", "logs"] }
+opentelemetry-otlp       = { version = "0.27", features = ["grpc-tonic", "metrics", "logs", "http-proto"] }
+opentelemetry-appender-tracing = "0.27"
 opentelemetry-prometheus = "0.27"
 prometheus               = "0.13"
 tracing-opentelemetry    = "0.28"

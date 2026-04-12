@@ -6,8 +6,8 @@
 //! not need the guard pattern.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use rskit_config::{LogFormat, LogOutput, LoggingConfig};
 use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt};

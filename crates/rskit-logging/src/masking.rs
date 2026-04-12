@@ -209,8 +209,10 @@ impl DefaultMasker {
     /// Compiles all default and custom regex patterns.  Invalid custom
     /// patterns are silently skipped.
     pub fn new(cfg: &MaskingConfig) -> Self {
-        let mut field_names: HashSet<String> =
-            DEFAULT_FIELD_NAMES.iter().map(|s| (*s).to_lowercase()).collect();
+        let mut field_names: HashSet<String> = DEFAULT_FIELD_NAMES
+            .iter()
+            .map(|s| (*s).to_lowercase())
+            .collect();
         for name in &cfg.field_names {
             field_names.insert(name.to_lowercase());
         }
@@ -298,8 +300,11 @@ impl DefaultMasker {
 
         for extra in &self.extra_patterns {
             if extra.is_match(&result) {
-                result =
-                    Cow::Owned(extra.replace_all(&result, self.replacement.as_str()).into_owned());
+                result = Cow::Owned(
+                    extra
+                        .replace_all(&result, self.replacement.as_str())
+                        .into_owned(),
+                );
             }
         }
 
@@ -344,8 +349,11 @@ impl Masker for DefaultMasker {
 
         for extra in &self.extra_patterns {
             if extra.is_match(&result) {
-                result =
-                    Cow::Owned(extra.replace_all(&result, self.replacement.as_str()).into_owned());
+                result = Cow::Owned(
+                    extra
+                        .replace_all(&result, self.replacement.as_str())
+                        .into_owned(),
+                );
             }
         }
 
@@ -551,10 +559,7 @@ mod tests {
     #[test]
     fn masks_ssn_field() {
         let m = default_masker();
-        assert_eq!(
-            m.mask_value("ssn", "123-45-6789").as_ref(),
-            "[REDACTED]"
-        );
+        assert_eq!(m.mask_value("ssn", "123-45-6789").as_ref(), "[REDACTED]");
     }
 
     #[test]
@@ -629,7 +634,11 @@ mod tests {
     fn credit_card_preserves_last_four_digits() {
         let m = default_masker();
         let result = m.mask_value("data", "card 1234-5678-9012-3456 end");
-        assert!(result.contains("3456"), "last four digits missing: {}", result);
+        assert!(
+            result.contains("3456"),
+            "last four digits missing: {}",
+            result
+        );
         assert!(
             result.contains("****-****-****-"),
             "mask prefix missing: {}",
@@ -692,7 +701,10 @@ mod tests {
             ..Default::default()
         };
         let m = DefaultMasker::new(&cfg);
-        assert_eq!(m.mask_value("custom_secret", "hidden").as_ref(), "[REDACTED]");
+        assert_eq!(
+            m.mask_value("custom_secret", "hidden").as_ref(),
+            "[REDACTED]"
+        );
     }
 
     #[test]
@@ -768,7 +780,12 @@ mod tests {
         let m = default_masker();
         for field in DEFAULT_FIELD_NAMES {
             let result = m.mask_value(field, "test-value");
-            assert_eq!(result.as_ref(), "[REDACTED]", "field '{}' not masked", field);
+            assert_eq!(
+                result.as_ref(),
+                "[REDACTED]",
+                "field '{}' not masked",
+                field
+            );
         }
     }
 
