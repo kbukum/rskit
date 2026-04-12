@@ -225,7 +225,7 @@ async fn memory_register_same_instance_twice_adds_duplicate() {
 
     // The current implementation simply pushes, so duplicates are possible
     let resolved = disco.resolve("svc").await.unwrap();
-    assert!(resolved.len() >= 1);
+    assert!(!resolved.is_empty());
 }
 
 #[tokio::test]

@@ -120,11 +120,8 @@ async fn slow_subscriber_channel_overflow() {
     // and lagged events are silently skipped by filter_map in subscribe()
     let timeout = Duration::from_millis(200);
     let mut count = 0;
-    loop {
-        match tokio::time::timeout(timeout, stream.next()).await {
-            Ok(Some(Ok(_))) => count += 1,
-            _ => break,
-        }
+    while let Ok(Some(Ok(_))) = tokio::time::timeout(timeout, stream.next()).await {
+        count += 1;
     }
 
     // We should have received some but not necessarily all 10

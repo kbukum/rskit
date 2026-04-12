@@ -384,7 +384,7 @@ fn health_status_inequality() {
 fn health_status_clone_copy() {
     let s = HealthStatus::Healthy;
     let s2 = s; // Copy
-    let s3 = s.clone();
+    let s3 = s;
     assert_eq!(s, s2);
     assert_eq!(s, s3);
 }

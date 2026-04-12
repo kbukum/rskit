@@ -40,7 +40,7 @@ async fn test_empty_stream_rbatch() {
 async fn test_single_item_pipeline() {
     let results: Vec<AppResult<u32>> = from_slice(vec![42u32])
         .rmap(|x| async move { Ok(x + 1) })
-        .rfilter(|r| r.as_ref().map_or(false, |v| *v > 0))
+        .rfilter(|r| r.as_ref().is_ok_and(|v| *v > 0))
         .collect::<Vec<_>>()
         .await;
     assert_eq!(results.len(), 1);
@@ -165,7 +165,7 @@ async fn test_complex_chain_five_operators() {
     // from_slice → rmap → rfilter → rtap → rreduce
     let sum = from_slice(vec![1u32, 2, 3, 4, 5, 6, 7, 8, 9, 10])
         .rmap(|x| async move { Ok::<u32, AppError>(x * 2) })
-        .rfilter(|r| r.as_ref().map_or(false, |v| *v > 6))
+        .rfilter(|r| r.as_ref().is_ok_and(|v| *v > 6))
         .rtap(move |r| {
             let seen = seen_clone.clone();
             let val = r.as_ref().ok().copied();

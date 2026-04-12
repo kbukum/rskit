@@ -597,7 +597,7 @@ async fn store_list_empty_prefix_returns_root_files() {
 
     // List with empty prefix — lists the root dir
     let items = store.list("", None).await.unwrap();
-    assert!(items.len() >= 1, "expected at least 1, got {}", items.len());
+    assert!(!items.is_empty(), "expected at least 1, got {}", items.len());
 }
 
 #[tokio::test]

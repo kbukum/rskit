@@ -146,6 +146,7 @@ mod tests {
     }
 
     impl MockEventProducer {
+        #[allow(clippy::type_complexity)]
         fn new() -> (Self, Arc<Mutex<Vec<(String, Event)>>>) {
             let published = Arc::new(Mutex::new(Vec::new()));
             (

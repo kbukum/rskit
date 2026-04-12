@@ -970,9 +970,9 @@ async fn edge_error_variants_propagation() {
         ErrorCode::Internal,
     ];
     for code in variants {
-        let expected_code = code.clone();
+        let expected_code = code;
         let p = request_response_fn("err-var", move |_: ()| {
-            let c = expected_code.clone();
+            let c = expected_code;
             async move { Err::<(), _>(AppError::new(c, "test")) }
         });
         let err = p.execute(()).await.unwrap_err();

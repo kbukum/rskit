@@ -293,7 +293,7 @@ fn invalid_token_constructor() {
 
 #[test]
 fn internal_constructor_wraps_cause() {
-    let cause = std::io::Error::new(std::io::ErrorKind::Other, "disk full");
+    let cause = std::io::Error::other("disk full");
     let err = AppError::internal(cause);
     assert_eq!(err.code, ErrorCode::Internal);
     assert!(!err.retryable);
@@ -304,7 +304,7 @@ fn internal_constructor_wraps_cause() {
 
 #[test]
 fn database_error_constructor_wraps_cause() {
-    let cause = std::io::Error::new(std::io::ErrorKind::Other, "connection reset");
+    let cause = std::io::Error::other("connection reset");
     let err = AppError::database_error(cause);
     assert_eq!(err.code, ErrorCode::DatabaseError);
     assert!(!err.retryable);
@@ -316,7 +316,7 @@ fn database_error_constructor_wraps_cause() {
 
 #[test]
 fn external_service_constructor() {
-    let cause = std::io::Error::new(std::io::ErrorKind::Other, "500 Internal Server Error");
+    let cause = std::io::Error::other("500 Internal Server Error");
     let err = AppError::external_service("stripe", cause);
     assert_eq!(err.code, ErrorCode::ExternalService);
     assert!(err.retryable);
@@ -331,7 +331,7 @@ fn external_service_constructor() {
 
 #[test]
 fn wrap_delegates_to_internal() {
-    let cause = std::io::Error::new(std::io::ErrorKind::Other, "oops");
+    let cause = std::io::Error::other("oops");
     let err = AppError::wrap(cause);
     assert_eq!(err.code, ErrorCode::Internal);
     assert!(err.cause.is_some());
@@ -398,7 +398,7 @@ fn retryable_override_false() {
 
 #[test]
 fn chained_builders() {
-    let cause = std::io::Error::new(std::io::ErrorKind::Other, "root cause");
+    let cause = std::io::Error::other("root cause");
     let err = AppError::new(ErrorCode::ExternalService, "fail")
         .with_cause(cause)
         .with_detail("service", "api-x")
@@ -820,7 +820,7 @@ fn error_code_display_matches_as_str() {
 #[test]
 fn error_code_clone_copy_eq_hash() {
     let code = ErrorCode::NotFound;
-    let cloned = code.clone();
+    let cloned = code;
     let copied = code;
     assert_eq!(code, cloned);
     assert_eq!(code, copied);

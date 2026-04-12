@@ -248,8 +248,10 @@ mod tests {
     #[test]
     fn service_config_validation_empty_name_fails() {
         use validator::Validate;
-        let mut cfg = ServiceConfig::default();
-        cfg.name = String::new();
+        let cfg = ServiceConfig {
+            name: String::new(),
+            ..Default::default()
+        };
         assert!(cfg.validate().is_err());
     }
 
@@ -263,8 +265,10 @@ mod tests {
     #[test]
     fn service_config_validation_long_name_passes() {
         use validator::Validate;
-        let mut cfg = ServiceConfig::default();
-        cfg.name = "a".repeat(1000);
+        let cfg = ServiceConfig {
+            name: "a".repeat(1000),
+            ..Default::default()
+        };
         assert!(cfg.validate().is_ok());
     }
 

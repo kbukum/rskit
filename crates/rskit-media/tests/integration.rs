@@ -1194,8 +1194,8 @@ fn param_value_from_impls() {
     let int_val: ParamValue = 42i64.into();
     assert!(matches!(int_val, ParamValue::Int(42)));
 
-    let float_val: ParamValue = 3.14f64.into();
-    assert!(matches!(float_val, ParamValue::Float(v) if (v - 3.14).abs() < f64::EPSILON));
+    let float_val: ParamValue = 3.25f64.into();
+    assert!(matches!(float_val, ParamValue::Float(v) if (v - 3.25).abs() < f64::EPSILON));
 
     let string_val: ParamValue = String::from("hello").into();
     assert!(matches!(string_val, ParamValue::Str(ref s) if s == "hello"));

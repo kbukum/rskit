@@ -261,7 +261,7 @@ async fn provider_pipeline_stream_through_operators() {
     let stream = from_slice(vec![1i32, 2, 3, 4, 5]);
     let results: Vec<AppResult<i32>> = stream
         .rmap(|x| async move { Ok(x * 2) })
-        .rfilter(|r| r.as_ref().map_or(false, |x| *x > 4))
+        .rfilter(|r| r.as_ref().is_ok_and(|x| *x > 4))
         .collect()
         .await;
 
@@ -276,7 +276,7 @@ async fn provider_pipeline_map_filter_collect() {
     let stream = from_slice(vec!["alice", "bob", "charlie"]);
     let results: Vec<AppResult<String>> = stream
         .rmap(|name| async move { Ok(format!("user:{}", name)) })
-        .rfilter(|r| r.as_ref().map_or(false, |s| s != "user:bob"))
+        .rfilter(|r| r.as_ref().is_ok_and(|s| s != "user:bob"))
         .collect()
         .await;
 

@@ -193,6 +193,7 @@ mod tests {
     }
 
     #[derive(Serialize)]
+    #[allow(dead_code)]
     struct EchoOutput {
         echo: String,
     }

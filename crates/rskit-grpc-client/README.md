@@ -45,7 +45,7 @@ This crate mirrors the design patterns from:
 
 ### Basic Usage
 
-```rust
+```no_run
 use rskit_grpc_client::{GrpcChannel, GrpcClientConfig};
 
 #[tokio::main]
@@ -97,7 +97,7 @@ rskit-grpc-client = { path = "...", features = ["discovery"] }
 
 Then use:
 
-```rust
+```ignore
 use std::sync::Arc;
 use rskit_grpc_client::{DiscoveryChannel, GrpcClientConfig};
 use rskit_discovery::Discovery;

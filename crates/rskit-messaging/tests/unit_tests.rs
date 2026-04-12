@@ -556,7 +556,7 @@ fn error_classifier_trait_is_object_safe() {
 
 #[test]
 fn noop_error_classifier_default() {
-    let _classifier = NoopErrorClassifier::default();
+    let _classifier = NoopErrorClassifier;
     // Verify Default trait works via the type system
     let classifier: NoopErrorClassifier = Default::default();
     let err = rskit_errors::AppError::new(rskit_errors::ErrorCode::Internal, "test");
