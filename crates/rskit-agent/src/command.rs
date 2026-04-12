@@ -82,7 +82,7 @@ impl CommandRegistry {
             && trimmed
                 .chars()
                 .nth(1)
-                .map_or(false, |c| c.is_ascii_alphabetic())
+                .is_some_and(|c| c.is_ascii_alphabetic())
     }
 
     /// Parse input into `(command_name, args)`.  Returns `None` if the input

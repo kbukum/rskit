@@ -11,7 +11,9 @@ pub const DEFAULT_GRACE_PERIOD: Duration = Duration::days(7);
 /// Configuration for key rotation.
 #[derive(Debug, Clone)]
 pub struct RotationConfig {
+    /// How long the old key remains valid after rotation.
     pub grace_period: Duration,
+    /// Prefix for the newly generated key (e.g. `"sk_live_"`).
     pub prefix: String,
 }
 
@@ -27,8 +29,11 @@ impl Default for RotationConfig {
 /// Outcome of a key rotation.
 #[derive(Debug, Clone)]
 pub struct RotationResult {
+    /// The newly generated key material.
     pub new_key: GenerateResult,
+    /// The ID of the key that was replaced.
     pub old_key_id: String,
+    /// When the old key stops being accepted.
     pub grace_ends_at: DateTime<Utc>,
 }
 

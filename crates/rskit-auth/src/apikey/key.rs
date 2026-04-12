@@ -7,17 +7,29 @@ use sha2::{Digest, Sha256};
 /// API key metadata (never stores the plaintext).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Key {
+    /// Unique identifier for this key.
     pub id: String,
+    /// Identifier of the key owner.
     pub owner_id: String,
+    /// Human-readable name for the key.
     pub name: String,
+    /// SHA-256 hash of the plaintext key.
     pub key_hash: String,
+    /// Short prefix shown for identification (e.g. `sk_live_a1b2`).
     pub key_prefix: String,
+    /// Scopes the key is authorised for.
     pub scopes: Vec<String>,
+    /// Whether the key is currently active.
     pub is_active: bool,
+    /// When the key expires (`None` = never).
     pub expires_at: Option<DateTime<Utc>>,
+    /// End of the grace period after rotation (`None` = no grace).
     pub grace_ends_at: Option<DateTime<Utc>>,
+    /// ID of the replacement key if this key was rotated.
     pub rotated_by_id: Option<String>,
+    /// Timestamp of the last successful validation.
     pub last_used_at: Option<DateTime<Utc>>,
+    /// When this key was created.
     pub created_at: DateTime<Utc>,
 }
 
@@ -42,8 +54,11 @@ impl Key {
 /// Result of key generation — contains the plaintext shown once.
 #[derive(Debug, Clone)]
 pub struct GenerateResult {
+    /// The full plaintext key (show once, then discard).
     pub plain_key: String,
+    /// SHA-256 hash to store in the database.
     pub key_hash: String,
+    /// Short display prefix for user-facing logs.
     pub prefix: String,
 }
 
@@ -80,8 +95,10 @@ pub fn hash_key(plain_key: &str) -> String {
 /// Error returned when an API key fails validation.
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum KeyValidationError {
+    /// The key has been explicitly revoked.
     #[error("key is revoked")]
     Revoked,
+    /// The key has expired (and any grace period has ended).
     #[error("key is expired")]
     Expired,
 }

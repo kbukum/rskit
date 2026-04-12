@@ -53,11 +53,8 @@ pub enum SubtitlePosition {
     },
 }
 
-impl Default for SubtitlePosition {
-    fn default() -> Self {
-        Self::Bottom
-    }
-}
+// Default derived: SubtitlePosition::Bottom is the first variant.
+
 
 /// A collection of subtitle entries.
 #[derive(Debug, Clone, Serialize, Deserialize)]

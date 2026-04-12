@@ -11,6 +11,7 @@ use super::Key;
 /// Validates an API key and returns its metadata.
 #[async_trait]
 pub trait KeyValidator: Send + Sync {
+    /// Look up a key by its plaintext value, validate it, and return metadata.
     async fn validate_key(&self, plain_key: &str) -> Result<Key, AppError>;
 }
 
@@ -25,6 +26,7 @@ pub struct ApiKeyLayer<V> {
 }
 
 impl<V: KeyValidator + 'static> ApiKeyLayer<V> {
+    /// Create a new layer using the default `x-api-key` header.
     pub fn new(validator: V) -> Self {
         Self {
             validator: Arc::new(validator),
@@ -32,6 +34,7 @@ impl<V: KeyValidator + 'static> ApiKeyLayer<V> {
         }
     }
 
+    /// Override the header name used for key extraction.
     pub fn with_header(mut self, name: HeaderName) -> Self {
         self.header_name = name;
         self
