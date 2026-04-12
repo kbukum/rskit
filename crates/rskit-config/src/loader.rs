@@ -8,23 +8,27 @@ use crate::AppConfig;
 ///
 /// Resolution order (last wins):
 /// 1. `config.toml` / `config/{service}.toml` (optional)
-/// 2. `.env` file via dotenvy (optional)
-/// 3. Environment variables with `APP__` prefix, `__` separator
-///    (`APP__DATABASE__HOST` → `database.host`)
+/// 2. Profile env file `config/profiles/{profile}.env` (optional, via [`with_profile`])
+/// 3. `.env` file via dotenvy (optional)
+/// 4. Environment variables with `__` separator, no prefix by default
+///    (`DATABASE__HOST` → `database.host`).
+///    A prefix can be set with [`with_env_prefix`].
 #[derive(Debug, Default)]
 pub struct ConfigLoader {
     config_file: Option<PathBuf>,
     env_file: Option<PathBuf>,
     env_prefix: String,
+    profile: Option<String>,
 }
 
 impl ConfigLoader {
-    /// Create a new [`ConfigLoader`] with default settings (prefix `"APP"`).
+    /// Create a new [`ConfigLoader`] with default settings (no env prefix).
     pub fn new() -> Self {
         Self {
             config_file: None,
             env_file: None,
-            env_prefix: "APP".to_string(),
+            env_prefix: String::new(),
+            profile: None,
         }
     }
 
@@ -42,11 +46,25 @@ impl ConfigLoader {
         self
     }
 
-    /// Override the env-var prefix (default: `"APP"`).
+    /// Override the env-var prefix (default: `""`).
     /// Separator is always `"__"`.
     #[must_use]
     pub fn with_env_prefix(mut self, prefix: impl Into<String>) -> Self {
         self.env_prefix = prefix.into();
+        self
+    }
+
+    /// Set the configuration profile (e.g., "development", "docker", "staging").
+    /// Loads `config/profiles/{profile}.env` before the main `.env` file.
+    /// If profile is `None`, reads from the `ENVIRONMENT` env var.
+    #[must_use]
+    pub fn with_profile(mut self, profile: impl Into<String>) -> Self {
+        let p = profile.into();
+        self.profile = Some(if p.is_empty() {
+            std::env::var("ENVIRONMENT").unwrap_or_default()
+        } else {
+            p
+        });
         self
     }
 
@@ -72,12 +90,17 @@ impl ConfigLoader {
             }
         }
 
-        // Environment variables: APP__DATABASE__HOST → database.host
-        builder = builder.add_source(
+        // Environment variables
+        let env_source = if self.env_prefix.is_empty() {
+            config::Environment::default()
+                .separator("__")
+                .try_parsing(true)
+        } else {
             config::Environment::with_prefix(&self.env_prefix)
                 .separator("__")
-                .try_parsing(true),
-        );
+                .try_parsing(true)
+        };
+        builder = builder.add_source(env_source);
 
         let raw = builder
             .build()
@@ -96,6 +119,24 @@ impl ConfigLoader {
     }
 
     fn load_env_file(&self) {
+        // 1. Load profile env file first (if profile is set)
+        if let Some(profile) = &self.profile {
+            if !profile.is_empty() {
+                let profile_paths = [
+                    format!("./config/profiles/{profile}.env"),
+                    format!("../config/profiles/{profile}.env"),
+                    format!("../../config/profiles/{profile}.env"),
+                ];
+                for path in &profile_paths {
+                    if std::path::Path::new(path).exists() {
+                        let _ = dotenvy::from_path(path);
+                        break;
+                    }
+                }
+            }
+        }
+
+        // 2. Load main .env file (existing behavior)
         if let Some(path) = &self.env_file {
             let _ = dotenvy::from_path(path);
         } else {
@@ -145,7 +186,7 @@ mod tests {
         // SAFETY: `std::env::remove_var` is unsafe because concurrent calls can cause data races.
         // We hold `ENV_LOCK` (a `std::sync::Mutex`) for the duration of this test,
         // serializing all environment variable mutations. No other test runs concurrently.
-        unsafe { std::env::remove_var("APP__PORT") };
+        unsafe { std::env::remove_var("PORT") };
         let cfg: TestConfig = ConfigLoader::new().load().expect("should load");
         assert_eq!(cfg.port, 8080);
     }
@@ -153,16 +194,16 @@ mod tests {
     #[test]
     fn env_prefix_override() {
         let _guard = ENV_LOCK.lock().unwrap();
-        // APP__PORT=9090 should override the default.
+        // PORT=9090 should override the default (no prefix by default).
         // SAFETY: `std::env::set_var` is unsafe because concurrent calls can cause data races.
         // We hold `ENV_LOCK` (a `std::sync::Mutex`) for the duration of this test,
         // serializing all environment variable mutations. No other test runs concurrently.
-        unsafe { std::env::set_var("APP__PORT", "9090") };
+        unsafe { std::env::set_var("PORT", "9090") };
         let cfg: TestConfig = ConfigLoader::new().load().expect("should load");
         assert_eq!(cfg.port, 9090);
         // SAFETY: `std::env::remove_var` is unsafe because concurrent calls can cause data races.
         // We hold `ENV_LOCK` for the duration of this test, serializing all env mutations.
-        unsafe { std::env::remove_var("APP__PORT") };
+        unsafe { std::env::remove_var("PORT") };
     }
 
     #[test]
