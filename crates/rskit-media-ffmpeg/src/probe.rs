@@ -234,17 +234,17 @@ impl FfmpegProbe {
                     .and_then(|s| s.parse::<u8>().ok())
                     .or_else(|| {
                         // Infer from pixel format name
-                        pix_fmt.as_deref().and_then(|fmt| {
+                        pix_fmt.as_deref().map(|fmt| {
                             if fmt.contains("10le") || fmt.contains("10be") || fmt.ends_with("p10")
                             {
-                                Some(10)
+                                10
                             } else if fmt.contains("12le")
                                 || fmt.contains("12be")
                                 || fmt.ends_with("p12")
                             {
-                                Some(12)
+                                12
                             } else {
-                                Some(8)
+                                8
                             }
                         })
                     });

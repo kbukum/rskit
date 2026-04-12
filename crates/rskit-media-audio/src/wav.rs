@@ -173,7 +173,7 @@ impl WavReader {
                         i32::from_le_bytes([0, data[offset], data[offset + 1], data[offset + 2]]);
                     // Sign-extend from 24-bit
                     let val = if val & 0x0080_0000 != 0 {
-                        val | (0xFF << 24) as i32
+                        val | (0xFF << 24)
                     } else {
                         val
                     };
