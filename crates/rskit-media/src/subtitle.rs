@@ -36,9 +36,10 @@ pub struct SubtitleStyle {
 }
 
 /// Subtitle display position.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 pub enum SubtitlePosition {
     /// Bottom of the screen (default).
+    #[default]
     Bottom,
     /// Top of the screen.
     Top,
@@ -52,8 +53,6 @@ pub enum SubtitlePosition {
         y: u32,
     },
 }
-
-// Default derived: SubtitlePosition::Bottom is the first variant.
 
 
 /// A collection of subtitle entries.

@@ -20,6 +20,13 @@ use parking_lot::Mutex;
 use tokio_util::sync::CancellationToken;
 use tower::{Layer, Service};
 
+// ── Type aliases for complex function pointers ────────────────────────────────
+
+/// Extracts a bucket key from an incoming request (e.g. IP, user-id).
+type KeyExtractor = Arc<dyn Fn(&Request<Body>) -> String + Send + Sync>;
+/// Returns `(key, rpm)` — allows tiered limits per request.
+type LimitExtractor = Arc<dyn Fn(&Request<Body>) -> (String, u32) + Send + Sync>;
+
 // ── Configuration ─────────────────────────────────────────────────────────────
 
 /// Configuration for the HTTP rate limiter.
@@ -27,9 +34,9 @@ pub struct RateLimitConfig {
     /// Default requests-per-minute for every bucket.
     pub requests_per_minute: u32,
     /// Extracts a key from the request (e.g. IP, user-id).
-    pub key_func: Option<Arc<dyn Fn(&Request<Body>) -> String + Send + Sync>>,
+    pub key_func: Option<KeyExtractor>,
     /// Returns `(key, rpm)` — allows tiered limits per request.
-    pub limit_func: Option<Arc<dyn Fn(&Request<Body>) -> (String, u32) + Send + Sync>>,
+    pub limit_func: Option<LimitExtractor>,
     /// How often the background task evicts stale buckets.
     pub cleanup_interval: Duration,
     /// Buckets not accessed within this TTL are removed.
