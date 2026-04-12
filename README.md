@@ -30,6 +30,14 @@ covering the same problem space as gokit but using idiomatic Rust patterns:
 
 ---
 
+## Architecture Overview
+
+rskit is a **Cargo workspace** with a facade crate and 40+ independent sub-crates under `crates/`:
+
+- **Facade crate** (`rskit`) — re-exports all sub-crates for convenience. Add only what you need or use the facade.
+- **Sub-crates** (`rskit-{name}`) — each is a standalone crate with its own `Cargo.toml`, published independently. Dependencies flow strictly downward (no cycles).
+- **Layered design** — Core → Foundation → Adapters → Specialist. Lower layers never import higher layers.
+
 ## Quick Start
 
 Add the facade crate to your service:
@@ -153,6 +161,7 @@ assert_eq!(result, "HELLO");
 | Core | `rskit-worker` | Task worker pool with JoinSet, typed events, and provider bridges |
 | Core | `rskit-server` | tonic gRPC server bootstrap as a lifecycle-managed Component |
 | Foundation | `rskit-validation` | Fluent field-level validator that collects errors and converts to AppError |
+| Foundation | `rskit-encryption` | Symmetric encryption — AES-256-GCM and ChaCha20-Poly1305 |
 | Foundation | `rskit-http` | Axum HTTP server with graceful shutdown, CORS, request-ID, and Component lifecycle |
 | Foundation | `rskit-di` | Lightweight Arc-based runtime dependency injection container |
 | Foundation | `rskit-auth` | JWT, OIDC, password hashing, and request-context auth helpers |
@@ -166,13 +175,25 @@ assert_eq!(result, "HELLO");
 | Specialist | `rskit-sse` | Server-Sent Events bus with axum integration |
 | Specialist | `rskit-dag` | DAG task orchestrator with parallel execution |
 | Specialist | `rskit-llm` | LLM provider abstractions for OpenAI and Anthropic |
+| Specialist | `rskit-llm-providers` | LLM provider implementations — OpenAI, Anthropic, Gemini |
 | Specialist | `rskit-embedding` | Embedding provider abstractions for vector search |
 | Specialist | `rskit-inference` | Inference provider abstractions for LLM chat completions |
 | Specialist | `rskit-vector-store` | Vector store abstractions with Qdrant and in-memory implementations |
+| Specialist | `rskit-agent` | Agentic loop — LLM orchestration, tool execution, context management |
+| Specialist | `rskit-tool` | Tool definitions, auto-wiring, registry, and middleware for agentic systems |
+| Specialist | `rskit-hook` | Generic event hook system for lifecycle handler registration |
+| Specialist | `rskit-mcp` | Model Context Protocol server and client bridge |
+| Specialist | `rskit-schema` | JSON Schema generation and validation from Rust types |
+| Specialist | `rskit-explain` | Structured explanation generation from analysis signals via LLM |
 | Media & File | `rskit-file` | File I/O, storage backends, temp files, and MIME detection |
+| Media & File | `rskit-file-s3` | S3 and S3-compatible (MinIO, LocalStack) storage backend |
 | Media & File | `rskit-media` | Media types, codec/format registry, pipeline builder, and processing traits |
 | Media & File | `rskit-media-ffmpeg` | FFmpeg CLI backend for video/audio processing |
 | Media & File | `rskit-media-image` | Native image processing backend using the image crate |
+| Media & File | `rskit-media-audio` | Pure Rust audio processing — WAV reading, waveform, silence detection |
+| Adapters | `rskit-httpclient` | Async HTTP client with auth, resilience, and error handling |
+| Adapters | `rskit-grpc-client` | Tonic-based gRPC client with lazy connections and discovery |
+| Platform | `rskit-process` | Subprocess execution with process-group isolation and timeout handling |
 | CLI & Data | `rskit-cli` | CLI framework: progress bars, structured output, signal handling |
 | CLI & Data | `rskit-dataset` | Dataset collection framework: source, transform, target, collector |
 | CLI & Data | `rskit-bench` | ML benchmarking framework: evaluators, metrics, reports, visualization |
@@ -324,6 +345,62 @@ rskit mirrors gokit's package structure and lifecycle philosophy. Key difference
 
 All 34 workspace crates are implemented and included in v0.1, covering DI,
 observability (OTEL), service discovery, database, Redis, and Kafka adapters.
+
+## Cross-Kit Comparison
+
+rskit, [gokit](https://github.com/kbukum/gokit) (Go), and [pykit](https://github.com/kbukum/pykit) (Python) share the same module structure and design philosophy. The table below shows capability coverage across all three kits.
+
+| Capability | gokit | rskit | pykit |
+|---|---|---|---|
+| Errors | ✅ `errors` | ✅ `rskit-errors` | ✅ `pykit-errors` |
+| Config | ✅ `config` | ✅ `rskit-config` | ✅ `pykit-config` |
+| Logging | ✅ `logger` | ✅ `rskit-logging` | ✅ `pykit-logging` |
+| Validation | ✅ `validation` | ✅ `rskit-validation` | ✅ `pykit-validation` |
+| Encryption | ✅ `encryption` | ✅ `rskit-encryption` | ✅ `pykit-encryption` |
+| Utilities | ✅ `util` | ❌ | ✅ `pykit-util` |
+| Version | ✅ `version` | ❌ | ✅ `pykit-version` |
+| Media | ✅ `media` | ✅ `rskit-media` | ✅ `pykit-media` |
+| Security | ✅ `security` | ❌ | ✅ `pykit-security` |
+| DI | ✅ `di` | ✅ `rskit-di` | ✅ `pykit-di` |
+| Component | ✅ `component` | ❌ | ✅ `pykit-component` |
+| Bootstrap | ✅ `bootstrap` | ✅ `rskit-bootstrap` | ✅ `pykit-bootstrap` |
+| Provider | ✅ `provider` | ✅ `rskit-provider` | ✅ `pykit-provider` |
+| Resilience | ✅ `resilience` | ✅ `rskit-resilience` | ✅ `pykit-resilience` |
+| Observability | ✅ `observability` | ✅ `rskit-observability` | ✅ `pykit-observability` |
+| Pipeline | ✅ `pipeline` | ✅ `rskit-pipeline` | ✅ `pykit-pipeline` |
+| DAG | ✅ `dag` | ✅ `rskit-dag` | ✅ `pykit-dag` |
+| Worker | ✅ `worker` | ✅ `rskit-worker` | ✅ `pykit-worker` |
+| SSE | ✅ `sse` | ✅ `rskit-sse` | ✅ `pykit-sse` |
+| Stateful | ✅ `stateful` | ❌ | ✅ `pykit-stateful` |
+| Auth | ✅ `auth` | ✅ `rskit-auth` | ✅ `pykit-auth` |
+| Authz | ✅ `authz` | ✅ `rskit-authz` | ✅ `pykit-authz` |
+| Database | ✅ `database` | ✅ `rskit-database` | ✅ `pykit-database` |
+| Redis / Cache | ✅ `redis` | ✅ `rskit-cache` | ✅ `pykit-redis` |
+| Storage / File | ✅ `storage` | ✅ `rskit-file` | ✅ `pykit-storage` |
+| Messaging | ✅ `messaging` | ✅ `rskit-messaging` | ✅ `pykit-messaging` |
+| HTTP Client | ✅ `httpclient` | ✅ `rskit-httpclient` | ✅ `pykit-httpclient` |
+| Server | ✅ `server` | ✅ `rskit-http`, `rskit-server` | ✅ `pykit-server` |
+| gRPC Client | ✅ `grpc` | ✅ `rskit-grpc-client` | ✅ `pykit-grpc` |
+| Connect | ✅ `connect` | ❌ | ❌ |
+| Discovery | ✅ `discovery` | ✅ `rskit-discovery` | ✅ `pykit-discovery` |
+| Process | ✅ `process` | ✅ `rskit-process` | ✅ `pykit-process` |
+| Workload | ✅ `workload` | ❌ | ✅ `pykit-workload` |
+| Test Utilities | ✅ `testutil` | ✅ `rskit-testutil` | ✅ `pykit-testutil` |
+| LLM | ✅ `llm` | ✅ `rskit-llm` | ✅ `pykit-llm` |
+| LLM Providers | ❌ | ✅ `rskit-llm-providers` | ✅ `pykit-llm-providers` |
+| Agent | ✅ `agent` | ✅ `rskit-agent` | ✅ `pykit-agent` |
+| Tool | ✅ `tool` | ✅ `rskit-tool` | ✅ `pykit-tool` |
+| MCP | ✅ `mcp` | ✅ `rskit-mcp` | ✅ `pykit-mcp` |
+| Hook | ✅ `hook` | ✅ `rskit-hook` | ✅ `pykit-hook` |
+| Schema | ✅ `schema` | ✅ `rskit-schema` | ✅ `pykit-schema` |
+| Explain | ✅ `explain` | ✅ `rskit-explain` | ✅ `pykit-explain` |
+| Bench | ✅ `bench` | ✅ `rskit-bench` | ✅ `pykit-bench` |
+| Dataset | ❌ | ✅ `rskit-dataset` | ✅ `pykit-dataset` |
+| Embedding | ✅ `embedding` | ✅ `rskit-embedding` | ✅ `pykit-embedding` |
+| Vector Store | ✅ `vectorstore` | ✅ `rskit-vector-store` | ✅ `pykit-vector-store` |
+| Inference | ❌ | ✅ `rskit-inference` | ✅ `pykit-triton` |
+| CLI | ❌ | ✅ `rskit-cli` | ❌ |
+| Metrics | ❌ | ❌ | ✅ `pykit-metrics` |
 
 ---
 
