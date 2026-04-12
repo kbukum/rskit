@@ -341,9 +341,7 @@ fn error_response_from_app_error_has_correct_status() {
 
 #[test]
 fn error_response_serialization_excludes_cause() {
-    let err = AppError::internal(std::io::Error::other(
-        "secret connection string here",
-    ));
+    let err = AppError::internal(std::io::Error::other("secret connection string here"));
     let json = serde_json::to_string(&err).unwrap();
     // The serialized form should not contain the cause's internal message
     // if the message field itself includes it, that's a known concern
