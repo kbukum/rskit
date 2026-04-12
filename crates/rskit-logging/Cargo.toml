@@ -17,10 +17,28 @@ keywords   = ["logging", "tracing", "observability"]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[features]
+default = []
+otlp = [
+    "dep:opentelemetry",
+    "dep:opentelemetry_sdk",
+    "dep:opentelemetry-appender-tracing",
+    "dep:opentelemetry-otlp",
+]
+
 [dependencies]
 rskit-config       = { path = "../rskit-config" }
+parking_lot        = { workspace = true }
+regex              = { workspace = true }
+serde              = { workspace = true }
 tracing            = { workspace = true }
 tracing-subscriber = { workspace = true }
+
+# Optional OTLP dependencies (enabled via `otlp` feature)
+opentelemetry                  = { workspace = true, optional = true }
+opentelemetry_sdk              = { workspace = true, optional = true }
+opentelemetry-appender-tracing = { workspace = true, optional = true }
+opentelemetry-otlp             = { workspace = true, optional = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }
