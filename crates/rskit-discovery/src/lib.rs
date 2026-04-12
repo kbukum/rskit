@@ -22,6 +22,8 @@ pub mod factory;
 pub mod instance;
 /// In-memory discovery for testing.
 pub mod memory;
+/// Bootstrap-time address resolution utilities.
+pub mod resolve;
 /// Discovery-integrated server component.
 pub mod server;
 /// Core discovery and registry traits.
@@ -35,5 +37,6 @@ pub use consul::ConsulDiscovery;
 pub use factory::{create_provider, register_provider, ProviderFactory, ProviderPair};
 pub use instance::ServiceInstance;
 pub use memory::InMemoryDiscovery;
+pub use resolve::resolve_addr;
 pub use server::DiscoveryServer;
 pub use traits::{Discovery, Registry, Watcher};
