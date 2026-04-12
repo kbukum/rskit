@@ -7,6 +7,8 @@
 
 #![warn(missing_docs)]
 
+/// Service discovery configuration.
+pub mod config;
 /// Load balancing strategies.
 pub mod balancer;
 /// Consul-backed service discovery.
@@ -22,9 +24,10 @@ pub mod server;
 pub mod traits;
 
 pub use balancer::{LeastConnections, LoadBalancer, Random, RoundRobin};
+pub use config::DiscoveryConfig;
 #[cfg(feature = "consul")]
 pub use consul::ConsulDiscovery;
 pub use instance::ServiceInstance;
 pub use memory::InMemoryDiscovery;
 pub use server::DiscoveryServer;
-pub use traits::{Discovery, Registry};
+pub use traits::{Discovery, Registry, Watcher};

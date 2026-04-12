@@ -1,14 +1,16 @@
 use std::collections::HashMap;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use tokio::sync::mpsc;
 use tracing::{debug, warn};
 
 use rskit_errors::{AppError, AppResult};
 
 use crate::instance::ServiceInstance;
-use crate::traits::{Discovery, Registry};
+use crate::traits::{Discovery, Registry, Watcher};
 
 // ── Consul API request/response types ────────────────────────────────────────
 
@@ -220,5 +222,120 @@ impl Registry for ConsulDiscovery {
         }
 
         Ok(())
+    }
+}
+
+/// Default polling interval when using the Watcher fallback.
+const DEFAULT_POLL_INTERVAL: Duration = Duration::from_secs(5);
+
+/// Consul blocking-query based watcher.
+///
+/// Uses the `?index=` long-poll parameter on the health endpoint.  When the
+/// Consul index doesn't advance within a cycle the response is treated as
+/// "no change" and no message is emitted.  If blocking queries are not
+/// supported (e.g. mock server), the implementation falls back to simple
+/// polling with change-detection.
+#[async_trait]
+impl Watcher for ConsulDiscovery {
+    async fn watch(
+        &self,
+        service: &str,
+    ) -> AppResult<mpsc::Receiver<Vec<ServiceInstance>>> {
+        let (tx, rx) = mpsc::channel(16);
+        let base_url = self.base_url.clone();
+        let token = self.token.clone();
+        let client = self.client.clone();
+        let service = service.to_owned();
+
+        tokio::spawn(async move {
+            let mut last_index: u64 = 0;
+            let mut last_endpoints: Vec<String> = Vec::new();
+
+            loop {
+                let url = format!(
+                    "{}/v1/health/service/{}?passing=true&index={}&wait=30s",
+                    base_url, service, last_index,
+                );
+                let mut req = client.request(reqwest::Method::GET, &url);
+                if let Some(tok) = &token {
+                    req = req.header("X-Consul-Token", tok);
+                }
+
+                match req.send().await {
+                    Ok(resp) if resp.status().is_success() => {
+                        // Extract the X-Consul-Index header for long-polling
+                        let new_index = resp
+                            .headers()
+                            .get("X-Consul-Index")
+                            .and_then(|v| v.to_str().ok())
+                            .and_then(|v| v.parse::<u64>().ok())
+                            .unwrap_or(0);
+
+                        match resp.json::<Vec<HealthEntry>>().await {
+                            Ok(entries) => {
+                                let instances: Vec<ServiceInstance> = entries
+                                    .into_iter()
+                                    .map(|entry| {
+                                        let svc = entry.service;
+                                        ServiceInstance {
+                                            id: svc.id,
+                                            name: svc.service,
+                                            address: svc.address,
+                                            port: svc.port,
+                                            healthy: true,
+                                            tags: svc.tags,
+                                            metadata: svc.meta,
+                                        }
+                                    })
+                                    .collect();
+
+                                // Emit only when the set actually changed
+                                let endpoints: Vec<String> =
+                                    instances.iter().map(|i| i.endpoint()).collect();
+
+                                if endpoints != last_endpoints || new_index != last_index {
+                                    last_endpoints = endpoints;
+                                    if tx.send(instances).await.is_err() {
+                                        debug!(
+                                            service = %service,
+                                            "watch receiver dropped, stopping"
+                                        );
+                                        return;
+                                    }
+                                }
+
+                                last_index = new_index;
+                            }
+                            Err(e) => {
+                                warn!(
+                                    service = %service,
+                                    error = %e,
+                                    "consul watch: failed to parse response"
+                                );
+                                tokio::time::sleep(DEFAULT_POLL_INTERVAL).await;
+                            }
+                        }
+                    }
+                    Ok(resp) => {
+                        warn!(
+                            service = %service,
+                            status = %resp.status(),
+                            "consul watch: non-success status"
+                        );
+                        tokio::time::sleep(DEFAULT_POLL_INTERVAL).await;
+                    }
+                    Err(e) => {
+                        warn!(
+                            service = %service,
+                            error = %e,
+                            "consul watch: request failed"
+                        );
+                        tokio::time::sleep(DEFAULT_POLL_INTERVAL).await;
+                    }
+                }
+            }
+        });
+
+        Ok(rx)
     }
 }

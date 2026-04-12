@@ -52,4 +52,4 @@ pub use config::GrpcClientConfig;
 pub use errors::{app_error_to_status, status_to_app_error};
 
 #[cfg(feature = "discovery")]
-pub use discovery::DiscoveryChannel;
+pub use discovery::{DiscoveryChannel, DiscoveryChannelConfig};
