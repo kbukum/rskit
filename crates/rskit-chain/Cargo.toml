@@ -1,0 +1,29 @@
+[package]
+name        = "rskit-chain"
+description = "Sequential chain execution pattern for rskit"
+version.workspace      = true
+edition.workspace      = true
+license.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+documentation = "https://docs.rs/rskit-chain"
+readme = "README.md"
+categories = ["asynchronous"]
+keywords   = ["chain", "sequential", "pipeline", "async"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+rskit-errors = { path = "../rskit-errors" }
+tokio        = { workspace = true }
+tokio-util   = { workspace = true }
+serde        = { workspace = true }
+serde_json   = { workspace = true }
+tracing      = { workspace = true }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full", "test-util"] }

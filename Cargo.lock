@@ -4397,6 +4397,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "rskit-chain"
+version = "0.1.0"
+dependencies = [
+ "rskit-errors",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
 name = "rskit-cli"
 version = "0.1.0"
 dependencies = [
