@@ -17,4 +17,6 @@ pub use ratelimit::{
     user_based_key,
 };
 pub use server::{HttpServer, HttpServerBuilder, health_router};
-pub use tenant::{TenantConfig, TenantId};
+pub use tenant::{
+    TenantConfig, TenantId, set_tenant_in_extensions, tenant_from_extensions, tenant_middleware,
+};

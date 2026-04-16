@@ -14,14 +14,10 @@ use crate::config::DiscoveryConfig;
 use crate::traits::{Discovery, Registry};
 
 /// A pair of `(Registry, Discovery)` returned by a provider factory.
-pub type ProviderPair = (
-    std::sync::Arc<dyn Registry>,
-    std::sync::Arc<dyn Discovery>,
-);
+pub type ProviderPair = (std::sync::Arc<dyn Registry>, std::sync::Arc<dyn Discovery>);
 
 /// Factory function type: creates a provider pair from a discovery config.
-pub type ProviderFactory =
-    Box<dyn Fn(&DiscoveryConfig) -> AppResult<ProviderPair> + Send + Sync>;
+pub type ProviderFactory = Box<dyn Fn(&DiscoveryConfig) -> AppResult<ProviderPair> + Send + Sync>;
 
 // Global factory registry.
 static FACTORIES: OnceLock<Mutex<HashMap<String, ProviderFactory>>> = OnceLock::new();
@@ -107,8 +103,7 @@ pub fn init_builtin() {
                 } else {
                     Some(config.token.clone())
                 };
-                let consul =
-                    std::sync::Arc::new(crate::consul::ConsulDiscovery::new(addr, token));
+                let consul = std::sync::Arc::new(crate::consul::ConsulDiscovery::new(addr, token));
                 Ok((consul.clone(), consul))
             }),
         );

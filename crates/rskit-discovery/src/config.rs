@@ -288,11 +288,15 @@ fn parse_duration(s: &str) -> Option<std::time::Duration> {
         return None;
     }
     if let Some(rest) = s.strip_suffix("ms") {
-        rest.parse::<u64>().ok().map(std::time::Duration::from_millis)
+        rest.parse::<u64>()
+            .ok()
+            .map(std::time::Duration::from_millis)
     } else if let Some(rest) = s.strip_suffix('s') {
         rest.parse::<u64>().ok().map(std::time::Duration::from_secs)
     } else if let Some(rest) = s.strip_suffix('m') {
-        rest.parse::<u64>().ok().map(|v| std::time::Duration::from_secs(v * 60))
+        rest.parse::<u64>()
+            .ok()
+            .map(|v| std::time::Duration::from_secs(v * 60))
     } else {
         s.parse::<u64>().ok().map(std::time::Duration::from_secs)
     }

@@ -177,9 +177,7 @@ impl ChainExecutor {
         }
 
         // Cleanup on failure: call cleanup on all completed steps in reverse order
-        let all_completed = results
-            .iter()
-            .all(|r| r.status == StepStatus::Completed);
+        let all_completed = results.iter().all(|r| r.status == StepStatus::Completed);
         if !all_completed && self.config.cleanup_on_failure {
             warn!("chain failed, cleaning up completed steps");
             for result in results.iter().rev() {

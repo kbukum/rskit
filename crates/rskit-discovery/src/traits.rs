@@ -29,8 +29,5 @@ pub trait Registry: Send + Sync {
 pub trait Watcher: Send + Sync {
     /// Returns a channel that fires whenever the instance list changes.
     /// Implementors should use Consul blocking queries, etcd watch, etc.
-    async fn watch(
-        &self,
-        service: &str,
-    ) -> AppResult<mpsc::Receiver<Vec<ServiceInstance>>>;
+    async fn watch(&self, service: &str) -> AppResult<mpsc::Receiver<Vec<ServiceInstance>>>;
 }

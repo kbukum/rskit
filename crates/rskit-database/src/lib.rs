@@ -8,6 +8,7 @@
 //! - [`Repository`] — a generic trait for entity CRUD operations.
 //! - [`FindOpts`] — builder for paginated / filtered queries.
 //! - [`SqlRepository`] — base helper struct for SQL-backed repositories.
+//! - [`query`] — HTTP query-string parsing and pagination helpers.
 
 #![warn(missing_docs)]
 
@@ -15,9 +16,17 @@
 pub mod config;
 /// Database pool and `Component` implementation.
 pub mod database;
+/// HTTP query parameter parsing and pagination.
+pub mod query;
 /// Repository trait and helpers.
 pub mod repository;
+/// Tenant-scoping helpers for multi-tenant queries.
+pub mod tenant;
 
 pub use config::{DatabaseConfig, DbDriver, SslMode};
 pub use database::Database;
+pub use query::{
+    PaginatedResult, Pagination, QueryConfig, QueryParams, SortOrder, parse_query_string,
+};
 pub use repository::{FindOpts, Repository, SqlRepository};
+pub use tenant::{TenantScope, set_session_variable};

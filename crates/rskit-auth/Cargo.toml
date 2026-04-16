@@ -30,6 +30,7 @@ base64        = "0.22"
 chrono        = { workspace = true }
 uuid          = { workspace = true }
 sha2          = "0.10"
+subtle        = "2.6"
 hex           = "0.4"
 thiserror     = { workspace = true }
 tower         = "0.5"

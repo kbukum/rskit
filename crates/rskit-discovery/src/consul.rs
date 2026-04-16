@@ -237,10 +237,7 @@ const DEFAULT_POLL_INTERVAL: Duration = Duration::from_secs(5);
 /// polling with change-detection.
 #[async_trait]
 impl Watcher for ConsulDiscovery {
-    async fn watch(
-        &self,
-        service: &str,
-    ) -> AppResult<mpsc::Receiver<Vec<ServiceInstance>>> {
+    async fn watch(&self, service: &str) -> AppResult<mpsc::Receiver<Vec<ServiceInstance>>> {
         let (tx, rx) = mpsc::channel(16);
         let base_url = self.base_url.clone();
         let token = self.token.clone();

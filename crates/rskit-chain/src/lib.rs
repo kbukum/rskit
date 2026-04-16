@@ -98,9 +98,7 @@ mod tests {
             _progress: ProgressFn,
             _cancel: CancellationToken,
         ) -> Pin<Box<dyn Future<Output = AppResult<Value>> + Send + '_>> {
-            Box::pin(async {
-                Err(AppError::new(ErrorCode::Internal, "intentional failure"))
-            })
+            Box::pin(async { Err(AppError::new(ErrorCode::Internal, "intentional failure")) })
         }
     }
 

@@ -156,13 +156,8 @@ impl DiscoveryChannel {
                         continue;
                     }
                     let new_target = instances[0].endpoint();
-                    Self::maybe_reconnect(
-                        &service_name,
-                        &new_target,
-                        &current_target,
-                        &channel,
-                    )
-                    .await;
+                    Self::maybe_reconnect(&service_name, &new_target, &current_target, &channel)
+                        .await;
                 }
                 debug!(
                     service = %service_name,
@@ -512,17 +507,11 @@ mod tests {
     #[tokio::test]
     async fn test_with_watcher_constructor() {
         let discovery = Arc::new(MockDiscovery);
-        let config =
-            DiscoveryChannelConfig::new(GrpcClientConfig::new("localhost:50051"))
-                .with_resolve_interval(Duration::from_secs(5));
+        let config = DiscoveryChannelConfig::new(GrpcClientConfig::new("localhost:50051"))
+            .with_resolve_interval(Duration::from_secs(5));
 
         // No watcher provided — still works
-        let ch = DiscoveryChannel::with_watcher(
-            discovery,
-            None,
-            "valid-service",
-            config,
-        );
+        let ch = DiscoveryChannel::with_watcher(discovery, None, "valid-service", config);
 
         let target = ch.resolve().await;
         assert!(target.is_ok());
@@ -555,16 +544,10 @@ mod tests {
     #[tokio::test]
     async fn test_start_background_polling() {
         let discovery = Arc::new(MockDiscovery);
-        let config =
-            DiscoveryChannelConfig::new(GrpcClientConfig::new("localhost:50051"))
-                .with_resolve_interval(Duration::from_millis(50));
+        let config = DiscoveryChannelConfig::new(GrpcClientConfig::new("localhost:50051"))
+            .with_resolve_interval(Duration::from_millis(50));
 
-        let mut ch = DiscoveryChannel::with_watcher(
-            discovery,
-            None,
-            "valid-service",
-            config,
-        );
+        let mut ch = DiscoveryChannel::with_watcher(discovery, None, "valid-service", config);
 
         // Start background polling
         ch.start_background().await.unwrap();

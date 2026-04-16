@@ -34,7 +34,7 @@ pub use component::DiscoveryComponent;
 pub use config::DiscoveryConfig;
 #[cfg(feature = "consul")]
 pub use consul::ConsulDiscovery;
-pub use factory::{create_provider, register_provider, ProviderFactory, ProviderPair};
+pub use factory::{ProviderFactory, ProviderPair, create_provider, register_provider};
 pub use instance::ServiceInstance;
 pub use memory::InMemoryDiscovery;
 pub use resolve::resolve_addr;

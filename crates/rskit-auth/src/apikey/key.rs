@@ -92,6 +92,16 @@ pub fn hash_key(plain_key: &str) -> String {
     hex::encode(hasher.finalize())
 }
 
+/// Perform a constant-time comparison between the hash of a plaintext key
+/// and a stored hash. Returns `true` if they match.
+///
+/// This prevents timing attacks that could leak information about stored hashes.
+pub fn compare_hash(plain_key: &str, stored_hash: &str) -> bool {
+    use subtle::ConstantTimeEq;
+    let computed = hash_key(plain_key);
+    computed.as_bytes().ct_eq(stored_hash.as_bytes()).into()
+}
+
 /// Error returned when an API key fails validation.
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum KeyValidationError {
@@ -112,4 +122,27 @@ pub fn validate(key: &Key) -> Result<(), KeyValidationError> {
         return Err(KeyValidationError::Expired);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn compare_hash_matching() {
+        let key = "sk_test_abc123def456";
+        let hash = hash_key(key);
+        assert!(compare_hash(key, &hash));
+    }
+
+    #[test]
+    fn compare_hash_wrong_key() {
+        let hash = hash_key("sk_test_abc123def456");
+        assert!(!compare_hash("sk_test_wrong", &hash));
+    }
+
+    #[test]
+    fn compare_hash_wrong_hash() {
+        assert!(!compare_hash("sk_test_abc123def456", "badhash"));
+    }
 }
