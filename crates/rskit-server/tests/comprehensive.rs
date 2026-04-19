@@ -158,6 +158,24 @@ fn builder_with_name_chaining() {
     assert_eq!(server.name(), "custom");
 }
 
+#[test]
+fn builder_with_reflection_builds_successfully() {
+    // Empty descriptor set is valid for builder construction.
+    let server = GrpcServerBuilder::new(GrpcServerConfig::default())
+        .with_reflection(&[])
+        .build();
+    assert_eq!(server.name(), "grpc-server");
+}
+
+#[test]
+fn builder_with_reflection_chaining() {
+    let server = GrpcServerBuilder::new(GrpcServerConfig::default())
+        .with_reflection(&[])
+        .with_name("reflected")
+        .build();
+    assert_eq!(server.name(), "reflected");
+}
+
 // ---------------------------------------------------------------------------
 // Component health before start
 // ---------------------------------------------------------------------------

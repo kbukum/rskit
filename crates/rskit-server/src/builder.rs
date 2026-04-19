@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use tokio_util::sync::CancellationToken;
 use tonic::transport::Server;
+use tonic_reflection::server::Builder as ReflectionBuilder;
 
 use crate::component::GrpcServer;
 use crate::config::GrpcServerConfig;
@@ -33,16 +34,36 @@ pub(crate) type ServeFn = Arc<
 
 /// Builder for a [`GrpcServer`] component.
 ///
-/// ```rust,no_run
+/// # gRPC Reflection
+///
+/// Enable server reflection so tools like `grpcurl` can discover services:
+///
+/// ```rust,ignore
 /// # use rskit_server::{GrpcServerBuilder, GrpcServerConfig};
+/// // In your build.rs, configure tonic_build to output a file descriptor set:
+/// //   tonic_build::configure()
+/// //       .file_descriptor_set_path("src/descriptor.bin")
+/// //       .compile(&["proto/my_service.proto"], &["proto/"])?;
+///
+/// let descriptor = include_bytes!("descriptor.bin");
+///
 /// let server = GrpcServerBuilder::new(GrpcServerConfig::default())
+///     .with_reflection(descriptor)
 ///     .build();
+/// ```
+///
+/// Then query with grpcurl:
+/// ```bash
+/// grpcurl -plaintext localhost:50051 list
+/// grpcurl -plaintext localhost:50051 describe my.package.MyService
 /// ```
 pub struct GrpcServerBuilder {
     name: String,
     config: GrpcServerConfig,
     /// Accumulated serve fns — each captures one tonic service.
     serve_fns: Vec<ServeFn>,
+    /// Compiled `FileDescriptorSet` bytes for gRPC reflection.
+    reflection_descriptor: Option<Vec<u8>>,
 }
 
 impl GrpcServerBuilder {
@@ -52,6 +73,7 @@ impl GrpcServerBuilder {
             name: "grpc-server".into(),
             config,
             serve_fns: Vec::new(),
+            reflection_descriptor: None,
         }
     }
 
@@ -62,10 +84,35 @@ impl GrpcServerBuilder {
         self
     }
 
+    /// Enable gRPC server reflection for service discovery.
+    ///
+    /// Accepts the compiled `FileDescriptorSet` bytes produced by `tonic-build`.
+    /// Configure `tonic-build` in your `build.rs`:
+    ///
+    /// ```rust,ignore
+    /// tonic_build::configure()
+    ///     .file_descriptor_set_path("src/descriptor.bin")
+    ///     .compile(&["proto/service.proto"], &["proto/"])?;
+    /// ```
+    ///
+    /// Then pass the bytes to the builder:
+    ///
+    /// ```rust,ignore
+    /// builder.with_reflection(include_bytes!("descriptor.bin"))
+    /// ```
+    #[must_use]
+    pub fn with_reflection(mut self, file_descriptor_set: &[u8]) -> Self {
+        self.reflection_descriptor = Some(file_descriptor_set.to_vec());
+        self
+    }
+
     /// Add a tonic-generated service.
     ///
     /// The service is captured in a closure that later calls
     /// `Server::builder().add_service(svc).serve_with_shutdown(addr, signal)`.
+    ///
+    /// If [`with_reflection`](Self::with_reflection) was called, the reflection
+    /// service is automatically added alongside each user service.
     #[must_use]
     pub fn add_service<S>(mut self, svc: S) -> Self
     where
@@ -80,13 +127,26 @@ impl GrpcServerBuilder {
             + 'static,
         S::Future: Send + 'static,
     {
+        let descriptor = self.reflection_descriptor.clone();
         let serve_fn: ServeFn = Arc::new(move |addr, signal| {
             let s = svc.clone();
+            let desc = descriptor.clone();
             Box::pin(async move {
-                Server::builder()
-                    .add_service(s)
-                    .serve_with_shutdown(addr, signal)
-                    .await
+                let mut builder = Server::builder();
+                let router = builder.add_service(s);
+
+                if let Some(desc_bytes) = desc {
+                    let refl_svc = ReflectionBuilder::configure()
+                        .register_encoded_file_descriptor_set(&desc_bytes)
+                        .build_v1()
+                        .expect("valid file descriptor set for reflection");
+                    router
+                        .add_service(refl_svc)
+                        .serve_with_shutdown(addr, signal)
+                        .await
+                } else {
+                    router.serve_with_shutdown(addr, signal).await
+                }
             })
         });
         self.serve_fns.push(serve_fn);
