@@ -4,9 +4,11 @@ use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 use tonic::transport::Server;
 use tonic_reflection::server::Builder as ReflectionBuilder;
+use tower::Layer;
 
 use crate::component::GrpcServer;
 use crate::config::GrpcServerConfig;
+use crate::error_layer::ErrorLayer;
 
 // ---------------------------------------------------------------------------
 // Service adder trait
@@ -108,10 +110,9 @@ impl GrpcServerBuilder {
 
     /// Add a tonic-generated service.
     ///
-    /// The service is captured in a closure that later calls
-    /// `Server::builder().add_service(svc).serve_with_shutdown(addr, signal)`.
-    ///
-    /// If [`with_reflection`](Self::with_reflection) was called, the reflection
+    /// The service is automatically wrapped with [`ErrorLayer`] so that all
+    /// gRPC error responses carry structured JSON details. If
+    /// [`with_reflection`](Self::with_reflection) was called, the reflection
     /// service is automatically added alongside each user service.
     #[must_use]
     pub fn add_service<S>(mut self, svc: S) -> Self
@@ -128,8 +129,10 @@ impl GrpcServerBuilder {
         S::Future: Send + 'static,
     {
         let descriptor = self.reflection_descriptor.clone();
+        // Wrap the user service with the error enrichment layer.
+        let wrapped_svc = ErrorLayer::new().layer(svc);
         let serve_fn: ServeFn = Arc::new(move |addr, signal| {
-            let s = svc.clone();
+            let s = wrapped_svc.clone();
             let desc = descriptor.clone();
             Box::pin(async move {
                 let mut builder = Server::builder();

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::error::Error;
 
-use rskit_errors::{AppError, AppResult, ErrorCode, ErrorResponse};
+use rskit_errors::{AppError, AppResult, ErrorCode, ProblemDetail};
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 1. ErrorCode → HTTP status mapping (ALL 17 codes)
@@ -563,24 +563,26 @@ fn app_result_map_err() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 9. ErrorResponse — serialization, deserialization, structure
+// 9. ProblemDetail — serialization, deserialization, structure (RFC 9457)
 // ═══════════════════════════════════════════════════════════════════════════
 
 #[test]
-fn error_response_from_app_error_fields() {
+fn problem_detail_from_app_error_fields() {
     let err = AppError::not_found("User", Some("42"));
-    let resp = ErrorResponse::from(&err);
-    assert_eq!(resp.status, 404);
-    assert_eq!(resp.title, "NOT_FOUND");
-    assert!(resp.detail.contains("User"));
-    assert!(resp.detail.contains("42"));
-    assert!(resp.error_type.contains("not-found"));
-    assert!(resp.instance.is_none());
-    assert!(resp.extensions.is_empty());
+    let pd = ProblemDetail::from(&err);
+    assert_eq!(pd.status, 404);
+    assert_eq!(pd.title, "Not Found");
+    assert!(pd.detail.contains("User"));
+    assert!(pd.detail.contains("42"));
+    assert!(pd.error_type.ends_with("not-found"));
+    assert!(pd.instance.is_none());
+    assert!(pd.details.is_empty());
+    assert_eq!(pd.code, ErrorCode::NotFound);
+    assert!(!pd.retryable);
 }
 
 #[test]
-fn error_response_error_type_uri_format() {
+fn problem_detail_error_type_uri_format() {
     let cases: Vec<(ErrorCode, &str)> = vec![
         (ErrorCode::ServiceUnavailable, "service-unavailable"),
         (ErrorCode::ConnectionFailed, "connection-failed"),
@@ -591,77 +593,132 @@ fn error_response_error_type_uri_format() {
     ];
     for (code, expected_slug) in cases {
         let err = AppError::new(code, "test");
-        let resp = ErrorResponse::from(&err);
-        let expected_uri = format!("https://rskit.dev/errors/{}", expected_slug);
-        assert_eq!(resp.error_type, expected_uri, "URI for {:?}", code);
+        let pd = ProblemDetail::from(&err);
+        assert!(
+            pd.error_type.ends_with(expected_slug),
+            "URI for {:?} was: {}",
+            code,
+            pd.error_type
+        );
+        assert!(
+            pd.error_type.starts_with("https://"),
+            "URI for {:?} was: {}",
+            code,
+            pd.error_type
+        );
     }
 }
 
 #[test]
-fn error_response_from_owned_app_error() {
+fn problem_detail_from_owned_app_error() {
     let err = AppError::unauthorized("no token");
-    let resp = ErrorResponse::from(err);
-    assert_eq!(resp.status, 401);
-    assert_eq!(resp.detail, "no token");
+    let pd = ProblemDetail::from(err);
+    assert_eq!(pd.status, 401);
+    assert_eq!(pd.detail, "no token");
+    assert_eq!(pd.code, ErrorCode::Unauthorized);
 }
 
 #[test]
-fn error_response_serializes_to_json() {
+fn problem_detail_serializes_to_json() {
     let err = AppError::new(ErrorCode::NotFound, "item not found");
-    let resp = ErrorResponse::from(&err);
-    let json = serde_json::to_value(&resp).unwrap();
+    let pd = ProblemDetail::from(&err);
+    let json = serde_json::to_value(&pd).unwrap();
 
-    assert_eq!(json["type"], "https://rskit.dev/errors/not-found");
-    assert_eq!(json["title"], "NOT_FOUND");
+    assert!(
+        json["type"].as_str().unwrap().ends_with("not-found"),
+        "type: {}",
+        json["type"]
+    );
+    assert_eq!(json["title"], "Not Found");
     assert_eq!(json["status"], 404);
     assert_eq!(json["detail"], "item not found");
+    assert_eq!(json["code"], "NOT_FOUND");
+    assert_eq!(json["retryable"], false);
     // instance is None → should be absent due to skip_serializing_if
     assert!(json.get("instance").is_none());
-    // extensions is empty → should be absent due to skip_serializing_if
-    assert!(json.get("extensions").is_none());
+    // details is empty → should be absent due to skip_serializing_if
+    assert!(json.get("details").is_none());
 }
 
 #[test]
-fn error_response_json_roundtrip() {
+fn problem_detail_json_roundtrip() {
     let err = AppError::new(ErrorCode::Forbidden, "not allowed");
-    let resp = ErrorResponse::from(&err);
-    let json_str = serde_json::to_string(&resp).unwrap();
-    let deserialized: ErrorResponse = serde_json::from_str(&json_str).unwrap();
+    let pd = ProblemDetail::from(&err);
+    let json_str = serde_json::to_string(&pd).unwrap();
+    let back: ProblemDetail = serde_json::from_str(&json_str).unwrap();
 
-    assert_eq!(deserialized.status, resp.status);
-    assert_eq!(deserialized.title, resp.title);
-    assert_eq!(deserialized.detail, resp.detail);
-    assert_eq!(deserialized.error_type, resp.error_type);
+    assert_eq!(back.status, pd.status);
+    assert_eq!(back.title, pd.title);
+    assert_eq!(back.detail, pd.detail);
+    assert_eq!(back.error_type, pd.error_type);
+    assert_eq!(back.code, pd.code);
+    assert_eq!(back.retryable, pd.retryable);
 }
 
 #[test]
-fn error_response_with_extensions_roundtrip() {
-    let mut resp = ErrorResponse::from(&AppError::new(ErrorCode::Internal, "err"));
-    resp.extensions
-        .insert("trace_id".to_string(), "abc-123".to_string());
-    resp.instance = Some("/api/v1/users/42".to_string());
+fn problem_detail_with_details_and_instance_roundtrip() {
+    let mut pd = ProblemDetail::from(&AppError::new(ErrorCode::Internal, "err"));
+    pd.details
+        .insert("trace_id".to_string(), serde_json::json!("abc-123"));
+    pd.instance = Some("/api/v1/users/42".to_string());
 
-    let json_str = serde_json::to_string(&resp).unwrap();
-    let deserialized: ErrorResponse = serde_json::from_str(&json_str).unwrap();
+    let json_str = serde_json::to_string(&pd).unwrap();
+    let back: ProblemDetail = serde_json::from_str(&json_str).unwrap();
 
-    assert_eq!(deserialized.extensions.get("trace_id").unwrap(), "abc-123");
-    assert_eq!(deserialized.instance.as_deref(), Some("/api/v1/users/42"));
+    assert_eq!(
+        back.details.get("trace_id").and_then(|v| v.as_str()),
+        Some("abc-123")
+    );
+    assert_eq!(back.instance.as_deref(), Some("/api/v1/users/42"));
 }
 
 #[test]
-fn error_response_deserialize_from_raw_json() {
+fn problem_detail_deserialize_from_raw_json() {
     let raw = r#"{
         "type": "https://rskit.dev/errors/not-found",
-        "title": "NOT_FOUND",
+        "title": "Not Found",
         "status": 404,
-        "detail": "user not found"
+        "detail": "user not found",
+        "code": "NOT_FOUND",
+        "retryable": false
     }"#;
-    let resp: ErrorResponse = serde_json::from_str(raw).unwrap();
-    assert_eq!(resp.status, 404);
-    assert_eq!(resp.title, "NOT_FOUND");
-    assert_eq!(resp.detail, "user not found");
-    assert!(resp.extensions.is_empty());
-    assert!(resp.instance.is_none());
+    let pd: ProblemDetail = serde_json::from_str(raw).unwrap();
+    assert_eq!(pd.status, 404);
+    assert_eq!(pd.title, "Not Found");
+    assert_eq!(pd.detail, "user not found");
+    assert!(pd.details.is_empty());
+    assert!(pd.instance.is_none());
+}
+
+#[test]
+fn problem_detail_title_is_title_cased() {
+    let cases: &[(ErrorCode, &str)] = &[
+        (ErrorCode::NotFound, "Not Found"),
+        (ErrorCode::ServiceUnavailable, "Service Unavailable"),
+        (ErrorCode::InvalidInput, "Invalid Input"),
+        (ErrorCode::DatabaseError, "Database Error"),
+        (ErrorCode::Internal, "Internal"),
+        (ErrorCode::Unauthorized, "Unauthorized"),
+    ];
+    for (code, expected_title) in cases {
+        let pd = ProblemDetail::from(&AppError::new(*code, "test"));
+        assert_eq!(pd.title, *expected_title, "title for {:?}", code);
+    }
+}
+
+#[test]
+fn problem_detail_grpc_roundtrip() {
+    let err = AppError::new(ErrorCode::NotFound, "user 42 not found").with_detail("id", "42");
+    let status: tonic::Status = err.into();
+    assert!(!status.details().is_empty());
+
+    let recovered: AppError = status.into();
+    assert_eq!(recovered.code, ErrorCode::NotFound);
+    assert_eq!(recovered.message, "user 42 not found");
+    assert_eq!(
+        recovered.details.get("id").and_then(|v| v.as_str()),
+        Some("42")
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

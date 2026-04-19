@@ -402,7 +402,7 @@ mod tests {
         };
         let params = parse_query_string("status=active&type=premium", &config);
         assert_eq!(params.filters.get("status").unwrap(), "active");
-        assert!(params.filters.get("type").is_none());
+        assert!(!params.filters.contains_key("type"));
     }
 
     #[test]

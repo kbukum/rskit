@@ -12,7 +12,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use rskit_auth::jwt::{JwtConfig, JwtService};
 use rskit_auth::password::{HashAlgorithm, PasswordHasher, ResetTokenGenerator};
 use rskit_auth::traits::{TokenGenerator, TokenValidator};
-use rskit_errors::{AppError, ErrorCode, ErrorResponse};
+use rskit_errors::{AppError, ErrorCode, ProblemDetail};
 use serde::{Deserialize, Serialize};
 
 // ─── Test Claims Type ──────────────────────────────────────────────────────
@@ -76,9 +76,9 @@ fn internal_error_message_is_generic_when_displayed_via_error_response() {
         "password=s3cret host=db.internal:5432",
     );
     let err = AppError::internal(cause);
-    let response = ErrorResponse::from(&err);
+    let response = ProblemDetail::from(&err);
 
-    // The ErrorResponse detail should not contain "s3cret" since it comes
+    // The ProblemDetail detail should not contain "s3cret" since it comes
     // from the AppError message field which includes the cause string.
     // This test documents current behavior — if it fails, the code may need fixing.
     assert!(
@@ -86,7 +86,7 @@ fn internal_error_message_is_generic_when_displayed_via_error_response() {
             // If it does contain it, flag as a known concern but don't block CI.
             // The actual HTTP layer should sanitize before sending to clients.
             eprintln!(
-                "SECURITY NOTE: ErrorResponse.detail contains cause details: {}",
+                "SECURITY NOTE: ProblemDetail.detail contains cause details: {}",
                 response.detail
             );
             true
@@ -308,7 +308,7 @@ fn public_types_are_send_and_sync() {
 
     assert_send_sync::<AppError>();
     assert_send_sync::<ErrorCode>();
-    assert_send_sync::<ErrorResponse>();
+    assert_send_sync::<ProblemDetail>();
     assert_send_sync::<JwtConfig>();
     assert_send_sync::<JwtService<TestClaims>>();
     assert_send_sync::<PasswordHasher>();
@@ -316,10 +316,10 @@ fn public_types_are_send_and_sync() {
     assert_send_sync::<ResetTokenGenerator>();
 }
 
-// ─── 6. Error Response (RFC 7807) Safety ───────────────────────────────────
+// ─── 6. Problem Detail (RFC 9457) Safety ──────────────────────────────────
 
 #[test]
-fn error_response_from_app_error_has_correct_status() {
+fn problem_detail_from_app_error_has_correct_status() {
     let cases = vec![
         (AppError::unauthorized("no"), 401u16),
         (AppError::forbidden("no"), 403),
@@ -330,11 +330,11 @@ fn error_response_from_app_error_has_correct_status() {
     ];
 
     for (err, expected_status) in cases {
-        let resp = ErrorResponse::from(&err);
+        let pd = ProblemDetail::from(&err);
         assert_eq!(
-            resp.status, expected_status,
+            pd.status, expected_status,
             "Wrong status for {:?}: got {}",
-            err.code, resp.status
+            err.code, pd.status
         );
     }
 }

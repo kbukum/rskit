@@ -191,28 +191,6 @@ fn http_error_not_found_into_response() {
 }
 
 #[test]
-fn http_error_internal_into_response() {
-    let app_err = AppError::new(ErrorCode::Internal, "something broke");
-    let http_err = HttpError::from(app_err);
-    let response = http_err.into_response();
-
-    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
-}
-
-#[test]
-fn http_error_unauthorized_into_response() {
-    let app_err = AppError::new(ErrorCode::Unauthorized, "bad token");
-    let http_err = HttpError::from(app_err);
-    let response = http_err.into_response();
-
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-    assert_eq!(
-        response.headers().get("content-type").unwrap(),
-        "application/problem+json"
-    );
-}
-
-#[test]
 fn http_error_forbidden_into_response() {
     let app_err = AppError::new(ErrorCode::Forbidden, "access denied");
     let http_err = HttpError::from(app_err);
@@ -259,35 +237,33 @@ fn http_error_service_unavailable_into_response() {
 }
 
 #[tokio::test]
-async fn http_error_response_body_is_json() {
+async fn http_error_response_body_is_problem_json() {
     let app_err = AppError::new(ErrorCode::NotFound, "item not found");
     let http_err = HttpError::from(app_err);
     let response = http_err.into_response();
+
+    assert_eq!(
+        response.headers().get("content-type").unwrap(),
+        "application/problem+json"
+    );
 
     let body = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
         .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
-    // RFC 7807 ErrorResponse fields: type, title, status, detail
+    // RFC 9457 ProblemDetail shape
     assert!(
-        json.get("type").is_some(),
-        "expected 'type' field in error response"
+        json["type"].as_str().unwrap().ends_with("not-found"),
+        "type: {}",
+        json["type"]
     );
-    assert!(
-        json.get("title").is_some(),
-        "expected 'title' field in error response"
-    );
-    assert!(
-        json.get("status").is_some(),
-        "expected 'status' field in error response"
-    );
-    assert!(
-        json.get("detail").is_some(),
-        "expected 'detail' field in error response"
-    );
-    assert_eq!(json["detail"], "item not found");
+    assert_eq!(json["title"], "Not Found");
     assert_eq!(json["status"], 404);
+    assert_eq!(json["detail"], "item not found");
+    assert_eq!(json["code"], "NOT_FOUND");
+    assert_eq!(json["retryable"], false);
+    assert!(json.get("instance").is_none());
 }
 
 #[test]

@@ -2,7 +2,7 @@ use axum::{
     http::{Request, StatusCode},
     response::{IntoResponse, Response},
 };
-use rskit_errors::{AppError, ErrorResponse};
+use rskit_errors::{AppError, ProblemDetail};
 use tower::{Layer, Service};
 
 // ── Newtype so we can implement IntoResponse (orphan rule) ────────────────────
@@ -20,7 +20,7 @@ impl IntoResponse for HttpError {
     fn into_response(self) -> Response {
         let status = StatusCode::from_u16(self.0.http_status.as_u16())
             .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
-        let body = serde_json::to_string(&ErrorResponse::from(&self.0)).unwrap_or_default();
+        let body = serde_json::to_string(&ProblemDetail::from(&self.0)).unwrap_or_default();
         (status, [("content-type", "application/problem+json")], body).into_response()
     }
 }

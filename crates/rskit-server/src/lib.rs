@@ -8,7 +8,10 @@ pub mod builder;
 pub mod component;
 /// [`GrpcServerConfig`] and [`TlsConfig`].
 pub mod config;
+/// [`ErrorLayer`] — auto-enriches gRPC error responses with structured RFC 9457 details.
+pub mod error_layer;
 
 pub use builder::GrpcServerBuilder;
 pub use component::GrpcServer;
 pub use config::{GrpcServerConfig, TlsConfig};
+pub use error_layer::ErrorLayer;
