@@ -47,7 +47,12 @@ pub use color::{ColorRange, ColorSpace, PixelFormat};
 pub use executor::MediaExecutor;
 pub use filter::{Filter, FilterTarget, ParamValue, Params};
 pub use format::Format;
-pub use ops::MediaOp;
+pub use ops::{
+    ColorAdjustments, FilterConfig, FilterPreset, ImageFormat, InterpolateConfig, InterpolateModel,
+    MediaOp, OverlayConfig, OverlayType, Position, SceneDetectConfig, SceneDetectMethod, Size,
+    SubtitleConfig, SubtitleFormat, SubtitleSource, TextOverlay, ThumbnailConfig, UpscaleConfig,
+    UpscaleModel,
+};
 pub use output::{
     AudioSettings, Bitrate, DashConfig, EncodingSpeed, HlsConfig, HlsPlaylistType, OutputConfig,
     Quality, RtmpConfig, StreamingConfig, VideoSettings,

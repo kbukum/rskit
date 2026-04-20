@@ -4,16 +4,9 @@ use std::time::Duration;
 
 use rskit_errors::AppResult;
 use rskit_file::{FileSink, FileSource};
-use rskit_media::{
-    filter::FilterTarget,
-    ops::*,
-    output::{Bitrate, EncodingSpeed, OutputConfig, Quality, StreamingConfig},
-    pipeline::Progress,
-    registry::Registry,
-    time::Timestamp,
-};
+use rskit_media::{ops::*, pipeline::Progress, registry::Registry, time::Timestamp};
 
-use crate::{config::FfmpegConfig, filter_map, progress::FfmpegProgressParser};
+use crate::{compilers::CompileContext, config::FfmpegConfig, progress::FfmpegProgressParser};
 
 #[cfg(unix)]
 #[allow(unused_imports)]
@@ -148,8 +141,8 @@ impl FfmpegCommand {
                 MediaOp::ExtractMany(_) => extract_many_count += 1,
                 MediaOp::Concat(_) => concat_count += 1,
                 MediaOp::Filter(f) => match f.target {
-                    FilterTarget::Video => has_video_op = true,
-                    FilterTarget::Audio => has_audio_op = true,
+                    rskit_media::filter::FilterTarget::Video => has_video_op = true,
+                    rskit_media::filter::FilterTarget::Audio => has_audio_op = true,
                 },
                 _ => {}
             }
@@ -267,416 +260,74 @@ impl FfmpegCommand {
             cmd.global_opts.extend(["-c:v".into(), decoder.clone()]);
         }
 
+        let mut ctx = CompileContext {
+            cmd: &mut cmd,
+            hints,
+            registry,
+        };
+
+        use crate::compilers;
         for op in &ops {
             match op {
-                MediaOp::Extract(range) => {
-                    cmd.inputs[0].seek_to = Some(range.start);
-                    cmd.inputs[0].duration = Some(range.duration());
+                MediaOp::Extract(range) => compilers::extract::compile_extract(&mut ctx, range)?,
+                MediaOp::ExtractMany(segs) => {
+                    compilers::extract::compile_extract_many(&mut ctx, segs)?;
                 }
-                MediaOp::Resize(resize_op) => {
-                    let (w, h) = (resize_op.resolution.width, resize_op.resolution.height);
-                    let filter = match resize_op.mode {
-                        ResizeMode::Exact => format!("scale={w}:{h}"),
-                        ResizeMode::Fit => format!(
-                            "scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2"
-                        ),
-                        ResizeMode::Fill => format!(
-                            "scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}"
-                        ),
-                        ResizeMode::FitWidth => format!("scale={w}:-2"),
-                        ResizeMode::FitHeight => format!("scale=-2:{h}"),
-                    };
-                    cmd.video_filters.push(filter);
+                MediaOp::Resize(r) => compilers::spatial::compile_resize(&mut ctx, r)?,
+                MediaOp::Crop(c) => compilers::spatial::compile_crop(&mut ctx, c)?,
+                MediaOp::Rotate(r) => compilers::spatial::compile_rotate(&mut ctx, r)?,
+                MediaOp::Flip(d) => compilers::spatial::compile_flip(&mut ctx, d)?,
+                MediaOp::Pad(p) => compilers::spatial::compile_pad(&mut ctx, p)?,
+                MediaOp::Speed(f) => compilers::temporal::compile_speed(&mut ctx, *f)?,
+                MediaOp::Reverse => compilers::temporal::compile_reverse(&mut ctx)?,
+                MediaOp::Volume(f) => compilers::audio::compile_volume(&mut ctx, *f)?,
+                MediaOp::NormalizeAudio => compilers::audio::compile_normalize_audio(&mut ctx)?,
+                MediaOp::FadeIn(d) => compilers::audio::compile_fade_in(&mut ctx, d)?,
+                MediaOp::FadeOut(d) => compilers::audio::compile_fade_out(&mut ctx, d)?,
+                MediaOp::StripAudio => compilers::audio::compile_strip_audio(&mut ctx)?,
+                MediaOp::StripVideo => compilers::audio::compile_strip_video(&mut ctx)?,
+                MediaOp::Filter(f) => compilers::filter::compile_filter(&mut ctx, f)?,
+                MediaOp::Overlay(o) => compilers::compose::compile_overlay(&mut ctx, o)?,
+                MediaOp::Concat(c) => compilers::compose::compile_concat(&mut ctx, c)?,
+                MediaOp::ReplaceAudio(r) => {
+                    compilers::compose::compile_replace_audio(&mut ctx, r)?;
                 }
-                MediaOp::Crop(region) => {
-                    cmd.video_filters.push(format!(
-                        "crop={}:{}:{}:{}",
-                        region.width, region.height, region.x, region.y,
+                MediaOp::MixAudio(m) => compilers::compose::compile_mix_audio(&mut ctx, m)?,
+                MediaOp::Transcode(c) => compilers::transcode::compile_transcode(&mut ctx, c)?,
+                MediaOp::SelectTracks(i) => {
+                    compilers::tracks::compile_select_tracks(&mut ctx, i)?;
+                }
+                MediaOp::SelectTracksByKind(k) => {
+                    compilers::tracks::compile_select_tracks_by_kind(&mut ctx, k)?;
+                }
+                MediaOp::BurnSubtitles(s) => {
+                    compilers::subtitle::compile_burn_subtitles(&mut ctx, s)?;
+                }
+                MediaOp::ApplyFilter(c) => compilers::visual::compile_apply_filter(&mut ctx, c)?,
+                MediaOp::AddOverlay(c) => {
+                    compilers::overlay::compile_add_overlay(&mut ctx, c)?;
+                }
+                MediaOp::GenerateThumbnail(c) => {
+                    compilers::thumbnail::compile_generate_thumbnail(&mut ctx, c)?;
+                }
+                MediaOp::DetectScenes(c) => {
+                    compilers::scene_detect::compile_detect_scenes(&mut ctx, c)?;
+                }
+                MediaOp::AddSubtitles(c) => {
+                    compilers::subtitle::compile_add_subtitles(&mut ctx, c)?;
+                }
+                MediaOp::Upscale(_) => compilers::ai::compile_upscale()?,
+                MediaOp::Interpolate(_) => compilers::ai::compile_interpolate()?,
+                _ => {
+                    return Err(rskit_errors::AppError::new(
+                        rskit_errors::ErrorCode::InvalidInput,
+                        format!("unsupported operation: {op:?}"),
                     ));
-                }
-                MediaOp::Rotate(rotation) => {
-                    let filter = match rotation {
-                        Rotation::Degrees90 => "transpose=1".to_string(),
-                        Rotation::Degrees180 => "hflip,vflip".to_string(),
-                        Rotation::Degrees270 => "transpose=2".to_string(),
-                        Rotation::Arbitrary(deg) => format!("rotate={deg}*PI/180"),
-                    };
-                    cmd.video_filters.push(filter);
-                }
-                MediaOp::Flip(dir) => match dir {
-                    FlipDirection::Horizontal => cmd.video_filters.push("hflip".into()),
-                    FlipDirection::Vertical => cmd.video_filters.push("vflip".into()),
-                    FlipDirection::Both => {
-                        cmd.video_filters.push("hflip".into());
-                        cmd.video_filters.push("vflip".into());
-                    }
-                },
-                MediaOp::Pad(pad) => {
-                    cmd.video_filters.push(format!(
-                        "pad={}:{}:(ow-iw)/2:(oh-ih)/2:{}",
-                        pad.width, pad.height, pad.color,
-                    ));
-                }
-                MediaOp::Speed(factor) => {
-                    cmd.video_filters.push(format!("setpts=PTS/{factor}"));
-                    // FFmpeg atempo only supports 0.5–100.0 per filter
-                    let mut remaining = *factor;
-                    while remaining > 2.0 {
-                        cmd.audio_filters.push("atempo=2.0".into());
-                        remaining /= 2.0;
-                    }
-                    while remaining < 0.5 {
-                        cmd.audio_filters.push("atempo=0.5".into());
-                        remaining /= 0.5;
-                    }
-                    cmd.audio_filters.push(format!("atempo={remaining}"));
-                }
-                MediaOp::Reverse => {
-                    cmd.video_filters.push("reverse".into());
-                    cmd.audio_filters.push("areverse".into());
-                }
-                MediaOp::Volume(factor) => {
-                    cmd.audio_filters.push(format!("volume={factor}"));
-                }
-                MediaOp::NormalizeAudio => {
-                    cmd.audio_filters.push("loudnorm".into());
-                }
-                MediaOp::FadeIn(d) => {
-                    let secs = d.as_secs_f64();
-                    cmd.video_filters.push(format!("fade=t=in:d={secs}"));
-                    cmd.audio_filters.push(format!("afade=t=in:d={secs}"));
-                }
-                MediaOp::FadeOut(d) => {
-                    let secs = d.as_secs_f64();
-                    cmd.video_filters.push(format!("fade=t=out:d={secs}"));
-                    cmd.audio_filters.push(format!("afade=t=out:d={secs}"));
-                }
-                MediaOp::StripAudio => {
-                    cmd.output_opts.push("-an".into());
-                }
-                MediaOp::StripVideo => {
-                    cmd.output_opts.push("-vn".into());
-                }
-                MediaOp::Filter(filter) => {
-                    let ff_filter = filter_map::to_ffmpeg_filter(filter);
-                    match filter.target {
-                        FilterTarget::Video => cmd.video_filters.push(ff_filter),
-                        FilterTarget::Audio => cmd.audio_filters.push(ff_filter),
-                    }
-                }
-                MediaOp::Overlay(overlay) => {
-                    cmd.inputs.push(FfmpegInput {
-                        source: overlay.source.clone(),
-                        seek_to: None,
-                        duration: None,
-                    });
-                    let pos = match &overlay.position {
-                        OverlayPosition::TopLeft(x, y) => format!("{x}:{y}"),
-                        OverlayPosition::TopRight(x, y) => format!("W-w-{x}:{y}"),
-                        OverlayPosition::BottomLeft(x, y) => format!("{x}:H-h-{y}"),
-                        OverlayPosition::BottomRight(x, y) => format!("W-w-{x}:H-h-{y}"),
-                        OverlayPosition::Center => "(W-w)/2:(H-h)/2".into(),
-                        OverlayPosition::Custom { x, y } => format!("{x}:{y}"),
-                    };
-                    let idx = cmd.inputs.len() - 1;
-                    cmd.complex_filter = Some(format!("[0][{idx}]overlay={pos}"));
-                }
-                MediaOp::Concat(concat) => {
-                    cmd.inputs.push(FfmpegInput {
-                        source: concat.source.clone(),
-                        seek_to: None,
-                        duration: None,
-                    });
-                    let n = cmd.inputs.len();
-                    let include_audio = hints.has_audio.unwrap_or(true);
-                    let a_flag = if include_audio { 1 } else { 0 };
-                    let pads: String = if include_audio {
-                        (0..n).map(|i| format!("[{i}:v][{i}:a]")).collect()
-                    } else {
-                        (0..n).map(|i| format!("[{i}:v]")).collect()
-                    };
-                    cmd.complex_filter = Some(format!("{pads}concat=n={n}:v=1:a={a_flag}"));
-                }
-                MediaOp::ReplaceAudio(replace) => {
-                    cmd.inputs.push(FfmpegInput {
-                        source: replace.audio_source.clone(),
-                        seek_to: None,
-                        duration: None,
-                    });
-                    cmd.output_opts.extend(["-map".into(), "0:v".into()]);
-                    cmd.output_opts
-                        .extend(["-map".into(), format!("{}:a", cmd.inputs.len() - 1)]);
-                }
-                MediaOp::MixAudio(mix) => {
-                    cmd.inputs.push(FfmpegInput {
-                        source: mix.audio_source.clone(),
-                        seek_to: None,
-                        duration: None,
-                    });
-                    let idx = cmd.inputs.len() - 1;
-                    cmd.complex_filter = Some(format!(
-                        "[0:a][{idx}:a]amix=inputs=2:duration=first:dropout_transition=3"
-                    ));
-                }
-                MediaOp::Transcode(config) => {
-                    Self::apply_output_config(&mut cmd, config, registry)?;
-                }
-                MediaOp::SelectTracks(indices) => {
-                    for idx in indices {
-                        cmd.output_opts.extend(["-map".into(), format!("0:{idx}")]);
-                    }
-                }
-                MediaOp::SelectTracksByKind(kinds) => {
-                    for kind in kinds {
-                        let stream_type = match kind {
-                            rskit_media::TrackKind::Video => "v",
-                            rskit_media::TrackKind::Audio => "a",
-                            rskit_media::TrackKind::Subtitle => "s",
-                            _ => continue,
-                        };
-                        cmd.output_opts
-                            .extend(["-map".into(), format!("0:{stream_type}")]);
-                    }
-                }
-                // Multi-segment extraction: concatenate extracted segments
-                MediaOp::ExtractMany(segments) => {
-                    if segments.is_empty() {
-                        return Err(rskit_errors::AppError::new(
-                            rskit_errors::ErrorCode::InvalidInput,
-                            "ExtractMany requires at least one segment",
-                        ));
-                    }
-                    if segments.len() == 1 {
-                        // Single segment → simple extract
-                        let range = segments[0].range;
-                        cmd.inputs[0].seek_to = Some(range.start);
-                        cmd.inputs[0].duration = Some(range.duration());
-                    } else {
-                        // Multiple segments → separate inputs per segment, concat
-                        let base_source = cmd.inputs[0].source.clone();
-                        cmd.inputs.clear();
-                        for seg in segments {
-                            cmd.inputs.push(FfmpegInput {
-                                source: base_source.clone(),
-                                seek_to: Some(seg.range.start),
-                                duration: Some(seg.range.duration()),
-                            });
-                        }
-                        let n = cmd.inputs.len();
-                        let include_audio = hints.has_audio.unwrap_or(true);
-                        let pads: String = if include_audio {
-                            (0..n).map(|i| format!("[{i}:v][{i}:a]")).collect()
-                        } else {
-                            (0..n).map(|i| format!("[{i}:v]")).collect()
-                        };
-                        if include_audio {
-                            cmd.complex_filter =
-                                Some(format!("{pads}concat=n={n}:v=1:a=1[outv][outa]"));
-                            cmd.output_opts.extend(["-map".into(), "[outv]".into()]);
-                            cmd.output_opts.extend(["-map".into(), "[outa]".into()]);
-                        } else {
-                            cmd.complex_filter = Some(format!("{pads}concat=n={n}:v=1:a=0[outv]"));
-                            cmd.output_opts.extend(["-map".into(), "[outv]".into()]);
-                        }
-                    }
-                }
-                MediaOp::BurnSubtitles(subs) => {
-                    // Write subtitles to a temp SRT file and use the subtitles filter
-                    let srt_content = subs.to_srt();
-                    let temp = rskit_file::TempFile::with_extension("srt").map_err(|e| {
-                        rskit_errors::AppError::new(
-                            rskit_errors::ErrorCode::Internal,
-                            format!("failed to create temp subtitle file: {e}"),
-                        )
-                    })?;
-                    std::fs::write(temp.path(), &srt_content).map_err(|e| {
-                        rskit_errors::AppError::new(
-                            rskit_errors::ErrorCode::Internal,
-                            format!("failed to write subtitle file: {e}"),
-                        )
-                    })?;
-                    // Escape colons and backslashes in the path for FFmpeg filter syntax
-                    let path_str = temp.path().to_string_lossy().replace('\\', "/");
-                    let escaped = path_str.replace(':', "\\:").replace("'", "\\'");
-                    cmd.video_filters
-                        .push(format!("subtitles=filename={escaped}"));
-                    // Keep temp file alive until command finishes
-                    cmd.temp_files.push(temp);
                 }
             }
         }
 
         Ok(cmd)
-    }
-
-    fn apply_output_config(
-        cmd: &mut FfmpegCommand,
-        config: &OutputConfig,
-        registry: &Registry,
-    ) -> AppResult<()> {
-        if let Some(video) = &config.video {
-            let encoder = registry
-                .codec_info(&video.codec)
-                .and_then(|info| info.ffmpeg_encoder.clone())
-                .unwrap_or_else(|| video.codec.id().to_string());
-
-            cmd.output_opts.extend(["-c:v".into(), encoder]);
-
-            if let Some(quality) = &video.quality {
-                let crf = match quality {
-                    Quality::Lossless => "0",
-                    Quality::UltraHigh => "14",
-                    Quality::High => "18",
-                    Quality::Medium => "23",
-                    Quality::Low => "28",
-                    Quality::VeryLow => "35",
-                    Quality::Custom(v) => {
-                        cmd.output_opts.extend(["-crf".into(), v.to_string()]);
-                        ""
-                    }
-                };
-                if !crf.is_empty() {
-                    cmd.output_opts.extend(["-crf".into(), crf.into()]);
-                }
-            }
-
-            if let Some(bitrate) = &video.bitrate {
-                match bitrate {
-                    Bitrate::Constant(br) => {
-                        cmd.output_opts.extend(["-b:v".into(), br.to_string()]);
-                    }
-                    Bitrate::Variable(br) => {
-                        cmd.output_opts.extend(["-b:v".into(), br.to_string()]);
-                    }
-                    Bitrate::Constrained { target, max } => {
-                        cmd.output_opts.extend(["-b:v".into(), target.to_string()]);
-                        cmd.output_opts.extend(["-maxrate".into(), max.to_string()]);
-                    }
-                }
-            }
-
-            if let Some(speed) = &video.speed {
-                let preset = match speed {
-                    EncodingSpeed::UltraFast => "ultrafast",
-                    EncodingSpeed::SuperFast => "superfast",
-                    EncodingSpeed::VeryFast => "veryfast",
-                    EncodingSpeed::Fast => "fast",
-                    EncodingSpeed::Medium => "medium",
-                    EncodingSpeed::Slow => "slow",
-                    EncodingSpeed::VerySlow => "veryslow",
-                };
-                cmd.output_opts.extend(["-preset".into(), preset.into()]);
-            }
-
-            if let Some(res) = &video.resolution {
-                cmd.video_filters
-                    .push(format!("scale={}:{}", res.width, res.height));
-            }
-
-            if let Some(fps) = &video.frame_rate {
-                cmd.output_opts
-                    .extend(["-r".into(), format!("{}/{}", fps.num, fps.den)]);
-            }
-
-            if let Some(profile) = &video.profile {
-                cmd.output_opts
-                    .extend(["-profile:v".into(), profile.as_ffmpeg_arg().into()]);
-            }
-
-            if let Some(level) = &video.level {
-                cmd.output_opts.extend(["-level".into(), level.to_string()]);
-            }
-        }
-
-        if let Some(audio) = &config.audio {
-            let encoder = registry
-                .codec_info(&audio.codec)
-                .and_then(|info| info.ffmpeg_encoder.clone())
-                .unwrap_or_else(|| audio.codec.id().to_string());
-
-            cmd.output_opts.extend(["-c:a".into(), encoder]);
-
-            if let Some(sr) = &audio.sample_rate {
-                cmd.output_opts.extend(["-ar".into(), sr.0.to_string()]);
-            }
-
-            if let Some(ch) = &audio.channels {
-                cmd.output_opts
-                    .extend(["-ac".into(), ch.channel_count().to_string()]);
-            }
-
-            if let Some(bitrate) = &audio.bitrate {
-                match bitrate {
-                    Bitrate::Constant(br) | Bitrate::Variable(br) => {
-                        cmd.output_opts.extend(["-b:a".into(), br.to_string()]);
-                    }
-                    Bitrate::Constrained { target, .. } => {
-                        cmd.output_opts.extend(["-b:a".into(), target.to_string()]);
-                    }
-                }
-            }
-        }
-
-        // Format extension for output
-        if let Some(info) = registry.format_info(&config.format) {
-            cmd.output_opts
-                .extend(["-f".into(), info.extension.clone()]);
-        }
-
-        if config.strip_metadata {
-            cmd.output_opts
-                .extend(["-map_metadata".into(), "-1".into()]);
-        }
-
-        for (k, v) in &config.extra {
-            cmd.output_opts.extend([format!("-{k}"), v.clone()]);
-        }
-
-        // Streaming output configuration
-        if let Some(streaming) = &config.streaming {
-            match streaming {
-                StreamingConfig::Hls(hls) => {
-                    cmd.output_opts.extend(["-f".into(), "hls".into()]);
-                    cmd.output_opts
-                        .extend(["-hls_time".into(), hls.segment_duration.to_string()]);
-                    cmd.output_opts
-                        .extend(["-hls_list_size".into(), hls.playlist_size.to_string()]);
-                    match hls.playlist_type {
-                        rskit_media::output::HlsPlaylistType::Vod => {
-                            cmd.output_opts
-                                .extend(["-hls_playlist_type".into(), "vod".into()]);
-                        }
-                        rskit_media::output::HlsPlaylistType::Event => {
-                            cmd.output_opts
-                                .extend(["-hls_playlist_type".into(), "event".into()]);
-                        }
-                    }
-                    if let Some(seg_fn) = &hls.segment_filename {
-                        cmd.output_opts
-                            .extend(["-hls_segment_filename".into(), seg_fn.clone()]);
-                    }
-                }
-                StreamingConfig::Dash(dash) => {
-                    cmd.output_opts.extend(["-f".into(), "dash".into()]);
-                    cmd.output_opts
-                        .extend(["-seg_duration".into(), dash.segment_duration.to_string()]);
-                    if dash.use_template {
-                        cmd.output_opts.extend(["-use_template".into(), "1".into()]);
-                    }
-                    if dash.use_timeline {
-                        cmd.output_opts.extend(["-use_timeline".into(), "1".into()]);
-                    }
-                }
-                StreamingConfig::Rtmp(rtmp) => {
-                    cmd.output_opts.extend(["-f".into(), "flv".into()]);
-                    // The RTMP URL is the output destination — handled at run time
-                    cmd.output_opts.extend(["-rtmp_live".into(), "live".into()]);
-                    cmd.output_opts.push(rtmp.url.clone());
-                }
-            }
-        }
-
-        Ok(())
     }
 
     /// Build the final FFmpeg CLI argument list (excluding the output path).

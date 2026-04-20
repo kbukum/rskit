@@ -2,6 +2,8 @@
 
 #![warn(missing_docs)]
 
+/// Sequential step-based executor with progress and cancellation.
+pub mod executor;
 /// Extension trait adding `rskit` operators to any `Stream`.
 pub mod ext;
 /// Higher-level stream operators (map, filter, fan-out, windowing, etc.).
@@ -11,6 +13,7 @@ pub mod sink;
 /// Stream source constructors (`from_slice`, `from_fn`, `from_channel`).
 pub mod source;
 
+pub use executor::{Step, StepExecutor, StepStatus};
 pub use ext::RskitStreamExt;
 pub use operators::combine::{concat, merge};
 pub use sink::{collect, drain, for_each};

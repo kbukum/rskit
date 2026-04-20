@@ -10,8 +10,9 @@ use crate::{
     executor::MediaExecutor,
     filter::Filter,
     ops::{
-        ConcatOp, CropRegion, FlipDirection, MediaOp, MixAudioOp, OverlayOp, OverlayPosition,
-        PadOp, ReplaceAudioOp, ResizeMode, ResizeOp, Rotation, Transition,
+        ConcatOp, CropRegion, FilterConfig, FlipDirection, InterpolateConfig, MediaOp, MixAudioOp,
+        OverlayConfig, OverlayOp, OverlayPosition, PadOp, ReplaceAudioOp, ResizeMode, ResizeOp,
+        Rotation, SceneDetectConfig, SubtitleConfig, ThumbnailConfig, Transition, UpscaleConfig,
     },
     output::OutputConfig,
     spatial::Resolution,
@@ -245,6 +246,57 @@ impl MediaPipeline {
     #[must_use]
     pub fn burn_subtitles(mut self, subs: SubtitleTrack) -> Self {
         self.ops.push(MediaOp::BurnSubtitles(subs));
+        self
+    }
+
+    // ── Advanced filter / effects ────────────────────────────────────
+
+    /// Apply a color grading or visual filter preset.
+    #[must_use]
+    pub fn apply_filter(mut self, config: FilterConfig) -> Self {
+        self.ops.push(MediaOp::ApplyFilter(config));
+        self
+    }
+
+    /// Add a text or image overlay.
+    #[must_use]
+    pub fn add_overlay(mut self, config: OverlayConfig) -> Self {
+        self.ops.push(MediaOp::AddOverlay(config));
+        self
+    }
+
+    /// Extract a single frame as a thumbnail image.
+    #[must_use]
+    pub fn generate_thumbnail(mut self, config: ThumbnailConfig) -> Self {
+        self.ops.push(MediaOp::GenerateThumbnail(config));
+        self
+    }
+
+    /// Detect scene boundaries.
+    #[must_use]
+    pub fn detect_scenes(mut self, config: SceneDetectConfig) -> Self {
+        self.ops.push(MediaOp::DetectScenes(config));
+        self
+    }
+
+    /// Burn subtitles from an external SRT/VTT/ASS source.
+    #[must_use]
+    pub fn add_subtitles(mut self, config: SubtitleConfig) -> Self {
+        self.ops.push(MediaOp::AddSubtitles(config));
+        self
+    }
+
+    /// AI upscale using Real-ESRGAN.
+    #[must_use]
+    pub fn upscale(mut self, config: UpscaleConfig) -> Self {
+        self.ops.push(MediaOp::Upscale(config));
+        self
+    }
+
+    /// AI frame interpolation using RIFE.
+    #[must_use]
+    pub fn interpolate(mut self, config: InterpolateConfig) -> Self {
+        self.ops.push(MediaOp::Interpolate(config));
         self
     }
 

@@ -20,6 +20,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 rskit-errors     = { path = "../rskit-errors" }
 tokio            = { workspace = true }
+tokio-util       = { workspace = true, features = ["rt"] }
 futures          = { workspace = true }
 futures-util     = { workspace = true }
 async-stream     = { workspace = true }

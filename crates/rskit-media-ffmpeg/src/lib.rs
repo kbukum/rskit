@@ -7,6 +7,7 @@
 #![warn(missing_docs)]
 
 mod command;
+mod compilers;
 mod config;
 mod error;
 mod executor;

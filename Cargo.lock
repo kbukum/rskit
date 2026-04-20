@@ -4885,6 +4885,7 @@ dependencies = [
  "rskit-errors",
  "tokio",
  "tokio-stream",
+ "tokio-util",
  "tracing",
 ]
 

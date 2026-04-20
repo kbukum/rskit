@@ -310,9 +310,8 @@ impl MediaExecutor for FfmpegExecutor {
     }
 
     fn supports(&self, op: &MediaOp) -> bool {
-        // All ops are now implemented
-        let _ = op;
-        true
+        // Upscale and Interpolate require external AI tools, not FFmpeg
+        !matches!(op, MediaOp::Upscale(_) | MediaOp::Interpolate(_))
     }
 
     fn preview(&self, source: &FileSource, ops: &[MediaOp]) -> AppResult<Vec<String>> {
