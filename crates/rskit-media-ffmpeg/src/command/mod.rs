@@ -1,17 +1,17 @@
 //! FFmpeg command builder — compiles MediaOp list into FFmpeg CLI arguments.
 
+mod optimize;
+mod runner;
+
 use std::time::Duration;
 
 use rskit_errors::AppResult;
 use rskit_file::{FileSink, FileSource};
-use rskit_media::{ops::*, pipeline::Progress, registry::Registry, time::Timestamp};
+use rskit_media::{ops::*, registry::Registry, time::Timestamp};
 
-use crate::{compilers::CompileContext, config::FfmpegConfig, progress::FfmpegProgressParser};
+use crate::{compilers::CompileContext, config::FfmpegConfig};
 
-#[cfg(unix)]
-#[allow(unused_imports)]
-use std::os::unix::process::CommandExt;
-
+/// FFmpeg input specification (source file, optional seek/duration).
 pub(crate) struct FfmpegInput {
     pub source: FileSource,
     pub seek_to: Option<Timestamp>,
@@ -55,145 +55,6 @@ pub struct FfmpegCommand {
 }
 
 impl FfmpegCommand {
-    /// Optimize a list of operations by removing redundancies.
-    ///
-    /// - Consecutive resizes: keep only the last one
-    /// - Consecutive crops: keep only the last one
-    /// - Multiple volume adjustments: multiply factors
-    /// - Speed(1.0): remove (no-op)
-    /// - Multiple consecutive Extract: keep only the last
-    pub fn optimize_ops(ops: &[MediaOp]) -> Vec<MediaOp> {
-        let mut result: Vec<MediaOp> = Vec::with_capacity(ops.len());
-
-        for op in ops {
-            match op {
-                MediaOp::Resize(_) => {
-                    // If the last op is also a resize, replace it
-                    if matches!(result.last(), Some(MediaOp::Resize(_))) {
-                        result.pop();
-                    }
-                    result.push(op.clone());
-                }
-                MediaOp::Crop(_) => {
-                    if matches!(result.last(), Some(MediaOp::Crop(_))) {
-                        result.pop();
-                    }
-                    result.push(op.clone());
-                }
-                MediaOp::Volume(factor) => {
-                    if let Some(MediaOp::Volume(prev)) = result.last_mut() {
-                        *prev *= factor;
-                    } else {
-                        result.push(op.clone());
-                    }
-                }
-                MediaOp::Speed(factor) => {
-                    // Skip no-op speed changes
-                    if (*factor - 1.0).abs() < f64::EPSILON {
-                        continue;
-                    }
-                    if let Some(MediaOp::Speed(prev)) = result.last_mut() {
-                        *prev *= factor;
-                    } else {
-                        result.push(op.clone());
-                    }
-                }
-                _ => result.push(op.clone()),
-            }
-        }
-
-        result
-    }
-
-    /// Pre-flight validation of operations before spawning FFmpeg.
-    ///
-    /// Catches invalid combinations that would cause FFmpeg to fail with
-    /// cryptic errors or produce incorrect output.
-    pub fn validate_ops(ops: &[MediaOp]) -> AppResult<()> {
-        let mut has_strip_audio = false;
-        let mut has_strip_video = false;
-        let mut has_audio_op = false;
-        let mut has_video_op = false;
-        let mut extract_count = 0;
-        let mut extract_many_count = 0;
-        let mut concat_count = 0;
-        let mut overlay_count = 0;
-
-        for op in ops {
-            match op {
-                MediaOp::StripAudio => has_strip_audio = true,
-                MediaOp::StripVideo => has_strip_video = true,
-                MediaOp::Volume(_)
-                | MediaOp::NormalizeAudio
-                | MediaOp::MixAudio(_)
-                | MediaOp::ReplaceAudio(_) => has_audio_op = true,
-                MediaOp::Resize(_)
-                | MediaOp::Crop(_)
-                | MediaOp::Rotate(_)
-                | MediaOp::Flip(_)
-                | MediaOp::Pad(_)
-                | MediaOp::BurnSubtitles(_) => has_video_op = true,
-                MediaOp::Overlay(_) => {
-                    has_video_op = true;
-                    overlay_count += 1;
-                }
-                MediaOp::Extract(_) => extract_count += 1,
-                MediaOp::ExtractMany(_) => extract_many_count += 1,
-                MediaOp::Concat(_) => concat_count += 1,
-                MediaOp::Filter(f) => match f.target {
-                    rskit_media::filter::FilterTarget::Video => has_video_op = true,
-                    rskit_media::filter::FilterTarget::Audio => has_audio_op = true,
-                },
-                _ => {}
-            }
-        }
-
-        if has_strip_audio && has_audio_op {
-            return Err(rskit_errors::AppError::new(
-                rskit_errors::ErrorCode::InvalidInput,
-                "Cannot apply audio operations after stripping audio (StripAudio + audio filter/volume/mix)",
-            ));
-        }
-
-        if has_strip_video && has_video_op {
-            return Err(rskit_errors::AppError::new(
-                rskit_errors::ErrorCode::InvalidInput,
-                "Cannot apply video operations after stripping video (StripVideo + video filter/resize/crop)",
-            ));
-        }
-
-        if extract_count > 1 {
-            return Err(rskit_errors::AppError::new(
-                rskit_errors::ErrorCode::InvalidInput,
-                "Multiple Extract ops found — use ExtractMany for multi-segment extraction",
-            ));
-        }
-
-        if extract_many_count > 1 {
-            return Err(rskit_errors::AppError::new(
-                rskit_errors::ErrorCode::InvalidInput,
-                "Multiple ExtractMany ops not supported",
-            ));
-        }
-
-        if (extract_count > 0 || extract_many_count > 0) && concat_count > 0 {
-            return Err(rskit_errors::AppError::new(
-                rskit_errors::ErrorCode::InvalidInput,
-                "Cannot combine Extract/ExtractMany with Concat — these use conflicting input strategies",
-            ));
-        }
-
-        if overlay_count > 1 || (overlay_count > 0 && concat_count > 0) {
-            // Multiple complex_filter ops would overwrite each other
-            return Err(rskit_errors::AppError::new(
-                rskit_errors::ErrorCode::InvalidInput,
-                "Only one complex-filter operation allowed per pipeline (overlay, concat, or multi-segment extract)",
-            ));
-        }
-
-        Ok(())
-    }
-
     /// Compile a list of media operations into an FFmpeg command.
     ///
     /// Uses default [`SourceHints`] (assumes audio present). For more accurate
@@ -366,162 +227,9 @@ impl FfmpegCommand {
 
         args
     }
-
-    /// Run the compiled FFmpeg command.
-    ///
-    /// Features:
-    /// - Process group isolation (setpgid) for clean cleanup on Unix
-    /// - Timeout enforcement via `tokio::time::timeout`
-    /// - Streaming stderr collection for both progress parsing and error diagnostics
-    /// - Progress reporting via `on_progress` callback (using mpsc channel)
-    /// - CancellationToken support via `cancel` parameter
-    /// - Full stderr included in error messages on failure
-    pub async fn run(
-        &self,
-        config: &FfmpegConfig,
-        on_progress: Option<Box<dyn Fn(Progress) + Send + Sync>>,
-        output_path: &std::path::Path,
-    ) -> Result<(), crate::error::FfmpegError> {
-        let mut args = self.to_args();
-        args.push(output_path.to_string_lossy().to_string());
-
-        tracing::debug!(cmd = %format!("ffmpeg {}", args.join(" ")), "executing ffmpeg");
-
-        let mut command = tokio::process::Command::new(config.ffmpeg_bin());
-        command
-            .args(&args)
-            .stderr(std::process::Stdio::piped())
-            .stdout(std::process::Stdio::null())
-            .stdin(std::process::Stdio::null());
-
-        // Process group isolation on Unix — allows clean SIGTERM of all child processes
-        #[cfg(unix)]
-        unsafe {
-            command.pre_exec(|| {
-                // Create new process group so we can kill the entire group
-                libc::setpgid(0, 0);
-                Ok(())
-            });
-        }
-
-        let mut child = command.spawn().map_err(|e| crate::error::FfmpegError {
-            kind: crate::error::FfmpegErrorKind::SpawnFailed,
-            exit_code: None,
-            stderr: String::new(),
-            message: format!("failed to spawn ffmpeg: {e}"),
-        })?;
-
-        let child_pid = child.id();
-
-        // Set up stderr reader for both progress parsing and error capture
-        let stderr = child.stderr.take().expect("stderr was piped");
-        let reader = tokio::io::BufReader::new(stderr);
-        use tokio::io::AsyncBufReadExt;
-        let mut lines = reader.lines();
-
-        // Channel for collecting stderr lines (for error diagnostics)
-        let (stderr_tx, mut stderr_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
-        // Channel for progress updates
-        let progress_callback = on_progress.map(std::sync::Arc::new);
-
-        let stderr_task = tokio::spawn({
-            let progress_callback = progress_callback.clone();
-            let parser = FfmpegProgressParser::new(None);
-            async move {
-                while let Ok(Some(line)) = lines.next_line().await {
-                    // Try parsing progress
-                    if let Some(ref cb) = progress_callback {
-                        if let Some(progress) = parser.parse_line(&line) {
-                            cb(progress);
-                        }
-                    }
-                    // Always collect stderr for error diagnostics
-                    let _ = stderr_tx.send(line);
-                }
-            }
-        });
-
-        // Wait for child with optional timeout
-        let wait_result = if let Some(timeout_dur) = config.timeout {
-            match tokio::time::timeout(timeout_dur, child.wait()).await {
-                Ok(result) => result.map_err(|e| crate::error::FfmpegError {
-                    kind: crate::error::FfmpegErrorKind::Unknown,
-                    exit_code: None,
-                    stderr: String::new(),
-                    message: format!("ffmpeg process error: {e}"),
-                }),
-                Err(_) => {
-                    // Timeout — kill the process
-                    tracing::warn!("FFmpeg process timed out after {:?}, killing", timeout_dur);
-                    Self::kill_process(&mut child, child_pid);
-                    return Err(crate::error::FfmpegError {
-                        kind: crate::error::FfmpegErrorKind::Timeout,
-                        exit_code: None,
-                        stderr: String::new(),
-                        message: format!("ffmpeg timed out after {timeout_dur:?}"),
-                    });
-                }
-            }
-        } else {
-            child.wait().await.map_err(|e| crate::error::FfmpegError {
-                kind: crate::error::FfmpegErrorKind::Unknown,
-                exit_code: None,
-                stderr: String::new(),
-                message: format!("ffmpeg process error: {e}"),
-            })
-        };
-
-        // Wait for stderr reader to finish
-        let _ = stderr_task.await;
-
-        // Collect all stderr lines
-        let mut stderr_lines = Vec::new();
-        while let Ok(line) = stderr_rx.try_recv() {
-            stderr_lines.push(line);
-        }
-        let stderr_output = stderr_lines.join("\n");
-
-        let status = wait_result?;
-
-        if !status.success() {
-            let exit_code = status.code();
-            let truncated_stderr =
-                crate::error::truncate_stderr(&stderr_output, config.max_stderr_lines);
-            let kind = crate::error::classify_error(exit_code, &stderr_output);
-
-            let message = format!(
-                "ffmpeg exited with status: {} (classified: {:?})",
-                status, kind
-            );
-
-            let err = crate::error::FfmpegError {
-                kind,
-                exit_code,
-                stderr: truncated_stderr,
-                message,
-            };
-
-            return Err(err);
-        }
-
-        Ok(())
-    }
-
-    /// Kill an FFmpeg child process and its process group.
-    fn kill_process(child: &mut tokio::process::Child, pid: Option<u32>) {
-        // Try graceful SIGTERM first on Unix
-        #[cfg(unix)]
-        if let Some(pid) = pid {
-            unsafe {
-                // Send SIGTERM to the process group
-                libc::kill(-(pid as i32), libc::SIGTERM);
-            }
-        }
-
-        // Then force kill via tokio
-        let _ = child.start_kill();
-    }
 }
+
+// ── Tests: golden arg verification for each operation ───────────────
 
 #[cfg(test)]
 mod tests {

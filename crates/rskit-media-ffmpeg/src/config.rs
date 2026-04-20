@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
+use rskit_media::timeout::{OperationKind, TimeoutCalculator};
 use serde::Deserialize;
 
 use crate::hw_accel::HwAccel;
@@ -20,8 +21,19 @@ pub struct FfmpegConfig {
     pub threads: Option<u32>,
     /// Hardware acceleration mode.
     pub hw_accel: Option<HwAccel>,
-    /// Maximum execution timeout per FFmpeg invocation.
+    /// Fixed execution timeout per FFmpeg invocation.
+    ///
+    /// When a [`TimeoutCalculator`] is also configured, the calculator takes
+    /// precedence if source duration and operation kind are available. This
+    /// fixed timeout serves as the fallback when duration is unknown.
     pub timeout: Option<Duration>,
+    /// Duration-aware timeout calculator.
+    ///
+    /// When set, timeouts are computed dynamically based on source duration
+    /// and operation type using `base + (duration × multiplier)`. Falls back
+    /// to the fixed `timeout` field when source duration is not available.
+    #[serde(skip)]
+    pub timeout_calculator: Option<TimeoutCalculator>,
     /// Whether to overwrite existing output files (`-y` flag).
     pub overwrite: bool,
     /// FFmpeg log level.
@@ -72,6 +84,7 @@ impl Default for FfmpegConfig {
             threads: None,
             hw_accel: None,
             timeout: None,
+            timeout_calculator: None,
             overwrite: true,
             log_level: FfmpegLogLevel::Warning,
             max_concurrent: None,
@@ -106,6 +119,34 @@ impl FfmpegConfig {
                 .unwrap_or(4);
             (cpus / 2).max(1)
         })
+    }
+
+    /// Resolve the effective timeout for an operation.
+    ///
+    /// Priority:
+    /// 1. If a [`TimeoutCalculator`] is configured and `source_duration` is
+    ///    provided, compute a duration-aware timeout based on the operation kind.
+    /// 2. Otherwise, fall back to the fixed `timeout` field.
+    /// 3. If neither is set, returns `None` (no timeout).
+    #[must_use]
+    pub fn resolve_timeout(
+        &self,
+        source_duration: Option<Duration>,
+        op_kind: Option<OperationKind>,
+    ) -> Option<Duration> {
+        if let (Some(calc), Some(dur)) = (&self.timeout_calculator, source_duration) {
+            let kind = op_kind.unwrap_or(OperationKind::Transcode);
+            Some(calc.calculate(dur, kind))
+        } else {
+            self.timeout
+        }
+    }
+
+    /// Set the timeout calculator (builder-style).
+    #[must_use]
+    pub fn with_timeout_calculator(mut self, calc: TimeoutCalculator) -> Self {
+        self.timeout_calculator = Some(calc);
+        self
     }
 }
 

@@ -8,6 +8,8 @@
 
 /// Audio sample rate and channel layout types.
 pub mod audio;
+/// Chunked media processing — split, process in parallel, reassemble.
+pub mod chunking;
 /// Codec identifiers, profiles, levels, and well-known constants.
 pub mod codec;
 /// Color space, color range, and pixel format types.
@@ -36,12 +38,18 @@ pub mod spatial;
 pub mod subtitle;
 /// Timestamp, time range, and segment types.
 pub mod time;
+/// Duration-aware timeout calculation for media operations.
+pub mod timeout;
 /// Track and track info types.
 pub mod track;
 /// Core media type enumerations.
 pub mod types;
 
 pub use audio::{ChannelLayout, SampleRate};
+pub use chunking::{
+    ChunkBoundary, ChunkId, ChunkPlan, ChunkProgress, ChunkResult, ChunkStatus, ChunkStrategy,
+    ChunkedOperation, FixedDurationStrategy, KeyframeStrategy, ReassemblyPlan, SilenceStrategy,
+};
 pub use codec::{Codec, CodecKind, CodecLevel, CodecProfile};
 pub use color::{ColorRange, ColorSpace, PixelFormat};
 pub use executor::MediaExecutor;
@@ -58,11 +66,12 @@ pub use output::{
     Quality, RtmpConfig, StreamingConfig, VideoSettings,
 };
 pub use pipeline::{MediaPipeline, Progress};
-pub use probe::{MediaMetadata, MediaProbe};
+pub use probe::{Chapter, KeyframeInfo, MediaMetadata, MediaProbe, PictureType, SilenceInterval};
 pub use registry::{CodecInfo, FormatInfo, Registry};
 pub use spatial::{FrameRate, Resolution};
 pub use subtitle::{SubtitleEntry, SubtitlePosition, SubtitleStyle, SubtitleTrack};
 pub use time::{Segment, TimeRange, Timestamp};
+pub use timeout::{OperationKind, TimeoutCalculator};
 pub use track::{
     AudioTrackInfo, ContentLightLevel, HdrFormat, HdrMetadata, MasteringDisplay, SubtitleTrackInfo,
     Track, VideoTrackInfo,
