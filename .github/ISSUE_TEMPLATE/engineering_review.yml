@@ -1,0 +1,85 @@
+name: Engineering Review Finding
+description: Tracked finding from the OSS engineering review
+title: "[Review] "
+labels: ["review", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Auto-filed from the cross-sibling OSS engineering review. See linked review document and cross-sibling matrix in the meta-tracking issue.
+  - type: input
+    id: finding_id
+    attributes:
+      label: Finding ID
+      description: Stable ID from the review document (e.g. F-008, RS-CR-01, PY-HI-12)
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options: ["Critical", "High", "Medium", "Low", "Nit"]
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - security
+        - errors
+        - observability
+        - concurrency
+        - architecture
+        - code-quality
+        - testing
+        - performance
+        - lint
+        - ci
+        - toolchain
+        - documentation
+        - release
+        - hygiene
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: File path(s) with line numbers and a short snippet
+      placeholder: |
+        path/to/file.ext:Lstart-Lend
+        ```
+        <snippet>
+        ```
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+    validations:
+      required: true
+  - type: textarea
+    id: recommendation
+    attributes:
+      label: Recommendation
+    validations:
+      required: true
+  - type: dropdown
+    id: effort
+    attributes:
+      label: Effort
+      options: ["XS", "S", "M", "L", "XL"]
+    validations:
+      required: true
+  - type: input
+    id: siblings
+    attributes:
+      label: Cross-sibling parity
+      description: Parallel finding IDs in sibling repos, or "no parity"
+      placeholder: "gokit F-002, rskit RS-HI-04"
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes / dependencies
