@@ -1,0 +1,91 @@
+# CODEOWNERS
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+#
+# Each line is a file pattern followed by one or more owners (GitHub usernames or team names).
+# Owners are automatically requested for review when someone opens a pull request that modifies files matching the pattern.
+
+# Global owner (applies to everything unless overridden)
+* @kbukum
+
+# Foundation crates
+/crates/rskit-errors/      @kbukum
+/crates/rskit-config/      @kbukum
+/crates/rskit-logging/     @kbukum
+/crates/rskit-validation/  @kbukum
+/crates/rskit-encryption/  @kbukum
+/crates/rskit-schema/      @kbukum
+/crates/rskit-file/        @kbukum
+/crates/rskit-media/       @kbukum
+/crates/rskit-media-image/ @kbukum
+/crates/rskit-media-audio/ @kbukum
+/crates/rskit-media-ffmpeg/ @kbukum
+
+# Patterns / Frameworks
+/crates/rskit-provider/      @kbukum
+/crates/rskit-resilience/    @kbukum
+/crates/rskit-hook/          @kbukum
+/crates/rskit-chain/         @kbukum
+/crates/rskit-di/            @kbukum
+/crates/rskit-bootstrap/     @kbukum
+/crates/rskit-observability/ @kbukum
+
+# Data & Flow
+/crates/rskit-pipeline/ @kbukum
+/crates/rskit-dag/      @kbukum
+/crates/rskit-worker/   @kbukum
+/crates/rskit-sse/      @kbukum
+/crates/rskit-cache/    @kbukum
+
+# Security
+/crates/rskit-auth/  @kbukum
+/crates/rskit-authz/ @kbukum
+
+# Transport
+/crates/rskit-http/         @kbukum
+/crates/rskit-httpclient/   @kbukum
+/crates/rskit-grpc-client/  @kbukum
+/crates/rskit-server/       @kbukum
+
+# Infrastructure
+/crates/rskit-database/  @kbukum
+/crates/rskit-file-s3/   @kbukum
+/crates/rskit-messaging/ @kbukum
+
+# AI/ML
+/crates/rskit-llm/            @kbukum
+/crates/rskit-llm-providers/  @kbukum
+/crates/rskit-bench/          @kbukum
+/crates/rskit-dataset/        @kbukum
+/crates/rskit-embedding/      @kbukum
+/crates/rskit-inference/      @kbukum
+/crates/rskit-vector-store/   @kbukum
+/crates/rskit-mcp/            @kbukum
+/crates/rskit-agent/          @kbukum
+/crates/rskit-tool/           @kbukum
+
+# Platform
+/crates/rskit-discovery/   @kbukum
+/crates/rskit-process/     @kbukum
+/crates/rskit-cli/         @kbukum
+/crates/rskit-explain/     @kbukum
+/crates/rskit-integration/ @kbukum
+/crates/rskit-testutil/    @kbukum
+
+# Infrastructure
+/.github/        @kbukum
+/Makefile        @kbukum
+/Cargo.toml      @kbukum
+/Cargo.lock      @kbukum
+/deny.toml       @kbukum
+/clippy.toml     @kbukum
+/rustfmt.toml    @kbukum
+/rust-toolchain.toml @kbukum
+
+# Documentation
+/docs/             @kbukum
+/README.md         @kbukum
+/CONTRIBUTING.md   @kbukum
+/CHANGELOG.md      @kbukum
+/SECURITY.md       @kbukum
+/GOVERNANCE.md     @kbukum
+/MAINTAINERS.md    @kbukum

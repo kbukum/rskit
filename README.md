@@ -1,48 +1,30 @@
 # rskit
 
-A production-grade Rust toolkit for building scalable, resilient services —
-the spiritual Rust twin of [gokit](https://github.com/kbukum/gokit).
-
 [![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml)
 [![Crates.io](https://img.shields.io/crates/v/rskit.svg)](https://crates.io/crates/rskit)
 [![docs.rs](https://img.shields.io/docsrs/rskit)](https://docs.rs/rskit)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![MSRV: 1.85](https://img.shields.io/badge/MSRV-1.85-orange.svg)](rust-toolchain.toml)
 
----
+**A production-grade Rust toolkit for building scalable, resilient services.** Structured errors, layered config, OpenTelemetry observability, typestate lifecycle, tower-based resilience, async pipelines, worker pools, and tonic gRPC — composable building blocks built on the standard Rust async ecosystem.
 
-## Overview
+> **Status — pre-1.0.** Public surface is semver-stable per crate; breaking changes are documented in [`CHANGELOG.md`](CHANGELOG.md). See [`docs/policy/SEMVER.md`](docs/policy/SEMVER.md). MSRV bumps are minor version changes.
 
-rskit provides composable building blocks for service development in Rust,
-covering the same problem space as gokit but using idiomatic Rust patterns:
+> **Sibling projects.** [**gokit**](https://github.com/kbukum/gokit) (Go) · rskit (Rust, this repo) · [**pykit**](https://github.com/kbukum/pykit) (Python). Public abstractions (`AppError`, `Component`, `Provider`, `Pipeline`, lifecycle hooks) are evaluated for parity across all three.
 
-| Concern | rskit crate | Key design choice vs. gokit |
-|---|---|---|
-| Structured errors | `rskit-errors` | `ErrorCode` enum (exhaustive match) instead of string constants |
-| Config loading | `rskit-config` | Layered TOML → `.env` → env vars with `validator` |
-| Observability | `rskit-logging` | `tracing` subscriber, one-shot setup, no global registry |
-| Service lifecycle | `rskit-bootstrap` | Typestate `App<S,C>` — lifecycle ordering enforced at compile time |
-| Resilience | `rskit-resilience` | `governor` rate limiter, `parking_lot` CB, Tower layers |
-| Async I/O patterns | `rskit-provider` | Four interaction traits bridging `tower::Service` |
-| Stream processing | `rskit-pipeline` | `futures::Stream` extension trait with 13 operators |
-| Worker pool | `rskit-worker` | `JoinSet` + `Semaphore`, event relay, panic detection |
-| gRPC transport | `rskit-server` | `tonic` server as a `Component` |
+## Highlights
 
----
+- **Cargo workspace** — facade crate (`rskit`) + 40+ independent `rskit-*` sub-crates. Add only what you need.
+- **Idiomatic Rust** — `tower::Layer` middleware, `futures::Stream` extensions, `parking_lot` non-poisoning mutexes, `CancellationToken` cooperative shutdown, `JoinSet` worker pools.
+- **Compile-time lifecycle safety** — typestate `App<S, C>` makes invalid lifecycle transitions impossible to write.
+- **Production resilience** — `governor` rate limiter, circuit breaker, retry with backoff + jitter, bulkhead — all available as `tower::Layer`.
+- **Typed errors** — `ErrorCode` enum (exhaustive match), HTTP & gRPC status mapping, free `tonic::Status` interop.
+- **Sibling parity** — APIs mirror [gokit](https://github.com/kbukum/gokit) (Go) and [pykit](https://github.com/kbukum/pykit) (Python). See [`docs/DESIGN.md`](docs/DESIGN.md) for cross-language design notes.
 
-## Architecture Overview
-
-rskit is a **Cargo workspace** with a facade crate and 40+ independent sub-crates under `crates/`:
-
-- **Facade crate** (`rskit`) — re-exports all sub-crates for convenience. Add only what you need or use the facade.
-- **Sub-crates** (`rskit-{name}`) — each is a standalone crate with its own `Cargo.toml`, published independently. Dependencies flow strictly downward (no cycles).
-- **Layered design** — Core → Foundation → Adapters → Specialist. Lower layers never import higher layers.
-
-## Quick Start
-
-Add the facade crate to your service:
+## Install
 
 ```toml
+# Facade — re-exports all rskit-* crates
 [dependencies]
 rskit = "0.1"
 tokio = { version = "1", features = ["full"] }
@@ -57,13 +39,14 @@ rskit-resilience = "0.1"
 rskit-worker     = "0.1"
 ```
 
-### Hello, lifecycle
+Requires **Rust 1.85+** (enforced by `rust-toolchain.toml`).
+
+## Quickstart
 
 ```rust
-use rskit_bootstrap::{App, AppBuilder, Component, Health};
+use rskit_bootstrap::AppBuilder;
 use rskit_config::ServiceConfig;
 use rskit_errors::AppResult;
-use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> AppResult<()> {
@@ -84,340 +67,26 @@ async fn main() -> AppResult<()> {
 }
 ```
 
-### Resilient HTTP call
+More examples (resilience, pipelines, workers, tower layers, …) → [`docs/EXAMPLES.md`](docs/EXAMPLES.md). Full crate list → [`docs/PACKAGES.md`](docs/PACKAGES.md).
 
-```rust
-use rskit_resilience::{CircuitBreaker, CbConfig, RetryPolicy};
-use std::time::Duration;
+## Documentation
 
-let cb = CircuitBreaker::new(CbConfig::default());
-let retry = RetryPolicy::builder()
-    .max_attempts(3)
-    .initial_backoff(Duration::from_millis(100))
-    .build();
-
-let result = retry.execute(|| async {
-    cb.execute(|| async { call_external_service().await }).await
-}).await?;
-```
-
-### Stream pipeline
-
-```rust
-use rskit_pipeline::{RskitStreamExt, from_slice};
-use futures::StreamExt;
-
-let results = from_slice(vec![1u32, 2, 3, 4, 5])
-    .rfilter(|&n| async move { n % 2 == 0 })
-    .rmap(|n| async move { Ok(n * 10) })
-    .collect::<Vec<_>>()
-    .await;
-// [Ok(20), Ok(40)]
-```
-
-### Worker pool
-
-```rust
-use rskit_worker::{Handler, Pool, PoolConfig, Event};
-use rskit_errors::AppResult;
-use tokio::sync::mpsc;
-use tokio_util::sync::CancellationToken;
-use std::sync::Arc;
-
-struct MyHandler;
-
-#[async_trait::async_trait]
-impl Handler<String, String> for MyHandler {
-    async fn handle(
-        &self,
-        input: String,
-        emit: mpsc::Sender<Event<String>>,
-        _cancel: CancellationToken,
-    ) -> AppResult<String> {
-        Ok(input.to_uppercase())
-    }
-}
-
-let pool = Pool::new(Arc::new(MyHandler), PoolConfig::new("demo"));
-let handle = pool.submit("hello".to_string()).await?;
-let result = handle.result().await?;
-assert_eq!(result, "HELLO");
-```
-
----
-
-### Crate Map
-
-| Phase | Crate | Description |
-|-------|-------|-------------|
-| Core | `rskit` | Production Rust toolkit — modular facade for rskit-* crates |
-| Core | `rskit-errors` | Structured application error types with HTTP/gRPC status mapping |
-| Core | `rskit-config` | TOML + environment variable configuration loading with validation |
-| Core | `rskit-logging` | Structured logging setup using tracing — JSON in production, pretty in dev |
-| Core | `rskit-bootstrap` | Application lifecycle orchestration: typestate App, Component registry, hooks |
-| Core | `rskit-provider` | Provider traits (request-response, stream, sink, duplex) with tower middleware |
-| Core | `rskit-pipeline` | Composable async data pipelines via futures::Stream extension operators |
-| Core | `rskit-resilience` | Fault-tolerance: retry, circuit breaker, bulkhead, rate limiter + tower layers |
-| Core | `rskit-worker` | Task worker pool with JoinSet, typed events, and provider bridges |
-| Core | `rskit-server` | tonic gRPC server bootstrap as a lifecycle-managed Component |
-| Foundation | `rskit-validation` | Fluent field-level validator that collects errors and converts to AppError |
-| Foundation | `rskit-encryption` | Symmetric encryption — AES-256-GCM and ChaCha20-Poly1305 |
-| Foundation | `rskit-http` | Axum HTTP server with graceful shutdown, CORS, request-ID, and Component lifecycle |
-| Foundation | `rskit-di` | Lightweight Arc-based runtime dependency injection container |
-| Foundation | `rskit-auth` | JWT, OIDC, password hashing, and request-context auth helpers |
-| Adapters | `rskit-database` | sqlx-based async database pool with repository pattern and slow-query logging |
-| Adapters | `rskit-cache` | Redis client with typed store, connection management, and Component lifecycle |
-| Adapters | `rskit-messaging` | Message broker abstractions with Kafka support |
-| Platform | `rskit-observability` | OpenTelemetry tracing, metrics, and context propagation |
-| Platform | `rskit-authz` | RBAC and ABAC authorization engine |
-| Platform | `rskit-discovery` | Service discovery with load balancing strategies |
-| Specialist | `rskit-testutil` | Test utilities, mock providers, and assertion helpers |
-| Specialist | `rskit-sse` | Server-Sent Events bus with axum integration |
-| Specialist | `rskit-dag` | DAG task orchestrator with parallel execution |
-| Specialist | `rskit-llm` | LLM provider abstractions for OpenAI and Anthropic |
-| Specialist | `rskit-llm-providers` | LLM provider implementations — OpenAI, Anthropic, Gemini |
-| Specialist | `rskit-embedding` | Embedding provider abstractions for vector search |
-| Specialist | `rskit-inference` | Inference provider abstractions for LLM chat completions |
-| Specialist | `rskit-vector-store` | Vector store abstractions with Qdrant and in-memory implementations |
-| Specialist | `rskit-agent` | Agentic loop — LLM orchestration, tool execution, context management |
-| Specialist | `rskit-tool` | Tool definitions, auto-wiring, registry, and middleware for agentic systems |
-| Specialist | `rskit-hook` | Generic event hook system for lifecycle handler registration |
-| Specialist | `rskit-mcp` | Model Context Protocol server and client bridge |
-| Specialist | `rskit-schema` | JSON Schema generation and validation from Rust types |
-| Specialist | `rskit-explain` | Structured explanation generation from analysis signals via LLM |
-| Media & File | `rskit-file` | File I/O, storage backends, temp files, and MIME detection |
-| Media & File | `rskit-file-s3` | S3 and S3-compatible (MinIO, LocalStack) storage backend |
-| Media & File | `rskit-media` | Media types, codec/format registry, pipeline builder, and processing traits |
-| Media & File | `rskit-media-ffmpeg` | FFmpeg CLI backend for video/audio processing |
-| Media & File | `rskit-media-image` | Native image processing backend using the image crate |
-| Media & File | `rskit-media-audio` | Pure Rust audio processing — WAV reading, waveform, silence detection |
-| Adapters | `rskit-httpclient` | Async HTTP client with auth, resilience, and error handling |
-| Adapters | `rskit-grpc-client` | Tonic-based gRPC client with lazy connections and discovery |
-| Platform | `rskit-process` | Subprocess execution with process-group isolation and timeout handling |
-| CLI & Data | `rskit-cli` | CLI framework: progress bars, structured output, signal handling |
-| CLI & Data | `rskit-dataset` | Dataset collection framework: source, transform, target, collector |
-| CLI & Data | `rskit-bench` | ML benchmarking framework: evaluators, metrics, reports, visualization |
-
-### Dependency graph
-
-```
-rskit-errors
-rskit-config       → rskit-errors
-rskit-logging      → rskit-config
-rskit-resilience   → rskit-errors
-rskit-provider     → rskit-errors, rskit-resilience
-rskit-pipeline     → rskit-errors
-rskit-bootstrap    → rskit-errors, rskit-config, rskit-logging
-rskit-worker       → rskit-errors, rskit-provider, rskit-pipeline, rskit-resilience
-rskit-server       → rskit-bootstrap, rskit-errors, rskit-config, rskit-resilience
-rskit (facade)     → all above
-```
-
-No circular dependencies. `rskit-bootstrap` intentionally does **not** depend on
-`rskit-provider` or `rskit-worker` — components are registered as `Arc<dyn Component>`,
-keeping the core lifecycle thin.
-
----
-
-## Feature Highlights
-
-### Errors — `rskit-errors`
-
-```rust
-// Typed error codes — exhaustive match, no string typos
-match err.code() {
-    ErrorCode::NotFound      => 404,
-    ErrorCode::Unauthorized  => 401,
-    ErrorCode::RateLimited   => 429,
-    _                        => 500,
-}
-
-// Fluent builder
-let err = AppError::not_found("user", user_id)
-    .with_detail("tenant", tenant_id)
-    .with_cause(db_error);
-
-// tonic interop
-let status: tonic::Status = err.into();
-```
-
-### Resilience — `rskit-resilience`
-
-```rust
-// Circuit breaker
-let cb = CircuitBreaker::new(CbConfig {
-    max_failures: 5,
-    timeout: Duration::from_secs(30),
-    ..Default::default()
-});
-
-// Retry with exponential backoff + jitter
-let policy = RetryPolicy::builder()
-    .max_attempts(4)
-    .initial_backoff(Duration::from_millis(50))
-    .backoff_factor(2.0)
-    .with_jitter(true)
-    .build();
-
-// Tower integration — wrap any tower::Service
-use tower::ServiceBuilder;
-use rskit_resilience::{CircuitBreakerLayer, RetryLayer};
-
-let svc = ServiceBuilder::new()
-    .layer(CircuitBreakerLayer(cb))
-    .layer(RetryLayer(policy))
-    .service(my_service);
-```
-
-### Pipeline — `rskit-pipeline`
-
-All operators are lazy and non-allocating where possible.
-
-| Operator | Description |
+| Topic | Link |
 |---|---|
-| `rmap` / `rflatmap` | Async map / flat-map |
-| `rfilter` | Async predicate filter |
-| `rtap` | Side-effect without transforming |
-| `rreduce` | Fold to a single value |
-| `rparallel` | Bounded concurrent execution |
-| `rfan_out` | Broadcast item to N async functions |
-| `rbatch` | Collect N items into a `Vec` |
-| `rdebounce` | Suppress rapid bursts; emit last after quiet period |
-| `rthrottle` | Emit at most once per interval |
-| `rtumbling_window` | Fixed non-overlapping time windows |
-| `rsliding_window` | Overlapping time windows |
-
-### Config loading order
-
-```
-1. TOML file (optional)            ← lowest priority
-2. .env file (optional, dotenvy)
-3. APP__SECTION__KEY env vars       ← highest priority
-```
-
-```rust
-#[derive(Deserialize, Validate, AppConfig)]
-struct Config {
-    service: ServiceConfig,
-    #[validate(range(min = 1, max = 65535))]
-    port: u16,
-}
-
-let cfg: Config = ConfigLoader::new()
-    .with_config_file("config/app.toml")
-    .with_env_prefix("MYAPP")
-    .load()?;
-```
-
----
-
-## Design Decisions
-
-| Decision | Rationale |
-|---|---|
-| `ErrorCode` as enum, not strings | Exhaustive pattern matching, derives `Hash`/`Copy`, no typos |
-| `tower::Layer` for middleware | Industry standard, free tonic interop, composable |
-| `futures::Stream` extension trait | Native async, tokio time interop, works with gRPC streaming |
-| `governor` for rate limiting | Production-grade, injectable clock for deterministic tests |
-| `parking_lot::Mutex` for circuit breaker | Non-poisoning, never held across `.await`, ~50% faster |
-| `CancellationToken` for shutdown | Idiomatic Tokio cooperative cancellation |
-| Typestate `App<S, C>` | Compile-time lifecycle ordering — can't call `run` before `build` |
-| No DI container | Rust's type system makes runtime DI stringly-typed without benefit |
-| `JoinSet` + `Semaphore` for worker pool | Idiomatic Tokio, panic detection via `JoinError`, zero boilerplate |
-| mpsc → broadcast relay in pool | Allows `T: Clone` without `T: Sync`, scales to N subscribers |
-
----
-
-## Comparison with gokit
-
-rskit mirrors gokit's package structure and lifecycle philosophy. Key differences:
-
-| gokit | rskit | Why |
-|---|---|---|
-| `ErrorCode` as string constants | `ErrorCode` enum | Exhaustive match, compile-time safety |
-| Custom `Middleware[I,O]` chain | `tower::Layer` | Industry standard |
-| Custom pull-based `Iterator[T]` | `futures::Stream` extension | Native async |
-| Custom token bucket | `governor` | Production-grade, testable |
-| `sync.Mutex` in CB | `parking_lot::Mutex` | Non-poisoning |
-| `context.Context` cancellation | `CancellationToken` | Rust-idiomatic |
-| Goroutine-per-worker pool | `JoinSet` pool | Idiomatic Tokio |
-| Runtime DI container | `rskit-di` container | Lightweight `Arc`-based, opt-in |
-
-All 34 workspace crates are implemented and included in v0.1, covering DI,
-observability (OTEL), service discovery, database, Redis, and Kafka adapters.
-
-## Cross-Kit Comparison
-
-rskit, [gokit](https://github.com/kbukum/gokit) (Go), and [pykit](https://github.com/kbukum/pykit) (Python) share the same module structure and design philosophy. The table below shows capability coverage across all three kits.
-
-| Capability | gokit | rskit | pykit |
-|---|---|---|---|
-| Errors | ✅ `errors` | ✅ `rskit-errors` | ✅ `pykit-errors` |
-| Config | ✅ `config` | ✅ `rskit-config` | ✅ `pykit-config` |
-| Logging | ✅ `logger` | ✅ `rskit-logging` | ✅ `pykit-logging` |
-| Validation | ✅ `validation` | ✅ `rskit-validation` | ✅ `pykit-validation` |
-| Encryption | ✅ `encryption` | ✅ `rskit-encryption` | ✅ `pykit-encryption` |
-| Utilities | ✅ `util` | ❌ | ✅ `pykit-util` |
-| Version | ✅ `version` | ❌ | ✅ `pykit-version` |
-| Media | ✅ `media` | ✅ `rskit-media` | ✅ `pykit-media` |
-| Security | ✅ `security` | ❌ | ✅ `pykit-security` |
-| DI | ✅ `di` | ✅ `rskit-di` | ✅ `pykit-di` |
-| Component | ✅ `component` | ❌ | ✅ `pykit-component` |
-| Bootstrap | ✅ `bootstrap` | ✅ `rskit-bootstrap` | ✅ `pykit-bootstrap` |
-| Provider | ✅ `provider` | ✅ `rskit-provider` | ✅ `pykit-provider` |
-| Resilience | ✅ `resilience` | ✅ `rskit-resilience` | ✅ `pykit-resilience` |
-| Observability | ✅ `observability` | ✅ `rskit-observability` | ✅ `pykit-observability` |
-| Pipeline | ✅ `pipeline` | ✅ `rskit-pipeline` | ✅ `pykit-pipeline` |
-| DAG | ✅ `dag` | ✅ `rskit-dag` | ✅ `pykit-dag` |
-| Worker | ✅ `worker` | ✅ `rskit-worker` | ✅ `pykit-worker` |
-| SSE | ✅ `sse` | ✅ `rskit-sse` | ✅ `pykit-sse` |
-| Stateful | ✅ `stateful` | ❌ | ✅ `pykit-stateful` |
-| Auth | ✅ `auth` | ✅ `rskit-auth` | ✅ `pykit-auth` |
-| Authz | ✅ `authz` | ✅ `rskit-authz` | ✅ `pykit-authz` |
-| Database | ✅ `database` | ✅ `rskit-database` | ✅ `pykit-database` |
-| Redis / Cache | ✅ `redis` | ✅ `rskit-cache` | ✅ `pykit-redis` |
-| Storage / File | ✅ `storage` | ✅ `rskit-file` | ✅ `pykit-storage` |
-| Messaging | ✅ `messaging` | ✅ `rskit-messaging` | ✅ `pykit-messaging` |
-| HTTP Client | ✅ `httpclient` | ✅ `rskit-httpclient` | ✅ `pykit-httpclient` |
-| Server | ✅ `server` | ✅ `rskit-http`, `rskit-server` | ✅ `pykit-server` |
-| gRPC Client | ✅ `grpc` | ✅ `rskit-grpc-client` | ✅ `pykit-grpc` |
-| Connect | ✅ `connect` | ❌ | ❌ |
-| Discovery | ✅ `discovery` | ✅ `rskit-discovery` | ✅ `pykit-discovery` |
-| Process | ✅ `process` | ✅ `rskit-process` | ✅ `pykit-process` |
-| Workload | ✅ `workload` | ❌ | ✅ `pykit-workload` |
-| Test Utilities | ✅ `testutil` | ✅ `rskit-testutil` | ✅ `pykit-testutil` |
-| LLM | ✅ `llm` | ✅ `rskit-llm` | ✅ `pykit-llm` |
-| LLM Providers | ❌ | ✅ `rskit-llm-providers` | ✅ `pykit-llm-providers` |
-| Agent | ✅ `agent` | ✅ `rskit-agent` | ✅ `pykit-agent` |
-| Tool | ✅ `tool` | ✅ `rskit-tool` | ✅ `pykit-tool` |
-| MCP | ✅ `mcp` | ✅ `rskit-mcp` | ✅ `pykit-mcp` |
-| Hook | ✅ `hook` | ✅ `rskit-hook` | ✅ `pykit-hook` |
-| Schema | ✅ `schema` | ✅ `rskit-schema` | ✅ `pykit-schema` |
-| Explain | ✅ `explain` | ✅ `rskit-explain` | ✅ `pykit-explain` |
-| Bench | ✅ `bench` | ✅ `rskit-bench` | ✅ `pykit-bench` |
-| Dataset | ❌ | ✅ `rskit-dataset` | ✅ `pykit-dataset` |
-| Embedding | ✅ `embedding` | ✅ `rskit-embedding` | ✅ `pykit-embedding` |
-| Vector Store | ✅ `vectorstore` | ✅ `rskit-vector-store` | ✅ `pykit-vector-store` |
-| Inference | ❌ | ✅ `rskit-inference` | ✅ `pykit-triton` |
-| CLI | ❌ | ✅ `rskit-cli` | ❌ |
-| Metrics | ❌ | ❌ | ✅ `pykit-metrics` |
-
----
-
-## Minimum Supported Rust Version (MSRV)
-
-**1.85** — enforced by `rust-toolchain.toml` and the CI matrix.
-
-MSRV bumps are treated as minor version changes and documented in `CHANGELOG.md`.
-
----
+| All crates | [`docs/PACKAGES.md`](docs/PACKAGES.md) |
+| Usage examples | [`docs/EXAMPLES.md`](docs/EXAMPLES.md) |
+| Design decisions & gokit comparison | [`docs/DESIGN.md`](docs/DESIGN.md) |
+| Architecture decisions | [`docs/adr/`](docs/adr/) |
+| Versioning & releases | [`docs/VERSIONING.md`](docs/VERSIONING.md) · [`docs/RELEASING.md`](docs/RELEASING.md) |
+| Semver & deprecation policy | [`docs/policy/SEMVER.md`](docs/policy/SEMVER.md) · [`docs/policy/DEPRECATION.md`](docs/policy/DEPRECATION.md) |
+| Cross-crate integration | [`INTEGRATION.md`](INTEGRATION.md) |
+| Per-crate API docs | [docs.rs/rskit](https://docs.rs/rskit) |
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, testing conventions,
-commit style, and the PR process.
+We welcome contributions. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for setup, testing conventions, commit style, and the PR process. By participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
 
----
+Other community docs: [`SECURITY.md`](SECURITY.md) · [`GOVERNANCE.md`](GOVERNANCE.md) · [`MAINTAINERS.md`](MAINTAINERS.md)
 
 ## License
 

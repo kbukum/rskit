@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Documentation & Project Hygiene
+- `SECURITY.md` — vulnerability disclosure policy, supply-chain section
+  (cosign, CycloneDX SBOM, `cargo-audit`, `cargo-deny`).
+- `GOVERNANCE.md` — roles, decision making, sibling-parity contract.
+- `MAINTAINERS.md` — current maintainers, areas, succession.
+- `docs/RELEASING.md` — mechanical release process for the cargo workspace
+  (cargo-release, Trusted Publishing flow).
+- `docs/VERSIONING.md` — workspace versioning guide (workspace inheritance).
+- `docs/policy/SEMVER.md` — semantic-versioning policy aligned with Cargo's
+  SemVer compatibility rules.
+- `docs/policy/DEPRECATION.md` — deprecation lifecycle (`#[deprecated]`).
+- `docs/adr/0000-template.md` and `docs/adr/0001-layered-crate-architecture.md` —
+  Architecture Decision Records.
+- `.github/CODEOWNERS` — review ownership across all crates.
+- `.github/dependabot.yml` — cargo + GitHub Actions dependency automation.
+- `.github/ISSUE_TEMPLATE/{bug_report,feature_request,config}.yml` — modern
+  YAML form templates (replaces legacy `.md` templates).
+- `.github/PULL_REQUEST_TEMPLATE.md` — expanded PR checklist with
+  sibling-parity prompt and supply-chain checks.
+- README: sibling-projects callout and `Project Documentation` index.
+
+### Changed — Documentation Layout
+- Moved `MEDIA_IMPLEMENTATION.md` (70 KB internal-only document) from the
+  repo root to `crates/rskit-media/docs/IMPLEMENTATION.md` to keep the
+  top-level documentation surface focused on user-facing content.
+
 ### Added
 - **rskit-messaging**: Event type with builder pattern and JSON serialization
 - **rskit-messaging**: `MessageProducer` and `MessageConsumer` async traits for raw bytes

@@ -1,0 +1,61 @@
+name: Feature Request
+description: Suggest a new feature or enhancement
+title: "[Feature]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for proposing a feature! Please describe the problem you're trying
+        to solve and your proposed approach.
+
+  - type: input
+    id: crate
+    attributes:
+      label: Crate
+      description: Which rskit crate would be affected? Use "new" if proposing a new crate.
+      placeholder: rskit-<name>
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What problem are you trying to solve? Why is the current API insufficient?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the API or behavior you'd like to see. Include a code sketch if possible.
+      render: rust
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What other approaches did you consider, and why did you reject them?
+
+  - type: textarea
+    id: sibling
+    attributes:
+      label: Sibling parity
+      description: |
+        rskit mirrors [gokit](https://github.com/kbukum/gokit) and
+        [pykit](https://github.com/kbukum/pykit). Does this feature already
+        exist in either sibling? Should it?
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Confirmation
+      options:
+        - label: I have searched existing issues and discussions and this is not a duplicate.
+          required: true
+        - label: I have read the [Code of Conduct](https://github.com/kbukum/rskit/blob/main/CODE_OF_CONDUCT.md).
+          required: true

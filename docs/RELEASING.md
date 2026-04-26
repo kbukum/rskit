@@ -1,0 +1,147 @@
+# Releasing
+
+The mechanical steps to cut a release of `rskit`. For *what* counts as a
+breaking change vs a feature vs a fix, see [`policy/SEMVER.md`](policy/SEMVER.md)
+and [`policy/DEPRECATION.md`](policy/DEPRECATION.md).
+
+## Prerequisites
+
+- You are listed in `MAINTAINERS.md` and have push access to `kbukum/rskit`.
+- Your local clone is on `main` with no uncommitted changes.
+- `git`, `gh`, `cargo`, and `cargo-release` are on your `$PATH`.
+- Your commits are GPG-signed (`git config commit.gpgsign true`) — release
+  tags must be signed.
+- A `CARGO_REGISTRY_TOKEN` is configured in CI for crates.io publishing
+  (preferably via Trusted Publishing once available).
+
+## 1. Decide the version
+
+```sh
+# What's the latest tag?
+git tag --sort=-v:refname | head -1
+
+# What changed since then?
+git log --oneline $(git describe --tags --abbrev=0)..HEAD
+```
+
+Use the [SEMVER policy](./policy/SEMVER.md) to pick the next version. While
+in `0.x`, every release with a breaking change in the `[Unreleased]`
+CHANGELOG section bumps MINOR; otherwise PATCH.
+
+## 2. Update the CHANGELOG
+
+1. Open `CHANGELOG.md`.
+2. Replace `## [Unreleased]` with `## [vX.Y.Z] - YYYY-MM-DD`.
+3. Add a fresh empty `## [Unreleased]` section above it.
+4. If `[Unreleased]` is empty, refuse to release — there is nothing to ship.
+5. Update the link reference at the bottom of the file (if present).
+
+CI refuses to tag if `[Unreleased]` is the only populated section, or if
+`[vX.Y.Z]` for the version you're cutting doesn't exist in the file.
+
+## 3. Bump versions across the workspace
+
+All crates in rskit currently share a single workspace version (lock-step).
+Bump it once via the workspace inheritance:
+
+```sh
+# Edit Cargo.toml: [workspace.package] version = "X.Y.Z"
+# All crates inherit via `version.workspace = true`.
+cargo set-version --workspace X.Y.Z   # cargo-edit
+```
+
+Then refresh the lockfile:
+
+```sh
+cargo update --workspace
+git add Cargo.toml Cargo.lock CHANGELOG.md
+git commit -S -m "chore: prepare vX.Y.Z release"
+```
+
+## 4. Pre-flight checks
+
+```sh
+cargo fmt --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+cargo deny check
+cargo doc --workspace --no-deps
+cargo publish --dry-run -p rskit-errors    # smoke test the smallest crate
+```
+
+If any check fails, fix it before tagging.
+
+## 5. Tag the release
+
+```sh
+git tag -s -a vX.Y.Z -m "vX.Y.Z"
+git push origin main vX.Y.Z
+```
+
+The release workflow (`.github/workflows/release.yml`) is triggered by the
+tag push and will:
+
+- Re-run the full test + lint + audit suite on the tagged commit.
+- Publish every workspace crate to crates.io in dependency order via
+  `cargo-release` (or a topologically sorted `cargo publish`).
+- Sign the release artifacts with [cosign](https://github.com/sigstore/cosign).
+- Generate and attach a CycloneDX SBOM (`cargo-cyclonedx`).
+
+## 6. Cut the GitHub Release
+
+Once the workflow completes successfully, generate release notes from the
+CHANGELOG and create the GitHub Release via `gh`:
+
+```sh
+./scripts/release-notes.sh vX.Y.Z > /tmp/notes.md
+gh release create vX.Y.Z --title "vX.Y.Z" --notes-file /tmp/notes.md \
+  --verify-tag
+```
+
+Attach the cosign signature bundle and SBOM to the Release as assets if the
+workflow did not already.
+
+## 7. Verify on crates.io and docs.rs
+
+```sh
+cargo search rskit
+# Check https://crates.io/crates/rskit/X.Y.Z
+# Check https://docs.rs/rskit/X.Y.Z
+```
+
+If `docs.rs` fails to build, investigate the build log on
+`https://docs.rs/crate/rskit/X.Y.Z/builds`.
+
+## 8. Announce
+
+- Post in the project's discussion / README "Latest" section.
+- Open a "post-release smoke test" issue against the next sprint milestone.
+- Notify sibling repos ([`gokit`](https://github.com/kbukum/gokit),
+  [`pykit`](https://github.com/kbukum/pykit)) if any cross-sibling APIs
+  changed.
+
+## Hotfix releases
+
+Hotfixes follow the same flow but skip the `[Unreleased]` rotation if the
+fix is targeted at an older line:
+
+```sh
+git checkout v0.2.0
+git checkout -b hotfix/v0.2.1
+# … apply fix …
+# add a `## [0.2.1] - YYYY-MM-DD` section to CHANGELOG.md
+git tag -s -a v0.2.1 -m "v0.2.1"
+git push origin v0.2.1
+```
+
+## Pre-releases
+
+```sh
+git tag -s -a v0.3.0-rc.1 -m "v0.3.0-rc.1"
+git push origin v0.3.0-rc.1
+gh release create v0.3.0-rc.1 --prerelease --title "v0.3.0-rc.1" \
+  --notes-file /tmp/notes.md
+```
+
+Pre-releases bypass the CHANGELOG check (the `-rc.N` / `-beta.N` suffix is
+detected by the release workflow).
