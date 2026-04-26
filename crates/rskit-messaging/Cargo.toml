@@ -42,6 +42,6 @@ chrono          = { workspace = true }
 uuid            = { workspace = true }
 
 [dependencies.rdkafka]
-version = "0.37"
+version = "0.39"
 features = ["tokio"]
 optional = true
