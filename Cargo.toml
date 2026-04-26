@@ -150,7 +150,7 @@ argon2       = "0.5"
 sqlx         = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "postgres", "mysql", "sqlite", "uuid", "chrono", "json"] }
 
 # Cache (Phase 3)
-redis        = { version = "0.27", features = ["tokio-comp", "connection-manager"] }
+redis        = { version = "1.2", features = ["tokio-comp", "connection-manager"] }
 
 # Messaging (Phase 3)
 rdkafka      = { version = "0.37", features = ["tokio"] }
