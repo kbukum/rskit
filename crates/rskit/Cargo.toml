@@ -95,6 +95,7 @@ file-gcs      = ["file", "rskit-file/gcs"]
 cli           = ["dep:rskit-cli"]
 dataset       = ["dep:rskit-dataset", "cli"]
 bench         = ["dep:rskit-bench"]
+test-util     = []
 full          = [
     "server", "grpc-client", "encryption", "http", "httpclient", "auth", "di", "database", "cache", "messaging",
     "observability", "authz", "discovery", "testutil", "sse", "dag", "llm",

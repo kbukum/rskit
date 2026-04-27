@@ -50,6 +50,15 @@ pub use task::{SupervisedTask, supervise};
 pub mod registry;
 pub use registry::TypedRegistry;
 
+// ── Mockable clock abstraction ────────────────────────────────────────────────
+
+pub mod clock;
+pub use clock::{Clock, SystemClock};
+
+// NOTE(#64 RS-ME-29): Prefer `impl Trait` in function arguments over `Box<dyn Trait>`
+// for zero-cost abstraction in hot paths. Use `Box<dyn Trait>` only when
+// type erasure is genuinely needed (e.g., storing heterogeneous types in a collection).
+
 // ── Always-on sub-crate facades ──────────────────────────────────────────────
 
 /// Error types, `ErrorCode`, `AppError`, `AppResult`.
