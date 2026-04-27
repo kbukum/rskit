@@ -110,15 +110,15 @@ impl RunStorage for FileRunStorage {
                 Ok(r) => r,
                 Err(_) => continue,
             };
-            if let Some(ref tag) = opts.tag {
-                if result.tag != *tag {
-                    continue;
-                }
+            if let Some(ref tag) = opts.tag
+                && result.tag != *tag
+            {
+                continue;
             }
-            if let Some(ref ds) = opts.dataset {
-                if result.dataset.name != *ds {
-                    continue;
-                }
+            if let Some(ref ds) = opts.dataset
+                && result.dataset.name != *ds
+            {
+                continue;
             }
             let f1 = result
                 .metrics

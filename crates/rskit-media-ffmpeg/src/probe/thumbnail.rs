@@ -203,9 +203,11 @@ async fn collect_images(dir: &std::path::Path) -> AppResult<Vec<FileSource>> {
     })?;
 
     let mut paths = Vec::new();
-    while let Some(entry) = entries.next_entry().await.map_err(|e| {
-        AppError::new(ErrorCode::Internal, format!("failed to read entry: {e}"))
-    })? {
+    while let Some(entry) = entries
+        .next_entry()
+        .await
+        .map_err(|e| AppError::new(ErrorCode::Internal, format!("failed to read entry: {e}")))?
+    {
         let p = entry.path();
         if p.extension().is_some_and(|e| e == "jpg") {
             paths.push(p);
@@ -216,10 +218,7 @@ async fn collect_images(dir: &std::path::Path) -> AppResult<Vec<FileSource>> {
     let mut results = Vec::with_capacity(paths.len());
     for p in paths {
         let data = tokio::fs::read(&p).await.map_err(|e| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!("failed to read image: {e}"),
-            )
+            AppError::new(ErrorCode::Internal, format!("failed to read image: {e}"))
         })?;
         results.push(FileSource::Bytes(bytes::Bytes::from(data)));
     }

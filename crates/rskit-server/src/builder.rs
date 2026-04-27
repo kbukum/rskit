@@ -144,14 +144,21 @@ impl GrpcServerBuilder {
                 let router = builder.add_service(s);
 
                 if let Some(desc_bytes) = desc {
-                    let refl_svc = ReflectionBuilder::configure()
+                    match ReflectionBuilder::configure()
                         .register_encoded_file_descriptor_set(&desc_bytes)
                         .build_v1()
-                        .expect("valid file descriptor set for reflection");
-                    router
-                        .add_service(refl_svc)
-                        .serve_with_shutdown(addr, signal)
-                        .await
+                    {
+                        Ok(refl_svc) => {
+                            router
+                                .add_service(refl_svc)
+                                .serve_with_shutdown(addr, signal)
+                                .await
+                        }
+                        Err(e) => {
+                            tracing::error!(error = %e, "failed to build reflection service; serving without reflection");
+                            router.serve_with_shutdown(addr, signal).await
+                        }
+                    }
                 } else {
                     router.serve_with_shutdown(addr, signal).await
                 }

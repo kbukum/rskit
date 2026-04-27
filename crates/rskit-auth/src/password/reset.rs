@@ -13,7 +13,7 @@ pub struct ResetTokenGenerator {
 
 impl ResetTokenGenerator {
     /// Create a new generator with the given TTL.
-    pub fn new(ttl: Duration) -> Self {
+    pub const fn new(ttl: Duration) -> Self {
         Self { ttl }
     }
 

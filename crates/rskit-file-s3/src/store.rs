@@ -368,10 +368,11 @@ impl FileStore for S3Store {
 
 /// Resolve AWS credentials from config fields or environment variables.
 fn resolve_credentials(config: &S3StoreConfig) -> AppResult<(String, String)> {
-    if let (Some(key), Some(secret)) = (&config.access_key_id, &config.secret_access_key) {
-        if !key.is_empty() && !secret.is_empty() {
-            return Ok((key.clone(), secret.clone()));
-        }
+    if let (Some(key), Some(secret)) = (&config.access_key_id, &config.secret_access_key)
+        && !key.is_empty()
+        && !secret.is_empty()
+    {
+        return Ok((key.clone(), secret.clone()));
     }
 
     let key = std::env::var("AWS_ACCESS_KEY_ID").unwrap_or_default();

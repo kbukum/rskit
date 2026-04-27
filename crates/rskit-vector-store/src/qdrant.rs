@@ -127,21 +127,21 @@ impl VectorStore for QdrantVectorStore {
         let mut builder =
             SearchPointsBuilder::new(collection, vector, limit as u64).with_payload(true);
 
-        if let Some(sf) = filter {
-            if !sf.must.is_empty() {
-                let conditions: Vec<Condition> = sf
-                    .must
-                    .into_iter()
-                    .filter_map(|(field, value)| {
-                        if let Some(s) = value.as_str() {
-                            Some(Condition::matches(field, s.to_string()))
-                        } else {
-                            value.as_i64().map(|n| Condition::matches(field, n))
-                        }
-                    })
-                    .collect();
-                builder = builder.filter(Filter::must(conditions));
-            }
+        if let Some(sf) = filter
+            && !sf.must.is_empty()
+        {
+            let conditions: Vec<Condition> = sf
+                .must
+                .into_iter()
+                .filter_map(|(field, value)| {
+                    if let Some(s) = value.as_str() {
+                        Some(Condition::matches(field, s.to_string()))
+                    } else {
+                        value.as_i64().map(|n| Condition::matches(field, n))
+                    }
+                })
+                .collect();
+            builder = builder.filter(Filter::must(conditions));
         }
 
         let results = self.client.search_points(builder).await.map_err(|e| {

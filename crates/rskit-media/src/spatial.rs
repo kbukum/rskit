@@ -48,10 +48,9 @@ impl Resolution {
     /// Aspect ratio as a simplified fraction (e.g., (16, 9)).
     pub fn aspect_ratio(&self) -> (u32, u32) {
         let g = gcd(self.width, self.height);
-        if g == 0 {
-            (0, 0)
-        } else {
-            (self.width / g, self.height / g)
+        match (self.width.checked_div(g), self.height.checked_div(g)) {
+            (Some(w), Some(h)) => (w, h),
+            _ => (0, 0),
         }
     }
 

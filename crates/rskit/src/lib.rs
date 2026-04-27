@@ -21,7 +21,7 @@
 //! | `llm`    | `rskit-llm` (LLM providers) |
 //! | `file`   | `rskit-file` (File I/O, storage) |
 //! | `media`  | `rskit-media` (media types, pipeline) |
-//! | `media-ffmpeg` | `rskit-media-ffmpeg` (FFmpeg backend) |
+//! | `media-ffmpeg` | `rskit-media-ffmpeg` (`FFmpeg` backend) |
 //! | `media-image`  | `rskit-media-image` (image processing) |
 //! | `media-full` | ffmpeg + image backends |
 //! | `file-s3` | S3 storage backend |

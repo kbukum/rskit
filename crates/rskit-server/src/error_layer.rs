@@ -1,5 +1,5 @@
 //! Tower layer that intercepts gRPC responses and enriches error statuses
-//! with structured [`AppError`] details.
+//! with structured [`rskit_errors::AppError`] details.
 //!
 //! Applied automatically by [`GrpcServerBuilder`] so service implementations
 //! can simply return `Status::from(AppError)` (or let the `?` operator do it)

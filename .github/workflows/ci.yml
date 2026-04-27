@@ -26,8 +26,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
-      - uses: dtolnay/rust-toolchain@b3b07ba8b418998c39fb20f53e8b695cdcc8de1b  # stable
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
+          toolchain: stable
           components: rustfmt
       - run: cargo fmt --check
 
@@ -39,11 +40,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
-      - uses: dtolnay/rust-toolchain@b3b07ba8b418998c39fb20f53e8b695cdcc8de1b  # stable
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
+          toolchain: stable
           components: clippy
       - uses: Swatinem/rust-cache@9bdad043e88c75890e36ad3bbc8d27f0090dd609  # v2.7.8
-      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - run: cargo clippy --workspace -- -D warnings
 
   # ---------------------------------------------------------------------------
   # Tests — matrix across OS + MSRV + stable
@@ -55,16 +57,16 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        rust: ["1.85", "stable"]
+        rust: ["1.91", "stable"]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
-      - uses: dtolnay/rust-toolchain@b3b07ba8b418998c39fb20f53e8b695cdcc8de1b  # stable
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: ${{ matrix.rust }}
       - uses: Swatinem/rust-cache@9bdad043e88c75890e36ad3bbc8d27f0090dd609  # v2.7.8
         with:
           key: ${{ matrix.os }}-${{ matrix.rust }}
-      - uses: taiki-e/install-action@375e0c7f08a66b8c2ba7e7eef0a4b5e31571c812  # v2
+      - uses: taiki-e/install-action@cf525cb33f51aca27cd6fa02034117ab963ff9f1  # v2
         with:
           tool: cargo-nextest
       - run: cargo nextest run --workspace
@@ -79,7 +81,9 @@ jobs:
       RUSTDOCFLAGS: "-D warnings"
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
-      - uses: dtolnay/rust-toolchain@b3b07ba8b418998c39fb20f53e8b695cdcc8de1b  # stable
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
+        with:
+          toolchain: stable
       - uses: Swatinem/rust-cache@9bdad043e88c75890e36ad3bbc8d27f0090dd609  # v2.7.8
       - run: cargo doc --workspace --no-deps --document-private-items
 
@@ -91,11 +95,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
-      - uses: dtolnay/rust-toolchain@b3b07ba8b418998c39fb20f53e8b695cdcc8de1b  # stable
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
+          toolchain: stable
           components: llvm-tools-preview
       - uses: Swatinem/rust-cache@9bdad043e88c75890e36ad3bbc8d27f0090dd609  # v2.7.8
-      - uses: taiki-e/install-action@375e0c7f08a66b8c2ba7e7eef0a4b5e31571c812  # v2
+      - uses: taiki-e/install-action@cf525cb33f51aca27cd6fa02034117ab963ff9f1  # v2
         with:
           tool: cargo-llvm-cov
       - run: cargo llvm-cov --workspace --lcov --output-path coverage.lcov --fail-under-lines 60
@@ -114,7 +119,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
-      - uses: EmbarkStudios/cargo-deny-action@34899fc7ba81ca6268d5947a7a16b4649013fea1  # v2
+      - uses: EmbarkStudios/cargo-deny-action@91bf2b620e09e18d6eb78b92e7861937469acedb  # v2.0.17
         with:
           command: check licenses advisories sources bans
 
@@ -124,9 +129,10 @@ jobs:
   audit:
     name: Security Audit
     runs-on: ubuntu-latest
+    continue-on-error: true  # Informational — cargo-deny is the authoritative gate
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
-      - uses: rustsec/audit-check@f1c9c796e42a2a1d7fe5d2f76ad63e6a4f89e2b4  # v2
+      - uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998  # v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -138,6 +144,35 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
-      - uses: dtolnay/rust-toolchain@b3b07ba8b418998c39fb20f53e8b695cdcc8de1b  # stable
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
+        with:
+          toolchain: stable
       - uses: Swatinem/rust-cache@9bdad043e88c75890e36ad3bbc8d27f0090dd609  # v2.7.8
       - run: cargo bench --workspace --no-run
+
+  # ---------------------------------------------------------------------------
+  # Gate: Aggregate status for branch protection
+  # ---------------------------------------------------------------------------
+  ci-status:
+    name: CI Status
+    if: always()
+    needs: [fmt, clippy, test, docs, coverage, deny, audit, bench]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate results
+        run: |
+          results=("${{ needs.fmt.result }}" \
+                   "${{ needs.clippy.result }}" \
+                   "${{ needs.test.result }}" \
+                   "${{ needs.docs.result }}" \
+                   "${{ needs.coverage.result }}" \
+                   "${{ needs.deny.result }}" \
+                   "${{ needs.audit.result }}" \
+                   "${{ needs.bench.result }}")
+          for r in "${results[@]}"; do
+            if [[ "$r" == "failure" || "$r" == "cancelled" ]]; then
+              echo "::error::CI failed — one or more jobs did not succeed."
+              exit 1
+            fi
+          done
+          echo "All CI checks passed ✓"

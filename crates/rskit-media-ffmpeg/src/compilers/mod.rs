@@ -1,4 +1,4 @@
-//! Per-operation compilers that translate [`MediaOp`] variants into FFmpeg arguments.
+//! Per-operation compilers that translate [`rskit_media::ops::MediaOp`] variants into FFmpeg arguments.
 
 pub(crate) mod ai;
 pub(crate) mod audio;

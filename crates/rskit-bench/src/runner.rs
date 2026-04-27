@@ -329,17 +329,17 @@ where
             }
         }
 
-        if let (Some(comparator), Some(storage)) = (&self.comparator, &self.storage) {
-            if let Ok(prev) = storage.latest() {
-                let diff = comparator.compare(&prev, &result);
-                if opts.fail_on_regression && diff.has_regression() {
-                    return Err(AppError::new(
-                        ErrorCode::Internal,
-                        format!("Regression detected:\n{}", diff.summary()),
-                    ));
-                }
-                tracing::info!("{}", diff.summary());
+        if let (Some(comparator), Some(storage)) = (&self.comparator, &self.storage)
+            && let Ok(prev) = storage.latest()
+        {
+            let diff = comparator.compare(&prev, &result);
+            if opts.fail_on_regression && diff.has_regression() {
+                return Err(AppError::new(
+                    ErrorCode::Internal,
+                    format!("Regression detected:\n{}", diff.summary()),
+                ));
             }
+            tracing::info!("{}", diff.summary());
         }
 
         Ok(result)

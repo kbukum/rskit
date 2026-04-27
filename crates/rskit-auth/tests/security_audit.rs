@@ -31,10 +31,7 @@ fn now_epoch() -> u64 {
 }
 
 fn make_jwt_service() -> JwtService<TestClaims> {
-    JwtService::new(JwtConfig {
-        secret: "test-secret-key-for-audit".into(),
-        ..Default::default()
-    })
+    JwtService::new(JwtConfig::new("test-secret-key-for-audit"))
 }
 
 // ─── 1. Error Display Doesn't Leak Secrets ─────────────────────────────────
@@ -120,14 +117,8 @@ fn auth_error_messages_do_not_reveal_system_info() {
 
 #[tokio::test]
 async fn jwt_wrong_secret_rejected() {
-    let svc1 = JwtService::<TestClaims>::new(JwtConfig {
-        secret: "secret-key-one-for-service-a".into(),
-        ..Default::default()
-    });
-    let svc2 = JwtService::<TestClaims>::new(JwtConfig {
-        secret: "secret-key-two-for-service-b".into(),
-        ..Default::default()
-    });
+    let svc1 = JwtService::<TestClaims>::new(JwtConfig::new("secret-key-one-for-service-a"));
+    let svc2 = JwtService::<TestClaims>::new(JwtConfig::new("secret-key-two-for-service-b"));
 
     let claims = TestClaims {
         sub: "user-123".into(),
@@ -179,10 +170,7 @@ async fn jwt_malformed_tokens_rejected() {
 #[tokio::test]
 async fn jwt_parse_error_does_not_leak_secret() {
     let secret = "ultra-secret-key-that-must-not-leak";
-    let svc = JwtService::<TestClaims>::new(JwtConfig {
-        secret: secret.into(),
-        ..Default::default()
-    });
+    let svc = JwtService::<TestClaims>::new(JwtConfig::new(secret));
 
     let result = svc.validate("invalid.token.here").await;
     assert!(result.is_err());

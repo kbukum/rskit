@@ -22,6 +22,7 @@ serde         = { workspace = true }
 serde_json    = { workspace = true }
 async-trait   = { workspace = true }
 tracing       = { workspace = true }
+parking_lot   = { workspace = true }
 qdrant-client = ">=1.13, <1.18"
 
 [dev-dependencies]

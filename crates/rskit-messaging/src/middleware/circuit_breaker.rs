@@ -55,7 +55,6 @@ struct CircuitBreakerMiddleware<T> {
     _marker: std::marker::PhantomData<T>,
 }
 
-
 impl<T: Send + Sync + 'static> HandlerMiddleware<T> for CircuitBreakerMiddleware<T> {
     fn wrap(&self, next: Arc<dyn MessageHandler<T>>) -> Arc<dyn MessageHandler<T>> {
         Arc::new(CircuitBreakerHandler {

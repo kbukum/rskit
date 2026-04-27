@@ -104,14 +104,14 @@ impl<T: Send + Sync + Clone + 'static> ManagedConsumer<T> {
                                             consecutive = consecutive_errors,
                                             "topic not yet available, waiting for creation"
                                         );
-                                    } else if consecutive_errors % 30 == 0 {
+                                    } else if consecutive_errors.is_multiple_of(30) {
                                         tracing::info!(
                                             consumer = %name,
                                             consecutive = consecutive_errors,
                                             "topic still not available"
                                         );
                                     }
-                                } else if consecutive_errors == 1 || consecutive_errors % 10 == 0 {
+                                } else if consecutive_errors == 1 || consecutive_errors.is_multiple_of(10) {
                                     tracing::warn!(
                                         consumer = %name,
                                         error = %e,

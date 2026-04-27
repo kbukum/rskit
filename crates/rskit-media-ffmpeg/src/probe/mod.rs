@@ -132,11 +132,7 @@ impl MediaProbe for FfmpegProbe {
             .await
     }
 
-    async fn scene_detect(
-        &self,
-        source: &FileSource,
-        threshold: f64,
-    ) -> AppResult<Vec<Timestamp>> {
+    async fn scene_detect(&self, source: &FileSource, threshold: f64) -> AppResult<Vec<Timestamp>> {
         self.detect_scenes(source, threshold).await
     }
 

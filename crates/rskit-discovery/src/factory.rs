@@ -6,8 +6,9 @@
 //! without importing provider-specific types.
 
 use std::collections::HashMap;
-use std::sync::{Mutex, OnceLock};
+use std::sync::OnceLock;
 
+use parking_lot::Mutex;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 
 use crate::config::DiscoveryConfig;
@@ -32,15 +33,12 @@ fn factories() -> &'static Mutex<HashMap<String, ProviderFactory>> {
 pub fn register_provider(name: impl Into<String>, factory: ProviderFactory) {
     let name = name.into();
     tracing::debug!(provider = %name, "Registered discovery provider factory");
-    factories()
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .insert(name, factory);
+    factories().lock().insert(name, factory);
 }
 
 /// Create a `(Registry, Discovery)` pair for the provider specified in `config.provider`.
 pub fn create_provider(config: &DiscoveryConfig) -> AppResult<ProviderPair> {
-    let map = factories().lock().unwrap_or_else(|e| e.into_inner());
+    let map = factories().lock();
     let factory = map.get(&config.provider).ok_or_else(|| {
         AppError::new(
             ErrorCode::InvalidInput,

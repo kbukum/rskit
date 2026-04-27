@@ -87,7 +87,7 @@ pub(crate) fn infer_operation_kind(ops: &[MediaOp]) -> OperationKind {
 impl FfmpegExecutor {
     /// Create an effective config with duration-aware timeout resolved.
     ///
-    /// When the config has a [`TimeoutCalculator`], this probes the source
+    /// When the config has a [`rskit_media::timeout::TimeoutCalculator`], this probes the source
     /// duration and infers the operation kind to compute a scaled timeout,
     /// replacing the fixed `timeout` field in the returned config.
     pub(crate) async fn resolve_effective_config(
@@ -119,10 +119,7 @@ impl FfmpegExecutor {
     }
 
     /// Quick ffprobe to get source duration (for timeout calculation).
-    pub(crate) async fn quick_probe_duration(
-        &self,
-        source: &FileSource,
-    ) -> Option<Duration> {
+    pub(crate) async fn quick_probe_duration(&self, source: &FileSource) -> Option<Duration> {
         let path = match source {
             FileSource::Path(p) => p.clone(),
             _ => return None,

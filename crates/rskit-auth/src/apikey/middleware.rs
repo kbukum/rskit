@@ -35,6 +35,7 @@ impl<V: KeyValidator + 'static> ApiKeyLayer<V> {
     }
 
     /// Override the header name used for key extraction.
+    #[must_use]
     pub fn with_header(mut self, name: HeaderName) -> Self {
         self.header_name = name;
         self
@@ -97,36 +98,30 @@ where
             }
 
             // SAFETY: checked is_none() above, so raw_key is guaranteed Some here.
-            let plain_key = match raw_key.expect("checked above").to_str() {
-                Ok(k) => k,
-                Err(_) => {
-                    let mut res = Response::new(ResBody::default());
-                    *res.status_mut() = StatusCode::UNAUTHORIZED;
-                    // Add WWW-Authenticate header per RFC 7235
-                    res.headers_mut().insert(
-                        http::header::WWW_AUTHENTICATE,
-                        http::HeaderValue::from_static(r#"Bearer realm="rskit""#),
-                    );
-                    return Ok(res);
-                }
+            let Ok(plain_key) = raw_key.expect("checked above").to_str() else {
+                let mut res = Response::new(ResBody::default());
+                *res.status_mut() = StatusCode::UNAUTHORIZED;
+                // Add WWW-Authenticate header per RFC 7235
+                res.headers_mut().insert(
+                    http::header::WWW_AUTHENTICATE,
+                    http::HeaderValue::from_static(r#"Bearer realm="rskit""#),
+                );
+                return Ok(res);
             };
 
-            match validator.validate_key(plain_key).await {
-                Ok(_key) => {
-                    // Store key in request extensions if needed
-                    // For now, just pass through
-                    inner.call(req).await
-                }
-                Err(_) => {
-                    let mut res = Response::new(ResBody::default());
-                    *res.status_mut() = StatusCode::UNAUTHORIZED;
-                    // Add WWW-Authenticate header per RFC 7235
-                    res.headers_mut().insert(
-                        http::header::WWW_AUTHENTICATE,
-                        http::HeaderValue::from_static(r#"Bearer realm="rskit""#),
-                    );
-                    Ok(res)
-                }
+            if let Ok(_key) = validator.validate_key(plain_key).await {
+                // Store key in request extensions if needed
+                // For now, just pass through
+                inner.call(req).await
+            } else {
+                let mut res = Response::new(ResBody::default());
+                *res.status_mut() = StatusCode::UNAUTHORIZED;
+                // Add WWW-Authenticate header per RFC 7235
+                res.headers_mut().insert(
+                    http::header::WWW_AUTHENTICATE,
+                    http::HeaderValue::from_static(r#"Bearer realm="rskit""#),
+                );
+                Ok(res)
             }
         })
     }

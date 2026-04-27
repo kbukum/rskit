@@ -4,6 +4,7 @@
 //! context helpers, span operations, edge cases, and output capture via a
 //! custom `tracing_subscriber::Layer`.
 
+#[allow(clippy::disallowed_types)]
 use std::sync::{Arc, Mutex};
 
 use rskit_config::{LogFormat, LogOutput, LoggingConfig};

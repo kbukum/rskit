@@ -1,7 +1,7 @@
 use rskit_errors::{AppError, ErrorCode};
 use tonic::Code;
 
-/// Convert a tonic [`Status`] to an [`AppError`].
+/// Convert a tonic [`tonic::Status`] to an [`AppError`].
 ///
 /// Maps gRPC status codes to rskit error codes with appropriate HTTP status
 /// and human-readable messages.
@@ -125,7 +125,7 @@ pub fn status_to_app_error(status: tonic::Status) -> AppError {
     .with_cause(status)
 }
 
-/// Convert an [`AppError`] to a tonic [`Status`].
+/// Convert an [`AppError`] to a tonic [`tonic::Status`].
 ///
 /// Maps rskit error codes to appropriate gRPC status codes.
 pub fn app_error_to_status(err: &AppError) -> tonic::Status {

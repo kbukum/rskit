@@ -1,7 +1,7 @@
 //! Evaluator trait and adapters for bench.
 //!
 //! An [`Evaluator`] takes raw `Vec<u8>` input and produces a
-//! [`Prediction`](super::types::Prediction). This is the core abstraction
+//! [`Prediction`]. This is the core abstraction
 //! that bench uses to run model evaluation.
 
 use crate::types::Prediction;

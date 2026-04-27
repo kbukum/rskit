@@ -106,10 +106,10 @@ fn extract_curve<T: serde::de::DeserializeOwned>(
 
 fn extract_from_metrics<T: serde::de::DeserializeOwned>(metrics: &[MetricResult]) -> Option<T> {
     for m in metrics {
-        if let Some(ref detail) = m.detail {
-            if let Some(t) = decode_as::<T>(detail) {
-                return Some(t);
-            }
+        if let Some(ref detail) = m.detail
+            && let Some(t) = decode_as::<T>(detail)
+        {
+            return Some(t);
         }
     }
     None

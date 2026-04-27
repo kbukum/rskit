@@ -115,10 +115,7 @@ impl Discovery for ConsulDiscovery {
             );
             return Err(AppError::external_service(
                 "consul",
-                std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("consul returned status {}", resp.status()),
-                ),
+                std::io::Error::other(format!("consul returned status {}", resp.status())),
             ));
         }
 
@@ -184,10 +181,7 @@ impl Registry for ConsulDiscovery {
             );
             return Err(AppError::external_service(
                 "consul",
-                std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("consul returned status {}", resp.status()),
-                ),
+                std::io::Error::other(format!("consul returned status {}", resp.status())),
             ));
         }
 
@@ -214,10 +208,7 @@ impl Registry for ConsulDiscovery {
             );
             return Err(AppError::external_service(
                 "consul",
-                std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("consul returned status {}", resp.status()),
-                ),
+                std::io::Error::other(format!("consul returned status {}", resp.status())),
             ));
         }
 

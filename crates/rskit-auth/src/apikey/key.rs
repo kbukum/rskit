@@ -37,15 +37,16 @@ impl Key {
     /// Return true if the key is expired and beyond its grace period.
     pub fn is_expired_past_grace(&self) -> bool {
         let now = Utc::now();
-        if let Some(grace_ends_at) = self.grace_ends_at {
-            if now > grace_ends_at {
-                return true;
-            }
+        if let Some(grace_ends_at) = self.grace_ends_at
+            && now > grace_ends_at
+        {
+            return true;
         }
-        if let Some(expires_at) = self.expires_at {
-            if now > expires_at && self.grace_ends_at.is_none() {
-                return true;
-            }
+        if let Some(expires_at) = self.expires_at
+            && now > expires_at
+            && self.grace_ends_at.is_none()
+        {
+            return true;
         }
         false
     }
@@ -70,7 +71,7 @@ pub fn generate(prefix: &str) -> GenerateResult {
     let mut random_bytes = [0u8; 16];
     rand::fill(&mut random_bytes);
     let random_hex = hex::encode(random_bytes);
-    let plain_key = format!("{}{}", prefix, random_hex);
+    let plain_key = format!("{prefix}{random_hex}");
     let key_hash = hash_key(&plain_key);
     let display_prefix = if plain_key.len() > 8 {
         plain_key[..8].to_string()

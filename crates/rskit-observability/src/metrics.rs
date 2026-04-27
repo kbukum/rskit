@@ -71,10 +71,9 @@ pub fn init_metrics(cfg: &MetricsConfig) -> AppResult<MetricsHandle> {
     use opentelemetry_sdk::Resource;
     use opentelemetry_sdk::metrics::SdkMeterProvider;
 
-    let resource = Resource::new(vec![KeyValue::new(
-        "service.name",
-        cfg.service_name.clone(),
-    )]);
+    let resource = Resource::builder_empty()
+        .with_attributes([KeyValue::new("service.name", cfg.service_name.clone())])
+        .build();
 
     let mut builder = SdkMeterProvider::builder().with_resource(resource);
 
@@ -90,7 +89,7 @@ pub fn init_metrics(cfg: &MetricsConfig) -> AppResult<MetricsHandle> {
                 AppError::new(ErrorCode::Internal, format!("OTLP metric exporter: {e}"))
             })?;
 
-        let reader = PeriodicReader::builder(exporter, opentelemetry_sdk::runtime::Tokio)
+        let reader = PeriodicReader::builder(exporter)
             .with_interval(cfg.export_interval)
             .build();
 

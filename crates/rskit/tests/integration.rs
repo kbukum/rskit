@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 use rskit::resilience::{CbConfig, CircuitBreaker, RetryPolicy};
 /// Facade integration tests — verify that types from all sub-crates
 /// are accessible through the `rskit` facade.

@@ -87,70 +87,69 @@ fn validate_value(schema: &Value, value: &Value, path: &str, errors: &mut Vec<Va
     };
 
     // type check
-    if let Some(type_val) = obj.get("type") {
-        if let Some(expected) = type_val.as_str() {
-            if !type_matches(expected, value) {
-                errors.push(ValidationError {
-                    path: path.to_string(),
-                    message: format!(
-                        "expected type \"{expected}\", got {}",
-                        json_type_name(value)
-                    ),
-                });
-                return; // no point checking further constraints
-            }
-        }
+    if let Some(type_val) = obj.get("type")
+        && let Some(expected) = type_val.as_str()
+        && !type_matches(expected, value)
+    {
+        errors.push(ValidationError {
+            path: path.to_string(),
+            message: format!(
+                "expected type \"{expected}\", got {}",
+                json_type_name(value)
+            ),
+        });
+        return; // no point checking further constraints
     }
 
     // enum
-    if let Some(enum_vals) = obj.get("enum").and_then(|v| v.as_array()) {
-        if !enum_vals.iter().any(|e| e == value) {
-            errors.push(ValidationError {
-                path: path.to_string(),
-                message: format!("value not in enum: {value}"),
-            });
-        }
+    if let Some(enum_vals) = obj.get("enum").and_then(|v| v.as_array())
+        && !enum_vals.iter().any(|e| e == value)
+    {
+        errors.push(ValidationError {
+            path: path.to_string(),
+            message: format!("value not in enum: {value}"),
+        });
     }
 
     // string constraints
     if let Some(s) = value.as_str() {
-        if let Some(min) = obj.get("minLength").and_then(|v| v.as_u64()) {
-            if (s.len() as u64) < min {
-                errors.push(ValidationError {
-                    path: path.to_string(),
-                    message: format!("string length {} < minLength {min}", s.len()),
-                });
-            }
+        if let Some(min) = obj.get("minLength").and_then(|v| v.as_u64())
+            && (s.len() as u64) < min
+        {
+            errors.push(ValidationError {
+                path: path.to_string(),
+                message: format!("string length {} < minLength {min}", s.len()),
+            });
         }
-        if let Some(max) = obj.get("maxLength").and_then(|v| v.as_u64()) {
-            if (s.len() as u64) > max {
-                errors.push(ValidationError {
-                    path: path.to_string(),
-                    message: format!("string length {} > maxLength {max}", s.len()),
-                });
-            }
+        if let Some(max) = obj.get("maxLength").and_then(|v| v.as_u64())
+            && (s.len() as u64) > max
+        {
+            errors.push(ValidationError {
+                path: path.to_string(),
+                message: format!("string length {} > maxLength {max}", s.len()),
+            });
         }
     }
 
     // number constraints
-    if value.is_number() {
-        if let Some(n) = value.as_f64() {
-            if let Some(min) = obj.get("minimum").and_then(|v| v.as_f64()) {
-                if n < min {
-                    errors.push(ValidationError {
-                        path: path.to_string(),
-                        message: format!("value {n} < minimum {min}"),
-                    });
-                }
-            }
-            if let Some(max) = obj.get("maximum").and_then(|v| v.as_f64()) {
-                if n > max {
-                    errors.push(ValidationError {
-                        path: path.to_string(),
-                        message: format!("value {n} > maximum {max}"),
-                    });
-                }
-            }
+    if value.is_number()
+        && let Some(n) = value.as_f64()
+    {
+        if let Some(min) = obj.get("minimum").and_then(|v| v.as_f64())
+            && n < min
+        {
+            errors.push(ValidationError {
+                path: path.to_string(),
+                message: format!("value {n} < minimum {min}"),
+            });
+        }
+        if let Some(max) = obj.get("maximum").and_then(|v| v.as_f64())
+            && n > max
+        {
+            errors.push(ValidationError {
+                path: path.to_string(),
+                message: format!("value {n} > maximum {max}"),
+            });
         }
     }
 
@@ -159,13 +158,13 @@ fn validate_value(schema: &Value, value: &Value, path: &str, errors: &mut Vec<Va
         // required fields
         if let Some(required) = obj.get("required").and_then(|v| v.as_array()) {
             for req in required {
-                if let Some(field) = req.as_str() {
-                    if !map.contains_key(field) {
-                        errors.push(ValidationError {
-                            path: child_path(path, field),
-                            message: format!("required field \"{field}\" is missing"),
-                        });
-                    }
+                if let Some(field) = req.as_str()
+                    && !map.contains_key(field)
+                {
+                    errors.push(ValidationError {
+                        path: child_path(path, field),
+                        message: format!("required field \"{field}\" is missing"),
+                    });
                 }
             }
         }
@@ -182,21 +181,21 @@ fn validate_value(schema: &Value, value: &Value, path: &str, errors: &mut Vec<Va
 
     // array constraints
     if let Some(arr) = value.as_array() {
-        if let Some(min) = obj.get("minItems").and_then(|v| v.as_u64()) {
-            if (arr.len() as u64) < min {
-                errors.push(ValidationError {
-                    path: path.to_string(),
-                    message: format!("array length {} < minItems {min}", arr.len()),
-                });
-            }
+        if let Some(min) = obj.get("minItems").and_then(|v| v.as_u64())
+            && (arr.len() as u64) < min
+        {
+            errors.push(ValidationError {
+                path: path.to_string(),
+                message: format!("array length {} < minItems {min}", arr.len()),
+            });
         }
-        if let Some(max) = obj.get("maxItems").and_then(|v| v.as_u64()) {
-            if (arr.len() as u64) > max {
-                errors.push(ValidationError {
-                    path: path.to_string(),
-                    message: format!("array length {} > maxItems {max}", arr.len()),
-                });
-            }
+        if let Some(max) = obj.get("maxItems").and_then(|v| v.as_u64())
+            && (arr.len() as u64) > max
+        {
+            errors.push(ValidationError {
+                path: path.to_string(),
+                message: format!("array length {} > maxItems {max}", arr.len()),
+            });
         }
 
         // items schema

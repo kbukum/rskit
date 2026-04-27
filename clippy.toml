@@ -2,7 +2,7 @@
 # https://doc.rust-lang.org/clippy/configuration.html
 
 # Match the workspace MSRV
-msrv = "1.85"
+msrv = "1.91"
 
 # Allow large error types in Results (common with AppError)
 too-large-for-stack = 512

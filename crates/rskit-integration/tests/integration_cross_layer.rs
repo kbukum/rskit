@@ -436,10 +436,7 @@ fn future_exp() -> u64 {
 
 #[tokio::test]
 async fn auth_authz_jwt_claims_feed_rbac() {
-    let jwt_svc = JwtService::<TestClaims>::new(JwtConfig {
-        secret: "integration-test-secret".into(),
-        ..Default::default()
-    });
+    let jwt_svc = JwtService::<TestClaims>::new(JwtConfig::new("integration-test-secret"));
 
     // Generate token with role
     let claims = TestClaims {
@@ -483,10 +480,7 @@ async fn auth_authz_jwt_claims_feed_rbac() {
 
 #[tokio::test]
 async fn auth_authz_restricted_role() {
-    let jwt_svc = JwtService::<TestClaims>::new(JwtConfig {
-        secret: "restricted-secret".into(),
-        ..Default::default()
-    });
+    let jwt_svc = JwtService::<TestClaims>::new(JwtConfig::new("restricted-secret"));
 
     let claims = TestClaims {
         sub: "user-2".into(),
@@ -519,10 +513,7 @@ async fn auth_authz_restricted_role() {
 
 #[tokio::test]
 async fn auth_authz_deny_overrides_allow() {
-    let jwt_svc = JwtService::<TestClaims>::new(JwtConfig {
-        secret: "deny-test-secret".into(),
-        ..Default::default()
-    });
+    let jwt_svc = JwtService::<TestClaims>::new(JwtConfig::new("deny-test-secret"));
 
     let claims = TestClaims {
         sub: "user-3".into(),

@@ -1,7 +1,7 @@
 //! MCP client that wraps remote tools as rskit [`Callable`] instances.
 //!
 //! Connects to an MCP server, discovers its tools, and wraps each one
-//! as a [`Callable`] so they can be registered in an rskit [`Registry`].
+//! as a [`Callable`] so they can be registered in an rskit [`rskit_tool::Registry`].
 
 use std::sync::Arc;
 
@@ -68,7 +68,7 @@ impl Callable for RemoteTool {
 /// Wrap discovered MCP tools as rskit [`Callable`] instances.
 ///
 /// Takes the tools list from an MCP server and the peer handle, returns
-/// boxed `Callable`s ready for registration in a [`Registry`].
+/// boxed `Callable`s ready for registration in a [`rskit_tool::Registry`].
 pub fn wrap_tools(
     tools: &[Tool],
     peer: Arc<Peer<RoleClient>>,

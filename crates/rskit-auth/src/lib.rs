@@ -10,12 +10,12 @@ pub mod apikey;
 pub mod context;
 /// JWT sign/verify service.
 pub mod jwt;
+/// OpenID Connect (OIDC) support — discovery, token validation, userinfo.
+pub mod oidc;
 /// Password hashing and reset-token generation.
 pub mod password;
 /// Core `TokenValidator` and `TokenGenerator` traits.
 pub mod traits;
-/// OpenID Connect (OIDC) support — discovery, token validation, userinfo.
-pub mod oidc;
 
 pub use context::AuthClaims;
 pub use jwt::{JwtConfig, JwtService};

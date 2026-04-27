@@ -75,11 +75,10 @@ impl<T: Send + Sync + Clone + 'static> BatchProducer<T> {
                             let mut buf = flush_buffer.lock().await;
                             std::mem::take(&mut *buf)
                         };
-                        if !msgs.is_empty() {
-                            if let Err(e) = flush_producer.send_batch(msgs).await {
+                        if !msgs.is_empty()
+                            && let Err(e) = flush_producer.send_batch(msgs).await {
                                 ::tracing::error!(error = %e, "batch periodic flush failed");
                             }
-                        }
                     }
                 }
             }

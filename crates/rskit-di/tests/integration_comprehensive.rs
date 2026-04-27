@@ -160,6 +160,7 @@ async fn high_concurrent_resolve_factory() {
 
 #[allow(dead_code)]
 struct MockCloseable {
+    #[allow(clippy::disallowed_types)]
     closed: std::sync::Mutex<bool>,
 }
 

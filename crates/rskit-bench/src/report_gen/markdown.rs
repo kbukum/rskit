@@ -54,34 +54,33 @@ impl Reporter for MarkdownReporter {
 
         // Confusion matrix (from metric detail)
         for m in &result.metrics {
-            if let Some(ref detail) = m.detail {
-                if let Some(labels) = detail.get("labels").and_then(|v| v.as_array()) {
-                    if let Some(matrix) = detail.get("matrix").and_then(|v| v.as_array()) {
-                        writeln!(w, "## Confusion Matrix").map_err(io_err)?;
-                        writeln!(w).map_err(io_err)?;
-                        write!(w, "| |").map_err(io_err)?;
-                        for l in labels {
-                            write!(w, " {} |", l.as_str().unwrap_or("?")).map_err(io_err)?;
-                        }
-                        writeln!(w).map_err(io_err)?;
-                        write!(w, "|---|").map_err(io_err)?;
-                        for _ in labels {
-                            write!(w, "---:|").map_err(io_err)?;
-                        }
-                        writeln!(w).map_err(io_err)?;
-                        for (i, row) in matrix.iter().enumerate() {
-                            let label = labels.get(i).and_then(|v| v.as_str()).unwrap_or("?");
-                            write!(w, "| **{label}** |").map_err(io_err)?;
-                            if let Some(cells) = row.as_array() {
-                                for cell in cells {
-                                    write!(w, " {cell} |").map_err(io_err)?;
-                                }
-                            }
-                            writeln!(w).map_err(io_err)?;
-                        }
-                        writeln!(w).map_err(io_err)?;
-                    }
+            if let Some(ref detail) = m.detail
+                && let Some(labels) = detail.get("labels").and_then(|v| v.as_array())
+                && let Some(matrix) = detail.get("matrix").and_then(|v| v.as_array())
+            {
+                writeln!(w, "## Confusion Matrix").map_err(io_err)?;
+                writeln!(w).map_err(io_err)?;
+                write!(w, "| |").map_err(io_err)?;
+                for l in labels {
+                    write!(w, " {} |", l.as_str().unwrap_or("?")).map_err(io_err)?;
                 }
+                writeln!(w).map_err(io_err)?;
+                write!(w, "|---|").map_err(io_err)?;
+                for _ in labels {
+                    write!(w, "---:|").map_err(io_err)?;
+                }
+                writeln!(w).map_err(io_err)?;
+                for (i, row) in matrix.iter().enumerate() {
+                    let label = labels.get(i).and_then(|v| v.as_str()).unwrap_or("?");
+                    write!(w, "| **{label}** |").map_err(io_err)?;
+                    if let Some(cells) = row.as_array() {
+                        for cell in cells {
+                            write!(w, " {cell} |").map_err(io_err)?;
+                        }
+                    }
+                    writeln!(w).map_err(io_err)?;
+                }
+                writeln!(w).map_err(io_err)?;
             }
         }
 

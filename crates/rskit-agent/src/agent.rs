@@ -106,10 +106,10 @@ impl Agent {
                         });
                     }
                     Action::Modify => {
-                        if let Some(data) = result.modified_data {
-                            if let Some(modified) = data.downcast_ref::<CompletionRequest>() {
-                                request = modified.clone();
-                            }
+                        if let Some(data) = result.modified_data
+                            && let Some(modified) = data.downcast_ref::<CompletionRequest>()
+                        {
+                            request = modified.clone();
                         }
                     }
                     Action::Continue => {}

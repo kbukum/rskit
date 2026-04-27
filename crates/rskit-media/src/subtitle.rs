@@ -361,7 +361,7 @@ fn parse_time_dotted(s: &str) -> Option<u64> {
     Some(h * 3_600_000 + m * 60_000 + sec * 1000 + frac)
 }
 
-/// Strip HTML/VTT tags like <b>, <i>, <c>, <u>, <ruby>, etc.
+/// Strip HTML/VTT tags like `<b>`, `<i>`, `<c>`, `<u>`, `<ruby>`, etc.
 fn strip_html_tags(s: &str) -> String {
     let mut result = String::with_capacity(s.len());
     let mut in_tag = false;

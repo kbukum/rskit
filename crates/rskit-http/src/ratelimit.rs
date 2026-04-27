@@ -97,14 +97,13 @@ impl RateLimitConfig {
 
 /// Extract a rate-limit key from `X-Forwarded-For`, falling back to `"unknown"`.
 pub fn ip_based_key(req: &Request<Body>) -> String {
-    if let Some(v) = req.headers().get("x-forwarded-for") {
-        if let Ok(s) = v.to_str() {
-            if let Some(first) = s.split(',').next() {
-                let trimmed = first.trim();
-                if !trimmed.is_empty() {
-                    return trimmed.to_string();
-                }
-            }
+    if let Some(v) = req.headers().get("x-forwarded-for")
+        && let Ok(s) = v.to_str()
+        && let Some(first) = s.split(',').next()
+    {
+        let trimmed = first.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
         }
     }
     "unknown".to_string()
@@ -329,16 +328,27 @@ where
             let (mut parts, body) = resp.into_parts();
             // SAFETY: u64::to_string() produces ASCII digits, which are always
             // valid HeaderValue bytes; parse() cannot fail for this input.
-            parts
-                .headers
-                .insert("x-ratelimit-limit", limit.to_string().parse().expect("u64 string is valid header value"));
+            parts.headers.insert(
+                "x-ratelimit-limit",
+                limit
+                    .to_string()
+                    .parse()
+                    .expect("u64 string is valid header value"),
+            );
             parts.headers.insert(
                 "x-ratelimit-remaining",
-                remaining.to_string().parse().expect("u64 string is valid header value"),
+                remaining
+                    .to_string()
+                    .parse()
+                    .expect("u64 string is valid header value"),
             );
-            parts
-                .headers
-                .insert("x-ratelimit-reset", reset_unix.to_string().parse().expect("u64 string is valid header value"));
+            parts.headers.insert(
+                "x-ratelimit-reset",
+                reset_unix
+                    .to_string()
+                    .parse()
+                    .expect("u64 string is valid header value"),
+            );
             Ok(Response::from_parts(parts, body))
         })
     }

@@ -1,8 +1,8 @@
-//! Periodic ticker worker that implements [`Component`].
+//! Periodic ticker worker that implements [`rskit_bootstrap::Component`].
 //!
 //! [`TickerWorker`] runs a user-supplied async function on a fixed interval
 //! in a background Tokio task. It integrates with the bootstrap lifecycle
-//! via the [`Component`] trait.
+//! via the [`rskit_bootstrap::Component`] trait.
 //!
 //! # Example
 //!

@@ -6,6 +6,7 @@ mod sealed {
 
 /// Marker trait for a JWT signing/verification algorithm.
 pub trait JwtAlgo: sealed::Sealed + Send + Sync + 'static {
+    /// The `jsonwebtoken` algorithm variant for this type.
     const ALG: jsonwebtoken::Algorithm;
 }
 

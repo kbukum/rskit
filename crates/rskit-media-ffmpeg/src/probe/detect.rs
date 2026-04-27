@@ -110,9 +110,7 @@ impl FfmpegProbe {
                 "-i",
                 &resolved.path().to_string_lossy(),
                 "-af",
-                &format!(
-                    "silencedetect=noise={threshold_db}dB:d={min_secs}"
-                ),
+                &format!("silencedetect=noise={threshold_db}dB:d={min_secs}"),
                 "-f",
                 "null",
                 "-",
@@ -131,10 +129,7 @@ impl FfmpegProbe {
     }
 
     /// Extract chapter markers from the media container via ffprobe.
-    pub(crate) async fn extract_chapters(
-        &self,
-        source: &FileSource,
-    ) -> AppResult<Vec<Chapter>> {
+    pub(crate) async fn extract_chapters(&self, source: &FileSource) -> AppResult<Vec<Chapter>> {
         let json = self.probe_raw(source).await?;
         Ok(parse_chapters(&json))
     }
@@ -167,14 +162,10 @@ fn parse_keyframes(json: &serde_json::Value) -> Vec<KeyframeInfo> {
     };
 
     let mut keyframes = Vec::new();
-    let mut frame_number: u64 = 0;
 
-    for frame in frames {
-        let is_key = frame
-            .get("key_frame")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0)
-            == 1;
+    for (frame_number, frame) in frames.iter().enumerate() {
+        let frame_number = frame_number as u64;
+        let is_key = frame.get("key_frame").and_then(|v| v.as_u64()).unwrap_or(0) == 1;
 
         if is_key {
             let pts_time = frame
@@ -202,8 +193,6 @@ fn parse_keyframes(json: &serde_json::Value) -> Vec<KeyframeInfo> {
                 size_bytes,
             });
         }
-
-        frame_number += 1;
     }
 
     keyframes
@@ -232,8 +221,7 @@ fn parse_silence_intervals(stderr: &str) -> Vec<SilenceInterval> {
                 .find('|')
                 .map_or(after.trim(), |pipe| after[..pipe].trim());
 
-            if let (Some(start_secs), Ok(end_secs)) =
-                (pending_start.take(), end_str.parse::<f64>())
+            if let (Some(start_secs), Ok(end_secs)) = (pending_start.take(), end_str.parse::<f64>())
             {
                 let dur = (end_secs - start_secs).max(0.0);
                 intervals.push(SilenceInterval {

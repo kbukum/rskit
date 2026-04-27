@@ -358,25 +358,25 @@ impl Masker for DefaultMasker {
         }
 
         // JSON field-name masking: "password":"secret" -> "password":"[REDACTED]"
-        if let Some(ref re) = self.json_field_regex {
-            if re.is_match(&result) {
-                let replacement = &self.replacement;
-                let masked = re.replace_all(&result, |caps: &regex::Captures| {
-                    format!("\"{}\":\"{}\"", &caps[1], replacement)
-                });
-                result = Cow::Owned(masked.into_owned());
-            }
+        if let Some(ref re) = self.json_field_regex
+            && re.is_match(&result)
+        {
+            let replacement = &self.replacement;
+            let masked = re.replace_all(&result, |caps: &regex::Captures| {
+                format!("\"{}\":\"{}\"", &caps[1], replacement)
+            });
+            result = Cow::Owned(masked.into_owned());
         }
 
         // Text field-name masking: password=secret -> password=[REDACTED]
-        if let Some(ref re) = self.text_field_regex {
-            if re.is_match(&result) {
-                let replacement = &self.replacement;
-                let masked = re.replace_all(&result, |caps: &regex::Captures| {
-                    format!("{}={}", &caps[1], replacement)
-                });
-                result = Cow::Owned(masked.into_owned());
-            }
+        if let Some(ref re) = self.text_field_regex
+            && re.is_match(&result)
+        {
+            let replacement = &self.replacement;
+            let masked = re.replace_all(&result, |caps: &regex::Captures| {
+                format!("{}={}", &caps[1], replacement)
+            });
+            result = Cow::Owned(masked.into_owned());
         }
 
         result

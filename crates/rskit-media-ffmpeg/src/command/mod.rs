@@ -110,10 +110,10 @@ impl FfmpegCommand {
                 .extend(["-threads".into(), threads.to_string()]);
         }
 
-        if let Some(hw) = &config.hw_accel {
-            if let Some(arg) = hw.ffmpeg_arg() {
-                cmd.global_opts.extend(["-hwaccel".into(), arg.into()]);
-            }
+        if let Some(hw) = &config.hw_accel
+            && let Some(arg) = hw.ffmpeg_arg()
+        {
+            cmd.global_opts.extend(["-hwaccel".into(), arg.into()]);
         }
 
         // Force a specific input video decoder (e.g., libdav1d for software AV1 decode)

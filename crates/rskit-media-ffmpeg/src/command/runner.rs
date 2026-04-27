@@ -65,7 +65,10 @@ impl FfmpegCommand {
         // Set up stderr reader for both progress parsing and error capture
         // SAFETY: `.stderr(Stdio::piped())` is called above; `take()` on a piped
         // child stderr is always Some.
-        let stderr = child.stderr.take().expect("stderr was piped in command setup");
+        let stderr = child
+            .stderr
+            .take()
+            .expect("stderr was piped in command setup");
         let reader = tokio::io::BufReader::new(stderr);
         use tokio::io::AsyncBufReadExt;
         let mut lines = reader.lines();
@@ -81,10 +84,10 @@ impl FfmpegCommand {
             async move {
                 while let Ok(Some(line)) = lines.next_line().await {
                     // Try parsing progress
-                    if let Some(ref cb) = progress_callback {
-                        if let Some(progress) = parser.parse_line(&line) {
-                            cb(progress);
-                        }
+                    if let Some(ref cb) = progress_callback
+                        && let Some(progress) = parser.parse_line(&line)
+                    {
+                        cb(progress);
                     }
                     // Always collect stderr for error diagnostics
                     let _ = stderr_tx.send(line);
@@ -159,10 +162,10 @@ impl FfmpegCommand {
     }
 
     /// Kill an FFmpeg child process and its process group.
-    fn kill_process(child: &mut tokio::process::Child, pid: Option<u32>) {
+    fn kill_process(child: &mut tokio::process::Child, _pid: Option<u32>) {
         // Try graceful SIGTERM first on Unix
         #[cfg(unix)]
-        if let Some(pid) = pid {
+        if let Some(pid) = _pid {
             unsafe {
                 // Send SIGTERM to the process group
                 libc::kill(-(pid as i32), libc::SIGTERM);

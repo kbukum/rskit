@@ -27,42 +27,42 @@ pub fn vegalite_specs(result: &BenchRunResult) -> serde_json::Value {
     let mut specs = serde_json::Map::new();
 
     // ROC curve spec (if roc data is present in curves)
-    if let Some(roc_data) = result.curves.get("roc") {
-        if let Some(spec) = roc_spec(roc_data) {
-            specs.insert("roc".to_string(), spec);
-        }
+    if let Some(roc_data) = result.curves.get("roc")
+        && let Some(spec) = roc_spec(roc_data)
+    {
+        specs.insert("roc".to_string(), spec);
     }
 
     // Confusion matrix heatmap
     for m in &result.metrics {
-        if let Some(ref detail) = m.detail {
-            if detail.get("matrix").is_some() && detail.get("labels").is_some() {
-                if let Some(spec) = confusion_matrix_spec(detail) {
-                    specs.insert("confusion_matrix".to_string(), spec);
-                }
-            }
+        if let Some(ref detail) = m.detail
+            && detail.get("matrix").is_some()
+            && detail.get("labels").is_some()
+            && let Some(spec) = confusion_matrix_spec(detail)
+        {
+            specs.insert("confusion_matrix".to_string(), spec);
         }
     }
 
     // Score distribution
-    if let Some(dist_data) = result.curves.get("score_distribution") {
-        if let Some(spec) = score_distribution_spec(dist_data) {
-            specs.insert("score_distribution".to_string(), spec);
-        }
+    if let Some(dist_data) = result.curves.get("score_distribution")
+        && let Some(spec) = score_distribution_spec(dist_data)
+    {
+        specs.insert("score_distribution".to_string(), spec);
     }
 
     // Threshold sweep
-    if let Some(sweep_data) = result.curves.get("threshold_sweep") {
-        if let Some(spec) = threshold_sweep_spec(sweep_data) {
-            specs.insert("threshold_sweep".to_string(), spec);
-        }
+    if let Some(sweep_data) = result.curves.get("threshold_sweep")
+        && let Some(spec) = threshold_sweep_spec(sweep_data)
+    {
+        specs.insert("threshold_sweep".to_string(), spec);
     }
 
     // Calibration curve
-    if let Some(cal_data) = result.curves.get("calibration") {
-        if let Some(spec) = calibration_spec(cal_data) {
-            specs.insert("calibration".to_string(), spec);
-        }
+    if let Some(cal_data) = result.curves.get("calibration")
+        && let Some(spec) = calibration_spec(cal_data)
+    {
+        specs.insert("calibration".to_string(), spec);
     }
 
     // Branch comparison

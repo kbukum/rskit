@@ -99,10 +99,10 @@ pub async fn detect_mime(source: &FileSource) -> AppResult<String> {
         FileSource::Url(_) => None,
     };
 
-    if let Some(bytes) = &bytes {
-        if let Some(kind) = infer::get(bytes) {
-            return Ok(kind.mime_type().to_string());
-        }
+    if let Some(bytes) = &bytes
+        && let Some(kind) = infer::get(bytes)
+    {
+        return Ok(kind.mime_type().to_string());
     }
 
     // Fall back to extension-based guessing

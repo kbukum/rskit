@@ -20,7 +20,6 @@ struct TracingMiddleware<T> {
     _marker: std::marker::PhantomData<T>,
 }
 
-
 impl<T: Send + Sync + 'static> HandlerMiddleware<T> for TracingMiddleware<T> {
     fn wrap(&self, next: Arc<dyn MessageHandler<T>>) -> Arc<dyn MessageHandler<T>> {
         Arc::new(TracingHandler { next })

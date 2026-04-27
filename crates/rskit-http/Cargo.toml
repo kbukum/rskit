@@ -31,6 +31,7 @@ tower            = { workspace = true }
 tower-http      = { version = "0.6", features = ["cors", "trace", "request-id", "timeout"] }
 hyper            = { version = "1", features = ["full"] }
 hyper-util      = { version = "0.1", features = ["tokio"] }
+http             = "1"
 validator        = { workspace = true }
 serde_json      = { workspace = true }
 uuid            = { workspace = true }

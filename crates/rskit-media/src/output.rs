@@ -338,27 +338,27 @@ impl OutputConfig {
 
     /// Validate codec/format compatibility against a registry.
     pub fn validate(&self, registry: &Registry) -> AppResult<()> {
-        if let Some(video) = &self.video {
-            if !registry.is_compatible(&video.codec, &self.format) {
-                return Err(AppError::new(
-                    ErrorCode::InvalidInput,
-                    format!(
-                        "video codec {} is not compatible with format {}",
-                        video.codec, self.format,
-                    ),
-                ));
-            }
+        if let Some(video) = &self.video
+            && !registry.is_compatible(&video.codec, &self.format)
+        {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                format!(
+                    "video codec {} is not compatible with format {}",
+                    video.codec, self.format,
+                ),
+            ));
         }
-        if let Some(audio) = &self.audio {
-            if !registry.is_compatible(&audio.codec, &self.format) {
-                return Err(AppError::new(
-                    ErrorCode::InvalidInput,
-                    format!(
-                        "audio codec {} is not compatible with format {}",
-                        audio.codec, self.format,
-                    ),
-                ));
-            }
+        if let Some(audio) = &self.audio
+            && !registry.is_compatible(&audio.codec, &self.format)
+        {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                format!(
+                    "audio codec {} is not compatible with format {}",
+                    audio.codec, self.format,
+                ),
+            ));
         }
         Ok(())
     }

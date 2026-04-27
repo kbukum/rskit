@@ -8,11 +8,11 @@ use crate::AppConfig;
 ///
 /// Resolution order (last wins):
 /// 1. `config.toml` / `config/{service}.toml` (optional)
-/// 2. Profile env file `config/profiles/{profile}.env` (optional, via [`with_profile`])
+/// 2. Profile env file `config/profiles/{profile}.env` (optional, via [`ConfigLoader::with_profile`])
 /// 3. `.env` file via dotenvy (optional)
 /// 4. Environment variables with `__` separator, no prefix by default
 ///    (`DATABASE__HOST` → `database.host`).
-///    A prefix can be set with [`with_env_prefix`].
+///    A prefix can be set with [`ConfigLoader::with_env_prefix`].
 #[derive(Debug, Default)]
 pub struct ConfigLoader {
     config_file: Option<PathBuf>,
@@ -120,18 +120,18 @@ impl ConfigLoader {
 
     fn load_env_file(&self) {
         // 1. Load profile env file first (if profile is set)
-        if let Some(profile) = &self.profile {
-            if !profile.is_empty() {
-                let profile_paths = [
-                    format!("./config/profiles/{profile}.env"),
-                    format!("../config/profiles/{profile}.env"),
-                    format!("../../config/profiles/{profile}.env"),
-                ];
-                for path in &profile_paths {
-                    if std::path::Path::new(path).exists() {
-                        let _ = dotenvy::from_path(path);
-                        break;
-                    }
+        if let Some(profile) = &self.profile
+            && !profile.is_empty()
+        {
+            let profile_paths = [
+                format!("./config/profiles/{profile}.env"),
+                format!("../config/profiles/{profile}.env"),
+                format!("../../config/profiles/{profile}.env"),
+            ];
+            for path in &profile_paths {
+                if std::path::Path::new(path).exists() {
+                    let _ = dotenvy::from_path(path);
+                    break;
                 }
             }
         }
