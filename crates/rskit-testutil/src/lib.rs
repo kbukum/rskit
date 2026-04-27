@@ -6,6 +6,9 @@
 // NOTE(#31): New async tests should use #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 // to catch concurrency bugs that only manifest with real parallelism.
 
+// NOTE(#31): New async tests should use #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+// to catch concurrency bugs that only manifest with real parallelism.
+
 #![warn(missing_docs)]
 
 /// Assertion helpers for `AppResult`.
