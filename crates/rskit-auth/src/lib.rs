@@ -2,6 +2,8 @@
 
 #![warn(missing_docs)]
 
+/// JWT algorithm typestate — prevents algorithm confusion attacks at compile time.
+pub mod algo;
 /// API key generation, hashing, validation, and rotation with grace periods.
 pub mod apikey;
 /// Auth claims stored in request extensions / task-locals.

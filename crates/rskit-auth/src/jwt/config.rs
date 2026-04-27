@@ -35,14 +35,16 @@ impl From<&Algorithm> for jsonwebtoken::Algorithm {
 }
 
 /// JWT configuration.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, zeroize::Zeroize, zeroize::ZeroizeOnDrop)]
 pub struct JwtConfig {
     /// HMAC secret or RSA private-key PEM.
     pub secret: String,
     /// Signing algorithm (default: HS256).
+    #[zeroize(skip)]
     #[serde(default)]
     pub algorithm: Algorithm,
     /// Token time-to-live (default: 1 hour).
+    #[zeroize(skip)]
     #[serde(default = "JwtConfig::default_ttl")]
     pub ttl: Duration,
     /// Expected issuer claim (`iss`).

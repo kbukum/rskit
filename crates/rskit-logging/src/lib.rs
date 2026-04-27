@@ -64,6 +64,14 @@ pub struct LoggingGuard(#[allow(dead_code)] DefaultGuard);
 /// - `LogFormat::Console` → human-readable with colour (development)
 ///
 /// The `RUST_LOG` env var takes precedence over `cfg.level` when set.
+///
+/// # Security
+///
+/// TODO(#22): Add a post-format masking layer that redacts fields named
+/// `password`, `secret`, `token`, `authorization`, `api_key` in log output.
+/// See <https://docs.rs/tracing-subscriber/latest/tracing_subscriber/layer/index.html>
+/// Use [`crate::masking::DefaultMasker`] with [`crate::masking::MaskingMakeWriter`] or
+/// call [`crate::global::init_global_with_masking`] which already wires masking.
 pub fn init_logging(cfg: &LoggingConfig) -> LoggingGuard {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&cfg.level));
 

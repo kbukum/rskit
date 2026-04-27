@@ -13,48 +13,51 @@ readme = "README.md"
 categories = ["development-tools", "network-programming", "asynchronous"]
 keywords   = ["toolkit", "async", "resilience", "grpc"]
 
+[lints]
+workspace = true
+
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 # Always-on core crates
-rskit-errors     = { path = "../rskit-errors" }
-rskit-config     = { path = "../rskit-config" }
-rskit-logging    = { path = "../rskit-logging" }
-rskit-bootstrap  = { path = "../rskit-bootstrap" }
-rskit-provider   = { path = "../rskit-provider" }
-rskit-pipeline   = { path = "../rskit-pipeline" }
-rskit-resilience = { path = "../rskit-resilience" }
-rskit-worker     = { path = "../rskit-worker" }
-rskit-validation = { path = "../rskit-validation" }
+rskit-errors     = { version = "0.1.0", path = "../rskit-errors" }
+rskit-config     = { version = "0.1.0", path = "../rskit-config" }
+rskit-logging    = { version = "0.1.0", path = "../rskit-logging" }
+rskit-bootstrap  = { version = "0.1.0", path = "../rskit-bootstrap" }
+rskit-provider   = { version = "0.1.0", path = "../rskit-provider" }
+rskit-pipeline   = { version = "0.1.0", path = "../rskit-pipeline" }
+rskit-resilience = { version = "0.1.0", path = "../rskit-resilience" }
+rskit-worker     = { version = "0.1.0", path = "../rskit-worker" }
+rskit-validation = { version = "0.1.0", path = "../rskit-validation" }
 
 # Feature-gated crates
-rskit-server        = { path = "../rskit-server",        optional = true }
-rskit-grpc-client   = { path = "../rskit-grpc-client",   optional = true }
-rskit-encryption    = { path = "../rskit-encryption",    optional = true }
-rskit-http          = { path = "../rskit-http",          optional = true }
-rskit-httpclient    = { path = "../rskit-httpclient",    optional = true }
-rskit-auth          = { path = "../rskit-auth",          optional = true }
-rskit-di            = { path = "../rskit-di",            optional = true }
-rskit-database      = { path = "../rskit-database",      optional = true }
-rskit-cache         = { path = "../rskit-cache",         optional = true }
-rskit-messaging     = { path = "../rskit-messaging",     optional = true }
-rskit-observability = { path = "../rskit-observability",  optional = true }
-rskit-authz         = { path = "../rskit-authz",         optional = true }
-rskit-discovery     = { path = "../rskit-discovery",     optional = true }
-rskit-testutil      = { path = "../rskit-testutil",      optional = true }
-rskit-sse           = { path = "../rskit-sse",           optional = true }
-rskit-dag           = { path = "../rskit-dag",           optional = true }
-rskit-llm           = { path = "../rskit-llm",           optional = true }
-rskit-file          = { path = "../rskit-file",          optional = true }
-rskit-file-s3       = { path = "../rskit-file-s3",       optional = true }
-rskit-media         = { path = "../rskit-media",         optional = true }
-rskit-media-ffmpeg  = { path = "../rskit-media-ffmpeg",  optional = true }
-rskit-media-image   = { path = "../rskit-media-image",   optional = true }
-rskit-cli           = { path = "../rskit-cli",           optional = true }
-rskit-dataset       = { path = "../rskit-dataset",       optional = true }
-rskit-bench         = { path = "../rskit-bench",         optional = true }
+rskit-server        = { version = "0.1.0", path = "../rskit-server",        optional = true }
+rskit-grpc-client   = { version = "0.1.0", path = "../rskit-grpc-client",   optional = true }
+rskit-encryption    = { version = "0.1.0", path = "../rskit-encryption",    optional = true }
+rskit-http          = { version = "0.1.0", path = "../rskit-http",          optional = true }
+rskit-httpclient    = { version = "0.1.0", path = "../rskit-httpclient",    optional = true }
+rskit-auth          = { version = "0.1.0", path = "../rskit-auth",          optional = true }
+rskit-di            = { version = "0.1.0", path = "../rskit-di",            optional = true }
+rskit-database      = { version = "0.1.0", path = "../rskit-database",      optional = true }
+rskit-cache         = { version = "0.1.0", path = "../rskit-cache",         optional = true }
+rskit-messaging     = { version = "0.1.0", path = "../rskit-messaging",     optional = true }
+rskit-observability = { version = "0.1.0", path = "../rskit-observability",  optional = true }
+rskit-authz         = { version = "0.1.0", path = "../rskit-authz",         optional = true }
+rskit-discovery     = { version = "0.1.0", path = "../rskit-discovery",     optional = true }
+rskit-testutil      = { version = "0.1.0", path = "../rskit-testutil",      optional = true }
+rskit-sse           = { version = "0.1.0", path = "../rskit-sse",           optional = true }
+rskit-dag           = { version = "0.1.0", path = "../rskit-dag",           optional = true }
+rskit-llm           = { version = "0.1.0", path = "../rskit-llm",           optional = true }
+rskit-file          = { version = "0.1.0", path = "../rskit-file",          optional = true }
+rskit-file-s3       = { version = "0.1.0", path = "../rskit-file-s3",       optional = true }
+rskit-media         = { version = "0.1.0", path = "../rskit-media",         optional = true }
+rskit-media-ffmpeg  = { version = "0.1.0", path = "../rskit-media-ffmpeg",  optional = true }
+rskit-media-image   = { version = "0.1.0", path = "../rskit-media-image",   optional = true }
+rskit-cli           = { version = "0.1.0", path = "../rskit-cli",           optional = true }
+rskit-dataset       = { version = "0.1.0", path = "../rskit-dataset",       optional = true }
+rskit-bench         = { version = "0.1.0", path = "../rskit-bench",         optional = true }
 
 [dev-dependencies]
 tokio       = { workspace = true, features = ["full"] }

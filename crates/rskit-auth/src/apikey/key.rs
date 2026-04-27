@@ -52,7 +52,7 @@ impl Key {
 }
 
 /// Result of key generation — contains the plaintext shown once.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, zeroize::Zeroize, zeroize::ZeroizeOnDrop)]
 pub struct GenerateResult {
     /// The full plaintext key (show once, then discard).
     pub plain_key: String,

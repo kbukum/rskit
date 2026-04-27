@@ -101,6 +101,11 @@ where
                 Err(_) => {
                     let mut res = Response::new(ResBody::default());
                     *res.status_mut() = StatusCode::UNAUTHORIZED;
+                    // Add WWW-Authenticate header per RFC 7235
+                    res.headers_mut().insert(
+                        http::header::WWW_AUTHENTICATE,
+                        http::HeaderValue::from_static(r#"Bearer realm="rskit""#),
+                    );
                     return Ok(res);
                 }
             };
@@ -114,6 +119,11 @@ where
                 Err(_) => {
                     let mut res = Response::new(ResBody::default());
                     *res.status_mut() = StatusCode::UNAUTHORIZED;
+                    // Add WWW-Authenticate header per RFC 7235
+                    res.headers_mut().insert(
+                        http::header::WWW_AUTHENTICATE,
+                        http::HeaderValue::from_static(r#"Bearer realm="rskit""#),
+                    );
                     Ok(res)
                 }
             }

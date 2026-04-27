@@ -117,6 +117,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "fmt"]
 # Resilience
 governor = { version = "0.10.4", features = ["std"] }
 rand     = "0.10.1"
+zeroize  = { version = "1", features = ["derive"] }
 
 # gRPC
 tonic            = { version = "0.14.5", features = ["transport"] }
@@ -191,6 +192,25 @@ crossterm    = "0.28"
 criterion    = { version = "0.5", features = ["html_reports", "async_tokio"] }
 insta        = { version = "1.47", features = ["json", "yaml", "redactions"] }
 
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+unused_imports = "warn"
+unused_variables = "warn"
+dead_code = "warn"
+unreachable_pub = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+# Allow common patterns that are overly noisy
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+wildcard_imports = "allow"
 
 [profile.release]
 lto           = true
