@@ -20,10 +20,7 @@ fn future_exp() -> u64 {
 }
 
 fn jwt_service() -> JwtService<Claims> {
-    JwtService::new(JwtConfig {
-        secret: "integration-test-secret-key".into(),
-        ..Default::default()
-    })
+    JwtService::new(JwtConfig::new("integration-test-secret-key"))
 }
 
 // ── JWT ──────────────────────────────────────────────────────────────

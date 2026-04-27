@@ -150,7 +150,7 @@ hyper        = { version = "1", features = ["full"] }
 hyper-util   = { version = "0.1", features = ["tokio"] }
 
 # Auth (Phase 2)
-jsonwebtoken = "10"
+jsonwebtoken = { version = "10", features = ["rust_crypto"] }
 argon2       = "0.5"
 
 # Database (Phase 3)

@@ -87,7 +87,7 @@ pub(crate) fn infer_operation_kind(ops: &[MediaOp]) -> OperationKind {
 impl FfmpegExecutor {
     /// Create an effective config with duration-aware timeout resolved.
     ///
-    /// When the config has a [`TimeoutCalculator`], this probes the source
+    /// When the config has a [`rskit_media::timeout::TimeoutCalculator`], this probes the source
     /// duration and infers the operation kind to compute a scaled timeout,
     /// replacing the fixed `timeout` field in the returned config.
     pub(crate) async fn resolve_effective_config(

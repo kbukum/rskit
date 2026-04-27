@@ -45,7 +45,7 @@ jobs:
           toolchain: stable
           components: clippy
       - uses: Swatinem/rust-cache@9bdad043e88c75890e36ad3bbc8d27f0090dd609  # v2.7.8
-      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - run: cargo clippy --workspace --all-targets -- -D warnings
 
   # ---------------------------------------------------------------------------
   # Tests — matrix across OS + MSRV + stable

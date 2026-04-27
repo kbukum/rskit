@@ -23,7 +23,7 @@ impl SupervisedTask {
     }
 
     /// Returns the task name.
-    pub fn name(&self) -> &'static str {
+    pub const fn name(&self) -> &'static str {
         self.name
     }
 }

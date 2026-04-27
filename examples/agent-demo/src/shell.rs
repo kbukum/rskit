@@ -363,6 +363,7 @@ pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
     println!("  \x1b[1;32m👋 Done.\x1b[0m");
 
     // Force exit — the blocking stdin thread can't be interrupted
+    #[allow(clippy::disallowed_methods)]
     std::process::exit(0);
 }
 

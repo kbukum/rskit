@@ -80,10 +80,7 @@ mod tests {
     }
 
     fn make_service() -> JwtService<TestClaims> {
-        JwtService::new(JwtConfig {
-            secret: "test-secret-key".into(),
-            ..Default::default()
-        })
+        JwtService::new(JwtConfig::new("test-secret-key"))
     }
 
     #[tokio::test]

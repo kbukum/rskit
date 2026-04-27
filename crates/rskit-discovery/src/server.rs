@@ -1,6 +1,6 @@
 //! Discovery-integrated server component.
 //!
-//! Wraps any server implementing the [`Component`] trait to automatically
+//! Wraps any server implementing the [`rskit_bootstrap::Component`] trait to automatically
 //! register with service discovery on start and deregister on stop.
 
 use std::sync::Arc;

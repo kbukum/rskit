@@ -34,10 +34,7 @@ fn past_exp() -> u64 {
 }
 
 fn jwt_service() -> JwtService<Claims> {
-    JwtService::new(JwtConfig {
-        secret: "test-secret-key-for-auth".into(),
-        ..Default::default()
-    })
+    JwtService::new(JwtConfig::new("test-secret-key-for-auth"))
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -69,14 +66,8 @@ async fn jwt_expired_token_rejected() {
 
 #[tokio::test]
 async fn jwt_invalid_signature_rejected() {
-    let svc1 = JwtService::<Claims>::new(JwtConfig {
-        secret: "secret-one".into(),
-        ..Default::default()
-    });
-    let svc2 = JwtService::<Claims>::new(JwtConfig {
-        secret: "secret-two".into(),
-        ..Default::default()
-    });
+    let svc1 = JwtService::<Claims>::new(JwtConfig::new("secret-one"));
+    let svc2 = JwtService::<Claims>::new(JwtConfig::new("secret-two"));
     let claims = Claims {
         sub: "u".into(),
         exp: future_exp(),
@@ -105,18 +96,16 @@ async fn jwt_no_dots_rejected() {
 
 #[tokio::test]
 async fn jwt_issuer_validation() {
-    let svc_gen = JwtService::<ClaimsWithIssAud>::new(JwtConfig {
-        secret: "shared".into(),
-        issuer: Some("issuer-a".into()),
-        audience: Some(vec!["aud".into()]),
-        ..Default::default()
-    });
-    let svc_val = JwtService::<ClaimsWithIssAud>::new(JwtConfig {
-        secret: "shared".into(),
-        issuer: Some("issuer-b".into()),
-        audience: Some(vec!["aud".into()]),
-        ..Default::default()
-    });
+    let svc_gen = JwtService::<ClaimsWithIssAud>::new(
+        JwtConfig::new("shared")
+            .with_issuer("issuer-a")
+            .with_audience(vec!["aud".into()]),
+    );
+    let svc_val = JwtService::<ClaimsWithIssAud>::new(
+        JwtConfig::new("shared")
+            .with_issuer("issuer-b")
+            .with_audience(vec!["aud".into()]),
+    );
     let claims = ClaimsWithIssAud {
         sub: "u".into(),
         exp: future_exp(),
@@ -129,16 +118,12 @@ async fn jwt_issuer_validation() {
 
 #[tokio::test]
 async fn jwt_audience_validation() {
-    let svc_gen = JwtService::<ClaimsWithIssAud>::new(JwtConfig {
-        secret: "shared".into(),
-        audience: Some(vec!["aud-a".into()]),
-        ..Default::default()
-    });
-    let svc_val = JwtService::<ClaimsWithIssAud>::new(JwtConfig {
-        secret: "shared".into(),
-        audience: Some(vec!["aud-b".into()]),
-        ..Default::default()
-    });
+    let svc_gen = JwtService::<ClaimsWithIssAud>::new(
+        JwtConfig::new("shared").with_audience(vec!["aud-a".into()]),
+    );
+    let svc_val = JwtService::<ClaimsWithIssAud>::new(
+        JwtConfig::new("shared").with_audience(vec!["aud-b".into()]),
+    );
     let claims = ClaimsWithIssAud {
         sub: "u".into(),
         exp: future_exp(),

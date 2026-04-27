@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 /// Configuration for a gRPC client channel.
 ///
-/// Mirrors [`gokit/grpc.Config`] and [`pykit_grpc.GrpcConfig`] with Rust-appropriate
+/// Mirrors `gokit/grpc.Config` and `pykit_grpc.GrpcConfig` with Rust-appropriate
 /// defaults and patterns.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]

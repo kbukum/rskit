@@ -1,7 +1,9 @@
 //! Mockable clock abstraction for deterministic time-dependent testing.
 
-use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
+
+#[cfg(any(test, feature = "test-util"))]
+use std::sync::{Arc, Mutex};
 
 /// Abstraction over wall-clock time for testability.
 pub trait Clock: Send + Sync + 'static {
@@ -37,9 +39,20 @@ impl Clock for SystemClock {
 /// assert!(clock.now() > t0);
 /// ```
 #[cfg(any(test, feature = "test-util"))]
-#[derive(Debug, Clone, Default)]
+#[allow(clippy::disallowed_types)] // MockClock is test-only, never crosses async boundaries
+#[derive(Debug, Clone)]
 pub struct MockClock {
     current: Arc<Mutex<SystemTime>>,
+}
+
+#[cfg(any(test, feature = "test-util"))]
+#[allow(clippy::disallowed_types)]
+impl Default for MockClock {
+    fn default() -> Self {
+        Self {
+            current: Arc::new(Mutex::new(SystemTime::now())),
+        }
+    }
 }
 
 #[cfg(any(test, feature = "test-util"))]

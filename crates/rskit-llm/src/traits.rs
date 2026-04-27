@@ -8,7 +8,7 @@ use crate::types::{CompletionRequest, CompletionResponse};
 /// Tool calling is handled through `CompletionRequest.tools` and
 /// `CompletionResponse.tool_calls` — no separate trait needed.
 ///
-/// For embeddings, use [`rskit_embedding::EmbeddingProvider`] instead.
+/// For embeddings, use `rskit_embedding::EmbeddingProvider` instead.
 #[async_trait]
 pub trait LlmProvider: Send + Sync {
     /// Send a chat completion request and return the response.

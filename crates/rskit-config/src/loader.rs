@@ -8,11 +8,11 @@ use crate::AppConfig;
 ///
 /// Resolution order (last wins):
 /// 1. `config.toml` / `config/{service}.toml` (optional)
-/// 2. Profile env file `config/profiles/{profile}.env` (optional, via [`with_profile`])
+/// 2. Profile env file `config/profiles/{profile}.env` (optional, via [`ConfigLoader::with_profile`])
 /// 3. `.env` file via dotenvy (optional)
 /// 4. Environment variables with `__` separator, no prefix by default
 ///    (`DATABASE__HOST` → `database.host`).
-///    A prefix can be set with [`with_env_prefix`].
+///    A prefix can be set with [`ConfigLoader::with_env_prefix`].
 #[derive(Debug, Default)]
 pub struct ConfigLoader {
     config_file: Option<PathBuf>,
