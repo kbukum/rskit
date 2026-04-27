@@ -65,7 +65,10 @@ impl FfmpegCommand {
         // Set up stderr reader for both progress parsing and error capture
         // SAFETY: `.stderr(Stdio::piped())` is called above; `take()` on a piped
         // child stderr is always Some.
-        let stderr = child.stderr.take().expect("stderr was piped in command setup");
+        let stderr = child
+            .stderr
+            .take()
+            .expect("stderr was piped in command setup");
         let reader = tokio::io::BufReader::new(stderr);
         use tokio::io::AsyncBufReadExt;
         let mut lines = reader.lines();

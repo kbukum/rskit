@@ -91,10 +91,7 @@ pub fn init_tracer(cfg: &TracingConfig) -> AppResult<TracerGuard> {
     // IDEMPOTENCY(#28): only install the global subscriber once; subsequent
     // calls (e.g. in tests or hot-reload scenarios) are silently skipped.
     SUBSCRIBER_INIT.get_or_init(|| {
-        if let Err(e) = tracing_subscriber::registry()
-            .with(otel_layer)
-            .try_init()
-        {
+        if let Err(e) = tracing_subscriber::registry().with(otel_layer).try_init() {
             tracing::warn!(error = %e, "tracing subscriber already initialised — skipping");
         }
     });

@@ -41,7 +41,10 @@ pub struct TokenUsage {
 #[async_trait]
 pub trait LlmProvider: Send + Sync {
     /// Complete a chat conversation.
-    async fn chat(&self, request: ChatRequest) -> Result<ChatResponse, Box<dyn std::error::Error + Send + Sync>>;
+    async fn chat(
+        &self,
+        request: ChatRequest,
+    ) -> Result<ChatResponse, Box<dyn std::error::Error + Send + Sync>>;
 
     /// Provider name for logging/metrics.
     fn name(&self) -> &'static str;

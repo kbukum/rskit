@@ -119,10 +119,7 @@ impl FfmpegExecutor {
     }
 
     /// Quick ffprobe to get source duration (for timeout calculation).
-    pub(crate) async fn quick_probe_duration(
-        &self,
-        source: &FileSource,
-    ) -> Option<Duration> {
+    pub(crate) async fn quick_probe_duration(&self, source: &FileSource) -> Option<Duration> {
         let path = match source {
             FileSource::Path(p) => p.clone(),
             _ => return None,

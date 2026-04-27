@@ -23,7 +23,9 @@ pub fn set_type_base_uri(uri: impl Into<String>) {
         uri.push('/');
     }
     if TYPE_BASE_URI.set(uri).is_err() {
-        eprintln!("rskit-errors: set_type_base_uri: base URI is already set; ignoring second call");
+        tracing::warn!(
+            "rskit-errors: set_type_base_uri: base URI is already set; ignoring second call"
+        );
     }
 }
 

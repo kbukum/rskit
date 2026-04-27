@@ -40,7 +40,11 @@ where
         match std::panic::AssertUnwindSafe(fut).catch_unwind().await {
             Ok(()) => {}
             Err(panic) => {
-                tracing::error!(task = name, ?panic, "supervised task panicked — restarting is the caller's responsibility");
+                tracing::error!(
+                    task = name,
+                    ?panic,
+                    "supervised task panicked — restarting is the caller's responsibility"
+                );
             }
         }
     });

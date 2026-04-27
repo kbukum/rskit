@@ -67,8 +67,8 @@ impl HttpServerBuilder {
         use tower_http::trace::DefaultOnResponse;
         use tracing::Level;
 
-        let trace_layer = TraceLayer::new_for_http().make_span_with(
-            |request: &Request<_>| {
+        let trace_layer = TraceLayer::new_for_http()
+            .make_span_with(|request: &Request<_>| {
                 // Record path only — query strings may contain sensitive tokens.
                 let path = request.uri().path();
                 tracing::info_span!(
@@ -78,8 +78,8 @@ impl HttpServerBuilder {
                     "http.target" = path,
                     status_code = tracing::field::Empty,
                 )
-            },
-        ).on_response(DefaultOnResponse::new().level(Level::INFO));
+            })
+            .on_response(DefaultOnResponse::new().level(Level::INFO));
 
         self.router = self.router.layer(trace_layer);
         self

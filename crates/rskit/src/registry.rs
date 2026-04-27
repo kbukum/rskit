@@ -1,7 +1,7 @@
 //! Generic typed registry backed by `DashMap` for concurrent access.
 
-use std::sync::Arc;
 use dashmap::DashMap;
+use std::sync::Arc;
 
 /// A concurrent, type-safe registry mapping keys to `Arc<V>`.
 pub struct TypedRegistry<K, V> {
@@ -13,7 +13,9 @@ where
     K: Eq + std::hash::Hash,
 {
     fn default() -> Self {
-        Self { inner: DashMap::new() }
+        Self {
+            inner: DashMap::new(),
+        }
     }
 }
 

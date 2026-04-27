@@ -4383,6 +4383,8 @@ name = "rskit"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "dashmap",
+ "futures",
  "rskit-auth",
  "rskit-authz",
  "rskit-bench",
@@ -4460,6 +4462,7 @@ dependencies = [
  "tokio",
  "tower 0.5.3",
  "uuid",
+ "zeroize",
 ]
 
 [[package]]
@@ -4481,6 +4484,7 @@ dependencies = [
  "async-trait",
  "criterion",
  "insta",
+ "rskit",
  "rskit-errors",
  "rskit-provider",
  "serde",
@@ -4668,6 +4672,7 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "tonic 0.14.5",
+ "tracing",
 ]
 
 [[package]]
@@ -4752,6 +4757,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "axum 0.8.9",
+ "criterion",
  "hyper 1.9.0",
  "hyper-util",
  "parking_lot",
@@ -4832,6 +4838,7 @@ dependencies = [
  "futures",
  "rskit-errors",
  "rskit-llm-providers",
+ "rskit-llm-traits",
  "rskit-tool",
  "serde",
  "serde_json",
@@ -4852,6 +4859,14 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "rskit-llm-traits"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "serde",
 ]
 
 [[package]]
@@ -5158,6 +5173,7 @@ name = "rskit-vector-store"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "parking_lot",
  "qdrant-client",
  "rskit-errors",
  "serde",

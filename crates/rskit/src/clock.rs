@@ -10,9 +10,7 @@ pub trait Clock: Send + Sync + 'static {
 
     /// Monotonic instant (for timeouts / rate-limits).
     fn elapsed_since(&self, earlier: SystemTime) -> Duration {
-        self.now()
-            .duration_since(earlier)
-            .unwrap_or(Duration::ZERO)
+        self.now().duration_since(earlier).unwrap_or(Duration::ZERO)
     }
 }
 

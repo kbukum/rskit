@@ -308,7 +308,10 @@ fn parse_subtitle_info(stream: &serde_json::Value) -> SubtitleTrackInfo {
         .unwrap_or(0)
         == 1;
 
-    SubtitleTrackInfo { format: fmt, forced }
+    SubtitleTrackInfo {
+        format: fmt,
+        forced,
+    }
 }
 
 /// Map common ffprobe format names to our canonical format IDs.

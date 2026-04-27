@@ -1,9 +1,9 @@
 //! In-memory vector store implementation for testing.
 
 use std::collections::HashMap;
-use std::sync::Mutex;
 
 use async_trait::async_trait;
+use parking_lot::Mutex as ParkingMutex;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use tracing::debug;
 
@@ -24,14 +24,14 @@ struct Collection {
 ///
 /// Intended for unit tests and prototyping — not suitable for production workloads.
 pub struct InMemoryVectorStore {
-    collections: Mutex<HashMap<String, Collection>>,
+    collections: ParkingMutex<HashMap<String, Collection>>,
 }
 
 impl InMemoryVectorStore {
     /// Create a new empty in-memory vector store.
     pub fn new() -> Self {
         Self {
-            collections: Mutex::new(HashMap::new()),
+            collections: ParkingMutex::new(HashMap::new()),
         }
     }
 }
@@ -65,10 +65,7 @@ fn matches_filter(payload: &PointPayload, filter: &SearchFilter) -> bool {
 #[async_trait]
 impl VectorStore for InMemoryVectorStore {
     async fn ensure_collection(&self, collection: &str, dimensions: usize) -> AppResult<()> {
-        let mut collections = self
-            .collections
-            .lock()
-            .map_err(|_| AppError::new(ErrorCode::Internal, "in-memory store lock poisoned"))?;
+        let mut collections = self.collections.lock();
         collections
             .entry(collection.to_string())
             .or_insert_with(|| Collection {
@@ -87,10 +84,7 @@ impl VectorStore for InMemoryVectorStore {
     ) -> AppResult<()> {
         debug!(collection, id, "InMemory: upserting vector point");
 
-        let mut collections = self
-            .collections
-            .lock()
-            .map_err(|_| AppError::new(ErrorCode::Internal, "in-memory store lock poisoned"))?;
+        let mut collections = self.collections.lock();
 
         let col = collections.get_mut(collection).ok_or_else(|| {
             AppError::new(
@@ -134,10 +128,7 @@ impl VectorStore for InMemoryVectorStore {
     ) -> AppResult<Vec<SearchResult>> {
         debug!(collection, limit, "InMemory: searching vectors");
 
-        let collections = self
-            .collections
-            .lock()
-            .map_err(|_| AppError::new(ErrorCode::Internal, "in-memory store lock poisoned"))?;
+        let collections = self.collections.lock();
 
         let col = collections.get(collection).ok_or_else(|| {
             AppError::new(
@@ -175,10 +166,7 @@ impl VectorStore for InMemoryVectorStore {
     async fn delete(&self, collection: &str, id: &str) -> AppResult<()> {
         debug!(collection, id, "InMemory: deleting vector point");
 
-        let mut collections = self
-            .collections
-            .lock()
-            .map_err(|_| AppError::new(ErrorCode::Internal, "in-memory store lock poisoned"))?;
+        let mut collections = self.collections.lock();
 
         let col = collections.get_mut(collection).ok_or_else(|| {
             AppError::new(

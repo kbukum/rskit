@@ -73,15 +73,15 @@ impl OperationKind {
     /// the variable portion of the timeout.
     pub fn default_multiplier(&self) -> f64 {
         match self {
-            Self::Probe => 0.0,           // Fixed timeout only
-            Self::StreamCopy => 0.2,      // 10 min video → ~2 min
+            Self::Probe => 0.0,            // Fixed timeout only
+            Self::StreamCopy => 0.2,       // 10 min video → ~2 min
             Self::ThumbnailExtract => 0.1, // 10 min video → ~1 min
-            Self::AudioProcess => 0.5,    // 10 min video → ~5 min
-            Self::SceneDetect => 1.5,     // 10 min video → ~15 min
-            Self::Filter => 2.0,          // 10 min video → ~20 min
-            Self::Transcode => 2.5,       // 10 min video → ~25 min
-            Self::SubtitleBurn => 3.0,    // 10 min video → ~30 min
-            Self::MlInference => 5.0,     // 10 min video → ~50 min
+            Self::AudioProcess => 0.5,     // 10 min video → ~5 min
+            Self::SceneDetect => 1.5,      // 10 min video → ~15 min
+            Self::Filter => 2.0,           // 10 min video → ~20 min
+            Self::Transcode => 2.5,        // 10 min video → ~25 min
+            Self::SubtitleBurn => 3.0,     // 10 min video → ~30 min
+            Self::MlInference => 5.0,      // 10 min video → ~50 min
         }
     }
 
@@ -219,8 +219,7 @@ mod tests {
 
     #[test]
     fn custom_multiplier_override() {
-        let calc = TimeoutCalculator::default()
-            .with_multiplier(OperationKind::Transcode, 1.0);
+        let calc = TimeoutCalculator::default().with_multiplier(OperationKind::Transcode, 1.0);
         // 60 min video with custom 1.0x multiplier
         let t = calc.calculate(Duration::from_secs(3600), OperationKind::Transcode);
         // base(120) + 3600 * 1.0 = 3720s
@@ -229,8 +228,7 @@ mod tests {
 
     #[test]
     fn max_timeout_is_respected() {
-        let calc = TimeoutCalculator::default()
-            .with_max_timeout(Duration::from_secs(600));
+        let calc = TimeoutCalculator::default().with_max_timeout(Duration::from_secs(600));
         let t = calc.calculate(Duration::from_secs(3600), OperationKind::Transcode);
         assert_eq!(t.as_secs(), 600);
     }

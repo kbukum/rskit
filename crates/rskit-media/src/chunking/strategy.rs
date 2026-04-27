@@ -114,7 +114,10 @@ impl ChunkStrategy for FixedDurationStrategy {
             let plan = ChunkPlan {
                 id: ChunkId::from_index(0),
                 index: 0,
-                range: TimeRange::new(Timestamp(0), Timestamp::from_seconds(total_duration.as_secs_f64())),
+                range: TimeRange::new(
+                    Timestamp(0),
+                    Timestamp::from_seconds(total_duration.as_secs_f64()),
+                ),
                 start_is_keyframe: true,
                 suggested_timeout: Duration::from_secs_f64(
                     total_duration.as_secs_f64() * self.timeout_multiplier,
@@ -137,7 +140,10 @@ impl ChunkStrategy for FixedDurationStrategy {
         let mut index = 0;
 
         while current_start.as_micros() < total_us {
-            let ideal_end_us = current_start.as_micros().saturating_add(chunk_us).min(total_us);
+            let ideal_end_us = current_start
+                .as_micros()
+                .saturating_add(chunk_us)
+                .min(total_us);
             let ideal_end = Timestamp(ideal_end_us);
 
             // If this is the last chunk (or close to the end), extend to the end
@@ -237,8 +243,7 @@ impl ChunkStrategy for KeyframeStrategy {
         }
 
         // Filter to keyframe-only boundaries
-        let keyframes: Vec<&ChunkBoundary> =
-            boundaries.iter().filter(|b| b.is_keyframe).collect();
+        let keyframes: Vec<&ChunkBoundary> = boundaries.iter().filter(|b| b.is_keyframe).collect();
 
         // If too few keyframes, fall back to fixed duration
         if keyframes.len() < self.target_chunks {
@@ -253,8 +258,7 @@ impl ChunkStrategy for KeyframeStrategy {
         }
 
         // Select keyframes that divide the media into roughly equal parts
-        let ideal_chunk_duration =
-            total_duration.as_secs_f64() / self.target_chunks as f64;
+        let ideal_chunk_duration = total_duration.as_secs_f64() / self.target_chunks as f64;
         let min_chunk_us = self.min_chunk_duration.as_micros() as u64;
         let total_us = total_duration.as_micros() as u64;
 
@@ -270,8 +274,8 @@ impl ChunkStrategy for KeyframeStrategy {
                 && (total_us - kf.timestamp.as_micros()) >= min_chunk_us
             {
                 split_points.push(kf.timestamp);
-                next_ideal_us = kf.timestamp.as_micros()
-                    + (ideal_chunk_duration * 1_000_000.0) as u64;
+                next_ideal_us =
+                    kf.timestamp.as_micros() + (ideal_chunk_duration * 1_000_000.0) as u64;
             }
         }
 
@@ -382,7 +386,10 @@ impl ChunkStrategy for SilenceStrategy {
         let mut index = 0;
 
         while current_start.as_micros() < total_us {
-            let ideal_end_us = current_start.as_micros().saturating_add(target_us).min(total_us);
+            let ideal_end_us = current_start
+                .as_micros()
+                .saturating_add(target_us)
+                .min(total_us);
             let remaining = total_us.saturating_sub(ideal_end_us);
 
             // If remaining is less than half a chunk, extend to end
@@ -395,7 +402,9 @@ impl ChunkStrategy for SilenceStrategy {
 
                 let best = silence_points
                     .iter()
-                    .filter(|b| b.timestamp.as_micros() >= min_us && b.timestamp.as_micros() <= max_us)
+                    .filter(|b| {
+                        b.timestamp.as_micros() >= min_us && b.timestamp.as_micros() <= max_us
+                    })
                     .min_by_key(|b| {
                         (b.timestamp.as_micros() as i64 - ideal_end_us as i64).unsigned_abs()
                     });
@@ -440,7 +449,11 @@ impl ChunkStrategy for SilenceStrategy {
 }
 
 /// Snap a timestamp to the nearest boundary within tolerance.
-fn snap_to_boundary(ideal: Timestamp, boundaries: &[ChunkBoundary], tolerance_us: u64) -> Timestamp {
+fn snap_to_boundary(
+    ideal: Timestamp,
+    boundaries: &[ChunkBoundary],
+    tolerance_us: u64,
+) -> Timestamp {
     if boundaries.is_empty() {
         return ideal;
     }
@@ -452,7 +465,9 @@ fn snap_to_boundary(ideal: Timestamp, boundaries: &[ChunkBoundary], tolerance_us
     // Prefer keyframe boundaries, then closest
     let best_keyframe = boundaries
         .iter()
-        .filter(|b| b.is_keyframe && b.timestamp.as_micros() >= min_us && b.timestamp.as_micros() <= max_us)
+        .filter(|b| {
+            b.is_keyframe && b.timestamp.as_micros() >= min_us && b.timestamp.as_micros() <= max_us
+        })
         .min_by_key(|b| (b.timestamp.as_micros() as i64 - ideal_us as i64).unsigned_abs());
 
     if let Some(kf) = best_keyframe {
@@ -554,24 +569,59 @@ mod tests {
 
         // Create silence points at ~10 min intervals with some jitter
         let silence_points = vec![
-            ChunkBoundary { timestamp: Timestamp::from_seconds(590.0), is_keyframe: false, quality: 0.8 },
-            ChunkBoundary { timestamp: Timestamp::from_seconds(1210.0), is_keyframe: false, quality: 0.9 },
-            ChunkBoundary { timestamp: Timestamp::from_seconds(1800.0), is_keyframe: false, quality: 0.7 },
-            ChunkBoundary { timestamp: Timestamp::from_seconds(2405.0), is_keyframe: false, quality: 0.85 },
-            ChunkBoundary { timestamp: Timestamp::from_seconds(3010.0), is_keyframe: false, quality: 0.9 },
+            ChunkBoundary {
+                timestamp: Timestamp::from_seconds(590.0),
+                is_keyframe: false,
+                quality: 0.8,
+            },
+            ChunkBoundary {
+                timestamp: Timestamp::from_seconds(1210.0),
+                is_keyframe: false,
+                quality: 0.9,
+            },
+            ChunkBoundary {
+                timestamp: Timestamp::from_seconds(1800.0),
+                is_keyframe: false,
+                quality: 0.7,
+            },
+            ChunkBoundary {
+                timestamp: Timestamp::from_seconds(2405.0),
+                is_keyframe: false,
+                quality: 0.85,
+            },
+            ChunkBoundary {
+                timestamp: Timestamp::from_seconds(3010.0),
+                is_keyframe: false,
+                quality: 0.9,
+            },
         ];
 
         let result = strategy.plan(&metadata, &silence_points).unwrap();
         assert!(result.chunk_count() >= 5);
-        assert!(matches!(result.reassembly, ReassemblyPlan::MergeText { .. }));
+        assert!(matches!(
+            result.reassembly,
+            ReassemblyPlan::MergeText { .. }
+        ));
     }
 
     #[test]
     fn snap_to_boundary_prefers_keyframe() {
         let boundaries = vec![
-            ChunkBoundary { timestamp: Timestamp::from_seconds(9.5), is_keyframe: false, quality: 0.8 },
-            ChunkBoundary { timestamp: Timestamp::from_seconds(10.5), is_keyframe: true, quality: 1.0 },
-            ChunkBoundary { timestamp: Timestamp::from_seconds(11.0), is_keyframe: false, quality: 0.5 },
+            ChunkBoundary {
+                timestamp: Timestamp::from_seconds(9.5),
+                is_keyframe: false,
+                quality: 0.8,
+            },
+            ChunkBoundary {
+                timestamp: Timestamp::from_seconds(10.5),
+                is_keyframe: true,
+                quality: 1.0,
+            },
+            ChunkBoundary {
+                timestamp: Timestamp::from_seconds(11.0),
+                is_keyframe: false,
+                quality: 0.5,
+            },
         ];
         let result = snap_to_boundary(
             Timestamp::from_seconds(10.0),
