@@ -210,6 +210,25 @@ impl AppError {
         Self::internal(err)
     }
 
+    /// Add human-readable context to this error.
+    ///
+    /// Prepends `msg` to the existing error message so call-site context is
+    /// preserved in logs and error responses without losing the original cause.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use rskit_errors::{AppError, ErrorCode};
+    /// let err = AppError::new(ErrorCode::NotFound, "user not found")
+    ///     .context("load profile");
+    /// assert_eq!(err.message, "load profile: user not found");
+    /// ```
+    pub fn context(mut self, msg: impl Into<String>) -> Self {
+        let new_msg = format!("{}: {}", msg.into(), self.message);
+        self.message = new_msg;
+        self
+    }
+
     // ── Query helpers ───────────────────────────────────────────────────
 
     /// Returns `true` if the operation that produced this error is safe to retry.

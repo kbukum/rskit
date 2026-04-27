@@ -16,7 +16,7 @@ pub use ratelimit::{
     HttpRateLimitLayer, HttpRateLimitService, HttpRateLimiter, RateLimitConfig, ip_based_key,
     user_based_key,
 };
-pub use server::{HttpServer, HttpServerBuilder, health_router};
+pub use server::{HttpServer, HttpServerBuilder, health_router, healthz_router};
 pub use tenant::{
     TenantConfig, TenantId, set_tenant_in_extensions, tenant_from_extensions, tenant_middleware,
 };

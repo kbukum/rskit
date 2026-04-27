@@ -1,3 +1,8 @@
+//! LLM provider abstractions for OpenAI, Anthropic, and other backends.
+//!
+//! Defines message types, request/response structs, and streaming helpers that
+//! are shared across LLM provider implementations.
+
 mod traits;
 
 /// LLM message types, request/response structs, and helper constructors.

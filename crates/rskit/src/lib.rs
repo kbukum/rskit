@@ -40,6 +40,11 @@
 
 #![warn(missing_docs)]
 
+// ── Supervised task helper ────────────────────────────────────────────────────
+
+pub mod task;
+pub use task::{SupervisedTask, supervise};
+
 // ── Always-on sub-crate facades ──────────────────────────────────────────────
 
 /// Error types, `ErrorCode`, `AppError`, `AppResult`.

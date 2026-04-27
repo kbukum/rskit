@@ -20,9 +20,6 @@ struct TracingMiddleware<T> {
     _marker: std::marker::PhantomData<T>,
 }
 
-// Safety: PhantomData is Send + Sync when T is.
-unsafe impl<T: Send> Send for TracingMiddleware<T> {}
-unsafe impl<T: Sync> Sync for TracingMiddleware<T> {}
 
 impl<T: Send + Sync + 'static> HandlerMiddleware<T> for TracingMiddleware<T> {
     fn wrap(&self, next: Arc<dyn MessageHandler<T>>) -> Arc<dyn MessageHandler<T>> {

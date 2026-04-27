@@ -36,6 +36,14 @@ impl Drop for TracerGuard {
 
 /// Initialise an OpenTelemetry tracer with an OTLP exporter and install
 /// a `tracing` layer that bridges spans into OpenTelemetry.
+///
+/// # `RUST_LOG` interaction
+///
+/// If a `RUST_LOG` environment variable is set at runtime it will be respected
+/// by the installed `tracing-subscriber` filter.  Note that this can override
+/// the sampling and verbosity configured via [`TracingConfig`].  Operators
+/// should be aware that setting `RUST_LOG` in production may increase span
+/// volume and override the intended sample rate.
 pub fn init_tracer(cfg: &TracingConfig) -> AppResult<TracerGuard> {
     use opentelemetry::trace::TracerProvider as _;
     use opentelemetry::{InstrumentationScope, KeyValue};
