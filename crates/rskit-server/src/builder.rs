@@ -135,6 +135,11 @@ impl GrpcServerBuilder {
             let s = wrapped_svc.clone();
             let desc = descriptor.clone();
             Box::pin(async move {
+                // FIXME(#3): TlsConfig is parsed but not wired into Server::builder().
+                // Until fixed, gRPC connections are plaintext regardless of config.
+                // To fix: load cert/key from GrpcServerConfig::tls, call
+                //   builder.tls_config(server_tls_config)?
+                // before adding services.
                 let mut builder = Server::builder();
                 let router = builder.add_service(s);
 

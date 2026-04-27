@@ -13,12 +13,15 @@ readme = "README.md"
 categories = ["authentication"]
 keywords   = ["auth", "jwt", "oidc", "password"]
 
+[lints]
+workspace = true
+
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-rskit-errors  = { path = "../rskit-errors" }
+rskit-errors  = { version = "0.1.0", path = "../rskit-errors" }
 serde         = { workspace = true }
 serde_json    = { workspace = true }
 async-trait   = { workspace = true }
@@ -35,6 +38,7 @@ hex           = "0.4"
 thiserror     = { workspace = true }
 tower         = "0.5"
 http          = "1.0"
+zeroize       = { workspace = true }
 
 [dev-dependencies]
 tokio         = { workspace = true, features = ["full", "macros", "rt-multi-thread"] }
