@@ -66,9 +66,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **rskit-messaging**: Enhanced `InMemoryBroker` with message history, topic tracking, and reset
 - **rskit-messaging**: Test assertions — `assert_published()`, `assert_published_n()`, `assert_no_messages()`, `wait_for_message()`
 
-## [0.1.0] - 2024-01-01
+## [0.1.0] - 2026-04-26
 
 ### Added
+
+- Initial release of rskit workspace (49 crates)
+- Core async runtime utilities (`rskit`)
+- HTTP server with axum (`rskit-http`)
+- Authentication: JWT, API keys, password hashing (`rskit-auth`)
+- Configuration management (`rskit-config`)
+- Structured logging with OpenTelemetry (`rskit-logging`, `rskit-observability`)
+- Service mesh: discovery, gRPC, messaging (`rskit-discovery`, `rskit-messaging`)
+- Database, cache, MQ adapters (`rskit-database`, `rskit-cache`, `rskit-messaging`)
+- LLM provider integrations (`rskit-llm`, `rskit-llm-providers`)
+- Media processing (`rskit-media`, `rskit-media-image`, `rskit-media-ffmpeg`)
+- CLI tooling (`rskit-cli`)
+- Comprehensive test utilities (`rskit-testutil`)
+
+#### Detailed crate additions
 
 #### `rskit-errors`
 - `ErrorCode` enum with 17 variants covering auth, input, resource, and infrastructure errors
