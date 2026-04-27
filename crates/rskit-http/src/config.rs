@@ -73,9 +73,16 @@ impl HttpServerConfig {
 }
 
 /// Cross-origin resource sharing configuration.
+///
+/// # Security
+/// WARNING: Wildcard CORS (`*` in `allowed_origins`) is only safe in development.
+/// Production deployments must use an explicit origin allowlist.
+/// See RS-ME-11 / issue #72.
 #[derive(Debug, Clone, Deserialize)]
 pub struct CorsConfig {
     /// Allowed origin patterns.
+    ///
+    /// Do **not** use `["*"]` in production — enumerate explicit origins instead.
     pub allowed_origins: Vec<String>,
     /// Allowed HTTP methods.
     pub allowed_methods: Vec<String>,

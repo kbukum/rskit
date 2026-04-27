@@ -9,6 +9,11 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 
 /// Async HTTP client with auth, headers, and error handling.
+///
+/// # Security (RS-ME-16 / #72)
+/// SECURITY(#72): TLS certificate verification must never be disabled in production.
+/// `danger_accept_invalid_certs` is only available behind the `danger-tls` feature flag
+/// and must not be enabled in release builds.
 pub struct HttpClient {
     client: Client,
     config: HttpClientConfig,

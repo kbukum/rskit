@@ -25,6 +25,15 @@ Do **not** open a public GitHub issue for security reports.
 - The affected version(s) and `rustc` toolchain.
 - Any suggested mitigations or fixes.
 
+### Response SLA
+
+| Step | Target |
+|------|--------|
+| Acknowledgment | 48 hours |
+| Triage & severity | 5 business days |
+| Fix available | 30 calendar days (critical), 90 days (high/medium) |
+| Public disclosure | 90 days after report (coordinated with reporter) |
+
 ### What to Expect
 
 - **Acknowledgment** within 48 hours of your report.

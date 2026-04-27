@@ -8,6 +8,11 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
 
+/// Guards against registering the global tracing subscriber more than once.
+/// `try_init()` returns an error on the second call; this lock makes `init_tracer`
+/// fully idempotent — subsequent calls are silently skipped.
+static SUBSCRIBER_INIT: std::sync::OnceLock<()> = std::sync::OnceLock::new();
+
 /// Configuration for an OTLP trace exporter.
 #[derive(Debug, Clone, Deserialize)]
 pub struct TracingConfig {
@@ -83,10 +88,16 @@ pub fn init_tracer(cfg: &TracingConfig) -> AppResult<TracerGuard> {
     let tracer = provider.tracer_with_scope(scope);
     let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
 
-    tracing_subscriber::registry()
-        .with(otel_layer)
-        .try_init()
-        .map_err(|e| AppError::new(ErrorCode::Internal, format!("subscriber init: {e}")))?;
+    // IDEMPOTENCY(#28): only install the global subscriber once; subsequent
+    // calls (e.g. in tests or hot-reload scenarios) are silently skipped.
+    SUBSCRIBER_INIT.get_or_init(|| {
+        if let Err(e) = tracing_subscriber::registry()
+            .with(otel_layer)
+            .try_init()
+        {
+            tracing::warn!(error = %e, "tracing subscriber already initialised — skipping");
+        }
+    });
 
     Ok(TracerGuard {
         _provider: provider,
