@@ -91,13 +91,14 @@ impl Registry {
                 async move {
                     tracing::debug!(component = c.name(), "starting component (concurrent)");
                     tokio::select! {
+                        biased;
+                        _ = cancel.cancelled() => {
+                            tracing::warn!(component = c.name(), "startup cancelled");
+                            Ok(())
+                        }
                         r = c.start() => {
                             r?;
                             tracing::debug!(component = c.name(), "component started");
-                            Ok(())
-                        }
-                        _ = cancel.cancelled() => {
-                            tracing::warn!(component = c.name(), "startup cancelled");
                             Ok(())
                         }
                     }

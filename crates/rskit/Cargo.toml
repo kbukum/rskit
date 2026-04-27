@@ -18,6 +18,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
+futures          = { workspace = true }
 # Always-on core crates
 rskit-errors     = { path = "../rskit-errors" }
 rskit-config     = { path = "../rskit-config" }

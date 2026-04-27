@@ -87,6 +87,9 @@ fn build_cors_layer(cfg: &CorsConfig) -> CorsLayer {
 pub struct HttpServer {
     config: Arc<HttpServerConfig>,
     cancel: CancellationToken,
+    // TODO(#4): Replace Mutex<Option<Router>> with HttpServer<Stopped|Bound|Running>
+    // typestate to make double-start a compile-time error rather than a runtime one.
+    // See issue #4 for the full typestate design.
     router: Arc<tokio::sync::Mutex<Option<Router>>>,
 }
 
@@ -117,14 +120,20 @@ impl Component for HttpServer {
 
         let cancel = self.cancel.clone();
         tokio::spawn(async move {
-            let listener = tokio::net::TcpListener::bind(addr)
-                .await
-                .expect("bind failed");
+            let listener = match tokio::net::TcpListener::bind(addr).await {
+                Ok(l) => l,
+                Err(e) => {
+                    tracing::error!(error = ?e, %addr, "HTTP server bind failed");
+                    return;
+                }
+            };
             tracing::info!(%addr, "HTTP server listening");
-            axum::serve(listener, router)
+            if let Err(e) = axum::serve(listener, router)
                 .with_graceful_shutdown(async move { cancel.cancelled().await })
                 .await
-                .expect("HTTP server error");
+            {
+                tracing::error!(error = ?e, "HTTP server error");
+            }
         });
 
         Ok(())
