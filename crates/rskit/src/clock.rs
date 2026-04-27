@@ -3,6 +3,7 @@
 use std::time::{Duration, SystemTime};
 
 #[cfg(any(test, feature = "test-util"))]
+#[allow(clippy::disallowed_types)]
 use std::sync::{Arc, Mutex};
 
 /// Abstraction over wall-clock time for testability.

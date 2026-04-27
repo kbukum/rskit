@@ -162,10 +162,10 @@ impl FfmpegCommand {
     }
 
     /// Kill an FFmpeg child process and its process group.
-    fn kill_process(child: &mut tokio::process::Child, pid: Option<u32>) {
+    fn kill_process(child: &mut tokio::process::Child, _pid: Option<u32>) {
         // Try graceful SIGTERM first on Unix
         #[cfg(unix)]
-        if let Some(pid) = pid {
+        if let Some(pid) = _pid {
             unsafe {
                 // Send SIGTERM to the process group
                 libc::kill(-(pid as i32), libc::SIGTERM);

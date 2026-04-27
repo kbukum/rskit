@@ -4,6 +4,7 @@ use std::io::Write;
 use validator::Validate;
 
 // Serialise env-mutating tests — parallel tests share the same process env.
+#[allow(clippy::disallowed_types)]
 static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 // ── Helpers ─────────────────────────────────────────────────────────

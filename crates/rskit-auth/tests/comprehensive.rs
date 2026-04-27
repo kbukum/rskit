@@ -1,3 +1,5 @@
+#![allow(missing_docs, clippy::missing_const_for_fn)]
+
 use std::time::Duration;
 
 use rskit_auth::{
@@ -264,7 +266,7 @@ fn password_concurrent_hashing() {
         .map(|i| {
             thread::spawn(move || {
                 let h = PasswordHasher::default();
-                let pw = format!("password-{}", i);
+                let pw = format!("password-{i}");
                 let hash = h.hash(&pw).unwrap();
                 assert!(h.verify(&pw, &hash).unwrap());
             })

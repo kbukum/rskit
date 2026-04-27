@@ -1,3 +1,4 @@
+#[allow(clippy::disallowed_types)]
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
