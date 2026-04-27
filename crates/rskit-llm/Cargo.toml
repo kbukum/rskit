@@ -18,8 +18,9 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-rskit-errors = { path = "../rskit-errors" }
-rskit-tool   = { path = "../rskit-tool" }
+rskit-errors      = { path = "../rskit-errors" }
+rskit-tool        = { path = "../rskit-tool" }
+rskit-llm-traits  = { workspace = true }
 serde        = { workspace = true }
 serde_json   = { workspace = true }
 async-trait  = { workspace = true }
