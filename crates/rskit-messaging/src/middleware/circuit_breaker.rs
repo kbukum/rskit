@@ -55,9 +55,6 @@ struct CircuitBreakerMiddleware<T> {
     _marker: std::marker::PhantomData<T>,
 }
 
-// Safety: PhantomData is Send + Sync when T is, and CircuitBreaker is Send + Sync.
-unsafe impl<T: Send> Send for CircuitBreakerMiddleware<T> {}
-unsafe impl<T: Sync> Sync for CircuitBreakerMiddleware<T> {}
 
 impl<T: Send + Sync + 'static> HandlerMiddleware<T> for CircuitBreakerMiddleware<T> {
     fn wrap(&self, next: Arc<dyn MessageHandler<T>>) -> Arc<dyn MessageHandler<T>> {

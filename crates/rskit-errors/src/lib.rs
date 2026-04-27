@@ -1,4 +1,19 @@
 //! Structured application error types with HTTP and gRPC status mapping.
+//!
+//! # Examples
+//!
+//! ```rust
+//! use rskit_errors::{AppError, AppResult, ErrorCode};
+//!
+//! fn find_user(id: &str) -> AppResult<String> {
+//!     Err(AppError::not_found("user", Some(id))
+//!         .context("find_user"))
+//! }
+//!
+//! let err = find_user("abc").unwrap_err();
+//! assert_eq!(err.code, ErrorCode::NotFound);
+//! assert!(err.message.contains("find_user"));
+//! ```
 
 #![warn(missing_docs)]
 

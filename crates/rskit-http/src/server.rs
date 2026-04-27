@@ -87,6 +87,9 @@ fn build_cors_layer(cfg: &CorsConfig) -> CorsLayer {
 pub struct HttpServer {
     config: Arc<HttpServerConfig>,
     cancel: CancellationToken,
+    // TODO(#4): Replace Mutex<Option<Router>> with HttpServer<Stopped|Bound|Running>
+    // typestate to make double-start a compile-time error rather than a runtime one.
+    // See issue #4 for the full typestate design.
     router: Arc<tokio::sync::Mutex<Option<Router>>>,
 }
 
@@ -117,14 +120,20 @@ impl Component for HttpServer {
 
         let cancel = self.cancel.clone();
         tokio::spawn(async move {
-            let listener = tokio::net::TcpListener::bind(addr)
-                .await
-                .expect("bind failed");
+            let listener = match tokio::net::TcpListener::bind(addr).await {
+                Ok(l) => l,
+                Err(e) => {
+                    tracing::error!(error = ?e, %addr, "HTTP server bind failed");
+                    return;
+                }
+            };
             tracing::info!(%addr, "HTTP server listening");
-            axum::serve(listener, router)
+            if let Err(e) = axum::serve(listener, router)
                 .with_graceful_shutdown(async move { cancel.cancelled().await })
                 .await
-                .expect("HTTP server error");
+            {
+                tracing::error!(error = ?e, "HTTP server error");
+            }
         });
 
         Ok(())
@@ -163,4 +172,38 @@ pub fn health_router(registry: Arc<Registry>) -> Router {
             }
         }),
     )
+}
+
+/// Returns a router with a `/healthz` liveness probe endpoint.
+///
+/// Unlike [`health_router`], this endpoint requires no registry and always
+/// returns `200 OK` as long as the process is running — suitable for
+/// Kubernetes liveness probes.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let app = HttpServerBuilder::new(config, cancel)
+///     .with_router(healthz_router())
+///     .build();
+/// ```
+pub fn healthz_router() -> Router {
+    use axum::{Json, routing::get};
+    use serde::Serialize;
+
+    #[derive(Serialize)]
+    struct LivenessResponse {
+        status: &'static str,
+        version: &'static str,
+    }
+
+    #[tracing::instrument]
+    async fn healthz_handler() -> Json<LivenessResponse> {
+        Json(LivenessResponse {
+            status: "ok",
+            version: env!("CARGO_PKG_VERSION"),
+        })
+    }
+
+    Router::new().route("/healthz", get(healthz_handler))
 }
