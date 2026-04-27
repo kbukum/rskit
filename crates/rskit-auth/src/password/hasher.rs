@@ -6,6 +6,7 @@ use rskit_errors::{AppError, AppResult};
 
 /// Supported password hashing algorithms.
 #[derive(Debug, Clone, Default)]
+#[non_exhaustive]
 pub enum HashAlgorithm {
     /// Argon2id — recommended default.
     #[default]

@@ -34,13 +34,13 @@ pub fn register_provider(name: impl Into<String>, factory: ProviderFactory) {
     tracing::debug!(provider = %name, "Registered discovery provider factory");
     factories()
         .lock()
-        .expect("factory lock poisoned")
+        .unwrap_or_else(|e| e.into_inner())
         .insert(name, factory);
 }
 
 /// Create a `(Registry, Discovery)` pair for the provider specified in `config.provider`.
 pub fn create_provider(config: &DiscoveryConfig) -> AppResult<ProviderPair> {
-    let map = factories().lock().expect("factory lock poisoned");
+    let map = factories().lock().unwrap_or_else(|e| e.into_inner());
     let factory = map.get(&config.provider).ok_or_else(|| {
         AppError::new(
             ErrorCode::InvalidInput,

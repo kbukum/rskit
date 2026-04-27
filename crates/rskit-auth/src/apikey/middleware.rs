@@ -96,7 +96,8 @@ where
                 return inner.call(req).await;
             }
 
-            let plain_key = match raw_key.unwrap().to_str() {
+            // SAFETY: checked is_none() above, so raw_key is guaranteed Some here.
+            let plain_key = match raw_key.expect("checked above").to_str() {
                 Ok(k) => k,
                 Err(_) => {
                     let mut res = Response::new(ResBody::default());

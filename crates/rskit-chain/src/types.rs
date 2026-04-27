@@ -4,6 +4,7 @@ use std::time::Duration;
 /// Status of a single step in a chain.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum StepStatus {
     /// Step has not started yet.
     Pending,

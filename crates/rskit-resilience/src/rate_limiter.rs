@@ -27,8 +27,8 @@ impl RateLimiter {
     /// Create a rate limiter that allows `per_second` requests/second with a
     /// burst capacity of `burst`.
     pub fn new(name: impl Into<String>, per_second: u32, burst: u32) -> Self {
-        let per_sec = NonZeroU32::new(per_second.max(1)).expect("per_second must be > 0");
-        let burst_size = NonZeroU32::new(burst.max(1)).expect("burst must be > 0");
+        let per_sec = NonZeroU32::new(per_second.max(1)).expect("per_second.max(1) is always >= 1; NonZeroU32::new cannot return None here");
+        let burst_size = NonZeroU32::new(burst.max(1)).expect("burst.max(1) is always >= 1; NonZeroU32::new cannot return None here");
         let quota = Quota::per_second(per_sec).allow_burst(burst_size);
         Self {
             inner: Arc::new(GovRateLimiter::direct(quota)),

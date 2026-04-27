@@ -5,6 +5,7 @@ use std::fmt;
 
 /// Authentication method for HTTP requests.
 #[derive(Debug, Clone, Default)]
+#[non_exhaustive]
 pub enum Auth {
     /// Bearer token authentication: `Authorization: Bearer <token>`
     Bearer(String),
