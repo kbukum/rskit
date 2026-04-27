@@ -45,6 +45,11 @@
 pub mod task;
 pub use task::{SupervisedTask, supervise};
 
+// ── Generic typed registry ────────────────────────────────────────────────────
+
+pub mod registry;
+pub use registry::TypedRegistry;
+
 // ── Always-on sub-crate facades ──────────────────────────────────────────────
 
 /// Error types, `ErrorCode`, `AppError`, `AppResult`.

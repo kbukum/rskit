@@ -6,3 +6,17 @@ msrv = "1.85"
 
 # Allow large error types in Results (common with AppError)
 too-large-for-stack = 512
+
+# Enforce consistent cognitive complexity
+cognitive-complexity-threshold = 30
+
+# Warn on large futures (common async performance issue)
+future-size-threshold = 16384
+
+[[disallowed-methods]]
+path = "std::process::exit"
+reason = "Use structured shutdown (CancellationToken) instead of process::exit"
+
+[[disallowed-types]]
+path = "std::sync::Mutex"
+reason = "Use parking_lot::Mutex for better performance and poisoning behaviour"

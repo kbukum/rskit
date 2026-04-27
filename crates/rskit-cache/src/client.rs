@@ -60,6 +60,9 @@ impl RedisClient {
 
     /// Returns a clone of the underlying connection manager.
     fn conn(&self) -> redis::aio::ConnectionManager {
+        // NOTE(#71 RS-ME-32): ConnectionManager uses Arc internally; cloning here is
+        // cheap but avoid calling this inside tight loops — pre-clone outside the loop
+        // or consider holding a Weak ref if you don't need to keep the manager alive.
         self.manager.clone()
     }
 
