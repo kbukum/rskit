@@ -153,7 +153,7 @@ sqlx         = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "po
 redis        = { version = "1.2", features = ["tokio-comp", "connection-manager"] }
 
 # Messaging (Phase 3)
-rdkafka      = { version = "0.37", features = ["tokio"] }
+rdkafka      = { version = "0.39", features = ["tokio"] }
 
 # Observability (Phase 4)
 opentelemetry            = "0.27"
