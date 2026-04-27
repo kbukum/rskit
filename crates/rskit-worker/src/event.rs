@@ -3,6 +3,7 @@ use uuid::Uuid;
 
 /// Kind of event emitted by a worker during task execution.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum EventKind {
     /// Periodic progress update with completion percentage.
     Progress,

@@ -28,6 +28,7 @@ pub struct Request {
 
 /// Request body.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum RequestBody {
     /// JSON body (serialized via serde_json)
     Json(serde_json::Value),

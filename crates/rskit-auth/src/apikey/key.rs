@@ -104,6 +104,7 @@ pub fn compare_hash(plain_key: &str, stored_hash: &str) -> bool {
 
 /// Error returned when an API key fails validation.
 #[derive(Debug, Clone, thiserror::Error)]
+#[non_exhaustive]
 pub enum KeyValidationError {
     /// The key has been explicitly revoked.
     #[error("key is revoked")]

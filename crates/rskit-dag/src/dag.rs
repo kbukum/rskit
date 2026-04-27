@@ -201,7 +201,9 @@ impl Dag {
         // Launch all root nodes (in-degree == 0)
         for (id, deg) in &remaining_in_degree {
             if *deg == 0 {
-                let node = Arc::clone(self.nodes.get(id).unwrap());
+                let node = Arc::clone(self.nodes.get(id).ok_or_else(|| {
+                    AppError::new(ErrorCode::Internal, format!("DAG node '{id}' not found in node map"))
+                })?);
                 let cancel = cancel.clone();
                 let outputs = Arc::clone(&outputs);
                 let node_id = id.clone();
@@ -250,7 +252,9 @@ impl Dag {
                     if let Some(deg) = remaining_in_degree.get_mut(dep_id) {
                         *deg -= 1;
                         if *deg == 0 {
-                            let node = Arc::clone(self.nodes.get(dep_id).unwrap());
+                            let node = Arc::clone(self.nodes.get(dep_id).ok_or_else(|| {
+                                AppError::new(ErrorCode::Internal, format!("DAG node '{dep_id}' not found in node map"))
+                            })?);
                             let cancel = cancel.clone();
                             let outputs = Arc::clone(&outputs);
                             let reverse =

@@ -5,6 +5,7 @@ use serde::Deserialize;
 /// JWT signing algorithm.
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(rename_all = "UPPERCASE")]
+#[non_exhaustive]
 pub enum Algorithm {
     /// HMAC-SHA256 (default).
     #[default]

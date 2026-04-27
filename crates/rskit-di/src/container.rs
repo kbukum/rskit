@@ -115,7 +115,9 @@ impl Container {
                     } else {
                         let v = factory()?;
                         let _ = instance.set(v.clone());
-                        instance.get().unwrap().clone()
+                        // SAFETY: we just called `set(v.clone())` above; the OnceLock
+                        // is now initialised so `get()` is guaranteed to return Some.
+                        instance.get().expect("OnceLock was just set above; qed").clone()
                     }
                 }
             }

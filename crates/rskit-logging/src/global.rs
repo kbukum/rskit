@@ -51,13 +51,13 @@ pub fn init_global(cfg: &LoggingConfig) -> GlobalLoggingGuard {
                 .with_writer(make_writer);
             let subscriber = tracing_subscriber::registry().with(filter).with(layer);
             tracing::subscriber::set_global_default(subscriber)
-                .expect("global subscriber already set");
+                .expect("failed to install global tracing subscriber; another subscriber may already be set");
         }
         LogFormat::Console => {
             let layer = fmt::layer().pretty().with_writer(make_writer);
             let subscriber = tracing_subscriber::registry().with(filter).with(layer);
             tracing::subscriber::set_global_default(subscriber)
-                .expect("global subscriber already set");
+                .expect("failed to install global tracing subscriber; another subscriber may already be set");
         }
     }
 
@@ -102,7 +102,7 @@ pub fn init_global_with_options(
                 .with(sampling_layer)
                 .with(layer);
             tracing::subscriber::set_global_default(subscriber)
-                .expect("global subscriber already set");
+                .expect("failed to install global tracing subscriber; another subscriber may already be set");
         }
         LogFormat::Console => {
             let layer = fmt::layer().pretty().with_writer(make_writer);
@@ -111,7 +111,7 @@ pub fn init_global_with_options(
                 .with(sampling_layer)
                 .with(layer);
             tracing::subscriber::set_global_default(subscriber)
-                .expect("global subscriber already set");
+                .expect("failed to install global tracing subscriber; another subscriber may already be set");
         }
     }
 
@@ -154,13 +154,13 @@ pub fn init_global_with_masking(
                 .with_writer(writer);
             let subscriber = tracing_subscriber::registry().with(filter).with(layer);
             tracing::subscriber::set_global_default(subscriber)
-                .expect("global subscriber already set");
+                .expect("failed to install global tracing subscriber; another subscriber may already be set");
         }
         LogFormat::Console => {
             let layer = fmt::layer().pretty().with_writer(writer);
             let subscriber = tracing_subscriber::registry().with(filter).with(layer);
             tracing::subscriber::set_global_default(subscriber)
-                .expect("global subscriber already set");
+                .expect("failed to install global tracing subscriber; another subscriber may already be set");
         }
     }
 

@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 
 /// Why the agent loop terminated.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum StopReason {
     /// The model finished its response without requesting any tool calls.
     EndTurn,
@@ -41,6 +42,7 @@ pub struct AgentResult {
 // ── AgentEvent ──────────────────────────────────────────────────────────────
 
 /// Events emitted during an agent run (for streaming / observability).
+#[non_exhaustive]
 pub enum AgentEvent {
     /// A new turn is starting.
     TurnStart { turn: u32 },

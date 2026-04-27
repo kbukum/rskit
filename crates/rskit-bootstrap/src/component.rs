@@ -64,7 +64,8 @@ impl<F: Fn() -> Arc<dyn Component> + Send + Sync> Component for LazyComponent<F>
             if guard.is_none() {
                 *guard = Some((self.factory)());
             }
-            guard.as_ref().unwrap().clone()
+            // SAFETY: set to Some in the branch above; always Some at this point.
+            guard.as_ref().expect("just initialized above; qed").clone()
         };
         component.start().await
     }

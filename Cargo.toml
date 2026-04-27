@@ -219,3 +219,12 @@ strip         = "symbols"
 
 [profile.dev]
 debug = true
+
+[profile.dev.package."*"]
+opt-level = 1
+
+# Toolchain hygiene: see issues #85 (RS-LO-16 through RS-LO-20) for remaining low findings
+
+[profile.bench]
+lto           = "thin"
+codegen-units = 1

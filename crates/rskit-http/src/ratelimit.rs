@@ -327,16 +327,18 @@ where
 
             // Attach rate-limit headers to the successful response.
             let (mut parts, body) = resp.into_parts();
+            // SAFETY: u64::to_string() produces ASCII digits, which are always
+            // valid HeaderValue bytes; parse() cannot fail for this input.
             parts
                 .headers
-                .insert("x-ratelimit-limit", limit.to_string().parse().unwrap());
+                .insert("x-ratelimit-limit", limit.to_string().parse().expect("u64 string is valid header value"));
             parts.headers.insert(
                 "x-ratelimit-remaining",
-                remaining.to_string().parse().unwrap(),
+                remaining.to_string().parse().expect("u64 string is valid header value"),
             );
             parts
                 .headers
-                .insert("x-ratelimit-reset", reset_unix.to_string().parse().unwrap());
+                .insert("x-ratelimit-reset", reset_unix.to_string().parse().expect("u64 string is valid header value"));
             Ok(Response::from_parts(parts, body))
         })
     }

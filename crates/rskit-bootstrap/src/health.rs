@@ -1,6 +1,7 @@
 /// Liveness state of a component.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum HealthStatus {
     /// Component is operating normally.
     Healthy,
