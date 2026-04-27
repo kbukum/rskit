@@ -22,7 +22,7 @@ pub struct PasswordHasher {
 
 impl PasswordHasher {
     /// Create a new [`PasswordHasher`] with the given algorithm.
-    pub fn new(algorithm: HashAlgorithm) -> Self {
+    pub const fn new(algorithm: HashAlgorithm) -> Self {
         Self { algorithm }
     }
 

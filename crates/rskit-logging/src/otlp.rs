@@ -23,7 +23,7 @@ use opentelemetry::KeyValue;
 use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::Resource;
-use opentelemetry_sdk::logs::LoggerProvider;
+use opentelemetry_sdk::logs::{SdkLogger, SdkLoggerProvider};
 use tracing::Subscriber;
 use tracing_subscriber::registry::LookupSpan;
 
@@ -58,7 +58,7 @@ impl Default for OtlpConfig {
 
 // ── Provider ────────────────────────────────────────────────────────────────
 
-/// Manages the OpenTelemetry [`LoggerProvider`] for OTLP export.
+/// Manages the OpenTelemetry [`SdkLoggerProvider`] for OTLP export.
 ///
 /// Create via [`OtlpProvider::new`], then call [`OtlpProvider::layer`] to
 /// obtain a [`tracing_subscriber::Layer`] that can be composed into the
@@ -67,7 +67,7 @@ impl Default for OtlpConfig {
 /// The provider **must** be shut down gracefully via [`OtlpProvider::shutdown`]
 /// (or by dropping the [`crate::LoggingGuard`]) to flush pending log records.
 pub struct OtlpProvider {
-    provider: LoggerProvider,
+    provider: SdkLoggerProvider,
 }
 
 impl OtlpProvider {
@@ -84,17 +84,19 @@ impl OtlpProvider {
             return Ok(None);
         }
 
-        let resource = Resource::new(vec![
-            KeyValue::new("service.name", service_name.to_string()),
-            KeyValue::new("deployment.environment", environment.to_string()),
-            KeyValue::new("service.version", version.to_string()),
-        ]);
+        let resource = Resource::builder_empty()
+            .with_attributes([
+                KeyValue::new("service.name", service_name.to_string()),
+                KeyValue::new("deployment.environment", environment.to_string()),
+                KeyValue::new("service.version", version.to_string()),
+            ])
+            .build();
 
         let exporter = build_exporter(cfg)?;
 
-        let provider = LoggerProvider::builder()
+        let provider = SdkLoggerProvider::builder()
             .with_resource(resource)
-            .with_batch_exporter(exporter, opentelemetry_sdk::runtime::Tokio)
+            .with_batch_exporter(exporter)
             .build();
 
         Ok(Some(Self { provider }))
@@ -105,9 +107,7 @@ impl OtlpProvider {
     ///
     /// The returned layer converts every [`tracing`] event into an
     /// OpenTelemetry log record and forwards it to the OTLP exporter.
-    pub fn layer<S>(
-        &self,
-    ) -> OpenTelemetryTracingBridge<LoggerProvider, opentelemetry_sdk::logs::Logger>
+    pub fn layer<S>(&self) -> OpenTelemetryTracingBridge<SdkLoggerProvider, SdkLogger>
     where
         S: Subscriber + for<'a> LookupSpan<'a>,
     {

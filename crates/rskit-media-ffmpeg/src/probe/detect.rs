@@ -162,9 +162,9 @@ fn parse_keyframes(json: &serde_json::Value) -> Vec<KeyframeInfo> {
     };
 
     let mut keyframes = Vec::new();
-    let mut frame_number: u64 = 0;
 
-    for frame in frames {
+    for (frame_number, frame) in frames.iter().enumerate() {
+        let frame_number = frame_number as u64;
         let is_key = frame.get("key_frame").and_then(|v| v.as_u64()).unwrap_or(0) == 1;
 
         if is_key {
@@ -193,8 +193,6 @@ fn parse_keyframes(json: &serde_json::Value) -> Vec<KeyframeInfo> {
                 size_bytes,
             });
         }
-
-        frame_number += 1;
     }
 
     keyframes

@@ -70,7 +70,7 @@ pub fn generate(prefix: &str) -> GenerateResult {
     let mut random_bytes = [0u8; 16];
     rand::fill(&mut random_bytes);
     let random_hex = hex::encode(random_bytes);
-    let plain_key = format!("{}{}", prefix, random_hex);
+    let plain_key = format!("{prefix}{random_hex}");
     let key_hash = hash_key(&plain_key);
     let display_prefix = if plain_key.len() > 8 {
         plain_key[..8].to_string()

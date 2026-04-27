@@ -4,8 +4,10 @@ use crate::evaluator::Evaluator;
 use crate::types::Prediction;
 use rskit_errors::AppResult;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
+
+use parking_lot::Mutex;
 
 /// Wraps an evaluator to record per-sample execution timings.
 pub struct TimingMiddleware<L> {
@@ -22,11 +24,11 @@ impl<L: Send + Sync + Clone + 'static> TimingMiddleware<L> {
     }
 
     pub fn timings(&self) -> Vec<(String, Duration)> {
-        self.timings.lock().unwrap().clone()
+        self.timings.lock().clone()
     }
 
     pub fn average(&self) -> Duration {
-        let t = self.timings.lock().unwrap();
+        let t = self.timings.lock();
         if t.is_empty() {
             return Duration::ZERO;
         }
@@ -50,10 +52,7 @@ impl<L: Send + Sync + Clone + 'static> Evaluator<L> for TimingMiddleware<L> {
         let result = self.inner.evaluate(input).await;
         let elapsed = start.elapsed();
         if let Ok(ref pred) = result {
-            self.timings
-                .lock()
-                .unwrap()
-                .push((pred.sample_id.clone(), elapsed));
+            self.timings.lock().push((pred.sample_id.clone(), elapsed));
         }
         result
     }
@@ -86,11 +85,11 @@ impl<L: Send + Sync + Clone + 'static> CachingMiddleware<L> {
     }
 
     pub fn hit_count(&self) -> u64 {
-        *self.hits.lock().unwrap()
+        *self.hits.lock()
     }
 
     pub fn miss_count(&self) -> u64 {
-        *self.misses.lock().unwrap()
+        *self.misses.lock()
     }
 }
 
@@ -106,13 +105,13 @@ impl<L: Send + Sync + Clone + 'static> Evaluator<L> for CachingMiddleware<L> {
 
     async fn evaluate(&self, input: Vec<u8>) -> AppResult<Prediction<L>> {
         let key = hash_bytes(&input);
-        if let Some(cached) = self.cache.lock().unwrap().get(&key).cloned() {
-            *self.hits.lock().unwrap() += 1;
+        if let Some(cached) = self.cache.lock().get(&key).cloned() {
+            *self.hits.lock() += 1;
             return Ok(cached);
         }
-        *self.misses.lock().unwrap() += 1;
+        *self.misses.lock() += 1;
         let result = self.inner.evaluate(input).await?;
-        self.cache.lock().unwrap().insert(key, result.clone());
+        self.cache.lock().insert(key, result.clone());
         Ok(result)
     }
 }

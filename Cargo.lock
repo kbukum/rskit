@@ -4421,6 +4421,7 @@ dependencies = [
  "rskit-worker",
  "tokio",
  "tokio-util",
+ "tracing",
 ]
 
 [[package]]
@@ -4484,6 +4485,7 @@ dependencies = [
  "async-trait",
  "criterion",
  "insta",
+ "parking_lot",
  "rskit",
  "rskit-errors",
  "rskit-provider",
@@ -4758,6 +4760,7 @@ dependencies = [
  "async-trait",
  "axum 0.8.9",
  "criterion",
+ "http 1.4.0",
  "hyper 1.9.0",
  "hyper-util",
  "parking_lot",

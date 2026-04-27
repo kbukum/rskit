@@ -25,12 +25,12 @@ pub enum Algorithm {
 impl From<&Algorithm> for jsonwebtoken::Algorithm {
     fn from(a: &Algorithm) -> Self {
         match a {
-            Algorithm::HS256 => jsonwebtoken::Algorithm::HS256,
-            Algorithm::HS384 => jsonwebtoken::Algorithm::HS384,
-            Algorithm::HS512 => jsonwebtoken::Algorithm::HS512,
-            Algorithm::RS256 => jsonwebtoken::Algorithm::RS256,
-            Algorithm::RS384 => jsonwebtoken::Algorithm::RS384,
-            Algorithm::RS512 => jsonwebtoken::Algorithm::RS512,
+            Algorithm::HS256 => Self::HS256,
+            Algorithm::HS384 => Self::HS384,
+            Algorithm::HS512 => Self::HS512,
+            Algorithm::RS256 => Self::RS256,
+            Algorithm::RS384 => Self::RS384,
+            Algorithm::RS512 => Self::RS512,
         }
     }
 }
@@ -67,7 +67,7 @@ impl Default for JwtConfig {
 }
 
 impl JwtConfig {
-    fn default_ttl() -> Duration {
+    const fn default_ttl() -> Duration {
         Duration::from_secs(3600)
     }
 }

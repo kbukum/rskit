@@ -462,11 +462,9 @@ impl MediaPipeline {
                     // Each concat appends one source — duration unknown, estimate double
                     duration = duration.saturating_mul(2);
                 }
-                MediaOp::Speed(factor) => {
-                    if *factor > 0.0 {
-                        let us = (duration.as_micros() as f64 / factor) as u64;
-                        duration = Duration::from_micros(us);
-                    }
+                MediaOp::Speed(factor) if *factor > 0.0 => {
+                    let us = (duration.as_micros() as f64 / factor) as u64;
+                    duration = Duration::from_micros(us);
                 }
                 _ => {}
             }

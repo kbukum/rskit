@@ -24,6 +24,7 @@ pub struct OidcConfig {
 /// - Implement JWKS fetching and caching (see issue #20)
 /// - Implement token validation against fetched keys
 /// - Implement userinfo endpoint call
+#[allow(clippy::unused_async)] // Stub — will use await once JWKS fetching is implemented (#20)
 pub async fn validate_id_token(
     _config: &OidcConfig,
     _id_token: &str,
@@ -45,10 +46,13 @@ pub struct OidcClaims {
 /// Errors from OIDC operations.
 #[derive(Debug, thiserror::Error)]
 pub enum OidcError {
+    /// OIDC validation is not yet implemented.
     #[error("OIDC not yet implemented — see issue #20")]
     NotImplemented,
+    /// The token could not be validated.
     #[error("invalid token: {0}")]
     InvalidToken(String),
+    /// The OIDC provider could not be reached.
     #[error("provider unreachable: {0}")]
     ProviderUnreachable(String),
 }

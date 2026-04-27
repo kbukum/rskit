@@ -28,7 +28,7 @@ pub struct TracingConfig {
 
 /// RAII guard — shuts down the tracer provider on drop.
 pub struct TracerGuard {
-    _provider: opentelemetry_sdk::trace::TracerProvider,
+    _provider: opentelemetry_sdk::trace::SdkTracerProvider,
 }
 
 impl Drop for TracerGuard {
@@ -54,7 +54,7 @@ pub fn init_tracer(cfg: &TracingConfig) -> AppResult<TracerGuard> {
     use opentelemetry::{InstrumentationScope, KeyValue};
     use opentelemetry_otlp::{SpanExporter, WithExportConfig};
     use opentelemetry_sdk::Resource;
-    use opentelemetry_sdk::trace::{Sampler, TracerProvider};
+    use opentelemetry_sdk::trace::{Sampler, SdkTracerProvider};
     use tracing_subscriber::layer::SubscriberExt;
     use tracing_subscriber::util::SubscriberInitExt;
 
@@ -73,13 +73,12 @@ pub fn init_tracer(cfg: &TracingConfig) -> AppResult<TracerGuard> {
         Sampler::TraceIdRatioBased(cfg.sample_rate)
     };
 
-    let resource = Resource::new(vec![KeyValue::new(
-        "service.name",
-        cfg.service_name.clone(),
-    )]);
+    let resource = Resource::builder_empty()
+        .with_attributes([KeyValue::new("service.name", cfg.service_name.clone())])
+        .build();
 
-    let provider = TracerProvider::builder()
-        .with_batch_exporter(exporter, opentelemetry_sdk::runtime::Tokio)
+    let provider = SdkTracerProvider::builder()
+        .with_batch_exporter(exporter)
         .with_sampler(sampler)
         .with_resource(resource)
         .build();
