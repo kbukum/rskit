@@ -66,10 +66,10 @@ impl Auth {
                 }
             }
             Auth::ApiKey { name, value } => {
-                if let Ok(header_name) = name.parse::<reqwest::header::HeaderName>() {
-                    if let Ok(header_value) = value.parse::<reqwest::header::HeaderValue>() {
-                        headers.insert(header_name, header_value);
-                    }
+                if let Ok(header_name) = name.parse::<reqwest::header::HeaderName>()
+                    && let Ok(header_value) = value.parse::<reqwest::header::HeaderValue>()
+                {
+                    headers.insert(header_name, header_value);
                 }
             }
             Auth::None => {}

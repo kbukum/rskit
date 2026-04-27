@@ -97,14 +97,13 @@ impl RateLimitConfig {
 
 /// Extract a rate-limit key from `X-Forwarded-For`, falling back to `"unknown"`.
 pub fn ip_based_key(req: &Request<Body>) -> String {
-    if let Some(v) = req.headers().get("x-forwarded-for") {
-        if let Ok(s) = v.to_str() {
-            if let Some(first) = s.split(',').next() {
-                let trimmed = first.trim();
-                if !trimmed.is_empty() {
-                    return trimmed.to_string();
-                }
-            }
+    if let Some(v) = req.headers().get("x-forwarded-for")
+        && let Ok(s) = v.to_str()
+        && let Some(first) = s.split(',').next()
+    {
+        let trimmed = first.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
         }
     }
     "unknown".to_string()

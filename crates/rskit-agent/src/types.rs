@@ -118,10 +118,10 @@ impl ContextStrategy for TruncateStrategy {
 
         let mut result = Vec::with_capacity(self.keep_last + 1);
         // Keep system prompt if present
-        if let Some(first) = messages.first() {
-            if matches!(first, Message::System(_)) {
-                result.push(first.clone());
-            }
+        if let Some(first) = messages.first()
+            && matches!(first, Message::System(_))
+        {
+            result.push(first.clone());
         }
         // Keep last N messages
         let start = messages.len().saturating_sub(self.keep_last);

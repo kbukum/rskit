@@ -53,10 +53,10 @@ impl FfmpegExecutor {
 
     fn determine_output_extension(&self, ops: &[MediaOp]) -> String {
         for op in ops.iter().rev() {
-            if let MediaOp::Transcode(config) = op {
-                if let Some(info) = self.registry.format_info(&config.format) {
-                    return info.extension.clone();
-                }
+            if let MediaOp::Transcode(config) = op
+                && let Some(info) = self.registry.format_info(&config.format)
+            {
+                return info.extension.clone();
             }
         }
         "mkv".to_string()

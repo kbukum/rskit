@@ -63,12 +63,12 @@ impl GrpcChannel {
         endpoint = endpoint.connect_timeout(self.config.connect_timeout);
 
         // Configure keepalive if specified
-        if let Some(interval) = self.config.keepalive_interval {
-            if let Some(timeout) = self.config.keepalive_timeout {
-                endpoint = endpoint.keep_alive_while_idle(true);
-                endpoint = endpoint.http2_keep_alive_interval(interval);
-                endpoint = endpoint.keep_alive_timeout(timeout);
-            }
+        if let Some(interval) = self.config.keepalive_interval
+            && let Some(timeout) = self.config.keepalive_timeout
+        {
+            endpoint = endpoint.keep_alive_while_idle(true);
+            endpoint = endpoint.http2_keep_alive_interval(interval);
+            endpoint = endpoint.keep_alive_timeout(timeout);
         }
 
         // Connect

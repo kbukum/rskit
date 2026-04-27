@@ -48,10 +48,10 @@ impl<L: Send + Clone + 'static> DatasetLoader<L> {
         let manifest = self.manifest()?;
         let mut samples = Vec::new();
         for s in &manifest.samples {
-            if let Some(ref filter) = self.config.filter {
-                if !filter(s) {
-                    continue;
-                }
+            if let Some(ref filter) = self.config.filter
+                && !filter(s)
+            {
+                continue;
             }
             let label = (self.mapper)(&s.label)?;
             let input = load_content(&self.dir, s)?;

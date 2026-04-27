@@ -120,18 +120,18 @@ impl ConfigLoader {
 
     fn load_env_file(&self) {
         // 1. Load profile env file first (if profile is set)
-        if let Some(profile) = &self.profile {
-            if !profile.is_empty() {
-                let profile_paths = [
-                    format!("./config/profiles/{profile}.env"),
-                    format!("../config/profiles/{profile}.env"),
-                    format!("../../config/profiles/{profile}.env"),
-                ];
-                for path in &profile_paths {
-                    if std::path::Path::new(path).exists() {
-                        let _ = dotenvy::from_path(path);
-                        break;
-                    }
+        if let Some(profile) = &self.profile
+            && !profile.is_empty()
+        {
+            let profile_paths = [
+                format!("./config/profiles/{profile}.env"),
+                format!("../config/profiles/{profile}.env"),
+                format!("../../config/profiles/{profile}.env"),
+            ];
+            for path in &profile_paths {
+                if std::path::Path::new(path).exists() {
+                    let _ = dotenvy::from_path(path);
+                    break;
                 }
             }
         }

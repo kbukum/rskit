@@ -230,11 +230,10 @@ async fn runner_loop<I, O>(
             }
 
             Some(res) = join_set.join_next() => {
-                if let Err(e) = res {
-                    if e.is_panic() {
+                if let Err(e) = res
+                    && e.is_panic() {
                         tracing::error!(pool = %pool_name, "task panicked: {:?}", e);
                     }
-                }
             }
 
             env = rx.recv() => {
@@ -258,10 +257,10 @@ async fn runner_loop<I, O>(
 
     // Drain in-flight tasks.
     while let Some(res) = join_set.join_next().await {
-        if let Err(e) = res {
-            if e.is_panic() {
-                tracing::error!(pool = %pool_name, "panic during drain: {:?}", e);
-            }
+        if let Err(e) = res
+            && e.is_panic()
+        {
+            tracing::error!(pool = %pool_name, "panic during drain: {:?}", e);
         }
     }
 

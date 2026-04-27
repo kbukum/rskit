@@ -70,19 +70,19 @@ impl HttpClient {
 
         // Apply default headers
         for (name, value) in &self.config.default_headers {
-            if let Ok(hv) = value.parse::<reqwest::header::HeaderValue>() {
-                if let Ok(hn) = name.parse::<reqwest::header::HeaderName>() {
-                    request = request.header(hn, hv);
-                }
+            if let Ok(hv) = value.parse::<reqwest::header::HeaderValue>()
+                && let Ok(hn) = name.parse::<reqwest::header::HeaderName>()
+            {
+                request = request.header(hn, hv);
             }
         }
 
         // Apply request-specific headers
         for (name, value) in &req.headers {
-            if let Ok(hv) = value.parse::<reqwest::header::HeaderValue>() {
-                if let Ok(hn) = name.parse::<reqwest::header::HeaderName>() {
-                    request = request.header(hn, hv);
-                }
+            if let Ok(hv) = value.parse::<reqwest::header::HeaderValue>()
+                && let Ok(hn) = name.parse::<reqwest::header::HeaderName>()
+            {
+                request = request.header(hn, hv);
             }
         }
 

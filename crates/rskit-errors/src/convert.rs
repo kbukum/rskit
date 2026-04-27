@@ -81,12 +81,12 @@ impl From<AppError> for tonic::Status {
 impl From<tonic::Status> for AppError {
     fn from(s: tonic::Status) -> Self {
         // Try to recover structured error details from the status details bytes.
-        if !s.details().is_empty() {
-            if let Ok(pd) = serde_json::from_slice::<ProblemDetail>(s.details()) {
-                return AppError::new(pd.code, pd.detail)
-                    .retryable(pd.retryable)
-                    .with_details(pd.details);
-            }
+        if !s.details().is_empty()
+            && let Ok(pd) = serde_json::from_slice::<ProblemDetail>(s.details())
+        {
+            return AppError::new(pd.code, pd.detail)
+                .retryable(pd.retryable)
+                .with_details(pd.details);
         }
 
         // Fallback: map gRPC code to AppError code.

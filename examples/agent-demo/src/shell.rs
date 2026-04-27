@@ -299,8 +299,8 @@ pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
 
             // ── Task completion (appears immediately!) ────────
             Some(comp) = done_rx.recv() => {
-                if let Some(t) = tasks.iter_mut().find(|t| t.id == comp.id) {
-                    if t.status == TaskStatus::Running {
+                if let Some(t) = tasks.iter_mut().find(|t| t.id == comp.id)
+                    && t.status == TaskStatus::Running {
                         match comp.result {
                             Ok(output) => {
                                 t.status = TaskStatus::Done;
@@ -320,7 +320,6 @@ pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
                         }
                         multi.println(dashboard::log_result(t)).ok();
                     }
-                }
                 // Clean up spinner for completed task
                 if let Some(pos) = handles.iter().position(|h| h.id == comp.id) {
                     handles[pos].spinner.finish_and_clear();
@@ -426,20 +425,20 @@ async fn submit_task(
             loop {
                 match events.recv().await {
                     Ok(event) => {
-                        if event.kind == EventKind::Progress {
-                            if let Some(ref p) = event.progress {
-                                let pct = p.percent.unwrap_or(0.0) as u32;
-                                let step_msg = p.message.as_deref().unwrap_or("Working...");
-                                event_spinner.set_message(format!(
-                                    "({event_label}) \x1b[2m— {step_msg}\x1b[0m \x1b[36m[{pct}%]\x1b[0m"
-                                ));
-                                let _ = event_prog_tx.send(ProgressUpdate {
-                                    id,
-                                    current: p.current,
-                                    total: p.total.unwrap_or(0),
-                                    message: step_msg.to_string(),
-                                });
-                            }
+                        if event.kind == EventKind::Progress
+                            && let Some(ref p) = event.progress
+                        {
+                            let pct = p.percent.unwrap_or(0.0) as u32;
+                            let step_msg = p.message.as_deref().unwrap_or("Working...");
+                            event_spinner.set_message(format!(
+                                "({event_label}) \x1b[2m— {step_msg}\x1b[0m \x1b[36m[{pct}%]\x1b[0m"
+                            ));
+                            let _ = event_prog_tx.send(ProgressUpdate {
+                                id,
+                                current: p.current,
+                                total: p.total.unwrap_or(0),
+                                message: step_msg.to_string(),
+                            });
                         }
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
@@ -477,27 +476,27 @@ fn drain_completions(
     multi: &MultiProgress,
 ) {
     while let Ok(comp) = done_rx.try_recv() {
-        if let Some(t) = tasks.iter_mut().find(|t| t.id == comp.id) {
-            if t.status == TaskStatus::Running {
-                match comp.result {
-                    Ok(output) => {
-                        t.status = TaskStatus::Done;
-                        t.result = Some(output);
-                    }
-                    Err(err) => {
-                        if err.contains("cancelled") {
-                            t.status = TaskStatus::Cancelled;
-                        } else {
-                            t.status = TaskStatus::Failed;
-                        }
-                        t.result = Some(TaskOutput {
-                            summary: err,
-                            details: vec![],
-                        });
-                    }
+        if let Some(t) = tasks.iter_mut().find(|t| t.id == comp.id)
+            && t.status == TaskStatus::Running
+        {
+            match comp.result {
+                Ok(output) => {
+                    t.status = TaskStatus::Done;
+                    t.result = Some(output);
                 }
-                multi.println(dashboard::log_result(t)).ok();
+                Err(err) => {
+                    if err.contains("cancelled") {
+                        t.status = TaskStatus::Cancelled;
+                    } else {
+                        t.status = TaskStatus::Failed;
+                    }
+                    t.result = Some(TaskOutput {
+                        summary: err,
+                        details: vec![],
+                    });
+                }
             }
+            multi.println(dashboard::log_result(t)).ok();
         }
         if let Some(pos) = handles.iter().position(|h| h.id == comp.id) {
             handles[pos].spinner.finish_and_clear();

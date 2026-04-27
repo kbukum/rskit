@@ -111,16 +111,16 @@ pub async fn run(command: &Command, config: &ProcessConfig) -> AppResult<Process
     })?;
 
     // Write stdin if provided
-    if let Some(stdin_data) = &command.stdin {
-        if let Some(mut stdin) = child.stdin.take() {
-            stdin.write_all(stdin_data).await.map_err(|e| {
-                AppError::new(
-                    ErrorCode::Internal,
-                    format!("failed to write to stdin: {}", e),
-                )
-            })?;
-            drop(stdin); // Close stdin to signal EOF
-        }
+    if let Some(stdin_data) = &command.stdin
+        && let Some(mut stdin) = child.stdin.take()
+    {
+        stdin.write_all(stdin_data).await.map_err(|e| {
+            AppError::new(
+                ErrorCode::Internal,
+                format!("failed to write to stdin: {}", e),
+            )
+        })?;
+        drop(stdin); // Close stdin to signal EOF
     }
 
     // Get pid for signal handling

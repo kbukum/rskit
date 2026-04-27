@@ -161,12 +161,11 @@ impl Component for DiscoveryComponent {
         debug!("Discovery component stopping");
 
         let instance_id = self.instance_id.lock().take();
-        if let Some(id) = instance_id {
-            if let Some(reg) = self.registry() {
-                if let Err(e) = reg.deregister(&id).await {
-                    warn!(error = %e, id = %id, "Failed to deregister on stop");
-                }
-            }
+        if let Some(id) = instance_id
+            && let Some(reg) = self.registry()
+            && let Err(e) = reg.deregister(&id).await
+        {
+            warn!(error = %e, id = %id, "Failed to deregister on stop");
         }
 
         Ok(())

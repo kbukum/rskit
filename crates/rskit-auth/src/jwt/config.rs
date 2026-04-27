@@ -68,7 +68,7 @@ impl Default for JwtConfig {
 
 impl JwtConfig {
     const fn default_ttl() -> Duration {
-        Duration::from_secs(3600)
+        Duration::from_hours(1)
     }
 
     /// Create a new config with just a secret (all other fields default).

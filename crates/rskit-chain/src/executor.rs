@@ -181,10 +181,10 @@ impl ChainExecutor {
         if !all_completed && self.config.cleanup_on_failure {
             warn!("chain failed, cleaning up completed steps");
             for result in results.iter().rev() {
-                if result.status == StepStatus::Completed {
-                    if let Some(op) = self.operations.iter().find(|o| o.id() == result.step_id) {
-                        op.cleanup(&result.output).await;
-                    }
+                if result.status == StepStatus::Completed
+                    && let Some(op) = self.operations.iter().find(|o| o.id() == result.step_id)
+                {
+                    op.cleanup(&result.output).await;
                 }
             }
         }

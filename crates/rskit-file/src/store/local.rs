@@ -163,10 +163,10 @@ impl FileStore for LocalStore {
                 format!("failed to read dir entry: {e}"),
             )
         })? {
-            if let Some(max) = limit {
-                if results.len() >= max {
-                    break;
-                }
+            if let Some(max) = limit
+                && results.len() >= max
+            {
+                break;
             }
 
             let meta = entry.metadata().await.map_err(|e| {

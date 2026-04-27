@@ -84,10 +84,10 @@ impl FfmpegCommand {
             async move {
                 while let Ok(Some(line)) = lines.next_line().await {
                     // Try parsing progress
-                    if let Some(ref cb) = progress_callback {
-                        if let Some(progress) = parser.parse_line(&line) {
-                            cb(progress);
-                        }
+                    if let Some(ref cb) = progress_callback
+                        && let Some(progress) = parser.parse_line(&line)
+                    {
+                        cb(progress);
                     }
                     // Always collect stderr for error diagnostics
                     let _ = stderr_tx.send(line);

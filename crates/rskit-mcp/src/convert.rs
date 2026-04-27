@@ -44,10 +44,10 @@ pub fn definition_to_tool(def: &Definition, prefix: &str) -> Tool {
         tool = tool.with_annotations(mcp_ann);
     }
 
-    if let Some(ref output_schema) = def.output_schema {
-        if let Some(obj) = output_schema.as_object() {
-            tool = tool.with_raw_output_schema(Arc::new(obj.clone()));
-        }
+    if let Some(ref output_schema) = def.output_schema
+        && let Some(obj) = output_schema.as_object()
+    {
+        tool = tool.with_raw_output_schema(Arc::new(obj.clone()));
     }
 
     tool

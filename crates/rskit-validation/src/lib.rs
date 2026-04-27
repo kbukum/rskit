@@ -122,10 +122,10 @@ impl Validator {
     /// Fail if `value` is `Some` but not a valid UUID string.
     #[must_use]
     pub fn optional_uuid(mut self, field: &str, value: Option<&str>) -> Self {
-        if let Some(v) = value {
-            if !validate_uuid(v) {
-                self.add(field, "must be a valid UUID");
-            }
+        if let Some(v) = value
+            && !validate_uuid(v)
+        {
+            self.add(field, "must be a valid UUID");
         }
         self
     }
