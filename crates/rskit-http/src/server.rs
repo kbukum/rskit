@@ -57,9 +57,31 @@ impl HttpServerBuilder {
     }
 
     /// Add automatic tracing span per request.
+    ///
+    /// SECURITY(#29): only the request path is recorded in spans — query strings
+    /// are intentionally omitted because they may contain bearer tokens, API keys,
+    /// or other secrets that must not appear in distributed trace backends.
     #[must_use]
     pub fn with_tracing(mut self) -> Self {
-        self.router = self.router.layer(TraceLayer::new_for_http());
+        use http::Request;
+        use tower_http::trace::DefaultOnResponse;
+        use tracing::Level;
+
+        let trace_layer = TraceLayer::new_for_http().make_span_with(
+            |request: &Request<_>| {
+                // Record path only — query strings may contain sensitive tokens.
+                let path = request.uri().path();
+                tracing::info_span!(
+                    "http_request",
+                    method = %request.method(),
+                    // http.target intentionally excludes the query string (see issue #29)
+                    "http.target" = path,
+                    status_code = tracing::field::Empty,
+                )
+            },
+        ).on_response(DefaultOnResponse::new().level(Level::INFO));
+
+        self.router = self.router.layer(trace_layer);
         self
     }
 
@@ -80,6 +102,8 @@ fn build_cors_layer(cfg: &CorsConfig) -> CorsLayer {
         .iter()
         .filter_map(|o| o.parse().ok())
         .collect();
+    // WARNING: Wildcard CORS is only safe in development.
+    // Production deployments must use an explicit origin allowlist.
     CorsLayer::new().allow_origin(AllowOrigin::list(origins))
 }
 

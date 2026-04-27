@@ -1,0 +1,24 @@
+[package]
+name = "rskit-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+rskit-auth = { path = "../crates/rskit-auth" }
+
+[[bin]]
+name = "auth_jwt_decode"
+path = "fuzz_targets/auth_jwt_decode.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "http_request_parse"
+path = "fuzz_targets/http_request_parse.rs"
+test = false
+doc = false

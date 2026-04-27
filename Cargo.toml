@@ -67,6 +67,9 @@ members = [
     "crates/rskit-integration",
 ]
 
+# cargo-fuzz must be excluded from the workspace (it uses a different nightly profile)
+exclude = ["fuzz"]
+
 [workspace.package]
 version      = "0.1.0"
 edition      = "2024"
@@ -78,6 +81,7 @@ homepage     = "https://github.com/kbukum/rskit"
 documentation = "https://docs.rs/rskit"
 
 [workspace.dependencies]
+# prefer default-features = false for security-sensitive deps to reduce attack surface (RS-LO-09 / #84)
 # Async runtime
 tokio      = { version = "1", features = ["full"] }
 tokio-util  = { version = "0.7", features = ["rt"] }
