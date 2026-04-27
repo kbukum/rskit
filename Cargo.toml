@@ -184,7 +184,7 @@ webp         = "0.3"
 which        = "8"
 
 # CLI progress bars (rskit-cli)
-indicatif    = "0.17"
+indicatif    = "0.18"
 crossterm    = "0.28"
 
 # Benchmarking & snapshot testing
