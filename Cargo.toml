@@ -162,7 +162,7 @@ opentelemetry-otlp       = { version = "0.27", features = ["grpc-tonic", "metric
 opentelemetry-appender-tracing = "0.27"
 opentelemetry-prometheus = "0.27"
 prometheus               = "0.13"
-tracing-opentelemetry    = "0.28"
+tracing-opentelemetry    = "0.32"
 
 # HTTP client (shared)
 reqwest      = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
