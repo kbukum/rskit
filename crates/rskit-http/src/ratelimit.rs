@@ -353,8 +353,11 @@ fn resolve_key_and_rpm<B: 'static>(req: &Request<B>, cfg: &RateLimitConfig) -> (
     let is_body = std::any::TypeId::of::<B>() == std::any::TypeId::of::<Body>();
 
     if is_body {
-        // SAFETY: We checked the TypeId matches. We only read the request by
-        // reference through the func so there is no ownership transfer.
+        // SAFETY: We verify TypeId equality above before casting.
+        // This is sound because Request<B> and Request<Body> have identical
+        // layout when B == Body (same generic parameter).
+        // TODO(#37): Refactor this function to accept &Request<axum::body::Body>
+        // directly and remove the unsafe cast entirely.
         let req_ref: &Request<Body> =
             unsafe { &*(req as *const Request<B> as *const Request<Body>) };
 
