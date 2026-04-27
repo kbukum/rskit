@@ -181,7 +181,7 @@ image        = "0.25"
 webp         = "0.3"
 
 # FFmpeg binary lookup (rskit-media-ffmpeg)
-which        = "7"
+which        = "8"
 
 # CLI progress bars (rskit-cli)
 indicatif    = "0.17"
