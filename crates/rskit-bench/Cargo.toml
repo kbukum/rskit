@@ -27,9 +27,14 @@ tokio     = { workspace = true, features = ["test-util", "full"] }
 tempfile  = { workspace = true }
 insta     = { workspace = true }
 criterion = { workspace = true }
+rskit     = { path = "../rskit" }
 
 [[bench]]
 name    = "metrics"
+harness = false
+
+[[bench]]
+name    = "core"
 harness = false
 
 [package.metadata.docs.rs]

@@ -35,3 +35,10 @@ validator        = { workspace = true }
 serde_json      = { workspace = true }
 uuid            = { workspace = true }
 parking_lot     = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name    = "router"
+harness = false
