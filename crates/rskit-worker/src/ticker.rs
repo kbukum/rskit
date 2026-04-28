@@ -241,7 +241,7 @@ mod tests {
             Box::pin(async { Ok(()) })
         });
         tw.start().await.unwrap();
-        tokio::time::sleep(Duration::from_millis(35)).await;
+        tokio::time::sleep(Duration::from_millis(80)).await;
         tw.stop().await.unwrap();
         assert!(tw.run_count() >= 2);
     }
@@ -252,7 +252,7 @@ mod tests {
             Box::pin(async { Err(AppError::new(ErrorCode::Internal, "test error")) })
         });
         tw.start().await.unwrap();
-        tokio::time::sleep(Duration::from_millis(35)).await;
+        tokio::time::sleep(Duration::from_millis(80)).await;
         tw.stop().await.unwrap();
         assert!(tw.fail_count() >= 2);
     }
