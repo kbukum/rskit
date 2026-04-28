@@ -197,7 +197,7 @@ indicatif    = "0.18"
 crossterm    = "0.28"
 
 # Benchmarking & snapshot testing
-criterion    = { version = "0.5", features = ["html_reports", "async_tokio"] }
+criterion    = { version = "0.8", features = ["html_reports", "async_tokio"] }
 insta        = { version = "1.47", features = ["json", "yaml", "redactions"] }
 
 # Internal path crates
