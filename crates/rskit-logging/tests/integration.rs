@@ -5,7 +5,8 @@
 //! custom `tracing_subscriber::Layer`.
 
 #[allow(clippy::disallowed_types)]
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use parking_lot::Mutex;
 
 use rskit_config::{LogFormat, LogOutput, LoggingConfig};
 use rskit_logging::context::{
@@ -64,7 +65,7 @@ impl<S: Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>> Layer
             .map(|(_, v)| v.clone())
             .unwrap_or_default();
 
-        self.logs.events.lock().unwrap().push(CapturedEvent {
+        self.logs.events.lock().push(CapturedEvent {
             message,
             level: *event.metadata().level(),
             target: event.metadata().target().to_string(),
@@ -81,7 +82,7 @@ impl<S: Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>> Layer
         let mut visitor = FieldVisitor::default();
         attrs.record(&mut visitor);
 
-        self.logs.spans.lock().unwrap().push(CapturedSpan {
+        self.logs.spans.lock().push(CapturedSpan {
             name: attrs.metadata().name().to_string(),
             fields: visitor.fields,
         });
@@ -239,7 +240,7 @@ fn filter_info_passes_info_and_above() {
         tracing::warn!("warn msg");
         tracing::error!("error msg");
     });
-    let events = captured.events.lock().unwrap();
+    let events = captured.events.lock();
     assert_eq!(events.len(), 3, "info filter should pass info, warn, error");
     assert_eq!(events[0].level, tracing::Level::INFO);
     assert_eq!(events[1].level, tracing::Level::WARN);
@@ -254,7 +255,7 @@ fn filter_debug_passes_debug_and_above() {
         tracing::debug!("debug msg");
         tracing::info!("info msg");
     });
-    let events = captured.events.lock().unwrap();
+    let events = captured.events.lock();
     assert_eq!(events.len(), 2, "debug filter should pass debug, info");
     assert_eq!(events[0].level, tracing::Level::DEBUG);
     assert_eq!(events[1].level, tracing::Level::INFO);
@@ -268,7 +269,7 @@ fn filter_error_only() {
         tracing::warn!("warn msg");
         tracing::error!("error msg");
     });
-    let events = captured.events.lock().unwrap();
+    let events = captured.events.lock();
     assert_eq!(events.len(), 1);
     assert_eq!(events[0].level, tracing::Level::ERROR);
 }
@@ -283,7 +284,7 @@ fn filter_trace_passes_everything() {
         tracing::warn!("warn msg");
         tracing::error!("error msg");
     });
-    let events = captured.events.lock().unwrap();
+    let events = captured.events.lock();
     assert_eq!(events.len(), 5, "trace filter should pass all levels");
 }
 
@@ -296,7 +297,7 @@ fn filter_with_target_directive() {
         tracing::debug!(target: "other_crate", "other debug");
         tracing::warn!(target: "other_crate", "other warn");
     });
-    let events = captured.events.lock().unwrap();
+    let events = captured.events.lock();
     assert_eq!(events.len(), 2);
     assert_eq!(events[0].target, "integration");
     assert_eq!(events[1].target, "other_crate");
@@ -319,9 +320,8 @@ fn envfilter_parse_compound_directive() {
 
 #[test]
 fn envfilter_parse_invalid_string_handled_by_init_logging() {
-    // EnvFilter::try_new is permissive with many strings (it interprets them
-    // as target directives), so instead of testing the parser we verify that
-    // init_logging gracefully handles an unusual level string.
+    // EnvFilter is permissive (interprets many strings as target directives),
+    // so we verify init_logging handles unusual level strings gracefully.
     let cfg = LoggingConfig {
         level: "not_a_real_module=trace".to_string(),
         ..Default::default()
@@ -368,7 +368,7 @@ fn correlation_id_recorded_inside_span_with_field() {
         set_correlation_id("corr-456");
         tracing::info!("after setting correlation_id");
     });
-    let events = captured.events.lock().unwrap();
+    let events = captured.events.lock();
     assert_eq!(events.len(), 1);
     assert_eq!(events[0].message, "after setting correlation_id");
 }
@@ -406,7 +406,7 @@ fn component_span_creates_named_span() {
         let _s = component_span("auth-service").entered();
         tracing::info!("inside component span");
     });
-    let spans = captured.spans.lock().unwrap();
+    let spans = captured.spans.lock();
     assert!(!spans.is_empty());
     assert_eq!(spans[0].name, "component");
     let comp_field = spans[0].fields.iter().find(|(k, _)| k == "component");
@@ -421,7 +421,7 @@ fn request_span_captures_http_metadata() {
         let _s = request_span("GET", "/api/v1/health", "req-001").entered();
         tracing::info!("inside request span");
     });
-    let spans = captured.spans.lock().unwrap();
+    let spans = captured.spans.lock();
     assert!(!spans.is_empty());
     assert_eq!(spans[0].name, "request");
 
@@ -448,7 +448,7 @@ fn request_span_various_methods() {
             let _s = request_span(method, "/test", "rid").entered();
         }
     });
-    let spans = captured.spans.lock().unwrap();
+    let spans = captured.spans.lock();
     assert_eq!(spans.len(), 5);
 }
 
@@ -460,7 +460,7 @@ fn nested_component_and_request_spans() {
         let _req = request_span("POST", "/login", "req-login").entered();
         tracing::info!("nested span test");
     });
-    let spans = captured.spans.lock().unwrap();
+    let spans = captured.spans.lock();
     assert_eq!(spans.len(), 2);
     assert_eq!(spans[0].name, "component");
     assert_eq!(spans[1].name, "request");
@@ -546,7 +546,7 @@ fn very_long_message() {
     with_default(sub, || {
         tracing::info!("{}", long_msg);
     });
-    let events = captured.events.lock().unwrap();
+    let events = captured.events.lock();
     assert_eq!(events.len(), 1);
     // The message should contain the full string (tracing doesn't truncate).
     assert!(events[0].message.len() >= 100_000);
@@ -558,7 +558,7 @@ fn unicode_in_messages() {
     with_default(sub, || {
         tracing::info!("こんにちは世界 🌍 مرحبا");
     });
-    let events = captured.events.lock().unwrap();
+    let events = captured.events.lock();
     assert_eq!(events.len(), 1);
     assert!(events[0].message.contains("こんにちは世界"));
     assert!(events[0].message.contains("🌍"));
@@ -572,7 +572,7 @@ fn unicode_in_span_fields() {
         let _s = request_span("GET", "/路径/テスト", "req-ünïcödé").entered();
         tracing::info!("unicode span test");
     });
-    let spans = captured.spans.lock().unwrap();
+    let spans = captured.spans.lock();
     let field_map: std::collections::HashMap<_, _> = spans[0].fields.iter().cloned().collect();
     assert_eq!(
         field_map.get("http.path").map(|s| s.as_str()),
@@ -631,7 +631,7 @@ fn special_characters_in_field_values() {
             "special chars"
         );
     });
-    let events = captured.events.lock().unwrap();
+    let events = captured.events.lock();
     assert_eq!(events.len(), 1);
 }
 
@@ -660,7 +660,7 @@ fn reexported_macros_compile_and_run() {
         rskit_logging::warn!("re-export warn");
         rskit_logging::error!("re-export error");
     });
-    let events = captured.events.lock().unwrap();
+    let events = captured.events.lock();
     assert_eq!(events.len(), 5);
 }
 

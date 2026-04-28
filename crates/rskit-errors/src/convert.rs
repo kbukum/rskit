@@ -63,6 +63,7 @@ impl From<AppError> for tonic::Status {
             ErrorCode::Internal | ErrorCode::DatabaseError | ErrorCode::ExternalService => {
                 tonic::Code::Internal
             }
+            ErrorCode::Cancelled => tonic::Code::Cancelled,
             #[allow(unreachable_patterns)]
             _ => tonic::Code::Unknown,
         };
@@ -100,6 +101,7 @@ impl From<tonic::Status> for AppError {
             tonic::Code::InvalidArgument => ErrorCode::InvalidInput,
             tonic::Code::Unauthenticated => ErrorCode::Unauthorized,
             tonic::Code::PermissionDenied => ErrorCode::Forbidden,
+            tonic::Code::Cancelled => ErrorCode::Cancelled,
             _ => ErrorCode::ExternalService,
         };
         AppError::new(code, s.message().to_string())

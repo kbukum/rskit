@@ -56,7 +56,7 @@ impl ConfigLoader {
 
     /// Set the configuration profile (e.g., "development", "docker", "staging").
     /// Loads `config/profiles/{profile}.env` before the main `.env` file.
-    /// If profile is `None`, reads from the `ENVIRONMENT` env var.
+    /// If an empty string is passed, reads the profile name from the `ENVIRONMENT` env var.
     #[must_use]
     pub fn with_profile(mut self, profile: impl Into<String>) -> Self {
         let p = profile.into();
@@ -159,7 +159,7 @@ mod tests {
     use validator::Validate;
 
     // Serialise env-mutating tests — parallel tests share the same process env.
-    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    static ENV_LOCK: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
 
     #[derive(Debug, Deserialize, Validate)]
     struct TestConfig {
@@ -182,7 +182,7 @@ mod tests {
 
     #[test]
     fn loads_defaults_with_no_file() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = ENV_LOCK.lock();
         // SAFETY: `std::env::remove_var` is unsafe because concurrent calls can cause data races.
         // We hold `ENV_LOCK` (a `std::sync::Mutex`) for the duration of this test,
         // serializing all environment variable mutations. No other test runs concurrently.
@@ -193,7 +193,7 @@ mod tests {
 
     #[test]
     fn env_prefix_override() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = ENV_LOCK.lock();
         // PORT=9090 should override the default (no prefix by default).
         // SAFETY: `std::env::set_var` is unsafe because concurrent calls can cause data races.
         // We hold `ENV_LOCK` (a `std::sync::Mutex`) for the duration of this test,
@@ -208,7 +208,7 @@ mod tests {
 
     #[test]
     fn custom_prefix_is_respected() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = ENV_LOCK.lock();
         // SAFETY: `std::env::set_var` is unsafe because concurrent calls can cause data races.
         // We hold `ENV_LOCK` (a `std::sync::Mutex`) for the duration of this test,
         // serializing all environment variable mutations. No other test runs concurrently.

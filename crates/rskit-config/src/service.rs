@@ -17,6 +17,14 @@ pub struct ServiceConfig {
     #[serde(default = "ServiceConfig::default_version")]
     pub version: String,
 
+    /// Network address the service binds to.
+    #[serde(default = "ServiceConfig::default_address")]
+    pub address: String,
+
+    /// Network port the service listens on.
+    #[serde(default = "ServiceConfig::default_port")]
+    pub port: u16,
+
     /// Enable verbose debug output.
     #[serde(default)]
     pub debug: bool,
@@ -33,6 +41,12 @@ impl ServiceConfig {
     fn default_version() -> String {
         env!("CARGO_PKG_VERSION").to_string()
     }
+    fn default_address() -> String {
+        "0.0.0.0".to_string()
+    }
+    fn default_port() -> u16 {
+        50051
+    }
 }
 
 impl Default for ServiceConfig {
@@ -41,6 +55,8 @@ impl Default for ServiceConfig {
             name: Self::default_name(),
             environment: Environment::default(),
             version: Self::default_version(),
+            address: Self::default_address(),
+            port: Self::default_port(),
             debug: false,
             logging: LoggingConfig::default(),
         }
@@ -139,6 +155,7 @@ pub enum LogOutput {
     /// Write to standard error.
     Stderr,
     /// Write to a file at the given path.
+    /// Not yet implemented — falls back to stdout.
     File {
         /// Absolute or relative path to the log file.
         path: String,
@@ -278,8 +295,22 @@ mod tests {
         let _ = &cfg.name;
         let _ = &cfg.environment;
         let _ = &cfg.version;
+        let _ = &cfg.address;
+        let _ = cfg.port;
         let _ = cfg.debug;
         let _ = &cfg.logging;
+    }
+
+    #[test]
+    fn service_config_default_address() {
+        let cfg = ServiceConfig::default();
+        assert_eq!(cfg.address, "0.0.0.0");
+    }
+
+    #[test]
+    fn service_config_default_port() {
+        let cfg = ServiceConfig::default();
+        assert_eq!(cfg.port, 50051);
     }
 
     #[test]

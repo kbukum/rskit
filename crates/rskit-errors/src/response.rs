@@ -145,7 +145,7 @@ mod tests {
 
     #[test]
     fn kebab_internal() {
-        assert_eq!(code_to_kebab(ErrorCode::Internal), "internal");
+        assert_eq!(code_to_kebab(ErrorCode::Internal), "internal-error");
     }
 
     // ── code_to_title ─────────────────────────────────────────────────────
@@ -165,7 +165,7 @@ mod tests {
 
     #[test]
     fn title_internal() {
-        assert_eq!(code_to_title(ErrorCode::Internal), "Internal");
+        assert_eq!(code_to_title(ErrorCode::Internal), "Internal Error");
     }
 
     // ── ProblemDetail::from(&AppError) ────────────────────────────────────
@@ -324,7 +324,7 @@ mod tests {
             (ErrorCode::TokenExpired, "token-expired"),
             (ErrorCode::InvalidInput, "invalid-input"),
             (ErrorCode::DatabaseError, "database-error"),
-            (ErrorCode::ExternalService, "external-service"),
+            (ErrorCode::ExternalService, "external-service-error"),
         ];
         for (code, expected_slug) in cases {
             let err = AppError::new(*code, "test");
