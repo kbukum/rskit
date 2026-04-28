@@ -4,9 +4,9 @@
 //! context helpers, span operations, edge cases, and output capture via a
 //! custom `tracing_subscriber::Layer`.
 
+use parking_lot::Mutex;
 #[allow(clippy::disallowed_types)]
 use std::sync::Arc;
-use parking_lot::Mutex;
 
 use rskit_config::{LogFormat, LogOutput, LoggingConfig};
 use rskit_logging::context::{
