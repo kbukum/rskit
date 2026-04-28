@@ -26,7 +26,7 @@ client  = ["rmcp/client", "rmcp/transport-child-process"]
 rskit-tool   = { path = "../rskit-tool" }
 rskit-schema = { path = "../rskit-schema" }
 rskit-errors = { path = "../rskit-errors" }
-rmcp         = { version = "1.3", default-features = false, features = ["transport-async-rw"] }
+rmcp         = { version = "1.5", default-features = false, features = ["transport-async-rw"] }
 serde        = { workspace = true }
 serde_json   = { workspace = true }
 tokio        = { workspace = true }
