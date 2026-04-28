@@ -34,7 +34,7 @@ default = []
 gcs = ["dep:google-cloud-storage"]
 
 [dependencies.google-cloud-storage]
-version  = "0.22"
+version  = "1.10"
 optional = true
 
 [dev-dependencies]
