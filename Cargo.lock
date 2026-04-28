@@ -5034,7 +5034,7 @@ dependencies = [
  "pbkdf2",
  "rand 0.10.1",
  "rskit-errors",
- "sha2 0.10.9",
+ "sha2 0.11.0",
  "tokio",
  "zeroize",
 ]
