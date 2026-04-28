@@ -315,12 +315,11 @@ fn pattern_fails_when_value_does_not_match() {
 }
 
 #[test]
+#[should_panic(expected = "invalid regex pattern")]
 fn pattern_fails_with_invalid_regex() {
-    let err = Validator::new()
+    let _ = Validator::new()
         .pattern("f", "value", "[invalid")
-        .validate()
-        .unwrap_err();
-    assert!(err.message.contains("invalid pattern"));
+        .validate();
 }
 
 #[test]
@@ -676,7 +675,7 @@ fn after_skips_when_floor_is_invalid() {
 fn custom_passes_when_check_is_true() {
     assert!(
         Validator::new()
-            .custom("tos", true, "must accept terms")
+            .custom(true, "tos", "must accept terms")
             .validate()
             .is_ok()
     );
@@ -685,7 +684,7 @@ fn custom_passes_when_check_is_true() {
 #[test]
 fn custom_fails_when_check_is_false() {
     let err = Validator::new()
-        .custom("tos", false, "must accept terms")
+        .custom(false, "tos", "must accept terms")
         .validate()
         .unwrap_err();
     assert!(err.message.contains("tos"));
@@ -697,7 +696,7 @@ fn custom_enables_arbitrary_domain_logic() {
     let password = "short";
     let has_digit = password.chars().any(|c| c.is_ascii_digit());
     let err = Validator::new()
-        .custom("password", has_digit, "must contain a digit")
+        .custom(has_digit, "password", "must contain a digit")
         .validate()
         .unwrap_err();
     assert!(err.message.contains("must contain a digit"));
@@ -734,7 +733,7 @@ fn validator_chaining_is_fluent() {
         .one_of("h", &1, &[1, 2, 3])
         .required_uuid("i", "550e8400-e29b-41d4-a716-446655440000")
         .optional_uuid("j", None)
-        .custom("k", true, "ok")
+        .custom(true, "k", "ok")
         .before("l", "2024-01-01T00:00:00Z", "2025-01-01T00:00:00Z")
         .after("m", "2026-01-01T00:00:00Z", "2025-01-01T00:00:00Z")
         .validate();
@@ -930,7 +929,7 @@ fn sql_injection_in_field_name_is_preserved_literally() {
 #[test]
 fn custom_message_with_injection_payloads() {
     let err = Validator::new()
-        .custom("f", false, "<img onerror=alert(1) src=x>")
+        .custom(false, "f", "<img onerror=alert(1) src=x>")
         .validate()
         .unwrap_err();
     assert!(err.message.contains("<img onerror=alert(1) src=x>"));
@@ -1185,8 +1184,8 @@ fn realistic_user_registration_validation_passes() {
         .min_length("password", "Str0ng!Pass", 8)
         .max_length("password", "Str0ng!Pass", 128)
         .custom(
-            "password",
             "Str0ng!Pass".chars().any(|c| c.is_ascii_digit()),
+            "password",
             "must contain a digit",
         )
         .in_range("age", 25, 13, 150)

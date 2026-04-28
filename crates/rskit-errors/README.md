@@ -10,7 +10,7 @@
 
 ## Features
 
-- 17 `ErrorCode` variants covering common application error scenarios
+- 18 `ErrorCode` variants covering common application error scenarios
 - Fluent builder with `with_detail` / `with_cause`
 - Automatic HTTP status code mapping via `http_status()`
 - `tonic::Status` conversion for gRPC services

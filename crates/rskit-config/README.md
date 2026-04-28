@@ -14,12 +14,14 @@ Load application config from TOML files, `.env` files, and environment variables
 - Serde-based deserialization into any `Deserialize` + `Validate` type
 - Optional `.env` file support via `dotenvy`
 - Configurable env prefix
+- Profile-specific env files (`config/profiles/{profile}.env`)
 
 ## Loading Order (lowest → highest priority)
 
 1. TOML file (`with_config_file`)
-2. `.env` file
-3. `APP__SECTION__KEY` environment variables
+2. Profile env file (`config/profiles/{profile}.env`, via `with_profile`)
+3. `.env` file
+4. Environment variables (`__` separator, optional prefix via `with_env_prefix`)
 
 ## Usage
 
@@ -31,15 +33,21 @@ validator = { version = "0.18", features = ["derive"] }
 ```
 
 ```rust
-use rskit_config::{ConfigLoader, AppConfig};
+use rskit_config::{ConfigLoader, AppConfig, ServiceConfig};
 use serde::Deserialize;
 use validator::Validate;
 
 #[derive(Deserialize, Validate)]
 struct Config {
-    #[validate(length(min = 1))]
-    name: String,
-    port: u16,
+    #[serde(flatten)]
+    service: ServiceConfig,
+    #[validate(range(min = 1))]
+    grpc_port: u16,
+}
+
+impl AppConfig for Config {
+    fn apply_defaults(&mut self) {}
+    fn service_config(&self) -> &ServiceConfig { &self.service }
 }
 
 let cfg: Config = ConfigLoader::new()
@@ -47,6 +55,22 @@ let cfg: Config = ConfigLoader::new()
     .with_env_prefix("MYAPP")
     .load()?;
 ```
+
+## ServiceConfig Fields
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `name` | `String` | `"service"` | Service name |
+| `environment` | `Environment` | `Development` | Deployment environment |
+| `version` | `String` | `CARGO_PKG_VERSION` | Service version |
+| `address` | `String` | `"0.0.0.0"` | Service bind address |
+| `port` | `u16` | `50051` | Service port |
+| `debug` | `bool` | `false` | Debug mode |
+| `logging` | `LoggingConfig` | | Logging (level, format, output) |
+
+## Validation
+
+Structs must implement `validator::Validate`. The loader calls `validate()` after `apply_defaults()` and returns `AppError` on failure.
 
 ## See Also
 

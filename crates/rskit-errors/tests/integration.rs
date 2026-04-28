@@ -435,7 +435,7 @@ fn display_format_for_various_codes() {
     let cases = vec![
         (ErrorCode::Timeout, "slow", "TIMEOUT: slow"),
         (ErrorCode::Forbidden, "nope", "FORBIDDEN: nope"),
-        (ErrorCode::Internal, "oops", "INTERNAL: oops"),
+        (ErrorCode::Internal, "oops", "INTERNAL_ERROR: oops"),
     ];
     for (code, msg, expected) in cases {
         let err = AppError::new(code, msg);
@@ -589,7 +589,7 @@ fn problem_detail_error_type_uri_format() {
         (ErrorCode::TokenExpired, "token-expired"),
         (ErrorCode::InvalidInput, "invalid-input"),
         (ErrorCode::DatabaseError, "database-error"),
-        (ErrorCode::ExternalService, "external-service"),
+        (ErrorCode::ExternalService, "external-service-error"),
     ];
     for (code, expected_slug) in cases {
         let err = AppError::new(code, "test");
@@ -697,7 +697,7 @@ fn problem_detail_title_is_title_cased() {
         (ErrorCode::ServiceUnavailable, "Service Unavailable"),
         (ErrorCode::InvalidInput, "Invalid Input"),
         (ErrorCode::DatabaseError, "Database Error"),
-        (ErrorCode::Internal, "Internal"),
+        (ErrorCode::Internal, "Internal Error"),
         (ErrorCode::Unauthorized, "Unauthorized"),
     ];
     for (code, expected_title) in cases {
@@ -729,7 +729,7 @@ fn problem_detail_grpc_roundtrip() {
 fn empty_string_message() {
     let err = AppError::new(ErrorCode::Internal, "");
     assert_eq!(err.message, "");
-    assert_eq!(format!("{err}"), "INTERNAL: ");
+    assert_eq!(format!("{err}"), "INTERNAL_ERROR: ");
 }
 
 #[test]
@@ -805,9 +805,9 @@ fn error_code_serde_all_variants() {
         (ErrorCode::Forbidden, "FORBIDDEN"),
         (ErrorCode::TokenExpired, "TOKEN_EXPIRED"),
         (ErrorCode::InvalidToken, "INVALID_TOKEN"),
-        (ErrorCode::Internal, "INTERNAL"),
+        (ErrorCode::Internal, "INTERNAL_ERROR"),
         (ErrorCode::DatabaseError, "DATABASE_ERROR"),
-        (ErrorCode::ExternalService, "EXTERNAL_SERVICE"),
+        (ErrorCode::ExternalService, "EXTERNAL_SERVICE_ERROR"),
     ];
     for (code, expected_str) in all_codes {
         let json = serde_json::to_string(&code).unwrap();
@@ -839,9 +839,9 @@ fn error_code_as_str_all_variants() {
         (ErrorCode::Forbidden, "FORBIDDEN"),
         (ErrorCode::TokenExpired, "TOKEN_EXPIRED"),
         (ErrorCode::InvalidToken, "INVALID_TOKEN"),
-        (ErrorCode::Internal, "INTERNAL"),
+        (ErrorCode::Internal, "INTERNAL_ERROR"),
         (ErrorCode::DatabaseError, "DATABASE_ERROR"),
-        (ErrorCode::ExternalService, "EXTERNAL_SERVICE"),
+        (ErrorCode::ExternalService, "EXTERNAL_SERVICE_ERROR"),
     ];
     for (code, expected) in cases {
         assert_eq!(code.as_str(), expected, "{:?}.as_str()", code);

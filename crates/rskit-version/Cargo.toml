@@ -1,0 +1,27 @@
+[package]
+name        = "rskit-version"
+description = "Build-time version and git metadata for rskit"
+version.workspace     = true
+edition.workspace     = true
+license.workspace     = true
+rust-version.workspace = true
+authors.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+documentation = "https://docs.rs/rskit-version"
+readme = "README.md"
+categories = ["development-tools"]
+keywords   = ["version", "git", "build-info", "metadata"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+serde = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

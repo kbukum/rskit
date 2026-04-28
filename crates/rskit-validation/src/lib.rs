@@ -23,7 +23,7 @@ use rskit_errors::{AppError, AppResult, ErrorCode};
 // ── FieldError ────────────────────────────────────────────────────────────────
 
 /// A single field validation failure.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct FieldError {
     /// The name of the field that failed validation.
     pub field: String,
@@ -96,14 +96,10 @@ impl Validator {
     /// Fail if `value` does not match the regular expression `re`.
     #[must_use]
     pub fn pattern(mut self, field: &str, value: &str, re: &str) -> Self {
-        match regex::Regex::new(re) {
-            Ok(r) if !r.is_match(value) => {
-                self.add(field, format!("must match pattern {re}"));
-            }
-            Err(_) => {
-                self.add(field, format!("invalid pattern {re}"));
-            }
-            _ => {}
+        let r = regex::Regex::new(re)
+            .unwrap_or_else(|e| panic!("validation: invalid regex pattern \"{re}\": {e}"));
+        if !r.is_match(value) {
+            self.add(field, format!("must match pattern {re}"));
         }
         self
     }
@@ -143,6 +139,24 @@ impl Validator {
     ) -> Self {
         if value < min || value > max {
             self.add(field, format!("must be between {min} and {max}"));
+        }
+        self
+    }
+
+    /// Fail if `value` is below `min`.
+    #[must_use]
+    pub fn min_value<T: PartialOrd + Display>(mut self, field: &str, value: T, min: T) -> Self {
+        if value < min {
+            self.add(field, format!("must be at least {min}"));
+        }
+        self
+    }
+
+    /// Fail if `value` is above `max`.
+    #[must_use]
+    pub fn max_value<T: PartialOrd + Display>(mut self, field: &str, value: T, max: T) -> Self {
+        if value > max {
+            self.add(field, format!("must be {max} or less"));
         }
         self
     }
@@ -199,10 +213,10 @@ impl Validator {
 
     // ── Composition ───────────────────────────────────────────────────────
 
-    /// Add an error for `field` if `check` is `false`.
+    /// Add an error for `field` if `condition` is `false`.
     #[must_use]
-    pub fn custom(mut self, field: &str, check: bool, message: &str) -> Self {
-        if !check {
+    pub fn custom(mut self, condition: bool, field: &str, message: &str) -> Self {
+        if !condition {
             self.add(field, message);
         }
         self
@@ -232,7 +246,9 @@ impl Validator {
             .map(|e| format!("{}: {}", e.field, e.message))
             .collect::<Vec<_>>()
             .join("; ");
-        Err(AppError::new(ErrorCode::InvalidInput, detail))
+        let fields_json =
+            serde_json::to_value(&self.errors).unwrap_or_else(|_| serde_json::Value::Array(vec![]));
+        Err(AppError::new(ErrorCode::InvalidInput, detail).with_detail("fields", fields_json))
     }
 
     // ── Internal ──────────────────────────────────────────────────────────

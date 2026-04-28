@@ -1,0 +1,30 @@
+[package]
+name        = "rskit-util"
+description = "Pure utility functions for rskit"
+version.workspace      = true
+edition.workspace      = true
+license.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+documentation = "https://docs.rs/rskit-util"
+readme = "README.md"
+categories = ["development-tools"]
+keywords   = ["utilities", "helpers", "async"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+chrono       = { workspace = true }
+parking_lot  = { workspace = true }
+regex        = { workspace = true }
+serde_json   = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+
+[lints]
+workspace = true

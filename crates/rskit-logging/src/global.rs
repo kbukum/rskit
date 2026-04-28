@@ -170,10 +170,10 @@ pub fn init_global_with_masking(
 // ── Internal helpers ─────────────────────────────────────────────────────────
 
 fn make_writer_for(output: &LogOutput) -> WriterKind {
-    // We only support Stdout/Stderr directly; File requires boxing and is
-    // deferred to a non-Send context — use Stdout as safe fallback for now.
     match output {
         LogOutput::Stderr => WriterKind::Stderr,
+        // File output not yet supported — fall back to stdout
+        LogOutput::File { .. } => WriterKind::Stdout,
         _ => WriterKind::Stdout,
     }
 }

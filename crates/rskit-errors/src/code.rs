@@ -44,12 +44,17 @@ pub enum ErrorCode {
 
     // ── Internal ───────────────────────────────────────────────────────
     /// An unexpected internal error occurred.
+    #[serde(rename = "INTERNAL_ERROR")]
     Internal,
     /// A database operation failed.
     DatabaseError,
     /// An external service returned an error; retryable.
+    #[serde(rename = "EXTERNAL_SERVICE_ERROR")]
     ExternalService,
-    /// The operation was cancelled before completion.
+
+    // ── Lifecycle ─────────────────────────────────────────────────────
+    /// The operation was cancelled by the caller or system before completion
+    /// (e.g., context cancellation, client disconnect).
     Cancelled,
 }
 
@@ -111,10 +116,10 @@ impl ErrorCode {
             ErrorCode::Forbidden => "FORBIDDEN",
             ErrorCode::TokenExpired => "TOKEN_EXPIRED",
             ErrorCode::InvalidToken => "INVALID_TOKEN",
-            ErrorCode::Internal => "INTERNAL",
+            ErrorCode::Internal => "INTERNAL_ERROR",
             ErrorCode::DatabaseError => "DATABASE_ERROR",
-            ErrorCode::ExternalService => "EXTERNAL_SERVICE",
-            ErrorCode::Cancelled => "CANCELLED",
+            ErrorCode::ExternalService => "EXTERNAL_SERVICE_ERROR",
+            ErrorCode::Cancelled => "CANCELED",
             #[allow(unreachable_patterns)]
             _ => "UNKNOWN",
         }
@@ -271,7 +276,7 @@ mod tests {
 
     #[test]
     fn as_str_internal() {
-        assert_eq!(ErrorCode::Internal.as_str(), "INTERNAL");
+        assert_eq!(ErrorCode::Internal.as_str(), "INTERNAL_ERROR");
     }
 
     #[test]
