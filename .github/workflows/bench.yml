@@ -39,7 +39,7 @@ jobs:
       - uses: Swatinem/rust-cache@9bdad043e88c75890e36ad3bbc8d27f0090dd609  # v2.7.8
 
       - name: Run benchmarks
-        run: cargo bench --workspace -- --output-format bencher | tee output.txt
+        run: cargo bench --workspace --bench '*' -- --output-format bencher | tee output.txt
 
       - name: Store benchmark result
         uses: benchmark-action/github-action-benchmark@a60cea5bc7b49e15c1f58f411161f99e0df48372  # v1.22.0
