@@ -321,6 +321,8 @@ All three kits (gokit, pykit, rskit) share the same structured field names, defi
 | `trace_id` | `fields::names::TRACE_ID` | Distributed trace ID |
 | `span_id` | `fields::names::SPAN_ID` | Span ID within trace |
 | `correlation_id` | `fields::names::CORRELATION_ID` | Cross-service correlation |
+| `user_id` | `fields::names::USER_ID` | User identifier |
+| `request_id` | `fields::names::REQUEST_ID` | HTTP request identifier |
 | `duration_ms` | `fields::names::DURATION_MS` | Duration in milliseconds |
 
 ### Using Field Constants

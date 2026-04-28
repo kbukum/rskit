@@ -17,6 +17,10 @@ pub mod names {
     pub const SPAN_ID: &str = "span_id";
     /// Correlation identifier for cross-service request tracking.
     pub const CORRELATION_ID: &str = "correlation_id";
+    /// User identifier.
+    pub const USER_ID: &str = "user_id";
+    /// HTTP request identifier.
+    pub const REQUEST_ID: &str = "request_id";
     /// Duration of an operation in milliseconds.
     pub const DURATION_MS: &str = "duration_ms";
     /// Service version string.
@@ -36,6 +40,8 @@ mod tests {
             TRACE_ID,
             SPAN_ID,
             CORRELATION_ID,
+            USER_ID,
+            REQUEST_ID,
             DURATION_MS,
             VERSION,
         ];
@@ -53,6 +59,8 @@ mod tests {
             TRACE_ID,
             SPAN_ID,
             CORRELATION_ID,
+            USER_ID,
+            REQUEST_ID,
             DURATION_MS,
             VERSION,
         ];

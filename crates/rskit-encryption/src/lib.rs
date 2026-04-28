@@ -5,16 +5,19 @@
 //! of sensitive data using either AES-256-GCM (default, with hardware acceleration)
 //! or ChaCha20-Poly1305 (modern, performant without AES-NI).
 //!
+//! Keys are derived from passphrases using PBKDF2-SHA256 with 600,000 iterations
+//! and a random 16-byte salt per encryption operation.
+//!
+//! Ciphertext format: `base64(salt[16] || nonce[12] || ciphertext)`
+//!
 //! # Examples
 //!
 //! ```no_run
 //! use rskit_encryption::{Encryptor, Algorithm};
 //! use rskit_encryption::new_encryptor;
 //!
-//! # #[tokio::main]
-//! # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! // Create an AES-GCM encryptor (default)
-//! let encryptor = new_encryptor(b"my-secret-key", Algorithm::AesGcm)?;
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let encryptor = new_encryptor(b"my-secret-key", Algorithm::AesGcm);
 //!
 //! let plaintext = b"sensitive data";
 //! let ciphertext = encryptor.encrypt(plaintext)?;
@@ -33,37 +36,28 @@ pub use aes_gcm::AesGcmEncryptor;
 pub use chacha20::ChaCha20Encryptor;
 pub use traits::{Algorithm, Encryptor};
 
-use rskit_errors::AppResult;
-
 /// Creates a new encryptor for the specified algorithm.
 ///
 /// # Arguments
 ///
-/// * `key` - The encryption key (will be hashed to 32 bytes with SHA-256)
+/// * `key` - The encryption passphrase (used with PBKDF2-SHA256 to derive keys)
 /// * `algorithm` - The encryption algorithm to use
 ///
 /// # Returns
 ///
 /// A boxed trait object implementing [`Encryptor`].
 ///
-/// # Errors
-///
-/// Returns an error if the encryptor cannot be created.
-///
 /// # Examples
 ///
 /// ```no_run
 /// use rskit_encryption::{new_encryptor, Algorithm};
 ///
-/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let encryptor = new_encryptor(b"secret-key", Algorithm::ChaCha20Poly1305)?;
-/// # Ok(())
-/// # }
+/// let encryptor = new_encryptor(b"secret-key", Algorithm::ChaCha20Poly1305);
 /// ```
-pub fn new_encryptor(key: &[u8], algorithm: Algorithm) -> AppResult<Box<dyn Encryptor>> {
+pub fn new_encryptor(key: &[u8], algorithm: Algorithm) -> Box<dyn Encryptor> {
     match algorithm {
-        Algorithm::AesGcm => Ok(Box::new(AesGcmEncryptor::new(key)?)),
-        Algorithm::ChaCha20Poly1305 => Ok(Box::new(ChaCha20Encryptor::new(key)?)),
+        Algorithm::AesGcm => Box::new(AesGcmEncryptor::new(key)),
+        Algorithm::ChaCha20Poly1305 => Box::new(ChaCha20Encryptor::new(key)),
     }
 }
 
@@ -73,7 +67,7 @@ mod tests {
 
     #[test]
     fn test_factory_aes_gcm() {
-        let encryptor = new_encryptor(b"secret-key", Algorithm::AesGcm).unwrap();
+        let encryptor = new_encryptor(b"secret-key", Algorithm::AesGcm);
         assert_eq!(encryptor.algorithm(), Algorithm::AesGcm);
 
         let plaintext = b"test";
@@ -84,7 +78,7 @@ mod tests {
 
     #[test]
     fn test_factory_chacha20() {
-        let encryptor = new_encryptor(b"secret-key", Algorithm::ChaCha20Poly1305).unwrap();
+        let encryptor = new_encryptor(b"secret-key", Algorithm::ChaCha20Poly1305);
         assert_eq!(encryptor.algorithm(), Algorithm::ChaCha20Poly1305);
 
         let plaintext = b"test";

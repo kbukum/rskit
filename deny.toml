@@ -60,6 +60,7 @@ ignore = [
     "RUSTSEC-2026-0098", # rustls 0.21: name constraint vuln — transitive via aws-sdk-s3
     "RUSTSEC-2026-0099", # rustls 0.21: wildcard name constraint — transitive via aws-sdk-s3
     "RUSTSEC-2026-0104", # rustls 0.21: CRL parsing panic — transitive via aws-sdk-s3
+    "RUSTSEC-2026-0097", # rand 0.8/0.9: unsound with custom logger — transitive via jsonwebtoken, sqlx, tonic
 ]
 
 # ---------------------------------------------------------------------------

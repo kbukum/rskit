@@ -7,56 +7,72 @@ use chacha20poly1305::{
 };
 use rand::Rng;
 use rskit_errors::{AppError, AppResult, ErrorCode};
-use sha2::{Digest, Sha256};
+use sha2::Sha256;
+use zeroize::Zeroize;
 
 use crate::traits::{Algorithm, Encryptor};
 
+const SALT_SIZE: usize = 16;
+const NONCE_SIZE: usize = 12;
+const PBKDF2_ITERATIONS: u32 = 600_000;
+const KEY_LEN: usize = 32;
+
 /// ChaCha20-Poly1305 encryptor.
 ///
-/// Modern AEAD cipher that performs well on CPUs without AES hardware acceleration.
-/// Uses a random 12-byte nonce for each encryption, prepended to the ciphertext.
-/// The output is base64-encoded for safe transmission.
+/// Uses PBKDF2-SHA256 for key derivation with a random 16-byte salt per encryption.
+/// Output format: `base64(salt[16] || nonce[12] || ciphertext)`.
 pub struct ChaCha20Encryptor {
-    cipher: ChaCha20Poly1305,
+    passphrase: Vec<u8>,
 }
 
 impl ChaCha20Encryptor {
     /// Creates a new ChaCha20-Poly1305 encryptor.
     ///
-    /// The key is hashed with SHA-256 to ensure it is exactly 32 bytes.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the cipher cannot be created (should not occur with valid key).
-    pub fn new(key: &[u8]) -> AppResult<Self> {
-        let mut hasher = Sha256::new();
-        hasher.update(key);
-        let key_bytes = hasher.finalize();
+    /// The passphrase is stored and used with PBKDF2-SHA256 to derive keys per operation.
+    pub fn new(key: &[u8]) -> Self {
+        Self {
+            passphrase: key.to_vec(),
+        }
+    }
 
-        let cipher = ChaCha20Poly1305::new((&key_bytes[..]).into());
+    fn derive_key(&self, salt: &[u8]) -> [u8; KEY_LEN] {
+        let mut key = [0u8; KEY_LEN];
+        pbkdf2::pbkdf2_hmac::<Sha256>(&self.passphrase, salt, PBKDF2_ITERATIONS, &mut key);
+        key
+    }
+}
 
-        Ok(Self { cipher })
+impl Drop for ChaCha20Encryptor {
+    fn drop(&mut self) {
+        self.passphrase.zeroize();
     }
 }
 
 impl Encryptor for ChaCha20Encryptor {
     fn encrypt(&self, plaintext: &[u8]) -> AppResult<String> {
-        let mut nonce_bytes = [0u8; 12];
+        let mut salt = [0u8; SALT_SIZE];
+        rand::rng().fill_bytes(&mut salt);
+
+        let mut key_bytes = self.derive_key(&salt);
+        let cipher = ChaCha20Poly1305::new((&key_bytes[..]).into());
+        key_bytes.zeroize();
+
+        let mut nonce_bytes = [0u8; NONCE_SIZE];
         rand::rng().fill_bytes(&mut nonce_bytes);
         let nonce = Nonce::from_slice(&nonce_bytes);
 
-        let ciphertext = self
-            .cipher
+        let ciphertext = cipher
             .encrypt(nonce, Payload::from(plaintext))
             .map_err(|e| {
                 AppError::new(
                     ErrorCode::Internal,
-                    format!("ChaCha20-Poly1305 encryption failed: {}", e),
+                    format!("ChaCha20-Poly1305 encryption failed: {e}"),
                 )
             })?;
 
-        // Prepend nonce to ciphertext
-        let mut result = nonce_bytes.to_vec();
+        let mut result = Vec::with_capacity(SALT_SIZE + NONCE_SIZE + ciphertext.len());
+        result.extend_from_slice(&salt);
+        result.extend_from_slice(&nonce_bytes);
         result.extend_from_slice(&ciphertext);
 
         Ok(STANDARD.encode(&result))
@@ -66,27 +82,32 @@ impl Encryptor for ChaCha20Encryptor {
         let data = STANDARD.decode(ciphertext).map_err(|e| {
             AppError::new(
                 ErrorCode::InvalidFormat,
-                format!("Invalid base64 ciphertext: {}", e),
+                format!("Invalid base64 ciphertext: {e}"),
             )
         })?;
 
-        const NONCE_SIZE: usize = 12;
-        if data.len() < NONCE_SIZE {
+        if data.len() < SALT_SIZE + NONCE_SIZE {
             return Err(AppError::new(
                 ErrorCode::InvalidFormat,
-                "Ciphertext too short (missing nonce)",
+                "Ciphertext too short (missing salt or nonce)",
             ));
         }
 
-        let (nonce_bytes, cipher_bytes) = data.split_at(NONCE_SIZE);
+        let (salt, remaining) = data.split_at(SALT_SIZE);
+        let (nonce_bytes, cipher_bytes) = remaining.split_at(NONCE_SIZE);
+
+        let mut key_bytes = self.derive_key(salt);
+        let cipher = ChaCha20Poly1305::new((&key_bytes[..]).into());
+        key_bytes.zeroize();
+
         let nonce = Nonce::from_slice(nonce_bytes);
 
-        self.cipher
+        cipher
             .decrypt(nonce, Payload::from(cipher_bytes))
             .map_err(|e| {
                 AppError::new(
                     ErrorCode::InvalidFormat,
-                    format!("ChaCha20-Poly1305 decryption failed: {}", e),
+                    format!("ChaCha20-Poly1305 decryption failed: {e}"),
                 )
             })
     }
@@ -102,7 +123,7 @@ mod tests {
 
     #[test]
     fn test_encrypt_decrypt_roundtrip() {
-        let encryptor = ChaCha20Encryptor::new(b"my-secret-key").unwrap();
+        let encryptor = ChaCha20Encryptor::new(b"my-secret-key");
         let plaintext = b"Hello, World!";
 
         let ciphertext = encryptor.encrypt(plaintext).unwrap();
@@ -113,20 +134,19 @@ mod tests {
 
     #[test]
     fn test_encrypt_produces_different_ciphertext() {
-        let encryptor = ChaCha20Encryptor::new(b"my-secret-key").unwrap();
+        let encryptor = ChaCha20Encryptor::new(b"my-secret-key");
         let plaintext = b"Same plaintext";
 
         let ct1 = encryptor.encrypt(plaintext).unwrap();
         let ct2 = encryptor.encrypt(plaintext).unwrap();
 
-        // Different nonces should produce different ciphertexts
         assert_ne!(ct1, ct2);
     }
 
     #[test]
     fn test_decrypt_with_wrong_key_fails() {
-        let encryptor1 = ChaCha20Encryptor::new(b"key-1").unwrap();
-        let encryptor2 = ChaCha20Encryptor::new(b"key-2").unwrap();
+        let encryptor1 = ChaCha20Encryptor::new(b"key-1");
+        let encryptor2 = ChaCha20Encryptor::new(b"key-2");
 
         let plaintext = b"Secret data";
         let ciphertext = encryptor1.encrypt(plaintext).unwrap();
@@ -137,7 +157,7 @@ mod tests {
 
     #[test]
     fn test_encrypt_empty_plaintext() {
-        let encryptor = ChaCha20Encryptor::new(b"my-secret-key").unwrap();
+        let encryptor = ChaCha20Encryptor::new(b"my-secret-key");
         let plaintext = b"";
 
         let ciphertext = encryptor.encrypt(plaintext).unwrap();
@@ -148,24 +168,23 @@ mod tests {
 
     #[test]
     fn test_algorithm() {
-        let encryptor = ChaCha20Encryptor::new(b"my-secret-key").unwrap();
+        let encryptor = ChaCha20Encryptor::new(b"my-secret-key");
         assert_eq!(encryptor.algorithm(), Algorithm::ChaCha20Poly1305);
     }
 
     #[test]
     fn test_invalid_ciphertext() {
-        let encryptor = ChaCha20Encryptor::new(b"my-secret-key").unwrap();
+        let encryptor = ChaCha20Encryptor::new(b"my-secret-key");
         let result = encryptor.decrypt("invalid-base64!@#$");
         assert!(result.is_err());
     }
 
     #[test]
     fn test_corrupted_ciphertext() {
-        let encryptor = ChaCha20Encryptor::new(b"my-secret-key").unwrap();
+        let encryptor = ChaCha20Encryptor::new(b"my-secret-key");
         let plaintext = b"Original";
         let ciphertext = encryptor.encrypt(plaintext).unwrap();
 
-        // Corrupt the ciphertext by modifying a byte in the middle
         let mut corrupted = ciphertext.clone();
         let chars: Vec<char> = corrupted.chars().collect();
         if chars.len() > 20 {
