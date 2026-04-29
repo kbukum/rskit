@@ -4,7 +4,7 @@ use std::fmt;
 
 const SECRET_MASK: &str = "***";
 
-/// A string wrapper that masks its value in [`Display`], [`Debug`], and JSON
+/// A string wrapper that masks its value in [`fmt::Display`], [`fmt::Debug`], and JSON
 /// serialisation to prevent accidental secret exposure in logs or config dumps.
 ///
 /// Use [`SecretString::expose()`] to access the plaintext.
