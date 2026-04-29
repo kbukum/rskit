@@ -96,10 +96,13 @@ impl Validator {
     /// Fail if `value` does not match the regular expression `re`.
     #[must_use]
     pub fn pattern(mut self, field: &str, value: &str, re: &str) -> Self {
-        let r = regex::Regex::new(re)
-            .unwrap_or_else(|e| panic!("validation: invalid regex pattern \"{re}\": {e}"));
-        if !r.is_match(value) {
-            self.add(field, format!("must match pattern {re}"));
+        match regex::Regex::new(re) {
+            Ok(regex) => {
+                if !regex.is_match(value) {
+                    self.add(field, format!("must match pattern {re}"));
+                }
+            }
+            Err(err) => self.add(field, format!("invalid pattern: {err}")),
         }
         self
     }

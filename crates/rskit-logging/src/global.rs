@@ -50,14 +50,16 @@ pub fn init_global(cfg: &LoggingConfig) -> GlobalLoggingGuard {
                 .with_span_list(true)
                 .with_writer(make_writer);
             let subscriber = tracing_subscriber::registry().with(filter).with(layer);
-            tracing::subscriber::set_global_default(subscriber)
-                .expect("failed to install global tracing subscriber; another subscriber may already be set");
+            tracing::subscriber::set_global_default(subscriber).unwrap_or_else(|e| {
+                eprintln!("rskit-logging: failed to install global subscriber: {e}")
+            });
         }
         LogFormat::Console => {
             let layer = fmt::layer().pretty().with_writer(make_writer);
             let subscriber = tracing_subscriber::registry().with(filter).with(layer);
-            tracing::subscriber::set_global_default(subscriber)
-                .expect("failed to install global tracing subscriber; another subscriber may already be set");
+            tracing::subscriber::set_global_default(subscriber).unwrap_or_else(|e| {
+                eprintln!("rskit-logging: failed to install global subscriber: {e}")
+            });
         }
     }
 
@@ -101,8 +103,9 @@ pub fn init_global_with_options(
                 .with(filter)
                 .with(sampling_layer)
                 .with(layer);
-            tracing::subscriber::set_global_default(subscriber)
-                .expect("failed to install global tracing subscriber; another subscriber may already be set");
+            tracing::subscriber::set_global_default(subscriber).unwrap_or_else(|e| {
+                eprintln!("rskit-logging: failed to install global subscriber: {e}")
+            });
         }
         LogFormat::Console => {
             let layer = fmt::layer().pretty().with_writer(make_writer);
@@ -110,8 +113,9 @@ pub fn init_global_with_options(
                 .with(filter)
                 .with(sampling_layer)
                 .with(layer);
-            tracing::subscriber::set_global_default(subscriber)
-                .expect("failed to install global tracing subscriber; another subscriber may already be set");
+            tracing::subscriber::set_global_default(subscriber).unwrap_or_else(|e| {
+                eprintln!("rskit-logging: failed to install global subscriber: {e}")
+            });
         }
     }
 
@@ -153,14 +157,16 @@ pub fn init_global_with_masking(
                 .with_span_list(true)
                 .with_writer(writer);
             let subscriber = tracing_subscriber::registry().with(filter).with(layer);
-            tracing::subscriber::set_global_default(subscriber)
-                .expect("failed to install global tracing subscriber; another subscriber may already be set");
+            tracing::subscriber::set_global_default(subscriber).unwrap_or_else(|e| {
+                eprintln!("rskit-logging: failed to install global subscriber: {e}")
+            });
         }
         LogFormat::Console => {
             let layer = fmt::layer().pretty().with_writer(writer);
             let subscriber = tracing_subscriber::registry().with(filter).with(layer);
-            tracing::subscriber::set_global_default(subscriber)
-                .expect("failed to install global tracing subscriber; another subscriber may already be set");
+            tracing::subscriber::set_global_default(subscriber).unwrap_or_else(|e| {
+                eprintln!("rskit-logging: failed to install global subscriber: {e}")
+            });
         }
     }
 

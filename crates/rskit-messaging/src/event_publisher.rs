@@ -139,7 +139,9 @@ mod tests {
         value: u32,
     }
 
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
+
+    use parking_lot::Mutex;
 
     struct MockEventProducer {
         published: Arc<Mutex<Vec<(String, Event)>>>,
@@ -161,15 +163,12 @@ mod tests {
     #[async_trait]
     impl EventProducer for MockEventProducer {
         async fn publish(&self, topic: &str, event: Event) -> AppResult<()> {
-            self.published
-                .lock()
-                .unwrap()
-                .push((topic.to_string(), event));
+            self.published.lock().push((topic.to_string(), event));
             Ok(())
         }
 
         async fn publish_batch(&self, topic: &str, events: Vec<Event>) -> AppResult<()> {
-            let mut guard = self.published.lock().unwrap();
+            let mut guard = self.published.lock();
             for event in events {
                 guard.push((topic.to_string(), event));
             }
@@ -192,7 +191,7 @@ mod tests {
             .await
             .unwrap();
 
-        let guard = published.lock().unwrap();
+        let guard = published.lock();
         assert_eq!(guard.len(), 1);
         let (topic, event) = &guard[0];
         assert_eq!(topic, "my.topic");
@@ -220,7 +219,7 @@ mod tests {
             .await
             .unwrap();
 
-        let guard = published.lock().unwrap();
+        let guard = published.lock();
         let (_, event) = &guard[0];
         assert_eq!(event.subject, "order-123");
         assert_eq!(event.event_type, "order.placed");
@@ -252,7 +251,7 @@ mod tests {
             .await
             .unwrap();
 
-        let guard = published.lock().unwrap();
+        let guard = published.lock();
         assert_eq!(guard.len(), 3);
         for (topic, event) in guard.iter() {
             assert_eq!(topic, "items");

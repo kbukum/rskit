@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
+use parking_lot::Mutex;
 use rskit_di::{Closeable, Container};
 use rskit_errors::{AppError, AppResult, ErrorCode};
 
@@ -160,14 +161,13 @@ async fn high_concurrent_resolve_factory() {
 
 #[allow(dead_code)]
 struct MockCloseable {
-    #[allow(clippy::disallowed_types)]
-    closed: std::sync::Mutex<bool>,
+    closed: Mutex<bool>,
 }
 
 #[async_trait::async_trait]
 impl Closeable for MockCloseable {
     async fn close(&self) -> AppResult<()> {
-        *self.closed.lock().unwrap() = true;
+        *self.closed.lock() = true;
         Ok(())
     }
 }

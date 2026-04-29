@@ -27,6 +27,7 @@ async-stream     = { workspace = true }
 pin-project-lite = { workspace = true }
 tracing          = { workspace = true }
 tokio-stream     = "0.1"
+parking_lot      = { workspace = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full", "test-util"] }

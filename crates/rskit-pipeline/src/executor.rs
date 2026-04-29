@@ -151,13 +151,13 @@ mod tests {
             make_step("double", |v| Ok(v * 2)),
         ];
         let executor = StepExecutor::new(steps);
-        let statuses = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let statuses = std::sync::Arc::new(parking_lot::Mutex::new(Vec::new()));
         let s = statuses.clone();
 
         let result = executor
             .execute(
                 5,
-                move |status| s.lock().unwrap().push(status),
+                move |status| s.lock().push(status),
                 CancellationToken::new(),
             )
             .await
@@ -166,7 +166,7 @@ mod tests {
         // (5 + 1) * 2 = 12
         assert_eq!(result, 12);
 
-        let statuses = statuses.lock().unwrap();
+        let statuses = statuses.lock();
         assert_eq!(statuses.len(), 4); // Started + Completed for each step
         assert!(matches!(&statuses[0], StepStatus::Started { step_id } if step_id == "add-one"));
         assert!(

@@ -37,6 +37,7 @@ pub use types::{ChainResult, StepProgress, StepResult, StepStatus};
 #[cfg(test)]
 mod tests {
     use super::*;
+    use parking_lot::Mutex;
     use rskit_errors::{AppError, AppResult, ErrorCode};
     use serde_json::{Value, json};
     use std::future::Future;
@@ -246,7 +247,7 @@ mod tests {
     /// Progress callback verification — capture all progress events and validate order.
     #[tokio::test]
     async fn test_progress_callback_events() {
-        let events = Arc::new(std::sync::Mutex::new(Vec::<StepProgress>::new()));
+        let events = Arc::new(Mutex::new(Vec::<StepProgress>::new()));
 
         let chain = ChainBuilder::new()
             .step(IncrementOp::new("step-1"))
@@ -256,7 +257,7 @@ mod tests {
         let cancel = CancellationToken::new();
         let events_clone = events.clone();
         let progress: ChainProgressFn = Arc::new(move |p: StepProgress| {
-            events_clone.lock().unwrap().push(p);
+            events_clone.lock().push(p);
         });
 
         let result = chain
@@ -266,7 +267,7 @@ mod tests {
 
         assert!(result.success);
 
-        let captured = events.lock().unwrap();
+        let captured = events.lock();
 
         // For each step we expect: Running(0%), Running(50%), Running(100%), Completed(100%)
         // That's 4 events per step × 2 steps = 8 total

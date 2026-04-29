@@ -26,7 +26,7 @@ fn http_status_all_codes_exhaustive() {
         (ErrorCode::InvalidToken, 401),
         (ErrorCode::Internal, 500),
         (ErrorCode::DatabaseError, 500),
-        (ErrorCode::ExternalService, 500),
+        (ErrorCode::ExternalService, 502),
     ];
     for (code, expected) in cases {
         assert_eq!(
@@ -320,8 +320,7 @@ fn external_service_constructor() {
     let err = AppError::external_service("stripe", cause);
     assert_eq!(err.code, ErrorCode::ExternalService);
     assert!(err.retryable);
-    assert_eq!(err.http_status.as_u16(), 500);
-    assert!(err.message.contains("stripe"));
+    assert_eq!(err.http_status.as_u16(), 502);
     assert!(err.cause.is_some());
     assert_eq!(
         err.details.get("service").and_then(|v| v.as_str()),

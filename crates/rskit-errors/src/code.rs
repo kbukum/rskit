@@ -55,6 +55,7 @@ pub enum ErrorCode {
     // ── Lifecycle ─────────────────────────────────────────────────────
     /// The operation was cancelled by the caller or system before completion
     /// (e.g., context cancellation, client disconnect).
+    #[serde(rename = "CANCELLED")]
     Cancelled,
 }
 
@@ -87,9 +88,10 @@ impl ErrorCode {
             ErrorCode::Unauthorized => http::StatusCode::UNAUTHORIZED,
             ErrorCode::Forbidden => http::StatusCode::FORBIDDEN,
             ErrorCode::TokenExpired | ErrorCode::InvalidToken => http::StatusCode::UNAUTHORIZED,
-            ErrorCode::Internal | ErrorCode::DatabaseError | ErrorCode::ExternalService => {
+            ErrorCode::Internal | ErrorCode::DatabaseError => {
                 http::StatusCode::INTERNAL_SERVER_ERROR
             }
+            ErrorCode::ExternalService => http::StatusCode::BAD_GATEWAY,
             // 499 Client Closed Request (non-standard but widely used for cancellation)
             ErrorCode::Cancelled => {
                 http::StatusCode::from_u16(499).unwrap_or(http::StatusCode::INTERNAL_SERVER_ERROR)
@@ -119,7 +121,7 @@ impl ErrorCode {
             ErrorCode::Internal => "INTERNAL_ERROR",
             ErrorCode::DatabaseError => "DATABASE_ERROR",
             ErrorCode::ExternalService => "EXTERNAL_SERVICE_ERROR",
-            ErrorCode::Cancelled => "CANCELED",
+            ErrorCode::Cancelled => "CANCELLED",
             #[allow(unreachable_patterns)]
             _ => "UNKNOWN",
         }

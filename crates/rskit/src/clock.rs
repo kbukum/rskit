@@ -3,8 +3,9 @@
 use std::time::{Duration, SystemTime};
 
 #[cfg(any(test, feature = "test-util"))]
-#[allow(clippy::disallowed_types)]
-use std::sync::{Arc, Mutex};
+use parking_lot::Mutex;
+#[cfg(any(test, feature = "test-util"))]
+use std::sync::Arc;
 
 /// Abstraction over wall-clock time for testability.
 pub trait Clock: Send + Sync + 'static {
@@ -40,14 +41,12 @@ impl Clock for SystemClock {
 /// assert!(clock.now() > t0);
 /// ```
 #[cfg(any(test, feature = "test-util"))]
-#[allow(clippy::disallowed_types)] // MockClock is test-only, never crosses async boundaries
 #[derive(Debug, Clone)]
 pub struct MockClock {
     current: Arc<Mutex<SystemTime>>,
 }
 
 #[cfg(any(test, feature = "test-util"))]
-#[allow(clippy::disallowed_types)]
 impl Default for MockClock {
     fn default() -> Self {
         Self {
@@ -60,19 +59,19 @@ impl Default for MockClock {
 impl MockClock {
     /// Advance the mock clock by `duration`.
     pub fn advance(&self, duration: Duration) {
-        let mut t = self.current.lock().expect("clock poisoned");
+        let mut t = self.current.lock();
         *t += duration;
     }
 
     /// Set the mock clock to a specific time.
     pub fn set(&self, time: SystemTime) {
-        *self.current.lock().expect("clock poisoned") = time;
+        *self.current.lock() = time;
     }
 }
 
 #[cfg(any(test, feature = "test-util"))]
 impl Clock for MockClock {
     fn now(&self) -> SystemTime {
-        *self.current.lock().expect("clock poisoned")
+        *self.current.lock()
     }
 }
