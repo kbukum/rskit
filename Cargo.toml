@@ -9,6 +9,7 @@ members = [
     "crates/rskit-config",
     "crates/rskit-logging",
     "crates/rskit-bootstrap",
+    "crates/rskit-component",
     "crates/rskit-provider",
     "crates/rskit-pipeline",
     "crates/rskit-resilience",

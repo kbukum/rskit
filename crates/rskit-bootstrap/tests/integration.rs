@@ -36,5 +36,5 @@ async fn registry_starts_and_stops() {
     let mut reg = Registry::new();
     reg.register(Arc::new(NoopComponent));
     reg.start_all().await.unwrap();
-    reg.stop_all().await;
+    reg.stop_all().await.unwrap();
 }

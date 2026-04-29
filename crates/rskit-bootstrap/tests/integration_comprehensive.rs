@@ -204,7 +204,7 @@ async fn registry_stop_order_is_lifo() {
     ));
 
     reg.start_all().await.unwrap();
-    reg.stop_all().await;
+    reg.stop_all().await.unwrap();
 
     let order = stop_order.lock();
     assert_eq!(*order, vec!["third", "second", "first"]);
@@ -260,8 +260,8 @@ async fn lifecycle_hooks_execute_in_order() {
     let executed = order.lock();
     assert_eq!(
         *executed,
-        vec!["configure", "start", "stop"],
-        "run_task: configure → start → task → stop"
+        vec!["configure", "start", "ready", "stop"],
+        "run_task: configure → start → ready → task → stop"
     );
 }
 
@@ -421,7 +421,8 @@ async fn stop_all_continues_on_error() {
     ));
 
     reg.start_all().await.unwrap();
-    reg.stop_all().await; // should not panic
+    let result = reg.stop_all().await;
+    assert!(result.is_err());
 
     let order = stop_order.lock();
     // Both non-failing components should have stopped (reverse order)
@@ -696,7 +697,7 @@ async fn empty_registry_start_all() {
 #[tokio::test]
 async fn empty_registry_stop_all() {
     let reg = Registry::new();
-    reg.stop_all().await;
+    reg.stop_all().await.unwrap();
     // Should complete without panic
 }
 

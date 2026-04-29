@@ -6,7 +6,7 @@ use std::sync::Arc;
 use async_stream::stream;
 use futures::Stream;
 use rskit_errors::AppResult;
-use rskit_hook::{Action, HookRegistry};
+use rskit_hook::{Action, CancellationToken, HookRegistry};
 use rskit_llm::provider::{Provider, count_tokens_approx};
 use rskit_llm::types::{AssistantMessage, CompletionRequest, CompletionResponse, Message, Usage};
 use rskit_tool::{Context, Registry, ToolResult};
@@ -62,11 +62,12 @@ impl Agent {
             tool_calls: vec![],
             usage: None,
         };
+        let hook_token = CancellationToken::new();
 
         for turn in 0..self.config.max_turns {
             // ── TurnStart hook ──────────────────────────────────────────
             if let Some(ref hooks) = self.config.hooks {
-                let result = hooks.emit(&hooks::TurnStart { turn });
+                let result = hooks.emit(&hooks::TurnStart { turn }, hook_token.clone());
                 if result.action == Action::Abort {
                     return Ok(AgentResult {
                         messages: all_messages,
@@ -92,9 +93,12 @@ impl Agent {
 
             // ── PreLLMCall hook (allow Modify) ──────────────────────────
             if let Some(ref hooks) = self.config.hooks {
-                let result = hooks.emit(&hooks::PreLLMCall {
-                    request: request.clone(),
-                });
+                let result = hooks.emit(
+                    &hooks::PreLLMCall {
+                        request: request.clone(),
+                    },
+                    hook_token.clone(),
+                );
                 match result.action {
                     Action::Abort => {
                         return Ok(AgentResult {
@@ -113,6 +117,7 @@ impl Agent {
                         }
                     }
                     Action::Continue => {}
+                    _ => {}
                 }
             }
 
@@ -121,10 +126,13 @@ impl Agent {
 
             // ── PostLLMCall hook ─────────────────────────────────────────
             if let Some(ref hooks) = self.config.hooks {
-                let result = hooks.emit(&hooks::PostLLMCall {
-                    response: response.clone(),
-                    error: None,
-                });
+                let result = hooks.emit(
+                    &hooks::PostLLMCall {
+                        response: response.clone(),
+                        error: None,
+                    },
+                    hook_token.clone(),
+                );
                 if result.action == Action::Abort {
                     return Ok(AgentResult {
                         messages: all_messages,
@@ -162,10 +170,13 @@ impl Agent {
 
                     // PreToolCall hook
                     if let Some(ref hooks) = self.config.hooks {
-                        let result = hooks.emit(&hooks::PreToolCall {
-                            name: tc.function.name.clone(),
-                            input: input.clone(),
-                        });
+                        let result = hooks.emit(
+                            &hooks::PreToolCall {
+                                name: tc.function.name.clone(),
+                                input: input.clone(),
+                            },
+                            hook_token.clone(),
+                        );
                         if result.action == Action::Abort {
                             return Ok(AgentResult {
                                 messages: all_messages,
@@ -188,12 +199,15 @@ impl Agent {
 
                     // PostToolCall hook
                     if let Some(ref hooks) = self.config.hooks {
-                        hooks.emit(&hooks::PostToolCall {
-                            name: tc.function.name.clone(),
-                            input: input.clone(),
-                            result: result_opt.clone(),
-                            error: error_opt.clone(),
-                        });
+                        let _ = hooks.emit(
+                            &hooks::PostToolCall {
+                                name: tc.function.name.clone(),
+                                input: input.clone(),
+                                result: result_opt.clone(),
+                                error: error_opt.clone(),
+                            },
+                            hook_token.clone(),
+                        );
                     }
 
                     // Build tool result message
@@ -234,10 +248,13 @@ impl Agent {
 
             // ── TurnEnd hook ────────────────────────────────────────────
             if let Some(ref hooks) = self.config.hooks {
-                let result = hooks.emit(&hooks::TurnEnd {
-                    turn,
-                    message: last_assistant.clone(),
-                });
+                let result = hooks.emit(
+                    &hooks::TurnEnd {
+                        turn,
+                        message: last_assistant.clone(),
+                    },
+                    hook_token.clone(),
+                );
                 if result.action == Action::Abort {
                     return Ok(AgentResult {
                         messages: all_messages,
@@ -556,7 +573,7 @@ mod tests {
         let provider = Arc::new(MockProvider::single_text("Hello"));
         let hooks = Arc::new(HookRegistry::new());
 
-        let _unsub = hooks.on(crate::turn_start_type(), |_| {
+        let _unsub = hooks.on(crate::turn_start_type(), |_, _| {
             HookResult::abort("blocked by policy")
         });
 
@@ -584,13 +601,13 @@ mod tests {
         let post_count = Arc::new(AtomicU32::new(0));
 
         let pc = pre_count.clone();
-        let _unsub1 = hooks.on(crate::pre_llm_call_type(), move |_| {
+        let _unsub1 = hooks.on(crate::pre_llm_call_type(), move |_, _| {
             pc.fetch_add(1, Ordering::SeqCst);
             HookResult::ok()
         });
 
         let poc = post_count.clone();
-        let _unsub2 = hooks.on(crate::post_llm_call_type(), move |_| {
+        let _unsub2 = hooks.on(crate::post_llm_call_type(), move |_, _| {
             poc.fetch_add(1, Ordering::SeqCst);
             HookResult::ok()
         });

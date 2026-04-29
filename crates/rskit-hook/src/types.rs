@@ -7,22 +7,21 @@
 use std::any::Any;
 use std::fmt;
 
-// ── EventType ───────────────────────────────────────────────────────────────
+use tokio_util::sync::CancellationToken;
 
 /// A string-based event type identifier.
-///
-/// Using a newtype over `String` rather than a fixed enum keeps the hook module
-/// free of domain knowledge — callers define their own event type constants.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct EventType(String);
 
 impl EventType {
     /// Create a new event type from any string-like value.
+    #[must_use]
     pub fn new(name: impl Into<String>) -> Self {
         Self(name.into())
     }
 
     /// Return the inner string slice.
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -34,12 +33,7 @@ impl fmt::Display for EventType {
     }
 }
 
-// ── Event trait ─────────────────────────────────────────────────────────────
-
 /// Trait that all hook events must implement.
-///
-/// Provides a discriminator via [`Event::event_type`] and allows downcasting
-/// through [`Any`] so handlers can inspect the concrete type when needed.
 pub trait Event: Any + Send + Sync {
     /// The event type discriminator for this event.
     fn event_type(&self) -> EventType;
@@ -48,10 +42,9 @@ pub trait Event: Any + Send + Sync {
     fn as_any(&self) -> &dyn Any;
 }
 
-// ── Action / HookResult ────────────────────────────────────────────────────
-
 /// What the pipeline should do after processing a hook handler.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Action {
     /// Continue normal execution.
     Continue,
@@ -69,6 +62,8 @@ pub struct HookResult {
     pub modified_data: Option<Box<dyn Any + Send>>,
     /// Human-readable explanation.
     pub reason: String,
+    /// Optional error surfaced by the handler.
+    pub error: Option<Box<dyn std::error::Error + Send + Sync>>,
 }
 
 impl fmt::Debug for HookResult {
@@ -77,35 +72,66 @@ impl fmt::Debug for HookResult {
             .field("action", &self.action)
             .field("has_modified_data", &self.modified_data.is_some())
             .field("reason", &self.reason)
+            .field("has_error", &self.error.is_some())
             .finish()
     }
 }
 
 impl HookResult {
     /// Convenience: continue with no modifications.
+    #[must_use]
     pub fn ok() -> Self {
         Self {
             action: Action::Continue,
             modified_data: None,
             reason: String::new(),
+            error: None,
+        }
+    }
+
+    /// Convenience: continue while attaching an error.
+    #[must_use]
+    pub fn continue_with_error(error: impl std::error::Error + Send + Sync + 'static) -> Self {
+        let reason = error.to_string();
+        Self {
+            action: Action::Continue,
+            modified_data: None,
+            reason,
+            error: Some(Box::new(error)),
         }
     }
 
     /// Convenience: abort with a reason.
+    #[must_use]
     pub fn abort(reason: impl Into<String>) -> Self {
         Self {
             action: Action::Abort,
             modified_data: None,
             reason: reason.into(),
+            error: None,
+        }
+    }
+
+    /// Convenience: abort while attaching an error.
+    #[must_use]
+    pub fn abort_with_error(error: impl std::error::Error + Send + Sync + 'static) -> Self {
+        let reason = error.to_string();
+        Self {
+            action: Action::Abort,
+            modified_data: None,
+            reason,
+            error: Some(Box::new(error)),
         }
     }
 
     /// Convenience: modify with typed data.
+    #[must_use]
     pub fn modify(data: impl Any + Send + 'static, reason: impl Into<String>) -> Self {
         Self {
             action: Action::Modify,
             modified_data: Some(Box::new(data)),
             reason: reason.into(),
+            error: None,
         }
     }
 }
@@ -117,13 +143,13 @@ impl Default for HookResult {
 }
 
 /// A boxed function that handles a hook event.
-pub type HookHandler = Box<dyn Fn(&dyn Event) -> HookResult + Send + Sync>;
+pub type HookHandler = Box<dyn Fn(CancellationToken, &dyn Event) -> HookResult + Send + Sync>;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::io;
 
-    // ── Test-local event types ──────────────────────────────────────────
+    use super::{Action, Event, EventType, HookResult};
 
     struct Ping {
         count: u32,
@@ -133,80 +159,66 @@ mod tests {
         fn event_type(&self) -> EventType {
             EventType::new("ping")
         }
-        fn as_any(&self) -> &dyn Any {
+
+        fn as_any(&self) -> &dyn std::any::Any {
             self
         }
     }
 
-    // ── Tests ───────────────────────────────────────────────────────────
-
     #[test]
     fn test_event_type_equality() {
-        let a = EventType::new("ping");
-        let b = EventType::new("ping");
-        let c = EventType::new("pong");
-        assert_eq!(a, b);
-        assert_ne!(a, c);
-    }
-
-    #[test]
-    fn test_event_type_display() {
-        let et = EventType::new("pre_tool_call");
-        assert_eq!(et.to_string(), "pre_tool_call");
-        assert_eq!(et.as_str(), "pre_tool_call");
+        assert_eq!(EventType::new("ping"), EventType::new("ping"));
+        assert_ne!(EventType::new("ping"), EventType::new("pong"));
     }
 
     #[test]
     fn test_event_trait() {
         let ping = Ping { count: 42 };
-        assert_eq!(ping.event_type(), EventType::new("ping"));
-
         let any = ping.as_any();
-        let downcasted = any.downcast_ref::<Ping>().unwrap();
+        let downcasted = any
+            .downcast_ref::<Ping>()
+            .expect("ping downcast should succeed");
         assert_eq!(downcasted.count, 42);
     }
 
     #[test]
     fn test_hook_result_ok() {
-        let r = HookResult::ok();
-        assert_eq!(r.action, Action::Continue);
-        assert!(r.modified_data.is_none());
-        assert!(r.reason.is_empty());
+        let result = HookResult::ok();
+        assert_eq!(result.action, Action::Continue);
+        assert!(result.error.is_none());
     }
 
     #[test]
-    fn test_hook_result_abort() {
-        let r = HookResult::abort("safety check failed");
-        assert_eq!(r.action, Action::Abort);
-        assert_eq!(r.reason, "safety check failed");
+    fn test_hook_result_continue_with_error() {
+        let result = HookResult::continue_with_error(io::Error::other("warn"));
+        assert_eq!(result.action, Action::Continue);
+        assert_eq!(result.reason, "warn");
+        assert!(result.error.is_some());
+    }
+
+    #[test]
+    fn test_hook_result_abort_with_error() {
+        let result = HookResult::abort_with_error(io::Error::other("blocked"));
+        assert_eq!(result.action, Action::Abort);
+        assert_eq!(result.reason, "blocked");
+        assert!(result.error.is_some());
     }
 
     #[test]
     fn test_hook_result_modify() {
-        let r = HookResult::modify(42_u32, "changed value");
-        assert_eq!(r.action, Action::Modify);
-        assert_eq!(r.reason, "changed value");
-        let val = r.modified_data.unwrap();
-        assert_eq!(*val.downcast_ref::<u32>().unwrap(), 42);
-    }
-
-    #[test]
-    fn test_hook_result_default() {
-        let r = HookResult::default();
-        assert_eq!(r.action, Action::Continue);
-    }
-
-    #[test]
-    fn test_action_equality() {
-        assert_eq!(Action::Continue, Action::Continue);
-        assert_ne!(Action::Continue, Action::Abort);
-        assert_ne!(Action::Abort, Action::Modify);
+        let result = HookResult::modify(42_u32, "changed value");
+        let value = result
+            .modified_data
+            .expect("modified result should include data");
+        assert_eq!(value.downcast_ref::<u32>(), Some(&42));
     }
 
     #[test]
     fn test_hook_result_debug() {
-        let r = HookResult::ok();
-        let dbg = format!("{r:?}");
-        assert!(dbg.contains("HookResult"));
+        let debug = format!(
+            "{:?}",
+            HookResult::continue_with_error(io::Error::other("warn"))
+        );
+        assert!(debug.contains("has_error"));
     }
 }

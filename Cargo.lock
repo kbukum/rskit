@@ -4764,6 +4764,7 @@ dependencies = [
  "rskit-bootstrap",
  "rskit-cache",
  "rskit-cli",
+ "rskit-component",
  "rskit-config",
  "rskit-dag",
  "rskit-database",
@@ -4877,8 +4878,10 @@ dependencies = [
  "futures",
  "futures-util",
  "parking_lot",
+ "rskit-component",
  "rskit-config",
  "rskit-errors",
+ "rskit-hook",
  "rskit-logging",
  "serde",
  "tokio",
@@ -4923,6 +4926,19 @@ dependencies = [
  "rskit-errors",
  "tokio",
  "tokio-util",
+]
+
+[[package]]
+name = "rskit-component"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "parking_lot",
+ "rskit-errors",
+ "serde",
+ "tokio",
+ "tokio-util",
+ "tracing",
 ]
 
 [[package]]
@@ -5126,6 +5142,7 @@ name = "rskit-hook"
 version = "0.1.0"
 dependencies = [
  "parking_lot",
+ "tokio-util",
  "tracing",
 ]
 
