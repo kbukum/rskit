@@ -74,7 +74,7 @@ fn password_hash_and_verify() {
 
 #[test]
 fn reset_token_generator_returns_token_string() {
-    let generator = ResetTokenGenerator::new(Duration::from_secs(600));
+    let generator = ResetTokenGenerator::new(Duration::from_mins(10));
     let (token, _expires_at) = generator.generate();
 
     assert!(!token.is_empty());
@@ -83,7 +83,7 @@ fn reset_token_generator_returns_token_string() {
 #[test]
 fn reset_token_has_expected_length() {
     // 32 random bytes → base64-URL-no-pad → 43 characters
-    let generator = ResetTokenGenerator::new(Duration::from_secs(600));
+    let generator = ResetTokenGenerator::new(Duration::from_mins(10));
     let (token, _) = generator.generate();
 
     assert_eq!(token.len(), 43);

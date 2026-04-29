@@ -4757,6 +4757,7 @@ dependencies = [
  "async-trait",
  "dashmap",
  "futures",
+ "parking_lot",
  "rskit-auth",
  "rskit-authz",
  "rskit-bench",
@@ -4904,6 +4905,7 @@ dependencies = [
 name = "rskit-chain"
 version = "0.1.0"
 dependencies = [
+ "parking_lot",
  "rskit-errors",
  "serde",
  "serde_json",
@@ -5398,6 +5400,7 @@ dependencies = [
  "async-stream",
  "futures",
  "futures-util",
+ "parking_lot",
  "pin-project-lite",
  "rskit-errors",
  "tokio",

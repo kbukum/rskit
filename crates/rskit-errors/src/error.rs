@@ -210,6 +210,16 @@ impl AppError {
         Self::internal(err)
     }
 
+    /// Create a `Cancelled` error for the named operation.
+    pub fn cancelled(operation: impl Into<String>) -> Self {
+        let op = operation.into();
+        Self::new(
+            ErrorCode::Cancelled,
+            format!("operation '{}' was cancelled", op),
+        )
+        .with_detail("operation", op)
+    }
+
     /// Add human-readable context to this error.
     ///
     /// Prepends `msg` to the existing error message so call-site context is

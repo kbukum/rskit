@@ -136,9 +136,11 @@ impl Registry {
 #[cfg(test)]
 mod tests {
     use std::sync::{
-        Arc, Mutex,
+        Arc,
         atomic::{AtomicUsize, Ordering},
     };
+
+    use parking_lot::Mutex;
 
     use rskit_errors::AppError;
 
@@ -198,7 +200,7 @@ mod tests {
         async fn stop(&self) -> AppResult<()> {
             self.stop_count.fetch_add(1, Ordering::SeqCst);
             if let Some(order) = &self.stop_order {
-                order.lock().unwrap().push(self.name.clone());
+                order.lock().push(self.name.clone());
             }
             Ok(())
         }
@@ -264,7 +266,7 @@ mod tests {
         reg.start_all().await.expect("start_all should succeed");
         reg.stop_all().await;
 
-        let order = stop_order.lock().unwrap();
+        let order = stop_order.lock();
         assert_eq!(*order, vec!["third", "second", "first"]);
     }
 

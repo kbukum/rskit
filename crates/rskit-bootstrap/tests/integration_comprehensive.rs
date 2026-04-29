@@ -1,8 +1,10 @@
 use std::sync::{
-    Arc, Mutex,
+    Arc,
     atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 use std::time::Duration;
+
+use parking_lot::Mutex;
 
 use async_trait::async_trait;
 use rskit_bootstrap::component::Component;
@@ -102,7 +104,7 @@ impl Component for MockComponent {
         }
         self.start_count.fetch_add(1, Ordering::SeqCst);
         if let Some(order) = &self.start_order {
-            order.lock().unwrap().push(self.name.clone());
+            order.lock().push(self.name.clone());
         }
         Ok(())
     }
@@ -113,7 +115,7 @@ impl Component for MockComponent {
         }
         self.stop_count.fetch_add(1, Ordering::SeqCst);
         if let Some(order) = &self.stop_order {
-            order.lock().unwrap().push(self.name.clone());
+            order.lock().push(self.name.clone());
         }
         Ok(())
     }
@@ -182,7 +184,7 @@ async fn registry_start_order_matches_registration() {
     ));
 
     reg.start_all().await.unwrap();
-    let started = order.lock().unwrap();
+    let started = order.lock();
     assert_eq!(*started, vec!["alpha", "beta", "gamma"]);
 }
 
@@ -204,7 +206,7 @@ async fn registry_stop_order_is_lifo() {
     reg.start_all().await.unwrap();
     reg.stop_all().await;
 
-    let order = stop_order.lock().unwrap();
+    let order = stop_order.lock();
     assert_eq!(*order, vec!["third", "second", "first"]);
 }
 
@@ -226,28 +228,28 @@ async fn lifecycle_hooks_execute_in_order() {
         .on_configure(move |_tok| {
             let o = o1.clone();
             async move {
-                o.lock().unwrap().push("configure".into());
+                o.lock().push("configure".into());
                 Ok(())
             }
         })
         .on_start(move |_tok| {
             let o = o2.clone();
             async move {
-                o.lock().unwrap().push("start".into());
+                o.lock().push("start".into());
                 Ok(())
             }
         })
         .on_ready(move |_tok| {
             let o = o3.clone();
             async move {
-                o.lock().unwrap().push("ready".into());
+                o.lock().push("ready".into());
                 Ok(())
             }
         })
         .on_stop(move |_tok| {
             let o = o4.clone();
             async move {
-                o.lock().unwrap().push("stop".into());
+                o.lock().push("stop".into());
                 Ok(())
             }
         });
@@ -255,7 +257,7 @@ async fn lifecycle_hooks_execute_in_order() {
     let result = app.run_task(|_cfg, _cancel| async move { Ok(()) }).await;
     assert!(result.is_ok());
 
-    let executed = order.lock().unwrap();
+    let executed = order.lock();
     assert_eq!(
         *executed,
         vec!["configure", "start", "stop"],
@@ -348,7 +350,7 @@ async fn start_all_concurrent_succeeds() {
     let result = reg.start_all_concurrent(cancel).await;
     assert!(result.is_ok());
 
-    let started = start_order.lock().unwrap();
+    let started = start_order.lock();
     assert_eq!(started.len(), 3, "all 3 should have started");
 }
 
@@ -421,7 +423,7 @@ async fn stop_all_continues_on_error() {
     reg.start_all().await.unwrap();
     reg.stop_all().await; // should not panic
 
-    let order = stop_order.lock().unwrap();
+    let order = stop_order.lock();
     // Both non-failing components should have stopped (reverse order)
     assert_eq!(*order, vec!["last", "first"]);
 }
@@ -640,7 +642,7 @@ async fn run_task_completes_and_stops() {
     let result = app.run_task(|_cfg, _cancel| async { Ok(()) }).await;
 
     assert!(result.is_ok());
-    let order = stop_order.lock().unwrap();
+    let order = stop_order.lock();
     assert_eq!(*order, vec!["db"], "components should stop after task");
 }
 
@@ -790,14 +792,14 @@ async fn full_lifecycle_with_components_and_hooks() {
         .on_start(move |_tok| {
             let o = o_start.clone();
             async move {
-                o.lock().unwrap().push("hook:start".into());
+                o.lock().push("hook:start".into());
                 Ok(())
             }
         })
         .on_stop(move |_tok| {
             let o = o_stop.clone();
             async move {
-                o.lock().unwrap().push("hook:stop".into());
+                o.lock().push("hook:stop".into());
                 Ok(())
             }
         });
@@ -805,7 +807,7 @@ async fn full_lifecycle_with_components_and_hooks() {
     let result = app.run_task(|_cfg, _cancel| async { Ok(()) }).await;
     assert!(result.is_ok());
 
-    let executed = order.lock().unwrap();
+    let executed = order.lock();
     // Components start before hooks, hooks stop before components
     assert_eq!(*executed, vec!["db", "hook:start", "hook:stop", "db"],);
 }

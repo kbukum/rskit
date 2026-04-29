@@ -130,7 +130,9 @@ impl ConfigLoader {
             ];
             for path in &profile_paths {
                 if std::path::Path::new(path).exists() {
-                    let _ = dotenvy::from_path(path);
+                    if let Err(e) = dotenvy::from_path(path) {
+                        tracing::warn!(path, error = %e, "failed to load profile env file");
+                    }
                     break;
                 }
             }
@@ -138,10 +140,16 @@ impl ConfigLoader {
 
         // 2. Load main .env file (existing behavior)
         if let Some(path) = &self.env_file {
-            let _ = dotenvy::from_path(path);
+            if let Err(e) = dotenvy::from_path(path) {
+                tracing::warn!(path = %path.display(), error = %e, "failed to load env file");
+            }
         } else {
             // Try the default `.env` in the current directory — silently ignore absence
-            let _ = dotenvy::dotenv();
+            // (missing .env is normal; parse errors are not)
+            match dotenvy::dotenv() {
+                Ok(_) | Err(dotenvy::Error::Io(_)) => {}
+                Err(e) => tracing::warn!(error = %e, "failed to parse .env file"),
+            }
         }
     }
 }
@@ -184,7 +192,7 @@ mod tests {
     fn loads_defaults_with_no_file() {
         let _guard = ENV_LOCK.lock();
         // SAFETY: `std::env::remove_var` is unsafe because concurrent calls can cause data races.
-        // We hold `ENV_LOCK` (a `std::sync::Mutex`) for the duration of this test,
+        // We hold `ENV_LOCK` (a `parking_lot::Mutex`) for the duration of this test,
         // serializing all environment variable mutations. No other test runs concurrently.
         unsafe { std::env::remove_var("PORT") };
         let cfg: TestConfig = ConfigLoader::new().load().expect("should load");
@@ -196,7 +204,7 @@ mod tests {
         let _guard = ENV_LOCK.lock();
         // PORT=9090 should override the default (no prefix by default).
         // SAFETY: `std::env::set_var` is unsafe because concurrent calls can cause data races.
-        // We hold `ENV_LOCK` (a `std::sync::Mutex`) for the duration of this test,
+        // We hold `ENV_LOCK` (a `parking_lot::Mutex`) for the duration of this test,
         // serializing all environment variable mutations. No other test runs concurrently.
         unsafe { std::env::set_var("PORT", "9090") };
         let cfg: TestConfig = ConfigLoader::new().load().expect("should load");
@@ -210,7 +218,7 @@ mod tests {
     fn custom_prefix_is_respected() {
         let _guard = ENV_LOCK.lock();
         // SAFETY: `std::env::set_var` is unsafe because concurrent calls can cause data races.
-        // We hold `ENV_LOCK` (a `std::sync::Mutex`) for the duration of this test,
+        // We hold `ENV_LOCK` (a `parking_lot::Mutex`) for the duration of this test,
         // serializing all environment variable mutations. No other test runs concurrently.
         unsafe { std::env::set_var("SVC__PORT", "7777") };
         let cfg: TestConfig = ConfigLoader::new()

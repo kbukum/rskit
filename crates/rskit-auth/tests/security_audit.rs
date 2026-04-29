@@ -258,7 +258,7 @@ fn argon2_unicode_password_roundtrip() {
 
 #[test]
 fn reset_tokens_are_unique() {
-    let generator = ResetTokenGenerator::new(std::time::Duration::from_secs(300));
+    let generator = ResetTokenGenerator::new(std::time::Duration::from_mins(5));
     let (t1, _) = generator.generate();
     let (t2, _) = generator.generate();
     assert_ne!(t1, t2, "Reset tokens should be unique");
@@ -266,7 +266,7 @@ fn reset_tokens_are_unique() {
 
 #[test]
 fn reset_token_has_sufficient_entropy() {
-    let generator = ResetTokenGenerator::new(std::time::Duration::from_secs(300));
+    let generator = ResetTokenGenerator::new(std::time::Duration::from_mins(5));
     let (token, _) = generator.generate();
     // base64url of 32 bytes = 43 characters
     assert!(
@@ -278,7 +278,7 @@ fn reset_token_has_sufficient_entropy() {
 
 #[test]
 fn reset_token_expiry_is_in_future() {
-    let generator = ResetTokenGenerator::new(std::time::Duration::from_secs(300));
+    let generator = ResetTokenGenerator::new(std::time::Duration::from_mins(5));
     let (_, exp) = generator.generate();
     assert!(
         exp > chrono::Utc::now(),

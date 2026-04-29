@@ -276,6 +276,7 @@ mod tests {
     };
     use std::time::Duration;
 
+    use parking_lot::Mutex;
     use rskit_errors::{AppError, AppResult, ErrorCode};
     use tower::{Service, ServiceBuilder, ServiceExt};
 
@@ -288,7 +289,7 @@ mod tests {
 
     #[allow(dead_code)]
     fn counting_service(
-        results: Arc<std::sync::Mutex<Vec<AppResult<i32>>>>,
+        results: Arc<Mutex<Vec<AppResult<i32>>>>,
     ) -> impl Service<
         i32,
         Response = i32,
@@ -298,7 +299,7 @@ mod tests {
         let results = results.clone();
         tower::service_fn(move |_req: i32| {
             let results = results.clone();
-            let result = results.lock().unwrap().remove(0);
+            let result = results.lock().remove(0);
             Box::pin(async move { result })
                 as std::pin::Pin<Box<dyn std::future::Future<Output = AppResult<i32>> + Send>>
         })

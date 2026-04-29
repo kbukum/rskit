@@ -1,11 +1,11 @@
+use parking_lot::Mutex;
 use rskit_config::{AppConfig, ConfigLoader, Environment, LogFormat, ServiceConfig, load_config};
 use serde::Deserialize;
 use std::io::Write;
 use validator::Validate;
 
 // Serialise env-mutating tests — parallel tests share the same process env.
-#[allow(clippy::disallowed_types)]
-static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+static ENV_LOCK: Mutex<()> = Mutex::new(());
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -110,7 +110,7 @@ fn loader_default_trait_creates_valid_loader() {
 
 #[test]
 fn load_defaults_when_no_file_exists() {
-    let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _guard = ENV_LOCK.lock();
     // SAFETY: serialized by ENV_LOCK
     unsafe { std::env::remove_var("PORT") };
     let cfg: TestConfig = ConfigLoader::new().load().expect("should load");
@@ -121,7 +121,7 @@ fn load_defaults_when_no_file_exists() {
 
 #[test]
 fn load_env_var_overrides_default() {
-    let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _guard = ENV_LOCK.lock();
     // SAFETY: serialized by ENV_LOCK
     unsafe { std::env::set_var("PORT", "9090") };
     let cfg: TestConfig = ConfigLoader::new().load().expect("should load");
@@ -132,7 +132,7 @@ fn load_env_var_overrides_default() {
 
 #[test]
 fn load_custom_prefix_env_var() {
-    let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _guard = ENV_LOCK.lock();
     // SAFETY: serialized by ENV_LOCK
     unsafe { std::env::set_var("SVC__PORT", "7777") };
     let cfg: TestConfig = ConfigLoader::new()
@@ -146,7 +146,7 @@ fn load_custom_prefix_env_var() {
 
 #[test]
 fn load_from_toml_file() {
-    let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _guard = ENV_LOCK.lock();
     // SAFETY: serialized by ENV_LOCK
     unsafe { std::env::remove_var("PORT") };
 
@@ -164,7 +164,7 @@ fn load_from_toml_file() {
 
 #[test]
 fn load_from_dotenv_file() {
-    let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _guard = ENV_LOCK.lock();
     // SAFETY: serialized by ENV_LOCK
     unsafe { std::env::remove_var("PORT") };
 
@@ -184,7 +184,7 @@ fn load_from_dotenv_file() {
 
 #[test]
 fn load_precedence_env_var_over_toml() {
-    let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _guard = ENV_LOCK.lock();
 
     let dir = tempfile::tempdir().unwrap();
     let toml_path = dir.path().join("test.toml");
@@ -206,7 +206,7 @@ fn load_precedence_env_var_over_toml() {
 
 #[test]
 fn load_precedence_dotenv_over_toml() {
-    let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _guard = ENV_LOCK.lock();
     // SAFETY: serialized by ENV_LOCK
     unsafe { std::env::remove_var("PORT") };
 
@@ -231,7 +231,7 @@ fn load_precedence_dotenv_over_toml() {
 
 #[test]
 fn load_precedence_real_env_over_dotenv() {
-    let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _guard = ENV_LOCK.lock();
 
     let dir = tempfile::tempdir().unwrap();
     let env_path = dir.path().join(".env");
@@ -255,7 +255,7 @@ fn load_precedence_real_env_over_dotenv() {
 
 #[test]
 fn load_config_convenience_works() {
-    let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _guard = ENV_LOCK.lock();
     // SAFETY: serialized by ENV_LOCK
     unsafe { std::env::remove_var("PORT") };
     let cfg: TestConfig = load_config().expect("convenience load should work");
@@ -266,7 +266,7 @@ fn load_config_convenience_works() {
 
 #[test]
 fn app_config_apply_defaults_is_called() {
-    let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _guard = ENV_LOCK.lock();
     // SAFETY: serialized by ENV_LOCK
     unsafe { std::env::remove_var("GRPC_PORT") };
 
@@ -277,7 +277,7 @@ fn app_config_apply_defaults_is_called() {
 
 #[test]
 fn app_config_service_config_returns_reference() {
-    let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _guard = ENV_LOCK.lock();
     // SAFETY: serialized by ENV_LOCK
     unsafe { std::env::remove_var("PORT") };
 
@@ -291,7 +291,7 @@ fn app_config_service_config_returns_reference() {
 
 #[test]
 fn invalid_toml_syntax_returns_error() {
-    let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _guard = ENV_LOCK.lock();
 
     let dir = tempfile::tempdir().unwrap();
     let toml_path = dir.path().join("bad.toml");
@@ -303,7 +303,7 @@ fn invalid_toml_syntax_returns_error() {
 
 #[test]
 fn missing_config_file_succeeds_with_defaults() {
-    let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _guard = ENV_LOCK.lock();
     // SAFETY: serialized by ENV_LOCK
     unsafe { std::env::remove_var("PORT") };
 
@@ -316,7 +316,7 @@ fn missing_config_file_succeeds_with_defaults() {
 
 #[test]
 fn empty_port_env_var_fails() {
-    let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _guard = ENV_LOCK.lock();
     // SAFETY: serialized by ENV_LOCK
     unsafe { std::env::set_var("PORT", "") };
 
@@ -330,7 +330,7 @@ fn empty_port_env_var_fails() {
 
 #[test]
 fn non_numeric_port_env_var_fails() {
-    let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _guard = ENV_LOCK.lock();
     // SAFETY: serialized by ENV_LOCK
     unsafe { std::env::set_var("PORT", "not_a_number") };
 
@@ -343,7 +343,7 @@ fn non_numeric_port_env_var_fails() {
 
 #[test]
 fn very_long_service_name_in_toml() {
-    let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _guard = ENV_LOCK.lock();
     // SAFETY: serialized by ENV_LOCK
     unsafe { std::env::remove_var("PORT") };
 
@@ -362,7 +362,7 @@ fn very_long_service_name_in_toml() {
 
 #[test]
 fn toml_sets_environment_production() {
-    let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _guard = ENV_LOCK.lock();
     // SAFETY: serialized by ENV_LOCK
     unsafe { std::env::remove_var("ENVIRONMENT") };
 
@@ -380,7 +380,7 @@ fn toml_sets_environment_production() {
 
 #[test]
 fn toml_sets_logging_config() {
-    let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _guard = ENV_LOCK.lock();
     // SAFETY: serialized by ENV_LOCK
     unsafe { std::env::remove_var("LOGGING__LEVEL") };
 
@@ -403,7 +403,7 @@ fn toml_sets_logging_config() {
 
 #[test]
 fn toml_sets_debug_flag() {
-    let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _guard = ENV_LOCK.lock();
 
     let dir = tempfile::tempdir().unwrap();
     let toml_path = dir.path().join("debug.toml");
@@ -418,7 +418,7 @@ fn toml_sets_debug_flag() {
 
 #[test]
 fn validation_rejects_empty_service_name_via_toml() {
-    let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _guard = ENV_LOCK.lock();
 
     let dir = tempfile::tempdir().unwrap();
     let toml_path = dir.path().join("empty_name.toml");

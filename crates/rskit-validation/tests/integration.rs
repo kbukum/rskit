@@ -315,11 +315,13 @@ fn pattern_fails_when_value_does_not_match() {
 }
 
 #[test]
-#[should_panic(expected = "invalid regex pattern")]
 fn pattern_fails_with_invalid_regex() {
-    let _ = Validator::new()
+    let err = Validator::new()
         .pattern("f", "value", "[invalid")
-        .validate();
+        .validate()
+        .unwrap_err();
+    assert!(err.message.contains("f"));
+    assert!(err.message.contains("invalid pattern:"));
 }
 
 #[test]

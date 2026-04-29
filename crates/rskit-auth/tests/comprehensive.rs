@@ -284,7 +284,7 @@ fn password_concurrent_hashing() {
 
 #[test]
 fn reset_token_unique() {
-    let generator = ResetTokenGenerator::new(Duration::from_secs(300));
+    let generator = ResetTokenGenerator::new(Duration::from_mins(5));
     let (t1, _) = generator.generate();
     let (t2, _) = generator.generate();
     assert_ne!(t1, t2);
@@ -292,7 +292,7 @@ fn reset_token_unique() {
 
 #[test]
 fn reset_token_is_base64url() {
-    let generator = ResetTokenGenerator::new(Duration::from_secs(300));
+    let generator = ResetTokenGenerator::new(Duration::from_mins(5));
     let (token, _) = generator.generate();
     // base64url-no-pad: only [A-Za-z0-9_-]
     assert!(
@@ -306,14 +306,14 @@ fn reset_token_is_base64url() {
 #[test]
 fn reset_token_length_is_43() {
     // 32 random bytes → base64-URL-no-pad → 43 characters
-    let generator = ResetTokenGenerator::new(Duration::from_secs(300));
+    let generator = ResetTokenGenerator::new(Duration::from_mins(5));
     let (token, _) = generator.generate();
     assert_eq!(token.len(), 43);
 }
 
 #[test]
 fn reset_token_expiry_in_future() {
-    let generator = ResetTokenGenerator::new(Duration::from_secs(600));
+    let generator = ResetTokenGenerator::new(Duration::from_mins(10));
     let (_, exp) = generator.generate();
     assert!(exp > chrono::Utc::now());
 }
@@ -330,7 +330,7 @@ fn reset_token_short_ttl() {
 
 #[test]
 fn reset_token_long_ttl() {
-    let generator = ResetTokenGenerator::new(Duration::from_secs(86400)); // 24 hours
+    let generator = ResetTokenGenerator::new(Duration::from_hours(24)); // 24 hours
     let (_, exp) = generator.generate();
     let now = chrono::Utc::now();
     let diff = exp.signed_duration_since(now);

@@ -21,8 +21,8 @@ pub use source::{from_channel, from_fn, from_slice};
 
 #[cfg(test)]
 mod tests {
+    use parking_lot::Mutex;
     use std::sync::Arc;
-    use std::sync::Mutex;
     use std::time::Duration;
 
     use futures::StreamExt as _;
@@ -56,7 +56,7 @@ mod tests {
         let stream = from_fn(move || {
             let c = c.clone();
             async move {
-                let mut n = c.lock().unwrap();
+                let mut n = c.lock();
                 if *n < 5 {
                     let val = *n;
                     *n += 1;
@@ -165,14 +165,14 @@ mod tests {
                 let seen = seen_clone.clone();
                 let val = *x;
                 async move {
-                    seen.lock().unwrap().push(val);
+                    seen.lock().push(val);
                 }
             })
             .collect()
             .await;
 
         assert_eq!(output, vec![10, 20, 30]);
-        assert_eq!(*seen.lock().unwrap(), vec![10, 20, 30]);
+        assert_eq!(*seen.lock(), vec![10, 20, 30]);
     }
 
     // ── RskitStreamExt::rreduce ───────────────────────────────────────────

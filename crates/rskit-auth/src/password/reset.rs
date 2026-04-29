@@ -35,7 +35,7 @@ mod tests {
 
     #[test]
     fn generates_unique_tokens() {
-        let generator = ResetTokenGenerator::new(Duration::from_secs(300));
+        let generator = ResetTokenGenerator::new(Duration::from_mins(5));
         let (t1, _) = generator.generate();
         let (t2, _) = generator.generate();
         assert_ne!(t1, t2);
@@ -43,7 +43,7 @@ mod tests {
 
     #[test]
     fn expiry_is_in_the_future() {
-        let generator = ResetTokenGenerator::new(Duration::from_secs(300));
+        let generator = ResetTokenGenerator::new(Duration::from_mins(5));
         let (_, exp) = generator.generate();
         assert!(exp > Utc::now());
     }

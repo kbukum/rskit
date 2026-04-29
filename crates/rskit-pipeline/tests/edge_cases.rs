@@ -1,5 +1,5 @@
-#[allow(clippy::disallowed_types)]
-use std::sync::{Arc, Mutex};
+use parking_lot::Mutex;
+use std::sync::Arc;
 use std::time::Duration;
 
 use futures_util::StreamExt;
@@ -172,7 +172,7 @@ async fn test_complex_chain_five_operators() {
             let val = r.as_ref().ok().copied();
             async move {
                 if let Some(v) = val {
-                    seen.lock().unwrap().push(v);
+                    seen.lock().push(v);
                 }
             }
         })
@@ -183,7 +183,7 @@ async fn test_complex_chain_five_operators() {
     // After rfilter (>6): 8,10,12,14,16,18,20
     // Sum: 8+10+12+14+16+18+20 = 98
     assert_eq!(sum, 98);
-    let tapped = seen.lock().unwrap().clone();
+    let tapped = seen.lock().clone();
     assert_eq!(tapped, vec![8, 10, 12, 14, 16, 18, 20]);
 }
 
