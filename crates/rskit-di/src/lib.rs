@@ -18,5 +18,7 @@
 #![warn(missing_docs)]
 
 mod container;
+mod typed;
 
 pub use container::{Closeable, Container};
+pub use typed::{must_resolve, provide, provide_singleton, provide_transient, resolve};

@@ -246,7 +246,7 @@ async fn config_bootstrap_health_check() {
     let health = comp.health();
     assert_eq!(health.status, HealthStatus::Healthy);
 
-    registry.stop_all().await;
+    registry.stop_all().await.unwrap();
 
     let health = comp.health();
     assert_eq!(health.status, HealthStatus::Unhealthy);
@@ -382,7 +382,7 @@ async fn di_component_container_manages_lifecycle() {
     assert!(db.started.load(Ordering::SeqCst));
     assert!(cache.started.load(Ordering::SeqCst));
 
-    registry.stop_all().await;
+    registry.stop_all().await.unwrap();
     assert!(db.stopped.load(Ordering::SeqCst));
     assert!(cache.stopped.load(Ordering::SeqCst));
 }
@@ -629,7 +629,7 @@ async fn full_stack_config_di_component_provider() {
 
     assert!(comp.started.load(Ordering::SeqCst));
 
-    registry.stop_all().await;
+    registry.stop_all().await.unwrap();
     assert!(comp.stopped.load(Ordering::SeqCst));
 }
 

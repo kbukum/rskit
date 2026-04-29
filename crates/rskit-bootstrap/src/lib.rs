@@ -1,22 +1,23 @@
-//! Application lifecycle orchestration: typestate `App`, component registry, and lifecycle hooks.
+//! Application lifecycle orchestration: typestate `App` and startup summary.
 
 #![warn(missing_docs)]
 
 /// Typestate [`App`] and [`AppBuilder`].
 pub mod app;
-/// [`Component`] trait for lifecycle-managed infrastructure.
-pub mod component;
-/// [`Health`] and [`HealthStatus`] types.
-pub mod health;
-/// Ordered component [`Registry`].
-pub mod registry;
+/// Lifecycle hook events.
+pub mod hooks;
 /// Startup summary printer.
 pub mod summary;
 
 pub use app::{App, AppBuilder, Unconfigured};
-pub use component::{Component, LazyComponent};
-pub use health::{Health, HealthStatus};
-pub use registry::{Registry, RegistryConfig};
+pub use hooks::{LifecycleEvent, LifecycleEventType};
+pub use rskit_component::component;
+pub use rskit_component::health;
+pub use rskit_component::registry;
+pub use rskit_component::state;
+pub use rskit_component::{
+    Component, Health, HealthStatus, LazyComponent, Registry, RegistryConfig, State, StopResult,
+};
 
 // Re-export CancellationToken so downstream crates don't need tokio-util directly
 pub use tokio_util::sync::CancellationToken;

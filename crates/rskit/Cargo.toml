@@ -31,6 +31,7 @@ rskit-errors     = { version = "0.1.0", path = "../rskit-errors" }
 rskit-config     = { version = "0.1.0", path = "../rskit-config" }
 rskit-logging    = { version = "0.1.0", path = "../rskit-logging" }
 rskit-bootstrap  = { version = "0.1.0", path = "../rskit-bootstrap" }
+rskit-component  = { version = "0.1.0", path = "../rskit-component" }
 rskit-provider   = { version = "0.1.0", path = "../rskit-provider" }
 rskit-pipeline   = { version = "0.1.0", path = "../rskit-pipeline" }
 rskit-resilience = { version = "0.1.0", path = "../rskit-resilience" }

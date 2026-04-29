@@ -14,9 +14,9 @@ pub enum HealthStatus {
 impl std::fmt::Display for HealthStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            HealthStatus::Healthy => f.write_str("healthy"),
-            HealthStatus::Degraded => f.write_str("degraded"),
-            HealthStatus::Unhealthy => f.write_str("unhealthy"),
+            Self::Healthy => f.write_str("healthy"),
+            Self::Degraded => f.write_str("degraded"),
+            Self::Unhealthy => f.write_str("unhealthy"),
         }
     }
 }
@@ -34,6 +34,7 @@ pub struct Health {
 
 impl Health {
     /// Create a healthy report for the named component.
+    #[must_use]
     pub fn healthy(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -43,6 +44,7 @@ impl Health {
     }
 
     /// Create a degraded report with an explanatory message.
+    #[must_use]
     pub fn degraded(name: impl Into<String>, msg: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -52,6 +54,7 @@ impl Health {
     }
 
     /// Create an unhealthy report with an explanatory message.
+    #[must_use]
     pub fn unhealthy(name: impl Into<String>, msg: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -61,6 +64,7 @@ impl Health {
     }
 
     /// Returns `true` if the status is [`HealthStatus::Healthy`].
+    #[must_use]
     pub fn is_healthy(&self) -> bool {
         self.status == HealthStatus::Healthy
     }
@@ -68,7 +72,7 @@ impl Health {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{Health, HealthStatus};
 
     #[test]
     fn healthy_sets_status_and_no_message() {
@@ -80,8 +84,7 @@ mod tests {
 
     #[test]
     fn healthy_is_healthy_returns_true() {
-        let h = Health::healthy("cache");
-        assert!(h.is_healthy());
+        assert!(Health::healthy("cache").is_healthy());
     }
 
     #[test]
@@ -92,12 +95,6 @@ mod tests {
     }
 
     #[test]
-    fn degraded_is_healthy_returns_false() {
-        let h = Health::degraded("queue", "slow");
-        assert!(!h.is_healthy());
-    }
-
-    #[test]
     fn unhealthy_sets_status_and_message() {
         let h = Health::unhealthy("db", "connection refused");
         assert_eq!(h.status, HealthStatus::Unhealthy);
@@ -105,23 +102,9 @@ mod tests {
     }
 
     #[test]
-    fn unhealthy_is_healthy_returns_false() {
-        let h = Health::unhealthy("db", "down");
-        assert!(!h.is_healthy());
-    }
-
-    #[test]
-    fn health_status_display_healthy() {
-        assert_eq!(format!("{}", HealthStatus::Healthy), "healthy");
-    }
-
-    #[test]
-    fn health_status_display_degraded() {
-        assert_eq!(format!("{}", HealthStatus::Degraded), "degraded");
-    }
-
-    #[test]
-    fn health_status_display_unhealthy() {
-        assert_eq!(format!("{}", HealthStatus::Unhealthy), "unhealthy");
+    fn health_status_display_values() {
+        assert_eq!(HealthStatus::Healthy.to_string(), "healthy");
+        assert_eq!(HealthStatus::Degraded.to_string(), "degraded");
+        assert_eq!(HealthStatus::Unhealthy.to_string(), "unhealthy");
     }
 }

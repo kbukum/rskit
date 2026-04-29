@@ -1,26 +1,114 @@
 use std::any::{Any, TypeId};
-use std::collections::HashMap;
-use std::sync::{Arc, OnceLock};
+use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use async_trait::async_trait;
-use parking_lot::RwLock;
-use rskit_errors::{AppError, AppResult};
-
-// ── Registration kinds ────────────────────────────────────────────────────────
+use parking_lot::{Mutex, RwLock};
+use rskit_errors::{AppError, AppResult, ErrorCode};
 
 type ArcAny = Arc<dyn Any + Send + Sync>;
 type Factory = Arc<dyn Fn() -> AppResult<ArcAny> + Send + Sync>;
 
+type CloseableArc = Arc<dyn Closeable>;
+
+type SingletonFactory = Arc<dyn Fn() -> AppResult<SingletonValue> + Send + Sync>;
+
+thread_local! {
+    static RESOLUTION_STACK: RefCell<HashSet<TypeId>> = RefCell::new(HashSet::new());
+}
+
+#[derive(Clone)]
+struct SingletonValue {
+    any: ArcAny,
+    closeable: Option<CloseableArc>,
+}
+
+struct SingletonRegistration {
+    factory: SingletonFactory,
+    value: Mutex<Option<SingletonValue>>,
+}
+
+impl SingletonRegistration {
+    fn new(factory: SingletonFactory) -> Self {
+        Self {
+            factory,
+            value: Mutex::new(None),
+        }
+    }
+
+    fn resolve_any(&self) -> AppResult<ArcAny> {
+        let mut guard = self.value.lock();
+        if let Some(value) = guard.as_ref() {
+            return Ok(Arc::clone(&value.any));
+        }
+
+        let value = (self.factory)()?;
+        let any = Arc::clone(&value.any);
+        *guard = Some(value);
+        Ok(any)
+    }
+
+    fn resolve_closeable(&self) -> AppResult<Option<CloseableArc>> {
+        let mut guard = self.value.lock();
+        if let Some(value) = guard.as_ref() {
+            return Ok(value.closeable.as_ref().map(Arc::clone));
+        }
+
+        let value = (self.factory)()?;
+        let closeable = value.closeable.as_ref().map(Arc::clone);
+        *guard = Some(value);
+        Ok(closeable)
+    }
+}
+
+#[derive(Clone)]
 enum Registration {
     Eager(ArcAny),
     Lazy(Factory),
-    Singleton {
-        factory: Factory,
-        instance: OnceLock<ArcAny>,
-    },
+    Singleton(Arc<SingletonRegistration>),
 }
 
-// ── Closeable ─────────────────────────────────────────────────────────────────
+enum CloseableRegistration {
+    Eager(CloseableArc),
+    Singleton(Arc<SingletonRegistration>),
+}
+
+struct ResolutionGuard {
+    type_id: TypeId,
+}
+
+impl ResolutionGuard {
+    fn enter<T: 'static>() -> AppResult<Self> {
+        let type_id = TypeId::of::<T>();
+        let type_name = std::any::type_name::<T>();
+        let inserted = RESOLUTION_STACK.with(|stack| {
+            let mut stack = stack.borrow_mut();
+            if stack.contains(&type_id) {
+                false
+            } else {
+                stack.insert(type_id)
+            }
+        });
+
+        if inserted {
+            Ok(Self { type_id })
+        } else {
+            Err(AppError::new(
+                ErrorCode::Conflict,
+                format!("circular dependency detected while resolving {type_name}"),
+            ))
+        }
+    }
+}
+
+impl Drop for ResolutionGuard {
+    fn drop(&mut self) {
+        RESOLUTION_STACK.with(|stack| {
+            stack.borrow_mut().remove(&self.type_id);
+        });
+    }
+}
 
 /// Trait implemented by registered values that need async cleanup.
 #[async_trait]
@@ -29,11 +117,9 @@ pub trait Closeable: Send + Sync {
     async fn close(&self) -> AppResult<()>;
 }
 
-// ── Container ─────────────────────────────────────────────────────────────────
-
 /// Thread-safe runtime dependency injection container.
 ///
-/// Each dependency is keyed by its concrete Rust type (`TypeId`).  Three
+/// Each dependency is keyed by its concrete Rust type (`TypeId`). Three
 /// registration modes are supported:
 ///
 /// | Mode | Fn | Description |
@@ -41,9 +127,12 @@ pub trait Closeable: Send + Sync {
 /// | Eager | [`register`](Self::register) | Pre-built value, returned as-is on every resolve |
 /// | Lazy factory | [`register_factory`](Self::register_factory) | Called fresh on every resolve |
 /// | Singleton | [`register_singleton`](Self::register_singleton) | Called once; result cached |
+///
+/// For values that implement [`Closeable`], use [`register_closeable`](Self::register_closeable)
+/// or [`register_singleton_closeable`](Self::register_singleton_closeable) so [`close`](Self::close) can clean them up.
 pub struct Container {
     registrations: RwLock<HashMap<TypeId, Registration>>,
-    closeables: RwLock<Vec<Arc<dyn Closeable>>>,
+    closeables: RwLock<HashMap<TypeId, CloseableRegistration>>,
 }
 
 impl Default for Container {
@@ -54,95 +143,127 @@ impl Default for Container {
 
 impl Container {
     /// Create an empty container.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             registrations: RwLock::new(HashMap::new()),
-            closeables: RwLock::new(Vec::new()),
+            closeables: RwLock::new(HashMap::new()),
         }
     }
 
-    /// Register a pre-built value (equivalent to gokit `RegisterEager`).
+    /// Register a pre-built value.
     pub fn register<T: Send + Sync + 'static>(&self, value: Arc<T>) {
-        let any: ArcAny = value.clone();
+        let type_id = TypeId::of::<T>();
         self.registrations
             .write()
-            .insert(TypeId::of::<T>(), Registration::Eager(any));
+            .insert(type_id, Registration::Eager(value as ArcAny));
+        self.closeables.write().remove(&type_id);
     }
 
-    /// Register a factory called fresh on every resolve (equivalent to `RegisterLazy`).
+    /// Register a pre-built value that implements [`Closeable`].
+    pub fn register_closeable<T: Closeable + Send + Sync + 'static>(&self, value: Arc<T>) {
+        let type_id = TypeId::of::<T>();
+        self.registrations
+            .write()
+            .insert(type_id, Registration::Eager(Arc::clone(&value) as ArcAny));
+        self.closeables
+            .write()
+            .insert(type_id, CloseableRegistration::Eager(value as CloseableArc));
+    }
+
+    /// Register a factory called fresh on every resolve.
     pub fn register_factory<T, F>(&self, factory: F)
     where
         T: Send + Sync + 'static,
         F: Fn() -> AppResult<Arc<T>> + Send + Sync + 'static,
     {
-        let f: Factory = Arc::new(move || factory().map(|v| v as ArcAny));
+        let type_id = TypeId::of::<T>();
+        let factory: Factory = Arc::new(move || factory().map(|value| value as ArcAny));
         self.registrations
             .write()
-            .insert(TypeId::of::<T>(), Registration::Lazy(f));
+            .insert(type_id, Registration::Lazy(factory));
+        self.closeables.write().remove(&type_id);
     }
 
-    /// Register a singleton factory — called once, result cached (equivalent to `RegisterSingleton`).
+    /// Register a singleton factory — called once and cached.
     pub fn register_singleton<T, F>(&self, factory: F)
     where
         T: Send + Sync + 'static,
         F: Fn() -> AppResult<Arc<T>> + Send + Sync + 'static,
     {
-        let f: Factory = Arc::new(move || factory().map(|v| v as ArcAny));
-        self.registrations.write().insert(
-            TypeId::of::<T>(),
-            Registration::Singleton {
-                factory: f,
-                instance: OnceLock::new(),
-            },
-        );
+        let type_id = TypeId::of::<T>();
+        let registration = Arc::new(SingletonRegistration::new(Arc::new(move || {
+            factory().map(|value| SingletonValue {
+                any: value as ArcAny,
+                closeable: None,
+            })
+        })));
+        self.registrations
+            .write()
+            .insert(type_id, Registration::Singleton(registration));
+        self.closeables.write().remove(&type_id);
+    }
+
+    /// Register a singleton factory for a type that implements [`Closeable`].
+    pub fn register_singleton_closeable<T, F>(&self, factory: F)
+    where
+        T: Closeable + Send + Sync + 'static,
+        F: Fn() -> AppResult<Arc<T>> + Send + Sync + 'static,
+    {
+        let type_id = TypeId::of::<T>();
+        let registration = Arc::new(SingletonRegistration::new(Arc::new(move || {
+            factory().map(|value| SingletonValue {
+                any: Arc::clone(&value) as ArcAny,
+                closeable: Some(value as CloseableArc),
+            })
+        })));
+        self.registrations
+            .write()
+            .insert(type_id, Registration::Singleton(Arc::clone(&registration)));
+        self.closeables
+            .write()
+            .insert(type_id, CloseableRegistration::Singleton(registration));
     }
 
     /// Resolve a registered type, returning `Err(NotFound)` if not registered.
     pub fn resolve<T: Send + Sync + 'static>(&self) -> AppResult<Arc<T>> {
-        let arc_any = {
-            let guard = self.registrations.read();
-            match guard.get(&TypeId::of::<T>()) {
-                None => {
-                    return Err(AppError::not_found(std::any::type_name::<T>(), None));
-                }
-                Some(Registration::Eager(v)) => v.clone(),
-                Some(Registration::Lazy(f)) => f()?,
-                Some(Registration::Singleton { factory, instance }) => {
-                    // OnceLock::get_or_try_init would be ideal but requires nightly;
-                    // use a two-phase approach for stable Rust.
-                    if let Some(v) = instance.get() {
-                        v.clone()
-                    } else {
-                        let v = factory()?;
-                        let _ = instance.set(v.clone());
-                        // SAFETY: we just called `set(v.clone())` above; the OnceLock
-                        // is now initialised so `get()` is guaranteed to return Some.
-                        instance
-                            .get()
-                            .expect("OnceLock was just set above; qed")
-                            .clone()
-                    }
-                }
-            }
+        let _guard = ResolutionGuard::enter::<T>()?;
+        let registration = self
+            .registrations
+            .read()
+            .get(&TypeId::of::<T>())
+            .cloned()
+            .ok_or_else(|| AppError::not_found(std::any::type_name::<T>(), None))?;
+
+        let value = match registration {
+            Registration::Eager(value) => value,
+            Registration::Lazy(factory) => factory()?,
+            Registration::Singleton(registration) => registration.resolve_any()?,
         };
-        arc_any.downcast::<T>().map_err(|_| {
-            AppError::new(
-                rskit_errors::ErrorCode::Internal,
-                "type downcast failed in DI container",
-            )
-        })
+
+        value
+            .downcast::<T>()
+            .map_err(|_| AppError::new(ErrorCode::Internal, "type downcast failed in DI container"))
     }
 
     /// Returns `true` if `T` has been registered.
+    #[must_use]
     pub fn is_registered<T: 'static>(&self) -> bool {
         self.registrations.read().contains_key(&TypeId::of::<T>())
     }
 
-    /// Call [`Closeable::close`] on all registered closeable values.
+    /// Call [`Closeable::close`] on all registered closeable values once.
     pub async fn close(&self) -> AppResult<()> {
-        let closeables = self.closeables.read().clone();
-        for c in closeables {
-            c.close().await?;
+        let closeables = std::mem::take(&mut *self.closeables.write());
+        for registration in closeables.into_values() {
+            match registration {
+                CloseableRegistration::Eager(closeable) => closeable.close().await?,
+                CloseableRegistration::Singleton(registration) => {
+                    if let Some(closeable) = registration.resolve_closeable()? {
+                        closeable.close().await?;
+                    }
+                }
+            }
         }
         Ok(())
     }
@@ -150,65 +271,124 @@ impl Container {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
+    use super::{Closeable, Container};
+    use rskit_errors::AppResult;
 
     struct Svc {
-        val: i32,
+        val: usize,
     }
 
     #[test]
     fn register_and_resolve_eager() {
-        let c = Container::new();
-        c.register(Arc::new(Svc { val: 42 }));
-        let s = c.resolve::<Svc>().unwrap();
-        assert_eq!(s.val, 42);
+        let container = Container::new();
+        container.register(Arc::new(Svc { val: 42 }));
+        let service = container.resolve::<Svc>().expect("service should resolve");
+        assert_eq!(service.val, 42);
     }
 
     #[test]
     fn resolve_unregistered_returns_not_found() {
-        let c = Container::new();
-        let r = c.resolve::<Svc>();
-        assert!(r.is_err());
+        let container = Container::new();
+        assert!(container.resolve::<Svc>().is_err());
     }
 
     #[test]
-    fn register_factory_called_on_each_resolve() {
-        use std::sync::atomic::{AtomicI32, Ordering};
-        static COUNTER: AtomicI32 = AtomicI32::new(0);
-
-        let c = Container::new();
-        c.register_factory(|| {
-            let n = COUNTER.fetch_add(1, Ordering::SeqCst);
-            Ok(Arc::new(Svc { val: n }))
+    fn register_factory_creates_new_arc_each_time() {
+        let container = Container::new();
+        let counter = Arc::new(AtomicUsize::new(0));
+        let captured = Arc::clone(&counter);
+        container.register_factory(move || {
+            let value = captured.fetch_add(1, Ordering::SeqCst);
+            Ok(Arc::new(Svc { val: value }))
         });
 
-        let s1 = c.resolve::<Svc>().unwrap();
-        let s2 = c.resolve::<Svc>().unwrap();
-        assert_ne!(s1.val, s2.val);
+        let first = container
+            .resolve::<Svc>()
+            .expect("first resolve should work");
+        let second = container
+            .resolve::<Svc>()
+            .expect("second resolve should work");
+
+        assert_ne!(first.val, second.val);
+        assert!(!Arc::ptr_eq(&first, &second));
     }
 
     #[test]
     fn register_singleton_returns_same_instance() {
-        use std::sync::atomic::{AtomicI32, Ordering};
-        static CTR: AtomicI32 = AtomicI32::new(0);
-
-        let c = Container::new();
-        c.register_singleton(|| {
-            let n = CTR.fetch_add(1, Ordering::SeqCst);
-            Ok(Arc::new(Svc { val: n }))
+        let container = Container::new();
+        let counter = Arc::new(AtomicUsize::new(0));
+        let captured = Arc::clone(&counter);
+        container.register_singleton(move || {
+            let value = captured.fetch_add(1, Ordering::SeqCst);
+            Ok(Arc::new(Svc { val: value }))
         });
 
-        let s1 = c.resolve::<Svc>().unwrap();
-        let s2 = c.resolve::<Svc>().unwrap();
-        assert_eq!(s1.val, s2.val);
-        assert_eq!(CTR.load(Ordering::SeqCst), 1);
+        let first = container
+            .resolve::<Svc>()
+            .expect("first resolve should work");
+        let second = container
+            .resolve::<Svc>()
+            .expect("second resolve should work");
+
+        assert!(Arc::ptr_eq(&first, &second));
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
     }
 
     #[test]
-    fn is_registered_reflects_state() {
-        let c = Container::new();
-        assert!(!c.is_registered::<Svc>());
-        c.register(Arc::new(Svc { val: 0 }));
-        assert!(c.is_registered::<Svc>());
+    fn circular_dependency_returns_error() {
+        #[derive(Debug)]
+        struct A;
+        #[derive(Debug)]
+        struct B;
+
+        let container = Arc::new(Container::new());
+        let a_container = Arc::clone(&container);
+        container.register_factory::<A, _>(move || {
+            let _ = a_container.resolve::<B>()?;
+            Ok(Arc::new(A))
+        });
+
+        let b_container = Arc::clone(&container);
+        container.register_factory::<B, _>(move || {
+            let _ = b_container.resolve::<A>()?;
+            Ok(Arc::new(B))
+        });
+
+        let error = container
+            .resolve::<A>()
+            .expect_err("circular dependency should fail");
+        assert!(error.message.contains("circular dependency"));
+    }
+
+    struct MockCloseable {
+        closed: Arc<AtomicBool>,
+    }
+
+    #[async_trait::async_trait]
+    impl Closeable for MockCloseable {
+        async fn close(&self) -> AppResult<()> {
+            self.closed.store(true, Ordering::SeqCst);
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn close_calls_registered_closeables_once() {
+        let container = Container::new();
+        let closed = Arc::new(AtomicBool::new(false));
+        container.register_closeable(Arc::new(MockCloseable {
+            closed: Arc::clone(&closed),
+        }));
+
+        container.close().await.expect("close should succeed");
+        container
+            .close()
+            .await
+            .expect("second close should be a no-op");
+
+        assert!(closed.load(Ordering::SeqCst));
     }
 }

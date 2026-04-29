@@ -79,8 +79,11 @@ pub use rskit_provider as provider;
 /// `futures::Stream` extension trait + operators.
 pub use rskit_pipeline as pipeline;
 
-/// App lifecycle, `Component` trait, `Registry`.
+/// App lifecycle orchestration.
 pub use rskit_bootstrap as bootstrap;
+
+/// Component lifecycle primitives: `Component`, `Registry`, health, and state.
+pub use rskit_component as component;
 
 /// Worker pool, `Handler` trait, typed events.
 pub use rskit_worker as worker;
@@ -184,7 +187,10 @@ pub use rskit_bench as bench;
 
 // ── Convenience re-exports at root ──────────────────────────────────────────
 
-pub use rskit_bootstrap::{App, AppBuilder, Component, Health, HealthStatus, Registry};
+pub use rskit_bootstrap::{App, AppBuilder};
+pub use rskit_component::{
+    Component, Health, HealthStatus, LazyComponent, Registry, RegistryConfig, State, StopResult,
+};
 pub use rskit_config::{AppConfig, ConfigLoader, ServiceConfig};
 pub use rskit_errors::{AppError, AppResult, ErrorCode};
 pub use rskit_logging::{LoggingGuard, init_logging, init_logging_env};

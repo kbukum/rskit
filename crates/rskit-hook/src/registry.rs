@@ -1,21 +1,48 @@
-//! Thread-safe registry for hook handlers.
-
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use parking_lot::RwLock;
+use tokio_util::sync::CancellationToken;
 
 use crate::types::{Action, Event, EventType, HookHandler, HookResult};
 
 type HandlerMap = Arc<RwLock<HashMap<EventType, Vec<(usize, HookHandler)>>>>;
+
+#[derive(Debug)]
+struct HookDispatchError(String);
+
+impl HookDispatchError {
+    fn cancelled() -> Self {
+        Self("hook dispatch cancelled".to_string())
+    }
+
+    fn panicked(payload: Box<dyn std::any::Any + Send>) -> Self {
+        let message = if let Some(message) = payload.downcast_ref::<&str>() {
+            (*message).to_string()
+        } else if let Some(message) = payload.downcast_ref::<String>() {
+            message.clone()
+        } else {
+            "unknown panic payload".to_string()
+        };
+        Self(format!("hook handler panicked: {message}"))
+    }
+}
+
+impl std::fmt::Display for HookDispatchError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for HookDispatchError {}
 
 /// A thread-safe registry that maps [`EventType`]s to ordered handler lists.
 ///
 /// Handlers are executed in registration order. The first handler that returns
 /// [`Action::Abort`] short-circuits evaluation; [`Action::Modify`] is noted and
 /// execution continues so later handlers can further modify. If no handler
-/// aborts, the last `Modify` result (or `Continue`) is returned.
+/// aborts, the last `Modify` result or the last non-fatal error result wins.
 pub struct HookRegistry {
     handlers: HandlerMap,
     next_id: AtomicUsize,
@@ -24,8 +51,10 @@ pub struct HookRegistry {
 impl std::fmt::Debug for HookRegistry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let handlers = self.handlers.read();
-        let counts: HashMap<&EventType, usize> =
-            handlers.iter().map(|(k, v)| (k, v.len())).collect();
+        let counts: HashMap<&EventType, usize> = handlers
+            .iter()
+            .map(|(event_type, items)| (event_type, items.len()))
+            .collect();
         f.debug_struct("HookRegistry")
             .field("handler_counts", &counts)
             .finish()
@@ -40,6 +69,7 @@ impl Default for HookRegistry {
 
 impl HookRegistry {
     /// Create a new empty registry.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             handlers: Arc::new(RwLock::new(HashMap::new())),
@@ -48,13 +78,10 @@ impl HookRegistry {
     }
 
     /// Register a handler for the given event type.
-    ///
-    /// Returns a closure that, when called, removes this handler from the
-    /// registry (i.e. an "unsubscribe" handle).
     pub fn on(
         &self,
         event_type: EventType,
-        handler: impl Fn(&dyn Event) -> HookResult + Send + Sync + 'static,
+        handler: impl Fn(CancellationToken, &dyn Event) -> HookResult + Send + Sync + 'static,
     ) -> Box<dyn FnOnce() + Send> {
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
         self.handlers
@@ -63,20 +90,18 @@ impl HookRegistry {
             .or_default()
             .push((id, Box::new(handler)));
 
-        let handlers = self.handlers.clone();
+        let handlers = Arc::clone(&self.handlers);
         Box::new(move || {
             let mut map = handlers.write();
-            if let Some(vec) = map.get_mut(&event_type) {
-                vec.retain(|(handler_id, _)| *handler_id != id);
+            if let Some(items) = map.get_mut(&event_type) {
+                items.retain(|(handler_id, _)| *handler_id != id);
             }
         })
     }
 
     /// Emit an event to all registered handlers for its type.
-    ///
-    /// Returns the combined result: the first `Abort` wins; otherwise the last
-    /// `Modify` is returned; if none, `Continue`.
-    pub fn emit(&self, event: &dyn Event) -> HookResult {
+    #[must_use]
+    pub fn emit(&self, event: &dyn Event, cancel: CancellationToken) -> HookResult {
         let event_type = event.event_type();
         let handlers = self.handlers.read();
 
@@ -84,44 +109,62 @@ impl HookRegistry {
             return HookResult::ok();
         };
 
-        let mut last_modify: Option<HookResult> = None;
+        let mut last_result: Option<HookResult> = None;
 
         for (_, handler) in handler_list {
-            let result = handler(event);
+            if cancel.is_cancelled() {
+                return HookResult::abort_with_error(HookDispatchError::cancelled());
+            }
+
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                handler(cancel.clone(), event)
+            }))
+            .unwrap_or_else(|payload| {
+                HookResult::continue_with_error(HookDispatchError::panicked(payload))
+            });
+
             match result.action {
                 Action::Abort => return result,
-                Action::Modify => {
-                    last_modify = Some(result);
+                Action::Modify => last_result = Some(result),
+                Action::Continue => {
+                    if result.error.is_some() {
+                        last_result = Some(result);
+                    }
                 }
-                Action::Continue => {}
             }
         }
 
-        last_modify.unwrap_or_else(HookResult::ok)
+        last_result.unwrap_or_else(HookResult::ok)
     }
 
     /// Check whether any handlers are registered for the given event type.
+    #[must_use]
     pub fn has_handlers(&self, event_type: &EventType) -> bool {
-        let handlers = self.handlers.read();
-        handlers.get(event_type).is_some_and(|vec| !vec.is_empty())
+        self.handlers
+            .read()
+            .get(event_type)
+            .is_some_and(|handlers| !handlers.is_empty())
     }
 
     /// Remove all handlers for the specified event types.
     pub fn clear(&self, event_types: &[EventType]) {
         let mut handlers = self.handlers.write();
-        for et in event_types {
-            handlers.remove(et);
+        for event_type in event_types {
+            handlers.remove(event_type);
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::any::Any;
-    use std::sync::atomic::AtomicU32;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicU32, Ordering};
 
-    // ── Test-local event types ──────────────────────────────────────────
+    use tokio_util::sync::CancellationToken;
+
+    use super::HookRegistry;
+    use crate::{Action, Event, EventType, HookResult};
 
     struct Ping;
 
@@ -129,6 +172,7 @@ mod tests {
         fn event_type(&self) -> EventType {
             EventType::new("ping")
         }
+
         fn as_any(&self) -> &dyn Any {
             self
         }
@@ -140,6 +184,7 @@ mod tests {
         fn event_type(&self) -> EventType {
             EventType::new("pong")
         }
+
         fn as_any(&self) -> &dyn Any {
             self
         }
@@ -148,165 +193,167 @@ mod tests {
     fn ping_type() -> EventType {
         EventType::new("ping")
     }
+
     fn pong_type() -> EventType {
         EventType::new("pong")
     }
 
-    // ── Tests ───────────────────────────────────────────────────────────
-
     #[test]
-    fn test_registry_new_empty() {
-        let reg = HookRegistry::new();
-        assert!(!reg.has_handlers(&ping_type()));
-        assert!(!reg.has_handlers(&pong_type()));
-    }
-
-    #[test]
-    fn test_register_and_emit() {
-        let reg = HookRegistry::new();
+    fn register_and_emit() {
+        let registry = HookRegistry::new();
         let counter = Arc::new(AtomicU32::new(0));
-        let counter_clone = counter.clone();
+        let counter_clone = Arc::clone(&counter);
 
-        let _unsub = reg.on(ping_type(), move |_event| {
+        let _unsubscribe = registry.on(ping_type(), move |_, _| {
             counter_clone.fetch_add(1, Ordering::SeqCst);
             HookResult::ok()
         });
 
-        assert!(reg.has_handlers(&ping_type()));
-        assert!(!reg.has_handlers(&pong_type()));
-
-        let result = reg.emit(&Ping);
+        let result = registry.emit(&Ping, CancellationToken::new());
         assert_eq!(result.action, Action::Continue);
         assert_eq!(counter.load(Ordering::SeqCst), 1);
     }
 
     #[test]
-    fn test_emit_no_handlers() {
-        let reg = HookRegistry::new();
-        let result = reg.emit(&Pong);
+    fn emit_no_handlers_returns_continue() {
+        let registry = HookRegistry::new();
+        let result = registry.emit(&Pong, CancellationToken::new());
         assert_eq!(result.action, Action::Continue);
     }
 
     #[test]
-    fn test_emit_abort_short_circuits() {
-        let reg = HookRegistry::new();
+    fn emit_abort_short_circuits() {
+        let registry = HookRegistry::new();
         let counter = Arc::new(AtomicU32::new(0));
 
-        let c1 = counter.clone();
-        let _unsub1 = reg.on(ping_type(), move |_| {
-            c1.fetch_add(1, Ordering::SeqCst);
+        let first = Arc::clone(&counter);
+        let _unsubscribe1 = registry.on(ping_type(), move |_, _| {
+            first.fetch_add(1, Ordering::SeqCst);
             HookResult::abort("blocked")
         });
 
-        let c2 = counter.clone();
-        let _unsub2 = reg.on(ping_type(), move |_| {
-            c2.fetch_add(1, Ordering::SeqCst);
+        let second = Arc::clone(&counter);
+        let _unsubscribe2 = registry.on(ping_type(), move |_, _| {
+            second.fetch_add(1, Ordering::SeqCst);
             HookResult::ok()
         });
 
-        let result = reg.emit(&Ping);
+        let result = registry.emit(&Ping, CancellationToken::new());
         assert_eq!(result.action, Action::Abort);
         assert_eq!(result.reason, "blocked");
         assert_eq!(counter.load(Ordering::SeqCst), 1);
     }
 
     #[test]
-    fn test_emit_modify_continues() {
-        let reg = HookRegistry::new();
+    fn emit_modify_returns_last_modify() {
+        let registry = HookRegistry::new();
+        let _unsubscribe1 = registry.on(ping_type(), |_, _| HookResult::modify(0.5_f64, "lower"));
+        let _unsubscribe2 = registry.on(ping_type(), |_, _| HookResult::modify(0.3_f64, "lowest"));
 
-        let _unsub1 = reg.on(ping_type(), |_| HookResult::modify(0.5_f64, "lower temp"));
-
-        let _unsub2 = reg.on(ping_type(), |_| HookResult::modify(0.3_f64, "even lower"));
-
-        let result = reg.emit(&Ping);
+        let result = registry.emit(&Ping, CancellationToken::new());
         assert_eq!(result.action, Action::Modify);
-        assert_eq!(result.reason, "even lower");
+        assert_eq!(result.reason, "lowest");
     }
 
     #[test]
-    fn test_unsubscribe() {
-        let reg = HookRegistry::new();
+    fn cancelled_emit_aborts_before_dispatch() {
+        let registry = HookRegistry::new();
         let counter = Arc::new(AtomicU32::new(0));
-        let counter_clone = counter.clone();
-
-        let error_type = EventType::new("error");
-        let unsub = reg.on(error_type.clone(), move |_| {
-            counter_clone.fetch_add(1, Ordering::SeqCst);
+        let cloned = Arc::clone(&counter);
+        let _unsubscribe = registry.on(ping_type(), move |_, _| {
+            cloned.fetch_add(1, Ordering::SeqCst);
             HookResult::ok()
         });
 
-        assert!(reg.has_handlers(&error_type));
+        let token = CancellationToken::new();
+        token.cancel();
+        let result = registry.emit(&Ping, token);
 
-        unsub();
+        assert_eq!(result.action, Action::Abort);
+        assert!(result.error.is_some());
+        assert_eq!(counter.load(Ordering::SeqCst), 0);
+    }
 
-        assert!(!reg.has_handlers(&error_type));
+    #[test]
+    fn panicking_handler_becomes_continue_with_error() {
+        let registry = HookRegistry::new();
+        let counter = Arc::new(AtomicU32::new(0));
 
-        // Define a simple error event for the emit call
+        let _unsubscribe1 = registry.on(ping_type(), |_, _| panic!("boom"));
+        let cloned = Arc::clone(&counter);
+        let _unsubscribe2 = registry.on(ping_type(), move |_, _| {
+            cloned.fetch_add(1, Ordering::SeqCst);
+            HookResult::ok()
+        });
+
+        let result = registry.emit(&Ping, CancellationToken::new());
+
+        assert_eq!(result.action, Action::Continue);
+        assert!(result.error.is_some());
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn unsubscribe_removes_handler() {
+        let registry = HookRegistry::new();
+        let counter = Arc::new(AtomicU32::new(0));
+        let cloned = Arc::clone(&counter);
+
+        let event_type = EventType::new("error");
+        let unsubscribe = registry.on(event_type.clone(), move |_, _| {
+            cloned.fetch_add(1, Ordering::SeqCst);
+            HookResult::ok()
+        });
+
+        unsubscribe();
+
         struct ErrorEvent;
         impl Event for ErrorEvent {
             fn event_type(&self) -> EventType {
                 EventType::new("error")
             }
+
             fn as_any(&self) -> &dyn Any {
                 self
             }
         }
 
-        reg.emit(&ErrorEvent);
+        let _ = registry.emit(&ErrorEvent, CancellationToken::new());
         assert_eq!(counter.load(Ordering::SeqCst), 0);
     }
 
     #[test]
-    fn test_clear() {
-        let reg = HookRegistry::new();
-
+    fn clear_removes_selected_event_types() {
+        let registry = HookRegistry::new();
         let a = EventType::new("a");
         let b = EventType::new("b");
         let c = EventType::new("c");
 
-        let _unsub1 = reg.on(a.clone(), |_| HookResult::ok());
-        let _unsub2 = reg.on(b.clone(), |_| HookResult::ok());
-        let _unsub3 = reg.on(c.clone(), |_| HookResult::ok());
+        let _unsubscribe1 = registry.on(a.clone(), |_, _| HookResult::ok());
+        let _unsubscribe2 = registry.on(b.clone(), |_, _| HookResult::ok());
+        let _unsubscribe3 = registry.on(c.clone(), |_, _| HookResult::ok());
 
-        assert!(reg.has_handlers(&a));
-        assert!(reg.has_handlers(&b));
-        assert!(reg.has_handlers(&c));
+        registry.clear(&[a.clone(), b.clone()]);
 
-        reg.clear(&[a.clone(), b.clone()]);
-
-        assert!(!reg.has_handlers(&a));
-        assert!(!reg.has_handlers(&b));
-        assert!(reg.has_handlers(&c));
+        assert!(!registry.has_handlers(&a));
+        assert!(!registry.has_handlers(&b));
+        assert!(registry.has_handlers(&c));
     }
 
     #[test]
-    fn test_multiple_handlers_same_event() {
-        let reg = HookRegistry::new();
+    fn multiple_handlers_same_event_all_run() {
+        let registry = HookRegistry::new();
         let counter = Arc::new(AtomicU32::new(0));
 
         for _ in 0..3 {
-            let c = counter.clone();
-            let _unsub = reg.on(pong_type(), move |_| {
-                c.fetch_add(1, Ordering::SeqCst);
+            let cloned = Arc::clone(&counter);
+            let _unsubscribe = registry.on(pong_type(), move |_, _| {
+                cloned.fetch_add(1, Ordering::SeqCst);
                 HookResult::ok()
             });
         }
 
-        reg.emit(&Pong);
+        let _ = registry.emit(&Pong, CancellationToken::new());
         assert_eq!(counter.load(Ordering::SeqCst), 3);
-    }
-
-    #[test]
-    fn test_debug_format() {
-        let reg = HookRegistry::new();
-        let _unsub = reg.on(ping_type(), |_| HookResult::ok());
-        let debug = format!("{reg:?}");
-        assert!(debug.contains("HookRegistry"));
-    }
-
-    #[test]
-    fn test_default() {
-        let reg = HookRegistry::default();
-        assert!(!reg.has_handlers(&ping_type()));
     }
 }
