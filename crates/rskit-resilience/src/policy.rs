@@ -62,9 +62,9 @@ impl Policy {
     /// Execute an operation through the configured policy stack.
     ///
     /// The execution order is: rate limit → bulkhead → circuit breaker → timeout → retry → fn.
-    pub async fn execute<F, Fut, T, E>(&self, f: F) -> Result<T, E>
+    pub async fn execute<F, Fut, T, E>(&self, mut f: F) -> Result<T, E>
     where
-        F: Fn() -> Fut,
+        F: FnMut() -> Fut,
         Fut: Future<Output = Result<T, E>>,
         E: From<AppError> + Into<AppError>,
     {
@@ -72,64 +72,103 @@ impl Policy {
             rate_limiter.check().map_err(E::from)?;
         }
 
-        let execute_retry = || async {
-            if let Some(retry) = &self.retry {
-                let mut attempt = 0usize;
-                loop {
-                    attempt += 1;
-                    match f().await {
-                        Ok(value) => return Ok(value),
-                        Err(err) => {
-                            let retryable_error: AppError = err.into();
-                            let should_retry = retry
-                                .retry_if
-                                .as_ref()
-                                .map(|predicate| predicate(&retryable_error))
-                                .unwrap_or_else(|| retryable_error.is_retryable());
-                            if attempt >= retry.max_attempts || !should_retry {
-                                return Err(E::from(retryable_error));
-                            }
-                            if let Some(callback) = &retry.on_retry {
-                                callback(attempt as u32, &retryable_error);
-                            }
-                            tokio::time::sleep(retry.backoff(attempt)).await;
-                        }
-                    }
-                }
-            } else {
-                f().await
-            }
-        };
-
-        let execute_timeout = || async {
-            if let Some(timeout) = self.timeout {
-                tokio::time::timeout(timeout, execute_retry())
-                    .await
-                    .map_err(|_| E::from(AppError::timeout("resilience policy")))?
-            } else {
-                execute_retry().await
-            }
-        };
-
-        let execute_circuit_breaker = || async {
-            if let Some(circuit_breaker) = &self.circuit_breaker {
-                circuit_breaker
-                    .execute(|| async { execute_timeout().await.map_err(Into::into) })
-                    .await
-                    .map_err(E::from)
-            } else {
-                execute_timeout().await
-            }
-        };
-
         if let Some(bulkhead) = &self.bulkhead {
             bulkhead
-                .execute(|| async { execute_circuit_breaker().await.map_err(Into::into) })
+                .execute(|| async {
+                    execute_circuit_breaker(
+                        self.circuit_breaker.as_ref(),
+                        self.timeout,
+                        self.retry.as_ref(),
+                        &mut f,
+                    )
+                    .await
+                    .map_err(Into::into)
+                })
                 .await
                 .map_err(E::from)
         } else {
-            execute_circuit_breaker().await
+            execute_circuit_breaker(
+                self.circuit_breaker.as_ref(),
+                self.timeout,
+                self.retry.as_ref(),
+                &mut f,
+            )
+            .await
         }
+    }
+}
+
+async fn execute_circuit_breaker<F, Fut, T, E>(
+    circuit_breaker: Option<&CircuitBreaker>,
+    timeout: Option<Duration>,
+    retry: Option<&RetryPolicy>,
+    f: &mut F,
+) -> Result<T, E>
+where
+    F: FnMut() -> Fut,
+    Fut: Future<Output = Result<T, E>>,
+    E: From<AppError> + Into<AppError>,
+{
+    if let Some(circuit_breaker) = circuit_breaker {
+        circuit_breaker
+            .execute(|| async { execute_timeout(timeout, retry, f).await.map_err(Into::into) })
+            .await
+            .map_err(E::from)
+    } else {
+        execute_timeout(timeout, retry, f).await
+    }
+}
+
+async fn execute_timeout<F, Fut, T, E>(
+    timeout: Option<Duration>,
+    retry: Option<&RetryPolicy>,
+    f: &mut F,
+) -> Result<T, E>
+where
+    F: FnMut() -> Fut,
+    Fut: Future<Output = Result<T, E>>,
+    E: From<AppError> + Into<AppError>,
+{
+    if let Some(timeout) = timeout {
+        tokio::time::timeout(timeout, execute_retry(retry, f))
+            .await
+            .map_err(|_| E::from(AppError::timeout("resilience policy")))?
+    } else {
+        execute_retry(retry, f).await
+    }
+}
+
+async fn execute_retry<F, Fut, T, E>(retry: Option<&RetryPolicy>, f: &mut F) -> Result<T, E>
+where
+    F: FnMut() -> Fut,
+    Fut: Future<Output = Result<T, E>>,
+    E: From<AppError> + Into<AppError>,
+{
+    if let Some(retry) = retry {
+        let mut attempt = 0usize;
+        loop {
+            attempt += 1;
+            match f().await {
+                Ok(value) => return Ok(value),
+                Err(err) => {
+                    let retryable_error: AppError = err.into();
+                    let should_retry = retry
+                        .retry_if
+                        .as_ref()
+                        .map(|predicate| predicate(&retryable_error))
+                        .unwrap_or_else(|| retryable_error.is_retryable());
+                    if attempt >= retry.max_attempts || !should_retry {
+                        return Err(E::from(retryable_error));
+                    }
+                    if let Some(callback) = &retry.on_retry {
+                        callback(attempt as u32, &retryable_error);
+                    }
+                    tokio::time::sleep(retry.backoff(attempt)).await;
+                }
+            }
+        }
+    } else {
+        f().await
     }
 }
 
@@ -147,8 +186,7 @@ mod tests {
 
     #[tokio::test]
     async fn policy_retries_until_success() {
-        let attempts = Arc::new(AtomicUsize::new(0));
-        let attempts_clone = attempts.clone();
+        let mut attempts = 0usize;
         let policy = Policy::new().with_retry(
             RetryPolicy::new()
                 .with_max_attempts(3)
@@ -158,9 +196,10 @@ mod tests {
 
         let result = policy
             .execute(|| {
-                let attempts = attempts_clone.clone();
+                attempts += 1;
+                let attempt = attempts;
                 async move {
-                    if attempts.fetch_add(1, Ordering::SeqCst) == 0 {
+                    if attempt == 1 {
                         Err::<u32, AppError>(AppError::connection_failed("upstream"))
                     } else {
                         Ok(7)
@@ -170,7 +209,7 @@ mod tests {
             .await;
 
         assert_eq!(result.unwrap(), 7);
-        assert_eq!(attempts.load(Ordering::SeqCst), 2);
+        assert_eq!(attempts, 2);
     }
 
     #[tokio::test]
