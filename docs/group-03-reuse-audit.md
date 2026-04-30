@@ -1,0 +1,42 @@
+# Group 03 reuse audit — rskit
+
+Format: `file:line` — **Action** — justification.
+
+- `crates/rskit-resilience/src/layers.rs:91` — **Leave** — canonical resilience tower retry layer owns retry telemetry and backoff sleep.
+- `crates/rskit-resilience/src/layers.rs:97` — **Leave** — canonical resilience tower retry layer owns retry backoff sleeps.
+- `crates/rskit-resilience/src/retry.rs:275` — **Leave** — canonical resilience module owns retry telemetry.
+- `crates/rskit-resilience/src/retry.rs:281` — **Leave** — canonical resilience module owns retry backoff sleeps, so this is the intended implementation rather than an ad-hoc duplicate.
+- `crates/rskit-resilience/src/policy.rs:166` — **Leave** — canonical policy composition owns retry backoff sleeps when composing `RetryPolicy`.
+- `crates/rskit-resilience/src/policy.rs:257` — **Leave** — test-only sleep used to exercise timeout behavior inside the resilience crate.
+- `crates/rskit-resilience/src/circuit_breaker.rs:256` — **Leave** — canonical circuit breaker owns state-transition telemetry.
+- `crates/rskit-resilience/src/bulkhead.rs:242` — **Leave** — test-only sleep inside the resilience crate; no cross-module reuse issue.
+- `crates/rskit-pipeline/src/operators/windowing.rs:36` — **Leave** — tumbling windows are pipeline timing semantics, not retry/backoff/timeout policy.
+- `crates/rskit-pipeline/src/operators/windowing.rs:89` — **Leave** — batch timeout is operator-local flush semantics and does not duplicate resilience timeout policy.
+- `crates/rskit-pipeline/src/operators/windowing.rs:129` — **Leave** — debounce delay is stream operator semantics and does not duplicate resilience retry/backoff.
+- `crates/rskit-worker/src/ticker.rs:120` — **Leave** — fixed-interval scheduling is the ticker worker's core contract, not resilience retry/backoff.
+- `crates/rskit-worker/src/ticker.rs:184` — **Leave** — test-only sleep used to observe interval ticks; no production reuse concern.
+- `crates/rskit-worker/src/ticker.rs:202` — **Leave** — test-only sleep used to observe stopped ticker behavior; no production reuse concern.
+- `crates/rskit-worker/src/ticker.rs:213` — **Leave** — test-only sleep used to observe failed tick health; no production reuse concern.
+- `crates/rskit-worker/src/ticker.rs:244` — **Leave** — test-only sleep used to observe lifecycle idempotency; no production reuse concern.
+- `crates/rskit-worker/src/ticker.rs:255` — **Leave** — test-only sleep used to observe run-count reporting; no production reuse concern.
+- `crates/rskit-process/src/runner.rs:78` — **Leave** — process timeout is the module's boundary contract for child processes, not retry/backoff policy.
+- `crates/rskit-process/src/runner.rs:90` — **Leave** — grace-period timeout is process termination semantics, not a reusable resilience timeout wrapper.
+- `crates/rskit-chain/src/executor.rs:125` — **Enhance** — chain step execution uses direct `tracing::info!`; future logger/observability injection should centralize chain telemetry.
+- `crates/rskit-chain/src/executor.rs:155` — **Enhance** — chain step failure uses direct `tracing::error!`; future logger/observability injection should centralize chain telemetry.
+- `crates/rskit-chain/src/executor.rs:182` — **Enhance** — chain cleanup warning uses direct `tracing::warn!`; future logger/observability injection should centralize chain telemetry.
+- `crates/rskit-process/src/runner.rs:54` — **Enhance** — process spawn telemetry uses direct tracing; future logger/observability injection should centralize subprocess telemetry.
+- `crates/rskit-process/src/runner.rs:87` — **Enhance** — process timeout telemetry uses direct tracing; future logger/observability injection should centralize subprocess telemetry.
+- `crates/rskit-process/src/runner.rs:93` — **Enhance** — process grace-period warning uses direct tracing; future logger/observability injection should centralize subprocess telemetry.
+- `crates/rskit-process/src/runner.rs:104` — **Enhance** — process forced-termination telemetry uses direct tracing; future logger/observability injection should centralize subprocess telemetry.
+- `crates/rskit-process/src/runner.rs:152` — **Enhance** — process completion telemetry uses direct tracing; future logger/observability injection should centralize subprocess telemetry.
+- `crates/rskit-process/src/runner.rs:216` — **Enhance** — process signal warning uses direct tracing; future logger/observability injection should centralize subprocess telemetry.
+- `crates/rskit-worker/src/pool.rs:425` — **Enhance** — worker pool emits direct `tracing::info!`; future logger/observability injection should centralize component lifecycle logs.
+- `crates/rskit-worker/src/pool.rs:432` — **Enhance** — panic logging uses direct `tracing::error!`; future logger/observability injection should centralize task failure telemetry.
+- `crates/rskit-worker/src/pool.rs:449` — **Enhance** — shutdown logging uses direct `tracing::info!`; future logger/observability injection should centralize lifecycle logs.
+- `crates/rskit-worker/src/pool.rs:473` — **Enhance** — task panic logging uses direct `tracing::error!`; future logger/observability injection should centralize worker telemetry.
+- `crates/rskit-worker/src/pool.rs:482` — **Enhance** — drain panic logging uses direct `tracing::error!`; future logger/observability injection should centralize worker telemetry.
+- `crates/rskit-worker/src/pool.rs:486` — **Enhance** — runner-exit logging uses direct `tracing::info!`; future logger/observability injection should centralize lifecycle logs.
+- `crates/rskit-worker/src/pool.rs:506` — **Enhance** — task-start logging uses direct `tracing::debug!`; future logger/observability injection should provide structured task telemetry.
+- `crates/rskit-worker/src/pool.rs:510` — **Enhance** — task-success logging uses direct `tracing::debug!`; future logger/observability injection should provide structured task telemetry.
+- `crates/rskit-worker/src/pool.rs:511` — **Enhance** — task-failure logging uses direct `tracing::warn!`; future logger/observability injection should provide structured task telemetry.
+- `crates/rskit-dag/src/dag.rs:363` — **Enhance** — DAG node execution uses direct `tracing::debug!`; future logger/observability injection should provide graph execution telemetry.
