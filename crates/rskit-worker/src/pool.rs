@@ -81,7 +81,9 @@ impl PoolConfig {
         }
     }
 
-    /// Set the maximum number of concurrent tasks.
+    /// Set the maximum number of concurrent tasks. Values below 1 are clamped
+    /// to 1 inside `Pool::new` (with a tracing warning), since a zero-sized
+    /// pool can never execute tasks.
     #[must_use]
     pub fn with_size(mut self, size: usize) -> Self {
         self.size = size;
@@ -267,8 +269,21 @@ where
     O: Send + Clone + 'static,
 {
     /// Create a new pool backed by `handler`.
+    ///
+    /// `config.size` is clamped to a minimum of 1 (a zero-sized pool can never
+    /// execute tasks because no permits would be available); a `tracing` warn
+    /// is emitted when this clamp engages.
     pub fn new(handler: Arc<dyn Handler<I, O>>, config: PoolConfig) -> Self {
-        let semaphore = Arc::new(Semaphore::new(config.size));
+        let size = if config.size == 0 {
+            tracing::warn!(
+                pool = %config.name,
+                "PoolConfig::size was 0, clamping to 1; a zero-sized pool can never execute tasks"
+            );
+            1
+        } else {
+            config.size
+        };
+        let semaphore = Arc::new(Semaphore::new(size));
         let (queue, receiver) = SubmitQueue::<Envelope<I, O>>::new(config.queue_size);
         let shutdown = CancellationToken::new();
 
@@ -284,7 +299,7 @@ where
             name: config.name,
             queue,
             semaphore,
-            capacity: config.size,
+            capacity: size,
             event_buffer: config.event_buffer,
             overflow_policy: config.overflow_policy,
             shutdown,
@@ -405,6 +420,27 @@ where
     let _ = envelope.result_tx.send(Err(error));
 }
 
+/// Complete a dequeued envelope with a `ServiceUnavailable` error when the
+/// pool is shutting down before the task could be dispatched. Without this
+/// the envelope's `result_tx` would simply be dropped, leaving any awaiting
+/// `TaskHandle::result()` to surface the resulting `RecvError` as a generic
+/// channel-closed error rather than a meaningful "pool is shutting down".
+fn fail_envelope_shutdown<I, O>(envelope: Envelope<I, O>, pool_name: &str)
+where
+    O: Clone + Send + 'static,
+{
+    let error = AppError::new(
+        ErrorCode::ServiceUnavailable,
+        format!("pool '{pool_name}' is shutting down"),
+    );
+    let _ = envelope.events_bcast.send(Event::error(
+        envelope.id,
+        format!("{pool_name}/shutdown"),
+        error.message.clone(),
+    ));
+    let _ = envelope.result_tx.send(Err(error));
+}
+
 async fn runner_loop<I, O>(
     pool_name: String,
     handler: Arc<dyn Handler<I, O>>,
@@ -446,14 +482,18 @@ async fn runner_loop<I, O>(
             biased;
 
             _ = shutdown.cancelled() => {
-                tracing::info!(pool = %pool_name, "shutdown requested, draining");
+                tracing::info!(pool = %pool_name, "shutdown requested while waiting for permit; failing dequeued task");
+                fail_envelope_shutdown(envelope, &pool_name);
                 break;
             }
 
             permit = semaphore.clone().acquire_owned() => {
                 match permit {
                     Ok(p) => p,
-                    Err(_) => break,
+                    Err(_) => {
+                        fail_envelope_shutdown(envelope, &pool_name);
+                        break;
+                    }
                 }
             }
         };

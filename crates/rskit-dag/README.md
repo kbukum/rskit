@@ -30,7 +30,7 @@ Directed acyclic graph task orchestrator with parallel execution.
 ### Cycle-detection guarantee
 
 `Dag::execute` always runs a topological-sort validation before scheduling work. Cyclic graphs
-return `ErrorCode::Validation` and no node is started.
+return `ErrorCode::InvalidInput` and no node is started.
 
 ### Parallel sibling execution
 

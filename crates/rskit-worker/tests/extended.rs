@@ -186,6 +186,52 @@ async fn pool_shutdown_during_active_tasks() {
     cancel_token.cancel();
 }
 
+// Regression: a task whose envelope was dequeued by the runner but had not yet
+// acquired a permit when shutdown fired must surface a `ServiceUnavailable`
+// error to the awaiting handle, not silently drop the oneshot sender.
+#[tokio::test]
+async fn pool_shutdown_fails_dequeued_but_unscheduled_task() {
+    let pool = Pool::new(
+        Arc::new(SlowHandler {
+            delay: Duration::from_secs(10),
+        }),
+        PoolConfig::new("shutdown-dequeued").with_size(1),
+    );
+
+    // First submission occupies the only permit.
+    let _h1 = pool.submit(1).await.unwrap();
+    // Second is queued and will be dequeued by the runner, but cannot acquire a
+    // permit until h1 finishes; we shut down before that ever happens.
+    let h2 = pool.submit(2).await.unwrap();
+
+    sleep(Duration::from_millis(50)).await;
+    pool.shutdown().await.unwrap();
+
+    let err = timeout(Duration::from_secs(2), h2.result())
+        .await
+        .expect("handle.result() must not hang after shutdown")
+        .expect_err("dequeued task must fail with ServiceUnavailable");
+    assert_eq!(err.code, ErrorCode::ServiceUnavailable);
+}
+
+// Regression: passing size=0 to the config used to silently install a
+// zero-permit semaphore so submissions could never run. Pool::new now clamps
+// to at least 1 so the pool still makes progress.
+#[tokio::test]
+async fn pool_with_zero_size_clamps_to_one() {
+    let pool = Pool::new(
+        Arc::new(DoubleHandler),
+        PoolConfig::new("size-zero").with_size(0),
+    );
+    let h = pool.submit(21).await.unwrap();
+    let v = timeout(Duration::from_secs(2), h.result())
+        .await
+        .expect("must not hang")
+        .expect("ok");
+    assert_eq!(v, 42);
+    pool.shutdown().await.unwrap();
+}
+
 // ── 5. Task cancellation ──────────────────────────────────────────────────────
 
 #[tokio::test]
