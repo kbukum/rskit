@@ -42,20 +42,13 @@ where
 
     /// Get the accumulator for `key`, creating it when missing.
     pub fn get_or_create(&self, key: K) -> Arc<Accumulator<V>> {
-        if let Some(existing) = self.accumulators.lock().get(&key).cloned() {
-            return existing;
-        }
-
-        let accumulator = Arc::new(Accumulator::new(
-            (self.store_factory)(),
-            self.config.clone(),
-        ));
         let mut accumulators = self.accumulators.lock();
-        Arc::clone(
-            accumulators
-                .entry(key)
-                .or_insert_with(|| Arc::clone(&accumulator)),
-        )
+        Arc::clone(accumulators.entry(key).or_insert_with(|| {
+            Arc::new(Accumulator::new(
+                (self.store_factory)(),
+                self.config.clone(),
+            ))
+        }))
     }
 
     /// Append a value to the keyed accumulator.
@@ -108,7 +101,8 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, Barrier};
     use std::time::Duration;
 
     use super::*;
@@ -145,5 +139,41 @@ mod tests {
         );
         assert!(manager.append("a", 1).unwrap().is_none());
         assert_eq!(manager.append("a", 2).unwrap(), Some(vec![1, 2]));
+    }
+
+    #[test]
+    fn get_or_create_invokes_factory_once_under_contention() {
+        const WORKERS: usize = 16;
+
+        let factory_calls = Arc::new(AtomicUsize::new(0));
+        let manager = Arc::new(Manager::new(AccumulatorConfig::new(), {
+            let factory_calls = Arc::clone(&factory_calls);
+            move || {
+                factory_calls.fetch_add(1, Ordering::SeqCst);
+                Box::new(MemoryStore::<i32>::new())
+            }
+        }));
+        let barrier = Arc::new(Barrier::new(WORKERS));
+
+        let threads: Vec<_> = (0..WORKERS)
+            .map(|_| {
+                let manager = Arc::clone(&manager);
+                let barrier = Arc::clone(&barrier);
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    manager.get_or_create("shared")
+                })
+            })
+            .collect();
+
+        let accumulators: Vec<_> = threads
+            .into_iter()
+            .map(|thread| thread.join().unwrap())
+            .collect();
+
+        assert_eq!(factory_calls.load(Ordering::SeqCst), 1);
+        for accumulator in &accumulators[1..] {
+            assert!(Arc::ptr_eq(&accumulators[0], accumulator));
+        }
     }
 }
