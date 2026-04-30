@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 
 use tokio::sync::mpsc;
-use tokio::time::sleep;
+use tokio::time::{sleep, timeout};
 use tokio_util::sync::CancellationToken;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
@@ -84,6 +84,20 @@ impl Handler<i32, i32> for EventEmittingHandler {
 
 struct CountingHandler {
     counter: Arc<AtomicU32>,
+}
+
+struct IdleHandler;
+
+#[async_trait::async_trait]
+impl Handler<i32, i32> for IdleHandler {
+    async fn handle(
+        &self,
+        task: i32,
+        _emit: mpsc::Sender<Event<i32>>,
+        _cancel: CancellationToken,
+    ) -> AppResult<i32> {
+        Ok(task)
+    }
 }
 
 #[async_trait::async_trait]
@@ -240,6 +254,7 @@ async fn pool_stats_accuracy() {
     let stats = pool.stats();
     assert_eq!(stats.running, 0);
     assert_eq!(stats.capacity, 4);
+    assert_eq!(pool.available_permits(), 4);
 
     // Submit tasks
     let _h1 = pool.submit(1).await.unwrap();
@@ -279,6 +294,38 @@ async fn concurrent_submissions_ten_plus() {
 }
 
 // ── 9. RoundRobinDispatcher ───────────────────────────────────────────────────
+
+#[tokio::test]
+async fn idle_pool_holds_no_permits() {
+    let pool = Pool::new(
+        Arc::new(IdleHandler),
+        PoolConfig::new("idle-stats").with_size(3),
+    );
+
+    let stats = pool.stats();
+    assert_eq!(stats.running, 0);
+    assert_eq!(pool.available_permits(), 3);
+}
+
+#[tokio::test]
+async fn dropping_pool_closes_runner() {
+    let handler: Arc<dyn Handler<i32, i32>> = Arc::new(IdleHandler);
+    let weak_handler = Arc::downgrade(&handler);
+    let pool = Pool::new(handler, PoolConfig::new("drop-close").with_size(1));
+
+    drop(pool);
+
+    timeout(Duration::from_millis(200), async {
+        loop {
+            if weak_handler.upgrade().is_none() {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+}
 
 #[tokio::test]
 async fn round_robin_dispatcher_cycles() {

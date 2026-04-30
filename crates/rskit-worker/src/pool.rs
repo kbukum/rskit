@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use parking_lot::Mutex;
 use tokio::sync::{Notify, Semaphore, broadcast, mpsc, oneshot};
-use tokio::task::JoinSet;
+use tokio::task::{JoinHandle, JoinSet};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
@@ -258,6 +258,7 @@ where
     event_buffer: usize,
     overflow_policy: OverflowPolicy,
     shutdown: CancellationToken,
+    runner: Option<JoinHandle<()>>,
 }
 
 impl<I, O> Pool<I, O>
@@ -271,7 +272,7 @@ where
         let (queue, receiver) = SubmitQueue::<Envelope<I, O>>::new(config.queue_size);
         let shutdown = CancellationToken::new();
 
-        tokio::spawn(runner_loop(
+        let runner = tokio::spawn(runner_loop(
             config.name.clone(),
             handler,
             receiver,
@@ -287,6 +288,7 @@ where
             event_buffer: config.event_buffer,
             overflow_policy: config.overflow_policy,
             shutdown,
+            runner: Some(runner),
         }
     }
 
@@ -351,11 +353,40 @@ where
         }
     }
 
-    /// Cancel all in-flight tasks and shut down the runner loop.
-    pub async fn shutdown(self) -> AppResult<()> {
+    /// Number of permits currently available for task execution.
+    #[must_use]
+    pub fn available_permits(&self) -> usize {
+        self.semaphore.available_permits()
+    }
+
+    /// Stop accepting work and ask the runner loop to exit.
+    pub fn close(&self) {
         self.shutdown.cancel();
         self.queue.close();
+    }
+
+    /// Cancel all in-flight tasks and shut down the runner loop.
+    pub async fn shutdown(mut self) -> AppResult<()> {
+        self.close();
+        if let Some(runner) = self.runner.take() {
+            runner.await.map_err(|err| {
+                AppError::new(
+                    ErrorCode::Internal,
+                    format!("pool '{}' runner failed during shutdown: {err}", self.name),
+                )
+            })?;
+        }
         Ok(())
+    }
+}
+
+impl<I, O> Drop for Pool<I, O>
+where
+    I: Send + 'static,
+    O: Send + Clone + 'static,
+{
+    fn drop(&mut self) {
+        self.close();
     }
 }
 
@@ -387,10 +418,7 @@ async fn runner_loop<I, O>(
     let mut join_set: JoinSet<()> = JoinSet::new();
 
     loop {
-        // Acquire a semaphore permit BEFORE popping from the queue.
-        // This ensures items stay in the queue (and count toward capacity)
-        // until a worker slot is actually available.
-        let permit = tokio::select! {
+        let envelope = tokio::select! {
             biased;
 
             _ = shutdown.cancelled() => {
@@ -406,16 +434,15 @@ async fn runner_loop<I, O>(
                 continue;
             }
 
-            permit = semaphore.clone().acquire_owned() => {
-                match permit {
-                    Ok(p) => p,
-                    Err(_) => break,
+            envelope = receiver.recv() => {
+                match envelope {
+                    Some(e) => e,
+                    None => break,
                 }
             }
         };
 
-        // Now that we have a worker slot, pop the next item from the queue.
-        let envelope = tokio::select! {
+        let permit = tokio::select! {
             biased;
 
             _ = shutdown.cancelled() => {
@@ -423,10 +450,10 @@ async fn runner_loop<I, O>(
                 break;
             }
 
-            envelope = receiver.recv() => {
-                match envelope {
-                    Some(e) => e,
-                    None => break,
+            permit = semaphore.clone().acquire_owned() => {
+                match permit {
+                    Ok(p) => p,
+                    Err(_) => break,
                 }
             }
         };
