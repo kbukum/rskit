@@ -191,8 +191,11 @@ where
     }
 
     /// Buffer up to `size` items from the upstream, allowing it to produce ahead.
+    ///
+    /// A zero size is clamped to one because Tokio bounded channels must have positive capacity.
     fn rbuffer(self, size: usize) -> impl Stream<Item = Self::Item> + Send + 'static {
-        let (tx, rx) = tokio::sync::mpsc::channel(size);
+        let capacity = size.max(1);
+        let (tx, rx) = tokio::sync::mpsc::channel(capacity);
         tokio::spawn(async move {
             let mut stream = std::pin::pin!(self);
             while let Some(item) = stream.next().await {

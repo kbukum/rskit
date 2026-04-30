@@ -40,15 +40,21 @@ where
     let (right_tx, right_rx) = mpsc::channel(64);
 
     tokio::spawn(async move {
+        let mut left_open = true;
+        let mut right_open = true;
+
         tokio::pin!(stream);
         while let Some(item) = stream.next().await {
-            let sender = if predicate(&item) {
-                &left_tx
-            } else {
-                &right_tx
-            };
-            if sender.send(item).await.is_err() {
+            if !left_open && !right_open {
                 break;
+            }
+
+            if predicate(&item) {
+                if left_open && left_tx.send(item).await.is_err() {
+                    left_open = false;
+                }
+            } else if right_open && right_tx.send(item).await.is_err() {
+                right_open = false;
             }
         }
     });
