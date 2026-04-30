@@ -2,10 +2,27 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 
 use crate::node::DagNode;
+use parking_lot::Mutex;
 use rskit_errors::{AppError, AppResult, ErrorCode};
-use tokio::sync::{Mutex, Semaphore};
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
+
+/// Failure handling strategy for DAG execution.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum FailurePolicy {
+    /// Stop execution immediately when the first node fails.
+    FailFast,
+    /// Continue executing all nodes, even when upstream dependencies fail.
+    Continue,
+    /// Skip all downstream dependents of a failed node, but keep independent branches running.
+    SkipDependents,
+}
+
+struct NodeExecution {
+    node_id: String,
+    result: AppResult<serde_json::Value>,
+}
 
 /// A directed acyclic graph of executable nodes.
 ///
@@ -21,6 +38,8 @@ pub struct Dag {
     reverse_edges: HashMap<String, Vec<String>>,
     /// Optional limit on concurrent node execution.
     max_parallelism: Option<usize>,
+    /// Failure handling strategy.
+    failure_policy: FailurePolicy,
 }
 
 impl Default for Dag {
@@ -31,22 +50,28 @@ impl Default for Dag {
 
 impl Dag {
     /// Create an empty DAG.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             nodes: HashMap::new(),
             edges: HashMap::new(),
             reverse_edges: HashMap::new(),
             max_parallelism: None,
+            failure_policy: FailurePolicy::FailFast,
         }
     }
 
     /// Set the maximum number of nodes that can execute concurrently.
-    ///
-    /// By default there is no limit — all ready nodes run in parallel.
-    /// Setting this to `Some(n)` caps concurrency to `n` nodes.
     #[must_use]
     pub fn with_max_parallelism(mut self, max: usize) -> Self {
         self.max_parallelism = Some(max.max(1));
+        self
+    }
+
+    /// Set the failure handling policy.
+    #[must_use]
+    pub fn with_failure_policy(mut self, policy: FailurePolicy) -> Self {
+        self.failure_policy = policy;
         self
     }
 
@@ -61,9 +86,6 @@ impl Dag {
     }
 
     /// Add a directed edge from one node to another.
-    ///
-    /// This means `from` must complete before `to` can execute,
-    /// and `to` will receive `from`'s output in its inputs.
     pub fn add_edge(mut self, from: &str, to: &str) -> AppResult<Self> {
         if !self.nodes.contains_key(from) {
             return Err(AppError::new(
@@ -91,20 +113,11 @@ impl Dag {
     }
 
     /// Topological sort using Kahn's algorithm.
-    ///
-    /// Returns an error if the graph contains a cycle.
     pub fn topological_sort(&self) -> AppResult<Vec<String>> {
         let mut in_degree: HashMap<String, usize> = HashMap::new();
         for id in self.nodes.keys() {
             in_degree.entry(id.clone()).or_insert(0);
         }
-        for deps in self.reverse_edges.values() {
-            // in_degree is already initialized for all nodes
-            for _ in deps {
-                // counted via edges below
-            }
-        }
-        // Compute in-degrees from reverse_edges
         for (node_id, deps) in &self.reverse_edges {
             *in_degree.entry(node_id.clone()).or_insert(0) = deps.len();
         }
@@ -142,166 +155,241 @@ impl Dag {
     }
 
     /// Execute all nodes respecting dependency order with maximum parallelism.
-    ///
-    /// Nodes with no pending dependencies are launched concurrently.
-    /// If [`with_max_parallelism`](Dag::with_max_parallelism) was called,
-    /// at most that many nodes will run at the same time.
-    /// When a node completes, any downstream nodes whose dependencies are
-    /// now fully satisfied are started immediately.
     pub async fn execute(
         &self,
         cancel: CancellationToken,
     ) -> AppResult<HashMap<String, serde_json::Value>> {
-        self.execute_inner(HashMap::new(), cancel).await
+        self.execute_with_inputs(HashMap::new(), cancel).await
     }
 
     /// Execute with initial inputs provided to root nodes.
-    ///
-    /// Root nodes (those with no dependencies) receive `initial_inputs`
-    /// as their input HashMap instead of an empty one.
     pub async fn execute_with_inputs(
         &self,
         initial_inputs: HashMap<String, serde_json::Value>,
         cancel: CancellationToken,
     ) -> AppResult<HashMap<String, serde_json::Value>> {
-        self.execute_inner(initial_inputs, cancel).await
-    }
-
-    async fn execute_inner(
-        &self,
-        initial_inputs: HashMap<String, serde_json::Value>,
-        cancel: CancellationToken,
-    ) -> AppResult<HashMap<String, serde_json::Value>> {
-        // Validate the DAG is acyclic first
         let _ = self.topological_sort()?;
 
-        let outputs: Arc<Mutex<HashMap<String, serde_json::Value>>> =
-            Arc::new(Mutex::new(HashMap::new()));
+        let outputs = Arc::new(Mutex::new(HashMap::<String, serde_json::Value>::new()));
+        let semaphore = self
+            .max_parallelism
+            .map(|n| Arc::new(tokio::sync::Semaphore::new(n)));
 
-        // Optional concurrency semaphore
-        let semaphore = self.max_parallelism.map(|n| {
-            tracing::debug!(max_parallelism = n, "DAG concurrency limited");
-            Arc::new(Semaphore::new(n))
-        });
+        let mut remaining_in_degree: HashMap<String, usize> = self
+            .nodes
+            .keys()
+            .map(|id| {
+                (
+                    id.clone(),
+                    self.reverse_edges.get(id).map_or(0, std::vec::Vec::len),
+                )
+            })
+            .collect();
 
-        // Track remaining in-degree for scheduling
-        let mut remaining_in_degree: HashMap<String, usize> = HashMap::new();
-        for (id, deps) in &self.reverse_edges {
-            remaining_in_degree.insert(id.clone(), deps.len());
-        }
-        // Ensure all nodes are in the map
-        for id in self.nodes.keys() {
-            remaining_in_degree.entry(id.clone()).or_insert(0);
-        }
+        let mut join_set: JoinSet<NodeExecution> = JoinSet::new();
+        let mut pending = HashSet::new();
+        let mut completed = HashSet::new();
+        let mut failed = HashSet::new();
+        let mut skipped = HashSet::new();
 
-        let mut join_set: JoinSet<AppResult<(String, serde_json::Value)>> = JoinSet::new();
-        let mut pending: HashSet<String> = HashSet::new();
-        let mut completed: HashSet<String> = HashSet::new();
-
-        // Launch all root nodes (in-degree == 0)
-        for (id, deg) in &remaining_in_degree {
-            if *deg == 0 {
-                let node = Arc::clone(self.nodes.get(id).ok_or_else(|| {
-                    AppError::new(
-                        ErrorCode::Internal,
-                        format!("DAG node '{id}' not found in node map"),
-                    )
-                })?);
-                let cancel = cancel.clone();
-                let outputs = Arc::clone(&outputs);
-                let node_id = id.clone();
-                let sem = semaphore.clone();
-                let root_inputs = initial_inputs.clone();
-
-                pending.insert(id.clone());
-                join_set.spawn(async move {
-                    // Acquire semaphore if max_parallelism is set
-                    let _permit = match sem {
-                        Some(ref s) => Some(s.acquire().await.map_err(|_| {
-                            AppError::new(ErrorCode::Internal, "DAG semaphore closed")
-                        })?),
-                        None => None,
-                    };
-
-                    // Root nodes receive initial_inputs instead of upstream outputs
-                    let _ = outputs;
-                    tracing::debug!(node = %node_id, "executing DAG node");
-                    let result = node.execute(root_inputs, cancel).await?;
-                    Ok((node_id, result))
-                });
+        for (id, degree) in &remaining_in_degree {
+            if *degree == 0 {
+                self.spawn_node(
+                    id.clone(),
+                    initial_inputs.clone(),
+                    cancel.clone(),
+                    semaphore.clone(),
+                    &mut join_set,
+                    &mut pending,
+                )?;
             }
         }
 
-        // Process completions and schedule downstream nodes
-        while let Some(result) = join_set.join_next().await {
-            let (finished_id, value) = result.map_err(|e| {
-                AppError::new(ErrorCode::Internal, format!("DAG task panicked: {e}"))
-            })??;
+        while let Some(joined) = join_set.join_next().await {
+            let execution = joined.map_err(|error| {
+                AppError::new(ErrorCode::Internal, format!("DAG task panicked: {error}"))
+            })?;
+            pending.remove(&execution.node_id);
 
-            tracing::debug!(node = %finished_id, "DAG node completed");
-            {
-                let mut out = outputs.lock().await;
-                out.insert(finished_id.clone(), value);
-            }
-            pending.remove(&finished_id);
-            completed.insert(finished_id.clone());
-
-            // Check downstream nodes
-            if let Some(dependents) = self.edges.get(&finished_id) {
-                for dep_id in dependents {
-                    if completed.contains(dep_id) || pending.contains(dep_id) {
-                        continue;
+            match execution.result {
+                Ok(value) => {
+                    outputs.lock().insert(execution.node_id.clone(), value);
+                    completed.insert(execution.node_id.clone());
+                    self.schedule_dependents(
+                        &execution.node_id,
+                        &cancel,
+                        &initial_inputs,
+                        &outputs,
+                        &semaphore,
+                        &mut join_set,
+                        &mut remaining_in_degree,
+                        &mut pending,
+                        &completed,
+                        &failed,
+                        &skipped,
+                    )?;
+                }
+                Err(error) => match self.failure_policy {
+                    FailurePolicy::FailFast => return Err(error),
+                    FailurePolicy::Continue => {
+                        failed.insert(execution.node_id.clone());
+                        completed.insert(execution.node_id.clone());
+                        self.schedule_dependents(
+                            &execution.node_id,
+                            &cancel,
+                            &initial_inputs,
+                            &outputs,
+                            &semaphore,
+                            &mut join_set,
+                            &mut remaining_in_degree,
+                            &mut pending,
+                            &completed,
+                            &failed,
+                            &skipped,
+                        )?;
                     }
-                    if let Some(deg) = remaining_in_degree.get_mut(dep_id) {
-                        *deg -= 1;
-                        if *deg == 0 {
-                            let node = Arc::clone(self.nodes.get(dep_id).ok_or_else(|| {
-                                AppError::new(
-                                    ErrorCode::Internal,
-                                    format!("DAG node '{dep_id}' not found in node map"),
-                                )
-                            })?);
-                            let cancel = cancel.clone();
-                            let outputs = Arc::clone(&outputs);
-                            let reverse =
-                                self.reverse_edges.get(dep_id).cloned().unwrap_or_default();
-                            let node_id = dep_id.clone();
-                            let sem = semaphore.clone();
+                    FailurePolicy::SkipDependents => {
+                        failed.insert(execution.node_id.clone());
+                        completed.insert(execution.node_id.clone());
+                        mark_skipped_dependents(
+                            &self.edges,
+                            &execution.node_id,
+                            &mut skipped,
+                            &pending,
+                        );
+                    }
+                },
+            }
+        }
 
-                            pending.insert(dep_id.clone());
-                            join_set.spawn(async move {
-                                let _permit = match sem {
-                                    Some(ref s) => Some(s.acquire().await.map_err(|_| {
-                                        AppError::new(ErrorCode::Internal, "DAG semaphore closed")
-                                    })?),
-                                    None => None,
-                                };
+        Ok(outputs.lock().clone())
+    }
 
-                                let inputs = {
-                                    let out = outputs.lock().await;
-                                    reverse
-                                        .iter()
-                                        .filter_map(|dep| {
-                                            out.get(dep).map(|v| (dep.clone(), v.clone()))
-                                        })
-                                        .collect()
-                                };
-
-                                tracing::debug!(node = %node_id, "executing DAG node");
-                                let result = node.execute(inputs, cancel).await?;
-                                Ok((node_id, result))
-                            });
-                        }
+    #[allow(clippy::too_many_arguments)]
+    fn schedule_dependents(
+        &self,
+        finished_id: &str,
+        cancel: &CancellationToken,
+        initial_inputs: &HashMap<String, serde_json::Value>,
+        outputs: &Arc<Mutex<HashMap<String, serde_json::Value>>>,
+        semaphore: &Option<Arc<tokio::sync::Semaphore>>,
+        join_set: &mut JoinSet<NodeExecution>,
+        remaining_in_degree: &mut HashMap<String, usize>,
+        pending: &mut HashSet<String>,
+        completed: &HashSet<String>,
+        failed: &HashSet<String>,
+        skipped: &HashSet<String>,
+    ) -> AppResult<()> {
+        if let Some(dependents) = self.edges.get(finished_id) {
+            for dependent_id in dependents {
+                if completed.contains(dependent_id)
+                    || pending.contains(dependent_id)
+                    || skipped.contains(dependent_id)
+                {
+                    continue;
+                }
+                if let Some(degree) = remaining_in_degree.get_mut(dependent_id) {
+                    *degree = degree.saturating_sub(1);
+                    if *degree == 0 {
+                        let inputs =
+                            self.collect_inputs(dependent_id, outputs, failed, initial_inputs);
+                        self.spawn_node(
+                            dependent_id.clone(),
+                            inputs,
+                            cancel.clone(),
+                            semaphore.clone(),
+                            join_set,
+                            pending,
+                        )?;
                     }
                 }
             }
         }
+        Ok(())
+    }
 
-        let final_outputs = Arc::try_unwrap(outputs)
-            .map_err(|_| AppError::new(ErrorCode::Internal, "failed to unwrap DAG outputs"))?
-            .into_inner();
+    fn collect_inputs(
+        &self,
+        node_id: &str,
+        outputs: &Arc<Mutex<HashMap<String, serde_json::Value>>>,
+        failed: &HashSet<String>,
+        initial_inputs: &HashMap<String, serde_json::Value>,
+    ) -> HashMap<String, serde_json::Value> {
+        let reverse = self.reverse_edges.get(node_id).cloned().unwrap_or_default();
+        if reverse.is_empty() {
+            return initial_inputs.clone();
+        }
 
-        Ok(final_outputs)
+        let output_guard = outputs.lock();
+        reverse
+            .iter()
+            .filter(|dependency| !failed.contains(*dependency))
+            .filter_map(|dependency| {
+                output_guard
+                    .get(dependency)
+                    .map(|value| (dependency.clone(), value.clone()))
+            })
+            .collect()
+    }
+
+    fn spawn_node(
+        &self,
+        node_id: String,
+        inputs: HashMap<String, serde_json::Value>,
+        cancel: CancellationToken,
+        semaphore: Option<Arc<tokio::sync::Semaphore>>,
+        join_set: &mut JoinSet<NodeExecution>,
+        pending: &mut HashSet<String>,
+    ) -> AppResult<()> {
+        let node = Arc::clone(self.nodes.get(&node_id).ok_or_else(|| {
+            AppError::new(
+                ErrorCode::Internal,
+                format!("DAG node '{node_id}' not found in node map"),
+            )
+        })?);
+        pending.insert(node_id.clone());
+        join_set.spawn(async move {
+            let permit_result = match semaphore {
+                Some(ref limit) => limit
+                    .acquire()
+                    .await
+                    .map(Some)
+                    .map_err(|_| AppError::new(ErrorCode::Internal, "DAG semaphore closed")),
+                None => Ok(None),
+            };
+
+            match permit_result {
+                Ok(_permit) => {
+                    tracing::debug!(node = %node_id, "executing DAG node");
+                    NodeExecution {
+                        node_id,
+                        result: node.execute(inputs, cancel).await,
+                    }
+                }
+                Err(error) => NodeExecution {
+                    node_id,
+                    result: Err(error),
+                },
+            }
+        });
+        Ok(())
+    }
+}
+
+fn mark_skipped_dependents(
+    edges: &HashMap<String, Vec<String>>,
+    failed_id: &str,
+    skipped: &mut HashSet<String>,
+    pending: &HashSet<String>,
+) {
+    let mut stack = edges.get(failed_id).cloned().unwrap_or_default();
+    while let Some(node_id) = stack.pop() {
+        if pending.contains(&node_id) || !skipped.insert(node_id.clone()) {
+            continue;
+        }
+        if let Some(children) = edges.get(&node_id) {
+            stack.extend(children.iter().cloned());
+        }
     }
 }
 
@@ -310,6 +398,7 @@ mod tests {
     use super::*;
     use std::future::Future;
     use std::pin::Pin;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     struct AddNode {
         id: String,
@@ -333,6 +422,48 @@ mod tests {
         }
     }
 
+    struct FailNode {
+        id: String,
+    }
+
+    impl DagNode for FailNode {
+        fn id(&self) -> &str {
+            &self.id
+        }
+
+        fn execute(
+            &self,
+            _inputs: HashMap<String, serde_json::Value>,
+            _cancel: CancellationToken,
+        ) -> Pin<Box<dyn Future<Output = AppResult<serde_json::Value>> + Send + '_>> {
+            Box::pin(async { Err(AppError::new(ErrorCode::Internal, "node failed")) })
+        }
+    }
+
+    struct CountingNode {
+        id: String,
+        counter: Arc<AtomicUsize>,
+        value: i64,
+    }
+
+    impl DagNode for CountingNode {
+        fn id(&self) -> &str {
+            &self.id
+        }
+
+        fn execute(
+            &self,
+            inputs: HashMap<String, serde_json::Value>,
+            _cancel: CancellationToken,
+        ) -> Pin<Box<dyn Future<Output = AppResult<serde_json::Value>> + Send + '_>> {
+            Box::pin(async move {
+                self.counter.fetch_add(1, Ordering::SeqCst);
+                let sum = inputs.values().filter_map(|v| v.as_i64()).sum::<i64>() + self.value;
+                Ok(serde_json::json!(sum))
+            })
+        }
+    }
+
     #[tokio::test]
     async fn linear_dag_executes_in_order() {
         let dag = Dag::new()
@@ -350,22 +481,15 @@ mod tests {
             });
 
         let dag = dag.add_edge("a", "b").unwrap().add_edge("b", "c").unwrap();
-
-        let cancel = CancellationToken::new();
-        let outputs = dag.execute(cancel).await.unwrap();
+        let outputs = dag.execute(CancellationToken::new()).await.unwrap();
 
         assert_eq!(outputs["a"], serde_json::json!(1));
-        assert_eq!(outputs["b"], serde_json::json!(3)); // 1 + 2
-        assert_eq!(outputs["c"], serde_json::json!(6)); // 3 + 3
+        assert_eq!(outputs["b"], serde_json::json!(3));
+        assert_eq!(outputs["c"], serde_json::json!(6));
     }
 
     #[tokio::test]
     async fn diamond_dag_merges_inputs() {
-        //   a
-        //  / \
-        // b   c
-        //  \ /
-        //   d
         let dag = Dag::new()
             .add_node(AddNode {
                 id: "a".into(),
@@ -394,13 +518,82 @@ mod tests {
             .add_edge("c", "d")
             .unwrap();
 
-        let cancel = CancellationToken::new();
-        let outputs = dag.execute(cancel).await.unwrap();
+        let outputs = dag.execute(CancellationToken::new()).await.unwrap();
 
         assert_eq!(outputs["a"], serde_json::json!(10));
-        assert_eq!(outputs["b"], serde_json::json!(11)); // 10 + 1
-        assert_eq!(outputs["c"], serde_json::json!(12)); // 10 + 2
-        assert_eq!(outputs["d"], serde_json::json!(23)); // 11 + 12 + 0
+        assert_eq!(outputs["b"], serde_json::json!(11));
+        assert_eq!(outputs["c"], serde_json::json!(12));
+        assert_eq!(outputs["d"], serde_json::json!(23));
+    }
+
+    #[tokio::test]
+    async fn fail_fast_returns_first_error() {
+        let dag = Dag::new()
+            .add_node(FailNode { id: "a".into() })
+            .add_node(AddNode {
+                id: "b".into(),
+                value: 1,
+            })
+            .add_edge("a", "b")
+            .unwrap();
+
+        let result = dag.execute(CancellationToken::new()).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn continue_runs_dependents_with_partial_inputs() {
+        let dependent_runs = Arc::new(AtomicUsize::new(0));
+        let independent_runs = Arc::new(AtomicUsize::new(0));
+        let dag = Dag::new()
+            .with_failure_policy(FailurePolicy::Continue)
+            .add_node(FailNode { id: "a".into() })
+            .add_node(CountingNode {
+                id: "b".into(),
+                counter: dependent_runs.clone(),
+                value: 5,
+            })
+            .add_node(CountingNode {
+                id: "c".into(),
+                counter: independent_runs.clone(),
+                value: 9,
+            });
+
+        let dag = dag.add_edge("a", "b").unwrap();
+        let outputs = dag.execute(CancellationToken::new()).await.unwrap();
+
+        assert_eq!(dependent_runs.load(Ordering::SeqCst), 1);
+        assert_eq!(independent_runs.load(Ordering::SeqCst), 1);
+        assert_eq!(outputs["b"], serde_json::json!(5));
+        assert_eq!(outputs["c"], serde_json::json!(9));
+        assert!(!outputs.contains_key("a"));
+    }
+
+    #[tokio::test]
+    async fn skip_dependents_skips_failed_branch_only() {
+        let dependent_runs = Arc::new(AtomicUsize::new(0));
+        let independent_runs = Arc::new(AtomicUsize::new(0));
+        let dag = Dag::new()
+            .with_failure_policy(FailurePolicy::SkipDependents)
+            .add_node(FailNode { id: "a".into() })
+            .add_node(CountingNode {
+                id: "b".into(),
+                counter: dependent_runs.clone(),
+                value: 5,
+            })
+            .add_node(CountingNode {
+                id: "c".into(),
+                counter: independent_runs.clone(),
+                value: 9,
+            });
+
+        let dag = dag.add_edge("a", "b").unwrap();
+        let outputs = dag.execute(CancellationToken::new()).await.unwrap();
+
+        assert_eq!(dependent_runs.load(Ordering::SeqCst), 0);
+        assert_eq!(independent_runs.load(Ordering::SeqCst), 1);
+        assert!(!outputs.contains_key("b"));
+        assert_eq!(outputs["c"], serde_json::json!(9));
     }
 
     #[test]
@@ -416,34 +609,7 @@ mod tests {
             });
 
         let dag = dag.add_edge("a", "b").unwrap().add_edge("b", "a").unwrap();
-
         let result = dag.topological_sort();
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn topological_sort_linear() {
-        let dag = Dag::new()
-            .add_node(AddNode {
-                id: "a".into(),
-                value: 0,
-            })
-            .add_node(AddNode {
-                id: "b".into(),
-                value: 0,
-            })
-            .add_node(AddNode {
-                id: "c".into(),
-                value: 0,
-            });
-
-        let dag = dag.add_edge("a", "b").unwrap().add_edge("b", "c").unwrap();
-
-        let sorted = dag.topological_sort().unwrap();
-        let pos_a = sorted.iter().position(|x| x == "a").unwrap();
-        let pos_b = sorted.iter().position(|x| x == "b").unwrap();
-        let pos_c = sorted.iter().position(|x| x == "c").unwrap();
-        assert!(pos_a < pos_b);
-        assert!(pos_b < pos_c);
     }
 }

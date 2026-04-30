@@ -24,6 +24,7 @@
 //!     grace_period: Duration::from_secs(5),
 //!     capture_output: true,
 //!     inherit_env: true,
+//!     max_output_bytes: None,
 //! };
 //!
 //! let result = run(&cmd, &config).await?;

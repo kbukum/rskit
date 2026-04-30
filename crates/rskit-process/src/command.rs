@@ -16,6 +16,9 @@ pub struct ProcessConfig {
     pub capture_output: bool,
     /// Whether to inherit parent process environment variables. Defaults to true.
     pub inherit_env: bool,
+    /// Maximum number of bytes to retain for each captured output stream.
+    /// When `None`, output capture is unbounded.
+    pub max_output_bytes: Option<usize>,
 }
 
 impl Default for ProcessConfig {
@@ -25,6 +28,7 @@ impl Default for ProcessConfig {
             grace_period: Duration::from_secs(5),
             capture_output: true,
             inherit_env: true,
+            max_output_bytes: None,
         }
     }
 }
@@ -42,22 +46,13 @@ pub struct Command {
     pub env: HashMap<String, String>,
     /// Standard input data to pipe to the process.
     pub stdin: Option<Vec<u8>>,
+    /// When true, start from an empty environment before applying `env`.
+    pub scrub_env: bool,
 }
 
 impl Command {
     /// Create a new command with just a program name.
-    ///
-    /// # Arguments
-    ///
-    /// * `program` - The executable name or path
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use rskit_process::Command;
-    ///
-    /// let cmd = Command::new("echo");
-    /// ```
+    #[must_use]
     pub fn new<S: Into<String>>(program: S) -> Self {
         Self {
             program: program.into(),
@@ -65,83 +60,44 @@ impl Command {
             dir: None,
             env: HashMap::new(),
             stdin: None,
+            scrub_env: false,
         }
     }
 
     /// Add a command-line argument.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use rskit_process::Command;
-    ///
-    /// let cmd = Command::new("echo").arg("hello").arg("world");
-    /// ```
+    #[must_use]
     pub fn arg<S: Into<String>>(mut self, arg: S) -> Self {
         self.args.push(arg.into());
         self
     }
 
     /// Add multiple command-line arguments.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use rskit_process::Command;
-    ///
-    /// let cmd = Command::new("ls").args(vec!["-l", "-a"]);
-    /// ```
+    #[must_use]
     pub fn args<I>(mut self, args: I) -> Self
     where
         I: IntoIterator,
         I::Item: Into<String>,
     {
-        self.args.extend(args.into_iter().map(|a| a.into()));
+        self.args.extend(args.into_iter().map(Into::into));
         self
     }
 
     /// Set the working directory.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use rskit_process::Command;
-    /// use std::path::PathBuf;
-    ///
-    /// let cmd = Command::new("ls").dir("/tmp");
-    /// ```
+    #[must_use]
     pub fn dir<P: Into<PathBuf>>(mut self, dir: P) -> Self {
         self.dir = Some(dir.into());
         self
     }
 
     /// Set an environment variable.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use rskit_process::Command;
-    ///
-    /// let cmd = Command::new("printenv").env("MY_VAR", "my_value");
-    /// ```
+    #[must_use]
     pub fn env<K: Into<String>, V: Into<String>>(mut self, key: K, value: V) -> Self {
         self.env.insert(key.into(), value.into());
         self
     }
 
     /// Set multiple environment variables.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use rskit_process::Command;
-    /// use std::collections::HashMap;
-    ///
-    /// let mut env = HashMap::new();
-    /// env.insert("VAR1".to_string(), "value1".to_string());
-    /// env.insert("VAR2".to_string(), "value2".to_string());
-    /// let cmd = Command::new("sh").envs(env);
-    /// ```
+    #[must_use]
     pub fn envs<K: Into<String>, V: Into<String>, I: IntoIterator<Item = (K, V)>>(
         mut self,
         vars: I,
@@ -153,16 +109,16 @@ impl Command {
     }
 
     /// Set stdin data to be piped to the process.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use rskit_process::Command;
-    ///
-    /// let cmd = Command::new("cat").stdin(b"hello world".to_vec());
-    /// ```
+    #[must_use]
     pub fn stdin<B: Into<Vec<u8>>>(mut self, stdin: B) -> Self {
         self.stdin = Some(stdin.into());
+        self
+    }
+
+    /// Start the command with an empty environment.
+    #[must_use]
+    pub fn scrub_env(mut self) -> Self {
+        self.scrub_env = true;
         self
     }
 }

@@ -4763,6 +4763,7 @@ dependencies = [
  "rskit-bench",
  "rskit-bootstrap",
  "rskit-cache",
+ "rskit-chain",
  "rskit-cli",
  "rskit-component",
  "rskit-config",
@@ -4786,10 +4787,12 @@ dependencies = [
  "rskit-messaging",
  "rskit-observability",
  "rskit-pipeline",
+ "rskit-process",
  "rskit-provider",
  "rskit-resilience",
  "rskit-server",
  "rskit-sse",
+ "rskit-stateful",
  "rskit-testutil",
  "rskit-validation",
  "rskit-worker",
@@ -4963,6 +4966,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "futures",
+ "parking_lot",
  "rskit-errors",
  "rskit-provider",
  "serde_json",
@@ -5431,6 +5435,7 @@ name = "rskit-process"
 version = "0.1.0"
 dependencies = [
  "libc",
+ "parking_lot",
  "rskit-errors",
  "thiserror 2.0.18",
  "tokio",
@@ -5523,6 +5528,15 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tracing",
+]
+
+[[package]]
+name = "rskit-stateful"
+version = "0.1.0"
+dependencies = [
+ "parking_lot",
+ "rskit-errors",
+ "tokio",
 ]
 
 [[package]]

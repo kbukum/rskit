@@ -434,4 +434,37 @@ mod tests {
         let windows = handle.await.unwrap();
         assert!(windows.is_empty());
     }
+
+    #[tokio::test]
+    async fn test_rdistinct_filters_duplicates() {
+        let stream = from_slice(vec![1u32, 2, 2, 3, 1, 4]);
+        let values: Vec<u32> = stream.rdistinct().collect().await;
+        assert_eq!(values, vec![1, 2, 3, 4]);
+    }
+
+    #[tokio::test]
+    async fn test_rtake_and_rskip_compose() {
+        let stream = from_slice(vec![1u32, 2, 3, 4, 5]);
+        let values: Vec<u32> = stream.rskip(1).rtake(3).collect().await;
+        assert_eq!(values, vec![2, 3, 4]);
+    }
+
+    #[tokio::test]
+    async fn test_rpartition_splits_stream() {
+        let stream = from_slice(vec![1u32, 2, 3, 4, 5, 6]);
+        let (even_stream, odd_stream) = stream.rpartition(|value| value % 2 == 0);
+        let (evens, odds) = tokio::join!(
+            even_stream.collect::<Vec<_>>(),
+            odd_stream.collect::<Vec<_>>()
+        );
+        assert_eq!(evens, vec![2, 4, 6]);
+        assert_eq!(odds, vec![1, 3, 5]);
+    }
+
+    #[tokio::test]
+    async fn test_rsliding_window_emits_overlapping_windows() {
+        let stream = from_slice(vec![1u32, 2, 3, 4, 5]);
+        let windows: Vec<Vec<u32>> = stream.rsliding_window(3, 1).collect().await;
+        assert_eq!(windows, vec![vec![1, 2, 3], vec![2, 3, 4], vec![3, 4, 5]]);
+    }
 }

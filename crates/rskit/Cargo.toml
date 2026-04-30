@@ -37,6 +37,9 @@ rskit-pipeline   = { version = "0.1.0", path = "../rskit-pipeline" }
 rskit-resilience = { version = "0.1.0", path = "../rskit-resilience" }
 rskit-worker     = { version = "0.1.0", path = "../rskit-worker" }
 rskit-validation = { version = "0.1.0", path = "../rskit-validation" }
+rskit-chain      = { version = "0.1.0", path = "../rskit-chain", optional = true }
+rskit-process    = { version = "0.1.0", path = "../rskit-process", optional = true }
+rskit-stateful   = { version = "0.1.0", path = "../rskit-stateful", optional = true }
 
 # Feature-gated crates
 rskit-server        = { version = "0.1.0", path = "../rskit-server",        optional = true }
@@ -99,9 +102,12 @@ file-gcs      = ["file", "rskit-file/gcs"]
 cli           = ["dep:rskit-cli"]
 dataset       = ["dep:rskit-dataset", "cli"]
 bench         = ["dep:rskit-bench"]
+chain         = ["dep:rskit-chain"]
+process       = ["dep:rskit-process"]
+stateful      = ["dep:rskit-stateful"]
 test-util     = []
 full          = [
     "server", "grpc-client", "encryption", "http", "httpclient", "auth", "di", "database", "cache", "messaging",
     "observability", "authz", "discovery", "testutil", "sse", "dag", "llm",
-    "media-full", "file", "cli", "dataset", "bench",
+    "media-full", "file", "cli", "dataset", "bench", "chain", "process", "stateful",
 ]
