@@ -28,6 +28,9 @@ pub struct GrpcServerConfig {
     pub keep_alive_secs: Option<u64>,
 
     /// Optional TLS configuration.
+    ///
+    /// When configured, tonic/rustls modern defaults are used with TLS 1.3
+    /// preferred and TLS 1.2 as the minimum supported version.
     pub tls: Option<TlsConfig>,
 }
 

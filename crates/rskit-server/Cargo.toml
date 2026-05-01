@@ -1,6 +1,6 @@
 [package]
 name        = "rskit-server"
-description = "tonic gRPC server bootstrap as a lifecycle-managed Component"
+description = "Service-facing server abstractions and lifecycle-managed transports for rskit"
 version.workspace     = true
 edition.workspace     = true
 license.workspace     = true
@@ -38,3 +38,8 @@ validator        = { workspace = true }
 parking_lot      = { workspace = true }
 http             = { workspace = true }
 base64           = { workspace = true }
+axum             = { workspace = true }
+tower-http       = { workspace = true }
+
+[dev-dependencies]
+futures          = { workspace = true }

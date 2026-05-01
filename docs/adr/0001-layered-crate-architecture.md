@@ -34,7 +34,7 @@ on nothing higher):
 5. **Data & Flow** — `rskit-pipeline`, `rskit-dag`, `rskit-worker`,
    `rskit-sse`, `rskit-cache`
 6. **Security** — `rskit-auth`, `rskit-authz`
-7. **Transport** — `rskit-http`, `rskit-httpclient`, `rskit-grpc-client`,
+7. **Transport** — `rskit-http`, `rskit-httpclient`, `rskit-grpc`,
    `rskit-server`
 8. **Infrastructure** — `rskit-database`, `rskit-file-s3`,
    `rskit-messaging`

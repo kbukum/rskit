@@ -10,7 +10,7 @@ use async_trait::async_trait;
 use parking_lot::Mutex;
 use rskit_bootstrap::{Component, Health};
 use rskit_errors::{AppError, AppResult, ErrorCode};
-use tokio::time::sleep;
+use rskit_resilience::{ConstantBackoff, Policy, RetryPolicy};
 use tracing::{debug, info, warn};
 
 use crate::config::DiscoveryConfig;
@@ -110,36 +110,31 @@ impl Component for DiscoveryComponent {
                 "Registering with service discovery"
             );
 
-            let max_retries = config.registration.max_retries.max(1);
-            let mut interval = config.registration.retry_duration();
-            let mut last_err = None;
             let instance_id = instance.id.clone();
-
-            for attempt in 1..=max_retries {
-                match reg.register(&instance).await {
-                    Ok(()) => {
-                        *self.instance_id.lock() = Some(instance_id.clone());
-                        last_err = None;
-                        break;
-                    }
-                    Err(e) => {
+            let max_retries = config.registration.max_retries.max(1) as usize;
+            let retry_policy = RetryPolicy::new()
+                .with_max_attempts(max_retries)
+                .with_constant_backoff(ConstantBackoff::new(config.registration.retry_duration()))
+                .with_jitter(false)
+                .with_on_retry({
+                    let instance_id = instance_id.clone();
+                    move |attempt, error| {
                         warn!(
-                            error = %e,
+                            error = %error,
                             service_id = %instance_id,
-                            attempt = attempt,
-                            max_retries = max_retries,
+                            attempt,
+                            max_retries,
                             "failed to register service"
                         );
-                        last_err = Some(e);
-                        if attempt < max_retries {
-                            sleep(interval).await;
-                            interval *= 2; // exponential backoff
-                        }
                     }
-                }
-            }
+                });
+            let registration_policy = Policy::new().with_retry(retry_policy);
 
-            if let Some(err) = last_err {
+            let registration = registration_policy
+                .execute(|| async { reg.register(&instance).await })
+                .await;
+
+            if let Err(err) = registration {
                 if config.registration.required {
                     return Err(AppError::new(
                         ErrorCode::Internal,
@@ -150,6 +145,8 @@ impl Component for DiscoveryComponent {
                     service_id = %instance_id,
                     "failed to register with discovery — continuing in degraded mode"
                 );
+            } else {
+                *self.instance_id.lock() = Some(instance_id.clone());
             }
         }
 

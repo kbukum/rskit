@@ -2,7 +2,12 @@
 
 #[cfg(test)]
 mod integration_tests {
+    use std::time::Duration;
+
     use rskit_httpclient::{Auth, HttpClient, HttpClientConfig, Request};
+    use rskit_resilience::{ConstantBackoff, Policy, RetryPolicy};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -94,6 +99,45 @@ mod integration_tests {
         // error_for_status should return an error
         let result = resp.error_for_status();
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_resilience_policy_retries_transport_execution() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+
+        let server = tokio::spawn(async move {
+            let (mut first, _) = listener.accept().await.unwrap();
+            let mut buffer = [0_u8; 1024];
+            let _ = first.read(&mut buffer).await;
+            drop(first);
+
+            let (mut second, _) = listener.accept().await.unwrap();
+            let _ = second.read(&mut buffer).await;
+            second
+                .write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\nconnection: close\r\n\r\nok")
+                .await
+                .unwrap();
+            second.shutdown().await.unwrap();
+        });
+
+        let policy = Policy::new().with_retry(
+            RetryPolicy::new()
+                .with_max_attempts(2)
+                .with_constant_backoff(ConstantBackoff::new(Duration::from_millis(1)))
+                .with_jitter(false),
+        );
+        let config = HttpClientConfig::new()
+            .with_base_url(format!("http://{address}"))
+            .with_resilience_policy(policy);
+
+        let client = HttpClient::new(config).unwrap();
+        let response = client.get("/retry").await.unwrap();
+
+        assert_eq!(response.status().as_u16(), 200);
+        assert_eq!(response.text().unwrap(), "ok");
+
+        server.await.unwrap();
     }
 
     #[test]

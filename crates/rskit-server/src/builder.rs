@@ -1,8 +1,10 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Duration;
 
+use rskit_errors::{AppError, AppResult, ErrorCode};
 use tokio_util::sync::CancellationToken;
-use tonic::transport::Server;
+use tonic::transport::{Identity, Server, ServerTlsConfig};
 use tonic_reflection::server::Builder as ReflectionBuilder;
 use tower::Layer;
 
@@ -28,9 +30,8 @@ pub(crate) type ServeFn = Arc<
     dyn Fn(
             SocketAddr,
             std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>>,
-        ) -> std::pin::Pin<
-            Box<dyn std::future::Future<Output = Result<(), tonic::transport::Error>> + Send>,
-        > + Send
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = AppResult<()>> + Send>>
+        + Send
         + Sync,
 >;
 
@@ -129,18 +130,45 @@ impl GrpcServerBuilder {
         S::Future: Send + 'static,
     {
         let descriptor = self.reflection_descriptor.clone();
+        let tls = self.config.tls.clone();
         // Wrap the user service with the error enrichment layer.
         let wrapped_svc = ErrorLayer::new().layer(svc);
         let serve_fn: ServeFn = Arc::new(move |addr, signal| {
             let s = wrapped_svc.clone();
             let desc = descriptor.clone();
+            let tls = tls.clone();
             Box::pin(async move {
-                // FIXME(#3): TlsConfig is parsed but not wired into Server::builder().
-                // Until fixed, gRPC connections are plaintext regardless of config.
-                // To fix: load cert/key from GrpcServerConfig::tls, call
-                //   builder.tls_config(server_tls_config)?
-                // before adding services.
                 let mut builder = Server::builder();
+                if let Some(tls) = &tls {
+                    let cert = tokio::fs::read(&tls.cert_path).await.map_err(|error| {
+                        AppError::new(
+                            ErrorCode::InvalidInput,
+                            format!(
+                                "failed to read TLS certificate '{}': {error}",
+                                tls.cert_path
+                            ),
+                        )
+                        .with_cause(error)
+                    })?;
+                    let key = tokio::fs::read(&tls.key_path).await.map_err(|error| {
+                        AppError::new(
+                            ErrorCode::InvalidInput,
+                            format!("failed to read TLS private key '{}': {error}", tls.key_path),
+                        )
+                        .with_cause(error)
+                    })?;
+                    let tls_config = ServerTlsConfig::new()
+                        .identity(Identity::from_pem(cert, key))
+                        .ignore_client_order(true)
+                        .timeout(Duration::from_secs(10));
+                    builder = builder.tls_config(tls_config).map_err(|error| {
+                        AppError::new(
+                            ErrorCode::InvalidInput,
+                            format!("invalid gRPC TLS configuration: {error}"),
+                        )
+                        .with_cause(error)
+                    })?;
+                }
                 let router = builder.add_service(s);
 
                 if let Some(desc_bytes) = desc {
@@ -148,19 +176,42 @@ impl GrpcServerBuilder {
                         .register_encoded_file_descriptor_set(&desc_bytes)
                         .build_v1()
                     {
-                        Ok(refl_svc) => {
-                            router
-                                .add_service(refl_svc)
-                                .serve_with_shutdown(addr, signal)
-                                .await
-                        }
+                        Ok(refl_svc) => router
+                            .add_service(refl_svc)
+                            .serve_with_shutdown(addr, signal)
+                            .await
+                            .map_err(|error| {
+                                AppError::new(
+                                    ErrorCode::Internal,
+                                    format!("gRPC server transport failed: {error}"),
+                                )
+                                .with_cause(error)
+                            }),
                         Err(e) => {
                             tracing::error!(error = %e, "failed to build reflection service; serving without reflection");
-                            router.serve_with_shutdown(addr, signal).await
+                            router
+                                .serve_with_shutdown(addr, signal)
+                                .await
+                                .map_err(|error| {
+                                    AppError::new(
+                                        ErrorCode::Internal,
+                                        format!("gRPC server transport failed: {error}"),
+                                    )
+                                    .with_cause(error)
+                                })
                         }
                     }
                 } else {
-                    router.serve_with_shutdown(addr, signal).await
+                    router
+                        .serve_with_shutdown(addr, signal)
+                        .await
+                        .map_err(|error| {
+                            AppError::new(
+                                ErrorCode::Internal,
+                                format!("gRPC server transport failed: {error}"),
+                            )
+                            .with_cause(error)
+                        })
                 }
             })
         });

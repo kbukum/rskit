@@ -4776,7 +4776,7 @@ dependencies = [
  "rskit-errors",
  "rskit-file",
  "rskit-file-s3",
- "rskit-grpc-client",
+ "rskit-grpc",
  "rskit-http",
  "rskit-httpclient",
  "rskit-llm",
@@ -5028,6 +5028,7 @@ dependencies = [
  "reqwest 0.12.28",
  "rskit-bootstrap",
  "rskit-errors",
+ "rskit-resilience",
  "serde",
  "serde_json",
  "tokio",
@@ -5125,14 +5126,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "rskit-grpc-client"
+name = "rskit-grpc"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
  "http 1.4.0",
+ "parking_lot",
  "rskit-discovery",
  "rskit-errors",
+ "rskit-resilience",
+ "rskit-server",
  "serde",
  "tokio",
  "tokio-util",
@@ -5181,10 +5185,12 @@ version = "0.1.0"
 dependencies = [
  "base64",
  "bytes",
+ "futures",
  "http 1.4.0",
  "insta",
  "reqwest 0.12.28",
  "rskit-errors",
+ "rskit-resilience",
  "serde",
  "serde_json",
  "tempfile",
@@ -5494,7 +5500,9 @@ name = "rskit-server"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "axum 0.8.9",
  "base64",
+ "futures",
  "http 1.4.0",
  "parking_lot",
  "rskit-bootstrap",
@@ -5509,6 +5517,7 @@ dependencies = [
  "tonic-health",
  "tonic-reflection",
  "tower 0.5.3",
+ "tower-http",
  "tower-layer",
  "tower-service",
  "tracing",

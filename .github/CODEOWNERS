@@ -43,7 +43,7 @@
 # Transport
 /crates/rskit-http/         @kbukum
 /crates/rskit-httpclient/   @kbukum
-/crates/rskit-grpc-client/  @kbukum
+/crates/rskit-grpc/         @kbukum
 /crates/rskit-server/       @kbukum
 
 # Infrastructure
