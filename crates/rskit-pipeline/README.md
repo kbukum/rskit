@@ -30,9 +30,7 @@ Operators available on any `futures::Stream` via `RskitStreamExt`:
 - `rtake` / `rskip` — bounded prefix operators
 - `rbuffer` — bounded producer/consumer decoupling
 
-## Operator parity
-
-Rows intentionally mirror gokit's operator order for the cross-kit Group 03 roll-up.
+## Operator reference
 
 | Operator | rskit API | Semantics |
 |----------|-----------|-----------|
