@@ -25,4 +25,5 @@ tracing    = { workspace = true }
 libc       = "0.2"
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["full"] }
+tokio = { workspace = true, features = ["full", "test-util"] }
+parking_lot = { workspace = true }

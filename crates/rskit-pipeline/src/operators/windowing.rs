@@ -1,6 +1,7 @@
+use std::collections::VecDeque;
 use std::time::Duration;
 
-use futures::Stream;
+use futures::{Stream, StreamExt as _};
 
 /// Collect items into non-overlapping time windows.
 ///
@@ -19,7 +20,7 @@ where
         let mut deadline = tokio::time::Instant::now() + duration;
         loop {
             tokio::select! {
-                item = futures::StreamExt::next(&mut stream) => {
+                item = stream.next() => {
                     match item {
                         Some(v) => {
                             buf.push(v);
@@ -59,12 +60,11 @@ where
     async_stream::stream! {
         tokio::pin!(stream);
         let mut buf: Vec<T> = Vec::with_capacity(size);
-        // Track deadline as Instant to avoid storing a !Unpin Sleep future.
         let mut deadline: Option<tokio::time::Instant> = None;
 
         loop {
             tokio::select! {
-                item = futures::StreamExt::next(&mut stream) => {
+                item = stream.next() => {
                     match item {
                         Some(v) => {
                             if buf.is_empty() {
@@ -100,7 +100,7 @@ where
     }
 }
 
-/// Only emit an item if no new item arrives within `delay`.
+/// Emit only when no new item arrives within `delay`.
 ///
 /// Useful for rate-limiting high-frequency event streams.
 pub fn debounce<S, T>(stream: S, delay: Duration) -> impl Stream<Item = T> + Send + 'static
@@ -115,7 +115,7 @@ where
         loop {
             let has_pending = pending.is_some();
             tokio::select! {
-                item = futures::StreamExt::next(&mut stream) => {
+                item = stream.next() => {
                     match item {
                         Some(v) => { pending = Some(v); }
                         None => {
@@ -125,8 +125,6 @@ where
                     }
                 }
                 _ = async move {
-                    // Capture only a bool — avoids borrowing &Option<T> which
-                    // would require T: Sync for the async block to be Send.
                     if has_pending {
                         tokio::time::sleep(delay).await;
                     } else {
@@ -149,11 +147,41 @@ where
     async_stream::stream! {
         tokio::pin!(stream);
         let mut last_emit = tokio::time::Instant::now() - interval;
-        while let Some(item) = futures::StreamExt::next(&mut stream).await {
+        while let Some(item) = stream.next().await {
             let now = tokio::time::Instant::now();
             if now.duration_since(last_emit) >= interval {
                 last_emit = now;
                 yield item;
+            }
+        }
+    }
+}
+
+/// Emit sliding windows of `size` items, advancing by `step` items each time.
+pub fn sliding_window<S, T>(
+    stream: S,
+    size: usize,
+    step: usize,
+) -> impl Stream<Item = Vec<T>> + Send + 'static
+where
+    S: Stream<Item = T> + Send + 'static,
+    T: Clone + Send + 'static,
+{
+    async_stream::stream! {
+        tokio::pin!(stream);
+        let mut window = VecDeque::with_capacity(size.max(1));
+        let effective_step = step.max(1);
+
+        while let Some(item) = stream.next().await {
+            window.push_back(item);
+            while window.len() > size {
+                window.pop_front();
+            }
+            if size > 0 && window.len() == size {
+                yield window.iter().cloned().collect();
+                for _ in 0..effective_step.min(window.len()) {
+                    window.pop_front();
+                }
             }
         }
     }

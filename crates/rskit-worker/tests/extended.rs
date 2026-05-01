@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 
 use tokio::sync::mpsc;
-use tokio::time::sleep;
+use tokio::time::{sleep, timeout};
 use tokio_util::sync::CancellationToken;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
@@ -84,6 +84,35 @@ impl Handler<i32, i32> for EventEmittingHandler {
 
 struct CountingHandler {
     counter: Arc<AtomicU32>,
+}
+
+struct IdleHandler;
+
+struct StubbornHandler;
+
+#[async_trait::async_trait]
+impl Handler<i32, i32> for IdleHandler {
+    async fn handle(
+        &self,
+        task: i32,
+        _emit: mpsc::Sender<Event<i32>>,
+        _cancel: CancellationToken,
+    ) -> AppResult<i32> {
+        Ok(task)
+    }
+}
+
+#[async_trait::async_trait]
+impl Handler<i32, i32> for StubbornHandler {
+    async fn handle(
+        &self,
+        task: i32,
+        _emit: mpsc::Sender<Event<i32>>,
+        _cancel: CancellationToken,
+    ) -> AppResult<i32> {
+        sleep(Duration::from_secs(10)).await;
+        Ok(task)
+    }
 }
 
 #[async_trait::async_trait]
@@ -172,6 +201,83 @@ async fn pool_shutdown_during_active_tasks() {
     cancel_token.cancel();
 }
 
+// Regression: a task whose envelope was dequeued by the runner but had not yet
+// acquired a permit when shutdown fired must surface a `ServiceUnavailable`
+// error to the awaiting handle, not silently drop the oneshot sender.
+#[tokio::test]
+async fn pool_shutdown_fails_dequeued_but_unscheduled_task() {
+    let pool = Pool::new(
+        Arc::new(SlowHandler {
+            delay: Duration::from_secs(10),
+        }),
+        PoolConfig::new("shutdown-dequeued").with_size(1),
+    );
+
+    // First submission occupies the only permit.
+    let _h1 = pool.submit(1).await.unwrap();
+    // Second is queued and will be dequeued by the runner, but cannot acquire a
+    // permit until h1 finishes; we shut down before that ever happens.
+    let h2 = pool.submit(2).await.unwrap();
+
+    sleep(Duration::from_millis(50)).await;
+    pool.shutdown().await.unwrap();
+
+    let err = timeout(Duration::from_secs(2), h2.result())
+        .await
+        .expect("handle.result() must not hang after shutdown")
+        .expect_err("dequeued task must fail with ServiceUnavailable");
+    assert_eq!(err.code, ErrorCode::ServiceUnavailable);
+}
+
+// Regression: passing size=0 to the config used to silently install a
+// zero-permit semaphore so submissions could never run. Pool::new now clamps
+// to at least 1 so the pool still makes progress.
+#[tokio::test]
+async fn pool_with_zero_size_clamps_to_one() {
+    let pool = Pool::new(
+        Arc::new(DoubleHandler),
+        PoolConfig::new("size-zero").with_size(0),
+    );
+    let h = pool.submit(21).await.unwrap();
+    let v = timeout(Duration::from_secs(2), h.result())
+        .await
+        .expect("must not hang")
+        .expect("ok");
+    assert_eq!(v, 42);
+    pool.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn reject_policy_reports_shutdown_as_service_unavailable() {
+    let pool = Pool::new(
+        Arc::new(DoubleHandler),
+        PoolConfig::new("reject-closed").with_overflow_policy(rskit_worker::OverflowPolicy::Reject),
+    );
+    pool.close();
+
+    let err = match pool.submit(1).await {
+        Ok(_) => panic!("closed pool must reject as ServiceUnavailable"),
+        Err(err) => err,
+    };
+    assert_eq!(err.code, ErrorCode::ServiceUnavailable);
+}
+
+#[tokio::test]
+async fn shutdown_respects_grace_period() {
+    let pool = Pool::new(
+        Arc::new(StubbornHandler),
+        PoolConfig::new("shutdown-grace")
+            .with_size(1)
+            .with_grace_period(Duration::from_millis(20)),
+    );
+    let _handle = pool.submit(1).await.unwrap();
+
+    timeout(Duration::from_millis(200), pool.shutdown())
+        .await
+        .expect("shutdown should return within configured grace period")
+        .unwrap();
+}
+
 // ── 5. Task cancellation ──────────────────────────────────────────────────────
 
 #[tokio::test]
@@ -240,6 +346,7 @@ async fn pool_stats_accuracy() {
     let stats = pool.stats();
     assert_eq!(stats.running, 0);
     assert_eq!(stats.capacity, 4);
+    assert_eq!(pool.available_permits(), 4);
 
     // Submit tasks
     let _h1 = pool.submit(1).await.unwrap();
@@ -279,6 +386,38 @@ async fn concurrent_submissions_ten_plus() {
 }
 
 // ── 9. RoundRobinDispatcher ───────────────────────────────────────────────────
+
+#[tokio::test]
+async fn idle_pool_holds_no_permits() {
+    let pool = Pool::new(
+        Arc::new(IdleHandler),
+        PoolConfig::new("idle-stats").with_size(3),
+    );
+
+    let stats = pool.stats();
+    assert_eq!(stats.running, 0);
+    assert_eq!(pool.available_permits(), 3);
+}
+
+#[tokio::test]
+async fn dropping_pool_closes_runner() {
+    let handler: Arc<dyn Handler<i32, i32>> = Arc::new(IdleHandler);
+    let weak_handler = Arc::downgrade(&handler);
+    let pool = Pool::new(handler, PoolConfig::new("drop-close").with_size(1));
+
+    drop(pool);
+
+    timeout(Duration::from_millis(200), async {
+        loop {
+            if weak_handler.upgrade().is_none() {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+}
 
 #[tokio::test]
 async fn round_robin_dispatcher_cycles() {

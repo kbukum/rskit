@@ -26,3 +26,4 @@ tokio        = { workspace = true }
 tracing      = { workspace = true }
 futures      = { workspace = true }
 tokio-util   = { workspace = true }
+parking_lot  = { workspace = true }

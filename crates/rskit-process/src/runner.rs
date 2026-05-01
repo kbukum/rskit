@@ -1,94 +1,49 @@
 //! Process execution runtime.
 
-#![allow(unused_imports)]
-
 use crate::{AppError, AppResult, Command, ErrorCode, ProcessConfig, ProcessResult};
 use std::io;
-use std::os::unix::process::CommandExt;
 use std::time::Instant;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio::process::Command as TokioCommand;
+use tokio::task::JoinHandle;
 use tokio::time::timeout;
 use tracing::{debug, warn};
 
 /// Execute a subprocess with the given configuration.
-///
-/// # Arguments
-///
-/// * `command` - The command to execute
-/// * `config` - Execution configuration (timeout, grace period, etc.)
-///
-/// # Returns
-///
-/// A [`ProcessResult`] containing exit code, stdout, stderr, and duration.
-/// Returns an error if the command validation fails.
-///
-/// # Example
-///
-/// ```no_run
-/// use rskit_process::{Command, ProcessConfig, run};
-/// use std::time::Duration;
-///
-/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-/// let cmd = Command::new("echo").arg("hello");
-/// let config = ProcessConfig {
-///     timeout: Some(Duration::from_secs(30)),
-///     ..Default::default()
-/// };
-/// let result = run(&cmd, &config).await?;
-/// println!("Output: {}", result.stdout);
-/// # Ok(())
-/// # }
-/// ```
 pub async fn run(command: &Command, config: &ProcessConfig) -> AppResult<ProcessResult> {
     if command.program.is_empty() {
-        return Err(AppError::new(
-            ErrorCode::InvalidInput,
-            "command program must not be empty",
-        ));
+        return Err(AppError::invalid_input("program", "must not be empty"));
     }
 
     let start = Instant::now();
-
-    // Build tokio command
     let mut cmd = TokioCommand::new(&command.program);
     cmd.args(&command.args);
 
-    // Set working directory
     if let Some(dir) = &command.dir {
         cmd.current_dir(dir);
     }
 
-    // Set environment variables
-    if config.inherit_env {
-        // Merge with parent environment
-        for (key, value) in &command.env {
-            cmd.env(key, value);
-        }
-    } else {
-        // Only use provided environment variables
+    if command.scrub_env || !config.inherit_env {
         cmd.env_clear();
-        for (key, value) in &command.env {
-            cmd.env(key, value);
-        }
+    }
+    for (key, value) in &command.env {
+        cmd.env(key, value);
     }
 
-    // Capture output if requested
     if config.capture_output {
         cmd.stdout(std::process::Stdio::piped());
         cmd.stderr(std::process::Stdio::piped());
     }
-
-    // Capture stdin if provided
     if command.stdin.is_some() {
         cmd.stdin(std::process::Stdio::piped());
     }
 
-    // Set process group (Unix only) to enable signal propagation to child processes
     #[cfg(unix)]
+    // SAFETY: `pre_exec` runs in the child process after fork and before exec.
+    // The closure only calls the async-signal-safe `setpgid` libc function and
+    // returns an `io::Error` on failure, which is the supported usage pattern.
     unsafe {
         cmd.pre_exec(|| {
-            // Create a new process group so we can send signals to all children
             if libc::setpgid(0, 0) != 0 {
                 return Err(io::Error::last_os_error());
             }
@@ -96,187 +51,102 @@ pub async fn run(command: &Command, config: &ProcessConfig) -> AppResult<Process
         });
     }
 
-    debug!(
-        program = %command.program,
-        args = ?command.args,
-        "spawning process"
-    );
-
-    // Spawn the process
-    let mut child = cmd.spawn().map_err(|e| {
+    debug!(program = %command.program, args = ?command.args, "spawning process");
+    let mut child = cmd.spawn().map_err(|error| {
         AppError::new(
             ErrorCode::Internal,
-            format!("failed to spawn process: {}", e),
+            format!("failed to spawn process: {error}"),
         )
     })?;
 
-    // Write stdin if provided
+    let stdout_task = spawn_reader(child.stdout.take(), config.max_output_bytes);
+    let stderr_task = spawn_reader(child.stderr.take(), config.max_output_bytes);
+
     if let Some(stdin_data) = &command.stdin
         && let Some(mut stdin) = child.stdin.take()
     {
-        stdin.write_all(stdin_data).await.map_err(|e| {
+        stdin.write_all(stdin_data).await.map_err(|error| {
             AppError::new(
                 ErrorCode::Internal,
-                format!("failed to write to stdin: {}", e),
+                format!("failed to write to stdin: {error}"),
             )
         })?;
-        drop(stdin); // Close stdin to signal EOF
     }
 
-    // Get pid for signal handling
     let pid = child.id();
-
-    // Wait for process with timeout handling
-    let result = if let Some(timeout_duration) = config.timeout {
+    let (exit_code, timed_out, synthetic_stderr) = if let Some(timeout_duration) = config.timeout {
         match timeout(timeout_duration, child.wait()).await {
-            Ok(Ok(status)) => {
-                let duration = start.elapsed();
-                let mut stdout = String::new();
-                let mut stderr = String::new();
-
-                if let Some(mut reader) = child.stdout.take() {
-                    let _ = reader.read_to_string(&mut stdout).await;
-                }
-                if let Some(mut reader) = child.stderr.take() {
-                    let _ = reader.read_to_string(&mut stderr).await;
-                }
-
-                ProcessResult {
-                    exit_code: status.code(),
-                    stdout,
-                    stderr,
-                    duration,
-                    timed_out: false,
-                }
-            }
-            Ok(Err(e)) => {
+            Ok(Ok(status)) => (status.code(), false, None),
+            Ok(Err(error)) => {
                 return Err(AppError::new(
                     ErrorCode::Internal,
-                    format!("process execution error: {}", e),
+                    format!("process execution error: {error}"),
                 ));
             }
             Err(_) => {
-                // Timeout occurred - kill the process
-                debug!(
-                    program = %command.program,
-                    timeout = ?timeout_duration,
-                    "process timeout, sending SIGTERM"
-                );
+                debug!(program = %command.program, timeout = ?timeout_duration, "process timeout, sending SIGTERM");
+                terminate_process_group(pid, libc::SIGTERM);
 
-                if let Some(pid) = pid {
-                    // Send SIGTERM to the process group
-                    #[cfg(unix)]
-                    unsafe {
-                        let result = libc::kill(-(pid as i32), libc::SIGTERM);
-                        if result != 0 {
-                            let err = io::Error::last_os_error();
-                            // ESRCH means process doesn't exist, which is fine
-                            if err.raw_os_error() != Some(libc::ESRCH) {
-                                warn!("failed to send SIGTERM: {}", err);
-                            }
-                        }
-                    }
-                }
-
-                // Wait for grace period
                 match timeout(config.grace_period, child.wait()).await {
-                    Ok(Ok(status)) => {
-                        debug!("process exited after SIGTERM");
-                        let duration = start.elapsed();
-                        let mut stdout = String::new();
-                        let mut stderr = String::new();
-
-                        if let Some(mut reader) = child.stdout.take() {
-                            let _ = reader.read_to_string(&mut stdout).await;
-                        }
-                        if let Some(mut reader) = child.stderr.take() {
-                            let _ = reader.read_to_string(&mut stderr).await;
-                        }
-
-                        ProcessResult {
-                            exit_code: status.code(),
-                            stdout,
-                            stderr,
-                            duration,
-                            timed_out: true,
-                        }
-                    }
-                    Ok(Err(e)) => {
-                        warn!("error waiting for process after SIGTERM: {}", e);
-                        // Try SIGKILL as fallback
-                        if let Some(pid) = pid {
-                            #[cfg(unix)]
-                            unsafe {
-                                let _ = libc::kill(-(pid as i32), libc::SIGKILL);
-                            }
-                        }
-                        let duration = start.elapsed();
-                        ProcessResult {
-                            exit_code: None,
-                            stdout: String::new(),
-                            stderr: format!("process killed (error during grace period: {})", e),
-                            duration,
-                            timed_out: true,
-                        }
+                    Ok(Ok(status)) => (status.code(), true, None),
+                    Ok(Err(error)) => {
+                        warn!("error waiting for process after SIGTERM: {error}");
+                        terminate_process_group(pid, libc::SIGKILL);
+                        (
+                            None,
+                            true,
+                            Some(format!(
+                                "process killed (error during grace period: {error})"
+                            )),
+                        )
                     }
                     Err(_) => {
-                        // Grace period expired, send SIGKILL
                         debug!("grace period expired, sending SIGKILL");
-                        if let Some(pid) = pid {
-                            #[cfg(unix)]
-                            unsafe {
-                                let result = libc::kill(-(pid as i32), libc::SIGKILL);
-                                if result != 0 {
-                                    warn!("failed to send SIGKILL: {}", io::Error::last_os_error());
-                                }
-                            }
-                        }
-
-                        // Final wait
+                        terminate_process_group(pid, libc::SIGKILL);
                         let _ = child.wait().await;
-                        let duration = start.elapsed();
-
-                        ProcessResult {
-                            exit_code: None,
-                            stdout: String::new(),
-                            stderr: "process killed by SIGKILL after timeout".to_string(),
-                            duration,
-                            timed_out: true,
-                        }
+                        (
+                            None,
+                            true,
+                            Some("process killed by SIGKILL after timeout".to_string()),
+                        )
                     }
                 }
             }
         }
     } else {
-        // No timeout
         match child.wait().await {
-            Ok(status) => {
-                let duration = start.elapsed();
-                let mut stdout = String::new();
-                let mut stderr = String::new();
-
-                if let Some(mut reader) = child.stdout.take() {
-                    let _ = reader.read_to_string(&mut stdout).await;
-                }
-                if let Some(mut reader) = child.stderr.take() {
-                    let _ = reader.read_to_string(&mut stderr).await;
-                }
-
-                ProcessResult {
-                    exit_code: status.code(),
-                    stdout,
-                    stderr,
-                    duration,
-                    timed_out: false,
-                }
-            }
-            Err(e) => {
+            Ok(status) => (status.code(), false, None),
+            Err(error) => {
                 return Err(AppError::new(
                     ErrorCode::Internal,
-                    format!("process execution error: {}", e),
+                    format!("process execution error: {error}"),
                 ));
             }
         }
+    };
+
+    let mut stdout = collect_reader(stdout_task).await?;
+    let mut stderr = collect_reader(stderr_task).await?;
+    if let Some(extra_stderr) = synthetic_stderr {
+        if !stderr.is_empty() {
+            stderr.push('\n');
+        }
+        stderr.push_str(&extra_stderr);
+    }
+
+    if config.capture_output
+        && let Some(limit) = config.max_output_bytes
+    {
+        stdout.truncate(limit);
+        stderr.truncate(limit);
+    }
+
+    let result = ProcessResult {
+        exit_code,
+        stdout,
+        stderr,
+        duration: start.elapsed(),
+        timed_out,
     };
 
     debug!(
@@ -287,4 +157,65 @@ pub async fn run(command: &Command, config: &ProcessConfig) -> AppResult<Process
     );
 
     Ok(result)
+}
+
+fn spawn_reader<R>(
+    reader: Option<R>,
+    max_output_bytes: Option<usize>,
+) -> Option<JoinHandle<io::Result<String>>>
+where
+    R: AsyncRead + Unpin + Send + 'static,
+{
+    reader.map(|reader| tokio::spawn(read_output(reader, max_output_bytes)))
+}
+
+async fn collect_reader(task: Option<JoinHandle<io::Result<String>>>) -> AppResult<String> {
+    match task {
+        Some(task) => task
+            .await
+            .map_err(AppError::internal)?
+            .map_err(AppError::internal),
+        None => Ok(String::new()),
+    }
+}
+
+async fn read_output<R>(mut reader: R, max_output_bytes: Option<usize>) -> io::Result<String>
+where
+    R: AsyncRead + Unpin,
+{
+    let mut captured = Vec::new();
+    let mut buffer = [0_u8; 4096];
+    let mut remaining = max_output_bytes.unwrap_or(usize::MAX);
+
+    loop {
+        let read = reader.read(&mut buffer).await?;
+        if read == 0 {
+            break;
+        }
+        if remaining > 0 {
+            let to_copy = remaining.min(read);
+            captured.extend_from_slice(&buffer[..to_copy]);
+            remaining -= to_copy;
+        }
+    }
+
+    Ok(String::from_utf8_lossy(&captured).into_owned())
+}
+
+fn terminate_process_group(pid: Option<u32>, signal: i32) {
+    if let Some(pid) = pid {
+        #[cfg(unix)]
+        // SAFETY: `kill` is invoked with the negated process-group id created by
+        // the `pre_exec` hook above so signals fan out to the subprocess tree.
+        // Errors are handled explicitly and ignored only for `ESRCH`.
+        unsafe {
+            let result = libc::kill(-(pid as i32), signal);
+            if result != 0 {
+                let error = io::Error::last_os_error();
+                if error.raw_os_error() != Some(libc::ESRCH) {
+                    warn!(signal, "failed to send signal: {error}");
+                }
+            }
+        }
+    }
 }

@@ -5,10 +5,44 @@ use governor::{DefaultDirectRateLimiter, Quota, RateLimiter as GovRateLimiter};
 use rskit_errors::{AppError, AppResult};
 use tokio_util::sync::CancellationToken;
 
+/// Configuration for constructing a [`RateLimiter`].
+#[derive(Debug, Clone)]
+pub struct RateLimiterConfig {
+    /// Human-readable limiter name used in error details.
+    pub name: String,
+    /// Requests permitted per second.
+    pub per_second: u32,
+    /// Burst capacity.
+    pub burst: u32,
+}
+
+impl RateLimiterConfig {
+    /// Create a new rate-limiter configuration.
+    #[must_use]
+    pub fn new(name: impl Into<String>, per_second: u32, burst: u32) -> Self {
+        Self {
+            name: name.into(),
+            per_second,
+            burst,
+        }
+    }
+
+    /// Set the steady-state requests per second.
+    #[must_use]
+    pub fn with_per_second(mut self, per_second: u32) -> Self {
+        self.per_second = per_second;
+        self
+    }
+
+    /// Set the burst capacity.
+    #[must_use]
+    pub fn with_burst(mut self, burst: u32) -> Self {
+        self.burst = burst;
+        self
+    }
+}
+
 /// Token-bucket rate limiter backed by `governor`.
-///
-/// `governor` uses atomic operations (no mutex) and supports injectable clocks,
-/// making it suitable for testing with fake time.
 #[derive(Clone)]
 pub struct RateLimiter {
     inner: Arc<DefaultDirectRateLimiter>,
@@ -26,15 +60,21 @@ impl std::fmt::Debug for RateLimiter {
 impl RateLimiter {
     /// Create a rate limiter that allows `per_second` requests/second with a
     /// burst capacity of `burst`.
+    #[must_use]
     pub fn new(name: impl Into<String>, per_second: u32, burst: u32) -> Self {
-        let per_sec = NonZeroU32::new(per_second.max(1))
-            .expect("per_second.max(1) is always >= 1; NonZeroU32::new cannot return None here");
-        let burst_size = NonZeroU32::new(burst.max(1))
-            .expect("burst.max(1) is always >= 1; NonZeroU32::new cannot return None here");
+        let config = RateLimiterConfig::new(name, per_second, burst);
+        Self::from_config(config)
+    }
+
+    /// Create a rate limiter from a configuration object.
+    #[must_use]
+    pub fn from_config(config: RateLimiterConfig) -> Self {
+        let per_sec = NonZeroU32::new(config.per_second.max(1)).unwrap_or(NonZeroU32::MIN);
+        let burst_size = NonZeroU32::new(config.burst.max(1)).unwrap_or(NonZeroU32::MIN);
         let quota = Quota::per_second(per_sec).allow_burst(burst_size);
         Self {
             inner: Arc::new(GovRateLimiter::direct(quota)),
-            name: name.into(),
+            name: config.name,
         }
     }
 
@@ -65,13 +105,18 @@ impl RateLimiter {
     }
 }
 
+impl From<RateLimiterConfig> for RateLimiter {
+    fn from(config: RateLimiterConfig) -> Self {
+        Self::from_config(config)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[tokio::test]
     async fn check_allows_up_to_burst_limit() {
-        // 1 per second, burst of 5 — all 5 should succeed immediately
         let rl = RateLimiter::new("test", 1, 5);
         for _ in 0..5 {
             assert!(rl.check().is_ok());
@@ -80,13 +125,10 @@ mod tests {
 
     #[tokio::test]
     async fn check_rejects_when_bucket_exhausted() {
-        // 1 per second, burst of 3
         let rl = RateLimiter::new("test", 1, 3);
-        // Drain the burst
         for _ in 0..3 {
             let _ = rl.check();
         }
-        // Next call should be rejected
         let result = rl.check();
         assert!(result.is_err());
     }
@@ -95,7 +137,6 @@ mod tests {
     async fn check_returns_rate_limited_error_code() {
         use rskit_errors::ErrorCode;
         let rl = RateLimiter::new("test", 1, 1);
-        // Drain the one token
         let _ = rl.check();
         let err = rl.check().unwrap_err();
         assert_eq!(err.code, ErrorCode::RateLimited);
@@ -103,19 +144,20 @@ mod tests {
 
     #[tokio::test]
     async fn until_ready_cancels_when_token_cancelled() {
-        use tokio_util::sync::CancellationToken;
-        // Very slow limiter: 1/second, burst of 0 effectively — already drained
         let rl = RateLimiter::new("test", 1, 1);
-        // Drain the single token so until_ready would wait forever
         let _ = rl.check();
 
         let cancel = CancellationToken::new();
         let cancel_clone = cancel.clone();
-
-        // Cancel immediately
         cancel_clone.cancel();
 
         let result = rl.until_ready(Some(cancel)).await;
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn from_config_builds_rate_limiter() {
+        let limiter = RateLimiter::from_config(RateLimiterConfig::new("cfg", 10, 2));
+        assert!(limiter.check().is_ok());
     }
 }

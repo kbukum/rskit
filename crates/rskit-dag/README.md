@@ -17,6 +17,27 @@ Directed acyclic graph task orchestrator with parallel execution.
 - Dependency outputs passed as `HashMap<String, serde_json::Value>`
 - Cancellation via `tokio_util::sync::CancellationToken`
 
+## Execution semantics
+
+### FailurePolicy modes
+
+| Mode | Behavior |
+|------|----------|
+| `FailurePolicy::FailFast` (default) | Return the first node error immediately. Already-running sibling tasks are allowed to finish or observe the caller's cancellation token. |
+| `FailurePolicy::Continue` | Record the failed node, treat it as completed for scheduling, and keep running downstream and independent nodes. Downstream nodes receive only successful dependency outputs. |
+| `FailurePolicy::SkipDependents` | Record the failed node and skip all transitive dependents while independent branches continue to run. |
+
+### Cycle-detection guarantee
+
+`Dag::execute` always runs a topological-sort validation before scheduling work. Cyclic graphs
+return `ErrorCode::InvalidInput` and no node is started.
+
+### Parallel sibling execution
+
+Nodes whose dependencies are satisfied are spawned as siblings and run concurrently. By default,
+parallelism is bounded only by the Tokio runtime. Use `Dag::with_max_parallelism(n)` to cap the
+number of concurrently executing nodes; `n` is clamped to at least one.
+
 ## Usage
 
 ```toml

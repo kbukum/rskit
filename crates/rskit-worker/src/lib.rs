@@ -21,7 +21,7 @@ pub use bridge::{as_provider, from_provider};
 pub use dispatch::{DispatchStrategy, RoundRobinDispatcher};
 pub use event::{Event, EventKind, Progress};
 pub use handler::Handler;
-pub use pool::{Pool, PoolConfig, PoolStats};
+pub use pool::{OverflowPolicy, Pool, PoolConfig, PoolStats};
 pub use task::TaskHandle;
 pub use ticker::{TickFuture, TickerWorker};
 
@@ -111,6 +111,25 @@ mod tests {
         }
     }
 
+    struct BlockingHandler {
+        started: Arc<tokio::sync::Notify>,
+        release: Arc<tokio::sync::Notify>,
+    }
+
+    #[async_trait::async_trait]
+    impl Handler<i32, i32> for BlockingHandler {
+        async fn handle(
+            &self,
+            task: i32,
+            _emit: mpsc::Sender<Event<i32>>,
+            _cancel: CancellationToken,
+        ) -> AppResult<i32> {
+            self.started.notify_one();
+            self.release.notified().await;
+            Ok(task)
+        }
+    }
+
     // ── 1. pool_submit_and_await_result ───────────────────────────────────────
 
     #[tokio::test]
@@ -178,5 +197,73 @@ mod tests {
         let provider = as_provider("name", handler);
         let result = provider.execute(5).await;
         assert_eq!(result.unwrap(), 6);
+    }
+
+    #[tokio::test]
+    async fn reject_overflow_policy_rejects_new_submission() {
+        let started = Arc::new(tokio::sync::Notify::new());
+        let release = Arc::new(tokio::sync::Notify::new());
+        let pool = Pool::new(
+            Arc::new(BlockingHandler {
+                started: started.clone(),
+                release: release.clone(),
+            }),
+            PoolConfig::new("reject-pool")
+                .with_size(1)
+                .with_queue_size(1)
+                .with_overflow_policy(crate::OverflowPolicy::Reject),
+        );
+
+        // Task 1 starts processing, holding the only worker slot.
+        let _first = pool.submit(1).await.unwrap();
+        started.notified().await;
+
+        // Task 2 fills the queue (capacity 1).
+        let _second = pool.submit(2).await.unwrap();
+
+        // Task 3 should be rejected: queue full.
+        let third = pool.submit(3).await;
+        assert!(third.is_err());
+
+        // Release task 1 so task 2 can run.
+        release.notify_waiters();
+        // Wait for task 2 to start, then release it.
+        started.notified().await;
+        release.notify_waiters();
+    }
+
+    #[tokio::test]
+    async fn drop_oldest_overflow_policy_drops_queued_task() {
+        let started = Arc::new(tokio::sync::Notify::new());
+        let release = Arc::new(tokio::sync::Notify::new());
+        let pool = Pool::new(
+            Arc::new(BlockingHandler {
+                started: started.clone(),
+                release: release.clone(),
+            }),
+            PoolConfig::new("drop-oldest-pool")
+                .with_size(1)
+                .with_queue_size(1)
+                .with_overflow_policy(crate::OverflowPolicy::DropOldest),
+        );
+
+        // Task 1 starts processing, holding the only worker slot.
+        let _first = pool.submit(1).await.unwrap();
+        started.notified().await;
+
+        // Task 2 fills the queue.
+        let second = pool.submit(2).await.unwrap();
+
+        // Task 3 evicts task 2 (drop oldest).
+        let _third = pool.submit(3).await.unwrap();
+
+        // Task 2 should have been dropped with a RateLimited error.
+        let dropped_error = second.result().await.unwrap_err();
+        assert_eq!(dropped_error.code, ErrorCode::RateLimited);
+
+        // Release task 1 so task 3 can run.
+        release.notify_waiters();
+        started.notified().await;
+        release.notify_waiters();
     }
 }

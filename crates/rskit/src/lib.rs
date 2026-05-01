@@ -18,6 +18,9 @@
 //! | `testutil` | `rskit-testutil` (test helpers) |
 //! | `sse`    | `rskit-sse` (Server-Sent Events) |
 //! | `dag`    | `rskit-dag` (DAG orchestration) |
+//! | `chain`  | `rskit-chain` (sequential execution) |
+//! | `process` | `rskit-process` (subprocess execution) |
+//! | `stateful` | `rskit-stateful` (stateful accumulators) |
 //! | `llm`    | `rskit-llm` (LLM providers) |
 //! | `file`   | `rskit-file` (File I/O, storage) |
 //! | `media`  | `rskit-media` (media types, pipeline) |
@@ -90,6 +93,18 @@ pub use rskit_worker as worker;
 
 /// Fluent field-level validation.
 pub use rskit_validation as validation;
+
+/// Sequential chain execution utilities.
+#[cfg(feature = "chain")]
+pub use rskit_chain as chain;
+
+/// Safe subprocess execution helpers.
+#[cfg(feature = "process")]
+pub use rskit_process as process;
+
+/// Stateful accumulators and keyed managers.
+#[cfg(feature = "stateful")]
+pub use rskit_stateful as stateful;
 
 // ── Feature-gated sub-crate facades ──────────────────────────────────────────
 

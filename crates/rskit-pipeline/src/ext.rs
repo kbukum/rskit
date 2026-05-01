@@ -1,13 +1,14 @@
 //! [`RskitStreamExt`] — ergonomic extension methods on [`futures::Stream`].
 
 use std::future::Future;
+use std::hash::Hash;
 use std::time::Duration;
 
 use futures::Stream;
 use futures::StreamExt as _;
 use rskit_errors::AppResult;
 
-use crate::operators::{concurrent, windowing};
+use crate::operators::{concurrent, transform, windowing};
 
 /// Extension trait adding rskit-specific operators to any [`Stream`].
 ///
@@ -17,8 +18,6 @@ pub trait RskitStreamExt: Stream + Sized + Send + 'static
 where
     Self::Item: Send + 'static,
 {
-    // ── Transform ─────────────────────────────────────────────────────
-
     /// Async map — apply a fallible async function to each item.
     fn rmap<O, F, Fut>(self, f: F) -> impl Stream<Item = AppResult<O>> + Send + 'static
     where
@@ -54,6 +53,14 @@ where
         })
     }
 
+    /// Emit only the first occurrence of each item.
+    fn rdistinct(self) -> impl Stream<Item = Self::Item> + Send + 'static
+    where
+        Self::Item: Clone + Eq + Hash,
+    {
+        transform::distinct(self)
+    }
+
     /// Side-effect for each item — does not modify the stream.
     fn rtap<F, Fut>(self, mut f: F) -> impl Stream<Item = Self::Item> + Send + 'static
     where
@@ -69,6 +76,30 @@ where
         })
     }
 
+    /// Take the first `n` items from the stream.
+    fn rtake(self, n: usize) -> impl Stream<Item = Self::Item> + Send + 'static {
+        self.take(n)
+    }
+
+    /// Skip the first `n` items from the stream.
+    fn rskip(self, n: usize) -> impl Stream<Item = Self::Item> + Send + 'static {
+        self.skip(n)
+    }
+
+    /// Split the stream into `(matching, remainder)` streams.
+    fn rpartition<F>(
+        self,
+        predicate: F,
+    ) -> (
+        impl Stream<Item = Self::Item> + Send + 'static,
+        impl Stream<Item = Self::Item> + Send + 'static,
+    )
+    where
+        F: FnMut(&Self::Item) -> bool + Send + 'static,
+    {
+        transform::partition(self, predicate)
+    }
+
     /// Fold the entire stream into a single value.
     async fn rreduce<Acc, F>(self, init: Acc, mut f: F) -> Acc
     where
@@ -76,7 +107,6 @@ where
         F: FnMut(Acc, Self::Item) -> Acc + Send + 'static,
     {
         let mut acc = init;
-        // `self` can't be used with `tokio::pin!` — bind to a named variable first.
         let this = self;
         tokio::pin!(this);
         while let Some(item) = this.next().await {
@@ -84,8 +114,6 @@ where
         }
         acc
     }
-
-    // ── Concurrency ───────────────────────────────────────────────────
 
     /// Process up to `concurrency` items in parallel (unordered output).
     fn rparallel<O, F, Fut>(
@@ -115,14 +143,24 @@ where
         concurrent::fan_out(self, fns)
     }
 
-    // ── Windowing / time ──────────────────────────────────────────────
-
     /// Collect items into fixed-duration non-overlapping windows.
     fn rtumbling_window(
         self,
         duration: Duration,
     ) -> impl Stream<Item = Vec<Self::Item>> + Send + 'static {
         windowing::tumbling_window(self, duration)
+    }
+
+    /// Emit sliding windows of `size` items, advancing by `step` items each time.
+    fn rsliding_window(
+        self,
+        size: usize,
+        step: usize,
+    ) -> impl Stream<Item = Vec<Self::Item>> + Send + 'static
+    where
+        Self::Item: Clone,
+    {
+        windowing::sliding_window(self, size, step)
     }
 
     /// Emit batches of up to `size` items or when `timeout` elapses.
@@ -143,9 +181,33 @@ where
     fn rthrottle(self, interval: Duration) -> impl Stream<Item = Self::Item> + Send + 'static {
         windowing::throttle(self, interval)
     }
+
+    /// Merge this stream with another, yielding items from whichever is ready first.
+    fn rmerge(
+        self,
+        other: impl Stream<Item = Self::Item> + Send + 'static,
+    ) -> impl Stream<Item = Self::Item> + Send + 'static {
+        futures::stream::select(self, other)
+    }
+
+    /// Buffer up to `size` items from the upstream, allowing it to produce ahead.
+    ///
+    /// A zero size is clamped to one because Tokio bounded channels must have positive capacity.
+    fn rbuffer(self, size: usize) -> impl Stream<Item = Self::Item> + Send + 'static {
+        let capacity = size.max(1);
+        let (tx, rx) = tokio::sync::mpsc::channel(capacity);
+        tokio::spawn(async move {
+            let mut stream = std::pin::pin!(self);
+            while let Some(item) = stream.next().await {
+                if tx.send(item).await.is_err() {
+                    break;
+                }
+            }
+        });
+        tokio_stream::wrappers::ReceiverStream::new(rx)
+    }
 }
 
-/// Blanket implementation for all compatible streams.
 impl<S> RskitStreamExt for S
 where
     S: Stream + Send + 'static,

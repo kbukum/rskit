@@ -1,0 +1,26 @@
+[package]
+name        = "rskit-stateful"
+description = "Stateful accumulators with triggers, measurers, and TTL cleanup"
+version.workspace      = true
+edition.workspace      = true
+license.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+documentation = "https://docs.rs/rskit-stateful"
+readme = "README.md"
+categories = ["asynchronous", "data-structures"]
+keywords   = ["stateful", "accumulator", "ttl", "buffer"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+rskit-errors = { path = "../rskit-errors" }
+parking_lot  = { workspace = true }
+tokio        = { workspace = true, features = ["time"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full", "test-util"] }

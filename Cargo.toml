@@ -16,6 +16,7 @@ members = [
     "crates/rskit-process",
     "crates/rskit-worker",
     "crates/rskit-chain",
+    "crates/rskit-stateful",
     "crates/rskit-server",
     # phase 2 new crates
     "crates/rskit-validation",
