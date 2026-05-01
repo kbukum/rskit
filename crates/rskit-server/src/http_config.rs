@@ -3,7 +3,7 @@ use std::time::Duration;
 use serde::Deserialize;
 use validator::Validate;
 
-/// HTTP server configuration.
+/// HTTP server configuration owned by `rskit-server`.
 #[derive(Debug, Clone, Deserialize, Validate)]
 pub struct HttpServerConfig {
     /// Bind address (default: `0.0.0.0`).
@@ -53,36 +53,38 @@ impl HttpServerConfig {
     fn default_host() -> String {
         "0.0.0.0".to_string()
     }
+
     fn default_port() -> u16 {
         8080
     }
+
     fn default_timeout() -> Duration {
         Duration::from_secs(30)
     }
+
     fn default_idle_timeout() -> Duration {
         Duration::from_secs(60)
     }
+
     fn default_h2c() -> bool {
         true
     }
 
-    /// Returns the bind address as `"host:port"`.
+    /// Returns the bind address as `host:port` (or `[host]:port` for IPv6).
+    #[must_use]
     pub fn bind_addr(&self) -> String {
-        format!("{}:{}", self.host, self.port)
+        if self.host.contains(':') && !self.host.starts_with('[') {
+            format!("[{}]:{}", self.host, self.port)
+        } else {
+            format!("{}:{}", self.host, self.port)
+        }
     }
 }
 
 /// Cross-origin resource sharing configuration.
-///
-/// # Security
-/// WARNING: Wildcard CORS (`*` in `allowed_origins`) is only safe in development.
-/// Production deployments must use an explicit origin allowlist.
-/// See RS-ME-11 / issue #72.
 #[derive(Debug, Clone, Deserialize)]
 pub struct CorsConfig {
-    /// Allowed origin patterns.
-    ///
-    /// Do **not** use `["*"]` in production — enumerate explicit origins instead.
+    /// Allowed origins.
     pub allowed_origins: Vec<String>,
     /// Allowed HTTP methods.
     pub allowed_methods: Vec<String>,

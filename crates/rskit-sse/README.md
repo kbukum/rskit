@@ -16,6 +16,13 @@ Server-Sent Events broadcast bus with Axum integration.
 - Automatic JSON serialization of events
 - `subscriber_count()` for monitoring
 
+## Delivery contract
+
+- Subscribers receive events published after they subscribe; earlier events are not replayed.
+- Per-subscriber ordering follows publish order for delivered events.
+- Reconnection metadata (`id`, `retry`, `Last-Event-ID`) and heartbeat frames stay
+  application-owned at the handler layer; `SseBus` only supplies the broadcast data stream.
+
 ## Usage
 
 ```toml

@@ -1,6 +1,6 @@
 [package]
-name        = "rskit-grpc-client"
-description = "tonic gRPC client with discovery and config — mirrors gokit/grpc/client and pykit-grpc"
+name        = "rskit-grpc"
+description = "tonic gRPC transport for rskit with aligned client and server entrypoints"
 version.workspace     = true
 edition.workspace     = true
 license.workspace     = true
@@ -8,7 +8,7 @@ rust-version.workspace = true
 authors.workspace      = true
 repository.workspace   = true
 homepage.workspace     = true
-documentation = "https://docs.rs/rskit-grpc-client"
+documentation = "https://docs.rs/rskit-grpc"
 readme = "README.md"
 categories = ["network-programming"]
 keywords   = ["grpc", "tonic", "client"]
@@ -19,9 +19,11 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 rskit-errors   = { path = "../rskit-errors" }
+rskit-resilience = { path = "../rskit-resilience" }
+rskit-server   = { path = "../rskit-server", optional = true }
 rskit-discovery = { path = "../rskit-discovery", optional = true }
 tonic          = { workspace = true }
-tokio          = { workspace = true }
+tokio          = { workspace = true, features = ["test-util"] }
 tower          = { workspace = true }
 tracing        = { workspace = true }
 async-trait    = { workspace = true }
@@ -31,7 +33,10 @@ chrono         = { workspace = true }
 
 [dev-dependencies]
 tokio-util     = { workspace = true }
+parking_lot    = { workspace = true }
 
 [features]
-default    = []
-discovery  = ["rskit-discovery"]
+default    = ["client"]
+client     = []
+server     = ["dep:rskit-server"]
+discovery  = ["client", "rskit-discovery"]

@@ -6,7 +6,7 @@
 //!
 //! - Async HTTP client built on `reqwest`
 //! - Support for Bearer, Basic, and API key authentication
-//! - Configurable timeouts, headers, and retry behavior
+//! - Configurable timeouts, headers, redirects, and injected resilience policies
 //! - URL building with base URL support
 //! - JSON request/response serialization
 //! - Integrated error handling with `rskit-errors`

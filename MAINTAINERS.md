@@ -22,7 +22,7 @@ in the following areas:
   `rskit-bootstrap`, `rskit-observability`
 - **Data & Flow**: `rskit-pipeline`, `rskit-dag`, `rskit-worker`,
   `rskit-sse`, `rskit-chain`
-- **Transport**: `rskit-server`, `rskit-grpc-client`, `rskit-http`,
+- **Transport**: `rskit-server`, `rskit-grpc`, `rskit-http`,
   `rskit-httpclient`
 - **Storage / Infra**: `rskit-database`, `rskit-cache`, `rskit-file`,
   `rskit-file-s3`, `rskit-messaging`

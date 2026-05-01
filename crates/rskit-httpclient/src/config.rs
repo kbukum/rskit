@@ -1,6 +1,7 @@
 //! HTTP client configuration.
 
 use crate::auth::Auth;
+use rskit_resilience::Policy;
 use std::collections::HashMap;
 use std::time::Duration;
 
@@ -8,7 +9,7 @@ const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
 const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Configuration for the HTTP client.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct HttpClientConfig {
     /// Base URL for requests (e.g., `https://api.example.com/v1`).
     /// Paths are appended to this URL.
@@ -34,6 +35,25 @@ pub struct HttpClientConfig {
 
     /// Maximum number of redirects to follow. Defaults to 5.
     pub max_redirects: usize,
+
+    /// Optional resilience policy applied to transport execution.
+    pub resilience_policy: Option<Policy>,
+}
+
+impl std::fmt::Debug for HttpClientConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("HttpClientConfig")
+            .field("base_url", &self.base_url)
+            .field("timeout", &self.timeout)
+            .field("connect_timeout", &self.connect_timeout)
+            .field("user_agent", &self.user_agent)
+            .field("default_headers", &self.default_headers)
+            .field("auth", &self.auth)
+            .field("follow_redirects", &self.follow_redirects)
+            .field("max_redirects", &self.max_redirects)
+            .field("has_resilience_policy", &self.resilience_policy.is_some())
+            .finish()
+    }
 }
 
 impl HttpClientConfig {
@@ -95,6 +115,13 @@ impl HttpClientConfig {
         self.max_redirects = max;
         self
     }
+
+    /// Sets the transport resilience policy.
+    #[must_use]
+    pub fn with_resilience_policy(mut self, policy: Policy) -> Self {
+        self.resilience_policy = Some(policy);
+        self
+    }
 }
 
 impl Default for HttpClientConfig {
@@ -108,6 +135,7 @@ impl Default for HttpClientConfig {
             auth: None,
             follow_redirects: true,
             max_redirects: 5,
+            resilience_policy: None,
         }
     }
 }

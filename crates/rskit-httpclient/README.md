@@ -1,12 +1,13 @@
 # rskit-httpclient
 
-Async HTTP client for rskit with auth, headers, and error handling.
+Async HTTP client for rskit with auth, headers, injected resilience policies, and error handling.
 
 ## Features
 
 - Async HTTP client built on `reqwest`
 - Support for Bearer, Basic, and API key authentication
 - Configurable timeouts, headers, and redirect behavior
+- Optional `rskit-resilience::Policy` integration for retry, timeout, circuit breaker, and rate limiting
 - URL building with base URL support
 - JSON request/response serialization via `serde`
 - Integrated error handling with `rskit-errors`
@@ -78,7 +79,7 @@ let resp = client.send(
 All methods return `AppResult<T>` (alias for `Result<T, AppError>`). Errors are classified with appropriate `ErrorCode` values:
 
 - `Timeout` for request timeouts
-- `Unavailable` for connection errors
+- `ConnectionFailed` for connection errors
 - `Unauthorized` for 401 responses
 - `Forbidden` for 403 responses
 - `NotFound` for 404 responses

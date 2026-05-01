@@ -1,6 +1,6 @@
 [package]
 name        = "rskit-http"
-description = "Axum HTTP server with graceful shutdown, CORS, request-ID, and Component lifecycle"
+description = "Axum transport details for rskit server integrations"
 version.workspace     = true
 edition.workspace     = true
 license.workspace     = true

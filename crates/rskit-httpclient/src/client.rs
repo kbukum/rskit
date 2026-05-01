@@ -52,77 +52,7 @@ impl HttpClient {
 
     /// Executes an HTTP request.
     pub async fn send(&self, req: Request) -> AppResult<Response> {
-        let url = self.build_url(&req.path)?;
-        let mut request = match req.method.as_str() {
-            "GET" => self.client.get(&url),
-            "POST" => self.client.post(&url),
-            "PUT" => self.client.put(&url),
-            "PATCH" => self.client.patch(&url),
-            "DELETE" => self.client.delete(&url),
-            "HEAD" => self.client.head(&url),
-            method => {
-                return Err(AppError::new(
-                    ErrorCode::InvalidInput,
-                    format!("unsupported http method: {}", method),
-                ));
-            }
-        };
-
-        // Apply default headers
-        for (name, value) in &self.config.default_headers {
-            if let Ok(hv) = value.parse::<reqwest::header::HeaderValue>()
-                && let Ok(hn) = name.parse::<reqwest::header::HeaderName>()
-            {
-                request = request.header(hn, hv);
-            }
-        }
-
-        // Apply request-specific headers
-        for (name, value) in &req.headers {
-            if let Ok(hv) = value.parse::<reqwest::header::HeaderValue>()
-                && let Ok(hn) = name.parse::<reqwest::header::HeaderName>()
-            {
-                request = request.header(hn, hv);
-            }
-        }
-
-        // Apply query parameters
-        if let Some(query) = &req.query {
-            request = request.query(query);
-        }
-
-        // Apply authentication
-        let mut headers = reqwest::header::HeaderMap::new();
-        let auth = req.auth.as_ref().or(self.config.auth.as_ref());
-        if let Some(a) = auth {
-            a.apply(&mut headers);
-        }
-        for (name, value) in headers {
-            if let Some(name) = name {
-                request = request.header(name, value);
-            }
-        }
-
-        // Apply body
-        if let Some(body) = req.body {
-            request = match body {
-                RequestBody::Json(value) => request.json(&value),
-                RequestBody::Text(text) => request.body(text),
-                RequestBody::Bytes(bytes) => request.body(bytes),
-            };
-        }
-
-        // Execute request
-        let response = request.send().await.map_err(|e| {
-            let code = if e.is_timeout() {
-                ErrorCode::Timeout
-            } else if e.is_connect() {
-                ErrorCode::ConnectionFailed
-            } else {
-                ErrorCode::ExternalService
-            };
-            AppError::new(code, format!("http request failed: {}", e))
-        })?;
+        let response = self.execute_with_resilience(req).await?;
 
         let status = response.status();
         let headers = response
@@ -144,6 +74,82 @@ impl HttpClient {
         })?;
 
         Ok(Response::new(status, headers, body))
+    }
+
+    async fn execute_with_resilience(&self, req: Request) -> AppResult<reqwest::Response> {
+        if let Some(policy) = &self.config.resilience_policy {
+            policy
+                .execute(|| async { self.execute_transport(req.clone()).await })
+                .await
+        } else {
+            self.execute_transport(req).await
+        }
+    }
+
+    async fn execute_transport(&self, req: Request) -> AppResult<reqwest::Response> {
+        self.build_request(&req)?
+            .send()
+            .await
+            .map_err(map_transport_error)
+    }
+
+    fn build_request(&self, req: &Request) -> AppResult<reqwest::RequestBuilder> {
+        let url = self.build_url(&req.path)?;
+        let mut request = match req.method.as_str() {
+            "GET" => self.client.get(&url),
+            "POST" => self.client.post(&url),
+            "PUT" => self.client.put(&url),
+            "PATCH" => self.client.patch(&url),
+            "DELETE" => self.client.delete(&url),
+            "HEAD" => self.client.head(&url),
+            method => {
+                return Err(AppError::new(
+                    ErrorCode::InvalidInput,
+                    format!("unsupported http method: {}", method),
+                ));
+            }
+        };
+
+        for (name, value) in &self.config.default_headers {
+            if let Ok(hv) = value.parse::<reqwest::header::HeaderValue>()
+                && let Ok(hn) = name.parse::<reqwest::header::HeaderName>()
+            {
+                request = request.header(hn, hv);
+            }
+        }
+
+        for (name, value) in &req.headers {
+            if let Ok(hv) = value.parse::<reqwest::header::HeaderValue>()
+                && let Ok(hn) = name.parse::<reqwest::header::HeaderName>()
+            {
+                request = request.header(hn, hv);
+            }
+        }
+
+        if let Some(query) = &req.query {
+            request = request.query(query);
+        }
+
+        let mut headers = reqwest::header::HeaderMap::new();
+        let auth = req.auth.as_ref().or(self.config.auth.as_ref());
+        if let Some(auth) = auth {
+            auth.apply(&mut headers);
+        }
+        for (name, value) in headers {
+            if let Some(name) = name {
+                request = request.header(name, value);
+            }
+        }
+
+        if let Some(body) = &req.body {
+            request = match body {
+                RequestBody::Json(value) => request.json(value),
+                RequestBody::Text(text) => request.body(text.clone()),
+                RequestBody::Bytes(bytes) => request.body(bytes.clone()),
+            };
+        }
+
+        Ok(request)
     }
 
     /// Executes a GET request and returns the response.
@@ -245,6 +251,17 @@ impl std::fmt::Debug for HttpClient {
             .field("config", &self.config)
             .finish()
     }
+}
+
+fn map_transport_error(error: reqwest::Error) -> AppError {
+    let code = if error.is_timeout() {
+        ErrorCode::Timeout
+    } else if error.is_connect() {
+        ErrorCode::ConnectionFailed
+    } else {
+        ErrorCode::ExternalService
+    };
+    AppError::new(code, format!("http request failed: {}", error))
 }
 
 #[cfg(test)]

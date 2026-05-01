@@ -1,6 +1,6 @@
 [package]
 name        = "rskit-httpclient"
-description = "Async HTTP client with auth, retries, and resilience for rskit"
+description = "Async HTTP client with auth and injected resilience policies for rskit"
 version.workspace     = true
 edition.workspace     = true
 license.workspace     = true
@@ -19,6 +19,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 rskit-errors = { path = "../rskit-errors" }
+rskit-resilience = { path = "../rskit-resilience" }
 reqwest      = { workspace = true }
 tokio        = { workspace = true, features = ["sync"] }
 serde        = { workspace = true, features = ["derive"] }
@@ -30,6 +31,7 @@ thiserror    = { workspace = true }
 base64       = { workspace = true }
 
 [dev-dependencies]
+futures      = { workspace = true }
 tokio        = { workspace = true }
 wiremock     = "0.6"
 tempfile     = { workspace = true }

@@ -11,13 +11,15 @@ use tower_http::{
     trace::TraceLayer,
 };
 
-use crate::config::{CorsConfig, HttpServerConfig};
+use crate::http_config::{CorsConfig, HttpServerConfig};
+use crate::middleware::HttpMiddlewareStack;
 
 /// Builder for [`HttpServer`].
 pub struct HttpServerBuilder {
     config: HttpServerConfig,
     cancel: CancellationToken,
     router: Router,
+    middleware: HttpMiddlewareStack,
 }
 
 impl HttpServerBuilder {
@@ -27,6 +29,7 @@ impl HttpServerBuilder {
             config,
             cancel,
             router: Router::new(),
+            middleware: HttpMiddlewareStack::new(),
         }
     }
 
@@ -34,6 +37,53 @@ impl HttpServerBuilder {
     #[must_use]
     pub fn with_router(mut self, router: Router) -> Self {
         self.router = self.router.merge(router);
+        self
+    }
+
+    /// Replace the ordered middleware stack.
+    #[must_use]
+    pub fn with_middleware_stack(mut self, middleware: HttpMiddlewareStack) -> Self {
+        self.middleware = middleware;
+        self
+    }
+
+    /// Append a logging-phase transform.
+    #[must_use]
+    pub fn with_logging_transform<F>(mut self, transform: F) -> Self
+    where
+        F: Fn(Router) -> Router + Send + Sync + 'static,
+    {
+        self.middleware = self.middleware.with_logging_transform(transform);
+        self
+    }
+
+    /// Append an auth-phase transform.
+    #[must_use]
+    pub fn with_auth_transform<F>(mut self, transform: F) -> Self
+    where
+        F: Fn(Router) -> Router + Send + Sync + 'static,
+    {
+        self.middleware = self.middleware.with_auth_transform(transform);
+        self
+    }
+
+    /// Append a validation-phase transform.
+    #[must_use]
+    pub fn with_validation_transform<F>(mut self, transform: F) -> Self
+    where
+        F: Fn(Router) -> Router + Send + Sync + 'static,
+    {
+        self.middleware = self.middleware.with_validation_transform(transform);
+        self
+    }
+
+    /// Append a metrics-phase transform.
+    #[must_use]
+    pub fn with_metrics_transform<F>(mut self, transform: F) -> Self
+    where
+        F: Fn(Router) -> Router + Send + Sync + 'static,
+    {
+        self.middleware = self.middleware.with_metrics_transform(transform);
         self
     }
 
@@ -56,11 +106,7 @@ impl HttpServerBuilder {
         self
     }
 
-    /// Add automatic tracing span per request.
-    ///
-    /// SECURITY(#29): only the request path is recorded in spans — query strings
-    /// are intentionally omitted because they may contain bearer tokens, API keys,
-    /// or other secrets that must not appear in distributed trace backends.
+    /// Add the canonical tracing phase.
     #[must_use]
     pub fn with_tracing(mut self) -> Self {
         use http::Request;
@@ -69,19 +115,19 @@ impl HttpServerBuilder {
 
         let trace_layer = TraceLayer::new_for_http()
             .make_span_with(|request: &Request<_>| {
-                // Record path only — query strings may contain sensitive tokens.
                 let path = request.uri().path();
                 tracing::info_span!(
                     "http_request",
                     method = %request.method(),
-                    // http.target intentionally excludes the query string (see issue #29)
                     "http.target" = path,
                     status_code = tracing::field::Empty,
                 )
             })
             .on_response(DefaultOnResponse::new().level(Level::INFO));
 
-        self.router = self.router.layer(trace_layer);
+        self.middleware = self
+            .middleware
+            .with_tracing_transform(move |router| router.layer(trace_layer.clone()));
         self
     }
 
@@ -90,7 +136,9 @@ impl HttpServerBuilder {
         HttpServer {
             config: Arc::new(self.config),
             cancel: self.cancel,
-            router: Arc::new(tokio::sync::Mutex::new(Some(self.router))),
+            router: Arc::new(tokio::sync::Mutex::new(Some(
+                self.middleware.apply(self.router),
+            ))),
         }
     }
 }
@@ -100,10 +148,8 @@ fn build_cors_layer(cfg: &CorsConfig) -> CorsLayer {
     let origins: Vec<_> = cfg
         .allowed_origins
         .iter()
-        .filter_map(|o| o.parse().ok())
+        .filter_map(|origin| origin.parse().ok())
         .collect();
-    // WARNING: Wildcard CORS is only safe in development.
-    // Production deployments must use an explicit origin allowlist.
     CorsLayer::new().allow_origin(AllowOrigin::list(origins))
 }
 
@@ -111,14 +157,12 @@ fn build_cors_layer(cfg: &CorsConfig) -> CorsLayer {
 pub struct HttpServer {
     config: Arc<HttpServerConfig>,
     cancel: CancellationToken,
-    // TODO(#4): Replace Mutex<Option<Router>> with HttpServer<Stopped|Bound|Running>
-    // typestate to make double-start a compile-time error rather than a runtime one.
-    // See issue #4 for the full typestate design.
     router: Arc<tokio::sync::Mutex<Option<Router>>>,
 }
 
 impl HttpServer {
-    /// Bind address as `"host:port"`.
+    /// Bind address as `host:port`.
+    #[must_use]
     pub fn bind_addr(&self) -> String {
         self.config.bind_addr()
     }
@@ -138,25 +182,28 @@ impl Component for HttpServer {
             .take()
             .ok_or_else(|| AppError::new(ErrorCode::Internal, "HTTP server already started"))?;
 
-        let addr: std::net::SocketAddr = self.config.bind_addr().parse().map_err(|e| {
-            AppError::new(ErrorCode::Internal, format!("invalid bind address: {e}"))
+        let addr: std::net::SocketAddr = self.config.bind_addr().parse().map_err(|error| {
+            AppError::new(
+                ErrorCode::Internal,
+                format!("invalid bind address: {error}"),
+            )
         })?;
 
         let cancel = self.cancel.clone();
         tokio::spawn(async move {
             let listener = match tokio::net::TcpListener::bind(addr).await {
-                Ok(l) => l,
-                Err(e) => {
-                    tracing::error!(error = ?e, %addr, "HTTP server bind failed");
+                Ok(listener) => listener,
+                Err(error) => {
+                    tracing::error!(error = ?error, %addr, "HTTP server bind failed");
                     return;
                 }
             };
             tracing::info!(%addr, "HTTP server listening");
-            if let Err(e) = axum::serve(listener, router)
+            if let Err(error) = axum::serve(listener, router)
                 .with_graceful_shutdown(async move { cancel.cancelled().await })
                 .await
             {
-                tracing::error!(error = ?e, "HTTP server error");
+                tracing::error!(error = ?error, "HTTP server error");
             }
         });
 
@@ -180,12 +227,12 @@ pub fn health_router(registry: Arc<Registry>) -> Router {
     Router::new().route(
         "/health",
         get({
-            let registry = registry.clone();
+            let registry = Arc::clone(&registry);
             move || {
-                let registry = registry.clone();
+                let registry = Arc::clone(&registry);
                 async move {
                     let healths = registry.health_all();
-                    let all_ok = healths.iter().all(|h| h.is_healthy());
+                    let all_ok = healths.iter().all(|health| health.is_healthy());
                     let status = if all_ok {
                         axum::http::StatusCode::OK
                     } else {
@@ -199,18 +246,6 @@ pub fn health_router(registry: Arc<Registry>) -> Router {
 }
 
 /// Returns a router with a `/healthz` liveness probe endpoint.
-///
-/// Unlike [`health_router`], this endpoint requires no registry and always
-/// returns `200 OK` as long as the process is running — suitable for
-/// Kubernetes liveness probes.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// let app = HttpServerBuilder::new(config, cancel)
-///     .with_router(healthz_router())
-///     .build();
-/// ```
 pub fn healthz_router() -> Router {
     use axum::{Json, routing::get};
     use serde::Serialize;
@@ -221,7 +256,6 @@ pub fn healthz_router() -> Router {
         version: &'static str,
     }
 
-    #[tracing::instrument]
     async fn healthz_handler() -> Json<LivenessResponse> {
         Json(LivenessResponse {
             status: "ok",

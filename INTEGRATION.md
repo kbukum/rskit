@@ -173,14 +173,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 **Problem**: Create a gRPC client that dynamically discovers and connects to a remote service with automatic load balancing and connection pooling.
 
-**Solution**: Use `rskit-grpc-client` with discovery integration. The `DiscoveryChannel` trait abstracts over different discovery backends and automatically handles service resolution and load balancing.
+**Solution**: Use `rskit-grpc` with discovery integration. `DiscoveryChannel` resolves service endpoints via `rskit-discovery`, then hands the connected tonic `Channel` to your generated client.
 
 **Code example**:
 
 ```rust
-use rskit_grpc_client::{GrpcClient, DiscoveryChannel};
-use rskit_discovery::{Discovery, RoundRobin};
-use rskit_logging::Logger;
+// Cargo.toml
+// rskit-grpc = { version = "0.1", features = ["client", "discovery"] }
+
+use rskit_grpc::{DiscoveryChannel, GrpcClientConfig};
+use rskit_discovery::Discovery;
 use std::sync::Arc;
 
 // Generated gRPC client stubs
@@ -189,22 +191,19 @@ use analysis::AnalyzeRequest;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let log = Logger::new();
-    
     // Create discovery client (e.g., Consul)
     let discovery: Arc<dyn Discovery> = Arc::new(/* ConsulDiscovery */);
-    
-    // Create gRPC channel with discovery
+
+    // Resolve and connect lazily through the aligned grpc transport
     let channel = DiscoveryChannel::new(
-        "analysis-service",
         discovery,
-        RoundRobin::default(),
-        log,
-    )?;
-    
-    // Create typed gRPC client
-    let mut client = AnalysisServiceClient::new(channel);
-    
+        "analysis-service",
+        GrpcClientConfig::new("analysis-service:50051"),
+    );
+
+    // Create typed gRPC client from the resolved tonic channel
+    let mut client = AnalysisServiceClient::new(channel.channel().await?);
+
     // First call triggers service discovery and connection
     let response = client
         .analyze(tonic::Request::new(AnalyzeRequest {
@@ -213,14 +212,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     
     println!("Analysis result: {:?}", response.into_inner());
-    
+
     Ok(())
 }
 ```
 
 **Modules involved**:
-- `rskit-grpc-client` — `GrpcClient`, `DiscoveryChannel`
-- `rskit-discovery` — `Discovery`, `RoundRobin`, load balancing
+- `rskit-grpc` — `GrpcChannel`, `DiscoveryChannel`, `GrpcClientConfig`
+- `rskit-discovery` — `Discovery`, backends, load balancing
 - `tonic` — gRPC codegen and runtime
 - `tokio` — async runtime
 
@@ -235,53 +234,42 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 **Code example**:
 
 ```rust
-use rskit_httpclient::{HttpClient, HttpConfig, Request};
-use rskit_resilience::{RetryPolicy, CircuitBreaker, ResilienceMiddleware};
-use rskit_logging::Logger;
+use rskit_httpclient::{HttpClient, HttpClientConfig};
+use rskit_resilience::{CbConfig, ConstantBackoff, Policy, RetryPolicy};
 use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let log = Logger::new();
-    
-    // Configure HTTP client with base URL
-    let config = HttpConfig::default()
+    // Compose resilience in rskit-resilience, then inject it into the client
+    let policy = Policy::new()
+        .with_timeout(Duration::from_secs(10))
+        .with_circuit_breaker(CbConfig::new("external-api").with_max_failures(5))
+        .with_retry(
+            RetryPolicy::new()
+                .with_max_attempts(3)
+                .with_constant_backoff(ConstantBackoff::new(Duration::from_millis(100)))
+                .with_jitter(false),
+        );
+
+    let config = HttpClientConfig::new()
         .with_base_url("https://api.example.com")
-        .with_timeout(Duration::from_secs(10));
-    
-    let mut client = HttpClient::new(config)?;
-    
-    // Apply resilience middleware
-    let retry_policy = RetryPolicy {
-        max_attempts: 3,
-        backoff_ms: 100,
-        dlq_topic: None,
-    };
-    
-    let circuit_breaker = CircuitBreaker {
-        failure_threshold: 5,
-        success_threshold: 2,
-        timeout_seconds: 30,
-    };
-    
-    // Wrap client with resilience
-    let resilient_client = ResilienceMiddleware::new(client, retry_policy, circuit_breaker);
-    
-    // Make a request with automatic retry and circuit breaker
-    let resp = resilient_client
-        .get("/users/123")
-        .await?;
-    
+        .with_timeout(Duration::from_secs(10))
+        .with_resilience_policy(policy);
+
+    let client = HttpClient::new(config)?;
+
+    let resp = client.get("/users/123").await?;
+
     println!("Status: {}", resp.status);
     println!("Body: {}", resp.text()?);
-    
+
     Ok(())
 }
 ```
 
 **Modules involved**:
-- `rskit-httpclient` — `HttpClient`, `HttpConfig`, `Request`, `Response`
-- `rskit-resilience` — `RetryPolicy`, `CircuitBreaker`, `ResilienceMiddleware`
+- `rskit-httpclient` — `HttpClient`, `HttpClientConfig`, `Request`, `Response`
+- `rskit-resilience` — `Policy`, `RetryPolicy`, `CbConfig`
 - `reqwest` — underlying HTTP library
 - `tokio` — async runtime
 
@@ -435,7 +423,7 @@ use rskit_discovery::*;
 use rskit_server::http::HttpServer;
 use rskit_messaging::*;
 use rskit_messaging::kafka::*;
-use rskit_grpc_client::*;
+use rskit_grpc::*;
 use rskit_httpclient::*;
 use rskit_logging::Logger;
 use std::sync::Arc;
@@ -466,10 +454,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     // 4. gRPC client with discovery
     let discovery: Arc<dyn Discovery> = Arc::new(/* ConsulDiscovery */);
-    let grpc_channel = DiscoveryChannel::new("analysis-service", discovery, RoundRobin::default(), log.clone())?;
+    let grpc_channel = DiscoveryChannel::new(
+        discovery,
+        "analysis-service",
+        GrpcClientConfig::new("analysis-service:50051"),
+    );
     
     // 5. HTTP client with resilience
-    let http_config = HttpConfig::default().with_base_url("https://api.example.com");
+    let http_config = HttpClientConfig::new().with_base_url("https://api.example.com");
     let http_client = HttpClient::new(http_config)?;
     
     // Keep running

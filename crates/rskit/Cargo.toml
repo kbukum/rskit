@@ -43,7 +43,7 @@ rskit-stateful   = { version = "0.1.0", path = "../rskit-stateful", optional = t
 
 # Feature-gated crates
 rskit-server        = { version = "0.1.0", path = "../rskit-server",        optional = true }
-rskit-grpc-client   = { version = "0.1.0", path = "../rskit-grpc-client",   optional = true }
+rskit-grpc          = { version = "0.1.0", path = "../rskit-grpc",          optional = true }
 rskit-encryption    = { version = "0.1.0", path = "../rskit-encryption",    optional = true }
 rskit-http          = { version = "0.1.0", path = "../rskit-http",          optional = true }
 rskit-httpclient    = { version = "0.1.0", path = "../rskit-httpclient",    optional = true }
@@ -76,7 +76,7 @@ async-trait = { workspace = true }
 [features]
 default       = []
 server        = ["dep:rskit-server"]
-grpc-client   = ["dep:rskit-grpc-client"]
+grpc          = ["dep:rskit-grpc"]
 encryption    = ["dep:rskit-encryption"]
 http          = ["dep:rskit-http"]
 httpclient    = ["dep:rskit-httpclient"]
@@ -107,7 +107,7 @@ process       = ["dep:rskit-process"]
 stateful      = ["dep:rskit-stateful"]
 test-util     = []
 full          = [
-    "server", "grpc-client", "encryption", "http", "httpclient", "auth", "di", "database", "cache", "messaging",
+    "server", "grpc", "encryption", "http", "httpclient", "auth", "di", "database", "cache", "messaging",
     "observability", "authz", "discovery", "testutil", "sse", "dag", "llm",
     "media-full", "file", "cli", "dataset", "bench", "chain", "process", "stateful",
 ]

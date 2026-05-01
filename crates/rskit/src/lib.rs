@@ -5,8 +5,9 @@
 //!
 //! | Feature | Extra crate |
 //! |---------|-------------|
-//! | `server` | `rskit-server` (tonic gRPC) |
-//! | `http`   | `rskit-http` (axum HTTP) |
+//! | `server` | `rskit-server` (service-facing HTTP + lifecycle) |
+//! | `grpc`   | `rskit-grpc` (aligned gRPC client/server transport) |
+//! | `http`   | `rskit-http` (axum transport details) |
 //! | `auth`   | `rskit-auth` (JWT, OIDC, password) |
 //! | `di`     | `rskit-di` (dependency injection) |
 //! | `database` | `rskit-database` (sqlx) |
@@ -112,7 +113,11 @@ pub use rskit_stateful as stateful;
 #[cfg(feature = "server")]
 pub use rskit_server as server;
 
-/// Axum HTTP server with CORS, request-ID, and Component lifecycle.
+/// Aligned gRPC transport namespace (opt-in via `grpc` feature).
+#[cfg(feature = "grpc")]
+pub use rskit_grpc as grpc;
+
+/// Axum transport details used by `rskit-server`.
 #[cfg(feature = "http")]
 pub use rskit_http as http;
 

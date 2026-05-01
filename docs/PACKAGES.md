@@ -19,7 +19,7 @@ rskit is a **Cargo workspace** with a facade crate (`rskit`) and 40+ independent
 | `rskit-pipeline` | Async data pipelines via `futures::Stream` extension operators |
 | `rskit-resilience` | Retry, circuit breaker, bulkhead, rate limiter, tower layers |
 | `rskit-worker` | Worker pool with `JoinSet`, typed events |
-| `rskit-server` | tonic gRPC server bootstrap as a lifecycle-managed Component |
+| `rskit-server` | Service-facing server crate with lifecycle-managed gRPC and HTTP transports |
 
 ## Foundation
 
@@ -27,7 +27,7 @@ rskit is a **Cargo workspace** with a facade crate (`rskit`) and 40+ independent
 |-------|-------------|
 | `rskit-validation` | Fluent field-level validator with AppError conversion |
 | `rskit-encryption` | AES-256-GCM and ChaCha20-Poly1305 |
-| `rskit-http` | Axum HTTP server with graceful shutdown, CORS, request-ID |
+| `rskit-http` | Axum transport details consumed by `rskit-server` |
 | `rskit-di` | Lightweight Arc-based runtime DI container |
 | `rskit-auth` | JWT, OIDC, password hashing, request-context auth helpers |
 
@@ -39,7 +39,7 @@ rskit is a **Cargo workspace** with a facade crate (`rskit`) and 40+ independent
 | `rskit-cache` | Redis client with typed store and Component lifecycle |
 | `rskit-messaging` | Message broker abstractions with Kafka support |
 | `rskit-httpclient` | Async HTTP client with auth and resilience |
-| `rskit-grpc-client` | Tonic-based gRPC client with lazy connections |
+| `rskit-grpc` | Aligned gRPC transport entrypoint with client + server features |
 
 ## Platform
 

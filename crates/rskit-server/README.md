@@ -1,20 +1,14 @@
-# rskit-server — gRPC Server Component
+# rskit-server
 
-`tonic`-backed gRPC server that integrates with `rskit-bootstrap`'s `Component` lifecycle.
+Service-facing server abstractions for rskit.
 
-[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml)
-[![crates.io](https://img.shields.io/crates/v/rskit-server.svg)](https://crates.io/crates/rskit-server)
-[![docs.rs](https://docs.rs/rskit-server/badge.svg)](https://docs.rs/rskit-server)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![MSRV: 1.85](https://img.shields.io/badge/MSRV-1.85-orange.svg)](https://blog.rust-lang.org/2025/02/20/Rust-1.85.0.html)
+## Responsibilities
 
-## Features
-
-- `GrpcServerBuilder` fluent API
-- Optional gRPC reflection support
-- Optional health check endpoint
-- Graceful shutdown via `CancellationToken`
-- Validator-backed `GrpcServerConfig`
+- owns the HTTP server abstraction (`HttpServerBuilder`, `HttpServerConfig`)
+- defines the canonical interceptor ordering: tracing -> logging -> auth -> validation -> handler -> metrics
+- exposes health routers and lifecycle-managed startup/shutdown
+- remains the home for shared server lifecycle pieces consumed by `rskit-grpc`
+- keeps TLS policy ownership for service-facing transports; `rskit-http` stays transport-only
 
 ## Usage
 
@@ -23,21 +17,19 @@
 rskit-server = "0.1"
 ```
 
-```rust
-use rskit_server::{GrpcServerBuilder, GrpcServerConfig};
+```rust,ignore
+use axum::{Router, routing::get};
+use rskit_server::{HttpServerBuilder, HttpServerConfig};
+use tokio_util::sync::CancellationToken;
 
-let server = GrpcServerBuilder::new(
-        GrpcServerConfig::builder().port(50051).build()?,
-        cancel.clone(),
-    )
-    .with_name("my-service")
-    .add_service(MyServiceServer::new(impl_))
-    .with_health_check()
-    .build()?;
-
-registry.register(Arc::new(server)).await;
+let server = HttpServerBuilder::new(HttpServerConfig::default(), CancellationToken::new())
+    .with_router(Router::new().route("/healthz", get(|| async { "ok" })))
+    .with_tracing()
+    .with_request_id()
+    .build();
 ```
 
-## See Also
+## TLS policy
 
-[Main repository README](https://github.com/kbukum/rskit)
+`GrpcServerConfig::tls` uses tonic/rustls modern defaults: TLS 1.3 preferred, TLS 1.2
+minimum, and no legacy protocol support.
