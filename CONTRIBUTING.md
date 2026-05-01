@@ -12,6 +12,7 @@ started, what we expect from contributors, and how the review process works.
 - [Development Setup](#development-setup)
 - [Making Changes](#making-changes)
 - [Testing](#testing)
+- [Quick Development Workflow](#quick-development-workflow)
 - [Commit Style](#commit-style)
 - [Pull Request Process](#pull-request-process)
 - [Adding a New Crate](#adding-a-new-crate)
@@ -98,6 +99,23 @@ cargo doc --workspace --no-deps --open
 ---
 
 ## Testing
+
+### Quick Development Workflow
+
+For rapid iteration:
+```bash
+make help                     # see available targets
+make check-fast               # format + lint + build only (~30s)
+make test-nextest             # parallel tests via nextest
+make test-affected            # test only crates changed vs main
+make test-doc                 # run doctests separately
+make check                    # full validation before PR
+```
+
+For CI-like local testing:
+```bash
+PROFILE=ci make test-nextest  # with CI profile (retries, no fail-fast)
+```
 
 - Every public function and trait impl should have at least one test.
 - Time-dependent tests **must** use `tokio::time::pause()` / `tokio::time::advance()` —

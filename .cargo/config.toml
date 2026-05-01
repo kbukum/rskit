@@ -11,3 +11,11 @@ xtdoc   = "doc --workspace --no-deps"
 xtdeny  = "deny check"
 public-api = "public-api"
 xtask = "run --package xtask --"
+
+[target.'cfg(target_os = "linux")']
+linker = "clang"
+rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+
+[target.'cfg(target_os = "macos")']
+# Use the platform default linker; lld is not guaranteed to be available.
+linker = "clang"
