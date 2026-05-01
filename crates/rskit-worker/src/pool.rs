@@ -143,6 +143,11 @@ struct SubmitQueue<T> {
     state: Arc<QueueState<T>>,
 }
 
+enum PushRejectError<T> {
+    Closed(T),
+    Full(T),
+}
+
 struct QueueReceiver<T> {
     state: Arc<QueueState<T>>,
 }
@@ -187,10 +192,13 @@ impl<T> SubmitQueue<T> {
         }
     }
 
-    fn push_reject(&self, item: T) -> Result<(), T> {
+    fn push_reject(&self, item: T) -> Result<(), PushRejectError<T>> {
         let mut inner = self.state.inner.lock();
-        if inner.closed || inner.items.len() >= inner.capacity {
-            return Err(item);
+        if inner.closed {
+            return Err(PushRejectError::Closed(item));
+        }
+        if inner.items.len() >= inner.capacity {
+            return Err(PushRejectError::Full(item));
         }
         inner.items.push_back(item);
         self.state.not_empty.notify_one();
@@ -259,6 +267,7 @@ where
     capacity: usize,
     event_buffer: usize,
     overflow_policy: OverflowPolicy,
+    grace_period: Duration,
     shutdown: CancellationToken,
     runner: Option<JoinHandle<()>>,
 }
@@ -302,6 +311,7 @@ where
             capacity: size,
             event_buffer: config.event_buffer,
             overflow_policy: config.overflow_policy,
+            grace_period: config.grace_period,
             shutdown,
             runner: Some(runner),
         }
@@ -334,10 +344,14 @@ where
                 })?;
             }
             OverflowPolicy::Reject => {
-                self.queue.push_reject(envelope).map_err(|_| {
-                    AppError::rate_limited()
+                self.queue.push_reject(envelope).map_err(|err| match err {
+                    PushRejectError::Closed(_) => AppError::new(
+                        ErrorCode::ServiceUnavailable,
+                        format!("pool '{}' is shut down", self.name),
+                    ),
+                    PushRejectError::Full(_) => AppError::rate_limited()
                         .with_detail("pool", self.name.clone())
-                        .with_detail("overflow_policy", "reject")
+                        .with_detail("overflow_policy", "reject"),
                 })?;
             }
             OverflowPolicy::DropOldest => {
@@ -384,12 +398,26 @@ where
     pub async fn shutdown(mut self) -> AppResult<()> {
         self.close();
         if let Some(runner) = self.runner.take() {
-            runner.await.map_err(|err| {
-                AppError::new(
-                    ErrorCode::Internal,
-                    format!("pool '{}' runner failed during shutdown: {err}", self.name),
-                )
-            })?;
+            let mut runner = runner;
+            let wait = tokio::time::timeout(self.grace_period, &mut runner).await;
+            match wait {
+                Ok(joined) => joined.map_err(|err| {
+                    AppError::new(
+                        ErrorCode::Internal,
+                        format!("pool '{}' runner failed during shutdown: {err}", self.name),
+                    )
+                })?,
+                Err(_) => {
+                    tracing::warn!(
+                        pool = %self.name,
+                        grace_period_ms = self.grace_period.as_millis(),
+                        "shutdown grace period elapsed; aborting runner"
+                    );
+                    self.shutdown.cancel();
+                    runner.abort();
+                    let _ = runner.await;
+                }
+            }
         }
         Ok(())
     }
@@ -402,6 +430,9 @@ where
 {
     fn drop(&mut self) {
         self.close();
+        if let Some(runner) = self.runner.take() {
+            runner.abort();
+        }
     }
 }
 

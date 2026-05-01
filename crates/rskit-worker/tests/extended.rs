@@ -88,6 +88,8 @@ struct CountingHandler {
 
 struct IdleHandler;
 
+struct StubbornHandler;
+
 #[async_trait::async_trait]
 impl Handler<i32, i32> for IdleHandler {
     async fn handle(
@@ -96,6 +98,19 @@ impl Handler<i32, i32> for IdleHandler {
         _emit: mpsc::Sender<Event<i32>>,
         _cancel: CancellationToken,
     ) -> AppResult<i32> {
+        Ok(task)
+    }
+}
+
+#[async_trait::async_trait]
+impl Handler<i32, i32> for StubbornHandler {
+    async fn handle(
+        &self,
+        task: i32,
+        _emit: mpsc::Sender<Event<i32>>,
+        _cancel: CancellationToken,
+    ) -> AppResult<i32> {
+        sleep(Duration::from_secs(10)).await;
         Ok(task)
     }
 }
@@ -230,6 +245,37 @@ async fn pool_with_zero_size_clamps_to_one() {
         .expect("ok");
     assert_eq!(v, 42);
     pool.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn reject_policy_reports_shutdown_as_service_unavailable() {
+    let pool = Pool::new(
+        Arc::new(DoubleHandler),
+        PoolConfig::new("reject-closed").with_overflow_policy(rskit_worker::OverflowPolicy::Reject),
+    );
+    pool.close();
+
+    let err = match pool.submit(1).await {
+        Ok(_) => panic!("closed pool must reject as ServiceUnavailable"),
+        Err(err) => err,
+    };
+    assert_eq!(err.code, ErrorCode::ServiceUnavailable);
+}
+
+#[tokio::test]
+async fn shutdown_respects_grace_period() {
+    let pool = Pool::new(
+        Arc::new(StubbornHandler),
+        PoolConfig::new("shutdown-grace")
+            .with_size(1)
+            .with_grace_period(Duration::from_millis(20)),
+    );
+    let _handle = pool.submit(1).await.unwrap();
+
+    timeout(Duration::from_millis(200), pool.shutdown())
+        .await
+        .expect("shutdown should return within configured grace period")
+        .unwrap();
 }
 
 // ── 5. Task cancellation ──────────────────────────────────────────────────────
