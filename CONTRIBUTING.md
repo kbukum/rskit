@@ -48,7 +48,7 @@ Be respectful, constructive, and patient. We follow the
 
 ## Prerequisites
 
-- Install Rust via [rustup](https://rustup.rs/).
+- Install Rust via [rustup](https://rustup.rs/). The repo is pinned to a specific toolchain via `rust-toolchain.toml` — rustup will automatically download and use the correct version.
 - **Linux:** Install `mold` linker for faster builds: `sudo apt install mold`
 - **Linux:** `clang` is also required as the linker driver when using the documented `mold` setup.
 - **macOS:** No additional linker setup needed (uses platform default)

@@ -1,4 +1,4 @@
-.PHONY: all build test test-nextest test-doc test-affected test-coverage lint fmt fmt-check check check-fast doc deny clean help \
+.PHONY: all build test test-nextest test-doc test-affected test-coverage test-coverage-html lint fmt fmt-check check check-fast doc deny clean help \
        ci ci-test ci-lint ci-fmt ensure-act
 
 # Crate flag: pass -p $(C) to cargo when C is set
