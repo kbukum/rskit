@@ -50,6 +50,7 @@ jobs:
               - '**/Cargo.lock'
               - 'Makefile'
               - '.cargo/**'
+              - '.config/**'
               - 'clippy.toml'
               - 'deny.toml'
               - 'rust-toolchain.toml'
@@ -85,6 +86,8 @@ jobs:
         with:
           toolchain: stable
           components: clippy
+      - name: Install mold linker
+        run: sudo apt-get install -y mold
       - uses: Swatinem/rust-cache@174de315c63e56da1192eb94417a8396a40c9e85  # v2.7.8
       - run: cargo clippy --workspace -- -D warnings
 
@@ -106,6 +109,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: ${{ matrix.rust }}
+      - name: Install mold linker (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get install -y mold
       - uses: Swatinem/rust-cache@174de315c63e56da1192eb94417a8396a40c9e85  # v2.7.8
         with:
           key: ${{ matrix.os }}-${{ matrix.rust }}
@@ -129,6 +135,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: stable
+      - name: Install mold linker
+        run: sudo apt-get install -y mold
       - uses: Swatinem/rust-cache@174de315c63e56da1192eb94417a8396a40c9e85  # v2.7.8
       - run: cargo doc --workspace --no-deps --document-private-items
 
@@ -146,6 +154,8 @@ jobs:
         with:
           toolchain: stable
           components: llvm-tools-preview
+      - name: Install mold linker
+        run: sudo apt-get install -y mold
       - uses: Swatinem/rust-cache@174de315c63e56da1192eb94417a8396a40c9e85  # v2.7.8
       - uses: taiki-e/install-action@481c34c1cf3a84c68b5e46f4eccfc82af798415a  # v2
         with:
@@ -188,6 +198,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: stable
+      - name: Install mold linker
+        run: sudo apt-get install -y mold
       - uses: Swatinem/rust-cache@174de315c63e56da1192eb94417a8396a40c9e85  # v2.7.8
       - run: cargo bench --workspace --no-run
 

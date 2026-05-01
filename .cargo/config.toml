@@ -12,10 +12,9 @@ xtdeny  = "deny check"
 public-api = "public-api"
 xtask = "run --package xtask --"
 
+# Linker optimization: use mold on Linux for faster linking.
+# Install mold: `sudo apt install mold` (Ubuntu) or `brew install mold` (macOS w/ Homebrew).
+# If mold is not available, comment out or remove the [target.cfg(linux)] section below.
 [target.'cfg(target_os = "linux")']
 linker = "clang"
 rustflags = ["-C", "link-arg=-fuse-ld=mold"]
-
-[target.'cfg(target_os = "macos")']
-# Use the platform default linker; lld is not guaranteed to be available.
-linker = "clang"
