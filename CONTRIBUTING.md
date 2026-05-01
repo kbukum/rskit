@@ -50,6 +50,7 @@ Be respectful, constructive, and patient. We follow the
 
 - Install Rust via [rustup](https://rustup.rs/).
 - **Linux:** Install `mold` linker for faster builds: `sudo apt install mold`
+- **Linux:** `clang` is also required as the linker driver when using the documented `mold` setup.
 - **macOS:** No additional linker setup needed (uses platform default)
 
 ---

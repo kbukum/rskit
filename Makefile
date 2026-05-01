@@ -35,7 +35,7 @@ test-doc:
 ## Run tests only for crates affected by current changes
 test-affected:
 	@echo "==> Detecting affected crates..."
-	@CHANGED=$$(git diff --name-only origin/main...HEAD 2>/dev/null || git diff --name-only HEAD~1); \
+	@CHANGED=$$(git diff --name-only origin/main...HEAD 2>/dev/null || git diff --name-only HEAD~1 2>/dev/null); \
 	if [ -z "$$CHANGED" ]; then \
 		echo "No changes detected, running all tests"; \
 		cargo nextest run --workspace; \
