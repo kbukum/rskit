@@ -1,4 +1,4 @@
-.PHONY: all build test test-coverage lint fmt check doc deny clean help \
+.PHONY: all build test test-nextest test-doc test-affected test-coverage test-coverage-html lint fmt fmt-check check check-fast doc deny clean help \
        ci ci-test ci-lint ci-fmt ensure-act
 
 # Crate flag: pass -p $(C) to cargo when C is set
@@ -21,6 +21,44 @@ test:
 	@echo "==> Testing..."
 	@cargo test --workspace $(_C) $(_T)
 	@echo "✓ Tests passed"
+
+## Run tests using nextest (parallel, with retries in CI)
+test-nextest:
+	@echo "==> Running tests with nextest..."
+	@cargo nextest run --workspace $(if $(PROFILE),--profile $(PROFILE))
+
+## Run only doctests (nextest doesn't support doctests)
+test-doc:
+	@echo "==> Running doctests..."
+	@cargo test --workspace --doc
+
+## Run tests only for crates affected by current changes
+test-affected:
+	@echo "==> Detecting affected crates..."
+	@CHANGED=$$(git diff --name-only origin/main...HEAD 2>/dev/null || git diff --name-only HEAD~1 2>/dev/null); \
+	if [ -z "$$CHANGED" ]; then \
+		echo "No changes detected, running all tests"; \
+		cargo nextest run --workspace; \
+	elif echo "$$CHANGED" | grep -qE '^(Cargo\.(toml|lock)|rust-toolchain\.toml|\.cargo/|\.config/)'; then \
+		echo "Root/workspace config changed, running all tests"; \
+		cargo nextest run --workspace; \
+	else \
+		CRATES=$$(echo "$$CHANGED" | grep -E '\.(rs|toml)$$' | xargs -I{} dirname {} | sort -u | while read dir; do \
+			d="$$dir"; \
+			while [ "$$d" != "." ] && [ ! -f "$$d/Cargo.toml" ]; do d=$$(dirname "$$d"); done; \
+			if [ -f "$$d/Cargo.toml" ] && [ "$$d" != "." ]; then \
+				grep -q '^\[package\]' "$$d/Cargo.toml" 2>/dev/null && grep -m1 'name' "$$d/Cargo.toml" | sed 's/.*= *"\(.*\)"/\1/'; \
+			fi; \
+		done | sort -u); \
+		if [ -z "$$CRATES" ]; then \
+			echo "No crate changes detected, running all tests"; \
+			cargo nextest run --workspace; \
+		else \
+			echo "Affected crates: $$CRATES"; \
+			PKGS=$$(echo "$$CRATES" | sed 's/^/-p /' | tr '\n' ' '); \
+			cargo nextest run $$PKGS; \
+		fi; \
+	fi
 
 ## Run tests with coverage (C=<crate>, T=<test pattern>)
 ## Requires: cargo install cargo-llvm-cov
@@ -66,6 +104,9 @@ deny:
 	@cargo deny check licenses advisories sources bans
 	@echo "✓ cargo-deny passed"
 
+## Fast check: format + lint + build only (no tests) — for rapid iteration
+check-fast: fmt-check lint build
+
 ## Run all checks (fmt + lint + build + test)
 check: fmt-check lint build test
 
@@ -102,20 +143,25 @@ ci-fmt: ensure-act
 
 ## Show help
 help:
-	@echo "Usage: make <target> [C=<crate>] [T=<test>]"
+	@echo "Usage: make <target> [C=<crate>] [T=<test>] [PROFILE=<profile>]"
 	@echo ""
 	@echo "Development:"
-	@echo "  make build              [C=]       Build workspace"
-	@echo "  make test               [C=] [T=]  Run tests"
-	@echo "  make test-coverage      [C=] [T=]  Run tests with coverage (LCOV)"
-	@echo "  make test-coverage-html [C=] [T=]  Run tests with coverage (HTML)"
-	@echo "  make lint               [C=]       Run clippy"
-	@echo "  make fmt                            Format code"
-	@echo "  make fmt-check                      Check formatting"
-	@echo "  make doc                            Build documentation"
-	@echo "  make deny                           Run cargo-deny checks"
-	@echo "  make check              [C=]       fmt + lint + build + test"
-	@echo "  make clean                          Remove build artifacts"
+	@echo "  make help                                  Show this help"
+	@echo "  make build              [C=]               Build workspace"
+	@echo "  make test               [C=] [T=]          Run tests"
+	@echo "  make test-nextest       [PROFILE=]         Run tests with nextest"
+	@echo "  make test-doc                             Run doctests only"
+	@echo "  make test-affected                        Run tests for changed crates"
+	@echo "  make test-coverage      [C=] [T=]          Run tests with coverage (LCOV)"
+	@echo "  make test-coverage-html [C=] [T=]          Run tests with coverage (HTML)"
+	@echo "  make lint               [C=]               Run clippy"
+	@echo "  make fmt                                  Format code"
+	@echo "  make fmt-check                            Check formatting"
+	@echo "  make doc                                  Build documentation"
+	@echo "  make deny                                 Run cargo-deny checks"
+	@echo "  make check-fast                           fmt + lint + build"
+	@echo "  make check              [C=]               fmt + lint + build + test"
+	@echo "  make clean                                Remove build artifacts"
 	@echo ""
 	@echo "Local CI (GitHub Actions via act + Docker):"
 	@echo "  make ci                             Run full CI pipeline"
@@ -130,9 +176,11 @@ help:
 	@echo "  C=rskit-messaging     Target messaging crate"
 	@echo ""
 	@echo "Examples:"
-	@echo "  make test                            Test everything"
-	@echo "  make test C=rskit-auth               Test auth crate"
-	@echo "  make test C=rskit-auth T=jwt         Test matching tests in auth"
-	@echo "  make lint C=rskit-http               Lint http crate"
-	@echo "  make check C=rskit-database          Full check on database crate"
-	@echo "  make test-coverage-html              Coverage report in browser"
+	@echo "  make test                              Test everything"
+	@echo "  make test-nextest PROFILE=ci           Run nextest with CI profile"
+	@echo "  make test-affected                     Test only changed crates"
+	@echo "  make test C=rskit-auth                 Test auth crate"
+	@echo "  make test C=rskit-auth T=jwt           Test matching tests in auth"
+	@echo "  make lint C=rskit-http                 Lint http crate"
+	@echo "  make check C=rskit-database            Full check on database crate"
+	@echo "  make test-coverage-html                Coverage report in browser"

@@ -17,12 +17,13 @@ on:
       - 'LICENSE'
       - '.github/ISSUE_TEMPLATE/**'
       - '.github/PULL_REQUEST_TEMPLATE/**'
+  merge_group:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -30,11 +31,39 @@ env:
   RUSTFLAGS: "-D warnings"
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      rust-code: ${{ steps.filter.outputs.rust-code }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36  # v3.0.2
+        id: filter
+        with:
+          filters: |
+            rust-code:
+              - '**/*.rs'
+              - '**/Cargo.toml'
+              - '**/Cargo.lock'
+              - 'Makefile'
+              - '.cargo/**'
+              - '.config/**'
+              - 'clippy.toml'
+              - 'deny.toml'
+              - 'rust-toolchain.toml'
+              - 'rustfmt.toml'
+              - '.github/workflows/ci.yml'
+
   # ---------------------------------------------------------------------------
   # Format check (fast gate — runs on stable, no need to pin MSRV here)
   # ---------------------------------------------------------------------------
   fmt:
     name: Rustfmt
+    needs: changes
+    if: needs.changes.outputs.rust-code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
@@ -49,6 +78,8 @@ jobs:
   # ---------------------------------------------------------------------------
   clippy:
     name: Clippy
+    if: needs.changes.outputs.rust-code == 'true'
+    needs: changes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
@@ -56,6 +87,8 @@ jobs:
         with:
           toolchain: stable
           components: clippy
+      - name: Install mold linker
+        run: sudo apt-get install -y mold
       - uses: Swatinem/rust-cache@174de315c63e56da1192eb94417a8396a40c9e85  # v2.7.8
       - run: cargo clippy --workspace -- -D warnings
 
@@ -64,6 +97,8 @@ jobs:
   # ---------------------------------------------------------------------------
   test:
     name: Test (${{ matrix.os }} / ${{ matrix.rust }})
+    if: needs.changes.outputs.rust-code == 'true'
+    needs: changes
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -75,19 +110,24 @@ jobs:
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: ${{ matrix.rust }}
+      - name: Install mold linker (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get install -y mold
       - uses: Swatinem/rust-cache@174de315c63e56da1192eb94417a8396a40c9e85  # v2.7.8
         with:
           key: ${{ matrix.os }}-${{ matrix.rust }}
       - uses: taiki-e/install-action@481c34c1cf3a84c68b5e46f4eccfc82af798415a  # v2
         with:
           tool: cargo-nextest
-      - run: cargo nextest run --workspace
+      - run: cargo nextest run --workspace --profile ci
 
   # ---------------------------------------------------------------------------
   # Documentation (ensure no broken intra-doc links)
   # ---------------------------------------------------------------------------
   docs:
     name: Docs
+    if: needs.changes.outputs.rust-code == 'true'
+    needs: changes
     runs-on: ubuntu-latest
     env:
       RUSTDOCFLAGS: "-D warnings"
@@ -96,6 +136,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: stable
+      - name: Install mold linker
+        run: sudo apt-get install -y mold
       - uses: Swatinem/rust-cache@174de315c63e56da1192eb94417a8396a40c9e85  # v2.7.8
       - run: cargo doc --workspace --no-deps --document-private-items
 
@@ -104,6 +146,8 @@ jobs:
   # ---------------------------------------------------------------------------
   coverage:
     name: Coverage
+    if: needs.changes.outputs.rust-code == 'true' && (github.event_name == 'merge_group' || github.event_name == 'push')
+    needs: changes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
@@ -111,6 +155,8 @@ jobs:
         with:
           toolchain: stable
           components: llvm-tools-preview
+      - name: Install mold linker
+        run: sudo apt-get install -y mold
       - uses: Swatinem/rust-cache@174de315c63e56da1192eb94417a8396a40c9e85  # v2.7.8
       - uses: taiki-e/install-action@481c34c1cf3a84c68b5e46f4eccfc82af798415a  # v2
         with:
@@ -128,6 +174,8 @@ jobs:
   # ---------------------------------------------------------------------------
   security:
     name: Security
+    if: needs.changes.outputs.rust-code == 'true' && (github.event_name == 'merge_group' || github.event_name == 'push')
+    needs: changes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
@@ -143,12 +191,16 @@ jobs:
   # ---------------------------------------------------------------------------
   bench:
     name: Benchmarks (smoke)
+    if: needs.changes.outputs.rust-code == 'true' && (github.event_name == 'merge_group' || github.event_name == 'push')
+    needs: changes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: stable
+      - name: Install mold linker
+        run: sudo apt-get install -y mold
       - uses: Swatinem/rust-cache@174de315c63e56da1192eb94417a8396a40c9e85  # v2.7.8
       - run: cargo bench --workspace --no-run
 
@@ -158,12 +210,13 @@ jobs:
   ci-status:
     name: CI Status
     if: always()
-    needs: [fmt, clippy, test, docs, coverage, security, bench]
+    needs: [changes, fmt, clippy, test, docs, coverage, security, bench]
     runs-on: ubuntu-latest
     steps:
       - name: Evaluate results
         run: |
-          results=("${{ needs.fmt.result }}" \
+          results=("${{ needs.changes.result }}" \
+                   "${{ needs.fmt.result }}" \
                    "${{ needs.clippy.result }}" \
                    "${{ needs.test.result }}" \
                    "${{ needs.docs.result }}" \

@@ -1,6 +1,0 @@
-[profile.default]
-retries = { backoff = "exponential", count = 2, delay = "1s", jitter = true }
-
-[profile.ci]
-retries = { backoff = "exponential", count = 3, delay = "2s", jitter = true }
-fail-fast = false
