@@ -39,6 +39,9 @@ test-affected:
 	if [ -z "$$CHANGED" ]; then \
 		echo "No changes detected, running all tests"; \
 		cargo nextest run --workspace; \
+	elif echo "$$CHANGED" | grep -qE '^(Cargo\.(toml|lock)|rust-toolchain\.toml|\.cargo/|\.config/)'; then \
+		echo "Root/workspace config changed, running all tests"; \
+		cargo nextest run --workspace; \
 	else \
 		CRATES=$$(echo "$$CHANGED" | grep -E '\.(rs|toml)$$' | xargs -I{} dirname {} | sort -u | while read dir; do \
 			d="$$dir"; \
@@ -48,7 +51,8 @@ test-affected:
 			fi; \
 		done | sort -u); \
 		if [ -z "$$CRATES" ]; then \
-			echo "No crate changes detected"; \
+			echo "No crate changes detected, running all tests"; \
+			cargo nextest run --workspace; \
 		else \
 			echo "Affected crates: $$CRATES"; \
 			PKGS=$$(echo "$$CRATES" | sed 's/^/-p /' | tr '\n' ' '); \

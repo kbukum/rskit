@@ -9,6 +9,7 @@ started, what we expect from contributors, and how the review process works.
 
 - [Code of Conduct](#code-of-conduct)
 - [Getting Started](#getting-started)
+- [Prerequisites](#prerequisites)
 - [Development Setup](#development-setup)
 - [Making Changes](#making-changes)
 - [Testing](#testing)
@@ -42,6 +43,14 @@ Be respectful, constructive, and patient. We follow the
    ```sh
    git remote add upstream https://github.com/kbukum/rskit.git
    ```
+
+---
+
+## Prerequisites
+
+- Install Rust via [rustup](https://rustup.rs/).
+- **Linux:** Install `mold` linker for faster builds: `sudo apt install mold`
+- **macOS:** No additional linker setup needed (uses platform default)
 
 ---
 

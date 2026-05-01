@@ -54,6 +54,7 @@ jobs:
               - 'clippy.toml'
               - 'deny.toml'
               - 'rust-toolchain.toml'
+              - 'rustfmt.toml'
               - '.github/workflows/ci.yml'
 
   # ---------------------------------------------------------------------------
