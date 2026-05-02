@@ -2,7 +2,7 @@
 //!
 //! `rskit-storage` provides generic file operations for any file type:
 //! read, write, copy, stream, detect type, manage temp files, and
-//! store to local/cloud backends.
+//! store through the [`FileStore`] trait.
 
 #![warn(missing_docs)]
 
@@ -22,6 +22,3 @@ pub use store::{
 };
 pub use temp::{TempDir, TempFile};
 pub use transfer::{copy_file, transfer};
-
-#[cfg(feature = "gcs")]
-pub use store::{GcsStore, GcsStoreConfig};

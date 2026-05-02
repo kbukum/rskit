@@ -49,6 +49,7 @@
 # Infrastructure
 /crates/rskit-database/  @kbukum
 /crates/rskit-storage-s3/   @kbukum
+/crates/rskit-storage-gcs/  @kbukum
 /crates/rskit-messaging/ @kbukum
 
 # AI/ML

@@ -73,6 +73,7 @@ rskit is a **Cargo workspace** with a facade crate (`rskit`) and 40+ independent
 |-------|-------------|
 | `rskit-storage` | File I/O, storage backends, temp files, MIME detection |
 | `rskit-storage-s3` | S3 / S3-compatible (MinIO, LocalStack) backend |
+| `rskit-storage-gcs` | Google Cloud Storage backend |
 | `rskit-media` | Media types, codec/format registry, pipeline builder |
 | `rskit-media-ffmpeg` | FFmpeg CLI backend for video/audio |
 | `rskit-media-image` | Native image processing (`image` crate) |

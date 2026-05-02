@@ -1,6 +1,6 @@
 # rskit-storage — File I/O & Storage
 
-File I/O, storage backends, temp files, and MIME detection.
+File I/O, local storage, temp files, MIME detection, and storage backend traits.
 
 [![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/rskit-storage.svg)](https://crates.io/crates/rskit-storage)
@@ -14,9 +14,12 @@ File I/O, storage backends, temp files, and MIME detection.
 - `FileSink` / `FileWriter` — buffered output destinations
 - `FileMeta`, `FileKind` — metadata and broad category detection (Video, Audio, Image, …)
 - `detect_mime` / `detect_kind` — magic-byte + extension fallback
-- `FileStore` trait with `LocalStore`, optional `S3Store` and `GcsStore`
+- `FileStore` trait with the built-in `LocalStore` and support for external adapter crates
 - `TempFile` / `TempDir` — RAII-managed temporaries (auto-deleted on drop)
 - Async streaming reads and file transfers
+
+Cloud backends live in adapter crates such as `rskit-storage-s3` and
+`rskit-storage-gcs` so core storage remains lightweight and reusable.
 
 ## Usage
 

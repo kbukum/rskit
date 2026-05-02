@@ -62,6 +62,7 @@ rskit-dag           = { version = "0.1.0", path = "../rskit-dag",           opti
 rskit-llm           = { version = "0.1.0", path = "../rskit-llm",           optional = true }
 rskit-storage       = { version = "0.1.0", path = "../rskit-storage", optional = true }
 rskit-storage-s3    = { version = "0.1.0", path = "../rskit-storage-s3", optional = true }
+rskit-storage-gcs   = { version = "0.1.0", path = "../rskit-storage-gcs", optional = true }
 rskit-media         = { version = "0.1.0", path = "../rskit-media",         optional = true }
 rskit-media-ffmpeg  = { version = "0.1.0", path = "../rskit-media-ffmpeg",  optional = true }
 rskit-media-image   = { version = "0.1.0", path = "../rskit-media-image",   optional = true }
@@ -100,7 +101,7 @@ media-ffmpeg  = ["dep:rskit-media-ffmpeg", "media"]
 media-image   = ["dep:rskit-media-image", "media"]
 media-full    = ["media-ffmpeg", "media-image"]
 storage-s3    = ["storage", "dep:rskit-storage-s3"]
-storage-gcs   = ["storage", "rskit-storage/gcs"]
+storage-gcs   = ["storage", "dep:rskit-storage-gcs"]
 cli           = ["dep:rskit-cli"]
 dataset       = ["dep:rskit-dataset", "cli"]
 bench         = ["dep:rskit-bench"]

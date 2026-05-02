@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — Storage Adapter Boundaries
+- **rskit-storage**: removed the feature-gated GCS backend from the core crate
+  so storage remains local/trait-focused and does not own Google Cloud SDK
+  dependencies.
+- **rskit-storage-gcs**: added a dedicated Google Cloud Storage adapter crate
+  implementing `rskit_storage::store::FileStore`, with application-default
+  credentials by default and explicit anonymous mode for public buckets.
+- **rskit**: `storage-gcs` now enables the `rskit-storage-gcs` adapter crate
+  instead of a feature inside `rskit-storage`.
+
 ### Added — Documentation & Project Hygiene
 - `SECURITY.md` — vulnerability disclosure policy, supply-chain section
   (cosign, CycloneDX SBOM, `cargo-audit`, `cargo-deny`).

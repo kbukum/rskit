@@ -4727,6 +4727,7 @@ dependencies = [
  "rskit-sse",
  "rskit-stateful",
  "rskit-storage",
+ "rskit-storage-gcs",
  "rskit-storage-s3",
  "rskit-testutil",
  "rskit-validation",
@@ -5463,7 +5464,6 @@ dependencies = [
  "chrono",
  "futures",
  "futures-util",
- "google-cloud-storage",
  "image",
  "infer",
  "insta",
@@ -5475,6 +5475,21 @@ dependencies = [
  "tempfile",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "rskit-storage-gcs"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "chrono",
+ "google-cloud-storage",
+ "rskit-errors",
+ "rskit-storage",
+ "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
