@@ -365,34 +365,10 @@ mod tests {
     const ISSUER: &str = "https://issuer.example";
     const CLIENT_ID: &str = "client-123";
     const REDIRECT_URI: &str = "https://app.example/callback";
-    const RSA_PRIVATE_KEY: &str = r"-----BEGIN PRIVATE KEY-----
-MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQChPq+pjsgVjG7w
-ticKA+wZkgI6BEXntdAj3ACggtZsbAgFPNkyL8q5Za1gKj4+HcuE3a+whRCQrBPX
-6Shvch8GgKH2Q3SI7p/9cteAA4IK1XKu3luMvIUm+1hwV5x+HzQu90R4vxUTsXGd
-3oKhG/XM2zNYXGx9IJ5Y/JZB58mMtxY6pGDnPIW4/nIfAbDMQjfAsqE8ULa59O6m
-7gZFwWmMqkzdnGhbDYERo9xKYowVYEZ3uWwpoF7pN8u8vekPDMEdKeBREYidetNA
-abD4pGkOty/m+VQPtDBVY/clYZbrpG1YfmpLkw/Z5445J3jz9hxxvHWRsZn41C2T
-p9I5PB39AgMBAAECggEAJZ4jyjl62XghW7wLQI1otBB5v4JGsseabvtBFDFiB/pu
-JparD0fSEk2z1JcWXVSDKhS0C8kHc9EJcho9qj5kGZbB8luLYPTW04DK4N0wpgll
-D4HltuA2akFCQTdXVZ8/A+QBD/B4YNdJa+zA6ghFYI0VHfy1/L0y5AzNm0ORpGel
-jJ/31SQnQgud8GPicWLA1TB53zM6TkidTMQWSDGazkJOCNemXTYs2EZ4HMNLk3m2
-B/8843F1QnJP0WTTEyTDA08UJIzgoSgK/bwsBLdFybr/SguExpj7aIJH8v5Z2ycV
-0tpC+Veoo4nPFEs5Zd3+g7o7QdMV/AKyZ/s8mGvEcQKBgQDQ1THa1gN9/ff7yJWc
-Qrre/KO+7/KgETluwfjGYNkhWEe4PYbGO+lW0mGvZD6eslj4eBbm+lUtIHks+4YD
-l2AxBeMV3h9dYIRPh7N3yFVn3aAJiK5sU7lFPcL4dOZtq+lYQSzWeYaBXOEP9LEI
-ceakpJeVDFrPhKtf1v1tLj/plQKBgQDFqe+5W/UroBZG2lSgFwQ5f5BJBE9lXsTu
-457TvjtST8aPP4nOAjuhT6MDbgYeP412RYjWbfvpGAHZa6xfhztGCqI2Ev0Q3/mV
-oeeHX9r2sYq65BffvMEgw4gKFCiZ8xJTKzEZEEyZ0gh3jTMk4mms93ew03ViapIY
-vrS3PhjYyQKBgQCKBc5cl4RZWmjzNaCEVapSxOGoycgvORMfe/5jhxEbM9C7GZch
-H+nZ41SC6ptkofWhyyU/5gYzvDm6nEb3yq3d2Mk848ERI0Bvm/3m1jZ0XotuobK+
-kBtsgySAuCqwI6YnGXR8EHfwuiVaOVxke3t4J/yzmyXN8B6gSmTXK3E8fQKBgDAu
-fz/YmYebyzJUMAKh+aamYJ5bzZqxIiH1HBcTLNSgm475dvbfdneYuOyyGg2vgiUN
-SBC02I32CyVbaLYUea9WEjpKIKPHZMhDofNOu0oc9usdhHBGS3FYGEYUqdz08keR
-pLMuVO2909CIe6oHAqll3SgeM2PdBGXBvr1YBqh5AoGAY5VQ7aGeLxZuaOK+9KIu
-hVQankaSDC0T1yCKS3jnK91ea3si2KDEnk99uDspH7M/tZohXVt8rXE3cykLqZMk
-HZr7Rf7ndVPj6E6x41qOUwRgZtSOWbYY4tfeAcr/64E/KwE9cnvB4XIxrxrGOVwH
-fVY5JLsbM7l4Egd233vN6Yo=
------END PRIVATE KEY-----";
+    const RSA_PRIVATE_KEY: &str = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/testdata/rsa_private_key.pem"
+    ));
     const JWKS_JSON: &str = r#"{
       "keys": [{
         "kty": "RSA",
