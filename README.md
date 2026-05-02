@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![MSRV: 1.85](https://img.shields.io/badge/MSRV-1.85-orange.svg)](rust-toolchain.toml)
 
-**A production-grade Rust toolkit for building scalable, resilient services.** Structured errors, layered config, OpenTelemetry observability, typestate lifecycle, tower-based resilience, async pipelines, worker pools, and tonic gRPC — composable building blocks built on the standard Rust async ecosystem.
+**A production-grade Rust toolkit for building scalable, resilient services.** Structured errors, layered config, OpenTelemetry observability, typestate lifecycle, tower-based resilience, async pipelines, worker pools, security policy, and tonic gRPC — composable building blocks built on the standard Rust async ecosystem.
 
 > **Status — pre-1.0.** Public surface is semver-stable per crate; breaking changes are documented in [`CHANGELOG.md`](CHANGELOG.md). See [`docs/policy/SEMVER.md`](docs/policy/SEMVER.md). MSRV bumps are minor version changes.
 
@@ -76,6 +76,7 @@ More examples (resilience, pipelines, workers, tower layers, …) → [`docs/EXA
 | All crates | [`docs/PACKAGES.md`](docs/PACKAGES.md) |
 | Usage examples | [`docs/EXAMPLES.md`](docs/EXAMPLES.md) |
 | Design decisions & gokit comparison | [`docs/DESIGN.md`](docs/DESIGN.md) |
+| Security model | [`docs/security-model.md`](docs/security-model.md) |
 | Architecture decisions | [`docs/adr/`](docs/adr/) |
 | Versioning & releases | [`docs/VERSIONING.md`](docs/VERSIONING.md) · [`docs/RELEASING.md`](docs/RELEASING.md) |
 | Semver & deprecation policy | [`docs/policy/SEMVER.md`](docs/policy/SEMVER.md) · [`docs/policy/DEPRECATION.md`](docs/policy/DEPRECATION.md) |

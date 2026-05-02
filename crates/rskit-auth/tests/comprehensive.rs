@@ -1,42 +1,41 @@
 #![allow(missing_docs, clippy::missing_const_for_fn)]
 
+mod common;
+
 use std::time::Duration;
 
+use common::{
+    AUDIENCE, ISSUER, StandardClaims, future_exp, jwt_service, now_epoch, standard_config,
+};
 use rskit_auth::{
     JwtConfig, JwtService, PasswordHasher, ResetTokenGenerator, TokenGenerator, TokenValidator,
 };
 use serde::{Deserialize, Serialize};
 
-// ── Test Claims ─────────────────────────────────────────────────────
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-struct Claims {
+struct TenantClaims {
     sub: String,
-    exp: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-struct ClaimsWithIssAud {
-    sub: String,
-    exp: u64,
     iss: String,
     aud: Vec<String>,
+    exp: u64,
+    nbf: u64,
+    iat: u64,
+    tenant: String,
 }
 
-fn future_exp() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
-        + 3600
-}
-
-fn past_exp() -> u64 {
-    1 // Unix epoch + 1 second, definitely expired
-}
-
-fn jwt_service() -> JwtService<Claims> {
-    JwtService::new(JwtConfig::new("test-secret-key-for-auth"))
+impl TenantClaims {
+    fn new(sub: &str, tenant: &str) -> Self {
+        let now = now_epoch();
+        Self {
+            sub: sub.into(),
+            iss: ISSUER.into(),
+            aud: vec![AUDIENCE.into()],
+            exp: future_exp(),
+            nbf: now.saturating_sub(1),
+            iat: now,
+            tenant: tenant.into(),
+        }
+    }
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -45,11 +44,8 @@ fn jwt_service() -> JwtService<Claims> {
 
 #[tokio::test]
 async fn jwt_roundtrip_preserves_claims() {
-    let svc = jwt_service();
-    let claims = Claims {
-        sub: "user-abc".into(),
-        exp: future_exp(),
-    };
+    let svc = jwt_service("test-secret-key-for-auth");
+    let claims = StandardClaims::new("user-abc");
     let token = svc.generate(&claims).await.unwrap();
     let decoded = svc.validate(&token).await.unwrap();
     assert_eq!(decoded.sub, "user-abc");
@@ -57,92 +53,73 @@ async fn jwt_roundtrip_preserves_claims() {
 
 #[tokio::test]
 async fn jwt_expired_token_rejected() {
-    let svc = jwt_service();
-    let claims = Claims {
-        sub: "user-1".into(),
-        exp: past_exp(),
-    };
+    let svc = jwt_service("test-secret-key-for-auth");
+    let mut claims = StandardClaims::new("user-1");
+    claims.exp = 1;
     let token = svc.generate(&claims).await.unwrap();
     assert!(svc.validate(&token).await.is_err());
 }
 
 #[tokio::test]
 async fn jwt_invalid_signature_rejected() {
-    let svc1 = JwtService::<Claims>::new(JwtConfig::new("secret-one"));
-    let svc2 = JwtService::<Claims>::new(JwtConfig::new("secret-two"));
-    let claims = Claims {
-        sub: "u".into(),
-        exp: future_exp(),
-    };
+    let svc1 = jwt_service("secret-one");
+    let svc2 = jwt_service("secret-two");
+    let claims = StandardClaims::new("u");
     let token = svc1.generate(&claims).await.unwrap();
     assert!(svc2.validate(&token).await.is_err());
 }
 
 #[tokio::test]
 async fn jwt_empty_token_rejected() {
-    let svc = jwt_service();
+    let svc = jwt_service("test-secret-key-for-auth");
     assert!(svc.validate("").await.is_err());
 }
 
 #[tokio::test]
 async fn jwt_garbage_token_rejected() {
-    let svc = jwt_service();
+    let svc = jwt_service("test-secret-key-for-auth");
     assert!(svc.validate("not.a.jwt").await.is_err());
 }
 
 #[tokio::test]
 async fn jwt_no_dots_rejected() {
-    let svc = jwt_service();
+    let svc = jwt_service("test-secret-key-for-auth");
     assert!(svc.validate("nodots").await.is_err());
 }
 
 #[tokio::test]
 async fn jwt_issuer_validation() {
-    let svc_gen = JwtService::<ClaimsWithIssAud>::new(
-        JwtConfig::new("shared")
-            .with_issuer("issuer-a")
-            .with_audience(vec!["aud".into()]),
-    );
-    let svc_val = JwtService::<ClaimsWithIssAud>::new(
-        JwtConfig::new("shared")
-            .with_issuer("issuer-b")
-            .with_audience(vec!["aud".into()]),
-    );
-    let claims = ClaimsWithIssAud {
-        sub: "u".into(),
-        exp: future_exp(),
-        iss: "issuer-a".into(),
-        aud: vec!["aud".into()],
-    };
+    let svc_gen = JwtService::<StandardClaims>::new(standard_config("shared")).unwrap();
+    let svc_val = JwtService::<StandardClaims>::new(JwtConfig::hs256_internal(
+        "shared--padded-to-32-bytes------",
+        "https://other-issuer.test",
+        vec![AUDIENCE.into()],
+    ))
+    .unwrap();
+    let claims = StandardClaims::new("u");
     let token = svc_gen.generate(&claims).await.unwrap();
     assert!(svc_val.validate(&token).await.is_err());
 }
 
 #[tokio::test]
 async fn jwt_audience_validation() {
-    let svc_gen = JwtService::<ClaimsWithIssAud>::new(
-        JwtConfig::new("shared").with_audience(vec!["aud-a".into()]),
-    );
-    let svc_val = JwtService::<ClaimsWithIssAud>::new(
-        JwtConfig::new("shared").with_audience(vec!["aud-b".into()]),
-    );
-    let claims = ClaimsWithIssAud {
-        sub: "u".into(),
-        exp: future_exp(),
-        iss: String::new(),
-        aud: vec!["aud-a".into()],
-    };
+    let svc_gen = JwtService::<StandardClaims>::new(standard_config("shared")).unwrap();
+    let svc_val = JwtService::<StandardClaims>::new(JwtConfig::hs256_internal(
+        "shared--padded-to-32-bytes------",
+        ISSUER,
+        vec!["other-audience".into()],
+    ))
+    .unwrap();
+    let claims = StandardClaims::new("u");
     let token = svc_gen.generate(&claims).await.unwrap();
     assert!(svc_val.validate(&token).await.is_err());
 }
 
 #[tokio::test]
 async fn jwt_large_claims_roundtrip() {
-    let svc = jwt_service();
-    let claims = Claims {
-        sub: "x".repeat(10_000),
-        exp: future_exp(),
-    };
+    let svc = jwt_service("test-secret-key-for-auth");
+    let mut claims = StandardClaims::new("x".repeat(10_000));
+    claims.sub = "x".repeat(10_000);
     let token = svc.generate(&claims).await.unwrap();
     let decoded = svc.validate(&token).await.unwrap();
     assert_eq!(decoded.sub.len(), 10_000);
@@ -150,11 +127,8 @@ async fn jwt_large_claims_roundtrip() {
 
 #[tokio::test]
 async fn jwt_special_chars_in_claims() {
-    let svc = jwt_service();
-    let claims = Claims {
-        sub: "用户/special<chars>&\"quotes\"".into(),
-        exp: future_exp(),
-    };
+    let svc = jwt_service("test-secret-key-for-auth");
+    let claims = StandardClaims::new("用户/special<chars>&\"quotes\"");
     let token = svc.generate(&claims).await.unwrap();
     let decoded = svc.validate(&token).await.unwrap();
     assert_eq!(decoded.sub, claims.sub);
@@ -162,16 +136,15 @@ async fn jwt_special_chars_in_claims() {
 
 #[tokio::test]
 async fn jwt_concurrent_validation() {
-    let svc = jwt_service();
-    let claims = Claims {
-        sub: "user-concurrent".into(),
-        exp: future_exp(),
-    };
-    let token = svc.generate(&claims).await.unwrap();
+    let claims = StandardClaims::new("user-concurrent");
+    let token = jwt_service("test-secret-key-for-auth")
+        .generate(&claims)
+        .await
+        .unwrap();
 
     let mut handles = vec![];
     for _ in 0..20 {
-        let svc_clone = jwt_service();
+        let svc_clone = jwt_service("test-secret-key-for-auth");
         let t = token.clone();
         handles.push(tokio::spawn(async move {
             let decoded = svc_clone.validate(&t).await.unwrap();
@@ -181,6 +154,36 @@ async fn jwt_concurrent_validation() {
     for h in handles {
         h.await.unwrap();
     }
+}
+
+#[tokio::test]
+async fn jwt_requires_iat_and_nbf_claims() {
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+    struct MissingClaims {
+        sub: String,
+        iss: String,
+        aud: Vec<String>,
+        exp: u64,
+    }
+
+    let svc = JwtService::<MissingClaims>::new(standard_config("shared")).unwrap();
+    let claims = MissingClaims {
+        sub: "u".into(),
+        iss: ISSUER.into(),
+        aud: vec![AUDIENCE.into()],
+        exp: future_exp(),
+    };
+    let token = svc.generate(&claims).await.unwrap();
+    assert!(svc.validate(&token).await.is_err());
+}
+
+#[tokio::test]
+async fn jwt_custom_claims_survive_validation() {
+    let svc = JwtService::<TenantClaims>::new(standard_config("tenant-secret")).unwrap();
+    let claims = TenantClaims::new("user-abc", "tenant-a");
+    let token = svc.generate(&claims).await.unwrap();
+    let decoded = svc.validate(&token).await.unwrap();
+    assert_eq!(decoded.tenant, "tenant-a");
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -294,7 +297,6 @@ fn reset_token_unique() {
 fn reset_token_is_base64url() {
     let generator = ResetTokenGenerator::new(Duration::from_mins(5));
     let (token, _) = generator.generate();
-    // base64url-no-pad: only [A-Za-z0-9_-]
     assert!(
         token
             .chars()
@@ -305,7 +307,6 @@ fn reset_token_is_base64url() {
 
 #[test]
 fn reset_token_length_is_43() {
-    // 32 random bytes → base64-URL-no-pad → 43 characters
     let generator = ResetTokenGenerator::new(Duration::from_mins(5));
     let (token, _) = generator.generate();
     assert_eq!(token.len(), 43);
@@ -323,16 +324,15 @@ fn reset_token_short_ttl() {
     let generator = ResetTokenGenerator::new(Duration::from_secs(1));
     let (_, exp) = generator.generate();
     let now = chrono::Utc::now();
-    // Should expire within 2 seconds of now
     let diff = exp.signed_duration_since(now);
     assert!(diff.num_seconds() <= 2);
 }
 
 #[test]
 fn reset_token_long_ttl() {
-    let generator = ResetTokenGenerator::new(Duration::from_hours(24)); // 24 hours
+    let generator = ResetTokenGenerator::new(Duration::from_hours(24));
     let (_, exp) = generator.generate();
     let now = chrono::Utc::now();
     let diff = exp.signed_duration_since(now);
-    assert!(diff.num_seconds() >= 86390); // allow small timing tolerance
+    assert!(diff.num_seconds() >= 86390);
 }

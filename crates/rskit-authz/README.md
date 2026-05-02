@@ -1,42 +1,49 @@
-# rskit-authz — Authorization Engine
+# rskit-authz
 
-RBAC and ABAC authorization engine with deny-first evaluation.
+Canonical RBAC + ABAC authorization engine with role hierarchy, deny override, and default deny.
 
-[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml)
-[![crates.io](https://img.shields.io/crates/v/rskit-authz.svg)](https://crates.io/crates/rskit-authz)
-[![docs.rs](https://docs.rs/rskit-authz/badge.svg)](https://docs.rs/rskit-authz)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![MSRV: 1.85](https://img.shields.io/badge/MSRV-1.85-orange.svg)](https://blog.rust-lang.org/2025/02/20/Rust-1.85.0.html)
+## Highlights
 
-## Features
+- `Engine` evaluates RBAC roles and ABAC policies together
+- role inheritance with wildcard resource/action permissions
+- explicit deny policies always win
+- unmatched requests resolve to `default deny`
+- `match_pattern` / `match_any` mirror gokit and pykit wildcard semantics
 
-- `Checker` trait — async policy enforcement point (`check(subject, action, resource)`)
-- `RbacChecker` — role-based access control with wildcard matching and deny-first evaluation
-- `AbacChecker` — attribute-based access control with pluggable `AbacRule` chain
-- `Policy` with `Effect::Allow` / `Effect::Deny`
-- Deny-by-default security model
-
-## Usage
-
-```toml
-[dependencies]
-rskit-authz = "0.1"
-```
+## Example
 
 ```rust
-use rskit_authz::{Checker, RbacChecker, Policy, Effect};
+use std::collections::HashMap;
 
-async fn example() {
-    let rbac = RbacChecker::new(vec![
-        Policy { subject: "admin".into(), action: "*".into(), resource: "*".into(), effect: Effect::Allow },
-        Policy { subject: "viewer".into(), action: "read".into(), resource: "doc".into(), effect: Effect::Allow },
-    ]);
+use rskit_authz::{Checker, Engine, Permission, Request, Resource, Role, Subject};
 
-    rbac.check("admin", "delete", "doc").await.unwrap(); // allowed
-    assert!(rbac.check("viewer", "delete", "doc").await.is_err()); // denied
-}
+let engine = Engine::new(
+    vec![Role {
+        name: "editor".into(),
+        inherits: vec!["viewer".into()],
+        permissions: vec![Permission {
+            resource: "article".into(),
+            action: "write".into(),
+        }],
+    }],
+    vec![],
+)?;
+
+let allowed = engine.check(&Request {
+    subject: Subject {
+        id: "user-1".into(),
+        roles: vec!["editor".into()],
+        attributes: HashMap::new(),
+    },
+    resource: Resource {
+        resource_type: "article".into(),
+        id: "article-1".into(),
+        attributes: HashMap::new(),
+    },
+    action: "write".into(),
+    context: HashMap::new(),
+});
+
+assert!(allowed);
+# Ok::<(), String>(())
 ```
-
-## See Also
-
-[Main repository README](https://github.com/kbukum/rskit)

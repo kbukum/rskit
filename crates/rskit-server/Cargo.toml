@@ -22,6 +22,7 @@ rskit-errors     = { path = "../rskit-errors" }
 rskit-config     = { path = "../rskit-config" }
 rskit-bootstrap  = { path = "../rskit-bootstrap" }
 rskit-resilience = { path = "../rskit-resilience" }
+rskit-security   = { path = "../rskit-security" }
 tonic            = { workspace = true }
 tonic-health     = { workspace = true }
 tonic-reflection = { workspace = true }

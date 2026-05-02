@@ -47,6 +47,7 @@ rskit is a **Cargo workspace** with a facade crate (`rskit`) and 40+ independent
 |-------|-------------|
 | `rskit-observability` | OpenTelemetry tracing, metrics, context propagation |
 | `rskit-authz` | RBAC and ABAC authorization engine |
+| `rskit-security` | Secure response headers and transport security policy |
 | `rskit-discovery` | Service discovery with load balancing strategies |
 | `rskit-process` | Subprocess execution with process-group isolation |
 

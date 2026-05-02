@@ -54,6 +54,7 @@ rskit-cache         = { version = "0.1.0", path = "../rskit-cache",         opti
 rskit-messaging     = { version = "0.1.0", path = "../rskit-messaging",     optional = true }
 rskit-observability = { version = "0.1.0", path = "../rskit-observability",  optional = true }
 rskit-authz         = { version = "0.1.0", path = "../rskit-authz",         optional = true }
+rskit-security      = { version = "0.1.0", path = "../rskit-security",      optional = true }
 rskit-discovery     = { version = "0.1.0", path = "../rskit-discovery",     optional = true }
 rskit-testutil      = { version = "0.1.0", path = "../rskit-testutil",      optional = true }
 rskit-sse           = { version = "0.1.0", path = "../rskit-sse",           optional = true }
@@ -87,6 +88,7 @@ cache         = ["dep:rskit-cache"]
 messaging     = ["dep:rskit-messaging"]
 observability = ["dep:rskit-observability"]
 authz         = ["dep:rskit-authz"]
+security      = ["dep:rskit-security"]
 discovery     = ["dep:rskit-discovery"]
 testutil      = ["dep:rskit-testutil"]
 sse           = ["dep:rskit-sse"]
@@ -108,6 +110,6 @@ stateful      = ["dep:rskit-stateful"]
 test-util     = []
 full          = [
     "server", "grpc", "encryption", "http", "httpclient", "auth", "di", "database", "cache", "messaging",
-    "observability", "authz", "discovery", "testutil", "sse", "dag", "llm",
+    "observability", "authz", "security", "discovery", "testutil", "sse", "dag", "llm",
     "media-full", "file", "cli", "dataset", "bench", "chain", "process", "stateful",
 ]

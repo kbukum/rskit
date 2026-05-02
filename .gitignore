@@ -1,7 +1,21 @@
-# Rust
-/target/
+# Rust build artifacts — any depth (covers workspace root, fuzz/, benches/, etc.)
+target/
 **/*.rs.bk
 *.pdb
+
+# Fuzz sub-workspace (excluded from main workspace; its lockfile is not reproducibility-critical)
+fuzz/Cargo.lock
+
+# Coverage
+lcov.info
+*.profraw
+*.profdata
+tarpaulin-report.html
+tarpaulin-report.json
+cobertura.xml
+
+# Benchmarks
+criterion/
 
 # IDE
 .vscode/
@@ -9,16 +23,12 @@
 *.swp
 *.swo
 *~
-.DS_Store
-
-# Build artifacts
-/dist/
-/build/
 
 # Environment
 .env
 .env.local
+.secrets
 
 # OS
-Thumbs.db
 .DS_Store
+Thumbs.db

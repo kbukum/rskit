@@ -18,6 +18,6 @@ pub mod password;
 pub mod traits;
 
 pub use context::AuthClaims;
-pub use jwt::{JwtConfig, JwtService};
+pub use jwt::{JwtAlgorithm, JwtConfig, JwtKeyMaterial, JwtService};
 pub use password::{HashAlgorithm, PasswordHasher, ResetTokenGenerator};
 pub use traits::{TokenGenerator, TokenValidator};

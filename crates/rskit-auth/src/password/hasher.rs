@@ -1,8 +1,13 @@
 use argon2::{
-    Argon2,
+    Algorithm, Argon2, Params, Version,
     password_hash::{PasswordHash, PasswordHasher as Argon2Hasher, PasswordVerifier, SaltString},
 };
 use rskit_errors::{AppError, AppResult};
+
+const ARGON2_MEMORY_COST_KIB: u32 = 65_536;
+const ARGON2_TIME_COST: u32 = 3;
+const ARGON2_PARALLELISM: u32 = 4;
+const ARGON2_HASH_LEN: usize = 32;
 
 /// Supported password hashing algorithms.
 #[derive(Debug, Clone, Default)]
@@ -30,7 +35,7 @@ impl PasswordHasher {
     pub fn hash(&self, password: &str) -> AppResult<String> {
         let mut rng = argon2::password_hash::rand_core::OsRng;
         let salt = SaltString::generate(&mut rng);
-        let argon2 = Argon2::default();
+        let argon2 = configured_argon2()?;
         argon2
             .hash_password(password.as_bytes(), &salt)
             .map(|h| h.to_string())
@@ -50,10 +55,21 @@ impl PasswordHasher {
                 format!("invalid hash format: {e}"),
             )
         })?;
-        Ok(Argon2::default()
+        Ok(configured_argon2()?
             .verify_password(password.as_bytes(), &parsed)
             .is_ok())
     }
+}
+
+fn configured_argon2() -> AppResult<Argon2<'static>> {
+    let params = Params::new(
+        ARGON2_MEMORY_COST_KIB,
+        ARGON2_TIME_COST,
+        ARGON2_PARALLELISM,
+        Some(ARGON2_HASH_LEN),
+    )
+    .map_err(|_e| AppError::internal(std::io::Error::other("invalid argon2 params")))?;
+    Ok(Argon2::new(Algorithm::Argon2id, Version::V0x13, params))
 }
 
 #[cfg(test)]
@@ -66,5 +82,14 @@ mod tests {
         let hash = h.hash("hunter2").unwrap();
         assert!(h.verify("hunter2", &hash).unwrap());
         assert!(!h.verify("wrong", &hash).unwrap());
+    }
+
+    #[test]
+    fn hash_uses_locked_group_05_parameters() {
+        let hash = PasswordHasher::default().hash("hunter2hunter2").unwrap();
+        assert!(hash.contains("$argon2id$"));
+        assert!(hash.contains("m=65536"));
+        assert!(hash.contains("t=3"));
+        assert!(hash.contains("p=4"));
     }
 }

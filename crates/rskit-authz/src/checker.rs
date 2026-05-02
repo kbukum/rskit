@@ -1,12 +1,14 @@
-use async_trait::async_trait;
+//! Lightweight authorization traits.
 
-use rskit_errors::AppResult;
+use crate::engine::{Decision, Request};
 
-/// Policy enforcement point — checks whether a subject is allowed to perform
-/// an action on a resource.
-#[async_trait]
+/// Policy enforcement point for authorization checks.
 pub trait Checker: Send + Sync {
-    /// Returns `Ok(())` when the action is permitted, or a forbidden
-    /// error when denied.
-    async fn check(&self, subject: &str, action: &str, resource: &str) -> AppResult<()>;
+    /// Evaluate a request and return the full decision.
+    fn authorize(&self, request: &Request) -> Decision;
+
+    /// Return `true` when the request is allowed.
+    fn check(&self, request: &Request) -> bool {
+        self.authorize(request).allowed
+    }
 }

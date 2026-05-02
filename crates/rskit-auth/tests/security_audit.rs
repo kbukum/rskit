@@ -1,38 +1,22 @@
 //! Security audit tests for rskit-auth and rskit-errors.
-//!
-//! Covers:
-//! - Error Display trait doesn't leak secrets
-//! - JWT algorithm verification and token safety
-//! - Argon2 safe defaults
-//! - Send+Sync bounds on all public types
-//! - Panic safety (no silent failures)
 
-use std::time::{SystemTime, UNIX_EPOCH};
+mod common;
 
+use common::{AUDIENCE, ISSUER, StandardClaims, jwt_service, now_epoch, standard_config};
+use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
 use rskit_auth::jwt::{JwtConfig, JwtService};
 use rskit_auth::password::{HashAlgorithm, PasswordHasher, ResetTokenGenerator};
 use rskit_auth::traits::{TokenGenerator, TokenValidator};
 use rskit_errors::{AppError, ErrorCode, ProblemDetail};
-use serde::{Deserialize, Serialize};
 
-// ─── Test Claims Type ──────────────────────────────────────────────────────
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-struct TestClaims {
-    sub: String,
-    exp: u64,
-}
-
-fn now_epoch() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
-}
-
-fn make_jwt_service() -> JwtService<TestClaims> {
-    JwtService::new(JwtConfig::new("test-secret-key-for-audit"))
-}
+const RSA_PRIVATE_KEY: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/testdata/rsa_private_key.pem"
+));
+const RSA_PUBLIC_KEY: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/testdata/rsa_public_key.pem"
+));
 
 // ─── 1. Error Display Doesn't Leak Secrets ─────────────────────────────────
 
@@ -74,20 +58,10 @@ fn internal_error_message_is_generic_when_displayed_via_error_response() {
     );
     let err = AppError::internal(cause);
     let response = ProblemDetail::from(&err);
-
-    // The ProblemDetail detail should not contain "s3cret" since it comes
-    // from the AppError message field which includes the cause string.
-    // This test documents current behavior — if it fails, the code may need fixing.
     assert!(
-        !response.detail.contains("s3cret") || {
-            // If it does contain it, flag as a known concern but don't block CI.
-            // The actual HTTP layer should sanitize before sending to clients.
-            eprintln!(
-                "SECURITY NOTE: ProblemDetail.detail contains cause details: {}",
-                response.detail
-            );
-            true
-        }
+        !response.detail.contains("s3cret"),
+        "ProblemDetail leaked secret: {:?}",
+        response.detail
     );
 }
 
@@ -117,14 +91,10 @@ fn auth_error_messages_do_not_reveal_system_info() {
 
 #[tokio::test]
 async fn jwt_wrong_secret_rejected() {
-    let svc1 = JwtService::<TestClaims>::new(JwtConfig::new("secret-key-one-for-service-a"));
-    let svc2 = JwtService::<TestClaims>::new(JwtConfig::new("secret-key-two-for-service-b"));
+    let svc1 = jwt_service("secret-key-one-for-service-a");
+    let svc2 = jwt_service("secret-key-two-for-service-b");
 
-    let claims = TestClaims {
-        sub: "user-123".into(),
-        exp: now_epoch() + 3600,
-    };
-
+    let claims = StandardClaims::new("user-123");
     let token = svc1.generate(&claims).await.unwrap();
     let result = svc2.validate(&token).await;
     assert!(
@@ -135,24 +105,21 @@ async fn jwt_wrong_secret_rejected() {
 
 #[tokio::test]
 async fn jwt_expired_token_rejected() {
-    let svc = make_jwt_service();
-    let claims = TestClaims {
-        sub: "user-123".into(),
-        exp: 1, // far in the past
-    };
+    let svc = jwt_service("test-secret-key-for-audit");
+    let mut claims = StandardClaims::new("user-123");
+    claims.exp = 1;
 
     let token = svc.generate(&claims).await.unwrap();
     let result = svc.validate(&token).await;
     assert!(result.is_err(), "Expired token should be rejected");
 
-    // Verify the error is specifically token_expired
     let err = result.unwrap_err();
     assert_eq!(err.code, ErrorCode::TokenExpired);
 }
 
 #[tokio::test]
 async fn jwt_malformed_tokens_rejected() {
-    let svc = make_jwt_service();
+    let svc = jwt_service("test-secret-key-for-audit");
 
     let long_token = "a".repeat(100_000);
     let malformed_tokens = vec!["", "not-a-jwt", "a.b", "a.b.c", "   ", &long_token];
@@ -170,7 +137,7 @@ async fn jwt_malformed_tokens_rejected() {
 #[tokio::test]
 async fn jwt_parse_error_does_not_leak_secret() {
     let secret = "ultra-secret-key-that-must-not-leak";
-    let svc = JwtService::<TestClaims>::new(JwtConfig::new(secret));
+    let svc = JwtService::<StandardClaims>::new(standard_config(secret)).unwrap();
 
     let result = svc.validate("invalid.token.here").await;
     assert!(result.is_err());
@@ -185,15 +152,50 @@ async fn jwt_parse_error_does_not_leak_secret() {
 
 #[tokio::test]
 async fn jwt_roundtrip_succeeds() {
-    let svc = make_jwt_service();
-    let claims = TestClaims {
-        sub: "user-123".into(),
-        exp: now_epoch() + 3600,
-    };
+    let svc = jwt_service("test-secret-key-for-audit");
+    let claims = StandardClaims::new("user-123");
 
     let token = svc.generate(&claims).await.unwrap();
     let decoded = svc.validate(&token).await.unwrap();
     assert_eq!(decoded, claims);
+}
+
+#[tokio::test]
+async fn jwt_algorithm_confusion_attack_is_rejected() {
+    let validator = JwtService::<StandardClaims>::new(JwtConfig::rs256(
+        RSA_PRIVATE_KEY,
+        RSA_PUBLIC_KEY,
+        ISSUER,
+        vec![AUDIENCE.into()],
+    ))
+    .unwrap();
+
+    let claims = StandardClaims::new("user-123");
+    let header = Header::new(Algorithm::HS256);
+    let attack_token = encode(
+        &header,
+        &claims,
+        &EncodingKey::from_secret(RSA_PUBLIC_KEY.as_bytes()),
+    )
+    .unwrap();
+
+    let result = validator.validate(&attack_token).await;
+    assert!(
+        result.is_err(),
+        "algorithm confusion token must be rejected"
+    );
+}
+
+#[tokio::test]
+async fn jwt_alg_none_is_rejected() {
+    let validator = jwt_service("alg-none-test");
+    let token = concat!(
+        "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.",
+        "eyJzdWIiOiJ1c2VyLTEyMyIsImlzcyI6Imh0dHBzOi8vaXNzdWVyLnJza2l0LnRlc3QiLCJhdWQiOlsicnNraXQtYXV0aC10ZXN0cyJdLCJleHAiOjQxMDI0NDQ4MDAsIm5iZiI6MTcwMDAwMDAwMCwiaWF0IjoxNzAwMDAwMDAwfQ.",
+        ""
+    );
+
+    assert!(validator.validate(token).await.is_err());
 }
 
 // ─── 3. Password Hashing Safety ────────────────────────────────────────────
@@ -237,7 +239,6 @@ fn argon2_malformed_hash_returns_error() {
 #[test]
 fn argon2_empty_password_hashes_without_panic() {
     let hasher = PasswordHasher::default();
-    // Empty password may or may not be accepted, but should not panic
     let _ = hasher.hash("");
 }
 
@@ -268,7 +269,6 @@ fn reset_tokens_are_unique() {
 fn reset_token_has_sufficient_entropy() {
     let generator = ResetTokenGenerator::new(std::time::Duration::from_mins(5));
     let (token, _) = generator.generate();
-    // base64url of 32 bytes = 43 characters
     assert!(
         token.len() >= 40,
         "Reset token should have sufficient length (got {})",
@@ -288,8 +288,6 @@ fn reset_token_expiry_is_in_future() {
 
 // ─── 5. Send+Sync Bounds ──────────────────────────────────────────────────
 
-/// Compile-time assertion that key types are Send + Sync.
-/// If this test compiles, the assertion passes.
 #[test]
 fn public_types_are_send_and_sync() {
     fn assert_send_sync<T: Send + Sync>() {}
@@ -298,7 +296,7 @@ fn public_types_are_send_and_sync() {
     assert_send_sync::<ErrorCode>();
     assert_send_sync::<ProblemDetail>();
     assert_send_sync::<JwtConfig>();
-    assert_send_sync::<JwtService<TestClaims>>();
+    assert_send_sync::<JwtService<StandardClaims>>();
     assert_send_sync::<PasswordHasher>();
     assert_send_sync::<HashAlgorithm>();
     assert_send_sync::<ResetTokenGenerator>();
@@ -331,11 +329,10 @@ fn problem_detail_from_app_error_has_correct_status() {
 fn error_response_serialization_excludes_cause() {
     let err = AppError::internal(std::io::Error::other("secret connection string here"));
     let json = serde_json::to_string(&err).unwrap();
-    // The serialized form should not contain the cause's internal message
-    // if the message field itself includes it, that's a known concern
+    assert!(!json.is_empty());
     assert!(
-        !json.contains("secret connection string") || json.contains("secret connection string"),
-        // This test documents behavior — cause text flows into message
+        !json.contains("secret connection string here"),
+        "Serialized error leaked internal cause: {json}"
     );
 }
 
@@ -343,16 +340,14 @@ fn error_response_serialization_excludes_cause() {
 
 #[tokio::test]
 async fn concurrent_jwt_generate_and_validate() {
-    let svc = std::sync::Arc::new(make_jwt_service());
+    let svc = std::sync::Arc::new(jwt_service("test-secret-key-for-audit"));
 
     let mut handles = Vec::new();
     for i in 0..20 {
         let svc = svc.clone();
         handles.push(tokio::spawn(async move {
-            let claims = TestClaims {
-                sub: format!("user-{i}"),
-                exp: now_epoch() + 3600,
-            };
+            let mut claims = StandardClaims::new(format!("user-{i}"));
+            claims.iat = now_epoch();
             let token = svc.generate(&claims).await.unwrap();
             let decoded = svc.validate(&token).await.unwrap();
             assert_eq!(decoded.sub, format!("user-{i}"));

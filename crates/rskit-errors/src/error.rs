@@ -182,24 +182,31 @@ impl AppError {
     }
 
     /// Wrap an arbitrary error as an `Internal` application error.
+    ///
+    /// The cause is stored internally for logging but is NOT included in the serialized
+    /// response — callers receive a generic "internal server error" message.
     pub fn internal(cause: impl std::error::Error + Send + Sync + 'static) -> Self {
-        let msg = cause.to_string();
-        Self::new(ErrorCode::Internal, msg).with_cause(cause)
+        Self::new(ErrorCode::Internal, "internal server error").with_cause(cause)
     }
 
     /// Wrap a database error.
+    ///
+    /// The cause is stored internally for logging but is NOT included in the serialized
+    /// response — callers receive a generic "database error" message.
     pub fn database_error(cause: impl std::error::Error + Send + Sync + 'static) -> Self {
-        let msg = format!("database error: {cause}");
-        Self::new(ErrorCode::DatabaseError, msg).with_cause(cause)
+        Self::new(ErrorCode::DatabaseError, "database error").with_cause(cause)
     }
 
     /// Wrap an external service error, naming the dependency.
+    ///
+    /// The cause is stored internally for logging but is NOT included in the serialized
+    /// response — callers receive a generic message naming only the service.
     pub fn external_service(
         service: impl Into<String>,
         cause: impl std::error::Error + Send + Sync + 'static,
     ) -> Self {
         let svc = service.into();
-        let msg = format!("external service error ({svc}): {cause}");
+        let msg = format!("external service error ({svc})");
         Self::new(ErrorCode::ExternalService, msg)
             .with_cause(cause)
             .with_detail("service", svc)

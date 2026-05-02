@@ -1,10 +1,65 @@
-//! API key data structure, generation, hashing, and validation.
+//! API key generation, peppered digest storage, and validation helpers.
 
+use std::fmt;
+
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
+use hmac::{Hmac, KeyInit, Mac};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
+use sha2::Sha256;
 
-/// API key metadata (never stores the plaintext).
+type HmacSha256 = Hmac<Sha256>;
+
+const DEFAULT_ENTROPY_BYTES: usize = 32;
+const MIN_ENTROPY_BYTES: usize = 16;
+const MIN_PEPPER_BYTES: usize = 32;
+
+/// API key hashing configuration.
+#[derive(Clone, Deserialize)]
+pub struct HashingConfig {
+    /// Secret pepper used for HMAC-SHA-256 digest storage.
+    pub pepper: String,
+    /// Random secret entropy in bytes.
+    pub entropy_bytes: usize,
+}
+
+impl HashingConfig {
+    /// Create a hashing configuration with the default entropy budget.
+    #[must_use]
+    pub fn new(pepper: impl Into<String>) -> Self {
+        Self {
+            pepper: pepper.into(),
+            entropy_bytes: DEFAULT_ENTROPY_BYTES,
+        }
+    }
+
+    /// Validate the configuration.
+    pub fn validate(&self) -> Result<(), String> {
+        if self.pepper.len() < MIN_PEPPER_BYTES {
+            return Err(format!(
+                "apikey: pepper must be at least {MIN_PEPPER_BYTES} bytes"
+            ));
+        }
+        if self.entropy_bytes < MIN_ENTROPY_BYTES {
+            return Err(format!(
+                "apikey: entropy_bytes must be at least {MIN_ENTROPY_BYTES}"
+            ));
+        }
+        Ok(())
+    }
+}
+
+impl fmt::Debug for HashingConfig {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("HashingConfig")
+            .field("pepper", &"<redacted>")
+            .field("entropy_bytes", &self.entropy_bytes)
+            .finish()
+    }
+}
+
+/// Persisted API key metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Key {
     /// Unique identifier for this key.
@@ -13,28 +68,29 @@ pub struct Key {
     pub owner_id: String,
     /// Human-readable name for the key.
     pub name: String,
-    /// SHA-256 hash of the plaintext key.
-    pub key_hash: String,
-    /// Short prefix shown for identification (e.g. `sk_live_a1b2`).
+    /// Display-safe key prefix used for candidate lookup.
     pub key_prefix: String,
-    /// Scopes the key is authorised for.
+    /// Pepper-keyed HMAC-SHA-256 digest stored at rest.
+    pub key_digest: String,
+    /// Scopes granted to the key.
     pub scopes: Vec<String>,
-    /// Whether the key is currently active.
+    /// Whether the key is active.
     pub is_active: bool,
-    /// When the key expires (`None` = never).
+    /// Expiry time.
     pub expires_at: Option<DateTime<Utc>>,
-    /// End of the grace period after rotation (`None` = no grace).
+    /// Grace period end after rotation.
     pub grace_ends_at: Option<DateTime<Utc>>,
-    /// ID of the replacement key if this key was rotated.
+    /// Replacement key ID after rotation.
     pub rotated_by_id: Option<String>,
-    /// Timestamp of the last successful validation.
+    /// Last successful validation time.
     pub last_used_at: Option<DateTime<Utc>>,
-    /// When this key was created.
+    /// Creation timestamp.
     pub created_at: DateTime<Utc>,
 }
 
 impl Key {
-    /// Return true if the key is expired and beyond its grace period.
+    /// Return `true` when the key is expired and beyond any grace period.
+    #[must_use]
     pub fn is_expired_past_grace(&self) -> bool {
         let now = Utc::now();
         if let Some(grace_ends_at) = self.grace_ends_at
@@ -52,70 +108,127 @@ impl Key {
     }
 }
 
-/// Result of key generation — contains the plaintext shown once.
-#[derive(Debug, Clone, zeroize::Zeroize, zeroize::ZeroizeOnDrop)]
+/// One-time API key material returned to callers.
+#[derive(Clone, zeroize::Zeroize, zeroize::ZeroizeOnDrop)]
 pub struct GenerateResult {
-    /// The full plaintext key (show once, then discard).
+    /// Plaintext key shown once.
     pub plain_key: String,
-    /// SHA-256 hash to store in the database.
-    pub key_hash: String,
-    /// Short display prefix for user-facing logs.
-    pub prefix: String,
+    /// Prefix stored alongside metadata.
+    pub key_prefix: String,
+    /// Pepper-keyed digest stored at rest.
+    pub key_digest: String,
 }
 
-/// Generate a new random API key with the given prefix.
-///
-/// The key is `prefix` + 32 hex characters (16 random bytes).
-/// Example: `generate("sk_live_")` produces `"sk_live_a1b2c3d4e5f6..."`
-pub fn generate(prefix: &str) -> GenerateResult {
-    let mut random_bytes = [0u8; 16];
-    rand::fill(&mut random_bytes);
-    let random_hex = hex::encode(random_bytes);
-    let plain_key = format!("{prefix}{random_hex}");
-    let key_hash = hash_key(&plain_key);
-    let display_prefix = if plain_key.len() > 8 {
-        plain_key[..8].to_string()
-    } else {
-        plain_key.clone()
-    };
-
-    GenerateResult {
-        plain_key,
-        key_hash,
-        prefix: display_prefix,
+impl fmt::Debug for GenerateResult {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("GenerateResult")
+            .field("plain_key", &"<redacted>")
+            .field("key_prefix", &self.key_prefix)
+            .field("key_digest", &self.key_digest)
+            .finish()
     }
 }
 
-/// Return the SHA-256 hex digest of a plaintext API key.
-pub fn hash_key(plain_key: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(plain_key.as_bytes());
-    hex::encode(hasher.finalize())
-}
-
-/// Perform a constant-time comparison between the hash of a plaintext key
-/// and a stored hash. Returns `true` if they match.
+/// API key hasher and issuer.
 ///
-/// This prevents timing attacks that could leak information about stored hashes.
-pub fn compare_hash(plain_key: &str, stored_hash: &str) -> bool {
-    use subtle::ConstantTimeEq;
-    let computed = hash_key(plain_key);
-    computed.as_bytes().ct_eq(stored_hash.as_bytes()).into()
+/// The HMAC key is validated and pre-initialized at construction time so that
+/// `digest` and `compare` are fully infallible at call time.
+#[derive(Clone)]
+pub struct Hasher {
+    config: HashingConfig,
+    /// Pre-initialized HMAC state; cloned cheaply for each digest call.
+    hmac_prototype: HmacSha256,
 }
 
-/// Error returned when an API key fails validation.
+impl fmt::Debug for Hasher {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Hasher")
+            .field("config", &self.config)
+            .field("hmac_prototype", &"<redacted>")
+            .finish()
+    }
+}
+
+impl Hasher {
+    /// Construct a new hasher, validating config and pre-initializing the HMAC key.
+    pub fn new(mut config: HashingConfig) -> Result<Self, String> {
+        if config.entropy_bytes == 0 {
+            config.entropy_bytes = DEFAULT_ENTROPY_BYTES;
+        }
+        config.validate()?;
+        let hmac_prototype = HmacSha256::new_from_slice(config.pepper.as_bytes())
+            .map_err(|e| format!("apikey: failed to initialize HMAC key: {e}"))?;
+        Ok(Self {
+            config,
+            hmac_prototype,
+        })
+    }
+
+    /// Return the active configuration.
+    #[must_use]
+    pub const fn config(&self) -> &HashingConfig {
+        &self.config
+    }
+
+    /// Generate a new API key with the supplied prefix.
+    pub fn generate_key(&self, prefix: &str) -> Result<GenerateResult, String> {
+        validate_prefix(prefix)?;
+
+        let mut random_bytes = vec![0_u8; self.config.entropy_bytes];
+        rand::fill(random_bytes.as_mut_slice());
+        let secret = URL_SAFE_NO_PAD.encode(random_bytes);
+        let plain_key = format!("{prefix}.{secret}");
+
+        Ok(GenerateResult {
+            key_prefix: prefix.to_string(),
+            key_digest: self.digest(&plain_key),
+            plain_key,
+        })
+    }
+
+    /// Compute the peppered HMAC-SHA-256 digest for a plaintext key.
+    ///
+    /// Infallible — the HMAC key was validated at construction.
+    #[must_use]
+    pub fn digest(&self, plain_key: &str) -> String {
+        let mut mac = self.hmac_prototype.clone();
+        mac.update(plain_key.as_bytes());
+        hex::encode(mac.finalize().into_bytes())
+    }
+
+    /// Constant-time digest comparison.
+    #[must_use]
+    pub fn compare(&self, plain_key: &str, stored_digest: &str) -> bool {
+        let computed = self.digest(plain_key);
+        subtle::ConstantTimeEq::ct_eq(computed.as_bytes(), stored_digest.as_bytes()).into()
+    }
+}
+
+/// Split a plaintext key into `(prefix, secret)`.
+pub fn split_key(plain_key: &str) -> Result<(String, String), String> {
+    let Some((prefix, secret)) = plain_key.split_once('.') else {
+        return Err(String::from("apikey: invalid key format"));
+    };
+    if prefix.is_empty() || secret.is_empty() {
+        return Err(String::from("apikey: invalid key format"));
+    }
+    Ok((prefix.to_string(), secret.to_string()))
+}
+
+/// Error returned when a key is not usable.
 #[derive(Debug, Clone, thiserror::Error)]
 #[non_exhaustive]
 pub enum KeyValidationError {
-    /// The key has been explicitly revoked.
+    /// The key has been revoked.
     #[error("key is revoked")]
     Revoked,
-    /// The key has expired (and any grace period has ended).
+    /// The key is expired past its grace period.
     #[error("key is expired")]
     Expired,
 }
 
-/// Check that a key is usable (active and not expired past grace).
+/// Validate key usability.
 pub fn validate(key: &Key) -> Result<(), KeyValidationError> {
     if !key.is_active {
         return Err(KeyValidationError::Revoked);
@@ -126,25 +239,61 @@ pub fn validate(key: &Key) -> Result<(), KeyValidationError> {
     Ok(())
 }
 
+fn validate_prefix(prefix: &str) -> Result<(), String> {
+    if prefix.is_empty() {
+        return Err(String::from("apikey: prefix must be non-empty"));
+    }
+    if prefix
+        .chars()
+        .any(|char| !char.is_ascii_alphanumeric() && char != '-' && char != '_')
+    {
+        return Err(String::from(
+            "apikey: prefix must contain only [A-Za-z0-9_-]",
+        ));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{GenerateResult, Hasher, HashingConfig, split_key};
 
     #[test]
-    fn compare_hash_matching() {
-        let key = "sk_test_abc123def456";
-        let hash = hash_key(key);
-        assert!(compare_hash(key, &hash));
+    fn hashing_config_debug_redacts_pepper() {
+        let formatted = format!("{:?}", HashingConfig::new("very-secret-pepper-material"));
+        assert!(formatted.contains("<redacted>"));
+        assert!(!formatted.contains("very-secret-pepper-material"));
     }
 
     #[test]
-    fn compare_hash_wrong_key() {
-        let hash = hash_key("sk_test_abc123def456");
-        assert!(!compare_hash("sk_test_wrong", &hash));
+    fn generate_result_debug_redacts_plain_key() {
+        let formatted = format!(
+            "{:?}",
+            GenerateResult {
+                plain_key: "sk_live.secret".into(),
+                key_prefix: "sk_live".into(),
+                key_digest: "digest".into(),
+            }
+        );
+        assert!(formatted.contains("<redacted>"));
+        assert!(!formatted.contains("sk_live.secret"));
     }
 
     #[test]
-    fn compare_hash_wrong_hash() {
-        assert!(!compare_hash("sk_test_abc123def456", "badhash"));
+    fn generate_and_compare_roundtrip() {
+        let hasher = Hasher::new(HashingConfig {
+            pepper: "p".repeat(32),
+            entropy_bytes: 32,
+        })
+        .unwrap();
+        let issued = hasher.generate_key("pk").unwrap();
+        assert!(issued.plain_key.starts_with("pk."));
+        assert!(hasher.compare(&issued.plain_key, &issued.key_digest));
+    }
+
+    #[test]
+    fn split_key_rejects_malformed_values() {
+        assert!(split_key("pk.secret").is_ok());
+        assert!(split_key("malformed").is_err());
     }
 }

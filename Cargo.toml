@@ -32,6 +32,7 @@ members = [
     # phase 4 platform
     "crates/rskit-observability",
     "crates/rskit-authz",
+    "crates/rskit-security",
     "crates/rskit-discovery",
     "crates/rskit-grpc",
     "crates/rskit-testutil",
@@ -171,12 +172,12 @@ opentelemetry            = "0.31"
 opentelemetry_sdk        = { version = "0.31", features = ["rt-tokio", "logs"] }
 opentelemetry-otlp       = { version = "0.31", features = ["grpc-tonic", "metrics", "logs", "http-proto"] }
 opentelemetry-appender-tracing = "0.31"
-opentelemetry-prometheus = "0.27"
-prometheus               = "0.13"
+opentelemetry-prometheus = "0.31.0"
+prometheus               = "0.14.0"
 tracing-opentelemetry    = "0.32"
 
 # HTTP client (shared)
-reqwest      = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+reqwest      = { version = "0.13", features = ["json", "rustls", "http2", "query"], default-features = false }
 
 # Concurrent hash map (discovery)
 dashmap      = "6"

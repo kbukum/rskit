@@ -33,14 +33,17 @@ base64        = "0.22"
 chrono        = { workspace = true }
 uuid          = { workspace = true }
 sha2          = "0.11"
+hmac          = "0.13"
 subtle        = "2.6"
 hex           = "0.4"
 thiserror     = { workspace = true }
 tower         = "0.5"
 http          = "1.0"
 zeroize       = { workspace = true }
+reqwest       = { workspace = true }
 
 [dev-dependencies]
 tokio         = { workspace = true, features = ["full", "macros", "rt-multi-thread"] }
 serde_json    = { workspace = true }
 chrono        = { workspace = true }
+parking_lot   = { workspace = true }

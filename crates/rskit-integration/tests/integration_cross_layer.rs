@@ -3,13 +3,14 @@
 //! Tests verify that modules work together correctly across architectural layers.
 //! Each test exercises at least 2 crates from different layers using real APIs.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::time::Duration;
 
 use async_trait::async_trait;
 use rskit_auth::{JwtConfig, JwtService, TokenGenerator, TokenValidator};
-use rskit_authz::{Checker, Effect, Policy, RbacChecker};
+use rskit_authz::{Checker, Effect, Engine, Permission, Policy, Request, Resource, Role, Subject};
 use rskit_bootstrap::{AppBuilder, Component, Health, HealthStatus, Registry};
 use rskit_di::Container;
 use rskit_errors::{AppError, AppResult, ErrorCode};
@@ -423,7 +424,11 @@ fn di_component_singleton_returns_same_instance() {
 struct TestClaims {
     sub: String,
     role: String,
+    iss: String,
+    aud: Vec<String>,
     exp: u64,
+    nbf: u64,
+    iat: u64,
 }
 
 fn future_exp() -> u64 {
@@ -434,129 +439,221 @@ fn future_exp() -> u64 {
         + 3600
 }
 
+fn now_epoch() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+}
+
 #[tokio::test]
 async fn auth_authz_jwt_claims_feed_rbac() {
-    let jwt_svc = JwtService::<TestClaims>::new(JwtConfig::new("integration-test-secret"));
+    let jwt_svc = JwtService::<TestClaims>::new(JwtConfig::hs256_internal(
+        "integration-test-secret-key-0001",
+        "https://issuer.rskit.test",
+        vec!["rskit-integration".into()],
+    ))
+    .unwrap();
 
     // Generate token with role
+    let now = now_epoch();
     let claims = TestClaims {
         sub: "user-1".into(),
         role: "admin".into(),
+        iss: "https://issuer.rskit.test".into(),
+        aud: vec!["rskit-integration".into()],
         exp: future_exp(),
+        nbf: now.saturating_sub(1),
+        iat: now,
     };
     let token = jwt_svc.generate(&claims).await.unwrap();
     let decoded = jwt_svc.validate(&token).await.unwrap();
 
-    // Feed claims into RBAC checker
-    let checker = RbacChecker::new(vec![
-        Policy {
-            subject: "admin".into(),
-            action: "*".into(),
-            resource: "*".into(),
-            effect: Effect::Allow,
-        },
-        Policy {
-            subject: "viewer".into(),
-            action: "read".into(),
-            resource: "*".into(),
-            effect: Effect::Allow,
-        },
-    ]);
+    let checker = Engine::new(
+        vec![
+            Role {
+                name: "admin".into(),
+                inherits: vec![],
+                permissions: vec![Permission {
+                    resource: "*".into(),
+                    action: "*".into(),
+                }],
+            },
+            Role {
+                name: "viewer".into(),
+                inherits: vec![],
+                permissions: vec![Permission {
+                    resource: "*".into(),
+                    action: "read".into(),
+                }],
+            },
+        ],
+        vec![],
+    )
+    .unwrap();
 
-    // Admin should have wildcard access
-    assert!(
-        checker
-            .check(&decoded.role, "delete", "users")
-            .await
-            .is_ok()
-    );
-    assert!(
-        checker
-            .check(&decoded.role, "write", "articles")
-            .await
-            .is_ok()
-    );
+    let delete_request = Request {
+        subject: Subject {
+            id: decoded.sub.clone(),
+            roles: vec![decoded.role.clone()],
+            attributes: HashMap::new(),
+        },
+        resource: Resource {
+            resource_type: "users".into(),
+            id: String::new(),
+            attributes: HashMap::new(),
+        },
+        action: "delete".into(),
+        context: HashMap::new(),
+    };
+    let write_request = Request {
+        subject: Subject {
+            id: decoded.sub.clone(),
+            roles: vec![decoded.role.clone()],
+            attributes: HashMap::new(),
+        },
+        resource: Resource {
+            resource_type: "articles".into(),
+            id: String::new(),
+            attributes: HashMap::new(),
+        },
+        action: "write".into(),
+        context: HashMap::new(),
+    };
+
+    assert!(checker.check(&delete_request));
+    assert!(checker.check(&write_request));
 }
 
 #[tokio::test]
 async fn auth_authz_restricted_role() {
-    let jwt_svc = JwtService::<TestClaims>::new(JwtConfig::new("restricted-secret"));
+    let jwt_svc = JwtService::<TestClaims>::new(JwtConfig::hs256_internal(
+        "restricted-secret-key-00000000001",
+        "https://issuer.rskit.test",
+        vec!["rskit-integration".into()],
+    ))
+    .unwrap();
 
+    let now = now_epoch();
     let claims = TestClaims {
         sub: "user-2".into(),
         role: "viewer".into(),
+        iss: "https://issuer.rskit.test".into(),
+        aud: vec!["rskit-integration".into()],
         exp: future_exp(),
+        nbf: now.saturating_sub(1),
+        iat: now,
     };
     let token = jwt_svc.generate(&claims).await.unwrap();
     let decoded = jwt_svc.validate(&token).await.unwrap();
 
-    let checker = RbacChecker::new(vec![Policy {
-        subject: "viewer".into(),
-        action: "read".into(),
-        resource: "*".into(),
-        effect: Effect::Allow,
-    }]);
+    let checker = Engine::new(
+        vec![Role {
+            name: "viewer".into(),
+            inherits: vec![],
+            permissions: vec![Permission {
+                resource: "*".into(),
+                action: "read".into(),
+            }],
+        }],
+        vec![],
+    )
+    .unwrap();
 
-    assert!(
-        checker
-            .check(&decoded.role, "read", "articles")
-            .await
-            .is_ok()
-    );
-    assert!(
-        checker
-            .check(&decoded.role, "write", "articles")
-            .await
-            .is_err()
-    );
+    let read_request = Request {
+        subject: Subject {
+            id: decoded.sub.clone(),
+            roles: vec![decoded.role.clone()],
+            attributes: HashMap::new(),
+        },
+        resource: Resource {
+            resource_type: "articles".into(),
+            id: String::new(),
+            attributes: HashMap::new(),
+        },
+        action: "read".into(),
+        context: HashMap::new(),
+    };
+    let write_request = Request {
+        subject: Subject {
+            id: decoded.sub.clone(),
+            roles: vec![decoded.role.clone()],
+            attributes: HashMap::new(),
+        },
+        resource: Resource {
+            resource_type: "articles".into(),
+            id: String::new(),
+            attributes: HashMap::new(),
+        },
+        action: "write".into(),
+        context: HashMap::new(),
+    };
+
+    assert!(checker.check(&read_request));
+    assert!(!checker.check(&write_request));
 }
 
 #[tokio::test]
 async fn auth_authz_deny_overrides_allow() {
-    let jwt_svc = JwtService::<TestClaims>::new(JwtConfig::new("deny-test-secret"));
+    let jwt_svc = JwtService::<TestClaims>::new(JwtConfig::hs256_internal(
+        "deny-test-secret-key-000000000001",
+        "https://issuer.rskit.test",
+        vec!["rskit-integration".into()],
+    ))
+    .unwrap();
 
+    let now = now_epoch();
     let claims = TestClaims {
         sub: "user-3".into(),
         role: "editor".into(),
+        iss: "https://issuer.rskit.test".into(),
+        aud: vec!["rskit-integration".into()],
         exp: future_exp(),
+        nbf: now.saturating_sub(1),
+        iat: now,
     };
     let token = jwt_svc.generate(&claims).await.unwrap();
     let decoded = jwt_svc.validate(&token).await.unwrap();
 
-    let checker = RbacChecker::new(vec![
-        Policy {
-            subject: "editor".into(),
-            action: "*".into(),
-            resource: "articles".into(),
-            effect: Effect::Allow,
-        },
-        Policy {
-            subject: "editor".into(),
-            action: "delete".into(),
-            resource: "articles".into(),
+    let checker = Engine::new(
+        vec![Role {
+            name: "editor".into(),
+            inherits: vec![],
+            permissions: vec![Permission {
+                resource: "articles".into(),
+                action: "*".into(),
+            }],
+        }],
+        vec![Policy {
+            name: "deny-delete".into(),
             effect: Effect::Deny,
-        },
-    ]);
+            actions: vec!["delete".into()],
+            resources: vec!["articles".into()],
+            conditions: vec![],
+        }],
+    )
+    .unwrap();
 
-    assert!(
-        checker
-            .check(&decoded.role, "read", "articles")
-            .await
-            .is_ok()
-    );
-    assert!(
-        checker
-            .check(&decoded.role, "write", "articles")
-            .await
-            .is_ok()
-    );
-    // Deny should override the wildcard allow
-    assert!(
-        checker
-            .check(&decoded.role, "delete", "articles")
-            .await
-            .is_err()
-    );
+    let mut request = Request {
+        subject: Subject {
+            id: decoded.sub.clone(),
+            roles: vec![decoded.role.clone()],
+            attributes: HashMap::new(),
+        },
+        resource: Resource {
+            resource_type: "articles".into(),
+            id: String::new(),
+            attributes: HashMap::new(),
+        },
+        action: "read".into(),
+        context: HashMap::new(),
+    };
+
+    assert!(checker.check(&request));
+    request.action = "write".into();
+    assert!(checker.check(&request));
+    request.action = "delete".into();
+    assert!(!checker.check(&request));
 }
 
 // ─── 7. Errors → Validation → Pipeline ─────────────────────────────────────
