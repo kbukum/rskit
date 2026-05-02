@@ -1,18 +1,17 @@
-//! RBAC and ABAC authorization engine.
-//!
-//! Provides a [`Checker`] trait and two built-in implementations:
-//! - [`RbacChecker`] — role-based access control with wildcard matching.
-//! - [`AbacChecker`] — attribute-based access control with pluggable rules.
+//! Canonical RBAC + ABAC authorization engine with deny-override semantics.
 
 #![warn(missing_docs)]
 
-/// Attribute-based access control.
-pub mod abac;
 /// Core authorization checker trait.
 pub mod checker;
-/// Role-based access control.
-pub mod rbac;
+/// Canonical authorization engine.
+pub mod engine;
+/// Wildcard permission matching.
+pub mod matcher;
 
-pub use abac::{AbacChecker, AbacRule};
 pub use checker::Checker;
-pub use rbac::{Effect, Policy, RbacChecker};
+pub use engine::{
+    AttributeSource, Attributes, Condition, Decision, Effect, Engine, Operator, Permission, Policy,
+    Request, Resource, Role, Subject,
+};
+pub use matcher::{match_any, match_pattern};

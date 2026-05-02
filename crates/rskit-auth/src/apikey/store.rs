@@ -6,19 +6,19 @@ use rskit_errors::AppError;
 
 use super::Key;
 
-/// Persistence contract for API keys. Consumers implement with their database.
+/// Persistence contract for API keys.
 #[async_trait]
 pub trait Store: Send + Sync {
     /// Persist a new key record.
     async fn create(&self, key: Key) -> Result<(), AppError>;
-    /// Retrieve a key by its SHA-256 hash.
-    async fn get_by_hash(&self, key_hash: &str) -> Result<Key, AppError>;
-    /// Retrieve a key by its unique ID.
+    /// List candidate keys by prefix.
+    async fn list_by_prefix(&self, key_prefix: &str) -> Result<Vec<Key>, AppError>;
+    /// Retrieve a key by ID.
     async fn get_by_id(&self, key_id: &str) -> Result<Key, AppError>;
-    /// Bump the `last_used_at` timestamp.
-    async fn update_last_used(&self, key_id: &str) -> Result<(), AppError>;
-    /// Set a grace period on a rotated key.
-    async fn set_grace_period(
+    /// Update last-used timestamp.
+    async fn update_last_used(&self, key_id: &str, used_at: DateTime<Utc>) -> Result<(), AppError>;
+    /// Set rotation metadata.
+    async fn set_rotation(
         &self,
         key_id: &str,
         grace_ends_at: DateTime<Utc>,
@@ -26,6 +26,6 @@ pub trait Store: Send + Sync {
     ) -> Result<(), AppError>;
     /// Enable or disable a key.
     async fn set_active(&self, key_id: &str, active: bool) -> Result<(), AppError>;
-    /// Permanently remove a key record.
+    /// Delete a key.
     async fn delete(&self, key_id: &str) -> Result<(), AppError>;
 }

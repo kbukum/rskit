@@ -32,6 +32,7 @@ members = [
     # phase 4 platform
     "crates/rskit-observability",
     "crates/rskit-authz",
+    "crates/rskit-security",
     "crates/rskit-discovery",
     "crates/rskit-grpc",
     "crates/rskit-testutil",

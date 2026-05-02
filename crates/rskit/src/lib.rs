@@ -15,6 +15,7 @@
 //! | `messaging` | `rskit-messaging` (Kafka) |
 //! | `observability` | `rskit-observability` (OpenTelemetry) |
 //! | `authz`  | `rskit-authz` (RBAC/ABAC) |
+//! | `security` | `rskit-security` (security headers) |
 //! | `discovery` | `rskit-discovery` (service discovery) |
 //! | `testutil` | `rskit-testutil` (test helpers) |
 //! | `sse`    | `rskit-sse` (Server-Sent Events) |
@@ -152,6 +153,10 @@ pub use rskit_observability as observability;
 /// RBAC and ABAC authorization engine.
 #[cfg(feature = "authz")]
 pub use rskit_authz as authz;
+
+/// Security headers and transport security policy.
+#[cfg(feature = "security")]
+pub use rskit_security as security;
 
 /// Service discovery with load balancing strategies.
 #[cfg(feature = "discovery")]

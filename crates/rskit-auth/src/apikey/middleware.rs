@@ -97,11 +97,12 @@ where
                 return inner.call(req).await;
             }
 
-            // SAFETY: checked is_none() above, so raw_key is guaranteed Some here.
-            let Ok(plain_key) = raw_key.expect("checked above").to_str() else {
+            let Some(raw_key) = raw_key else {
+                return inner.call(req).await;
+            };
+            let Ok(plain_key) = raw_key.to_str() else {
                 let mut res = Response::new(ResBody::default());
                 *res.status_mut() = StatusCode::UNAUTHORIZED;
-                // Add WWW-Authenticate header per RFC 7235
                 res.headers_mut().insert(
                     http::header::WWW_AUTHENTICATE,
                     http::HeaderValue::from_static(r#"Bearer realm="rskit""#),
@@ -109,14 +110,13 @@ where
                 return Ok(res);
             };
 
-            if let Ok(_key) = validator.validate_key(plain_key).await {
-                // Store key in request extensions if needed
-                // For now, just pass through
+            if let Ok(key) = validator.validate_key(plain_key).await {
+                let mut req = req;
+                req.extensions_mut().insert(key);
                 inner.call(req).await
             } else {
                 let mut res = Response::new(ResBody::default());
                 *res.status_mut() = StatusCode::UNAUTHORIZED;
-                // Add WWW-Authenticate header per RFC 7235
                 res.headers_mut().insert(
                     http::header::WWW_AUTHENTICATE,
                     http::HeaderValue::from_static(r#"Bearer realm="rskit""#),

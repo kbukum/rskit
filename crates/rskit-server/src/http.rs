@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use axum::Router;
 use rskit_bootstrap::{Component, Health, Registry};
 use rskit_errors::{AppError, AppResult, ErrorCode};
+use rskit_security::{SecurityHeadersConfig, SecurityHeadersLayer};
 use tokio_util::sync::CancellationToken;
 use tower_http::{
     cors::CorsLayer,
@@ -104,6 +105,30 @@ impl HttpServerBuilder {
             .router
             .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid));
         self
+    }
+
+    /// Add secure response headers using the default security policy.
+    #[must_use]
+    pub fn with_security_headers(self) -> Self {
+        let Ok(layer) = SecurityHeadersLayer::new(SecurityHeadersConfig::default()) else {
+            return self;
+        };
+        let mut this = self;
+        this.router = this.router.layer(layer);
+        this
+    }
+
+    /// Add secure response headers using an explicit security policy.
+    ///
+    /// # Errors
+    /// Returns an error when the supplied policy is invalid.
+    pub fn with_security_headers_config(
+        mut self,
+        config: SecurityHeadersConfig,
+    ) -> AppResult<Self> {
+        let layer = SecurityHeadersLayer::new(config)?;
+        self.router = self.router.layer(layer);
+        Ok(self)
     }
 
     /// Add the canonical tracing phase.

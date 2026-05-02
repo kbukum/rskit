@@ -1,39 +1,18 @@
 #![allow(missing_docs)]
 
+mod common;
+
 use std::time::Duration;
 
-use rskit_auth::{
-    JwtConfig, JwtService, PasswordHasher, ResetTokenGenerator, TokenGenerator, TokenValidator,
-};
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-struct Claims {
-    sub: String,
-    exp: u64,
-}
-
-fn future_exp() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
-        + 3600
-}
-
-fn jwt_service() -> JwtService<Claims> {
-    JwtService::new(JwtConfig::new("integration-test-secret-key"))
-}
+use common::{StandardClaims, jwt_service};
+use rskit_auth::{PasswordHasher, ResetTokenGenerator, TokenGenerator, TokenValidator};
 
 // ── JWT ──────────────────────────────────────────────────────────────
 
 #[tokio::test]
 async fn jwt_sign_then_validate_roundtrip() {
-    let svc = jwt_service();
-    let claims = Claims {
-        sub: "user-1".into(),
-        exp: future_exp(),
-    };
+    let svc = jwt_service("integration-test-secret-key");
+    let claims = StandardClaims::new("user-1");
 
     let token = svc.generate(&claims).await.unwrap();
     let decoded = svc.validate(&token).await.unwrap();
@@ -43,11 +22,9 @@ async fn jwt_sign_then_validate_roundtrip() {
 
 #[tokio::test]
 async fn jwt_expired_token_fails_validation() {
-    let svc = jwt_service();
-    let claims = Claims {
-        sub: "user-1".into(),
-        exp: 1,
-    };
+    let svc = jwt_service("integration-test-secret-key");
+    let mut claims = StandardClaims::new("user-1");
+    claims.exp = 1;
 
     let token = svc.generate(&claims).await.unwrap();
     let result = svc.validate(&token).await;
