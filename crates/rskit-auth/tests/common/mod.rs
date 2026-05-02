@@ -24,7 +24,15 @@ pub(crate) fn future_exp() -> u64 {
 }
 
 pub(crate) fn standard_config(secret: &str) -> JwtConfig {
-    JwtConfig::hs256_internal(secret, ISSUER, vec![AUDIENCE.to_string()])
+    // Pad short secrets to the 32-byte minimum required by the HMAC key validator.
+    let padded;
+    let key = if secret.len() < 32 {
+        padded = format!("{secret:-<32}");
+        padded.as_str()
+    } else {
+        secret
+    };
+    JwtConfig::hs256_internal(key, ISSUER, vec![AUDIENCE.to_string()])
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

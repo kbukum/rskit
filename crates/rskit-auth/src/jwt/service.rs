@@ -57,10 +57,21 @@ fn validate_config(config: &JwtConfig) -> AppResult<()> {
 
 fn build_keys(key_material: &JwtKeyMaterial) -> AppResult<(EncodingKey, DecodingKey)> {
     match key_material {
-        JwtKeyMaterial::Hs256Internal { secret } => Ok((
-            EncodingKey::from_secret(secret.as_bytes()),
-            DecodingKey::from_secret(secret.as_bytes()),
-        )),
+        JwtKeyMaterial::Hs256Internal { secret } => {
+            if secret.is_empty() {
+                return Err(AppError::invalid_input("secret", "HMAC secret must not be empty"));
+            }
+            if secret.len() < 32 {
+                return Err(AppError::invalid_input(
+                    "secret",
+                    "HMAC secret must be at least 32 bytes",
+                ));
+            }
+            Ok((
+                EncodingKey::from_secret(secret.as_bytes()),
+                DecodingKey::from_secret(secret.as_bytes()),
+            ))
+        }
         JwtKeyMaterial::Rs256 {
             private_key_pem,
             public_key_pem,
@@ -104,22 +115,10 @@ fn validation_for(config: &JwtConfig) -> Validation {
     validation.validate_nbf = true;
     validation.set_issuer(&[config.issuer.as_str()]);
     validation.set_audience(&config.audience);
-    validation.set_required_spec_claims(&["exp", "nbf", "iss", "aud", "sub"]);
+    // Include "iat" in required claims to avoid a second decode pass.
+    validation.set_required_spec_claims(&["exp", "nbf", "iss", "aud", "sub", "iat"]);
     validation.algorithms = vec![config.algorithm().as_jsonwebtoken()];
     validation
-}
-
-fn ensure_iat_present(
-    token: &str,
-    decoding_key: &DecodingKey,
-    validation: &Validation,
-) -> AppResult<()> {
-    let data = jsonwebtoken::decode::<serde_json::Value>(token, decoding_key, validation)
-        .map_err(|error| map_validation_error(&error))?;
-    if data.claims.get("iat").is_none() {
-        return Err(AppError::invalid_token().context("missing iat claim"));
-    }
-    Ok(())
 }
 
 fn map_validation_error(error: &jsonwebtoken::errors::Error) -> AppError {
@@ -167,7 +166,6 @@ impl<C: Serialize + DeserializeOwned + Send + Sync> TokenValidator<C> for JwtSer
         }
 
         let validation = validation_for(&self.config);
-        ensure_iat_present(token, &self.decoding_key, &validation)?;
         let data = jsonwebtoken::decode::<C>(token, &self.decoding_key, &validation)
             .map_err(|error| map_validation_error(&error))?;
         Ok(data.claims)
@@ -247,7 +245,7 @@ Drcv5vlUD7QwVWP3JWGW66RtWH5qS5MP2eeOOSd48/Yccbx1kbGZ+NQtk6fSOTwd
 
     fn symmetric_service() -> JwtService<TestClaims> {
         JwtService::new(JwtConfig::hs256_internal(
-            "test-secret-key",
+            "test-secret-key-32-bytes-minimum!",
             ISSUER,
             vec![AUDIENCE.to_string()],
         ))

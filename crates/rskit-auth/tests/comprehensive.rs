@@ -91,7 +91,7 @@ async fn jwt_no_dots_rejected() {
 async fn jwt_issuer_validation() {
     let svc_gen = JwtService::<StandardClaims>::new(standard_config("shared")).unwrap();
     let svc_val = JwtService::<StandardClaims>::new(JwtConfig::hs256_internal(
-        "shared",
+        "shared--padded-to-32-bytes------",
         "https://other-issuer.test",
         vec![AUDIENCE.into()],
     ))
@@ -105,7 +105,7 @@ async fn jwt_issuer_validation() {
 async fn jwt_audience_validation() {
     let svc_gen = JwtService::<StandardClaims>::new(standard_config("shared")).unwrap();
     let svc_val = JwtService::<StandardClaims>::new(JwtConfig::hs256_internal(
-        "shared",
+        "shared--padded-to-32-bytes------",
         ISSUER,
         vec!["other-audience".into()],
     ))

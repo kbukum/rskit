@@ -375,7 +375,7 @@ where
         let metadata = serde_json::from_value::<OidcProviderMetadata>(json).map_err(|error| {
             OidcError::Discovery(format!("invalid discovery document: {error}"))
         })?;
-        if metadata.issuer != self.config.issuer {
+        if metadata.issuer.trim_end_matches('/') != self.config.issuer.trim_end_matches('/') {
             return Err(OidcError::Discovery(
                 "provider issuer did not exactly match configured issuer".into(),
             ));
@@ -595,8 +595,9 @@ fn oidc_validation(config: &OidcConfig, algorithm: Algorithm) -> Validation {
     validation.algorithms = vec![algorithm];
     validation.set_issuer(&[config.issuer.as_str()]);
     validation.set_audience(&config.audience);
-    validation.set_required_spec_claims(&["exp", "nbf", "iss", "aud", "sub"]);
-    validation.validate_nbf = true;
+    // nbf is optional in OIDC — many providers omit it; only exp/iss/aud/sub/iat are required.
+    validation.set_required_spec_claims(&["exp", "iss", "aud", "sub"]);
+    validation.validate_nbf = false;
     validation.leeway = config.clock_skew.as_secs();
     validation
 }

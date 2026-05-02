@@ -108,14 +108,12 @@ impl HttpServerBuilder {
     }
 
     /// Add secure response headers using the default security policy.
-    #[must_use]
-    pub fn with_security_headers(self) -> Self {
-        let Ok(layer) = SecurityHeadersLayer::new(SecurityHeadersConfig::default()) else {
-            return self;
-        };
-        let mut this = self;
-        this.router = this.router.layer(layer);
-        this
+    ///
+    /// # Errors
+    /// Returns an error if the default security policy cannot be built (should never happen
+    /// in practice — this is a programming error guard).
+    pub fn with_security_headers(self) -> AppResult<Self> {
+        self.with_security_headers_config(SecurityHeadersConfig::default())
     }
 
     /// Add secure response headers using an explicit security policy.

@@ -152,6 +152,10 @@ impl<S: Store> Manager<S> {
         old_key_id: &str,
         config: RotationConfig,
     ) -> Result<RotationResult, AppError> {
+        if config.new_key_id.is_empty() {
+            return Err(AppError::invalid_input("new_key_id", "new_key_id is required for rotation"));
+        }
+
         let old_key = self.store.get_by_id(old_key_id).await?;
         validate(&old_key)
             .map_err(|error| invalid_input_error(format!("cannot rotate key: {error}")))?;
@@ -166,13 +170,23 @@ impl<S: Store> Manager<S> {
         } else {
             config.owner_id.clone()
         };
+        let name = if config.name.is_empty() {
+            old_key.name.clone()
+        } else {
+            config.name.clone()
+        };
+        let prefix = if config.prefix.is_empty() {
+            old_key.key_prefix.clone()
+        } else {
+            config.prefix.clone()
+        };
 
         let (issued, record) = self
             .issue_key(
                 &config.new_key_id,
                 &owner_id,
-                &config.name,
-                &config.prefix,
+                &name,
+                &prefix,
                 &scopes,
                 config.expires_at,
             )

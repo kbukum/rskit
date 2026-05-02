@@ -87,7 +87,7 @@ fn internal_error_message_is_generic_when_displayed_via_error_response() {
     );
     let err = AppError::internal(cause);
     let response = ProblemDetail::from(&err);
-    assert!(!response.detail.contains("s3cret") || !response.detail.is_empty());
+    assert!(!response.detail.contains("s3cret"), "ProblemDetail leaked secret: {:?}", response.detail);
 }
 
 #[test]
@@ -355,6 +355,10 @@ fn error_response_serialization_excludes_cause() {
     let err = AppError::internal(std::io::Error::other("secret connection string here"));
     let json = serde_json::to_string(&err).unwrap();
     assert!(!json.is_empty());
+    assert!(
+        !json.contains("secret connection string here"),
+        "Serialized error leaked internal cause: {json}"
+    );
 }
 
 // ─── 7. Concurrent JWT Operations ──────────────────────────────────────────
