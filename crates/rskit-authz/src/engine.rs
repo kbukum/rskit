@@ -266,21 +266,24 @@ impl Condition {
             return false;
         };
 
-        let expected = if let (Some(compare_source), Some(compare_key)) =
+        if let (Some(compare_source), Some(compare_key)) =
             (self.compare_source, self.compare_key.as_deref())
         {
             let Some(other) = attribute_value(request, compare_source, compare_key) else {
                 return false;
             };
-            vec![other]
+            // Cross-field comparison: exactly one dynamic value, no Vec allocation.
+            match self.operator {
+                Operator::Equals | Operator::OneOf => actual == other,
+                Operator::NotEquals => actual != other,
+            }
         } else {
-            self.values.clone()
-        };
-
-        match self.operator {
-            Operator::Equals => expected.len() == 1 && actual == expected[0],
-            Operator::NotEquals => expected.len() == 1 && actual != expected[0],
-            Operator::OneOf => expected.iter().any(|value| value == &actual),
+            // Literal-value comparison: compare by reference, no clone.
+            match self.operator {
+                Operator::Equals => self.values.len() == 1 && actual == self.values[0],
+                Operator::NotEquals => self.values.len() == 1 && actual != self.values[0],
+                Operator::OneOf => self.values.iter().any(|v| v == &actual),
+            }
         }
     }
 }

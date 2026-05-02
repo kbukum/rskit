@@ -320,4 +320,19 @@ mod tests {
             Some(&HeaderValue::from_static("same-origin"))
         );
     }
+
+    #[test]
+    fn all_headers_disabled_with_allow_insecure_local_is_rejected() {
+        let config = SecurityHeadersConfig::default()
+            .with_transport_security(TransportSecurity::AllowInsecureLocal)
+            .with_content_security_policy(None)
+            .with_permissions_policy(None)
+            .with_referrer_policy(None)
+            .with_frame_options(None)
+            .with_content_type_options(None);
+        assert!(
+            SecurityHeadersLayer::new(&config).is_err(),
+            "AllowInsecureLocal with all headers disabled must be rejected"
+        );
+    }
 }

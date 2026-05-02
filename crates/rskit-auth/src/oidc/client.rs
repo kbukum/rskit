@@ -20,7 +20,7 @@ const JWKS_REFRESH_COOLDOWN: Duration = Duration::from_secs(30);
 #[derive(Debug, Default)]
 struct OidcCache {
     metadata: Option<OidcProviderMetadata>,
-    jwks: Option<JwkSet>,
+    jwks: Option<Arc<JwkSet>>,
     last_forced_jwks_refresh: Option<Instant>,
 }
 
@@ -104,7 +104,7 @@ where
         Ok(metadata)
     }
 
-    async fn jwks(&self, force_refresh: bool) -> Result<JwkSet, OidcError> {
+    async fn jwks(&self, force_refresh: bool) -> Result<Arc<JwkSet>, OidcError> {
         if !force_refresh && let Some(jwks) = self.cache.read().await.jwks.clone() {
             return Ok(jwks);
         }
@@ -125,7 +125,8 @@ where
         let json = self.http_client.get_json(&metadata.jwks_uri, None).await?;
         let jwks = serde_json::from_value::<JwkSet>(json)
             .map_err(|error| OidcError::Discovery(format!("invalid JWKS document: {error}")))?;
-        self.cache.write().await.jwks = Some(jwks.clone());
+        let jwks = Arc::new(jwks);
+        self.cache.write().await.jwks = Some(Arc::clone(&jwks));
         Ok(jwks)
     }
 
@@ -271,8 +272,9 @@ where
             let jwks = self.jwks(force_refresh).await?;
             if let Some(jwk) = jwks
                 .keys
-                .into_iter()
+                .iter()
                 .find(|jwk| jwk.common.key_id.as_deref() == Some(kid))
+                .cloned()
             {
                 return Ok(jwk);
             }
