@@ -2,6 +2,7 @@
 
 #![warn(missing_docs)]
 
+use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use http::{
@@ -169,19 +170,26 @@ fn header_value(header: &HeaderName, value: &str) -> AppResult<HeaderValue> {
 }
 
 /// Tower layer that applies secure response headers.
+///
+/// Headers are validated and precomputed at construction time so that the
+/// per-request path is infallible and the layer fails fast on invalid config.
 #[derive(Debug, Clone)]
 pub struct SecurityHeadersLayer {
-    config: SecurityHeadersConfig,
+    headers: Arc<Vec<(HeaderName, HeaderValue)>>,
 }
 
 impl SecurityHeadersLayer {
     /// Create a new layer from validated configuration.
     ///
+    /// Headers are precomputed here; any invalid configuration is rejected at
+    /// this point rather than silently falling back at request time.
+    ///
     /// # Errors
-    /// Returns an error when the configuration is invalid.
+    /// Returns an error when the configuration is invalid or a header value
+    /// cannot be constructed.
     pub fn new(config: SecurityHeadersConfig) -> AppResult<Self> {
-        config.validate()?;
-        Ok(Self { config })
+        let headers = Arc::new(config.header_pairs()?);
+        Ok(Self { headers })
     }
 }
 
@@ -191,7 +199,7 @@ impl<S> Layer<S> for SecurityHeadersLayer {
     fn layer(&self, inner: S) -> Self::Service {
         SecurityHeadersService {
             inner,
-            config: self.config.clone(),
+            headers: Arc::clone(&self.headers),
         }
     }
 }
@@ -200,7 +208,7 @@ impl<S> Layer<S> for SecurityHeadersLayer {
 #[derive(Debug, Clone)]
 pub struct SecurityHeadersService<S> {
     inner: S,
-    config: SecurityHeadersConfig,
+    headers: Arc<Vec<(HeaderName, HeaderValue)>>,
 }
 
 impl<S, ReqBody, ResBody> Service<Request<ReqBody>> for SecurityHeadersService<S>
@@ -221,18 +229,19 @@ where
     }
 
     fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
-        let mut inner = self.inner.clone();
-        // Configuration is validated at layer construction so header_pairs() is
-        // infallible here. unwrap_or_default() returns an empty Vec on the
-        // unreachable error branch — fail-closed, no headers applied.
-        let headers = self.config.header_pairs().unwrap_or_default();
+        // Use mem::replace to honour the Tower poll_ready → call contract:
+        // the instance that was polled ready (now in `inner`) handles this
+        // request; self.inner receives a fresh clone for the next cycle.
+        let clone = self.inner.clone();
+        let mut inner = std::mem::replace(&mut self.inner, clone);
+        let headers = Arc::clone(&self.headers);
         Box::pin(async move {
             let mut response = inner.call(req).await?;
-            if !headers.is_empty() {
-                let response_headers = response.headers_mut();
-                for (name, value) in headers {
-                    response_headers.entry(name).or_insert(value);
-                }
+            let response_headers = response.headers_mut();
+            for (name, value) in headers.iter() {
+                response_headers
+                    .entry(name)
+                    .or_insert_with(|| value.clone());
             }
             Ok(response)
         })
