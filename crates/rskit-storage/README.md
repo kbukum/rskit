@@ -14,10 +14,9 @@ File I/O, local storage, temp files, MIME detection, and storage backend traits.
 - `FileSink` / `FileWriter` — buffered output destinations
 - `FileMeta`, `FileKind` — metadata and broad category detection (Video, Audio, Image, …)
 - `detect_mime` / `detect_kind` — magic-byte + extension fallback
-- `FileStore` trait with the built-in `LocalStore`
+- `FileStore` trait with the built-in `LocalStore` and support for external adapter crates
 - `TempFile` / `TempDir` — RAII-managed temporaries (auto-deleted on drop)
 - Async streaming reads and file transfers
-- `FileStore` trait for external storage adapters
 
 Cloud backends live in adapter crates such as `rskit-storage-s3` and
 `rskit-storage-gcs` so core storage remains lightweight and reusable.
