@@ -186,6 +186,10 @@ pub use rskit_storage as storage;
 #[cfg(feature = "storage-s3")]
 pub use rskit_storage_s3 as storage_s3;
 
+/// Google Cloud Storage backend.
+#[cfg(feature = "storage-gcs")]
+pub use rskit_storage_gcs as storage_gcs;
+
 /// Media types, codec/format registry, pipeline builder.
 #[cfg(feature = "media")]
 pub use rskit_media as media;

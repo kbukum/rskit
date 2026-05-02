@@ -11,7 +11,8 @@ use qdrant_client::qdrant::{
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use tracing::{debug, info};
 
-use crate::store::{PointPayload, SearchFilter, SearchResult, VectorStore};
+use crate::registry::{VectorFactory, VectorStoreRegistry};
+use crate::store::{PointPayload, SearchFilter, SearchResult, SimilarityMetric, VectorStore};
 
 /// Configuration for the Qdrant vector store.
 #[derive(Debug, Clone)]
@@ -20,6 +21,8 @@ pub struct QdrantConfig {
     pub url: String,
     /// Optional API key for Qdrant Cloud.
     pub api_key: Option<String>,
+    /// Metric used when creating collections.
+    pub metric: SimilarityMetric,
 }
 
 impl Default for QdrantConfig {
@@ -27,6 +30,7 @@ impl Default for QdrantConfig {
         Self {
             url: "http://localhost:6334".to_owned(),
             api_key: None,
+            metric: SimilarityMetric::Cosine,
         }
     }
 }
@@ -34,6 +38,7 @@ impl Default for QdrantConfig {
 /// Qdrant-backed vector store.
 pub struct QdrantVectorStore {
     client: Qdrant,
+    metric: SimilarityMetric,
 }
 
 impl QdrantVectorStore {
@@ -49,7 +54,10 @@ impl QdrantVectorStore {
                 format!("failed to connect to Qdrant: {e}"),
             )
         })?;
-        Ok(Self { client })
+        Ok(Self {
+            client,
+            metric: config.metric,
+        })
     }
 }
 
@@ -71,7 +79,7 @@ impl VectorStore for QdrantVectorStore {
             info!(collection, dimensions, "Creating Qdrant collection");
             self.client
                 .create_collection(CreateCollectionBuilder::new(collection).vectors_config(
-                    VectorParamsBuilder::new(dimensions as u64, Distance::Cosine),
+                    VectorParamsBuilder::new(dimensions as u64, qdrant_distance(self.metric)),
                 ))
                 .await
                 .map_err(|e| {
@@ -133,11 +141,14 @@ impl VectorStore for QdrantVectorStore {
             let conditions: Vec<Condition> = sf
                 .must
                 .into_iter()
-                .filter_map(|(field, value)| {
-                    if let Some(s) = value.as_str() {
-                        Some(Condition::matches(field, s.to_string()))
+                .filter_map(|condition| {
+                    if let Some(s) = condition.equals.as_str() {
+                        Some(Condition::matches(condition.field, s.to_string()))
                     } else {
-                        value.as_i64().map(|n| Condition::matches(field, n))
+                        condition
+                            .equals
+                            .as_i64()
+                            .map(|n| Condition::matches(condition.field, n))
                     }
                 })
                 .collect();
@@ -203,6 +214,31 @@ impl VectorStore for QdrantVectorStore {
     }
 }
 
+fn qdrant_distance(metric: SimilarityMetric) -> Distance {
+    match metric {
+        SimilarityMetric::Cosine => Distance::Cosine,
+        SimilarityMetric::Dot => Distance::Dot,
+        SimilarityMetric::L2 => Distance::Euclid,
+    }
+}
+
+struct QdrantFactory {
+    config: QdrantConfig,
+}
+
+impl VectorFactory for QdrantFactory {
+    fn create(&self) -> AppResult<std::sync::Arc<dyn VectorStore>> {
+        Ok(std::sync::Arc::new(QdrantVectorStore::new(
+            self.config.clone(),
+        )?))
+    }
+}
+
+/// Explicitly register a configured Qdrant backend.
+pub fn register_qdrant(registry: &mut VectorStoreRegistry, config: QdrantConfig) -> AppResult<()> {
+    registry.register("qdrant", std::sync::Arc::new(QdrantFactory { config }))
+}
+
 fn json_to_qdrant_value(v: serde_json::Value) -> qdrant_client::qdrant::Value {
     use qdrant_client::qdrant::value::Kind;
     let kind = match v {
@@ -240,6 +276,7 @@ mod tests {
         let cfg = QdrantConfig::default();
         assert_eq!(cfg.url, "http://localhost:6334");
         assert!(cfg.api_key.is_none());
+        assert_eq!(cfg.metric, SimilarityMetric::Cosine);
     }
 
     #[test]

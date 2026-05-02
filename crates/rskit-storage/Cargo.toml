@@ -29,14 +29,6 @@ tempfile        = "3"
 mime_guess      = "2"
 infer           = "0.19"
 
-[features]
-default = []
-gcs = ["dep:google-cloud-storage"]
-
-[dependencies.google-cloud-storage]
-version  = "=0.22.1"
-optional = true
-
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "full"] }
 image = "0.25"

@@ -1,14 +1,10 @@
 //! File store trait and backends for persistent file storage.
 
 mod local;
-
-#[cfg(feature = "gcs")]
-mod gcs;
+mod registry;
 
 pub use local::{LocalStore, LocalStoreConfig};
-
-#[cfg(feature = "gcs")]
-pub use gcs::{GcsStore, GcsStoreConfig};
+pub use registry::{StorageConfig, StorageFactory, StorageRegistry, register_local};
 
 use std::collections::HashMap;
 use std::sync::Arc;

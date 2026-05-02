@@ -1,6 +1,8 @@
 use std::time::Duration;
 
-use rskit_database::{DatabaseConfig, DbDriver, FindOpts, SqlRepository, SslMode};
+#[cfg(feature = "sqlx-any")]
+use rskit_database::SqlRepository;
+use rskit_database::{DatabaseConfig, DatabaseRegistry, DbDriver, FindOpts, SslMode};
 
 #[test]
 fn ssl_mode_defaults_to_prefer() {
@@ -157,6 +159,7 @@ fn find_opts_combined_builder() {
 // ── Database (requires external service) ────────────────────────────────────
 
 #[tokio::test]
+#[cfg(feature = "sqlx-any")]
 #[ignore = "requires running database server"]
 async fn database_connects_to_sqlite_memory() {
     let cfg = DatabaseConfig {
@@ -176,6 +179,21 @@ async fn database_connects_to_sqlite_memory() {
     };
     let db = rskit_database::Database::new(cfg).await.unwrap();
     assert!(!db.pool().is_closed());
+}
+
+#[test]
+fn database_registry_empty_until_explicit_registration() {
+    let registry = DatabaseRegistry::new();
+    assert!(registry.is_empty());
+    assert_eq!(registry.len(), 0);
+    assert!(!registry.contains(DbDriver::Postgres));
+}
+
+#[test]
+fn database_registry_rejects_duplicate_driver_registration() {
+    let mut registry = DatabaseRegistry::new();
+    registry.register(DbDriver::Sqlite).unwrap();
+    assert!(registry.register(DbDriver::Sqlite).is_err());
 }
 
 // ── Config validation and edge cases ────────────────────────────────────────
@@ -455,6 +473,7 @@ fn find_opts_order_by_preserves_insertion_order() {
 // ── SqlRepository (requires Database, so ignored) ───────────────────────────
 
 #[tokio::test]
+#[cfg(feature = "sqlx-any")]
 #[ignore = "requires running database server"]
 async fn sql_repository_debug_format() {
     let cfg = DatabaseConfig {
@@ -480,6 +499,7 @@ async fn sql_repository_debug_format() {
 }
 
 #[tokio::test]
+#[cfg(feature = "sqlx-any")]
 #[ignore = "requires running database server"]
 async fn sql_repository_table_name_returns_correct_value() {
     let cfg = DatabaseConfig {

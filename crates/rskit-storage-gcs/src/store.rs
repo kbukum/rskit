@@ -1,19 +1,16 @@
-//! Google Cloud Storage backend (feature: `gcs`).
-
-#![cfg(feature = "gcs")]
-
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
-use serde::Deserialize;
+use rskit_storage::FileSource;
+use rskit_storage::store::{
+    FileStore, ProgressCallback, StorageConfig, StorageFactory, StorageRegistry, StoredFile,
+};
+use serde::{Deserialize, Serialize};
 
-use crate::FileSource;
-
-use super::{FileStore, ProgressCallback, StoredFile};
-
-/// Configuration for the GCS store.
-#[derive(Debug, Clone, Deserialize)]
+/// Configuration for the Google Cloud Storage backend.
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct GcsStoreConfig {
     /// GCS bucket name.
     pub bucket: String,
@@ -28,7 +25,7 @@ pub struct GcsStore {
 }
 
 impl GcsStore {
-    /// Create a new GCS store with the given configuration.
+    /// Create a new Google Cloud Storage backend.
     pub async fn new(config: GcsStoreConfig) -> AppResult<Self> {
         let client_config = google_cloud_storage::client::ClientConfig::default().anonymous();
         let client = google_cloud_storage::client::Client::new(client_config);
@@ -203,12 +200,11 @@ impl FileStore for GcsStore {
     async fn presigned_url(&self, _key: &str, _expires_in: Duration) -> AppResult<String> {
         Err(AppError::new(
             ErrorCode::Internal,
-            "GCS presigned URLs not yet implemented",
+            "GCS presigned URLs are not supported by this backend",
         ))
     }
 
     async fn copy(&self, from_key: &str, to_key: &str) -> AppResult<StoredFile> {
-        // Download and re-upload
         let source = self.download(from_key).await?;
         self.upload(&source, to_key, None, None).await
     }
@@ -217,5 +213,46 @@ impl FileStore for GcsStore {
         let result = self.copy(from_key, to_key).await?;
         self.delete(from_key).await?;
         Ok(result)
+    }
+}
+
+struct GcsFactory;
+
+#[async_trait::async_trait]
+impl StorageFactory for GcsFactory {
+    async fn create(&self, config: &StorageConfig) -> AppResult<Arc<dyn FileStore>> {
+        let gcs_config: GcsStoreConfig =
+            serde_json::from_value(config.options.clone()).map_err(|e| {
+                AppError::new(
+                    ErrorCode::InvalidInput,
+                    format!("invalid GCS storage config: {e}"),
+                )
+            })?;
+        Ok(Arc::new(GcsStore::new(gcs_config).await?))
+    }
+}
+
+/// Explicitly register the Google Cloud Storage backend.
+pub fn register_gcs(registry: &mut StorageRegistry) -> AppResult<()> {
+    registry.register("gcs", Arc::new(GcsFactory))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn config_deserializes_with_optional_prefix() {
+        let json = r#"{"bucket": "test"}"#;
+        let cfg: GcsStoreConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(cfg.bucket, "test");
+        assert!(cfg.prefix.is_none());
+    }
+
+    #[test]
+    fn register_gcs_adds_backend_without_constructing_client() {
+        let mut registry = StorageRegistry::new();
+        register_gcs(&mut registry).unwrap();
+        assert!(registry.contains("gcs"));
     }
 }

@@ -1,9 +1,15 @@
-//! Vector store abstraction with Qdrant and in-memory implementations.
+//! Vector store abstraction with in-memory default and opt-in adapters.
 
 mod memory;
+#[cfg(feature = "qdrant")]
 mod qdrant;
+mod registry;
 mod store;
 
 pub use memory::InMemoryVectorStore;
-pub use qdrant::{QdrantConfig, QdrantVectorStore};
-pub use store::{PointPayload, SearchFilter, SearchResult, VectorStore};
+#[cfg(feature = "qdrant")]
+pub use qdrant::{QdrantConfig, QdrantVectorStore, register_qdrant};
+pub use registry::{VectorFactory, VectorStoreRegistry, register_memory};
+pub use store::{
+    FilterCondition, PointPayload, SearchFilter, SearchResult, SimilarityMetric, VectorStore,
+};

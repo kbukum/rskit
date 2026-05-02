@@ -1,6 +1,6 @@
 [package]
 name        = "rskit-cache"
-description = "Redis client with typed store, connection management, and Component lifecycle"
+description = "Cache abstraction with in-memory default and opt-in Redis backend"
 version.workspace     = true
 edition.workspace     = true
 license.workspace     = true
@@ -11,11 +11,15 @@ homepage.workspace     = true
 documentation = "https://docs.rs/rskit-cache"
 readme = "README.md"
 categories = ["caching"]
-keywords   = ["redis", "cache", "store"]
+keywords   = ["cache", "memory", "redis", "store"]
 
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
+
+[features]
+default = []
+redis = ["dep:redis"]
 
 [dependencies]
 rskit-errors    = { path = "../rskit-errors" }
@@ -25,4 +29,5 @@ serde_json      = { workspace = true }
 async-trait     = { workspace = true }
 tokio           = { workspace = true }
 tracing         = { workspace = true }
-redis           = { workspace = true }
+parking_lot     = { workspace = true }
+redis           = { workspace = true, optional = true }

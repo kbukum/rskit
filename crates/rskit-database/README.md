@@ -1,46 +1,50 @@
-# rskit-database — Async Database Pool
+# rskit-database
 
-sqlx-based async database pool with repository pattern and slow-query logging.
+Database contracts, bounded pool configuration, tenant helpers, query parsing,
+and repository traits with feature-gated SQLx backend support.
 
-[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml)
-[![crates.io](https://img.shields.io/crates/v/rskit-database.svg)](https://crates.io/crates/rskit-database)
-[![docs.rs](https://docs.rs/rskit-database/badge.svg)](https://docs.rs/rskit-database)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![MSRV: 1.85](https://img.shields.io/badge/MSRV-1.85-orange.svg)](https://blog.rust-lang.org/2025/02/20/Rust-1.85.0.html)
+The crate keeps backend selection explicit. A new `DatabaseRegistry` starts
+empty; applications register only the SQL drivers they compile in and then
+construct `Database` from validated configuration.
 
-## Features
-
-- Multi-driver support (PostgreSQL, MySQL, SQLite) via `DbDriver`
-- Connection pooling with configurable min/max, timeouts, and idle lifetime
-- `Repository<T, ID>` async trait for CRUD operations
-- `FindOpts` builder with limit, offset, order, and filter
-- Automatic slow-query logging at WARN level
-- Implements `rskit-bootstrap::Component` lifecycle
-
-## Usage
+## Installation
 
 ```toml
 [dependencies]
-rskit-database = "0.1"
+rskit-database = { version = "0.1", features = ["postgres"] }
+
+# Optional driver features:
+# postgres, mysql, sqlite, sqlx-any
 ```
 
-```rust
-use rskit_database::{Database, DatabaseConfig, DbDriver, FindOpts};
-use rskit_errors::AppResult;
+## Backend registration
 
-async fn example() -> AppResult<()> {
-    let config = DatabaseConfig {
-        driver: DbDriver::Sqlite,
-        database: ":memory:".into(),
-        max_connections: 5,
-        ..Default::default()
-    };
-    let db = Database::new(config).await?;
-    // Use Repository<T, ID> trait for typed data access
-    Ok(())
-}
+```rust,no_run
+use rskit_database::{Database, DatabaseConfig, DatabaseRegistry, DbDriver, register_postgres};
+
+# async fn example() -> rskit_errors::AppResult<()> {
+let mut registry = DatabaseRegistry::new();
+register_postgres(&mut registry)?;
+
+let config = DatabaseConfig {
+    driver: DbDriver::Postgres,
+    host: "localhost".into(),
+    database: "app".into(),
+    user: "app".into(),
+    max_connections: 10,
+    ..Default::default()
+};
+
+assert!(registry.contains(config.driver.clone()));
+let database = Database::new(config).await?;
+# Ok(())
+# }
 ```
 
-## See Also
+## Public API
 
-[Main repository README](https://github.com/kbukum/rskit)
+- `DatabaseConfig` — driver, DSN fields, TLS mode, timeouts, and pool bounds.
+- `DatabaseRegistry` — injected registry for compiled-in SQL backends.
+- `Database` — SQLx-backed async pool and component integration.
+- `Repository<T, ID>` and `FindOpts` — typed repository contracts.
+- `TenantScope` — tenant filter helper for row-scoped data isolation.

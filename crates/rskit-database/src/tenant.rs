@@ -7,9 +7,10 @@
 //! - [`TenantScope`] — a builder for constructing tenant-filtered SQL
 //!   `WHERE` clauses.
 
-use sqlx::AnyPool;
+#[cfg(feature = "sqlx-any")]
 use tracing::{debug, error};
 
+#[cfg(feature = "sqlx-any")]
 use rskit_errors::{AppError, AppResult, ErrorCode};
 
 /// Set a PostgreSQL session variable using `set_config()`.
@@ -23,8 +24,9 @@ use rskit_errors::{AppError, AppResult, ErrorCode};
 /// ```ignore
 /// set_session_variable(&pool, "app.workspace_id", "ws-123", true).await?;
 /// ```
+#[cfg(feature = "sqlx-any")]
 pub async fn set_session_variable(
-    pool: &AnyPool,
+    pool: &sqlx::AnyPool,
     name: &str,
     value: &str,
     is_local: bool,

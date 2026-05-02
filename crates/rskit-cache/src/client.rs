@@ -7,6 +7,7 @@ use rskit_bootstrap::{Component, Health};
 use rskit_errors::{AppError, AppResult, ErrorCode};
 
 use crate::config::RedisConfig;
+use crate::registry::{CacheBackend, CacheFactory, CacheRegistry};
 
 /// Async Redis client backed by [`redis::aio::ConnectionManager`].
 ///
@@ -15,6 +16,46 @@ pub struct RedisClient {
     manager: redis::aio::ConnectionManager,
     config: RedisConfig,
     connected: AtomicBool,
+}
+
+#[async_trait::async_trait]
+impl CacheBackend for RedisClient {
+    async fn get(&self, key: &str) -> AppResult<Option<String>> {
+        Self::get(self, key).await
+    }
+
+    async fn set(&self, key: &str, val: &str, ttl: Option<Duration>) -> AppResult<()> {
+        Self::set(self, key, val, ttl).await
+    }
+
+    async fn delete(&self, key: &str) -> AppResult<bool> {
+        Self::delete(self, key).await
+    }
+
+    async fn exists(&self, key: &str) -> AppResult<bool> {
+        Self::exists(self, key).await
+    }
+}
+
+struct RedisFactory;
+
+#[async_trait::async_trait]
+impl CacheFactory for RedisFactory {
+    async fn create(
+        &self,
+        config: &crate::config::CacheConfig,
+    ) -> AppResult<std::sync::Arc<dyn CacheBackend>> {
+        let mut redis = config.redis.clone();
+        if redis.key_prefix.is_none() {
+            redis.key_prefix.clone_from(&config.key_prefix);
+        }
+        Ok(std::sync::Arc::new(RedisClient::new(redis).await?))
+    }
+}
+
+/// Explicitly register the Redis backend. Requires the `redis` cargo feature.
+pub fn register_redis(registry: &mut CacheRegistry) -> AppResult<()> {
+    registry.register("redis", std::sync::Arc::new(RedisFactory))
 }
 
 impl RedisClient {

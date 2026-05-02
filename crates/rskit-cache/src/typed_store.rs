@@ -7,22 +7,22 @@ use serde::de::DeserializeOwned;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
 
-use crate::client::RedisClient;
+use crate::registry::CacheBackend;
 
-/// A generic, JSON-serialised store backed by a [`RedisClient`].
+/// A generic, JSON-serialised store backed by a [`CacheBackend`].
 ///
 /// Keys are automatically prefixed with the store's `prefix` so that
 /// multiple `TypedStore` instances can coexist in the same Redis database
 /// without key collisions.
 pub struct TypedStore<T> {
-    client: Arc<RedisClient>,
+    client: Arc<dyn CacheBackend>,
     prefix: String,
     _marker: PhantomData<T>,
 }
 
 impl<T: Serialize + DeserializeOwned + Send + Sync> TypedStore<T> {
     /// Create a new typed store that prefixes all keys with `prefix`.
-    pub fn new(client: Arc<RedisClient>, prefix: impl Into<String>) -> Self {
+    pub fn new(client: Arc<dyn CacheBackend>, prefix: impl Into<String>) -> Self {
         Self {
             client,
             prefix: prefix.into(),
