@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{fmt, time::Duration};
 
 use serde::Deserialize;
 
@@ -37,7 +37,7 @@ impl JwtAlgorithm {
 }
 
 /// Key material used to sign and verify JWTs.
-#[derive(Debug, Clone, Deserialize, zeroize::Zeroize, zeroize::ZeroizeOnDrop)]
+#[derive(Clone, Deserialize, zeroize::Zeroize, zeroize::ZeroizeOnDrop)]
 #[non_exhaustive]
 pub enum JwtKeyMaterial {
     /// Explicit internal-only HMAC secret.
@@ -81,8 +81,34 @@ impl JwtKeyMaterial {
     }
 }
 
+impl fmt::Debug for JwtKeyMaterial {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Hs256Internal { .. } => formatter
+                .debug_struct("Hs256Internal")
+                .field("secret", &"<redacted>")
+                .finish(),
+            Self::Rs256 { .. } => formatter
+                .debug_struct("Rs256")
+                .field("private_key_pem", &"<redacted>")
+                .field("public_key_pem", &"<redacted>")
+                .finish(),
+            Self::Es256 { .. } => formatter
+                .debug_struct("Es256")
+                .field("private_key_pem", &"<redacted>")
+                .field("public_key_pem", &"<redacted>")
+                .finish(),
+            Self::EdDsa { .. } => formatter
+                .debug_struct("EdDsa")
+                .field("private_key_pem", &"<redacted>")
+                .field("public_key_pem", &"<redacted>")
+                .finish(),
+        }
+    }
+}
+
 /// JWT validation policy.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct JwtConfig {
     /// Signing and verification key material.
     pub key_material: JwtKeyMaterial,
@@ -203,5 +229,61 @@ impl JwtConfig {
     #[must_use]
     pub const fn algorithm(&self) -> JwtAlgorithm {
         self.key_material.algorithm()
+    }
+}
+
+impl fmt::Debug for JwtConfig {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("JwtConfig")
+            .field("key_material", &self.key_material)
+            .field("issuer", &self.issuer)
+            .field("audience", &self.audience)
+            .field("ttl", &self.ttl)
+            .field("leeway", &self.leeway)
+            .finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{JwtConfig, JwtKeyMaterial};
+
+    #[test]
+    fn jwt_key_material_debug_redacts_secret_values() {
+        let symmetric = format!(
+            "{:?}",
+            JwtKeyMaterial::Hs256Internal {
+                secret: "super-secret-value".into(),
+            }
+        );
+        assert!(symmetric.contains("<redacted>"));
+        assert!(!symmetric.contains("super-secret-value"));
+
+        let asymmetric = format!(
+            "{:?}",
+            JwtKeyMaterial::Rs256 {
+                private_key_pem: "private-pem".into(),
+                public_key_pem: "public-pem".into(),
+            }
+        );
+        assert!(asymmetric.contains("<redacted>"));
+        assert!(!asymmetric.contains("private-pem"));
+        assert!(!asymmetric.contains("public-pem"));
+    }
+
+    #[test]
+    fn jwt_config_debug_redacts_nested_key_material() {
+        let config = JwtConfig::hs256_internal(
+            "another-secret-value",
+            "issuer.example",
+            vec!["audience".into()],
+        );
+
+        let formatted = format!("{config:?}");
+
+        assert!(formatted.contains("<redacted>"));
+        assert!(!formatted.contains("another-secret-value"));
+        assert!(formatted.contains("issuer.example"));
     }
 }

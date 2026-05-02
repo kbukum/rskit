@@ -1,5 +1,7 @@
 //! API key generation, peppered digest storage, and validation helpers.
 
+use std::fmt;
+
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
 use hmac::{Hmac, Mac};
@@ -13,7 +15,7 @@ const MIN_ENTROPY_BYTES: usize = 16;
 const MIN_PEPPER_BYTES: usize = 32;
 
 /// API key hashing configuration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct HashingConfig {
     /// Secret pepper used for HMAC-SHA-256 digest storage.
     pub pepper: String,
@@ -21,16 +23,16 @@ pub struct HashingConfig {
     pub entropy_bytes: usize,
 }
 
-impl Default for HashingConfig {
-    fn default() -> Self {
+impl HashingConfig {
+    /// Create a hashing configuration with the default entropy budget.
+    #[must_use]
+    pub fn new(pepper: impl Into<String>) -> Self {
         Self {
-            pepper: String::new(),
+            pepper: pepper.into(),
             entropy_bytes: DEFAULT_ENTROPY_BYTES,
         }
     }
-}
 
-impl HashingConfig {
     /// Validate the configuration.
     pub fn validate(&self) -> Result<(), String> {
         if self.pepper.len() < MIN_PEPPER_BYTES {
@@ -44,6 +46,16 @@ impl HashingConfig {
             ));
         }
         Ok(())
+    }
+}
+
+impl fmt::Debug for HashingConfig {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("HashingConfig")
+            .field("pepper", &"<redacted>")
+            .field("entropy_bytes", &self.entropy_bytes)
+            .finish()
     }
 }
 
@@ -97,7 +109,7 @@ impl Key {
 }
 
 /// One-time API key material returned to callers.
-#[derive(Debug, Clone, zeroize::Zeroize, zeroize::ZeroizeOnDrop)]
+#[derive(Clone, zeroize::Zeroize, zeroize::ZeroizeOnDrop)]
 pub struct GenerateResult {
     /// Plaintext key shown once.
     pub plain_key: String,
@@ -105,6 +117,17 @@ pub struct GenerateResult {
     pub key_prefix: String,
     /// Pepper-keyed digest stored at rest.
     pub key_digest: String,
+}
+
+impl fmt::Debug for GenerateResult {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("GenerateResult")
+            .field("plain_key", &"<redacted>")
+            .field("key_prefix", &self.key_prefix)
+            .field("key_digest", &self.key_digest)
+            .finish()
+    }
 }
 
 /// API key hasher and issuer.
@@ -213,7 +236,28 @@ fn validate_prefix(prefix: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Hasher, HashingConfig, split_key};
+    use super::{GenerateResult, Hasher, HashingConfig, split_key};
+
+    #[test]
+    fn hashing_config_debug_redacts_pepper() {
+        let formatted = format!("{:?}", HashingConfig::new("very-secret-pepper-material"));
+        assert!(formatted.contains("<redacted>"));
+        assert!(!formatted.contains("very-secret-pepper-material"));
+    }
+
+    #[test]
+    fn generate_result_debug_redacts_plain_key() {
+        let formatted = format!(
+            "{:?}",
+            GenerateResult {
+                plain_key: "sk_live.secret".into(),
+                key_prefix: "sk_live".into(),
+                key_digest: "digest".into(),
+            }
+        );
+        assert!(formatted.contains("<redacted>"));
+        assert!(!formatted.contains("sk_live.secret"));
+    }
 
     #[test]
     fn generate_and_compare_roundtrip() {

@@ -1,327 +1,27 @@
-//! OpenID Connect (OIDC) support — discovery, PKCE, token validation, and userinfo.
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
-use std::{sync::Arc, time::Duration};
-
-use async_trait::async_trait;
 use base64::Engine;
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode, decode_header, jwk::JwkSet};
-use reqwest::{Client, Url};
-use serde::Deserialize;
+use reqwest::Url;
 use serde_json::Value;
-use sha2::Digest;
 use tokio::sync::RwLock;
 
-/// `OpenID` Connect client type.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-#[non_exhaustive]
-pub enum OidcClientType {
-    /// Public/native/browser clients. PKCE is mandatory.
-    #[default]
-    Public,
-    /// Confidential server-side clients. PKCE is still recommended.
-    Confidential,
-}
+use super::types::RawOidcClaims;
+use super::{
+    OidcAuthorizationRequest, OidcClaims, OidcClientType, OidcConfig, OidcError, OidcHttpClient,
+    OidcProviderMetadata, OidcTokenExchangeRequest, OidcUserInfo, PkcePair, ReqwestOidcHttpClient,
+};
 
-/// OIDC validation and authorization configuration.
-#[derive(Debug, Clone)]
-pub struct OidcConfig {
-    /// Issuer URL (e.g. `https://accounts.google.com`).
-    pub issuer: String,
-    /// Client ID registered with the provider.
-    pub client_id: String,
-    /// Exact redirect URI registered with the provider.
-    pub redirect_uri: String,
-    /// OIDC client type.
-    pub client_type: OidcClientType,
-    /// Accepted audience claim values.
-    pub audience: Vec<String>,
-    /// Accepted ID-token signing algorithms.
-    pub allowed_algorithms: Vec<Algorithm>,
-    /// Clock-skew tolerance for `exp` and `nbf`.
-    pub clock_skew: Duration,
-}
-
-impl OidcConfig {
-    /// Create a new OIDC configuration.
-    #[must_use]
-    pub fn new(
-        issuer: impl Into<String>,
-        client_id: impl Into<String>,
-        redirect_uri: impl Into<String>,
-        client_type: OidcClientType,
-    ) -> Self {
-        let client_id = client_id.into();
-        Self {
-            issuer: issuer.into(),
-            audience: vec![client_id.clone()],
-            client_id,
-            redirect_uri: redirect_uri.into(),
-            client_type,
-            allowed_algorithms: vec![Algorithm::RS256, Algorithm::ES256, Algorithm::EdDSA],
-            clock_skew: Duration::from_secs(30),
-        }
-    }
-
-    /// Override accepted audiences.
-    #[must_use]
-    pub fn with_audience(mut self, audience: Vec<String>) -> Self {
-        self.audience = audience;
-        self
-    }
-
-    /// Override allowed algorithms.
-    #[must_use]
-    pub fn with_allowed_algorithms(mut self, algorithms: Vec<Algorithm>) -> Self {
-        self.allowed_algorithms = algorithms;
-        self
-    }
-
-    /// Override clock-skew tolerance.
-    #[must_use]
-    pub const fn with_clock_skew(mut self, clock_skew: Duration) -> Self {
-        self.clock_skew = clock_skew;
-        self
-    }
-
-    fn validate(&self) -> Result<(), OidcError> {
-        if self.clock_skew.as_secs() > 60 {
-            return Err(OidcError::Configuration(
-                "clock skew tolerance must be 60 seconds or less".into(),
-            ));
-        }
-        let issuer = Url::parse(&self.issuer)
-            .map_err(|error| OidcError::Configuration(format!("invalid issuer URL: {error}")))?;
-        let redirect_uri = Url::parse(&self.redirect_uri)
-            .map_err(|error| OidcError::Configuration(format!("invalid redirect URI: {error}")))?;
-
-        if issuer.scheme() != "https" {
-            return Err(OidcError::Configuration(
-                "OIDC issuer must use HTTPS".into(),
-            ));
-        }
-        if !is_allowed_redirect_uri(&redirect_uri) {
-            return Err(OidcError::Configuration(
-                "redirect URI must be HTTPS or a localhost development callback".into(),
-            ));
-        }
-        if self.audience.is_empty() {
-            return Err(OidcError::Configuration(
-                "OIDC audience must not be empty".into(),
-            ));
-        }
-        Ok(())
-    }
-}
-
-fn is_allowed_redirect_uri(url: &Url) -> bool {
-    if url.scheme() == "https" {
-        return true;
-    }
-    if url.scheme() == "http"
-        && let Some(host) = url.host_str()
-    {
-        return matches!(host, "localhost" | "127.0.0.1" | "::1");
-    }
-    false
-}
-
-/// OIDC discovery document.
-#[derive(Debug, Clone, Deserialize)]
-pub struct OidcProviderMetadata {
-    /// Issuer URL.
-    pub issuer: String,
-    /// Authorization endpoint.
-    pub authorization_endpoint: String,
-    /// Token endpoint.
-    pub token_endpoint: String,
-    /// JWKS endpoint.
-    pub jwks_uri: String,
-    /// Userinfo endpoint.
-    pub userinfo_endpoint: Option<String>,
-    /// Supported response types.
-    #[serde(default)]
-    pub response_types_supported: Vec<String>,
-    /// Supported PKCE code challenge methods.
-    #[serde(default)]
-    pub code_challenge_methods_supported: Vec<String>,
-    /// Supported ID-token signing algorithms.
-    #[serde(default)]
-    pub id_token_signing_alg_values_supported: Vec<String>,
-}
-
-/// Built authorization request plus correlated anti-CSRF state.
-#[derive(Debug, Clone)]
-pub struct OidcAuthorizationRequest {
-    /// Fully rendered authorization URL.
-    pub url: String,
-    /// Anti-CSRF state value.
-    pub state: String,
-    /// Nonce that must be echoed in the ID token.
-    pub nonce: String,
-    /// PKCE verifier/challenge pair.
-    pub pkce: Option<PkcePair>,
-}
-
-/// Token exchange parameters validated against the authorization request state.
-#[derive(Debug, Clone)]
-pub struct OidcTokenExchangeRequest {
-    /// Token endpoint discovered from the provider.
-    pub token_endpoint: String,
-    /// Authorization code from the callback.
-    pub code: String,
-    /// Exact redirect URI configured for the client.
-    pub redirect_uri: String,
-    /// Original anti-CSRF state.
-    pub state: String,
-    /// Optional PKCE verifier. Required for public clients.
-    pub code_verifier: Option<String>,
-}
-
-/// PKCE verifier/challenge pair.
-#[derive(Debug, Clone)]
-pub struct PkcePair {
-    /// High-entropy verifier.
-    pub verifier: String,
-    /// SHA-256 based challenge.
-    pub challenge: String,
-    /// Challenge method, always `S256`.
-    pub method: &'static str,
-}
-
-impl PkcePair {
-    /// Generate a PKCE verifier/challenge pair.
-    #[must_use]
-    pub fn generate() -> Self {
-        let mut bytes = [0_u8; 32];
-        rand::fill(&mut bytes);
-        let verifier = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes);
-        let challenge = base64::engine::general_purpose::URL_SAFE_NO_PAD
-            .encode(sha2::Sha256::digest(verifier.as_bytes()));
-        Self {
-            verifier,
-            challenge,
-            method: "S256",
-        }
-    }
-}
-
-/// Claims extracted from a validated OIDC ID token.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OidcClaims {
-    /// Subject identifier.
-    pub sub: String,
-    /// Issuer identifier.
-    pub iss: String,
-    /// Audience values.
-    pub aud: Vec<String>,
-    /// Expiration timestamp (seconds since epoch).
-    pub exp: u64,
-    /// Issued-at timestamp.
-    pub iat: u64,
-    /// Not-before timestamp, if present.
-    pub nbf: Option<u64>,
-    /// OIDC nonce claim, if present.
-    pub nonce: Option<String>,
-    /// User email, if present.
-    pub email: Option<String>,
-    /// Whether the provider verified the email.
-    pub email_verified: Option<bool>,
-    /// Human-readable display name.
-    pub name: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct RawOidcClaims {
-    sub: String,
-    iss: String,
-    aud: Audiences,
-    exp: u64,
-    iat: Option<u64>,
-    nbf: Option<u64>,
-    nonce: Option<String>,
-    email: Option<String>,
-    email_verified: Option<bool>,
-    name: Option<String>,
-}
-
-/// User profile returned by the OIDC userinfo endpoint.
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
-pub struct OidcUserInfo {
-    /// Subject identifier.
-    pub sub: String,
-    /// User email, if present.
-    pub email: Option<String>,
-    /// Whether the provider verified the email.
-    pub email_verified: Option<bool>,
-    /// Human-readable name.
-    pub name: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(untagged)]
-enum Audiences {
-    One(String),
-    Many(Vec<String>),
-}
-
-impl Audiences {
-    fn into_vec(self) -> Vec<String> {
-        match self {
-            Self::One(value) => vec![value],
-            Self::Many(values) => values,
-        }
-    }
-}
-
-#[async_trait]
-/// Minimal async HTTP client contract used by OIDC.
-pub trait OidcHttpClient: Send + Sync {
-    /// Fetch JSON from a URL, optionally using bearer authentication.
-    async fn get_json(&self, url: &str, bearer_token: Option<&str>) -> Result<Value, OidcError>;
-}
-
-/// Default reqwest-backed OIDC HTTP client.
-#[derive(Debug, Clone)]
-pub struct ReqwestOidcHttpClient {
-    client: Client,
-}
-
-impl Default for ReqwestOidcHttpClient {
-    fn default() -> Self {
-        Self {
-            client: Client::new(),
-        }
-    }
-}
-
-#[async_trait]
-impl OidcHttpClient for ReqwestOidcHttpClient {
-    async fn get_json(&self, url: &str, bearer_token: Option<&str>) -> Result<Value, OidcError> {
-        let mut request = self.client.get(url);
-        if let Some(token) = bearer_token {
-            request = request.bearer_auth(token);
-        }
-        let response = request
-            .send()
-            .await
-            .map_err(|error| OidcError::ProviderUnreachable(error.to_string()))?;
-        let status = response.status();
-        if !status.is_success() {
-            return Err(OidcError::ProviderUnreachable(format!(
-                "provider returned HTTP {status}"
-            )));
-        }
-        response
-            .json::<Value>()
-            .await
-            .map_err(|error| OidcError::ProviderUnreachable(error.to_string()))
-    }
-}
+const JWKS_REFRESH_COOLDOWN: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Default)]
 struct OidcCache {
     metadata: Option<OidcProviderMetadata>,
     jwks: Option<JwkSet>,
+    last_forced_jwks_refresh: Option<Instant>,
 }
 
 /// Stateful OIDC client with discovery and JWKS caching.
@@ -407,6 +107,18 @@ where
     async fn jwks(&self, force_refresh: bool) -> Result<JwkSet, OidcError> {
         if !force_refresh && let Some(jwks) = self.cache.read().await.jwks.clone() {
             return Ok(jwks);
+        }
+
+        if force_refresh {
+            let mut cache = self.cache.write().await;
+            if let Some(jwks) = cache.jwks.clone()
+                && cache
+                    .last_forced_jwks_refresh
+                    .is_some_and(|last_refresh| last_refresh.elapsed() < JWKS_REFRESH_COOLDOWN)
+            {
+                return Ok(jwks);
+            }
+            cache.last_forced_jwks_refresh = Some(Instant::now());
         }
 
         let metadata = self.discover().await?;
@@ -594,7 +306,6 @@ fn oidc_validation(config: &OidcConfig, algorithm: Algorithm) -> Validation {
     validation.algorithms = vec![algorithm];
     validation.set_issuer(&[config.issuer.as_str()]);
     validation.set_audience(&config.audience);
-    // nbf is optional in OIDC — many providers omit it; only exp/iss/aud/sub/iat are required.
     validation.set_required_spec_claims(&["exp", "iss", "aud", "sub"]);
     validation.validate_nbf = false;
     validation.leeway = config.clock_skew.as_secs();
@@ -632,44 +343,20 @@ pub async fn validate_id_token(
         .await
 }
 
-/// Errors from OIDC operations.
-#[derive(Debug, thiserror::Error, PartialEq, Eq)]
-pub enum OidcError {
-    /// Configuration is invalid or unsafe.
-    #[error("invalid OIDC configuration: {0}")]
-    Configuration(String),
-    /// Discovery failed or returned an invalid document.
-    #[error("OIDC discovery failed: {0}")]
-    Discovery(String),
-    /// The token could not be validated.
-    #[error("invalid token: {0}")]
-    InvalidToken(String),
-    /// The OIDC provider could not be reached.
-    #[error("provider unreachable: {0}")]
-    ProviderUnreachable(String),
-    /// Callback state mismatched the original request.
-    #[error("OIDC state mismatch")]
-    StateMismatch,
-    /// Public clients must supply PKCE verifiers.
-    #[error("PKCE verifier is required for public clients")]
-    MissingPkce,
-    /// Nonce mismatched the validated ID token.
-    #[error("OIDC nonce mismatch")]
-    NonceMismatch,
-    /// The provider or token selected an unsupported algorithm.
-    #[error("unsupported OIDC signing algorithm: {0}")]
-    UnsupportedAlgorithm(String),
-    /// A required claim is missing.
-    #[error("missing required OIDC claim: {0}")]
-    MissingClaim(String),
-}
-
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::{
+        collections::HashMap,
+        sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        },
+    };
+
+    use async_trait::async_trait;
+    use jsonwebtoken::{EncodingKey, Header, encode};
 
     use super::*;
-    use jsonwebtoken::{EncodingKey, Header, encode};
 
     const ISSUER: &str = "https://issuer.example";
     const CLIENT_ID: &str = "client-123";
@@ -716,6 +403,7 @@ fVY5JLsbM7l4Egd233vN6Yo=
     #[derive(Debug, Clone)]
     struct MockHttpClient {
         responses: Arc<HashMap<String, Value>>,
+        request_counts: Arc<HashMap<String, AtomicUsize>>,
     }
 
     #[async_trait]
@@ -725,6 +413,9 @@ fVY5JLsbM7l4Egd233vN6Yo=
             url: &str,
             _bearer_token: Option<&str>,
         ) -> Result<Value, OidcError> {
+            if let Some(counter) = self.request_counts.get(url) {
+                counter.fetch_add(1, Ordering::Relaxed);
+            }
             self.responses.get(url).cloned().ok_or_else(|| {
                 OidcError::ProviderUnreachable(format!("no response configured for {url}"))
             })
@@ -765,6 +456,14 @@ fVY5JLsbM7l4Egd233vN6Yo=
             OidcConfig::new(ISSUER, CLIENT_ID, REDIRECT_URI, OidcClientType::Public),
             MockHttpClient {
                 responses: Arc::new(responses),
+                request_counts: Arc::new(HashMap::from([
+                    (
+                        format!("{ISSUER}/.well-known/openid-configuration"),
+                        AtomicUsize::new(0),
+                    ),
+                    (format!("{ISSUER}/jwks"), AtomicUsize::new(0)),
+                    (format!("{ISSUER}/userinfo"), AtomicUsize::new(0)),
+                ])),
             },
         )
         .unwrap()
@@ -888,5 +587,51 @@ fVY5JLsbM7l4Egd233vN6Yo=
             result.unwrap_err(),
             OidcError::InvalidToken("token header is missing required kid".into())
         );
+    }
+
+    #[tokio::test]
+    async fn jwks_forced_refresh_is_throttled_after_unknown_kid() {
+        let client = mock_client();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let mut header = Header::new(Algorithm::RS256);
+        header.kid = Some("missing-kid".into());
+        let token = encode(
+            &header,
+            &serde_json::json!({
+                "sub": "user-123",
+                "iss": ISSUER,
+                "aud": [CLIENT_ID],
+                "exp": now + 3600,
+                "nbf": now.saturating_sub(1),
+                "iat": now,
+                "nonce": "nonce-123"
+            }),
+            &EncodingKey::from_rsa_pem(RSA_PRIVATE_KEY.as_bytes()).unwrap(),
+        )
+        .unwrap();
+
+        let jwks_url = format!("{ISSUER}/jwks");
+        let counter = client
+            .http_client
+            .request_counts
+            .get(&jwks_url)
+            .expect("jwks counter must exist");
+
+        let first = client.validate_id_token(&token, Some("nonce-123")).await;
+        assert_eq!(
+            first.unwrap_err(),
+            OidcError::InvalidToken("no matching JWK found for token header".into())
+        );
+        assert_eq!(counter.load(Ordering::Relaxed), 2);
+
+        let second = client.validate_id_token(&token, Some("nonce-123")).await;
+        assert_eq!(
+            second.unwrap_err(),
+            OidcError::InvalidToken("no matching JWK found for token header".into())
+        );
+        assert_eq!(counter.load(Ordering::Relaxed), 2);
     }
 }
