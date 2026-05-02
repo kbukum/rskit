@@ -300,7 +300,10 @@ fn internal_constructor_wraps_cause() {
     assert_eq!(err.http_status.as_u16(), 500);
     // message must be generic — must NOT expose the cause to callers
     assert_eq!(err.message, "internal server error");
-    assert!(!err.message.contains("disk full"), "cause leaked into message");
+    assert!(
+        !err.message.contains("disk full"),
+        "cause leaked into message"
+    );
     assert!(err.cause.is_some());
 }
 
@@ -313,7 +316,10 @@ fn database_error_constructor_wraps_cause() {
     assert_eq!(err.http_status.as_u16(), 500);
     // message must be generic — must NOT expose the cause to callers
     assert_eq!(err.message, "database error");
-    assert!(!err.message.contains("connection reset"), "cause leaked into message");
+    assert!(
+        !err.message.contains("connection reset"),
+        "cause leaked into message"
+    );
     assert!(err.cause.is_some());
 }
 

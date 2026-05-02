@@ -87,7 +87,11 @@ fn internal_error_message_is_generic_when_displayed_via_error_response() {
     );
     let err = AppError::internal(cause);
     let response = ProblemDetail::from(&err);
-    assert!(!response.detail.contains("s3cret"), "ProblemDetail leaked secret: {:?}", response.detail);
+    assert!(
+        !response.detail.contains("s3cret"),
+        "ProblemDetail leaked secret: {:?}",
+        response.detail
+    );
 }
 
 #[test]

@@ -449,7 +449,7 @@ fn now_epoch() -> u64 {
 #[tokio::test]
 async fn auth_authz_jwt_claims_feed_rbac() {
     let jwt_svc = JwtService::<TestClaims>::new(JwtConfig::hs256_internal(
-        "integration-test-secret",
+        "integration-test-secret-key-0001",
         "https://issuer.rskit.test",
         vec!["rskit-integration".into()],
     ))
@@ -528,7 +528,7 @@ async fn auth_authz_jwt_claims_feed_rbac() {
 #[tokio::test]
 async fn auth_authz_restricted_role() {
     let jwt_svc = JwtService::<TestClaims>::new(JwtConfig::hs256_internal(
-        "restricted-secret",
+        "restricted-secret-key-00000000001",
         "https://issuer.rskit.test",
         vec!["rskit-integration".into()],
     ))
@@ -596,7 +596,7 @@ async fn auth_authz_restricted_role() {
 #[tokio::test]
 async fn auth_authz_deny_overrides_allow() {
     let jwt_svc = JwtService::<TestClaims>::new(JwtConfig::hs256_internal(
-        "deny-test-secret",
+        "deny-test-secret-key-000000000001",
         "https://issuer.rskit.test",
         vec!["rskit-integration".into()],
     ))

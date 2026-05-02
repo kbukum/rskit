@@ -153,7 +153,10 @@ impl<S: Store> Manager<S> {
         config: RotationConfig,
     ) -> Result<RotationResult, AppError> {
         if config.new_key_id.is_empty() {
-            return Err(AppError::invalid_input("new_key_id", "new_key_id is required for rotation"));
+            return Err(AppError::invalid_input(
+                "new_key_id",
+                "new_key_id is required for rotation",
+            ));
         }
 
         let old_key = self.store.get_by_id(old_key_id).await?;

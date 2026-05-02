@@ -59,7 +59,10 @@ fn build_keys(key_material: &JwtKeyMaterial) -> AppResult<(EncodingKey, Decoding
     match key_material {
         JwtKeyMaterial::Hs256Internal { secret } => {
             if secret.is_empty() {
-                return Err(AppError::invalid_input("secret", "HMAC secret must not be empty"));
+                return Err(AppError::invalid_input(
+                    "secret",
+                    "HMAC secret must not be empty",
+                ));
             }
             if secret.len() < 32 {
                 return Err(AppError::invalid_input(
