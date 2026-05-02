@@ -131,19 +131,38 @@ impl fmt::Debug for GenerateResult {
 }
 
 /// API key hasher and issuer.
-#[derive(Debug, Clone)]
+///
+/// The HMAC key is validated and pre-initialized at construction time so that
+/// `digest` and `compare` are fully infallible at call time.
+#[derive(Clone)]
 pub struct Hasher {
     config: HashingConfig,
+    /// Pre-initialized HMAC state; cloned cheaply for each digest call.
+    hmac_prototype: HmacSha256,
+}
+
+impl fmt::Debug for Hasher {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Hasher")
+            .field("config", &self.config)
+            .field("hmac_prototype", &"<redacted>")
+            .finish()
+    }
 }
 
 impl Hasher {
-    /// Construct a new hasher.
+    /// Construct a new hasher, validating config and pre-initializing the HMAC key.
     pub fn new(mut config: HashingConfig) -> Result<Self, String> {
         if config.entropy_bytes == 0 {
             config.entropy_bytes = DEFAULT_ENTROPY_BYTES;
         }
         config.validate()?;
-        Ok(Self { config })
+        let hmac_prototype = HmacSha256::new_from_slice(config.pepper.as_bytes())
+            .map_err(|e| format!("apikey: failed to initialize HMAC key: {e}"))?;
+        Ok(Self {
+            config,
+            hmac_prototype,
+        })
     }
 
     /// Return the active configuration.
@@ -168,11 +187,12 @@ impl Hasher {
         })
     }
 
-    /// Compute the peppered digest for a plaintext key.
+    /// Compute the peppered HMAC-SHA-256 digest for a plaintext key.
+    ///
+    /// Infallible — the HMAC key was validated at construction.
     #[must_use]
     pub fn digest(&self, plain_key: &str) -> String {
-        let mut mac = HmacSha256::new_from_slice(self.config.pepper.as_bytes())
-            .expect("pepper length validated");
+        let mut mac = self.hmac_prototype.clone();
         mac.update(plain_key.as_bytes());
         hex::encode(mac.finalize().into_bytes())
     }

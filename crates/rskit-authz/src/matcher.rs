@@ -9,17 +9,11 @@ pub fn match_pattern(pattern: &str, value: &str) -> bool {
         return true;
     }
 
-    let pattern_parts: Vec<_> = pattern.splitn(2, ':').collect();
-    let value_parts: Vec<_> = value.splitn(2, ':').collect();
-    if pattern_parts.len() != value_parts.len() {
-        return wildcard_equals(pattern, value);
+    // Use split_once to avoid per-call Vec allocation on the hot auth path.
+    match (pattern.split_once(':'), value.split_once(':')) {
+        (Some((pp, pa)), Some((vp, va))) => wildcard_equals(pp, vp) && wildcard_equals(pa, va),
+        _ => wildcard_equals(pattern, value),
     }
-    if pattern_parts.len() == 1 {
-        return wildcard_equals(pattern, value);
-    }
-
-    wildcard_equals(pattern_parts[0], value_parts[0])
-        && wildcard_equals(pattern_parts[1], value_parts[1])
 }
 
 /// Return `true` when any supplied pattern matches `value`.

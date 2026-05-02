@@ -86,7 +86,8 @@ where
     }
 
     fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
-        let mut inner = self.inner.clone();
+        let clone = self.inner.clone();
+        let mut inner = std::mem::replace(&mut self.inner, clone);
         let validator = Arc::clone(&self.validator);
         let header_name = self.header_name.clone();
 

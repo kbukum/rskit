@@ -307,7 +307,9 @@ fn oidc_validation(config: &OidcConfig, algorithm: Algorithm) -> Validation {
     validation.set_issuer(&[config.issuer.as_str()]);
     validation.set_audience(&config.audience);
     validation.set_required_spec_claims(&["exp", "iss", "aud", "sub"]);
-    validation.validate_nbf = false;
+    // Validate nbf when present: tokens with a future nbf are rejected;
+    // tokens that omit nbf still pass (nbf is not in required_spec_claims).
+    validation.validate_nbf = true;
     validation.leeway = config.clock_skew.as_secs();
     validation
 }
