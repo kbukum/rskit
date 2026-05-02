@@ -552,17 +552,16 @@ where
     }
 
     async fn select_jwk(&self, kid: Option<&str>) -> Result<jsonwebtoken::jwk::Jwk, OidcError> {
+        let kid = kid.ok_or_else(|| {
+            OidcError::InvalidToken("token header is missing required kid".into())
+        })?;
         for force_refresh in [false, true] {
             let jwks = self.jwks(force_refresh).await?;
-            if let Some(kid) = kid {
-                if let Some(jwk) = jwks
-                    .keys
-                    .into_iter()
-                    .find(|jwk| jwk.common.key_id.as_deref() == Some(kid))
-                {
-                    return Ok(jwk);
-                }
-            } else if let Some(jwk) = jwks.keys.into_iter().next() {
+            if let Some(jwk) = jwks
+                .keys
+                .into_iter()
+                .find(|jwk| jwk.common.key_id.as_deref() == Some(kid))
+            {
                 return Ok(jwk);
             }
         }
@@ -860,5 +859,34 @@ fVY5JLsbM7l4Egd233vN6Yo=
         assert_eq!(claims.sub, "user-123");
         assert_eq!(claims.email.as_deref(), Some("user@example.com"));
         assert_eq!(userinfo.name.as_deref(), Some("Example User"));
+    }
+
+    #[tokio::test]
+    async fn id_token_without_kid_is_rejected() {
+        let client = mock_client();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let token = encode(
+            &Header::new(Algorithm::RS256),
+            &serde_json::json!({
+                "sub": "user-123",
+                "iss": ISSUER,
+                "aud": [CLIENT_ID],
+                "exp": now + 3600,
+                "nbf": now.saturating_sub(1),
+                "iat": now,
+                "nonce": "nonce-123"
+            }),
+            &EncodingKey::from_rsa_pem(RSA_PRIVATE_KEY.as_bytes()).unwrap(),
+        )
+        .unwrap();
+
+        let result = client.validate_id_token(&token, Some("nonce-123")).await;
+        assert_eq!(
+            result.unwrap_err(),
+            OidcError::InvalidToken("token header is missing required kid".into())
+        );
     }
 }

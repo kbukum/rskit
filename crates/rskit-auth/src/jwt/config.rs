@@ -41,13 +41,11 @@ impl JwtAlgorithm {
 #[non_exhaustive]
 pub enum JwtKeyMaterial {
     /// Explicit internal-only HMAC secret.
-    #[zeroize(skip)]
     Hs256Internal {
         /// Shared secret used for signing and verification.
         secret: String,
     },
     /// RSA PEM key pair.
-    #[zeroize(skip)]
     Rs256 {
         /// PKCS#8 or PKCS#1 private key PEM.
         private_key_pem: String,
@@ -55,7 +53,6 @@ pub enum JwtKeyMaterial {
         public_key_pem: String,
     },
     /// EC P-256 PEM key pair.
-    #[zeroize(skip)]
     Es256 {
         /// PKCS#8 private key PEM.
         private_key_pem: String,
@@ -63,7 +60,6 @@ pub enum JwtKeyMaterial {
         public_key_pem: String,
     },
     /// Ed25519 PEM key pair.
-    #[zeroize(skip)]
     EdDsa {
         /// PKCS#8 private key PEM.
         private_key_pem: String,
@@ -97,7 +93,7 @@ pub struct JwtConfig {
     /// Token time-to-live. Generation helpers may use this value.
     #[serde(default = "JwtConfig::default_ttl")]
     pub ttl: Duration,
-    /// Clock-skew tolerance. Defaults to 60 seconds and must not exceed that.
+    /// Clock-skew tolerance. Defaults to 30 seconds and must not exceed 60 seconds.
     #[serde(default = "JwtConfig::default_leeway")]
     pub leeway: Duration,
 }

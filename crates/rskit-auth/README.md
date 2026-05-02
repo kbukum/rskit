@@ -42,7 +42,7 @@ let hash = hasher.hash("s3cret!").unwrap();
 assert!(hasher.verify("s3cret!", &hash).unwrap());
 
 let jwt = JwtService::<Claims>::new(JwtConfig::hs256_internal(
-    "internal-secret",
+    "internal-secret-key-material-0001",
     "https://issuer.example",
     vec!["service-a".into()],
 ))

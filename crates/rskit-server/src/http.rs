@@ -112,6 +112,7 @@ impl HttpServerBuilder {
     /// # Errors
     /// Returns an error if the default security policy cannot be built (should never happen
     /// in practice — this is a programming error guard).
+    #[must_use = "builder methods return a new builder; use the returned value"]
     pub fn with_security_headers(self) -> AppResult<Self> {
         self.with_security_headers_config(SecurityHeadersConfig::default())
     }
@@ -120,6 +121,7 @@ impl HttpServerBuilder {
     ///
     /// # Errors
     /// Returns an error when the supplied policy is invalid.
+    #[must_use = "builder methods return a new builder; use the returned value"]
     pub fn with_security_headers_config(
         mut self,
         config: SecurityHeadersConfig,

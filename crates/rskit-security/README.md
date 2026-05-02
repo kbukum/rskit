@@ -17,10 +17,8 @@ rskit-security = "0.1"
 ```
 
 ```rust
-use rskit_security::{SecurityHeadersConfig, SecurityHeadersLayer};
+use rskit_security::{SecurityHeadersConfig, SecurityHeadersLayer, TransportSecurity};
 
-let layer = SecurityHeadersLayer::new(
-    SecurityHeadersConfig::default()
-        .with_transport_security(rskit_security::TransportSecurity::HttpsOnly),
-);
+let config = SecurityHeadersConfig::default().with_transport_security(TransportSecurity::HttpsOnly);
+let layer = SecurityHeadersLayer::new(&config).unwrap();
 ```
