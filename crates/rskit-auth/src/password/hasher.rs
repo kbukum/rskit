@@ -68,12 +68,7 @@ fn configured_argon2() -> AppResult<Argon2<'static>> {
         ARGON2_PARALLELISM,
         Some(ARGON2_HASH_LEN),
     )
-    .map_err(|e| {
-        AppError::new(
-            rskit_errors::ErrorCode::Internal,
-            format!("invalid argon2 params: {e}"),
-        )
-    })?;
+    .map_err(|_e| AppError::internal("invalid argon2 params"))?;
     Ok(Argon2::new(Algorithm::Argon2id, Version::V0x13, params))
 }
 
