@@ -12,12 +12,12 @@ mod thumbnail;
 use std::time::Duration;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
-use rskit_storage::FileSource;
 use rskit_media::{
     probe::{Chapter, KeyframeInfo, MediaMetadata, MediaProbe, SilenceInterval},
     spatial::Resolution,
     time::Timestamp,
 };
+use rskit_storage::FileSource;
 
 use crate::config::FfmpegConfig;
 

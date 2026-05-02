@@ -5,13 +5,13 @@
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use image::{Rgb, RgbImage, imageops};
-use rskit_storage::{FileSource, TempFile};
 use rskit_media::{
     executor::MediaExecutor,
     ops::{CropRegion, FlipDirection, MediaOp, ResizeMode, ResizeOp, Rotation},
     spatial::Resolution,
 };
 use rskit_media_image::ImageProcessor;
+use rskit_storage::{FileSource, TempFile};
 
 /// Create a gradient test image at given dimensions.
 fn create_fixture(width: u32, height: u32) -> TempFile {

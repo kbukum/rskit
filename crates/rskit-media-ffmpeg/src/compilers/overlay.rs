@@ -1,8 +1,8 @@
 //! Compiler for `AddOverlay` (text/image overlay).
 
 use rskit_errors::AppResult;
-use rskit_storage::FileSource;
 use rskit_media::ops::{OverlayConfig, OverlayType};
+use rskit_storage::FileSource;
 
 use super::CompileContext;
 use crate::command::FfmpegInput;
