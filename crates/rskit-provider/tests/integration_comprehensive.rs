@@ -14,7 +14,7 @@ use rskit_provider::middleware::resilience::{ResilienceConfig, ResilienceLayer};
 use rskit_provider::middleware::tracing_layer::TracingLayer;
 use rskit_provider::traits::{
     BoxStream, Closeable, Duplex, DuplexChannel, Initializable, Provider, RequestResponse, Sink,
-    StreamProvider,
+    Stream,
 };
 use rskit_provider::{TowerProvider, request_response_fn, sink_fn};
 use rskit_resilience::{CbConfig, CircuitBreaker, RateLimiter, RetryPolicy};
@@ -77,13 +77,13 @@ impl Closeable for LifecycleProvider {
     }
 }
 
-/// A StreamProvider impl for BoxStream tests.
-struct VecStreamProvider {
+/// A Stream impl for BoxStream tests.
+struct VecStream {
     items: Vec<i32>,
     error_at: Option<usize>, // inject error at this index
 }
 
-impl VecStreamProvider {
+impl VecStream {
     fn from_items(items: Vec<i32>) -> Self {
         Self {
             items,
@@ -105,14 +105,14 @@ impl VecStreamProvider {
 }
 
 #[async_trait::async_trait]
-impl Provider for VecStreamProvider {
+impl Provider for VecStream {
     fn name(&self) -> &'static str {
         "vec-stream"
     }
 }
 
 #[async_trait::async_trait]
-impl StreamProvider<(), i32> for VecStreamProvider {
+impl Stream<(), i32> for VecStream {
     async fn stream(&self, _input: ()) -> AppResult<BoxStream<i32>> {
         let mut results: Vec<AppResult<i32>> = Vec::new();
         for (i, item) in self.items.iter().enumerate() {
@@ -342,7 +342,7 @@ async fn send_sync_verification() {
 
 #[tokio::test]
 async fn boxstream_multiple_items() {
-    let sp = VecStreamProvider::from_items(vec![1, 2, 3]);
+    let sp = VecStream::from_items(vec![1, 2, 3]);
     let mut s = sp.stream(()).await.unwrap();
     assert_eq!(s.next().await.unwrap().unwrap(), 1);
     assert_eq!(s.next().await.unwrap().unwrap(), 2);
@@ -352,7 +352,7 @@ async fn boxstream_multiple_items() {
 
 #[tokio::test]
 async fn boxstream_with_error_midstream() {
-    let sp = VecStreamProvider::with_error_at(vec![10, 30], 1);
+    let sp = VecStream::with_error_at(vec![10, 30], 1);
     let mut s = sp.stream(()).await.unwrap();
     assert_eq!(s.next().await.unwrap().unwrap(), 10);
     let err = s.next().await.unwrap().unwrap_err();
@@ -363,14 +363,14 @@ async fn boxstream_with_error_midstream() {
 
 #[tokio::test]
 async fn boxstream_empty() {
-    let sp = VecStreamProvider::empty();
+    let sp = VecStream::empty();
     let mut s = sp.stream(()).await.unwrap();
     assert!(s.next().await.is_none());
 }
 
 #[tokio::test]
 async fn boxstream_collect_all() {
-    let sp = VecStreamProvider::from_items(vec![1, 2, 3, 4, 5]);
+    let sp = VecStream::from_items(vec![1, 2, 3, 4, 5]);
     let s = sp.stream(()).await.unwrap();
     let collected: Vec<i32> = s.filter_map(|r| async { r.ok() }).collect().await;
     assert_eq!(collected, vec![1, 2, 3, 4, 5]);

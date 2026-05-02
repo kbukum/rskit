@@ -6,7 +6,7 @@ mod runner;
 use std::time::Duration;
 
 use rskit_errors::AppResult;
-use rskit_file::{FileSink, FileSource};
+use rskit_storage::{FileSink, FileSource};
 use rskit_media::{ops::*, registry::Registry, time::Timestamp};
 
 use crate::{compilers::CompileContext, config::FfmpegConfig};
@@ -51,7 +51,7 @@ pub struct FfmpegCommand {
     pub(crate) global_opts: Vec<String>,
     /// Temp files kept alive for the duration of the command (e.g., subtitle files).
     #[allow(dead_code)]
-    pub(crate) temp_files: Vec<rskit_file::TempFile>,
+    pub(crate) temp_files: Vec<rskit_storage::TempFile>,
 }
 
 impl FfmpegCommand {

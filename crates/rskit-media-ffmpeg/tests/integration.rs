@@ -3,7 +3,7 @@
 
 use std::time::Duration;
 
-use rskit_file::{FileSink, FileSource, TempDir, TempFile};
+use rskit_storage::{FileSink, FileSource, TempDir, TempFile};
 use rskit_media::{
     executor::MediaExecutor,
     ops::{MediaOp, ResizeMode, ResizeOp},

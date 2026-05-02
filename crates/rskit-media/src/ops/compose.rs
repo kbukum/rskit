@@ -1,6 +1,6 @@
 //! Composition operations for combining multiple media sources.
 
-use rskit_file::FileSource;
+use rskit_storage::FileSource;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 

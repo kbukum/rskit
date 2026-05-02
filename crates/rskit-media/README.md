@@ -26,7 +26,7 @@ rskit-media = "0.1"
 
 ```rust
 use rskit_media::{MediaPipeline, spatial::Resolution, time::TimeRange, MediaOp};
-use rskit_file::FileSource;
+use rskit_storage::FileSource;
 
 let source = FileSource::from_path("input.mp4");
 let pipeline = MediaPipeline::from(&source)

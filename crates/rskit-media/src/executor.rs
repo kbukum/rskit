@@ -1,7 +1,7 @@
 //! Backend executor trait for media processing.
 
 use rskit_errors::AppResult;
-use rskit_file::{FileSink, FileSource};
+use rskit_storage::{FileSink, FileSource};
 use tokio_util::sync::CancellationToken;
 
 use crate::{ops::MediaOp, pipeline::Progress};

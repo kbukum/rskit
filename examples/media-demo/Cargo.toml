@@ -7,7 +7,7 @@ publish               = false
 
 [dependencies]
 rskit-errors       = { path = "../../crates/rskit-errors" }
-rskit-file         = { path = "../../crates/rskit-file" }
+rskit-storage         = { path = "../../crates/rskit-storage" }
 rskit-media        = { path = "../../crates/rskit-media" }
 rskit-media-ffmpeg = { path = "../../crates/rskit-media-ffmpeg" }
 rskit-media-image  = { path = "../../crates/rskit-media-image" }

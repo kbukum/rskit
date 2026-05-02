@@ -3,7 +3,7 @@
 //! Usage:
 //!   cargo run --bin thumbnail -- input.mp4 thumb.jpg 5.0
 
-use rskit_file::{FileSink, FileSource};
+use rskit_storage::{FileSink, FileSource};
 use rskit_media::{
     Registry, ops::ResizeMode, pipeline::MediaPipeline, presets, spatial::Resolution,
     time::TimeRange,

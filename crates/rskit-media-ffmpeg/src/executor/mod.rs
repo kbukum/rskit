@@ -6,7 +6,7 @@ mod retry;
 use std::sync::Arc;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
-use rskit_file::{FileSink, FileSource};
+use rskit_storage::{FileSink, FileSource};
 use rskit_media::{executor::MediaExecutor, ops::MediaOp, pipeline::Progress, registry::Registry};
 use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;

@@ -15,7 +15,7 @@ keywords               = ["image", "resize", "crop", "processing"]
 
 [dependencies]
 rskit-errors = { path = "../rskit-errors" }
-rskit-file   = { path = "../rskit-file" }
+rskit-storage   = { path = "../rskit-storage" }
 rskit-media  = { path = "../rskit-media" }
 image        = "0.25"
 webp         = "0.3"
@@ -27,7 +27,7 @@ async-trait  = { workspace = true }
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "full"] }
 image = "0.25"
-rskit-file = { path = "../rskit-file" }
+rskit-storage = { path = "../rskit-storage" }
 rskit-media = { path = "../rskit-media" }
 bytes = { workspace = true }
 criterion = { workspace = true }

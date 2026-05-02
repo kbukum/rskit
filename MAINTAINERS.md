@@ -24,8 +24,8 @@ in the following areas:
   `rskit-sse`, `rskit-chain`
 - **Transport**: `rskit-server`, `rskit-grpc`, `rskit-http`,
   `rskit-httpclient`
-- **Storage / Infra**: `rskit-database`, `rskit-cache`, `rskit-file`,
-  `rskit-file-s3`, `rskit-messaging`
+- **Storage / Infra**: `rskit-database`, `rskit-cache`, `rskit-storage`,
+  `rskit-storage-s3`, `rskit-messaging`
 - **AI/ML**: `rskit-llm`, `rskit-llm-providers`, `rskit-bench`,
   `rskit-dataset`, `rskit-embedding`, `rskit-inference`
 - **Media**: `rskit-media`, `rskit-media-audio`, `rskit-media-image`,

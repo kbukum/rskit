@@ -5,7 +5,7 @@
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use image::{Rgb, RgbImage, imageops};
-use rskit_file::{FileSource, TempFile};
+use rskit_storage::{FileSource, TempFile};
 use rskit_media::{
     executor::MediaExecutor,
     ops::{CropRegion, FlipDirection, MediaOp, ResizeMode, ResizeOp, Rotation},

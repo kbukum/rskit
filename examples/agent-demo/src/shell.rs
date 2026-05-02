@@ -575,7 +575,7 @@ const BANNER: &str = concat!(
     "\n",
     "  \x1b[1;36m🚀 rskit Agent Demo\x1b[0m — Media Processing Pipeline\n",
     "  \x1b[2mShowcasing background workers, progress tracking, and stream processing\x1b[0m\n",
-    "  \x1b[2mrskit-worker │ rskit-cli │ rskit-pipeline │ rskit-file │ rskit-media-image\x1b[0m\n",
+    "  \x1b[2mrskit-worker │ rskit-cli │ rskit-pipeline │ rskit-storage │ rskit-media-image\x1b[0m\n",
 );
 
 #[cfg(test)]

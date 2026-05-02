@@ -24,13 +24,13 @@
 //! | `process` | `rskit-process` (subprocess execution) |
 //! | `stateful` | `rskit-stateful` (stateful accumulators) |
 //! | `llm`    | `rskit-llm` (LLM providers) |
-//! | `file`   | `rskit-file` (File I/O, storage) |
+//! | `storage` | `rskit-storage` (File I/O, storage) |
 //! | `media`  | `rskit-media` (media types, pipeline) |
 //! | `media-ffmpeg` | `rskit-media-ffmpeg` (`FFmpeg` backend) |
 //! | `media-image`  | `rskit-media-image` (image processing) |
 //! | `media-full` | ffmpeg + image backends |
-//! | `file-s3` | S3 storage backend |
-//! | `file-gcs` | GCS storage backend |
+//! | `storage-s3` | S3 storage backend |
+//! | `storage-gcs` | GCS storage backend |
 //! | `cli`    | `rskit-cli` (CLI helpers) |
 //! | `dataset` | `rskit-dataset` (dataset collection) |
 //! | `bench`  | `rskit-bench` (ML benchmarking) |
@@ -179,12 +179,12 @@ pub use rskit_dag as dag;
 pub use rskit_llm as llm;
 
 /// File I/O, storage backends, MIME detection, temp files.
-#[cfg(feature = "file")]
-pub use rskit_file as file;
+#[cfg(feature = "storage")]
+pub use rskit_storage as storage;
 
 /// Amazon S3 and S3-compatible (MinIO, LocalStack) storage backend.
-#[cfg(feature = "file-s3")]
-pub use rskit_file_s3 as file_s3;
+#[cfg(feature = "storage-s3")]
+pub use rskit_storage_s3 as storage_s3;
 
 /// Media types, codec/format registry, pipeline builder.
 #[cfg(feature = "media")]

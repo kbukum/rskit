@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use rskit_file::FileSource;
+use rskit_storage::FileSource;
 use rskit_media::{
     executor::MediaExecutor,
     filter::{Filter, FilterTarget, ParamValue, Params},

@@ -1,7 +1,7 @@
 //! Compiler for `AddOverlay` (text/image overlay).
 
 use rskit_errors::AppResult;
-use rskit_file::FileSource;
+use rskit_storage::FileSource;
 use rskit_media::ops::{OverlayConfig, OverlayType};
 
 use super::CompileContext;

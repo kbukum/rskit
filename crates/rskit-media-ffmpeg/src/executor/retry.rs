@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
-use rskit_file::{FileSink, FileSource, TempFile};
+use rskit_storage::{FileSink, FileSource, TempFile};
 use rskit_media::{ops::MediaOp, pipeline::Progress};
 
 use crate::command::FfmpegCommand;

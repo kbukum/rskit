@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
-use rskit_file::FileSource;
+use rskit_storage::FileSource;
 use rskit_media::{
     codec::Codec,
     format::Format,

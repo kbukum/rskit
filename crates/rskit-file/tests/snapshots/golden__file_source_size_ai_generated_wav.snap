@@ -1,7 +1,0 @@
----
-source: crates/rskit-file/tests/golden.rs
-expression: size
----
-Some(
-    82028,
-)

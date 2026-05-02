@@ -10,7 +10,7 @@ pub(crate) fn compile_burn_subtitles(
     subs: &SubtitleTrack,
 ) -> AppResult<()> {
     let srt_content = subs.to_srt();
-    let temp = rskit_file::TempFile::with_extension("srt").map_err(|e| {
+    let temp = rskit_storage::TempFile::with_extension("srt").map_err(|e| {
         rskit_errors::AppError::new(
             rskit_errors::ErrorCode::Internal,
             format!("failed to create temp subtitle file: {e}"),
@@ -52,7 +52,7 @@ pub(crate) fn compile_add_subtitles(
         }
     };
     let ext = cfg.format.extension();
-    let temp = rskit_file::TempFile::with_extension(ext).map_err(|e| {
+    let temp = rskit_storage::TempFile::with_extension(ext).map_err(|e| {
         rskit_errors::AppError::new(
             rskit_errors::ErrorCode::Internal,
             format!("failed to create temp subtitle file: {e}"),

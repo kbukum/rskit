@@ -1,5 +1,0 @@
----
-source: crates/rskit-file/tests/golden.rs
-expression: kind
----
-"Image"

@@ -12,7 +12,7 @@ mod thumbnail;
 use std::time::Duration;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
-use rskit_file::FileSource;
+use rskit_storage::FileSource;
 use rskit_media::{
     probe::{Chapter, KeyframeInfo, MediaMetadata, MediaProbe, SilenceInterval},
     spatial::Resolution,
