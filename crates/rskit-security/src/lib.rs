@@ -222,15 +222,10 @@ where
 
     fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
         let mut inner = self.inner.clone();
-        let headers = match self.config.header_pairs() {
-            Ok(h) => h,
-            Err(_) => {
-                // Configuration was validated at layer construction; this branch is
-                // unreachable under normal use. Fail open by logging would be worse
-                // than failing closed — return an empty vec so nothing sneaks through.
-                Vec::new()
-            }
-        };
+        // Configuration is validated at layer construction so header_pairs() is
+        // infallible here. unwrap_or_default() returns an empty Vec on the
+        // unreachable error branch — fail-closed, no headers applied.
+        let headers = self.config.header_pairs().unwrap_or_default();
         Box::pin(async move {
             let mut response = inner.call(req).await?;
             if !headers.is_empty() {
