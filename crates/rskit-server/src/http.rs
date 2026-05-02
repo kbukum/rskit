@@ -124,7 +124,7 @@ impl HttpServerBuilder {
         mut self,
         config: SecurityHeadersConfig,
     ) -> AppResult<Self> {
-        let layer = SecurityHeadersLayer::new(config)?;
+        let layer = SecurityHeadersLayer::new(&config)?;
         self.router = self.router.layer(layer);
         Ok(self)
     }

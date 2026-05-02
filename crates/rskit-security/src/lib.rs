@@ -187,7 +187,7 @@ impl SecurityHeadersLayer {
     /// # Errors
     /// Returns an error when the configuration is invalid or a header value
     /// cannot be constructed.
-    pub fn new(config: SecurityHeadersConfig) -> AppResult<Self> {
+    pub fn new(config: &SecurityHeadersConfig) -> AppResult<Self> {
         let headers = Arc::new(config.header_pairs()?);
         Ok(Self { headers })
     }
@@ -257,7 +257,7 @@ mod tests {
     #[tokio::test]
     async fn defaults_apply_secure_headers() {
         let service = ServiceBuilder::new()
-            .layer(SecurityHeadersLayer::new(SecurityHeadersConfig::default()).unwrap())
+            .layer(SecurityHeadersLayer::new(&SecurityHeadersConfig::default()).unwrap())
             .service(service_fn(|_req: Request<()>| async {
                 Ok::<_, std::convert::Infallible>(
                     Response::builder().status(StatusCode::OK).body(()).unwrap(),
@@ -286,7 +286,7 @@ mod tests {
         let service = ServiceBuilder::new()
             .layer(
                 SecurityHeadersLayer::new(
-                    SecurityHeadersConfig::default()
+                    &SecurityHeadersConfig::default()
                         .with_transport_security(TransportSecurity::AllowInsecureLocal),
                 )
                 .unwrap(),
@@ -305,7 +305,7 @@ mod tests {
     #[tokio::test]
     async fn existing_headers_are_not_overwritten() {
         let service = ServiceBuilder::new()
-            .layer(SecurityHeadersLayer::new(SecurityHeadersConfig::default()).unwrap())
+            .layer(SecurityHeadersLayer::new(&SecurityHeadersConfig::default()).unwrap())
             .service(service_fn(|_req: Request<()>| async {
                 let mut response = Response::builder().status(StatusCode::OK).body(()).unwrap();
                 response
