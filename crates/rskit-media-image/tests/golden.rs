@@ -2,7 +2,6 @@
 
 use std::path::PathBuf;
 
-use rskit_file::FileSource;
 use rskit_media::{
     executor::MediaExecutor,
     filter::{Filter, FilterTarget, ParamValue, Params},
@@ -13,6 +12,7 @@ use rskit_media::{
     spatial::Resolution,
 };
 use rskit_media_image::{ImageProbe, ImageProcessor};
+use rskit_storage::FileSource;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

@@ -3,10 +3,10 @@
 //! Usage:
 //!   cargo run --bin probe -- path/to/video.mp4
 
-use rskit_file::FileSource;
 use rskit_media::probe::MediaProbe;
 use rskit_media::types::TrackKind;
 use rskit_media_ffmpeg::{FfmpegConfig, FfmpegProbe};
+use rskit_storage::FileSource;
 
 #[tokio::main]
 async fn main() -> rskit_errors::AppResult<()> {

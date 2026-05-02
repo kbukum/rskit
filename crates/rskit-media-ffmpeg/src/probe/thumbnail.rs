@@ -3,9 +3,9 @@
 use std::time::Duration;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
-use rskit_file::FileSource;
 use rskit_media::spatial::Resolution;
 use rskit_media::time::Timestamp;
+use rskit_storage::FileSource;
 
 use super::FfmpegProbe;
 
@@ -18,7 +18,7 @@ impl FfmpegProbe {
         resolution: Option<Resolution>,
     ) -> AppResult<FileSource> {
         let resolved = source.to_local_path().await?;
-        let tmp = rskit_file::TempFile::with_extension("jpg")?;
+        let tmp = rskit_storage::TempFile::with_extension("jpg")?;
 
         let mut args = vec![
             "-ss".to_string(),
@@ -65,7 +65,7 @@ impl FfmpegProbe {
         resolution: Option<Resolution>,
     ) -> AppResult<Vec<FileSource>> {
         let resolved = source.to_local_path().await?;
-        let tmp_dir = rskit_file::TempDir::new()?;
+        let tmp_dir = rskit_storage::TempDir::new()?;
         let pattern = tmp_dir.path().join("thumb_%04d.jpg");
 
         let mut vf = format!("fps=1/{}", interval.as_secs().max(1));
@@ -111,7 +111,7 @@ impl FfmpegProbe {
         columns: u32,
     ) -> AppResult<FileSource> {
         let resolved = source.to_local_path().await?;
-        let tmp = rskit_file::TempFile::with_extension("jpg")?;
+        let tmp = rskit_storage::TempFile::with_extension("jpg")?;
 
         let vf = format!(
             "fps=1/{},scale={}:{},tile={}x0",
@@ -159,7 +159,7 @@ impl FfmpegProbe {
         resolution: Resolution,
     ) -> AppResult<FileSource> {
         let resolved = source.to_local_path().await?;
-        let tmp = rskit_file::TempFile::with_extension("png")?;
+        let tmp = rskit_storage::TempFile::with_extension("png")?;
 
         let output = tokio::process::Command::new(self.config.ffmpeg_bin())
             .args([

@@ -11,7 +11,7 @@ Typed async interaction traits (`Provider`, `RequestResponse`, `Sink`, `Duplex`)
 ## Features
 
 - `RequestResponse<I,O>` — single request → single response
-- `StreamProvider<I,O>` — request → async stream of responses
+- `Stream<I,O>` — request → async stream of responses
 - `Sink<I>` — fire-and-forget
 - `Duplex<I,O>` — bidirectional streaming
 - Tower bridge for composing providers with middleware

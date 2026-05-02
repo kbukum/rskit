@@ -1,7 +1,6 @@
 //! Integration tests for rskit-media-image: ImageProcessor with real image fixtures.
 
 use image::{ImageFormat, Rgb, RgbImage};
-use rskit_file::{FileSink, FileSource, TempDir, TempFile};
 use rskit_media::{
     executor::MediaExecutor,
     filter::{Filter, FilterTarget, ParamValue, Params},
@@ -11,6 +10,7 @@ use rskit_media::{
     spatial::Resolution,
 };
 use rskit_media_image::ImageProcessor;
+use rskit_storage::{FileSink, FileSource, TempDir, TempFile};
 
 // ── Fixture generation ──────────────────────────────────────────────────────
 

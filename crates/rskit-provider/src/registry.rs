@@ -1,4 +1,4 @@
-//! Operation-to-provider registry with tier-based resolution.
+//! Provider registry with operation and tier-based resolution.
 
 use std::collections::HashMap;
 
@@ -6,7 +6,7 @@ use rskit_errors::{AppError, AppResult, ErrorCode};
 
 /// Binding of an operation to a provider with priority and tier access control.
 #[derive(Debug, Clone)]
-pub struct OperationBinding<P> {
+pub struct Binding<P> {
     /// Identifier of the operation this binding serves.
     pub operation_id: String,
     /// The provider instance.
@@ -24,17 +24,17 @@ pub struct OperationBinding<P> {
 /// 2. Filter to bindings whose `tiers` list is empty (wildcard) or contains the
 ///    requested tier.
 /// 3. Return the binding with the lowest `priority` value.
-pub struct OperationRegistry<P> {
-    bindings: HashMap<String, Vec<OperationBinding<P>>>,
+pub struct Registry<P> {
+    bindings: HashMap<String, Vec<Binding<P>>>,
 }
 
-impl<P: Clone> Default for OperationRegistry<P> {
+impl<P: Clone> Default for Registry<P> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<P: Clone> OperationRegistry<P> {
+impl<P: Clone> Registry<P> {
     /// Create an empty registry.
     pub fn new() -> Self {
         Self {
@@ -43,7 +43,7 @@ impl<P: Clone> OperationRegistry<P> {
     }
 
     /// Register a provider binding for an operation.
-    pub fn bind(&mut self, binding: OperationBinding<P>) {
+    pub fn bind(&mut self, binding: Binding<P>) {
         self.bindings
             .entry(binding.operation_id.clone())
             .or_default()
@@ -80,7 +80,7 @@ impl<P: Clone> OperationRegistry<P> {
     /// List all bindings registered for an operation.
     ///
     /// Returns an empty slice when the operation is unknown.
-    pub fn list_bindings(&self, operation_id: &str) -> &[OperationBinding<P>] {
+    pub fn list_bindings(&self, operation_id: &str) -> &[Binding<P>] {
         self.bindings
             .get(operation_id)
             .map(Vec::as_slice)
@@ -94,14 +94,14 @@ mod tests {
 
     #[test]
     fn resolve_returns_highest_priority_match() {
-        let mut reg = OperationRegistry::new();
-        reg.bind(OperationBinding {
+        let mut reg = Registry::new();
+        reg.bind(Binding {
             operation_id: "transcode".into(),
             provider: "slow-provider",
             tiers: vec![],
             priority: 10,
         });
-        reg.bind(OperationBinding {
+        reg.bind(Binding {
             operation_id: "transcode".into(),
             provider: "fast-provider",
             tiers: vec![],
@@ -114,14 +114,14 @@ mod tests {
 
     #[test]
     fn resolve_filters_by_tier() {
-        let mut reg = OperationRegistry::new();
-        reg.bind(OperationBinding {
+        let mut reg = Registry::new();
+        reg.bind(Binding {
             operation_id: "upscale".into(),
             provider: "premium-backend",
             tiers: vec!["pro".into()],
             priority: 1,
         });
-        reg.bind(OperationBinding {
+        reg.bind(Binding {
             operation_id: "upscale".into(),
             provider: "basic-backend",
             tiers: vec![],
@@ -139,15 +139,15 @@ mod tests {
 
     #[test]
     fn resolve_unknown_operation_returns_not_found() {
-        let reg = OperationRegistry::<&str>::new();
+        let reg = Registry::<&str>::new();
         let err = reg.resolve("nonexistent", "free").unwrap_err();
         assert_eq!(err.code, ErrorCode::NotFound);
     }
 
     #[test]
     fn resolve_no_tier_match_returns_not_found() {
-        let mut reg = OperationRegistry::new();
-        reg.bind(OperationBinding {
+        let mut reg = Registry::new();
+        reg.bind(Binding {
             operation_id: "export".into(),
             provider: "enterprise-only",
             tiers: vec!["enterprise".into()],
@@ -160,14 +160,14 @@ mod tests {
 
     #[test]
     fn list_bindings_returns_all_registered() {
-        let mut reg = OperationRegistry::new();
-        reg.bind(OperationBinding {
+        let mut reg = Registry::new();
+        reg.bind(Binding {
             operation_id: "encode".into(),
             provider: "a",
             tiers: vec![],
             priority: 1,
         });
-        reg.bind(OperationBinding {
+        reg.bind(Binding {
             operation_id: "encode".into(),
             provider: "b",
             tiers: vec!["pro".into()],
@@ -180,7 +180,7 @@ mod tests {
 
     #[test]
     fn default_creates_empty_registry() {
-        let reg = OperationRegistry::<String>::default();
+        let reg = Registry::<String>::default();
         assert!(reg.list_bindings("any").is_empty());
     }
 }

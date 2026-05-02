@@ -12,7 +12,7 @@ rskit-bootstrap   = { path = "../../crates/rskit-bootstrap" }
 rskit-worker      = { path = "../../crates/rskit-worker" }
 rskit-cli         = { path = "../../crates/rskit-cli" }
 rskit-pipeline    = { path = "../../crates/rskit-pipeline" }
-rskit-file        = { path = "../../crates/rskit-file" }
+rskit-storage        = { path = "../../crates/rskit-storage" }
 rskit-media       = { path = "../../crates/rskit-media" }
 rskit-media-image = { path = "../../crates/rskit-media-image" }
 

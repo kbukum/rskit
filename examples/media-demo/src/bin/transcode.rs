@@ -3,12 +3,12 @@
 //! Usage:
 //!   cargo run --bin transcode -- input.mp4 output.mp4
 
-use rskit_file::{FileSink, FileSource};
 use rskit_media::{
     Registry, filter::filters, ops::ResizeMode, pipeline::MediaPipeline, presets,
     spatial::Resolution, time::TimeRange,
 };
 use rskit_media_ffmpeg::{FfmpegConfig, FfmpegExecutor};
+use rskit_storage::{FileSink, FileSource};
 
 #[tokio::main]
 async fn main() -> rskit_errors::AppResult<()> {

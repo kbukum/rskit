@@ -1,13 +1,13 @@
 //! Bridge adapters from messaging traits to [`rskit_provider`] traits.
 //!
 //! - [`ProducerSink`] wraps a [`MessageProducer`] as a [`Sink`].
-//! - [`ConsumerStream`] wraps a [`MessageConsumer`] as a [`StreamProvider`].
+//! - [`ConsumerStream`] wraps a [`MessageConsumer`] as a [`Stream`].
 
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use rskit_errors::AppResult;
-use rskit_provider::traits::{BoxStream, Provider, Sink, StreamProvider};
+use rskit_provider::traits::{BoxStream, Provider, Sink, Stream};
 
 use crate::message::Message;
 use crate::traits::{MessageConsumer, MessageProducer};
@@ -58,9 +58,9 @@ pub fn producer_as_sink<T: Send + Sync + 'static>(
 
 // ─── ConsumerStream ──────────────────────────────────────────────────────────
 
-/// Wraps a [`MessageConsumer`] as a [`StreamProvider<(), Message<T>>`](StreamProvider).
+/// Wraps a [`MessageConsumer`] as a [`Stream<(), Message<T>>`](Stream).
 ///
-/// Calling [`StreamProvider::stream`] returns an unbounded stream of consumed
+/// Calling [`Stream::stream`] returns an unbounded stream of consumed
 /// messages. The stream yields items until an error occurs.
 pub struct ConsumerStream<T: Send + Sync + 'static> {
     name: &'static str,
@@ -75,7 +75,7 @@ impl<T: Send + Sync + 'static> Provider for ConsumerStream<T> {
 }
 
 #[async_trait]
-impl<T: Send + Sync + Clone + 'static> StreamProvider<(), Message<T>> for ConsumerStream<T> {
+impl<T: Send + Sync + Clone + 'static> Stream<(), Message<T>> for ConsumerStream<T> {
     async fn stream(&self, _input: ()) -> AppResult<BoxStream<Message<T>>> {
         let consumer = Arc::clone(&self.consumer);
         let stream = async_stream::try_stream! {

@@ -1,10 +1,10 @@
 use std::pin::Pin;
 
-use futures::Stream;
+use futures::Stream as FuturesStream;
 use rskit_errors::AppResult;
 
 /// Boxed stream of `AppResult<O>`.
-pub type BoxStream<O> = Pin<Box<dyn Stream<Item = AppResult<O>> + Send + 'static>>;
+pub type BoxStream<O> = Pin<Box<dyn FuturesStream<Item = AppResult<O>> + Send + 'static>>;
 
 // ─── Base ─────────────────────────────────────────────────────────────────────
 
@@ -35,7 +35,7 @@ where
 
 /// One input → stream of outputs (gRPC server-stream, SSE, live query).
 #[async_trait::async_trait]
-pub trait StreamProvider<I, O>: Provider
+pub trait Stream<I, O>: Provider
 where
     I: Send + 'static,
     O: Send + 'static,

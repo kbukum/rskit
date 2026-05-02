@@ -26,7 +26,7 @@ rskit-media-image = "0.1"
 ```rust
 use rskit_media_image::ImageProcessor;
 use rskit_media::{MediaPipeline, spatial::Resolution};
-use rskit_file::FileSource;
+use rskit_storage::FileSource;
 
 async fn example() {
     let processor = ImageProcessor::new();

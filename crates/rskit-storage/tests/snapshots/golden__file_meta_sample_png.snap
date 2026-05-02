@@ -1,0 +1,13 @@
+---
+source: crates/rskit-storage/tests/golden.rs
+expression: meta
+---
+{
+  "name": "sample.png",
+  "extension": "png",
+  "mime_type": "image/png",
+  "size": 135770,
+  "created_at": "[timestamp]",
+  "modified_at": "[timestamp]",
+  "checksum": null
+}

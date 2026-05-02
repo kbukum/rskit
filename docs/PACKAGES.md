@@ -59,7 +59,7 @@ rskit is a **Cargo workspace** with a facade crate (`rskit`) and 40+ independent
 | `rskit-llm-providers` | LLM implementations — OpenAI, Anthropic, Gemini |
 | `rskit-embedding` | Embedding provider abstractions for vector search |
 | `rskit-inference` | Inference provider abstractions |
-| `rskit-vector-store` | Vector store abstractions (Qdrant + in-memory) |
+| `rskit-vectorstore` | Vector store abstractions (Qdrant + in-memory) |
 | `rskit-agent` | Agentic loop — LLM orchestration, tool execution |
 | `rskit-tool` | Tool definitions, auto-wiring, registry, middleware |
 | `rskit-hook` | Generic event hook system |
@@ -71,8 +71,8 @@ rskit is a **Cargo workspace** with a facade crate (`rskit`) and 40+ independent
 
 | Crate | Description |
 |-------|-------------|
-| `rskit-file` | File I/O, storage backends, temp files, MIME detection |
-| `rskit-file-s3` | S3 / S3-compatible (MinIO, LocalStack) backend |
+| `rskit-storage` | File I/O, storage backends, temp files, MIME detection |
+| `rskit-storage-s3` | S3 / S3-compatible (MinIO, LocalStack) backend |
 | `rskit-media` | Media types, codec/format registry, pipeline builder |
 | `rskit-media-ffmpeg` | FFmpeg CLI backend for video/audio |
 | `rskit-media-image` | Native image processing (`image` crate) |

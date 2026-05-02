@@ -42,7 +42,7 @@ members = [
     "crates/rskit-llm",
     "crates/rskit-embedding",
     "crates/rskit-inference",
-    "crates/rskit-vector-store",
+    "crates/rskit-vectorstore",
     "crates/rskit-schema",
     "crates/rskit-tool",
     # phase 5 vendor providers
@@ -55,8 +55,8 @@ members = [
     "crates/rskit-hook",
     "crates/rskit-agent",
     # phase 6 media & file
-    "crates/rskit-file",
-    "crates/rskit-file-s3",
+    "crates/rskit-storage",
+    "crates/rskit-storage-s3",
     "crates/rskit-media",
     "crates/rskit-media-ffmpeg",
     "crates/rskit-media-image",
@@ -182,7 +182,7 @@ reqwest      = { version = "0.13", features = ["json", "rustls", "http2", "query
 # Concurrent hash map (discovery)
 dashmap      = "6"
 
-# File I/O (rskit-file)
+# File I/O (rskit-storage)
 tempfile     = "3"
 mime_guess   = "2"
 infer        = "0.19"

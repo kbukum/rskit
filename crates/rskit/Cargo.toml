@@ -60,8 +60,8 @@ rskit-testutil      = { version = "0.1.0", path = "../rskit-testutil",      opti
 rskit-sse           = { version = "0.1.0", path = "../rskit-sse",           optional = true }
 rskit-dag           = { version = "0.1.0", path = "../rskit-dag",           optional = true }
 rskit-llm           = { version = "0.1.0", path = "../rskit-llm",           optional = true }
-rskit-file          = { version = "0.1.0", path = "../rskit-file",          optional = true }
-rskit-file-s3       = { version = "0.1.0", path = "../rskit-file-s3",       optional = true }
+rskit-storage       = { version = "0.1.0", path = "../rskit-storage", optional = true }
+rskit-storage-s3    = { version = "0.1.0", path = "../rskit-storage-s3", optional = true }
 rskit-media         = { version = "0.1.0", path = "../rskit-media",         optional = true }
 rskit-media-ffmpeg  = { version = "0.1.0", path = "../rskit-media-ffmpeg",  optional = true }
 rskit-media-image   = { version = "0.1.0", path = "../rskit-media-image",   optional = true }
@@ -94,13 +94,13 @@ testutil      = ["dep:rskit-testutil"]
 sse           = ["dep:rskit-sse"]
 dag           = ["dep:rskit-dag"]
 llm           = ["dep:rskit-llm"]
-file          = ["dep:rskit-file"]
-media         = ["dep:rskit-media", "file"]
+storage       = ["dep:rskit-storage"]
+media         = ["dep:rskit-media", "storage"]
 media-ffmpeg  = ["dep:rskit-media-ffmpeg", "media"]
 media-image   = ["dep:rskit-media-image", "media"]
 media-full    = ["media-ffmpeg", "media-image"]
-file-s3       = ["file", "dep:rskit-file-s3"]
-file-gcs      = ["file", "rskit-file/gcs"]
+storage-s3    = ["storage", "dep:rskit-storage-s3"]
+storage-gcs   = ["storage", "rskit-storage/gcs"]
 cli           = ["dep:rskit-cli"]
 dataset       = ["dep:rskit-dataset", "cli"]
 bench         = ["dep:rskit-bench"]
@@ -111,5 +111,5 @@ test-util     = []
 full          = [
     "server", "grpc", "encryption", "http", "httpclient", "auth", "di", "database", "cache", "messaging",
     "observability", "authz", "security", "discovery", "testutil", "sse", "dag", "llm",
-    "media-full", "file", "cli", "dataset", "bench", "chain", "process", "stateful",
+    "media-full", "storage", "cli", "dataset", "bench", "chain", "process", "stateful",
 ]

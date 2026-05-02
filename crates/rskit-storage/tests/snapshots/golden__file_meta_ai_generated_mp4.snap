@@ -1,0 +1,13 @@
+---
+source: crates/rskit-storage/tests/golden.rs
+expression: meta
+---
+{
+  "name": "ai-generated.mp4",
+  "extension": "mp4",
+  "mime_type": "video/mp4",
+  "size": 477826,
+  "created_at": "[timestamp]",
+  "modified_at": "[timestamp]",
+  "checksum": null
+}

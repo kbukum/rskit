@@ -388,7 +388,7 @@ fn crop_region_center_aspect() {
 
 #[test]
 fn pipeline_builder_chaining() {
-    let source = rskit_file::FileSource::from_path("/tmp/test.mp4");
+    let source = rskit_storage::FileSource::from_path("/tmp/test.mp4");
     let pipe = pipeline::MediaPipeline::from(&source)
         .resize(Resolution::p720(), ops::ResizeMode::Fit)
         .crop(ops::CropRegion::new(0, 0, 640, 360))
@@ -409,7 +409,7 @@ fn pipeline_builder_chaining() {
 
 #[test]
 fn pipeline_extract() {
-    let source = rskit_file::FileSource::from_path("/tmp/test.mp4");
+    let source = rskit_storage::FileSource::from_path("/tmp/test.mp4");
     let pipe = pipeline::MediaPipeline::from(&source).extract(TimeRange::from_seconds(1.0, 5.0));
     assert_eq!(pipe.operations().len(), 1);
     assert!(matches!(pipe.operations()[0], MediaOp::Extract(_)));
@@ -417,7 +417,7 @@ fn pipeline_extract() {
 
 #[test]
 fn pipeline_transcode() {
-    let source = rskit_file::FileSource::from_path("/tmp/test.mp4");
+    let source = rskit_storage::FileSource::from_path("/tmp/test.mp4");
     let pipe = pipeline::MediaPipeline::from(&source).transcode(presets::webm_vp9());
     assert_eq!(pipe.operations().len(), 1);
     assert!(matches!(pipe.operations()[0], MediaOp::Transcode(_)));
@@ -1409,7 +1409,7 @@ fn preset_gif() {
 
 #[test]
 fn pipeline_audio_operations() {
-    let source = rskit_file::FileSource::from_path("/tmp/test.mp4");
+    let source = rskit_storage::FileSource::from_path("/tmp/test.mp4");
     let pipe = pipeline::MediaPipeline::from(&source)
         .volume(0.5)
         .normalize_audio()
@@ -1430,7 +1430,7 @@ fn pipeline_audio_operations() {
 
 #[test]
 fn pipeline_reverse() {
-    let source = rskit_file::FileSource::from_path("/tmp/test.mp4");
+    let source = rskit_storage::FileSource::from_path("/tmp/test.mp4");
     let pipe = pipeline::MediaPipeline::from(&source).reverse();
     assert_eq!(pipe.operations().len(), 1);
     assert!(matches!(pipe.operations()[0], MediaOp::Reverse));
@@ -1438,7 +1438,7 @@ fn pipeline_reverse() {
 
 #[test]
 fn pipeline_pad() {
-    let source = rskit_file::FileSource::from_path("/tmp/test.mp4");
+    let source = rskit_storage::FileSource::from_path("/tmp/test.mp4");
     let pipe = pipeline::MediaPipeline::from(&source).pad(1920, 1080, "black");
     assert_eq!(pipe.operations().len(), 1);
     assert!(matches!(pipe.operations()[0], MediaOp::Pad(_)));
@@ -1446,7 +1446,7 @@ fn pipeline_pad() {
 
 #[test]
 fn pipeline_select_tracks() {
-    let source = rskit_file::FileSource::from_path("/tmp/test.mp4");
+    let source = rskit_storage::FileSource::from_path("/tmp/test.mp4");
     let pipe = pipeline::MediaPipeline::from(&source)
         .select_tracks(vec![0, 2])
         .select_tracks_by_kind(vec![TrackKind::Video, TrackKind::Audio]);
@@ -1459,7 +1459,7 @@ fn pipeline_select_tracks() {
 
 #[test]
 fn pipeline_estimated_duration_extract() {
-    let source = rskit_file::FileSource::from_path("/tmp/test.mp4");
+    let source = rskit_storage::FileSource::from_path("/tmp/test.mp4");
     let pipe = pipeline::MediaPipeline::from(&source).extract(TimeRange::from_seconds(10.0, 60.0));
     let est = pipe.estimated_duration(Duration::from_secs(120));
     assert_eq!(est, Duration::from_secs(50));
@@ -1467,7 +1467,7 @@ fn pipeline_estimated_duration_extract() {
 
 #[test]
 fn pipeline_estimated_duration_speed() {
-    let source = rskit_file::FileSource::from_path("/tmp/test.mp4");
+    let source = rskit_storage::FileSource::from_path("/tmp/test.mp4");
     let pipe = pipeline::MediaPipeline::from(&source).speed(2.0);
     let est = pipe.estimated_duration(Duration::from_secs(120));
     assert_eq!(est, Duration::from_secs(60));
@@ -1475,7 +1475,7 @@ fn pipeline_estimated_duration_speed() {
 
 #[test]
 fn pipeline_estimated_duration_no_ops() {
-    let source = rskit_file::FileSource::from_path("/tmp/test.mp4");
+    let source = rskit_storage::FileSource::from_path("/tmp/test.mp4");
     let pipe = pipeline::MediaPipeline::from(&source);
     let est = pipe.estimated_duration(Duration::from_secs(120));
     assert_eq!(est, Duration::from_secs(120));
@@ -1483,8 +1483,8 @@ fn pipeline_estimated_duration_no_ops() {
 
 #[test]
 fn pipeline_concat_and_overlay() {
-    let source = rskit_file::FileSource::from_path("/tmp/test.mp4");
-    let other = rskit_file::FileSource::from_path("/tmp/other.mp4");
+    let source = rskit_storage::FileSource::from_path("/tmp/test.mp4");
+    let other = rskit_storage::FileSource::from_path("/tmp/other.mp4");
     let pipe = pipeline::MediaPipeline::from(&source)
         .concat(&other)
         .overlay(&other, ops::OverlayPosition::Center, 0.8);

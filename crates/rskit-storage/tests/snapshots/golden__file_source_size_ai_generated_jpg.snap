@@ -1,0 +1,7 @@
+---
+source: crates/rskit-storage/tests/golden.rs
+expression: size
+---
+Some(
+    15448,
+)

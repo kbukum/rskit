@@ -10,7 +10,7 @@ mod metadata;
 use std::time::Duration;
 
 use rskit_errors::AppResult;
-use rskit_file::FileSource;
+use rskit_storage::FileSource;
 
 pub use analysis::{Chapter, KeyframeInfo, PictureType, SilenceInterval};
 pub use metadata::MediaMetadata;

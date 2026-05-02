@@ -15,7 +15,7 @@ keywords               = ["audio", "wav", "waveform", "loudness", "silence"]
 
 [dependencies]
 rskit-errors = { path = "../rskit-errors" }
-rskit-file   = { path = "../rskit-file" }
+rskit-storage   = { path = "../rskit-storage" }
 rskit-media  = { path = "../rskit-media" }
 bytes        = { workspace = true }
 tokio        = { workspace = true }

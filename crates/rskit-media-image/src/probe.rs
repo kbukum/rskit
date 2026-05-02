@@ -4,7 +4,6 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
-use rskit_file::FileSource;
 use rskit_media::{
     codec::Codec,
     format::Format,
@@ -14,6 +13,7 @@ use rskit_media::{
     track::{Track, VideoTrackInfo},
     types::{MediaType, TrackKind},
 };
+use rskit_storage::FileSource;
 
 /// Native image probe using the `image` crate.
 ///

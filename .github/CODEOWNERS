@@ -14,7 +14,7 @@
 /crates/rskit-validation/  @kbukum
 /crates/rskit-encryption/  @kbukum
 /crates/rskit-schema/      @kbukum
-/crates/rskit-file/        @kbukum
+/crates/rskit-storage/        @kbukum
 /crates/rskit-media/       @kbukum
 /crates/rskit-media-image/ @kbukum
 /crates/rskit-media-audio/ @kbukum
@@ -48,7 +48,7 @@
 
 # Infrastructure
 /crates/rskit-database/  @kbukum
-/crates/rskit-file-s3/   @kbukum
+/crates/rskit-storage-s3/   @kbukum
 /crates/rskit-messaging/ @kbukum
 
 # AI/ML
@@ -58,7 +58,7 @@
 /crates/rskit-dataset/        @kbukum
 /crates/rskit-embedding/      @kbukum
 /crates/rskit-inference/      @kbukum
-/crates/rskit-vector-store/   @kbukum
+/crates/rskit-vectorstore/   @kbukum
 /crates/rskit-mcp/            @kbukum
 /crates/rskit-agent/          @kbukum
 /crates/rskit-tool/           @kbukum

@@ -1,0 +1,13 @@
+---
+source: crates/rskit-storage/tests/golden.rs
+expression: meta
+---
+{
+  "name": "ai-generated.wav",
+  "extension": "wav",
+  "mime_type": "audio/x-wav",
+  "size": 82028,
+  "created_at": "[timestamp]",
+  "modified_at": "[timestamp]",
+  "checksum": null
+}

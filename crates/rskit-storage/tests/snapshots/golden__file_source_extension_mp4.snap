@@ -1,0 +1,5 @@
+---
+source: crates/rskit-storage/tests/golden.rs
+expression: ext
+---
+mp4

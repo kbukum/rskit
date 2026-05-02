@@ -25,7 +25,7 @@ on nothing higher):
 
 1. **Foundation** — `rskit-errors`, `rskit-config`, `rskit-logging`,
    `rskit-validation`
-2. **Utilities** — `rskit-encryption`, `rskit-schema`, `rskit-file`,
+2. **Utilities** — `rskit-encryption`, `rskit-schema`, `rskit-storage`,
    `rskit-media`, `rskit-media-image`, `rskit-media-audio`,
    `rskit-media-ffmpeg`
 3. **Patterns** — `rskit-provider`, `rskit-resilience`, `rskit-hook`,
@@ -36,11 +36,11 @@ on nothing higher):
 6. **Security** — `rskit-auth`, `rskit-authz`
 7. **Transport** — `rskit-http`, `rskit-httpclient`, `rskit-grpc`,
    `rskit-server`
-8. **Infrastructure** — `rskit-database`, `rskit-file-s3`,
+8. **Infrastructure** — `rskit-database`, `rskit-storage-s3`,
    `rskit-messaging`
 9. **AI/ML** — `rskit-llm`, `rskit-llm-providers`, `rskit-bench`,
    `rskit-dataset`, `rskit-embedding`, `rskit-inference`,
-   `rskit-vector-store`, `rskit-mcp`, `rskit-agent`, `rskit-tool`
+   `rskit-vectorstore`, `rskit-mcp`, `rskit-agent`, `rskit-tool`
 10. **Platform** — `rskit-discovery`, `rskit-process`, `rskit-cli`,
     `rskit-explain`, `rskit-integration`, `rskit-testutil`
 

@@ -6,7 +6,7 @@
 pub mod adapt;
 /// Tower middleware layers: logging, tracing, resilience.
 pub mod middleware;
-/// Operation-to-provider registry with tier-based resolution.
+/// Provider registry with operation and tier-based resolution.
 pub mod registry;
 /// [`TowerProvider`] — bridge from `tower::Service` to [`traits::RequestResponse`].
 pub mod tower_bridge;
@@ -14,9 +14,9 @@ pub mod tower_bridge;
 pub mod traits;
 
 pub use adapt::{request_response_fn, sink_fn};
-pub use registry::{OperationBinding, OperationRegistry};
+pub use registry::{Binding, Registry};
 pub use tower_bridge::TowerProvider;
-pub use traits::{Duplex, DuplexChannel, Provider, RequestResponse, Sink, StreamProvider};
+pub use traits::{Duplex, DuplexChannel, Provider, RequestResponse, Sink, Stream};
 
 #[cfg(test)]
 mod tests {

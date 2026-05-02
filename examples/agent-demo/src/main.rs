@@ -2,7 +2,7 @@
 //!
 //! Demonstrates: rskit-worker (background tasks with progress),
 //! rskit-cli (progress bars, output tables, cancellation),
-//! rskit-pipeline (stream processing), rskit-file (I/O),
+//! rskit-pipeline (stream processing), rskit-storage (I/O),
 //! rskit-media + rskit-media-image (actual image processing).
 //!
 //! Run: cargo run -p agent-demo

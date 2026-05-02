@@ -1,0 +1,28 @@
+[package]
+name        = "rskit-storage-s3"
+description = "Amazon S3 and S3-compatible (MinIO, LocalStack) storage backend for rskit-storage"
+version.workspace      = true
+edition.workspace      = true
+license.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+documentation          = "https://docs.rs/rskit-storage-s3"
+readme                 = "README.md"
+categories             = ["filesystem", "asynchronous", "web-programming"]
+keywords               = ["s3", "minio", "storage", "async", "file"]
+
+[dependencies]
+rskit-errors = { path = "../rskit-errors" }
+rskit-storage   = { path = "../rskit-storage" }
+aws-sdk-s3   = "1"
+async-trait  = { workspace = true }
+bytes        = { workspace = true }
+chrono       = { workspace = true }
+serde        = { workspace = true }
+tracing      = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "full"] }
+serde_json = { workspace = true }
