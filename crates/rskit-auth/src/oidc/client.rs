@@ -499,6 +499,31 @@ fVY5JLsbM7l4Egd233vN6Yo=
         .unwrap()
     }
 
+    fn issue_token_without_nbf(nonce: &str) -> String {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let mut header = Header::new(Algorithm::RS256);
+        header.kid = Some("rsa-1".into());
+        encode(
+            &header,
+            &serde_json::json!({
+                "sub": "user-123",
+                "iss": ISSUER,
+                "aud": [CLIENT_ID],
+                "exp": now + 3600,
+                "iat": now,
+                "nonce": nonce,
+                "email": "user@example.com",
+                "email_verified": true,
+                "name": "Example User"
+            }),
+            &EncodingKey::from_rsa_pem(RSA_PRIVATE_KEY.as_bytes()).unwrap(),
+        )
+        .unwrap()
+    }
+
     #[tokio::test]
     async fn authorization_request_includes_pkce_state_and_nonce() {
         let client = mock_client();
@@ -562,6 +587,20 @@ fVY5JLsbM7l4Egd233vN6Yo=
         assert_eq!(claims.sub, "user-123");
         assert_eq!(claims.email.as_deref(), Some("user@example.com"));
         assert_eq!(userinfo.name.as_deref(), Some("Example User"));
+    }
+
+    #[tokio::test]
+    async fn valid_id_token_without_nbf_is_accepted() {
+        let client = mock_client();
+        let token = issue_token_without_nbf("nonce-123");
+
+        let claims = client
+            .validate_id_token(&token, Some("nonce-123"))
+            .await
+            .unwrap();
+
+        assert_eq!(claims.sub, "user-123");
+        assert!(claims.nbf.is_none());
     }
 
     #[tokio::test]
