@@ -2,13 +2,7 @@
 
 mod local;
 
-#[cfg(feature = "gcs")]
-mod gcs;
-
 pub use local::{LocalStore, LocalStoreConfig};
-
-#[cfg(feature = "gcs")]
-pub use gcs::{GcsStore, GcsStoreConfig};
 
 use std::collections::HashMap;
 use std::sync::Arc;

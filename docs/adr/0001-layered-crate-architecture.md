@@ -37,7 +37,7 @@ on nothing higher):
 7. **Transport** — `rskit-http`, `rskit-httpclient`, `rskit-grpc`,
    `rskit-server`
 8. **Infrastructure** — `rskit-database`, `rskit-storage-s3`,
-   `rskit-messaging`
+   `rskit-storage-gcs`, `rskit-messaging`
 9. **AI/ML** — `rskit-llm`, `rskit-llm-providers`, `rskit-bench`,
    `rskit-dataset`, `rskit-embedding`, `rskit-inference`,
    `rskit-vectorstore`, `rskit-mcp`, `rskit-agent`, `rskit-tool`

@@ -57,6 +57,7 @@ members = [
     # phase 6 media & file
     "crates/rskit-storage",
     "crates/rskit-storage-s3",
+    "crates/rskit-storage-gcs",
     "crates/rskit-media",
     "crates/rskit-media-ffmpeg",
     "crates/rskit-media-image",
