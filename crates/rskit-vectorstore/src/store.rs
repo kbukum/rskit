@@ -78,6 +78,7 @@ pub struct FilterCondition {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SearchFilter {
     /// Filter by exact field match (e.g., platform = "youtube").
+    #[serde(default)]
     pub must: Vec<FilterCondition>,
 }
 

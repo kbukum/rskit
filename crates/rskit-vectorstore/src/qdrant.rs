@@ -138,21 +138,12 @@ impl VectorStore for QdrantVectorStore {
         if let Some(sf) = filter
             && !sf.must.is_empty()
         {
-            let conditions: Vec<Condition> = sf
+            let conditions: AppResult<Vec<Condition>> = sf
                 .must
                 .into_iter()
-                .filter_map(|condition| {
-                    if let Some(s) = condition.equals.as_str() {
-                        Some(Condition::matches(condition.field, s.to_string()))
-                    } else {
-                        condition
-                            .equals
-                            .as_i64()
-                            .map(|n| Condition::matches(condition.field, n))
-                    }
-                })
+                .map(|condition| filter_condition_to_qdrant(condition.field, condition.equals))
                 .collect();
-            builder = builder.filter(Filter::must(conditions));
+            builder = builder.filter(Filter::must(conditions?));
         }
 
         let results = self.client.search_points(builder).await.map_err(|e| {
@@ -254,6 +245,22 @@ fn json_to_qdrant_value(v: serde_json::Value) -> qdrant_client::qdrant::Value {
         _ => Kind::StringValue(v.to_string()),
     };
     qdrant_client::qdrant::Value { kind: Some(kind) }
+}
+
+fn filter_condition_to_qdrant(field: String, value: serde_json::Value) -> AppResult<Condition> {
+    if let Some(s) = value.as_str() {
+        return Ok(Condition::matches(field, s.to_string()));
+    }
+    if let Some(n) = value.as_i64() {
+        return Ok(Condition::matches(field, n));
+    }
+    if let Some(b) = value.as_bool() {
+        return Ok(Condition::matches(field, b));
+    }
+    Err(AppError::new(
+        ErrorCode::InvalidInput,
+        format!("unsupported Qdrant filter value for field '{field}': {value}"),
+    ))
 }
 
 fn qdrant_value_to_json(v: qdrant_client::qdrant::Value) -> serde_json::Value {
