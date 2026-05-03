@@ -128,8 +128,8 @@ impl RedisClient {
                         "cache TTL must be greater than zero",
                     ));
                 }
-                let secs = dur.as_secs().max(1);
-                conn.set_ex::<_, _, ()>(&k, val, secs)
+                let millis = u64::try_from(dur.as_millis()).unwrap_or(u64::MAX).max(1);
+                conn.pset_ex::<_, _, ()>(&k, val, millis)
                     .await
                     .map_err(redis_err)?;
             }

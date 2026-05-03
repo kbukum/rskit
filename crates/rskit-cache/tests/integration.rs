@@ -59,6 +59,23 @@ async fn memory_cache_prunes_expired_before_capacity_eviction() {
     assert_eq!(cache.get("fresh").await.unwrap().as_deref(), Some("new"));
 }
 
+#[tokio::test]
+async fn memory_cache_honors_subsecond_ttl() {
+    let now = Arc::new(Mutex::new(std::time::Instant::now()));
+    let clock = Arc::clone(&now);
+    let cache = MemoryCache::new_with_clock(None, None, move || *clock.lock());
+
+    cache
+        .set("short", "value", Some(Duration::from_millis(500)))
+        .await
+        .unwrap();
+    *now.lock() += Duration::from_millis(250);
+    assert_eq!(cache.get("short").await.unwrap().as_deref(), Some("value"));
+
+    *now.lock() += Duration::from_millis(250);
+    assert_eq!(cache.get("short").await.unwrap(), None);
+}
+
 #[cfg(feature = "redis")]
 mod redis_integration {
     use rskit_cache::{RedisClient, RedisConfig};
