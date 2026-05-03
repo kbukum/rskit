@@ -7,6 +7,8 @@
 //! No backend is registered by default; construct and inject a registry at the
 //! composition boundary.
 
+#![warn(missing_docs)]
+
 /// Async Redis client with string, hash, list, scan, and pub/sub operations.
 #[cfg(feature = "redis")]
 pub mod client;

@@ -33,12 +33,13 @@ impl VectorStoreRegistry {
         factory: Arc<dyn VectorFactory>,
     ) -> AppResult<()> {
         let name = name.into();
-        if self.factories.insert(name.clone(), factory).is_some() {
+        if self.factories.contains_key(&name) {
             return Err(AppError::new(
                 ErrorCode::AlreadyExists,
                 format!("vectorstore backend '{name}' is already registered"),
             ));
         }
+        self.factories.insert(name, factory);
         Ok(())
     }
 

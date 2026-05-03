@@ -12,8 +12,8 @@ use crate::registry::CacheBackend;
 /// A generic, JSON-serialised store backed by a [`CacheBackend`].
 ///
 /// Keys are automatically prefixed with the store's `prefix` so that
-/// multiple `TypedStore` instances can coexist in the same Redis database
-/// without key collisions.
+/// multiple `TypedStore` instances can coexist on the same backend without
+/// key collisions.
 pub struct TypedStore<T> {
     client: Arc<dyn CacheBackend>,
     prefix: String,
@@ -30,7 +30,7 @@ impl<T: Serialize + DeserializeOwned + Send + Sync> TypedStore<T> {
         }
     }
 
-    /// Build the full key used in Redis.
+    /// Build the backend key used for storage.
     fn full_key(&self, key: &str) -> String {
         format!("{}:{}", self.prefix, key)
     }

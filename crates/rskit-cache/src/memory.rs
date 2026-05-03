@@ -1,6 +1,7 @@
 //! In-memory cache backend.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
@@ -25,17 +26,36 @@ pub struct MemoryCache {
     prefix: Option<String>,
     max_entries: Option<usize>,
     entries: Mutex<HashMap<String, Entry>>,
+    clock: Arc<dyn Fn() -> Instant + Send + Sync>,
 }
 
 impl MemoryCache {
     /// Create an empty in-memory cache.
     #[must_use]
     pub fn new(prefix: Option<String>, max_entries: Option<usize>) -> Self {
+        Self::new_with_clock(prefix, max_entries, Instant::now)
+    }
+
+    /// Create an in-memory cache with an injected clock.
+    ///
+    /// This is primarily useful for deterministic tests and simulations that
+    /// need to advance cache expiry without sleeping.
+    #[must_use]
+    pub fn new_with_clock(
+        prefix: Option<String>,
+        max_entries: Option<usize>,
+        clock: impl Fn() -> Instant + Send + Sync + 'static,
+    ) -> Self {
         Self {
             prefix,
             max_entries,
             entries: Mutex::new(HashMap::new()),
+            clock: Arc::new(clock),
         }
+    }
+
+    fn now(&self) -> Instant {
+        (self.clock)()
     }
 
     fn key(&self, key: &str) -> String {
@@ -55,7 +75,7 @@ impl CacheBackend for MemoryCache {
         let mut entries = self.entries.lock();
         let full_key = self.key(key);
         match entries.get(&full_key) {
-            Some(entry) if entry.is_expired(Instant::now()) => {
+            Some(entry) if entry.is_expired(self.now()) => {
                 entries.remove(&full_key);
                 Ok(None)
             }
@@ -66,7 +86,7 @@ impl CacheBackend for MemoryCache {
 
     async fn set(&self, key: &str, val: &str, ttl: Option<Duration>) -> AppResult<()> {
         let mut entries = self.entries.lock();
-        let now = Instant::now();
+        let now = self.now();
         Self::prune_expired(&mut entries, now);
 
         if ttl.is_some_and(|ttl| ttl.is_zero()) {

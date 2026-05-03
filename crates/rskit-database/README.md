@@ -11,7 +11,7 @@ construct `Database` from validated configuration.
 
 ```toml
 [dependencies]
-rskit-database = { version = "0.1", features = ["postgres"] }
+rskit-database = { version = "0.1", features = ["postgres", "sqlx-any"] }
 
 # Optional driver features:
 # postgres, mysql, sqlite, sqlx-any

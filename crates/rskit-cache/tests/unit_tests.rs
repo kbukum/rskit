@@ -1,6 +1,7 @@
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
+use parking_lot::Mutex;
 use rskit_cache::{
     CacheBackend, CacheConfig, CacheRegistry, MemoryCache, MemoryConfig, TypedStore,
     register_memory,
@@ -46,12 +47,14 @@ async fn memory_cache_ttl_zero_expires_immediately() {
 
 #[tokio::test]
 async fn memory_cache_ttl_boundary_expires_after_duration() {
-    let cache = MemoryCache::default();
+    let now = Arc::new(Mutex::new(Instant::now()));
+    let clock = Arc::clone(&now);
+    let cache = MemoryCache::new_with_clock(None, None, move || *clock.lock());
     cache
         .set("short", "value", Some(Duration::from_millis(1)))
         .await
         .unwrap();
-    tokio::time::sleep(Duration::from_millis(5)).await;
+    *now.lock() += Duration::from_millis(5);
 
     assert_eq!(cache.get("short").await.unwrap(), None);
 }

@@ -1,5 +1,7 @@
+use std::sync::Arc;
 use std::time::Duration;
 
+use parking_lot::Mutex;
 use rskit_cache::{CacheBackend, MemoryCache};
 
 #[tokio::test]
@@ -26,13 +28,15 @@ async fn memory_cache_prefix_isolated() {
 
 #[tokio::test]
 async fn memory_cache_prunes_expired_before_capacity_eviction() {
-    let cache = MemoryCache::new(None, Some(1));
+    let now = Arc::new(Mutex::new(std::time::Instant::now()));
+    let clock = Arc::clone(&now);
+    let cache = MemoryCache::new_with_clock(None, Some(1), move || *clock.lock());
 
     cache
         .set("expired", "old", Some(Duration::from_millis(1)))
         .await
         .unwrap();
-    tokio::time::sleep(Duration::from_millis(5)).await;
+    *now.lock() += Duration::from_millis(5);
     cache.set("fresh", "new", None).await.unwrap();
 
     assert_eq!(cache.get("expired").await.unwrap(), None);

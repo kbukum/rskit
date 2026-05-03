@@ -1,5 +1,7 @@
 //! Vector store abstraction with in-memory default and opt-in adapters.
 
+#![warn(missing_docs)]
+
 mod memory;
 #[cfg(feature = "qdrant")]
 mod qdrant;

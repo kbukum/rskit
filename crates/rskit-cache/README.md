@@ -13,8 +13,12 @@ import side effects.
 ```toml
 [dependencies]
 rskit-cache = "0.1"
+```
 
-# Optional Redis backend
+With Redis:
+
+```toml
+[dependencies]
 rskit-cache = { version = "0.1", features = ["redis"] }
 ```
 
@@ -30,9 +34,9 @@ register_memory(&mut registry)?;
 let cache = registry
     .build(&CacheConfig {
         backend: "memory".into(),
+        key_prefix: None,
         memory: MemoryConfig::default(),
-        #[cfg(feature = "redis")]
-        redis: Default::default(),
+        ..Default::default()
     })
     .await?;
 

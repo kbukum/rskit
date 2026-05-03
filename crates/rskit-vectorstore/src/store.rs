@@ -53,6 +53,7 @@ pub struct SearchResult {
 
 /// Canonical vector distance/similarity metrics.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 #[serde(rename_all = "lowercase")]
 pub enum SimilarityMetric {
     /// Cosine similarity.

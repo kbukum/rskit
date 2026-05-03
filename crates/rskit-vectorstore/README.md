@@ -12,8 +12,12 @@ and is registered only when the application calls `register_qdrant`.
 ```toml
 [dependencies]
 rskit-vectorstore = "0.1"
+```
 
-# Optional Qdrant backend
+With Qdrant:
+
+```toml
+[dependencies]
 rskit-vectorstore = { version = "0.1", features = ["qdrant"] }
 ```
 

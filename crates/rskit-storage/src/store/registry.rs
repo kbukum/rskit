@@ -45,12 +45,13 @@ impl StorageRegistry {
         factory: Arc<dyn StorageFactory>,
     ) -> AppResult<()> {
         let name = name.into();
-        if self.factories.insert(name.clone(), factory).is_some() {
+        if self.factories.contains_key(&name) {
             return Err(AppError::new(
                 ErrorCode::AlreadyExists,
                 format!("storage backend '{name}' is already registered"),
             ));
         }
+        self.factories.insert(name, factory);
         Ok(())
     }
 
