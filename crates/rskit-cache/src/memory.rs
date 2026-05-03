@@ -1,6 +1,6 @@
 //! In-memory cache backend.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -25,7 +25,7 @@ impl Entry {
 pub struct MemoryCache {
     prefix: Option<String>,
     max_entries: Option<usize>,
-    entries: Mutex<HashMap<String, Entry>>,
+    entries: Mutex<BTreeMap<String, Entry>>,
     clock: Arc<dyn Fn() -> Instant + Send + Sync>,
 }
 
@@ -49,7 +49,7 @@ impl MemoryCache {
         Self {
             prefix,
             max_entries: max_entries.filter(|entries| *entries > 0),
-            entries: Mutex::new(HashMap::new()),
+            entries: Mutex::new(BTreeMap::new()),
             clock: Arc::new(clock),
         }
     }
@@ -64,7 +64,7 @@ impl MemoryCache {
             .map_or_else(|| key.to_owned(), |prefix| format!("{prefix}:{key}"))
     }
 
-    fn prune_expired(entries: &mut HashMap<String, Entry>, now: Instant) {
+    fn prune_expired(entries: &mut BTreeMap<String, Entry>, now: Instant) {
         entries.retain(|_, entry| !entry.is_expired(now));
     }
 }
@@ -88,6 +88,7 @@ impl CacheBackend for MemoryCache {
         let mut entries = self.entries.lock();
         let now = self.now();
         Self::prune_expired(&mut entries, now);
+        let key = self.key(key);
 
         if ttl.is_some_and(|ttl| ttl.is_zero()) {
             return Err(AppError::new(
@@ -98,14 +99,14 @@ impl CacheBackend for MemoryCache {
 
         if let Some(max_entries) = self.max_entries
             && entries.len() >= max_entries
-            && !entries.contains_key(&self.key(key))
+            && !entries.contains_key(&key)
             && let Some(first_key) = entries.keys().next().cloned()
         {
             entries.remove(&first_key);
         }
 
         entries.insert(
-            self.key(key),
+            key,
             Entry {
                 value: val.to_owned(),
                 expires_at: ttl.map(|duration| now + duration),

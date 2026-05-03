@@ -1,9 +1,9 @@
 use std::time::Duration;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// Cache backend selection and common key settings.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CacheConfig {
     /// Backend name looked up in an injected [`crate::CacheRegistry`].
     #[serde(default = "default_backend")]
@@ -34,14 +34,14 @@ fn default_backend() -> String {
 }
 
 /// In-memory cache configuration.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct MemoryConfig {
     /// Optional maximum entry count. `Some(0)` is normalized to unbounded by the memory backend.
     pub max_entries: Option<usize>,
 }
 
 /// Redis connection and pool configuration.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RedisConfig {
     /// Redis server hostname or IP address.
     #[serde(default = "default_host")]
@@ -57,7 +57,7 @@ pub struct RedisConfig {
     /// Connection pool size (default: 10).
     #[serde(default = "default_pool_size")]
     pub pool_size: u32,
-    /// Timeout for establishing a connection, serialized as integer seconds.
+    /// Timeout for establishing a connection, represented as integer seconds.
     #[serde(default = "default_connect_timeout", with = "duration_seconds")]
     pub connect_timeout: Duration,
     /// Optional prefix prepended to every key.

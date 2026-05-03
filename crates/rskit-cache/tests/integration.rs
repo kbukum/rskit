@@ -60,6 +60,19 @@ async fn memory_cache_prunes_expired_before_capacity_eviction() {
 }
 
 #[tokio::test]
+async fn memory_cache_capacity_eviction_is_deterministic() {
+    let cache = MemoryCache::new(None, Some(2));
+
+    cache.set("b", "second", None).await.unwrap();
+    cache.set("a", "first", None).await.unwrap();
+    cache.set("c", "third", None).await.unwrap();
+
+    assert_eq!(cache.get("a").await.unwrap(), None);
+    assert_eq!(cache.get("b").await.unwrap().as_deref(), Some("second"));
+    assert_eq!(cache.get("c").await.unwrap().as_deref(), Some("third"));
+}
+
+#[tokio::test]
 async fn memory_cache_honors_subsecond_ttl() {
     let now = Arc::new(Mutex::new(std::time::Instant::now()));
     let clock = Arc::clone(&now);

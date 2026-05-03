@@ -234,7 +234,7 @@ impl FileStore for GcsStore {
 
     async fn presigned_url(&self, _key: &str, _expires_in: Duration) -> AppResult<String> {
         Err(AppError::new(
-            ErrorCode::Internal,
+            ErrorCode::InvalidInput,
             "GCS presigned URLs are not supported by this backend",
         ))
     }
