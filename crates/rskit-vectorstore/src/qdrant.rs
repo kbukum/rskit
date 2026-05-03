@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use qdrant_client::Qdrant;
 use qdrant_client::qdrant::{
-    Condition, CreateCollectionBuilder, DeletePointsBuilder, Distance, Filter, PointStruct,
+    Condition, CreateCollectionBuilder, DeletePointsBuilder, Distance, Filter, PointStruct, Range,
     SearchPointsBuilder, UpsertPointsBuilder, VectorParamsBuilder,
 };
 use rskit_errors::{AppError, AppResult, ErrorCode};
@@ -254,6 +254,16 @@ fn filter_condition_to_qdrant(field: String, value: serde_json::Value) -> AppRes
     if let Some(n) = value.as_i64() {
         return Ok(Condition::matches(field, n));
     }
+    if let Some(n) = value.as_f64() {
+        return Ok(Condition::range(
+            field,
+            Range {
+                gte: Some(n),
+                lte: Some(n),
+                ..Default::default()
+            },
+        ));
+    }
     if let Some(b) = value.as_bool() {
         return Ok(Condition::matches(field, b));
     }
@@ -308,5 +318,36 @@ mod tests {
         let qdrant_val = json_to_qdrant_value(json_val.clone());
         let back = qdrant_value_to_json(qdrant_val);
         assert_eq!(json_val, back);
+    }
+
+    #[test]
+    fn test_filter_condition_accepts_double_payload_values() {
+        let condition = filter_condition_to_qdrant("score".to_owned(), serde_json::json!(42.5))
+            .expect("double filters should be supported");
+
+        let qdrant_client::qdrant::condition::ConditionOneOf::Field(field) =
+            condition.condition_one_of.expect("field condition")
+        else {
+            panic!("expected field condition");
+        };
+        let range = field.range.expect("double filters use exact range");
+        assert_eq!(range.gte, Some(42.5));
+        assert_eq!(range.lte, Some(42.5));
+    }
+
+    #[test]
+    fn test_filter_condition_accepts_unsigned_payload_values() {
+        let value = u64::try_from(i64::MAX).unwrap() + 1;
+        let condition = filter_condition_to_qdrant("visits".to_owned(), serde_json::json!(value))
+            .expect("unsigned numeric filters should be supported");
+
+        let qdrant_client::qdrant::condition::ConditionOneOf::Field(field) =
+            condition.condition_one_of.expect("field condition")
+        else {
+            panic!("expected field condition");
+        };
+        let range = field.range.expect("unsigned filters use exact range");
+        assert_eq!(range.gte, Some(value as f64));
+        assert_eq!(range.lte, Some(value as f64));
     }
 }

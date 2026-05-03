@@ -20,7 +20,7 @@ impl DatabaseRegistry {
     }
 
     /// Register a supported driver.
-    pub fn register(&mut self, driver: DbDriver) -> AppResult<()> {
+    pub(crate) fn register(&mut self, driver: DbDriver) -> AppResult<()> {
         if self.drivers.contains(&driver) {
             return Err(AppError::new(
                 ErrorCode::AlreadyExists,
