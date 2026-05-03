@@ -21,19 +21,19 @@ pub struct RedisClient {
 #[async_trait::async_trait]
 impl CacheBackend for RedisClient {
     async fn get(&self, key: &str) -> AppResult<Option<String>> {
-        Self::get(self, key).await
+        RedisClient::get(self, key).await
     }
 
     async fn set(&self, key: &str, val: &str, ttl: Option<Duration>) -> AppResult<()> {
-        Self::set(self, key, val, ttl).await
+        RedisClient::set(self, key, val, ttl).await
     }
 
     async fn delete(&self, key: &str) -> AppResult<bool> {
-        Self::delete(self, key).await
+        RedisClient::delete(self, key).await
     }
 
     async fn exists(&self, key: &str) -> AppResult<bool> {
-        Self::exists(self, key).await
+        RedisClient::exists(self, key).await
     }
 }
 

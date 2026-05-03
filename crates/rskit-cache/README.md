@@ -60,6 +60,7 @@ register_redis(&mut registry)?;
 let cache = registry
     .build(&CacheConfig {
         backend: "redis".into(),
+        key_prefix: None,
         memory: Default::default(),
         redis: RedisConfig::default(),
     })

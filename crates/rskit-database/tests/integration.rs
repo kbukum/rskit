@@ -186,7 +186,7 @@ fn database_registry_empty_until_explicit_registration() {
     let registry = DatabaseRegistry::new();
     assert!(registry.is_empty());
     assert_eq!(registry.len(), 0);
-    assert!(!registry.contains(DbDriver::Postgres));
+    assert!(!registry.contains(&DbDriver::Postgres));
 }
 
 #[test]

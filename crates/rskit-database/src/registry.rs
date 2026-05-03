@@ -21,19 +21,20 @@ impl DatabaseRegistry {
 
     /// Register a supported driver.
     pub fn register(&mut self, driver: DbDriver) -> AppResult<()> {
-        if !self.drivers.insert(driver.clone()) {
+        if self.drivers.contains(&driver) {
             return Err(AppError::new(
                 ErrorCode::AlreadyExists,
                 format!("database driver '{driver}' is already registered"),
             ));
         }
+        self.drivers.insert(driver);
         Ok(())
     }
 
     /// Return true when the driver has been explicitly registered.
     #[must_use]
-    pub fn contains(&self, driver: DbDriver) -> bool {
-        self.drivers.contains(&driver)
+    pub fn contains(&self, driver: &DbDriver) -> bool {
+        self.drivers.contains(driver)
     }
 
     /// Number of registered database drivers.

@@ -35,7 +35,7 @@ let config = DatabaseConfig {
     ..Default::default()
 };
 
-assert!(registry.contains(config.driver.clone()));
+assert!(registry.contains(&config.driver));
 let database = Database::new(config).await?;
 # Ok(())
 # }
