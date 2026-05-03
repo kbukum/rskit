@@ -14,8 +14,8 @@ use crate::Database;
 
 /// Generic repository interface for CRUD operations.
 ///
-/// Implement this trait for each entity type.  The [`SqlRepository`] struct
-/// provides a convenient base that holds a [`Database`] reference and table
+/// Implement this trait for each entity type.  The `SqlRepository` struct
+/// provides a convenient base that holds a `Database` reference and table
 /// name, but does **not** implement this trait itself because the SQL required
 /// is entity-specific.
 #[async_trait]
@@ -109,7 +109,7 @@ pub struct SqlRepository<T> {
 
 #[cfg(feature = "sqlx-any")]
 impl<T> SqlRepository<T> {
-    /// Create a new [`SqlRepository`] for the given table.
+    /// Create a new `SqlRepository` for the given table.
     pub fn new(db: Arc<Database>, table_name: &'static str) -> Self {
         Self {
             db,
@@ -118,7 +118,7 @@ impl<T> SqlRepository<T> {
         }
     }
 
-    /// Return a reference to the underlying [`Database`].
+    /// Return a reference to the underlying `Database`.
     pub fn db(&self) -> &Database {
         &self.db
     }

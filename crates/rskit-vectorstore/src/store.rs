@@ -52,21 +52,16 @@ pub struct SearchResult {
 }
 
 /// Canonical vector distance/similarity metrics.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SimilarityMetric {
     /// Cosine similarity.
+    #[default]
     Cosine,
     /// Dot product.
     Dot,
     /// Euclidean L2 distance.
     L2,
-}
-
-impl Default for SimilarityMetric {
-    fn default() -> Self {
-        Self::Cosine
-    }
 }
 
 /// Exact-match metadata filter condition.

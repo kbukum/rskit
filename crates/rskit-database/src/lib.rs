@@ -3,11 +3,12 @@
 //! This crate provides:
 //!
 //! - [`DatabaseConfig`] — connection pool configuration with serde support.
-//! - [`Database`] — an async pool wrapping `sqlx::AnyPool` when the `sqlx-any`
+//! - `Database` — an async pool wrapping `sqlx::AnyPool` when the `sqlx-any`
 //!   feature is enabled.
 //! - [`Repository`] — a generic trait for entity CRUD operations.
 //! - [`FindOpts`] — builder for paginated / filtered queries.
-//! - [`SqlRepository`] — base helper struct for SQL-backed repositories.
+//! - `SqlRepository` — base helper struct for SQL-backed repositories when the
+//!   `sqlx-any` feature is enabled.
 //! - [`query`] — HTTP query-string parsing and pagination helpers.
 
 #![warn(missing_docs)]

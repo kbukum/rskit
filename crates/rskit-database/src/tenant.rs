@@ -2,7 +2,7 @@
 //!
 //! Mirrors gokit's `database/tenant.go`.  Provides:
 //!
-//! - [`set_session_variable`] — sets a PostgreSQL session variable via
+//! - `set_session_variable` — sets a PostgreSQL session variable via
 //!   `set_config()` for Row Level Security (RLS) policies.
 //! - [`TenantScope`] — a builder for constructing tenant-filtered SQL
 //!   `WHERE` clauses.
