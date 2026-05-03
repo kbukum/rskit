@@ -5,6 +5,7 @@ use std::time::Duration;
 use redis::AsyncCommands;
 use rskit_bootstrap::{Component, Health};
 use rskit_errors::{AppError, AppResult, ErrorCode};
+use tokio::time::timeout;
 
 use crate::config::RedisConfig;
 use crate::registry::{CacheBackend, CacheFactory, CacheRegistry};
@@ -72,15 +73,33 @@ impl RedisClient {
             .with_cause(e)
         })?;
 
-        let manager = redis::aio::ConnectionManager::new(client)
-            .await
-            .map_err(|e| {
-                AppError::new(
-                    ErrorCode::ConnectionFailed,
-                    format!("redis connection failed: {e}"),
-                )
-                .with_cause(e)
-            })?;
+        let manager = timeout(config.connect_timeout, async {
+            let mut manager = redis::aio::ConnectionManager::new(client)
+                .await
+                .map_err(|e| {
+                    AppError::new(
+                        ErrorCode::ConnectionFailed,
+                        format!("redis connection failed: {e}"),
+                    )
+                    .with_cause(e)
+                })?;
+            let pong: String = redis::cmd("PING")
+                .query_async(&mut manager)
+                .await
+                .map_err(redis_err)?;
+            tracing::debug!(response = %pong, "redis PING ok");
+            Ok::<_, AppError>(manager)
+        })
+        .await
+        .map_err(|_| {
+            AppError::new(
+                ErrorCode::ConnectionFailed,
+                format!(
+                    "redis connection timed out after {}ms",
+                    config.connect_timeout.as_millis()
+                ),
+            )
+        })??;
 
         tracing::debug!(host = %config.host, port = %config.port, db = %config.database, "redis connected");
 

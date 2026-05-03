@@ -254,6 +254,17 @@ fn filter_condition_to_qdrant(field: String, value: serde_json::Value) -> AppRes
     if let Some(n) = value.as_i64() {
         return Ok(Condition::matches(field, n));
     }
+    if let Some(n) = value.as_u64() {
+        let signed = i64::try_from(n).map_err(|_| {
+            AppError::new(
+                ErrorCode::InvalidInput,
+                format!(
+                    "unsupported Qdrant unsigned integer filter value for field '{field}': {n}; encode values larger than i64::MAX as strings"
+                ),
+            )
+        })?;
+        return Ok(Condition::matches(field, signed));
+    }
     if let Some(n) = value.as_f64() {
         return Ok(Condition::range(
             field,
@@ -337,8 +348,7 @@ mod tests {
 
     #[test]
     fn test_filter_condition_accepts_unsigned_payload_values() {
-        let value = u64::try_from(i64::MAX).unwrap() + 1;
-        let condition = filter_condition_to_qdrant("visits".to_owned(), serde_json::json!(value))
+        let condition = filter_condition_to_qdrant("visits".to_owned(), serde_json::json!(42_u64))
             .expect("unsigned numeric filters should be supported");
 
         let qdrant_client::qdrant::condition::ConditionOneOf::Field(field) =
@@ -346,8 +356,22 @@ mod tests {
         else {
             panic!("expected field condition");
         };
-        let range = field.range.expect("unsigned filters use exact range");
-        assert_eq!(range.gte, Some(value as f64));
-        assert_eq!(range.lte, Some(value as f64));
+        let matched = field
+            .r#match
+            .expect("unsigned filters use exact integer match");
+        assert_eq!(
+            matched.match_value,
+            Some(qdrant_client::qdrant::r#match::MatchValue::Integer(42))
+        );
+    }
+
+    #[test]
+    fn test_filter_condition_rejects_unsigned_values_larger_than_i64() {
+        let value = u64::try_from(i64::MAX).unwrap() + 1;
+        let err = filter_condition_to_qdrant("visits".to_owned(), serde_json::json!(value))
+            .expect_err("large unsigned filters must not be converted through f64");
+
+        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert!(err.to_string().contains("larger than i64::MAX"));
     }
 }
