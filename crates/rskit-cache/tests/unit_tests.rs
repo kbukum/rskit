@@ -59,6 +59,16 @@ async fn memory_cache_ttl_boundary_expires_after_duration() {
 }
 
 #[tokio::test]
+async fn memory_cache_zero_capacity_is_unbounded() {
+    let cache = MemoryCache::new(None, Some(0));
+    cache.set("first", "value", None).await.unwrap();
+    cache.set("second", "value", None).await.unwrap();
+
+    assert_eq!(cache.get("first").await.unwrap().as_deref(), Some("value"));
+    assert_eq!(cache.get("second").await.unwrap().as_deref(), Some("value"));
+}
+
+#[tokio::test]
 async fn typed_store_round_trips_json_via_cache_trait() {
     #[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq)]
     struct Session {

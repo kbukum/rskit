@@ -36,7 +36,7 @@ fn default_backend() -> String {
 /// In-memory cache configuration.
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct MemoryConfig {
-    /// Optional maximum entry count. When exceeded, expired entries are pruned first.
+    /// Optional maximum entry count. `Some(0)` is normalized to unbounded by the memory backend.
     pub max_entries: Option<usize>,
 }
 

@@ -48,7 +48,7 @@ impl MemoryCache {
     ) -> Self {
         Self {
             prefix,
-            max_entries,
+            max_entries: max_entries.filter(|entries| *entries > 0),
             entries: Mutex::new(HashMap::new()),
             clock: Arc::new(clock),
         }
