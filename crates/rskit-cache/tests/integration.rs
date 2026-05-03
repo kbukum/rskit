@@ -15,6 +15,22 @@ async fn memory_cache_delete_reports_existence() {
 }
 
 #[tokio::test]
+async fn memory_cache_delete_reports_false_for_expired_key() {
+    let now = Arc::new(Mutex::new(std::time::Instant::now()));
+    let clock = Arc::clone(&now);
+    let cache = MemoryCache::new_with_clock(None, None, move || *clock.lock());
+
+    cache
+        .set("expired", "value", Some(Duration::from_millis(1)))
+        .await
+        .unwrap();
+    *now.lock() += Duration::from_millis(5);
+
+    assert!(!cache.delete("expired").await.unwrap());
+    assert_eq!(cache.get("expired").await.unwrap(), None);
+}
+
+#[tokio::test]
 async fn memory_cache_prefix_isolated() {
     let a = MemoryCache::new(Some("a".into()), None);
     let b = MemoryCache::new(Some("b".into()), None);

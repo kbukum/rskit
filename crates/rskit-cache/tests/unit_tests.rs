@@ -34,15 +34,14 @@ async fn unregistered_backend_returns_error() {
 }
 
 #[tokio::test]
-async fn memory_cache_ttl_zero_expires_immediately() {
+async fn memory_cache_ttl_zero_is_invalid() {
     let cache = MemoryCache::default();
-    cache
+    let err = cache
         .set("boundary", "value", Some(Duration::ZERO))
         .await
-        .unwrap();
+        .unwrap_err();
 
-    assert_eq!(cache.get("boundary").await.unwrap(), None);
-    assert!(!cache.exists("boundary").await.unwrap());
+    assert!(err.to_string().contains("TTL must be greater than zero"));
 }
 
 #[tokio::test]

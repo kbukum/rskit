@@ -122,6 +122,12 @@ impl RedisClient {
         let mut conn = self.conn();
         match ttl {
             Some(dur) => {
+                if dur.is_zero() {
+                    return Err(AppError::new(
+                        ErrorCode::InvalidInput,
+                        "cache TTL must be greater than zero",
+                    ));
+                }
                 let secs = dur.as_secs().max(1);
                 conn.set_ex::<_, _, ()>(&k, val, secs)
                     .await

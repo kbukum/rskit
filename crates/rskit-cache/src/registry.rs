@@ -14,7 +14,7 @@ use crate::memory::MemoryCache;
 pub trait CacheBackend: Send + Sync {
     /// Retrieve a string value by key.
     async fn get(&self, key: &str) -> AppResult<Option<String>>;
-    /// Store a string value with an optional TTL.
+    /// Store a string value with an optional TTL. `Duration::ZERO` is invalid.
     async fn set(&self, key: &str, val: &str, ttl: Option<Duration>) -> AppResult<()>;
     /// Delete a key and report whether it existed.
     async fn delete(&self, key: &str) -> AppResult<bool>;

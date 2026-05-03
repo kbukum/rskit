@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
-use rskit_errors::AppResult;
+use rskit_errors::{AppError, AppResult, ErrorCode};
 
 use crate::registry::CacheBackend;
 
@@ -90,8 +90,10 @@ impl CacheBackend for MemoryCache {
         Self::prune_expired(&mut entries, now);
 
         if ttl.is_some_and(|ttl| ttl.is_zero()) {
-            entries.remove(&self.key(key));
-            return Ok(());
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                "cache TTL must be greater than zero",
+            ));
         }
 
         if let Some(max_entries) = self.max_entries
@@ -113,7 +115,18 @@ impl CacheBackend for MemoryCache {
     }
 
     async fn delete(&self, key: &str) -> AppResult<bool> {
-        Ok(self.entries.lock().remove(&self.key(key)).is_some())
+        let mut entries = self.entries.lock();
+        let now = self.now();
+        let key = self.key(key);
+        if entries
+            .get(&key)
+            .and_then(|entry| entry.expires_at)
+            .is_some_and(|expires_at| expires_at <= now)
+        {
+            entries.remove(&key);
+            return Ok(false);
+        }
+        Ok(entries.remove(&key).is_some())
     }
 
     async fn exists(&self, key: &str) -> AppResult<bool> {

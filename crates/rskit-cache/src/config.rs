@@ -57,7 +57,7 @@ pub struct RedisConfig {
     /// Connection pool size (default: 10).
     #[serde(default = "default_pool_size")]
     pub pool_size: u32,
-    /// Timeout for establishing a connection.
+    /// Timeout for establishing a connection, serialized as integer seconds.
     #[serde(default = "default_connect_timeout", with = "duration_seconds")]
     pub connect_timeout: Duration,
     /// Optional prefix prepended to every key.
