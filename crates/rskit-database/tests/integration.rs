@@ -2,9 +2,9 @@ use std::time::Duration;
 
 #[cfg(feature = "sqlx-any")]
 use rskit_database::SqlRepository;
-use rskit_database::{
-    DatabaseConfig, DatabaseRegistry, DbDriver, FindOpts, SslMode, register_sqlite,
-};
+#[cfg(feature = "sqlite")]
+use rskit_database::register_sqlite;
+use rskit_database::{DatabaseConfig, DatabaseRegistry, DbDriver, FindOpts, SslMode};
 
 #[test]
 fn ssl_mode_defaults_to_prefer() {
@@ -192,6 +192,7 @@ fn database_registry_empty_until_explicit_registration() {
 }
 
 #[test]
+#[cfg(feature = "sqlite")]
 fn database_registry_rejects_duplicate_driver_registration() {
     let mut registry = DatabaseRegistry::new();
     register_sqlite(&mut registry).unwrap();

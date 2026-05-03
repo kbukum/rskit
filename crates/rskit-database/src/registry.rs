@@ -20,6 +20,7 @@ impl DatabaseRegistry {
     }
 
     /// Register a supported driver.
+    #[cfg(any(feature = "postgres", feature = "mysql", feature = "sqlite"))]
     pub(crate) fn register(&mut self, driver: DbDriver) -> AppResult<()> {
         if self.drivers.contains(&driver) {
             return Err(AppError::new(
