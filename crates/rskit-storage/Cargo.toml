@@ -1,6 +1,6 @@
 [package]
 name        = "rskit-storage"
-description = "File I/O, storage backends, temp files, and MIME detection"
+description = "File I/O, local storage, temp files, MIME detection, and storage backend traits"
 version.workspace      = true
 edition.workspace      = true
 license.workspace      = true
@@ -36,5 +36,4 @@ bytes = { workspace = true }
 insta = { workspace = true }
 
 [package.metadata.docs.rs]
-all-features = true
 rustdoc-args = ["--cfg", "docsrs"]

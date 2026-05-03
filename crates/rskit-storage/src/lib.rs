@@ -2,7 +2,7 @@
 //!
 //! `rskit-storage` provides generic file operations for any file type:
 //! read, write, copy, stream, detect type, manage temp files, and
-//! store to local/cloud backends.
+//! store through the [`FileStore`] trait.
 
 #![warn(missing_docs)]
 

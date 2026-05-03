@@ -1,9 +1,10 @@
-//! Google Cloud Storage backend for `rskit-storage`.
+//! Google Cloud Storage backend for [`rskit_storage`].
 //!
-//! Implements [`rskit_storage::FileStore`] for Google Cloud Storage and registers
-//! through an explicit [`rskit_storage::StorageRegistry`]. Importing this crate
-//! does not register a backend or create a client; applications call
-//! [`register_gcs`] with the registry they own.
+//! This crate implements [`rskit_storage::store::FileStore`] without adding
+//! Google Cloud dependencies to the core storage crate. Importing it has no
+//! side effects; applications call [`register_gcs`] with the registry they own.
+
+#![warn(missing_docs)]
 
 mod store;
 

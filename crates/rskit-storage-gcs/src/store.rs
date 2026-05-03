@@ -1,7 +1,14 @@
+//! Google Cloud Storage backend implementing [`rskit_storage::store::FileStore`].
+
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
+use google_cloud_storage::http::objects::delete::DeleteObjectRequest;
+use google_cloud_storage::http::objects::download::Range;
+use google_cloud_storage::http::objects::get::GetObjectRequest;
+use google_cloud_storage::http::objects::list::ListObjectsRequest;
+use google_cloud_storage::http::objects::upload::{Media, UploadObjectRequest, UploadType};
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_storage::FileSource;
 use rskit_storage::store::{
@@ -16,6 +23,12 @@ pub struct GcsStoreConfig {
     pub bucket: String,
     /// Key prefix for all objects.
     pub prefix: Option<String>,
+    /// Use unsigned requests for public buckets.
+    ///
+    /// Defaults to authenticated requests using Google application default
+    /// credentials. Set this only for explicitly public buckets.
+    #[serde(default)]
+    pub anonymous: bool,
 }
 
 /// Google Cloud Storage backend.
@@ -27,17 +40,43 @@ pub struct GcsStore {
 impl GcsStore {
     /// Create a new Google Cloud Storage backend.
     pub async fn new(config: GcsStoreConfig) -> AppResult<Self> {
-        let client_config = google_cloud_storage::client::ClientConfig::default().anonymous();
+        let client_config = if config.anonymous {
+            google_cloud_storage::client::ClientConfig::default().anonymous()
+        } else {
+            google_cloud_storage::client::ClientConfig::default()
+                .with_auth()
+                .await
+                .map_err(|e| {
+                    AppError::new(
+                        ErrorCode::Internal,
+                        format!("GCS authentication configuration failed: {e}"),
+                    )
+                })?
+        };
         let client = google_cloud_storage::client::Client::new(client_config);
         Ok(Self { client, config })
     }
 
-    fn full_key(&self, key: &str) -> String {
-        match &self.config.prefix {
-            Some(prefix) => format!("{prefix}/{key}"),
-            None => key.to_string(),
-        }
+    /// Returns the bucket name.
+    pub fn bucket(&self) -> &str {
+        &self.config.bucket
     }
+
+    fn full_key(&self, key: &str) -> String {
+        self.config
+            .prefix
+            .as_ref()
+            .map_or_else(|| key.to_string(), |prefix| format!("{prefix}/{key}"))
+    }
+}
+
+fn object_size(size: i64) -> AppResult<u64> {
+    u64::try_from(size).map_err(|_| {
+        AppError::new(
+            ErrorCode::Internal,
+            format!("GCS object size must not be negative: {size}"),
+        )
+    })
 }
 
 #[async_trait::async_trait]
@@ -53,9 +92,7 @@ impl FileStore for GcsStore {
         let size = data.len() as u64;
         let full_key = self.full_key(key);
 
-        use google_cloud_storage::http::objects::upload::{Media, UploadObjectRequest, UploadType};
-
-        let upload_type = UploadType::Simple(Media::new(full_key.clone()));
+        let upload_type = UploadType::Simple(Media::new(full_key));
         let req = UploadObjectRequest {
             bucket: self.config.bucket.clone(),
             ..Default::default()
@@ -90,8 +127,6 @@ impl FileStore for GcsStore {
     async fn download(&self, key: &str) -> AppResult<FileSource> {
         let full_key = self.full_key(key);
 
-        use google_cloud_storage::http::objects::get::GetObjectRequest;
-
         let req = GetObjectRequest {
             bucket: self.config.bucket.clone(),
             object: full_key,
@@ -100,7 +135,7 @@ impl FileStore for GcsStore {
 
         let data = self
             .client
-            .download_object(&req, &Default::default())
+            .download_object(&req, &Range::default())
             .await
             .map_err(|e| AppError::new(ErrorCode::NotFound, format!("GCS download failed: {e}")))?;
 
@@ -109,8 +144,6 @@ impl FileStore for GcsStore {
 
     async fn delete(&self, key: &str) -> AppResult<()> {
         let full_key = self.full_key(key);
-
-        use google_cloud_storage::http::objects::delete::DeleteObjectRequest;
 
         let req = DeleteObjectRequest {
             bucket: self.config.bucket.clone(),
@@ -136,8 +169,6 @@ impl FileStore for GcsStore {
     async fn head(&self, key: &str) -> AppResult<StoredFile> {
         let full_key = self.full_key(key);
 
-        use google_cloud_storage::http::objects::get::GetObjectRequest;
-
         let req = GetObjectRequest {
             bucket: self.config.bucket.clone(),
             object: full_key,
@@ -152,7 +183,7 @@ impl FileStore for GcsStore {
 
         Ok(StoredFile {
             key: key.to_string(),
-            size: obj.size as u64,
+            size: object_size(obj.size)?,
             content_type: obj
                 .content_type
                 .unwrap_or_else(|| "application/octet-stream".to_string()),
@@ -164,12 +195,14 @@ impl FileStore for GcsStore {
     async fn list(&self, prefix: &str, limit: Option<usize>) -> AppResult<Vec<StoredFile>> {
         let full_prefix = self.full_key(prefix);
 
-        use google_cloud_storage::http::objects::list::ListObjectsRequest;
+        let max_results = limit.map(i32::try_from).transpose().map_err(|_| {
+            AppError::new(ErrorCode::InvalidInput, "GCS list limit exceeds i32::MAX")
+        })?;
 
         let req = ListObjectsRequest {
             bucket: self.config.bucket.clone(),
             prefix: Some(full_prefix),
-            max_results: limit.map(|l| l as i32),
+            max_results,
             ..Default::default()
         };
 
@@ -183,16 +216,18 @@ impl FileStore for GcsStore {
             .items
             .unwrap_or_default()
             .into_iter()
-            .map(|obj| StoredFile {
-                key: obj.name,
-                size: obj.size as u64,
-                content_type: obj
-                    .content_type
-                    .unwrap_or_else(|| "application/octet-stream".to_string()),
-                stored_at: chrono::Utc::now(),
-                metadata: obj.metadata.unwrap_or_default(),
+            .map(|obj| {
+                Ok(StoredFile {
+                    key: obj.name,
+                    size: object_size(obj.size)?,
+                    content_type: obj
+                        .content_type
+                        .unwrap_or_else(|| "application/octet-stream".to_string()),
+                    stored_at: chrono::Utc::now(),
+                    metadata: obj.metadata.unwrap_or_default(),
+                })
             })
-            .collect();
+            .collect::<AppResult<Vec<_>>>()?;
 
         Ok(items)
     }
@@ -242,11 +277,35 @@ mod tests {
     use super::*;
 
     #[test]
-    fn config_deserializes_with_optional_prefix() {
+    fn config_deserializes_with_authenticated_default() {
         let json = r#"{"bucket": "test"}"#;
         let cfg: GcsStoreConfig = serde_json::from_str(json).unwrap();
         assert_eq!(cfg.bucket, "test");
         assert!(cfg.prefix.is_none());
+        assert!(!cfg.anonymous);
+    }
+
+    #[test]
+    fn config_deserializes_anonymous_opt_in() {
+        let json = r#"{"bucket": "public-assets", "prefix": "uploads", "anonymous": true}"#;
+        let cfg: GcsStoreConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(cfg.bucket, "public-assets");
+        assert_eq!(cfg.prefix.as_deref(), Some("uploads"));
+        assert!(cfg.anonymous);
+    }
+
+    #[tokio::test]
+    async fn anonymous_store_constructs_without_credentials() {
+        let store = GcsStore::new(GcsStoreConfig {
+            bucket: "public-assets".into(),
+            prefix: Some("uploads".into()),
+            anonymous: true,
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(store.bucket(), "public-assets");
+        assert_eq!(store.full_key("image.png"), "uploads/image.png");
     }
 
     #[test]

@@ -28,7 +28,7 @@ Cloud backends live in opt-in adapter crates:
 Adapter crates register through an application-owned `StorageRegistry`; importing
 an adapter crate has no side effects.
 
-## File utilities
+## Usage
 
 ```toml
 [dependencies]
