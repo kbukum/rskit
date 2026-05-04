@@ -170,6 +170,11 @@ impl<T: Send + Sync + Clone + 'static> ManagedConsumer<T> {
             }
         }
 
+        // Call close() to release broker connections and resources.
+        if let Err(e) = self.inner.close().await {
+            tracing::warn!(consumer = %self.name, error = %e, "error closing consumer");
+        }
+
         self.running.store(false, Ordering::SeqCst);
         tracing::debug!(consumer = %self.name, "managed consumer stopped");
         Ok(())

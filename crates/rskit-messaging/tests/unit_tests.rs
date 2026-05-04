@@ -476,7 +476,7 @@ async fn managed_producer_send_batch_while_running() {
     producer.send_batch(msgs).await.unwrap();
 
     assert_eq!(broker.message_count("t").await, 3);
-    producer.stop().unwrap();
+    producer.stop().await.unwrap();
 }
 
 #[tokio::test]

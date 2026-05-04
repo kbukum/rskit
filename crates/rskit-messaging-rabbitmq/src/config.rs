@@ -260,21 +260,11 @@ pub(crate) fn default_rabbitmq_base() -> BrokerConfig {
 }
 
 fn apply_adapter_base_defaults(base: &mut BrokerConfig) {
-    let default_base = BrokerConfig::default();
-    if base.backend == default_base.backend {
+    // Only apply adapter defaults for the backend name; leave all other fields
+    // as-is so that explicit user configuration can be validated and rejected
+    // by validate() if unsupported.
+    if base.backend.is_empty() {
         base.backend = BACKEND_NAME.to_string();
-    }
-    if base.delivery_guarantee == default_base.delivery_guarantee {
-        base.delivery_guarantee = DeliveryGuarantee::AtMostOnce;
-    }
-    if base.commit_strategy == default_base.commit_strategy {
-        base.commit_strategy = CommitStrategy::Auto;
-    }
-    if base.retries == default_base.retries {
-        base.retries = 0;
-    }
-    if base.dlq == default_base.dlq {
-        base.dlq.enabled = false;
     }
 }
 
