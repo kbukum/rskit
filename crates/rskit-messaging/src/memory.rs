@@ -13,7 +13,7 @@ use crate::message::Message;
 use crate::registry::MessagingRegistry;
 use crate::traits::{EventConsumer, EventProducer, MessageConsumer, MessageProducer};
 
-const BACKEND_NAME: &str = "memory";
+const ADAPTER_NAME: &str = "memory";
 
 /// An in-memory message broker backed by a `tokio::sync::broadcast` channel.
 ///
@@ -144,10 +144,10 @@ pub fn register<T: Clone + Send + Sync + 'static>(
     broker: InMemoryBroker<T>,
 ) -> AppResult<()> {
     let producer_broker = broker.clone();
-    registry.register_producer(BACKEND_NAME, move || {
+    registry.register_producer(ADAPTER_NAME, move || {
         Ok(Arc::new(producer_broker.producer()) as Arc<dyn MessageProducer<T>>)
     })?;
-    registry.register_consumer(BACKEND_NAME, move || {
+    registry.register_consumer(ADAPTER_NAME, move || {
         Ok(Arc::new(broker.consumer()) as Arc<dyn MessageConsumer<T>>)
     })
 }
@@ -384,14 +384,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn register_memory_backend_explicitly() {
+    async fn register_memory_adapter_explicitly() {
         let broker: InMemoryBroker<String> = InMemoryBroker::new(16);
         let mut registry = MessagingRegistry::new();
 
         register(&mut registry, broker).unwrap();
 
-        assert_eq!(registry.producer_backends(), vec!["memory"]);
-        assert_eq!(registry.consumer_backends(), vec!["memory"]);
+        assert_eq!(registry.producer_adapters(), vec!["memory"]);
+        assert_eq!(registry.consumer_adapters(), vec!["memory"]);
         let producer = registry.producer("memory").unwrap();
         let consumer = registry.consumer("memory").unwrap();
         consumer.subscribe(&["events"]).await.unwrap();

@@ -47,12 +47,12 @@ pub trait MessageConsumer<T: Send + Sync>: Send + Sync {
         Ok(())
     }
 
-    /// Pause message delivery when the backend supports it.
+    /// Pause message delivery when the adapter supports it.
     async fn pause(&self) -> AppResult<()> {
         unsupported("pause")
     }
 
-    /// Resume paused message delivery when the backend supports it.
+    /// Resume paused message delivery when the adapter supports it.
     async fn resume(&self) -> AppResult<()> {
         unsupported("resume")
     }
@@ -83,7 +83,7 @@ pub trait EventConsumer: Send + Sync {
 /// Lifecycle management for a message-broker connection.
 ///
 /// This is intentionally simpler than [`rskit_bootstrap::Component`] — it
-/// captures the start / stop / health contract that every broker backend
+/// captures the start / stop / health contract that every broker adapter
 /// needs without pulling in the full component registry.  Implementations
 /// can bridge to the bootstrap `Component` trait where needed.
 #[async_trait]

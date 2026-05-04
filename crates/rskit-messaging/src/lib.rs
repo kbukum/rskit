@@ -43,7 +43,10 @@ pub mod traits;
 pub mod translator;
 
 pub use batch::{BatchConfig, BatchProducer};
-pub use config::{BrokerConfig, BrokerConfigExt, CommitStrategy, DeliveryGuarantee, DlqPolicy};
+pub use config::{
+    BrokerConfig, BrokerConfigExt, BrokerConfigOverrides, CommitStrategy, DeliveryGuarantee,
+    DlqPolicy,
+};
 pub use errors::{ErrorClassifier, NoopErrorClassifier};
 pub use event::Event;
 pub use event_publisher::EventPublisher;

@@ -4,11 +4,12 @@ use std::time::Duration;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_messaging::{
-    BrokerConfig, BrokerConfigExt, CommitStrategy, DeliveryGuarantee, DlqPolicy,
+    BrokerConfig, BrokerConfigExt, BrokerConfigOverrides, CommitStrategy, DeliveryGuarantee,
+    DlqPolicy,
 };
 use serde::{Deserialize, Deserializer};
 
-pub(crate) const BACKEND_NAME: &str = "kafka";
+pub(crate) const ADAPTER_NAME: &str = "kafka";
 
 /// Configuration for connecting to a Kafka cluster.
 ///
@@ -16,7 +17,7 @@ pub(crate) const BACKEND_NAME: &str = "kafka";
 /// knobs: bootstrap servers, compression, offset reset, batching, and security settings.
 #[derive(Clone)]
 pub struct KafkaConfig {
-    /// Shared broker settings (backend/name/enabled, delivery, retry, DLQ, etc.).
+    /// Shared broker settings (adapter/name/enabled, delivery, retry, DLQ, etc.).
     pub base: BrokerConfig,
     /// Kafka bootstrap servers. Credentials and query strings are rejected; use SASL fields.
     pub brokers: Vec<String>,
@@ -45,7 +46,7 @@ pub struct KafkaConfig {
 #[derive(Deserialize)]
 struct KafkaConfigSerde {
     #[serde(default, flatten)]
-    base: BrokerConfig,
+    base: BrokerConfigOverrides,
     #[serde(default = "default_brokers")]
     brokers: Vec<String>,
     #[serde(default)]
@@ -75,10 +76,11 @@ impl<'de> Deserialize<'de> for KafkaConfig {
     where
         D: Deserializer<'de>,
     {
-        let mut config = KafkaConfigSerde::deserialize(deserializer)?;
-        apply_adapter_base_defaults(&mut config.base);
+        let config = KafkaConfigSerde::deserialize(deserializer)?;
+        let mut base = default_kafka_base();
+        config.base.apply_to(&mut base);
         Ok(Self {
-            base: config.base,
+            base,
             brokers: config.brokers,
             compression: config.compression,
             auto_offset_reset: config.auto_offset_reset,
@@ -103,7 +105,7 @@ impl fmt::Debug for KafkaConfig {
             .collect::<Vec<_>>();
 
         f.debug_struct("KafkaConfig")
-            .field("backend", &self.base.backend)
+            .field("adapter", &self.base.adapter)
             .field("name", &self.base.name)
             .field("enabled", &self.base.enabled)
             .field("brokers", &redacted_brokers)
@@ -169,7 +171,7 @@ impl BrokerConfigExt for KafkaConfig {
 
     fn validate(&self) -> AppResult<()> {
         self.base.validate()?;
-        validate_backend(&self.base.backend)?;
+        validate_adapter(&self.base.adapter)?;
 
         if self.base.dlq.enabled {
             return invalid(
@@ -307,22 +309,13 @@ impl FromStr for SecurityProtocol {
 }
 
 pub(crate) fn default_kafka_base() -> BrokerConfig {
-    let mut base = BrokerConfig::new(BACKEND_NAME);
+    let mut base = BrokerConfig::new(ADAPTER_NAME);
     base.commit_strategy = CommitStrategy::Auto;
     base.dlq = DlqPolicy {
         enabled: false,
         ..DlqPolicy::default()
     };
     base
-}
-
-fn apply_adapter_base_defaults(base: &mut BrokerConfig) {
-    // Only apply adapter defaults for the backend name; leave all other fields
-    // as-is so that explicit user configuration can be validated and rejected
-    // by validate() if unsupported.
-    if base.backend.is_empty() {
-        base.backend = BACKEND_NAME.to_string();
-    }
 }
 
 pub(crate) fn validate_topic(field: &str, value: &str) -> AppResult<()> {
@@ -409,11 +402,11 @@ mod duration_seconds {
     }
 }
 
-fn validate_backend(backend: &str) -> AppResult<()> {
-    if backend == BACKEND_NAME {
+fn validate_adapter(adapter: &str) -> AppResult<()> {
+    if adapter == ADAPTER_NAME {
         return Ok(());
     }
-    invalid(format!("Kafka config backend must be '{BACKEND_NAME}'"))
+    invalid(format!("Kafka config adapter must be '{ADAPTER_NAME}'"))
 }
 
 fn invalid(message: impl Into<String>) -> AppResult<()> {

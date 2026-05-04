@@ -2,11 +2,12 @@ use std::fmt;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_messaging::{
-    BrokerConfig, BrokerConfigExt, CommitStrategy, DeliveryGuarantee, DlqPolicy,
+    BrokerConfig, BrokerConfigExt, BrokerConfigOverrides, CommitStrategy, DeliveryGuarantee,
+    DlqPolicy,
 };
 use serde::{Deserialize, Deserializer};
 
-pub(crate) const BACKEND_NAME: &str = "nats";
+pub(crate) const ADAPTER_NAME: &str = "nats";
 const DEFAULT_URL: &str = "tls://127.0.0.1:4222";
 
 /// Configuration for the NATS messaging adapter.
@@ -15,7 +16,7 @@ const DEFAULT_URL: &str = "tls://127.0.0.1:4222";
 /// [`BrokerConfig::consumer_group`]; adapter fields are limited to NATS client/protocol knobs.
 #[derive(Clone)]
 pub struct NatsConfig {
-    /// Shared broker settings (backend/name/enabled, delivery, retry, DLQ, etc.).
+    /// Shared broker settings (adapter/name/enabled, delivery, retry, DLQ, etc.).
     pub base: BrokerConfig,
     /// NATS server URLs. Credentials and query strings are rejected.
     pub servers: Vec<String>,
@@ -42,7 +43,7 @@ pub struct NatsConfig {
 #[derive(Deserialize)]
 struct NatsConfigSerde {
     #[serde(default, flatten)]
-    base: BrokerConfig,
+    base: BrokerConfigOverrides,
     #[serde(default = "default_servers")]
     servers: Vec<String>,
     #[serde(default)]
@@ -70,10 +71,11 @@ impl<'de> Deserialize<'de> for NatsConfig {
     where
         D: Deserializer<'de>,
     {
-        let mut config = NatsConfigSerde::deserialize(deserializer)?;
-        apply_adapter_base_defaults(&mut config.base);
+        let config = NatsConfigSerde::deserialize(deserializer)?;
+        let mut base = default_nats_base();
+        config.base.apply_to(&mut base);
         Ok(Self {
-            base: config.base,
+            base,
             servers: config.servers,
             subject_prefix: config.subject_prefix,
             token: config.token,
@@ -91,7 +93,7 @@ impl<'de> Deserialize<'de> for NatsConfig {
 impl fmt::Debug for NatsConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("NatsConfig")
-            .field("backend", &self.base.backend)
+            .field("adapter", &self.base.adapter)
             .field("name", &self.base.name)
             .field("enabled", &self.base.enabled)
             .field("servers", &redact_many(&self.servers))
@@ -143,7 +145,7 @@ impl BrokerConfigExt for NatsConfig {
 
     fn validate(&self) -> AppResult<()> {
         self.base.validate()?;
-        validate_backend(&self.base.backend)?;
+        validate_adapter(&self.base.adapter)?;
 
         if !matches!(self.base.delivery_guarantee, DeliveryGuarantee::AtMostOnce) {
             return invalid(
@@ -210,7 +212,7 @@ impl BrokerConfigExt for NatsConfig {
 }
 
 pub(crate) fn default_nats_base() -> BrokerConfig {
-    let mut base = BrokerConfig::new(BACKEND_NAME);
+    let mut base = BrokerConfig::new(ADAPTER_NAME);
     base.delivery_guarantee = DeliveryGuarantee::AtMostOnce;
     base.commit_strategy = CommitStrategy::Auto;
     base.retries = 0;
@@ -219,15 +221,6 @@ pub(crate) fn default_nats_base() -> BrokerConfig {
         ..DlqPolicy::default()
     };
     base
-}
-
-fn apply_adapter_base_defaults(base: &mut BrokerConfig) {
-    // Only apply adapter defaults for the backend name; leave all other fields
-    // as-is so that explicit user configuration can be validated and rejected
-    // by validate() if unsupported.
-    if base.backend.is_empty() {
-        base.backend = BACKEND_NAME.to_string();
-    }
 }
 
 fn redacted_option(value: Option<&String>) -> Option<&'static str> {
@@ -329,11 +322,11 @@ pub(crate) fn subject_for(config: &NatsConfig, subject: &str) -> AppResult<Strin
     Ok(combined)
 }
 
-fn validate_backend(backend: &str) -> AppResult<()> {
-    if backend == BACKEND_NAME {
+fn validate_adapter(adapter: &str) -> AppResult<()> {
+    if adapter == ADAPTER_NAME {
         return Ok(());
     }
-    invalid(format!("NATS config backend must be '{BACKEND_NAME}'"))
+    invalid(format!("NATS config adapter must be '{ADAPTER_NAME}'"))
 }
 
 fn invalid(message: impl Into<String>) -> AppResult<()> {

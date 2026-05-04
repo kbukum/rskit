@@ -186,12 +186,12 @@ pub fn register(registry: &mut MessagingRegistry<Vec<u8>>, config: KafkaConfig) 
     if !config.base.enabled {
         return Ok(());
     }
-    let backend = config.base.backend.clone();
+    let adapter = config.base.adapter.clone();
     let producer_config = config.clone();
-    registry.register_producer(backend.clone(), move || {
+    registry.register_producer(adapter.clone(), move || {
         Ok(Arc::new(KafkaProducer::new(&producer_config)?) as Arc<dyn MessageProducer<Vec<u8>>>)
     })?;
-    registry.register_consumer(backend, move || {
+    registry.register_consumer(adapter, move || {
         Ok(Arc::new(KafkaConsumer::new(&config)?) as Arc<dyn MessageConsumer<Vec<u8>>>)
     })
 }
@@ -274,7 +274,7 @@ mod tests {
     fn kafka_config_default_values() {
         let config = KafkaConfig::default();
 
-        assert_eq!(config.base.backend, "kafka");
+        assert_eq!(config.base.adapter, "kafka");
         assert_eq!(config.brokers, vec!["localhost:9092".to_string()]);
         assert_eq!(config.base.retries, 3);
         assert_eq!(config.batch_size, 1000);
@@ -290,7 +290,7 @@ mod tests {
     fn kafka_config_deserializes_adapter_defaults() {
         let config: KafkaConfig = serde_json::from_str("{}").unwrap();
 
-        assert_eq!(config.base.backend, "kafka");
+        assert_eq!(config.base.adapter, "kafka");
         assert_eq!(config.brokers, vec!["localhost:9092".to_string()]);
         assert!(config.validate().is_ok());
     }
@@ -337,8 +337,8 @@ mod tests {
     fn register_adds_kafka_factories_without_creating_clients() {
         let mut registry = MessagingRegistry::<Vec<u8>>::new();
         register(&mut registry, KafkaConfig::default()).unwrap();
-        assert_eq!(registry.producer_backends(), vec!["kafka"]);
-        assert_eq!(registry.consumer_backends(), vec!["kafka"]);
+        assert_eq!(registry.producer_adapters(), vec!["kafka"]);
+        assert_eq!(registry.consumer_adapters(), vec!["kafka"]);
     }
 
     #[test]

@@ -515,8 +515,8 @@ fn noop_error_classifier_default() {
 #[test]
 fn core_registry_starts_empty_for_binary_payloads() {
     let registry = rskit_messaging::MessagingRegistry::<Vec<u8>>::new();
-    assert!(registry.producer_backends().is_empty());
-    assert!(registry.consumer_backends().is_empty());
+    assert!(registry.producer_adapters().is_empty());
+    assert!(registry.consumer_adapters().is_empty());
     assert!(registry.producer("kafka").is_err());
     assert!(registry.producer("nats").is_err());
     assert!(registry.producer("rabbitmq").is_err());

@@ -13,16 +13,16 @@ Message broker abstractions with an in-memory default plus opt-in Kafka, NATS, a
 - `MessageProducer<T>` / `MessageConsumer<T>` traits for send and receive.
 - `EventProducer` / `EventConsumer` for CloudEvents-compatible structured events.
 - `InMemoryBroker<T>` for tests with bounded message history.
-- `MessagingRegistry<T>` for explicit, injected backend selection.
-- Broker-neutral `BrokerConfig` for backend/name/enabled, delivery, commit, retry, max-in-flight, topics/subscriptions, consumer group, timeout, and DLQ policy.
+- `MessagingRegistry<T>` for explicit, injected adapter selection.
+- Broker-neutral `BrokerConfig` for adapter/name/enabled, delivery, commit, retry, max-in-flight, topics/subscriptions, consumer group, timeout, and DLQ policy.
 - Canonical DLQ middleware envelope fields: `original_topic`, `error`, `retry_count`, `timestamp`, `headers`, `payload` plus a redacted `payload_summary` for typed Rust payloads.
 - Opt-in adapter crates: `rskit-messaging-kafka`, `rskit-messaging-nats`, and `rskit-messaging-rabbitmq`.
 
 ## Configuration and adapters
 
-Core `rskit-messaging` contains no Kafka/NATS/RabbitMQ SDK dependencies. Adapter crates own protocol-specific settings and register typed factories explicitly. Rust registration captures the typed adapter config by design, then registry creation calls select by `BrokerConfig.backend` without importing optional SDKs from core.
+Core `rskit-messaging` contains no Kafka/NATS/RabbitMQ SDK dependencies. Adapter crates own protocol-specific settings and register typed factories explicitly. Rust registration captures the typed adapter config by design, then registry creation calls select by `BrokerConfig.adapter` without importing optional SDKs from core.
 
-Adapter configs embed `BrokerConfig` and keep only backend-specific knobs outside it:
+Adapter configs embed `BrokerConfig` and keep only adapter-specific knobs outside it:
 
 - Kafka: brokers, compression, offset reset, batching, `SecurityProtocol`, SASL fields, and `allow_insecure_dev`.
 - NATS: server URLs, auth token or username/password, reconnect settings, subject prefix, subscription buffer, and `allow_insecure_dev`.

@@ -346,13 +346,13 @@ pub fn register(
     if !config.base.enabled {
         return Ok(());
     }
-    let backend = config.base.backend.clone();
+    let adapter = config.base.adapter.clone();
     let producer_config = config.clone();
-    registry.register_producer(backend.clone(), move || {
+    registry.register_producer(adapter.clone(), move || {
         Ok(Arc::new(RabbitMqProducer::new(producer_config.clone())?)
             as Arc<dyn MessageProducer<Vec<u8>>>)
     })?;
-    registry.register_consumer(backend, move || {
+    registry.register_consumer(adapter, move || {
         Ok(Arc::new(RabbitMqConsumer::new(config.clone())?) as Arc<dyn MessageConsumer<Vec<u8>>>)
     })
 }
@@ -507,15 +507,15 @@ mod tests {
     fn register_adds_rabbitmq_factories_without_connecting() {
         let mut registry = MessagingRegistry::<Vec<u8>>::new();
         register(&mut registry, RabbitMqConfig::default()).unwrap();
-        assert_eq!(registry.producer_backends(), vec!["rabbitmq"]);
-        assert_eq!(registry.consumer_backends(), vec!["rabbitmq"]);
+        assert_eq!(registry.producer_adapters(), vec!["rabbitmq"]);
+        assert_eq!(registry.consumer_adapters(), vec!["rabbitmq"]);
     }
 
     #[test]
     fn rabbitmq_config_deserializes_adapter_defaults() {
         let config: RabbitMqConfig = serde_json::from_str("{}").unwrap();
 
-        assert_eq!(config.base.backend, "rabbitmq");
+        assert_eq!(config.base.adapter, "rabbitmq");
         assert_eq!(config.uri, "amqps://127.0.0.1:5671/%2f");
         assert!(config.validate().is_ok());
     }
@@ -524,7 +524,7 @@ mod tests {
     fn rabbitmq_defaults_use_supported_auto_ack_semantics() {
         let config = RabbitMqConfig::default();
 
-        assert_eq!(config.base.backend, "rabbitmq");
+        assert_eq!(config.base.adapter, "rabbitmq");
         assert_eq!(config.auto_ack, None);
         assert!(matches!(
             config.base.delivery_guarantee,

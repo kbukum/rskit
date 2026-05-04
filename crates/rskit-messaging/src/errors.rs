@@ -4,7 +4,7 @@ use rskit_errors::AppError;
 
 /// Classifies errors for retry and circuit-breaker decisions.
 ///
-/// Broker backends implement this trait so that generic retry policies and
+/// Broker adapters implement this trait so that generic retry policies and
 /// circuit breakers can decide how to handle a particular failure without
 /// knowing which broker produced it.
 pub trait ErrorClassifier: Send + Sync {

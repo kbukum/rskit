@@ -1,6 +1,6 @@
 [package]
 name        = "rskit-messaging"
-description = "Message broker abstractions, registry, middleware, and in-memory backend"
+description = "Message broker abstractions, registry, middleware, and in-memory adapter"
 version.workspace     = true
 edition.workspace     = true
 license.workspace     = true

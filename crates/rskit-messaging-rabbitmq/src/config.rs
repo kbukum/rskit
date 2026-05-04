@@ -2,11 +2,12 @@ use std::fmt;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_messaging::{
-    BrokerConfig, BrokerConfigExt, CommitStrategy, DeliveryGuarantee, DlqPolicy,
+    BrokerConfig, BrokerConfigExt, BrokerConfigOverrides, CommitStrategy, DeliveryGuarantee,
+    DlqPolicy,
 };
 use serde::{Deserialize, Deserializer};
 
-pub(crate) const BACKEND_NAME: &str = "rabbitmq";
+pub(crate) const ADAPTER_NAME: &str = "rabbitmq";
 const DEFAULT_URI: &str = "amqps://127.0.0.1:5671/%2f";
 
 /// Configuration for the `RabbitMQ` messaging adapter.
@@ -15,7 +16,7 @@ const DEFAULT_URI: &str = "amqps://127.0.0.1:5671/%2f";
 /// connection, routing, queue declaration, acknowledgement, and prefetch knobs.
 #[derive(Clone)]
 pub struct RabbitMqConfig {
-    /// Shared broker settings (backend/name/enabled, delivery, retry, DLQ, etc.).
+    /// Shared broker settings (adapter/name/enabled, delivery, retry, DLQ, etc.).
     pub base: BrokerConfig,
     /// AMQP connection URI. Credentials and query strings are rejected.
     pub uri: String,
@@ -44,7 +45,7 @@ pub struct RabbitMqConfig {
 #[derive(Deserialize)]
 struct RabbitMqConfigSerde {
     #[serde(default, flatten)]
-    base: BrokerConfig,
+    base: BrokerConfigOverrides,
     #[serde(default = "default_uri")]
     uri: String,
     #[serde(default)]
@@ -74,10 +75,11 @@ impl<'de> Deserialize<'de> for RabbitMqConfig {
     where
         D: Deserializer<'de>,
     {
-        let mut config = RabbitMqConfigSerde::deserialize(deserializer)?;
-        apply_adapter_base_defaults(&mut config.base);
+        let config = RabbitMqConfigSerde::deserialize(deserializer)?;
+        let mut base = default_rabbitmq_base();
+        config.base.apply_to(&mut base);
         Ok(Self {
-            base: config.base,
+            base,
             uri: config.uri,
             exchange: config.exchange,
             queue_prefix: config.queue_prefix,
@@ -96,7 +98,7 @@ impl<'de> Deserialize<'de> for RabbitMqConfig {
 impl fmt::Debug for RabbitMqConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("RabbitMqConfig")
-            .field("backend", &self.base.backend)
+            .field("adapter", &self.base.adapter)
             .field("name", &self.base.name)
             .field("enabled", &self.base.enabled)
             .field("retries", &self.base.retries)
@@ -173,7 +175,7 @@ impl BrokerConfigExt for RabbitMqConfig {
 
     fn validate(&self) -> AppResult<()> {
         self.base.validate()?;
-        validate_backend(&self.base.backend)?;
+        validate_adapter(&self.base.adapter)?;
 
         if matches!(self.base.delivery_guarantee, DeliveryGuarantee::ExactlyOnce) {
             return invalid("RabbitMQ exactly_once delivery is not supported by this adapter");
@@ -248,7 +250,7 @@ impl BrokerConfigExt for RabbitMqConfig {
 }
 
 pub(crate) fn default_rabbitmq_base() -> BrokerConfig {
-    let mut base = BrokerConfig::new(BACKEND_NAME);
+    let mut base = BrokerConfig::new(ADAPTER_NAME);
     base.delivery_guarantee = DeliveryGuarantee::AtMostOnce;
     base.commit_strategy = CommitStrategy::Auto;
     base.retries = 0;
@@ -257,15 +259,6 @@ pub(crate) fn default_rabbitmq_base() -> BrokerConfig {
         ..DlqPolicy::default()
     };
     base
-}
-
-fn apply_adapter_base_defaults(base: &mut BrokerConfig) {
-    // Only apply adapter defaults for the backend name; leave all other fields
-    // as-is so that explicit user configuration can be validated and rejected
-    // by validate() if unsupported.
-    if base.backend.is_empty() {
-        base.backend = BACKEND_NAME.to_string();
-    }
 }
 
 fn default_uri() -> String {
@@ -359,11 +352,11 @@ pub(crate) fn queue_for(config: &RabbitMqConfig, queue: &str) -> AppResult<Strin
     Ok(combined)
 }
 
-fn validate_backend(backend: &str) -> AppResult<()> {
-    if backend == BACKEND_NAME {
+fn validate_adapter(adapter: &str) -> AppResult<()> {
+    if adapter == ADAPTER_NAME {
         return Ok(());
     }
-    invalid(format!("RabbitMQ config backend must be '{BACKEND_NAME}'"))
+    invalid(format!("RabbitMQ config adapter must be '{ADAPTER_NAME}'"))
 }
 
 fn invalid(message: impl Into<String>) -> AppResult<()> {

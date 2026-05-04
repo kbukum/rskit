@@ -5,15 +5,15 @@ use serde::Deserialize;
 
 // ── Base broker configuration ────────────────────────────────────────────────
 
-/// Configuration shared by all message-broker backends.
+/// Configuration shared by all message-broker adapters.
 ///
 /// Concrete broker configs embed this struct so generic code can work through
-/// [`BrokerConfigExt`] without knowing backend-specific fields.
+/// [`BrokerConfigExt`] without knowing adapter-specific fields.
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct BrokerConfig {
-    /// Backend name used for registry selection.
-    #[serde(default = "default_backend")]
-    pub backend: String,
+    /// Adapter name used for registry selection.
+    #[serde(default = "default_adapter")]
+    pub adapter: String,
     /// Logical name for this configuration.
     #[serde(default = "default_name")]
     pub name: String,
@@ -53,11 +53,11 @@ pub struct BrokerConfig {
 }
 
 impl BrokerConfig {
-    /// Create a broker config with the provided backend name and shared defaults.
+    /// Create a broker config with the provided adapter name and shared defaults.
     #[must_use]
-    pub fn new(backend: impl Into<String>) -> Self {
+    pub fn new(adapter: impl Into<String>) -> Self {
         Self {
-            backend: backend.into(),
+            adapter: adapter.into(),
             ..Self::default()
         }
     }
@@ -76,7 +76,7 @@ impl BrokerConfig {
 
     /// Validate shared broker-neutral configuration.
     pub fn validate(&self) -> AppResult<()> {
-        validate_name("messaging backend", &self.backend)?;
+        validate_name("messaging adapter", &self.adapter)?;
         validate_name("messaging config name", &self.name)?;
 
         if self.max_in_flight == 0 {
@@ -111,7 +111,7 @@ impl BrokerConfig {
 impl Default for BrokerConfig {
     fn default() -> Self {
         Self {
-            backend: default_backend(),
+            adapter: default_adapter(),
             name: default_name(),
             enabled: default_enabled(),
             retries: default_retries(),
@@ -128,16 +128,94 @@ impl Default for BrokerConfig {
     }
 }
 
+/// Partial broker config used by adapter crates to apply only user-provided
+/// shared settings over adapter-specific defaults.
+#[doc(hidden)]
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+pub struct BrokerConfigOverrides {
+    /// Adapter name used for registry selection.
+    pub adapter: Option<String>,
+    /// Logical name for this configuration.
+    pub name: Option<String>,
+    /// Whether this configuration is enabled.
+    pub enabled: Option<bool>,
+    /// Number of retries for failed requests.
+    pub retries: Option<u32>,
+    /// Backoff between retry attempts in milliseconds.
+    pub retry_backoff: Option<u64>,
+    /// Request timeout in milliseconds.
+    pub request_timeout: Option<Option<u64>>,
+    /// Requested delivery semantics.
+    pub delivery_guarantee: Option<DeliveryGuarantee>,
+    /// Offset/ack commit behavior.
+    pub commit_strategy: Option<CommitStrategy>,
+    /// Dead-letter queue policy.
+    pub dlq: Option<DlqPolicy>,
+    /// Maximum number of in-flight messages.
+    pub max_in_flight: Option<usize>,
+    /// Broker-neutral consumer group name.
+    pub consumer_group: Option<Option<String>>,
+    /// Broker-neutral topic declarations.
+    pub topics: Option<Vec<String>>,
+    /// Broker-neutral subscription subjects/topics.
+    pub subscriptions: Option<Vec<String>>,
+}
+
+impl BrokerConfigOverrides {
+    /// Apply explicitly provided fields to `base`.
+    pub fn apply_to(self, base: &mut BrokerConfig) {
+        if let Some(value) = self.adapter {
+            base.adapter = value;
+        }
+        if let Some(value) = self.name {
+            base.name = value;
+        }
+        if let Some(value) = self.enabled {
+            base.enabled = value;
+        }
+        if let Some(value) = self.retries {
+            base.retries = value;
+        }
+        if let Some(value) = self.retry_backoff {
+            base.retry_backoff = value;
+        }
+        if let Some(value) = self.request_timeout {
+            base.request_timeout = value;
+        }
+        if let Some(value) = self.delivery_guarantee {
+            base.delivery_guarantee = value;
+        }
+        if let Some(value) = self.commit_strategy {
+            base.commit_strategy = value;
+        }
+        if let Some(value) = self.dlq {
+            base.dlq = value;
+        }
+        if let Some(value) = self.max_in_flight {
+            base.max_in_flight = value;
+        }
+        if let Some(value) = self.consumer_group {
+            base.consumer_group = value;
+        }
+        if let Some(value) = self.topics {
+            base.topics = value;
+        }
+        if let Some(value) = self.subscriptions {
+            base.subscriptions = value;
+        }
+    }
+}
+
 /// Extension trait for broker-specific configurations.
 ///
-/// Every backend configuration struct should implement this so that generic
+/// Every adapter configuration struct should implement this so that generic
 /// infrastructure (retry policies, health checks, service discovery) can
 /// access the common [`BrokerConfig`] and perform validation without knowing
 /// the concrete broker type.
 pub trait BrokerConfigExt {
     /// Access the shared broker configuration.
     fn base(&self) -> &BrokerConfig;
-    /// Validate the complete configuration (base + backend-specific fields).
+    /// Validate the complete configuration (base + adapter-specific fields).
     fn validate(&self) -> AppResult<()>;
 }
 
@@ -149,7 +227,7 @@ fn default_retry_backoff() -> u64 {
     100
 }
 
-fn default_backend() -> String {
+fn default_adapter() -> String {
     "memory".to_string()
 }
 
@@ -293,7 +371,7 @@ mod tests {
     fn broker_config_defaults_are_broker_neutral() {
         let config = BrokerConfig::default();
 
-        assert_eq!(config.backend, "memory");
+        assert_eq!(config.adapter, "memory");
         assert_eq!(config.name, "default");
         assert!(config.enabled);
         assert_eq!(config.retries, 3);

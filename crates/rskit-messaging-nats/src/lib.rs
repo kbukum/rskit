@@ -313,13 +313,13 @@ pub fn register(registry: &mut MessagingRegistry<Vec<u8>>, config: NatsConfig) -
     if !config.base.enabled {
         return Ok(());
     }
-    let backend = config.base.backend.clone();
+    let adapter = config.base.adapter.clone();
     let producer_config = config.clone();
-    registry.register_producer(backend.clone(), move || {
+    registry.register_producer(adapter.clone(), move || {
         Ok(Arc::new(NatsProducer::new(producer_config.clone())?)
             as Arc<dyn MessageProducer<Vec<u8>>>)
     })?;
-    registry.register_consumer(backend, move || {
+    registry.register_consumer(adapter, move || {
         Ok(Arc::new(NatsConsumer::new(config.clone())?) as Arc<dyn MessageConsumer<Vec<u8>>>)
     })
 }
@@ -394,15 +394,15 @@ mod tests {
     fn register_adds_nats_factories_without_connecting() {
         let mut registry = MessagingRegistry::<Vec<u8>>::new();
         register(&mut registry, NatsConfig::default()).unwrap();
-        assert_eq!(registry.producer_backends(), vec!["nats"]);
-        assert_eq!(registry.consumer_backends(), vec!["nats"]);
+        assert_eq!(registry.producer_adapters(), vec!["nats"]);
+        assert_eq!(registry.consumer_adapters(), vec!["nats"]);
     }
 
     #[test]
     fn nats_config_deserializes_adapter_defaults() {
         let config: NatsConfig = serde_json::from_str("{}").unwrap();
 
-        assert_eq!(config.base.backend, "nats");
+        assert_eq!(config.base.adapter, "nats");
         assert_eq!(config.servers, vec!["tls://127.0.0.1:4222".to_string()]);
         assert!(config.validate().is_ok());
     }
