@@ -178,8 +178,10 @@ impl BrokerConfigExt for RabbitMqConfig {
         if matches!(self.base.delivery_guarantee, DeliveryGuarantee::ExactlyOnce) {
             return invalid("RabbitMQ exactly_once delivery is not supported by this adapter");
         }
-        if matches!(self.base.commit_strategy, CommitStrategy::Manual) {
-            return invalid("RabbitMQ adapter cannot honor manual commits through MessageConsumer");
+        if !matches!(self.base.commit_strategy, CommitStrategy::Auto) {
+            return invalid(
+                "RabbitMQ MessageConsumer supports only commit_strategy=auto; post_handler_success/manual require an ack-capable consumer API",
+            );
         }
         if self.base.retries != 0 {
             return invalid(
@@ -207,7 +209,7 @@ impl BrokerConfigExt for RabbitMqConfig {
             .iter()
             .chain(self.base.subscriptions.iter())
         {
-            validate_name("RabbitMQ queue", queue)?;
+            queue_for(self, queue)?;
         }
         if self.uri.trim().is_empty() {
             return invalid("RabbitMQ uri is required");
@@ -232,10 +234,13 @@ impl BrokerConfigExt for RabbitMqConfig {
         if self.effective_prefetch_count()? == 0 {
             return invalid("RabbitMQ prefetch_count must be greater than zero");
         }
-        if matches!(self.base.delivery_guarantee, DeliveryGuarantee::AtMostOnce)
-            && !self.effective_auto_ack()
-        {
-            return invalid("RabbitMQ at_most_once delivery requires auto acknowledgements");
+        if !matches!(self.base.delivery_guarantee, DeliveryGuarantee::AtMostOnce) {
+            return invalid(
+                "RabbitMQ MessageConsumer supports only at_most_once delivery without handler-coupled acknowledgements",
+            );
+        }
+        if !self.effective_auto_ack() {
+            return invalid("RabbitMQ auto acknowledgements are required for MessageConsumer");
         }
 
         Ok(())
@@ -244,6 +249,8 @@ impl BrokerConfigExt for RabbitMqConfig {
 
 pub(crate) fn default_rabbitmq_base() -> BrokerConfig {
     let mut base = BrokerConfig::new(BACKEND_NAME);
+    base.delivery_guarantee = DeliveryGuarantee::AtMostOnce;
+    base.commit_strategy = CommitStrategy::Auto;
     base.retries = 0;
     base.dlq = DlqPolicy {
         enabled: false,
@@ -256,6 +263,12 @@ fn apply_adapter_base_defaults(base: &mut BrokerConfig) {
     let default_base = BrokerConfig::default();
     if base.backend == default_base.backend {
         base.backend = BACKEND_NAME.to_string();
+    }
+    if base.delivery_guarantee == default_base.delivery_guarantee {
+        base.delivery_guarantee = DeliveryGuarantee::AtMostOnce;
+    }
+    if base.commit_strategy == default_base.commit_strategy {
+        base.commit_strategy = CommitStrategy::Auto;
     }
     if base.retries == default_base.retries {
         base.retries = 0;
@@ -345,13 +358,15 @@ fn has_url_credentials(value: &str) -> bool {
     value[authority_start..authority_end].contains('@')
 }
 
-pub(crate) fn queue_for(config: &RabbitMqConfig, queue: &str) -> String {
-    debug_assert!(validate_name("RabbitMQ queue", queue).is_ok());
-    if config.queue_prefix.is_empty() {
-        return queue.to_string();
-    }
-
-    format!("{}{}", config.queue_prefix, queue)
+pub(crate) fn queue_for(config: &RabbitMqConfig, queue: &str) -> AppResult<String> {
+    validate_name("RabbitMQ queue", queue)?;
+    let combined = if config.queue_prefix.is_empty() {
+        queue.to_string()
+    } else {
+        format!("{}{}", config.queue_prefix, queue)
+    };
+    validate_name("RabbitMQ combined queue/routing key", &combined)?;
+    Ok(combined)
 }
 
 fn validate_backend(backend: &str) -> AppResult<()> {

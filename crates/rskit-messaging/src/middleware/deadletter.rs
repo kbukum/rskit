@@ -14,6 +14,7 @@ use crate::traits::MessageProducer;
 
 const REDACTED: &str = "<redacted>";
 const MAX_DLQ_PAYLOAD_CHARS: usize = 4096;
+const MAX_BINARY_PREVIEW_BYTES: usize = 32;
 const SENSITIVE_PARTS: &[&str] = &[
     "authorization",
     "cookie",
@@ -59,13 +60,31 @@ pub struct DeadLetterEnvelope<T> {
     pub payload_summary: String,
 }
 
+/// Payload types that can provide a safe dead-letter summary without requiring text display.
+pub trait DeadLetterPayloadSummary: Send + Sync {
+    /// Return a redacted, bounded payload summary for DLQ metadata.
+    fn dead_letter_payload_summary(&self) -> String;
+}
+
+impl DeadLetterPayloadSummary for String {
+    fn dead_letter_payload_summary(&self) -> String {
+        sanitize_summary(self)
+    }
+}
+
+impl DeadLetterPayloadSummary for Vec<u8> {
+    fn dead_letter_payload_summary(&self) -> String {
+        binary_payload_summary(self)
+    }
+}
+
 /// Create a dead-letter middleware that routes terminal failures to a DLQ.
 ///
 /// When the inner handler returns an error, a [`DeadLetterEnvelope`] is sent to
 /// `<original_topic><suffix>`. A successful DLQ publish swallows the terminal
 /// handler error so poison-pill messages do not stall loops. DLQ publish
 /// failures are propagated.
-pub fn dead_letter<T: Send + Sync + Clone + ToString + 'static>(
+pub fn dead_letter<T: Send + Sync + Clone + DeadLetterPayloadSummary + 'static>(
     producer: Arc<dyn MessageProducer<DeadLetterEnvelope<T>>>,
     config: DeadLetterConfig,
 ) -> impl HandlerMiddleware<T> {
@@ -77,7 +96,9 @@ struct DeadLetterMiddleware<T: Send + Sync + 'static> {
     config: DeadLetterConfig,
 }
 
-impl<T: Send + Sync + Clone + ToString + 'static> HandlerMiddleware<T> for DeadLetterMiddleware<T> {
+impl<T: Send + Sync + Clone + DeadLetterPayloadSummary + 'static> HandlerMiddleware<T>
+    for DeadLetterMiddleware<T>
+{
     fn wrap(&self, next: Arc<dyn MessageHandler<T>>) -> Arc<dyn MessageHandler<T>> {
         Arc::new(DeadLetterHandler {
             producer: self.producer.clone(),
@@ -94,7 +115,9 @@ struct DeadLetterHandler<T: Send + Sync + 'static> {
 }
 
 #[async_trait]
-impl<T: Send + Sync + Clone + ToString + 'static> MessageHandler<T> for DeadLetterHandler<T> {
+impl<T: Send + Sync + Clone + DeadLetterPayloadSummary + 'static> MessageHandler<T>
+    for DeadLetterHandler<T>
+{
     async fn handle(&self, msg: Message<T>) -> AppResult<()> {
         let backup = msg.clone();
         match self.next.handle(msg).await {
@@ -107,7 +130,7 @@ impl<T: Send + Sync + Clone + ToString + 'static> MessageHandler<T> for DeadLett
                     retry_count: retry_count(&backup.headers),
                     timestamp: Utc::now(),
                     headers: redact_headers(&backup.headers),
-                    payload_summary: payload_summary(&backup.payload),
+                    payload_summary: backup.payload.dead_letter_payload_summary(),
                     payload: backup.payload,
                 };
                 let mut dlq_msg = Message::new(dlq_topic, envelope);
@@ -146,8 +169,21 @@ fn sanitize_summary(value: &str) -> String {
     }
 }
 
-fn payload_summary<T: ToString>(value: &T) -> String {
-    sanitize_summary(&value.to_string())
+fn binary_payload_summary(value: &[u8]) -> String {
+    let preview = value
+        .iter()
+        .take(MAX_BINARY_PREVIEW_BYTES)
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<Vec<_>>()
+        .join("");
+    if value.len() > MAX_BINARY_PREVIEW_BYTES {
+        format!(
+            "binary payload: {} bytes, hex preview: {preview}…",
+            value.len()
+        )
+    } else {
+        format!("binary payload: {} bytes, hex: {preview}", value.len())
+    }
 }
 
 fn truncate(value: &str) -> String {
@@ -294,5 +330,38 @@ mod tests {
             .handle(Message::new("topic", "fail".to_string()))
             .await;
         assert!(result.is_err());
+    }
+    #[tokio::test]
+    async fn binary_payload_routes_to_dlq_without_string_conversion() {
+        let broker = InMemoryBroker::<DeadLetterEnvelope<Vec<u8>>>::new(16);
+        let dlq_producer = broker.producer();
+        let dlq_consumer = broker.consumer();
+        dlq_consumer.subscribe(&["topic.dlq"]).await.unwrap();
+
+        let base: Arc<dyn MessageHandler<Vec<u8>>> =
+            Arc::new(FnHandler::new(|_msg: Message<Vec<u8>>| async {
+                Err(AppError::new(ErrorCode::Internal, "boom"))
+            }));
+
+        let mw: Arc<dyn HandlerMiddleware<Vec<u8>>> = Arc::new(DeadLetterMiddleware {
+            producer: Arc::new(dlq_producer),
+            config: DeadLetterConfig::default(),
+        });
+        let handler = chain_handlers(base, &[mw]);
+
+        handler
+            .handle(Message::new("topic", vec![0, 1, 2, 0xff]))
+            .await
+            .unwrap();
+
+        let dlq_msg = tokio::time::timeout(Duration::from_millis(200), dlq_consumer.recv())
+            .await
+            .expect("should receive DLQ message")
+            .unwrap();
+        assert_eq!(dlq_msg.payload.payload, vec![0, 1, 2, 0xff]);
+        assert_eq!(
+            dlq_msg.payload.payload_summary,
+            "binary payload: 4 bytes, hex: 000102ff"
+        );
     }
 }

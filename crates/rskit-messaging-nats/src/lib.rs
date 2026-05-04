@@ -6,6 +6,7 @@
 #![warn(missing_docs)]
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 
 use async_nats::Client;
@@ -67,7 +68,7 @@ impl NatsProducer {
 impl MessageProducer<Vec<u8>> for NatsProducer {
     async fn send(&self, msg: Message<Vec<u8>>) -> AppResult<()> {
         validate_subject("NATS subject", &msg.topic)?;
-        let subject = subject_for(&self.config, &msg.topic);
+        let subject = subject_for(&self.config, &msg.topic)?;
         let client = self.client().await?;
         client
             .publish(subject, Bytes::from(msg.payload))
@@ -121,6 +122,9 @@ pub struct NatsConsumer {
     sender: mpsc::Sender<Message<Vec<u8>>>,
     receiver: Mutex<mpsc::Receiver<Message<Vec<u8>>>>,
     tasks: SyncMutex<Vec<ConsumerTask>>,
+    active_tasks: Arc<AtomicUsize>,
+    subscribed: AtomicBool,
+    task_finished: Arc<tokio::sync::Notify>,
 }
 
 struct ConsumerTask {
@@ -140,6 +144,9 @@ impl NatsConsumer {
             sender,
             receiver: Mutex::new(receiver),
             tasks: SyncMutex::new(Vec::new()),
+            active_tasks: Arc::new(AtomicUsize::new(0)),
+            subscribed: AtomicBool::new(false),
+            task_finished: Arc::new(tokio::sync::Notify::new()),
         })
     }
 
@@ -170,9 +177,12 @@ impl Drop for NatsConsumer {
 impl MessageConsumer<Vec<u8>> for NatsConsumer {
     async fn subscribe(&self, topics: &[&str]) -> AppResult<()> {
         let client = self.client().await?;
+        if !topics.is_empty() {
+            self.subscribed.store(true, Ordering::SeqCst);
+        }
         for topic in topics {
             validate_subject("NATS subject", topic)?;
-            let subject = subject_for(&self.config, topic);
+            let subject = subject_for(&self.config, topic)?;
             let mut subscriber =
                 if let Some(queue_group) = self.config.base.consumer_group.as_ref() {
                     client.queue_subscribe(subject, queue_group.clone()).await
@@ -188,6 +198,9 @@ impl MessageConsumer<Vec<u8>> for NatsConsumer {
             let sender = self.sender.clone();
             let cancellation = CancellationToken::new();
             let task_cancellation = cancellation.clone();
+            let active_tasks = self.active_tasks.clone();
+            let task_finished = self.task_finished.clone();
+            active_tasks.fetch_add(1, Ordering::SeqCst);
             let topic_name = (*topic).to_string();
             let handle = tokio::spawn(async move {
                 loop {
@@ -203,13 +216,23 @@ impl MessageConsumer<Vec<u8>> for NatsConsumer {
                             };
                             let topic = message.subject.to_string();
                             let payload = message.payload.to_vec();
-                            if sender.send(Message::new(topic, payload)).await.is_err() {
-                                debug!(topic = %topic_name, "NATS consumer receiver closed");
-                                break;
+                            tokio::select! {
+                                () = task_cancellation.cancelled() => {
+                                    debug!(topic = %topic_name, "NATS consumer task shutting down");
+                                    break;
+                                }
+                                result = sender.send(Message::new(topic, payload)) => {
+                                    if result.is_err() {
+                                        debug!(topic = %topic_name, "NATS consumer receiver closed");
+                                        break;
+                                    }
+                                }
                             }
                         }
                     }
                 }
+                active_tasks.fetch_sub(1, Ordering::SeqCst);
+                task_finished.notify_waiters();
             });
             self.tasks.lock().push(ConsumerTask {
                 cancellation,
@@ -220,12 +243,36 @@ impl MessageConsumer<Vec<u8>> for NatsConsumer {
     }
 
     async fn recv(&self) -> AppResult<Message<Vec<u8>>> {
-        self.receiver.lock().await.recv().await.ok_or_else(|| {
-            AppError::new(
-                ErrorCode::ExternalService,
-                "NATS subscription stream closed",
-            )
-        })
+        let mut receiver = self.receiver.lock().await;
+        loop {
+            if self.subscribed.load(Ordering::SeqCst)
+                && self.active_tasks.load(Ordering::SeqCst) == 0
+                && receiver.is_empty()
+            {
+                return Err(AppError::new(
+                    ErrorCode::ExternalService,
+                    "NATS subscription stream closed",
+                ));
+            }
+
+            match tokio::time::timeout(Duration::from_millis(50), receiver.recv()).await {
+                Ok(Some(message)) => return Ok(message),
+                Ok(None) => {
+                    return Err(AppError::new(
+                        ErrorCode::ExternalService,
+                        "NATS subscription stream closed",
+                    ));
+                }
+                Err(_) => {}
+            }
+        }
+    }
+
+    async fn close(&self) -> AppResult<()> {
+        shutdown_consumer_tasks(self.tasks.lock().drain(..).collect());
+        self.active_tasks.store(0, Ordering::SeqCst);
+        self.task_finished.notify_waiters();
+        Ok(())
     }
 }
 
@@ -302,7 +349,10 @@ fn shutdown_consumer_tasks(tasks: Vec<ConsumerTask>) {
                     continue;
                 }
 
-                if tokio::time::timeout(Duration::from_millis(100), &mut task.handle).await.is_err() {
+                if tokio::time::timeout(Duration::from_millis(100), &mut task.handle)
+                    .await
+                    .is_err()
+                {
                     task.handle.abort();
                     let _ = task.handle.await;
                 }
@@ -399,7 +449,7 @@ mod tests {
             ..NatsConfig::default()
         };
 
-        assert_eq!(subject_for(&config, "events"), "svc.events");
+        assert_eq!(subject_for(&config, "events").unwrap(), "svc.events");
     }
 
     #[tokio::test]
@@ -421,5 +471,37 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
+    }
+    #[test]
+    fn nats_subject_prefix_validates_combined_subject() {
+        let config = NatsConfig {
+            subject_prefix: "svc.".to_string(),
+            base: rskit_messaging::BrokerConfig {
+                topics: vec!["bad subject".to_string()],
+                ..NatsConfig::default().base
+            },
+            ..NatsConfig::default()
+        };
+        assert!(config.validate().is_err());
+
+        let config = NatsConfig {
+            subject_prefix: "svc..".to_string(),
+            base: rskit_messaging::BrokerConfig {
+                topics: vec!["events".to_string()],
+                ..NatsConfig::default().base
+            },
+            ..NatsConfig::default()
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[tokio::test]
+    async fn recv_returns_when_subscribed_tasks_have_closed() {
+        let consumer = NatsConsumer::new(NatsConfig::default()).unwrap();
+        consumer.subscribed.store(true, Ordering::SeqCst);
+
+        let result = consumer.recv().await;
+
+        assert!(result.is_err());
     }
 }

@@ -187,7 +187,7 @@ impl BrokerConfigExt for NatsConfig {
             .iter()
             .chain(self.base.subscriptions.iter())
         {
-            validate_subject("NATS subject", subject)?;
+            subject_for(self, subject)?;
         }
         if self.token.is_some() && (self.username.is_some() || self.password.is_some()) {
             return invalid("NATS token auth and username/password auth are mutually exclusive");
@@ -328,13 +328,15 @@ fn has_url_credentials(value: &str) -> bool {
     value[authority_start..authority_end].contains('@')
 }
 
-pub(crate) fn subject_for(config: &NatsConfig, subject: &str) -> String {
-    debug_assert!(validate_subject("NATS subject", subject).is_ok());
-    if config.subject_prefix.is_empty() {
-        return subject.to_string();
-    }
-
-    format!("{}{}", config.subject_prefix, subject)
+pub(crate) fn subject_for(config: &NatsConfig, subject: &str) -> AppResult<String> {
+    validate_subject("NATS subject", subject)?;
+    let combined = if config.subject_prefix.is_empty() {
+        subject.to_string()
+    } else {
+        format!("{}{}", config.subject_prefix, subject)
+    };
+    validate_subject("NATS combined subject", &combined)?;
+    Ok(combined)
 }
 
 fn validate_backend(backend: &str) -> AppResult<()> {

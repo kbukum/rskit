@@ -22,7 +22,7 @@ pub mod tracing;
 
 pub use self::tracing::tracing_middleware;
 pub use circuit_breaker::{CircuitBreakerConfig, circuit_breaker};
-pub use deadletter::{DeadLetterConfig, DeadLetterEnvelope, dead_letter};
+pub use deadletter::{DeadLetterConfig, DeadLetterEnvelope, DeadLetterPayloadSummary, dead_letter};
 pub use dedup::{DedupConfig, dedup};
 pub use metrics::instrument;
 pub use retry::{RetryConfig, retry};

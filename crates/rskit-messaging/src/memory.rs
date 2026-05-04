@@ -14,7 +14,6 @@ use crate::registry::MessagingRegistry;
 use crate::traits::{EventConsumer, EventProducer, MessageConsumer, MessageProducer};
 
 const BACKEND_NAME: &str = "memory";
-const DEFAULT_HISTORY_LIMIT: usize = 1024;
 
 /// An in-memory message broker backed by a `tokio::sync::broadcast` channel.
 ///
@@ -27,7 +26,7 @@ const DEFAULT_HISTORY_LIMIT: usize = 1024;
 pub struct InMemoryBroker<T: Clone + Send + Sync + 'static> {
     tx: broadcast::Sender<Message<T>>,
     history: Arc<Mutex<VecDeque<Message<T>>>>,
-    history_limit: usize,
+    history_limit: Option<usize>,
     topics: Arc<Mutex<HashSet<String>>>,
     /// Notified after every publish so that [`wait_for_message`] can wake
     /// without polling.
@@ -40,8 +39,8 @@ impl<T: Clone + Send + Sync + 'static> InMemoryBroker<T> {
         let (tx, _) = broadcast::channel(capacity);
         Self {
             tx,
-            history: Arc::new(Mutex::new(VecDeque::with_capacity(DEFAULT_HISTORY_LIMIT))),
-            history_limit: DEFAULT_HISTORY_LIMIT,
+            history: Arc::new(Mutex::new(VecDeque::new())),
+            history_limit: None,
             topics: Arc::new(Mutex::new(HashSet::new())),
             notify: Arc::new(tokio::sync::Notify::new()),
         }
@@ -58,7 +57,10 @@ impl<T: Clone + Send + Sync + 'static> InMemoryBroker<T> {
         }
     }
 
-    /// Create a broker with explicit channel capacity and history limit.
+    /// Create a broker with explicit channel capacity and bounded history limit.
+    ///
+    /// The default [`InMemoryBroker::new`] preserves all history. Use this constructor
+    /// when tests intentionally need bounded memory.
     #[must_use]
     pub fn with_history_limit(capacity: usize, history_limit: usize) -> Self {
         let limit = history_limit.max(1);
@@ -66,7 +68,7 @@ impl<T: Clone + Send + Sync + 'static> InMemoryBroker<T> {
         Self {
             tx,
             history: Arc::new(Mutex::new(VecDeque::with_capacity(limit))),
-            history_limit: limit,
+            history_limit: Some(limit),
             topics: Arc::new(Mutex::new(HashSet::new())),
             notify: Arc::new(tokio::sync::Notify::new()),
         }
@@ -155,7 +157,7 @@ pub fn register<T: Clone + Send + Sync + 'static>(
 pub struct InMemoryProducer<T: Clone + Send + Sync + 'static> {
     tx: broadcast::Sender<Message<T>>,
     history: Arc<Mutex<VecDeque<Message<T>>>>,
-    history_limit: usize,
+    history_limit: Option<usize>,
     topics: Arc<Mutex<HashSet<String>>>,
     notify: Arc<tokio::sync::Notify>,
 }
@@ -166,7 +168,9 @@ impl<T: Clone + Send + Sync + 'static> MessageProducer<T> for InMemoryProducer<T
         // Record in history before broadcasting.
         {
             let mut hist = self.history.lock().await;
-            if hist.len() == self.history_limit {
+            if let Some(limit) = self.history_limit
+                && hist.len() == limit
+            {
                 hist.pop_front();
             }
             hist.push_back(msg.clone());
@@ -647,5 +651,38 @@ mod tests {
 
         let msg = wait_for_message(&broker, "t1", Duration::from_secs(2)).await;
         assert_eq!(msg.payload, "delayed");
+    }
+    #[tokio::test]
+    async fn default_history_preserves_more_than_legacy_limit() {
+        let broker: InMemoryBroker<usize> = InMemoryBroker::new(8);
+        let producer = broker.producer();
+        let _consumer = broker.consumer();
+
+        for value in 0..1030 {
+            producer.send(Message::new("history", value)).await.unwrap();
+        }
+
+        let messages = broker.messages("history").await;
+        assert_eq!(messages.len(), 1030);
+        assert_eq!(messages.first().map(|msg| msg.payload), Some(0));
+    }
+
+    #[tokio::test]
+    async fn bounded_history_limit_is_opt_in() {
+        let broker: InMemoryBroker<usize> = InMemoryBroker::with_history_limit(8, 2);
+        let producer = broker.producer();
+        let _consumer = broker.consumer();
+
+        for value in 0..4 {
+            producer.send(Message::new("history", value)).await.unwrap();
+        }
+
+        let payloads = broker
+            .messages("history")
+            .await
+            .into_iter()
+            .map(|msg| msg.payload)
+            .collect::<Vec<_>>();
+        assert_eq!(payloads, vec![2, 3]);
     }
 }

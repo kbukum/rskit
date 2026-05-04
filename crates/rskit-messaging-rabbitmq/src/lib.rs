@@ -7,12 +7,13 @@
 
 use std::collections::HashSet;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 
 use async_trait::async_trait;
 use futures_util::StreamExt;
 use lapin::options::{
-    BasicAckOptions, BasicConsumeOptions, BasicPublishOptions, BasicQosOptions, QueueDeclareOptions,
+    BasicConsumeOptions, BasicPublishOptions, BasicQosOptions, QueueDeclareOptions,
 };
 use lapin::types::FieldTable;
 use lapin::{BasicProperties, Channel, Connection, ConnectionProperties};
@@ -92,7 +93,7 @@ impl RabbitMqProducer {
 impl MessageProducer<Vec<u8>> for RabbitMqProducer {
     async fn send(&self, msg: Message<Vec<u8>>) -> AppResult<()> {
         validate_name("RabbitMQ routing key", &msg.topic)?;
-        let routing_key = queue_for(&self.config, &msg.topic);
+        let routing_key = queue_for(&self.config, &msg.topic)?;
         let channel = self.channel().await?;
         if self.needs_queue_declare(&routing_key).await {
             declare_queue(&channel, &routing_key, self.config.durable_queues).await?;
@@ -156,6 +157,9 @@ pub struct RabbitMqConsumer {
     sender: mpsc::Sender<Message<Vec<u8>>>,
     receiver: Mutex<mpsc::Receiver<Message<Vec<u8>>>>,
     subscriptions: SyncMutex<Vec<RabbitMqSubscription>>,
+    active_tasks: Arc<AtomicUsize>,
+    subscribed: AtomicBool,
+    task_finished: Arc<tokio::sync::Notify>,
 }
 
 struct RabbitMqSubscription {
@@ -180,6 +184,9 @@ impl RabbitMqConsumer {
             sender,
             receiver: Mutex::new(receiver),
             subscriptions: SyncMutex::new(Vec::new()),
+            active_tasks: Arc::new(AtomicUsize::new(0)),
+            subscribed: AtomicBool::new(false),
+            task_finished: Arc::new(tokio::sync::Notify::new()),
         })
     }
 }
@@ -198,14 +205,14 @@ impl MessageConsumer<Vec<u8>> for RabbitMqConsumer {
         if topics.is_empty() {
             return Ok(());
         }
+        self.subscribed.store(true, Ordering::SeqCst);
 
         let connection = connect(&self.config).await?;
         let mut consumers = Vec::with_capacity(topics.len());
         let mut channels = Vec::with_capacity(topics.len());
 
         for topic in topics {
-            validate_name("RabbitMQ queue", topic)?;
-            let queue = queue_for(&self.config, topic);
+            let queue = queue_for(&self.config, topic)?;
             let channel = connection.create_channel().await.map_err(|e| {
                 AppError::new(
                     ErrorCode::ExternalService,
@@ -238,48 +245,14 @@ impl MessageConsumer<Vec<u8>> for RabbitMqConsumer {
         }
 
         let mut tasks = Vec::with_capacity(consumers.len());
-        for (topic, mut consumer) in consumers {
-            let sender = self.sender.clone();
-            let cancellation = CancellationToken::new();
-            let task_cancellation = cancellation.clone();
-            let auto_ack = self.config.effective_auto_ack();
-            let handle = tokio::spawn(async move {
-                loop {
-                    tokio::select! {
-                        () = task_cancellation.cancelled() => {
-                            debug!(topic = %topic, "RabbitMQ consumer task shutting down");
-                            break;
-                        }
-                        delivery = consumer.next() => {
-                            let Some(delivery) = delivery else {
-                                warn!(topic = %topic, "RabbitMQ consumer stream ended");
-                                break;
-                            };
-                            let delivery = match delivery {
-                                Ok(delivery) => delivery,
-                                Err(error) => {
-                                    warn!(topic = %topic, error = %error, "RabbitMQ consumer stream error");
-                                    break;
-                                }
-                            };
-                            let routing_key = delivery.routing_key.to_string();
-                            let payload = delivery.data.clone();
-                            if sender.send(Message::new(routing_key, payload)).await.is_err() {
-                                debug!(topic = %topic, "RabbitMQ consumer receiver closed");
-                                break;
-                            }
-                            if !auto_ack && let Err(error) = delivery.ack(BasicAckOptions::default()).await {
-                                warn!(topic = %topic, error = %error, "RabbitMQ delivery ack failed");
-                                break;
-                            }
-                        }
-                    }
-                }
-            });
-            tasks.push(ConsumerTask {
-                cancellation,
-                handle,
-            });
+        for (topic, consumer) in consumers {
+            tasks.push(spawn_consumer_task(
+                topic,
+                consumer,
+                self.sender.clone(),
+                self.active_tasks.clone(),
+                self.task_finished.clone(),
+            ));
         }
 
         self.subscriptions.lock().push(RabbitMqSubscription {
@@ -292,12 +265,38 @@ impl MessageConsumer<Vec<u8>> for RabbitMqConsumer {
     }
 
     async fn recv(&self) -> AppResult<Message<Vec<u8>>> {
-        self.receiver.lock().await.recv().await.ok_or_else(|| {
-            AppError::new(
-                ErrorCode::ExternalService,
-                "RabbitMQ consumer stream closed",
-            )
-        })
+        let mut receiver = self.receiver.lock().await;
+        loop {
+            if self.subscribed.load(Ordering::SeqCst)
+                && self.active_tasks.load(Ordering::SeqCst) == 0
+                && receiver.is_empty()
+            {
+                return Err(AppError::new(
+                    ErrorCode::ExternalService,
+                    "RabbitMQ consumer stream closed",
+                ));
+            }
+
+            match tokio::time::timeout(Duration::from_millis(50), receiver.recv()).await {
+                Ok(Some(message)) => return Ok(message),
+                Ok(None) => {
+                    return Err(AppError::new(
+                        ErrorCode::ExternalService,
+                        "RabbitMQ consumer stream closed",
+                    ));
+                }
+                Err(_) => {}
+            }
+        }
+    }
+
+    async fn close(&self) -> AppResult<()> {
+        for subscription in self.subscriptions.lock().drain(..) {
+            shutdown_consumer_tasks(subscription.tasks);
+        }
+        self.active_tasks.store(0, Ordering::SeqCst);
+        self.task_finished.notify_waiters();
+        Ok(())
     }
 }
 
@@ -331,6 +330,61 @@ pub fn register(
     registry.register_consumer(backend, move || {
         Ok(Arc::new(RabbitMqConsumer::new(config.clone())?) as Arc<dyn MessageConsumer<Vec<u8>>>)
     })
+}
+
+fn spawn_consumer_task(
+    topic: String,
+    mut consumer: lapin::Consumer,
+    sender: mpsc::Sender<Message<Vec<u8>>>,
+    active_tasks: Arc<AtomicUsize>,
+    task_finished: Arc<tokio::sync::Notify>,
+) -> ConsumerTask {
+    let cancellation = CancellationToken::new();
+    let task_cancellation = cancellation.clone();
+    active_tasks.fetch_add(1, Ordering::SeqCst);
+    let handle = tokio::spawn(async move {
+        loop {
+            tokio::select! {
+                () = task_cancellation.cancelled() => {
+                    debug!(topic = %topic, "RabbitMQ consumer task shutting down");
+                    break;
+                }
+                delivery = consumer.next() => {
+                    let Some(delivery) = delivery else {
+                        warn!(topic = %topic, "RabbitMQ consumer stream ended");
+                        break;
+                    };
+                    let delivery = match delivery {
+                        Ok(delivery) => delivery,
+                        Err(error) => {
+                            warn!(topic = %topic, error = %error, "RabbitMQ consumer stream error");
+                            break;
+                        }
+                    };
+                    let routing_key = delivery.routing_key.to_string();
+                    let payload = delivery.data.clone();
+                    tokio::select! {
+                        () = task_cancellation.cancelled() => {
+                            debug!(topic = %topic, "RabbitMQ consumer task shutting down");
+                            break;
+                        }
+                        result = sender.send(Message::new(routing_key, payload)) => {
+                            if result.is_err() {
+                                debug!(topic = %topic, "RabbitMQ consumer receiver closed");
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        active_tasks.fetch_sub(1, Ordering::SeqCst);
+        task_finished.notify_waiters();
+    });
+    ConsumerTask {
+        cancellation,
+        handle,
+    }
 }
 
 async fn connect(config: &RabbitMqConfig) -> AppResult<Connection> {
@@ -402,7 +456,10 @@ fn shutdown_consumer_tasks(tasks: Vec<ConsumerTask>) {
                     continue;
                 }
 
-                if tokio::time::timeout(Duration::from_millis(100), &mut task.handle).await.is_err() {
+                if tokio::time::timeout(Duration::from_millis(100), &mut task.handle)
+                    .await
+                    .is_err()
+                {
                     task.handle.abort();
                     let _ = task.handle.await;
                 }
@@ -439,12 +496,17 @@ mod tests {
     }
 
     #[test]
-    fn rabbitmq_defaults_use_buffer_ack_semantics() {
+    fn rabbitmq_defaults_use_supported_auto_ack_semantics() {
         let config = RabbitMqConfig::default();
 
         assert_eq!(config.base.backend, "rabbitmq");
         assert_eq!(config.auto_ack, None);
-        assert!(!config.effective_auto_ack());
+        assert!(matches!(
+            config.base.delivery_guarantee,
+            DeliveryGuarantee::AtMostOnce
+        ));
+        assert!(matches!(config.base.commit_strategy, CommitStrategy::Auto));
+        assert!(config.effective_auto_ack());
         assert_eq!(config.effective_prefetch_count().unwrap(), 1);
         assert!(config.declare_queues);
         assert!(config.durable_queues);
@@ -467,7 +529,10 @@ mod tests {
         assert!(config.validate().is_err());
 
         config = RabbitMqConfig::default();
-        config.base.delivery_guarantee = DeliveryGuarantee::AtMostOnce;
+        config.base.commit_strategy = CommitStrategy::PostHandlerSuccess;
+        assert!(config.validate().is_err());
+
+        config = RabbitMqConfig::default();
         config.auto_ack = Some(false);
         assert!(config.validate().is_err());
     }
@@ -527,7 +592,7 @@ mod tests {
             ..RabbitMqConfig::default()
         };
 
-        assert_eq!(queue_for(&config, "events"), "svc.events");
+        assert_eq!(queue_for(&config, "events").unwrap(), "svc.events");
     }
 
     #[tokio::test]
@@ -567,5 +632,37 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
+    }
+    #[test]
+    fn rabbitmq_queue_prefix_validates_combined_queue() {
+        let config = RabbitMqConfig {
+            queue_prefix: "svc.".to_string(),
+            base: rskit_messaging::BrokerConfig {
+                topics: vec!["bad queue".to_string()],
+                ..RabbitMqConfig::default().base
+            },
+            ..RabbitMqConfig::default()
+        };
+        assert!(config.validate().is_err());
+
+        let config = RabbitMqConfig {
+            queue_prefix: "x".repeat(248),
+            base: rskit_messaging::BrokerConfig {
+                topics: vec!["too-long".to_string()],
+                ..RabbitMqConfig::default().base
+            },
+            ..RabbitMqConfig::default()
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[tokio::test]
+    async fn recv_returns_when_subscribed_tasks_have_closed() {
+        let consumer = RabbitMqConsumer::new(RabbitMqConfig::default()).unwrap();
+        consumer.subscribed.store(true, Ordering::SeqCst);
+
+        let result = consumer.recv().await;
+
+        assert!(result.is_err());
     }
 }

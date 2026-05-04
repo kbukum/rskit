@@ -4,13 +4,137 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use rskit_errors::AppResult;
-use rskit_resilience::RetryPolicy;
+use rskit_resilience::{ConstantBackoff, LinearBackoff, RetryError, RetryPolicy};
 
 use crate::handler::{HandlerMiddleware, MessageHandler};
 use crate::message::Message;
 
 /// Canonical retry configuration for messaging middleware.
-pub type RetryConfig = RetryPolicy;
+///
+/// Messaging retries historically retried every handler failure by default.
+/// `RetryPolicy` defaults to retrying only errors marked retryable, so this
+/// wrapper encodes the messaging-specific always-retry default explicitly.
+#[derive(Debug, Clone)]
+pub struct RetryConfig {
+    policy: RetryPolicy,
+}
+
+impl Default for RetryConfig {
+    fn default() -> Self {
+        Self {
+            policy: RetryPolicy::new().with_retry_if(|_| true),
+        }
+    }
+}
+
+impl RetryConfig {
+    /// Create a retry config with messaging defaults.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Wrap an explicit resilience retry policy.
+    #[must_use]
+    pub fn from_policy(policy: RetryPolicy) -> Self {
+        Self { policy }
+    }
+
+    /// Set the maximum number of attempts (including the first call).
+    #[must_use]
+    pub fn with_max_attempts(mut self, n: usize) -> Self {
+        self.policy = self.policy.with_max_attempts(n);
+        self
+    }
+
+    /// Set the initial backoff delay before the first retry.
+    #[must_use]
+    pub fn with_initial_backoff(mut self, d: std::time::Duration) -> Self {
+        self.policy = self.policy.with_initial_backoff(d);
+        self
+    }
+
+    /// Set the upper bound on any single backoff delay.
+    #[must_use]
+    pub fn with_max_backoff(mut self, d: std::time::Duration) -> Self {
+        self.policy = self.policy.with_max_backoff(d);
+        self
+    }
+
+    /// Set the exponential backoff multiplication factor.
+    #[must_use]
+    pub fn with_backoff_factor(mut self, factor: f64) -> Self {
+        self.policy = self.policy.with_backoff_factor(factor);
+        self
+    }
+
+    /// Use a fixed delay for every retry attempt.
+    #[must_use]
+    pub fn with_constant_backoff(mut self, backoff: ConstantBackoff) -> Self {
+        self.policy = self.policy.with_constant_backoff(backoff);
+        self
+    }
+
+    /// Use a linearly increasing retry delay.
+    #[must_use]
+    pub fn with_linear_backoff(mut self, backoff: LinearBackoff) -> Self {
+        self.policy = self.policy.with_linear_backoff(backoff);
+        self
+    }
+
+    /// Enable or disable retry jitter.
+    #[must_use]
+    pub fn with_jitter(mut self, enabled: bool) -> Self {
+        self.policy = self.policy.with_jitter(enabled);
+        self
+    }
+
+    /// Override the predicate used to decide whether an error is retried.
+    #[must_use]
+    pub fn with_retry_if(
+        mut self,
+        f: impl Fn(&rskit_errors::AppError) -> bool + Send + Sync + 'static,
+    ) -> Self {
+        self.policy = self.policy.with_retry_if(f);
+        self
+    }
+
+    /// Register a callback called after each failed attempt before the next backoff sleep.
+    #[must_use]
+    pub fn with_on_retry(
+        mut self,
+        f: impl Fn(u32, &rskit_errors::AppError) + Send + Sync + 'static,
+    ) -> Self {
+        self.policy = self.policy.with_on_retry(f);
+        self
+    }
+
+    /// Borrow the underlying resilience policy.
+    #[must_use]
+    pub fn policy(&self) -> &RetryPolicy {
+        &self.policy
+    }
+
+    /// Convert into the underlying resilience policy.
+    #[must_use]
+    pub fn into_policy(self) -> RetryPolicy {
+        self.policy
+    }
+
+    async fn execute<F, Fut, T>(&self, f: F) -> Result<T, RetryError>
+    where
+        F: FnMut() -> Fut,
+        Fut: std::future::Future<Output = AppResult<T>>,
+    {
+        self.policy.execute(f).await
+    }
+}
+
+impl From<RetryPolicy> for RetryConfig {
+    fn from(policy: RetryPolicy) -> Self {
+        Self::from_policy(policy)
+    }
+}
 
 /// Create a retry middleware with the given canonical retry policy.
 pub fn retry<T: Send + Sync + Clone + 'static>(config: RetryConfig) -> impl HandlerMiddleware<T> {
@@ -60,11 +184,10 @@ mod tests {
     use rskit_errors::{AppError, ErrorCode};
 
     fn test_policy() -> RetryConfig {
-        RetryPolicy::new()
+        RetryConfig::new()
             .with_max_attempts(3)
             .with_initial_backoff(Duration::from_millis(1))
             .with_jitter(false)
-            .with_retry_if(|_| true)
     }
 
     #[tokio::test]
@@ -148,5 +271,36 @@ mod tests {
         let result = handler.handle(Message::new("t", "data".to_string())).await;
         assert!(result.is_err());
         assert_eq!(counter.load(Ordering::SeqCst), 3);
+    }
+    #[tokio::test]
+    async fn default_retry_config_retries_non_retryable_handler_errors() {
+        let counter = Arc::new(AtomicU32::new(0));
+        let c = counter.clone();
+        let base: Arc<dyn MessageHandler<String>> =
+            Arc::new(FnHandler::new(move |_msg: Message<String>| {
+                let c = c.clone();
+                async move {
+                    c.fetch_add(1, Ordering::SeqCst);
+                    Err(AppError::new(
+                        ErrorCode::InvalidInput,
+                        "invalid but retried",
+                    ))
+                }
+            }));
+
+        let handler = chain_handlers(
+            base,
+            &[Arc::new(RetryMiddleware {
+                config: RetryConfig::new()
+                    .with_max_attempts(2)
+                    .with_initial_backoff(Duration::from_millis(1))
+                    .with_jitter(false),
+            })],
+        );
+
+        let result = handler.handle(Message::new("t", "data".to_string())).await;
+
+        assert!(result.is_err());
+        assert_eq!(counter.load(Ordering::SeqCst), 2);
     }
 }
