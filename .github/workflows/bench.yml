@@ -30,22 +30,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
 
-      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: stable
 
       - name: Install mold linker
         run: sudo apt-get install -y mold
 
-      - uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b
+      - uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b  # v2.7.8
 
       - name: Run benchmarks
         run: cargo bench --workspace --bench '*' -- --output-format bencher | tee output.txt
 
       - name: Store benchmark result
-        uses: benchmark-action/github-action-benchmark@a60cea5bc7b49e15c1f58f411161f99e0df48372
+        uses: benchmark-action/github-action-benchmark@a60cea5bc7b49e15c1f58f411161f99e0df48372  # v1.22.0
         with:
           tool: 'cargo'
           output-file-path: output.txt

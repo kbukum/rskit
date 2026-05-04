@@ -39,8 +39,8 @@ jobs:
     outputs:
       rust-code: ${{ steps.filter.outputs.rust-code }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
-      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d  # v4.0.1
         id: filter
         with:
           filters: |
@@ -66,8 +66,8 @@ jobs:
     if: needs.changes.outputs.rust-code == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
-      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: stable
           components: rustfmt
@@ -82,14 +82,14 @@ jobs:
     needs: changes
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
-      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: stable
           components: clippy
       - name: Install mold linker
         run: sudo apt-get install -y mold
-      - uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b
+      - uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b  # v2.7.8
       - run: cargo clippy --workspace -- -D warnings
 
   # ---------------------------------------------------------------------------
@@ -106,17 +106,17 @@ jobs:
         os: [ubuntu-latest, macos-latest]
         rust: ["1.91", "stable"]
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
-      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: ${{ matrix.rust }}
       - name: Install mold linker (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get install -y mold
-      - uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b
+      - uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b  # v2.7.8
         with:
           key: ${{ matrix.os }}-${{ matrix.rust }}
-      - uses: taiki-e/install-action@db5fb34fa772531a3ece57ca434f579eb334e0fb
+      - uses: taiki-e/install-action@db5fb34fa772531a3ece57ca434f579eb334e0fb  # v2
         with:
           tool: cargo-nextest
       - run: cargo nextest run --workspace --profile ci
@@ -132,13 +132,13 @@ jobs:
     env:
       RUSTDOCFLAGS: "-D warnings"
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
-      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: stable
       - name: Install mold linker
         run: sudo apt-get install -y mold
-      - uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b
+      - uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b  # v2.7.8
       - run: cargo doc --workspace --no-deps --document-private-items
 
   # ---------------------------------------------------------------------------
@@ -150,19 +150,19 @@ jobs:
     needs: changes
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
-      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: stable
           components: llvm-tools-preview
       - name: Install mold linker
         run: sudo apt-get install -y mold
-      - uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b
-      - uses: taiki-e/install-action@db5fb34fa772531a3ece57ca434f579eb334e0fb
+      - uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b  # v2.7.8
+      - uses: taiki-e/install-action@db5fb34fa772531a3ece57ca434f579eb334e0fb  # v2
         with:
           tool: cargo-llvm-cov
       - run: cargo llvm-cov --workspace --lcov --output-path coverage.lcov --fail-under-lines 60
-      - uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2
+      - uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2  # v5
         with:
           files: coverage.lcov
           fail_ci_if_error: false
@@ -178,11 +178,11 @@ jobs:
     needs: changes
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
-      - uses: EmbarkStudios/cargo-deny-action@91bf2b620e09e18d6eb78b92e7861937469acedb
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: EmbarkStudios/cargo-deny-action@91bf2b620e09e18d6eb78b92e7861937469acedb  # v2.0.17
         with:
           command: check licenses advisories sources bans
-      - uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998
+      - uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998  # v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -195,13 +195,13 @@ jobs:
     needs: changes
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
-      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: stable
       - name: Install mold linker
         run: sudo apt-get install -y mold
-      - uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b
+      - uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b  # v2.7.8
       - run: cargo bench --workspace --no-run
 
   # ---------------------------------------------------------------------------
