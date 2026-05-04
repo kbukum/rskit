@@ -13,9 +13,9 @@
 //! | `database` | `rskit-database` (sqlx) |
 //! | `cache`  | `rskit-cache` (Redis) |
 //! | `messaging` | `rskit-messaging` (core abstractions + in-memory backend) |
-//! | `messaging-kafka` | Kafka messaging adapter |
+//! | `messaging-kafka` | `Kafka` messaging adapter |
 //! | `messaging-nats` | NATS messaging adapter |
-//! | `messaging-rabbitmq` | RabbitMQ messaging adapter |
+//! | `messaging-rabbitmq` | `RabbitMQ` messaging adapter |
 //! | `observability` | `rskit-observability` (OpenTelemetry) |
 //! | `authz`  | `rskit-authz` (RBAC/ABAC) |
 //! | `security` | `rskit-security` (security headers) |

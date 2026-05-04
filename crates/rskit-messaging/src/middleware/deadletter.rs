@@ -6,7 +6,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use rskit_errors::AppResult;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use crate::handler::{HandlerMiddleware, MessageHandler};
 use crate::message::Message;
@@ -42,7 +42,7 @@ impl Default for DeadLetterConfig {
 }
 
 /// Canonical envelope written to DLQ topics.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct DeadLetterEnvelope<T> {
     /// Original source topic.
     pub original_topic: String,
@@ -54,7 +54,9 @@ pub struct DeadLetterEnvelope<T> {
     pub timestamp: DateTime<Utc>,
     /// Redacted message headers/metadata.
     pub headers: HashMap<String, String>,
-    /// Original payload for typed in-process use.
+    /// Original payload for typed in-process use. Serialized DLQ envelopes omit
+    /// this field so JSON adapters do not leak raw failed-message contents.
+    #[serde(skip)]
     pub payload: T,
     /// Redacted string summary for logs, JSON adapters, and non-text payloads.
     pub payload_summary: String,

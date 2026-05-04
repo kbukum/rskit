@@ -42,7 +42,7 @@ pub struct RabbitMqProducer {
 }
 
 struct RabbitMqProducerState {
-    _connection: Connection,
+    connection: Connection,
     channel: Channel,
 }
 
@@ -71,7 +71,7 @@ impl RabbitMqProducer {
             )
         })?;
         *guard = Some(RabbitMqProducerState {
-            _connection: connection,
+            connection,
             channel: channel.clone(),
         });
         drop(guard);
@@ -133,6 +133,26 @@ impl MessageProducer<Vec<u8>> for RabbitMqProducer {
     }
 
     async fn flush(&self, _timeout: Duration) -> AppResult<()> {
+        Ok(())
+    }
+
+    async fn close(&self) -> AppResult<()> {
+        let state = self.state.lock().await.take();
+        if let Some(state) = state {
+            state.channel.close(200, "closed").await.map_err(|e| {
+                AppError::new(
+                    ErrorCode::ExternalService,
+                    format!("RabbitMQ channel close failed: {e}"),
+                )
+            })?;
+            state.connection.close(200, "closed").await.map_err(|e| {
+                AppError::new(
+                    ErrorCode::ExternalService,
+                    format!("RabbitMQ connection close failed: {e}"),
+                )
+            })?;
+        }
+        self.declared_queues.lock().await.clear();
         Ok(())
     }
 }
@@ -264,6 +284,7 @@ impl MessageConsumer<Vec<u8>> for RabbitMqConsumer {
         Ok(())
     }
 
+    #[allow(clippy::significant_drop_tightening)]
     async fn recv(&self) -> AppResult<Message<Vec<u8>>> {
         let mut receiver = self.receiver.lock().await;
         loop {
@@ -277,15 +298,19 @@ impl MessageConsumer<Vec<u8>> for RabbitMqConsumer {
                 ));
             }
 
-            match tokio::time::timeout(Duration::from_millis(50), receiver.recv()).await {
-                Ok(Some(message)) => return Ok(message),
-                Ok(None) => {
-                    return Err(AppError::new(
-                        ErrorCode::ExternalService,
-                        "RabbitMQ consumer stream closed",
-                    ));
+            tokio::select! {
+                message = receiver.recv() => {
+                    match message {
+                        Some(message) => return Ok(message),
+                        None => {
+                            return Err(AppError::new(
+                                ErrorCode::ExternalService,
+                                "RabbitMQ consumer stream closed",
+                            ));
+                        }
+                    }
                 }
-                Err(_) => {}
+                () = self.task_finished.notified() => {}
             }
         }
     }

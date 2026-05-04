@@ -99,6 +99,19 @@ impl MessageProducer<Vec<u8>> for NatsProducer {
             )
         })
     }
+
+    async fn close(&self) -> AppResult<()> {
+        let client = self.client.lock().await.take();
+        if let Some(client) = client {
+            client.flush().await.map_err(|e| {
+                AppError::new(
+                    ErrorCode::ExternalService,
+                    format!("NATS flush before close failed: {e}"),
+                )
+            })?;
+        }
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -242,6 +255,7 @@ impl MessageConsumer<Vec<u8>> for NatsConsumer {
         Ok(())
     }
 
+    #[allow(clippy::significant_drop_tightening)]
     async fn recv(&self) -> AppResult<Message<Vec<u8>>> {
         let mut receiver = self.receiver.lock().await;
         loop {
@@ -255,15 +269,19 @@ impl MessageConsumer<Vec<u8>> for NatsConsumer {
                 ));
             }
 
-            match tokio::time::timeout(Duration::from_millis(50), receiver.recv()).await {
-                Ok(Some(message)) => return Ok(message),
-                Ok(None) => {
-                    return Err(AppError::new(
-                        ErrorCode::ExternalService,
-                        "NATS subscription stream closed",
-                    ));
+            tokio::select! {
+                message = receiver.recv() => {
+                    match message {
+                        Some(message) => return Ok(message),
+                        None => {
+                            return Err(AppError::new(
+                                ErrorCode::ExternalService,
+                                "NATS subscription stream closed",
+                            ));
+                        }
+                    }
                 }
-                Err(_) => {}
+                () = self.task_finished.notified() => {}
             }
         }
     }
@@ -271,6 +289,7 @@ impl MessageConsumer<Vec<u8>> for NatsConsumer {
     async fn close(&self) -> AppResult<()> {
         shutdown_consumer_tasks(self.tasks.lock().drain(..).collect());
         self.active_tasks.store(0, Ordering::SeqCst);
+        self.client.lock().await.take();
         self.task_finished.notify_waiters();
         Ok(())
     }
