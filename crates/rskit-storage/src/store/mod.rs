@@ -1,8 +1,10 @@
 //! File store trait and backends for persistent file storage.
 
 mod local;
+mod registry;
 
 pub use local::{LocalStore, LocalStoreConfig};
+pub use registry::{StorageConfig, StorageFactory, StorageRegistry, register_local};
 
 use std::collections::HashMap;
 use std::sync::Arc;

@@ -18,7 +18,8 @@ pub use meta::{FileKind, FileMeta, detect_kind, detect_mime, file_meta};
 pub use sink::{FileSink, FileWriter};
 pub use source::{FileSource, ResolvedPath};
 pub use store::{
-    FileStore, LocalStore, LocalStoreConfig, ProgressCallback, StoredFile, UploadProgress,
+    FileStore, LocalStore, LocalStoreConfig, ProgressCallback, StorageConfig, StorageFactory,
+    StorageRegistry, StoredFile, UploadProgress, register_local,
 };
 pub use temp::{TempDir, TempFile};
 pub use transfer::{copy_file, transfer};

@@ -53,13 +53,17 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
 }
 
 fn matches_filter(payload: &PointPayload, filter: &SearchFilter) -> bool {
-    for (field, expected) in &filter.must {
-        match payload.fields.get(field) {
-            Some(actual) if actual == expected => {}
+    for condition in &filter.must {
+        match payload.fields.get(&condition.field) {
+            Some(actual) if actual == &condition.equals => {}
             _ => return false,
         }
     }
     true
+}
+
+fn compare_score_desc(a: f32, b: f32) -> std::cmp::Ordering {
+    b.partial_cmp(&a).unwrap_or(std::cmp::Ordering::Equal)
 }
 
 #[async_trait]
@@ -152,12 +156,7 @@ impl VectorStore for InMemoryVectorStore {
             })
             .collect();
 
-        // Sort descending by score
-        scored.sort_by(|a, b| {
-            b.score
-                .partial_cmp(&a.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        scored.sort_by(|a, b| compare_score_desc(a.score, b.score));
         scored.truncate(limit);
 
         Ok(scored)

@@ -1,21 +1,32 @@
-//! Redis client with typed store, connection management, and Component lifecycle.
+//! Cache abstraction with an in-memory default and opt-in backend adapters.
 //!
-//! # Overview
+//! The core crate exports [`CacheBackend`], [`CacheRegistry`], [`MemoryCache`],
+//! and [`TypedStore`]. External infrastructure backends, such as Redis, are
+//! available only behind cargo features and must be registered explicitly.
 //!
-//! `rskit-cache` provides an async Redis client ([`RedisClient`]) backed by
-//! [`redis::aio::ConnectionManager`] and a generic JSON-serialised store
-//! ([`TypedStore`]) for strongly-typed caching.
-//!
-//! The client implements the [`rskit_bootstrap::Component`] trait, making it
-//! easy to integrate into the rskit application lifecycle.
+//! No backend is registered by default; construct and inject a registry at the
+//! composition boundary.
+
+#![warn(missing_docs)]
 
 /// Async Redis client with string, hash, list, scan, and pub/sub operations.
+#[cfg(feature = "redis")]
 pub mod client;
-/// Redis connection and pool configuration.
+/// Cache backend configuration and backend-specific options.
 pub mod config;
-/// Generic JSON-serialised typed store backed by [`RedisClient`].
+/// In-memory cache backend.
+pub mod memory;
+/// Explicit backend registry and config-driven selection.
+pub mod registry;
+/// Generic JSON-serialised typed store backed by a [`CacheBackend`].
 pub mod typed_store;
 
-pub use client::RedisClient;
+#[cfg(feature = "redis")]
+/// Async Redis client with string, hash, list, scan, and pub/sub operations.
+pub use client::{RedisClient, register_redis};
+#[cfg(feature = "redis")]
 pub use config::RedisConfig;
+pub use config::{CacheConfig, MemoryConfig};
+pub use memory::MemoryCache;
+pub use registry::{CacheBackend, CacheFactory, CacheRegistry, register_memory};
 pub use typed_store::TypedStore;

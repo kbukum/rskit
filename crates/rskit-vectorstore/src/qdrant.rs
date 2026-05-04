@@ -5,13 +5,14 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use qdrant_client::Qdrant;
 use qdrant_client::qdrant::{
-    Condition, CreateCollectionBuilder, DeletePointsBuilder, Distance, Filter, PointStruct,
+    Condition, CreateCollectionBuilder, DeletePointsBuilder, Distance, Filter, PointStruct, Range,
     SearchPointsBuilder, UpsertPointsBuilder, VectorParamsBuilder,
 };
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use tracing::{debug, info};
 
-use crate::store::{PointPayload, SearchFilter, SearchResult, VectorStore};
+use crate::registry::{VectorFactory, VectorStoreRegistry};
+use crate::store::{PointPayload, SearchFilter, SearchResult, SimilarityMetric, VectorStore};
 
 /// Configuration for the Qdrant vector store.
 #[derive(Debug, Clone)]
@@ -20,6 +21,8 @@ pub struct QdrantConfig {
     pub url: String,
     /// Optional API key for Qdrant Cloud.
     pub api_key: Option<String>,
+    /// Metric used when creating collections.
+    pub metric: SimilarityMetric,
 }
 
 impl Default for QdrantConfig {
@@ -27,6 +30,7 @@ impl Default for QdrantConfig {
         Self {
             url: "http://localhost:6334".to_owned(),
             api_key: None,
+            metric: SimilarityMetric::Cosine,
         }
     }
 }
@@ -34,6 +38,7 @@ impl Default for QdrantConfig {
 /// Qdrant-backed vector store.
 pub struct QdrantVectorStore {
     client: Qdrant,
+    metric: SimilarityMetric,
 }
 
 impl QdrantVectorStore {
@@ -49,7 +54,10 @@ impl QdrantVectorStore {
                 format!("failed to connect to Qdrant: {e}"),
             )
         })?;
-        Ok(Self { client })
+        Ok(Self {
+            client,
+            metric: config.metric,
+        })
     }
 }
 
@@ -71,7 +79,7 @@ impl VectorStore for QdrantVectorStore {
             info!(collection, dimensions, "Creating Qdrant collection");
             self.client
                 .create_collection(CreateCollectionBuilder::new(collection).vectors_config(
-                    VectorParamsBuilder::new(dimensions as u64, Distance::Cosine),
+                    VectorParamsBuilder::new(dimensions as u64, qdrant_distance(self.metric)),
                 ))
                 .await
                 .map_err(|e| {
@@ -130,18 +138,12 @@ impl VectorStore for QdrantVectorStore {
         if let Some(sf) = filter
             && !sf.must.is_empty()
         {
-            let conditions: Vec<Condition> = sf
+            let conditions: AppResult<Vec<Condition>> = sf
                 .must
                 .into_iter()
-                .filter_map(|(field, value)| {
-                    if let Some(s) = value.as_str() {
-                        Some(Condition::matches(field, s.to_string()))
-                    } else {
-                        value.as_i64().map(|n| Condition::matches(field, n))
-                    }
-                })
+                .map(|condition| filter_condition_to_qdrant(condition.field, condition.equals))
                 .collect();
-            builder = builder.filter(Filter::must(conditions));
+            builder = builder.filter(Filter::must(conditions?));
         }
 
         let results = self.client.search_points(builder).await.map_err(|e| {
@@ -203,6 +205,31 @@ impl VectorStore for QdrantVectorStore {
     }
 }
 
+fn qdrant_distance(metric: SimilarityMetric) -> Distance {
+    match metric {
+        SimilarityMetric::Cosine => Distance::Cosine,
+        SimilarityMetric::Dot => Distance::Dot,
+        SimilarityMetric::L2 => Distance::Euclid,
+    }
+}
+
+struct QdrantFactory {
+    config: QdrantConfig,
+}
+
+impl VectorFactory for QdrantFactory {
+    fn create(&self) -> AppResult<std::sync::Arc<dyn VectorStore>> {
+        Ok(std::sync::Arc::new(QdrantVectorStore::new(
+            self.config.clone(),
+        )?))
+    }
+}
+
+/// Explicitly register a configured Qdrant backend.
+pub fn register_qdrant(registry: &mut VectorStoreRegistry, config: QdrantConfig) -> AppResult<()> {
+    registry.register("qdrant", std::sync::Arc::new(QdrantFactory { config }))
+}
+
 fn json_to_qdrant_value(v: serde_json::Value) -> qdrant_client::qdrant::Value {
     use qdrant_client::qdrant::value::Kind;
     let kind = match v {
@@ -218,6 +245,43 @@ fn json_to_qdrant_value(v: serde_json::Value) -> qdrant_client::qdrant::Value {
         _ => Kind::StringValue(v.to_string()),
     };
     qdrant_client::qdrant::Value { kind: Some(kind) }
+}
+
+fn filter_condition_to_qdrant(field: String, value: serde_json::Value) -> AppResult<Condition> {
+    if let Some(s) = value.as_str() {
+        return Ok(Condition::matches(field, s.to_string()));
+    }
+    if let Some(n) = value.as_i64() {
+        return Ok(Condition::matches(field, n));
+    }
+    if let Some(n) = value.as_u64() {
+        let signed = i64::try_from(n).map_err(|_| {
+            AppError::new(
+                ErrorCode::InvalidInput,
+                format!(
+                    "unsupported Qdrant unsigned integer filter value for field '{field}': {n}; encode values larger than i64::MAX as strings"
+                ),
+            )
+        })?;
+        return Ok(Condition::matches(field, signed));
+    }
+    if let Some(n) = value.as_f64() {
+        return Ok(Condition::range(
+            field,
+            Range {
+                gte: Some(n),
+                lte: Some(n),
+                ..Default::default()
+            },
+        ));
+    }
+    if let Some(b) = value.as_bool() {
+        return Ok(Condition::matches(field, b));
+    }
+    Err(AppError::new(
+        ErrorCode::InvalidInput,
+        format!("unsupported Qdrant filter value for field '{field}': {value}"),
+    ))
 }
 
 fn qdrant_value_to_json(v: qdrant_client::qdrant::Value) -> serde_json::Value {
@@ -240,6 +304,7 @@ mod tests {
         let cfg = QdrantConfig::default();
         assert_eq!(cfg.url, "http://localhost:6334");
         assert!(cfg.api_key.is_none());
+        assert_eq!(cfg.metric, SimilarityMetric::Cosine);
     }
 
     #[test]
@@ -264,5 +329,49 @@ mod tests {
         let qdrant_val = json_to_qdrant_value(json_val.clone());
         let back = qdrant_value_to_json(qdrant_val);
         assert_eq!(json_val, back);
+    }
+
+    #[test]
+    fn test_filter_condition_accepts_double_payload_values() {
+        let condition = filter_condition_to_qdrant("score".to_owned(), serde_json::json!(42.5))
+            .expect("double filters should be supported");
+
+        let qdrant_client::qdrant::condition::ConditionOneOf::Field(field) =
+            condition.condition_one_of.expect("field condition")
+        else {
+            panic!("expected field condition");
+        };
+        let range = field.range.expect("double filters use exact range");
+        assert_eq!(range.gte, Some(42.5));
+        assert_eq!(range.lte, Some(42.5));
+    }
+
+    #[test]
+    fn test_filter_condition_accepts_unsigned_payload_values() {
+        let condition = filter_condition_to_qdrant("visits".to_owned(), serde_json::json!(42_u64))
+            .expect("unsigned numeric filters should be supported");
+
+        let qdrant_client::qdrant::condition::ConditionOneOf::Field(field) =
+            condition.condition_one_of.expect("field condition")
+        else {
+            panic!("expected field condition");
+        };
+        let matched = field
+            .r#match
+            .expect("unsigned filters use exact integer match");
+        assert_eq!(
+            matched.match_value,
+            Some(qdrant_client::qdrant::r#match::MatchValue::Integer(42))
+        );
+    }
+
+    #[test]
+    fn test_filter_condition_rejects_unsigned_values_larger_than_i64() {
+        let value = u64::try_from(i64::MAX).unwrap() + 1;
+        let err = filter_condition_to_qdrant("visits".to_owned(), serde_json::json!(value))
+            .expect_err("large unsigned filters must not be converted through f64");
+
+        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert!(err.to_string().contains("larger than i64::MAX"));
     }
 }

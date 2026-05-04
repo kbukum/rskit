@@ -6,14 +6,14 @@ use std::time::Duration;
 
 use chrono::Utc;
 use rskit_errors::{AppError, AppResult, ErrorCode};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::FileSource;
 
 use super::{FileStore, ProgressCallback, StoredFile};
 
 /// Configuration for the local file store.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct LocalStoreConfig {
     /// Root directory for stored files.
     pub root_dir: PathBuf,

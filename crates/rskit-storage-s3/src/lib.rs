@@ -35,6 +35,8 @@
 //! # }
 //! ```
 
+#![warn(missing_docs)]
+
 mod store;
 
-pub use store::{S3Store, S3StoreConfig};
+pub use store::{S3Store, S3StoreConfig, register_s3};

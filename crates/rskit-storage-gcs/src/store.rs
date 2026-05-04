@@ -1,6 +1,7 @@
 //! Google Cloud Storage backend implementing [`rskit_storage::store::FileStore`].
 
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 
 use google_cloud_storage::http::objects::delete::DeleteObjectRequest;
@@ -10,11 +11,13 @@ use google_cloud_storage::http::objects::list::ListObjectsRequest;
 use google_cloud_storage::http::objects::upload::{Media, UploadObjectRequest, UploadType};
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_storage::FileSource;
-use rskit_storage::store::{FileStore, ProgressCallback, StoredFile};
-use serde::Deserialize;
+use rskit_storage::store::{
+    FileStore, ProgressCallback, StorageConfig, StorageFactory, StorageRegistry, StoredFile,
+};
+use serde::{Deserialize, Serialize};
 
-/// Configuration for the GCS store.
-#[derive(Debug, Clone, Deserialize)]
+/// Configuration for the Google Cloud Storage backend.
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct GcsStoreConfig {
     /// GCS bucket name.
     pub bucket: String,
@@ -35,7 +38,7 @@ pub struct GcsStore {
 }
 
 impl GcsStore {
-    /// Create a new GCS store with the given configuration.
+    /// Create a new Google Cloud Storage backend.
     pub async fn new(config: GcsStoreConfig) -> AppResult<Self> {
         let client_config = if config.anonymous {
             google_cloud_storage::client::ClientConfig::default().anonymous()
@@ -231,8 +234,8 @@ impl FileStore for GcsStore {
 
     async fn presigned_url(&self, _key: &str, _expires_in: Duration) -> AppResult<String> {
         Err(AppError::new(
-            ErrorCode::Internal,
-            "GCS presigned URLs not yet implemented",
+            ErrorCode::InvalidInput,
+            "GCS presigned URLs are not supported by this backend",
         ))
     }
 
@@ -246,6 +249,27 @@ impl FileStore for GcsStore {
         self.delete(from_key).await?;
         Ok(result)
     }
+}
+
+struct GcsFactory;
+
+#[async_trait::async_trait]
+impl StorageFactory for GcsFactory {
+    async fn create(&self, config: &StorageConfig) -> AppResult<Arc<dyn FileStore>> {
+        let gcs_config: GcsStoreConfig =
+            serde_json::from_value(config.options.clone()).map_err(|e| {
+                AppError::new(
+                    ErrorCode::InvalidInput,
+                    format!("invalid GCS storage config: {e}"),
+                )
+            })?;
+        Ok(Arc::new(GcsStore::new(gcs_config).await?))
+    }
+}
+
+/// Explicitly register the Google Cloud Storage backend.
+pub fn register_gcs(registry: &mut StorageRegistry) -> AppResult<()> {
+    registry.register("gcs", Arc::new(GcsFactory))
 }
 
 #[cfg(test)]
@@ -282,5 +306,12 @@ mod tests {
 
         assert_eq!(store.bucket(), "public-assets");
         assert_eq!(store.full_key("image.png"), "uploads/image.png");
+    }
+
+    #[test]
+    fn register_gcs_adds_backend_without_constructing_client() {
+        let mut registry = StorageRegistry::new();
+        register_gcs(&mut registry).unwrap();
+        assert!(registry.contains("gcs"));
     }
 }

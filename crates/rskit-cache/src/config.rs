@@ -1,34 +1,71 @@
 use std::time::Duration;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+
+/// Cache backend selection and common key settings.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CacheConfig {
+    /// Backend name looked up in an injected [`crate::CacheRegistry`].
+    #[serde(default = "default_backend")]
+    pub backend: String,
+    /// Optional prefix prepended to every key by backends that support it.
+    pub key_prefix: Option<String>,
+    /// In-memory backend options.
+    #[serde(default)]
+    pub memory: MemoryConfig,
+    /// Redis backend options. Used only when the `redis` cargo feature is enabled.
+    #[serde(default)]
+    pub redis: RedisConfig,
+}
+
+impl Default for CacheConfig {
+    fn default() -> Self {
+        Self {
+            backend: default_backend(),
+            key_prefix: None,
+            memory: MemoryConfig::default(),
+            redis: RedisConfig::default(),
+        }
+    }
+}
+
+fn default_backend() -> String {
+    "memory".to_owned()
+}
+
+/// In-memory cache configuration.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+pub struct MemoryConfig {
+    /// Optional maximum entry count. `Some(0)` is normalized to unbounded by the memory backend.
+    pub max_entries: Option<usize>,
+}
 
 /// Redis connection and pool configuration.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RedisConfig {
     /// Redis server hostname or IP address.
+    #[serde(default = "default_host")]
     pub host: String,
-
     /// Redis server port (default: 6379).
     #[serde(default = "default_port")]
     pub port: u16,
-
     /// Optional password for Redis AUTH.
     pub password: Option<String>,
-
     /// Redis database index (default: 0).
     #[serde(default)]
     pub database: u8,
-
     /// Connection pool size (default: 10).
     #[serde(default = "default_pool_size")]
     pub pool_size: u32,
-
-    /// Timeout for establishing a connection.
-    #[serde(default = "default_connect_timeout", with = "humantime_serde")]
+    /// Timeout for establishing a connection, represented as integer seconds.
+    #[serde(default = "default_connect_timeout", with = "duration_seconds")]
     pub connect_timeout: Duration,
-
     /// Optional prefix prepended to every key.
     pub key_prefix: Option<String>,
+}
+
+fn default_host() -> String {
+    "127.0.0.1".to_owned()
 }
 
 fn default_port() -> u16 {
@@ -46,7 +83,7 @@ fn default_connect_timeout() -> Duration {
 impl Default for RedisConfig {
     fn default() -> Self {
         Self {
-            host: "127.0.0.1".into(),
+            host: default_host(),
             port: default_port(),
             password: None,
             database: 0,
@@ -59,6 +96,7 @@ impl Default for RedisConfig {
 
 impl RedisConfig {
     /// Build the `redis://` connection URL from the config fields.
+    #[must_use]
     pub fn connection_url(&self) -> String {
         match &self.password {
             Some(pw) => format!(
@@ -70,20 +108,16 @@ impl RedisConfig {
     }
 }
 
-/// Minimal serde helper that deserialises a [`Duration`] from a human-readable
-/// string (e.g. `"5s"`, `"200ms"`) or an integer-seconds value, without
-/// pulling in the full `humantime-serde` crate.
-mod humantime_serde {
+mod duration_seconds {
     use std::time::Duration;
 
-    use serde::{self, Deserialize, Deserializer, Serializer};
+    use serde::{Deserialize, Deserializer, Serializer};
 
     pub fn deserialize<'de, D>(deserializer: D) -> Result<Duration, D::Error>
     where
         D: Deserializer<'de>,
     {
-        let secs = u64::deserialize(deserializer)?;
-        Ok(Duration::from_secs(secs))
+        u64::deserialize(deserializer).map(Duration::from_secs)
     }
 
     #[allow(dead_code)]
@@ -101,14 +135,10 @@ mod tests {
 
     #[test]
     fn default_config_has_expected_values() {
-        let cfg = RedisConfig::default();
-        assert_eq!(cfg.host, "127.0.0.1");
-        assert_eq!(cfg.port, 6379);
-        assert!(cfg.password.is_none());
-        assert_eq!(cfg.database, 0);
-        assert_eq!(cfg.pool_size, 10);
-        assert_eq!(cfg.connect_timeout, Duration::from_secs(5));
+        let cfg = CacheConfig::default();
+        assert_eq!(cfg.backend, "memory");
         assert!(cfg.key_prefix.is_none());
+        assert!(cfg.memory.max_entries.is_none());
     }
 
     #[test]
@@ -139,11 +169,12 @@ mod tests {
 
     #[test]
     fn deserialise_from_json() {
-        let json = r#"{"host":"localhost","port":6380,"database":2,"connect_timeout":10}"#;
-        let cfg: RedisConfig = serde_json::from_str(json).unwrap();
-        assert_eq!(cfg.host, "localhost");
-        assert_eq!(cfg.port, 6380);
-        assert_eq!(cfg.database, 2);
-        assert_eq!(cfg.connect_timeout, Duration::from_secs(10));
+        let json = r#"{"backend":"redis","redis":{"host":"localhost","port":6380,"database":2,"connect_timeout":10}}"#;
+        let cfg: CacheConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(cfg.backend, "redis");
+        assert_eq!(cfg.redis.host, "localhost");
+        assert_eq!(cfg.redis.port, 6380);
+        assert_eq!(cfg.redis.database, 2);
+        assert_eq!(cfg.redis.connect_timeout, Duration::from_secs(10));
     }
 }

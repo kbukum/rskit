@@ -1,51 +1,78 @@
-# rskit-cache — Redis Client & Typed Store
+# rskit-cache
 
-Redis client with typed store, connection management, and `Component` lifecycle.
+Cache abstraction with an in-memory default, explicit backend registry, typed
+JSON store, and optional Redis support.
 
-[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml)
-[![crates.io](https://img.shields.io/crates/v/rskit-cache.svg)](https://crates.io/crates/rskit-cache)
-[![docs.rs](https://docs.rs/rskit-cache/badge.svg)](https://docs.rs/rskit-cache)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![MSRV: 1.85](https://img.shields.io/badge/MSRV-1.85-orange.svg)](https://blog.rust-lang.org/2025/02/20/Rust-1.85.0.html)
+The core crate is backend-neutral. A new `CacheRegistry` starts empty; call
+`register_memory` or `register_redis` explicitly before selecting a backend from
+configuration. Redis is behind the `redis` feature and is never registered by
+import side effects.
 
-## Features
-
-- `RedisClient` — async connection with pooling and automatic key prefixing
-- `TypedStore<T>` — JSON-serialized typed cache backed by `RedisClient`
-- String, hash, list, scan, and pub/sub operations
-- TTL support for cache expiration
-- Implements `rskit-bootstrap::Component` lifecycle
-
-## Usage
+## Installation
 
 ```toml
 [dependencies]
 rskit-cache = "0.1"
 ```
 
-```rust
-use rskit_cache::{RedisClient, RedisConfig, TypedStore};
-use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-use std::time::Duration;
+With Redis:
 
-#[derive(Serialize, Deserialize)]
-struct Session { user_id: String }
-
-async fn example() {
-    let config = RedisConfig {
-        host: "127.0.0.1".into(),
-        port: 6379,
-        ..Default::default()
-    };
-    let client = Arc::new(RedisClient::new(config).await.unwrap());
-    let store = TypedStore::<Session>::new(client, "sessions");
-
-    store.set("s1", &Session { user_id: "u1".into() }, Some(Duration::from_secs(3600))).await.unwrap();
-    let s: Option<Session> = store.get("s1").await.unwrap();
-}
+```toml
+[dependencies]
+rskit-cache = { version = "0.1", features = ["redis"] }
 ```
 
-## See Also
+## In-memory backend
 
-[Main repository README](https://github.com/kbukum/rskit)
+```rust,no_run
+use rskit_cache::{CacheConfig, CacheRegistry, MemoryConfig, TypedStore, register_memory};
+
+# async fn example() -> rskit_errors::AppResult<()> {
+let mut registry = CacheRegistry::new();
+register_memory(&mut registry)?;
+
+let cache = registry
+    .build(&CacheConfig {
+        backend: "memory".into(),
+        key_prefix: None,
+        memory: MemoryConfig::default(),
+        ..Default::default()
+    })
+    .await?;
+
+let store = TypedStore::<String>::new(cache, "sessions");
+store.set("s1", &"user-1".to_string(), None).await?;
+# Ok(())
+# }
+```
+
+## Redis backend
+
+```rust,no_run
+#[cfg(feature = "redis")]
+use rskit_cache::{CacheConfig, CacheRegistry, RedisConfig, register_redis};
+
+# #[cfg(feature = "redis")]
+# async fn example() -> rskit_errors::AppResult<()> {
+let mut registry = CacheRegistry::new();
+register_redis(&mut registry)?;
+
+let cache = registry
+    .build(&CacheConfig {
+        backend: "redis".into(),
+        key_prefix: None,
+        memory: Default::default(),
+        redis: RedisConfig::default(),
+    })
+    .await?;
+# Ok(())
+# }
+```
+
+## Public API
+
+- `CacheBackend` — async get/set/delete/exists operations with TTL support.
+- `CacheRegistry` — injected registry for config-driven backend selection.
+- `MemoryCache` — lean default backend for local use and tests.
+- `TypedStore<T>` — JSON-serialized typed values with key prefixes.
+- `RedisClient` — optional Redis implementation when the `redis` feature is enabled.

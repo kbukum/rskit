@@ -5,8 +5,10 @@ use std::time::Duration;
 use redis::AsyncCommands;
 use rskit_bootstrap::{Component, Health};
 use rskit_errors::{AppError, AppResult, ErrorCode};
+use tokio::time::timeout;
 
 use crate::config::RedisConfig;
+use crate::registry::{CacheBackend, CacheFactory, CacheRegistry};
 
 /// Async Redis client backed by [`redis::aio::ConnectionManager`].
 ///
@@ -17,11 +19,57 @@ pub struct RedisClient {
     connected: AtomicBool,
 }
 
+#[async_trait::async_trait]
+impl CacheBackend for RedisClient {
+    async fn get(&self, key: &str) -> AppResult<Option<String>> {
+        RedisClient::get(self, key).await
+    }
+
+    async fn set(&self, key: &str, val: &str, ttl: Option<Duration>) -> AppResult<()> {
+        RedisClient::set(self, key, val, ttl).await
+    }
+
+    async fn delete(&self, key: &str) -> AppResult<bool> {
+        RedisClient::delete(self, key).await
+    }
+
+    async fn exists(&self, key: &str) -> AppResult<bool> {
+        RedisClient::exists(self, key).await
+    }
+}
+
+struct RedisFactory;
+
+#[async_trait::async_trait]
+impl CacheFactory for RedisFactory {
+    async fn create(
+        &self,
+        config: &crate::config::CacheConfig,
+    ) -> AppResult<std::sync::Arc<dyn CacheBackend>> {
+        let mut redis = config.redis.clone();
+        if redis.key_prefix.is_none() {
+            redis.key_prefix.clone_from(&config.key_prefix);
+        }
+        Ok(std::sync::Arc::new(RedisClient::new(redis).await?))
+    }
+}
+
+/// Explicitly register the Redis backend. Requires the `redis` cargo feature.
+pub fn register_redis(registry: &mut CacheRegistry) -> AppResult<()> {
+    registry.register("redis", std::sync::Arc::new(RedisFactory))
+}
+
 impl RedisClient {
     /// Create a new [`RedisClient`] from the given configuration.
     ///
     /// Establishes a connection to Redis and verifies it with a PING.
     pub async fn new(config: RedisConfig) -> AppResult<Self> {
+        if config.connect_timeout.is_zero() {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                "redis connect_timeout must be greater than zero",
+            ));
+        }
         let url = config.connection_url();
         let client = redis::Client::open(url.as_str()).map_err(|e| {
             AppError::new(
@@ -31,15 +79,33 @@ impl RedisClient {
             .with_cause(e)
         })?;
 
-        let manager = redis::aio::ConnectionManager::new(client)
-            .await
-            .map_err(|e| {
-                AppError::new(
-                    ErrorCode::ConnectionFailed,
-                    format!("redis connection failed: {e}"),
-                )
-                .with_cause(e)
-            })?;
+        let manager = timeout(config.connect_timeout, async {
+            let mut manager = redis::aio::ConnectionManager::new(client)
+                .await
+                .map_err(|e| {
+                    AppError::new(
+                        ErrorCode::ConnectionFailed,
+                        format!("redis connection failed: {e}"),
+                    )
+                    .with_cause(e)
+                })?;
+            let pong: String = redis::cmd("PING")
+                .query_async(&mut manager)
+                .await
+                .map_err(redis_err)?;
+            tracing::debug!(response = %pong, "redis PING ok");
+            Ok::<_, AppError>(manager)
+        })
+        .await
+        .map_err(|_| {
+            AppError::new(
+                ErrorCode::ConnectionFailed,
+                format!(
+                    "redis connection timed out after {}ms",
+                    config.connect_timeout.as_millis()
+                ),
+            )
+        })??;
 
         tracing::debug!(host = %config.host, port = %config.port, db = %config.database, "redis connected");
 
@@ -81,8 +147,14 @@ impl RedisClient {
         let mut conn = self.conn();
         match ttl {
             Some(dur) => {
-                let secs = dur.as_secs().max(1);
-                conn.set_ex::<_, _, ()>(&k, val, secs)
+                if dur.is_zero() {
+                    return Err(AppError::new(
+                        ErrorCode::InvalidInput,
+                        "cache TTL must be greater than zero",
+                    ));
+                }
+                let millis = redis_ttl_millis(dur)?;
+                conn.pset_ex::<_, _, ()>(&k, val, millis)
                     .await
                     .map_err(redis_err)?;
             }
@@ -287,4 +359,62 @@ impl Component for RedisClient {
 /// Map a [`redis::RedisError`] to an [`AppError`].
 fn redis_err(e: redis::RedisError) -> AppError {
     AppError::new(ErrorCode::ExternalService, format!("redis error: {e}")).with_cause(e)
+}
+
+fn redis_ttl_millis(ttl: Duration) -> AppResult<u64> {
+    if ttl.is_zero() {
+        return Err(AppError::new(
+            ErrorCode::InvalidInput,
+            "cache TTL must be greater than zero",
+        ));
+    }
+    let millis = ttl.as_millis().max(1);
+    u64::try_from(millis).map_err(|_| {
+        AppError::new(
+            ErrorCode::InvalidInput,
+            "cache TTL is too large to represent safely for Redis",
+        )
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn redis_ttl_millis_rejects_zero() {
+        let err = redis_ttl_millis(Duration::ZERO).expect_err("zero TTL must be invalid");
+
+        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert!(err.to_string().contains("greater than zero"));
+    }
+
+    #[test]
+    fn redis_ttl_millis_rejects_u64_overflow() {
+        let err = redis_ttl_millis(Duration::MAX).expect_err("overflowing TTL must be invalid");
+
+        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert!(err.to_string().contains("too large"));
+    }
+
+    #[test]
+    fn redis_ttl_millis_rounds_non_zero_sub_millisecond_up() {
+        assert_eq!(
+            redis_ttl_millis(Duration::from_micros(500)).expect("non-zero TTL should be valid"),
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn redis_client_rejects_zero_connect_timeout_before_connecting() {
+        let config = RedisConfig {
+            connect_timeout: Duration::ZERO,
+            ..Default::default()
+        };
+
+        let err = RedisClient::new(config).await.err().unwrap();
+
+        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert!(err.to_string().contains("connect_timeout"));
+    }
 }

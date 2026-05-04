@@ -1,18 +1,21 @@
 //! Repository trait and helpers for the data-access layer.
 
+#[cfg(feature = "sqlx-any")]
 use std::marker::PhantomData;
+#[cfg(feature = "sqlx-any")]
 use std::sync::Arc;
 
 use async_trait::async_trait;
 
 use rskit_errors::AppResult;
 
+#[cfg(feature = "sqlx-any")]
 use crate::Database;
 
 /// Generic repository interface for CRUD operations.
 ///
-/// Implement this trait for each entity type.  The [`SqlRepository`] struct
-/// provides a convenient base that holds a [`Database`] reference and table
+/// Implement this trait for each entity type.  The `SqlRepository` struct
+/// provides a convenient base that holds a `Database` reference and table
 /// name, but does **not** implement this trait itself because the SQL required
 /// is entity-specific.
 #[async_trait]
@@ -97,14 +100,16 @@ impl FindOpts {
 /// Holds an `Arc<Database>` and a table name.  Concrete repository
 /// implementations can embed this struct and delegate to its accessors when
 /// building queries.
+#[cfg(feature = "sqlx-any")]
 pub struct SqlRepository<T> {
     db: Arc<Database>,
     table_name: &'static str,
     _marker: PhantomData<T>,
 }
 
+#[cfg(feature = "sqlx-any")]
 impl<T> SqlRepository<T> {
-    /// Create a new [`SqlRepository`] for the given table.
+    /// Create a new `SqlRepository` for the given table.
     pub fn new(db: Arc<Database>, table_name: &'static str) -> Self {
         Self {
             db,
@@ -113,7 +118,7 @@ impl<T> SqlRepository<T> {
         }
     }
 
-    /// Return a reference to the underlying [`Database`].
+    /// Return a reference to the underlying `Database`.
     pub fn db(&self) -> &Database {
         &self.db
     }
@@ -124,6 +129,7 @@ impl<T> SqlRepository<T> {
     }
 }
 
+#[cfg(feature = "sqlx-any")]
 impl<T> std::fmt::Debug for SqlRepository<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SqlRepository")

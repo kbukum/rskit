@@ -1,10 +1,11 @@
 # rskit-storage-gcs
 
-Google Cloud Storage backend for `rskit-storage`.
+Google Cloud Storage adapter for `rskit-storage`.
 
-This crate implements `rskit_storage::store::FileStore` as an opt-in adapter.
-Core `rskit-storage` stays focused on file utilities, local storage, and the
-backend trait.
+`rskit-storage-gcs` is an opt-in backend crate. The core `rskit-storage`
+crate contains the `FileStore` trait, `StorageRegistry`, and local filesystem
+backend; this crate owns the Google Cloud Storage client dependency and
+registers itself only when the application explicitly calls `register_gcs`.
 
 ## Authentication
 
@@ -15,7 +16,7 @@ or metadata-server sources supported by `google-cloud-storage`.
 Set `GcsStoreConfig::anonymous` only for explicitly public buckets that require
 unsigned requests.
 
-## Usage
+## Installation
 
 ```toml
 [dependencies]
@@ -23,16 +24,29 @@ rskit-storage = "0.1"
 rskit-storage-gcs = "0.1"
 ```
 
+## Usage
+
 ```rust,no_run
-use rskit_storage_gcs::{GcsStore, GcsStoreConfig};
+use rskit_storage::{StorageConfig, StorageRegistry};
+use rskit_storage_gcs::{GcsStoreConfig, register_gcs};
 
 # async fn example() -> rskit_errors::AppResult<()> {
-let store = GcsStore::new(GcsStoreConfig {
-    bucket: "assets".into(),
-    prefix: Some("uploads".into()),
-    anonymous: false,
-})
-.await?;
+let mut registry = StorageRegistry::new();
+register_gcs(&mut registry)?;
+
+let store = registry
+    .build(&StorageConfig {
+        backend: "gcs".into(),
+        options: serde_json::to_value(GcsStoreConfig {
+            bucket: "assets".into(),
+            prefix: Some("uploads".into()),
+            anonymous: false,
+        })?,
+    })
+    .await?;
 # Ok(())
 # }
 ```
+
+Importing this crate has no side effects. Applications own the registry and
+choose the backend through configuration.

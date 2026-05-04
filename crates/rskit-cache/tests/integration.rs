@@ -1,93 +1,106 @@
+use std::sync::Arc;
 use std::time::Duration;
 
-use rskit_cache::RedisConfig;
+use parking_lot::Mutex;
+use rskit_cache::{CacheBackend, MemoryCache};
 
-#[test]
-fn default_config_has_expected_values() {
-    let cfg = RedisConfig::default();
-    assert_eq!(cfg.host, "127.0.0.1");
-    assert_eq!(cfg.port, 6379);
-    assert!(cfg.password.is_none());
-    assert_eq!(cfg.database, 0);
-    assert_eq!(cfg.pool_size, 10);
-    assert_eq!(cfg.connect_timeout, Duration::from_secs(5));
-    assert!(cfg.key_prefix.is_none());
-}
+#[tokio::test]
+async fn memory_cache_delete_reports_existence() {
+    let cache = MemoryCache::default();
 
-#[test]
-fn connection_url_without_password() {
-    let cfg = RedisConfig::default();
-    assert_eq!(cfg.connection_url(), "redis://127.0.0.1:6379/0");
-}
-
-#[test]
-fn connection_url_with_password() {
-    let cfg = RedisConfig {
-        password: Some("secret".into()),
-        ..Default::default()
-    };
-    assert_eq!(cfg.connection_url(), "redis://:secret@127.0.0.1:6379/0");
-}
-
-#[test]
-fn connection_url_custom_fields() {
-    let cfg = RedisConfig {
-        host: "redis.example.com".into(),
-        port: 6380,
-        database: 3,
-        ..Default::default()
-    };
-    assert_eq!(cfg.connection_url(), "redis://redis.example.com:6380/3");
-}
-
-#[test]
-fn config_with_key_prefix() {
-    let cfg = RedisConfig {
-        key_prefix: Some("myapp".into()),
-        ..Default::default()
-    };
-    assert_eq!(cfg.key_prefix.as_deref(), Some("myapp"));
-}
-
-#[test]
-fn deserialise_config_from_json() {
-    let json = r#"{"host":"localhost","port":6380,"database":2,"connect_timeout":10}"#;
-    let cfg: RedisConfig = serde_json::from_str(json).unwrap();
-    assert_eq!(cfg.host, "localhost");
-    assert_eq!(cfg.port, 6380);
-    assert_eq!(cfg.database, 2);
-    assert_eq!(cfg.connect_timeout, Duration::from_secs(10));
-    assert!(cfg.password.is_none());
-}
-
-#[test]
-fn deserialise_config_uses_defaults_for_missing_fields() {
-    let json = r#"{"host":"127.0.0.1"}"#;
-    let cfg: RedisConfig = serde_json::from_str(json).unwrap();
-    assert_eq!(cfg.port, 6379);
-    assert_eq!(cfg.pool_size, 10);
-    assert_eq!(cfg.connect_timeout, Duration::from_secs(5));
+    assert!(!cache.delete("missing").await.unwrap());
+    cache.set("key", "value", None).await.unwrap();
+    assert!(cache.delete("key").await.unwrap());
+    assert!(!cache.delete("key").await.unwrap());
 }
 
 #[tokio::test]
-#[ignore = "requires running Redis server"]
-async fn client_set_and_get() {
-    let cfg = RedisConfig::default();
-    let client = rskit_cache::RedisClient::new(cfg).await.unwrap();
-    client.set("test_key", "hello", None).await.unwrap();
-    let val = client.get("test_key").await.unwrap();
-    assert_eq!(val.as_deref(), Some("hello"));
-    client.delete("test_key").await.unwrap();
+async fn memory_cache_delete_reports_false_for_expired_key() {
+    let now = Arc::new(Mutex::new(std::time::Instant::now()));
+    let clock = Arc::clone(&now);
+    let cache = MemoryCache::new_with_clock(None, None, move || *clock.lock());
+
+    cache
+        .set("expired", "value", Some(Duration::from_millis(1)))
+        .await
+        .unwrap();
+    *now.lock() += Duration::from_millis(5);
+
+    assert!(!cache.delete("expired").await.unwrap());
+    assert_eq!(cache.get("expired").await.unwrap(), None);
 }
 
 #[tokio::test]
-#[ignore = "requires running Redis server"]
-async fn client_delete_returns_true_when_key_exists() {
-    let cfg = RedisConfig::default();
-    let client = rskit_cache::RedisClient::new(cfg).await.unwrap();
-    client.set("del_key", "value", None).await.unwrap();
-    let removed = client.delete("del_key").await.unwrap();
-    assert!(removed);
-    let removed_again = client.delete("del_key").await.unwrap();
-    assert!(!removed_again);
+async fn memory_cache_prefix_isolated() {
+    let a = MemoryCache::new(Some("a".into()), None);
+    let b = MemoryCache::new(Some("b".into()), None);
+
+    a.set("same", "one", None).await.unwrap();
+    b.set("same", "two", None).await.unwrap();
+
+    assert_eq!(a.get("same").await.unwrap().as_deref(), Some("one"));
+    assert_eq!(b.get("same").await.unwrap().as_deref(), Some("two"));
+}
+
+#[tokio::test]
+async fn memory_cache_prunes_expired_before_capacity_eviction() {
+    let now = Arc::new(Mutex::new(std::time::Instant::now()));
+    let clock = Arc::clone(&now);
+    let cache = MemoryCache::new_with_clock(None, Some(1), move || *clock.lock());
+
+    cache
+        .set("expired", "old", Some(Duration::from_millis(1)))
+        .await
+        .unwrap();
+    *now.lock() += Duration::from_millis(5);
+    cache.set("fresh", "new", None).await.unwrap();
+
+    assert_eq!(cache.get("expired").await.unwrap(), None);
+    assert_eq!(cache.get("fresh").await.unwrap().as_deref(), Some("new"));
+}
+
+#[tokio::test]
+async fn memory_cache_capacity_eviction_is_deterministic() {
+    let cache = MemoryCache::new(None, Some(2));
+
+    cache.set("b", "second", None).await.unwrap();
+    cache.set("a", "first", None).await.unwrap();
+    cache.set("c", "third", None).await.unwrap();
+
+    assert_eq!(cache.get("a").await.unwrap(), None);
+    assert_eq!(cache.get("b").await.unwrap().as_deref(), Some("second"));
+    assert_eq!(cache.get("c").await.unwrap().as_deref(), Some("third"));
+}
+
+#[tokio::test]
+async fn memory_cache_honors_subsecond_ttl() {
+    let now = Arc::new(Mutex::new(std::time::Instant::now()));
+    let clock = Arc::clone(&now);
+    let cache = MemoryCache::new_with_clock(None, None, move || *clock.lock());
+
+    cache
+        .set("short", "value", Some(Duration::from_millis(500)))
+        .await
+        .unwrap();
+    *now.lock() += Duration::from_millis(250);
+    assert_eq!(cache.get("short").await.unwrap().as_deref(), Some("value"));
+
+    *now.lock() += Duration::from_millis(250);
+    assert_eq!(cache.get("short").await.unwrap(), None);
+}
+
+#[cfg(feature = "redis")]
+mod redis_integration {
+    use rskit_cache::{RedisClient, RedisConfig};
+
+    #[tokio::test]
+    #[ignore = "requires running Redis server"]
+    async fn client_set_and_get() {
+        let cfg = RedisConfig::default();
+        let client = RedisClient::new(cfg).await.unwrap();
+        client.set("test_key", "hello", None).await.unwrap();
+        let val = client.get("test_key").await.unwrap();
+        assert_eq!(val.as_deref(), Some("hello"));
+        client.delete("test_key").await.unwrap();
+    }
 }

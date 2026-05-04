@@ -6,7 +6,7 @@ use serde::{Deserialize, Deserializer};
 use validator::Validate;
 
 /// Supported database drivers.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum DbDriver {
     /// PostgreSQL.

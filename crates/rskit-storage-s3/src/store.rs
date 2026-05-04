@@ -1,18 +1,21 @@
 //! S3 / MinIO storage backend implementing [`rskit_storage::FileStore`].
 
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_storage::FileSource;
-use rskit_storage::store::{FileStore, ProgressCallback, StoredFile};
-use serde::Deserialize;
+use rskit_storage::store::{
+    FileStore, ProgressCallback, StorageConfig, StorageFactory, StorageRegistry, StoredFile,
+};
+use serde::{Deserialize, Serialize};
 
 /// Configuration for the S3 store.
 ///
 /// Supports AWS S3 and S3-compatible services (MinIO, LocalStack, etc.)
 /// via `endpoint`, `force_path_style`, and explicit credentials.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct S3StoreConfig {
     /// S3 bucket name.
     pub bucket: String,
@@ -208,7 +211,6 @@ impl FileStore for S3Store {
         content_type: Option<&str>,
         _on_progress: ProgressCallback,
     ) -> AppResult<StoredFile> {
-        // TODO: implement chunked upload with progress reporting
         self.upload(source, key, content_type, None).await
     }
 
@@ -387,6 +389,27 @@ fn resolve_credentials(config: &S3StoreConfig) -> AppResult<(String, String)> {
     }
 
     Ok((key, secret))
+}
+
+struct S3Factory;
+
+#[async_trait::async_trait]
+impl StorageFactory for S3Factory {
+    async fn create(&self, config: &StorageConfig) -> AppResult<Arc<dyn FileStore>> {
+        let s3_config: S3StoreConfig =
+            serde_json::from_value(config.options.clone()).map_err(|e| {
+                AppError::new(
+                    ErrorCode::InvalidInput,
+                    format!("invalid S3 storage config: {e}"),
+                )
+            })?;
+        Ok(Arc::new(S3Store::new(s3_config)?))
+    }
+}
+
+/// Explicitly register the S3 backend in an injected storage registry.
+pub fn register_s3(registry: &mut StorageRegistry) -> AppResult<()> {
+    registry.register("s3", Arc::new(S3Factory))
 }
 
 #[cfg(test)]

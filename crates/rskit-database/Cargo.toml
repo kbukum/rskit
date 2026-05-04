@@ -1,6 +1,6 @@
 [package]
 name        = "rskit-database"
-description = "sqlx-based async database pool with repository pattern and slow-query logging"
+description = "Database contracts with feature-gated sqlx backend support"
 version.workspace     = true
 edition.workspace     = true
 license.workspace     = true
@@ -17,6 +17,14 @@ keywords   = ["database", "sqlx", "repository"]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[features]
+default = []
+sqlx-core = ["dep:sqlx"]
+sqlx-any = ["sqlx-core", "sqlx/any"]
+postgres = ["sqlx-core", "sqlx/postgres"]
+mysql = ["sqlx-core", "sqlx/mysql"]
+sqlite = ["sqlx-core", "sqlx/sqlite"]
+
 [dependencies]
 rskit-errors    = { path = "../rskit-errors" }
 rskit-bootstrap = { path = "../rskit-bootstrap" }
@@ -25,7 +33,7 @@ serde_json      = { workspace = true }
 async-trait     = { workspace = true }
 tokio           = { workspace = true }
 tracing         = { workspace = true }
-sqlx            = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "postgres", "mysql", "sqlite", "any", "uuid", "chrono", "json"] }
+sqlx            = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "uuid", "chrono", "json"], optional = true }
 chrono          = { workspace = true }
 uuid            = { workspace = true }
 validator       = { workspace = true }
