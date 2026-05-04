@@ -22,7 +22,7 @@ rskit-errors = { path = "../rskit-errors" }
 aes-gcm      = "0.10"
 chacha20poly1305 = "0.10"
 sha2         = "0.10"
-pbkdf2       = "0.12"
+pbkdf2       = "0.13"
 rand         = { workspace = true }
 base64       = { workspace = true }
 zeroize      = { version = "1", features = ["derive"] }
