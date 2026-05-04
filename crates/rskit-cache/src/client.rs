@@ -368,7 +368,8 @@ fn redis_ttl_millis(ttl: Duration) -> AppResult<u64> {
             "cache TTL must be greater than zero",
         ));
     }
-    u64::try_from(ttl.as_millis()).map_err(|_| {
+    let millis = ttl.as_millis().max(1);
+    u64::try_from(millis).map_err(|_| {
         AppError::new(
             ErrorCode::InvalidInput,
             "cache TTL is too large to represent safely for Redis",
@@ -394,6 +395,14 @@ mod tests {
 
         assert_eq!(err.code, ErrorCode::InvalidInput);
         assert!(err.to_string().contains("too large"));
+    }
+
+    #[test]
+    fn redis_ttl_millis_rounds_non_zero_sub_millisecond_up() {
+        assert_eq!(
+            redis_ttl_millis(Duration::from_micros(500)).expect("non-zero TTL should be valid"),
+            1
+        );
     }
 
     #[tokio::test]
