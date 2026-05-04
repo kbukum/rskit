@@ -54,12 +54,19 @@ impl DatabaseRegistry {
 /// Register the generic sqlx Any selector boundary.
 #[cfg(feature = "sqlx-any")]
 pub fn register_sqlx_any(registry: &mut DatabaseRegistry) -> AppResult<()> {
+    let before = registry.len();
     #[cfg(feature = "postgres")]
     registry.register(DbDriver::Postgres)?;
     #[cfg(feature = "mysql")]
     registry.register(DbDriver::Mysql)?;
     #[cfg(feature = "sqlite")]
     registry.register(DbDriver::Sqlite)?;
+    if registry.len() == before {
+        return Err(AppError::new(
+            ErrorCode::InvalidInput,
+            "database sqlx-any registration requires at least one concrete driver feature",
+        ));
+    }
     Ok(())
 }
 

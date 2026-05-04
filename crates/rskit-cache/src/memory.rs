@@ -67,21 +67,27 @@ impl MemoryCache {
     fn prune_expired(entries: &mut BTreeMap<String, Entry>, now: Instant) {
         entries.retain(|_, entry| !entry.is_expired(now));
     }
+
+    fn expires_at(now: Instant, ttl: Option<Duration>) -> AppResult<Option<Instant>> {
+        let Some(duration) = ttl else {
+            return Ok(None);
+        };
+        now.checked_add(duration).map(Some).ok_or_else(|| {
+            AppError::new(
+                ErrorCode::InvalidInput,
+                "cache TTL is too large to represent safely",
+            )
+        })
+    }
 }
 
 #[async_trait::async_trait]
 impl CacheBackend for MemoryCache {
     async fn get(&self, key: &str) -> AppResult<Option<String>> {
         let mut entries = self.entries.lock();
+        Self::prune_expired(&mut entries, self.now());
         let full_key = self.key(key);
-        match entries.get(&full_key) {
-            Some(entry) if entry.is_expired(self.now()) => {
-                entries.remove(&full_key);
-                Ok(None)
-            }
-            Some(entry) => Ok(Some(entry.value.clone())),
-            None => Ok(None),
-        }
+        Ok(entries.get(&full_key).map(|entry| entry.value.clone()))
     }
 
     async fn set(&self, key: &str, val: &str, ttl: Option<Duration>) -> AppResult<()> {
@@ -96,6 +102,7 @@ impl CacheBackend for MemoryCache {
                 "cache TTL must be greater than zero",
             ));
         }
+        let expires_at = Self::expires_at(now, ttl)?;
 
         if let Some(max_entries) = self.max_entries
             && entries.len() >= max_entries
@@ -109,7 +116,7 @@ impl CacheBackend for MemoryCache {
             key,
             Entry {
                 value: val.to_owned(),
-                expires_at: ttl.map(|duration| now + duration),
+                expires_at,
             },
         );
         Ok(())
@@ -117,16 +124,8 @@ impl CacheBackend for MemoryCache {
 
     async fn delete(&self, key: &str) -> AppResult<bool> {
         let mut entries = self.entries.lock();
-        let now = self.now();
+        Self::prune_expired(&mut entries, self.now());
         let key = self.key(key);
-        if entries
-            .get(&key)
-            .and_then(|entry| entry.expires_at)
-            .is_some_and(|expires_at| expires_at <= now)
-        {
-            entries.remove(&key);
-            return Ok(false);
-        }
         Ok(entries.remove(&key).is_some())
     }
 
@@ -138,5 +137,59 @@ impl CacheBackend for MemoryCache {
 impl Default for MemoryCache {
     fn default() -> Self {
         Self::new(None, None)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use parking_lot::Mutex;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn set_rejects_unrepresentable_ttl() {
+        let cache = MemoryCache::default();
+
+        let err = cache
+            .set("too-long", "value", Some(Duration::MAX))
+            .await
+            .expect_err("TTL overflow must be rejected");
+
+        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert!(err.to_string().contains("too large"));
+    }
+
+    #[tokio::test]
+    async fn get_prunes_unrelated_expired_entries() {
+        let now = Arc::new(Mutex::new(Instant::now()));
+        let clock = Arc::clone(&now);
+        let cache = MemoryCache::new_with_clock(None, None, move || *clock.lock());
+        cache
+            .set("expired", "value", Some(Duration::from_secs(1)))
+            .await
+            .unwrap();
+        cache.set("live", "value", None).await.unwrap();
+        *now.lock() += Duration::from_secs(2);
+
+        assert_eq!(cache.get("live").await.unwrap().as_deref(), Some("value"));
+        assert_eq!(cache.entries.lock().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn delete_prunes_unrelated_expired_entries() {
+        let now = Arc::new(Mutex::new(Instant::now()));
+        let clock = Arc::clone(&now);
+        let cache = MemoryCache::new_with_clock(None, None, move || *clock.lock());
+        cache
+            .set("expired", "value", Some(Duration::from_secs(1)))
+            .await
+            .unwrap();
+        cache.set("live", "value", None).await.unwrap();
+        *now.lock() += Duration::from_secs(2);
+
+        assert!(!cache.delete("missing").await.unwrap());
+        assert_eq!(cache.entries.lock().len(), 1);
     }
 }
