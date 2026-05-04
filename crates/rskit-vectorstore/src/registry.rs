@@ -87,3 +87,46 @@ impl VectorFactory for MemoryFactory {
 pub fn register_memory(registry: &mut VectorStoreRegistry) -> AppResult<()> {
     registry.register("memory", Arc::new(MemoryFactory))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn registry_starts_empty() {
+        let registry = VectorStoreRegistry::new();
+
+        assert!(registry.is_empty());
+        assert_eq!(registry.len(), 0);
+        assert!(!registry.contains("memory"));
+    }
+
+    #[test]
+    fn registry_rejects_duplicate_backend() {
+        let mut registry = VectorStoreRegistry::new();
+        register_memory(&mut registry).unwrap();
+
+        let err = register_memory(&mut registry).expect_err("duplicate backend must fail");
+
+        assert_eq!(err.code, ErrorCode::AlreadyExists);
+    }
+
+    #[test]
+    fn registry_builds_memory_backend_after_explicit_registration() {
+        let mut registry = VectorStoreRegistry::new();
+        register_memory(&mut registry).unwrap();
+
+        let store = registry.build("memory").unwrap();
+
+        assert!(Arc::strong_count(&store) >= 1);
+    }
+
+    #[test]
+    fn registry_rejects_unregistered_backend() {
+        let registry = VectorStoreRegistry::new();
+
+        let err = registry.build("memory").err().unwrap();
+
+        assert_eq!(err.code, ErrorCode::NotFound);
+    }
+}

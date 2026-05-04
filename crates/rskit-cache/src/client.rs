@@ -64,6 +64,12 @@ impl RedisClient {
     ///
     /// Establishes a connection to Redis and verifies it with a PING.
     pub async fn new(config: RedisConfig) -> AppResult<Self> {
+        if config.connect_timeout.is_zero() {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                "redis connect_timeout must be greater than zero",
+            ));
+        }
         let url = config.connection_url();
         let client = redis::Client::open(url.as_str()).map_err(|e| {
             AppError::new(
@@ -147,7 +153,7 @@ impl RedisClient {
                         "cache TTL must be greater than zero",
                     ));
                 }
-                let millis = u64::try_from(dur.as_millis()).unwrap_or(u64::MAX).max(1);
+                let millis = redis_ttl_millis(dur)?;
                 conn.pset_ex::<_, _, ()>(&k, val, millis)
                     .await
                     .map_err(redis_err)?;
@@ -353,4 +359,53 @@ impl Component for RedisClient {
 /// Map a [`redis::RedisError`] to an [`AppError`].
 fn redis_err(e: redis::RedisError) -> AppError {
     AppError::new(ErrorCode::ExternalService, format!("redis error: {e}")).with_cause(e)
+}
+
+fn redis_ttl_millis(ttl: Duration) -> AppResult<u64> {
+    if ttl.is_zero() {
+        return Err(AppError::new(
+            ErrorCode::InvalidInput,
+            "cache TTL must be greater than zero",
+        ));
+    }
+    u64::try_from(ttl.as_millis()).map_err(|_| {
+        AppError::new(
+            ErrorCode::InvalidInput,
+            "cache TTL is too large to represent safely for Redis",
+        )
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn redis_ttl_millis_rejects_zero() {
+        let err = redis_ttl_millis(Duration::ZERO).expect_err("zero TTL must be invalid");
+
+        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert!(err.to_string().contains("greater than zero"));
+    }
+
+    #[test]
+    fn redis_ttl_millis_rejects_u64_overflow() {
+        let err = redis_ttl_millis(Duration::MAX).expect_err("overflowing TTL must be invalid");
+
+        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert!(err.to_string().contains("too large"));
+    }
+
+    #[tokio::test]
+    async fn redis_client_rejects_zero_connect_timeout_before_connecting() {
+        let config = RedisConfig {
+            connect_timeout: Duration::ZERO,
+            ..Default::default()
+        };
+
+        let err = RedisClient::new(config).await.err().unwrap();
+
+        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert!(err.to_string().contains("connect_timeout"));
+    }
 }
