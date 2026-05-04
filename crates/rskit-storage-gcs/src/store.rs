@@ -4,11 +4,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use google_cloud_storage::http::objects::delete::DeleteObjectRequest;
-use google_cloud_storage::http::objects::download::Range;
-use google_cloud_storage::http::objects::get::GetObjectRequest;
-use google_cloud_storage::http::objects::list::ListObjectsRequest;
-use google_cloud_storage::http::objects::upload::{Media, UploadObjectRequest, UploadType};
+use google_cloud_auth::credentials::anonymous::Builder as AnonymousCredentials;
+use google_cloud_storage::client::{Storage, StorageControl};
+use google_cloud_storage::model::Object;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_storage::FileSource;
 use rskit_storage::store::{
@@ -33,28 +31,56 @@ pub struct GcsStoreConfig {
 
 /// Google Cloud Storage backend.
 pub struct GcsStore {
-    client: google_cloud_storage::client::Client,
+    storage: Storage,
+    control: StorageControl,
     config: GcsStoreConfig,
 }
 
 impl GcsStore {
     /// Create a new Google Cloud Storage backend.
     pub async fn new(config: GcsStoreConfig) -> AppResult<Self> {
-        let client_config = if config.anonymous {
-            google_cloud_storage::client::ClientConfig::default().anonymous()
-        } else {
-            google_cloud_storage::client::ClientConfig::default()
-                .with_auth()
+        let (storage, control) = if config.anonymous {
+            let storage = Storage::builder()
+                .with_credentials(AnonymousCredentials::new().build())
+                .build()
                 .await
                 .map_err(|e| {
                     AppError::new(
                         ErrorCode::Internal,
-                        format!("GCS authentication configuration failed: {e}"),
+                        format!("GCS anonymous storage client configuration failed: {e}"),
                     )
-                })?
+                })?;
+            let control = StorageControl::builder()
+                .with_credentials(AnonymousCredentials::new().build())
+                .build()
+                .await
+                .map_err(|e| {
+                    AppError::new(
+                        ErrorCode::Internal,
+                        format!("GCS anonymous control client configuration failed: {e}"),
+                    )
+                })?;
+            (storage, control)
+        } else {
+            let storage = Storage::builder().build().await.map_err(|e| {
+                AppError::new(
+                    ErrorCode::Internal,
+                    format!("GCS storage client configuration failed: {e}"),
+                )
+            })?;
+            let control = StorageControl::builder().build().await.map_err(|e| {
+                AppError::new(
+                    ErrorCode::Internal,
+                    format!("GCS control client configuration failed: {e}"),
+                )
+            })?;
+            (storage, control)
         };
-        let client = google_cloud_storage::client::Client::new(client_config);
-        Ok(Self { client, config })
+        Ok(Self {
+            storage,
+            control,
+            config,
+        })
     }
 
     /// Returns the bucket name.
@@ -68,6 +94,14 @@ impl GcsStore {
             .as_ref()
             .map_or_else(|| key.to_string(), |prefix| format!("{prefix}/{key}"))
     }
+
+    fn bucket_resource(&self) -> String {
+        if self.config.bucket.starts_with("projects/") {
+            self.config.bucket.clone()
+        } else {
+            format!("projects/_/buckets/{}", self.config.bucket)
+        }
+    }
 }
 
 fn object_size(size: i64) -> AppResult<u64> {
@@ -76,6 +110,20 @@ fn object_size(size: i64) -> AppResult<u64> {
             ErrorCode::Internal,
             format!("GCS object size must not be negative: {size}"),
         )
+    })
+}
+
+fn stored_file_from_object(key: String, obj: Object) -> AppResult<StoredFile> {
+    Ok(StoredFile {
+        key,
+        size: object_size(obj.size)?,
+        content_type: if obj.content_type.is_empty() {
+            "application/octet-stream".to_string()
+        } else {
+            obj.content_type
+        },
+        stored_at: chrono::Utc::now(),
+        metadata: obj.metadata,
     })
 }
 
@@ -91,15 +139,16 @@ impl FileStore for GcsStore {
         let data = source.read_all().await?;
         let size = data.len() as u64;
         let full_key = self.full_key(key);
+        let bucket = self.bucket_resource();
 
-        let upload_type = UploadType::Simple(Media::new(full_key));
-        let req = UploadObjectRequest {
-            bucket: self.config.bucket.clone(),
-            ..Default::default()
-        };
-
-        self.client
-            .upload_object(&req, data.to_vec(), &upload_type)
+        let mut request = self
+            .storage
+            .write_object(bucket, full_key, data)
+            .set_content_type(content_type.unwrap_or("application/octet-stream"));
+        if let Some(metadata) = metadata.clone() {
+            request = request.set_metadata(metadata);
+        }
+        Box::pin(request.send_buffered())
             .await
             .map_err(|e| AppError::new(ErrorCode::Internal, format!("GCS upload failed: {e}")))?;
 
@@ -126,33 +175,36 @@ impl FileStore for GcsStore {
 
     async fn download(&self, key: &str) -> AppResult<FileSource> {
         let full_key = self.full_key(key);
-
-        let req = GetObjectRequest {
-            bucket: self.config.bucket.clone(),
-            object: full_key,
-            ..Default::default()
-        };
-
-        let data = self
-            .client
-            .download_object(&req, &Range::default())
+        let bucket = self.bucket_resource();
+        let mut response = self
+            .storage
+            .read_object(bucket, full_key)
+            .send()
             .await
             .map_err(|e| AppError::new(ErrorCode::NotFound, format!("GCS download failed: {e}")))?;
+
+        let mut data = Vec::new();
+        while let Some(chunk) = response.next().await {
+            let chunk = chunk.map_err(|e| {
+                AppError::new(
+                    ErrorCode::Internal,
+                    format!("GCS download stream failed: {e}"),
+                )
+            })?;
+            data.extend_from_slice(&chunk);
+        }
 
         Ok(FileSource::Bytes(bytes::Bytes::from(data)))
     }
 
     async fn delete(&self, key: &str) -> AppResult<()> {
         let full_key = self.full_key(key);
-
-        let req = DeleteObjectRequest {
-            bucket: self.config.bucket.clone(),
-            object: full_key,
-            ..Default::default()
-        };
-
-        self.client
-            .delete_object(&req)
+        let bucket = self.bucket_resource();
+        self.control
+            .delete_object()
+            .set_bucket(bucket)
+            .set_object(full_key)
+            .send()
             .await
             .map_err(|e| AppError::new(ErrorCode::Internal, format!("GCS delete failed: {e}")))?;
 
@@ -168,28 +220,16 @@ impl FileStore for GcsStore {
 
     async fn head(&self, key: &str) -> AppResult<StoredFile> {
         let full_key = self.full_key(key);
-
-        let req = GetObjectRequest {
-            bucket: self.config.bucket.clone(),
-            object: full_key,
-            ..Default::default()
-        };
-
         let obj = self
-            .client
-            .get_object(&req)
+            .control
+            .get_object()
+            .set_bucket(self.bucket_resource())
+            .set_object(full_key)
+            .send()
             .await
             .map_err(|e| AppError::new(ErrorCode::NotFound, format!("GCS head failed: {e}")))?;
 
-        Ok(StoredFile {
-            key: key.to_string(),
-            size: object_size(obj.size)?,
-            content_type: obj
-                .content_type
-                .unwrap_or_else(|| "application/octet-stream".to_string()),
-            stored_at: chrono::Utc::now(),
-            metadata: obj.metadata.unwrap_or_default(),
-        })
+        stored_file_from_object(key.to_string(), obj)
     }
 
     async fn list(&self, prefix: &str, limit: Option<usize>) -> AppResult<Vec<StoredFile>> {
@@ -199,34 +239,23 @@ impl FileStore for GcsStore {
             AppError::new(ErrorCode::InvalidInput, "GCS list limit exceeds i32::MAX")
         })?;
 
-        let req = ListObjectsRequest {
-            bucket: self.config.bucket.clone(),
-            prefix: Some(full_prefix),
-            max_results,
-            ..Default::default()
-        };
-
-        let resp = self
-            .client
-            .list_objects(&req)
+        let mut request = self
+            .control
+            .list_objects()
+            .set_parent(self.bucket_resource())
+            .set_prefix(full_prefix);
+        if let Some(max_results) = max_results {
+            request = request.set_page_size(max_results);
+        }
+        let resp = request
+            .send()
             .await
             .map_err(|e| AppError::new(ErrorCode::Internal, format!("GCS list failed: {e}")))?;
 
         let items = resp
-            .items
-            .unwrap_or_default()
+            .objects
             .into_iter()
-            .map(|obj| {
-                Ok(StoredFile {
-                    key: obj.name,
-                    size: object_size(obj.size)?,
-                    content_type: obj
-                        .content_type
-                        .unwrap_or_else(|| "application/octet-stream".to_string()),
-                    stored_at: chrono::Utc::now(),
-                    metadata: obj.metadata.unwrap_or_default(),
-                })
-            })
+            .map(|obj| stored_file_from_object(obj.name.clone(), obj))
             .collect::<AppResult<Vec<_>>>()?;
 
         Ok(items)

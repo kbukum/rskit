@@ -5556,6 +5556,7 @@ dependencies = [
  "async-trait",
  "bytes",
  "chrono",
+ "google-cloud-auth",
  "google-cloud-storage",
  "rskit-errors",
  "rskit-storage",
