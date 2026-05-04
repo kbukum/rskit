@@ -1,10 +1,17 @@
 use std::time::Duration;
 
 use async_trait::async_trait;
-use rskit_errors::AppResult;
+use rskit_errors::{AppError, AppResult, ErrorCode};
 
 use crate::event::Event;
 use crate::message::Message;
+
+fn unsupported(capability: &str) -> AppResult<()> {
+    Err(AppError::new(
+        ErrorCode::InvalidInput,
+        format!("messaging capability {capability} is not supported by this consumer"),
+    ))
+}
 
 // ── Messaging traits ─────────────────────────────────────────────────────────
 
@@ -19,6 +26,11 @@ pub trait MessageProducer<T: Send + Sync>: Send + Sync {
 
     /// Flush pending messages within the given timeout.
     async fn flush(&self, timeout: Duration) -> AppResult<()>;
+
+    /// Close or shut down the producer. Implementations with no persistent resources may no-op.
+    async fn close(&self) -> AppResult<()> {
+        Ok(())
+    }
 }
 
 /// A consumer that receives messages from a broker.
@@ -29,6 +41,21 @@ pub trait MessageConsumer<T: Send + Sync>: Send + Sync {
 
     /// Receive the next message. Blocks until a message is available.
     async fn recv(&self) -> AppResult<Message<T>>;
+
+    /// Close or shut down the consumer. Implementations with no persistent resources may no-op.
+    async fn close(&self) -> AppResult<()> {
+        Ok(())
+    }
+
+    /// Pause message delivery when the backend supports it.
+    async fn pause(&self) -> AppResult<()> {
+        unsupported("pause")
+    }
+
+    /// Resume paused message delivery when the backend supports it.
+    async fn resume(&self) -> AppResult<()> {
+        unsupported("resume")
+    }
 }
 
 /// A producer that publishes structured [`Event`]s to topics.

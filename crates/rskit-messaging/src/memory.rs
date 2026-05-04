@@ -1,6 +1,6 @@
 //! In-memory message broker, producer, and consumer for testing.
 
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -10,7 +10,11 @@ use tokio::sync::{Mutex, broadcast};
 
 use crate::event::Event;
 use crate::message::Message;
+use crate::registry::MessagingRegistry;
 use crate::traits::{EventConsumer, EventProducer, MessageConsumer, MessageProducer};
+
+const BACKEND_NAME: &str = "memory";
+const DEFAULT_HISTORY_LIMIT: usize = 1024;
 
 /// An in-memory message broker backed by a `tokio::sync::broadcast` channel.
 ///
@@ -22,7 +26,8 @@ use crate::traits::{EventConsumer, EventProducer, MessageConsumer, MessageProduc
 #[derive(Debug, Clone)]
 pub struct InMemoryBroker<T: Clone + Send + Sync + 'static> {
     tx: broadcast::Sender<Message<T>>,
-    history: Arc<Mutex<Vec<Message<T>>>>,
+    history: Arc<Mutex<VecDeque<Message<T>>>>,
+    history_limit: usize,
     topics: Arc<Mutex<HashSet<String>>>,
     /// Notified after every publish so that [`wait_for_message`] can wake
     /// without polling.
@@ -35,7 +40,8 @@ impl<T: Clone + Send + Sync + 'static> InMemoryBroker<T> {
         let (tx, _) = broadcast::channel(capacity);
         Self {
             tx,
-            history: Arc::new(Mutex::new(Vec::new())),
+            history: Arc::new(Mutex::new(VecDeque::with_capacity(DEFAULT_HISTORY_LIMIT))),
+            history_limit: DEFAULT_HISTORY_LIMIT,
             topics: Arc::new(Mutex::new(HashSet::new())),
             notify: Arc::new(tokio::sync::Notify::new()),
         }
@@ -46,8 +52,23 @@ impl<T: Clone + Send + Sync + 'static> InMemoryBroker<T> {
         InMemoryProducer {
             tx: self.tx.clone(),
             history: self.history.clone(),
+            history_limit: self.history_limit,
             topics: self.topics.clone(),
             notify: self.notify.clone(),
+        }
+    }
+
+    /// Create a broker with explicit channel capacity and history limit.
+    #[must_use]
+    pub fn with_history_limit(capacity: usize, history_limit: usize) -> Self {
+        let limit = history_limit.max(1);
+        let (tx, _) = broadcast::channel(capacity);
+        Self {
+            tx,
+            history: Arc::new(Mutex::new(VecDeque::with_capacity(limit))),
+            history_limit: limit,
+            topics: Arc::new(Mutex::new(HashSet::new())),
+            notify: Arc::new(tokio::sync::Notify::new()),
         }
     }
 
@@ -72,7 +93,7 @@ impl<T: Clone + Send + Sync + 'static> InMemoryBroker<T> {
 
     /// Return a clone of every message published to any topic.
     pub async fn all_messages(&self) -> Vec<Message<T>> {
-        self.history.lock().await.clone()
+        self.history.lock().await.iter().cloned().collect()
     }
 
     /// Return the number of messages published to `topic`.
@@ -115,11 +136,26 @@ impl<T: Clone + Send + Sync + 'static> Default for InMemoryBroker<T> {
     }
 }
 
+/// Register in-memory producer and consumer factories.
+pub fn register<T: Clone + Send + Sync + 'static>(
+    registry: &mut MessagingRegistry<T>,
+    broker: InMemoryBroker<T>,
+) -> AppResult<()> {
+    let producer_broker = broker.clone();
+    registry.register_producer(BACKEND_NAME, move || {
+        Ok(Arc::new(producer_broker.producer()) as Arc<dyn MessageProducer<T>>)
+    })?;
+    registry.register_consumer(BACKEND_NAME, move || {
+        Ok(Arc::new(broker.consumer()) as Arc<dyn MessageConsumer<T>>)
+    })
+}
+
 /// An in-memory message producer.
 #[derive(Debug, Clone)]
 pub struct InMemoryProducer<T: Clone + Send + Sync + 'static> {
     tx: broadcast::Sender<Message<T>>,
-    history: Arc<Mutex<Vec<Message<T>>>>,
+    history: Arc<Mutex<VecDeque<Message<T>>>>,
+    history_limit: usize,
     topics: Arc<Mutex<HashSet<String>>>,
     notify: Arc<tokio::sync::Notify>,
 }
@@ -130,7 +166,10 @@ impl<T: Clone + Send + Sync + 'static> MessageProducer<T> for InMemoryProducer<T
         // Record in history before broadcasting.
         {
             let mut hist = self.history.lock().await;
-            hist.push(msg.clone());
+            if hist.len() == self.history_limit {
+                hist.pop_front();
+            }
+            hist.push_back(msg.clone());
         }
         {
             let mut set = self.topics.lock().await;
@@ -341,6 +380,26 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn register_memory_backend_explicitly() {
+        let broker: InMemoryBroker<String> = InMemoryBroker::new(16);
+        let mut registry = MessagingRegistry::new();
+
+        register(&mut registry, broker).unwrap();
+
+        assert_eq!(registry.producer_backends(), vec!["memory"]);
+        assert_eq!(registry.consumer_backends(), vec!["memory"]);
+        let producer = registry.producer("memory").unwrap();
+        let consumer = registry.consumer("memory").unwrap();
+        consumer.subscribe(&["events"]).await.unwrap();
+        producer
+            .send(Message::new("events", "registered".to_string()))
+            .await
+            .unwrap();
+        let received = consumer.recv().await.unwrap();
+        assert_eq!(received.payload, "registered");
+    }
+
+    #[tokio::test]
     async fn send_batch_and_receive() {
         let broker: InMemoryBroker<i32> = InMemoryBroker::new(16);
         let producer = broker.producer();
@@ -472,6 +531,22 @@ mod tests {
 
         let all = broker.all_messages().await;
         assert_eq!(all.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn in_memory_history_is_bounded() {
+        let broker = InMemoryBroker::with_history_limit(8, 2);
+        let producer = broker.producer();
+        let _consumer = broker.consumer();
+
+        producer.send(Message::new("events", 1_u32)).await.unwrap();
+        producer.send(Message::new("events", 2_u32)).await.unwrap();
+        producer.send(Message::new("events", 3_u32)).await.unwrap();
+
+        let messages = broker.messages("events").await;
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].payload, 2);
+        assert_eq!(messages[1].payload, 3);
     }
 
     #[tokio::test]

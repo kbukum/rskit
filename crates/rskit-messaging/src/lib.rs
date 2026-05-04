@@ -1,7 +1,7 @@
 //! # rskit-messaging
 //!
-//! Message broker abstractions with an in-memory implementation for testing
-//! and an optional Kafka backend (enable the `kafka` feature).
+//! Message broker abstractions with an in-memory implementation for testing.
+//! Broker SDKs live in opt-in adapter crates such as `rskit-messaging-kafka`.
 //!
 //! ## Quick start
 //!
@@ -36,18 +36,14 @@ pub mod memory;
 pub mod message;
 pub mod metrics;
 pub mod middleware;
+pub mod registry;
 pub mod router;
 pub mod runner;
 pub mod traits;
 pub mod translator;
 
-#[cfg(feature = "kafka")]
-pub mod kafka;
-
 pub use batch::{BatchConfig, BatchProducer};
-pub use config::{
-    BrokerConfig, BrokerConfigExt, Compression, KafkaConfig, OffsetReset, SecurityProtocol,
-};
+pub use config::{BrokerConfig, BrokerConfigExt, CommitStrategy, DeliveryGuarantee, DlqPolicy};
 pub use errors::{ErrorClassifier, NoopErrorClassifier};
 pub use event::Event;
 pub use event_publisher::EventPublisher;
@@ -61,6 +57,7 @@ pub use memory::{
 pub use message::Message;
 pub use metrics::{MetricsCollector, NoopMetrics};
 pub use middleware::StackBuilder;
+pub use registry::MessagingRegistry;
 pub use router::MessageRouter;
 pub use runner::ConsumerRunner;
 pub use traits::{BrokerComponent, EventConsumer, EventProducer, MessageConsumer, MessageProducer};

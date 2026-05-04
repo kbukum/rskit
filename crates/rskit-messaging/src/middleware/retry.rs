@@ -1,43 +1,18 @@
-//! Retry middleware with exponential backoff.
+//! Retry middleware backed by [`rskit_resilience::RetryPolicy`].
 
 use std::sync::Arc;
-use std::time::Duration;
 
 use async_trait::async_trait;
 use rskit_errors::AppResult;
+use rskit_resilience::RetryPolicy;
 
 use crate::handler::{HandlerMiddleware, MessageHandler};
 use crate::message::Message;
 
-/// Configuration for the retry middleware.
-#[derive(Debug, Clone)]
-pub struct RetryConfig {
-    /// Maximum number of attempts (including the first call).
-    pub max_attempts: u32,
-    /// Delay before the first retry.
-    pub initial_backoff: Duration,
-    /// Upper bound on any single backoff delay.
-    pub max_backoff: Duration,
-    /// Multiplier applied on each successive retry.
-    pub backoff_factor: f64,
-}
+/// Canonical retry configuration for messaging middleware.
+pub type RetryConfig = RetryPolicy;
 
-impl Default for RetryConfig {
-    fn default() -> Self {
-        Self {
-            max_attempts: 3,
-            initial_backoff: Duration::from_millis(100),
-            max_backoff: Duration::from_secs(10),
-            backoff_factor: 2.0,
-        }
-    }
-}
-
-/// Create a retry middleware with the given configuration.
-///
-/// The handler will be retried up to `config.max_attempts` times on
-/// failure, with exponential backoff between attempts. The message is
-/// cloned for each retry so `T` must implement [`Clone`].
+/// Create a retry middleware with the given canonical retry policy.
 pub fn retry<T: Send + Sync + Clone + 'static>(config: RetryConfig) -> impl HandlerMiddleware<T> {
     RetryMiddleware { config }
 }
@@ -63,46 +38,34 @@ struct RetryHandler<T: Send + Sync + 'static> {
 #[async_trait]
 impl<T: Send + Sync + Clone + 'static> MessageHandler<T> for RetryHandler<T> {
     async fn handle(&self, msg: Message<T>) -> AppResult<()> {
-        let mut last_err = None;
-        for attempt in 0..self.config.max_attempts {
-            let clone = msg.clone();
-            match self.next.handle(clone).await {
-                Ok(()) => return Ok(()),
-                Err(e) => {
-                    ::tracing::warn!(
-                        attempt = attempt + 1,
-                        max = self.config.max_attempts,
-                        error = %e,
-                        "handler attempt failed, will retry"
-                    );
-                    last_err = Some(e);
-                    if attempt + 1 < self.config.max_attempts {
-                        let delay = self.backoff(attempt);
-                        tokio::time::sleep(delay).await;
-                    }
-                }
-            }
-        }
-        Err(last_err.expect("at least one attempt must have been made"))
-    }
-}
-
-impl<T: Send + Sync + 'static> RetryHandler<T> {
-    fn backoff(&self, attempt: u32) -> Duration {
-        let exp = self.config.backoff_factor.powi(attempt as i32);
-        let base_ms = (self.config.initial_backoff.as_millis() as f64 * exp) as u64;
-        let capped_ms = base_ms.min(self.config.max_backoff.as_millis() as u64);
-        Duration::from_millis(capped_ms)
+        let next = self.next.clone();
+        self.config
+            .execute(|| {
+                let next = next.clone();
+                let msg = msg.clone();
+                async move { next.handle(msg).await }
+            })
+            .await
+            .map_err(|err| err.last_error)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use std::sync::atomic::{AtomicU32, Ordering};
+    use std::time::Duration;
 
     use super::*;
     use crate::handler::{FnHandler, chain_handlers};
     use rskit_errors::{AppError, ErrorCode};
+
+    fn test_policy() -> RetryConfig {
+        RetryPolicy::new()
+            .with_max_attempts(3)
+            .with_initial_backoff(Duration::from_millis(1))
+            .with_jitter(false)
+            .with_retry_if(|_| true)
+    }
 
     #[tokio::test]
     async fn retry_success_on_first_attempt() {
@@ -117,14 +80,12 @@ mod tests {
                 }
             }));
 
-        let mw: Arc<dyn HandlerMiddleware<String>> = Arc::new(RetryMiddleware {
-            config: RetryConfig {
-                max_attempts: 3,
-                initial_backoff: Duration::from_millis(1),
-                ..Default::default()
-            },
-        });
-        let handler = chain_handlers(base, &[mw]);
+        let handler = chain_handlers(
+            base,
+            &[Arc::new(RetryMiddleware {
+                config: test_policy(),
+            })],
+        );
 
         handler
             .handle(Message::new("t", "data".to_string()))
@@ -150,14 +111,12 @@ mod tests {
                 }
             }));
 
-        let mw: Arc<dyn HandlerMiddleware<String>> = Arc::new(RetryMiddleware {
-            config: RetryConfig {
-                max_attempts: 3,
-                initial_backoff: Duration::from_millis(1),
-                ..Default::default()
-            },
-        });
-        let handler = chain_handlers(base, &[mw]);
+        let handler = chain_handlers(
+            base,
+            &[Arc::new(RetryMiddleware {
+                config: test_policy(),
+            })],
+        );
 
         handler
             .handle(Message::new("t", "data".to_string()))
@@ -179,14 +138,12 @@ mod tests {
                 }
             }));
 
-        let mw: Arc<dyn HandlerMiddleware<String>> = Arc::new(RetryMiddleware {
-            config: RetryConfig {
-                max_attempts: 3,
-                initial_backoff: Duration::from_millis(1),
-                ..Default::default()
-            },
-        });
-        let handler = chain_handlers(base, &[mw]);
+        let handler = chain_handlers(
+            base,
+            &[Arc::new(RetryMiddleware {
+                config: test_policy(),
+            })],
+        );
 
         let result = handler.handle(Message::new("t", "data".to_string())).await;
         assert!(result.is_err());

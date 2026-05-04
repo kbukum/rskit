@@ -29,6 +29,9 @@ members = [
     "crates/rskit-database",
     "crates/rskit-cache",
     "crates/rskit-messaging",
+    "crates/rskit-messaging-kafka",
+    "crates/rskit-messaging-nats",
+    "crates/rskit-messaging-rabbitmq",
     # phase 4 platform
     "crates/rskit-observability",
     "crates/rskit-authz",
@@ -165,8 +168,10 @@ sqlx         = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "po
 # Cache (Phase 3)
 redis        = { version = "1.2", features = ["tokio-comp", "connection-manager"] }
 
-# Messaging (Phase 3)
+# Messaging adapters (Phase 3)
 rdkafka      = { version = "0.39", features = ["tokio"] }
+async-nats   = "0.44"
+lapin        = { version = "3", default-features = false, features = ["rustls"] }
 
 # Observability (Phase 4)
 opentelemetry            = "0.31"

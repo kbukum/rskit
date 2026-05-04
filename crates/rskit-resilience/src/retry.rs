@@ -284,7 +284,9 @@ impl RetryPolicy {
         }
     }
 
-    pub(crate) fn backoff(&self, attempt: usize) -> Duration {
+    /// Return the retry delay for a one-based failed attempt number.
+    #[must_use]
+    pub fn backoff_delay(&self, attempt: usize) -> Duration {
         let base_delay = match self.backoff_kind {
             BackoffKind::Exponential => {
                 let exp = self.backoff_factor.powi(attempt.saturating_sub(1) as i32);
@@ -307,6 +309,10 @@ impl RetryPolicy {
         } else {
             base_delay
         }
+    }
+
+    pub(crate) fn backoff(&self, attempt: usize) -> Duration {
+        self.backoff_delay(attempt)
     }
 }
 
@@ -442,5 +448,15 @@ mod tests {
         assert_eq!(policy.backoff(2), Duration::from_millis(15));
         assert_eq!(policy.backoff(3), Duration::from_millis(20));
         assert_eq!(policy.backoff(6), Duration::from_millis(20));
+    }
+
+    #[test]
+    fn public_backoff_delay_matches_policy_backoff() {
+        let policy = RetryPolicy::new()
+            .with_initial_backoff(Duration::from_millis(10))
+            .with_max_backoff(Duration::from_millis(30))
+            .with_jitter(false);
+
+        assert_eq!(policy.backoff_delay(3), Duration::from_millis(30));
     }
 }

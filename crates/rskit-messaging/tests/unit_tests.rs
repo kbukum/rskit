@@ -3,13 +3,11 @@
 //! These tests exercise public APIs via `rskit_messaging::*` imports and
 //! complement the 62 inline + 8 integration tests already in the crate.
 
+use rskit_messaging::*;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
-
-use rskit_messaging::config::{BrokerConfigExt, KafkaConfig, SecurityProtocol};
-use rskit_messaging::*;
-use serde::{Deserialize, Serialize};
 
 // ── 1. Message Construction Edge Cases ──────────────────────────────────────
 
@@ -98,57 +96,7 @@ fn event_parse_data_type_mismatch_returns_error() {
     assert!(result.is_err());
 }
 
-// ── 3. Config Validation ────────────────────────────────────────────────────
-
-#[test]
-fn kafka_config_default_values() {
-    let config = KafkaConfig::default();
-
-    assert_eq!(config.base.brokers, vec!["localhost:9092".to_string()]);
-    assert_eq!(config.base.retries, 3);
-    assert_eq!(config.batch_size, 1000);
-    assert_eq!(config.linger_ms, 5);
-    assert_eq!(config.session_timeout, Duration::from_secs(30));
-    assert_eq!(config.base.name, "default");
-    assert!(config.base.enabled);
-    assert!(config.group_id.is_none());
-    assert_eq!(config.security_protocol, SecurityProtocol::Plaintext);
-}
-
-#[test]
-fn kafka_config_validate_empty_brokers_fails() {
-    let mut config = KafkaConfig::default();
-    config.base.brokers.clear();
-
-    let result = config.validate();
-    assert!(result.is_err());
-}
-
-#[test]
-fn security_protocol_display_and_parse_roundtrip() {
-    use std::str::FromStr;
-
-    let variants = [
-        (SecurityProtocol::Plaintext, "plaintext"),
-        (SecurityProtocol::Ssl, "ssl"),
-        (SecurityProtocol::SaslPlaintext, "sasl_plaintext"),
-        (SecurityProtocol::SaslSsl, "sasl_ssl"),
-    ];
-
-    for (variant, expected_str) in &variants {
-        let display = format!("{}", variant);
-        assert_eq!(&display, expected_str);
-
-        let parsed = SecurityProtocol::from_str(&display).unwrap();
-        assert_eq!(&parsed, variant);
-    }
-
-    // Invalid string returns error
-    let result = SecurityProtocol::from_str("invalid_protocol");
-    assert!(result.is_err());
-}
-
-// ── 4. Router Advanced Patterns ─────────────────────────────────────────────
+// ── 3. Router Advanced Patterns ─────────────────────────────────────────────
 
 fn counting_handler(counter: &Arc<AtomicU32>) -> Arc<dyn MessageHandler<String>> {
     let c = counter.clone();
@@ -562,4 +510,25 @@ fn noop_error_classifier_default() {
     let err = rskit_errors::AppError::new(rskit_errors::ErrorCode::Internal, "test");
     assert!(!classifier.is_connection_error(&err));
     assert!(!classifier.is_retryable_error(&err));
+}
+
+#[test]
+fn core_registry_starts_empty_for_binary_payloads() {
+    let registry = rskit_messaging::MessagingRegistry::<Vec<u8>>::new();
+    assert!(registry.producer_backends().is_empty());
+    assert!(registry.consumer_backends().is_empty());
+    assert!(registry.producer("kafka").is_err());
+    assert!(registry.producer("nats").is_err());
+    assert!(registry.producer("rabbitmq").is_err());
+}
+
+#[test]
+fn core_manifest_has_no_broker_sdk_dependencies_or_features() {
+    let manifest = include_str!("../Cargo.toml");
+    assert!(!manifest.contains("rdkafka"));
+    assert!(!manifest.contains("async-nats"));
+    assert!(!manifest.contains("lapin"));
+    assert!(!manifest.contains("kafka ="));
+    assert!(!manifest.contains("nats ="));
+    assert!(!manifest.contains("rabbitmq ="));
 }

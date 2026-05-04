@@ -1,5 +1,3 @@
-use std::fmt;
-use std::str::FromStr;
 use std::time::Duration;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
@@ -9,47 +7,123 @@ use serde::Deserialize;
 
 /// Configuration shared by all message-broker backends.
 ///
-/// Concrete broker configs (e.g. [`KafkaConfig`]) embed this struct via
-/// `#[serde(flatten)]` so that end-users see a single, flat configuration
-/// surface while generic code can work through [`BrokerConfigExt`].
-#[derive(Debug, Clone, Deserialize)]
+/// Concrete broker configs embed this struct so generic code can work through
+/// [`BrokerConfigExt`] without knowing backend-specific fields.
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct BrokerConfig {
+    /// Backend name used for registry selection.
+    #[serde(default = "default_backend")]
+    pub backend: String,
     /// Logical name for this configuration.
     #[serde(default = "default_name")]
     pub name: String,
     /// Whether this configuration is enabled.
     #[serde(default = "default_enabled")]
     pub enabled: bool,
-    /// Broker addresses (e.g. `["localhost:9092"]`).
-    #[serde(default = "default_brokers")]
-    pub brokers: Vec<String>,
     /// Number of retries for failed requests.
     #[serde(default = "default_retries")]
     pub retries: u32,
+    /// Backoff between retry attempts in milliseconds.
+    #[serde(default = "default_retry_backoff")]
+    pub retry_backoff: u64,
     /// Request timeout in milliseconds (`None` = use broker default).
     #[serde(default)]
     pub request_timeout: Option<u64>,
-    /// Default topics to subscribe to.
+    /// Requested delivery semantics.
+    #[serde(default)]
+    pub delivery_guarantee: DeliveryGuarantee,
+    /// Offset/ack commit behavior.
+    #[serde(default)]
+    pub commit_strategy: CommitStrategy,
+    /// Dead-letter queue policy.
+    #[serde(default)]
+    pub dlq: DlqPolicy,
+    /// Maximum number of in-flight messages.
+    #[serde(default = "default_max_in_flight")]
+    pub max_in_flight: usize,
+    /// Broker-neutral consumer group name.
+    #[serde(default)]
+    pub consumer_group: Option<String>,
+    /// Broker-neutral topic declarations.
     #[serde(default)]
     pub topics: Vec<String>,
+    /// Broker-neutral subscription subjects/topics. Empty means the consumer chooses at runtime.
+    #[serde(default)]
+    pub subscriptions: Vec<String>,
 }
 
 impl BrokerConfig {
+    /// Create a broker config with the provided backend name and shared defaults.
+    #[must_use]
+    pub fn new(backend: impl Into<String>) -> Self {
+        Self {
+            backend: backend.into(),
+            ..Self::default()
+        }
+    }
+
     /// Return the request timeout as a [`Duration`], if configured.
+    #[must_use]
     pub fn request_timeout_duration(&self) -> Option<Duration> {
         self.request_timeout.map(Duration::from_millis)
+    }
+
+    /// Return retry backoff as a [`Duration`].
+    #[must_use]
+    pub fn retry_backoff_duration(&self) -> Duration {
+        Duration::from_millis(self.retry_backoff)
+    }
+
+    /// Validate shared broker-neutral configuration.
+    pub fn validate(&self) -> AppResult<()> {
+        validate_name("messaging backend", &self.backend)?;
+        validate_name("messaging config name", &self.name)?;
+
+        if self.max_in_flight == 0 {
+            return invalid("messaging max_in_flight must be greater than zero");
+        }
+
+        if let Some(timeout) = self.request_timeout
+            && timeout == 0
+        {
+            return invalid("messaging request_timeout must be greater than zero when set");
+        }
+
+        if self.retries > 0 && self.retry_backoff == 0 {
+            return invalid(
+                "messaging retry_backoff must be greater than zero when retries are enabled",
+            );
+        }
+
+        validate_optional_name("messaging consumer_group", self.consumer_group.as_deref())?;
+
+        for topic in &self.topics {
+            validate_topic_like("messaging topic", topic)?;
+        }
+        for subscription in &self.subscriptions {
+            validate_topic_like("messaging subscription", subscription)?;
+        }
+
+        self.dlq.validate()
     }
 }
 
 impl Default for BrokerConfig {
     fn default() -> Self {
         Self {
+            backend: default_backend(),
             name: default_name(),
             enabled: default_enabled(),
-            brokers: default_brokers(),
             retries: default_retries(),
+            retry_backoff: default_retry_backoff(),
             request_timeout: None,
+            delivery_guarantee: DeliveryGuarantee::default(),
+            commit_strategy: CommitStrategy::default(),
+            dlq: DlqPolicy::default(),
+            max_in_flight: default_max_in_flight(),
+            consumer_group: None,
             topics: Vec::new(),
+            subscriptions: Vec::new(),
         }
     }
 }
@@ -67,255 +141,195 @@ pub trait BrokerConfigExt {
     fn validate(&self) -> AppResult<()>;
 }
 
-// ── Kafka configuration ──────────────────────────────────────────────────────
-
-/// Configuration for connecting to a Kafka cluster.
-///
-/// The broker-agnostic fields live in the embedded [`BrokerConfig`]
-/// (flattened for serde) while Kafka-specific knobs remain here.
-#[derive(Debug, Clone, Deserialize)]
-pub struct KafkaConfig {
-    /// Shared broker settings (name, enabled, brokers, retries, …).
-    #[serde(flatten)]
-    pub base: BrokerConfig,
-    /// Consumer group identifier.
-    pub group_id: Option<String>,
-    /// Compression algorithm for produced messages.
-    #[serde(default)]
-    pub compression: Compression,
-    /// Where to start consuming when no committed offset exists.
-    #[serde(default)]
-    pub auto_offset_reset: OffsetReset,
-    /// Session timeout for the consumer group.
-    #[serde(with = "humantime_serde", default = "default_session_timeout")]
-    pub session_timeout: Duration,
-    /// Maximum number of messages per batch.
-    #[serde(default = "default_batch_size")]
-    pub batch_size: usize,
-    /// Delay in milliseconds before sending a batch.
-    #[serde(default = "default_linger_ms")]
-    pub linger_ms: u64,
-    /// Security protocol for broker connections.
-    #[serde(default)]
-    pub security_protocol: SecurityProtocol,
-    /// SASL mechanism (e.g. `PLAIN`, `SCRAM-SHA-256`).
-    #[serde(default)]
-    pub sasl_mechanism: Option<String>,
-    /// SASL username.
-    #[serde(default)]
-    pub sasl_username: Option<String>,
-    /// SASL password.
-    #[serde(default)]
-    pub sasl_password: Option<String>,
-}
-
-fn default_session_timeout() -> Duration {
-    Duration::from_secs(30)
-}
-
-fn default_batch_size() -> usize {
-    1000
-}
-
-fn default_linger_ms() -> u64 {
-    5
-}
-
 fn default_retries() -> u32 {
     3
+}
+
+fn default_retry_backoff() -> u64 {
+    100
+}
+
+fn default_backend() -> String {
+    "memory".to_string()
+}
+
+fn default_max_in_flight() -> usize {
+    1
 }
 
 fn default_name() -> String {
     "default".to_string()
 }
 
-fn default_enabled() -> bool {
-    true
+/// Requested broker delivery semantics.
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+#[non_exhaustive]
+#[serde(rename_all = "snake_case")]
+pub enum DeliveryGuarantee {
+    /// Message loss is allowed but redelivery is avoided.
+    AtMostOnce,
+    /// Default: messages may redeliver after failure.
+    #[default]
+    AtLeastOnce,
+    /// Broker-supported exactly-once semantics.
+    ExactlyOnce,
 }
 
-fn default_brokers() -> Vec<String> {
-    vec!["localhost:9092".to_string()]
+/// Offset/ack commit behavior.
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+#[non_exhaustive]
+#[serde(rename_all = "snake_case")]
+pub enum CommitStrategy {
+    /// Delegate commit behavior to the broker client.
+    Auto,
+    /// Default: commit after handler success.
+    #[default]
+    PostHandlerSuccess,
+    /// Application code commits manually.
+    Manual,
 }
 
-impl Default for KafkaConfig {
+/// Dead-letter queue policy.
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct DlqPolicy {
+    /// Whether DLQ routing is enabled.
+    #[serde(default = "default_enabled")]
+    pub enabled: bool,
+    /// Suffix appended to source topic when no explicit DLQ topic is configured.
+    #[serde(default = "default_dlq_suffix")]
+    pub suffix: String,
+}
+
+impl Default for DlqPolicy {
     fn default() -> Self {
         Self {
-            base: BrokerConfig::default(),
-            group_id: None,
-            compression: Compression::default(),
-            auto_offset_reset: OffsetReset::default(),
-            session_timeout: default_session_timeout(),
-            batch_size: default_batch_size(),
-            linger_ms: default_linger_ms(),
-            security_protocol: SecurityProtocol::default(),
-            sasl_mechanism: None,
-            sasl_username: None,
-            sasl_password: None,
+            enabled: true,
+            suffix: default_dlq_suffix(),
         }
     }
 }
 
-impl BrokerConfigExt for KafkaConfig {
-    fn base(&self) -> &BrokerConfig {
-        &self.base
-    }
-
-    fn validate(&self) -> AppResult<()> {
-        if self.base.brokers.is_empty() {
-            return Err(AppError::new(
-                ErrorCode::InvalidInput,
-                "brokers list cannot be empty",
-            ));
+impl DlqPolicy {
+    /// Validate DLQ policy fields.
+    pub fn validate(&self) -> AppResult<()> {
+        if !self.enabled {
+            return Ok(());
         }
+
+        if self.suffix.is_empty() {
+            return invalid("messaging dlq suffix is required when DLQ is enabled");
+        }
+        if self.suffix.len() > 64 {
+            return invalid("messaging dlq suffix must be at most 64 bytes");
+        }
+        if self.suffix.chars().any(char::is_whitespace) {
+            return invalid("messaging dlq suffix must not contain whitespace");
+        }
+        if self.suffix.contains('/') || self.suffix.contains('\\') {
+            return invalid("messaging dlq suffix must not contain path separators");
+        }
+
         Ok(())
     }
 }
 
-impl KafkaConfig {
-    /// Build a base `rdkafka::config::ClientConfig` with properties shared
-    /// by both producers and consumers (brokers, security, timeouts).
-    #[cfg(feature = "kafka")]
-    fn base_client_config(&self) -> rdkafka::config::ClientConfig {
-        let mut cfg = rdkafka::config::ClientConfig::new();
-        cfg.set("bootstrap.servers", self.base.brokers.join(","));
-        cfg.set("security.protocol", self.security_protocol.to_string());
+fn default_enabled() -> bool {
+    true
+}
 
-        if let Some(ref mechanism) = self.sasl_mechanism {
-            cfg.set("sasl.mechanism", mechanism);
-        }
-        if let Some(ref username) = self.sasl_username {
-            cfg.set("sasl.username", username);
-        }
-        if let Some(ref password) = self.sasl_password {
-            cfg.set("sasl.password", password);
-        }
-        if let Some(timeout) = self.base.request_timeout {
-            cfg.set("request.timeout.ms", timeout.to_string());
-        }
+fn default_dlq_suffix() -> String {
+    ".dlq".to_string()
+}
 
-        cfg
+fn validate_optional_name(field: &str, value: Option<&str>) -> AppResult<()> {
+    if let Some(value) = value {
+        validate_topic_like(field, value)?;
     }
+    Ok(())
+}
 
-    /// Build a producer-specific `ClientConfig` (compression, batching, retries).
-    #[cfg(feature = "kafka")]
-    pub fn to_producer_config(&self) -> rdkafka::config::ClientConfig {
-        let mut cfg = self.base_client_config();
-
-        let compression = match self.compression {
-            Compression::None => "none",
-            Compression::Gzip => "gzip",
-            Compression::Snappy => "snappy",
-            Compression::Lz4 => "lz4",
-            Compression::Zstd => "zstd",
-        };
-        cfg.set("compression.type", compression);
-        cfg.set("batch.size", self.batch_size.to_string());
-        cfg.set("linger.ms", self.linger_ms.to_string());
-        cfg.set("message.send.max.retries", self.base.retries.to_string());
-
-        cfg
+fn validate_topic_like(field: &str, value: &str) -> AppResult<()> {
+    if value.trim().is_empty() {
+        return invalid(format!("{field} is required"));
     }
-
-    /// Build a consumer-specific `ClientConfig` (group, offsets, session timeout).
-    #[cfg(feature = "kafka")]
-    pub fn to_consumer_config(&self) -> rdkafka::config::ClientConfig {
-        let mut cfg = self.base_client_config();
-
-        if let Some(ref group) = self.group_id {
-            cfg.set("group.id", group);
-        }
-
-        let offset = match self.auto_offset_reset {
-            OffsetReset::Latest => "latest",
-            OffsetReset::Earliest => "earliest",
-        };
-        cfg.set("auto.offset.reset", offset);
-        cfg.set(
-            "session.timeout.ms",
-            self.session_timeout.as_millis().to_string(),
-        );
-
-        cfg
-    }
-}
-
-/// Compression algorithm for produced messages.
-#[derive(Debug, Clone, Default, Deserialize)]
-pub enum Compression {
-    /// No compression.
-    #[default]
-    None,
-    /// Gzip compression.
-    Gzip,
-    /// Snappy compression.
-    Snappy,
-    /// LZ4 compression.
-    Lz4,
-    /// Zstandard compression.
-    Zstd,
-}
-
-/// Starting offset strategy when no committed offset exists.
-#[derive(Debug, Clone, Default, Deserialize)]
-pub enum OffsetReset {
-    /// Start from the latest (most recent) offset.
-    #[default]
-    Latest,
-    /// Start from the earliest available offset.
-    Earliest,
-}
-
-/// Security protocol for Kafka broker connections.
-#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
-pub enum SecurityProtocol {
-    /// Plaintext (no encryption).
-    #[default]
-    Plaintext,
-    /// SSL/TLS encryption.
-    Ssl,
-    /// SASL authentication over plaintext.
-    SaslPlaintext,
-    /// SASL authentication over SSL/TLS.
-    SaslSsl,
-}
-
-impl fmt::Display for SecurityProtocol {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let s = match self {
-            Self::Plaintext => "plaintext",
-            Self::Ssl => "ssl",
-            Self::SaslPlaintext => "sasl_plaintext",
-            Self::SaslSsl => "sasl_ssl",
-        };
-        f.write_str(s)
-    }
-}
-
-impl FromStr for SecurityProtocol {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "plaintext" => Ok(Self::Plaintext),
-            "ssl" => Ok(Self::Ssl),
-            "sasl_plaintext" => Ok(Self::SaslPlaintext),
-            "sasl_ssl" => Ok(Self::SaslSsl),
-            other => Err(format!("unknown security protocol: {other}")),
-        }
-    }
-}
-
-/// Serde helper for `Duration` via human-readable strings (e.g. `"30s"`).
-mod humantime_serde {
-    use std::time::Duration;
-
-    use serde::{Deserialize, Deserializer};
-
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Duration, D::Error>
-    where
-        D: Deserializer<'de>,
+    if value
+        .chars()
+        .any(|ch| ch.is_control() || ch.is_whitespace())
     {
-        let secs = u64::deserialize(deserializer)?;
-        Ok(Duration::from_secs(secs))
+        return invalid(format!(
+            "{field} must not contain whitespace or control characters"
+        ));
+    }
+    Ok(())
+}
+
+fn validate_name(field: &str, value: &str) -> AppResult<()> {
+    if value.trim().is_empty() {
+        return invalid(format!("{field} is required"));
+    }
+    if value.len() > 128 {
+        return invalid(format!("{field} must be at most 128 bytes"));
+    }
+    if !value
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
+    {
+        return invalid(format!(
+            "{field} must contain only letters, digits, ., _, or -"
+        ));
+    }
+    Ok(())
+}
+
+fn invalid(message: impl Into<String>) -> AppResult<()> {
+    Err(AppError::new(ErrorCode::InvalidInput, message.into()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn broker_config_defaults_are_broker_neutral() {
+        let config = BrokerConfig::default();
+
+        assert_eq!(config.backend, "memory");
+        assert_eq!(config.name, "default");
+        assert!(config.enabled);
+        assert_eq!(config.retries, 3);
+        assert_eq!(config.retry_backoff_duration(), Duration::from_millis(100));
+        assert!(config.request_timeout_duration().is_none());
+        assert_eq!(config.delivery_guarantee, DeliveryGuarantee::AtLeastOnce);
+        assert_eq!(config.commit_strategy, CommitStrategy::PostHandlerSuccess);
+        assert_eq!(config.max_in_flight, 1);
+        assert!(config.consumer_group.is_none());
+        assert!(config.topics.is_empty());
+        assert!(config.subscriptions.is_empty());
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn broker_config_validation_rejects_invalid_shared_values() {
+        let config = BrokerConfig {
+            max_in_flight: 0,
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+
+        let config = BrokerConfig {
+            request_timeout: Some(0),
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+
+        let config = BrokerConfig {
+            retry_backoff: 0,
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+
+        let mut config = BrokerConfig::default();
+        config.dlq.suffix = "bad suffix".to_string();
+        assert!(config.validate().is_err());
     }
 }
