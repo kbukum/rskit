@@ -40,7 +40,7 @@ jobs:
       rust-code: ${{ steps.filter.outputs.rust-code }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
-      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36  # v3.0.2
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d  # v4.0.1
         id: filter
         with:
           filters: |
@@ -89,7 +89,7 @@ jobs:
           components: clippy
       - name: Install mold linker
         run: sudo apt-get install -y mold
-      - uses: Swatinem/rust-cache@174de315c63e56da1192eb94417a8396a40c9e85  # v2.7.8
+      - uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b  # v2.7.8
       - run: cargo clippy --workspace -- -D warnings
 
   # ---------------------------------------------------------------------------
@@ -113,10 +113,10 @@ jobs:
       - name: Install mold linker (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get install -y mold
-      - uses: Swatinem/rust-cache@174de315c63e56da1192eb94417a8396a40c9e85  # v2.7.8
+      - uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b  # v2.7.8
         with:
           key: ${{ matrix.os }}-${{ matrix.rust }}
-      - uses: taiki-e/install-action@481c34c1cf3a84c68b5e46f4eccfc82af798415a  # v2
+      - uses: taiki-e/install-action@db5fb34fa772531a3ece57ca434f579eb334e0fb  # v2
         with:
           tool: cargo-nextest
       - run: cargo nextest run --workspace --profile ci
@@ -138,7 +138,7 @@ jobs:
           toolchain: stable
       - name: Install mold linker
         run: sudo apt-get install -y mold
-      - uses: Swatinem/rust-cache@174de315c63e56da1192eb94417a8396a40c9e85  # v2.7.8
+      - uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b  # v2.7.8
       - run: cargo doc --workspace --no-deps --document-private-items
 
   # ---------------------------------------------------------------------------
@@ -157,8 +157,8 @@ jobs:
           components: llvm-tools-preview
       - name: Install mold linker
         run: sudo apt-get install -y mold
-      - uses: Swatinem/rust-cache@174de315c63e56da1192eb94417a8396a40c9e85  # v2.7.8
-      - uses: taiki-e/install-action@481c34c1cf3a84c68b5e46f4eccfc82af798415a  # v2
+      - uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b  # v2.7.8
+      - uses: taiki-e/install-action@db5fb34fa772531a3ece57ca434f579eb334e0fb  # v2
         with:
           tool: cargo-llvm-cov
       - run: cargo llvm-cov --workspace --lcov --output-path coverage.lcov --fail-under-lines 60
@@ -201,7 +201,7 @@ jobs:
           toolchain: stable
       - name: Install mold linker
         run: sudo apt-get install -y mold
-      - uses: Swatinem/rust-cache@174de315c63e56da1192eb94417a8396a40c9e85  # v2.7.8
+      - uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b  # v2.7.8
       - run: cargo bench --workspace --no-run
 
   # ---------------------------------------------------------------------------
