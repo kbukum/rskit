@@ -1,6 +1,6 @@
 [package]
 name        = "rskit-messaging"
-description = "Message broker abstractions with Kafka support"
+description = "Message broker abstractions, registry, middleware, and in-memory adapter"
 version.workspace     = true
 edition.workspace     = true
 license.workspace     = true
@@ -11,7 +11,7 @@ homepage.workspace     = true
 documentation = "https://docs.rs/rskit-messaging"
 readme = "README.md"
 categories = ["asynchronous"]
-keywords   = ["kafka", "messaging", "producer", "consumer"]
+keywords   = ["messaging", "broker", "producer", "consumer"]
 
 [package.metadata.docs.rs]
 all-features = true
@@ -19,7 +19,6 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 default = []
-kafka = ["dep:rdkafka"]
 provider-bridge = ["dep:rskit-provider"]
 bridges = ["provider-bridge"]
 
@@ -41,7 +40,3 @@ parking_lot     = { workspace = true }
 chrono          = { workspace = true }
 uuid            = { workspace = true }
 
-[dependencies.rdkafka]
-version = "0.39"
-features = ["tokio"]
-optional = true

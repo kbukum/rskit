@@ -52,6 +52,9 @@ rskit-di            = { version = "0.1.0", path = "../rskit-di",            opti
 rskit-database      = { version = "0.1.0", path = "../rskit-database",      optional = true }
 rskit-cache         = { version = "0.1.0", path = "../rskit-cache",         optional = true }
 rskit-messaging     = { version = "0.1.0", path = "../rskit-messaging",     optional = true }
+rskit-messaging-kafka = { version = "0.1.0", path = "../rskit-messaging-kafka", optional = true }
+rskit-messaging-nats = { version = "0.1.0", path = "../rskit-messaging-nats", optional = true }
+rskit-messaging-rabbitmq = { version = "0.1.0", path = "../rskit-messaging-rabbitmq", optional = true }
 rskit-observability = { version = "0.1.0", path = "../rskit-observability",  optional = true }
 rskit-authz         = { version = "0.1.0", path = "../rskit-authz",         optional = true }
 rskit-security      = { version = "0.1.0", path = "../rskit-security",      optional = true }
@@ -87,6 +90,9 @@ di            = ["dep:rskit-di"]
 database      = ["dep:rskit-database"]
 cache         = ["dep:rskit-cache"]
 messaging     = ["dep:rskit-messaging"]
+messaging-kafka = ["messaging", "dep:rskit-messaging-kafka"]
+messaging-nats = ["messaging", "dep:rskit-messaging-nats"]
+messaging-rabbitmq = ["messaging", "dep:rskit-messaging-rabbitmq"]
 observability = ["dep:rskit-observability"]
 authz         = ["dep:rskit-authz"]
 security      = ["dep:rskit-security"]
@@ -111,6 +117,7 @@ stateful      = ["dep:rskit-stateful"]
 test-util     = []
 full          = [
     "server", "grpc", "encryption", "http", "httpclient", "auth", "di", "database", "cache", "messaging",
+    "messaging-kafka", "messaging-nats", "messaging-rabbitmq",
     "observability", "authz", "security", "discovery", "testutil", "sse", "dag", "llm",
     "media-full", "storage", "cli", "dataset", "bench", "chain", "process", "stateful",
 ]

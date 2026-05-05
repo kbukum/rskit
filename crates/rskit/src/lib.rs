@@ -12,7 +12,10 @@
 //! | `di`     | `rskit-di` (dependency injection) |
 //! | `database` | `rskit-database` (sqlx) |
 //! | `cache`  | `rskit-cache` (Redis) |
-//! | `messaging` | `rskit-messaging` (Kafka) |
+//! | `messaging` | `rskit-messaging` (core abstractions + in-memory backend) |
+//! | `messaging-kafka` | `Kafka` messaging adapter |
+//! | `messaging-nats` | NATS messaging adapter |
+//! | `messaging-rabbitmq` | `RabbitMQ` messaging adapter |
 //! | `observability` | `rskit-observability` (OpenTelemetry) |
 //! | `authz`  | `rskit-authz` (RBAC/ABAC) |
 //! | `security` | `rskit-security` (security headers) |
@@ -142,9 +145,21 @@ pub use rskit_database as database;
 #[cfg(feature = "cache")]
 pub use rskit_cache as cache;
 
-/// Message broker abstractions (Kafka, in-memory).
+/// Message broker abstractions and in-memory backend.
 #[cfg(feature = "messaging")]
 pub use rskit_messaging as messaging;
+
+/// Kafka messaging adapter.
+#[cfg(feature = "messaging-kafka")]
+pub use rskit_messaging_kafka as messaging_kafka;
+
+/// NATS messaging adapter.
+#[cfg(feature = "messaging-nats")]
+pub use rskit_messaging_nats as messaging_nats;
+
+/// RabbitMQ messaging adapter.
+#[cfg(feature = "messaging-rabbitmq")]
+pub use rskit_messaging_rabbitmq as messaging_rabbitmq;
 
 /// OpenTelemetry tracing, metrics, and context propagation.
 #[cfg(feature = "observability")]

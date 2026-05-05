@@ -46,12 +46,16 @@ impl<T: Send + Sync + 'static> ManagedProducer<T> {
     }
 
     /// Stop the managed producer.
-    pub fn stop(&self) -> AppResult<()> {
+    pub async fn stop(&self) -> AppResult<()> {
         if !self.running.swap(false, Ordering::SeqCst) {
             return Err(AppError::new(
                 ErrorCode::InvalidInput,
                 format!("producer '{}' is not running", self.name),
             ));
+        }
+        // Call close() to release broker connections and resources.
+        if let Err(e) = self.inner.close().await {
+            tracing::warn!(producer = %self.name, error = %e, "error closing producer");
         }
         tracing::debug!(producer = %self.name, "managed producer stopped");
         Ok(())
@@ -171,7 +175,7 @@ mod tests {
         assert!(!producer.is_running());
         producer.start().unwrap();
         assert!(producer.is_running());
-        producer.stop().unwrap();
+        producer.stop().await.unwrap();
         assert!(!producer.is_running());
     }
 

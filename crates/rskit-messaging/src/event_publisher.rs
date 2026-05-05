@@ -84,7 +84,7 @@ impl<P: EventProducer> EventPublisher<P> {
     /// Publish a typed payload with an explicit partition key and subject.
     ///
     /// Same as [`publish`](Self::publish) but also sets `Event::subject`
-    /// to the given `key`, which messaging backends typically use as the
+    /// to the given `key`, which messaging adapters typically use as the
     /// partition key for ordering guarantees.
     pub async fn publish_keyed<T: Serialize + Send>(
         &self,

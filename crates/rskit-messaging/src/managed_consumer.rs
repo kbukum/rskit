@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
+use rskit_resilience::{LinearBackoff, RetryPolicy};
 use tokio_util::sync::CancellationToken;
 use tracing;
 
@@ -21,6 +22,7 @@ pub struct ManagedConsumer<T: Send + Sync + Clone + 'static> {
     inner: Arc<dyn MessageConsumer<T>>,
     handler: Arc<dyn MessageHandler<T>>,
     metrics: Arc<dyn MetricsCollector>,
+    recv_backoff: RetryPolicy,
     name: String,
     cancel: CancellationToken,
     running: Arc<AtomicBool>,
@@ -50,6 +52,7 @@ impl<T: Send + Sync + Clone + 'static> ManagedConsumer<T> {
         let consumer = self.inner.clone();
         let handler = self.handler.clone();
         let metrics = self.metrics.clone();
+        let recv_backoff = self.recv_backoff.clone();
         let cancel = self.cancel.clone();
         let running = self.running.clone();
         let name = self.name.clone();
@@ -119,9 +122,10 @@ impl<T: Send + Sync + Clone + 'static> ManagedConsumer<T> {
                                         "recv error (retrying)"
                                     );
                                 }
-                                // Exponential backoff: 500ms, 1s, 2s, 4s, capped at 5s
-                                let backoff_ms = (500u64 * (1u64 << consecutive_errors.min(3))).min(5000);
-                                tokio::time::sleep(std::time::Duration::from_millis(backoff_ms)).await;
+                                tokio::time::sleep(
+                                    recv_backoff.backoff_delay(consecutive_errors as usize),
+                                )
+                                .await;
                             }
                         }
                     }
@@ -166,6 +170,11 @@ impl<T: Send + Sync + Clone + 'static> ManagedConsumer<T> {
             }
         }
 
+        // Call close() to release broker connections and resources.
+        if let Err(e) = self.inner.close().await {
+            tracing::warn!(consumer = %self.name, error = %e, "error closing consumer");
+        }
+
         self.running.store(false, Ordering::SeqCst);
         tracing::debug!(consumer = %self.name, "managed consumer stopped");
         Ok(())
@@ -177,6 +186,7 @@ pub struct ManagedConsumerBuilder<T: Send + Sync + Clone + 'static> {
     inner: Arc<dyn MessageConsumer<T>>,
     handler: Arc<dyn MessageHandler<T>>,
     metrics: Arc<dyn MetricsCollector>,
+    recv_backoff: RetryPolicy,
     name: String,
 }
 
@@ -191,6 +201,13 @@ impl<T: Send + Sync + Clone + 'static> ManagedConsumerBuilder<T> {
             inner,
             handler,
             metrics: Arc::new(NoopMetrics),
+            recv_backoff: RetryPolicy::new()
+                .with_linear_backoff(LinearBackoff::new(
+                    std::time::Duration::from_millis(500),
+                    std::time::Duration::from_millis(500),
+                    std::time::Duration::from_secs(5),
+                ))
+                .with_jitter(false),
             name: name.into(),
         }
     }
@@ -202,12 +219,20 @@ impl<T: Send + Sync + Clone + 'static> ManagedConsumerBuilder<T> {
         self
     }
 
+    /// Set the retry/backoff policy used after receive errors.
+    #[must_use]
+    pub fn with_recv_backoff(mut self, recv_backoff: RetryPolicy) -> Self {
+        self.recv_backoff = recv_backoff;
+        self
+    }
+
     /// Build the managed consumer.
     pub fn build(self) -> ManagedConsumer<T> {
         ManagedConsumer {
             inner: self.inner,
             handler: self.handler,
             metrics: self.metrics,
+            recv_backoff: self.recv_backoff,
             name: self.name,
             cancel: CancellationToken::new(),
             running: Arc::new(AtomicBool::new(false)),
