@@ -181,7 +181,8 @@ impl Registry {
             .values()
             .filter_map(|t| {
                 let def = t.definition();
-                (def.annotations.execution_hint == hint).then(|| def.clone())
+                (def.annotations.execution_hint.effective() == hint.effective())
+                    .then(|| def.clone())
             })
             .collect()
     }

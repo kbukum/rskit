@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::envelope::Envelope;
 
 /// How the frontend should handle the tool result.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 #[non_exhaustive]
 pub enum ExecutionHint {
@@ -19,6 +19,16 @@ pub enum ExecutionHint {
     /// Unknown hint from a newer protocol version; normalizes to Backend.
     #[serde(other)]
     Unknown,
+}
+
+impl Serialize for ExecutionHint {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self.effective() {
+            Self::Backend | Self::Unknown => serializer.serialize_str("backend"),
+            Self::Ui => serializer.serialize_str("ui"),
+            Self::Hybrid => serializer.serialize_str("hybrid"),
+        }
+    }
 }
 
 impl ExecutionHint {
