@@ -5,7 +5,7 @@ use std::time::Duration;
 use futures_util::future::BoxFuture;
 use rskit_component::{Component, Registry};
 use rskit_config::AppConfig;
-use rskit_errors::{AppError, AppResult, ErrorCode};
+use rskit_errors::{AppError, AppResult};
 use rskit_hook::{HookError, HookResult, Registry as HookRegistry};
 use tokio_util::sync::CancellationToken;
 
@@ -71,10 +71,9 @@ fn hook_result_to_error(event_type: LifecycleEventType, result: HookResult) -> A
             if error.is_fatal() {
                 let phase = phase_label(event_type);
                 tracing::error!(phase, ?error, "fatal hook error");
-                return Err(AppError::new(
-                    ErrorCode::Internal,
-                    format!("{phase} hook failed"),
-                ));
+                return Err(
+                    AppError::internal(error).context(format!("{phase} hook failed"))
+                );
             }
 
             tracing::warn!(
