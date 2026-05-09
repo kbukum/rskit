@@ -1,0 +1,26 @@
+[package]
+name        = "rskit-ai"
+description = "Shared AI vocabulary for rskit AI/ML crates"
+version.workspace      = true
+edition.workspace      = true
+license.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+documentation = "https://docs.rs/rskit-ai"
+categories = ["api-bindings"]
+keywords   = ["ai", "llm", "prompt", "vocabulary"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+rskit-errors = { path = "../rskit-errors" }
+rskit-util   = { path = "../rskit-util" }
+rskit-version = { path = "../rskit-version" }
+serde        = { workspace = true }
+serde_json   = { workspace = true }
+thiserror    = { workspace = true }
+semver       = { version = "1", features = ["serde"] }

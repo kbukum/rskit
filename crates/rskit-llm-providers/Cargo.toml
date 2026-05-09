@@ -10,13 +10,19 @@ repository.workspace   = true
 homepage.workspace     = true
 
 [dependencies]
+rskit-ai = { workspace = true }
 rskit-llm        = { path = "../rskit-llm" }
 rskit-embedding  = { path = "../rskit-embedding" }
 rskit-httpclient = { path = "../rskit-httpclient" }
 rskit-errors     = { path = "../rskit-errors" }
+rskit-component  = { path = "../rskit-component" }
+rskit-provider   = { path = "../rskit-provider" }
+rskit-resilience = { path = "../rskit-resilience" }
 reqwest          = { workspace = true }
 serde            = { workspace = true }
 serde_json       = { workspace = true }
 async-trait      = { workspace = true }
 tokio            = { workspace = true }
 tracing          = { workspace = true }
+opentelemetry    = { workspace = true }
+tracing-opentelemetry = { workspace = true }

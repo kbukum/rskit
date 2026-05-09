@@ -3,15 +3,17 @@
 use async_trait::async_trait;
 use rskit_errors::AppResult;
 
-/// Trait for generating vector embeddings from text.
+use crate::{EmbedRequest, EmbedResponse};
+
+/// Trait for canonical multimodal embedding providers.
+///
+/// Extends [`rskit_provider::Provider`] so any embedding provider can be
+/// plugged directly into pipeline / dag / worker flows per locked decision D7.
 #[async_trait]
-pub trait EmbeddingProvider: Send + Sync {
-    /// Generate an embedding vector for a single text input.
-    async fn embed(&self, text: &str) -> AppResult<Vec<f32>>;
+pub trait Provider: rskit_provider::Provider {
+    /// Generate embeddings for one request.
+    async fn embed(&self, req: EmbedRequest) -> AppResult<EmbedResponse>;
 
-    /// Generate embedding vectors for a batch of text inputs.
-    async fn embed_batch(&self, texts: &[&str]) -> AppResult<Vec<Vec<f32>>>;
-
-    /// Return the dimensionality of the embedding vectors.
-    fn dimensions(&self) -> usize;
+    /// Generate embeddings for a caller-controlled batch of requests.
+    async fn embed_batch(&self, reqs: Vec<EmbedRequest>) -> AppResult<Vec<EmbedResponse>>;
 }

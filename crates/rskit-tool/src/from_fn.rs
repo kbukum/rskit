@@ -41,11 +41,8 @@ where
         description: description.to_string(),
         input_schema,
         output_schema: None,
-        annotations: None,
-        read_only: false,
-        destructive: false,
-        max_result_size: 0,
-        timeout_secs: 0.0,
+        annotations: crate::Annotations::default(),
+        envelope: crate::Envelope::default(),
     };
 
     Box::new(FnTool {
@@ -103,11 +100,8 @@ where
         description: description.to_string(),
         input_schema,
         output_schema: None,
-        annotations: None,
-        read_only: false,
-        destructive: false,
-        max_result_size: 0,
-        timeout_secs: 0.0,
+        annotations: crate::Annotations::default(),
+        envelope: crate::Envelope::default(),
     };
 
     Box::new(SimpleFnTool {

@@ -16,7 +16,7 @@ use crate::TempFile;
 /// - `Temp` serializes as `Path` (temp file's path).
 /// - `Bytes` serializes as a byte array.
 /// - Deserialized `Temp` becomes `Path` (temp ownership is not restored).
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum FileSource {
     /// Local filesystem path.
     Path(PathBuf),
@@ -26,6 +26,27 @@ pub enum FileSource {
     Bytes(Bytes),
     /// Managed temporary file (auto-deleted on drop).
     Temp(TempFile),
+}
+
+impl Clone for FileSource {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Path(path) => Self::Path(path.clone()),
+            Self::Url(url) => Self::Url(url.clone()),
+            Self::Bytes(bytes) => Self::Bytes(bytes.clone()),
+            Self::Temp(temp) => match temp.try_clone() {
+                Ok(cloned) => Self::Temp(cloned),
+                Err(error) => {
+                    tracing::warn!(
+                        error = %error,
+                        path = %temp.path().display(),
+                        "FileSource::Temp clone failed, falling back to Path"
+                    );
+                    Self::Path(temp.path().to_path_buf())
+                }
+            },
+        }
+    }
 }
 
 // -- Custom serde: Temp serializes as Path, Bytes as a byte vec --

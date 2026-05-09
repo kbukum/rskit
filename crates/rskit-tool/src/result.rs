@@ -1,5 +1,6 @@
 //! Tool execution result types.
 
+use rskit_ai::ToolResultBlock;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -24,6 +25,15 @@ impl ToolResult {
     /// Returns the text content of this result.
     pub fn text(&self) -> &str {
         &self.content
+    }
+
+    /// Build the GenAI tool-result block for sending to the model.
+    pub fn to_block(&self, id: &str) -> ToolResultBlock {
+        ToolResultBlock {
+            id: id.to_string(),
+            content: self.content.clone(),
+            is_error: self.is_error,
+        }
     }
 
     /// Insert a metadata key-value pair.

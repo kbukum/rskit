@@ -19,20 +19,26 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 default = ["server", "client"]
-server  = ["rmcp/server", "rmcp/transport-io"]
+server  = ["rmcp/server", "rmcp/transport-io", "rmcp/transport-streamable-http-server"]
 client  = ["rmcp/client", "rmcp/transport-child-process"]
 
 [dependencies]
 rskit-tool   = { path = "../rskit-tool" }
 rskit-schema = { path = "../rskit-schema" }
 rskit-errors = { path = "../rskit-errors" }
+rskit-skill  = { path = "../rskit-skill" }
+rskit-authz  = { path = "../rskit-authz" }
 rmcp         = { version = "1.5", default-features = false, features = ["transport-async-rw"] }
 serde        = { workspace = true }
 serde_json   = { workspace = true }
 tokio        = { workspace = true }
 tracing      = { workspace = true }
 async-trait  = { workspace = true }
+thiserror    = { workspace = true }
+parking_lot  = { workspace = true }
+url          = "2"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }
 schemars = { workspace = true }
+tempfile = { workspace = true }

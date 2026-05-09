@@ -1,51 +1,59 @@
-# rskit-inference — LLM Inference Provider
+# rskit-inference — model-serving runtime adapters
 
-Inference provider abstractions for LLM chat completions.
+`rskit-inference` is the model-serving runtime layer for Triton, vLLM raw, TGI, KServe v2, BentoML, ONNX Runtime Server, TFServing, and custom REST/gRPC serving APIs. It is not a chat completion abstraction; chat belongs to `rskit-llm` and `rskit-llm-providers`.
 
-[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml)
-[![crates.io](https://img.shields.io/crates/v/rskit-inference.svg)](https://crates.io/crates/rskit-inference)
-[![docs.rs](https://docs.rs/rskit-inference/badge.svg)](https://docs.rs/rskit-inference)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![MSRV: 1.85](https://img.shields.io/badge/MSRV-1.85-orange.svg)](https://blog.rust-lang.org/2025/02/20/Rust-1.85.0.html)
-
-## Features
-
-- `InferenceProvider` trait — `complete(CompletionRequest) → AppResult<CompletionResponse>`
-- `OpenAiInferenceProvider` — works with OpenAI, llama.cpp, vLLM, Ollama
-- Simple `Message` type with role and content strings
-- Token usage tracking via `CompletionResponse.usage_tokens`
-- Configurable endpoint, API key, and model
-
-## Usage
+## Install
 
 ```toml
 [dependencies]
 rskit-inference = "0.1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
+## Adapters
+
+| Adapter | Protocol | Streaming | Status |
+| --- | --- | --- | --- |
+| `echo` | local test adapter | No | ✅ Implemented |
+| `triton` | KServe v2 HTTP | No | ✅ Implemented |
+| `vllm` | OpenAI-compatible `/v1/completions` | No | ✅ Implemented |
+| `tgi` | OpenAI-compatible `/v1/chat/completions` | No | ✅ Implemented |
+
+## Quick start
+
 ```rust
-use rskit_inference::{
-    InferenceProvider, OpenAiInferenceProvider, OpenAiInferenceConfig,
-    CompletionRequest, Message,
-};
+use std::collections::HashMap;
 
-async fn example() {
-    let provider = OpenAiInferenceProvider::new(OpenAiInferenceConfig {
-        endpoint: "http://localhost:8000".into(),
-        api_key: "".into(),
-        model: "mistral-7b".into(),
-    });
+use rskit_inference::{Inference, PredictRequest, Value};
+use rskit_inference::tgi::{Config, TgiAdapter};
 
-    let resp = provider.complete(CompletionRequest {
-        messages: vec![Message { role: "user".into(), content: "Hello".into() }],
-        max_tokens: Some(128),
-        temperature: Some(0.7),
-    }).await.unwrap();
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let adapter = TgiAdapter::new(Config {
+        base_url: "http://localhost:8080".into(),
+        model: "mistral-7b-instruct".into(),
+        api_key: None,
+        max_tokens: 256,
+    })?;
 
-    println!("{} (tokens: {})", resp.content, resp.usage_tokens);
+    let response = adapter
+        .predict(PredictRequest {
+            model_name: String::new(),
+            inputs: HashMap::from([(
+                "prompt".into(),
+                Value::Text {
+                    text: "Write a short rollout note.".into(),
+                },
+            )]),
+            ..PredictRequest::default()
+        })
+        .await?;
+
+    println!("{:?}", response.outputs.get("text"));
+    Ok(())
 }
 ```
 
-## See Also
+## When to use
 
-[Main repository README](https://github.com/kbukum/rskit)
+Use `rskit-inference` when you are integrating serving runtimes with typed inputs and outputs. If you want conversational LLM behavior, tool use, or canonical chat events, stay in `rskit-llm`.

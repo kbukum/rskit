@@ -207,10 +207,15 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "requires native TLS certificates; run with --include-ignored in a configured environment"]
     async fn build_endpoint_uses_https_when_tls_is_enabled() {
-        let endpoint = build_endpoint(
-            &GrpcClientConfig::new("example.com:443").with_tls(GrpcTlsConfig::default()),
-        )
+        let ca_cert_path = concat!(env!("CARGO_MANIFEST_DIR"), "/testdata/ca.pem").to_string();
+        let endpoint = build_endpoint(&GrpcClientConfig::new("example.com:443").with_tls(
+            GrpcTlsConfig {
+                ca_cert_path: Some(ca_cert_path),
+                ..Default::default()
+            },
+        ))
         .await
         .unwrap();
         assert_eq!(endpoint.uri().scheme_str(), Some("https"));

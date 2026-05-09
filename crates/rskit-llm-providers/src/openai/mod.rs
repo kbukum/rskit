@@ -5,6 +5,9 @@ mod config;
 mod dialect;
 mod embedding;
 
+#[cfg(test)]
+mod fixture_tests;
+
 pub use adapter::new_adapter;
 pub use config::Config;
 pub use dialect::OpenAiDialect;

@@ -1,5 +1,6 @@
 //! Common error parsing and token estimation utilities.
 
+use rskit_ai::GenAiError;
 use rskit_errors::{AppError, ErrorCode};
 use serde::Deserialize;
 
@@ -27,6 +28,31 @@ impl std::fmt::Display for ApiError {
 }
 
 impl std::error::Error for ApiError {}
+
+impl ApiError {
+    /// Map provider wire errors to canonical GenAI sentinels at the adapter boundary.
+    #[must_use]
+    pub fn to_genai_error(&self) -> GenAiError {
+        let kind = self
+            .error_type
+            .as_deref()
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        if self.status == 429 || kind.contains("rate") {
+            GenAiError::RateLimited
+        } else if self.status == 404 || kind.contains("model_not_found") {
+            GenAiError::ModelNotFound
+        } else if kind.contains("context") || kind.contains("token") && kind.contains("limit") {
+            GenAiError::ContextLengthExceeded
+        } else if kind.contains("content") || kind.contains("safety") || kind.contains("filter") {
+            GenAiError::ContentFilter
+        } else if self.status == 503 || kind.contains("overloaded") {
+            GenAiError::ModelOverloaded
+        } else {
+            GenAiError::InvalidRequest(self.message.clone())
+        }
+    }
+}
 
 impl From<ApiError> for AppError {
     fn from(e: ApiError) -> Self {
@@ -113,8 +139,6 @@ struct GeminiErrorBody {
 #[derive(Deserialize)]
 struct GeminiErrorDetail {
     message: Option<String>,
-    #[allow(dead_code)]
-    code: Option<u16>,
     status: Option<String>,
 }
 
@@ -202,6 +226,7 @@ mod tests {
             message: "rate limited".to_string(),
             error_type: None,
         };
+        assert_eq!(api_err.to_genai_error(), GenAiError::RateLimited);
         let app_err: AppError = api_err.into();
         assert_eq!(app_err.code, ErrorCode::RateLimited);
     }

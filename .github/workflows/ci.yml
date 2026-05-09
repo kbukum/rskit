@@ -49,6 +49,7 @@ jobs:
               - '**/Cargo.toml'
               - '**/Cargo.lock'
               - 'Makefile'
+              - 'scripts/**'
               - '.cargo/**'
               - '.config/**'
               - 'clippy.toml'
@@ -170,6 +171,21 @@ jobs:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   # ---------------------------------------------------------------------------
+  # L7 dependency edge guard
+  # ---------------------------------------------------------------------------
+  l7-depguard:
+    name: L7 Dependency Guard
+    if: needs.changes.outputs.rust-code == 'true'
+    needs: changes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
+        with:
+          toolchain: stable
+      - run: ./scripts/check-l7-edges.sh
+
+  # ---------------------------------------------------------------------------
   # Supply-chain audit (cargo-deny + cargo-audit)
   # ---------------------------------------------------------------------------
   security:
@@ -182,6 +198,7 @@ jobs:
       - uses: EmbarkStudios/cargo-deny-action@91bf2b620e09e18d6eb78b92e7861937469acedb  # v2.0.17
         with:
           command: check licenses advisories sources bans
+      - run: ./scripts/check-l7-edges.sh
       - uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998  # v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -210,7 +227,7 @@ jobs:
   ci-status:
     name: CI Status
     if: always()
-    needs: [changes, fmt, clippy, test, docs, coverage, security, bench]
+    needs: [changes, fmt, clippy, test, docs, l7-depguard, coverage, security, bench]
     runs-on: ubuntu-latest
     steps:
       - name: Evaluate results
@@ -220,6 +237,7 @@ jobs:
                    "${{ needs.clippy.result }}" \
                    "${{ needs.test.result }}" \
                    "${{ needs.docs.result }}" \
+                   "${{ needs.l7-depguard.result }}" \
                    "${{ needs.coverage.result }}" \
                    "${{ needs.security.result }}" \
                    "${{ needs.bench.result }}")

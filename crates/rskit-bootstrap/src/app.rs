@@ -6,7 +6,7 @@ use futures_util::future::BoxFuture;
 use rskit_component::{Component, Registry};
 use rskit_config::AppConfig;
 use rskit_errors::{AppError, AppResult, ErrorCode};
-use rskit_hook::{Action, HookResult, Registry as HookRegistry};
+use rskit_hook::{HookError, HookResult, Registry as HookRegistry};
 use tokio_util::sync::CancellationToken;
 
 use crate::hooks::{LifecycleEvent, LifecycleEventType};
@@ -32,7 +32,9 @@ fn register_lifecycle_hook(
 ) {
     let _unsubscribe = hooks.on(event_type.event_type(), move |cancel, event| {
         let Some(event) = event.as_any().downcast_ref::<LifecycleEvent>() else {
-            return HookResult::abort("unexpected bootstrap lifecycle event payload");
+            return Err(HookError::fatal(
+                "unexpected bootstrap lifecycle event payload",
+            ));
         };
 
         let runtime = event.runtime_handle().clone();
@@ -44,9 +46,9 @@ fn register_lifecycle_hook(
         });
 
         match receiver.recv() {
-            Ok(Ok(())) => HookResult::ok(),
-            Ok(Err(error)) => HookResult::abort_with_error(error),
-            Err(error) => HookResult::abort_with_error(AppError::internal(error)),
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(error)) => Err(HookError::fatal(error.to_string())),
+            Err(error) => Err(HookError::fatal(AppError::internal(error).to_string())),
         }
     });
 }
@@ -60,26 +62,22 @@ fn phase_label(event_type: LifecycleEventType) -> &'static str {
 }
 
 fn hook_result_to_error(event_type: LifecycleEventType, result: HookResult) -> AppResult<()> {
-    if let Some(error) = result.error {
-        return match error.downcast::<AppError>() {
-            Ok(app_error) => {
-                Err((*app_error).context(format!("{} hook failed", phase_label(event_type))))
+    match result {
+        Ok(()) => Ok(()),
+        Err(error) => {
+            if error.is_fatal() {
+                return Err(AppError::new(ErrorCode::Internal, error.to_string())
+                    .context(format!("{} hook failed", phase_label(event_type))));
             }
-            Err(error) => Err(AppError::new(ErrorCode::Internal, error.to_string())
-                .context(format!("{} hook failed", phase_label(event_type)))),
-        };
-    }
 
-    if result.action == Action::Abort {
-        let reason = if result.reason.is_empty() {
-            format!("{} hook aborted", phase_label(event_type))
-        } else {
-            result.reason
-        };
-        return Err(AppError::new(ErrorCode::Conflict, reason));
+            tracing::warn!(
+                phase = phase_label(event_type),
+                error = %error,
+                "non-fatal hook error"
+            );
+            Ok(())
+        }
     }
-
-    Ok(())
 }
 
 /// Builder for [`App`]. Validates config before handing off to the lifecycle.
@@ -447,9 +445,11 @@ mod tests {
 
     use parking_lot::Mutex;
     use rskit_config::ServiceConfig;
+    use rskit_hook::HookError;
     use tokio_util::sync::CancellationToken;
 
-    use super::AppBuilder;
+    use super::{AppBuilder, hook_result_to_error};
+    use crate::hooks::LifecycleEventType;
 
     #[derive(Debug, Default, serde::Deserialize, validator::Validate)]
     struct TestCfg {
@@ -535,5 +535,27 @@ mod tests {
 
         assert!(result.is_ok(), "run_task should complete with Ok(())");
         assert_eq!(runs.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn non_fatal_hook_error_is_logged_and_ignored() {
+        let result = hook_result_to_error(
+            LifecycleEventType::EventStart,
+            Err(HookError::new("warn only")),
+        );
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn fatal_hook_error_becomes_app_error() {
+        let result = hook_result_to_error(
+            LifecycleEventType::EventStart,
+            Err(HookError::fatal("hard fail")),
+        );
+
+        let error = result.expect_err("fatal hook error should fail");
+        assert!(error.to_string().contains("hard fail"));
+        assert!(error.to_string().contains("on_start hook failed"));
     }
 }

@@ -62,13 +62,18 @@ impl FfmpegCommand {
 
         let child_pid = child.id();
 
-        // Set up stderr reader for both progress parsing and error capture
-        // SAFETY: `.stderr(Stdio::piped())` is called above; `take()` on a piped
-        // child stderr is always Some.
+        // Set up stderr reader for both progress parsing and error capture.
+        // If stderr is unexpectedly unavailable, fail with a typed spawn error
+        // rather than panicking on a runtime process path.
         let stderr = child
             .stderr
             .take()
-            .expect("stderr was piped in command setup");
+            .ok_or_else(|| crate::error::FfmpegError {
+                kind: crate::error::FfmpegErrorKind::SpawnFailed,
+                exit_code: None,
+                stderr: String::new(),
+                message: "ffmpeg stderr was not piped during command setup".to_string(),
+            })?;
         let reader = tokio::io::BufReader::new(stderr);
         use tokio::io::AsyncBufReadExt;
         let mut lines = reader.lines();

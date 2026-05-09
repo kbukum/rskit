@@ -26,6 +26,7 @@
 //! | `chain`  | `rskit-chain` (sequential execution) |
 //! | `process` | `rskit-process` (subprocess execution) |
 //! | `stateful` | `rskit-stateful` (stateful accumulators) |
+//! | `genai` | `rskit-ai` (shared `GenAI` vocabulary) |
 //! | `llm`    | `rskit-llm` (LLM providers) |
 //! | `storage` | `rskit-storage` (File I/O, storage) |
 //! | `media`  | `rskit-media` (media types, pipeline) |
@@ -189,9 +190,37 @@ pub use rskit_sse as sse;
 #[cfg(feature = "dag")]
 pub use rskit_dag as dag;
 
+/// Shared GenAI vocabulary.
+#[cfg(feature = "genai")]
+pub use rskit_ai as genai;
+
 /// LLM provider abstractions for OpenAI and Anthropic.
 #[cfg(feature = "llm")]
 pub use rskit_llm as llm;
+
+/// Model-serving runtime inference abstractions.
+#[cfg(feature = "inference")]
+pub use rskit_inference as inference;
+
+/// Triton KServe v2 HTTP inference adapter.
+#[cfg(feature = "inference-triton")]
+pub use rskit_inference_triton as inference_triton;
+
+/// vLLM raw REST inference adapter skeleton.
+#[cfg(feature = "inference-vllm")]
+pub use rskit_inference_vllm as inference_vllm;
+
+/// Hugging Face TGI REST inference adapter skeleton.
+#[cfg(feature = "inference-tgi")]
+pub use rskit_inference_tgi as inference_tgi;
+
+/// Prompt templates and output schema contracts.
+#[cfg(feature = "prompt")]
+pub use rskit_ai::prompt;
+
+/// Skill manifests, loaders, registries, and verification contracts.
+#[cfg(feature = "skill")]
+pub use rskit_skill as skill;
 
 /// File I/O, storage backends, MIME detection, temp files.
 #[cfg(feature = "storage")]

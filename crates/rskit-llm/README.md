@@ -1,51 +1,52 @@
-# rskit-llm — LLM Provider Abstractions
+# rskit-llm — LLM provider abstractions
 
-LLM provider abstractions for OpenAI and Anthropic.
+`rskit-llm` owns the SDK-free completion contract for chat models: requests, responses, canonical tool-use blocks, capability metadata, and the single `Provider` trait used across the Rust kit.
 
-[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml)
-[![crates.io](https://img.shields.io/crates/v/rskit-llm.svg)](https://crates.io/crates/rskit-llm)
-[![docs.rs](https://docs.rs/rskit-llm/badge.svg)](https://docs.rs/rskit-llm)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![MSRV: 1.85](https://img.shields.io/badge/MSRV-1.85-orange.svg)](https://blog.rust-lang.org/2025/02/20/Rust-1.85.0.html)
-
-## Features
-
-- `LlmProvider` trait — `complete(CompletionRequest)` and `embed(texts)`
-- `OpenAiProvider` — OpenAI-compatible backend (configurable base URL)
-- `AnthropicProvider` — Anthropic Claude backend
-- Typed request/response: `ChatMessage`, `Role`, `CompletionRequest`, `CompletionResponse`
-- `TokenUsage` tracking (input + output tokens)
-- Streaming support
-
-## Usage
+## Install
 
 ```toml
 [dependencies]
 rskit-llm = "0.1"
+rskit-llm-providers = "0.1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
+## Quick start
+
 ```rust
-use rskit_llm::{LlmProvider, OpenAiProvider, OpenAiConfig, CompletionRequest, ChatMessage, Role};
+use futures::StreamExt;
+use rskit_llm::{Provider, CompletionRequest, user};
+use rskit_llm_providers::openai::{self, Config};
 
-async fn example() {
-    let provider = OpenAiProvider::new(OpenAiConfig {
-        api_key: "sk-…".into(),
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let provider = openai::new_adapter(&Config {
+        api_key: std::env::var("OPENAI_API_KEY")?,
         base_url: "https://api.openai.com/v1".into(),
-        ..Default::default()
-    }).unwrap();
+        model: "gpt-4o".into(),
+        embedding_model: "text-embedding-3-small".into(),
+        embedding_dimensions: 1536,
+    })?;
 
-    let resp = provider.complete(CompletionRequest {
-        model: "gpt-4o-mini".into(),
-        messages: vec![ChatMessage { role: Role::User, content: "Hi".into() }],
-        max_tokens: Some(64),
-        temperature: Some(0.7),
+    let request = CompletionRequest {
+        model: "gpt-4o".into(),
+        messages: vec![user("Summarize why explicit registration is safer.")],
+        max_tokens: Some(128),
+        temperature: Some(0.2),
         stream: false,
-    }).await.unwrap();
+        tools: None,
+        tool_choice: None,
+    };
 
-    println!("{}", resp.content);
+    let response = provider.complete(request.clone()).await?;
+    println!("{}", response.text());
+
+    let mut stream = provider.stream(request).await?;
+    while let Some(_event) = stream.next().await {}
+    Ok(())
 }
 ```
 
-## See Also
+## When to use
 
-[Main repository README](https://github.com/kbukum/rskit)
+Use `rskit-llm` for canonical chat completions and stream events. Use `rskit-inference` for serving-runtime protocols such as Triton, vLLM, and TGI.

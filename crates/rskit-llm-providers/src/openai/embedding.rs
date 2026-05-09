@@ -1,6 +1,7 @@
 //! OpenAI-compatible embedding provider using rskit-httpclient.
 
 use async_trait::async_trait;
+use rskit_embedding::{EmbedInput, EmbedRequest, EmbedResponse, Embedding, Provider};
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_httpclient::{Auth, HttpClient, HttpClientConfig, Request};
 use serde::{Deserialize, Serialize};
@@ -30,6 +31,12 @@ impl EmbeddingProvider {
             dimensions: cfg.embedding_dimensions,
         })
     }
+
+    /// Return the configured embedding dimensionality.
+    #[must_use]
+    pub const fn dimensions(&self) -> usize {
+        self.dimensions
+    }
 }
 
 #[derive(Serialize)]
@@ -49,28 +56,39 @@ struct EmbeddingData {
 }
 
 #[async_trait]
-impl rskit_embedding::EmbeddingProvider for EmbeddingProvider {
-    async fn embed(&self, text: &str) -> AppResult<Vec<f32>> {
-        let results = self.embed_batch(&[text]).await?;
-        results.into_iter().next().ok_or_else(|| {
-            AppError::new(
-                ErrorCode::ExternalService,
-                "empty embedding response from OpenAI",
-            )
-        })
-    }
+impl Provider for EmbeddingProvider {
+    async fn embed(&self, req: EmbedRequest) -> AppResult<EmbedResponse> {
+        let mut response_model = req.model.clone();
+        if response_model.name.is_empty() {
+            response_model.name.clone_from(&self.model);
+        }
+        let model = response_model.name.clone();
+        let texts = req
+            .inputs
+            .iter()
+            .map(|input| match input {
+                EmbedInput::Text(text) => Ok(text.clone()),
+                _ => Err(AppError::new(
+                    ErrorCode::InvalidInput,
+                    "OpenAI embedding adapter currently accepts text inputs only",
+                )),
+            })
+            .collect::<AppResult<Vec<_>>>()?;
 
-    async fn embed_batch(&self, texts: &[&str]) -> AppResult<Vec<Vec<f32>>> {
         if texts.is_empty() {
-            return Ok(Vec::new());
+            return Ok(EmbedResponse {
+                embeddings: Vec::new(),
+                model: response_model,
+                usage: rskit_ai::Usage::default(),
+            });
         }
 
         let body = EmbeddingRequest {
-            model: self.model.clone(),
-            input: texts.iter().map(|t| t.to_string()).collect(),
+            model: model.clone(),
+            input: texts,
         };
 
-        debug!(model = %self.model, count = texts.len(), "requesting embeddings");
+        debug!(model = %model, count = body.input.len(), "requesting embeddings");
 
         let request = Request::post("/embeddings").json_body(&body).map_err(|e| {
             AppError::new(
@@ -97,11 +115,30 @@ impl rskit_embedding::EmbeddingProvider for EmbeddingProvider {
             )
         })?;
 
-        Ok(result.data.into_iter().map(|d| d.embedding).collect())
+        Ok(EmbedResponse {
+            embeddings: result
+                .data
+                .into_iter()
+                .enumerate()
+                .map(|(index, data)| Embedding::new(data.embedding, index))
+                .collect(),
+            model: response_model,
+            usage: rskit_ai::Usage::default(),
+        })
     }
 
-    fn dimensions(&self) -> usize {
-        self.dimensions
+    async fn embed_batch(&self, reqs: Vec<EmbedRequest>) -> AppResult<Vec<EmbedResponse>> {
+        let mut responses = Vec::with_capacity(reqs.len());
+        for req in reqs {
+            responses.push(self.embed(req).await?);
+        }
+        Ok(responses)
+    }
+}
+
+impl rskit_provider::Provider for EmbeddingProvider {
+    fn name(&self) -> &'static str {
+        "openai_embedding"
     }
 }
 
@@ -111,8 +148,6 @@ mod tests {
 
     #[test]
     fn provider_constructs_with_config() {
-        use rskit_embedding::EmbeddingProvider as _;
-
         let cfg = Config {
             api_key: "sk-test".into(),
             base_url: "https://api.openai.com/v1".into(),

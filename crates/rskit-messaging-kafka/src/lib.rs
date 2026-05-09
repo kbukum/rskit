@@ -322,7 +322,7 @@ mod tests {
         ];
 
         for (variant, expected_str) in &variants {
-            let display = format!("{}", variant);
+            let display = format!("{variant}");
             assert_eq!(&display, expected_str);
 
             let parsed = SecurityProtocol::from_str(&display).unwrap();

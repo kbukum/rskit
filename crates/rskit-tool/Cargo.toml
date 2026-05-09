@@ -18,6 +18,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
+rskit-ai = { workspace = true }
 rskit-schema   = { path = "../rskit-schema" }
 rskit-errors   = { path = "../rskit-errors" }
 serde          = { workspace = true }

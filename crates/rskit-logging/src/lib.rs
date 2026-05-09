@@ -67,11 +67,8 @@ pub struct LoggingGuard(#[allow(dead_code)] DefaultGuard);
 ///
 /// # Security
 ///
-/// TODO(#22): Add a post-format masking layer that redacts fields named
-/// `password`, `secret`, `token`, `authorization`, `api_key` in log output.
-/// See <https://docs.rs/tracing-subscriber/latest/tracing_subscriber/layer/index.html>
-/// Use [`crate::masking::DefaultMasker`] with [`crate::masking::MaskingMakeWriter`] or
-/// call [`crate::global::init_global_with_masking`] which already wires masking.
+/// Use [`init_logging_with_masking`] or [`crate::global::init_global_with_masking`]
+/// when log output must be redacted before it reaches the configured sink.
 pub fn init_logging(cfg: &LoggingConfig) -> LoggingGuard {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&cfg.level));
 
