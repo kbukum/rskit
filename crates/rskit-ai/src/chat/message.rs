@@ -15,7 +15,7 @@ pub enum Message {
     /// System instruction.
     System(SystemMessage),
     /// Tool execution result.
-    #[serde(alias = "tool_result")]
+    #[serde(rename = "tool_result", alias = "tool")]
     Tool(ToolResultMessage),
 }
 
