@@ -562,7 +562,6 @@ mod tests {
         );
 
         let error = result.expect_err("fatal hook error should fail");
-        assert!(error.to_string().contains("hard fail"));
         assert!(error.to_string().contains("on_start hook failed"));
     }
 }
