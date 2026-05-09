@@ -110,8 +110,10 @@ impl Provider for EmbeddingProvider {
             let text = response.text().unwrap_or_default();
             return Err(AppError::new(
                 ErrorCode::ExternalService,
-                format!("embedding API returned HTTP {status}: {text}"),
-            ));
+                format!("embedding API returned HTTP {status}"),
+            )
+            .with_detail("status", status.to_string())
+            .with_detail("body", text));
         }
 
         let result: EmbeddingResponse = response
