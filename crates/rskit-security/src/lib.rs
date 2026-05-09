@@ -382,10 +382,12 @@ impl Default for McpHttpSecurityConfig {
 impl McpHttpSecurityConfig {
     /// Validate hardened MCP HTTP defaults.
     pub fn validate(&self) -> AppResult<()> {
-        if self.bind_host != "127.0.0.1"
-            && self.bind_host != "::1"
-            && self.allowed_origins.is_empty()
-        {
+        let is_loopback = matches!(self.bind_host.as_str(), "127.0.0.1" | "::1" | "localhost")
+            || self
+                .bind_host
+                .parse::<std::net::IpAddr>()
+                .is_ok_and(|ip| ip.is_loopback());
+        if !is_loopback && self.allowed_origins.is_empty() {
             return Err(AppError::invalid_input(
                 "allowed_origins",
                 "non-loopback MCP HTTP endpoints require explicit Origin allow-list",

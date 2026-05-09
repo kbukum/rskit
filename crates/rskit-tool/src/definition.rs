@@ -16,9 +16,20 @@ pub enum ExecutionHint {
     Ui,
     /// Tool executes backend AND frontend should refresh/navigate.
     Hybrid,
-    /// Unknown hint from a newer protocol version; treated as Backend.
+    /// Unknown hint from a newer protocol version; normalizes to Backend.
     #[serde(other)]
     Unknown,
+}
+
+impl ExecutionHint {
+    /// Return the effective hint, mapping Unknown → Backend.
+    #[must_use]
+    pub fn effective(self) -> Self {
+        match self {
+            Self::Unknown => Self::Backend,
+            other => other,
+        }
+    }
 }
 
 /// Optional hints about tool behavior (MCP-aligned).

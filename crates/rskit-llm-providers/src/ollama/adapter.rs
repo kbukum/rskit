@@ -77,9 +77,7 @@ impl OllamaAdapter {
 
         let request = Request::post(OpenAiDialect::endpoint())
             .json_body(&body)
-            .map_err(|e| {
-                AppError::new(ErrorCode::Internal, format!("failed to build request: {e}"))
-            })?;
+            .map_err(|e| AppError::internal(e).context("build Ollama request"))?;
 
         let response = self.client.send(request).await?;
 
