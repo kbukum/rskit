@@ -48,11 +48,20 @@ struct EmbeddingRequest {
 #[derive(Deserialize)]
 struct EmbeddingResponse {
     data: Vec<EmbeddingData>,
+    #[serde(default)]
+    usage: Option<EmbeddingUsage>,
 }
 
 #[derive(Deserialize)]
 struct EmbeddingData {
     embedding: Vec<f32>,
+}
+
+#[derive(Deserialize)]
+struct EmbeddingUsage {
+    prompt_tokens: u64,
+    #[serde(default)]
+    total_tokens: u64,
 }
 
 #[async_trait]
@@ -90,12 +99,9 @@ impl Provider for EmbeddingProvider {
 
         debug!(model = %model, count = body.input.len(), "requesting embeddings");
 
-        let request = Request::post("/embeddings").json_body(&body).map_err(|e| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!("failed to build embedding request: {e}"),
-            )
-        })?;
+        let request = Request::post("/embeddings")
+            .json_body(&body)
+            .map_err(|e| AppError::internal(e).context("build embedding request"))?;
 
         let response = self.client.send(request).await?;
 
@@ -108,12 +114,18 @@ impl Provider for EmbeddingProvider {
             ));
         }
 
-        let result: EmbeddingResponse = response.json().map_err(|e| {
-            AppError::new(
-                ErrorCode::ExternalService,
-                format!("failed to parse embedding response: {e}"),
-            )
-        })?;
+        let result: EmbeddingResponse = response
+            .json()
+            .map_err(|e| AppError::internal(e).context("parse embedding response"))?;
+
+        let usage = result
+            .usage
+            .map(|u| rskit_ai::Usage {
+                input_tokens: u.prompt_tokens,
+                output_tokens: u.total_tokens.saturating_sub(u.prompt_tokens),
+                ..Default::default()
+            })
+            .unwrap_or_default();
 
         Ok(EmbedResponse {
             embeddings: result
@@ -123,7 +135,7 @@ impl Provider for EmbeddingProvider {
                 .map(|(index, data)| Embedding::new(data.embedding, index))
                 .collect(),
             model: response_model,
-            usage: rskit_ai::Usage::default(),
+            usage,
         })
     }
 
