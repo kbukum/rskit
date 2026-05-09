@@ -24,7 +24,7 @@ pub enum StopReason {
     MaxToolCallsExceeded,
     /// The run was cancelled.
     Cancelled,
-    /// Aborted by a hook handler.
+    /// Aborted due to a hook handler, model error, or content filter.
     Aborted,
 }
 
