@@ -77,16 +77,8 @@ impl TempFile {
     /// Create an independent copy of this temporary file.
     pub fn try_clone(&self) -> AppResult<Self> {
         let new = TempFile::new()?;
-        std::fs::copy(self.path(), new.path()).map_err(|e| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!(
-                    "failed to clone temp file {} -> {}: {e}",
-                    self.path().display(),
-                    new.path().display()
-                ),
-            )
-        })?;
+        std::fs::copy(self.path(), new.path())
+            .map_err(|e| AppError::internal(e).context("clone temp file"))?;
         Ok(new)
     }
 

@@ -119,10 +119,7 @@ pub fn init_tracer(cfg: &TracingConfig) -> AppResult<TracerGuard> {
             let _ = TRACER_INIT.set(());
             Ok(TracerGuard { provider: None })
         }
-        Err(error) => Err(AppError::new(
-            ErrorCode::Internal,
-            format!("tracing subscriber init: {error}"),
-        )),
+        Err(error) => Err(AppError::internal(error).context("tracing subscriber init")),
     }
 }
 

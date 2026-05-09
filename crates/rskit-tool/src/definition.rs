@@ -16,6 +16,9 @@ pub enum ExecutionHint {
     Ui,
     /// Tool executes backend AND frontend should refresh/navigate.
     Hybrid,
+    /// Unknown hint from a newer protocol version; treated as Backend.
+    #[serde(other)]
+    Unknown,
 }
 
 /// Optional hints about tool behavior (MCP-aligned).
