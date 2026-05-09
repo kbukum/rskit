@@ -71,9 +71,7 @@ fn hook_result_to_error(event_type: LifecycleEventType, result: HookResult) -> A
             if error.is_fatal() {
                 let phase = phase_label(event_type);
                 tracing::error!(phase, ?error, "fatal hook error");
-                return Err(
-                    AppError::internal(error).context(format!("{phase} hook failed"))
-                );
+                return Err(AppError::internal(error).context(format!("{phase} hook failed")));
             }
 
             tracing::warn!(
