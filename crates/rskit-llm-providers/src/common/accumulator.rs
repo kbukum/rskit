@@ -62,6 +62,7 @@ pub(crate) fn accumulate_tool_uses(
     calls
         .into_iter()
         .enumerate()
+        .filter(|(_, call)| !call.name.is_empty() || !call.id.is_empty())
         .map(|(index, call)| {
             Ok(ToolUseBlock {
                 id: if call.id.is_empty() {
