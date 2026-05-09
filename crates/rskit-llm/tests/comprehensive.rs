@@ -1,6 +1,12 @@
 use rskit_llm::{
-    AssistantMessage, CompletionRequest, CompletionResponse, ContentBlock, FunctionCall, Message,
-    StopReason, ToolCall, ToolChoice, Usage, assistant, system, text_of, tool_result_msg, user,
+    AssistantMessage, CompletionRequest, CompletionResponse, ContentPart, FinishReason, Message,
+    ToolChoice, ToolDefinition, ToolUseBlock, Usage, assistant, system, text_of, tool_result_msg,
+    user,
+};
+
+const _: fn() = || {
+    fn assert_copy<T: Copy>() {}
+    assert_copy::<Usage>();
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -28,10 +34,14 @@ fn message_tool_result_role() {
 }
 
 #[test]
-fn message_clone() {
-    let msg = user("clone me");
-    let msg2 = msg.clone();
-    assert_eq!(msg.role(), msg2.role());
+fn message_serde_roundtrip_preserves_content() {
+    let msg = user("round trip content");
+    let json = serde_json::to_string(&msg).unwrap();
+    let back: Message = serde_json::from_str(&json).unwrap();
+    assert_eq!(
+        serde_json::to_value(&back).unwrap(),
+        serde_json::to_value(&msg).unwrap()
+    );
 }
 
 #[test]
@@ -84,12 +94,12 @@ fn message_deserialize_invalid_role() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ContentBlock — serde, variants
+// ContentPart — serde, variants
 // ═══════════════════════════════════════════════════════════════════════════
 
 #[test]
 fn content_block_text_serde() {
-    let block = ContentBlock::Text { text: "hi".into() };
+    let block = ContentPart::Text { text: "hi".into() };
     let json = serde_json::to_value(&block).unwrap();
     assert_eq!(json["type"], "text");
     assert_eq!(json["text"], "hi");
@@ -97,7 +107,7 @@ fn content_block_text_serde() {
 
 #[test]
 fn content_block_image_serde() {
-    let block = ContentBlock::Image {
+    let block = ContentPart::Image {
         source: "base64data".into(),
         mime_type: "image/png".into(),
         data: None,
@@ -109,25 +119,28 @@ fn content_block_image_serde() {
 
 #[test]
 fn content_block_tool_use_serde() {
-    let block = ContentBlock::ToolUse {
+    let block = ContentPart::ToolUse {
         id: "call_1".into(),
         name: "search".into(),
-        input: serde_json::json!({"q": "rust"}),
+        input: serde_json::json!({"q": "rust"})
+            .as_object()
+            .cloned()
+            .unwrap(),
     };
     let json = serde_json::to_value(&block).unwrap();
     assert_eq!(json["type"], "tool_use");
     assert_eq!(json["name"], "search");
-    let back: ContentBlock = serde_json::from_value(json).unwrap();
+    let back: ContentPart = serde_json::from_value(json).unwrap();
     match back {
-        ContentBlock::ToolUse { name, .. } => assert_eq!(name, "search"),
+        ContentPart::ToolUse { name, .. } => assert_eq!(name, "search"),
         _ => panic!("expected ToolUse"),
     }
 }
 
 #[test]
 fn content_block_tool_result_serde() {
-    let block = ContentBlock::ToolResult {
-        tool_use_id: "call_1".into(),
+    let block = ContentPart::ToolResult {
+        id: "call_1".into(),
         content: "42".into(),
         is_error: false,
     };
@@ -136,12 +149,14 @@ fn content_block_tool_result_serde() {
 }
 
 #[test]
-fn content_block_thinking_serde() {
-    let block = ContentBlock::Thinking {
-        text: "let me think...".into(),
+fn content_block_audio_serde() {
+    let block = ContentPart::Audio {
+        source: "s3://bucket/audio.mp3".into(),
+        mime_type: "audio/mpeg".into(),
+        data: None,
     };
     let json = serde_json::to_value(&block).unwrap();
-    assert_eq!(json["type"], "thinking");
+    assert_eq!(json["type"], "audio");
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -151,15 +166,15 @@ fn content_block_thinking_serde() {
 #[test]
 fn text_of_concatenates_text_blocks() {
     let blocks = vec![
-        ContentBlock::Text {
+        ContentPart::Text {
             text: "Hello ".into(),
         },
-        ContentBlock::ToolUse {
+        ContentPart::ToolUse {
             id: "x".into(),
             name: "y".into(),
-            input: serde_json::json!({}),
+            input: serde_json::json!({}).as_object().cloned().unwrap(),
         },
-        ContentBlock::Text {
+        ContentPart::Text {
             text: "world".into(),
         },
     ];
@@ -173,7 +188,11 @@ fn text_of_empty_blocks() {
 
 #[test]
 fn text_of_no_text_blocks() {
-    let blocks = vec![ContentBlock::Thinking { text: "hmm".into() }];
+    let blocks = vec![ContentPart::File {
+        source: "s3://bucket/doc.pdf".into(),
+        mime_type: "application/pdf".into(),
+        data: None,
+    }];
     assert_eq!(text_of(&blocks), "");
 }
 
@@ -201,16 +220,11 @@ fn completion_request_minimal() {
 
 #[test]
 fn completion_request_all_fields() {
-    let tool_def = rskit_tool::Definition {
+    let tool_def = ToolDefinition {
         name: "get_weather".into(),
         description: "Get weather for a city".into(),
         input_schema: serde_json::json!({"type": "object", "properties": {"city": {"type": "string"}}}),
         output_schema: None,
-        annotations: None,
-        read_only: false,
-        destructive: false,
-        max_result_size: 0,
-        timeout_secs: 0.0,
     };
     let req = CompletionRequest {
         model: "gpt-4o".into(),
@@ -320,7 +334,7 @@ fn completion_request_deserialize_minimal_json() {
 fn make_response(text: &str) -> CompletionResponse {
     CompletionResponse {
         message: AssistantMessage {
-            content: vec![ContentBlock::Text { text: text.into() }],
+            content: vec![ContentPart::Text { text: text.into() }],
             tool_calls: vec![],
             usage: None,
         },
@@ -328,8 +342,10 @@ fn make_response(text: &str) -> CompletionResponse {
         usage: Usage {
             input_tokens: 10,
             output_tokens: 5,
+            cached_tokens: 0,
+            reasoning_tokens: 0,
         },
-        stop_reason: Some(StopReason::EndTurn),
+        stop_reason: Some(FinishReason::Stop),
     }
 }
 
@@ -349,25 +365,26 @@ fn completion_response_empty_content() {
 }
 
 #[test]
-fn completion_response_clone() {
+fn completion_response_serde_roundtrip_preserves_text_and_usage() {
     let resp = make_response("test");
-    let resp2 = resp.clone();
-    assert_eq!(resp.text(), resp2.text());
-    assert_eq!(resp.model, resp2.model);
+    let json = serde_json::to_string(&resp).unwrap();
+    let back: CompletionResponse = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.text(), "test");
+    assert_eq!(
+        serde_json::to_value(&back).unwrap(),
+        serde_json::to_value(&resp).unwrap()
+    );
 }
 
 #[test]
 fn completion_response_has_tool_calls() {
     let mut resp = make_response("");
-    resp.message.tool_calls = vec![ToolCall {
+    resp.message.tool_calls = vec![ToolUseBlock {
         id: "c1".into(),
-        call_type: "function".into(),
-        function: FunctionCall {
-            name: "f".into(),
-            arguments: "{}".into(),
-        },
+        name: "f".into(),
+        input: serde_json::Map::new(),
     }];
-    resp.stop_reason = Some(StopReason::ToolUse);
+    resp.stop_reason = Some(FinishReason::ToolUse);
     assert!(resp.has_tool_calls());
 }
 
@@ -406,21 +423,12 @@ fn usage_large_values() {
 }
 
 #[test]
-fn usage_clone() {
-    let usage = Usage {
-        input_tokens: 10,
-        output_tokens: 5,
-    };
-    let usage2 = usage.clone();
-    assert_eq!(usage.input_tokens, usage2.input_tokens);
-    assert_eq!(usage.output_tokens, usage2.output_tokens);
-}
-
-#[test]
 fn usage_debug() {
     let usage = Usage {
         input_tokens: 10,
         output_tokens: 5,
+        cached_tokens: 0,
+        reasoning_tokens: 0,
     };
     let dbg = format!("{:?}", usage);
     assert!(dbg.contains("10"));
@@ -428,20 +436,20 @@ fn usage_debug() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// StopReason
+// FinishReason
 // ═══════════════════════════════════════════════════════════════════════════
 
 #[test]
 fn stop_reason_variants() {
     let reasons = [
-        StopReason::EndTurn,
-        StopReason::MaxTokens,
-        StopReason::ToolUse,
-        StopReason::StopSequence,
+        FinishReason::Stop,
+        FinishReason::Length,
+        FinishReason::ToolUse,
+        FinishReason::Stop,
     ];
     for r in &reasons {
         let json = serde_json::to_value(r).unwrap();
-        let back: StopReason = serde_json::from_value(json).unwrap();
+        let back: FinishReason = serde_json::from_value(json).unwrap();
         assert_eq!(format!("{:?}", r), format!("{:?}", back));
     }
 }

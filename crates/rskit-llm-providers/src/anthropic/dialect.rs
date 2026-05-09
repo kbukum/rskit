@@ -2,12 +2,13 @@
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_llm::types::{
-    AssistantMessage, CompletionRequest, CompletionResponse, ContentBlock, FunctionCall, Message,
-    StopReason, StreamChunk, ToolCall, Usage,
+    AssistantMessage, CompletionRequest, CompletionResponse, ContentPart, FinishReason, Message,
+    ToolUseBlock, Usage,
 };
 use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 
-use crate::common;
+use crate::common::{self, StreamChunk, StreamToolCall};
 
 /// Converts rskit types to/from the Anthropic Messages API wire format.
 pub struct AnthropicDialect;
@@ -33,16 +34,25 @@ struct WireMessage {
 
 #[derive(Deserialize)]
 struct ChatResponse {
-    #[allow(dead_code)]
-    id: String,
     model: String,
     content: Vec<ContentItem>,
     usage: WireUsage,
+    #[serde(default)]
+    stop_reason: Option<String>,
 }
 
 #[derive(Deserialize)]
 struct ContentItem {
+    #[serde(rename = "type")]
+    kind: String,
+    #[serde(default)]
     text: Option<String>,
+    #[serde(default)]
+    id: Option<String>,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    input: Option<Map<String, Value>>,
 }
 
 #[derive(Deserialize)]
@@ -63,11 +73,22 @@ fn to_wire(msg: &Message) -> Option<WireMessage> {
             role: "assistant".to_string(),
             content: rskit_llm::types::text_of(&a.content),
         }),
-        Message::ToolResult(tr) => Some(WireMessage {
+        Message::Tool(tr) => Some(WireMessage {
             role: "user".to_string(),
             content: tr.content.clone(),
         }),
-        Message::System(_) => None, // handled via top-level `system` field
+        Message::System(_) => None,
+    }
+}
+
+fn parse_stop_reason(reason: Option<&str>) -> FinishReason {
+    match reason {
+        Some("max_tokens") => FinishReason::Length,
+        Some("tool_use") => FinishReason::ToolUse,
+        Some("content_filter") => FinishReason::ContentFilter,
+        Some("error") => FinishReason::Error,
+        Some("cancelled") => FinishReason::Cancelled,
+        _ => FinishReason::Stop,
     }
 }
 
@@ -103,25 +124,35 @@ impl AnthropicDialect {
             )
         })?;
 
-        let content_text = resp
-            .content
-            .into_iter()
-            .filter_map(|c| c.text)
-            .collect::<Vec<_>>()
-            .join("");
+        let mut content = String::new();
+        let mut tool_calls = Vec::new();
+
+        for (index, item) in resp.content.into_iter().enumerate() {
+            match item.kind.as_str() {
+                "text" => content.push_str(item.text.as_deref().unwrap_or("")),
+                "tool_use" => tool_calls.push(ToolUseBlock {
+                    id: item.id.unwrap_or_else(|| format!("tool_call_{index}")),
+                    name: item.name.unwrap_or_default(),
+                    input: item.input.unwrap_or_default(),
+                }),
+                _ => {}
+            }
+        }
 
         Ok(CompletionResponse {
             message: AssistantMessage {
-                content: vec![ContentBlock::Text { text: content_text }],
-                tool_calls: vec![],
+                content: vec![ContentPart::Text { text: content }],
+                tool_calls,
                 usage: None,
             },
             model: resp.model,
             usage: Usage {
-                input_tokens: resp.usage.input_tokens,
-                output_tokens: resp.usage.output_tokens,
+                input_tokens: u64::from(resp.usage.input_tokens),
+                output_tokens: u64::from(resp.usage.output_tokens),
+                cached_tokens: 0,
+                reasoning_tokens: 0,
             },
-            stop_reason: Some(StopReason::EndTurn),
+            stop_reason: Some(parse_stop_reason(resp.stop_reason.as_deref())),
         })
     }
 
@@ -131,10 +162,8 @@ impl AnthropicDialect {
     }
 
     /// Parse a single SSE data payload from the streaming Messages API.
-    ///
-    /// Anthropic streams events with a `type` discriminator.  The caller is
-    /// responsible for stripping the `data: ` prefix.
-    pub fn parse_stream_chunk(data: &[u8]) -> AppResult<StreamChunk> {
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn parse_stream_chunk(data: &[u8]) -> AppResult<StreamChunk> {
         let s = std::str::from_utf8(data).map_err(|e| {
             AppError::new(
                 ErrorCode::InvalidFormat,
@@ -169,14 +198,16 @@ impl AnthropicDialect {
                             .get("partial_json")
                             .and_then(|p| p.as_str())
                             .unwrap_or("");
+                        let index = v
+                            .get("index")
+                            .and_then(|value| value.as_u64())
+                            .map_or(0, |value| value as usize);
                         Ok(StreamChunk {
-                            tool_calls: vec![ToolCall {
+                            tool_calls: vec![StreamToolCall {
+                                index,
                                 id: String::new(),
-                                call_type: "function".to_string(),
-                                function: FunctionCall {
-                                    name: String::new(),
-                                    arguments: partial.to_string(),
-                                },
+                                name: String::new(),
+                                input_delta: partial.to_string(),
                             }],
                             ..Default::default()
                         })
@@ -191,22 +222,24 @@ impl AnthropicDialect {
                 if block_type == "tool_use" {
                     let id = block
                         .get("id")
-                        .and_then(|v| v.as_str())
+                        .and_then(|value| value.as_str())
                         .unwrap_or("")
                         .to_string();
                     let name = block
                         .get("name")
-                        .and_then(|v| v.as_str())
+                        .and_then(|value| value.as_str())
                         .unwrap_or("")
                         .to_string();
+                    let index = v
+                        .get("index")
+                        .and_then(|value| value.as_u64())
+                        .map_or(0, |value| value as usize);
                     Ok(StreamChunk {
-                        tool_calls: vec![ToolCall {
+                        tool_calls: vec![StreamToolCall {
+                            index,
                             id,
-                            call_type: "function".to_string(),
-                            function: FunctionCall {
-                                name,
-                                arguments: String::new(),
-                            },
+                            name,
+                            input_delta: String::new(),
                         }],
                         ..Default::default()
                     })
@@ -256,19 +289,19 @@ mod tests {
             "id": "msg-1",
             "model": "claude-sonnet-4-20250514",
             "content": [{"type": "text", "text": "Hello!"}],
-            "usage": {"input_tokens": 8, "output_tokens": 3}
+            "usage": {"input_tokens": 8, "output_tokens": 3},
+            "stop_reason": "end_turn"
         }"#;
         let resp = AnthropicDialect::parse_response(body).unwrap();
         assert_eq!(resp.text(), "Hello!");
         assert_eq!(resp.usage.input_tokens, 8);
+        assert_eq!(resp.stop_reason, Some(FinishReason::Stop));
     }
 
     #[test]
     fn endpoint_is_correct() {
         assert_eq!(AnthropicDialect::endpoint(), "/v1/messages");
     }
-
-    // -- parse_stream_chunk tests --
 
     #[test]
     fn stream_chunk_text_delta() {
@@ -286,8 +319,8 @@ mod tests {
         assert!(chunk.content.is_empty());
         assert_eq!(chunk.tool_calls.len(), 1);
         assert_eq!(chunk.tool_calls[0].id, "toolu_1");
-        assert_eq!(chunk.tool_calls[0].function.name, "get_weather");
-        assert!(chunk.tool_calls[0].function.arguments.is_empty());
+        assert_eq!(chunk.tool_calls[0].name, "get_weather");
+        assert!(chunk.tool_calls[0].input_delta.is_empty());
     }
 
     #[test]
@@ -295,7 +328,7 @@ mod tests {
         let data = br#"{"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"loc\":"}}"#;
         let chunk = AnthropicDialect::parse_stream_chunk(data).unwrap();
         assert_eq!(chunk.tool_calls.len(), 1);
-        assert_eq!(chunk.tool_calls[0].function.arguments, r#"{"loc":"#);
+        assert_eq!(chunk.tool_calls[0].input_delta, r#"{"loc":"#);
     }
 
     #[test]

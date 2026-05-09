@@ -1,7 +1,6 @@
 //! W3C Trace-Context propagation helpers.
 //!
-//! These are thin wrappers kept for a clean public API.
-//! The heavy lifting lives in the `tracer` module.
+//! Public HTTP propagation API; implementation lives in the `tracer` module.
 
 /// Inject the current span's trace context into HTTP headers.
 ///

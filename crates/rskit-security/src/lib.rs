@@ -336,3 +336,69 @@ mod tests {
         );
     }
 }
+
+/// Verification result for signed artifacts.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum VerificationResult {
+    /// Verification passed.
+    Verified,
+    /// Verification produced warnings and may proceed under warn policy.
+    Warning(Vec<String>),
+    /// Verification denied the artifact.
+    Denied(String),
+}
+
+/// Generic verifier contract for skill signatures and supply-chain artifacts.
+pub trait Verifier<T>: Send + Sync {
+    /// Verify an artifact.
+    fn verify(&self, artifact: &T) -> VerificationResult;
+}
+
+/// Streamable HTTP hardening configuration for MCP endpoints.
+#[derive(Debug, Clone)]
+pub struct McpHttpSecurityConfig {
+    /// Allowed Origin header values.
+    pub allowed_origins: Vec<String>,
+    /// Bind host. Defaults should be loopback.
+    pub bind_host: String,
+    /// Maximum request payload bytes.
+    pub max_payload_bytes: usize,
+    /// Whether OAuth 2.1 + PKCE is required.
+    pub require_oauth_pkce: bool,
+}
+
+impl Default for McpHttpSecurityConfig {
+    fn default() -> Self {
+        Self {
+            allowed_origins: Vec::new(),
+            bind_host: "127.0.0.1".to_string(),
+            max_payload_bytes: 1_048_576,
+            require_oauth_pkce: true,
+        }
+    }
+}
+
+impl McpHttpSecurityConfig {
+    /// Validate hardened MCP HTTP defaults.
+    pub fn validate(&self) -> AppResult<()> {
+        let is_loopback = matches!(self.bind_host.as_str(), "127.0.0.1" | "::1" | "localhost")
+            || self
+                .bind_host
+                .parse::<std::net::IpAddr>()
+                .is_ok_and(|ip| ip.is_loopback());
+        if !is_loopback && self.allowed_origins.is_empty() {
+            return Err(AppError::invalid_input(
+                "allowed_origins",
+                "non-loopback MCP HTTP endpoints require explicit Origin allow-list",
+            ));
+        }
+        if self.max_payload_bytes == 0 {
+            return Err(AppError::invalid_input(
+                "max_payload_bytes",
+                "payload limit must be greater than zero",
+            ));
+        }
+        Ok(())
+    }
+}

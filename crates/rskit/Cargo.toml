@@ -62,7 +62,13 @@ rskit-discovery     = { version = "0.1.0", path = "../rskit-discovery",     opti
 rskit-testutil      = { version = "0.1.0", path = "../rskit-testutil",      optional = true }
 rskit-sse           = { version = "0.1.0", path = "../rskit-sse",           optional = true }
 rskit-dag           = { version = "0.1.0", path = "../rskit-dag",           optional = true }
+rskit-ai        = { version = "0.1.0", path = "../rskit-ai",        optional = true }
 rskit-llm           = { version = "0.1.0", path = "../rskit-llm",           optional = true }
+rskit-inference     = { version = "0.1.0", path = "../rskit-inference",     optional = true }
+rskit-inference-triton = { version = "0.1.0", path = "../rskit-inference-triton", optional = true }
+rskit-inference-vllm = { version = "0.1.0", path = "../rskit-inference-vllm", optional = true }
+rskit-inference-tgi = { version = "0.1.0", path = "../rskit-inference-tgi", optional = true }
+rskit-skill         = { version = "0.1.0", path = "../rskit-skill",         optional = true }
 rskit-storage       = { version = "0.1.0", path = "../rskit-storage", optional = true }
 rskit-storage-s3    = { version = "0.1.0", path = "../rskit-storage-s3", optional = true }
 rskit-storage-gcs   = { version = "0.1.0", path = "../rskit-storage-gcs", optional = true }
@@ -100,7 +106,14 @@ discovery     = ["dep:rskit-discovery"]
 testutil      = ["dep:rskit-testutil"]
 sse           = ["dep:rskit-sse"]
 dag           = ["dep:rskit-dag"]
-llm           = ["dep:rskit-llm"]
+genai        = ["dep:rskit-ai"]
+llm           = ["genai", "dep:rskit-llm"]
+inference     = ["dep:rskit-inference"]
+inference-triton = ["inference", "dep:rskit-inference-triton"]
+inference-vllm = ["inference", "dep:rskit-inference-vllm"]
+inference-tgi = ["inference", "dep:rskit-inference-tgi"]
+prompt        = ["dep:rskit-ai"]
+skill         = ["dep:rskit-skill"]
 storage       = ["dep:rskit-storage"]
 media         = ["dep:rskit-media", "storage"]
 media-ffmpeg  = ["dep:rskit-media-ffmpeg", "media"]
@@ -118,6 +131,7 @@ test-util     = []
 full          = [
     "server", "grpc", "encryption", "http", "httpclient", "auth", "di", "database", "cache", "messaging",
     "messaging-kafka", "messaging-nats", "messaging-rabbitmq",
-    "observability", "authz", "security", "discovery", "testutil", "sse", "dag", "llm",
-    "media-full", "storage", "cli", "dataset", "bench", "chain", "process", "stateful",
+    "observability", "authz", "security", "discovery", "testutil", "sse", "dag", "genai", "llm",
+    "inference", "inference-triton", "inference-vllm", "inference-tgi",
+    "prompt", "skill", "media-full", "storage", "cli", "dataset", "bench", "chain", "process", "stateful",
 ]

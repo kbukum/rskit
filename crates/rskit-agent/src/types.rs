@@ -1,7 +1,7 @@
 //! Agent result types, events, and context strategies.
 
+use rskit_ai::{FinishReason, StreamEventRef};
 use rskit_errors::AppError;
-use rskit_llm::stream_events::StreamEvent;
 use rskit_llm::types::{AssistantMessage, Message, Usage};
 use rskit_tool::ToolResult;
 use serde::{Deserialize, Serialize};
@@ -17,9 +17,58 @@ pub enum StopReason {
     /// Reached the configured maximum number of turns.
     MaxTurns,
     /// Exceeded the token budget.
-    MaxBudget,
-    /// Aborted by a hook handler.
+    MaxTokens,
+    /// Exceeded the wall-clock budget.
+    WallClockExceeded,
+    /// Exceeded the maximum tool-call budget.
+    MaxToolCallsExceeded,
+    /// The run was cancelled.
+    Cancelled,
+    /// Aborted due to a hook handler, model error, or content filter.
     Aborted,
+}
+
+impl From<FinishReason> for StopReason {
+    fn from(r: FinishReason) -> Self {
+        match r {
+            FinishReason::Length => Self::MaxTokens,
+            FinishReason::Cancelled => Self::Cancelled,
+            FinishReason::Error | FinishReason::ContentFilter => Self::Aborted,
+            // Stop, ToolUse, or any future variant → natural end of turn.
+            _ => Self::EndTurn,
+        }
+    }
+}
+
+// ── AgentLimitError ─────────────────────────────────────────────────────────────
+
+/// Agent limit or cancellation failure with locked precedence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub enum AgentLimitError {
+    /// Parent cancellation wins over all budget failures.
+    Cancelled,
+    /// Wall-clock deadline exceeded.
+    WallClockExceeded,
+    /// Maximum tool-call budget exceeded.
+    MaxToolCallsExceeded,
+    /// Maximum token budget exceeded.
+    MaxTokensExceeded,
+    /// Maximum turn budget exceeded.
+    MaxTurnsExceeded,
+}
+
+impl AgentLimitError {
+    /// Return precedence where larger values win.
+    pub const fn precedence(self) -> u8 {
+        match self {
+            Self::Cancelled => 5,
+            Self::WallClockExceeded => 4,
+            Self::MaxToolCallsExceeded => 3,
+            Self::MaxTokensExceeded => 2,
+            Self::MaxTurnsExceeded => 1,
+        }
+    }
 }
 
 // ── AgentResult ─────────────────────────────────────────────────────────────
@@ -47,7 +96,7 @@ pub enum AgentEvent {
     /// A new turn is starting.
     TurnStart { turn: u32 },
     /// An LLM streaming event was received.
-    LlmStreamEvent { event: StreamEvent },
+    LlmStreamEvent { event: StreamEventRef },
     /// A tool is about to be executed.
     ToolExecuting {
         tool_use_id: String,
@@ -206,6 +255,8 @@ mod tests {
             total_usage: Usage {
                 input_tokens: 10,
                 output_tokens: 20,
+                cached_tokens: 0,
+                reasoning_tokens: 0,
             },
             turn_count: 1,
             stop_reason: StopReason::EndTurn,

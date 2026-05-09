@@ -2,13 +2,17 @@
 
 use std::pin::Pin;
 use std::sync::Arc;
+use std::time::Duration;
 
 use async_stream::stream;
 use futures::Stream;
+use rskit_ai::chat::count_tokens_approx;
 use rskit_errors::AppResult;
-use rskit_hook::{Action, CancellationToken, HookRegistry};
-use rskit_llm::provider::{Provider, count_tokens_approx};
-use rskit_llm::types::{AssistantMessage, CompletionRequest, CompletionResponse, Message, Usage};
+use rskit_hook::{CancellationToken, Event, HookRegistry};
+use rskit_llm::provider::Provider;
+use rskit_llm::types::{
+    AssistantMessage, CompletionRequest, CompletionResponse, Message, ToolDefinition, Usage,
+};
 use rskit_tool::{Context, Registry, ToolResult};
 
 use crate::hooks;
@@ -18,8 +22,6 @@ use crate::types::{AgentEvent, AgentResult, ContextStrategy, FailStrategy, StopR
 
 /// Configuration for an [`Agent`].
 pub struct AgentConfig {
-    /// The LLM provider to use for completions.
-    pub provider: Arc<dyn Provider>,
     /// Optional tool registry.
     pub tools: Option<Arc<Registry>>,
     /// Optional hook registry for lifecycle events.
@@ -29,9 +31,50 @@ pub struct AgentConfig {
     /// Maximum number of turns before the agent stops.
     pub max_turns: u32,
     /// Maximum cumulative token budget (input + output) across all turns.
-    pub max_token_budget: usize,
+    pub max_tokens: usize,
+    /// Maximum wall-clock time for a run.
+    pub wall_clock: Duration,
+    /// Maximum logical tool calls. Retries count as one logical call.
+    pub max_tool_calls: u32,
+    /// Maximum concurrently scheduled tool calls.
+    pub tool_concurrency: usize,
+    /// Per-tool call timeout.
+    pub tool_timeout: Duration,
     /// Strategy for compacting context when it exceeds the provider's limit.
     pub context_strategy: Option<Box<dyn ContextStrategy>>,
+    /// Model identifier to send with each completion request.
+    pub model: String,
+}
+
+impl AgentConfig {
+    /// Return this configuration as shared GenAI budget vocabulary.
+    #[must_use]
+    pub fn budget(&self) -> rskit_ai::Budget {
+        rskit_ai::Budget {
+            max_tokens: Some(self.max_tokens as u64),
+            max_calls: Some(u64::from(self.max_tool_calls)),
+            max_cost: None,
+            wall_clock: Some(self.wall_clock.as_secs()),
+        }
+    }
+}
+
+impl Default for AgentConfig {
+    fn default() -> Self {
+        Self {
+            tools: None,
+            hooks: None,
+            system_prompt: String::new(),
+            max_turns: 10,
+            max_tokens: 100_000,
+            wall_clock: Duration::from_secs(60),
+            max_tool_calls: 50,
+            tool_concurrency: 4,
+            tool_timeout: Duration::from_secs(30),
+            context_strategy: None,
+            model: String::new(),
+        }
+    }
 }
 
 // ── Agent ───────────────────────────────────────────────────────────────────
@@ -39,13 +82,36 @@ pub struct AgentConfig {
 /// A multi-turn agentic loop that drives an LLM provider, executes tool calls,
 /// and emits hook events at each lifecycle point.
 pub struct Agent {
+    provider: Arc<dyn Provider>,
     config: AgentConfig,
 }
 
+fn emit_hook(hooks: &HookRegistry, event: &dyn Event, token: CancellationToken) -> bool {
+    match hooks.emit(event, token.clone()) {
+        Ok(()) => false,
+        Err(error) => {
+            let fatal = error.is_fatal();
+            let _ = hooks.emit(
+                &hooks::OnError {
+                    error: error.to_string(),
+                    source: event.event_type().to_string(),
+                },
+                token,
+            );
+            fatal
+        }
+    }
+}
+
 impl Agent {
-    /// Create a new agent with the given configuration.
-    pub fn new(config: AgentConfig) -> Self {
-        Self { config }
+    /// Create a new agent with the given provider and configuration.
+    pub fn new(provider: Arc<dyn Provider>, config: AgentConfig) -> Self {
+        Self { provider, config }
+    }
+
+    /// Create a new agent with the locked default configuration.
+    pub fn with_defaults(provider: Arc<dyn Provider>) -> Self {
+        Self::new(provider, AgentConfig::default())
     }
 
     /// Run the agent loop synchronously (all turns, no streaming).
@@ -56,33 +122,67 @@ impl Agent {
         let mut total_usage = Usage {
             input_tokens: 0,
             output_tokens: 0,
+            cached_tokens: 0,
+            reasoning_tokens: 0,
         };
         let mut last_assistant = AssistantMessage {
             content: vec![],
             tool_calls: vec![],
             usage: None,
         };
+
+        if self.config.max_tokens == 0 {
+            return Ok(AgentResult {
+                messages: all_messages,
+                final_message: last_assistant,
+                total_usage,
+                turn_count: 0,
+                stop_reason: StopReason::MaxTokens,
+            });
+        }
+
+        let started_at = tokio::time::Instant::now();
+        let mut tool_calls_used = 0_u32;
         let hook_token = CancellationToken::new();
 
         for turn in 0..self.config.max_turns {
+            if started_at.elapsed() >= self.config.wall_clock {
+                return Ok(AgentResult {
+                    messages: all_messages,
+                    final_message: last_assistant,
+                    total_usage,
+                    turn_count: turn,
+                    stop_reason: StopReason::WallClockExceeded,
+                });
+            }
             // ── TurnStart hook ──────────────────────────────────────────
-            if let Some(ref hooks) = self.config.hooks {
-                let result = hooks.emit(&hooks::TurnStart { turn }, hook_token.clone());
-                if result.action == Action::Abort {
-                    return Ok(AgentResult {
-                        messages: all_messages,
-                        final_message: last_assistant,
-                        total_usage,
-                        turn_count: turn,
-                        stop_reason: StopReason::Aborted,
-                    });
-                }
+            if let Some(ref hooks) = self.config.hooks
+                && emit_hook(hooks, &hooks::TurnStart { turn }, hook_token.clone())
+            {
+                return Ok(AgentResult {
+                    messages: all_messages,
+                    final_message: last_assistant,
+                    total_usage,
+                    turn_count: turn,
+                    stop_reason: StopReason::Aborted,
+                });
             }
 
             // ── Build request ───────────────────────────────────────────
-            let tool_defs = self.config.tools.as_ref().map(|t| t.list());
-            let mut request = CompletionRequest {
-                model: self.config.provider.capabilities().model_id.clone(),
+            let tool_defs = self.config.tools.as_ref().map(|registry| {
+                registry
+                    .list()
+                    .into_iter()
+                    .map(|tool| ToolDefinition {
+                        name: tool.name,
+                        description: tool.description,
+                        input_schema: tool.input_schema,
+                        output_schema: tool.output_schema,
+                    })
+                    .collect()
+            });
+            let request = CompletionRequest {
+                model: self.config.model.clone(),
                 messages: all_messages.clone(),
                 max_tokens: None,
                 temperature: None,
@@ -91,57 +191,56 @@ impl Agent {
                 tool_choice: None,
             };
 
-            // ── PreLLMCall hook (allow Modify) ──────────────────────────
-            if let Some(ref hooks) = self.config.hooks {
-                let result = hooks.emit(
+            // ── LLM call hook (observe-only) ──────────────────────────
+            if let Some(ref hooks) = self.config.hooks
+                && emit_hook(
+                    hooks,
                     &hooks::PreLLMCall {
                         request: request.clone(),
                     },
                     hook_token.clone(),
-                );
-                match result.action {
-                    Action::Abort => {
-                        return Ok(AgentResult {
-                            messages: all_messages,
-                            final_message: last_assistant,
-                            total_usage,
-                            turn_count: turn,
-                            stop_reason: StopReason::Aborted,
-                        });
-                    }
-                    Action::Modify => {
-                        if let Some(data) = result.modified_data
-                            && let Some(modified) = data.downcast_ref::<CompletionRequest>()
-                        {
-                            request = modified.clone();
-                        }
-                    }
-                    Action::Continue => {}
-                    _ => {}
-                }
+                )
+            {
+                return Ok(AgentResult {
+                    messages: all_messages,
+                    final_message: last_assistant,
+                    total_usage,
+                    turn_count: turn,
+                    stop_reason: StopReason::Aborted,
+                });
             }
 
             // ── LLM call ────────────────────────────────────────────────
-            let response: CompletionResponse = self.config.provider.complete(request).await?;
+            let response: CompletionResponse = tokio::time::timeout(
+                self.config.wall_clock.saturating_sub(started_at.elapsed()),
+                self.provider.complete(request),
+            )
+            .await
+            .map_err(|_| {
+                rskit_errors::AppError::new(
+                    rskit_errors::ErrorCode::Timeout,
+                    "agent wall-clock budget exceeded",
+                )
+            })??;
 
-            // ── PostLLMCall hook ─────────────────────────────────────────
-            if let Some(ref hooks) = self.config.hooks {
-                let result = hooks.emit(
+            // ── LLM response hook ──────────────────────────────────────
+            if let Some(ref hooks) = self.config.hooks
+                && emit_hook(
+                    hooks,
                     &hooks::PostLLMCall {
                         response: response.clone(),
                         error: None,
                     },
                     hook_token.clone(),
-                );
-                if result.action == Action::Abort {
-                    return Ok(AgentResult {
-                        messages: all_messages,
-                        final_message: response.message,
-                        total_usage,
-                        turn_count: turn + 1,
-                        stop_reason: StopReason::Aborted,
-                    });
-                }
+                )
+            {
+                return Ok(AgentResult {
+                    messages: all_messages,
+                    final_message: response.message,
+                    total_usage,
+                    turn_count: turn + 1,
+                    stop_reason: StopReason::Aborted,
+                });
             }
 
             // Track usage
@@ -158,38 +257,61 @@ impl Agent {
                     final_message: last_assistant,
                     total_usage,
                     turn_count: turn + 1,
-                    stop_reason: StopReason::EndTurn,
+                    stop_reason: StopReason::from(
+                        response
+                            .stop_reason
+                            .unwrap_or(rskit_llm::FinishReason::Stop),
+                    ),
                 });
             }
 
             // ── Execute tool calls ──────────────────────────────────────
             if let Some(ref tools) = self.config.tools {
                 for tc in &response.message.tool_calls {
-                    let input: serde_json::Value = serde_json::from_str(&tc.function.arguments)
-                        .unwrap_or(serde_json::Value::Null);
+                    if tool_calls_used >= self.config.max_tool_calls {
+                        return Ok(AgentResult {
+                            messages: all_messages,
+                            final_message: last_assistant,
+                            total_usage,
+                            turn_count: turn + 1,
+                            stop_reason: StopReason::MaxToolCallsExceeded,
+                        });
+                    }
+                    tool_calls_used += 1;
+                    let input = serde_json::Value::Object(tc.input.clone());
 
-                    // PreToolCall hook
-                    if let Some(ref hooks) = self.config.hooks {
-                        let result = hooks.emit(
+                    // Tool call hook
+                    if let Some(ref hooks) = self.config.hooks
+                        && emit_hook(
+                            hooks,
                             &hooks::PreToolCall {
-                                name: tc.function.name.clone(),
+                                name: tc.name.clone(),
                                 input: input.clone(),
                             },
                             hook_token.clone(),
-                        );
-                        if result.action == Action::Abort {
-                            return Ok(AgentResult {
-                                messages: all_messages,
-                                final_message: last_assistant,
-                                total_usage,
-                                turn_count: turn + 1,
-                                stop_reason: StopReason::Aborted,
-                            });
-                        }
+                        )
+                    {
+                        return Ok(AgentResult {
+                            messages: all_messages,
+                            final_message: last_assistant,
+                            total_usage,
+                            turn_count: turn + 1,
+                            stop_reason: StopReason::Aborted,
+                        });
                     }
 
                     let ctx = Context::new();
-                    let tool_result = tools.call(&tc.function.name, &ctx, input.clone()).await;
+                    let tool_result = tokio::time::timeout(
+                        self.config.tool_timeout,
+                        tools.call(&tc.name, &ctx, input.clone()),
+                    )
+                    .await
+                    .unwrap_or_else(|_| {
+                        Err(rskit_errors::AppError::new(
+                            rskit_errors::ErrorCode::Timeout,
+                            "tool call timed out",
+                        ))
+                    });
 
                     let (result_opt, error_opt): (Option<ToolResult>, Option<String>) =
                         match &tool_result {
@@ -197,11 +319,14 @@ impl Agent {
                             Err(e) => (None, Some(e.to_string())),
                         };
 
-                    // PostToolCall hook
+                    // Tool result hook (observe-only: emission errors are
+                    // logged via emit_hook side effects but cannot abort the
+                    // turn — the tool has already executed).
                     if let Some(ref hooks) = self.config.hooks {
-                        let _ = hooks.emit(
+                        let _ = emit_hook(
+                            hooks,
                             &hooks::PostToolCall {
-                                name: tc.function.name.clone(),
+                                name: tc.name.clone(),
                                 input: input.clone(),
                                 result: result_opt.clone(),
                                 error: error_opt.clone(),
@@ -222,20 +347,22 @@ impl Agent {
 
             // ── Check token budget ──────────────────────────────────────
             let total_tokens = (total_usage.input_tokens + total_usage.output_tokens) as usize;
-            if total_tokens >= self.config.max_token_budget {
+            if total_tokens >= self.config.max_tokens {
                 return Ok(AgentResult {
                     messages: all_messages,
                     final_message: last_assistant,
                     total_usage,
                     turn_count: turn + 1,
-                    stop_reason: StopReason::MaxBudget,
+                    stop_reason: StopReason::MaxTokens,
                 });
             }
 
             // ── Check context size, compact if needed ───────────────────
-            let caps = self.config.provider.capabilities();
+            let caps = self.provider.capabilities();
             let context_tokens = count_tokens_approx(&all_messages);
-            if context_tokens > caps.max_context_tokens && caps.max_context_tokens > 0 {
+            if let Some(max_input_tokens) = caps.max_input_tokens
+                && context_tokens > max_input_tokens as usize
+            {
                 let strategy = self
                     .config
                     .context_strategy
@@ -243,27 +370,27 @@ impl Agent {
                     .map(|s| s.as_ref())
                     .unwrap_or(&FailStrategy as &dyn ContextStrategy);
 
-                all_messages = strategy.compact(all_messages, caps.max_context_tokens)?;
+                all_messages = strategy.compact(all_messages, max_input_tokens as usize)?;
             }
 
-            // ── TurnEnd hook ────────────────────────────────────────────
-            if let Some(ref hooks) = self.config.hooks {
-                let result = hooks.emit(
+            // ── Turn complete hook ─────────────────────────────────────
+            if let Some(ref hooks) = self.config.hooks
+                && emit_hook(
+                    hooks,
                     &hooks::TurnEnd {
                         turn,
                         message: last_assistant.clone(),
                     },
                     hook_token.clone(),
-                );
-                if result.action == Action::Abort {
-                    return Ok(AgentResult {
-                        messages: all_messages,
-                        final_message: last_assistant,
-                        total_usage,
-                        turn_count: turn + 1,
-                        stop_reason: StopReason::Aborted,
-                    });
-                }
+                )
+            {
+                return Ok(AgentResult {
+                    messages: all_messages,
+                    final_message: last_assistant,
+                    total_usage,
+                    turn_count: turn + 1,
+                    stop_reason: StopReason::Aborted,
+                });
             }
         }
 
@@ -290,7 +417,7 @@ impl Agent {
                         yield AgentEvent::TurnComplete {
                             turn,
                             message: result.final_message.clone(),
-                            usage: result.total_usage.clone(),
+                            usage: result.total_usage,
                         };
                     }
                     yield AgentEvent::Complete { result };
@@ -308,10 +435,10 @@ mod tests {
     use super::*;
     use async_trait::async_trait;
     use futures::StreamExt;
+    use rskit_ai::Capabilities;
+    use rskit_ai::StreamEventRef;
     use rskit_errors::AppError;
-    use rskit_hook::HookResult;
-    use rskit_llm::provider::Capabilities;
-    use rskit_llm::stream_events::StreamEvent;
+    use rskit_hook::HookError;
     use rskit_llm::types;
     use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -341,9 +468,18 @@ mod tests {
                 usage: Usage {
                     input_tokens: 10,
                     output_tokens: 5,
+                    cached_tokens: 0,
+                    reasoning_tokens: 0,
                 },
-                stop_reason: Some(rskit_llm::StopReason::EndTurn),
+                stop_reason: Some(rskit_llm::FinishReason::Stop),
             }])
+        }
+    }
+
+    #[async_trait]
+    impl rskit_provider::Provider for MockProvider {
+        fn name(&self) -> &'static str {
+            "mock"
         }
     }
 
@@ -365,17 +501,16 @@ mod tests {
         async fn stream(
             &self,
             _request: CompletionRequest,
-        ) -> Result<Pin<Box<dyn Stream<Item = StreamEvent> + Send>>, AppError> {
+        ) -> Result<Pin<Box<dyn Stream<Item = StreamEventRef> + Send>>, AppError> {
             Ok(Box::pin(futures::stream::empty()))
         }
 
         fn capabilities(&self) -> Capabilities {
             Capabilities {
-                supports_tools: true,
-                supports_streaming: false,
-                max_context_tokens: 128_000,
-                max_output_tokens: 4_096,
-                model_id: "mock".to_string(),
+                tool_use: true,
+                streaming: false,
+                max_input_tokens: Some(128_000),
+                max_output_tokens: Some(4_096),
                 ..Default::default()
             }
         }
@@ -390,15 +525,22 @@ mod tests {
     #[tokio::test]
     async fn test_agent_simple_completion() {
         let provider = Arc::new(MockProvider::single_text("Hello!"));
-        let agent = Agent::new(AgentConfig {
+        let agent = Agent::new(
             provider,
-            tools: None,
-            hooks: None,
-            system_prompt: "You are helpful.".to_string(),
-            max_turns: 5,
-            max_token_budget: 100_000,
-            context_strategy: None,
-        });
+            AgentConfig {
+                tools: None,
+                hooks: None,
+                system_prompt: "You are helpful.".to_string(),
+                max_turns: 5,
+                max_tokens: 100_000,
+                wall_clock: Duration::from_secs(60),
+                max_tool_calls: 50,
+                tool_concurrency: 4,
+                tool_timeout: Duration::from_secs(30),
+                context_strategy: None,
+                model: String::new(),
+            },
+        );
 
         let result = agent.run(vec![types::user("Hi")]).await.unwrap();
         assert_eq!(result.turn_count, 1);
@@ -413,13 +555,10 @@ mod tests {
         let tool_call_response = CompletionResponse {
             message: AssistantMessage {
                 content: vec![],
-                tool_calls: vec![rskit_llm::ToolCall {
+                tool_calls: vec![rskit_llm::ToolUseBlock {
                     id: "tc_1".to_string(),
-                    call_type: "function".to_string(),
-                    function: rskit_llm::FunctionCall {
-                        name: "test_tool".to_string(),
-                        arguments: r#"{"x": 1}"#.to_string(),
-                    },
+                    name: "test_tool".to_string(),
+                    input: serde_json::json!({"x": 1}).as_object().cloned().unwrap(),
                 }],
                 usage: None,
             },
@@ -427,22 +566,31 @@ mod tests {
             usage: Usage {
                 input_tokens: 5,
                 output_tokens: 5,
+                cached_tokens: 0,
+                reasoning_tokens: 0,
             },
-            stop_reason: Some(rskit_llm::StopReason::ToolUse),
+            stop_reason: Some(rskit_llm::FinishReason::ToolUse),
         };
 
         let provider = Arc::new(MockProvider::new(vec![tool_call_response]));
 
         // No tools registered → tool calls will fail, but loop continues
-        let agent = Agent::new(AgentConfig {
+        let agent = Agent::new(
             provider,
-            tools: None,
-            hooks: None,
-            system_prompt: "sys".to_string(),
-            max_turns: 3,
-            max_token_budget: 100_000,
-            context_strategy: None,
-        });
+            AgentConfig {
+                tools: None,
+                hooks: None,
+                system_prompt: "sys".to_string(),
+                max_turns: 3,
+                max_tokens: 100_000,
+                wall_clock: Duration::from_secs(60),
+                max_tool_calls: 50,
+                tool_concurrency: 4,
+                tool_timeout: Duration::from_secs(30),
+                context_strategy: None,
+                model: String::new(),
+            },
+        );
 
         let result = agent.run(vec![types::user("go")]).await.unwrap();
         assert_eq!(result.turn_count, 3);
@@ -476,13 +624,13 @@ mod tests {
         let tool_call_resp = CompletionResponse {
             message: AssistantMessage {
                 content: vec![],
-                tool_calls: vec![rskit_llm::ToolCall {
+                tool_calls: vec![rskit_llm::ToolUseBlock {
                     id: "tc_1".to_string(),
-                    call_type: "function".to_string(),
-                    function: rskit_llm::FunctionCall {
-                        name: "add".to_string(),
-                        arguments: r#"{"a": 2, "b": 3}"#.to_string(),
-                    },
+                    name: "add".to_string(),
+                    input: serde_json::json!({"a": 2, "b": 3})
+                        .as_object()
+                        .cloned()
+                        .unwrap(),
                 }],
                 usage: None,
             },
@@ -490,8 +638,10 @@ mod tests {
             usage: Usage {
                 input_tokens: 10,
                 output_tokens: 5,
+                cached_tokens: 0,
+                reasoning_tokens: 0,
             },
-            stop_reason: Some(rskit_llm::StopReason::ToolUse),
+            stop_reason: Some(rskit_llm::FinishReason::ToolUse),
         };
 
         // Second call: model returns final text
@@ -505,21 +655,30 @@ mod tests {
             usage: Usage {
                 input_tokens: 15,
                 output_tokens: 8,
+                cached_tokens: 0,
+                reasoning_tokens: 0,
             },
-            stop_reason: Some(rskit_llm::StopReason::EndTurn),
+            stop_reason: Some(rskit_llm::FinishReason::Stop),
         };
 
         let provider = Arc::new(MockProvider::new(vec![tool_call_resp, final_resp]));
 
-        let agent = Agent::new(AgentConfig {
+        let agent = Agent::new(
             provider,
-            tools: Some(registry),
-            hooks: None,
-            system_prompt: "You are a calculator.".to_string(),
-            max_turns: 5,
-            max_token_budget: 100_000,
-            context_strategy: None,
-        });
+            AgentConfig {
+                tools: Some(registry),
+                hooks: None,
+                system_prompt: "You are a calculator.".to_string(),
+                max_turns: 5,
+                max_tokens: 100_000,
+                wall_clock: Duration::from_secs(60),
+                max_tool_calls: 50,
+                tool_concurrency: 4,
+                tool_timeout: Duration::from_secs(30),
+                context_strategy: None,
+                model: String::new(),
+            },
+        );
 
         let result = agent.run(vec![types::user("What is 2+3?")]).await.unwrap();
         assert_eq!(result.turn_count, 2);
@@ -534,13 +693,10 @@ mod tests {
         let tool_call_response = CompletionResponse {
             message: AssistantMessage {
                 content: vec![],
-                tool_calls: vec![rskit_llm::ToolCall {
+                tool_calls: vec![rskit_llm::ToolUseBlock {
                     id: "tc_1".to_string(),
-                    call_type: "function".to_string(),
-                    function: rskit_llm::FunctionCall {
-                        name: "noop".to_string(),
-                        arguments: "{}".to_string(),
-                    },
+                    name: "noop".to_string(),
+                    input: serde_json::Map::new(),
                 }],
                 usage: None,
             },
@@ -548,48 +704,96 @@ mod tests {
             usage: Usage {
                 input_tokens: 50,
                 output_tokens: 50,
+                cached_tokens: 0,
+                reasoning_tokens: 0,
             },
-            stop_reason: Some(rskit_llm::StopReason::ToolUse),
+            stop_reason: Some(rskit_llm::FinishReason::ToolUse),
         };
 
         let provider = Arc::new(MockProvider::new(vec![tool_call_response]));
 
-        let agent = Agent::new(AgentConfig {
+        let agent = Agent::new(
             provider,
-            tools: None,
-            hooks: None,
-            system_prompt: "sys".to_string(),
-            max_turns: 100,
-            max_token_budget: 80, // Budget of 80 tokens total
-            context_strategy: None,
-        });
+            AgentConfig {
+                tools: None,
+                hooks: None,
+                system_prompt: "sys".to_string(),
+                max_turns: 100,
+                max_tokens: 80, // Budget of 80 tokens total
+                wall_clock: Duration::from_secs(60),
+                max_tool_calls: 50,
+                tool_concurrency: 4,
+                tool_timeout: Duration::from_secs(30),
+                context_strategy: None,
+                model: String::new(),
+            },
+        );
 
         let result = agent.run(vec![types::user("go")]).await.unwrap();
-        assert!(matches!(result.stop_reason, StopReason::MaxBudget));
+        assert!(matches!(result.stop_reason, StopReason::MaxTokens));
     }
 
     #[tokio::test]
-    async fn test_agent_hook_abort() {
+    async fn test_agent_hook_fatal_error_stops() {
         let provider = Arc::new(MockProvider::single_text("Hello"));
         let hooks = Arc::new(HookRegistry::new());
 
         let _unsub = hooks.on(crate::turn_start_type(), |_, _| {
-            HookResult::abort("blocked by policy")
+            Err(HookError::fatal("blocked by policy"))
         });
 
-        let agent = Agent::new(AgentConfig {
+        let agent = Agent::new(
             provider,
-            tools: None,
-            hooks: Some(hooks),
-            system_prompt: "sys".to_string(),
-            max_turns: 5,
-            max_token_budget: 100_000,
-            context_strategy: None,
-        });
+            AgentConfig {
+                tools: None,
+                hooks: Some(hooks),
+                system_prompt: "sys".to_string(),
+                max_turns: 5,
+                max_tokens: 100_000,
+                wall_clock: Duration::from_secs(60),
+                max_tool_calls: 50,
+                tool_concurrency: 4,
+                tool_timeout: Duration::from_secs(30),
+                context_strategy: None,
+                model: String::new(),
+            },
+        );
 
         let result = agent.run(vec![types::user("hi")]).await.unwrap();
         assert!(matches!(result.stop_reason, StopReason::Aborted));
         assert_eq!(result.turn_count, 0);
+    }
+
+    #[tokio::test]
+    async fn hook_observes_request_without_mutation_surface() {
+        let provider = Arc::new(MockProvider::single_text("done"));
+        let hooks = Arc::new(HookRegistry::new());
+        let observed = Arc::new(AtomicU32::new(0));
+        let observed_clone = Arc::clone(&observed);
+
+        let _unsub = hooks.on(crate::pre_llm_call_type(), move |_, event| {
+            let call = event
+                .as_any()
+                .downcast_ref::<crate::hooks::PreLLMCall>()
+                .expect("pre LLM call event");
+            assert_eq!(call.request.model, "test-model");
+            observed_clone.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        });
+
+        let agent = Agent::new(
+            provider,
+            AgentConfig {
+                hooks: Some(hooks),
+                system_prompt: "sys".to_string(),
+                model: "test-model".to_string(),
+                ..AgentConfig::default()
+            },
+        );
+
+        let result = agent.run(vec![types::user("hi")]).await.unwrap();
+        assert!(matches!(result.stop_reason, StopReason::EndTurn));
+        assert_eq!(observed.load(Ordering::SeqCst), 1);
     }
 
     #[tokio::test]
@@ -603,24 +807,31 @@ mod tests {
         let pc = pre_count.clone();
         let _unsub1 = hooks.on(crate::pre_llm_call_type(), move |_, _| {
             pc.fetch_add(1, Ordering::SeqCst);
-            HookResult::ok()
+            Ok(())
         });
 
         let poc = post_count.clone();
         let _unsub2 = hooks.on(crate::post_llm_call_type(), move |_, _| {
             poc.fetch_add(1, Ordering::SeqCst);
-            HookResult::ok()
+            Ok(())
         });
 
-        let agent = Agent::new(AgentConfig {
+        let agent = Agent::new(
             provider,
-            tools: None,
-            hooks: Some(hooks),
-            system_prompt: "sys".to_string(),
-            max_turns: 5,
-            max_token_budget: 100_000,
-            context_strategy: None,
-        });
+            AgentConfig {
+                tools: None,
+                hooks: Some(hooks),
+                system_prompt: "sys".to_string(),
+                max_turns: 5,
+                max_tokens: 100_000,
+                wall_clock: Duration::from_secs(60),
+                max_tool_calls: 50,
+                tool_concurrency: 4,
+                tool_timeout: Duration::from_secs(30),
+                context_strategy: None,
+                model: String::new(),
+            },
+        );
 
         agent.run(vec![types::user("hi")]).await.unwrap();
         assert_eq!(pre_count.load(Ordering::SeqCst), 1);
@@ -630,15 +841,22 @@ mod tests {
     #[tokio::test]
     async fn test_agent_stream() {
         let provider = Arc::new(MockProvider::single_text("streamed"));
-        let agent = Agent::new(AgentConfig {
+        let agent = Agent::new(
             provider,
-            tools: None,
-            hooks: None,
-            system_prompt: "sys".to_string(),
-            max_turns: 5,
-            max_token_budget: 100_000,
-            context_strategy: None,
-        });
+            AgentConfig {
+                tools: None,
+                hooks: None,
+                system_prompt: "sys".to_string(),
+                max_turns: 5,
+                max_tokens: 100_000,
+                wall_clock: Duration::from_secs(60),
+                max_tool_calls: 50,
+                tool_concurrency: 4,
+                tool_timeout: Duration::from_secs(30),
+                context_strategy: None,
+                model: String::new(),
+            },
+        );
 
         let stream = agent.stream(vec![types::user("hi")]);
         let events: Vec<AgentEvent> = stream.collect().await;

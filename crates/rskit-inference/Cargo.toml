@@ -1,25 +1,35 @@
 [package]
 name        = "rskit-inference"
-description = "Inference provider abstractions for LLM chat completions"
-version.workspace     = true
-edition.workspace     = true
-license.workspace     = true
+description = "Model-serving runtime inference abstractions and registry"
+version.workspace      = true
+edition.workspace      = true
+license.workspace      = true
 rust-version.workspace = true
 authors.workspace      = true
 repository.workspace   = true
 homepage.workspace     = true
 documentation = "https://docs.rs/rskit-inference"
+readme = "README.md"
 categories = ["api-bindings"]
-keywords   = ["inference", "llm", "openai", "ai"]
+keywords   = ["inference", "serving", "triton", "vllm", "ai"]
 
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
+rskit-ai = { workspace = true }
 rskit-errors = { path = "../rskit-errors" }
+rskit-tool   = { path = "../rskit-tool" }
+rskit-httpclient = { path = "../rskit-httpclient" }
 serde        = { workspace = true }
 serde_json   = { workspace = true }
 async-trait  = { workspace = true }
-tracing      = { workspace = true }
+bytes        = { workspace = true, features = ["serde"] }
 reqwest      = { workspace = true }
+thiserror    = { workspace = true }
+tokio-stream = { workspace = true }
+uuid         = { version = "1", features = ["v7"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }

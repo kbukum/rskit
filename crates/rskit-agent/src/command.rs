@@ -58,9 +58,17 @@ impl CommandRegistry {
         }
     }
 
-    /// Register a command.  Overwrites any existing command with the same name.
-    pub fn register(&mut self, cmd: Command) {
+    /// Register a command. Returns an error if the name is empty.
+    /// Overwrites any existing command with the same name.
+    pub fn register(&mut self, cmd: Command) -> Result<(), AppError> {
+        if cmd.name.trim().is_empty() {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                "command name must not be empty",
+            ));
+        }
         self.commands.insert(cmd.name.clone(), cmd);
+        Ok(())
     }
 
     /// Look up a command by name (without the leading `/`).
@@ -125,7 +133,7 @@ impl CommandRegistry {
 ///
 /// These handlers return descriptive strings; the caller is responsible for
 /// hooking them into actual agent behaviour.
-pub fn register_builtins(registry: &mut CommandRegistry) {
+pub fn register_builtins(registry: &mut CommandRegistry) -> Result<(), AppError> {
     registry.register(Command {
         name: "help".to_string(),
         description: "List available commands".to_string(),
@@ -135,7 +143,7 @@ pub fn register_builtins(registry: &mut CommandRegistry) {
                 Use /help <command> for details."
                 .to_string())
         }),
-    });
+    })?;
 
     registry.register(Command {
         name: "clear".to_string(),
@@ -144,7 +152,7 @@ pub fn register_builtins(registry: &mut CommandRegistry) {
         handler: Box::new(|_args: &str| -> Result<String, AppError> {
             Ok("Conversation history cleared.".to_string())
         }),
-    });
+    })?;
 
     registry.register(Command {
         name: "model".to_string(),
@@ -157,7 +165,7 @@ pub fn register_builtins(registry: &mut CommandRegistry) {
                 Ok(format!("Model switched to: {args}"))
             }
         }),
-    });
+    })?;
 
     registry.register(Command {
         name: "compact".to_string(),
@@ -166,7 +174,8 @@ pub fn register_builtins(registry: &mut CommandRegistry) {
         handler: Box::new(|_args: &str| -> Result<String, AppError> {
             Ok("Context compacted.".to_string())
         }),
-    });
+    })?;
+    Ok(())
 }
 
 // ── Tests ───────────────────────────────────────────────────────────────────
@@ -212,7 +221,8 @@ mod tests {
             description: "Ping".to_string(),
             usage: "/ping".to_string(),
             handler: Box::new(|_: &str| Ok("pong".to_string())),
-        });
+        })
+        .unwrap();
         assert!(reg.get("ping").is_some());
         assert!(reg.get("missing").is_none());
     }
@@ -226,7 +236,8 @@ mod tests {
                 description: String::new(),
                 usage: String::new(),
                 handler: Box::new(|_: &str| Ok(String::new())),
-            });
+            })
+            .unwrap();
         }
         let names: Vec<&str> = reg.list().iter().map(|c| c.name.as_str()).collect();
         assert_eq!(names, vec!["alpha", "mid", "zebra"]);
@@ -240,7 +251,8 @@ mod tests {
             description: "Echo args".to_string(),
             usage: "/echo <text>".to_string(),
             handler: Box::new(|args: &str| Ok(format!("echo: {args}"))),
-        });
+        })
+        .unwrap();
         let result = reg.execute("/echo hello world").unwrap();
         assert_eq!(result, "echo: hello world");
     }
@@ -255,7 +267,7 @@ mod tests {
     #[test]
     fn test_builtins() {
         let mut reg = CommandRegistry::new();
-        register_builtins(&mut reg);
+        register_builtins(&mut reg).unwrap();
 
         assert!(reg.get("help").is_some());
         assert!(reg.get("clear").is_some());

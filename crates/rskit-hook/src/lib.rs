@@ -10,4 +10,4 @@ pub mod types;
 pub use registry::HookRegistry;
 pub use registry::HookRegistry as Registry;
 pub use tokio_util::sync::CancellationToken;
-pub use types::{Action, Event, EventType, HookHandler, HookResult};
+pub use types::{Event, EventType, HookError, HookHandler, HookResult};

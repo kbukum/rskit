@@ -3436,6 +3436,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "libyml"
+version = "0.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3302702afa434ffa30847a83305f0a69d6abd74293b6554c18ec85c7ef30c980"
+dependencies = [
+ "anyhow",
+ "version_check",
+]
+
+[[package]]
 name = "libz-sys"
 version = "1.1.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5125,19 +5135,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e12ca9067b5ebfbd5b3fcdc4acfceb81aa7d5ab2a879dff7cb75d22434276aad"
 dependencies = [
  "async-trait",
+ "bytes",
  "chrono",
  "futures",
+ "http 1.4.0",
+ "http-body 1.0.1",
+ "http-body-util",
  "pastey 0.2.2",
  "pin-project-lite",
  "process-wrap",
+ "rand 0.10.1",
  "schemars 1.2.1",
  "serde",
  "serde_json",
+ "sse-stream",
  "thiserror 2.0.18",
  "tokio",
  "tokio-stream",
  "tokio-util",
+ "tower-service",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -5168,6 +5186,7 @@ dependencies = [
  "dashmap",
  "futures",
  "parking_lot",
+ "rskit-ai",
  "rskit-auth",
  "rskit-authz",
  "rskit-bench",
@@ -5187,6 +5206,10 @@ dependencies = [
  "rskit-grpc",
  "rskit-http",
  "rskit-httpclient",
+ "rskit-inference",
+ "rskit-inference-tgi",
+ "rskit-inference-triton",
+ "rskit-inference-vllm",
  "rskit-llm",
  "rskit-logging",
  "rskit-media",
@@ -5203,6 +5226,7 @@ dependencies = [
  "rskit-resilience",
  "rskit-security",
  "rskit-server",
+ "rskit-skill",
  "rskit-sse",
  "rskit-stateful",
  "rskit-storage",
@@ -5223,15 +5247,30 @@ dependencies = [
  "async-stream",
  "async-trait",
  "futures",
+ "rskit-ai",
  "rskit-errors",
  "rskit-hook",
  "rskit-llm",
+ "rskit-provider",
  "rskit-tool",
  "schemars 1.2.1",
  "serde",
  "serde_json",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "rskit-ai"
+version = "0.1.0"
+dependencies = [
+ "rskit-errors",
+ "rskit-util",
+ "rskit-version",
+ "semver",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -5457,9 +5496,12 @@ name = "rskit-embedding"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "rskit-ai",
  "rskit-errors",
+ "rskit-provider",
  "serde",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -5487,18 +5529,6 @@ dependencies = [
  "thiserror 2.0.18",
  "tonic 0.14.5",
  "tracing",
-]
-
-[[package]]
-name = "rskit-explain"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "rskit-errors",
- "rskit-llm",
- "serde",
- "serde_json",
- "tokio",
 ]
 
 [[package]]
@@ -5581,11 +5611,77 @@ name = "rskit-inference"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "bytes",
  "reqwest 0.13.3",
+ "rskit-ai",
  "rskit-errors",
+ "rskit-httpclient",
+ "rskit-tool",
  "serde",
  "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-stream",
+ "uuid",
+]
+
+[[package]]
+name = "rskit-inference-tgi"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "reqwest 0.13.3",
+ "rskit-ai",
+ "rskit-component",
+ "rskit-errors",
+ "rskit-inference",
+ "rskit-tool",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-stream",
+]
+
+[[package]]
+name = "rskit-inference-triton"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "base64",
+ "bytes",
+ "reqwest 0.13.3",
+ "rskit-ai",
+ "rskit-authz",
+ "rskit-component",
+ "rskit-errors",
+ "rskit-inference",
+ "rskit-observability",
+ "rskit-resilience",
+ "rskit-tool",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
  "tracing",
+ "uuid",
+ "wiremock",
+]
+
+[[package]]
+name = "rskit-inference-vllm"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "reqwest 0.13.3",
+ "rskit-ai",
+ "rskit-component",
+ "rskit-errors",
+ "rskit-inference",
+ "rskit-tool",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-stream",
 ]
 
 [[package]]
@@ -5618,25 +5714,12 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "futures",
+ "parking_lot",
+ "rskit-ai",
+ "rskit-component",
  "rskit-errors",
  "rskit-llm-providers",
- "rskit-llm-traits",
- "rskit-tool",
- "serde",
- "serde_json",
- "tokio",
-]
-
-[[package]]
-name = "rskit-llm-providers"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "reqwest 0.13.3",
- "rskit-embedding",
- "rskit-errors",
- "rskit-httpclient",
- "rskit-llm",
+ "rskit-provider",
  "serde",
  "serde_json",
  "tokio",
@@ -5644,11 +5727,25 @@ dependencies = [
 ]
 
 [[package]]
-name = "rskit-llm-traits"
+name = "rskit-llm-providers"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "opentelemetry",
+ "reqwest 0.13.3",
+ "rskit-ai",
+ "rskit-component",
+ "rskit-embedding",
+ "rskit-errors",
+ "rskit-httpclient",
+ "rskit-llm",
+ "rskit-provider",
+ "rskit-resilience",
  "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-opentelemetry",
 ]
 
 [[package]]
@@ -5673,15 +5770,21 @@ name = "rskit-mcp"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "parking_lot",
  "rmcp",
+ "rskit-authz",
  "rskit-errors",
  "rskit-schema",
+ "rskit-skill",
  "rskit-tool",
  "schemars 1.2.1",
  "serde",
  "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
  "tokio",
  "tracing",
+ "url",
 ]
 
 [[package]]
@@ -5961,6 +6064,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "rskit-skill"
+version = "0.1.0"
+dependencies = [
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "serde_yml",
+ "sha2 0.10.9",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "rskit-sse"
 version = "0.1.0"
 dependencies = [
@@ -6056,6 +6171,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "parking_lot",
+ "rskit-ai",
  "rskit-errors",
  "rskit-schema",
  "schemars 1.2.1",
@@ -6488,6 +6604,10 @@ name = "semver"
 version = "1.0.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a7852d02fc848982e0c167ef163aaff9cd91dc640ba85e263cb1ce46fae51cd"
+dependencies = [
+ "serde",
+ "serde_core",
+]
 
 [[package]]
 name = "serde"
@@ -6624,6 +6744,21 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "serde_yml"
+version = "0.0.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "59e2dd588bf1597a252c3b920e0143eb99b0f76e4e082f4c92ce34fbc9e71ddd"
+dependencies = [
+ "indexmap 2.14.0",
+ "itoa",
+ "libyml",
+ "memchr",
+ "ryu",
+ "serde",
+ "version_check",
 ]
 
 [[package]]
@@ -7040,6 +7175,19 @@ dependencies = [
  "tracing",
  "url",
  "uuid",
+]
+
+[[package]]
+name = "sse-stream"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f3962b63f038885f15bce2c6e02c0e7925c072f1ac86bb60fd44c5c6b762fb72"
+dependencies = [
+ "bytes",
+ "futures-util",
+ "http-body 1.0.1",
+ "http-body-util",
+ "pin-project-lite",
 ]
 
 [[package]]

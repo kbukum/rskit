@@ -1,147 +1,161 @@
-//! Provider trait — the core abstraction over LLM backends.
+//! Provider trait — the canonical abstraction over LLM backends.
 //!
-//! [`Provider`] extends the existing [`LlmProvider`](crate::LlmProvider) with
-//! streaming, capability introspection, and token counting.
+//! Per locked decision D6, this is the *single* full LLM provider trait. The
+//! split `LlmProvider`/`Provider` shape was collapsed: implementors only need
+//! to supply [`Provider::complete`] (and optionally override the defaults for
+//! `stream`, `capabilities`, and `count_tokens`).
+//!
+//! Per locked decision D7, the trait extends `rskit_provider::Provider` so any
+//! LLM provider is natively usable in `dag`, `pipeline`, `chain`, `worker`,
+//! and `process` consumers without adapter shims.
 
 use std::pin::Pin;
+use std::sync::Arc;
 
 use async_trait::async_trait;
-use futures::Stream;
-use rskit_errors::AppError;
-use serde::{Deserialize, Serialize};
+use futures::Stream as FutStream;
+use rskit_ai::chat::{Message, count_tokens_approx};
+use rskit_ai::{
+    Capabilities, FinishReason, MessageStart, MessageStop, Role, StreamEventRef, TextDelta,
+    UsageDelta, text_of,
+};
+use rskit_errors::{AppError, AppResult};
 
-use crate::stream_events::StreamEvent;
-use crate::types::{CompletionRequest, CompletionResponse, ContentBlock, Message};
-
-// ── Capabilities ────────────────────────────────────────────────────────────
-
-/// Describes the features a provider / model supports.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct Capabilities {
-    /// Whether the model supports tool / function calling.
-    pub supports_tools: bool,
-    /// Whether the model accepts image content blocks.
-    pub supports_vision: bool,
-    /// Whether the model emits thinking / chain-of-thought blocks.
-    pub supports_thinking: bool,
-    /// Whether the provider supports streaming responses.
-    pub supports_streaming: bool,
-    /// Maximum input context window in tokens.
-    pub max_context_tokens: usize,
-    /// Maximum output tokens the model can generate.
-    pub max_output_tokens: usize,
-    /// The underlying model identifier (e.g. `"gpt-4o"`).
-    pub model_id: String,
-}
-
-// ── Provider trait ──────────────────────────────────────────────────────────
+use crate::types::{CompletionRequest, CompletionResponse};
 
 /// A fully-featured LLM provider with streaming and capability introspection.
+///
+/// The only method an adapter MUST implement is [`Provider::complete`] plus
+/// [`rskit_provider::Provider::name`], which returns a `&'static str`. The
+/// default [`Provider::stream`] synthesizes a
+/// four-event sequence (`message.start` → `text.delta` → `usage.delta` →
+/// `message.stop`) by awaiting `complete`. Adapters whose backend supports
+/// native streaming SHOULD override `stream` to emit incremental events.
+///
+/// # D7 — Native provider shape
+///
+/// This trait requires `rskit_provider::Provider` as supertrait, so every
+/// `llm::Provider` carries the canonical identity/availability contract.
+/// Consumers that need the `RequestResponse` or `Stream` shapes can use the
+/// [`LlmRequestResponse`] and [`LlmStream`] wrapper types which forward to
+/// `complete` and `stream` respectively.
 #[async_trait]
-pub trait Provider: Send + Sync {
+pub trait Provider: rskit_provider::Provider {
     /// Send a chat completion request and return the full response.
     async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse, AppError>;
 
-    /// Stream a chat completion as a series of [`StreamEvent`]s.
+    /// Stream a chat completion as a series of stream event objects.
+    ///
+    /// Default impl synthesizes events from [`Provider::complete`] for
+    /// adapters whose backend has no native streaming endpoint.
     async fn stream(
         &self,
         request: CompletionRequest,
-    ) -> Result<Pin<Box<dyn Stream<Item = StreamEvent> + Send>>, AppError>;
+    ) -> Result<Pin<Box<dyn FutStream<Item = StreamEventRef> + Send>>, AppError> {
+        let resp = self.complete(request).await?;
+        let text = text_of(&resp.message.content);
+        let model = resp.model.clone();
+        let usage = resp.usage;
+        let finish_reason = resp.stop_reason.unwrap_or(FinishReason::Stop);
+        let mut events: Vec<StreamEventRef> = Vec::with_capacity(4);
+        events.push(Arc::new(MessageStart {
+            role: Role::Assistant,
+            model,
+            request_id: None,
+        }));
+        if !text.is_empty() {
+            events.push(Arc::new(TextDelta { text }));
+        }
+        events.push(Arc::new(UsageDelta { usage }));
+        events.push(Arc::new(MessageStop { finish_reason }));
+        Ok(Box::pin(futures::stream::iter(events)))
+    }
 
-    /// Describe what this provider / model supports.
-    fn capabilities(&self) -> Capabilities;
+    /// Describe what this provider / model supports. Default returns an
+    /// empty [`Capabilities`]; adapters SHOULD override to advertise tool use,
+    /// streaming, vision, etc.
+    fn capabilities(&self) -> Capabilities {
+        Capabilities::default()
+    }
 
-    /// Estimate the number of tokens consumed by the given messages.
-    fn count_tokens(&self, messages: &[Message]) -> usize;
+    /// Estimate the number of tokens consumed by the given messages. Default
+    /// uses the shared whitespace-based approximation from `rskit_ai::chat`.
+    fn count_tokens(&self, messages: &[Message]) -> usize {
+        count_tokens_approx(messages)
+    }
 }
 
-// ── Approximate token counter ───────────────────────────────────────────────
+/// Adapter wrapping an `llm::Provider` as `provider::RequestResponse<CompletionRequest, CompletionResponse>`.
+///
+/// Use this to plug an LLM provider directly into pipeline/dag/chain consumers.
+pub struct LlmRequestResponse<P: Provider>(pub Arc<P>);
 
-/// Rough token estimator (~4 chars per token) for providers that lack a
-/// dedicated tokenizer.
-pub fn count_tokens_approx(messages: &[Message]) -> usize {
-    let total_chars: usize = messages
-        .iter()
-        .map(|m| match m {
-            Message::User(u) => content_blocks_len(&u.content),
-            Message::Assistant(a) => content_blocks_len(&a.content),
-            Message::ToolResult(t) => t.content.len(),
-            Message::System(s) => s.content.len(),
-        })
-        .sum();
-
-    // Roughly 4 characters per token.
-    total_chars / 4
+#[async_trait]
+impl<P: Provider + 'static> rskit_provider::Provider for LlmRequestResponse<P> {
+    fn name(&self) -> &'static str {
+        self.0.name()
+    }
 }
 
-fn content_blocks_len(blocks: &[ContentBlock]) -> usize {
-    blocks
-        .iter()
-        .map(|b| match b {
-            ContentBlock::Text { text } => text.len(),
-            ContentBlock::Thinking { text } => text.len(),
-            ContentBlock::ToolUse { input, .. } => input.to_string().len(),
-            ContentBlock::ToolResult { content, .. } => content.len(),
-            ContentBlock::Image { .. } => 256, // rough estimate for images
-        })
-        .sum()
+#[async_trait]
+impl<P: Provider + 'static> rskit_provider::RequestResponse<CompletionRequest, CompletionResponse>
+    for LlmRequestResponse<P>
+{
+    async fn execute(&self, input: CompletionRequest) -> AppResult<CompletionResponse> {
+        self.0.complete(input).await
+    }
+}
+
+/// Type alias for the provider-shaped boxed stream (mirrors `rskit_provider::traits::BoxStream`).
+type ProviderBoxStream<O> = Pin<Box<dyn FutStream<Item = AppResult<O>> + Send + 'static>>;
+
+/// Adapter wrapping an `llm::Provider` as `provider::Stream<CompletionRequest, StreamEventRef>`.
+///
+/// Use this to plug an LLM provider's streaming into pipeline/dag consumers.
+pub struct LlmStream<P: Provider>(pub Arc<P>);
+
+#[async_trait]
+impl<P: Provider + 'static> rskit_provider::Provider for LlmStream<P> {
+    fn name(&self) -> &'static str {
+        self.0.name()
+    }
+}
+
+#[async_trait]
+impl<P: Provider + 'static> rskit_provider::Stream<CompletionRequest, StreamEventRef>
+    for LlmStream<P>
+{
+    async fn stream(
+        &self,
+        input: CompletionRequest,
+    ) -> AppResult<ProviderBoxStream<StreamEventRef>> {
+        use futures::StreamExt;
+        let raw = Provider::stream(&*self.0, input).await?;
+        Ok(Box::pin(raw.map(Ok)))
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{self, Usage};
+    use crate::{self as llm, types};
     use futures::StreamExt;
 
     #[test]
     fn test_capabilities_default() {
         let cap = Capabilities::default();
-        assert!(!cap.supports_tools);
-        assert!(!cap.supports_vision);
-        assert!(!cap.supports_thinking);
-        assert!(!cap.supports_streaming);
-        assert_eq!(cap.max_context_tokens, 0);
-        assert_eq!(cap.max_output_tokens, 0);
-        assert!(cap.model_id.is_empty());
-    }
-
-    #[test]
-    fn test_capabilities_serde() {
-        let cap = Capabilities {
-            supports_tools: true,
-            supports_vision: true,
-            supports_thinking: false,
-            supports_streaming: true,
-            max_context_tokens: 128_000,
-            max_output_tokens: 4_096,
-            model_id: "gpt-4o".to_string(),
-        };
-        let json = serde_json::to_value(&cap).unwrap();
-        assert_eq!(json["supports_tools"], true);
-        assert_eq!(json["max_context_tokens"], 128_000);
-        assert_eq!(json["model_id"], "gpt-4o");
-
-        let deser: Capabilities = serde_json::from_value(json).unwrap();
-        assert_eq!(deser.max_output_tokens, 4_096);
+        assert!(!cap.tool_use);
+        assert!(!cap.vision);
+        assert!(!cap.reasoning_tokens);
+        assert!(!cap.streaming);
+        assert_eq!(cap.max_input_tokens.unwrap_or_default(), 0);
+        assert!(cap.max_output_tokens.is_none());
     }
 
     #[test]
     fn test_count_tokens_approx_user() {
-        // "hello world" = 11 chars → 11/4 = 2
         let msgs = vec![types::user("hello world")];
-        assert_eq!(count_tokens_approx(&msgs), 2);
-    }
-
-    #[test]
-    fn test_count_tokens_approx_multiple() {
-        let msgs = vec![
-            types::system("You are a helpful assistant."),
-            types::user("What is 2+2?"),
-            types::assistant("4"),
-        ];
-        // system: 28 chars, user: 12 chars, assistant: 1 char → 41/4 = 10
-        let tokens = count_tokens_approx(&msgs);
-        assert!(tokens > 0);
+        assert!(count_tokens_approx(&msgs) > 0);
     }
 
     #[test]
@@ -150,18 +164,16 @@ mod tests {
         assert_eq!(count_tokens_approx(&msgs), 0);
     }
 
-    #[test]
-    fn test_count_tokens_approx_tool_result() {
-        let msgs = vec![types::tool_result_msg(
-            "tc_1",
-            "The weather is sunny",
-            false,
-        )];
-        let tokens = count_tokens_approx(&msgs);
-        assert!(tokens > 0);
-    }
-
+    /// `MockProvider` only implements `complete` to verify default impls
+    /// (stream, capabilities, count_tokens) compose correctly.
     struct MockProvider;
+
+    #[async_trait]
+    impl rskit_provider::Provider for MockProvider {
+        fn name(&self) -> &'static str {
+            "mock"
+        }
+    }
 
     #[async_trait]
     impl Provider for MockProvider {
@@ -170,49 +182,20 @@ mod tests {
             _request: CompletionRequest,
         ) -> Result<CompletionResponse, AppError> {
             Ok(CompletionResponse {
-                message: types::AssistantMessage {
-                    content: types::text_content("Hi"),
+                message: llm::AssistantMessage {
+                    content: llm::text_content("Hi"),
                     tool_calls: vec![],
                     usage: None,
                 },
                 model: "mock".to_string(),
-                usage: Usage {
+                usage: rskit_ai::Usage {
                     input_tokens: 1,
                     output_tokens: 1,
+                    cached_tokens: 0,
+                    reasoning_tokens: 0,
                 },
-                stop_reason: None,
+                stop_reason: Some(FinishReason::Stop),
             })
-        }
-
-        async fn stream(
-            &self,
-            _request: CompletionRequest,
-        ) -> Result<Pin<Box<dyn Stream<Item = StreamEvent> + Send>>, AppError> {
-            let events = vec![
-                StreamEvent::ContentDelta {
-                    text: "Hi".to_string(),
-                },
-                StreamEvent::UsageUpdate {
-                    usage: Usage {
-                        input_tokens: 1,
-                        output_tokens: 1,
-                    },
-                },
-            ];
-            Ok(Box::pin(futures::stream::iter(events)))
-        }
-
-        fn capabilities(&self) -> Capabilities {
-            Capabilities {
-                supports_tools: true,
-                supports_streaming: true,
-                model_id: "mock".to_string(),
-                ..Default::default()
-            }
-        }
-
-        fn count_tokens(&self, messages: &[Message]) -> usize {
-            count_tokens_approx(messages)
         }
     }
 
@@ -233,7 +216,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_mock_provider_stream() {
+    async fn test_default_stream_synthesizes_from_complete() {
         let provider = MockProvider;
         let request = CompletionRequest {
             model: "mock".to_string(),
@@ -245,27 +228,38 @@ mod tests {
             tool_choice: None,
         };
         let mut stream = provider.stream(request).await.unwrap();
-        let mut events = vec![];
+        let mut event_types = vec![];
         while let Some(event) = stream.next().await {
-            events.push(event);
+            event_types.push(event.event_type());
         }
-        assert_eq!(events.len(), 2);
+        assert_eq!(
+            event_types,
+            vec!["message.start", "text.delta", "usage.delta", "message.stop"]
+        );
     }
 
-    #[test]
-    fn test_mock_provider_capabilities() {
-        let provider = MockProvider;
-        let caps = provider.capabilities();
-        assert!(caps.supports_tools);
-        assert!(caps.supports_streaming);
-        assert_eq!(caps.model_id, "mock");
-    }
-
-    #[test]
-    fn test_mock_provider_count_tokens() {
+    #[tokio::test]
+    async fn test_default_count_tokens_uses_approx() {
         let provider = MockProvider;
         let msgs = vec![types::user("hello world")];
-        let tokens = provider.count_tokens(&msgs);
-        assert!(tokens > 0);
+        assert_eq!(provider.count_tokens(&msgs), count_tokens_approx(&msgs));
+    }
+
+    #[tokio::test]
+    async fn test_llm_request_response_adapter() {
+        let provider = Arc::new(MockProvider);
+        let adapter = LlmRequestResponse(provider);
+        use rskit_provider::RequestResponse;
+        let request = CompletionRequest {
+            model: "mock".to_string(),
+            messages: vec![types::user("hi")],
+            max_tokens: None,
+            temperature: None,
+            stream: false,
+            tools: None,
+            tool_choice: None,
+        };
+        let resp = adapter.execute(request).await.unwrap();
+        assert_eq!(resp.model, "mock");
     }
 }

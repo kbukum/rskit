@@ -10,17 +10,18 @@
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_llm::types::{
-    AssistantMessage, CompletionRequest, CompletionResponse, ContentBlock, FunctionCall, Message,
-    StopReason, StreamChunk, ToolCall, Usage,
+    AssistantMessage, CompletionRequest, CompletionResponse, ContentPart, FinishReason, Message,
+    ToolUseBlock, Usage,
 };
 use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 
-use crate::common;
+use crate::common::{self, StreamChunk, StreamToolCall};
 
 /// Converts rskit types to/from the Gemini `generateContent` wire format.
 pub struct GeminiDialect;
 
-// --- Wire types (request) ---
+// --- Wire types (request/response) ---
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -43,6 +44,15 @@ struct WireContent {
 struct WirePart {
     #[serde(skip_serializing_if = "Option::is_none")]
     text: Option<String>,
+    #[serde(rename = "functionCall", skip_serializing_if = "Option::is_none")]
+    function_call: Option<WireFunctionCall>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+struct WireFunctionCall {
+    name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    args: Option<Value>,
 }
 
 #[derive(Serialize)]
@@ -54,15 +64,11 @@ struct GenerationConfig {
     max_output_tokens: Option<u32>,
 }
 
-// --- Wire types (response) ---
-
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct GenerateContentResponse {
     candidates: Option<Vec<Candidate>>,
     usage_metadata: Option<UsageMetadata>,
-    #[allow(dead_code)]
-    model_version: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -87,31 +93,44 @@ fn to_wire_content(msg: &Message) -> Option<WireContent> {
             role: Some("user".to_string()),
             parts: vec![WirePart {
                 text: Some(rskit_llm::types::text_of(&u.content)),
+                function_call: None,
             }],
         }),
         Message::Assistant(a) => Some(WireContent {
             role: Some("model".to_string()),
             parts: vec![WirePart {
                 text: Some(rskit_llm::types::text_of(&a.content)),
+                function_call: None,
             }],
         }),
-        Message::ToolResult(tr) => Some(WireContent {
+        Message::Tool(tr) => Some(WireContent {
             role: Some("user".to_string()),
             parts: vec![WirePart {
                 text: Some(tr.content.clone()),
+                function_call: None,
             }],
         }),
-        Message::System(_) => None, // handled via systemInstruction
+        Message::System(_) => None,
     }
 }
 
-fn parse_stop_reason(reason: &str) -> StopReason {
+fn parse_stop_reason(reason: &str) -> FinishReason {
     match reason {
-        "STOP" => StopReason::EndTurn,
-        "MAX_TOKENS" => StopReason::MaxTokens,
-        "SAFETY" => StopReason::ContentFilter,
-        _ => StopReason::EndTurn,
+        "STOP" => FinishReason::Stop,
+        "MAX_TOKENS" => FinishReason::Length,
+        "SAFETY" => FinishReason::ContentFilter,
+        "TOOL_USE" => FinishReason::ToolUse,
+        "CANCELLED" => FinishReason::Cancelled,
+        _ => FinishReason::Stop,
     }
+}
+
+fn parse_function_call(function_call: WireFunctionCall, index: usize) -> AppResult<ToolUseBlock> {
+    Ok(ToolUseBlock {
+        id: format!("tool_call_{index}"),
+        name: function_call.name,
+        input: common::value_to_input_map(function_call.args.unwrap_or(Value::Object(Map::new())))?,
+    })
 }
 
 impl GeminiDialect {
@@ -122,6 +141,7 @@ impl GeminiDialect {
                 role: None,
                 parts: vec![WirePart {
                     text: Some(s.content.clone()),
+                    function_call: None,
                 }],
             }),
             _ => None,
@@ -161,37 +181,46 @@ impl GeminiDialect {
 
         let candidate = resp.candidates.as_ref().and_then(|c| c.first());
 
-        let content_text = candidate
+        let mut content = String::new();
+        let mut tool_calls = Vec::new();
+        if let Some(parts) = candidate
             .and_then(|c| c.content.as_ref())
-            .map(|c| {
-                c.parts
-                    .iter()
-                    .filter_map(|p| p.text.as_deref())
-                    .collect::<Vec<_>>()
-                    .join("")
-            })
-            .unwrap_or_default();
+            .map(|content| &content.parts)
+        {
+            for (index, part) in parts.iter().enumerate() {
+                if let Some(text) = part.text.as_deref() {
+                    content.push_str(text);
+                }
+                if let Some(function_call) = part.function_call.clone() {
+                    tool_calls.push(parse_function_call(function_call, index)?);
+                }
+            }
+        }
 
         let stop_reason = candidate
             .and_then(|c| c.finish_reason.as_deref())
             .map(parse_stop_reason)
-            .unwrap_or(StopReason::EndTurn);
+            .unwrap_or(FinishReason::Stop);
 
         let usage = resp.usage_metadata.as_ref().map_or(
             Usage {
                 input_tokens: 0,
                 output_tokens: 0,
+                cached_tokens: 0,
+                reasoning_tokens: 0,
             },
             |u| Usage {
-                input_tokens: u.prompt_token_count.unwrap_or(0),
-                output_tokens: u.candidates_token_count.unwrap_or(0),
+                input_tokens: u64::from(u.prompt_token_count.unwrap_or(0)),
+                output_tokens: u64::from(u.candidates_token_count.unwrap_or(0)),
+                cached_tokens: 0,
+                reasoning_tokens: 0,
             },
         );
 
         Ok(CompletionResponse {
             message: AssistantMessage {
-                content: vec![ContentBlock::Text { text: content_text }],
-                tool_calls: vec![],
+                content: vec![ContentPart::Text { text: content }],
+                tool_calls,
                 usage: None,
             },
             model: model.to_string(),
@@ -206,9 +235,8 @@ impl GeminiDialect {
     }
 
     /// Parse a single SSE data payload from the streaming `generateContent` API.
-    ///
-    /// Gemini streams JSON objects with `candidates[].content.parts[]`.
-    pub fn parse_stream_chunk(data: &[u8]) -> AppResult<StreamChunk> {
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn parse_stream_chunk(data: &[u8]) -> AppResult<StreamChunk> {
         let s = std::str::from_utf8(data).map_err(|e| {
             AppError::new(
                 ErrorCode::InvalidFormat,
@@ -224,7 +252,6 @@ impl GeminiDialect {
         })?;
 
         let candidate = v.get("candidates").and_then(|c| c.get(0));
-
         let parts = candidate
             .and_then(|c| c.get("content"))
             .and_then(|c| c.get("parts"))
@@ -234,27 +261,26 @@ impl GeminiDialect {
         let mut tool_calls = Vec::new();
 
         if let Some(parts) = parts {
-            for part in parts {
+            for (index, part) in parts.iter().enumerate() {
                 if let Some(text) = part.get("text").and_then(|t| t.as_str()) {
                     content.push_str(text);
                 }
-                if let Some(fc) = part.get("functionCall") {
-                    let name = fc
+                if let Some(function_call) = part.get("functionCall") {
+                    let name = function_call
                         .get("name")
                         .and_then(|n| n.as_str())
                         .unwrap_or("")
                         .to_string();
-                    let args = fc
+                    let input_delta = function_call
                         .get("args")
-                        .map(|a| a.to_string())
-                        .unwrap_or_else(|| "{}".to_string());
-                    tool_calls.push(ToolCall {
+                        .cloned()
+                        .unwrap_or(Value::Object(Map::new()))
+                        .to_string();
+                    tool_calls.push(StreamToolCall {
+                        index,
                         id: String::new(),
-                        call_type: "function".to_string(),
-                        function: FunctionCall {
-                            name,
-                            arguments: args,
-                        },
+                        name,
+                        input_delta,
                     });
                 }
             }
@@ -263,7 +289,7 @@ impl GeminiDialect {
         let done = candidate
             .and_then(|c| c.get("finishReason"))
             .and_then(|r| r.as_str())
-            .is_some_and(|r| !r.is_empty() && r != "NONE");
+            .is_some_and(|reason| !reason.is_empty() && reason != "NONE");
 
         Ok(StreamChunk {
             content,
@@ -347,7 +373,7 @@ mod tests {
         assert_eq!(resp.model, "gemini-2.5-flash");
         assert_eq!(resp.usage.input_tokens, 5);
         assert_eq!(resp.usage.output_tokens, 2);
-        assert_eq!(resp.stop_reason, Some(StopReason::EndTurn));
+        assert_eq!(resp.stop_reason, Some(FinishReason::Stop));
     }
 
     #[test]
@@ -360,7 +386,7 @@ mod tests {
             "usageMetadata": {"promptTokenCount": 5, "candidatesTokenCount": 10}
         }"#;
         let resp = GeminiDialect::parse_response(body, "gemini-2.5-flash").unwrap();
-        assert_eq!(resp.stop_reason, Some(StopReason::MaxTokens));
+        assert_eq!(resp.stop_reason, Some(FinishReason::Length));
     }
 
     #[test]
@@ -372,7 +398,7 @@ mod tests {
             }]
         }"#;
         let resp = GeminiDialect::parse_response(body, "gemini-2.5-flash").unwrap();
-        assert_eq!(resp.stop_reason, Some(StopReason::ContentFilter));
+        assert_eq!(resp.stop_reason, Some(FinishReason::ContentFilter));
     }
 
     #[test]
@@ -382,8 +408,6 @@ mod tests {
             "/v1beta/models/gemini-2.5-flash:generateContent"
         );
     }
-
-    // -- parse_stream_chunk tests --
 
     #[test]
     fn stream_chunk_text_content() {
@@ -400,9 +424,9 @@ mod tests {
         let chunk = GeminiDialect::parse_stream_chunk(data).unwrap();
         assert!(chunk.content.is_empty());
         assert_eq!(chunk.tool_calls.len(), 1);
-        assert_eq!(chunk.tool_calls[0].function.name, "get_weather");
+        assert_eq!(chunk.tool_calls[0].name, "get_weather");
         let args: serde_json::Value =
-            serde_json::from_str(&chunk.tool_calls[0].function.arguments).unwrap();
+            serde_json::from_str(&chunk.tool_calls[0].input_delta).unwrap();
         assert_eq!(args["location"], "NYC");
     }
 

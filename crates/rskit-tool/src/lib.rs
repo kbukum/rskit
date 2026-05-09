@@ -6,23 +6,25 @@
 mod callable;
 pub mod context;
 mod definition;
+pub mod envelope;
 mod from_fn;
-mod middleware;
-mod middleware_metrics;
-mod middleware_retry;
+pub mod hitl;
 pub mod registry;
 pub mod result;
 
 pub use callable::Callable;
 pub use context::Context;
-pub use definition::{Annotations, Definition};
-pub use from_fn::{from_fn, from_fn_simple};
-pub use middleware::{
-    Middleware, chain, with_logging, with_result_limit, with_timeout, with_validation,
+pub use definition::{Annotations, Definition, ExecutionHint};
+pub use envelope::{
+    DataClassification, Envelope, FilesystemMode, FilesystemRule, NetworkPolicy, NetworkRule,
+    Safety, SensitiveMatcher, SensitivePredicate, SubprocessRule,
 };
-pub use middleware_metrics::{InMemoryMetrics, MetricRecord, MetricsCollector, with_metrics};
-pub use middleware_retry::{RetryConfig, RetryPredicate, with_retry};
-pub use registry::Registry;
+pub use from_fn::{from_fn, from_fn_simple};
+pub use hitl::{
+    Decision, DenyHumanApproval, DenyOnSensitive, HumanApproval, SensitivityEvaluator, ToolCall,
+    denied_error,
+};
+pub use registry::{BatchOptions, Registry};
 pub use result::{ToolResult, error_result, json_result, text_result};
 
 // Re-export for convenience
@@ -226,54 +228,48 @@ mod tests {
             description: "Test tool".to_string(),
             input_schema: serde_json::json!({"type": "object"}),
             output_schema: None,
-            annotations: Some(Annotations {
-                title: Some("Test".to_string()),
-                read_only_hint: Some(true),
+            annotations: Annotations {
+                title: "Test".to_string(),
                 ..Default::default()
-            }),
-            read_only: true,
-            destructive: false,
-            max_result_size: 0,
-            timeout_secs: 0.0,
+            },
+            envelope: Envelope::default(),
         };
 
         let json = serde_json::to_value(&def).unwrap();
         assert_eq!(json["name"], "test");
-        assert_eq!(json["annotations"]["read_only_hint"], true);
+        assert_eq!(json["annotations"]["title"], "Test");
         assert!(json.get("output_schema").is_none());
     }
 
     #[test]
     fn test_annotations_execution_hint() {
         let ann = Annotations {
-            execution_hint: Some("ui".to_string()),
+            execution_hint: ExecutionHint::Ui,
             ..Default::default()
         };
-        assert_eq!(ann.execution_hint.as_deref(), Some("ui"));
+        assert_eq!(ann.execution_hint, ExecutionHint::Ui);
 
         let default_ann = Annotations::default();
-        assert!(default_ann.execution_hint.is_none());
+        assert_eq!(default_ann.execution_hint, ExecutionHint::Backend);
     }
 
     #[test]
     fn test_execution_hint_serialization() {
-        // execution_hint present — included in JSON
         let ann = Annotations {
-            title: Some("My Tool".to_string()),
-            execution_hint: Some("hybrid".to_string()),
+            title: "My Tool".to_string(),
+            execution_hint: ExecutionHint::Hybrid,
             ..Default::default()
         };
         let json = serde_json::to_value(&ann).unwrap();
         assert_eq!(json["execution_hint"], "hybrid");
         assert_eq!(json["title"], "My Tool");
 
-        // execution_hint None — omitted from JSON (skip_serializing_if)
-        let ann_none = Annotations {
-            title: Some("Other".to_string()),
+        let ann_default = Annotations {
+            title: "Other".to_string(),
             ..Default::default()
         };
-        let json_none = serde_json::to_value(&ann_none).unwrap();
-        assert!(json_none.get("execution_hint").is_none());
+        let json_default = serde_json::to_value(&ann_default).unwrap();
+        assert_eq!(json_default["execution_hint"], "backend");
     }
 
     #[test]
@@ -283,12 +279,11 @@ mod tests {
             "execution_hint": "backend"
         });
         let ann: Annotations = serde_json::from_value(json).unwrap();
-        assert_eq!(ann.execution_hint.as_deref(), Some("backend"));
+        assert_eq!(ann.execution_hint, ExecutionHint::Backend);
 
-        // Missing field deserializes as None
         let json_missing = serde_json::json!({"title": "T"});
         let ann2: Annotations = serde_json::from_value(json_missing).unwrap();
-        assert!(ann2.execution_hint.is_none());
+        assert_eq!(ann2.execution_hint, ExecutionHint::Backend);
     }
 
     /// Minimal Callable for tests that need custom annotations.
@@ -310,17 +305,14 @@ mod tests {
         }
     }
 
-    fn stub_def(name: &str, annotations: Option<Annotations>) -> Box<dyn Callable> {
+    fn stub_def(name: &str, annotations: Annotations) -> Box<dyn Callable> {
         Box::new(StubTool(Definition {
             name: name.to_string(),
             description: name.to_string(),
             input_schema: serde_json::json!({"type": "object"}),
             output_schema: None,
             annotations,
-            read_only: false,
-            destructive: false,
-            max_result_size: 0,
-            timeout_secs: 0.0,
+            envelope: Envelope::default(),
         }))
     }
 
@@ -331,35 +323,40 @@ mod tests {
         registry
             .register(stub_def(
                 "validate_form",
-                Some(Annotations {
-                    execution_hint: Some("ui".to_string()),
+                Annotations {
+                    execution_hint: ExecutionHint::Ui,
                     ..Default::default()
-                }),
+                },
             ))
             .unwrap();
 
         registry
             .register(stub_def(
                 "run_query",
-                Some(Annotations {
-                    execution_hint: Some("backend".to_string()),
+                Annotations {
+                    execution_hint: ExecutionHint::Backend,
                     ..Default::default()
-                }),
+                },
             ))
             .unwrap();
 
-        // Tool with no annotations at all
-        registry.register(stub_def("noop", None)).unwrap();
+        registry
+            .register(stub_def("noop", Annotations::default()))
+            .unwrap();
 
-        let ui = registry.filter_by_execution_hint("ui");
+        let ui = registry.filter_by_execution_hint(ExecutionHint::Ui);
         assert_eq!(ui.len(), 1);
         assert_eq!(ui[0].name, "validate_form");
 
-        let backend = registry.filter_by_execution_hint("backend");
-        assert_eq!(backend.len(), 1);
-        assert_eq!(backend[0].name, "run_query");
+        let backend = registry.filter_by_execution_hint(ExecutionHint::Backend);
+        let mut backend_names = backend
+            .iter()
+            .map(|def| def.name.as_str())
+            .collect::<Vec<_>>();
+        backend_names.sort_unstable();
+        assert_eq!(backend_names, vec!["noop", "run_query"]);
 
-        let hybrid = registry.filter_by_execution_hint("hybrid");
+        let hybrid = registry.filter_by_execution_hint(ExecutionHint::Hybrid);
         assert!(hybrid.is_empty());
     }
 

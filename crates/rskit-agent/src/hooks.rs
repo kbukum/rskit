@@ -11,24 +11,44 @@ use rskit_tool::ToolResult;
 
 // ── Event type constants ────────────────────────────────────────────────────
 
-/// Event type for [`PreToolCall`].
-pub fn pre_tool_call_type() -> EventType {
-    EventType::new("pre_tool_call")
+/// Event type for canonical `on_tool_call` observations.
+pub fn on_tool_call_type() -> EventType {
+    EventType::new("on_tool_call")
 }
 
-/// Event type for [`PostToolCall`].
+/// Event type for [`PreToolCall`].
+pub fn pre_tool_call_type() -> EventType {
+    on_tool_call_type()
+}
+
+/// Event type for canonical `on_tool_result` observations.
+pub fn on_tool_result_type() -> EventType {
+    EventType::new("on_tool_result")
+}
+
+/// Event type for tool-result observations.
 pub fn post_tool_call_type() -> EventType {
-    EventType::new("post_tool_call")
+    on_tool_result_type()
+}
+
+/// Event type for canonical `on_llm_call` observations.
+pub fn on_llm_call_type() -> EventType {
+    EventType::new("on_llm_call")
 }
 
 /// Event type for [`PreLLMCall`].
 pub fn pre_llm_call_type() -> EventType {
-    EventType::new("pre_llm_call")
+    on_llm_call_type()
 }
 
-/// Event type for [`PostLLMCall`].
+/// Event type for canonical `on_llm_response` observations.
+pub fn on_llm_response_type() -> EventType {
+    EventType::new("on_llm_response")
+}
+
+/// Event type for LLM-response observations.
 pub fn post_llm_call_type() -> EventType {
-    EventType::new("post_llm_call")
+    on_llm_response_type()
 }
 
 /// Event type for [`OnError`].
@@ -36,17 +56,94 @@ pub fn on_error_type() -> EventType {
     EventType::new("on_error")
 }
 
+/// Event type for canonical [`TurnStart`].
+pub fn on_turn_start_type() -> EventType {
+    EventType::new("on_turn_start")
+}
+
 /// Event type for [`TurnStart`].
 pub fn turn_start_type() -> EventType {
-    EventType::new("turn_start")
+    on_turn_start_type()
+}
+
+/// Event type for canonical [`TurnEnd`].
+pub fn on_turn_complete_type() -> EventType {
+    EventType::new("on_turn_complete")
 }
 
 /// Event type for [`TurnEnd`].
 pub fn turn_end_type() -> EventType {
-    EventType::new("turn_end")
+    on_turn_complete_type()
+}
+
+/// Event type for canonical stream/event observations.
+pub fn on_event_type() -> EventType {
+    EventType::new("on_event")
+}
+
+/// Event type for canonical MCP call observations.
+pub fn on_mcp_call_type() -> EventType {
+    EventType::new("on_mcp_call")
+}
+
+/// Event type for canonical MCP result observations.
+pub fn on_mcp_result_type() -> EventType {
+    EventType::new("on_mcp_result")
 }
 
 // ── Event structs ───────────────────────────────────────────────────────────
+
+/// Canonical observe-only event stream observation.
+#[derive(Debug, Clone)]
+pub struct OnEvent {
+    /// Observed event payload.
+    pub event: rskit_ai::StreamEventRef,
+}
+
+impl Event for OnEvent {
+    fn event_type(&self) -> EventType {
+        on_event_type()
+    }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+/// Canonical observe-only MCP call event.
+#[derive(Debug, Clone)]
+pub struct OnMCPCall {
+    /// MCP method or operation name.
+    pub method: String,
+}
+
+impl Event for OnMCPCall {
+    fn event_type(&self) -> EventType {
+        on_mcp_call_type()
+    }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+/// Canonical observe-only MCP result event.
+#[derive(Debug, Clone)]
+pub struct OnMCPResult {
+    /// MCP method or operation name.
+    pub method: String,
+    /// Optional result payload.
+    pub result: Option<serde_json::Value>,
+    /// Optional error text.
+    pub error: Option<String>,
+}
+
+impl Event for OnMCPResult {
+    fn event_type(&self) -> EventType {
+        on_mcp_result_type()
+    }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
 
 /// Fired before a tool call is executed.
 #[derive(Debug, Clone)]
@@ -171,7 +268,7 @@ mod tests {
             name: "calculator".to_string(),
             input: serde_json::json!({"x": 1}),
         };
-        assert_eq!(event.event_type(), EventType::new("pre_tool_call"));
+        assert_eq!(event.event_type(), EventType::new("on_tool_call"));
         let any = event.as_any();
         let downcasted = any.downcast_ref::<PreToolCall>().unwrap();
         assert_eq!(downcasted.name, "calculator");
@@ -185,7 +282,7 @@ mod tests {
             result: None,
             error: Some("timeout".to_string()),
         };
-        assert_eq!(event.event_type(), EventType::new("post_tool_call"));
+        assert_eq!(event.event_type(), EventType::new("on_tool_result"));
     }
 
     #[test]
@@ -201,7 +298,7 @@ mod tests {
                 tool_choice: None,
             },
         };
-        assert_eq!(event.event_type(), EventType::new("pre_llm_call"));
+        assert_eq!(event.event_type(), EventType::new("on_llm_call"));
     }
 
     #[test]
@@ -216,7 +313,7 @@ mod tests {
     #[test]
     fn test_turn_start_event() {
         let event = TurnStart { turn: 0 };
-        assert_eq!(event.event_type(), EventType::new("turn_start"));
+        assert_eq!(event.event_type(), EventType::new("on_turn_start"));
         let any = event.as_any();
         assert_eq!(any.downcast_ref::<TurnStart>().unwrap().turn, 0);
     }
@@ -232,17 +329,17 @@ mod tests {
                 usage: None,
             },
         };
-        assert_eq!(event.event_type(), EventType::new("turn_end"));
+        assert_eq!(event.event_type(), EventType::new("on_turn_complete"));
     }
 
     #[test]
     fn test_event_type_constants() {
-        assert_eq!(pre_tool_call_type(), EventType::new("pre_tool_call"));
-        assert_eq!(post_tool_call_type(), EventType::new("post_tool_call"));
-        assert_eq!(pre_llm_call_type(), EventType::new("pre_llm_call"));
-        assert_eq!(post_llm_call_type(), EventType::new("post_llm_call"));
+        assert_eq!(pre_tool_call_type(), EventType::new("on_tool_call"));
+        assert_eq!(post_tool_call_type(), EventType::new("on_tool_result"));
+        assert_eq!(pre_llm_call_type(), EventType::new("on_llm_call"));
+        assert_eq!(post_llm_call_type(), EventType::new("on_llm_response"));
         assert_eq!(on_error_type(), EventType::new("on_error"));
-        assert_eq!(turn_start_type(), EventType::new("turn_start"));
-        assert_eq!(turn_end_type(), EventType::new("turn_end"));
+        assert_eq!(turn_start_type(), EventType::new("on_turn_start"));
+        assert_eq!(turn_end_type(), EventType::new("on_turn_complete"));
     }
 }

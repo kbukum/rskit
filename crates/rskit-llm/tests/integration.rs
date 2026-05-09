@@ -125,7 +125,7 @@ fn anthropic_adapter_constructs_with_valid_config() {
 #[tokio::test]
 #[ignore = "requires OpenAI API key"]
 async fn openai_complete_request() {
-    use rskit_llm::LlmProvider;
+    use rskit_llm::Provider;
 
     let cfg: openai::Config = serde_json::from_str(r#"{"api_key":"sk-real-key"}"#).unwrap();
     let provider = openai::new_adapter(&cfg).unwrap();
@@ -145,7 +145,7 @@ async fn openai_complete_request() {
 #[tokio::test]
 #[ignore = "requires Anthropic API key"]
 async fn anthropic_complete_request() {
-    use rskit_llm::LlmProvider;
+    use rskit_llm::Provider;
 
     let cfg: anthropic::Config = serde_json::from_str(r#"{"api_key":"sk-ant-real-key"}"#).unwrap();
     let provider = anthropic::new_adapter(&cfg).unwrap();

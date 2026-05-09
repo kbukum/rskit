@@ -405,7 +405,7 @@ fn temp_file_in_dir_with_extension() {
 fn temp_file_clone_creates_independent_copy() {
     let tmp = TempFile::new().unwrap();
     std::fs::write(tmp.path(), b"original").unwrap();
-    let cloned = tmp.clone();
+    let cloned = tmp.try_clone().unwrap();
     // Both should exist
     assert!(tmp.path().exists());
     assert!(cloned.path().exists());

@@ -6,7 +6,7 @@ use rmcp::model::{
     CallToolResult, Content, ErrorData, ListToolsResult, RawContent, Tool, ToolAnnotations,
 };
 use rskit_tool::result::ToolResult;
-use rskit_tool::{Annotations, Definition};
+use rskit_tool::{Annotations, Definition, Envelope, NetworkPolicy, Safety};
 
 // ── Kit Definition → MCP Tool ──────────────────────────────────────────────
 
@@ -23,26 +23,7 @@ pub fn definition_to_tool(def: &Definition, prefix: &str) -> Tool {
     let input_schema = value_to_json_object(&def.input_schema);
 
     let mut tool = Tool::new(name, def.description.clone(), input_schema);
-
-    if let Some(ref ann) = def.annotations {
-        let mut mcp_ann = ToolAnnotations::new();
-        if let Some(ref title) = ann.title {
-            mcp_ann = ToolAnnotations::with_title(title.clone());
-        }
-        if let Some(ro) = ann.read_only_hint {
-            mcp_ann = mcp_ann.read_only(ro);
-        }
-        if let Some(dest) = ann.destructive_hint {
-            mcp_ann = mcp_ann.destructive(dest);
-        }
-        if let Some(idem) = ann.idempotent_hint {
-            mcp_ann = mcp_ann.idempotent(idem);
-        }
-        if let Some(ow) = ann.open_world_hint {
-            mcp_ann = mcp_ann.open_world(ow);
-        }
-        tool = tool.with_annotations(mcp_ann);
-    }
+    tool = tool.with_annotations(to_mcp_annotations(def));
 
     if let Some(ref output_schema) = def.output_schema
         && let Some(obj) = output_schema.as_object()
@@ -51,6 +32,29 @@ pub fn definition_to_tool(def: &Definition, prefix: &str) -> Tool {
     }
 
     tool
+}
+
+fn to_mcp_annotations(def: &Definition) -> ToolAnnotations {
+    let read_only = matches!(def.envelope.safety, Safety::ReadOnly);
+    let destructive = matches!(def.envelope.safety, Safety::Destructive);
+    let open_world = match &def.envelope.network {
+        NetworkPolicy::None => false,
+        NetworkPolicy::AllowList { rules } => !rules.is_empty(),
+    } || !def.envelope.filesystem.is_empty()
+        || !def.envelope.subprocess.is_empty();
+
+    let mut annotations = if def.annotations.title.is_empty() {
+        ToolAnnotations::new()
+    } else {
+        ToolAnnotations::with_title(def.annotations.title.clone())
+    };
+    annotations = annotations.read_only(read_only);
+    annotations = annotations.destructive(destructive);
+    annotations = annotations.open_world(open_world);
+    if let Some(idempotent) = def.annotations.idempotent_hint {
+        annotations = annotations.idempotent(idempotent);
+    }
+    annotations
 }
 
 /// Convert a list of rskit [`Definition`]s to an MCP [`ListToolsResult`].
@@ -83,16 +87,14 @@ pub fn tool_to_definition(tool: &Tool, prefix: &str) -> Definition {
         .as_ref()
         .map(|s| serde_json::to_value(s.as_ref()).unwrap_or_default());
 
-    let annotations = tool.annotations.as_ref().map(|a| Annotations {
-        title: a.title.clone(),
-        read_only_hint: a.read_only_hint,
-        destructive_hint: a.destructive_hint,
-        idempotent_hint: a.idempotent_hint,
-        open_world_hint: a.open_world_hint,
-        execution_hint: None,
-        category: None,
-        tags: None,
-    });
+    let annotations = tool
+        .annotations
+        .as_ref()
+        .map_or_else(Annotations::default, |a| Annotations {
+            title: a.title.clone().unwrap_or_default(),
+            idempotent_hint: a.idempotent_hint,
+            ..Annotations::default()
+        });
 
     let read_only = tool
         .annotations
@@ -111,10 +113,16 @@ pub fn tool_to_definition(tool: &Tool, prefix: &str) -> Definition {
         input_schema,
         output_schema,
         annotations,
-        read_only,
-        destructive,
-        max_result_size: 0,
-        timeout_secs: 0.0,
+        envelope: Envelope {
+            safety: if destructive {
+                Safety::Destructive
+            } else if read_only {
+                Safety::ReadOnly
+            } else {
+                Safety::Mutating
+            },
+            ..Envelope::default()
+        },
     }
 }
 
@@ -200,7 +208,10 @@ fn value_to_json_object(value: &serde_json::Value) -> serde_json::Map<String, se
 mod tests {
     use super::*;
     use rskit_tool::result::{ToolResult, error_result, text_result};
-    use rskit_tool::{Annotations, Definition};
+    use rskit_tool::{
+        Annotations, Definition, Envelope, FilesystemMode, FilesystemRule, NetworkPolicy,
+        NetworkRule, Safety,
+    };
     use serde_json::json;
 
     fn sample_definition() -> Definition {
@@ -215,20 +226,28 @@ mod tests {
                 "required": ["query"]
             }),
             output_schema: None,
-            annotations: Some(Annotations {
-                title: Some("Web Search".to_string()),
-                read_only_hint: Some(true),
-                destructive_hint: Some(false),
+            annotations: Annotations {
+                title: "Web Search".to_string(),
                 idempotent_hint: Some(true),
-                open_world_hint: Some(true),
-                category: Some("web".to_string()),
-                tags: Some(vec!["search".to_string()]),
-                execution_hint: None,
-            }),
-            read_only: true,
-            destructive: false,
-            max_result_size: 0,
-            timeout_secs: 0.0,
+                category: "web".to_string(),
+                tags: vec!["search".to_string()],
+                ..Annotations::default()
+            },
+            envelope: Envelope {
+                network: NetworkPolicy::AllowList {
+                    rules: vec![NetworkRule {
+                        host: "example.com".to_string(),
+                        port: None,
+                        scheme: Some("https".to_string()),
+                    }],
+                },
+                filesystem: vec![FilesystemRule {
+                    path: "/data".to_string(),
+                    mode: FilesystemMode::Read,
+                }],
+                safety: Safety::ReadOnly,
+                ..Envelope::default()
+            },
         }
     }
 
@@ -323,12 +342,10 @@ mod tests {
         let def = sample_definition();
         let tool = definition_to_tool(&def, "");
         let round_tripped = tool_to_definition(&tool, "");
-        let ann = round_tripped.annotations.unwrap();
-        assert_eq!(ann.title, Some("Web Search".to_string()));
-        assert_eq!(ann.read_only_hint, Some(true));
-        assert_eq!(ann.destructive_hint, Some(false));
+        let ann = round_tripped.annotations;
+        assert_eq!(ann.title, "Web Search");
         assert_eq!(ann.idempotent_hint, Some(true));
-        assert_eq!(ann.open_world_hint, Some(true));
+        assert_eq!(round_tripped.envelope.safety, Safety::ReadOnly);
     }
 
     #[test]

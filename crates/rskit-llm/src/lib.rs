@@ -1,11 +1,9 @@
 //! LLM provider abstractions for OpenAI, Anthropic, and other backends.
 //!
-//! Defines message types, request/response structs, and streaming helpers that
-//! are shared across LLM provider implementations.
+//! Defines request/response structs, stream helpers, and the canonical
+//! [`Provider`] trait shared across LLM provider implementations.
 
-mod traits;
-
-/// LLM message types, request/response structs, and helper constructors.
+/// LLM request/response types and helper constructors.
 pub mod types;
 
 /// Streaming event types emitted during completion.
@@ -14,11 +12,19 @@ pub mod stream_events;
 /// Provider trait with streaming, capabilities, and token counting.
 pub mod provider;
 
-pub use provider::{Capabilities, Provider, count_tokens_approx};
-pub use stream_events::StreamEvent;
-pub use traits::LlmProvider;
-pub use types::{
-    AssistantMessage, CompletionRequest, CompletionResponse, ContentBlock, FunctionCall, Message,
-    StopReason, StreamChunk, SystemMessage, ToolCall, ToolChoice, ToolResultMessage, Usage,
-    UserMessage, assistant, system, text_content, text_of, tool_result_msg, user,
+/// Component lifecycle mixin for LLM providers (D12).
+pub mod lifecycle;
+
+pub use lifecycle::Lifecycle;
+pub use provider::{LlmRequestResponse, LlmStream, Provider};
+pub use rskit_ai::chat::{
+    AssistantMessage, Message, SystemMessage, ToolResultMessage, UserMessage, assistant, system,
+    tool_result_msg, user,
 };
+pub use rskit_ai::{
+    Budget, BudgetExceededReason, Capabilities, ContentPart, Cost, ErrorEvent, FinishReason,
+    GenAiError, MessageStart, MessageStop, Model, Money, ReasoningDelta, StreamEvent,
+    StreamEventRef, TextDelta, ToolResultBlock, ToolUseBlock, ToolUseDelta, ToolUseStart,
+    ToolUseStop, Usage, UsageDelta, text_content, text_of,
+};
+pub use types::{CompletionRequest, CompletionResponse, ToolChoice, ToolDefinition};

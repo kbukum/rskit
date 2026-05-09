@@ -6,11 +6,19 @@
 //! - **Server**: expose an rskit [`Registry`](rskit_tool::Registry) as an MCP server
 //! - **Client**: connect to an MCP server and wrap remote tools as rskit [`Callable`](rskit_tool::Callable)
 //! - **Convert**: bidirectional type conversions between rskit and MCP types
+//! - **Skill integration**: consumes top-level `rskit-skill`; remote MCP servers are tool sources
+//! - **Transport helpers**: validate canonical transport names and build loopback-safe
+//!   Streamable HTTP configuration defaults
 
 pub mod convert;
+#[cfg(feature = "server")]
+pub mod transport;
 
 #[cfg(feature = "server")]
 pub mod server;
+
+#[cfg(feature = "server")]
+pub mod authorizer;
 
 #[cfg(feature = "client")]
 pub mod client;
@@ -22,7 +30,17 @@ pub use convert::{
 };
 
 #[cfg(feature = "server")]
-pub use server::{RegistryHandler, ServerConfig, create_server};
+pub use authorizer::DeciderToolAuthorizer;
+#[cfg(feature = "server")]
+pub use server::{
+    PromptEntry, RegistryHandler, ResourceEntry, ResourceTemplateEntry, ServerConfig,
+    ToolAuditEvent, ToolAuditSink, ToolAuthorizationDecision, ToolAuthorizationRequest,
+    ToolAuthorizer, create_server,
+};
+#[cfg(feature = "server")]
+pub use transport::{
+    TRANSPORT_STDIO, TRANSPORT_STREAMABLE_HTTP, TransportKind, streamable_http_server_config,
+};
 
 #[cfg(feature = "client")]
 pub use client::{ClientConfig, discover_tools, wrap_tools};

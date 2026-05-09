@@ -87,7 +87,7 @@ fn extract_trace_context_with_traceparent() {
 // ── OTLP-dependent tests ────────────────────────────────────────────────────
 
 #[tokio::test]
-#[ignore = "requires OTLP collector"]
+#[ignore = "installs global subscriber; requires OTLP collector"]
 async fn init_tracer_with_valid_endpoint() {
     let cfg = TracingConfig {
         service_name: "test-svc".into(),
@@ -96,6 +96,19 @@ async fn init_tracer_with_valid_endpoint() {
         export_timeout: Duration::from_secs(5),
     };
     let _guard = rskit_observability::init_tracer(&cfg).unwrap();
+}
+
+#[tokio::test]
+#[ignore = "installs global subscriber; requires OTLP collector"]
+async fn init_tracer_is_idempotent() {
+    let cfg = TracingConfig {
+        service_name: "test-svc".into(),
+        endpoint: "http://localhost:4317".into(),
+        sample_rate: 1.0,
+        export_timeout: Duration::from_secs(5),
+    };
+    let _first = rskit_observability::init_tracer(&cfg).unwrap();
+    let _second = rskit_observability::init_tracer(&cfg).unwrap();
 }
 
 #[tokio::test]

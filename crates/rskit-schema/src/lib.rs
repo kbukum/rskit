@@ -245,6 +245,25 @@ fn child_path(parent: &str, child: &str) -> String {
     }
 }
 
+/// Validate structured model output against a JSON Schema 2020-12-compatible schema subset.
+pub fn validate_structured_output(schema: &Value, value: &Value) -> ValidationResult {
+    validate(schema, value)
+}
+
+/// Validate an MCP elicitation schema subset.
+pub fn validate_elicitation_schema(schema: &Value) -> ValidationResult {
+    let meta_schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "type": { "enum": ["object"] },
+            "properties": { "type": "object" },
+            "required": { "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["type", "properties"]
+    });
+    validate(&meta_schema, schema)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -74,6 +74,14 @@ impl TempFile {
         super::FileSource::Temp(self)
     }
 
+    /// Create an independent copy of this temporary file.
+    pub fn try_clone(&self) -> AppResult<Self> {
+        let new = TempFile::new()?;
+        std::fs::copy(self.path(), new.path())
+            .map_err(|e| AppError::internal(e).context("clone temp file"))?;
+        Ok(new)
+    }
+
     /// Persist this temporary file to the given target path.
     /// The file will no longer be auto-deleted.
     pub fn persist(self, target: impl AsRef<Path>) -> AppResult<PathBuf> {
@@ -85,18 +93,6 @@ impl TempFile {
             )
         })?;
         Ok(target)
-    }
-}
-
-impl Clone for TempFile {
-    fn clone(&self) -> Self {
-        // Clone by creating a new temp file and copying content.
-        // This is a best-effort clone; the new file may differ.
-        let new = TempFile::new().expect("failed to clone temp file");
-        if let Ok(content) = std::fs::read(self.path()) {
-            let _ = std::fs::write(new.path(), &content);
-        }
-        new
     }
 }
 

@@ -7,25 +7,75 @@ use std::sync::Arc;
 
 use crate::callable::Callable;
 use crate::context::Context;
-use crate::definition::Definition;
+use crate::definition::{Definition, ExecutionHint};
+use crate::hitl::{Decision, HumanApproval, SensitivityEvaluator, ToolCall, denied_error};
 use crate::result::ToolResult;
 
+/// Options for passive batch tool execution.
+#[derive(Debug, Clone, Copy)]
+pub struct BatchOptions {
+    /// Maximum number of concurrent calls. Values below 1 are treated as 1.
+    pub concurrency: usize,
+    /// Stop scheduling calls after the first error.
+    pub fail_fast: bool,
+}
+
+impl Default for BatchOptions {
+    fn default() -> Self {
+        Self {
+            concurrency: 1,
+            fail_fast: true,
+        }
+    }
+}
+
 /// Thread-safe registry of callable tools.
+///
+/// Optionally wires the HITL stages (per locked decision D10):
+/// `sensitivity → (if RequireApproval) human approval → invoke`. The
+/// authorization stage is owned by the boundary (`rskit-mcp`, etc.) and is
+/// not enforced here; this preserves module layering.
 pub struct Registry {
     tools: RwLock<HashMap<String, Arc<dyn Callable>>>,
+    sensitivity: Option<Arc<dyn SensitivityEvaluator>>,
+    approval: Option<Arc<dyn HumanApproval>>,
 }
 
 impl Registry {
     /// Create a new empty registry.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             tools: RwLock::new(HashMap::new()),
+            sensitivity: None,
+            approval: None,
         }
     }
 
-    /// Register a tool. Returns error on duplicate names.
+    /// Inject a sensitivity evaluator. When unset, no sensitivity checks run.
+    #[must_use]
+    pub fn with_sensitivity_evaluator(mut self, evaluator: Arc<dyn SensitivityEvaluator>) -> Self {
+        self.sensitivity = Some(evaluator);
+        self
+    }
+
+    /// Inject a human-approval gate. When unset, `RequireApproval` decisions
+    /// are treated as denials.
+    #[must_use]
+    pub fn with_human_approval(mut self, approval: Arc<dyn HumanApproval>) -> Self {
+        self.approval = Some(approval);
+        self
+    }
+
+    /// Register a tool. Returns error on empty name or duplicate.
     pub fn register(&self, tool: Box<dyn Callable>) -> AppResult<()> {
         let name = tool.definition().name.clone();
+        if name.trim().is_empty() {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                "tool name must not be empty",
+            ));
+        }
         let mut tools = self.tools.write();
         if tools.contains_key(&name) {
             return Err(AppError::new(
@@ -56,7 +106,8 @@ impl Registry {
         self.tools.read().keys().cloned().collect()
     }
 
-    /// Call a tool by name with a context.
+    /// Call a tool by name with a context. Runs the HITL stages (sensitivity
+    /// → human approval) if configured before invoking the tool.
     pub async fn call(
         &self,
         name: &str,
@@ -66,7 +117,42 @@ impl Registry {
         let tool = self.get(name).ok_or_else(|| {
             AppError::new(ErrorCode::NotFound, format!("tool not found: {name:?}"))
         })?;
+        self.run_hitl(tool.as_ref(), ctx, &input).await?;
         tool.call(ctx, input).await
+    }
+
+    async fn run_hitl(
+        &self,
+        tool: &dyn Callable,
+        ctx: &Context,
+        input: &serde_json::Value,
+    ) -> AppResult<()> {
+        let evaluator = match &self.sensitivity {
+            Some(e) => e.clone(),
+            None => return Ok(()),
+        };
+        let definition = tool.definition();
+        let call = ToolCall {
+            name: definition.name.clone(),
+            input: input.clone(),
+        };
+        let decision = evaluator.evaluate(ctx, &call, &definition.envelope).await?;
+        match decision {
+            Decision::Allow => Ok(()),
+            Decision::Deny(reason) => Err(denied_error(reason)),
+            Decision::RequireApproval(reason) => match &self.approval {
+                Some(approver) => {
+                    if approver.approve(ctx, &call, &reason).await? {
+                        Ok(())
+                    } else {
+                        Err(denied_error(format!("human approval rejected: {reason}")))
+                    }
+                }
+                None => Err(denied_error(format!(
+                    "approval required but no approver configured: {reason}"
+                ))),
+            },
+        }
     }
 
     /// Search for tools whose name or description contains the query (case-insensitive).
@@ -89,89 +175,91 @@ impl Registry {
     }
 
     /// Filter tools by execution_hint annotation.
-    ///
-    /// Returns definitions whose `annotations.execution_hint` matches the given
-    /// hint value. Tools without annotations or without an execution_hint are
-    /// excluded.
-    pub fn filter_by_execution_hint(&self, hint: &str) -> Vec<Definition> {
+    pub fn filter_by_execution_hint(&self, hint: ExecutionHint) -> Vec<Definition> {
         self.tools
             .read()
             .values()
             .filter_map(|t| {
                 let def = t.definition();
-                match &def.annotations {
-                    Some(ann) if ann.execution_hint.as_deref() == Some(hint) => Some(def.clone()),
-                    _ => None,
-                }
+                (def.annotations.execution_hint.effective() == hint.effective())
+                    .then(|| def.clone())
             })
             .collect()
     }
 
-    /// Call multiple tools concurrently.
-    ///
-    /// Read-only tools are executed concurrently via `tokio::join!`.
-    /// Non-read-only tools are executed serially to avoid side-effect conflicts.
+    /// Call multiple tools with caller-supplied concurrency policy. Each call
+    /// goes through the same HITL stages as [`Registry::call`].
     pub async fn call_batch(
         &self,
         calls: Vec<(&str, serde_json::Value)>,
         ctx: &Context,
+        options: BatchOptions,
     ) -> Vec<AppResult<ToolResult>> {
-        let mut read_only_futs = Vec::new();
-        let mut serial_calls = Vec::new();
+        let concurrency = options.concurrency.max(1);
+        let mut results = Vec::with_capacity(calls.len());
 
-        for (name, input) in &calls {
-            if let Some(tool) = self.get(name) {
-                if tool.definition().read_only {
-                    read_only_futs.push((tool, input.clone()));
-                } else {
-                    serial_calls.push((name.to_string(), tool, input.clone()));
-                }
-            } else {
-                serial_calls.push((
-                    name.to_string(),
-                    Arc::from(Box::new(NotFoundTool(name.to_string())) as Box<dyn Callable>),
-                    input.clone(),
-                ));
+        for chunk in calls.chunks(concurrency) {
+            let mut handles = Vec::with_capacity(chunk.len());
+            for (name, input) in chunk {
+                let name = (*name).to_string();
+                let input = input.clone();
+                let ctx = ctx.clone();
+                let tool = self.get(&name);
+                let sensitivity = self.sensitivity.clone();
+                let approval = self.approval.clone();
+                handles.push(tokio::spawn(async move {
+                    let Some(tool) = tool else {
+                        return Err(AppError::new(
+                            ErrorCode::NotFound,
+                            format!("tool not found: {name:?}"),
+                        ));
+                    };
+                    if let Some(evaluator) = sensitivity {
+                        let definition = tool.definition();
+                        let call = ToolCall {
+                            name: definition.name.clone(),
+                            input: input.clone(),
+                        };
+                        let decision = evaluator
+                            .evaluate(&ctx, &call, &definition.envelope)
+                            .await?;
+                        match decision {
+                            Decision::Allow => {}
+                            Decision::Deny(reason) => return Err(denied_error(reason)),
+                            Decision::RequireApproval(reason) => match approval {
+                                Some(approver) => {
+                                    if !approver.approve(&ctx, &call, &reason).await? {
+                                        return Err(denied_error(format!(
+                                            "human approval rejected: {reason}"
+                                        )));
+                                    }
+                                }
+                                None => {
+                                    return Err(denied_error(format!(
+                                        "approval required but no approver configured: {reason}"
+                                    )));
+                                }
+                            },
+                        }
+                    }
+                    tool.call(&ctx, input).await
+                }));
             }
-        }
-
-        let mut results = Vec::new();
-
-        // Execute read-only tools concurrently
-        if !read_only_futs.is_empty() {
-            let handles: Vec<_> = read_only_futs
-                .into_iter()
-                .map(|(tool, input)| {
-                    let ctx = ctx.clone();
-                    let tool = tool.clone();
-                    tokio::spawn(async move { tool.call(&ctx, input).await })
-                })
-                .collect();
 
             for handle in handles {
-                match handle.await {
-                    Ok(r) => results.push(r),
-                    Err(e) => results.push(Err(AppError::new(
+                let result = match handle.await {
+                    Ok(result) => result,
+                    Err(error) => Err(AppError::new(
                         ErrorCode::Internal,
-                        format!("task join error: {e}"),
-                    ))),
+                        format!("task join error: {error}"),
+                    )),
+                };
+                let failed = result.is_err();
+                results.push(result);
+                if failed && options.fail_fast {
+                    return results;
                 }
             }
-        }
-
-        // Execute non-read-only tools serially
-        for (name, tool, input) in serial_calls {
-            if tool.definition().name == name || tool.definition().name.is_empty() {
-                // NotFoundTool check
-                if tool.definition().name.is_empty() {
-                    results.push(Err(AppError::new(
-                        ErrorCode::NotFound,
-                        format!("tool not found: {name:?}"),
-                    )));
-                    continue;
-                }
-            }
-            results.push(tool.call(ctx, input).await);
         }
 
         results
@@ -199,44 +287,121 @@ impl Default for Registry {
     }
 }
 
-/// Placeholder for not-found tools in call_batch.
-struct NotFoundTool(String);
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::definition::Definition;
+    use crate::envelope::{Envelope, SensitiveMatcher, SensitivePredicate};
+    use crate::hitl::{DenyHumanApproval, DenyOnSensitive};
+    use crate::result::ToolResult;
+    use serde_json::json;
 
-#[async_trait::async_trait]
-impl Callable for NotFoundTool {
-    fn definition(&self) -> &Definition {
-        // This is only used for the not-found case; we use a static-like approach
-        // by leaking a definition. Since this is transient, we construct it inline.
-        // A better approach: we handle not-found above. This is a fallback.
-        static EMPTY_DEF: std::sync::LazyLock<Definition> =
-            std::sync::LazyLock::new(|| Definition {
-                name: String::new(),
-                description: String::new(),
-                input_schema: serde_json::Value::Null,
-                output_schema: None,
-                annotations: None,
-                read_only: false,
-                destructive: false,
-                max_result_size: 0,
-                timeout_secs: 0.0,
-            });
-        &EMPTY_DEF
+    struct StubTool {
+        def: Definition,
     }
 
-    fn validate(&self, _input: &serde_json::Value) -> rskit_schema::ValidationResult {
-        rskit_schema::ValidationResult {
-            valid: false,
-            errors: vec![rskit_schema::ValidationError {
-                path: String::new(),
-                message: format!("tool not found: {:?}", self.0),
-            }],
+    #[async_trait::async_trait]
+    impl Callable for StubTool {
+        fn definition(&self) -> &Definition {
+            &self.def
+        }
+        fn validate(&self, _input: &serde_json::Value) -> rskit_schema::ValidationResult {
+            rskit_schema::ValidationResult {
+                valid: true,
+                errors: Vec::new(),
+            }
+        }
+        async fn call(&self, _ctx: &Context, input: serde_json::Value) -> AppResult<ToolResult> {
+            Ok(ToolResult {
+                output: Some(input),
+                content: "ok".to_owned(),
+                is_error: false,
+                metadata: std::collections::HashMap::new(),
+            })
         }
     }
 
-    async fn call(&self, _ctx: &Context, _input: serde_json::Value) -> AppResult<ToolResult> {
-        Err(AppError::new(
-            ErrorCode::NotFound,
-            format!("tool not found: {:?}", self.0),
-        ))
+    fn stub(name: &str, env: Envelope) -> Box<dyn Callable> {
+        Box::new(StubTool {
+            def: Definition {
+                name: name.to_owned(),
+                description: "stub".to_owned(),
+                input_schema: json!({"type": "object"}),
+                output_schema: None,
+                annotations: crate::Annotations::default(),
+                envelope: env,
+            },
+        })
+    }
+
+    #[tokio::test]
+    async fn register_rejects_empty_name() {
+        let registry = Registry::new();
+        let err = registry
+            .register(stub("", Envelope::default()))
+            .expect_err("empty name rejected");
+        assert_eq!(err.code, ErrorCode::InvalidInput);
+    }
+
+    #[tokio::test]
+    async fn deny_on_sensitive_blocks_dispatch() {
+        let env = Envelope {
+            sensitive_invocations: vec![SensitivePredicate {
+                jsonpath: "$.msg".to_owned(),
+                matcher: SensitiveMatcher::Exists,
+            }],
+            ..Envelope::default()
+        };
+        let registry = Registry::new().with_sensitivity_evaluator(Arc::new(DenyOnSensitive));
+        registry.register(stub("danger", env)).unwrap();
+
+        let ctx = Context::new();
+        let err = registry
+            .call("danger", &ctx, json!({"msg": "hi"}))
+            .await
+            .expect_err("sensitive call denied");
+        assert_eq!(err.code, ErrorCode::Forbidden);
+    }
+
+    #[tokio::test]
+    async fn allow_when_no_sensitive_predicate_matches() {
+        let registry = Registry::new().with_sensitivity_evaluator(Arc::new(DenyOnSensitive));
+        registry
+            .register(stub("safe", Envelope::default()))
+            .unwrap();
+
+        let ctx = Context::new();
+        let result = registry
+            .call("safe", &ctx, json!({"msg": "hi"}))
+            .await
+            .unwrap();
+        assert!(!result.is_error);
+    }
+
+    #[tokio::test]
+    async fn require_approval_with_deny_human_rejects() {
+        struct AlwaysApprove;
+        #[async_trait::async_trait]
+        impl SensitivityEvaluator for AlwaysApprove {
+            async fn evaluate(
+                &self,
+                _ctx: &Context,
+                _call: &ToolCall,
+                _envelope: &Envelope,
+            ) -> AppResult<Decision> {
+                Ok(Decision::RequireApproval("policy".into()))
+            }
+        }
+        let registry = Registry::new()
+            .with_sensitivity_evaluator(Arc::new(AlwaysApprove))
+            .with_human_approval(Arc::new(DenyHumanApproval));
+        registry.register(stub("any", Envelope::default())).unwrap();
+
+        let ctx = Context::new();
+        let err = registry
+            .call("any", &ctx, json!({"msg": "x"}))
+            .await
+            .expect_err("denied by human approval default");
+        assert_eq!(err.code, ErrorCode::Forbidden);
     }
 }

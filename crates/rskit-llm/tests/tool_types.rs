@@ -1,33 +1,36 @@
 //! Tests for tool-calling types in rskit-llm.
 
 use rskit_llm::{
-    CompletionRequest, CompletionResponse, ContentBlock, FunctionCall, Message, ToolCall,
-    ToolChoice, Usage, assistant, system, text_of, tool_result_msg, user,
+    CompletionRequest, CompletionResponse, ContentPart, Message, ToolChoice, ToolUseBlock, Usage,
+    assistant, system, text_of, tool_result_msg, user,
 };
 
-// ── ContentBlock ────────────────────────────────────────────────────────────
+// ── ContentPart ────────────────────────────────────────────────────────────
 
 #[test]
 fn content_block_text_serde() {
-    let block = ContentBlock::Text {
+    let block = ContentPart::Text {
         text: "hello".into(),
     };
     let json = serde_json::to_value(&block).unwrap();
     assert_eq!(json["type"], "text");
     assert_eq!(json["text"], "hello");
-    let back: ContentBlock = serde_json::from_value(json).unwrap();
+    let back: ContentPart = serde_json::from_value(json).unwrap();
     match back {
-        ContentBlock::Text { text } => assert_eq!(text, "hello"),
+        ContentPart::Text { text } => assert_eq!(text, "hello"),
         _ => panic!("expected Text"),
     }
 }
 
 #[test]
 fn content_block_tool_use_serde() {
-    let block = ContentBlock::ToolUse {
+    let block = ContentPart::ToolUse {
         id: "call_1".into(),
         name: "search".into(),
-        input: serde_json::json!({"q": "rust"}),
+        input: serde_json::json!({"q": "rust"})
+            .as_object()
+            .cloned()
+            .unwrap(),
     };
     let json = serde_json::to_value(&block).unwrap();
     assert_eq!(json["type"], "tool_use");
@@ -36,8 +39,8 @@ fn content_block_tool_use_serde() {
 
 #[test]
 fn content_block_tool_result_serde() {
-    let block = ContentBlock::ToolResult {
-        tool_use_id: "call_1".into(),
+    let block = ContentPart::ToolResult {
+        id: "call_1".into(),
         content: "found it".into(),
         is_error: false,
     };
@@ -95,15 +98,15 @@ fn message_serde_roundtrip_system() {
 #[test]
 fn text_of_extracts_text_blocks() {
     let blocks = vec![
-        ContentBlock::Text {
+        ContentPart::Text {
             text: "Hello ".into(),
         },
-        ContentBlock::ToolUse {
+        ContentPart::ToolUse {
             id: "x".into(),
             name: "y".into(),
-            input: serde_json::json!({}),
+            input: serde_json::json!({}).as_object().cloned().unwrap(),
         },
-        ContentBlock::Text {
+        ContentPart::Text {
             text: "world".into(),
         },
     ];
@@ -115,27 +118,27 @@ fn text_of_empty() {
     assert_eq!(text_of(&[]), "");
 }
 
-// ── ToolCall / FunctionCall ─────────────────────────────────────────────────
+// ── ToolUseBlock ─────────────────────────────────────────────────────────────
 
 #[test]
-fn tool_call_serde_roundtrip() {
-    let tc = ToolCall {
+fn tool_use_block_serde_roundtrip() {
+    let tc = ToolUseBlock {
         id: "call_abc123".into(),
-        call_type: "function".into(),
-        function: FunctionCall {
-            name: "get_weather".into(),
-            arguments: r#"{"city":"NYC"}"#.into(),
-        },
+        name: "get_weather".into(),
+        input: serde_json::json!({"city": "NYC"})
+            .as_object()
+            .cloned()
+            .unwrap(),
     };
 
     let json = serde_json::to_value(&tc).unwrap();
     assert_eq!(json["id"], "call_abc123");
-    assert_eq!(json["type"], "function");
-    assert_eq!(json["function"]["name"], "get_weather");
+    assert_eq!(json["name"], "get_weather");
+    assert_eq!(json["input"]["city"], "NYC");
 
-    let back: ToolCall = serde_json::from_value(json).unwrap();
+    let back: ToolUseBlock = serde_json::from_value(json).unwrap();
     assert_eq!(back.id, "call_abc123");
-    assert_eq!(back.function.name, "get_weather");
+    assert_eq!(back.name, "get_weather");
 }
 
 // ── ToolChoice ──────────────────────────────────────────────────────────────
@@ -215,13 +218,10 @@ fn has_tool_calls_true() {
     let resp = CompletionResponse {
         message: rskit_llm::AssistantMessage {
             content: vec![],
-            tool_calls: vec![ToolCall {
+            tool_calls: vec![ToolUseBlock {
                 id: "call_1".into(),
-                call_type: "function".into(),
-                function: FunctionCall {
-                    name: "f".into(),
-                    arguments: "{}".into(),
-                },
+                name: "f".into(),
+                input: serde_json::Map::new(),
             }],
             usage: None,
         },
@@ -229,8 +229,10 @@ fn has_tool_calls_true() {
         usage: Usage {
             input_tokens: 10,
             output_tokens: 5,
+            cached_tokens: 0,
+            reasoning_tokens: 0,
         },
-        stop_reason: Some(rskit_llm::StopReason::ToolUse),
+        stop_reason: Some(rskit_llm::FinishReason::ToolUse),
     };
     assert!(resp.has_tool_calls());
 }
@@ -239,7 +241,7 @@ fn has_tool_calls_true() {
 fn has_tool_calls_false_when_empty() {
     let resp = CompletionResponse {
         message: rskit_llm::AssistantMessage {
-            content: vec![ContentBlock::Text {
+            content: vec![ContentPart::Text {
                 text: "done".into(),
             }],
             tool_calls: vec![],
@@ -249,8 +251,10 @@ fn has_tool_calls_false_when_empty() {
         usage: Usage {
             input_tokens: 10,
             output_tokens: 5,
+            cached_tokens: 0,
+            reasoning_tokens: 0,
         },
-        stop_reason: Some(rskit_llm::StopReason::EndTurn),
+        stop_reason: Some(rskit_llm::FinishReason::Stop),
     };
     assert!(!resp.has_tool_calls());
 }
@@ -259,7 +263,7 @@ fn has_tool_calls_false_when_empty() {
 fn completion_response_text() {
     let resp = CompletionResponse {
         message: rskit_llm::AssistantMessage {
-            content: vec![ContentBlock::Text {
+            content: vec![ContentPart::Text {
                 text: "Hello!".into(),
             }],
             tool_calls: vec![],
@@ -269,6 +273,8 @@ fn completion_response_text() {
         usage: Usage {
             input_tokens: 1,
             output_tokens: 1,
+            cached_tokens: 0,
+            reasoning_tokens: 0,
         },
         stop_reason: None,
     };

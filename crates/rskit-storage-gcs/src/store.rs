@@ -324,6 +324,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "requires GCS network access; run with --include-ignored in a configured environment"]
     async fn anonymous_store_constructs_without_credentials() {
         let store = GcsStore::new(GcsStoreConfig {
             bucket: "public-assets".into(),

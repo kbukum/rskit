@@ -45,6 +45,11 @@ multiple-versions = "warn"
 # Deny crates with known security advisories.
 deny = []
 
+# L7 dependency direction: rskit-ai is the only shared AI/ML vocabulary crate.
+# cargo-deny bans cannot express parent->child workspace path edges without banning
+# legitimate consumers globally, so CI runs scripts/check-l7-edges.sh after cargo-deny
+# to fail on disallowed direct normal-dependency regressions.
+
 # ---------------------------------------------------------------------------
 # Advisories
 # ---------------------------------------------------------------------------

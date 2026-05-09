@@ -1,4 +1,4 @@
-.PHONY: all build test test-nextest test-doc test-affected test-coverage test-coverage-html lint fmt fmt-check check check-fast doc deny clean help \
+.PHONY: all build test test-nextest test-doc test-affected test-coverage test-coverage-html lint fmt fmt-check check check-fast doc deny check-l7-edges clean help \
        ci ci-test ci-lint ci-fmt ensure-act
 
 # Crate flag: pass -p $(C) to cargo when C is set
@@ -97,9 +97,15 @@ doc:
 	@RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --document-private-items
 	@echo "✓ Docs built"
 
-## Run cargo-deny checks (licenses, advisories, sources, bans)
+## Run L7 dependency edge checks
+check-l7-edges:
+	@echo "==> Checking L7 dependency edges..."
+	@./scripts/check-l7-edges.sh
+	@echo "✓ L7 dependency edges OK"
+
+## Run cargo-deny checks (licenses, advisories, sources, bans) and L7 edge checks
 ## Requires: cargo install cargo-deny
-deny:
+deny: check-l7-edges
 	@echo "==> Running cargo-deny..."
 	@cargo deny check licenses advisories sources bans
 	@echo "✓ cargo-deny passed"
@@ -158,7 +164,8 @@ help:
 	@echo "  make fmt                                  Format code"
 	@echo "  make fmt-check                            Check formatting"
 	@echo "  make doc                                  Build documentation"
-	@echo "  make deny                                 Run cargo-deny checks"
+	@echo "  make check-l7-edges                       Check L7 dependency edges"
+	@echo "  make deny                                 Run cargo-deny + L7 edge checks"
 	@echo "  make check-fast                           fmt + lint + build"
 	@echo "  make check              [C=]               fmt + lint + build + test"
 	@echo "  make clean                                Remove build artifacts"
