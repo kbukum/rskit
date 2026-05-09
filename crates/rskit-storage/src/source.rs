@@ -38,7 +38,7 @@ impl Clone for FileSource {
                 Ok(cloned) => Self::Temp(cloned),
                 Err(error) => {
                     tracing::warn!(
-                        error = %error,
+                        error = ?error,
                         path = %temp.path().display(),
                         "FileSource::Temp clone failed, falling back to Path"
                     );

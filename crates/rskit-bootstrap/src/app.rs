@@ -47,7 +47,10 @@ fn register_lifecycle_hook(
 
         match receiver.recv() {
             Ok(Ok(())) => Ok(()),
-            Ok(Err(error)) => Err(HookError::fatal(error.to_string())),
+            Ok(Err(error)) => {
+                tracing::error!(error = ?error, "lifecycle hook failed");
+                Err(HookError::fatal(error.to_string()))
+            }
             Err(error) => Err(HookError::fatal(AppError::internal(error).to_string())),
         }
     });
