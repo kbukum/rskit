@@ -18,6 +18,11 @@ else
   python_bin="python3"
 fi
 
+if ! command -v "$python_bin" >/dev/null 2>&1; then
+  echo "Python 3.11+ is required but '$python_bin' was not found" >&2
+  exit 1
+fi
+
 require_python() {
   "$python_bin" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else "Python 3.11+ is required")'
 }

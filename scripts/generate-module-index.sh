@@ -23,11 +23,12 @@ from __future__ import annotations
 
 import os
 import sys
-import tomllib
-from pathlib import Path
 
 if sys.version_info < (3, 11):
     raise SystemExit("python3.11+ is required (tomllib)")
+
+import tomllib
+from pathlib import Path
 
 DOMAIN_EMOJI = {
     "core": "🧱",

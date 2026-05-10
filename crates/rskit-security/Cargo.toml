@@ -24,6 +24,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 rskit-errors = { version = "0.1.0", path = "../rskit-errors" }
 http         = { workspace = true }
 tower        = { workspace = true }
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

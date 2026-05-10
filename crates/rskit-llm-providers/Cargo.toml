@@ -26,3 +26,4 @@ tokio            = { workspace = true }
 tracing          = { workspace = true }
 opentelemetry    = { workspace = true }
 tracing-opentelemetry = { workspace = true }
+workspace-hack = { version = "0.1", path = "../workspace-hack" }

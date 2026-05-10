@@ -19,6 +19,7 @@ rskit-bootstrap = { path = "../rskit-bootstrap" }
 indicatif       = { workspace = true }
 tokio           = { workspace = true }
 tokio-util      = { workspace = true }
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "full"] }

@@ -4,6 +4,9 @@
 ## The name of the workspace-hack package
 hakari-package = "workspace-hack"
 
+## Resolver version (must match workspace Cargo.toml)
+resolver = "2"
+
 ## Platforms to compute unified features for
 platforms = [
     "x86_64-unknown-linux-gnu",
