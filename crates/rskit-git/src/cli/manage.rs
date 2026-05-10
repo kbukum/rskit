@@ -4,6 +4,7 @@ use std::process::Command;
 
 use rskit_errors::{AppError, AppResult};
 
+use crate::error::GitError;
 use crate::manage::{ConfigReader, Maintainer, RefManager, RemoteManager};
 use crate::options::{CleanOptions, FetchOptions, PushOptions};
 use crate::types::{Branch, BranchFilter, Remote, Tag};
@@ -139,8 +140,23 @@ impl RemoteManager for Backend {
 
 impl ConfigReader for Backend {
     fn config_get(&self, key: &str) -> AppResult<String> {
-        let output = self.run(&["config", "--get", key])?;
-        Ok(String::from_utf8_lossy(&output).trim().to_string())
+        let output = Command::new("git")
+            .args(["config", "--get", key])
+            .current_dir(&self.root)
+            .output()
+            .map_err(|err| GitError::CommandFailed {
+                args: vec!["config".into(), "--get".into(), key.into()],
+                stderr: err.to_string(),
+            })?;
+
+        if output.status.success() {
+            Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+        } else {
+            Err(GitError::ConfigNotFound {
+                key: key.to_string(),
+            }
+            .into())
+        }
     }
 
     fn config_get_all(&self, key: &str) -> AppResult<Vec<String>> {

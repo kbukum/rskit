@@ -137,11 +137,15 @@ impl RefManager for Backend {
     }
 
     fn delete_tag(&self, name: &str) -> AppResult<()> {
-        self.repo
-            .tag_delete(name)
-            .map_err(|_| GitError::RefNotFound {
-                refname: name.to_string(),
-            })?;
+        self.repo.tag_delete(name).map_err(|e| {
+            if e.code() == git2::ErrorCode::NotFound {
+                GitError::RefNotFound {
+                    refname: name.to_string(),
+                }
+            } else {
+                GitError::Internal(e)
+            }
+        })?;
         Ok(())
     }
 }
