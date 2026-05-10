@@ -1,7 +1,7 @@
 //! Management trait stubs for the CLI backend.
 
 use std::process::Command;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, UNIX_EPOCH};
 
 use rskit_errors::{AppError, AppResult};
 

@@ -5260,6 +5260,7 @@ dependencies = [
  "rskit-discovery",
  "rskit-encryption",
  "rskit-errors",
+ "rskit-git",
  "rskit-grpc",
  "rskit-http",
  "rskit-httpclient",

@@ -255,6 +255,10 @@ pub use rskit_workload as workload;
 #[cfg(feature = "cli")]
 pub use rskit_cli as cli;
 
+/// Git operations: repository management, commits, branches, tags, diffs.
+#[cfg(feature = "git")]
+pub use rskit_git as git;
+
 /// Dataset collection: sources, transforms, targets, manifest caching.
 #[cfg(feature = "dataset")]
 pub use rskit_dataset as dataset;
