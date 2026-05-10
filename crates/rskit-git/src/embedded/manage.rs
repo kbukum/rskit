@@ -71,7 +71,11 @@ impl RefManager for Backend {
                     name: name.to_string(),
                     target: oid_from_git2(tag.target_id()),
                     tagger: tag.tagger().map(|sig| signature_from_git2(&sig)),
-                    message: tag.message().unwrap_or_default().to_string(),
+                    message: tag
+                        .message()
+                        .unwrap_or_default()
+                        .trim_end_matches('\n')
+                        .to_string(),
                 });
             } else {
                 tags.push(Tag {
@@ -273,20 +277,16 @@ fn fetch_options_to_git2(opts: &FetchOptions) -> AppResult<git2::FetchOptions<'s
 fn push_refspecs(remote: &git2::Remote<'_>, opts: Option<&PushOptions>) -> AppResult<Vec<String>> {
     let mut refspecs = match opts {
         Some(o) if !o.refspecs.is_empty() => o.refspecs.clone(),
-        _ => {
-            // Use the remote's configured push refspecs (same as bare `git push`)
-            let configured = remote
-                .push_refspecs()
-                .map_err(GitError::Internal)?
-                .iter()
-                .flatten()
-                .map(str::to_string)
-                .collect::<Vec<_>>();
-            configured
-        }
+        _ => remote
+            .push_refspecs()
+            .map_err(GitError::Internal)?
+            .iter()
+            .flatten()
+            .map(str::to_string)
+            .collect::<Vec<_>>(),
     };
 
-    let force = opts.map_or(false, |o| o.force);
+    let force = opts.is_some_and(|o| o.force);
     if force {
         for refspec in &mut refspecs {
             if !refspec.starts_with('+') {

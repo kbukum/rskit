@@ -16,9 +16,12 @@ impl IndexManager for Backend {
     fn stage(&self, paths: &[&str]) -> AppResult<()> {
         let mut index = self.repo.index().map_err(GitError::Internal)?;
         for path in paths {
-            index
-                .add_path(Path::new(path))
-                .map_err(GitError::Internal)?;
+            let p = Path::new(path);
+            if self.root.join(p).exists() {
+                index.add_path(p).map_err(GitError::Internal)?;
+            } else {
+                index.remove_path(p).map_err(GitError::Internal)?;
+            }
         }
         index.write().map_err(GitError::Internal)?;
         Ok(())

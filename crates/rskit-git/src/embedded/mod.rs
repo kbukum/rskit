@@ -36,10 +36,7 @@ pub fn open(path: impl AsRef<Path>) -> AppResult<Backend> {
     let repo =
         git2::Repository::open(&abs).map_err(|_| GitError::NotFound { path: abs.clone() })?;
     // workdir() is None for bare repos; fall back to the .git dir path
-    let root = repo
-        .workdir()
-        .unwrap_or_else(|| repo.path())
-        .to_path_buf();
+    let root = repo.workdir().unwrap_or_else(|| repo.path()).to_path_buf();
     Ok(Backend { repo, root })
 }
 
@@ -50,10 +47,7 @@ pub fn discover(path: impl AsRef<Path>) -> AppResult<Backend> {
         path: path.to_path_buf(),
     })?;
     // workdir() is None for bare repos; fall back to the .git dir path
-    let root = repo
-        .workdir()
-        .unwrap_or_else(|| repo.path())
-        .to_path_buf();
+    let root = repo.workdir().unwrap_or_else(|| repo.path()).to_path_buf();
     Ok(Backend { repo, root })
 }
 

@@ -14,7 +14,7 @@ testutil = ["dep:tempfile"]
 
 [dependencies]
 rskit-errors = { path = "../rskit-errors" }
-git2 = { version = "0.20", default-features = false }
+git2 = { version = "0.20", default-features = false, features = ["https", "ssh"] }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 tempfile = { version = "3", optional = true }
