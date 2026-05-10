@@ -29,8 +29,6 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
-  SCCACHE_GHA_ENABLED: "true"
-  RUSTC_WRAPPER: "sccache"
 
 jobs:
   changes:
@@ -86,8 +84,6 @@ jobs:
     needs: changes
     if: needs.changes.outputs.rust-code == 'true'
     runs-on: ubuntu-latest
-    env:
-      RUSTC_WRAPPER: ""
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
@@ -123,6 +119,9 @@ jobs:
     if: needs.changes.outputs.rust-code == 'true'
     needs: changes
     runs-on: ubuntu-latest
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
@@ -143,6 +142,9 @@ jobs:
     if: needs.changes.outputs.rust-code == 'true'
     needs: changes
     runs-on: ${{ matrix.os }}
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     strategy:
       fail-fast: false
       matrix:
@@ -175,6 +177,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RUSTDOCFLAGS: "-D warnings"
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
@@ -194,6 +198,9 @@ jobs:
     if: needs.changes.outputs.rust-code == 'true' && (github.event_name == 'merge_group' || github.event_name == 'push')
     needs: changes
     runs-on: ubuntu-latest
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
@@ -223,8 +230,6 @@ jobs:
     if: needs.changes.outputs.rust-code == 'true'
     needs: changes
     runs-on: ubuntu-latest
-    env:
-      RUSTC_WRAPPER: ""
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
@@ -240,8 +245,6 @@ jobs:
     if: needs.changes.outputs.rust-code == 'true' && (github.event_name == 'merge_group' || github.event_name == 'push')
     needs: changes
     runs-on: ubuntu-latest
-    env:
-      RUSTC_WRAPPER: ""
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
@@ -261,6 +264,9 @@ jobs:
     if: needs.changes.outputs.rust-code == 'true' && (github.event_name == 'merge_group' || github.event_name == 'push')
     needs: changes
     runs-on: ubuntu-latest
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
@@ -278,13 +284,14 @@ jobs:
   ci-status:
     name: CI Status
     if: always()
-    needs: [changes, fmt, clippy, test, docs, l7-depguard, coverage, security, bench]
+    needs: [changes, fmt, hakari, clippy, test, docs, l7-depguard, coverage, security, bench]
     runs-on: ubuntu-latest
     steps:
       - name: Evaluate results
         run: |
           results=("${{ needs.changes.result }}" \
                    "${{ needs.fmt.result }}" \
+                   "${{ needs.hakari.result }}" \
                    "${{ needs.clippy.result }}" \
                    "${{ needs.test.result }}" \
                    "${{ needs.docs.result }}" \
