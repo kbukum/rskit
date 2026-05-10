@@ -118,10 +118,21 @@ impl RefManager for Backend {
             .map_err(|_| GitError::RefNotFound {
                 refname: target.to_string(),
             })?;
-        let signature = self.repo.signature().map_err(GitError::Internal)?;
-        self.repo
-            .tag(name, &obj, &signature, message, false)
-            .map_err(|err| map_exists_error("tag", name, err))?;
+        if message.is_empty() {
+            self.repo
+                .reference(
+                    &format!("refs/tags/{name}"),
+                    obj.id(),
+                    false,
+                    "create lightweight tag",
+                )
+                .map_err(|err| map_exists_error("tag", name, err))?;
+        } else {
+            let signature = self.repo.signature().map_err(GitError::Internal)?;
+            self.repo
+                .tag(name, &obj, &signature, message, false)
+                .map_err(|err| map_exists_error("tag", name, err))?;
+        }
         Ok(())
     }
 

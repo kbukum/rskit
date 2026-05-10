@@ -74,14 +74,14 @@ fn parse_grep_match(line: &str, revision: &str, line_numbers: bool) -> AppResult
 
     if line_numbers {
         let invalid_match = || AppError::invalid_format("grep match", "<path>:<line>:<content>");
-        let mut parts = line.rsplitn(3, ':');
-        content = parts.next().unwrap_or_default().to_string();
+        let mut parts = line.splitn(3, ':');
+        path_part = parts.next().ok_or_else(invalid_match)?.to_string();
         line_number = parts
             .next()
             .ok_or_else(invalid_match)?
             .parse::<usize>()
             .map_err(|_| invalid_match())?;
-        path_part = parts.next().ok_or_else(invalid_match)?.to_string();
+        content = parts.next().ok_or_else(invalid_match)?.to_string();
     } else {
         // Without -n the format is [<revision>:]<path>:<content>.
         // Split from the right so paths with colons are handled correctly.
@@ -118,5 +118,15 @@ mod tests {
             err.message,
             "invalid format for grep match: expected <path>:<line>:<content>"
         );
+    }
+
+    #[test]
+    fn parse_grep_match_with_line_numbers_preserves_colons_in_content() {
+        let matched =
+            parse_grep_match("README.md:12:key: value: still content", "HEAD", true).unwrap();
+
+        assert_eq!(matched.path, "README.md");
+        assert_eq!(matched.line_number, 12);
+        assert_eq!(matched.line, "key: value: still content");
     }
 }

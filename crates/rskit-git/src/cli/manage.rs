@@ -208,11 +208,19 @@ fn run_allow_empty(backend: &Backend, args: &[&str]) -> AppResult<Vec<u8>> {
     let output = Command::new("git")
         .args(args)
         .current_dir(backend.root())
-        .output()?;
+        .output()
+        .map_err(|err| crate::error::GitError::CommandFailed {
+            args: args.iter().map(|arg| (*arg).to_string()).collect(),
+            stderr: err.to_string(),
+        })?;
     if output.status.success() || output.status.code() == Some(1) {
         Ok(output.stdout)
     } else {
-        backend.run(args)
+        Err(crate::error::GitError::CommandFailed {
+            args: args.iter().map(|arg| (*arg).to_string()).collect(),
+            stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+        }
+        .into())
     }
 }
 

@@ -25,10 +25,10 @@ fn test_list_branches_and_tags() {
         tags.iter()
             .any(|tag| tag.name == "v0.1.0" && tag.message.is_empty())
     );
-    assert!(tags.iter().any(|tag| tag.name == "v0.2.0"
-        && tag.message
-            == "release
-" && tag.tagger.is_some()));
+    assert!(
+        tags.iter()
+            .any(|tag| tag.name == "v0.2.0" && tag.message == "release" && tag.tagger.is_some())
+    );
 }
 
 #[test]
