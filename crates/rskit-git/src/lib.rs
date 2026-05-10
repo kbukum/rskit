@@ -1,0 +1,49 @@
+//! Composable git repository interfaces backed by libgit2.
+//!
+//! This crate provides capability-based traits for git operations:
+//! - [`Repository`] and [`Executor`] for core repository access and raw CLI execution
+//! - [`Differ`], [`TreeReader`], [`LogReader`], [`Blamer`], and [`Inspector`] for read flows
+//! - [`IndexManager`], [`Committer`], and related write traits for mutating operations
+//! - [`RefManager`], [`RemoteManager`], [`ConfigReader`], and [`Maintainer`] for management
+//!
+//! The default backend uses `git2` for embedded operations and a CLI facade for stubbed
+//! command-oriented workflows.
+//!
+//! # Usage
+//!
+//! ```no_run
+//! use rskit_git::{Differ, Repository, open};
+//!
+//! let repo = open("/path/to/repo").unwrap();
+//! let dirty = repo.is_dirty().unwrap();
+//! let _status = repo.status().unwrap();
+//! assert!(!repo.root().as_os_str().is_empty() || !dirty);
+//! ```
+
+#![warn(missing_docs)]
+
+pub mod auth;
+pub mod cli;
+pub mod core;
+pub mod embedded;
+pub mod error;
+pub mod manage;
+pub mod options;
+pub mod read;
+pub mod repo;
+#[cfg(test)]
+pub mod testutil;
+pub mod types;
+pub mod write;
+
+pub use core::{Executor, Repository};
+pub use error::GitError;
+pub use manage::{ConfigReader, Maintainer, RefManager, RemoteManager};
+pub use options::*;
+pub use read::{Blamer, Differ, Inspector, LogReader, TreeReader};
+pub use repo::{Repo, clone, discover, init, init_bare, open};
+pub use rskit_errors::{AppError, AppResult};
+pub use types::*;
+pub use write::{
+    Checker, CherryPicker, Committer, IndexManager, Merger, Rebaser, Resetter, Stasher,
+};

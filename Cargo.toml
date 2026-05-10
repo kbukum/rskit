@@ -37,6 +37,7 @@ members = [
     "crates/rskit-authz",
     "crates/rskit-security",
     "crates/rskit-discovery",
+    "crates/rskit-git",
     "crates/rskit-grpc",
     "crates/rskit-testutil",
     # phase 5 specialist

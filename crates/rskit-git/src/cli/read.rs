@@ -1,0 +1,94 @@
+//! Read trait stubs for the CLI backend.
+
+use rskit_errors::AppResult;
+
+use crate::options::{DescribeOptions, GrepOptions};
+use crate::read::Inspector;
+use crate::types::{GrepMatch, Oid};
+
+use super::{Backend, parse_oid};
+
+impl Inspector for Backend {
+    fn describe(&self, opts: Option<&DescribeOptions>) -> AppResult<String> {
+        let opts = opts.cloned().unwrap_or_default();
+        let mut args = vec!["describe".to_string()];
+        if !opts.annotated_tags_only {
+            args.push("--tags".to_string());
+        }
+        if opts.long {
+            args.push("--long".to_string());
+        }
+        args.extend(opts.extra_args);
+
+        let refs = args.iter().map(String::as_str).collect::<Vec<_>>();
+        let output = self.run(&refs)?;
+        Ok(String::from_utf8_lossy(&output).trim().to_string())
+    }
+
+    fn rev_parse(&self, revision: &str) -> AppResult<Oid> {
+        let output = self.run(&["rev-parse", revision])?;
+        parse_oid(String::from_utf8_lossy(&output).trim())
+    }
+
+    fn grep(
+        &self,
+        pattern: &str,
+        revision: &str,
+        opts: Option<&GrepOptions>,
+    ) -> AppResult<Vec<GrepMatch>> {
+        let opts = opts.cloned().unwrap_or_default();
+        let mut args = vec!["grep".to_string(), "-n".to_string()];
+        if opts.ignore_case {
+            args.push("-i".to_string());
+        }
+        if opts.line_numbers {
+            args.push("-n".to_string());
+        }
+        args.extend(opts.extra_args);
+        args.push(pattern.to_string());
+        args.push(revision.to_string());
+        if !opts.pathspecs.is_empty() {
+            args.push("--".to_string());
+            args.extend(opts.pathspecs);
+        }
+
+        let refs = args.iter().map(String::as_str).collect::<Vec<_>>();
+        let output = self.run(&refs)?;
+        String::from_utf8_lossy(&output)
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(|line| parse_grep_match(line, revision))
+            .collect()
+    }
+
+    fn show(&self, object: &str) -> AppResult<Vec<u8>> {
+        self.run(&["show", object])
+    }
+}
+
+fn parse_grep_match(line: &str, revision: &str) -> AppResult<GrepMatch> {
+    let mut parts = line.rsplitn(3, ':');
+    let content = parts.next().unwrap_or_default().to_string();
+    let line_number = parts
+        .next()
+        .ok_or_else(|| crate::GitError::InvalidOid {
+            value: line.to_string(),
+        })?
+        .parse::<usize>()
+        .map_err(|_| crate::GitError::InvalidOid {
+            value: line.to_string(),
+        })?;
+    let path_part = parts.next().ok_or_else(|| crate::GitError::InvalidOid {
+        value: line.to_string(),
+    })?;
+    let path = path_part
+        .strip_prefix(&format!("{revision}:"))
+        .unwrap_or(path_part)
+        .to_string();
+
+    Ok(GrepMatch {
+        path,
+        line_number,
+        line: content,
+    })
+}
