@@ -312,6 +312,7 @@ pub struct RebaseResult {
 
 /// Controls which branches to list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
 pub enum BranchFilter {
     /// Only local branches.
     #[default]
@@ -324,6 +325,7 @@ pub enum BranchFilter {
 
 /// Controls repository reset behavior.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
 pub enum ResetMode {
     /// Reset HEAD and index, preserving worktree changes.
     #[default]

@@ -83,10 +83,12 @@ fn parse_grep_match(line: &str, revision: &str, line_numbers: bool) -> AppResult
             .map_err(|_| invalid_match())?;
         path_part = parts.next().ok_or_else(invalid_match)?.to_string();
     } else {
+        // Without -n the format is [<revision>:]<path>:<content>.
+        // Split from the right so paths with colons are handled correctly.
         let invalid_match = || AppError::invalid_format("grep match", "<path>:<content>");
-        let mut parts = line.splitn(2, ':');
-        path_part = parts.next().ok_or_else(invalid_match)?.to_string();
+        let mut parts = line.rsplitn(2, ':');
         content = parts.next().ok_or_else(invalid_match)?.to_string();
+        path_part = parts.next().ok_or_else(invalid_match)?.to_string();
         line_number = 0;
     }
 

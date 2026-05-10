@@ -146,8 +146,12 @@ impl LogReader for Backend {
         self.repo
             .merge_base(a.id(), b.id())
             .map(oid_from_git2)
-            .map_err(|_| GitError::RefNotFound {
-                refname: format!("{a_rev}:{b_rev}"),
+            .map_err(|e| {
+                if e.code() == git2::ErrorCode::NotFound {
+                    GitError::NoMergeBase { a: a_rev, b: b_rev }
+                } else {
+                    GitError::Internal(e)
+                }
             })
             .map_err(Into::into)
     }

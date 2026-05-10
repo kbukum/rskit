@@ -19,7 +19,10 @@ pub trait RefManager {
     /// Deletes a local branch.
     fn delete_branch(&self, name: &str) -> AppResult<()>;
 
-    /// Creates an annotated tag pointing at the given target revision.
+    /// Creates a tag pointing at the given target revision.
+    /// An annotated tag (with tagger and message) is created when `message` is non-empty;
+    /// a lightweight tag (a plain ref) is created when `message` is empty.
+    /// Both backends must follow this convention.
     fn create_tag(&self, name: &str, target: &str, message: &str) -> AppResult<()>;
 
     /// Deletes a tag.

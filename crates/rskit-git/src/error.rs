@@ -94,6 +94,15 @@ pub enum GitError {
         key: String,
     },
 
+    /// No merge base exists between the two commits.
+    #[error("no merge base found between {a} and {b}")]
+    NoMergeBase {
+        /// First commit reference.
+        a: String,
+        /// Second commit reference.
+        b: String,
+    },
+
     /// Commit signing is not supported by the selected backend.
     #[error("commit signing is not supported by the selected backend")]
     SigningNotSupported,
@@ -165,6 +174,9 @@ impl From<GitError> for AppError {
             }
             GitError::InvalidPath { path } => AppError::invalid_input("path", path),
             GitError::InvalidConfigKey { key } => AppError::invalid_input("key", key),
+            GitError::NoMergeBase { a, b } => {
+                AppError::not_found("merge base", Some(&format!("{a}..{b}")))
+            }
             GitError::SigningNotSupported => AppError::invalid_input(
                 "sign",
                 "commit signing is not supported by the selected backend",

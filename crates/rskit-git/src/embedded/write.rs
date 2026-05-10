@@ -3,7 +3,7 @@
 use std::path::Path;
 use std::time::{Duration, SystemTime};
 
-use rskit_errors::{AppError, AppResult};
+use rskit_errors::AppResult;
 
 use crate::error::GitError;
 use crate::options::CommitOptions;
@@ -79,10 +79,7 @@ impl Committer for Backend {
     fn commit(&self, message: &str, opts: Option<&CommitOptions>) -> AppResult<Oid> {
         let opts = opts.cloned().unwrap_or_default();
         if opts.sign {
-            return Err(AppError::invalid_input(
-                "sign",
-                "signed commits are not supported by the embedded backend",
-            ));
+            return Err(GitError::SigningNotSupported.into());
         }
 
         let mut index = self.repo.index().map_err(GitError::Internal)?;
