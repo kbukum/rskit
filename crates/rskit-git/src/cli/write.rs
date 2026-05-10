@@ -108,12 +108,24 @@ impl Rebaser for Backend {
     }
 
     fn continue_rebase(&self) -> AppResult<RebaseResult> {
+        let old_head = self.rev_parse("HEAD").ok();
         match self.run(&["rebase", "--continue"]) {
-            Ok(_) => Ok(RebaseResult {
-                head: Some(self.rev_parse("HEAD")?),
-                applied: 0,
-                conflicts: Vec::new(),
-            }),
+            Ok(_) => {
+                let new_head = self.rev_parse("HEAD")?;
+                let applied = match &old_head {
+                    Some(old) => self
+                        .run(&["rev-list", "--count", &format!("{old}..{new_head}")])
+                        .ok()
+                        .and_then(|out| String::from_utf8_lossy(&out).trim().parse::<usize>().ok())
+                        .unwrap_or(0),
+                    None => 0,
+                };
+                Ok(RebaseResult {
+                    head: Some(new_head),
+                    applied,
+                    conflicts: Vec::new(),
+                })
+            }
             Err(err) => match conflict_stderr(&err) {
                 Some(stderr) if stderr.contains("CONFLICT") => Ok(RebaseResult {
                     head: None,

@@ -141,21 +141,9 @@ fn test_tree_hash_changes() {
 #[test]
 fn test_log_with_options() {
     let repo = helpers::TestRepo::init();
-    repo.commit_file(
-        "foo.txt", "one
-", "add foo",
-    );
-    repo.commit_file(
-        "bar.txt", "bar
-", "add bar",
-    );
-    repo.commit_file(
-        "foo.txt",
-        "one
-two
-",
-        "update foo",
-    );
+    repo.commit_file("foo.txt", "one\n", "add foo");
+    repo.commit_file("bar.txt", "bar\n", "add bar");
+    repo.commit_file("foo.txt", "one\ntwo\n", "update foo");
     let r = open(repo.path()).unwrap();
 
     let commits = r
@@ -209,30 +197,17 @@ two
 #[test]
 fn test_merge_base_and_is_ancestor() {
     let repo = helpers::TestRepo::init();
-    repo.commit_file(
-        "base.txt", "base
-", "base",
-    );
+    repo.commit_file("base.txt", "base\n", "base");
     let base = repo.rev_parse("HEAD");
     repo.create_branch("feature");
     let main_branch = repo.current_branch();
 
     repo.checkout("feature");
-    repo.commit_file(
-        "feature.txt",
-        "feature
-",
-        "feature work",
-    );
+    repo.commit_file("feature.txt", "feature\n", "feature work");
     let feature_head = repo.rev_parse("HEAD");
 
     repo.checkout(&main_branch);
-    repo.commit_file(
-        "main.txt",
-        "main
-",
-        "main work",
-    );
+    repo.commit_file("main.txt", "main\n", "main work");
     let r = open(repo.path()).unwrap();
 
     let merge_base = r.merge_base("HEAD", &feature_head).unwrap();

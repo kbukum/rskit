@@ -304,8 +304,15 @@ fn parse_tag(fields: &[&str]) -> AppResult<Tag> {
     let tagger = if !tagger_name.is_empty() {
         let when = tagger_date
             .trim()
-            .parse::<u64>()
-            .map(|secs| UNIX_EPOCH + Duration::from_secs(secs))
+            .parse::<i64>()
+            .ok()
+            .and_then(|secs| {
+                if secs >= 0 {
+                    UNIX_EPOCH.checked_add(Duration::from_secs(secs as u64))
+                } else {
+                    UNIX_EPOCH.checked_sub(Duration::from_secs(secs.unsigned_abs()))
+                }
+            })
             .unwrap_or(UNIX_EPOCH);
         Some(Signature {
             name: (*tagger_name).to_string(),
