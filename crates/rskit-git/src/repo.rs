@@ -18,7 +18,7 @@ use crate::types::{
     RebaseResult, Reference, Remote, ResetMode, StashEntry, StatusEntry, Tag, TreeEntry, TreeHash,
 };
 use crate::write::{
-    Checker, CherryPicker, Committer, IndexManager, Merger, Rebaser, Resetter, Stasher,
+    CheckoutManager, CherryPicker, Committer, IndexManager, Merger, Rebaser, Resetter, Stasher,
 };
 
 /// Repository facade that combines embedded and CLI capabilities.
@@ -227,7 +227,7 @@ impl Resetter for Repo {
     }
 }
 
-impl Checker for Repo {
+impl CheckoutManager for Repo {
     fn checkout(&self, ref_name: &str, opts: Option<&CheckoutOptions>) -> AppResult<()> {
         self.cli.checkout(ref_name, opts)
     }

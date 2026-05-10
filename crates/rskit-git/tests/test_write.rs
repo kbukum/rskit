@@ -3,7 +3,7 @@ mod helpers;
 use std::time::{Duration, UNIX_EPOCH};
 
 use rskit_git::{
-    Checker, CheckoutOptions, CherryPicker, CommitOptions, Committer, Differ, EntryState,
+    CheckoutManager, CheckoutOptions, CherryPicker, CommitOptions, Committer, Differ, EntryState,
     IndexManager, LogOptions, LogReader, Merger, Rebaser, Repository, ResetMode, Resetter,
     Signature, Stasher, open,
 };

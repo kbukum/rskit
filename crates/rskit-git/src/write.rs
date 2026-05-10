@@ -80,7 +80,7 @@ pub trait Resetter {
 }
 
 /// Checkout operations.
-pub trait Checker {
+pub trait CheckoutManager {
     /// Checks out the given ref.
     fn checkout(&self, ref_name: &str, opts: Option<&CheckoutOptions>) -> AppResult<()>;
 

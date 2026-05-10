@@ -153,9 +153,15 @@ impl ConfigReader for Backend {
 
         if output.status.success() {
             Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
-        } else {
+        } else if output.status.code() == Some(1) {
             Err(GitError::ConfigNotFound {
                 key: key.to_string(),
+            }
+            .into())
+        } else {
+            Err(GitError::CommandFailed {
+                args: vec!["config".into(), "--get".into(), key.into()],
+                stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
             }
             .into())
         }

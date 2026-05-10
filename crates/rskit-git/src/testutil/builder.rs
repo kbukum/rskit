@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use rskit_errors::{AppError, AppResult};
 use tempfile::TempDir;
 
-use crate::{Checker, Committer, ConfigReader, Differ, IndexManager, RefManager, Repo};
+use crate::{CheckoutManager, Committer, ConfigReader, Differ, IndexManager, RefManager, Repo};
 
 /// Builder for creating test repositories with specific states.
 pub struct RepoBuilder {

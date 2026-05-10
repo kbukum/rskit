@@ -5,7 +5,7 @@ use rskit_errors::{AppError, AppResult};
 use crate::options::{CheckoutOptions, CherryPickOptions, MergeOptions, RebaseOptions};
 use crate::read::Inspector;
 use crate::types::{MergeResult, Oid, RebaseResult, ResetMode, StashEntry};
-use crate::write::{Checker, CherryPicker, Merger, Rebaser, Resetter, Stasher};
+use crate::write::{CheckoutManager, CherryPicker, Merger, Rebaser, Resetter, Stasher};
 
 use super::Backend;
 
@@ -166,7 +166,7 @@ impl Resetter for Backend {
     }
 }
 
-impl Checker for Backend {
+impl CheckoutManager for Backend {
     fn checkout(&self, ref_name: &str, opts: Option<&CheckoutOptions>) -> AppResult<()> {
         let opts = opts.cloned().unwrap_or_default();
         let mut args = vec!["checkout".to_string()];

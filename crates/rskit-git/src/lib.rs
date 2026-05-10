@@ -45,5 +45,5 @@ pub use repo::{Repo, clone, discover, init, init_bare, open};
 pub use rskit_errors::{AppError, AppResult};
 pub use types::*;
 pub use write::{
-    Checker, CherryPicker, Committer, IndexManager, Merger, Rebaser, Resetter, Stasher,
+    CheckoutManager, CherryPicker, Committer, IndexManager, Merger, Rebaser, Resetter, Stasher,
 };
