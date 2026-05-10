@@ -271,8 +271,8 @@ pub struct BlameLine {
 pub struct GrepMatch {
     /// Repository-relative file path.
     pub path: String,
-    /// One-based matching line number.
-    pub line_number: usize,
+    /// One-based line number, or `None` when line numbers were not requested.
+    pub line_number: Option<usize>,
     /// Raw matching line content.
     pub line: String,
 }

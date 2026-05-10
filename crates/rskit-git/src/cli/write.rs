@@ -28,11 +28,14 @@ impl Merger for Backend {
 
         let refs = args.iter().map(String::as_str).collect::<Vec<_>>();
         match self.run(&refs) {
-            Ok(_) => Ok(MergeResult {
-                head: None,
-                fast_forward: false,
-                conflicts: Vec::new(),
-            }),
+            Ok(_) => {
+                let head = self.rev_parse("HEAD").ok();
+                Ok(MergeResult {
+                    head,
+                    fast_forward: false,
+                    conflicts: Vec::new(),
+                })
+            }
             Err(err) => match conflict_stderr(&err) {
                 Some(stderr) if stderr.contains("CONFLICT") => Ok(MergeResult {
                     head: None,

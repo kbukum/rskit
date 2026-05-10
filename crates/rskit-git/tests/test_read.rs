@@ -355,7 +355,7 @@ fn test_rev_parse_describe_grep_and_show() {
         .unwrap();
     assert_eq!(matches.len(), 1);
     assert_eq!(matches[0].path, "docs/notes.txt");
-    assert_eq!(matches[0].line_number, 1);
+    assert_eq!(matches[0].line_number, Some(1));
     assert_eq!(matches[0].line, "Hello World");
 
     let shown = r.show("HEAD:docs/notes.txt").unwrap();

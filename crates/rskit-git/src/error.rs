@@ -185,8 +185,9 @@ impl From<GitError> for AppError {
             GitError::Network(message) => {
                 AppError::external_service("git", io::Error::other(message))
             }
-            GitError::CommandFailed { stderr, .. } => {
-                AppError::external_service("git", io::Error::other(stderr))
+            GitError::CommandFailed { args, stderr } => {
+                let detail = format!("git {}: {}", args.join(" "), stderr);
+                AppError::external_service("git", io::Error::other(detail))
             }
             GitError::InvalidOid { value } => AppError::invalid_input("oid", value),
             GitError::NotImplemented { operation } => AppError::new(
