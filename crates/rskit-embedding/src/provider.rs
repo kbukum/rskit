@@ -9,8 +9,7 @@ use crate::{EmbedRequest, EmbedResponse};
 ///
 /// Extends [`rskit_provider::RequestResponse<EmbedRequest, EmbedResponse>`] so
 /// any embedding provider can be plugged directly into pipeline / dag / worker
-/// flows. Any embedding provider plugs directly into pipeline / dag / worker
-/// consumers.
+/// flows.
 #[async_trait]
 pub trait Provider: rskit_provider::RequestResponse<EmbedRequest, EmbedResponse> {
     /// Generate embeddings for one request.

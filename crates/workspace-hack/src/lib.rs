@@ -2,3 +2,5 @@
 //!
 //! This crate exists to unify feature sets across the workspace.
 //! Do not add code here — run `cargo hakari generate` to update dependencies.
+
+#![warn(missing_docs)]

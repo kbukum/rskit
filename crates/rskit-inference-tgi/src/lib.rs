@@ -156,7 +156,7 @@ pub fn register(registry: &mut Registry) -> Result<(), RegistryError> {
                 .map_err(|err| InferenceError::Decode(err.to_string()))?
         };
         Ok(Arc::new(
-            Adapter::new(config).map_err(|err| InferenceError::Decode(err.to_string()))?,
+            Adapter::new(config).map_err(InferenceError::from)?,
         ))
     });
     registry.register(KIND, factory)

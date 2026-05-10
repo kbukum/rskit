@@ -17,7 +17,7 @@
 Modules are organized into domains for scoped development. See [Module Index](docs/MODULE-INDEX.md) for the full breakdown.
 
 | Domain | Focus | Quick check |
-|--------|-------|-------------|
+| ------ | ----- | ----------- |
 | core | Foundation types, config, logging | `make check-core` |
 | patterns | Component, provider, DI, hooks | `make check-patterns` |
 | crosscutting | Observability, resilience, security | `make check-crosscutting` |

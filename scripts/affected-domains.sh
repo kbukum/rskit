@@ -57,7 +57,13 @@ def domains_for_file(path_str: str) -> set[str]:
     if not parts:
         return set()
 
-    if len(parts) == 1 or parts[0] in {".cargo", ".config"}:
+    global_files = {"Cargo.lock", "Cargo.toml", "Makefile", "README.md", "domains.toml"}
+    global_dirs = {".cargo", ".config", ".github", "docs", "scripts"}
+
+    if path_str in global_files or parts[0] in global_dirs:
+        return set(all_domains)
+
+    if len(parts) >= 2 and parts[0] == "crates" and parts[1] in {"rskit", "workspace-hack"}:
         return set(all_domains)
 
     if len(parts) >= 2 and parts[0] == "crates" and parts[1].startswith("rskit-"):

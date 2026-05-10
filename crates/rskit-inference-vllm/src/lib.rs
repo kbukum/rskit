@@ -66,19 +66,19 @@ impl rskit_provider::RequestResponse<PredictRequest, PredictResponse> for Adapte
 }
 
 impl Adapter {
-    /// Create a adapter with the default canonical HTTP client.
+    /// Create an adapter with the default canonical HTTP client.
     pub fn new(config: Config) -> AppResult<Self> {
         let client = HttpClient::new(HttpClientConfig::new().with_base_url(&config.endpoint))?;
         Ok(Self::with_http_client(config, client))
     }
 
-    /// Create a adapter with an injected canonical HTTP client.
+    /// Create an adapter with an injected canonical HTTP client.
     #[must_use]
     pub fn with_http_client(config: Config, client: HttpClient) -> Self {
         Self { config, client }
     }
 
-    /// Create a adapter with an injected raw reqwest client.
+    /// Create an adapter with an injected raw reqwest client.
     #[must_use]
     pub fn with_reqwest_client(config: Config, client: reqwest::Client) -> Self {
         let client = HttpClient::from_parts(
@@ -153,7 +153,7 @@ pub fn register(registry: &mut Registry) -> Result<(), RegistryError> {
                 .map_err(|err| InferenceError::Decode(err.to_string()))?
         };
         Ok(Arc::new(
-            Adapter::new(config).map_err(|err| InferenceError::Decode(err.to_string()))?,
+            Adapter::new(config).map_err(InferenceError::from)?,
         ))
     });
     registry.register(KIND, factory)

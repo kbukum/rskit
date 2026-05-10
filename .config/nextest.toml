@@ -4,7 +4,7 @@
 [profile.default]
 # Fail fast: stop on first failure during development
 fail-fast = true
-# Retry flaky tests once
+# No retries in dev; CI profile adds retries
 retries = 0
 
 [profile.ci]

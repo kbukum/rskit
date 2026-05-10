@@ -313,7 +313,7 @@ impl Agent {
                         }
 
                         let tool_result = self
-                            .execute_tool_call(tools, &tc.name, input.clone())
+                            .execute_tool_call(tools, &tc.id, &tc.name, input.clone())
                             .instrument(turn_span.clone())
                             .await;
 
@@ -432,18 +432,22 @@ impl Agent {
     async fn execute_tool_call(
         &self,
         tools: &Registry,
+        tool_use_id: &str,
         name: &str,
         input: serde_json::Value,
     ) -> AppResult<ToolResult> {
         let timeout = self.config.tool_timeout;
         let policy = self.config.policy.clone();
         let tool_name = name.to_string();
+        let tool_use_id = tool_use_id.to_string();
 
         let execute = || {
             let tool_name = tool_name.clone();
+            let tool_use_id = tool_use_id.clone();
             let input = input.clone();
             async move {
-                let ctx = Context::new();
+                let mut ctx = Context::new();
+                ctx.tool_use_id = tool_use_id;
                 tokio::time::timeout(timeout, tools.call(&tool_name, &ctx, input))
                     .await
                     .unwrap_or_else(|_| {

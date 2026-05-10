@@ -4,7 +4,10 @@ version = "0.1.0"
 edition = "2024"
 publish = false
 # Managed by cargo-hakari — do not edit manually.
-# Run `cargo hakari generate` to regenerate dependency unification.
+# Dependencies are managed by cargo-hakari. Run:
+#   cargo install cargo-hakari
+#   cargo hakari generate
+#   cargo hakari manage-deps
 
 [dependencies]
 

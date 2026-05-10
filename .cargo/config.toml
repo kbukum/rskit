@@ -1,7 +1,8 @@
 [build]
 # Pass --cfg docsrs when building documentation so #[cfg_attr(docsrs, ...)]
 # attributes are activated on docs.rs.
-rustc-wrapper = "sccache"
+# Uncomment to enable sccache locally (install: cargo install sccache).
+# rustc-wrapper = "sccache"
 # rustdocflags = ["--cfg", "docsrs"]   # uncomment when publishing to docs.rs
 
 [alias]

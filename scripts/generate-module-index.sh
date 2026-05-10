@@ -4,13 +4,30 @@ set -euo pipefail
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(CDPATH= cd -- "${SCRIPT_DIR}/.." && pwd)"
 export ROOT_DIR
+PYTHON_BIN=""
 
-python3 <<'PY'
+for candidate in python3.14 python3.13 python3.12 python3.11 python3; do
+  if command -v "$candidate" >/dev/null 2>&1; then
+    PYTHON_BIN="$candidate"
+    break
+  fi
+done
+
+if [ -z "$PYTHON_BIN" ]; then
+  echo "python3.11+ is required (tomllib)" >&2
+  exit 1
+fi
+
+"$PYTHON_BIN" - <<'PY'
 from __future__ import annotations
 
 import os
+import sys
 import tomllib
 from pathlib import Path
+
+if sys.version_info < (3, 11):
+    raise SystemExit("python3.11+ is required (tomllib)")
 
 DOMAIN_EMOJI = {
     "core": "🧱",
