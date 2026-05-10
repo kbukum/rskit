@@ -1,11 +1,10 @@
 //! Provider trait — the canonical abstraction over LLM backends.
 //!
-//! Per locked decision D6, this is the *single* full LLM provider trait. The
-//! split `LlmProvider`/`Provider` shape was collapsed: implementors only need
-//! to supply [`Provider::complete`] (and optionally override the defaults for
-//! `stream`, `capabilities`, and `count_tokens`).
+//! This is the single full LLM provider trait. Implementors only need to supply
+//! [`Provider::complete`] (and optionally override the defaults for `stream`,
+//! `capabilities`, and `count_tokens`).
 //!
-//! Per locked decision D7, the trait extends
+//! The trait extends
 //! `rskit_provider::RequestResponse<CompletionRequest, CompletionResponse>` so
 //! any LLM provider is natively usable in `dag`, `pipeline`, `chain`, `worker`,
 //! and `process` consumers without adapter shims.
@@ -33,7 +32,7 @@ use crate::types::{CompletionRequest, CompletionResponse};
 /// `message.stop`) by awaiting `complete`. Adapters whose backend supports
 /// native streaming SHOULD override `stream` to emit incremental events.
 ///
-/// # D7 — Native provider shape
+/// # Native provider shape
 ///
 /// This trait requires
 /// `rskit_provider::RequestResponse<CompletionRequest, CompletionResponse>` as

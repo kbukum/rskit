@@ -10,9 +10,8 @@ use crate::types::{
 /// embeddings (BentoML, custom), image/audio inference, and arbitrary tensor
 /// protocols. NOT chat completion — that lives in `rskit-llm`.
 ///
-/// Per locked decision D7, this trait extends
-/// `rskit_provider::RequestResponse<PredictRequest, PredictResponse>` so
-/// inference adapters natively expose the canonical request/response shape.
+/// This trait extends `rskit_provider::RequestResponse<PredictRequest, PredictResponse>`
+/// so inference adapters natively expose the canonical request/response shape.
 #[async_trait]
 pub trait Inference:
     rskit_provider::RequestResponse<PredictRequest, PredictResponse> + Send + Sync

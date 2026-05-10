@@ -1,8 +1,7 @@
-//! vLLM raw REST adapter skeleton for `rskit-inference`.
+//! vLLM raw REST adapter for `rskit-inference`.
 //!
-//! Implementation pending; PRs welcome. The crate exists to lock the backend
-//! split shape: explicit registration, descriptor, and streaming-capable trait
-//! surface without auto-registration or globals.
+//! The crate locks the backend split shape: explicit registration, descriptor,
+//! and streaming-capable trait surface without auto-registration or globals.
 
 #![warn(missing_docs)]
 
@@ -19,10 +18,10 @@ use rskit_tool::Envelope;
 use serde::{Deserialize, Serialize};
 use tokio_stream::Stream;
 
-/// Registry kind for the vLLM adapter skeleton.
+/// Registry kind for the vLLM adapter.
 pub const KIND: &str = "vllm";
 
-/// Configuration for the vLLM raw REST adapter skeleton.
+/// Configuration for the vLLM raw REST adapter.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     /// Adapter endpoint base URL.
@@ -46,7 +45,7 @@ impl Default for Config {
     }
 }
 
-/// vLLM raw REST adapter skeleton.
+/// vLLM raw REST adapter.
 pub struct Adapter {
     config: Config,
     client: HttpClient,
@@ -67,19 +66,19 @@ impl rskit_provider::RequestResponse<PredictRequest, PredictResponse> for Adapte
 }
 
 impl Adapter {
-    /// Create a skeleton adapter with the default canonical HTTP client.
+    /// Create a adapter with the default canonical HTTP client.
     pub fn new(config: Config) -> AppResult<Self> {
         let client = HttpClient::new(HttpClientConfig::new().with_base_url(&config.endpoint))?;
         Ok(Self::with_http_client(config, client))
     }
 
-    /// Create a skeleton adapter with an injected canonical HTTP client.
+    /// Create a adapter with an injected canonical HTTP client.
     #[must_use]
     pub fn with_http_client(config: Config, client: HttpClient) -> Self {
         Self { config, client }
     }
 
-    /// Create a skeleton adapter with an injected raw reqwest client.
+    /// Create a adapter with an injected raw reqwest client.
     #[must_use]
     pub fn with_reqwest_client(config: Config, client: reqwest::Client) -> Self {
         let client = HttpClient::from_parts(
@@ -144,7 +143,7 @@ impl rskit_component::Component for Adapter {
     }
 }
 
-/// Register this adapter skeleton in an explicit registry.
+/// Register this adapter in an explicit registry.
 pub fn register(registry: &mut Registry) -> Result<(), RegistryError> {
     let factory: Factory = Arc::new(|config| {
         let config = if config.is_null() {
@@ -169,5 +168,5 @@ fn default_name() -> String {
 }
 
 fn default_description() -> String {
-    "vLLM raw REST adapter skeleton; implementation pending; PRs welcome".to_owned()
+    "vLLM raw REST adapter; implementation pending; PRs welcome".to_owned()
 }

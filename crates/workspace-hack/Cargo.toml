@@ -3,15 +3,12 @@ name = "workspace-hack"
 version = "0.1.0"
 edition = "2024"
 publish = false
-# managed by cargo-hakari — do not edit manually
-# run `cargo hakari generate` to regenerate
+# Managed by cargo-hakari — do not edit manually.
+# Run `cargo hakari generate` to regenerate dependency unification.
 
 [dependencies]
-# This section will be populated by `cargo hakari generate`.
-# For now it's empty, which is valid — hakari will fill it in.
 
 [build-dependencies]
-# This section will be populated by `cargo hakari generate`.
 
 [features]
 default = []

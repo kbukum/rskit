@@ -1,8 +1,10 @@
-//! Hugging Face TGI REST adapter skeleton for `rskit-inference`.
+//! Hugging Face TGI REST adapter for `rskit-inference`.
 //!
-//! Implementation pending; PRs welcome. The crate exists to lock the backend
-//! split shape: explicit registration, descriptor, and streaming-capable trait
-//! surface without auto-registration or globals.
+//! This crate implements [`rskit_inference::Inference`] and
+//! [`rskit_inference::StreamingInference`] against Hugging Face's
+//! Text Generation Inference (TGI) REST API. Explicit registration,
+//! descriptor, and streaming-capable trait surface without
+//! auto-registration or globals.
 
 #![warn(missing_docs)]
 
@@ -67,19 +69,19 @@ impl rskit_provider::RequestResponse<PredictRequest, PredictResponse> for Adapte
 }
 
 impl Adapter {
-    /// Create a skeleton adapter with the default canonical HTTP client.
+    /// Create an adapter with the default canonical HTTP client.
     pub fn new(config: Config) -> AppResult<Self> {
         let client = HttpClient::new(HttpClientConfig::new().with_base_url(&config.endpoint))?;
         Ok(Self::with_http_client(config, client))
     }
 
-    /// Create a skeleton adapter with an injected canonical HTTP client.
+    /// Create an adapter with an injected canonical HTTP client.
     #[must_use]
     pub fn with_http_client(config: Config, client: HttpClient) -> Self {
         Self { config, client }
     }
 
-    /// Create a skeleton adapter with an injected raw reqwest client.
+    /// Create an adapter with an injected raw reqwest client.
     #[must_use]
     pub fn with_reqwest_client(config: Config, client: reqwest::Client) -> Self {
         let client = HttpClient::from_parts(
