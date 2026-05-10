@@ -28,11 +28,13 @@ impl Merger for Backend {
 
         let refs = args.iter().map(String::as_str).collect::<Vec<_>>();
         match self.run(&refs) {
-            Ok(_) => {
+            Ok(output) => {
                 let head = self.rev_parse("HEAD").ok();
+                let stdout = String::from_utf8_lossy(&output);
+                let fast_forward = stdout.contains("Fast-forward");
                 Ok(MergeResult {
                     head,
-                    fast_forward: false,
+                    fast_forward,
                     conflicts: Vec::new(),
                 })
             }
@@ -67,12 +69,26 @@ impl Rebaser for Backend {
         args.push(onto.to_string());
 
         let refs = args.iter().map(String::as_str).collect::<Vec<_>>();
+        let old_head = self.rev_parse("HEAD").ok();
         match self.run(&refs) {
-            Ok(_) => Ok(RebaseResult {
-                head: Some(self.rev_parse("HEAD")?),
-                applied: 0,
-                conflicts: Vec::new(),
-            }),
+            Ok(_) => {
+                let new_head = self.rev_parse("HEAD")?;
+                let applied = match &old_head {
+                    Some(oh) => {
+                        let range = format!("{}..{}", oh, new_head);
+                        self.run(&["rev-list", "--count", &range])
+                            .ok()
+                            .and_then(|out| String::from_utf8_lossy(&out).trim().parse().ok())
+                            .unwrap_or(0)
+                    }
+                    None => 0,
+                };
+                Ok(RebaseResult {
+                    head: Some(new_head),
+                    applied,
+                    conflicts: Vec::new(),
+                })
+            }
             Err(err) => match conflict_stderr(&err) {
                 Some(stderr) if stderr.contains("CONFLICT") => Ok(RebaseResult {
                     head: None,

@@ -34,6 +34,7 @@ impl Backend {
         let output = Command::new("git")
             .args(args)
             .current_dir(&self.root)
+            .env("GIT_TERMINAL_PROMPT", "0")
             .output()
             .map_err(|err| GitError::CommandFailed {
                 args: args.iter().map(|arg| (*arg).to_string()).collect(),
