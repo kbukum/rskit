@@ -158,7 +158,9 @@ fn reference_from_git2(reference: &git2::Reference<'_>) -> Reference {
 
 fn map_head_error(err: git2::Error) -> GitError {
     if err.code() == git2::ErrorCode::UnbornBranch || err.code() == git2::ErrorCode::NotFound {
-        GitError::DetachedHead
+        GitError::RefNotFound {
+            refname: "HEAD".to_string(),
+        }
     } else {
         GitError::Internal(err)
     }
