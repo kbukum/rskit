@@ -174,16 +174,8 @@ two
         }))
         .unwrap();
     assert_eq!(commits.len(), 2);
-    assert_eq!(
-        commits[0].message,
-        "update foo
-"
-    );
-    assert_eq!(
-        commits[1].message,
-        "add bar
-"
-    );
+    assert_eq!(commits[0].message, "update foo");
+    assert_eq!(commits[1].message, "add bar");
 
     let foo_commits = r
         .log(Some(&LogOptions {

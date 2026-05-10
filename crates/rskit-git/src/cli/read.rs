@@ -68,14 +68,17 @@ impl Inspector for Backend {
 }
 
 fn parse_grep_match(line: &str, revision: &str, line_numbers: bool) -> AppResult<GrepMatch> {
-    let path_part;
+    // Strip optional revision prefix (e.g., "HEAD:" from "HEAD:path:1:content")
+    let stripped = line.strip_prefix(&format!("{revision}:")).unwrap_or(line);
+
+    let path;
     let line_number;
     let content;
 
     if line_numbers {
         let invalid_match = || AppError::invalid_format("grep match", "<path>:<line>:<content>");
-        let mut parts = line.splitn(3, ':');
-        path_part = parts.next().ok_or_else(invalid_match)?.to_string();
+        let mut parts = stripped.splitn(3, ':');
+        path = parts.next().ok_or_else(invalid_match)?.to_string();
         line_number = parts
             .next()
             .ok_or_else(invalid_match)?
@@ -83,19 +86,14 @@ fn parse_grep_match(line: &str, revision: &str, line_numbers: bool) -> AppResult
             .map_err(|_| invalid_match())?;
         content = parts.next().ok_or_else(invalid_match)?.to_string();
     } else {
-        // Without -n the format is [<revision>:]<path>:<content>.
-        // Split from the right so paths with colons are handled correctly.
+        // Without -n the format is <path>:<content>.
+        // Split from left: path has no colons (relative), content may.
         let invalid_match = || AppError::invalid_format("grep match", "<path>:<content>");
-        let mut parts = line.rsplitn(2, ':');
+        let mut parts = stripped.splitn(2, ':');
+        path = parts.next().ok_or_else(invalid_match)?.to_string();
         content = parts.next().ok_or_else(invalid_match)?.to_string();
-        path_part = parts.next().ok_or_else(invalid_match)?.to_string();
         line_number = 0;
     }
-
-    let path = path_part
-        .strip_prefix(&format!("{revision}:"))
-        .unwrap_or(&path_part)
-        .to_string();
 
     Ok(GrepMatch {
         path,
