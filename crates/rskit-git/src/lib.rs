@@ -31,7 +31,6 @@ pub mod manage;
 pub mod options;
 pub mod read;
 pub mod repo;
-#[cfg(test)]
 pub mod testutil;
 pub mod types;
 pub mod write;
