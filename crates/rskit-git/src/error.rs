@@ -201,8 +201,8 @@ impl From<GitError> for AppError {
             }
             GitError::InvalidOid { value } => AppError::invalid_input("oid", value),
             GitError::NotImplemented { operation } => AppError::new(
-                ErrorCode::Internal,
-                format!("git operation not implemented: {operation}"),
+                ErrorCode::InvalidInput,
+                format!("git operation not supported: {operation}"),
             ),
             GitError::Internal(inner) => AppError::internal(inner),
         }
