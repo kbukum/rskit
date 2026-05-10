@@ -1,4 +1,4 @@
-//! Composable git repository interfaces backed by libgit2.
+//! Composable git repository interfaces backed by libgit2 and the git CLI.
 //!
 //! This crate provides capability-based traits for git operations:
 //! - [`Repository`] and [`Executor`] for core repository access and raw CLI execution
@@ -6,8 +6,9 @@
 //! - [`IndexManager`], [`Committer`], and related write traits for mutating operations
 //! - [`RefManager`], [`RemoteManager`], [`ConfigReader`], and [`Maintainer`] for management
 //!
-//! The default backend uses `git2` for embedded operations and a CLI facade for stubbed
-//! command-oriented workflows.
+//! The default backend uses `git2` (libgit2) for embedded operations and delegates several
+//! core mutating operations (merge, rebase, checkout, reset, stash, fetch, push, maintenance)
+//! to the `git` CLI binary. **A `git` binary must be available on `PATH` at runtime.**
 //!
 //! # Usage
 //!

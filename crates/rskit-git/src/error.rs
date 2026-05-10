@@ -123,6 +123,8 @@ pub enum GitError {
     CommandFailed {
         /// CLI arguments that were attempted.
         args: Vec<String>,
+        /// Standard output (may contain conflict diagnostics).
+        stdout: String,
         /// Standard error output.
         stderr: String,
     },
@@ -185,8 +187,16 @@ impl From<GitError> for AppError {
             GitError::Network(message) => {
                 AppError::external_service("git", io::Error::other(message))
             }
-            GitError::CommandFailed { args, stderr } => {
-                let detail = format!("git {}: {}", args.join(" "), stderr);
+            GitError::CommandFailed {
+                args,
+                stdout,
+                stderr,
+            } => {
+                let mut detail = format!("git {}: {}", args.join(" "), stderr);
+                if !stdout.is_empty() {
+                    detail.push_str("\nstdout: ");
+                    detail.push_str(&stdout);
+                }
                 AppError::external_service("git", io::Error::other(detail))
             }
             GitError::InvalidOid { value } => AppError::invalid_input("oid", value),

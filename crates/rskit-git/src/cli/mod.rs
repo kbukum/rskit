@@ -38,6 +38,7 @@ impl Backend {
             .output()
             .map_err(|err| GitError::CommandFailed {
                 args: args.iter().map(|arg| (*arg).to_string()).collect(),
+                stdout: String::new(),
                 stderr: err.to_string(),
             })?;
 
@@ -46,6 +47,7 @@ impl Backend {
         } else {
             Err(GitError::CommandFailed {
                 args: args.iter().map(|arg| (*arg).to_string()).collect(),
+                stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
                 stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
             }
             .into())

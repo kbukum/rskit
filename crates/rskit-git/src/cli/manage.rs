@@ -148,6 +148,7 @@ impl ConfigReader for Backend {
             .output()
             .map_err(|err| GitError::CommandFailed {
                 args: vec!["config".into(), "--get".into(), key.into()],
+                stdout: String::new(),
                 stderr: err.to_string(),
             })?;
 
@@ -161,6 +162,7 @@ impl ConfigReader for Backend {
         } else {
             Err(GitError::CommandFailed {
                 args: vec!["config".into(), "--get".into(), key.into()],
+                stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
                 stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
             }
             .into())
@@ -236,6 +238,7 @@ fn run_allow_empty(backend: &Backend, args: &[&str]) -> AppResult<Vec<u8>> {
         .output()
         .map_err(|err| crate::error::GitError::CommandFailed {
             args: args.iter().map(|arg| (*arg).to_string()).collect(),
+            stdout: String::new(),
             stderr: err.to_string(),
         })?;
     if output.status.success() || output.status.code() == Some(1) {
@@ -243,6 +246,7 @@ fn run_allow_empty(backend: &Backend, args: &[&str]) -> AppResult<Vec<u8>> {
     } else {
         Err(crate::error::GitError::CommandFailed {
             args: args.iter().map(|arg| (*arg).to_string()).collect(),
+            stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
             stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
         }
         .into())

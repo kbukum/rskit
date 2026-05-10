@@ -1,5 +1,7 @@
 //! Write trait stubs for the CLI backend.
 
+use std::process::Command;
+
 use rskit_errors::{AppError, AppResult};
 
 use crate::options::{CheckoutOptions, CherryPickOptions, MergeOptions, RebaseOptions};
@@ -42,7 +44,7 @@ impl Merger for Backend {
                 Some(stderr) if stderr.contains("CONFLICT") => Ok(MergeResult {
                     head: None,
                     fast_forward: false,
-                    conflicts: parse_conflict_paths(&stderr),
+                    conflicts: parse_conflict_paths(self),
                 }),
                 _ => Err(err),
             },
@@ -93,7 +95,7 @@ impl Rebaser for Backend {
                 Some(stderr) if stderr.contains("CONFLICT") => Ok(RebaseResult {
                     head: None,
                     applied: 0,
-                    conflicts: parse_conflict_paths(&stderr),
+                    conflicts: parse_conflict_paths(self),
                 }),
                 _ => Err(err),
             },
@@ -116,7 +118,7 @@ impl Rebaser for Backend {
                 Some(stderr) if stderr.contains("CONFLICT") => Ok(RebaseResult {
                     head: None,
                     applied: 0,
-                    conflicts: parse_conflict_paths(&stderr),
+                    conflicts: parse_conflict_paths(self),
                 }),
                 _ => Err(err),
             },
@@ -258,27 +260,24 @@ fn conflict_stderr(error: &AppError) -> Option<String> {
         .or_else(|| Some(error.message.clone()))
 }
 
-fn parse_conflict_paths(stderr: &str) -> Vec<String> {
-    let mut conflicts = Vec::new();
-    for line in stderr.lines() {
-        let line = line.trim();
-        if !line.contains("CONFLICT") {
-            continue;
+fn parse_conflict_paths(backend: &Backend) -> Vec<String> {
+    // Query git directly for conflicted paths rather than parsing human-readable messages.
+    let output = Command::new("git")
+        .args(["diff", "--name-only", "--diff-filter=U"])
+        .current_dir(backend.root())
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .output();
+    match output {
+        Ok(out) if out.status.success() => {
+            let mut paths: Vec<String> = String::from_utf8_lossy(&out.stdout)
+                .lines()
+                .filter(|l| !l.trim().is_empty())
+                .map(str::to_string)
+                .collect();
+            paths.sort();
+            paths.dedup();
+            paths
         }
-
-        if let Some(path) = line.rsplit_once(" in ").map(|(_, path)| path.trim()) {
-            conflicts.push(path.to_string());
-            continue;
-        }
-
-        if let Some(path) = line
-            .strip_prefix("CONFLICT ")
-            .and_then(|rest| rest.split_once(':').map(|(_, path)| path.trim()))
-        {
-            conflicts.push(path.to_string());
-        }
+        _ => Vec::new(),
     }
-    conflicts.sort();
-    conflicts.dedup();
-    conflicts
 }
