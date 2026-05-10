@@ -36,16 +36,15 @@ async fn predict_happy_path_round_trips_kserve_v2() {
         .mount(&server)
         .await;
 
-    let adapter = rskit_inference_triton::TritonInference::new(
-        rskit_inference_triton::TritonConfig {
+    let adapter =
+        rskit_inference_triton::TritonInference::new(rskit_inference_triton::TritonConfig {
             base_url: server.uri(),
             network_host: "127.0.0.1".to_owned(),
             network_port: None,
             network_scheme: "http".to_owned(),
             ..rskit_inference_triton::TritonConfig::default()
-        },
-        reqwest::Client::new(),
-    );
+        })
+        .expect("adapter constructs");
 
     let mut inputs = HashMap::new();
     inputs.insert(
@@ -100,13 +99,12 @@ async fn predict_error_response_returns_server_error() {
         .mount(&server)
         .await;
 
-    let adapter = rskit_inference_triton::TritonInference::new(
-        rskit_inference_triton::TritonConfig {
+    let adapter =
+        rskit_inference_triton::TritonInference::new(rskit_inference_triton::TritonConfig {
             base_url: server.uri(),
             ..rskit_inference_triton::TritonConfig::default()
-        },
-        reqwest::Client::new(),
-    );
+        })
+        .expect("adapter constructs");
 
     let err = adapter
         .predict(PredictRequest {
@@ -127,13 +125,12 @@ async fn health_probe_reports_ready() {
         .mount(&server)
         .await;
 
-    let adapter = rskit_inference_triton::TritonInference::new(
-        rskit_inference_triton::TritonConfig {
+    let adapter =
+        rskit_inference_triton::TritonInference::new(rskit_inference_triton::TritonConfig {
             base_url: server.uri(),
             ..rskit_inference_triton::TritonConfig::default()
-        },
-        reqwest::Client::new(),
-    );
+        })
+        .expect("adapter constructs");
 
     assert!(adapter.health_check().await.expect("health probe"));
 }

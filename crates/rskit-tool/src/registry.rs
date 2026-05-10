@@ -1,9 +1,12 @@
 //! Concurrent-safe tool registry.
 
 use parking_lot::RwLock;
+use rskit_ai::semconv;
+use rskit_component::{Component, Health};
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use std::collections::HashMap;
 use std::sync::Arc;
+use tracing::Instrument;
 
 use crate::callable::Callable;
 use crate::context::Context;
@@ -114,11 +117,21 @@ impl Registry {
         ctx: &Context,
         input: serde_json::Value,
     ) -> AppResult<ToolResult> {
-        let tool = self.get(name).ok_or_else(|| {
-            AppError::new(ErrorCode::NotFound, format!("tool not found: {name:?}"))
-        })?;
-        self.run_hitl(tool.as_ref(), ctx, &input).await?;
-        tool.call(ctx, input).await
+        let span = tracing::info_span!(
+            "tool.call",
+            "gen_ai.operation.name" = semconv::Operation::ToolCall.as_str(),
+            "gen_ai.tool.name" = name,
+            "tool.use_id" = %ctx.tool_use_id,
+        );
+        async {
+            let tool = self.get(name).ok_or_else(|| {
+                AppError::new(ErrorCode::NotFound, format!("tool not found: {name:?}"))
+            })?;
+            self.run_hitl(tool.as_ref(), ctx, &input).await?;
+            tool.call(ctx, input).await
+        }
+        .instrument(span)
+        .await
     }
 
     async fn run_hitl(
@@ -207,43 +220,52 @@ impl Registry {
                 let tool = self.get(&name);
                 let sensitivity = self.sensitivity.clone();
                 let approval = self.approval.clone();
-                handles.push(tokio::spawn(async move {
-                    let Some(tool) = tool else {
-                        return Err(AppError::new(
-                            ErrorCode::NotFound,
-                            format!("tool not found: {name:?}"),
-                        ));
-                    };
-                    if let Some(evaluator) = sensitivity {
-                        let definition = tool.definition();
-                        let call = ToolCall {
-                            name: definition.name.clone(),
-                            input: input.clone(),
+                let span = tracing::info_span!(
+                    "tool.call",
+                    "gen_ai.operation.name" = semconv::Operation::ToolCall.as_str(),
+                    "gen_ai.tool.name" = name.as_str(),
+                    "tool.use_id" = %ctx.tool_use_id,
+                );
+                handles.push(tokio::spawn(
+                    async move {
+                        let Some(tool) = tool else {
+                            return Err(AppError::new(
+                                ErrorCode::NotFound,
+                                format!("tool not found: {name:?}"),
+                            ));
                         };
-                        let decision = evaluator
-                            .evaluate(&ctx, &call, &definition.envelope)
-                            .await?;
-                        match decision {
-                            Decision::Allow => {}
-                            Decision::Deny(reason) => return Err(denied_error(reason)),
-                            Decision::RequireApproval(reason) => match approval {
-                                Some(approver) => {
-                                    if !approver.approve(&ctx, &call, &reason).await? {
+                        if let Some(evaluator) = sensitivity {
+                            let definition = tool.definition();
+                            let call = ToolCall {
+                                name: definition.name.clone(),
+                                input: input.clone(),
+                            };
+                            let decision = evaluator
+                                .evaluate(&ctx, &call, &definition.envelope)
+                                .await?;
+                            match decision {
+                                Decision::Allow => {}
+                                Decision::Deny(reason) => return Err(denied_error(reason)),
+                                Decision::RequireApproval(reason) => match approval {
+                                    Some(approver) => {
+                                        if !approver.approve(&ctx, &call, &reason).await? {
+                                            return Err(denied_error(format!(
+                                                "human approval rejected: {reason}"
+                                            )));
+                                        }
+                                    }
+                                    None => {
                                         return Err(denied_error(format!(
-                                            "human approval rejected: {reason}"
+                                            "approval required but no approver configured: {reason}"
                                         )));
                                     }
-                                }
-                                None => {
-                                    return Err(denied_error(format!(
-                                        "approval required but no approver configured: {reason}"
-                                    )));
-                                }
-                            },
+                                },
+                            }
                         }
+                        tool.call(&ctx, input).await
                     }
-                    tool.call(&ctx, input).await
-                }));
+                    .instrument(span),
+                ));
             }
 
             for handle in handles {
@@ -278,6 +300,25 @@ impl Registry {
     /// Check if a tool is registered.
     pub fn contains(&self, name: &str) -> bool {
         self.tools.read().contains_key(name)
+    }
+}
+
+#[async_trait::async_trait]
+impl Component for Registry {
+    fn name(&self) -> &str {
+        "rskit-tool.registry"
+    }
+
+    async fn start(&self) -> AppResult<()> {
+        Ok(())
+    }
+
+    async fn stop(&self) -> AppResult<()> {
+        Ok(())
+    }
+
+    fn health(&self) -> Health {
+        Health::healthy(self.name())
     }
 }
 

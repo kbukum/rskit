@@ -24,3 +24,4 @@ serde_json = { workspace = true }
 http       = { workspace = true }
 tonic      = { workspace = true }
 tracing    = { workspace = true }
+workspace-hack = { version = "0.1", path = "../workspace-hack" }

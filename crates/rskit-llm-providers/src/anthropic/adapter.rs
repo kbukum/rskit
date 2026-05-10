@@ -101,6 +101,13 @@ impl rskit_provider::Provider for AnthropicAdapter {
 }
 
 #[async_trait]
+impl rskit_provider::RequestResponse<CompletionRequest, CompletionResponse> for AnthropicAdapter {
+    async fn execute(&self, input: CompletionRequest) -> AppResult<CompletionResponse> {
+        self.complete(input).await
+    }
+}
+
+#[async_trait]
 impl Provider for AnthropicAdapter {
     async fn complete(&self, mut req: CompletionRequest) -> AppResult<CompletionResponse> {
         if req.model.is_empty() {

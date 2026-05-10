@@ -35,6 +35,7 @@
 //! | `media-full` | ffmpeg + image backends |
 //! | `storage-s3` | S3 storage backend |
 //! | `storage-gcs` | GCS storage backend |
+//! | `workload` | `rskit-workload` (workload management) |
 //! | `cli`    | `rskit-cli` (CLI helpers) |
 //! | `dataset` | `rskit-dataset` (dataset collection) |
 //! | `bench`  | `rskit-bench` (ML benchmarking) |
@@ -245,6 +246,10 @@ pub use rskit_media_ffmpeg as media_ffmpeg;
 /// Native image processing backend using the `image` crate.
 #[cfg(feature = "media-image")]
 pub use rskit_media_image as media_image;
+
+/// Workload configuration and orchestration primitives.
+#[cfg(feature = "workload")]
+pub use rskit_workload as workload;
 
 /// CLI helpers: progress bars, cancellation tokens, output formatting.
 #[cfg(feature = "cli")]

@@ -23,6 +23,7 @@ rskit-errors = { path = "../rskit-errors" }
 thiserror  = { workspace = true }
 tracing    = { workspace = true }
 libc       = "0.2"
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full", "test-util"] }

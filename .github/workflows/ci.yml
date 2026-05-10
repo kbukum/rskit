@@ -38,6 +38,7 @@ jobs:
       pull-requests: read
     outputs:
       rust-code: ${{ steps.filter.outputs.rust-code }}
+      affected: ${{ steps.domains.outputs.affected || 'all' }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
       - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d  # v4.0.1
@@ -57,6 +58,23 @@ jobs:
               - 'rust-toolchain.toml'
               - 'rustfmt.toml'
               - '.github/workflows/ci.yml'
+      - name: Detect affected domains
+        id: domains
+        if: github.event_name == 'pull_request'
+        run: |
+          CHANGED=$(git diff --name-only ${{ github.event.pull_request.base.sha }}...${{ github.sha }} 2>/dev/null || echo "")
+          if [ -n "$CHANGED" ]; then
+            AFFECTED=$(echo "$CHANGED" | ./scripts/affected-domains.sh)
+          else
+            AFFECTED=""
+          fi
+          if [ -z "$AFFECTED" ]; then
+            AFFECTED="all"
+          fi
+          echo "affected<<EOF" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "$AFFECTED" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+          echo "Affected domains: $AFFECTED"
 
   # ---------------------------------------------------------------------------
   # Format check (fast gate — runs on stable, no need to pin MSRV here)
@@ -75,10 +93,10 @@ jobs:
       - run: cargo fmt --check
 
   # ---------------------------------------------------------------------------
-  # Clippy (uses the pinned toolchain from rust-toolchain.toml)
+  # Hakari — verify workspace-hack is up-to-date
   # ---------------------------------------------------------------------------
-  clippy:
-    name: Clippy
+  hakari:
+    name: Hakari verify
     if: needs.changes.outputs.rust-code == 'true'
     needs: changes
     runs-on: ubuntu-latest
@@ -87,9 +105,32 @@ jobs:
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: stable
+      - uses: taiki-e/install-action@db5fb34fa772531a3ece57ca434f579eb334e0fb  # v2
+        with:
+          tool: cargo-hakari
+      - run: cargo hakari generate --diff
+      - run: cargo hakari manage-deps --dry-run
+
+  # ---------------------------------------------------------------------------
+  # Clippy (uses the pinned toolchain from rust-toolchain.toml)
+  # ---------------------------------------------------------------------------
+  clippy:
+    name: Clippy
+    if: needs.changes.outputs.rust-code == 'true'
+    needs: changes
+    runs-on: ubuntu-latest
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
+        with:
+          toolchain: stable
           components: clippy
       - name: Install mold linker
         run: sudo apt-get install -y mold
+      - uses: mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad  # v0.0.9
       - uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b  # v2.7.8
       - run: cargo clippy --workspace -- -D warnings
 
@@ -101,6 +142,9 @@ jobs:
     if: needs.changes.outputs.rust-code == 'true'
     needs: changes
     runs-on: ${{ matrix.os }}
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     strategy:
       fail-fast: false
       matrix:
@@ -111,6 +155,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: ${{ matrix.rust }}
+      - uses: mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad  # v0.0.9
       - name: Install mold linker (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get install -y mold
@@ -132,11 +177,14 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RUSTDOCFLAGS: "-D warnings"
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: stable
+      - uses: mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad  # v0.0.9
       - name: Install mold linker
         run: sudo apt-get install -y mold
       - uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b  # v2.7.8
@@ -150,12 +198,16 @@ jobs:
     if: needs.changes.outputs.rust-code == 'true' && (github.event_name == 'merge_group' || github.event_name == 'push')
     needs: changes
     runs-on: ubuntu-latest
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: stable
           components: llvm-tools-preview
+      - uses: mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad  # v0.0.9
       - name: Install mold linker
         run: sudo apt-get install -y mold
       - uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b  # v2.7.8
@@ -212,11 +264,15 @@ jobs:
     if: needs.changes.outputs.rust-code == 'true' && (github.event_name == 'merge_group' || github.event_name == 'push')
     needs: changes
     runs-on: ubuntu-latest
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: stable
+      - uses: mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad  # v0.0.9
       - name: Install mold linker
         run: sudo apt-get install -y mold
       - uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b  # v2.7.8
@@ -228,13 +284,14 @@ jobs:
   ci-status:
     name: CI Status
     if: always()
-    needs: [changes, fmt, clippy, test, docs, l7-depguard, coverage, security, bench]
+    needs: [changes, fmt, hakari, clippy, test, docs, l7-depguard, coverage, security, bench]
     runs-on: ubuntu-latest
     steps:
       - name: Evaluate results
         run: |
           results=("${{ needs.changes.result }}" \
                    "${{ needs.fmt.result }}" \
+                   "${{ needs.hakari.result }}" \
                    "${{ needs.clippy.result }}" \
                    "${{ needs.test.result }}" \
                    "${{ needs.docs.result }}" \

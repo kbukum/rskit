@@ -23,6 +23,8 @@ server  = ["rmcp/server", "rmcp/transport-io", "rmcp/transport-streamable-http-s
 client  = ["rmcp/client", "rmcp/transport-child-process"]
 
 [dependencies]
+rskit-ai     = { path = "../rskit-ai" }
+rskit-component = { path = "../rskit-component" }
 rskit-tool   = { path = "../rskit-tool" }
 rskit-schema = { path = "../rskit-schema" }
 rskit-errors = { path = "../rskit-errors" }
@@ -37,6 +39,7 @@ async-trait  = { workspace = true }
 thiserror    = { workspace = true }
 parking_lot  = { workspace = true }
 url          = "2"
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }

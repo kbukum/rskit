@@ -45,6 +45,12 @@ impl HttpClient {
         Ok(Self { client, config })
     }
 
+    /// Wraps an existing reqwest client with canonical configuration metadata.
+    #[must_use]
+    pub fn from_parts(config: HttpClientConfig, client: Client) -> Self {
+        Self { client, config }
+    }
+
     /// Gets the configuration.
     pub fn config(&self) -> &HttpClientConfig {
         &self.config

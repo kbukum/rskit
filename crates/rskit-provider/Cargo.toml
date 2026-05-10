@@ -31,3 +31,4 @@ pin-project-lite = { workspace = true }
 async-trait      = { workspace = true }
 bytes            = { workspace = true }
 parking_lot      = { workspace = true }
+workspace-hack = { version = "0.1", path = "../workspace-hack" }

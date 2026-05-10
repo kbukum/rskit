@@ -18,11 +18,14 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 rskit-ai = { workspace = true }
+rskit-component = { path = "../rskit-component" }
 rskit-errors = { path = "../rskit-errors" }
 rskit-provider = { path = "../rskit-provider" }
 serde        = { workspace = true }
 serde_json   = { workspace = true }
 async-trait  = { workspace = true }
+tracing      = { workspace = true }
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }

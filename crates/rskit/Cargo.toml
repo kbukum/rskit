@@ -75,9 +75,11 @@ rskit-storage-gcs   = { version = "0.1.0", path = "../rskit-storage-gcs", option
 rskit-media         = { version = "0.1.0", path = "../rskit-media",         optional = true }
 rskit-media-ffmpeg  = { version = "0.1.0", path = "../rskit-media-ffmpeg",  optional = true }
 rskit-media-image   = { version = "0.1.0", path = "../rskit-media-image",   optional = true }
+rskit-workload      = { version = "0.1.0", path = "../rskit-workload",      optional = true }
 rskit-cli           = { version = "0.1.0", path = "../rskit-cli",           optional = true }
 rskit-dataset       = { version = "0.1.0", path = "../rskit-dataset",       optional = true }
 rskit-bench         = { version = "0.1.0", path = "../rskit-bench",         optional = true }
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [dev-dependencies]
 tokio       = { workspace = true, features = ["full"] }
@@ -121,6 +123,7 @@ media-image   = ["dep:rskit-media-image", "media"]
 media-full    = ["media-ffmpeg", "media-image"]
 storage-s3    = ["storage", "dep:rskit-storage-s3"]
 storage-gcs   = ["storage", "dep:rskit-storage-gcs"]
+workload      = ["dep:rskit-workload"]
 cli           = ["dep:rskit-cli"]
 dataset       = ["dep:rskit-dataset", "cli"]
 bench         = ["dep:rskit-bench"]
@@ -133,5 +136,5 @@ full          = [
     "messaging-kafka", "messaging-nats", "messaging-rabbitmq",
     "observability", "authz", "security", "discovery", "testutil", "sse", "dag", "genai", "llm",
     "inference", "inference-triton", "inference-vllm", "inference-tgi",
-    "prompt", "skill", "media-full", "storage", "cli", "dataset", "bench", "chain", "process", "stateful",
+    "prompt", "skill", "media-full", "storage", "workload", "cli", "dataset", "bench", "chain", "process", "stateful",
 ]

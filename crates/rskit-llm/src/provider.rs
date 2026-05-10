@@ -1,12 +1,13 @@
 //! Provider trait — the canonical abstraction over LLM backends.
 //!
-//! Per locked decision D6, this is the *single* full LLM provider trait. The
-//! split `LlmProvider`/`Provider` shape was collapsed: implementors only need
-//! to supply [`Provider::complete`] (and optionally override the defaults for
-//! `stream`, `capabilities`, and `count_tokens`).
+//! This is the single full LLM provider trait. Implementors supply
+//! [`Provider::complete`], [`rskit_provider::Provider::name`], and
+//! [`rskit_provider::RequestResponse::execute`] (which typically delegates to
+//! `complete`).
 //!
-//! Per locked decision D7, the trait extends `rskit_provider::Provider` so any
-//! LLM provider is natively usable in `dag`, `pipeline`, `chain`, `worker`,
+//! The trait extends
+//! `rskit_provider::RequestResponse<CompletionRequest, CompletionResponse>` so
+//! any LLM provider is natively usable in `dag`, `pipeline`, `chain`, `worker`,
 //! and `process` consumers without adapter shims.
 
 use std::pin::Pin;
@@ -25,22 +26,25 @@ use crate::types::{CompletionRequest, CompletionResponse};
 
 /// A fully-featured LLM provider with streaming and capability introspection.
 ///
-/// The only method an adapter MUST implement is [`Provider::complete`] plus
-/// [`rskit_provider::Provider::name`], which returns a `&'static str`. The
+/// An adapter MUST implement [`Provider::complete`],
+/// [`rskit_provider::Provider::name`] (`&'static str`), and
+/// [`rskit_provider::RequestResponse::execute`] (typically delegates to
+/// `complete`). The
 /// default [`Provider::stream`] synthesizes a
 /// four-event sequence (`message.start` → `text.delta` → `usage.delta` →
 /// `message.stop`) by awaiting `complete`. Adapters whose backend supports
 /// native streaming SHOULD override `stream` to emit incremental events.
 ///
-/// # D7 — Native provider shape
+/// # Native provider shape
 ///
-/// This trait requires `rskit_provider::Provider` as supertrait, so every
-/// `llm::Provider` carries the canonical identity/availability contract.
-/// Consumers that need the `RequestResponse` or `Stream` shapes can use the
-/// [`LlmRequestResponse`] and [`LlmStream`] wrapper types which forward to
-/// `complete` and `stream` respectively.
+/// This trait requires
+/// `rskit_provider::RequestResponse<CompletionRequest, CompletionResponse>` as
+/// supertrait, so every `llm::Provider` carries the canonical
+/// identity/availability + request/response contract natively. The optional
+/// [`LlmStream`] wrapper remains available for consumers that specifically need
+/// the provider `Stream` shape.
 #[async_trait]
-pub trait Provider: rskit_provider::Provider {
+pub trait Provider: rskit_provider::RequestResponse<CompletionRequest, CompletionResponse> {
     /// Send a chat completion request and return the full response.
     async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse, AppError>;
 
@@ -172,6 +176,13 @@ mod tests {
     impl rskit_provider::Provider for MockProvider {
         fn name(&self) -> &'static str {
             "mock"
+        }
+    }
+
+    #[async_trait]
+    impl rskit_provider::RequestResponse<CompletionRequest, CompletionResponse> for MockProvider {
+        async fn execute(&self, input: CompletionRequest) -> AppResult<CompletionResponse> {
+            self.complete(input).await
         }
     }
 

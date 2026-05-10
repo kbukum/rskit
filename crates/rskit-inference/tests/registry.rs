@@ -10,6 +10,20 @@ use rskit_tool::Envelope;
 struct FakeInference;
 
 #[async_trait]
+impl rskit_provider::Provider for FakeInference {
+    fn name(&self) -> &'static str {
+        "fake"
+    }
+}
+
+#[async_trait]
+impl rskit_provider::RequestResponse<PredictRequest, PredictResponse> for FakeInference {
+    async fn execute(&self, input: PredictRequest) -> rskit_errors::AppResult<PredictResponse> {
+        self.predict(input).await.map_err(Into::into)
+    }
+}
+
+#[async_trait]
 impl Inference for FakeInference {
     async fn predict(&self, _request: PredictRequest) -> Result<PredictResponse, InferenceError> {
         Ok(PredictResponse::default())

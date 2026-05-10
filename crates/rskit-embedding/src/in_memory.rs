@@ -2,6 +2,8 @@
 
 use async_trait::async_trait;
 use rskit_ai::Usage;
+use rskit_ai::semconv;
+use rskit_component::{Component, Health};
 use rskit_errors::AppResult;
 
 use crate::{EmbedInput, EmbedRequest, EmbedResponse, Embedding, Provider};
@@ -49,6 +51,14 @@ impl Default for InMemoryProvider {
 #[async_trait]
 impl Provider for InMemoryProvider {
     async fn embed(&self, req: EmbedRequest) -> AppResult<EmbedResponse> {
+        let _span = tracing::info_span!(
+            "embedding.embed",
+            "gen_ai.system" = "in_memory",
+            "gen_ai.operation.name" = semconv::Operation::Embedding.as_str(),
+            "gen_ai.request.model" = req.model.name.as_str(),
+            "embedding.input_count" = req.inputs.len(),
+        )
+        .entered();
         let embeddings = req
             .inputs
             .iter()
@@ -74,6 +84,32 @@ impl Provider for InMemoryProvider {
 impl rskit_provider::Provider for InMemoryProvider {
     fn name(&self) -> &'static str {
         "in_memory_embedding"
+    }
+}
+
+#[async_trait]
+impl rskit_provider::RequestResponse<EmbedRequest, EmbedResponse> for InMemoryProvider {
+    async fn execute(&self, input: EmbedRequest) -> AppResult<EmbedResponse> {
+        self.embed(input).await
+    }
+}
+
+#[async_trait]
+impl Component for InMemoryProvider {
+    fn name(&self) -> &str {
+        "rskit-embedding.in_memory"
+    }
+
+    async fn start(&self) -> AppResult<()> {
+        Ok(())
+    }
+
+    async fn stop(&self) -> AppResult<()> {
+        Ok(())
+    }
+
+    fn health(&self) -> Health {
+        Health::healthy(self.name())
     }
 }
 

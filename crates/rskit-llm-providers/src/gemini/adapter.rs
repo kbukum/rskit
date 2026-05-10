@@ -102,6 +102,13 @@ impl rskit_provider::Provider for GeminiAdapter {
 }
 
 #[async_trait]
+impl rskit_provider::RequestResponse<CompletionRequest, CompletionResponse> for GeminiAdapter {
+    async fn execute(&self, input: CompletionRequest) -> AppResult<CompletionResponse> {
+        self.complete(input).await
+    }
+}
+
+#[async_trait]
 impl Provider for GeminiAdapter {
     async fn complete(&self, mut req: CompletionRequest) -> AppResult<CompletionResponse> {
         if req.model.is_empty() {

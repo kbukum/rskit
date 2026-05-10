@@ -22,6 +22,7 @@ chrono       = { workspace = true }
 parking_lot  = { workspace = true }
 regex        = { workspace = true }
 serde_json   = { workspace = true }
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [dev-dependencies]
 tokio = { workspace = true }

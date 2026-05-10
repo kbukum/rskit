@@ -2,6 +2,8 @@
 
 use async_trait::async_trait;
 use rskit_ai::{Capabilities, Model, Provider as ModelProvider, Usage};
+use rskit_component::{Component, Health};
+use rskit_errors::AppResult;
 use rskit_tool::Envelope;
 
 use crate::{
@@ -15,6 +17,20 @@ pub const ECHO_KIND: &str = "echo";
 /// Echo inference adapter for tests and local composition.
 #[derive(Debug, Clone, Default)]
 pub struct Echo;
+
+#[async_trait]
+impl rskit_provider::Provider for Echo {
+    fn name(&self) -> &'static str {
+        ECHO_KIND
+    }
+}
+
+#[async_trait]
+impl rskit_provider::RequestResponse<PredictRequest, PredictResponse> for Echo {
+    async fn execute(&self, input: PredictRequest) -> AppResult<PredictResponse> {
+        self.predict(input).await.map_err(Into::into)
+    }
+}
 
 #[async_trait]
 impl Inference for Echo {
@@ -47,6 +63,25 @@ impl Inference for Echo {
 pub fn register(registry: &mut Registry) -> Result<(), RegistryError> {
     let factory: Factory = std::sync::Arc::new(|_| Ok(std::sync::Arc::new(Echo)));
     registry.register(ECHO_KIND, factory)
+}
+
+#[async_trait]
+impl Component for Echo {
+    fn name(&self) -> &str {
+        "rskit-inference.echo"
+    }
+
+    async fn start(&self) -> rskit_errors::AppResult<()> {
+        Ok(())
+    }
+
+    async fn stop(&self) -> rskit_errors::AppResult<()> {
+        Ok(())
+    }
+
+    fn health(&self) -> Health {
+        Health::healthy(self.name())
+    }
 }
 
 #[cfg(test)]

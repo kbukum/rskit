@@ -96,6 +96,13 @@ impl rskit_provider::Provider for OpenAiAdapter {
 }
 
 #[async_trait]
+impl rskit_provider::RequestResponse<CompletionRequest, CompletionResponse> for OpenAiAdapter {
+    async fn execute(&self, input: CompletionRequest) -> AppResult<CompletionResponse> {
+        self.complete(input).await
+    }
+}
+
+#[async_trait]
 impl Provider for OpenAiAdapter {
     async fn complete(&self, mut req: CompletionRequest) -> AppResult<CompletionResponse> {
         if req.model.is_empty() {

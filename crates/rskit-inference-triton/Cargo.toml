@@ -22,7 +22,9 @@ rskit-ai = { workspace = true }
 rskit-authz       = { path = "../rskit-authz" }
 rskit-component   = { path = "../rskit-component" }
 rskit-errors      = { path = "../rskit-errors" }
+rskit-httpclient  = { path = "../rskit-httpclient" }
 rskit-inference   = { path = "../rskit-inference" }
+rskit-provider    = { path = "../rskit-provider" }
 rskit-observability = { path = "../rskit-observability" }
 rskit-resilience  = { path = "../rskit-resilience" }
 rskit-tool        = { path = "../rskit-tool" }
@@ -36,6 +38,7 @@ thiserror         = { workspace = true }
 tokio             = { workspace = true }
 tracing           = { workspace = true }
 uuid              = { version = "1", features = ["v7"] }
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

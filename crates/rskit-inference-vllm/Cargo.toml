@@ -21,13 +21,16 @@ rustdoc-args = ["--cfg", "docsrs"]
 rskit-ai = { workspace = true }
 rskit-component = { path = "../rskit-component" }
 rskit-errors    = { path = "../rskit-errors" }
+rskit-httpclient = { path = "../rskit-httpclient" }
 rskit-inference = { path = "../rskit-inference" }
+rskit-provider  = { path = "../rskit-provider" }
 rskit-tool      = { path = "../rskit-tool" }
 async-trait     = { workspace = true }
 reqwest         = { workspace = true, features = ["json"] }
 serde           = { workspace = true }
 serde_json      = { workspace = true }
 tokio-stream    = { workspace = true }
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }

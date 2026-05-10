@@ -21,6 +21,7 @@ bytes        = { workspace = true }
 tokio        = { workspace = true }
 tracing      = { workspace = true }
 async-trait  = { workspace = true }
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [dev-dependencies]
 tokio  = { workspace = true, features = ["test-util", "full"] }
