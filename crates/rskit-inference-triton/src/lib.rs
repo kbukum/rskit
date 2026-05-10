@@ -204,7 +204,7 @@ impl TritonInference {
         let status = response.status();
         let body = response
             .text()
-            .map_err(|err| InferenceError::Decode(err.to_string()))?;
+            .map_err(InferenceError::from)?;
         if !status.is_success() {
             return Err(InferenceError::Server {
                 status: status.as_u16(),

@@ -97,6 +97,25 @@ jobs:
       - run: cargo fmt --check
 
   # ---------------------------------------------------------------------------
+  # Hakari — verify workspace-hack is up-to-date
+  # ---------------------------------------------------------------------------
+  hakari:
+    name: Hakari verify
+    if: needs.changes.outputs.rust-code == 'true'
+    needs: changes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
+        with:
+          toolchain: stable
+      - uses: taiki-e/install-action@db5fb34fa772531a3ece57ca434f579eb334e0fb  # v2
+        with:
+          tool: cargo-hakari
+      - run: cargo hakari generate --diff
+      - run: cargo hakari manage-deps --dry-run
+
+  # ---------------------------------------------------------------------------
   # Clippy (uses the pinned toolchain from rust-toolchain.toml)
   # ---------------------------------------------------------------------------
   clippy:

@@ -1,8 +1,9 @@
 //! Provider trait — the canonical abstraction over LLM backends.
 //!
-//! This is the single full LLM provider trait. Implementors only need to supply
-//! [`Provider::complete`] (and optionally override the defaults for `stream`,
-//! `capabilities`, and `count_tokens`).
+//! This is the single full LLM provider trait. Implementors supply
+//! [`Provider::complete`], [`rskit_provider::Provider::name`], and
+//! [`rskit_provider::RequestResponse::execute`] (which typically delegates to
+//! `complete`).
 //!
 //! The trait extends
 //! `rskit_provider::RequestResponse<CompletionRequest, CompletionResponse>` so
@@ -25,8 +26,10 @@ use crate::types::{CompletionRequest, CompletionResponse};
 
 /// A fully-featured LLM provider with streaming and capability introspection.
 ///
-/// The only method an adapter MUST implement is [`Provider::complete`] plus
-/// [`rskit_provider::Provider::name`], which returns a `&'static str`. The
+/// An adapter MUST implement [`Provider::complete`],
+/// [`rskit_provider::Provider::name`] (`&'static str`), and
+/// [`rskit_provider::RequestResponse::execute`] (typically delegates to
+/// `complete`). The
 /// default [`Provider::stream`] synthesizes a
 /// four-event sequence (`message.start` → `text.delta` → `usage.delta` →
 /// `message.stop`) by awaiting `complete`. Adapters whose backend supports
