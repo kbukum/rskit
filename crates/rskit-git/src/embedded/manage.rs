@@ -271,23 +271,23 @@ fn fetch_options_to_git2(opts: &FetchOptions) -> AppResult<git2::FetchOptions<'s
 }
 
 fn push_refspecs(remote: &git2::Remote<'_>, opts: Option<&PushOptions>) -> AppResult<Vec<String>> {
-    let Some(opts) = opts else {
-        return Ok(Vec::new());
+    let mut refspecs = match opts {
+        Some(o) if !o.refspecs.is_empty() => o.refspecs.clone(),
+        _ => {
+            // Use the remote's configured push refspecs (same as bare `git push`)
+            let configured = remote
+                .push_refspecs()
+                .map_err(GitError::Internal)?
+                .iter()
+                .flatten()
+                .map(str::to_string)
+                .collect::<Vec<_>>();
+            configured
+        }
     };
 
-    let mut refspecs = if opts.refspecs.is_empty() {
-        remote
-            .push_refspecs()
-            .map_err(GitError::Internal)?
-            .iter()
-            .flatten()
-            .map(str::to_string)
-            .collect()
-    } else {
-        opts.refspecs.clone()
-    };
-
-    if opts.force {
+    let force = opts.map_or(false, |o| o.force);
+    if force {
         for refspec in &mut refspecs {
             if !refspec.starts_with('+') {
                 refspec.insert(0, '+');

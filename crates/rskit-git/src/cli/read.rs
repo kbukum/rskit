@@ -54,10 +54,11 @@ impl Inspector for Backend {
 
         let refs = args.iter().map(String::as_str).collect::<Vec<_>>();
         let output = self.run(&refs)?;
+        let line_numbers = opts.line_numbers;
         String::from_utf8_lossy(&output)
             .lines()
             .filter(|line| !line.trim().is_empty())
-            .map(|line| parse_grep_match(line, revision))
+            .map(|line| parse_grep_match(line, revision, line_numbers))
             .collect()
     }
 
@@ -66,19 +67,32 @@ impl Inspector for Backend {
     }
 }
 
-fn parse_grep_match(line: &str, revision: &str) -> AppResult<GrepMatch> {
-    let invalid_match = || AppError::invalid_format("grep match", "<path>:<line>:<content>");
-    let mut parts = line.rsplitn(3, ':');
-    let content = parts.next().unwrap_or_default().to_string();
-    let line_number = parts
-        .next()
-        .ok_or_else(invalid_match)?
-        .parse::<usize>()
-        .map_err(|_| invalid_match())?;
-    let path_part = parts.next().ok_or_else(invalid_match)?;
+fn parse_grep_match(line: &str, revision: &str, line_numbers: bool) -> AppResult<GrepMatch> {
+    let path_part;
+    let line_number;
+    let content;
+
+    if line_numbers {
+        let invalid_match = || AppError::invalid_format("grep match", "<path>:<line>:<content>");
+        let mut parts = line.rsplitn(3, ':');
+        content = parts.next().unwrap_or_default().to_string();
+        line_number = parts
+            .next()
+            .ok_or_else(invalid_match)?
+            .parse::<usize>()
+            .map_err(|_| invalid_match())?;
+        path_part = parts.next().ok_or_else(invalid_match)?.to_string();
+    } else {
+        let invalid_match = || AppError::invalid_format("grep match", "<path>:<content>");
+        let mut parts = line.splitn(2, ':');
+        path_part = parts.next().ok_or_else(invalid_match)?.to_string();
+        content = parts.next().ok_or_else(invalid_match)?.to_string();
+        line_number = 0;
+    }
+
     let path = path_part
         .strip_prefix(&format!("{revision}:"))
-        .unwrap_or(path_part)
+        .unwrap_or(&path_part)
         .to_string();
 
     Ok(GrepMatch {
@@ -96,7 +110,7 @@ mod tests {
 
     #[test]
     fn parse_grep_match_reports_invalid_format() {
-        let err = parse_grep_match("README.md:not-a-line", "HEAD").unwrap_err();
+        let err = parse_grep_match("README.md:not-a-line", "HEAD", true).unwrap_err();
         assert_eq!(err.code, ErrorCode::InvalidFormat);
         assert_eq!(
             err.message,
