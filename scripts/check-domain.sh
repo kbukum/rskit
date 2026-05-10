@@ -6,14 +6,20 @@ cd "$repo_root"
 
 if [[ -n "${PYTHON:-}" ]]; then
   python_bin="$PYTHON"
+elif command -v python3.14 >/dev/null 2>&1; then
+  python_bin="python3.14"
 elif command -v python3.13 >/dev/null 2>&1; then
   python_bin="python3.13"
+elif command -v python3.12 >/dev/null 2>&1; then
+  python_bin="python3.12"
+elif command -v python3.11 >/dev/null 2>&1; then
+  python_bin="python3.11"
 else
   python_bin="python3"
 fi
 
 require_python() {
-  "$python_bin" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 13) else "Python 3.13+ is required")'
+  "$python_bin" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else "Python 3.11+ is required")'
 }
 
 list_domains() {

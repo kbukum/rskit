@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DOMAINS_FILE="${ROOT_DIR}/domains.toml"
 PYTHON_BIN=""
 
-for candidate in python3.14 python3.13 python3; do
+for candidate in python3.14 python3.13 python3.12 python3.11 python3; do
   if command -v "$candidate" >/dev/null 2>&1; then
     PYTHON_BIN="$candidate"
     break
@@ -13,7 +13,7 @@ for candidate in python3.14 python3.13 python3; do
 done
 
 if [ -z "$PYTHON_BIN" ]; then
-  echo "python3.13+ is required" >&2
+  echo "python3.11+ is required (tomllib)" >&2
   exit 1
 fi
 
@@ -34,8 +34,8 @@ from collections import deque
 from pathlib import PurePosixPath
 import tomllib
 
-if sys.version_info < (3, 13):
-    raise SystemExit("python3.13+ is required")
+if sys.version_info < (3, 11):
+    raise SystemExit("python3.11+ is required (tomllib)")
 
 
 with open(os.environ["DOMAINS_FILE"], "rb") as fh:
