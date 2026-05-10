@@ -83,7 +83,11 @@ run_module_checks() {
 
   echo "==> Checking $module ($crate)"
   cargo clippy -p "$crate" -- -D warnings
-  cargo nextest run -p "$crate"
+  if command -v cargo-nextest >/dev/null 2>&1; then
+    cargo nextest run -p "$crate"
+  else
+    cargo test -p "$crate"
+  fi
 }
 
 run_domain() {

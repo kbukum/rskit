@@ -78,19 +78,20 @@ struct EmbeddingUsage {
 #[async_trait]
 impl Provider for EmbeddingProvider {
     async fn embed(&self, req: EmbedRequest) -> AppResult<EmbedResponse> {
+        let mut response_model = req.model.clone();
+        if response_model.name.is_empty() {
+            response_model.name.clone_from(&self.model);
+        }
+        let model = response_model.name.clone();
+
         let span = tracing::info_span!(
             "embedding.embed",
             "gen_ai.system" = "openai",
             "gen_ai.operation.name" = semconv::Operation::Embedding.as_str(),
-            "gen_ai.request.model" = %req.model.name,
+            "gen_ai.request.model" = %model,
             "embedding.input_count" = req.inputs.len(),
         );
         async move {
-            let mut response_model = req.model.clone();
-            if response_model.name.is_empty() {
-                response_model.name.clone_from(&self.model);
-            }
-            let model = response_model.name.clone();
             let texts = req
                 .inputs
                 .iter()
@@ -128,23 +129,36 @@ impl Provider for EmbeddingProvider {
                 policy
                     .execute(|| {
                         let request = request.clone();
-                        async move { self.client.send(request).await }
+                        async move {
+                            let resp = self.client.send(request).await?;
+                            if !resp.is_success() {
+                                let status = resp.status().as_u16();
+                                let text = resp.text().unwrap_or_default();
+                                return Err(AppError::new(
+                                    ErrorCode::ExternalService,
+                                    format!("embedding API returned HTTP {status}"),
+                                )
+                                .with_detail("status", status.to_string())
+                                .with_detail("body", text));
+                            }
+                            Ok(resp)
+                        }
                     })
                     .await?
             } else {
-                self.client.send(request).await?
+                let resp = self.client.send(request).await?;
+                if !resp.is_success() {
+                    let status = resp.status().as_u16();
+                    let text = resp.text().unwrap_or_default();
+                    return Err(AppError::new(
+                        ErrorCode::ExternalService,
+                        format!("embedding API returned HTTP {status}"),
+                    )
+                    .with_detail("status", status.to_string())
+                    .with_detail("body", text));
+                }
+                resp
             };
-
-            if !response.is_success() {
-                let status = response.status().as_u16();
-                let text = response.text().unwrap_or_default();
-                return Err(AppError::new(
-                    ErrorCode::ExternalService,
-                    format!("embedding API returned HTTP {status}"),
-                )
-                .with_detail("status", status.to_string())
-                .with_detail("body", text));
-            }
 
             let result: EmbeddingResponse = response
                 .json()

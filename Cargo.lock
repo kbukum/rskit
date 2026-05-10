@@ -6332,8 +6332,6 @@ dependencies = [
 name = "rskit-workload"
 version = "0.1.0"
 dependencies = [
- "rskit-component",
- "rskit-errors",
  "workspace-hack",
 ]
 

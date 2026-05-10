@@ -11,8 +11,6 @@ description = "Workload management for rskit services"
 publish = false
 
 [dependencies]
-rskit-errors = { path = "../rskit-errors" }
-rskit-component = { path = "../rskit-component" }
 workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [lints]

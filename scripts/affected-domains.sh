@@ -73,7 +73,7 @@ def domains_for_file(path_str: str) -> set[str]:
 
     if len(parts) >= 2 and parts[0] == "crates" and parts[1].startswith("rskit-"):
         module = parts[1][len("rskit-") :]
-        return set(module_to_domains.get(module, set()))
+        return set(module_to_domains.get(module, all_domains))
 
     return set()
 
