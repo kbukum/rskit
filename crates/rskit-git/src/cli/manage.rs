@@ -268,7 +268,7 @@ fn parse_tag(fields: &[&str]) -> AppResult<Tag> {
         target,
         tagger: None,
         message: if object_type == "tag" {
-            message.trim().to_string()
+            message.trim_end_matches('\n').to_string()
         } else {
             String::new()
         },

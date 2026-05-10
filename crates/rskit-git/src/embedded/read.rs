@@ -91,8 +91,8 @@ impl TreeReader for Backend {
         let tree = commit.tree().map_err(GitError::Internal)?;
         let entry = tree
             .get_path(Path::new(path))
-            .map_err(|_| GitError::RefNotFound {
-                refname: format!("{revision}:{path}"),
+            .map_err(|_| GitError::InvalidPath {
+                path: path.to_string(),
             })?;
         let blob = self
             .repo
@@ -273,13 +273,13 @@ impl Backend {
 
         let entry = tree
             .get_path(Path::new(path))
-            .map_err(|_| GitError::RefNotFound {
-                refname: format!("{revision}:{path}"),
+            .map_err(|_| GitError::InvalidPath {
+                path: path.to_string(),
             })?;
         self.repo
             .find_tree(entry.id())
-            .map_err(|_| GitError::RefNotFound {
-                refname: format!("{revision}:{path}"),
+            .map_err(|_| GitError::InvalidPath {
+                path: path.to_string(),
             })
             .map_err(Into::into)
     }

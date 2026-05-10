@@ -134,7 +134,11 @@ pub(crate) fn commit_from_git2(commit: &git2::Commit<'_>) -> Commit {
         oid: oid_from_git2(commit.id()),
         author: signature_from_git2(&commit.author()),
         committer: signature_from_git2(&commit.committer()),
-        message: commit.message().unwrap_or_default().trim_end_matches('\0').to_string(),
+        message: commit
+            .message()
+            .unwrap_or_default()
+            .trim_end_matches('\0')
+            .to_string(),
         parents: commit.parent_ids().map(oid_from_git2).collect(),
     }
 }

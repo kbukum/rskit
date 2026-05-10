@@ -29,6 +29,7 @@ impl RepoBuilder {
     }
 
     /// Creates or overwrites a file in the working tree.
+    #[must_use]
     pub fn with_file(self, path: &str, content: &str) -> AppResult<Self> {
         let full_path = self.root.join(path);
         if let Some(parent) = full_path.parent() {
@@ -39,6 +40,7 @@ impl RepoBuilder {
     }
 
     /// Stages all changes and creates a commit.
+    #[must_use]
     pub fn with_commit(self, message: &str) -> AppResult<Self> {
         let paths = self
             .repo
@@ -55,18 +57,21 @@ impl RepoBuilder {
     }
 
     /// Creates a new branch at HEAD.
+    #[must_use]
     pub fn with_branch(self, name: &str) -> AppResult<Self> {
         self.repo.create_branch(name, "HEAD")?;
         Ok(self)
     }
 
     /// Switches to the named branch.
+    #[must_use]
     pub fn with_checkout(self, branch: &str) -> AppResult<Self> {
         self.repo.checkout(branch, None)?;
         Ok(self)
     }
 
     /// Creates a tag at HEAD.
+    #[must_use]
     pub fn with_tag(self, name: &str, message: &str) -> AppResult<Self> {
         self.repo.create_tag(name, "HEAD", message)?;
         Ok(self)
