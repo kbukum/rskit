@@ -261,11 +261,11 @@ fn parse_branch(line: &str) -> AppResult<Branch> {
 fn parse_tags(output: &[u8]) -> AppResult<Vec<Tag>> {
     let text = String::from_utf8_lossy(output);
     let fields = text.split_terminator('\0').collect::<Vec<_>>();
-    let chunks = fields.chunks_exact(7);
+    let chunks = fields.chunks_exact(8);
     if !chunks.remainder().is_empty() {
         return Err(AppError::invalid_format(
             "tag list",
-            "records with 7 NUL-separated fields",
+            "records with 8 NUL-separated fields",
         ));
     }
 
