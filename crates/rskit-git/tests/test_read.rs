@@ -42,17 +42,8 @@ fn test_diff_modified() {
 fn test_diff_stats() {
     let repo = helpers::TestRepo::init();
     repo.create_tag("v1");
-    repo.commit_file(
-        "a.txt",
-        "line1
-line2
-",
-        "add a",
-    );
-    repo.commit_file(
-        "b.txt", "line1
-", "add b",
-    );
+    repo.commit_file("a.txt", "line1\nline2\n", "add a");
+    repo.commit_file("b.txt", "line1\n", "add b");
     let r = open(repo.path()).unwrap();
 
     let stats = r.diff_stats("v1", "HEAD").unwrap();
@@ -255,30 +246,17 @@ fn test_merge_base_and_is_ancestor() {
 #[test]
 fn test_blame_with_multiple_commits() {
     let repo = helpers::TestRepo::init();
-    repo.commit_file(
-        "notes.txt",
-        "line 1
-line 2
-line 3
-",
-        "add notes",
-    );
+    repo.commit_file("notes.txt", "line 1\nline 2\nline 3\n", "add notes");
     let add_notes = repo.rev_parse("HEAD");
     repo.commit_file(
         "notes.txt",
-        "line 1
-line 2 updated
-line 3
-",
+        "line 1\nline 2 updated\nline 3\n",
         "update line 2",
     );
     let update_line_2 = repo.rev_parse("HEAD");
     repo.commit_file(
         "notes.txt",
-        "line 1
-line 2 updated
-line 3 updated
-",
+        "line 1\nline 2 updated\nline 3 updated\n",
         "update line 3",
     );
     let update_line_3 = repo.rev_parse("HEAD");

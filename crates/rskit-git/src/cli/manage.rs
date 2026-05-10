@@ -1,7 +1,7 @@
 //! Management trait stubs for the CLI backend.
 
 use std::process::Command;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use rskit_errors::{AppError, AppResult};
 
@@ -41,7 +41,7 @@ impl RefManager for Backend {
             "for-each-ref",
             "-z",
             "refs/tags",
-            "--format=%(refname:short)%00%(objecttype)%00%(objectname)%00%(*objectname)%00%(taggername)%00%(taggeremail)%00%(contents)",
+            "--format=%(refname:short)%00%(objecttype)%00%(objectname)%00%(*objectname)%00%(taggername)%00%(taggeremail)%00%(taggerdate:unix)%00%(contents)",
         ])?;
         parse_tags(&output)
     }
@@ -280,10 +280,11 @@ fn parse_tag(fields: &[&str]) -> AppResult<Tag> {
         peeled_oid,
         tagger_name,
         tagger_email,
+        tagger_date,
         message,
     ] = fields
     else {
-        return Err(AppError::invalid_format("tag", "7 NUL-separated fields"));
+        return Err(AppError::invalid_format("tag", "8 NUL-separated fields"));
     };
     let target = if object_type == "tag" && !peeled_oid.is_empty() {
         super::parse_oid(peeled_oid)?
@@ -291,12 +292,17 @@ fn parse_tag(fields: &[&str]) -> AppResult<Tag> {
         super::parse_oid(object_oid)?
     };
     let tagger = if !tagger_name.is_empty() {
+        let when = tagger_date
+            .trim()
+            .parse::<u64>()
+            .map(|secs| UNIX_EPOCH + Duration::from_secs(secs))
+            .unwrap_or(UNIX_EPOCH);
         Some(Signature {
             name: (*tagger_name).to_string(),
             email: tagger_email
                 .trim_matches(|c| c == '<' || c == '>')
                 .to_string(),
-            when: SystemTime::UNIX_EPOCH,
+            when,
         })
     } else {
         None
@@ -326,6 +332,7 @@ mod tests {
             "1111111111111111111111111111111111111111\0",
             "Test User\0",
             "test@example.com\0",
+            "1700000000\0",
             "release\nnotes\0"
         )
         .as_bytes();

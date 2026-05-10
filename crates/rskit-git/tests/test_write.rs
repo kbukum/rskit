@@ -11,18 +11,8 @@ use rskit_git::{
 #[test]
 fn test_stage() {
     let repo = helpers::TestRepo::init();
-    std::fs::write(
-        repo.path().join("README.md"),
-        "updated
-",
-    )
-    .unwrap();
-    std::fs::write(
-        repo.path().join("new.txt"),
-        "hello
-",
-    )
-    .unwrap();
+    std::fs::write(repo.path().join("README.md"), "updated\n").unwrap();
+    std::fs::write(repo.path().join("new.txt"), "hello\n").unwrap();
     let r = open(repo.path()).unwrap();
 
     r.stage(&["README.md", "new.txt"]).unwrap();
@@ -43,18 +33,8 @@ fn test_stage() {
 #[test]
 fn test_unstage() {
     let repo = helpers::TestRepo::init();
-    std::fs::write(
-        repo.path().join("README.md"),
-        "updated
-",
-    )
-    .unwrap();
-    std::fs::write(
-        repo.path().join("new.txt"),
-        "hello
-",
-    )
-    .unwrap();
+    std::fs::write(repo.path().join("README.md"), "updated\n").unwrap();
+    std::fs::write(repo.path().join("new.txt"), "hello\n").unwrap();
     let r = open(repo.path()).unwrap();
 
     r.stage(&["README.md", "new.txt"]).unwrap();
@@ -79,18 +59,8 @@ fn test_unstage() {
 #[test]
 fn test_staged_entries() {
     let repo = helpers::TestRepo::init();
-    std::fs::write(
-        repo.path().join("README.md"),
-        "updated
-",
-    )
-    .unwrap();
-    std::fs::write(
-        repo.path().join("untracked.txt"),
-        "pending
-",
-    )
-    .unwrap();
+    std::fs::write(repo.path().join("README.md"), "updated\n").unwrap();
+    std::fs::write(repo.path().join("untracked.txt"), "pending\n").unwrap();
     let r = open(repo.path()).unwrap();
 
     r.stage(&["README.md"]).unwrap();
@@ -104,12 +74,7 @@ fn test_staged_entries() {
 #[test]
 fn test_commit_with_message() {
     let repo = helpers::TestRepo::init();
-    std::fs::write(
-        repo.path().join("new.txt"),
-        "hello
-",
-    )
-    .unwrap();
+    std::fs::write(repo.path().join("new.txt"), "hello\n").unwrap();
     let r = open(repo.path()).unwrap();
 
     r.stage(&["new.txt"]).unwrap();
@@ -130,12 +95,7 @@ fn test_commit_with_message() {
 #[test]
 fn test_commit_with_options() {
     let repo = helpers::TestRepo::init();
-    std::fs::write(
-        repo.path().join("README.md"),
-        "updated
-",
-    )
-    .unwrap();
+    std::fs::write(repo.path().join("README.md"), "updated\n").unwrap();
     let r = open(repo.path()).unwrap();
 
     r.stage(&["README.md"]).unwrap();
@@ -175,21 +135,11 @@ fn test_commit_amend_preserves_parent_chain() {
     let base = repo.rev_parse("HEAD");
     let r = open(repo.path()).unwrap();
 
-    std::fs::write(
-        repo.path().join("README.md"),
-        "first update
-",
-    )
-    .unwrap();
+    std::fs::write(repo.path().join("README.md"), "first update\n").unwrap();
     r.stage(&["README.md"]).unwrap();
     r.commit("first update", None).unwrap();
 
-    std::fs::write(
-        repo.path().join("README.md"),
-        "second update
-",
-    )
-    .unwrap();
+    std::fs::write(repo.path().join("README.md"), "second update\n").unwrap();
     r.stage(&["README.md"]).unwrap();
     let amended = r
         .commit(
