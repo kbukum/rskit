@@ -2,7 +2,7 @@
 
 use std::process::Command;
 
-use rskit_errors::AppResult;
+use rskit_errors::{AppError, AppResult};
 
 use crate::manage::{ConfigReader, Maintainer, RefManager, RemoteManager};
 use crate::options::{CleanOptions, FetchOptions, PushOptions};
@@ -37,14 +37,11 @@ impl RefManager for Backend {
     fn list_tags(&self) -> AppResult<Vec<Tag>> {
         let output = self.run(&[
             "for-each-ref",
+            "-z",
             "refs/tags",
             "--format=%(refname:short)%00%(objecttype)%00%(objectname)%00%(*objectname)%00%(taggername)%00%(taggeremail)%00%(contents)",
         ])?;
-        String::from_utf8_lossy(&output)
-            .lines()
-            .filter(|line| !line.trim().is_empty())
-            .map(parse_tag)
-            .collect::<AppResult<Vec<_>>>()
+        parse_tags(&output)
     }
 
     fn create_branch(&self, name: &str, target: &str) -> AppResult<()> {
@@ -234,28 +231,74 @@ fn parse_branch(line: &str) -> AppResult<Branch> {
     })
 }
 
-fn parse_tag(line: &str) -> AppResult<Tag> {
-    let mut parts = line.splitn(7, '\0');
-    let name = parts.next().unwrap_or_default().to_string();
-    let object_type = parts.next().unwrap_or_default();
-    let object_oid = parts.next().unwrap_or_default();
-    let peeled_oid = parts.next().unwrap_or_default();
-    let _tagger_name = parts.next().unwrap_or_default();
-    let _tagger_email = parts.next().unwrap_or_default();
-    let message = parts.next().unwrap_or_default().trim().to_string();
+fn parse_tags(output: &[u8]) -> AppResult<Vec<Tag>> {
+    let text = String::from_utf8_lossy(output);
+    let fields = text.split_terminator('\0').collect::<Vec<_>>();
+    let chunks = fields.chunks_exact(7);
+    if !chunks.remainder().is_empty() {
+        return Err(AppError::invalid_format(
+            "tag list",
+            "records with 7 NUL-separated fields",
+        ));
+    }
+
+    chunks.map(parse_tag).collect()
+}
+
+fn parse_tag(fields: &[&str]) -> AppResult<Tag> {
+    let &[
+        name,
+        object_type,
+        object_oid,
+        peeled_oid,
+        _tagger_name,
+        _tagger_email,
+        message,
+    ] = fields
+    else {
+        return Err(AppError::invalid_format("tag", "7 NUL-separated fields"));
+    };
     let target = if object_type == "tag" && !peeled_oid.is_empty() {
         super::parse_oid(peeled_oid)?
     } else {
         super::parse_oid(object_oid)?
     };
     Ok(Tag {
-        name,
+        name: (*name).to_string(),
         target,
         tagger: None,
         message: if object_type == "tag" {
-            message
+            message.trim().to_string()
         } else {
             String::new()
         },
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_tags;
+
+    #[test]
+    fn parse_tags_preserves_multiline_contents() {
+        let output = concat!(
+            "v0.2.0\0",
+            "tag\0",
+            "0000000000000000000000000000000000000000\0",
+            "1111111111111111111111111111111111111111\0",
+            "Test User\0",
+            "test@example.com\0",
+            "release\nnotes\0"
+        )
+        .as_bytes();
+        let tags = parse_tags(output).unwrap();
+
+        assert_eq!(tags.len(), 1);
+        assert_eq!(tags[0].name, "v0.2.0");
+        assert_eq!(tags[0].message, "release\nnotes");
+        assert_eq!(
+            tags[0].target.to_string(),
+            "1111111111111111111111111111111111111111"
+        );
+    }
 }

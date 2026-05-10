@@ -355,6 +355,7 @@ fn test_rev_parse_describe_grep_and_show() {
             "HEAD",
             Some(&GrepOptions {
                 ignore_case: true,
+                line_numbers: true,
                 pathspecs: vec!["docs".to_string()],
                 ..Default::default()
             }),

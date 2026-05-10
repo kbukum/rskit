@@ -1,6 +1,6 @@
 //! Read trait stubs for the CLI backend.
 
-use rskit_errors::AppResult;
+use rskit_errors::{AppError, AppResult};
 
 use crate::options::{DescribeOptions, GrepOptions};
 use crate::read::Inspector;
@@ -37,7 +37,7 @@ impl Inspector for Backend {
         opts: Option<&GrepOptions>,
     ) -> AppResult<Vec<GrepMatch>> {
         let opts = opts.cloned().unwrap_or_default();
-        let mut args = vec!["grep".to_string(), "-n".to_string()];
+        let mut args = vec!["grep".to_string()];
         if opts.ignore_case {
             args.push("-i".to_string());
         }
@@ -67,20 +67,15 @@ impl Inspector for Backend {
 }
 
 fn parse_grep_match(line: &str, revision: &str) -> AppResult<GrepMatch> {
+    let invalid_match = || AppError::invalid_format("grep match", "<path>:<line>:<content>");
     let mut parts = line.rsplitn(3, ':');
     let content = parts.next().unwrap_or_default().to_string();
     let line_number = parts
         .next()
-        .ok_or_else(|| crate::GitError::InvalidOid {
-            value: line.to_string(),
-        })?
+        .ok_or_else(invalid_match)?
         .parse::<usize>()
-        .map_err(|_| crate::GitError::InvalidOid {
-            value: line.to_string(),
-        })?;
-    let path_part = parts.next().ok_or_else(|| crate::GitError::InvalidOid {
-        value: line.to_string(),
-    })?;
+        .map_err(|_| invalid_match())?;
+    let path_part = parts.next().ok_or_else(invalid_match)?;
     let path = path_part
         .strip_prefix(&format!("{revision}:"))
         .unwrap_or(path_part)
@@ -91,4 +86,21 @@ fn parse_grep_match(line: &str, revision: &str) -> AppResult<GrepMatch> {
         line_number,
         line: content,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use rskit_errors::ErrorCode;
+
+    use super::parse_grep_match;
+
+    #[test]
+    fn parse_grep_match_reports_invalid_format() {
+        let err = parse_grep_match("README.md:not-a-line", "HEAD").unwrap_err();
+        assert_eq!(err.code, ErrorCode::InvalidFormat);
+        assert_eq!(
+            err.message,
+            "invalid format for grep match: expected <path>:<line>:<content>"
+        );
+    }
 }

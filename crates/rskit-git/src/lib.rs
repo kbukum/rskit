@@ -31,6 +31,7 @@ pub mod manage;
 pub mod options;
 pub mod read;
 pub mod repo;
+#[cfg(feature = "testutil")]
 pub mod testutil;
 pub mod types;
 pub mod write;
