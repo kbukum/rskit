@@ -48,6 +48,7 @@ hyper-util = { version = "0.1", features = ["client-legacy", "client-proxy", "se
 idna = { version = "1" }
 inout = { version = "0.1", default-features = false, features = ["block-padding"] }
 lazy_static = { version = "1", default-features = false, features = ["spin_no_std"] }
+libz-sys = { version = "1" }
 log = { version = "0.4", default-features = false, features = ["std"] }
 md-5 = { version = "0.10" }
 memchr = { version = "2" }
@@ -140,6 +141,7 @@ libc = { version = "0.2", features = ["extra_traits"] }
 
 [target.aarch64-apple-darwin.dependencies]
 bitflags = { version = "2", default-features = false, features = ["std"] }
+errno = { version = "0.3" }
 getrandom-9fbad63c4bcf4a8f = { package = "getrandom", version = "0.4", default-features = false, features = ["std", "sys_rng"] }
 hyper-rustls = { version = "0.27", default-features = false, features = ["aws-lc-rs", "http1", "http2", "native-tokio", "ring", "tls12", "webpki-tokio"] }
 libc = { version = "0.2", features = ["extra_traits"] }

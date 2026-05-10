@@ -27,11 +27,11 @@ impl RefManager for Backend {
 
         let refs = args.iter().map(String::as_str).collect::<Vec<_>>();
         let output = self.run(&refs)?;
-        Ok(String::from_utf8_lossy(&output)
+        String::from_utf8_lossy(&output)
             .lines()
             .filter(|line| !line.trim().is_empty())
             .map(parse_branch)
-            .collect::<AppResult<Vec<_>>>()?)
+            .collect::<AppResult<Vec<_>>>()
     }
 
     fn list_tags(&self) -> AppResult<Vec<Tag>> {
@@ -40,11 +40,11 @@ impl RefManager for Backend {
             "refs/tags",
             "--format=%(refname:short)%00%(objecttype)%00%(objectname)%00%(*objectname)%00%(taggername)%00%(taggeremail)%00%(contents)",
         ])?;
-        Ok(String::from_utf8_lossy(&output)
+        String::from_utf8_lossy(&output)
             .lines()
             .filter(|line| !line.trim().is_empty())
             .map(parse_tag)
-            .collect::<AppResult<Vec<_>>>()?)
+            .collect::<AppResult<Vec<_>>>()
     }
 
     fn create_branch(&self, name: &str, target: &str) -> AppResult<()> {
