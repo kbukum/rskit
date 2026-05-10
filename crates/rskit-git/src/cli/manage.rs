@@ -85,7 +85,7 @@ impl RemoteManager for Backend {
             if !seen.insert(name.to_string()) {
                 continue;
             }
-            let url = rest.split(' ').next().unwrap_or_default().to_string();
+            let url = rest.rsplit_once(" (").map_or(rest, |(u, _)| u).to_string();
             remotes.push(Remote {
                 name: name.to_string(),
                 url,

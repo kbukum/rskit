@@ -45,6 +45,7 @@ impl Inspector for Backend {
             args.push("-n".to_string());
         }
         args.extend(opts.extra_args);
+        args.push("-e".to_string());
         args.push(pattern.to_string());
         args.push(revision.to_string());
         if !opts.pathspecs.is_empty() {
