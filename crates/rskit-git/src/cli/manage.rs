@@ -1,13 +1,14 @@
 //! Management trait stubs for the CLI backend.
 
 use std::process::Command;
+use std::time::SystemTime;
 
 use rskit_errors::{AppError, AppResult};
 
 use crate::error::GitError;
 use crate::manage::{ConfigReader, Maintainer, RefManager, RemoteManager};
 use crate::options::{CleanOptions, FetchOptions, PushOptions};
-use crate::types::{Branch, BranchFilter, Remote, Tag};
+use crate::types::{Branch, BranchFilter, Remote, Signature, Tag};
 
 use super::Backend;
 
@@ -143,6 +144,7 @@ impl ConfigReader for Backend {
         let output = Command::new("git")
             .args(["config", "--get", key])
             .current_dir(&self.root)
+            .env("GIT_TERMINAL_PROMPT", "0")
             .output()
             .map_err(|err| GitError::CommandFailed {
                 args: vec!["config".into(), "--get".into(), key.into()],
@@ -224,6 +226,7 @@ fn run_allow_empty(backend: &Backend, args: &[&str]) -> AppResult<Vec<u8>> {
     let output = Command::new("git")
         .args(args)
         .current_dir(backend.root())
+        .env("GIT_TERMINAL_PROMPT", "0")
         .output()
         .map_err(|err| crate::error::GitError::CommandFailed {
             args: args.iter().map(|arg| (*arg).to_string()).collect(),
@@ -275,8 +278,8 @@ fn parse_tag(fields: &[&str]) -> AppResult<Tag> {
         object_type,
         object_oid,
         peeled_oid,
-        _tagger_name,
-        _tagger_email,
+        tagger_name,
+        tagger_email,
         message,
     ] = fields
     else {
@@ -287,10 +290,21 @@ fn parse_tag(fields: &[&str]) -> AppResult<Tag> {
     } else {
         super::parse_oid(object_oid)?
     };
+    let tagger = if !tagger_name.is_empty() {
+        Some(Signature {
+            name: (*tagger_name).to_string(),
+            email: tagger_email
+                .trim_matches(|c| c == '<' || c == '>')
+                .to_string(),
+            when: SystemTime::UNIX_EPOCH,
+        })
+    } else {
+        None
+    };
     Ok(Tag {
         name: (*name).to_string(),
         target,
-        tagger: None,
+        tagger,
         message: if object_type == "tag" {
             message.trim_end_matches('\n').to_string()
         } else {

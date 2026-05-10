@@ -14,6 +14,12 @@ use super::{Backend, oid_from_git2};
 
 impl IndexManager for Backend {
     fn stage(&self, paths: &[&str]) -> AppResult<()> {
+        if self.repo.is_bare() {
+            return Err(GitError::NotImplemented {
+                operation: "stage on bare repository",
+            }
+            .into());
+        }
         let mut index = self.repo.index().map_err(GitError::Internal)?;
         for path in paths {
             let p = Path::new(path);
