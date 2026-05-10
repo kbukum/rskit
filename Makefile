@@ -1,5 +1,6 @@
-.PHONY: all build test test-nextest test-doc test-affected test-coverage test-coverage-html lint fmt fmt-check check check-fast doc deny check-l7-edges clean help \
-       ci ci-test ci-lint ci-fmt ensure-act
+.PHONY: all build test test-nextest test-doc test-affected test-coverage test-coverage-html lint fmt fmt-check check check-fast \
+       check-core check-patterns check-crosscutting check-composition check-transport check-auth check-data check-ai \
+       check-media check-infra doc deny hakari-verify check-l7-edges clean help ci ci-test ci-lint ci-fmt ensure-act
 
 # Crate flag: pass -p $(C) to cargo when C is set
 _C = $(if $(C),-p $(C))
@@ -110,11 +111,58 @@ deny: check-l7-edges
 	@cargo deny check licenses advisories sources bans
 	@echo "✓ cargo-deny passed"
 
+## Verify workspace-hack is up-to-date (requires cargo-hakari)
+hakari-verify:
+	@echo "==> Verifying workspace-hack..."
+	@cargo hakari generate --diff
+	@cargo hakari manage-deps --dry-run
+	@echo "✓ workspace-hack is up-to-date"
+
 ## Fast check: format + lint + build only (no tests) — for rapid iteration
 check-fast: fmt-check lint build
 
 ## Run all checks (fmt + lint + build + test)
-check: fmt-check lint build test
+check: fmt-check lint build test-nextest test-doc
+
+## Check only core domain modules
+check-core:
+	@./scripts/check-domain.sh core
+
+## Check only patterns domain modules
+check-patterns:
+	@./scripts/check-domain.sh patterns
+
+## Check only crosscutting domain modules
+check-crosscutting:
+	@./scripts/check-domain.sh crosscutting
+
+## Check only composition domain modules
+check-composition:
+	@./scripts/check-domain.sh composition
+
+## Check only transport domain modules
+check-transport:
+	@./scripts/check-domain.sh transport
+
+## Check only auth domain modules
+check-auth:
+	@./scripts/check-domain.sh auth
+
+## Check only data domain modules
+check-data:
+	@./scripts/check-domain.sh data
+
+## Check only ai domain modules
+check-ai:
+	@./scripts/check-domain.sh ai
+
+## Check only media domain modules
+check-media:
+	@./scripts/check-domain.sh media
+
+## Check only infra domain modules
+check-infra:
+	@./scripts/check-domain.sh infra
 
 ## Clean build artifacts
 clean:
@@ -166,8 +214,19 @@ help:
 	@echo "  make doc                                  Build documentation"
 	@echo "  make check-l7-edges                       Check L7 dependency edges"
 	@echo "  make deny                                 Run cargo-deny + L7 edge checks"
+	@echo "  make hakari-verify                        Verify workspace-hack is current"
 	@echo "  make check-fast                           fmt + lint + build"
 	@echo "  make check              [C=]               fmt + lint + build + test"
+	@echo "  make check-core                           Check only core domain modules"
+	@echo "  make check-patterns                       Check only patterns domain modules"
+	@echo "  make check-crosscutting                   Check only crosscutting domain modules"
+	@echo "  make check-composition                    Check only composition domain modules"
+	@echo "  make check-transport                      Check only transport domain modules"
+	@echo "  make check-auth                           Check only auth domain modules"
+	@echo "  make check-data                           Check only data domain modules"
+	@echo "  make check-ai                             Check only ai domain modules"
+	@echo "  make check-media                          Check only media domain modules"
+	@echo "  make check-infra                          Check only infra domain modules"
 	@echo "  make clean                                Remove build artifacts"
 	@echo ""
 	@echo "Local CI (GitHub Actions via act + Docker):"

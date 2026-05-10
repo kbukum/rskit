@@ -106,6 +106,21 @@ impl rskit_provider::Provider for OllamaAdapter {
 }
 
 #[async_trait]
+impl
+    rskit_provider::RequestResponse<
+        rskit_llm::types::CompletionRequest,
+        rskit_llm::types::CompletionResponse,
+    > for OllamaAdapter
+{
+    async fn execute(
+        &self,
+        input: rskit_llm::types::CompletionRequest,
+    ) -> AppResult<rskit_llm::types::CompletionResponse> {
+        self.complete(input).await
+    }
+}
+
+#[async_trait]
 impl Provider for OllamaAdapter {
     async fn complete(
         &self,

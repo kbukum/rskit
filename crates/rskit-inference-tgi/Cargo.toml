@@ -21,7 +21,9 @@ rustdoc-args = ["--cfg", "docsrs"]
 rskit-ai = { workspace = true }
 rskit-component = { path = "../rskit-component" }
 rskit-errors    = { path = "../rskit-errors" }
+rskit-httpclient = { path = "../rskit-httpclient" }
 rskit-inference = { path = "../rskit-inference" }
+rskit-provider  = { path = "../rskit-provider" }
 rskit-tool      = { path = "../rskit-tool" }
 async-trait     = { workspace = true }
 reqwest         = { workspace = true, features = ["json"] }

@@ -1,6 +1,7 @@
 [build]
 # Pass --cfg docsrs when building documentation so #[cfg_attr(docsrs, ...)]
 # attributes are activated on docs.rs.
+rustc-wrapper = "sccache"
 # rustdocflags = ["--cfg", "docsrs"]   # uncomment when publishing to docs.rs
 
 [alias]
@@ -18,3 +19,9 @@ xtask = "run --package xtask --"
 [target.'cfg(target_os = "linux")']
 linker = "clang"
 rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+
+# macOS (Apple Silicon): use lld for faster linking.
+# Install: brew install llvm (provides lld at /opt/homebrew/opt/llvm/bin/ld64.lld)
+# Uncomment the following after installing llvm:
+# [target.aarch64-apple-darwin]
+# rustflags = ["-C", "link-arg=-fuse-ld=/opt/homebrew/opt/llvm/bin/ld64.lld"]

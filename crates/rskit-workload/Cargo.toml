@@ -1,0 +1,18 @@
+[package]
+name = "rskit-workload"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Workload management for rskit services"
+publish = false
+
+[dependencies]
+rskit-errors = { path = "../rskit-errors" }
+rskit-component = { path = "../rskit-component" }
+
+[lints]
+workspace = true

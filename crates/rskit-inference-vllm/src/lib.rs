@@ -9,6 +9,8 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use rskit_errors::AppResult;
+use rskit_httpclient::{HttpClient, HttpClientConfig};
 use rskit_inference::{
     Factory, Inference, InferenceDescriptor, InferenceError, PredictRequest, PredictResponse,
     Registry, RegistryError, ServingProtocol, StreamEventRef, StreamingInference,
@@ -47,14 +49,44 @@ impl Default for Config {
 /// vLLM raw REST adapter skeleton.
 pub struct Adapter {
     config: Config,
-    client: reqwest::Client,
+    client: HttpClient,
+}
+
+#[async_trait]
+impl rskit_provider::Provider for Adapter {
+    fn name(&self) -> &'static str {
+        KIND
+    }
+}
+
+#[async_trait]
+impl rskit_provider::RequestResponse<PredictRequest, PredictResponse> for Adapter {
+    async fn execute(&self, input: PredictRequest) -> AppResult<PredictResponse> {
+        self.predict(input).await.map_err(Into::into)
+    }
 }
 
 impl Adapter {
-    /// Create a skeleton adapter with an injected HTTP client.
+    /// Create a skeleton adapter with the default canonical HTTP client.
+    pub fn new(config: Config) -> AppResult<Self> {
+        let client = HttpClient::new(HttpClientConfig::new().with_base_url(&config.endpoint))?;
+        Ok(Self::with_http_client(config, client))
+    }
+
+    /// Create a skeleton adapter with an injected canonical HTTP client.
     #[must_use]
-    pub fn new(config: Config, client: reqwest::Client) -> Self {
+    pub fn with_http_client(config: Config, client: HttpClient) -> Self {
         Self { config, client }
+    }
+
+    /// Create a skeleton adapter with an injected raw reqwest client.
+    #[must_use]
+    pub fn with_reqwest_client(config: Config, client: reqwest::Client) -> Self {
+        let client = HttpClient::from_parts(
+            HttpClientConfig::new().with_base_url(&config.endpoint),
+            client,
+        );
+        Self::with_http_client(config, client)
     }
 }
 
@@ -121,7 +153,9 @@ pub fn register(registry: &mut Registry) -> Result<(), RegistryError> {
             serde_json::from_value::<Config>(config)
                 .map_err(|err| InferenceError::Decode(err.to_string()))?
         };
-        Ok(Arc::new(Adapter::new(config, reqwest::Client::new())))
+        Ok(Arc::new(
+            Adapter::new(config).map_err(|err| InferenceError::Decode(err.to_string()))?,
+        ))
     });
     registry.register(KIND, factory)
 }

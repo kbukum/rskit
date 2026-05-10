@@ -12,6 +12,25 @@
 
 > **Sibling projects.** [**gokit**](https://github.com/kbukum/gokit) (Go) · rskit (Rust, this repo) · [**pykit**](https://github.com/kbukum/pykit) (Python). Public abstractions (`AppError`, `Component`, `Provider`, `Pipeline`, lifecycle hooks) are evaluated for parity across all three.
 
+## Browse by Domain
+
+Modules are organized into domains for scoped development. See [Module Index](docs/MODULE-INDEX.md) for the full breakdown.
+
+| Domain | Focus | Quick check |
+|--------|-------|-------------|
+| core | Foundation types, config, logging | `make check-core` |
+| patterns | Component, provider, DI, hooks | `make check-patterns` |
+| crosscutting | Observability, resilience, security | `make check-crosscutting` |
+| composition | Bootstrap, pipeline, DAG, workers | `make check-composition` |
+| transport | Server, HTTP, gRPC, SSE | `make check-transport` |
+| auth | Authentication, authorization | `make check-auth` |
+| data | Database, cache, storage, messaging | `make check-data` |
+| ai | LLM, inference, agents, tools | `make check-ai` |
+| media | Media processing, transcription | `make check-media` |
+| infra | Workload, CLI, benchmarks, testing | `make check-infra` |
+
+CI still runs the full workspace; on pull requests the `changes` job also publishes an `affected` domain list from `./scripts/affected-domains.sh` so future workflow steps can inspect the same domains developers target locally with `make check-<domain>`.
+
 ## Highlights
 
 - **Cargo workspace** — facade crate (`rskit`) + 40+ independent `rskit-*` sub-crates. Add only what you need.

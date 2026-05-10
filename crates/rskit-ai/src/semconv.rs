@@ -38,6 +38,8 @@ pub enum Operation {
     TextCompletion,
     /// Embedding generation operation.
     Embedding,
+    /// Agent run operation.
+    AgentRun,
     /// Agent turn operation.
     AgentTurn,
     /// LLM provider call operation.
@@ -60,6 +62,7 @@ impl Operation {
             Self::Chat => "chat",
             Self::TextCompletion => "text_completion",
             Self::Embedding => "embedding",
+            Self::AgentRun => "agent.run",
             Self::AgentTurn => "agent.turn",
             Self::LlmCall => "llm.call",
             Self::ToolCall => "tool.call",
@@ -76,6 +79,7 @@ impl Operation {
             "chat" => Some(Self::Chat),
             "text_completion" => Some(Self::TextCompletion),
             "embedding" => Some(Self::Embedding),
+            "agent.run" => Some(Self::AgentRun),
             "agent.turn" => Some(Self::AgentTurn),
             "llm.call" => Some(Self::LlmCall),
             "tool.call" => Some(Self::ToolCall),

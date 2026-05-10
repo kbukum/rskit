@@ -9,8 +9,14 @@ use crate::types::{
 /// generation (vLLM, TGI), classification/regression (Triton KServe v2),
 /// embeddings (BentoML, custom), image/audio inference, and arbitrary tensor
 /// protocols. NOT chat completion — that lives in `rskit-llm`.
+///
+/// Per locked decision D7, this trait extends
+/// `rskit_provider::RequestResponse<PredictRequest, PredictResponse>` so
+/// inference adapters natively expose the canonical request/response shape.
 #[async_trait]
-pub trait Inference: Send + Sync {
+pub trait Inference:
+    rskit_provider::RequestResponse<PredictRequest, PredictResponse> + Send + Sync
+{
     /// Execute one prediction request against the serving runtime.
     async fn predict(&self, request: PredictRequest) -> Result<PredictResponse, InferenceError>;
 

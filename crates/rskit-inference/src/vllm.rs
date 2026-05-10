@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use rskit_ai::{Capabilities, Model, Provider as ModelProvider, Usage};
+use rskit_component::{Component, Health};
 use rskit_errors::AppResult;
 use rskit_httpclient::{Auth, HttpClient, HttpClientConfig, Request};
 use rskit_tool::Envelope;
@@ -91,6 +92,20 @@ struct OaiChoice {
 struct OaiUsage {
     prompt_tokens: u32,
     completion_tokens: u32,
+}
+
+#[async_trait]
+impl rskit_provider::Provider for VllmAdapter {
+    fn name(&self) -> &'static str {
+        VLLM_KIND
+    }
+}
+
+#[async_trait]
+impl rskit_provider::RequestResponse<PredictRequest, PredictResponse> for VllmAdapter {
+    async fn execute(&self, input: PredictRequest) -> AppResult<PredictResponse> {
+        self.predict(input).await.map_err(Into::into)
+    }
 }
 
 #[async_trait]
@@ -207,6 +222,25 @@ pub fn register(registry: &mut Registry) -> Result<(), RegistryError> {
         ))
     });
     registry.register(VLLM_KIND, factory)
+}
+
+#[async_trait]
+impl Component for VllmAdapter {
+    fn name(&self) -> &str {
+        "rskit-inference.vllm"
+    }
+
+    async fn start(&self) -> AppResult<()> {
+        Ok(())
+    }
+
+    async fn stop(&self) -> AppResult<()> {
+        Ok(())
+    }
+
+    fn health(&self) -> Health {
+        Health::healthy(self.name())
+    }
 }
 
 #[cfg(test)]

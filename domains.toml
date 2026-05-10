@@ -1,0 +1,51 @@
+# Maps modules to domains. Used by: Makefile, CI, generated docs.
+# Module names use the kit's canonical naming (directory/crate/package name without kit prefix).
+
+[domains.core]
+description = "Foundation types, config, logging, validation, encryption"
+modules = ["errors", "config", "logging", "validation", "encryption", "util", "version", "schema"]
+
+[domains.patterns]
+description = "Component lifecycle, provider shapes, DI, hooks"
+modules = ["component", "hook", "provider", "di"]
+depends_on = ["core"]
+
+[domains.crosscutting]
+description = "Observability, resilience, security"
+modules = ["observability", "resilience", "security"]
+depends_on = ["core", "patterns"]
+
+[domains.composition]
+description = "Bootstrap, pipeline, DAG, chain, worker, process, stateful"
+modules = ["bootstrap", "pipeline", "dag", "chain", "worker", "process", "stateful"]
+depends_on = ["core", "patterns", "crosscutting"]
+
+[domains.transport]
+description = "Server, HTTP client, gRPC, SSE, connect, discovery"
+modules = ["server", "httpclient", "grpc", "sse", "http", "discovery"]
+depends_on = ["core", "patterns", "crosscutting"]
+
+[domains.auth]
+description = "Authentication and authorization"
+modules = ["auth", "authz"]
+depends_on = ["core", "patterns", "crosscutting", "transport"]
+
+[domains.data]
+description = "Database, cache, storage, vectorstore, messaging"
+modules = ["database", "cache", "storage", "storage-gcs", "storage-s3", "vectorstore", "messaging", "messaging-kafka", "messaging-nats", "messaging-rabbitmq"]
+depends_on = ["core", "patterns", "crosscutting", "transport", "auth"]
+
+[domains.ai]
+description = "LLM, inference, embedding, agent, tool, MCP, skill"
+modules = ["ai", "llm", "llm-providers", "embedding", "inference", "inference-tgi", "inference-triton", "inference-vllm", "agent", "tool", "mcp", "skill"]
+depends_on = ["core", "patterns", "crosscutting", "transport", "auth"]
+
+[domains.media]
+description = "Media processing, transcription"
+modules = ["media", "media-audio", "media-ffmpeg", "media-image"]
+depends_on = ["core", "patterns", "crosscutting"]
+
+[domains.infra]
+description = "Workload management, CLI, benchmarking, dataset, test utilities, integration"
+modules = ["workload", "bench", "cli", "dataset", "testutil", "integration"]
+depends_on = ["core", "patterns"]

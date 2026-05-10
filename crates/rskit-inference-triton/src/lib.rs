@@ -14,6 +14,8 @@ use base64::{Engine, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use bytes::Bytes;
 use rskit_ai::{Capabilities, Model, Provider as ModelProvider, semconv, semconv::Operation};
 use rskit_authz::{AuthzDecision, AuthzRequest, Decider};
+use rskit_errors::AppResult;
+use rskit_httpclient::{HttpClient, HttpClientConfig, Request};
 use rskit_inference::{
     Factory, Inference, InferenceDescriptor, InferenceError, PredictRequest, PredictResponse,
     PredictStatus, Registry, RegistryError, ServingProtocol, Tensor, TensorData, Usage, Value,
@@ -71,17 +73,40 @@ impl Default for TritonConfig {
 
 /// Triton KServe v2 HTTP inference adapter.
 pub struct TritonInference {
-    client: reqwest::Client,
+    client: HttpClient,
+    #[expect(dead_code, reason = "stored for future introspection; original design")]
     config: TritonConfig,
     descriptor: InferenceDescriptor,
     policy: Option<Policy>,
     decider: Option<Arc<dyn Decider>>,
 }
 
+#[async_trait]
+impl rskit_provider::Provider for TritonInference {
+    fn name(&self) -> &'static str {
+        TRITON_KIND
+    }
+}
+
+#[async_trait]
+impl rskit_provider::RequestResponse<PredictRequest, PredictResponse> for TritonInference {
+    async fn execute(&self, input: PredictRequest) -> AppResult<PredictResponse> {
+        self.predict(input).await.map_err(Into::into)
+    }
+}
+
 impl TritonInference {
-    /// Create a Triton adapter with an injected `reqwest::Client`.
+    /// Create a Triton adapter with the default canonical HTTP client.
+    pub fn new(config: TritonConfig) -> Result<Self, InferenceError> {
+        let client = HttpClient::new(
+            HttpClientConfig::new().with_base_url(config.base_url.trim_end_matches('/')),
+        )?;
+        Ok(Self::with_http_client(config, client))
+    }
+
+    /// Create a Triton adapter with an injected canonical HTTP client.
     #[must_use]
-    pub fn new(config: TritonConfig, client: reqwest::Client) -> Self {
+    pub fn with_http_client(config: TritonConfig, client: HttpClient) -> Self {
         let descriptor = descriptor_from_config(&config);
         Self {
             client,
@@ -90,6 +115,16 @@ impl TritonInference {
             policy: None,
             decider: None,
         }
+    }
+
+    /// Create a Triton adapter with an injected raw reqwest client.
+    #[must_use]
+    pub fn with_reqwest_client(config: TritonConfig, client: reqwest::Client) -> Self {
+        let http_client = HttpClient::from_parts(
+            HttpClientConfig::new().with_base_url(config.base_url.trim_end_matches('/')),
+            client,
+        );
+        Self::with_http_client(config, http_client)
     }
 
     /// Inject a resilience policy. The adapter does not implement inline retries.
@@ -108,12 +143,7 @@ impl TritonInference {
 
     /// Return whether Triton reports `/v2/health/ready` successfully.
     pub async fn health_check(&self) -> Result<bool, InferenceError> {
-        let url = format!(
-            "{}/v2/health/ready",
-            self.config.base_url.trim_end_matches('/')
-        );
-        let response = self.client.get(url).send().await?;
-        Ok(response.status().is_success())
+        Ok(self.client.get("/v2/health/ready").await?.is_success())
     }
 
     async fn predict_authorized(
@@ -163,15 +193,18 @@ impl TritonInference {
         request: &PredictRequest,
     ) -> Result<PredictResponse, InferenceError> {
         let path = infer_path(&request.model_name, request.model_version.as_deref())?;
-        let url = format!("{}{}", self.config.base_url.trim_end_matches('/'), path);
         let response = self
             .client
-            .post(url)
-            .json(&encode_request(request)?)
-            .send()
+            .send(
+                Request::post(path)
+                    .json_body(&encode_request(request)?)
+                    .map_err(|err| InferenceError::Decode(err.to_string()))?,
+            )
             .await?;
         let status = response.status();
-        let body = response.text().await?;
+        let body = response
+            .text()
+            .map_err(|err| InferenceError::Decode(err.to_string()))?;
         if !status.is_success() {
             return Err(InferenceError::Server {
                 status: status.as_u16(),
@@ -229,10 +262,7 @@ pub fn register(registry: &mut Registry) -> Result<(), RegistryError> {
             serde_json::from_value::<TritonConfig>(config)
                 .map_err(|err| InferenceError::Decode(err.to_string()))?
         };
-        Ok(Arc::new(TritonInference::new(
-            config,
-            reqwest::Client::new(),
-        )))
+        Ok(Arc::new(TritonInference::new(config)?))
     });
     registry.register(TRITON_KIND, factory)
 }

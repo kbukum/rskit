@@ -8,12 +8,14 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use rmcp::model::{CallToolRequestParams, Tool};
 use rmcp::service::{Peer, RoleClient, RunningService};
+use rskit_ai::semconv;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_schema::ValidationResult;
 use rskit_tool::Callable;
 use rskit_tool::Definition;
 use rskit_tool::context::Context;
 use rskit_tool::result::ToolResult;
+use tracing::Instrument;
 
 use crate::convert;
 
@@ -44,24 +46,35 @@ impl Callable for RemoteTool {
     }
 
     async fn call(&self, _ctx: &Context, input: serde_json::Value) -> AppResult<ToolResult> {
-        let arguments = match input {
-            serde_json::Value::Object(map) => Some(map),
-            _ => None,
-        };
+        let span = tracing::info_span!(
+            "mcp.request",
+            "gen_ai.operation.name" = semconv::Operation::McpRequest.as_str(),
+            "gen_ai.tool.name" = self.definition.name.as_str(),
+            "mcp.method" = "tools/call",
+            "mcp.tool_name" = self.mcp_name.as_str(),
+        );
+        async {
+            let arguments = match input {
+                serde_json::Value::Object(map) => Some(map),
+                _ => None,
+            };
 
-        let mut params = CallToolRequestParams::new(self.mcp_name.clone());
-        if let Some(args) = arguments {
-            params = params.with_arguments(args);
+            let mut params = CallToolRequestParams::new(self.mcp_name.clone());
+            if let Some(args) = arguments {
+                params = params.with_arguments(args);
+            }
+
+            let result = self.peer.call_tool(params).await.map_err(|e| {
+                AppError::new(
+                    ErrorCode::ExternalService,
+                    format!("MCP call_tool failed: {e}"),
+                )
+            })?;
+
+            Ok(convert::call_result_to_tool_result(&result))
         }
-
-        let result = self.peer.call_tool(params).await.map_err(|e| {
-            AppError::new(
-                ErrorCode::ExternalService,
-                format!("MCP call_tool failed: {e}"),
-            )
-        })?;
-
-        Ok(convert::call_result_to_tool_result(&result))
+        .instrument(span)
+        .await
     }
 }
 

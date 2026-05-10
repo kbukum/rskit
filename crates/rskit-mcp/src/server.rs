@@ -15,7 +15,10 @@ use rmcp::model::{
     ResourceTemplate, ServerCapabilities, ServerInfo, Tool,
 };
 use rmcp::service::{RequestContext, RoleServer};
+use rskit_ai::semconv;
+use rskit_component::{Component, Health};
 use tracing;
+use tracing::Instrument;
 
 use rskit_tool::context::Context;
 use rskit_tool::registry::Registry;
@@ -291,113 +294,127 @@ impl RegistryHandler {
 
     pub(crate) async fn handle_call_tool(&self, request: CallToolRequestParams) -> CallToolResult {
         let tool_name = self.strip_prefix(&request.name);
-        tracing::debug!(tool = tool_name, "MCP tools/call");
+        let span = tracing::info_span!(
+            "mcp.request",
+            "gen_ai.operation.name" = semconv::Operation::McpRequest.as_str(),
+            "gen_ai.tool.name" = tool_name,
+            "mcp.method" = "tools/call",
+            "mcp.tool_name" = %request.name,
+        );
+        async {
+            tracing::debug!(tool = tool_name, "MCP tools/call");
 
-        let mut event = ToolAuditEvent {
-            tool_name: tool_name.to_string(),
-            mcp_name: request.name.to_string(),
-            outcome: String::new(),
-            reason: String::new(),
-            error: String::new(),
-        };
-
-        if !self.allows_tool(tool_name) {
-            event.outcome = String::from("denied");
-            event.reason = String::from("not in allow-list");
-            self.audit_tool_call(event).await;
-            tracing::warn!(tool = tool_name, "MCP tool call rejected by allow-list");
-            return CallToolResult::error(vec![rmcp::model::Content::text("tool is not allowed")]);
-        }
-
-        let input = match request.arguments {
-            Some(args) => serde_json::Value::Object(args),
-            None => serde_json::Value::Object(serde_json::Map::new()),
-        };
-
-        match self
-            .authorize_tool_call(ToolAuthorizationRequest {
+            let mut event = ToolAuditEvent {
                 tool_name: tool_name.to_string(),
                 mcp_name: request.name.to_string(),
-                arguments: input.clone(),
-            })
-            .await
-        {
-            Ok(decision) => {
-                event.reason = decision.reason.clone();
-                if !decision.allowed {
-                    event.outcome = String::from("denied");
+                outcome: String::new(),
+                reason: String::new(),
+                error: String::new(),
+            };
+
+            if !self.allows_tool(tool_name) {
+                event.outcome = String::from("denied");
+                event.reason = String::from("not in allow-list");
+                self.audit_tool_call(event).await;
+                tracing::warn!(tool = tool_name, "MCP tool call rejected by allow-list");
+                return CallToolResult::error(vec![rmcp::model::Content::text(
+                    "tool is not allowed",
+                )]);
+            }
+
+            let input = match request.arguments {
+                Some(args) => serde_json::Value::Object(args),
+                None => serde_json::Value::Object(serde_json::Map::new()),
+            };
+
+            match self
+                .authorize_tool_call(ToolAuthorizationRequest {
+                    tool_name: tool_name.to_string(),
+                    mcp_name: request.name.to_string(),
+                    arguments: input.clone(),
+                })
+                .await
+            {
+                Ok(decision) => {
+                    event.reason = decision.reason.clone();
+                    if !decision.allowed {
+                        event.outcome = String::from("denied");
+                        self.audit_tool_call(event).await;
+                        return CallToolResult::error(vec![rmcp::model::Content::text(
+                            denied_message(&decision.reason),
+                        )]);
+                    }
+                }
+                Err(err) => {
+                    event.outcome = String::from("authorization_error");
+                    event.error = err.clone();
                     self.audit_tool_call(event).await;
                     return CallToolResult::error(vec![rmcp::model::Content::text(
-                        denied_message(&decision.reason),
+                        "authorization error",
                     )]);
                 }
             }
-            Err(err) => {
-                event.outcome = String::from("authorization_error");
-                event.error = err.clone();
+
+            if self.config.max_input_bytes > 0
+                && json_size_bytes(&input) > self.config.max_input_bytes
+            {
+                event.outcome = String::from("input_too_large");
+                event.error = format!("input size exceeds {} bytes", self.config.max_input_bytes);
                 self.audit_tool_call(event).await;
-                return CallToolResult::error(vec![rmcp::model::Content::text(
-                    "authorization error",
-                )]);
+                return CallToolResult::error(vec![rmcp::model::Content::text(format!(
+                    "input too large: exceeds {} bytes",
+                    self.config.max_input_bytes
+                ))]);
             }
-        }
 
-        if self.config.max_input_bytes > 0 && json_size_bytes(&input) > self.config.max_input_bytes
-        {
-            event.outcome = String::from("input_too_large");
-            event.error = format!("input size exceeds {} bytes", self.config.max_input_bytes);
-            self.audit_tool_call(event).await;
-            return CallToolResult::error(vec![rmcp::model::Content::text(format!(
-                "input too large: exceeds {} bytes",
-                self.config.max_input_bytes
-            ))]);
-        }
+            let ctx = Context::new();
+            let tool_def = self
+                .registry
+                .get(tool_name)
+                .map(|tool| tool.definition().clone());
 
-        let ctx = Context::new();
-        let tool_def = self
-            .registry
-            .get(tool_name)
-            .map(|tool| tool.definition().clone());
-
-        let result = match self.registry.call(tool_name, &ctx, input).await {
-            Ok(result) => {
-                if result.is_error {
-                    event.outcome = String::from("tool_error");
-                    event.error = result.text().to_string();
-                } else {
-                    let limit = self.config.max_result_bytes;
-                    if limit > 0 && result_size_bytes(&result) > limit {
-                        event.outcome = String::from("result_too_large");
-                        event.error = format!("result size exceeds {limit} bytes");
-                        self.audit_tool_call(event).await;
-                        return CallToolResult::error(vec![rmcp::model::Content::text(format!(
-                            "result too large: exceeds {limit} bytes"
-                        ))]);
+            let result = match self.registry.call(tool_name, &ctx, input).await {
+                Ok(result) => {
+                    if result.is_error {
+                        event.outcome = String::from("tool_error");
+                        event.error = result.text().to_string();
+                    } else {
+                        let limit = self.config.max_result_bytes;
+                        if limit > 0 && result_size_bytes(&result) > limit {
+                            event.outcome = String::from("result_too_large");
+                            event.error = format!("result size exceeds {limit} bytes");
+                            self.audit_tool_call(event).await;
+                            return CallToolResult::error(vec![rmcp::model::Content::text(
+                                format!("result too large: exceeds {limit} bytes"),
+                            )]);
+                        }
+                        if let Some(definition) = &tool_def
+                            && let Some(message) = validate_tool_output(definition, &result)
+                        {
+                            event.outcome = String::from("output_validation_error");
+                            event.error = message.clone();
+                            self.audit_tool_call(event).await;
+                            return CallToolResult::error(vec![rmcp::model::Content::text(
+                                format!("output validation error: {message}"),
+                            )]);
+                        }
+                        event.outcome = String::from("success");
                     }
-                    if let Some(definition) = &tool_def
-                        && let Some(message) = validate_tool_output(definition, &result)
-                    {
-                        event.outcome = String::from("output_validation_error");
-                        event.error = message.clone();
-                        self.audit_tool_call(event).await;
-                        return CallToolResult::error(vec![rmcp::model::Content::text(format!(
-                            "output validation error: {message}"
-                        ))]);
-                    }
-                    event.outcome = String::from("success");
+                    convert::tool_result_to_call_result(&result)
                 }
-                convert::tool_result_to_call_result(&result)
-            }
-            Err(err) => {
-                event.outcome = String::from("tool_error");
-                event.error = err.message.clone();
-                tracing::warn!(tool = tool_name, error = %err, "tool call failed");
-                CallToolResult::error(vec![rmcp::model::Content::text(err.message.clone())])
-            }
-        };
+                Err(err) => {
+                    event.outcome = String::from("tool_error");
+                    event.error = err.message.clone();
+                    tracing::warn!(tool = tool_name, error = %err, "tool call failed");
+                    CallToolResult::error(vec![rmcp::model::Content::text(err.message.clone())])
+                }
+            };
 
-        self.audit_tool_call(event).await;
-        result
+            self.audit_tool_call(event).await;
+            result
+        }
+        .instrument(span)
+        .await
     }
 
     async fn authorize_tool_call(
@@ -645,6 +662,25 @@ fn resource_template_matches(template: &str, uri: &str) -> bool {
         return uri.ends_with(last);
     }
     true
+}
+
+#[async_trait]
+impl Component for RegistryHandler {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    async fn start(&self) -> rskit_errors::AppResult<()> {
+        Ok(())
+    }
+
+    async fn stop(&self) -> rskit_errors::AppResult<()> {
+        Ok(())
+    }
+
+    fn health(&self) -> Health {
+        Health::healthy(self.name())
+    }
 }
 
 fn template_literals(template: &str) -> Vec<String> {

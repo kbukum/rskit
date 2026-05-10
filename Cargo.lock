@@ -5235,6 +5235,7 @@ dependencies = [
  "rskit-testutil",
  "rskit-validation",
  "rskit-worker",
+ "rskit-workload",
  "tokio",
  "tokio-util",
  "tracing",
@@ -5248,10 +5249,12 @@ dependencies = [
  "async-trait",
  "futures",
  "rskit-ai",
+ "rskit-component",
  "rskit-errors",
  "rskit-hook",
  "rskit-llm",
  "rskit-provider",
+ "rskit-resilience",
  "rskit-tool",
  "schemars 1.2.1",
  "serde",
@@ -5497,11 +5500,13 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "rskit-ai",
+ "rskit-component",
  "rskit-errors",
  "rskit-provider",
  "serde",
  "serde_json",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -5614,8 +5619,10 @@ dependencies = [
  "bytes",
  "reqwest 0.13.3",
  "rskit-ai",
+ "rskit-component",
  "rskit-errors",
  "rskit-httpclient",
+ "rskit-provider",
  "rskit-tool",
  "serde",
  "serde_json",
@@ -5634,7 +5641,9 @@ dependencies = [
  "rskit-ai",
  "rskit-component",
  "rskit-errors",
+ "rskit-httpclient",
  "rskit-inference",
+ "rskit-provider",
  "rskit-tool",
  "serde",
  "serde_json",
@@ -5654,8 +5663,10 @@ dependencies = [
  "rskit-authz",
  "rskit-component",
  "rskit-errors",
+ "rskit-httpclient",
  "rskit-inference",
  "rskit-observability",
+ "rskit-provider",
  "rskit-resilience",
  "rskit-tool",
  "serde",
@@ -5676,7 +5687,9 @@ dependencies = [
  "rskit-ai",
  "rskit-component",
  "rskit-errors",
+ "rskit-httpclient",
  "rskit-inference",
+ "rskit-provider",
  "rskit-tool",
  "serde",
  "serde_json",
@@ -5772,7 +5785,9 @@ dependencies = [
  "async-trait",
  "parking_lot",
  "rmcp",
+ "rskit-ai",
  "rskit-authz",
+ "rskit-component",
  "rskit-errors",
  "rskit-schema",
  "rskit-skill",
@@ -6172,6 +6187,7 @@ dependencies = [
  "async-trait",
  "parking_lot",
  "rskit-ai",
+ "rskit-component",
  "rskit-errors",
  "rskit-schema",
  "schemars 1.2.1",
@@ -6246,6 +6262,14 @@ dependencies = [
  "tokio-util",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "rskit-workload"
+version = "0.1.0"
+dependencies = [
+ "rskit-component",
+ "rskit-errors",
 ]
 
 [[package]]
@@ -8770,6 +8794,10 @@ dependencies = [
  "unicode-xid",
  "wasmparser",
 ]
+
+[[package]]
+name = "workspace-hack"
+version = "0.1.0"
 
 [[package]]
 name = "writeable"
