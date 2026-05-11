@@ -47,26 +47,26 @@ impl RefManager for Backend {
     }
 
     fn create_branch(&self, name: &str, target: &str) -> AppResult<()> {
-        self.run(&["branch", name, target])?;
+        self.run(&["branch", "--", name, target])?;
         Ok(())
     }
 
     fn delete_branch(&self, name: &str) -> AppResult<()> {
-        self.run(&["branch", "-d", name])?;
+        self.run(&["branch", "-d", "--", name])?;
         Ok(())
     }
 
     fn create_tag(&self, name: &str, target: &str, message: &str) -> AppResult<()> {
         if message.is_empty() {
-            self.run(&["tag", name, target])?;
+            self.run(&["tag", "--", name, target])?;
         } else {
-            self.run(&["tag", "-a", name, target, "-m", message])?;
+            self.run(&["tag", "-a", "-m", message, "--", name, target])?;
         }
         Ok(())
     }
 
     fn delete_tag(&self, name: &str) -> AppResult<()> {
-        self.run(&["tag", "-d", name])?;
+        self.run(&["tag", "-d", "--", name])?;
         Ok(())
     }
 }

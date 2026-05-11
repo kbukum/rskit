@@ -7,8 +7,9 @@
 //! - [`RefManager`], [`RemoteManager`], [`ConfigReader`], and [`Maintainer`] for management
 //!
 //! The default backend uses `git2` (libgit2) for embedded operations and delegates several
-//! core mutating operations (merge, rebase, checkout, reset, stash, fetch, push, maintenance)
+//! core mutating operations (merge, rebase, checkout, reset, stash, cherry-pick, maintenance)
 //! to the `git` CLI binary. **A `git` binary must be available on `PATH` at runtime.**
+//! Network operations (fetch, push) use the embedded `git2` backend.
 //!
 //! # Usage
 //!

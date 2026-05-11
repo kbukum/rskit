@@ -27,14 +27,22 @@ impl Backend {
     }
 }
 
-/// Opens a git repository at the exact given path.
+/// Opens a git repository at the given path (canonicalized).
 pub fn open(path: impl AsRef<Path>) -> AppResult<Backend> {
     let path = path.as_ref();
-    let abs = std::fs::canonicalize(path).map_err(|_| GitError::NotFound {
-        path: path.to_path_buf(),
+    let abs = std::fs::canonicalize(path).map_err(|err| match err.kind() {
+        std::io::ErrorKind::NotFound => GitError::NotFound {
+            path: path.to_path_buf(),
+        },
+        _ => GitError::Internal(err.into()),
     })?;
-    let repo =
-        git2::Repository::open(&abs).map_err(|_| GitError::NotFound { path: abs.clone() })?;
+    let repo = git2::Repository::open(&abs).map_err(|err| {
+        if err.code() == git2::ErrorCode::NotFound {
+            GitError::NotFound { path: abs.clone() }
+        } else {
+            GitError::Internal(err.into())
+        }
+    })?;
     // workdir() is None for bare repos; fall back to the .git dir path
     let root = repo.workdir().unwrap_or_else(|| repo.path()).to_path_buf();
     Ok(Backend { repo, root })
@@ -43,8 +51,14 @@ pub fn open(path: impl AsRef<Path>) -> AppResult<Backend> {
 /// Discovers a git repository by walking up from the given path.
 pub fn discover(path: impl AsRef<Path>) -> AppResult<Backend> {
     let path = path.as_ref();
-    let repo = git2::Repository::discover(path).map_err(|_| GitError::NotFound {
-        path: path.to_path_buf(),
+    let repo = git2::Repository::discover(path).map_err(|err| {
+        if err.code() == git2::ErrorCode::NotFound {
+            GitError::NotFound {
+                path: path.to_path_buf(),
+            }
+        } else {
+            GitError::Internal(err.into())
+        }
     })?;
     // workdir() is None for bare repos; fall back to the .git dir path
     let root = repo.workdir().unwrap_or_else(|| repo.path()).to_path_buf();

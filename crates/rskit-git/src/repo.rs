@@ -34,7 +34,7 @@ impl Repo {
     }
 }
 
-/// Opens a git repository at the exact given path.
+/// Opens a git repository at the given path (canonicalized).
 pub fn open(path: impl AsRef<Path>) -> AppResult<Repo> {
     embedded::open(path).map(Repo::new)
 }

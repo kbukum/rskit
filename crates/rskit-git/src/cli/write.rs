@@ -175,7 +175,7 @@ impl Resetter for Backend {
             ResetMode::Soft => "--soft",
             ResetMode::Hard => "--hard",
         };
-        self.run(&["reset", mode, target])?;
+        self.run(&["reset", mode, "--", target])?;
         Ok(())
     }
 }
