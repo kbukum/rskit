@@ -1,4 +1,4 @@
-//! Management trait stubs for the CLI backend.
+//! Management operations for the CLI backend.
 
 use std::process::Command;
 use std::time::{Duration, UNIX_EPOCH};

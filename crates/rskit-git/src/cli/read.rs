@@ -1,4 +1,4 @@
-//! Read trait stubs for the CLI backend.
+//! Read operations for the CLI backend.
 
 use rskit_errors::{AppError, AppResult};
 
