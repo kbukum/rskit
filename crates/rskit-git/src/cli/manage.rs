@@ -142,7 +142,7 @@ impl RemoteManager for Backend {
 impl ConfigReader for Backend {
     fn config_get(&self, key: &str) -> AppResult<String> {
         let output = Command::new("git")
-            .args(["config", "--get", key])
+            .args(["config", "--get", "--", key])
             .current_dir(&self.root)
             .env("GIT_TERMINAL_PROMPT", "0")
             .output()
