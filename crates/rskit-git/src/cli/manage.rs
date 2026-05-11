@@ -52,8 +52,21 @@ impl RefManager for Backend {
     }
 
     fn delete_branch(&self, name: &str) -> AppResult<()> {
-        self.run(&["branch", "-d", "--", name])?;
-        Ok(())
+        let result = self.run(&["branch", "-d", "--", name]);
+        match result {
+            Ok(_) => Ok(()),
+            Err(err) => {
+                let msg = err.to_string();
+                if msg.contains("not found") || msg.contains("no such branch") {
+                    Err(GitError::RefNotFound {
+                        refname: name.to_string(),
+                    }
+                    .into())
+                } else {
+                    Err(err)
+                }
+            }
+        }
     }
 
     fn create_tag(&self, name: &str, target: &str, message: &str) -> AppResult<()> {
@@ -66,8 +79,21 @@ impl RefManager for Backend {
     }
 
     fn delete_tag(&self, name: &str) -> AppResult<()> {
-        self.run(&["tag", "-d", "--", name])?;
-        Ok(())
+        let result = self.run(&["tag", "-d", "--", name]);
+        match result {
+            Ok(_) => Ok(()),
+            Err(err) => {
+                let msg = err.to_string();
+                if msg.contains("not found") || msg.contains("No such tag") {
+                    Err(GitError::RefNotFound {
+                        refname: name.to_string(),
+                    }
+                    .into())
+                } else {
+                    Err(err)
+                }
+            }
+        }
     }
 }
 

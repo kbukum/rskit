@@ -5620,7 +5620,6 @@ version = "0.1.0"
 dependencies = [
  "git2",
  "rskit-errors",
- "rskit-git",
  "tempfile",
  "thiserror 2.0.18",
  "workspace-hack",
