@@ -105,7 +105,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: stable
-      - uses: taiki-e/install-action@db5fb34fa772531a3ece57ca434f579eb334e0fb  # v2
+      - uses: taiki-e/install-action@ec28e287910af896fd98e04056d31fa68607e7ad  # v2
         with:
           tool: cargo-hakari
       - run: cargo hakari generate --diff
@@ -130,7 +130,7 @@ jobs:
           components: clippy
       - name: Install mold linker
         run: sudo apt-get install -y mold
-      - uses: mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad  # v0.0.9
+      - uses: mozilla-actions/sccache-action@9e7fa8a12102821edf02ca5dbea1acd0f89a2696  # v0.0.10
       - uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b  # v2.7.8
       - run: cargo clippy --workspace -- -D warnings
 
@@ -155,14 +155,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: ${{ matrix.rust }}
-      - uses: mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad  # v0.0.9
+      - uses: mozilla-actions/sccache-action@9e7fa8a12102821edf02ca5dbea1acd0f89a2696  # v0.0.10
       - name: Install mold linker (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get install -y mold
       - uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b  # v2.7.8
         with:
           key: ${{ matrix.os }}-${{ matrix.rust }}
-      - uses: taiki-e/install-action@db5fb34fa772531a3ece57ca434f579eb334e0fb  # v2
+      - uses: taiki-e/install-action@ec28e287910af896fd98e04056d31fa68607e7ad  # v2
         with:
           tool: cargo-nextest
       - run: cargo nextest run --workspace --profile ci
@@ -184,7 +184,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: stable
-      - uses: mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad  # v0.0.9
+      - uses: mozilla-actions/sccache-action@9e7fa8a12102821edf02ca5dbea1acd0f89a2696  # v0.0.10
       - name: Install mold linker
         run: sudo apt-get install -y mold
       - uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b  # v2.7.8
@@ -207,11 +207,11 @@ jobs:
         with:
           toolchain: stable
           components: llvm-tools-preview
-      - uses: mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad  # v0.0.9
+      - uses: mozilla-actions/sccache-action@9e7fa8a12102821edf02ca5dbea1acd0f89a2696  # v0.0.10
       - name: Install mold linker
         run: sudo apt-get install -y mold
       - uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b  # v2.7.8
-      - uses: taiki-e/install-action@db5fb34fa772531a3ece57ca434f579eb334e0fb  # v2
+      - uses: taiki-e/install-action@ec28e287910af896fd98e04056d31fa68607e7ad  # v2
         with:
           tool: cargo-llvm-cov
       - run: cargo llvm-cov --workspace --lcov --output-path coverage.lcov --fail-under-lines 60
@@ -272,7 +272,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: stable
-      - uses: mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad  # v0.0.9
+      - uses: mozilla-actions/sccache-action@9e7fa8a12102821edf02ca5dbea1acd0f89a2696  # v0.0.10
       - name: Install mold linker
         run: sudo apt-get install -y mold
       - uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b  # v2.7.8
