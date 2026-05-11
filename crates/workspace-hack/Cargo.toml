@@ -17,7 +17,7 @@ bytes = { version = "1", features = ["serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 cipher = { version = "0.4", default-features = false, features = ["alloc", "block-padding", "zeroize"] }
 console = { version = "0.16", default-features = false, features = ["ansi-parsing", "std", "unicode-width"] }
-const-oid = { version = "0.9", default-features = false, features = ["db"] }
+const-oid = { version = "0.10", default-features = false, features = ["db"] }
 crossbeam-utils = { version = "0.8" }
 crypto-bigint = { version = "0.5", features = ["generic-array", "zeroize"] }
 crypto-common = { version = "0.1", default-features = false, features = ["getrandom", "std"] }

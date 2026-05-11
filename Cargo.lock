@@ -8930,7 +8930,7 @@ dependencies = [
  "chrono",
  "cipher",
  "console",
- "const-oid 0.9.6",
+ "const-oid 0.10.2",
  "crossbeam-utils",
  "crypto-bigint 0.5.5",
  "crypto-common 0.1.7",
