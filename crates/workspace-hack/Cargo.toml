@@ -88,7 +88,7 @@ signature = { version = "2", default-features = false, features = ["digest", "ra
 simd-adler32 = { version = "0.3" }
 slab = { version = "0.4" }
 smallvec = { version = "1", default-features = false, features = ["const_new", "serde"] }
-spin = { version = "0.9" }
+spin = { version = "0.10" }
 spki = { version = "0.7", default-features = false, features = ["pem", "std"] }
 subtle = { version = "2" }
 sync_wrapper = { version = "1", default-features = false, features = ["futures"] }
