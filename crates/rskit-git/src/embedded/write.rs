@@ -3,7 +3,7 @@
 use std::path::Path;
 use std::time::{Duration, SystemTime};
 
-use rskit_errors::{AppError, AppResult};
+use rskit_errors::AppResult;
 
 use crate::error::GitError;
 use crate::options::CommitOptions;
@@ -25,10 +25,10 @@ impl IndexManager for Backend {
             let p = Path::new(path);
             // Reject absolute paths and paths with parent (..) components
             if p.is_absolute() || p.components().any(|c| c == std::path::Component::ParentDir) {
-                return Err(AppError::invalid_input(
-                    "path",
-                    format!("must be relative and inside the repository: {path}"),
-                ));
+                return Err(GitError::InvalidPath {
+                    path: path.to_string(),
+                }
+                .into());
             }
             if self.root.join(p).exists() {
                 index.add_path(p).map_err(GitError::Internal)?;

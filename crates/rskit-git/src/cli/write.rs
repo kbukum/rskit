@@ -26,6 +26,7 @@ impl Merger for Backend {
             args.push(message);
         }
         args.extend(opts.extra_args);
+        args.push("--".to_string());
         args.push(branch.to_string());
 
         let refs = args.iter().map(String::as_str).collect::<Vec<_>>();
