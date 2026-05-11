@@ -28,7 +28,6 @@ async-trait   = { workspace = true }
 tracing       = { workspace = true }
 parking_lot   = { workspace = true }
 qdrant-client = { version = ">=1.13, <1.18", optional = true }
-workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [dev-dependencies]
 tokio = { workspace = true }

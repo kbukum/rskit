@@ -31,4 +31,3 @@ tower-service = { workspace = true }
 futures-util  = { workspace = true }
 pin-project-lite = { workspace = true }
 serde         = { workspace = true, features = ["derive"] }
-workspace-hack = { version = "0.1", path = "../workspace-hack" }

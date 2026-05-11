@@ -25,7 +25,6 @@ tracing      = { workspace = true }
 async-trait  = { workspace = true }
 bytes        = { workspace = true }
 which        = "8"
-workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

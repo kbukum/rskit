@@ -11,7 +11,6 @@ description = "Workload management for rskit services"
 publish = false
 
 [dependencies]
-workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [lints]
 workspace = true

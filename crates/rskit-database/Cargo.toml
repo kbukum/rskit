@@ -37,4 +37,3 @@ sqlx            = { version = "0.8", default-features = false, features = ["runt
 chrono          = { workspace = true }
 uuid            = { workspace = true }
 validator       = { workspace = true }
-workspace-hack = { version = "0.1", path = "../workspace-hack" }

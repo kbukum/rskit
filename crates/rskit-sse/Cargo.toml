@@ -27,4 +27,3 @@ tokio-stream = { workspace = true, features = ["sync"] }
 tracing      = { workspace = true }
 axum         = { workspace = true }
 futures-util = { workspace = true }
-workspace-hack = { version = "0.1", path = "../workspace-hack" }

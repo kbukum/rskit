@@ -36,4 +36,3 @@ dashmap      = { workspace = true }
 rand         = { workspace = true }
 parking_lot  = { workspace = true }
 reqwest      = { workspace = true, optional = true }
-workspace-hack = { version = "0.1", path = "../workspace-hack" }

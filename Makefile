@@ -1,6 +1,6 @@
 .PHONY: all build test test-nextest test-doc test-affected test-coverage test-coverage-html lint fmt fmt-check check check-fast \
        check-core check-patterns check-crosscutting check-composition check-transport check-auth check-data check-ai \
-       check-media check-infra doc deny hakari-verify check-l7-edges clean help ci ci-test ci-lint ci-fmt ensure-act
+       check-media check-infra doc deny check-l7-edges clean help ci ci-test ci-lint ci-fmt ensure-act
 
 # Crate flag: pass -p $(C) to cargo when C is set
 _C = $(if $(C),-p $(C))
@@ -111,12 +111,6 @@ deny: check-l7-edges
 	@cargo deny check licenses advisories sources bans
 	@echo "✓ cargo-deny passed"
 
-## Verify workspace-hack is up-to-date (requires cargo-hakari)
-hakari-verify:
-	@echo "==> Verifying workspace-hack..."
-	@cargo hakari generate --diff
-	@cargo hakari manage-deps --dry-run
-	@echo "✓ workspace-hack is up-to-date"
 
 ## Fast check: format + lint + build only (no tests) — for rapid iteration
 check-fast: fmt-check lint build
@@ -214,7 +208,6 @@ help:
 	@echo "  make doc                                  Build documentation"
 	@echo "  make check-l7-edges                       Check L7 dependency edges"
 	@echo "  make deny                                 Run cargo-deny + L7 edge checks"
-	@echo "  make hakari-verify                        Verify workspace-hack is current"
 	@echo "  make check-fast                           fmt + lint + build"
 	@echo "  make check              [C=]               fmt + lint + build + test"
 	@echo "  make check-core                           Check only core domain modules"

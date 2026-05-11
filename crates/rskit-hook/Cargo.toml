@@ -21,4 +21,3 @@ rustdoc-args = ["--cfg", "docsrs"]
 parking_lot  = { workspace = true }
 tracing      = { workspace = true }
 tokio-util   = { workspace = true }
-workspace-hack = { version = "0.1", path = "../workspace-hack" }
