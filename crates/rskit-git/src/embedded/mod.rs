@@ -34,13 +34,13 @@ pub fn open(path: impl AsRef<Path>) -> AppResult<Backend> {
         std::io::ErrorKind::NotFound => GitError::NotFound {
             path: path.to_path_buf(),
         },
-        _ => GitError::Internal(err.into()),
+        _ => GitError::Internal(git2::Error::from_str(&err.to_string())),
     })?;
     let repo = git2::Repository::open(&abs).map_err(|err| {
         if err.code() == git2::ErrorCode::NotFound {
             GitError::NotFound { path: abs.clone() }
         } else {
-            GitError::Internal(err.into())
+            GitError::Internal(err)
         }
     })?;
     // workdir() is None for bare repos; fall back to the .git dir path
@@ -57,7 +57,7 @@ pub fn discover(path: impl AsRef<Path>) -> AppResult<Backend> {
                 path: path.to_path_buf(),
             }
         } else {
-            GitError::Internal(err.into())
+            GitError::Internal(err)
         }
     })?;
     // workdir() is None for bare repos; fall back to the .git dir path
