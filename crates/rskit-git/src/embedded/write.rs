@@ -24,8 +24,7 @@ impl IndexManager for Backend {
         for path in paths {
             let p = Path::new(path);
             // Reject absolute paths and paths with parent (..) components
-            if p.is_absolute() || p.components().any(|c| c == std::path::Component::ParentDir)
-            {
+            if p.is_absolute() || p.components().any(|c| c == std::path::Component::ParentDir) {
                 return Err(AppError::invalid_input(
                     "path",
                     format!("must be relative and inside the repository: {path}"),
