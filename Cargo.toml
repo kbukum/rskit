@@ -140,9 +140,9 @@ rand     = "0.10.1"
 zeroize  = { version = "1", features = ["derive"] }
 
 # gRPC
-    tonic            = { version = "0.14.5", features = ["transport", "tls-ring"] }
-tonic-health     = "0.14.5"
-tonic-reflection = "0.14.5"
+    tonic            = { version = "0.14.6", features = ["transport", "tls-ring"] }
+tonic-health     = "0.14.6"
+tonic-reflection = "0.14.6"
 prost            = "0.14.3"
 
 # Utilities
