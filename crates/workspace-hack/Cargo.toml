@@ -46,7 +46,7 @@ hmac = { version = "0.12", default-features = false, features = ["reset"] }
 hyper = { version = "1", features = ["full"] }
 hyper-util = { version = "0.1", features = ["client-legacy", "client-proxy", "server-auto", "service"] }
 idna = { version = "1" }
-inout = { version = "0.1", default-features = false, features = ["block-padding"] }
+inout = { version = "0.2", default-features = false, features = ["block-padding"] }
 lazy_static = { version = "1", default-features = false, features = ["spin_no_std"] }
 libz-sys = { version = "1" }
 log = { version = "0.4", default-features = false, features = ["std"] }
