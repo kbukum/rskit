@@ -53,7 +53,7 @@ log = { version = "0.4", default-features = false, features = ["std"] }
 md-5 = { version = "0.10" }
 memchr = { version = "2" }
 mime_guess = { version = "2" }
-miniz_oxide = { version = "0.8", features = ["simd"] }
+miniz_oxide = { version = "0.9", features = ["simd"] }
 num-bigint = { version = "0.4" }
 num-integer = { version = "0.1", features = ["i128"] }
 num-traits = { version = "0.2", features = ["i128", "libm"] }
