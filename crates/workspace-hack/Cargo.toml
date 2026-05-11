@@ -15,7 +15,7 @@ bitflags = { version = "2", default-features = false, features = ["serde"] }
 byteorder = { version = "1" }
 bytes = { version = "1", features = ["serde"] }
 chrono = { version = "0.4", features = ["serde"] }
-cipher = { version = "0.4", default-features = false, features = ["alloc", "block-padding", "zeroize"] }
+cipher = { version = "0.5", default-features = false, features = ["alloc", "block-padding", "zeroize"] }
 console = { version = "0.16", default-features = false, features = ["ansi-parsing", "std", "unicode-width"] }
 const-oid = { version = "0.9", default-features = false, features = ["db"] }
 crossbeam-utils = { version = "0.8" }
