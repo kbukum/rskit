@@ -102,9 +102,9 @@ pub fn init_logging_env() -> LoggingGuard {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
     let layer = fmt::layer().pretty();
     let dispatcher = tracing_subscriber::registry()
-                .with(filter)
-                .with(layer)
-                .into();
+        .with(filter)
+        .with(layer)
+        .into();
     LoggingGuard(tracing::dispatcher::set_default(&dispatcher))
 }
 

@@ -5,7 +5,6 @@ use serde::Deserialize;
 
 use rskit_errors::AppResult;
 
-
 /// Configuration for the OpenTelemetry metrics pipeline.
 #[derive(Debug, Clone, Deserialize)]
 pub struct MetricsConfig {
@@ -103,7 +102,9 @@ pub fn init_metrics(cfg: &MetricsConfig) -> AppResult<MetricsHandle> {
         }
         #[cfg(not(feature = "otlp"))]
         {
-            ::tracing::warn!("OTLP endpoint configured but 'otlp' feature is disabled; metrics will not be exported");
+            ::tracing::warn!(
+                "OTLP endpoint configured but 'otlp' feature is disabled; metrics will not be exported"
+            );
         }
     }
 
