@@ -132,9 +132,10 @@ PROFILE=ci make test-nextest  # with CI profile (retries, no fail-fast)
   never `std::thread::sleep`.
 - Env-var tests must hold a `static parking_lot::Mutex<()>` guard to prevent
   cross-test pollution (see `rskit-config/src/loader.rs` for the pattern).
-- Tests that require a live service (e.g., gRPC integration tests) go in
-  `crates/<crate>/tests/` and are gated with `#[ignore]` plus a doc comment
-  explaining what service is needed.
+- Tests that require a live service (e.g., gRPC integration tests) go in the
+  crate-local `tests/` directory under `core/rskit-<name>/tests/` for
+  foundation crates or `contrib/<domain>/<name>/tests/` for adapters, and are
+  gated with `#[ignore]` plus a doc comment explaining what service is needed.
 
 Run the full suite before submitting:
 
@@ -185,7 +186,7 @@ chore(ci): pin cargo-deny to 0.16
 
 ## Adding a New Crate
 
-1. Create the crate under `crates/rskit-<name>/` with `cargo new --lib`.
+1. Create foundation crates under `core/rskit-<name>/` with `cargo new --lib`, or adapter crates under `contrib/<domain>/<name>/`.
 2. Add it to `[workspace.members]` in the root `Cargo.toml`.
 3. Inherit workspace metadata (`version.workspace = true`, etc.).
 4. Add `#![warn(missing_docs)]` to `src/lib.rs`.

@@ -37,8 +37,8 @@ edition = "2024"
 rust-version = "1.85"
 
 [workspace.dependencies]
-rskit-errors = { path = "crates/rskit-errors", version = "0.1.0" }
-# … etc
+rskit-errors = { path = "core/rskit-errors", version = "0.1.0" }
+# … core and contrib members follow the same pattern
 ```
 
 Each member crate inherits via:
@@ -63,8 +63,8 @@ git tag -s -a v0.1.0 -m "v0.1.0"
 git push origin v0.1.0
 ```
 
-The release workflow then publishes every `crates/rskit-*` and the facade
-in lock-step.
+The release workflow then publishes every workspace crate from `core/` and
+`contrib/`, plus the facade, in lock-step.
 
 ## Compatibility Policy
 

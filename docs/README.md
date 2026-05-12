@@ -7,4 +7,4 @@
 - [Versioning](VERSIONING.md)
 - [Contributing](../CONTRIBUTING.md)
 - [ADRs](adr/)
-- [rskit-media crate README](../crates/rskit-media/README.md)
+- [rskit-media crate README](../core/rskit-media/README.md)

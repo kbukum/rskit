@@ -1,0 +1,39 @@
+[workspace]
+resolver = "2"
+members = [
+    "agent-demo",
+    "media-demo",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+rust-version = "1.91"
+authors = ["kbukum contributors"]
+repository = "https://github.com/kbukum/rskit"
+publish = false
+
+[workspace.dependencies]
+# Core crates
+rskit-errors = { path = "../core/rskit-errors" }
+rskit-bootstrap = { path = "../core/rskit-bootstrap" }
+rskit-worker = { path = "../core/rskit-worker" }
+rskit-cli = { path = "../core/rskit-cli" }
+rskit-pipeline = { path = "../core/rskit-pipeline" }
+rskit-storage = { path = "../core/rskit-storage" }
+rskit-media = { path = "../core/rskit-media" }
+
+# Contrib crates
+rskit-media-image = { path = "../contrib/media/image" }
+rskit-media-ffmpeg = { path = "../contrib/media/ffmpeg" }
+rskit-media-audio = { path = "../contrib/media/audio" }
+
+# External
+tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["rt"] }
+indicatif = "0.18"
+async-trait = "0.1"
+tracing = "0.1"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4"] }

@@ -57,36 +57,63 @@ resolve_crate_name() {
   local module="$1"
   case "$module" in
     rskit)
-      printf '%s\n' "rskit"
-      return 0
+      if [[ -d core/rskit ]]; then
+        printf '%s\n' "rskit"
+        return 0
+      fi
       ;;
-    logger)
-      if [[ -d crates/rskit-logging ]]; then
+    logger|logging)
+      if [[ -d core/rskit-logging ]]; then
         printf '%s\n' "rskit-logging"
         return 0
       fi
       ;;
   esac
 
+  if [[ -d "core/rskit-$module" ]]; then
+    printf '%s\n' "rskit-$module"
+    return 0
+  fi
+
+  if find contrib -mindepth 2 -maxdepth 3 -name Cargo.toml -exec grep -lE "^name\s*=\s*\"rskit-${module}\"" {} + 2>/dev/null | grep -q .; then
+    printf '%s\n' "rskit-$module"
+    return 0
+  fi
+
   printf '%s\n' "rskit-$module"
+}
+
+resolve_manifest_path() {
+  local crate="$1"
+  if cargo metadata --manifest-path core/Cargo.toml --no-deps --format-version 1 2>/dev/null | grep -q "\"name\":\"$crate\""; then
+    printf '%s\n' "core/Cargo.toml"
+    return 0
+  fi
+
+  if cargo metadata --manifest-path contrib/Cargo.toml --no-deps --format-version 1 2>/dev/null | grep -q "\"name\":\"$crate\""; then
+    printf '%s\n' "contrib/Cargo.toml"
+    return 0
+  fi
+
+  return 1
 }
 
 run_module_checks() {
   local module="$1"
-  local crate
+  local crate manifest
   crate="$(resolve_crate_name "$module")"
 
-  if [[ ! -d "crates/$crate" ]] && [[ "$crate" != "rskit" ]]; then
-    echo "Unable to resolve crate for '$module' (expected crates/$crate)" >&2
+  if ! manifest="$(resolve_manifest_path "$crate")"; then
+    echo "Unable to resolve crate for '$module' (expected in core/ or contrib/)" >&2
     return 1
   fi
 
   echo "==> Checking $module ($crate)"
-  cargo clippy -p "$crate" -- -D warnings
+  cargo clippy --manifest-path "$manifest" -p "$crate" -- -D warnings
   if command -v cargo-nextest >/dev/null 2>&1; then
-    cargo nextest run -p "$crate"
+    cargo nextest run --manifest-path "$manifest" -p "$crate"
   else
-    cargo test -p "$crate"
+    cargo test --manifest-path "$manifest" -p "$crate"
   fi
 }
 

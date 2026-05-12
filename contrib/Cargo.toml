@@ -1,0 +1,126 @@
+[workspace]
+resolver = "2"
+members = [
+    "storage/*",
+    "messaging/*",
+    "inference/*",
+    "llm/*",
+    "media/*",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+rust-version = "1.91"
+authors = ["kbukum contributors"]
+repository = "https://github.com/kbukum/rskit"
+homepage = "https://github.com/kbukum/rskit"
+documentation = "https://docs.rs/rskit"
+
+[workspace.dependencies]
+# Core crates (published deps — path override for local dev)
+rskit-errors = { path = "../core/rskit-errors", version = "0.1.0" }
+rskit-storage = { path = "../core/rskit-storage", version = "0.1.0" }
+rskit-cache = { path = "../core/rskit-cache", version = "0.1.0" }
+rskit-messaging = { path = "../core/rskit-messaging", version = "0.1.0" }
+rskit-llm = { path = "../core/rskit-llm", version = "0.1.0" }
+rskit-ai = { path = "../core/rskit-ai", version = "0.1.0" }
+rskit-inference = { path = "../core/rskit-inference", version = "0.1.0" }
+rskit-media = { path = "../core/rskit-media", version = "0.1.0" }
+rskit-vectorstore = { path = "../core/rskit-vectorstore", version = "0.1.0" }
+rskit-config = { path = "../core/rskit-config", version = "0.1.0" }
+rskit-logging = { path = "../core/rskit-logging", version = "0.1.0" }
+rskit-component = { path = "../core/rskit-component", version = "0.1.0" }
+rskit-provider = { path = "../core/rskit-provider", version = "0.1.0" }
+rskit-httpclient = { path = "../core/rskit-httpclient", version = "0.1.0" }
+rskit-resilience = { path = "../core/rskit-resilience", version = "0.1.0" }
+rskit-embedding = { path = "../core/rskit-embedding", version = "0.1.0" }
+rskit-observability = { path = "../core/rskit-observability", version = "0.1.0" }
+rskit-util = { path = "../core/rskit-util", version = "0.1.0" }
+rskit-version = { path = "../core/rskit-version", version = "0.1.0" }
+rskit-validation = { path = "../core/rskit-validation", version = "0.1.0" }
+rskit-testutil = { path = "../core/rskit-testutil", version = "0.1.0" }
+rskit-server = { path = "../core/rskit-server", version = "0.1.0" }
+rskit-authz = { path = "../core/rskit-authz", version = "0.1.0" }
+rskit-tool = { path = "../core/rskit-tool", version = "0.1.0" }
+rskit-llm-common = { path = "./llm/common", version = "0.1.0" }
+
+# Shared external deps used by contrib crates
+tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["rt"] }
+tokio-stream = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+async-trait = "0.1"
+tracing = "0.1"
+thiserror = "2"
+futures = "0.3"
+futures-util = "0.3"
+bytes = "1"
+reqwest = { version = "0.13", features = ["json", "rustls", "http2", "query"], default-features = false }
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4"] }
+parking_lot = "0.12"
+prost = "0.14.3"
+tonic = { version = "0.14.6", features = ["transport", "tls-ring"] }
+base64 = "0.22"
+opentelemetry = "0.31"
+tracing-opentelemetry = "0.32"
+criterion = { version = "0.8", features = ["html_reports", "async_tokio"] }
+insta = { version = "1.47", features = ["json", "yaml", "redactions"] }
+
+# Messaging adapters
+rdkafka = { version = "0.39", features = ["tokio"] }
+async-nats = "0.47"
+lapin = { version = "3", default-features = false, features = ["rustls"] }
+
+# Media
+image = "0.25"
+webp = "0.3"
+which = "8"
+
+# Storage
+tempfile = "3"
+aws-sdk-s3 = "1"
+google-cloud-storage = "=1.11.0"
+google-cloud-auth = { version = "1.9", default-features = false }
+
+# Inference
+wiremock = "0.6"
+
+# Platform-specific
+libc = "0.2"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+unused_imports = "warn"
+unused_variables = "warn"
+dead_code = "warn"
+unreachable_pub = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+wildcard_imports = "allow"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = "symbols"
+
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+opt-level = 1
+
+[profile.bench]
+lto = "thin"
+codegen-units = 1
