@@ -40,9 +40,16 @@ jobs:
         run: sudo apt-get install -y mold
 
       - uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b  # v2.7.8
+        with:
+          workspaces: |
+            core
+            contrib
+            examples
 
       - name: Run benchmarks
-        run: cargo bench --workspace --bench '*' -- --output-format bencher | tee output.txt
+        run: |
+          cargo bench --manifest-path core/Cargo.toml --workspace --bench '*' -- --output-format bencher | tee output.txt
+          cargo bench --manifest-path contrib/Cargo.toml --workspace --bench '*' -- --output-format bencher | tee -a output.txt
 
       - name: Store benchmark result
         uses: benchmark-action/github-action-benchmark@52576c92bccf6ac60c8223ec7eb2565637cae9ba  # v1.22.1
