@@ -1,11 +1,11 @@
-//! Configuration for the OpenAI provider.
+//! Configuration for the `OpenAI` provider.
 
 use serde::Deserialize;
 
-/// OpenAI provider configuration.
+/// `OpenAI` provider configuration.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
-    /// OpenAI API key.
+    /// `OpenAI` API key.
     pub api_key: String,
 
     /// Base URL (default: `https://api.openai.com/v1`).
@@ -37,7 +37,7 @@ fn default_embedding_model() -> String {
     "text-embedding-3-small".into()
 }
 
-fn default_embedding_dimensions() -> usize {
+const fn default_embedding_dimensions() -> usize {
     1536
 }
 

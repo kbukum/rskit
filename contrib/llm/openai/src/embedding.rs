@@ -20,7 +20,7 @@ pub struct EmbeddingProvider {
 }
 
 impl EmbeddingProvider {
-    /// Create a new embedding provider from an OpenAI [`Config`].
+    /// Create a new embedding provider from an `OpenAI` [`Config`].
     pub fn new(cfg: &Config) -> AppResult<Self> {
         let http_cfg = HttpClientConfig::new()
             .with_base_url(&cfg.base_url)

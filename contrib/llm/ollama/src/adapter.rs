@@ -1,6 +1,6 @@
-//! Adapter factory: bridges Ollama [`Config`] → [`Provider`] via the OpenAI dialect.
+//! Adapter factory: bridges Ollama [`Config`] → [`Provider`] via the `OpenAI` dialect.
 //!
-//! Ollama exposes an OpenAI-compatible chat-completions API. This adapter
+//! Ollama exposes an `OpenAI`-compatible chat-completions API. This adapter
 //! delegates to [`OpenAiDialect`] for wire-format conversion — no second
 //! dialect implementation is needed.
 
@@ -26,7 +26,7 @@ const SYSTEM: &str = "ollama";
 
 /// A [`Provider`] backed by a local or remote Ollama instance.
 ///
-/// Ollama mirrors the OpenAI `/v1/chat/completions` API, so this adapter
+/// Ollama mirrors the `OpenAI` `/v1/chat/completions` API, so this adapter
 /// reuses [`OpenAiDialect`] for all wire-format conversion.
 pub struct OllamaAdapter {
     client: HttpClient,
@@ -64,8 +64,7 @@ impl OllamaAdapter {
     fn record_call(&self) {
         let now_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_millis() as u64)
-            .unwrap_or(0);
+            .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX));
         self.last_call_at.store(now_ms, Ordering::Relaxed);
     }
 
@@ -178,7 +177,7 @@ impl Provider for OllamaAdapter {
 
 #[async_trait]
 impl Component for OllamaAdapter {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "rskit-llm-ollama.ollama"
     }
 

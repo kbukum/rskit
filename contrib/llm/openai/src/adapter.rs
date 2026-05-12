@@ -1,4 +1,4 @@
-//! Adapter factory: bridges OpenAI [`Config`] → [`Provider`] via rskit-httpclient.
+//! Adapter factory: bridges `OpenAI` [`Config`] → [`Provider`] via `rskit-httpclient`.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -20,7 +20,7 @@ use super::dialect::OpenAiDialect;
 
 const SYSTEM: &str = "openai";
 
-/// A [`Provider`] backed by the OpenAI chat-completions API.
+/// A [`Provider`] backed by the `OpenAI` chat-completions API.
 pub struct OpenAiAdapter {
     client: HttpClient,
     model: String,
@@ -28,7 +28,7 @@ pub struct OpenAiAdapter {
     last_call_at: Arc<AtomicU64>,
 }
 
-/// Create a new [`Provider`] wired to OpenAI with Bearer auth.
+/// Create a new [`Provider`] wired to `OpenAI` with Bearer auth.
 pub fn new_adapter(cfg: &Config) -> AppResult<OpenAiAdapter> {
     let http_cfg = HttpClientConfig::new()
         .with_base_url(&cfg.base_url)
@@ -55,8 +55,7 @@ impl OpenAiAdapter {
     fn record_call(&self) {
         let now_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_millis() as u64)
-            .unwrap_or(0);
+            .map_or(0, |duration| u64::try_from(duration.as_millis()).unwrap_or(u64::MAX));
         self.last_call_at.store(now_ms, Ordering::Relaxed);
     }
 
@@ -157,7 +156,7 @@ impl Provider for OpenAiAdapter {
 
 #[async_trait]
 impl Component for OpenAiAdapter {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "rskit-llm-openai.openai"
     }
 

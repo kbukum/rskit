@@ -58,8 +58,7 @@ impl GeminiAdapter {
     fn record_call(&self) {
         let now_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_millis() as u64)
-            .unwrap_or(0);
+            .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX));
         self.last_call_at.store(now_ms, Ordering::Relaxed);
     }
 
@@ -120,10 +119,10 @@ impl Provider for GeminiAdapter {
         span.record(semconv::OPERATION_NAME, semconv::Operation::Chat.as_str());
         span.record(semconv::REQUEST_MODEL, req.model.as_str());
         if let Some(max) = req.max_tokens {
-            span.record(semconv::REQUEST_MAX_TOKENS, max as i64);
+            span.record(semconv::REQUEST_MAX_TOKENS, i64::from(max));
         }
         if let Some(temp) = req.temperature {
-            span.record(semconv::REQUEST_TEMPERATURE, temp as f64);
+            span.record(semconv::REQUEST_TEMPERATURE, f64::from(temp));
         }
 
         let policy = self.policy.clone();
@@ -157,7 +156,7 @@ impl Provider for GeminiAdapter {
 
 #[async_trait]
 impl Component for GeminiAdapter {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "rskit-llm-gemini.gemini"
     }
 

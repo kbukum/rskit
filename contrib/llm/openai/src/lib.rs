@@ -1,6 +1,6 @@
 #![warn(missing_docs)]
 
-//! OpenAI provider (chat completions + embeddings).
+//! `OpenAI` provider (chat completions + embeddings).
 
 mod adapter;
 mod config;

@@ -201,8 +201,8 @@ impl AnthropicDialect {
                             .unwrap_or("");
                         let index = v
                             .get("index")
-                            .and_then(|value| value.as_u64())
-                            .map_or(0, |value| value as usize);
+                            .and_then(Value::as_u64)
+                            .map_or(0, |value| usize::try_from(value).unwrap_or(usize::MAX));
                         Ok(StreamChunk {
                             tool_calls: vec![StreamToolCall {
                                 index,
@@ -233,8 +233,8 @@ impl AnthropicDialect {
                         .to_string();
                     let index = v
                         .get("index")
-                        .and_then(|value| value.as_u64())
-                        .map_or(0, |value| value as usize);
+                        .and_then(Value::as_u64)
+                        .map_or(0, |value| usize::try_from(value).unwrap_or(usize::MAX));
                     Ok(StreamChunk {
                         tool_calls: vec![StreamToolCall {
                             index,
@@ -257,7 +257,7 @@ impl AnthropicDialect {
     }
 
     /// Returns the messages endpoint path.
-    pub fn endpoint() -> &'static str {
+    pub const fn endpoint() -> &'static str {
         "/v1/messages"
     }
 }

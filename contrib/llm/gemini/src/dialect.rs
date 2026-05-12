@@ -1,6 +1,6 @@
 //! Gemini Generative Language API dialect.
 //!
-//! Gemini uses a structurally different API from OpenAI / Anthropic:
+//! Gemini uses a structurally different API from `OpenAI` / `Anthropic`:
 //! - Endpoint: `POST /v1beta/models/{model}:generateContent`
 //! - Content uses `parts` (`text`, `functionCall`, `functionResponse`)
 //! - System prompt → `systemInstruction`
@@ -116,13 +116,16 @@ fn to_wire_content(msg: &Message) -> Option<WireContent> {
 }
 
 fn parse_stop_reason(reason: &str) -> FinishReason {
-    match reason {
-        "STOP" => FinishReason::Stop,
-        "MAX_TOKENS" => FinishReason::Length,
-        "SAFETY" => FinishReason::ContentFilter,
-        "TOOL_USE" => FinishReason::ToolUse,
-        "CANCELLED" => FinishReason::Cancelled,
-        _ => FinishReason::Stop,
+    if reason == "MAX_TOKENS" {
+        FinishReason::Length
+    } else if reason == "SAFETY" {
+        FinishReason::ContentFilter
+    } else if reason == "TOOL_USE" {
+        FinishReason::ToolUse
+    } else if reason == "CANCELLED" {
+        FinishReason::Cancelled
+    } else {
+        FinishReason::Stop
     }
 }
 
@@ -130,7 +133,11 @@ fn parse_function_call(function_call: WireFunctionCall, index: usize) -> AppResu
     Ok(ToolUseBlock {
         id: format!("tool_call_{index}"),
         name: function_call.name,
-        input: common::value_to_input_map(function_call.args.unwrap_or(Value::Object(Map::new())))?,
+        input: common::value_to_input_map(
+            function_call
+                .args
+                .unwrap_or_else(|| Value::Object(Map::new())),
+        )?,
     })
 }
 
@@ -200,8 +207,7 @@ impl GeminiDialect {
 
         let stop_reason = candidate
             .and_then(|c| c.finish_reason.as_deref())
-            .map(parse_stop_reason)
-            .unwrap_or(FinishReason::Stop);
+            .map_or(FinishReason::Stop, parse_stop_reason);
 
         let usage = resp.usage_metadata.as_ref().map_or(
             Usage {
@@ -275,7 +281,7 @@ impl GeminiDialect {
                     let input_delta = function_call
                         .get("args")
                         .cloned()
-                        .unwrap_or(Value::Object(Map::new()))
+                        .unwrap_or_else(|| Value::Object(Map::new()))
                         .to_string();
                     tool_calls.push(StreamToolCall {
                         index,
@@ -301,7 +307,7 @@ impl GeminiDialect {
 
     /// Build the endpoint path for a given model.
     pub fn endpoint(model: &str) -> String {
-        format!("/v1beta/models/{}:generateContent", model)
+        format!("/v1beta/models/{model}:generateContent")
     }
 }
 

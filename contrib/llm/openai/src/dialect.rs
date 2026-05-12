@@ -1,4 +1,4 @@
-//! OpenAI chat-completions dialect.
+//! `OpenAI` chat-completions dialect.
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_llm::types::{
@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use rskit_llm_common as common;
 use rskit_llm_common::{StreamChunk, StreamToolCall};
 
-/// Converts an rskit [`CompletionRequest`] into the OpenAI wire format and
+/// Converts an rskit [`CompletionRequest`] into the `OpenAI` wire format and
 /// parses the response back into an rskit [`CompletionResponse`].
 pub struct OpenAiDialect;
 
@@ -211,9 +211,8 @@ impl OpenAiDialect {
             )
         })?;
 
-        let choice = match v.get("choices").and_then(|c| c.get(0)) {
-            Some(c) => c,
-            None => return Ok(StreamChunk::default()),
+        let Some(choice) = v.get("choices").and_then(|c| c.get(0)) else {
+            return Ok(StreamChunk::default());
         };
 
         let delta = choice.get("delta").unwrap_or(&serde_json::Value::Null);
@@ -229,8 +228,8 @@ impl OpenAiDialect {
             for tc in tcs {
                 let index = tc
                     .get("index")
-                    .and_then(|v| v.as_u64())
-                    .map_or(0, |value| value as usize);
+                    .and_then(serde_json::Value::as_u64)
+                    .map_or(0, |value| usize::try_from(value).unwrap_or(usize::MAX));
                 let id = tc
                     .get("id")
                     .and_then(|v| v.as_str())
@@ -269,7 +268,7 @@ impl OpenAiDialect {
     }
 
     /// Returns the chat completions endpoint path.
-    pub fn endpoint() -> &'static str {
+    pub const fn endpoint() -> &'static str {
         "/chat/completions"
     }
 }

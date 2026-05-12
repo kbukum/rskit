@@ -58,8 +58,7 @@ impl AnthropicAdapter {
     fn record_call(&self) {
         let now_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_millis() as u64)
-            .unwrap_or(0);
+            .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX));
         self.last_call_at.store(now_ms, Ordering::Relaxed);
     }
 
@@ -161,7 +160,7 @@ impl Provider for AnthropicAdapter {
 
 #[async_trait]
 impl Component for AnthropicAdapter {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "rskit-llm-anthropic.anthropic"
     }
 
