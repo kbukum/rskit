@@ -39,7 +39,6 @@ impl<S: Into<String>> From<S> for SecretString {
 }
 
 impl SecretString {
-
     /// Return the plaintext value.
     pub fn expose(&self) -> &str {
         &self.value
