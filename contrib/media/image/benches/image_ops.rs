@@ -211,6 +211,8 @@ fn real_fixture_path(name: &str) -> std::path::PathBuf {
         .unwrap()
         .parent()
         .unwrap()
+        .parent()
+        .unwrap()
         .join("tests/fixtures/image")
         .join(name)
 }

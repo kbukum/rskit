@@ -18,7 +18,6 @@ cobertura.xml
 criterion/
 
 # IDE
-.vscode/
 .idea/
 *.swp
 *.swo

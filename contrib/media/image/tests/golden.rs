@@ -22,6 +22,8 @@ fn fixtures_dir() -> PathBuf {
         .unwrap()
         .parent()
         .unwrap()
+        .parent()
+        .unwrap()
         .join("tests/fixtures")
 }
 
