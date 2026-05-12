@@ -9,7 +9,7 @@ use rskit_errors::{AppError, AppResult};
 use rskit_hook::{HookError, HookResult, Registry as HookRegistry};
 use tokio_util::sync::CancellationToken;
 
-use crate::hooks::{LifecycleEvent, LifecycleEventType};
+use crate::hooks::{AppReady, AppStarted, AppStopping, LifecyclePhase};
 
 /// Typestate marker: App not yet started.
 pub struct Unconfigured;
@@ -27,20 +27,13 @@ where
 
 fn register_lifecycle_hook(
     hooks: &Arc<HookRegistry>,
-    event_type: LifecycleEventType,
+    phase: LifecyclePhase,
     hook: AsyncHook,
 ) {
-    let _unsubscribe = hooks.on(event_type.event_type(), move |cancel, event| {
-        let Some(event) = event.as_any().downcast_ref::<LifecycleEvent>() else {
-            return Err(HookError::fatal(
-                "unexpected bootstrap lifecycle event payload",
-            ));
-        };
-
-        let runtime = event.runtime_handle().clone();
+    let handler = move |cancel: CancellationToken, handle: &tokio::runtime::Handle| {
         let hook = Arc::clone(&hook);
         let (sender, receiver) = sync_channel(1);
-        runtime.spawn(async move {
+        handle.spawn(async move {
             let result = hook(cancel).await;
             let _ = sender.send(result);
         });
@@ -53,29 +46,50 @@ fn register_lifecycle_hook(
             }
             Err(error) => Err(HookError::fatal(AppError::internal(error).to_string())),
         }
-    });
-}
+    };
 
-fn phase_label(event_type: LifecycleEventType) -> &'static str {
-    match event_type {
-        LifecycleEventType::EventStart => "on_start",
-        LifecycleEventType::EventReady => "on_ready",
-        LifecycleEventType::EventStop => "on_stop",
+    match phase {
+        LifecyclePhase::Start => {
+            let _unsubscribe = hooks.on::<AppStarted>(0, move |cancel, event| {
+                let event = event.as_any().downcast_ref::<AppStarted>().unwrap();
+                handler(cancel, &event.runtime_handle)
+            });
+        }
+        LifecyclePhase::Ready => {
+            let _unsubscribe = hooks.on::<AppReady>(0, move |cancel, event| {
+                let event = event.as_any().downcast_ref::<AppReady>().unwrap();
+                handler(cancel, &event.runtime_handle)
+            });
+        }
+        LifecyclePhase::Stop => {
+            let _unsubscribe = hooks.on::<AppStopping>(0, move |cancel, event| {
+                let event = event.as_any().downcast_ref::<AppStopping>().unwrap();
+                handler(cancel, &event.runtime_handle)
+            });
+        }
     }
 }
 
-fn hook_result_to_error(event_type: LifecycleEventType, result: HookResult) -> AppResult<()> {
+fn phase_label(phase: LifecyclePhase) -> &'static str {
+    match phase {
+        LifecyclePhase::Start => "on_start",
+        LifecyclePhase::Ready => "on_ready",
+        LifecyclePhase::Stop => "on_stop",
+    }
+}
+
+fn hook_result_to_error(phase: LifecyclePhase, result: HookResult) -> AppResult<()> {
     match result {
         Ok(()) => Ok(()),
         Err(error) => {
             if error.is_fatal() {
-                let phase = phase_label(event_type);
+                let phase = phase_label(phase);
                 tracing::error!(phase, ?error, "fatal hook error");
                 return Err(AppError::internal(error).context(format!("{phase} hook failed")));
             }
 
             tracing::warn!(
-                phase = phase_label(event_type),
+                phase = phase_label(phase),
                 error = %error,
                 "non-fatal hook error"
             );
@@ -125,7 +139,7 @@ impl<C: AppConfig> AppBuilder<C> {
         Fut: std::future::Future<Output = AppResult<()>> + Send + 'static,
     {
         let hook = make_hook(hook);
-        register_lifecycle_hook(&self.hooks, LifecycleEventType::EventStart, hook);
+        register_lifecycle_hook(&self.hooks, LifecyclePhase::Start, hook);
         self
     }
 
@@ -137,7 +151,7 @@ impl<C: AppConfig> AppBuilder<C> {
         Fut: std::future::Future<Output = AppResult<()>> + Send + 'static,
     {
         let hook = make_hook(hook);
-        register_lifecycle_hook(&self.hooks, LifecycleEventType::EventReady, hook);
+        register_lifecycle_hook(&self.hooks, LifecyclePhase::Ready, hook);
         self
     }
 
@@ -149,7 +163,7 @@ impl<C: AppConfig> AppBuilder<C> {
         Fut: std::future::Future<Output = AppResult<()>> + Send + 'static,
     {
         let hook = make_hook(hook);
-        register_lifecycle_hook(&self.hooks, LifecycleEventType::EventStop, hook);
+        register_lifecycle_hook(&self.hooks, LifecyclePhase::Stop, hook);
         self
     }
 
@@ -225,7 +239,7 @@ impl<C: AppConfig> App<Unconfigured, C> {
         F: Fn(CancellationToken) -> Fut + Send + Sync + 'static,
         Fut: std::future::Future<Output = AppResult<()>> + Send + 'static,
     {
-        self.register_event_hook(LifecycleEventType::EventStart, make_hook(hook))
+        self.register_event_hook(LifecyclePhase::Start, make_hook(hook))
     }
 
     /// Register a hook called after readiness checks and before the app is ready.
@@ -235,7 +249,7 @@ impl<C: AppConfig> App<Unconfigured, C> {
         F: Fn(CancellationToken) -> Fut + Send + Sync + 'static,
         Fut: std::future::Future<Output = AppResult<()>> + Send + 'static,
     {
-        self.register_event_hook(LifecycleEventType::EventReady, make_hook(hook))
+        self.register_event_hook(LifecyclePhase::Ready, make_hook(hook))
     }
 
     /// Register a hook called during graceful shutdown before components stop.
@@ -245,11 +259,11 @@ impl<C: AppConfig> App<Unconfigured, C> {
         F: Fn(CancellationToken) -> Fut + Send + Sync + 'static,
         Fut: std::future::Future<Output = AppResult<()>> + Send + 'static,
     {
-        self.register_event_hook(LifecycleEventType::EventStop, make_hook(hook))
+        self.register_event_hook(LifecyclePhase::Stop, make_hook(hook))
     }
 
-    fn register_event_hook(self, event_type: LifecycleEventType, hook: AsyncHook) -> Self {
-        register_lifecycle_hook(&self.hooks, event_type, hook);
+    fn register_event_hook(self, phase: LifecyclePhase, hook: AsyncHook) -> Self {
+        register_lifecycle_hook(&self.hooks, phase, hook);
         self
     }
 
@@ -292,7 +306,7 @@ impl<C: AppConfig> App<Unconfigured, C> {
         };
 
         let stop_hook_result = self
-            .emit_lifecycle_hooks(LifecycleEventType::EventStop)
+            .emit_lifecycle_hooks(LifecyclePhase::Stop)
             .await;
         let stop_components_result = self.registry.stop_all().await;
         if let Err(error) = &stop_components_result {
@@ -318,7 +332,7 @@ impl<C: AppConfig> App<Unconfigured, C> {
         }
 
         if let Err(error) = self
-            .emit_lifecycle_hooks(LifecycleEventType::EventStart)
+            .emit_lifecycle_hooks(LifecyclePhase::Start)
             .await
         {
             return Err(self
@@ -331,7 +345,7 @@ impl<C: AppConfig> App<Unconfigured, C> {
         }
 
         if let Err(error) = self
-            .emit_lifecycle_hooks(LifecycleEventType::EventReady)
+            .emit_lifecycle_hooks(LifecyclePhase::Ready)
             .await
         {
             return Err(self
@@ -371,14 +385,18 @@ impl<C: AppConfig> App<Unconfigured, C> {
         }
     }
 
-    async fn emit_lifecycle_hooks(&self, event_type: LifecycleEventType) -> AppResult<()> {
+    async fn emit_lifecycle_hooks(&self, phase: LifecyclePhase) -> AppResult<()> {
         let hooks = Arc::clone(&self.hooks);
-        let event = LifecycleEvent::new(event_type, tokio::runtime::Handle::current());
+        let handle = tokio::runtime::Handle::current();
         let cancel = self.shutdown_token.clone();
-        let result = tokio::task::spawn_blocking(move || hooks.emit(&event, cancel))
-            .await
-            .map_err(AppError::internal)?;
-        hook_result_to_error(event_type, result)
+        let result = tokio::task::spawn_blocking(move || match phase {
+            LifecyclePhase::Start => hooks.emit(&AppStarted { runtime_handle: handle }, cancel),
+            LifecyclePhase::Ready => hooks.emit(&AppReady { runtime_handle: handle }, cancel),
+            LifecyclePhase::Stop => hooks.emit(&AppStopping { runtime_handle: handle }, cancel),
+        })
+        .await
+        .map_err(AppError::internal)?;
+        hook_result_to_error(phase, result)
     }
 
     async fn rollback_startup_failure(
@@ -387,7 +405,7 @@ impl<C: AppConfig> App<Unconfigured, C> {
         stop_components: bool,
     ) -> AppError {
         if let Err(stop_hook_error) = self
-            .emit_lifecycle_hooks(LifecycleEventType::EventStop)
+            .emit_lifecycle_hooks(LifecyclePhase::Stop)
             .await
         {
             tracing::warn!(error = %stop_hook_error, "stop hook error during startup rollback");
@@ -409,7 +427,7 @@ impl<C: AppConfig> App<Unconfigured, C> {
     async fn graceful_shutdown(self) -> AppResult<()> {
         let stop_result = tokio::time::timeout(
             self.graceful_timeout,
-            self.emit_lifecycle_hooks(LifecycleEventType::EventStop),
+            self.emit_lifecycle_hooks(LifecyclePhase::Stop),
         )
         .await;
 
@@ -453,7 +471,7 @@ mod tests {
     use tokio_util::sync::CancellationToken;
 
     use super::{AppBuilder, hook_result_to_error};
-    use crate::hooks::LifecycleEventType;
+    use crate::hooks::LifecyclePhase;
 
     #[derive(Debug, Default, serde::Deserialize, validator::Validate)]
     struct TestCfg {
@@ -544,7 +562,7 @@ mod tests {
     #[test]
     fn non_fatal_hook_error_is_logged_and_ignored() {
         let result = hook_result_to_error(
-            LifecycleEventType::EventStart,
+            LifecyclePhase::Start,
             Err(HookError::new("warn only")),
         );
 
@@ -554,7 +572,7 @@ mod tests {
     #[test]
     fn fatal_hook_error_becomes_app_error() {
         let result = hook_result_to_error(
-            LifecycleEventType::EventStart,
+            LifecyclePhase::Start,
             Err(HookError::fatal("hard fail")),
         );
 

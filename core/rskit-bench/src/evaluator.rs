@@ -25,11 +25,6 @@ where
     /// Returns the evaluator's name.
     fn name(&self) -> &'static str;
 
-    /// Non-blocking availability check.
-    async fn is_available(&self) -> bool {
-        true
-    }
-
     /// Execute the evaluator on raw input and return a prediction.
     async fn evaluate(&self, input: Vec<u8>) -> AppResult<Prediction<L>>;
 }
@@ -118,10 +113,6 @@ where
 {
     fn name(&self) -> &'static str {
         self.provider.name()
-    }
-
-    async fn is_available(&self) -> bool {
-        self.provider.is_available().await
     }
 
     async fn evaluate(&self, input: Vec<u8>) -> AppResult<Prediction<L>> {

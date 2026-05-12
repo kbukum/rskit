@@ -10,7 +10,7 @@ pub mod hooks;
 pub mod summary;
 
 pub use app::{App, AppBuilder, Unconfigured};
-pub use hooks::{LifecycleEvent, LifecycleEventType};
+pub use hooks::{AppReady, AppStarted, AppStopping, LifecyclePhase};
 pub use rskit_component::component;
 pub use rskit_component::health;
 pub use rskit_component::registry;

@@ -4,7 +4,7 @@
 //! composition, edge cases, and concurrency.
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use futures::{StreamExt, stream};
@@ -13,8 +13,7 @@ use rskit_provider::middleware::logging::LoggingLayer;
 use rskit_provider::middleware::resilience::{ResilienceConfig, ResilienceLayer};
 use rskit_provider::middleware::tracing_layer::TracingLayer;
 use rskit_provider::traits::{
-    BoxStream, Closeable, Duplex, DuplexChannel, Initializable, Provider, RequestResponse, Sink,
-    Stream,
+    BoxStream, Duplex, DuplexChannel, Provider, RequestResponse, Sink, Stream,
 };
 use rskit_provider::{TowerProvider, request_response_fn, sink_fn};
 use rskit_resilience::{CbConfig, CircuitBreaker, RateLimiter, RetryPolicy};
@@ -23,59 +22,6 @@ use tower::ServiceBuilder;
 // ═══════════════════════════════════════════════════════════════════════════════
 // Test helpers — mock providers, services, channels
 // ═══════════════════════════════════════════════════════════════════════════════
-
-/// A manual Provider impl for testing trait methods directly.
-struct SimpleProvider {
-    available: bool,
-}
-
-#[async_trait::async_trait]
-impl Provider for SimpleProvider {
-    fn name(&self) -> &'static str {
-        "simple"
-    }
-    async fn is_available(&self) -> bool {
-        self.available
-    }
-}
-
-/// Provider with lifecycle support.
-struct LifecycleProvider {
-    initialized: AtomicBool,
-    closed: AtomicBool,
-}
-
-impl LifecycleProvider {
-    fn new() -> Self {
-        Self {
-            initialized: AtomicBool::new(false),
-            closed: AtomicBool::new(false),
-        }
-    }
-}
-
-#[async_trait::async_trait]
-impl Provider for LifecycleProvider {
-    fn name(&self) -> &'static str {
-        "lifecycle"
-    }
-}
-
-#[async_trait::async_trait]
-impl Initializable for LifecycleProvider {
-    async fn init(&self) -> AppResult<()> {
-        self.initialized.store(true, Ordering::SeqCst);
-        Ok(())
-    }
-}
-
-#[async_trait::async_trait]
-impl Closeable for LifecycleProvider {
-    async fn close(&self) -> AppResult<()> {
-        self.closed.store(true, Ordering::SeqCst);
-        Ok(())
-    }
-}
 
 /// A Stream impl for BoxStream tests.
 struct VecStream {
@@ -263,12 +209,6 @@ async fn rr_fn_name() {
 }
 
 #[tokio::test]
-async fn rr_fn_is_available_default_true() {
-    let p = request_response_fn("avail", |_: ()| async { Ok(()) });
-    assert!(p.is_available().await);
-}
-
-#[tokio::test]
 async fn sink_fn_success() {
     let sink = sink_fn("s", |_: String| async { Ok(()) });
     assert!(sink.send("data".into()).await.is_ok());
@@ -306,25 +246,6 @@ async fn sink_fn_name() {
     assert_eq!(sink.name(), "my-sink");
 }
 
-#[tokio::test]
-async fn provider_is_available_override() {
-    let p = SimpleProvider { available: false };
-    assert!(!p.is_available().await);
-    assert_eq!(p.name(), "simple");
-}
-
-#[tokio::test]
-async fn initializable_closeable_lifecycle() {
-    let p = LifecycleProvider::new();
-    assert!(!p.initialized.load(Ordering::SeqCst));
-    assert!(!p.closed.load(Ordering::SeqCst));
-
-    p.init().await.unwrap();
-    assert!(p.initialized.load(Ordering::SeqCst));
-
-    p.close().await.unwrap();
-    assert!(p.closed.load(Ordering::SeqCst));
-}
 
 /// Compile-time check: providers from adapt are Send + Sync.
 #[tokio::test]
@@ -431,11 +352,10 @@ async fn tower_provider_error() {
 }
 
 #[tokio::test]
-async fn tower_provider_name_and_available() {
+async fn tower_provider_name() {
     let svc = tower::service_fn(|_: ()| async { Ok::<_, AppError>(()) });
     let p = TowerProvider::new("my-tower", svc);
     assert_eq!(p.name(), "my-tower");
-    assert!(p.is_available().await);
 }
 
 #[tokio::test]

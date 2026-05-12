@@ -824,7 +824,7 @@ mod tests {
         let provider = Arc::new(MockProvider::single_text("Hello"));
         let hooks = Arc::new(HookRegistry::new());
 
-        let _unsub = hooks.on(crate::turn_start_type(), |_, _| {
+        let _unsub = hooks.on::<crate::hooks::TurnStart>(0, |_, _| {
             Err(HookError::fatal("blocked by policy"))
         });
 
@@ -858,7 +858,7 @@ mod tests {
         let observed = Arc::new(AtomicU32::new(0));
         let observed_clone = Arc::clone(&observed);
 
-        let _unsub = hooks.on(crate::pre_llm_call_type(), move |_, event| {
+        let _unsub = hooks.on::<crate::hooks::PreLLMCall>(0, move |_, event| {
             let call = event
                 .as_any()
                 .downcast_ref::<crate::hooks::PreLLMCall>()
@@ -892,13 +892,13 @@ mod tests {
         let post_count = Arc::new(AtomicU32::new(0));
 
         let pc = pre_count.clone();
-        let _unsub1 = hooks.on(crate::pre_llm_call_type(), move |_, _| {
+        let _unsub1 = hooks.on::<crate::hooks::PreLLMCall>(0, move |_, _| {
             pc.fetch_add(1, Ordering::SeqCst);
             Ok(())
         });
 
         let poc = post_count.clone();
-        let _unsub2 = hooks.on(crate::post_llm_call_type(), move |_, _| {
+        let _unsub2 = hooks.on::<crate::hooks::PostLLMCall>(0, move |_, _| {
             poc.fetch_add(1, Ordering::SeqCst);
             Ok(())
         });
