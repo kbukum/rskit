@@ -1,0 +1,32 @@
+[package]
+name        = "rskit-llm-openai"
+description = "OpenAI provider implementation for rskit"
+version.workspace      = true
+edition.workspace      = true
+license.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+
+[lints]
+workspace = true
+
+[dependencies]
+rskit-ai = { workspace = true }
+rskit-llm.workspace = true
+rskit-embedding.workspace = true
+rskit-httpclient.workspace = true
+rskit-errors.workspace = true
+rskit-component.workspace = true
+rskit-provider.workspace = true
+rskit-resilience.workspace = true
+rskit-llm-common.workspace = true
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+opentelemetry = { workspace = true }
+tracing-opentelemetry = { workspace = true }

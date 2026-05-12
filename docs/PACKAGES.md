@@ -1,6 +1,6 @@
 # rskit Crate Map
 
-rskit is a **Cargo workspace** with a facade crate (`rskit`) and 40+ independent sub-crates under `crates/`. Every crate has its own `README.md` — start there for API details. This file is the bird's-eye index.
+rskit is a **Cargo workspace** with a facade crate (`rskit`), foundation crates under `core/`, and adapter crates under `contrib/<domain>/<name>/`. Examples live under `examples/`. Every crate has its own `README.md` — start there for API details. This file is the bird's-eye index.
 
 ## MSRV
 

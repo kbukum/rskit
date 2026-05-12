@@ -6,10 +6,10 @@ license.workspace     = true
 publish               = false
 
 [dependencies]
-rskit-errors       = { path = "../../crates/rskit-errors" }
-rskit-storage         = { path = "../../crates/rskit-storage" }
-rskit-media        = { path = "../../crates/rskit-media" }
-rskit-media-ffmpeg = { path = "../../crates/rskit-media-ffmpeg" }
-rskit-media-image  = { path = "../../crates/rskit-media-image" }
-rskit-media-audio  = { path = "../../crates/rskit-media-audio" }
+rskit-errors       = { workspace = true }
+rskit-storage      = { workspace = true }
+rskit-media        = { workspace = true }
+rskit-media-ffmpeg = { workspace = true }
+rskit-media-image  = { workspace = true }
+rskit-media-audio  = { workspace = true }
 tokio              = { workspace = true, features = ["full"] }

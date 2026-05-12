@@ -10,7 +10,7 @@ cargo-fuzz = true
 [dependencies]
 jsonwebtoken = { version = "10", features = ["rust_crypto"] }
 libfuzzer-sys = "0.4"
-rskit-auth = { path = "../crates/rskit-auth" }
+rskit-auth = { path = "../core/rskit-auth" }
 
 [[bin]]
 name = "auth_jwt_decode"

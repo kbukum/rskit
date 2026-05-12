@@ -1,0 +1,36 @@
+[package]
+name        = "rskit-dataset"
+description = "Dataset collection framework: source, transform, target, collector"
+version.workspace      = true
+edition.workspace      = true
+license.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+documentation          = "https://docs.rs/rskit-dataset"
+readme                 = "README.md"
+categories             = ["data-structures"]
+keywords               = ["dataset", "pipeline", "collector", "etl"]
+
+[dependencies]
+rskit-errors = { path = "../rskit-errors" }
+rskit-cli    = { path = "../rskit-cli" }
+image        = { version = "0.25", optional = true }
+serde        = { workspace = true }
+serde_json   = { workspace = true }
+tokio        = { workspace = true }
+tracing      = { workspace = true }
+async-trait  = { workspace = true }
+
+[features]
+default = ["image-transform"]
+image-transform = ["dep:image"]
+
+[dev-dependencies]
+tokio    = { workspace = true, features = ["test-util", "full"] }
+tempfile = { workspace = true }
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

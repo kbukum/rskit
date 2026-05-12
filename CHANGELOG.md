@@ -40,7 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed — Documentation Layout
 - Moved `MEDIA_IMPLEMENTATION.md` (70 KB internal-only document) from the
-  repo root to `crates/rskit-media/docs/IMPLEMENTATION.md` to keep the
+  repo root to `core/rskit-media/docs/IMPLEMENTATION.md` to keep the
   top-level documentation surface focused on user-facing content.
 
 ### Added

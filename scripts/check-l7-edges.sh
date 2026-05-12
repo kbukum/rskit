@@ -24,7 +24,21 @@ status=0
 for edge in "${disallowed_edges[@]}"; do
   parent="${edge%%:*}"
   child="${edge##*:}"
-  if cargo tree -e normal --all-features -p "$parent" --depth 1 --prefix none \
+
+  manifest_path=""
+  if cargo metadata --manifest-path core/Cargo.toml --no-deps --format-version 1 >/dev/null 2>&1 \
+    && cargo tree --manifest-path core/Cargo.toml -e normal --all-features -p "$parent" --depth 1 --prefix none >/dev/null 2>&1; then
+    manifest_path="core/Cargo.toml"
+  elif cargo metadata --manifest-path contrib/Cargo.toml --no-deps --format-version 1 >/dev/null 2>&1 \
+    && cargo tree --manifest-path contrib/Cargo.toml -e normal --all-features -p "$parent" --depth 1 --prefix none >/dev/null 2>&1; then
+    manifest_path="contrib/Cargo.toml"
+  else
+    echo "unable to locate workspace for crate: $parent" >&2
+    status=1
+    continue
+  fi
+
+  if cargo tree --manifest-path "$manifest_path" -e normal --all-features -p "$parent" --depth 1 --prefix none \
     | awk 'NR > 1 { print $1 }' \
     | grep -Fxq "$child"; then
     echo "disallowed dependency edge: $parent -> $child" >&2

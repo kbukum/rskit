@@ -90,7 +90,9 @@ jobs:
         with:
           toolchain: stable
           components: rustfmt
-      - run: cargo fmt --check
+      - run: |
+          cd core && cargo fmt --all --check
+          cd ../contrib && cargo fmt --all --check
 
   # ---------------------------------------------------------------------------
   # Clippy (uses the pinned toolchain from rust-toolchain.toml)
@@ -113,7 +115,14 @@ jobs:
         run: sudo apt-get install -y mold
       - uses: mozilla-actions/sccache-action@9e7fa8a12102821edf02ca5dbea1acd0f89a2696  # v0.0.10
       - uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b  # v2.7.8
-      - run: cargo clippy --workspace -- -D warnings
+        with:
+          workspaces: |
+            core
+            contrib
+            examples
+      - run: |
+          cargo clippy --manifest-path core/Cargo.toml --workspace -- -D warnings
+          cargo clippy --manifest-path contrib/Cargo.toml --workspace -- -D warnings
 
   # ---------------------------------------------------------------------------
   # Tests — matrix across OS + MSRV + stable
@@ -143,10 +152,16 @@ jobs:
       - uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b  # v2.7.8
         with:
           key: ${{ matrix.os }}-${{ matrix.rust }}
+          workspaces: |
+            core
+            contrib
+            examples
       - uses: taiki-e/install-action@ec28e287910af896fd98e04056d31fa68607e7ad  # v2
         with:
           tool: cargo-nextest
-      - run: cargo nextest run --workspace --profile ci
+      - run: |
+          cargo nextest run --manifest-path core/Cargo.toml --workspace --profile ci
+          cargo nextest run --manifest-path contrib/Cargo.toml --workspace --profile ci
 
   # ---------------------------------------------------------------------------
   # Documentation (ensure no broken intra-doc links)
@@ -169,7 +184,14 @@ jobs:
       - name: Install mold linker
         run: sudo apt-get install -y mold
       - uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b  # v2.7.8
-      - run: cargo doc --workspace --no-deps --document-private-items
+        with:
+          workspaces: |
+            core
+            contrib
+            examples
+      - run: |
+          cargo doc --manifest-path core/Cargo.toml --workspace --no-deps --document-private-items
+          cargo doc --manifest-path contrib/Cargo.toml --workspace --no-deps --document-private-items
 
   # ---------------------------------------------------------------------------
   # Coverage (runs on stable Linux only, uploads LCOV)
@@ -192,13 +214,20 @@ jobs:
       - name: Install mold linker
         run: sudo apt-get install -y mold
       - uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b  # v2.7.8
+        with:
+          workspaces: |
+            core
+            contrib
+            examples
       - uses: taiki-e/install-action@ec28e287910af896fd98e04056d31fa68607e7ad  # v2
         with:
           tool: cargo-llvm-cov
-      - run: cargo llvm-cov --workspace --lcov --output-path coverage.lcov --fail-under-lines 60
+      - run: |
+          cargo llvm-cov --manifest-path core/Cargo.toml --workspace --lcov --output-path core-coverage.lcov --fail-under-lines 60
+          cargo llvm-cov --manifest-path contrib/Cargo.toml --workspace --lcov --output-path contrib-coverage.lcov --fail-under-lines 60
       - uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2  # v5
         with:
-          files: coverage.lcov
+          files: core-coverage.lcov,contrib-coverage.lcov
           fail_ci_if_error: false
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
@@ -232,10 +261,20 @@ jobs:
       - uses: EmbarkStudios/cargo-deny-action@91bf2b620e09e18d6eb78b92e7861937469acedb  # v2.0.17
         with:
           command: check licenses advisories sources bans
+          manifest-path: core/Cargo.toml
+      - uses: EmbarkStudios/cargo-deny-action@91bf2b620e09e18d6eb78b92e7861937469acedb  # v2.0.17
+        with:
+          command: check licenses advisories sources bans
+          manifest-path: contrib/Cargo.toml
       - run: ./scripts/check-l7-edges.sh
       - uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998  # v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          working-directory: core
+      - uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998  # v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          working-directory: contrib
 
   # ---------------------------------------------------------------------------
   # Benchmarks (smoke — ensure they compile and run)
@@ -257,7 +296,14 @@ jobs:
       - name: Install mold linker
         run: sudo apt-get install -y mold
       - uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b  # v2.7.8
-      - run: cargo bench --workspace --no-run
+        with:
+          workspaces: |
+            core
+            contrib
+            examples
+      - run: |
+          cargo bench --manifest-path core/Cargo.toml --workspace --no-run
+          cargo bench --manifest-path contrib/Cargo.toml --workspace --no-run
 
   # ---------------------------------------------------------------------------
   # Gate: Aggregate status for branch protection

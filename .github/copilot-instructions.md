@@ -20,21 +20,17 @@ make deny               # cargo-deny (licenses, advisories, sources)
 
 ## Crate Structure
 
-Cargo workspace with 31 crates in `crates/`, organized by phase:
+Cargo workspace split by role:
 
-| Phase | Crates |
-|-------|--------|
-| Core | rskit (facade), errors, config, logging, bootstrap, provider, pipeline, resilience, worker, server |
-| Foundation | validation, http, di, auth |
-| Adapters | database, cache, messaging |
-| Platform | observability, authz, discovery |
-| Specialist | testutil, sse, dag, llm |
-| Media & File | file, media, media-ffmpeg, media-image |
-| CLI & Data | cli, dataset, bench |
+- `core/rskit-<name>/` — foundation crates and the `rskit` facade
+- `contrib/<domain>/<name>/` — adapter crates grouped by domain (`storage`, `cache`, `messaging`, `inference`, `llm`, `media`, `vectorstore`)
+- `examples/<name>/` — demos and sample applications
 
-The facade crate (`rskit`) re-exports all sub-crates via feature flags.
+Core crates cover the shared foundations and cross-cutting modules (for example `errors`, `config`, `logging`, `bootstrap`, `provider`, `pipeline`, `resilience`, `worker`, `server`, `validation`, `http`, `di`, `auth`, `observability`, `authz`, `discovery`, `security`, `process`, `media`, `cli`, and `dataset`). Adapter crates live under `contrib/` by domain, such as `contrib/storage/s3`, `contrib/messaging/kafka`, or `contrib/media/ffmpeg`.
 
-When adding a new crate: create under `crates/rskit-<name>/`, add to workspace members, inherit workspace package metadata, add `#![warn(missing_docs)]`, wire into facade.
+The facade crate (`rskit`) re-exports core crates and exposes adapter integrations via feature flags.
+
+When adding a new foundation crate: create it under `core/rskit-<name>/`, add it to workspace members, inherit workspace package metadata, add `#![warn(missing_docs)]`, and wire it into the facade as appropriate. When adding an adapter crate, place it under `contrib/<domain>/<name>/`.
 
 ## Code Style
 

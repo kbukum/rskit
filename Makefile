@@ -2,8 +2,11 @@
        check-core check-patterns check-crosscutting check-composition check-transport check-auth check-data check-ai \
        check-media check-infra doc deny check-l7-edges clean help ci ci-test ci-lint ci-fmt ensure-act
 
-# Crate flag: pass -p $(C) to cargo when C is set
-_C = $(if $(C),-p $(C))
+CORE_MANIFEST = core/Cargo.toml
+CONTRIB_MANIFEST = contrib/Cargo.toml
+EXAMPLES_MANIFEST = examples/Cargo.toml
+WORKSPACE_MANIFESTS = $(CORE_MANIFEST) $(CONTRIB_MANIFEST)
+FORMAT_MANIFESTS = $(WORKSPACE_MANIFESTS) $(EXAMPLES_MANIFEST)
 
 # Test filter: pass -- $(T) when T is set
 _T = $(if $(T),-- $(T))
@@ -11,27 +14,53 @@ _T = $(if $(T),-- $(T))
 ## Default target
 all: check
 
-## Build workspace (C=<crate> for specific)
+define run_cargo_target
+	@if [ -n "$(C)" ]; then \
+		cargo $(1) --manifest-path $(CORE_MANIFEST) -p $(C) $(2) 2>/dev/null || \
+		cargo $(1) --manifest-path $(CONTRIB_MANIFEST) -p $(C) $(2) 2>/dev/null || \
+		cargo $(1) --manifest-path $(EXAMPLES_MANIFEST) -p $(C) $(2); \
+	elif [ -n "$(W)" ]; then \
+		cargo $(1) --manifest-path $(W)/Cargo.toml --workspace $(2); \
+	else \
+		set -e; \
+		for manifest in $(3); do \
+			cargo $(1) --manifest-path $$manifest --workspace $(2); \
+		done; \
+	fi
+endef
+
+define run_fmt_target
+	@if [ -n "$(W)" ]; then \
+		cargo fmt --manifest-path $(W)/Cargo.toml --all $(1); \
+	else \
+		set -e; \
+		for manifest in $(FORMAT_MANIFESTS); do \
+			cargo fmt --manifest-path $$manifest --all $(1); \
+		done; \
+	fi
+endef
+
+## Build workspace (C=<crate> for specific crate, W=core|contrib|examples for specific workspace)
 build:
 	@echo "==> Building..."
-	@cargo build --workspace $(_C)
+	$(call run_cargo_target,build,,$(WORKSPACE_MANIFESTS))
 	@echo "✓ Build succeeded"
 
-## Run tests (C=<crate>, T=<test pattern>)
+## Run tests (C=<crate>, T=<test pattern>, W=core|contrib|examples)
 test:
 	@echo "==> Testing..."
-	@cargo test --workspace $(_C) $(_T)
+	$(call run_cargo_target,test,$(_T),$(WORKSPACE_MANIFESTS))
 	@echo "✓ Tests passed"
 
 ## Run tests using nextest (parallel, with retries in CI)
 test-nextest:
 	@echo "==> Running tests with nextest..."
-	@cargo nextest run --workspace $(if $(PROFILE),--profile $(PROFILE))
+	$(call run_cargo_target,nextest run,$(if $(PROFILE),--profile $(PROFILE)),$(WORKSPACE_MANIFESTS))
 
 ## Run only doctests (nextest doesn't support doctests)
 test-doc:
 	@echo "==> Running doctests..."
-	@cargo test --workspace --doc
+	$(call run_cargo_target,test,--doc,$(WORKSPACE_MANIFESTS))
 
 ## Run tests only for crates affected by current changes
 test-affected:
@@ -39,25 +68,32 @@ test-affected:
 	@CHANGED=$$(git diff --name-only origin/main...HEAD 2>/dev/null || git diff --name-only HEAD~1 2>/dev/null); \
 	if [ -z "$$CHANGED" ]; then \
 		echo "No changes detected, running all tests"; \
-		cargo nextest run --workspace; \
-	elif echo "$$CHANGED" | grep -qE '^(Cargo\.(toml|lock)|rust-toolchain\.toml|\.cargo/|\.config/)'; then \
+		cargo nextest run --manifest-path $(CORE_MANIFEST) --workspace; \
+		cargo nextest run --manifest-path $(CONTRIB_MANIFEST) --workspace; \
+	elif echo "$$CHANGED" | grep -qE '^(Cargo\.(toml|lock)|rust-toolchain\.toml|\.cargo/|\.config/|core/Cargo\.toml|contrib/Cargo\.toml|examples/Cargo\.toml)'; then \
 		echo "Root/workspace config changed, running all tests"; \
-		cargo nextest run --workspace; \
+		cargo nextest run --manifest-path $(CORE_MANIFEST) --workspace; \
+		cargo nextest run --manifest-path $(CONTRIB_MANIFEST) --workspace; \
 	else \
 		CRATES=$$(echo "$$CHANGED" | grep -E '\.(rs|toml)$$' | xargs -I{} dirname {} | sort -u | while read dir; do \
 			d="$$dir"; \
 			while [ "$$d" != "." ] && [ ! -f "$$d/Cargo.toml" ]; do d=$$(dirname "$$d"); done; \
-			if [ -f "$$d/Cargo.toml" ] && [ "$$d" != "." ]; then \
-				grep -q '^\[package\]' "$$d/Cargo.toml" 2>/dev/null && grep -m1 'name' "$$d/Cargo.toml" | sed 's/.*= *"\(.*\)"/\1/'; \
+			if [ -f "$$d/Cargo.toml" ] && [ "$$d" != "." ] && [ "$$d" != "core" ] && [ "$$d" != "contrib" ] && [ "$$d" != "examples" ]; then \
+				grep -m1 '^name\s*=\s*"' "$$d/Cargo.toml" | sed 's/.*= *"\(.*\)"/\1/'; \
 			fi; \
 		done | sort -u); \
 		if [ -z "$$CRATES" ]; then \
 			echo "No crate changes detected, running all tests"; \
-			cargo nextest run --workspace; \
+			cargo nextest run --manifest-path $(CORE_MANIFEST) --workspace; \
+			cargo nextest run --manifest-path $(CONTRIB_MANIFEST) --workspace; \
 		else \
 			echo "Affected crates: $$CRATES"; \
-			PKGS=$$(echo "$$CRATES" | sed 's/^/-p /' | tr '\n' ' '); \
-			cargo nextest run $$PKGS; \
+			echo "$$CRATES" | while IFS= read -r crate; do \
+				[ -n "$$crate" ] || continue; \
+				cargo nextest run --manifest-path $(CORE_MANIFEST) -p "$$crate" 2>/dev/null || \
+				cargo nextest run --manifest-path $(CONTRIB_MANIFEST) -p "$$crate" 2>/dev/null || \
+				cargo nextest run --manifest-path $(EXAMPLES_MANIFEST) -p "$$crate"; \
+			done; \
 		fi; \
 	fi
 
@@ -65,37 +101,48 @@ test-affected:
 ## Requires: cargo install cargo-llvm-cov
 test-coverage:
 	@echo "==> Testing with coverage..."
-	@cargo llvm-cov --workspace --lcov --output-path coverage.lcov $(_C) $(_T)
+	$(call run_cargo_target,llvm-cov,--lcov --output-path coverage.lcov $(_T),$(WORKSPACE_MANIFESTS))
 	@echo "✓ Coverage report: coverage.lcov"
 
 ## Run tests with coverage HTML report
 test-coverage-html:
 	@echo "==> Testing with coverage (HTML)..."
-	@cargo llvm-cov --workspace --html $(_C) $(_T)
-	@echo "✓ Coverage report: target/llvm-cov/html/index.html"
+	$(call run_cargo_target,llvm-cov,--html $(_T),$(WORKSPACE_MANIFESTS))
+	@echo "✓ Coverage report generated"
 
 ## Run clippy linter (C=<crate>)
 lint:
 	@echo "==> Linting..."
-	@cargo clippy --workspace --all-targets $(_C) -- -D warnings
+	$(call run_cargo_target,clippy,--all-targets -- -D warnings,$(WORKSPACE_MANIFESTS))
 	@echo "✓ Lint passed"
 
-## Format code (C=<crate>)
+## Format code (W=core|contrib|examples)
 fmt:
 	@echo "==> Formatting..."
-	@cargo fmt --all
+	$(call run_fmt_target,)
 	@echo "✓ Formatted"
 
 ## Check formatting without modifying files
 fmt-check:
 	@echo "==> Checking format..."
-	@cargo fmt --all -- --check
+	$(call run_fmt_target,-- --check)
 	@echo "✓ Format OK"
 
 ## Build documentation
 doc:
 	@echo "==> Building docs..."
-	@RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --document-private-items
+	@if [ -n "$(C)" ]; then \
+		RUSTDOCFLAGS="-D warnings" cargo doc --manifest-path $(CORE_MANIFEST) -p $(C) --no-deps --document-private-items 2>/dev/null || \
+		RUSTDOCFLAGS="-D warnings" cargo doc --manifest-path $(CONTRIB_MANIFEST) -p $(C) --no-deps --document-private-items 2>/dev/null || \
+		RUSTDOCFLAGS="-D warnings" cargo doc --manifest-path $(EXAMPLES_MANIFEST) -p $(C) --no-deps --document-private-items; \
+	elif [ -n "$(W)" ]; then \
+		RUSTDOCFLAGS="-D warnings" cargo doc --manifest-path $(W)/Cargo.toml --workspace --no-deps --document-private-items; \
+	else \
+		set -e; \
+		for manifest in $(FORMAT_MANIFESTS); do \
+			RUSTDOCFLAGS="-D warnings" cargo doc --manifest-path $$manifest --workspace --no-deps --document-private-items; \
+		done; \
+	fi
 	@echo "✓ Docs built"
 
 ## Run L7 dependency edge checks
@@ -108,9 +155,15 @@ check-l7-edges:
 ## Requires: cargo install cargo-deny
 deny: check-l7-edges
 	@echo "==> Running cargo-deny..."
-	@cargo deny check licenses advisories sources bans
+	@if [ -n "$(W)" ]; then \
+		cargo deny --manifest-path $(W)/Cargo.toml check licenses advisories sources bans; \
+	else \
+		set -e; \
+		for manifest in $(WORKSPACE_MANIFESTS); do \
+			cargo deny --manifest-path $$manifest check licenses advisories sources bans; \
+		done; \
+	fi
 	@echo "✓ cargo-deny passed"
-
 
 ## Fast check: format + lint + build only (no tests) — for rapid iteration
 check-fast: fmt-check lint build
@@ -160,9 +213,11 @@ check-infra:
 
 ## Clean build artifacts
 clean:
-	@cargo clean
+	@cd core && cargo clean
+	@cd contrib && cargo clean
+	@cd examples && cargo clean
 	@rm -f coverage.lcov
-	@rm -rf target/llvm-cov
+	@rm -rf core/target/llvm-cov contrib/target/llvm-cov examples/target/llvm-cov
 	@echo "✓ Cleaned"
 
 ## Ensure act is installed (for local CI)
@@ -191,25 +246,25 @@ ci-fmt: ensure-act
 
 ## Show help
 help:
-	@echo "Usage: make <target> [C=<crate>] [T=<test>] [PROFILE=<profile>]"
+	@echo "Usage: make <target> [C=<crate>] [T=<test>] [PROFILE=<profile>] [W=core|contrib|examples]"
 	@echo ""
 	@echo "Development:"
 	@echo "  make help                                  Show this help"
-	@echo "  make build              [C=]               Build workspace"
-	@echo "  make test               [C=] [T=]          Run tests"
-	@echo "  make test-nextest       [PROFILE=]         Run tests with nextest"
-	@echo "  make test-doc                             Run doctests only"
+	@echo "  make build              [C=] [W=]          Build workspace(s)"
+	@echo "  make test               [C=] [T=] [W=]     Run tests"
+	@echo "  make test-nextest       [PROFILE=] [W=]    Run tests with nextest"
+	@echo "  make test-doc           [C=] [W=]          Run doctests only"
 	@echo "  make test-affected                        Run tests for changed crates"
-	@echo "  make test-coverage      [C=] [T=]          Run tests with coverage (LCOV)"
-	@echo "  make test-coverage-html [C=] [T=]          Run tests with coverage (HTML)"
-	@echo "  make lint               [C=]               Run clippy"
-	@echo "  make fmt                                  Format code"
-	@echo "  make fmt-check                            Check formatting"
-	@echo "  make doc                                  Build documentation"
+	@echo "  make test-coverage      [C=] [T=] [W=]     Run tests with coverage (LCOV)"
+	@echo "  make test-coverage-html [C=] [T=] [W=]     Run tests with coverage (HTML)"
+	@echo "  make lint               [C=] [W=]          Run clippy"
+	@echo "  make fmt                [W=]               Format code"
+	@echo "  make fmt-check          [W=]               Check formatting"
+	@echo "  make doc                [C=] [W=]          Build documentation"
 	@echo "  make check-l7-edges                       Check L7 dependency edges"
-	@echo "  make deny                                 Run cargo-deny + L7 edge checks"
+	@echo "  make deny               [W=]               Run cargo-deny + L7 edge checks"
 	@echo "  make check-fast                           fmt + lint + build"
-	@echo "  make check              [C=]               fmt + lint + build + test"
+	@echo "  make check              [C=] [W=]          fmt + lint + build + test"
 	@echo "  make check-core                           Check only core domain modules"
 	@echo "  make check-patterns                       Check only patterns domain modules"
 	@echo "  make check-crosscutting                   Check only crosscutting domain modules"
@@ -223,23 +278,23 @@ help:
 	@echo "  make clean                                Remove build artifacts"
 	@echo ""
 	@echo "Local CI (GitHub Actions via act + Docker):"
-	@echo "  make ci                             Run full CI pipeline"
-	@echo "  make ci-test                        Run only test job"
-	@echo "  make ci-lint                        Run only lint job"
-	@echo "  make ci-fmt                         Run only fmt job"
+	@echo "  make ci                                   Run full CI pipeline"
+	@echo "  make ci-test                              Run only test job"
+	@echo "  make ci-lint                              Run only lint job"
+	@echo "  make ci-fmt                               Run only fmt job"
 	@echo ""
 	@echo "Crate targeting (C=):"
-	@echo "  C=rskit-auth          Target auth crate"
-	@echo "  C=rskit-http          Target http crate"
-	@echo "  C=rskit-database      Target database crate"
-	@echo "  C=rskit-messaging     Target messaging crate"
+	@echo "  C=rskit-errors        Target core crate"
+	@echo "  C=rskit-storage-s3    Target contrib crate"
+	@echo "  C=agent-demo          Target example crate"
 	@echo ""
 	@echo "Examples:"
-	@echo "  make test                              Test everything"
-	@echo "  make test-nextest PROFILE=ci           Run nextest with CI profile"
-	@echo "  make test-affected                     Test only changed crates"
-	@echo "  make test C=rskit-auth                 Test auth crate"
-	@echo "  make test C=rskit-auth T=jwt           Test matching tests in auth"
-	@echo "  make lint C=rskit-http                 Lint http crate"
-	@echo "  make check C=rskit-database            Full check on database crate"
-	@echo "  make test-coverage-html                Coverage report in browser"
+	@echo "  make build                               Build core + contrib workspaces"
+	@echo "  make build W=examples                    Build examples workspace"
+	@echo "  make test-nextest PROFILE=ci             Run nextest with CI profile"
+	@echo "  make test-affected                       Test only changed crates"
+	@echo "  make test C=rskit-auth                   Test auth crate"
+	@echo "  make test C=rskit-storage-s3             Test S3 contrib crate"
+	@echo "  make lint C=rskit-errors                 Lint errors crate"
+	@echo "  make check W=core                        Full check on core workspace"
+	@echo "  make test-coverage-html                  Coverage report in browser"
