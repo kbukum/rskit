@@ -30,7 +30,7 @@ impl std::fmt::Display for ApiError {
 impl std::error::Error for ApiError {}
 
 impl ApiError {
-    /// Map provider wire errors to canonical GenAI sentinels at the adapter boundary.
+    /// Map provider wire errors to canonical `GenAI` sentinels at the adapter boundary.
     #[must_use]
     pub fn to_genai_error(&self) -> GenAiError {
         let kind = self
@@ -63,7 +63,7 @@ impl From<ApiError> for AppError {
             429 => ErrorCode::RateLimited,
             _ => ErrorCode::ExternalService,
         };
-        AppError::new(code, e.to_string())
+        Self::new(code, e.to_string())
             .with_detail("provider", e.provider)
             .with_detail("status", e.status.to_string())
     }
@@ -88,8 +88,10 @@ pub fn parse_openai_error(status: u16, body: &str) -> ApiError {
     let (message, error_type) = serde_json::from_str::<OpenAiErrorBody>(body)
         .ok()
         .and_then(|b| b.error)
-        .map(|e| (e.message.unwrap_or_else(|| body.to_string()), e.error_type))
-        .unwrap_or_else(|| (body.to_string(), None));
+        .map_or_else(
+            || (body.to_string(), None),
+            |e| (e.message.unwrap_or_else(|| body.to_string()), e.error_type),
+        );
 
     ApiError {
         status,
@@ -118,8 +120,10 @@ pub fn parse_anthropic_error(status: u16, body: &str) -> ApiError {
     let (message, error_type) = serde_json::from_str::<AnthropicErrorBody>(body)
         .ok()
         .and_then(|b| b.error)
-        .map(|e| (e.message.unwrap_or_else(|| body.to_string()), e.error_type))
-        .unwrap_or_else(|| (body.to_string(), None));
+        .map_or_else(
+            || (body.to_string(), None),
+            |e| (e.message.unwrap_or_else(|| body.to_string()), e.error_type),
+        );
 
     ApiError {
         status,
@@ -147,8 +151,10 @@ pub fn parse_gemini_error(status: u16, body: &str) -> ApiError {
     let (message, error_type) = serde_json::from_str::<GeminiErrorBody>(body)
         .ok()
         .and_then(|b| b.error)
-        .map(|e| (e.message.unwrap_or_else(|| body.to_string()), e.status))
-        .unwrap_or_else(|| (body.to_string(), None));
+        .map_or_else(
+            || (body.to_string(), None),
+            |e| (e.message.unwrap_or_else(|| body.to_string()), e.status),
+        );
 
     ApiError {
         status,
@@ -161,7 +167,7 @@ pub fn parse_gemini_error(status: u16, body: &str) -> ApiError {
 /// Rough token estimator (~4 chars per token).
 ///
 /// Use when a dedicated tokenizer is unavailable.
-pub fn estimate_tokens(text: &str) -> usize {
+pub const fn estimate_tokens(text: &str) -> usize {
     text.len() / 4
 }
 
