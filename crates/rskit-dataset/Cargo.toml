@@ -22,7 +22,6 @@ serde_json   = { workspace = true }
 tokio        = { workspace = true }
 tracing      = { workspace = true }
 async-trait  = { workspace = true }
-workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [features]
 default = ["image-transform"]

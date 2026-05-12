@@ -80,7 +80,6 @@ rskit-cli           = { version = "0.1.0", path = "../rskit-cli",           opti
 rskit-git           = { version = "0.1.0", path = "../rskit-git",           optional = true }
 rskit-dataset       = { version = "0.1.0", path = "../rskit-dataset",       optional = true }
 rskit-bench         = { version = "0.1.0", path = "../rskit-bench",         optional = true }
-workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [dev-dependencies]
 tokio       = { workspace = true, features = ["full"] }

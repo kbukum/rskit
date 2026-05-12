@@ -28,7 +28,6 @@ async-trait  = { workspace = true }
 futures      = { workspace = true }
 parking_lot  = { workspace = true }
 tracing      = { workspace = true }
-workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [dev-dependencies]
 rskit-llm-providers = { path = "../rskit-llm-providers" }

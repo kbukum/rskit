@@ -24,4 +24,3 @@ serde        = { workspace = true }
 serde_json   = { workspace = true }
 thiserror    = { workspace = true }
 semver       = { version = "1", features = ["serde"] }
-workspace-hack = { version = "0.1", path = "../workspace-hack" }

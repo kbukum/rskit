@@ -26,4 +26,3 @@ validator        = { workspace = true }
 futures          = { workspace = true }
 parking_lot      = { workspace = true }
 http             = { workspace = true }
-workspace-hack = { version = "0.1", path = "../workspace-hack" }

@@ -26,7 +26,6 @@ serde         = { workspace = true }
 serde_json    = { workspace = true }
 google-cloud-storage = "=1.11.0"
 google-cloud-auth    = { version = "1.9", default-features = false }
-workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [dev-dependencies]
 serde_json = { workspace = true }

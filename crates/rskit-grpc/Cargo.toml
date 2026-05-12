@@ -30,7 +30,6 @@ async-trait    = { workspace = true }
 serde          = { workspace = true }
 http           = { workspace = true }
 chrono         = { workspace = true }
-workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 [dev-dependencies]
 tokio-util     = { workspace = true }
