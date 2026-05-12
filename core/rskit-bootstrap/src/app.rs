@@ -25,11 +25,7 @@ where
     Arc::new(move |token| Box::pin(f(token)))
 }
 
-fn register_lifecycle_hook(
-    hooks: &Arc<HookRegistry>,
-    phase: LifecyclePhase,
-    hook: AsyncHook,
-) {
+fn register_lifecycle_hook(hooks: &Arc<HookRegistry>, phase: LifecyclePhase, hook: AsyncHook) {
     let handler = move |cancel: CancellationToken, handle: &tokio::runtime::Handle| {
         let hook = Arc::clone(&hook);
         let (sender, receiver) = sync_channel(1);
@@ -305,9 +301,7 @@ impl<C: AppConfig> App<Unconfigured, C> {
             }
         };
 
-        let stop_hook_result = self
-            .emit_lifecycle_hooks(LifecyclePhase::Stop)
-            .await;
+        let stop_hook_result = self.emit_lifecycle_hooks(LifecyclePhase::Stop).await;
         let stop_components_result = self.registry.stop_all().await;
         if let Err(error) = &stop_components_result {
             tracing::warn!(error = %error, "component shutdown error");
@@ -331,10 +325,7 @@ impl<C: AppConfig> App<Unconfigured, C> {
                 .await);
         }
 
-        if let Err(error) = self
-            .emit_lifecycle_hooks(LifecyclePhase::Start)
-            .await
-        {
+        if let Err(error) = self.emit_lifecycle_hooks(LifecyclePhase::Start).await {
             return Err(self
                 .rollback_startup_failure(error.context("startup hooks failed"), true)
                 .await);
@@ -344,10 +335,7 @@ impl<C: AppConfig> App<Unconfigured, C> {
             tracing::warn!(error = %error, "ready check reported issues");
         }
 
-        if let Err(error) = self
-            .emit_lifecycle_hooks(LifecyclePhase::Ready)
-            .await
-        {
+        if let Err(error) = self.emit_lifecycle_hooks(LifecyclePhase::Ready).await {
             return Err(self
                 .rollback_startup_failure(error.context("ready hooks failed"), true)
                 .await);
@@ -390,9 +378,24 @@ impl<C: AppConfig> App<Unconfigured, C> {
         let handle = tokio::runtime::Handle::current();
         let cancel = self.shutdown_token.clone();
         let result = tokio::task::spawn_blocking(move || match phase {
-            LifecyclePhase::Start => hooks.emit(&AppStarted { runtime_handle: handle }, cancel),
-            LifecyclePhase::Ready => hooks.emit(&AppReady { runtime_handle: handle }, cancel),
-            LifecyclePhase::Stop => hooks.emit(&AppStopping { runtime_handle: handle }, cancel),
+            LifecyclePhase::Start => hooks.emit(
+                &AppStarted {
+                    runtime_handle: handle,
+                },
+                cancel,
+            ),
+            LifecyclePhase::Ready => hooks.emit(
+                &AppReady {
+                    runtime_handle: handle,
+                },
+                cancel,
+            ),
+            LifecyclePhase::Stop => hooks.emit(
+                &AppStopping {
+                    runtime_handle: handle,
+                },
+                cancel,
+            ),
         })
         .await
         .map_err(AppError::internal)?;
@@ -404,10 +407,7 @@ impl<C: AppConfig> App<Unconfigured, C> {
         mut error: AppError,
         stop_components: bool,
     ) -> AppError {
-        if let Err(stop_hook_error) = self
-            .emit_lifecycle_hooks(LifecyclePhase::Stop)
-            .await
-        {
+        if let Err(stop_hook_error) = self.emit_lifecycle_hooks(LifecyclePhase::Stop).await {
             tracing::warn!(error = %stop_hook_error, "stop hook error during startup rollback");
             error = error.context(format!(
                 "startup rollback stop hooks failed: {stop_hook_error}"
@@ -561,20 +561,15 @@ mod tests {
 
     #[test]
     fn non_fatal_hook_error_is_logged_and_ignored() {
-        let result = hook_result_to_error(
-            LifecyclePhase::Start,
-            Err(HookError::new("warn only")),
-        );
+        let result = hook_result_to_error(LifecyclePhase::Start, Err(HookError::new("warn only")));
 
         assert!(result.is_ok());
     }
 
     #[test]
     fn fatal_hook_error_becomes_app_error() {
-        let result = hook_result_to_error(
-            LifecyclePhase::Start,
-            Err(HookError::fatal("hard fail")),
-        );
+        let result =
+            hook_result_to_error(LifecyclePhase::Start, Err(HookError::fatal("hard fail")));
 
         let error = result.expect_err("fatal hook error should fail");
         assert!(error.to_string().contains("on_start hook failed"));

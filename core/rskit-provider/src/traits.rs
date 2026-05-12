@@ -74,4 +74,3 @@ where
     /// Close the channel gracefully.
     async fn close(&mut self) -> AppResult<()>;
 }
-

@@ -43,7 +43,6 @@ impl<L: Send + Sync + Clone + 'static> Evaluator<L> for TimingMiddleware<L> {
         self.inner.name()
     }
 
-
     async fn evaluate(&self, input: Vec<u8>) -> AppResult<Prediction<L>> {
         let start = Instant::now();
         let result = self.inner.evaluate(input).await;
@@ -95,7 +94,6 @@ impl<L: Send + Sync + Clone + 'static> Evaluator<L> for CachingMiddleware<L> {
     fn name(&self) -> &'static str {
         self.inner.name()
     }
-
 
     async fn evaluate(&self, input: Vec<u8>) -> AppResult<Prediction<L>> {
         let key = hash_bytes(&input);

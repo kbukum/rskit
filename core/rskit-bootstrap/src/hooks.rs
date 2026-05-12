@@ -7,6 +7,7 @@ use rskit_hook::{Event, EventType};
 /// Emitted after components start and before readiness checks.
 #[derive(Debug, Clone)]
 pub struct AppStarted {
+    /// The Tokio runtime handle used to drive async lifecycle handlers.
     pub runtime_handle: tokio::runtime::Handle,
 }
 
@@ -22,6 +23,7 @@ impl Event for AppStarted {
 /// Emitted after readiness checks and before the app is marked ready.
 #[derive(Debug, Clone)]
 pub struct AppReady {
+    /// The Tokio runtime handle used to drive async lifecycle handlers.
     pub runtime_handle: tokio::runtime::Handle,
 }
 
@@ -37,6 +39,7 @@ impl Event for AppReady {
 /// Emitted during shutdown before components are stopped.
 #[derive(Debug, Clone)]
 pub struct AppStopping {
+    /// The Tokio runtime handle used to drive async lifecycle handlers.
     pub runtime_handle: tokio::runtime::Handle,
 }
 
@@ -53,7 +56,10 @@ impl Event for AppStopping {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum LifecyclePhase {
+    /// App has started its components.
     Start,
+    /// App is ready to serve requests.
     Ready,
+    /// App is stopping its components.
     Stop,
 }

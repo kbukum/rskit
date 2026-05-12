@@ -246,7 +246,6 @@ async fn sink_fn_name() {
     assert_eq!(sink.name(), "my-sink");
 }
 
-
 /// Compile-time check: providers from adapt are Send + Sync.
 #[tokio::test]
 async fn send_sync_verification() {

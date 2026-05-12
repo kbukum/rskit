@@ -19,8 +19,7 @@ pub struct HookRegistry {
 impl std::fmt::Debug for HookRegistry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let handlers = self.handlers.read();
-        let counts: HashMap<TypeId, usize> =
-            handlers.iter().map(|(k, v)| (*k, v.len())).collect();
+        let counts: HashMap<TypeId, usize> = handlers.iter().map(|(k, v)| (*k, v.len())).collect();
         f.debug_struct("HookRegistry")
             .field("handler_counts", &counts)
             .finish()
@@ -126,10 +125,10 @@ fn panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
 
 #[cfg(test)]
 mod tests {
+    use parking_lot::Mutex;
     use std::any::Any;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicU32, Ordering};
-    use parking_lot::Mutex;
 
     use tokio_util::sync::CancellationToken;
 

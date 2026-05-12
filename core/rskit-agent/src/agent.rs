@@ -824,9 +824,8 @@ mod tests {
         let provider = Arc::new(MockProvider::single_text("Hello"));
         let hooks = Arc::new(HookRegistry::new());
 
-        let _unsub = hooks.on::<crate::hooks::TurnStart>(0, |_, _| {
-            Err(HookError::fatal("blocked by policy"))
-        });
+        let _unsub = hooks
+            .on::<crate::hooks::TurnStart>(0, |_, _| Err(HookError::fatal("blocked by policy")));
 
         let agent = Agent::new(
             provider,
