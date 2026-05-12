@@ -55,7 +55,9 @@ impl OpenAiAdapter {
     fn record_call(&self) {
         let now_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map_or(0, |duration| u64::try_from(duration.as_millis()).unwrap_or(u64::MAX));
+            .map_or(0, |duration| {
+                u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
+            });
         self.last_call_at.store(now_ms, Ordering::Relaxed);
     }
 
