@@ -29,7 +29,8 @@ tracing      = { workspace = true }
 async-trait  = { workspace = true }
 futures-util = { workspace = true }
 futures      = { workspace = true }
-validator    = { workspace = true }
+rskit-validation = { path = "../rskit-validation" }
+validator = { workspace = true }
 parking_lot  = { workspace = true }
 serde        = { workspace = true }
 

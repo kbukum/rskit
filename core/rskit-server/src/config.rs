@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use validator::Validate;
+use rskit_validation::Validate;
 
 /// TLS configuration for the gRPC server.
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -65,7 +65,7 @@ impl GrpcServerConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use validator::Validate;
+    use rskit_validation::Validate;
 
     #[test]
     fn default_config_is_valid() {

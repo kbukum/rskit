@@ -16,7 +16,7 @@ pub use service::{Environment, LogFormat, LogOutput, LoggingConfig, ServiceConfi
 /// service-specific fields.
 ///
 /// ```ignore
-/// #[derive(serde::Deserialize, validator::Validate)]
+/// #[derive(serde::Deserialize, rskit_validation::Validate)]
 /// struct MyConfig {
 ///     #[serde(flatten)]
 ///     service: rskit_config::ServiceConfig,
@@ -32,7 +32,7 @@ pub use service::{Environment, LogFormat, LogOutput, LoggingConfig, ServiceConfi
 /// }
 /// ```
 pub trait AppConfig:
-    serde::de::DeserializeOwned + validator::Validate + Send + Sync + 'static
+    serde::de::DeserializeOwned + rskit_validation::Validate + Send + Sync + 'static
 {
     /// Apply any programmatic defaults after deserialization.
     fn apply_defaults(&mut self);

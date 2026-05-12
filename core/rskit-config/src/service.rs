@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use validator::Validate;
+use rskit_validation::Validate;
 
 /// Base service configuration — embed this in every application config.
 #[derive(Debug, Clone, Deserialize, Validate)]
@@ -18,11 +18,9 @@ pub struct ServiceConfig {
     pub version: String,
 
     /// Network address the service binds to.
-    #[serde(default = "ServiceConfig::default_address")]
     pub address: String,
 
     /// Network port the service listens on.
-    #[serde(default = "ServiceConfig::default_port")]
     pub port: u16,
 
     /// Enable verbose debug output.
@@ -264,7 +262,7 @@ mod tests {
 
     #[test]
     fn service_config_validation_empty_name_fails() {
-        use validator::Validate;
+        use rskit_validation::Validate;
         let cfg = ServiceConfig {
             name: String::new(),
             ..Default::default()
@@ -274,14 +272,14 @@ mod tests {
 
     #[test]
     fn service_config_validation_valid_name_passes() {
-        use validator::Validate;
+        use rskit_validation::Validate;
         let cfg = ServiceConfig::default();
         assert!(cfg.validate().is_ok());
     }
 
     #[test]
     fn service_config_validation_long_name_passes() {
-        use validator::Validate;
+        use rskit_validation::Validate;
         let cfg = ServiceConfig {
             name: "a".repeat(1000),
             ..Default::default()

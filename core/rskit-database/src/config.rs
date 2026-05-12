@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use serde::{Deserialize, Deserializer};
-use validator::Validate;
+use rskit_validation::Validate;
 
 /// Supported database drivers.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize)]

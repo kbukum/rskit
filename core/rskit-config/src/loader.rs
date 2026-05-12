@@ -164,7 +164,7 @@ mod tests {
     use super::*;
     use crate::{AppConfig, ServiceConfig};
     use serde::Deserialize;
-    use validator::Validate;
+    use rskit_validation::Validate;
 
     // Serialise env-mutating tests — parallel tests share the same process env.
     static ENV_LOCK: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
@@ -173,11 +173,11 @@ mod tests {
     struct TestConfig {
         #[serde(flatten)]
         service: ServiceConfig,
-        #[serde(default = "default_port")]
-        port: u16,
+        #[serde(default = "default_app_port")]
+        app_port: u16,
     }
 
-    fn default_port() -> u16 {
+    fn default_app_port() -> u16 {
         8080
     }
 
@@ -194,9 +194,20 @@ mod tests {
         // SAFETY: `std::env::remove_var` is unsafe because concurrent calls can cause data races.
         // We hold `ENV_LOCK` (a `parking_lot::Mutex`) for the duration of this test,
         // serializing all environment variable mutations. No other test runs concurrently.
-        unsafe { std::env::remove_var("PORT") };
+        unsafe {
+            std::env::set_var("APP_PORT", "8080");
+            std::env::set_var("ADDRESS", "127.0.0.1");
+            std::env::set_var("PORT", "50051");
+        };
         let cfg: TestConfig = ConfigLoader::new().load().expect("should load");
-        assert_eq!(cfg.port, 8080);
+        assert_eq!(cfg.app_port, 8080);
+        assert_eq!(cfg.service.address, "127.0.0.1");
+        assert_eq!(cfg.service.port, 50051);
+        unsafe {
+            std::env::remove_var("APP_PORT");
+            std::env::remove_var("ADDRESS");
+            std::env::remove_var("PORT");
+        };
     }
 
     #[test]
@@ -206,12 +217,22 @@ mod tests {
         // SAFETY: `std::env::set_var` is unsafe because concurrent calls can cause data races.
         // We hold `ENV_LOCK` (a `parking_lot::Mutex`) for the duration of this test,
         // serializing all environment variable mutations. No other test runs concurrently.
-        unsafe { std::env::set_var("PORT", "9090") };
+        unsafe {
+            std::env::set_var("APP_PORT", "9090");
+            std::env::set_var("ADDRESS", "127.0.0.1");
+            std::env::set_var("PORT", "50051");
+        };
         let cfg: TestConfig = ConfigLoader::new().load().expect("should load");
-        assert_eq!(cfg.port, 9090);
+        assert_eq!(cfg.app_port, 9090);
+        assert_eq!(cfg.service.address, "127.0.0.1");
+        assert_eq!(cfg.service.port, 50051);
         // SAFETY: `std::env::remove_var` is unsafe because concurrent calls can cause data races.
         // We hold `ENV_LOCK` for the duration of this test, serializing all env mutations.
-        unsafe { std::env::remove_var("PORT") };
+        unsafe {
+            std::env::remove_var("APP_PORT");
+            std::env::remove_var("ADDRESS");
+            std::env::remove_var("PORT");
+        };
     }
 
     #[test]
@@ -220,14 +241,24 @@ mod tests {
         // SAFETY: `std::env::set_var` is unsafe because concurrent calls can cause data races.
         // We hold `ENV_LOCK` (a `parking_lot::Mutex`) for the duration of this test,
         // serializing all environment variable mutations. No other test runs concurrently.
-        unsafe { std::env::set_var("SVC__PORT", "7777") };
+        unsafe {
+            std::env::set_var("SVC__APP_PORT", "7777");
+            std::env::set_var("SVC__ADDRESS", "127.0.0.1");
+            std::env::set_var("SVC__PORT", "50051");
+        };
         let cfg: TestConfig = ConfigLoader::new()
             .with_env_prefix("SVC")
             .load()
             .expect("should load");
-        assert_eq!(cfg.port, 7777);
+        assert_eq!(cfg.app_port, 7777);
+        assert_eq!(cfg.service.address, "127.0.0.1");
+        assert_eq!(cfg.service.port, 50051);
         // SAFETY: `std::env::remove_var` is unsafe because concurrent calls can cause data races.
         // We hold `ENV_LOCK` for the duration of this test, serializing all env mutations.
-        unsafe { std::env::remove_var("SVC__PORT") };
+        unsafe {
+            std::env::remove_var("SVC__APP_PORT");
+            std::env::remove_var("SVC__ADDRESS");
+            std::env::remove_var("SVC__PORT");
+        };
     }
 }

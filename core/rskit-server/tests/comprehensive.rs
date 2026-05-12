@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use validator::Validate;
+use rskit_validation::Validate;
 
 use rskit_bootstrap::Component;
 use rskit_server::{GrpcServerBuilder, GrpcServerConfig};

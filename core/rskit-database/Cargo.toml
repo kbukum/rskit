@@ -36,4 +36,5 @@ tracing         = { workspace = true }
 sqlx            = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "uuid", "chrono", "json"], optional = true }
 chrono          = { workspace = true }
 uuid            = { workspace = true }
-validator       = { workspace = true }
+rskit-validation = { path = "../rskit-validation" }
+validator = { workspace = true }

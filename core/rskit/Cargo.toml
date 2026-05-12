@@ -36,7 +36,8 @@ rskit-provider   = { version = "0.1.0", path = "../rskit-provider" }
 rskit-pipeline   = { version = "0.1.0", path = "../rskit-pipeline" }
 rskit-resilience = { version = "0.1.0", path = "../rskit-resilience" }
 rskit-worker     = { version = "0.1.0", path = "../rskit-worker" }
-rskit-validation = { version = "0.1.0", path = "../rskit-validation" }
+rskit-validation = { path = "../rskit-validation" }
+validator = { workspace = true }
 rskit-chain      = { version = "0.1.0", path = "../rskit-chain", optional = true }
 rskit-process    = { version = "0.1.0", path = "../rskit-process", optional = true }
 rskit-stateful   = { version = "0.1.0", path = "../rskit-stateful", optional = true }

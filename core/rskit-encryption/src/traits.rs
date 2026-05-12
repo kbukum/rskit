@@ -9,6 +9,8 @@ pub enum Algorithm {
     AesGcm,
     /// ChaCha20-Poly1305 (modern, performant on CPUs without AES-NI)
     ChaCha20Poly1305,
+    /// Argon2id (modern password hashing/KDF)
+    Argon2id,
 }
 
 impl Algorithm {
@@ -17,6 +19,7 @@ impl Algorithm {
         match self {
             Self::AesGcm => "aes-256-gcm",
             Self::ChaCha20Poly1305 => "chacha20-poly1305",
+            Self::Argon2id => "argon2id",
         }
     }
 }

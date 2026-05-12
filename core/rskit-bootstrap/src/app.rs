@@ -455,7 +455,7 @@ mod tests {
     use super::{AppBuilder, hook_result_to_error};
     use crate::hooks::LifecycleEventType;
 
-    #[derive(Debug, Default, serde::Deserialize, validator::Validate)]
+    #[derive(Debug, Default, serde::Deserialize, rskit_validation::Validate)]
     struct TestCfg {
         #[serde(default)]
         service: rskit_config::ServiceConfig,

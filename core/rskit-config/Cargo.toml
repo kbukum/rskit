@@ -23,7 +23,8 @@ serde        = { workspace = true }
 serde_json   = { workspace = true }
 config       = { workspace = true }
 dotenvy      = { workspace = true }
-validator    = { workspace = true }
+rskit-validation = { path = "../rskit-validation" }
+validator = { workspace = true }
 tracing      = { workspace = true }
 
 [dev-dependencies]
