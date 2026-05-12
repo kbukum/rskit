@@ -23,7 +23,7 @@ debate, enforced automatically.
 We will organize rskit crates into the following layers (lowest depends
 on nothing higher):
 
-1. **Foundation** — `rskit-errors`, `rskit-config`, `rskit-logging`,
+1. **Foundation** — `rskit-errors`, `rskit-config`, `rskit-observability`,
    `rskit-validation`
 2. **Utilities** — `rskit-encryption`, `rskit-schema`, `rskit-storage`,
    `rskit-media`, `rskit-media-image`, `rskit-media-audio`,

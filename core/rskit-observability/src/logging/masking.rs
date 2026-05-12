@@ -10,7 +10,7 @@
 //! # Examples
 //!
 //! ```rust
-//! use rskit_logging::masking::{DefaultMasker, Masker, MaskingConfig};
+//! use rskit_observability::masking::{DefaultMasker, Masker, MaskingConfig};
 //!
 //! let masker = DefaultMasker::default();
 //! assert_eq!(masker.mask_value("password", "hunter2"), "[REDACTED]");
@@ -174,7 +174,7 @@ fn tag_to_kind(tag: u8) -> PatternKind {
 /// # Examples
 ///
 /// ```rust
-/// use rskit_logging::masking::{DefaultMasker, Masker};
+/// use rskit_observability::masking::{DefaultMasker, Masker};
 ///
 /// let masker = DefaultMasker::default();
 ///
@@ -404,7 +404,7 @@ pub fn mask_value(key: &str, value: &str) -> String {
 /// # Examples
 ///
 /// ```ignore
-/// use rskit_logging::masking::{DefaultMasker, MaskingMakeWriter, Masker};
+/// use rskit_observability::masking::{DefaultMasker, MaskingMakeWriter, Masker};
 /// use std::sync::Arc;
 ///
 /// let masker: Arc<dyn Masker> = Arc::new(DefaultMasker::default());

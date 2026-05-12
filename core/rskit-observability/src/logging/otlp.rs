@@ -10,7 +10,7 @@
 //! # Example
 //!
 //! ```rust,ignore
-//! use rskit_logging::otlp::{OtlpConfig, OtlpProvider};
+//! use rskit_observability::otlp::{OtlpConfig, OtlpProvider};
 //!
 //! let cfg = OtlpConfig { enabled: true, ..Default::default() };
 //! let provider = OtlpProvider::new(&cfg, "my-svc", "production", "1.0.0")?;

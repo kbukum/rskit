@@ -5,7 +5,7 @@
 /// # Example
 ///
 /// ```rust
-/// # use rskit_logging::context::component_span;
+/// # use rskit_observability::logging::context::component_span;
 /// let _span = component_span("auth-service").entered();
 /// tracing::info!("component log");
 /// ```
@@ -17,9 +17,9 @@ pub fn component_span(name: &'static str) -> tracing::Span {
 pub fn request_span(method: &str, path: &str, request_id: &str) -> tracing::Span {
     tracing::info_span!(
         "request",
-        http.method  = %method,
-        http.path    = %path,
-        request_id   = %request_id,
+        "http.request.method" = %method,
+        "url.path" = %path,
+        "http.request_id" = %request_id,
     )
 }
 

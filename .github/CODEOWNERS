@@ -10,7 +10,7 @@
 # Foundation crates
 /crates/rskit-errors/      @kbukum
 /crates/rskit-config/      @kbukum
-/crates/rskit-logging/     @kbukum
+/crates/rskit-observability/     @kbukum
 /crates/rskit-validation/  @kbukum
 /crates/rskit-encryption/  @kbukum
 /crates/rskit-schema/      @kbukum

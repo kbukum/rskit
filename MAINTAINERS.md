@@ -16,7 +16,7 @@ sustainability risk for a project of this size (40+ crates). We are actively
 looking for contributors interested in becoming co-maintainers, particularly
 in the following areas:
 
-- **Foundation**: `rskit-errors`, `rskit-config`, `rskit-logging`,
+- **Foundation**: `rskit-errors`, `rskit-config`, `rskit-observability`,
   `rskit-validation`
 - **Patterns**: `rskit-provider`, `rskit-resilience`, `rskit-di`,
   `rskit-bootstrap`, `rskit-observability`

@@ -13,7 +13,7 @@ This document shows how rskit modules compose together to solve common microserv
 ```rust
 use rskit_discovery::{Discovery, Registry, ServiceInstance, server::DiscoveryServer};
 use rskit_server::http::HttpServer;
-use rskit_logging::Logger;
+use rskit_observability::Logger;
 use rskit_di::Container;
 
 async fn setup_discovery_server(
@@ -61,7 +61,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 **Modules involved**:
 - `rskit-discovery` — `Discovery`, `Registry`, `ServiceInstance`, `DiscoveryServer`
 - `rskit-server` — `HttpServer`, `GrpcServer`
-- `rskit-logging` — `Logger`
+- `rskit-observability` — `Logger`
 - `tokio` — async runtime
 
 ---
@@ -79,7 +79,7 @@ use rskit_messaging::{MessageHandler, Message, Handler};
 use rskit_messaging::kafka::{KafkaConsumer, KafkaConfig};
 use rskit_resilience::{RetryPolicy, CircuitBreaker};
 use rskit_observability::Tracer;
-use rskit_logging::Logger;
+use rskit_observability::Logger;
 use std::sync::Arc;
 
 struct OrderHandler;
@@ -351,7 +351,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```rust
 use rskit_process::{Command, ProcessConfig, run_command};
 use rskit_errors::{AppError, ErrorCode};
-use rskit_logging::Logger;
+use rskit_observability::Logger;
 use std::time::Duration;
 
 #[tokio::main]
@@ -399,7 +399,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 **Modules involved**:
 - `rskit-process` — `Command`, `ProcessConfig`, `run_command`
 - `rskit-errors` — `AppError`, `ErrorCode`
-- `rskit-logging` — `Logger`
+- `rskit-observability` — `Logger`
 - `tokio` — async runtime
 
 ---
@@ -425,7 +425,7 @@ use rskit_messaging::*;
 use rskit_messaging::kafka::*;
 use rskit_grpc::*;
 use rskit_httpclient::*;
-use rskit_logging::Logger;
+use rskit_observability::Logger;
 use std::sync::Arc;
 
 #[tokio::main]

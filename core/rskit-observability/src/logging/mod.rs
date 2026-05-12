@@ -3,7 +3,7 @@
 //! # Usage
 //!
 //! ```ignore
-//! use rskit_logging::init_logging;
+//! use rskit_observability::init_logging;
 //!
 //! let _guard = init_logging(&config.service.logging);
 //! // _guard must stay alive for the duration of the program
@@ -67,7 +67,7 @@ pub struct LoggingGuard(#[allow(dead_code)] DefaultGuard);
 ///
 /// # Security
 ///
-/// Use [`init_logging_with_masking`] or [`crate::global::init_global_with_masking`]
+/// Use [`init_logging_with_masking`] or [`crate::logging::global::init_global_with_masking`]
 /// when log output must be redacted before it reaches the configured sink.
 pub fn init_logging(cfg: &LoggingConfig) -> LoggingGuard {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&cfg.level));
@@ -102,9 +102,9 @@ pub fn init_logging_env() -> LoggingGuard {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
     let layer = fmt::layer().pretty();
     let dispatcher = tracing_subscriber::registry()
-        .with(filter)
-        .with(layer)
-        .into();
+                .with(filter)
+                .with(layer)
+                .into();
     LoggingGuard(tracing::dispatcher::set_default(&dispatcher))
 }
 
@@ -200,7 +200,7 @@ pub fn init_logging_with_masking(
 }
 
 /// Build an [`EnvFilter`] from the configured level and optional module overrides.
-fn build_filter(level: &str, module_levels: Option<&HashMap<String, String>>) -> EnvFilter {
+pub fn build_filter(level: &str, module_levels: Option<&HashMap<String, String>>) -> EnvFilter {
     match module_levels {
         Some(levels) if !levels.is_empty() => module_levels::build_env_filter(level, levels),
         _ => EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(level)),
@@ -275,7 +275,7 @@ pub fn init_logging_full(
     Ok(LoggingGuard(guard))
 }
 
-// Re-export tracing macros for convenience — callers can `use rskit_logging::*`
+// Re-export tracing macros for convenience — callers can `use rskit_observability::*`
 pub use tracing::{debug, error, info, instrument, trace, warn};
 
 #[cfg(test)]

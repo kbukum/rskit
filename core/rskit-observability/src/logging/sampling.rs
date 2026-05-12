@@ -7,7 +7,7 @@
 //! # Example
 //!
 //! ```rust
-//! use rskit_logging::sampling::SamplingConfig;
+//! use rskit_observability::sampling::SamplingConfig;
 //!
 //! let cfg = SamplingConfig { enabled: true, initial_rate: 50, thereafter_rate: 10 };
 //! assert!(cfg.enabled);

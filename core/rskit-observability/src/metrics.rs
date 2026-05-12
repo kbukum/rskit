@@ -3,7 +3,8 @@ use std::time::Duration;
 use opentelemetry::metrics::{Counter, Gauge, Histogram, UpDownCounter};
 use serde::Deserialize;
 
-use rskit_errors::{AppError, AppResult, ErrorCode};
+use rskit_errors::AppResult;
+
 
 /// Configuration for the OpenTelemetry metrics pipeline.
 #[derive(Debug, Clone, Deserialize)]
@@ -75,25 +76,35 @@ pub fn init_metrics(cfg: &MetricsConfig) -> AppResult<MetricsHandle> {
         .with_attributes([KeyValue::new("service.name", cfg.service_name.clone())])
         .build();
 
+    #[allow(unused_mut)]
     let mut builder = SdkMeterProvider::builder().with_resource(resource);
 
-    if let Some(endpoint) = &cfg.otlp_endpoint {
-        use opentelemetry_otlp::{MetricExporter, WithExportConfig};
-        use opentelemetry_sdk::metrics::PeriodicReader;
+    if let Some(_endpoint) = &cfg.otlp_endpoint {
+        #[cfg(feature = "otlp")]
+        {
+            use opentelemetry_otlp::{MetricExporter, WithExportConfig};
+            use opentelemetry_sdk::metrics::PeriodicReader;
+            use rskit_errors::{AppError, ErrorCode};
 
-        let exporter = MetricExporter::builder()
-            .with_tonic()
-            .with_endpoint(endpoint)
-            .build()
-            .map_err(|e| {
-                AppError::new(ErrorCode::Internal, format!("OTLP metric exporter: {e}"))
-            })?;
+            let endpoint = _endpoint;
+            let exporter = MetricExporter::builder()
+                .with_tonic()
+                .with_endpoint(endpoint.clone())
+                .build()
+                .map_err(|e| {
+                    AppError::new(ErrorCode::Internal, format!("OTLP metric exporter: {e}"))
+                })?;
 
-        let reader = PeriodicReader::builder(exporter)
-            .with_interval(cfg.export_interval)
-            .build();
+            let reader = PeriodicReader::builder(exporter)
+                .with_interval(cfg.export_interval)
+                .build();
 
-        builder = builder.with_reader(reader);
+            builder = builder.with_reader(reader);
+        }
+        #[cfg(not(feature = "otlp"))]
+        {
+            ::tracing::warn!("OTLP endpoint configured but 'otlp' feature is disabled; metrics will not be exported");
+        }
     }
 
     let provider = builder.build();

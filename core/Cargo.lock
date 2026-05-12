@@ -5222,7 +5222,6 @@ dependencies = [
  "rskit-inference-triton",
  "rskit-inference-vllm",
  "rskit-llm",
- "rskit-logging",
  "rskit-media",
  "rskit-media-ffmpeg",
  "rskit-media-image",
@@ -5352,7 +5351,7 @@ dependencies = [
  "rskit-config",
  "rskit-errors",
  "rskit-hook",
- "rskit-logging",
+ "rskit-observability",
  "serde",
  "tokio",
  "tokio-util",
@@ -5599,7 +5598,7 @@ dependencies = [
  "parking_lot",
  "rskit-bootstrap",
  "rskit-errors",
- "rskit-logging",
+ "rskit-observability",
  "serde",
  "serde_json",
  "tokio",
@@ -5814,23 +5813,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rskit-logging"
-version = "0.1.0"
-dependencies = [
- "opentelemetry",
- "opentelemetry-appender-tracing",
- "opentelemetry-otlp",
- "opentelemetry_sdk",
- "parking_lot",
- "regex",
- "rskit-config",
- "serde",
- "serde_json",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "rskit-mcp"
 version = "0.1.0"
 dependencies = [
@@ -5978,12 +5960,13 @@ dependencies = [
  "async-trait",
  "http 1.4.0",
  "opentelemetry",
+ "opentelemetry-appender-tracing",
  "opentelemetry-otlp",
  "opentelemetry_sdk",
  "parking_lot",
- "rskit-bootstrap",
+ "regex",
+ "rskit-config",
  "rskit-errors",
- "rskit-logging",
  "serde",
  "serde_json",
  "tokio",
@@ -6030,6 +6013,7 @@ dependencies = [
  "futures-util",
  "parking_lot",
  "pin-project-lite",
+ "reqwest 0.13.3",
  "rskit-errors",
  "rskit-resilience",
  "tokio",

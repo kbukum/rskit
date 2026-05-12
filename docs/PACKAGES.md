@@ -13,7 +13,7 @@ rskit is a **Cargo workspace** with a facade crate (`rskit`), foundation crates 
 | `rskit` | Facade — re-exports all rskit-* crates |
 | `rskit-errors` | Structured application error types with HTTP/gRPC status mapping |
 | `rskit-config` | TOML + env var configuration loading with validation |
-| `rskit-logging` | Structured logging with `tracing` — JSON in prod, pretty in dev |
+| `rskit-observability` | Structured logging with `tracing` — JSON in prod, pretty in dev |
 | `rskit-bootstrap` | Typestate `App<S, C>`, Component registry, hooks |
 | `rskit-provider` | Provider traits (request-response, stream, sink, duplex) |
 | `rskit-pipeline` | Async data pipelines via `futures::Stream` extension operators |
@@ -100,11 +100,11 @@ rskit is a **Cargo workspace** with a facade crate (`rskit`), foundation crates 
 ```
 rskit-errors
 rskit-config       → rskit-errors
-rskit-logging      → rskit-config
+rskit-observability      → rskit-config
 rskit-resilience   → rskit-errors
 rskit-provider     → rskit-errors, rskit-resilience
 rskit-pipeline     → rskit-errors
-rskit-bootstrap    → rskit-errors, rskit-config, rskit-logging
+rskit-bootstrap    → rskit-errors, rskit-config, rskit-observability
 rskit-worker       → rskit-errors, rskit-provider, rskit-pipeline, rskit-resilience
 rskit-server       → rskit-bootstrap, rskit-errors, rskit-config, rskit-resilience
 rskit (facade)     → all above

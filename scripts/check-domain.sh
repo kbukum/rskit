@@ -63,8 +63,8 @@ resolve_crate_name() {
       fi
       ;;
     logger|logging)
-      if [[ -d core/rskit-logging ]]; then
-        printf '%s\n' "rskit-logging"
+      if [[ -d core/rskit-observability ]]; then
+        printf '%s\n' "rskit-observability"
         return 0
       fi
       ;;

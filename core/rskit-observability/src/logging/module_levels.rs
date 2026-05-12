@@ -8,7 +8,7 @@
 //!
 //! ```rust
 //! use std::collections::HashMap;
-//! use rskit_logging::module_levels::build_env_filter;
+//! use rskit_observability::module_levels::build_env_filter;
 //!
 //! let mut levels = HashMap::new();
 //! levels.insert("sqlx".to_string(), "warn".to_string());

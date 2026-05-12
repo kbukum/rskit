@@ -1,6 +1,6 @@
 [package]
 name        = "rskit-observability"
-description = "OpenTelemetry tracing, metrics, and context propagation"
+description = "OpenTelemetry tracing, metrics, logging, and context propagation"
 version.workspace     = true
 edition.workspace     = true
 license.workspace     = true
@@ -11,25 +11,33 @@ homepage.workspace     = true
 documentation = "https://docs.rs/rskit-observability"
 readme = "README.md"
 categories = ["development-tools::profiling"]
-keywords   = ["opentelemetry", "tracing", "metrics", "prometheus"]
+keywords   = ["opentelemetry", "tracing", "metrics", "logging", "prometheus"]
 
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[features]
+default = ["otlp"]
+otlp = [
+    "dep:opentelemetry-appender-tracing",
+    "dep:opentelemetry-otlp",
+]
+
 [dependencies]
 rskit-errors    = { path = "../rskit-errors" }
-rskit-bootstrap = { path = "../rskit-bootstrap" }
-rskit-logging   = { path = "../rskit-logging" }
+rskit-config    = { path = "../rskit-config" }
 serde           = { workspace = true }
 async-trait     = { workspace = true }
 tokio           = { workspace = true }
 tracing         = { workspace = true }
 tracing-subscriber = { workspace = true }
 parking_lot     = { workspace = true }
+regex           = { workspace = true }
 opentelemetry            = { workspace = true }
-opentelemetry_sdk        = { workspace = true }
-opentelemetry-otlp       = { workspace = true }
+opentelemetry_sdk        = { workspace = true, features = ["rt-tokio", "logs"] }
+opentelemetry-otlp       = { workspace = true, optional = true }
+opentelemetry-appender-tracing = { workspace = true, optional = true }
 tracing-opentelemetry    = { workspace = true }
 http            = { workspace = true }
 

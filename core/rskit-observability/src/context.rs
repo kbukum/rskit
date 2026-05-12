@@ -52,11 +52,11 @@ impl OperationContext {
     pub fn start_span(&self, name: &str) -> Span {
         tracing::info_span!(
             "operation",
-            otel.name = name,
-            service.name = %self.service_name,
-            operation.name = %self.operation_name,
-            request.id = %self.request_id,
-            user.id = %self.user_id,
+            "otel.name" = name,
+            "service.name" = %self.service_name,
+            "rpc.method" = %self.operation_name,
+            "http.request_id" = %self.request_id,
+            "user.id" = %self.user_id,
         )
     }
 

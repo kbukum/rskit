@@ -3,7 +3,8 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use rskit_errors::AppError;
-use rskit_resilience::{CircuitBreaker, RateLimiter, RetryPolicy};
+pub use rskit_resilience::{CircuitBreaker, RateLimiter, RetryPolicy};
+use tower::{Layer, Service};
 
 /// Resilience configuration for a provider layer.
 #[derive(Clone, Default)]
@@ -52,7 +53,7 @@ impl ResilienceLayer {
     }
 }
 
-impl<S> tower::Layer<S> for ResilienceLayer {
+impl<S> Layer<S> for ResilienceLayer {
     type Service = ResilienceService<S>;
     fn layer(&self, inner: S) -> Self::Service {
         ResilienceService {
@@ -69,9 +70,9 @@ pub struct ResilienceService<S> {
     config: ResilienceConfig,
 }
 
-impl<S, Req> tower::Service<Req> for ResilienceService<S>
+impl<S, Req> Service<Req> for ResilienceService<S>
 where
-    S: tower::Service<Req, Error = AppError> + Clone + Send + 'static,
+    S: Service<Req, Error = AppError> + Clone + Send + 'static,
     S::Future: Send + 'static,
     S::Response: Send + 'static,
     Req: Clone + Send + 'static,
@@ -85,32 +86,39 @@ where
     }
 
     fn call(&mut self, req: Req) -> Self::Future {
-        let svc = self.inner.clone();
+        let inner = self.inner.clone();
         let config = self.config.clone();
 
         Box::pin(async move {
-            // Rate limit first (cheapest, no upstream call)
+            // Execution order: rate limit → circuit breaker → retry → inner service
+
+            // 1. Rate Limiting (cheapest)
             if let Some(rl) = &config.rate_limiter {
                 rl.check()?;
             }
 
-            // The actual call, wrapped in CB + optional retry
-            let call = move || {
-                let r = req.clone();
+            // 2. Define the combined CB + inner service call
+            let cb = config.circuit_breaker.clone();
+            let svc = inner;
+            let req_for_retry = req;
+
+            let call_with_cb = move || {
                 let mut s = svc.clone();
-                let cb = config.circuit_breaker.clone();
+                let r = req_for_retry.clone();
+                let cb_inner = cb.clone();
                 async move {
-                    if let Some(cb) = cb {
-                        cb.execute(|| s.call(r)).await
+                    if let Some(cb_instance) = cb_inner {
+                        cb_instance.execute(|| s.call(r)).await
                     } else {
                         s.call(r).await
                     }
                 }
             };
 
+            // 3. Apply Retry logic if configured
             match &config.retry {
-                Some(policy) => policy.execute(call).await.map_err(|e| e.last_error),
-                None => call().await,
+                Some(policy) => policy.execute(call_with_cb).await.map_err(|e| e.last_error),
+                None => call_with_cb().await,
             }
         })
     }

@@ -6,7 +6,6 @@ members = [
     "rskit-version",
     "rskit-errors",
     "rskit-config",
-    "rskit-logging",
     "rskit-bootstrap",
     "rskit-component",
     "rskit-provider",

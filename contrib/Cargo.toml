@@ -30,13 +30,12 @@ rskit-inference = { path = "../core/rskit-inference", version = "0.1.0" }
 rskit-media = { path = "../core/rskit-media", version = "0.1.0" }
 rskit-vectorstore = { path = "../core/rskit-vectorstore", version = "0.1.0" }
 rskit-config = { path = "../core/rskit-config", version = "0.1.0" }
-rskit-logging = { path = "../core/rskit-logging", version = "0.1.0" }
+rskit-observability = { path = "../core/rskit-observability", version = "0.1.0" }
 rskit-component = { path = "../core/rskit-component", version = "0.1.0" }
 rskit-provider = { path = "../core/rskit-provider", version = "0.1.0" }
 rskit-httpclient = { path = "../core/rskit-httpclient", version = "0.1.0" }
 rskit-resilience = { path = "../core/rskit-resilience", version = "0.1.0" }
 rskit-embedding = { path = "../core/rskit-embedding", version = "0.1.0" }
-rskit-observability = { path = "../core/rskit-observability", version = "0.1.0" }
 rskit-util = { path = "../core/rskit-util", version = "0.1.0" }
 rskit-version = { path = "../core/rskit-version", version = "0.1.0" }
 rskit-validation = { path = "../core/rskit-validation", version = "0.1.0" }

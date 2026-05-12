@@ -29,7 +29,7 @@ parking_lot      = { workspace = true }
 # Always-on core crates
 rskit-errors     = { version = "0.1.0", path = "../rskit-errors" }
 rskit-config     = { version = "0.1.0", path = "../rskit-config" }
-rskit-logging    = { version = "0.1.0", path = "../rskit-logging" }
+rskit-observability = { version = "0.1.0", path = "../rskit-observability" }
 rskit-bootstrap  = { version = "0.1.0", path = "../rskit-bootstrap" }
 rskit-component  = { version = "0.1.0", path = "../rskit-component" }
 rskit-provider   = { version = "0.1.0", path = "../rskit-provider" }
@@ -55,7 +55,6 @@ rskit-messaging     = { version = "0.1.0", path = "../rskit-messaging",     opti
 rskit-messaging-kafka = { version = "0.1.0", path = "../../contrib/messaging/kafka", optional = true }
 rskit-messaging-nats = { version = "0.1.0", path = "../../contrib/messaging/nats", optional = true }
 rskit-messaging-rabbitmq = { version = "0.1.0", path = "../../contrib/messaging/rabbitmq", optional = true }
-rskit-observability = { version = "0.1.0", path = "../rskit-observability",  optional = true }
 rskit-authz         = { version = "0.1.0", path = "../rskit-authz",         optional = true }
 rskit-security      = { version = "0.1.0", path = "../rskit-security",      optional = true }
 rskit-discovery     = { version = "0.1.0", path = "../rskit-discovery",     optional = true }
@@ -101,7 +100,7 @@ messaging     = ["dep:rskit-messaging"]
 messaging-kafka = ["messaging", "dep:rskit-messaging-kafka"]
 messaging-nats = ["messaging", "dep:rskit-messaging-nats"]
 messaging-rabbitmq = ["messaging", "dep:rskit-messaging-rabbitmq"]
-observability = ["dep:rskit-observability"]
+observability = [] # rskit-observability is now always-on
 authz         = ["dep:rskit-authz"]
 security      = ["dep:rskit-security"]
 discovery     = ["dep:rskit-discovery"]

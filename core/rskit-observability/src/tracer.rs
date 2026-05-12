@@ -8,7 +8,7 @@ use serde::Deserialize;
 use tracing::Span;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
-use rskit_errors::{AppError, AppResult, ErrorCode};
+use rskit_errors::{AppError, AppResult};
 
 /// Configuration for an OTLP trace exporter.
 #[derive(Debug, Clone, Deserialize)]
@@ -61,7 +61,6 @@ fn is_already_initialized_error(error: &impl std::fmt::Display) -> bool {
 pub fn init_tracer(cfg: &TracingConfig) -> AppResult<TracerGuard> {
     use opentelemetry::trace::TracerProvider as _;
     use opentelemetry::{InstrumentationScope, KeyValue};
-    use opentelemetry_otlp::{SpanExporter, WithExportConfig};
     use opentelemetry_sdk::Resource;
     use opentelemetry_sdk::trace::{Sampler, SdkTracerProvider};
     use tracing_subscriber::layer::SubscriberExt;
@@ -76,12 +75,17 @@ pub fn init_tracer(cfg: &TracingConfig) -> AppResult<TracerGuard> {
         return Ok(TracerGuard { provider: None });
     }
 
-    let exporter = SpanExporter::builder()
-        .with_tonic()
-        .with_endpoint(&cfg.endpoint)
-        .with_timeout(cfg.export_timeout)
-        .build()
-        .map_err(|e| AppError::new(ErrorCode::Internal, format!("OTLP span exporter: {e}")))?;
+    #[cfg(feature = "otlp")]
+    let exporter = {
+        use opentelemetry_otlp::{SpanExporter, WithExportConfig};
+        use rskit_errors::ErrorCode;
+        SpanExporter::builder()
+            .with_tonic()
+            .with_endpoint(&cfg.endpoint)
+            .with_timeout(cfg.export_timeout)
+            .build()
+            .map_err(|e| AppError::new(ErrorCode::Internal, format!("OTLP span exporter: {e}")))?
+    };
 
     let sampler = if (cfg.sample_rate - 1.0).abs() < f64::EPSILON {
         Sampler::AlwaysOn
@@ -95,11 +99,17 @@ pub fn init_tracer(cfg: &TracingConfig) -> AppResult<TracerGuard> {
         .with_attributes([KeyValue::new("service.name", cfg.service_name.clone())])
         .build();
 
-    let provider = SdkTracerProvider::builder()
-        .with_batch_exporter(exporter)
+    #[allow(unused_mut)]
+    let mut provider_builder = SdkTracerProvider::builder()
         .with_sampler(sampler)
-        .with_resource(resource)
-        .build();
+        .with_resource(resource);
+
+    #[cfg(feature = "otlp")]
+    {
+        provider_builder = provider_builder.with_batch_exporter(exporter);
+    }
+
+    let provider = provider_builder.build();
 
     let scope = InstrumentationScope::builder(cfg.service_name.clone()).build();
     let tracer = provider.tracer_with_scope(scope);

@@ -36,9 +36,10 @@ impl<T: Send + Sync + 'static> MessageHandler<T> for TracingHandler<T> {
         let topic = msg.topic.clone();
         let key = msg.key.as_deref().unwrap_or("").to_string();
         let span = ::tracing::info_span!(
-            "message.handle",
-            messaging.topic = %topic,
-            messaging.key = %key,
+            "messaging.process",
+            "messaging.destination.name" = %topic,
+            "messaging.message.key" = %key,
+            "messaging.operation" = "process",
         );
         let _enter = span.enter();
         self.next.handle(msg).await

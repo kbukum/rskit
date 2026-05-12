@@ -78,7 +78,7 @@ pub use rskit_errors as errors;
 pub use rskit_config as config;
 
 /// `tracing` subscriber setup.
-pub use rskit_logging as logging;
+pub use rskit_observability as logging;
 
 /// Retry, circuit breaker, bulkhead, rate limiter — and tower layers.
 pub use rskit_resilience as resilience;
@@ -275,7 +275,7 @@ pub use rskit_component::{
 };
 pub use rskit_config::{AppConfig, ConfigLoader, ServiceConfig};
 pub use rskit_errors::{AppError, AppResult, ErrorCode};
-pub use rskit_logging::{LoggingGuard, init_logging, init_logging_env};
+pub use rskit_observability::{LoggingGuard, init_logging, init_logging_env};
 pub use rskit_provider::traits::{Provider, RequestResponse, Sink};
 pub use rskit_resilience::{CircuitBreaker, RateLimiter, RetryPolicy};
 pub use rskit_worker::{Handler, Pool, PoolConfig, TaskHandle};

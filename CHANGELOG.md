@@ -85,7 +85,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - HTTP server with axum (`rskit-http`)
 - Authentication: JWT, API keys, password hashing (`rskit-auth`)
 - Configuration management (`rskit-config`)
-- Structured logging with OpenTelemetry (`rskit-logging`, `rskit-observability`)
+- Structured logging with OpenTelemetry (`rskit-observability`, `rskit-observability`)
 - Service mesh: discovery, gRPC, messaging (`rskit-discovery`, `rskit-messaging`)
 - Database, cache, MQ adapters (`rskit-database`, `rskit-cache`, `rskit-messaging`)
 - LLM provider integrations (`rskit-llm`, `rskit-llm-providers`)
@@ -109,7 +109,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ServiceConfig`, `LoggingConfig`, `Environment`, `LogFormat` built-in types
 - `load_config<T>` convenience free function
 
-#### `rskit-logging`
+#### `rskit-observability`
 - `init_logging(cfg)` returning a `LoggingGuard` (dropped on shutdown)
 - `init_logging_env()` for `RUST_LOG`-only setup
 - JSON and console format support via `LogFormat`
