@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use rskit_validation::Validate;
+use serde::{Deserialize, Serialize};
 
 /// Base service configuration — embed this in every application config.
 #[derive(Debug, Clone, Deserialize, Validate)]

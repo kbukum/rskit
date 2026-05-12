@@ -2,8 +2,9 @@
 
 use std::time::Duration;
 
-use serde::{Deserialize, Deserializer};
+use rskit_config::SecretString;
 use rskit_validation::Validate;
+use serde::{Deserialize, Deserializer};
 
 /// Supported database drivers.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
@@ -62,7 +63,7 @@ pub struct DatabaseConfig {
     /// Username for authentication.
     pub user: String,
     /// Password for authentication.
-    pub password: String,
+    pub password: SecretString,
     /// Database / schema name.
     pub database: String,
     /// Maximum number of connections in the pool (default: 10).
@@ -101,13 +102,22 @@ impl DatabaseConfig {
             DbDriver::Postgres => {
                 format!(
                     "postgres://{}:{}@{}:{}/{}?sslmode={}",
-                    self.user, self.password, self.host, self.port, self.database, self.ssl_mode,
+                    self.user,
+                    self.password.expose(),
+                    self.host,
+                    self.port,
+                    self.database,
+                    self.ssl_mode,
                 )
             }
             DbDriver::Mysql => {
                 format!(
                     "mysql://{}:{}@{}:{}/{}",
-                    self.user, self.password, self.host, self.port, self.database,
+                    self.user,
+                    self.password.expose(),
+                    self.host,
+                    self.port,
+                    self.database,
                 )
             }
             DbDriver::Sqlite => {
@@ -160,7 +170,7 @@ mod tests {
             host: "localhost".into(),
             port: 5432,
             user: "admin".into(),
-            password: "secret".into(),
+            password: SecretString::new("secret"),
             database: "mydb".into(),
             max_connections: 10,
             min_connections: 1,
@@ -183,7 +193,7 @@ mod tests {
             host: "db.example.com".into(),
             port: 3306,
             user: "root".into(),
-            password: "pw".into(),
+            password: SecretString::new("pw"),
             database: "app".into(),
             max_connections: 5,
             min_connections: 1,
@@ -206,7 +216,7 @@ mod tests {
             host: String::new(),
             port: 0,
             user: String::new(),
-            password: String::new(),
+            password: SecretString::default(),
             database: ":memory:".into(),
             max_connections: 1,
             min_connections: 1,

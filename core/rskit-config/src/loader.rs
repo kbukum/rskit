@@ -163,8 +163,8 @@ pub fn load_config<T: AppConfig>() -> AppResult<T> {
 mod tests {
     use super::*;
     use crate::{AppConfig, ServiceConfig};
-    use serde::Deserialize;
     use rskit_validation::Validate;
+    use serde::Deserialize;
 
     // Serialise env-mutating tests — parallel tests share the same process env.
     static ENV_LOCK: parking_lot::Mutex<()> = parking_lot::Mutex::new(());

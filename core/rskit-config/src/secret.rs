@@ -30,6 +30,15 @@ impl SecretString {
             value: value.into(),
         }
     }
+}
+
+impl<S: Into<String>> From<S> for SecretString {
+    fn from(value: S) -> Self {
+        Self::new(value)
+    }
+}
+
+impl SecretString {
 
     /// Return the plaintext value.
     pub fn expose(&self) -> &str {
@@ -39,6 +48,22 @@ impl SecretString {
     /// Return `true` if the underlying value is empty.
     pub fn is_empty(&self) -> bool {
         self.value.is_empty()
+    }
+
+    /// Return the length of the underlying value.
+    pub fn len(&self) -> usize {
+        self.value.len()
+    }
+
+    /// Return the underlying value as bytes.
+    pub fn as_bytes(&self) -> &[u8] {
+        self.value.as_bytes()
+    }
+}
+
+impl zeroize::Zeroize for SecretString {
+    fn zeroize(&mut self) {
+        self.value.zeroize();
     }
 }
 

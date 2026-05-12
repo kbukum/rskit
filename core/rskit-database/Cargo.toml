@@ -38,3 +38,4 @@ chrono          = { workspace = true }
 uuid            = { workspace = true }
 rskit-validation = { path = "../rskit-validation" }
 validator = { workspace = true }
+rskit-config = { version = "0.1.0", path = "../rskit-config" }

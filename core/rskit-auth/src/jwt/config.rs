@@ -1,5 +1,6 @@
 use std::{fmt, time::Duration};
 
+use rskit_config::SecretString;
 use serde::Deserialize;
 
 /// Public JWT algorithm policy for rskit.
@@ -43,28 +44,28 @@ pub enum JwtKeyMaterial {
     /// Explicit internal-only HMAC secret.
     Hs256Internal {
         /// Shared secret used for signing and verification.
-        secret: String,
+        secret: SecretString,
     },
     /// RSA PEM key pair.
     Rs256 {
         /// PKCS#8 or PKCS#1 private key PEM.
-        private_key_pem: String,
+        private_key_pem: SecretString,
         /// `SubjectPublicKeyInfo` public key PEM.
-        public_key_pem: String,
+        public_key_pem: SecretString,
     },
     /// EC P-256 PEM key pair.
     Es256 {
         /// PKCS#8 private key PEM.
-        private_key_pem: String,
+        private_key_pem: SecretString,
         /// `SubjectPublicKeyInfo` public key PEM.
-        public_key_pem: String,
+        public_key_pem: SecretString,
     },
     /// Ed25519 PEM key pair.
     EdDsa {
         /// PKCS#8 private key PEM.
-        private_key_pem: String,
+        private_key_pem: SecretString,
         /// `SubjectPublicKeyInfo` public key PEM.
-        public_key_pem: String,
+        public_key_pem: SecretString,
     },
 }
 
@@ -84,24 +85,33 @@ impl JwtKeyMaterial {
 impl fmt::Debug for JwtKeyMaterial {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Hs256Internal { .. } => formatter
+            Self::Hs256Internal { secret } => formatter
                 .debug_struct("Hs256Internal")
-                .field("secret", &"<redacted>")
+                .field("secret", secret)
                 .finish(),
-            Self::Rs256 { .. } => formatter
+            Self::Rs256 {
+                private_key_pem,
+                public_key_pem,
+            } => formatter
                 .debug_struct("Rs256")
-                .field("private_key_pem", &"<redacted>")
-                .field("public_key_pem", &"<redacted>")
+                .field("private_key_pem", private_key_pem)
+                .field("public_key_pem", public_key_pem)
                 .finish(),
-            Self::Es256 { .. } => formatter
+            Self::Es256 {
+                private_key_pem,
+                public_key_pem,
+            } => formatter
                 .debug_struct("Es256")
-                .field("private_key_pem", &"<redacted>")
-                .field("public_key_pem", &"<redacted>")
+                .field("private_key_pem", private_key_pem)
+                .field("public_key_pem", public_key_pem)
                 .finish(),
-            Self::EdDsa { .. } => formatter
+            Self::EdDsa {
+                private_key_pem,
+                public_key_pem,
+            } => formatter
                 .debug_struct("EdDsa")
-                .field("private_key_pem", &"<redacted>")
-                .field("public_key_pem", &"<redacted>")
+                .field("private_key_pem", private_key_pem)
+                .field("public_key_pem", public_key_pem)
                 .finish(),
         }
     }
@@ -142,7 +152,7 @@ impl JwtConfig {
     ) -> Self {
         Self {
             key_material: JwtKeyMaterial::Hs256Internal {
-                secret: secret.into(),
+                secret: SecretString::new(secret),
             },
             issuer: issuer.into(),
             audience,
@@ -161,8 +171,8 @@ impl JwtConfig {
     ) -> Self {
         Self {
             key_material: JwtKeyMaterial::Rs256 {
-                private_key_pem: private_key_pem.into(),
-                public_key_pem: public_key_pem.into(),
+                private_key_pem: SecretString::new(private_key_pem),
+                public_key_pem: SecretString::new(public_key_pem),
             },
             issuer: issuer.into(),
             audience,
@@ -181,8 +191,8 @@ impl JwtConfig {
     ) -> Self {
         Self {
             key_material: JwtKeyMaterial::Es256 {
-                private_key_pem: private_key_pem.into(),
-                public_key_pem: public_key_pem.into(),
+                private_key_pem: SecretString::new(private_key_pem),
+                public_key_pem: SecretString::new(public_key_pem),
             },
             issuer: issuer.into(),
             audience,
@@ -201,8 +211,8 @@ impl JwtConfig {
     ) -> Self {
         Self {
             key_material: JwtKeyMaterial::EdDsa {
-                private_key_pem: private_key_pem.into(),
-                public_key_pem: public_key_pem.into(),
+                private_key_pem: SecretString::new(private_key_pem),
+                public_key_pem: SecretString::new(public_key_pem),
             },
             issuer: issuer.into(),
             audience,
@@ -247,27 +257,27 @@ impl fmt::Debug for JwtConfig {
 
 #[cfg(test)]
 mod tests {
-    use super::{JwtConfig, JwtKeyMaterial};
+    use super::{JwtConfig, JwtKeyMaterial, SecretString};
 
     #[test]
     fn jwt_key_material_debug_redacts_secret_values() {
         let symmetric = format!(
             "{:?}",
             JwtKeyMaterial::Hs256Internal {
-                secret: "super-secret-value".into(),
+                secret: SecretString::new("super-secret-value"),
             }
         );
-        assert!(symmetric.contains("<redacted>"));
+        assert!(symmetric.contains("***"));
         assert!(!symmetric.contains("super-secret-value"));
 
         let asymmetric = format!(
             "{:?}",
             JwtKeyMaterial::Rs256 {
-                private_key_pem: "private-pem".into(),
-                public_key_pem: "public-pem".into(),
+                private_key_pem: SecretString::new("private-pem"),
+                public_key_pem: SecretString::new("public-pem"),
             }
         );
-        assert!(asymmetric.contains("<redacted>"));
+        assert!(asymmetric.contains("***"));
         assert!(!asymmetric.contains("private-pem"));
         assert!(!asymmetric.contains("public-pem"));
     }
@@ -282,7 +292,7 @@ mod tests {
 
         let formatted = format!("{config:?}");
 
-        assert!(formatted.contains("<redacted>"));
+        assert!(formatted.contains("***"));
         assert!(!formatted.contains("another-secret-value"));
         assert!(formatted.contains("issuer.example"));
     }

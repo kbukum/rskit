@@ -1,8 +1,8 @@
 use parking_lot::Mutex;
 use rskit_config::{AppConfig, ConfigLoader, Environment, LogFormat, ServiceConfig, load_config};
+use rskit_validation::Validate;
 use serde::Deserialize;
 use std::io::Write;
-use rskit_validation::Validate;
 
 // Serialise env-mutating tests — parallel tests share the same process env.
 static ENV_LOCK: Mutex<()> = Mutex::new(());
@@ -365,7 +365,12 @@ fn very_long_service_name_in_toml() {
     let dir = tempfile::tempdir().unwrap();
     let toml_path = dir.path().join("long.toml");
     let mut f = std::fs::File::create(&toml_path).unwrap();
-    write!(f, "name = \"{}\"\naddress = \"0.0.0.0\"\nport = 50051\n", long_name).unwrap();
+    write!(
+        f,
+        "name = \"{}\"\naddress = \"0.0.0.0\"\nport = 50051\n",
+        long_name
+    )
+    .unwrap();
 
     let cfg: TestConfig = ConfigLoader::new()
         .with_config_file(&toml_path)
@@ -383,7 +388,11 @@ fn toml_sets_environment_production() {
 
     let dir = tempfile::tempdir().unwrap();
     let toml_path = dir.path().join("prod.toml");
-    std::fs::write(&toml_path, b"environment = \"production\"\naddress=\"0.0.0.0\"\nport=50051\n").unwrap();
+    std::fs::write(
+        &toml_path,
+        b"environment = \"production\"\naddress=\"0.0.0.0\"\nport=50051\n",
+    )
+    .unwrap();
 
     let cfg: TestConfig = ConfigLoader::new()
         .with_config_file(&toml_path)
@@ -424,7 +433,11 @@ fn toml_sets_debug_flag() {
 
     let dir = tempfile::tempdir().unwrap();
     let toml_path = dir.path().join("debug.toml");
-    std::fs::write(&toml_path, b"debug = true\naddress=\"0.0.0.0\"\nport=50051\n").unwrap();
+    std::fs::write(
+        &toml_path,
+        b"debug = true\naddress=\"0.0.0.0\"\nport=50051\n",
+    )
+    .unwrap();
 
     let cfg: TestConfig = ConfigLoader::new()
         .with_config_file(&toml_path)
@@ -441,7 +454,11 @@ fn validation_rejects_empty_service_name_via_toml() {
 
     let dir = tempfile::tempdir().unwrap();
     let toml_path = dir.path().join("empty_name.toml");
-    std::fs::write(&toml_path, b"name = \"\"\naddress=\"0.0.0.0\"\nport=50051\n").unwrap();
+    std::fs::write(
+        &toml_path,
+        b"name = \"\"\naddress=\"0.0.0.0\"\nport=50051\n",
+    )
+    .unwrap();
 
     let result: Result<TestConfig, _> = ConfigLoader::new().with_config_file(&toml_path).load();
     assert!(result.is_err(), "empty service name should fail validation");

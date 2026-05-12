@@ -71,7 +71,7 @@ fn sqlite_connection_url() {
         host: String::new(),
         port: 0,
         user: String::new(),
-        password: String::new(),
+        password: String::new().into(),
         database: ":memory:".into(),
         max_connections: 1,
         min_connections: 1,
@@ -169,7 +169,7 @@ async fn database_connects_to_sqlite_memory() {
         host: String::new(),
         port: 0,
         user: String::new(),
-        password: String::new(),
+        password: String::new().into(),
         database: ":memory:".into(),
         max_connections: 1,
         min_connections: 1,
@@ -300,7 +300,7 @@ fn deserialize_config_all_fields_explicit() {
     assert_eq!(cfg.host, "db.example.com");
     assert_eq!(cfg.port, 5433);
     assert_eq!(cfg.user, "root");
-    assert_eq!(cfg.password, "s3cret");
+    assert_eq!(cfg.password, "s3cret".into());
     assert_eq!(cfg.database, "production");
     assert_eq!(cfg.max_connections, 50);
     assert_eq!(cfg.min_connections, 5);
@@ -484,7 +484,7 @@ async fn sql_repository_debug_format() {
         host: String::new(),
         port: 0,
         user: String::new(),
-        password: String::new(),
+        password: String::new().into(),
         database: ":memory:".into(),
         max_connections: 1,
         min_connections: 1,
@@ -510,7 +510,7 @@ async fn sql_repository_table_name_returns_correct_value() {
         host: String::new(),
         port: 0,
         user: String::new(),
-        password: String::new(),
+        password: String::new().into(),
         database: ":memory:".into(),
         max_connections: 1,
         min_connections: 1,

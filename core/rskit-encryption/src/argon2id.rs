@@ -37,10 +37,7 @@ impl Encryptor for Argon2idHasher {
         let password_hash = argon2
             .hash_password(plaintext, &salt)
             .map_err(|e| {
-                AppError::new(
-                    ErrorCode::Internal,
-                    format!("Argon2id hashing failed: {e}"),
-                )
+                AppError::new(ErrorCode::Internal, format!("Argon2id hashing failed: {e}"))
             })?
             .to_string();
 

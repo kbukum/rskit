@@ -5303,6 +5303,7 @@ dependencies = [
  "parking_lot",
  "rand 0.10.1",
  "reqwest 0.13.3",
+ "rskit-config",
  "rskit-errors",
  "serde",
  "serde_json",
@@ -5370,6 +5371,7 @@ dependencies = [
  "parking_lot",
  "redis",
  "rskit-bootstrap",
+ "rskit-config",
  "rskit-errors",
  "serde",
  "serde_json",
@@ -5429,6 +5431,7 @@ dependencies = [
  "tokio",
  "tracing",
  "validator",
+ "zeroize",
 ]
 
 [[package]]
@@ -5453,6 +5456,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "rskit-bootstrap",
+ "rskit-config",
  "rskit-errors",
  "rskit-validation",
  "serde",

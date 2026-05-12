@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use rskit_validation::Validate;
+use serde::{Deserialize, Serialize};
 
 /// TLS configuration for the gRPC server.
 #[derive(Debug, Clone, Deserialize, Serialize)]

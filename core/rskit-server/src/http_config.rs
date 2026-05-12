@@ -1,7 +1,7 @@
 use std::time::Duration;
 
-use serde::Deserialize;
 use rskit_validation::Validate;
+use serde::Deserialize;
 
 /// HTTP server configuration owned by `rskit-server`.
 #[derive(Debug, Clone, Deserialize, Validate)]
