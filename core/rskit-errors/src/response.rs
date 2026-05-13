@@ -81,12 +81,12 @@ impl ProblemDetail {
     /// `base_uri` must end with `/`; a trailing slash is appended automatically
     /// if absent.
     pub fn with_base_uri(base_uri: &str, err: &AppError) -> Self {
-        let base = if base_uri.ends_with('/') {
-            base_uri.to_string()
+        if base_uri.ends_with('/') {
+            Self::build(base_uri, err)
         } else {
-            format!("{base_uri}/")
-        };
-        Self::build(&base, err)
+            let base = format!("{base_uri}/");
+            Self::build(&base, err)
+        }
     }
 
     fn build(base_uri: &str, err: &AppError) -> Self {

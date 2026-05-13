@@ -49,10 +49,12 @@ pub fn generate_with<T: JsonSchema>(opts: Options) -> Json {
 
 // ── Schema Validation ───────────────────────────────────────────────────────
 
-/// A single validation error with a path to the failing value.
+/// A single validation error with a path using dot-separated object segments
+/// and `[i]` array indices.
 #[derive(Debug, Clone)]
 pub struct ValidationError {
-    /// Dot-notation path to the failing value (e.g. `"user.address.zip"`).
+    /// Path to the failing value using dot-separated object segments and `[i]`
+    /// array indices (e.g. `"user.addresses[0].zip"`).
     /// Empty string when the error is at the root of the document.
     pub path: String,
     /// Human-readable description of the constraint that was violated.
