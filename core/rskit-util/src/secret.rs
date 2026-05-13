@@ -60,6 +60,11 @@ impl SecretString {
 
 impl PartialEq for SecretString {
     /// Constant-time comparison to prevent timing side-channel attacks.
+    ///
+    /// Note: when the two values differ in length the length comparison itself
+    /// is **not** constant-time (inherent limitation of [`subtle::ConstantTimeEq`]).
+    /// This is acceptable for typical use (comparing secrets derived from the
+    /// same config field).
     fn eq(&self, other: &Self) -> bool {
         self.value.as_bytes().ct_eq(other.value.as_bytes()).into()
     }

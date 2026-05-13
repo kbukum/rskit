@@ -50,6 +50,7 @@ impl rskit_config::AppConfig for DefaultApplyConfig {
 }
 
 fn set_required_env() {
+    // SAFETY: serialized by ENV_LOCK held by the caller.
     unsafe {
         std::env::set_var("ADDRESS", "127.0.0.1");
         std::env::set_var("PORT", "50051");
@@ -57,6 +58,7 @@ fn set_required_env() {
 }
 
 fn clear_required_env() {
+    // SAFETY: serialized by ENV_LOCK held by the caller.
     unsafe {
         std::env::remove_var("ADDRESS");
         std::env::remove_var("PORT");
