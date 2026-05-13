@@ -93,9 +93,7 @@ pub fn init_global_with_options(
 
     let sampling_layer = sampling_cfg.filter(|s| s.enabled).map(SamplingLayer::new);
 
-    let effective_masking = masking_cfg
-        .cloned()
-        .unwrap_or_default();
+    let effective_masking = masking_cfg.cloned().unwrap_or_default();
 
     if effective_masking.enabled {
         let masker: Arc<dyn masking::Masker> =

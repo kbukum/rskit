@@ -106,9 +106,7 @@ pub fn init_logging_with_options(
         .filter(|s| s.enabled)
         .map(sampling::SamplingLayer::new);
 
-    let effective_masking = masking_cfg
-        .cloned()
-        .unwrap_or_default();
+    let effective_masking = masking_cfg.cloned().unwrap_or_default();
     let masker: Arc<dyn masking::Masker> =
         Arc::new(masking::DefaultMasker::new(&effective_masking));
     let writer = masking::MaskingMakeWriter::new(std::io::stdout, masker);
@@ -254,9 +252,7 @@ pub fn init_logging_full(
         None => None,
     };
 
-    let effective_masking = masking_cfg
-        .cloned()
-        .unwrap_or_default();
+    let effective_masking = masking_cfg.cloned().unwrap_or_default();
     let masker: Arc<dyn masking::Masker> =
         Arc::new(masking::DefaultMasker::new(&effective_masking));
     let writer = masking::MaskingMakeWriter::new(std::io::stdout, masker);

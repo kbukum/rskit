@@ -39,12 +39,12 @@ impl SecretString {
     }
 
     /// Return `true` if the underlying value is empty.
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.value.is_empty()
     }
 
     /// Return the length of the underlying value.
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         self.value.len()
     }
 }

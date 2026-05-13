@@ -31,7 +31,7 @@ pub mod merge;
 pub mod secret;
 
 pub use clock::{Clock, FakeClock, SystemClock};
-pub use secret::SecretString;
 pub use merge::deep_merge;
 pub use parse::{mask_secret, parse_size};
 pub use sanitize::{is_safe_string, sanitize_env_value, sanitize_string};
+pub use secret::SecretString;

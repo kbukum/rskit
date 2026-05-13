@@ -4,8 +4,8 @@ use std::time::Duration;
 use rskit_database::SqlRepository;
 #[cfg(feature = "sqlite")]
 use rskit_database::register_sqlite;
-use rskit_util::SecretString;
 use rskit_database::{DatabaseConfig, DatabaseRegistry, DbDriver, FindOpts, SslMode};
+use rskit_util::SecretString;
 
 #[test]
 fn ssl_mode_defaults_to_prefer() {

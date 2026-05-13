@@ -219,7 +219,13 @@ impl JwtConfig {
         issuer: impl Into<String>,
         audience: Vec<String>,
     ) -> Self {
-        Self::asymmetric(AsymmetricAlgorithm::Rs256, private_key_pem, public_key_pem, issuer, audience)
+        Self::asymmetric(
+            AsymmetricAlgorithm::Rs256,
+            private_key_pem,
+            public_key_pem,
+            issuer,
+            audience,
+        )
     }
 
     /// Create an ES256 configuration from PEM-encoded keys.
@@ -230,7 +236,13 @@ impl JwtConfig {
         issuer: impl Into<String>,
         audience: Vec<String>,
     ) -> Self {
-        Self::asymmetric(AsymmetricAlgorithm::Es256, private_key_pem, public_key_pem, issuer, audience)
+        Self::asymmetric(
+            AsymmetricAlgorithm::Es256,
+            private_key_pem,
+            public_key_pem,
+            issuer,
+            audience,
+        )
     }
 
     /// Create an `EdDSA` configuration from PEM-encoded keys.
@@ -241,7 +253,13 @@ impl JwtConfig {
         issuer: impl Into<String>,
         audience: Vec<String>,
     ) -> Self {
-        Self::asymmetric(AsymmetricAlgorithm::EdDsa, private_key_pem, public_key_pem, issuer, audience)
+        Self::asymmetric(
+            AsymmetricAlgorithm::EdDsa,
+            private_key_pem,
+            public_key_pem,
+            issuer,
+            audience,
+        )
     }
 
     /// Override the configured token TTL.
