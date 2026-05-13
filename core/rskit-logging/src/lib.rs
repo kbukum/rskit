@@ -145,16 +145,38 @@ pub fn init_logging_with_options(
 ///
 /// When `masking_cfg.enabled` is `true`, all log output passes through a
 /// [`MaskingMakeWriter`] that redacts secrets and PII before they reach the
-/// output sink.  When masking is disabled this delegates to [`init_logging`].
+/// output sink.  When masking is disabled, logging goes directly to stdout.
 pub fn init_logging_with_masking(
     cfg: &LoggingConfig,
     masking_cfg: &masking::MaskingConfig,
 ) -> LoggingGuard {
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&cfg.level));
+
     if !masking_cfg.enabled {
-        return init_logging(cfg);
+        let guard = match cfg.format {
+            LogFormat::Json => {
+                let layer = fmt::layer()
+                    .json()
+                    .with_current_span(true)
+                    .with_span_list(true);
+                let dispatcher = tracing_subscriber::registry()
+                    .with(filter)
+                    .with(layer)
+                    .into();
+                tracing::dispatcher::set_default(&dispatcher)
+            }
+            LogFormat::Console => {
+                let layer = fmt::layer().pretty();
+                let dispatcher = tracing_subscriber::registry()
+                    .with(filter)
+                    .with(layer)
+                    .into();
+                tracing::dispatcher::set_default(&dispatcher)
+            }
+        };
+        return LoggingGuard(guard);
     }
 
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&cfg.level));
     let masker: Arc<dyn masking::Masker> = Arc::new(masking::DefaultMasker::new(masking_cfg));
     let writer = masking::MaskingMakeWriter::new(std::io::stdout, masker);
 
