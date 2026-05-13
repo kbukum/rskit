@@ -71,35 +71,35 @@ fn build_keys(key_material: &JwtKeyMaterial) -> AppResult<(EncodingKey, Decoding
                 ));
             }
             Ok((
-                EncodingKey::from_secret(secret.as_bytes()),
-                DecodingKey::from_secret(secret.as_bytes()),
+                EncodingKey::from_secret(secret.expose().as_bytes()),
+                DecodingKey::from_secret(secret.expose().as_bytes()),
             ))
         }
         JwtKeyMaterial::Rs256 {
             private_key_pem,
             public_key_pem,
         } => Ok((
-            EncodingKey::from_rsa_pem(private_key_pem.as_bytes())
+            EncodingKey::from_rsa_pem(private_key_pem.expose().as_bytes())
                 .map_err(|error| jwt_key_error(&error))?,
-            DecodingKey::from_rsa_pem(public_key_pem.as_bytes())
+            DecodingKey::from_rsa_pem(public_key_pem.expose().as_bytes())
                 .map_err(|error| jwt_key_error(&error))?,
         )),
         JwtKeyMaterial::Es256 {
             private_key_pem,
             public_key_pem,
         } => Ok((
-            EncodingKey::from_ec_pem(private_key_pem.as_bytes())
+            EncodingKey::from_ec_pem(private_key_pem.expose().as_bytes())
                 .map_err(|error| jwt_key_error(&error))?,
-            DecodingKey::from_ec_pem(public_key_pem.as_bytes())
+            DecodingKey::from_ec_pem(public_key_pem.expose().as_bytes())
                 .map_err(|error| jwt_key_error(&error))?,
         )),
         JwtKeyMaterial::EdDsa {
             private_key_pem,
             public_key_pem,
         } => Ok((
-            EncodingKey::from_ed_pem(private_key_pem.as_bytes())
+            EncodingKey::from_ed_pem(private_key_pem.expose().as_bytes())
                 .map_err(|error| jwt_key_error(&error))?,
-            DecodingKey::from_ed_pem(public_key_pem.as_bytes())
+            DecodingKey::from_ed_pem(public_key_pem.expose().as_bytes())
                 .map_err(|error| jwt_key_error(&error))?,
         )),
     }

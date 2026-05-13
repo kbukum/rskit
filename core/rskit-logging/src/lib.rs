@@ -98,6 +98,7 @@ pub fn init_logging_with_options(
     cfg: &LoggingConfig,
     sampling_cfg: Option<&SamplingConfig>,
     module_levels: Option<&HashMap<String, String>>,
+    masking_cfg: Option<&MaskingConfig>,
 ) -> LoggingGuard {
     let filter = build_filter(&cfg.level, module_levels);
 
@@ -105,9 +106,11 @@ pub fn init_logging_with_options(
         .filter(|s| s.enabled)
         .map(sampling::SamplingLayer::new);
 
-    let masker: Arc<dyn masking::Masker> = Arc::new(masking::DefaultMasker::new(
-        &masking::MaskingConfig::default(),
-    ));
+    let effective_masking = masking_cfg
+        .cloned()
+        .unwrap_or_default();
+    let masker: Arc<dyn masking::Masker> =
+        Arc::new(masking::DefaultMasker::new(&effective_masking));
     let writer = masking::MaskingMakeWriter::new(std::io::stdout, masker);
 
     let guard = match cfg.format {
@@ -211,6 +214,7 @@ pub fn init_logging_full(
     cfg: &LoggingConfig,
     sampling_cfg: Option<&SamplingConfig>,
     module_levels: Option<&HashMap<String, String>>,
+    masking_cfg: Option<&MaskingConfig>,
     otlp_cfg: Option<&otlp::OtlpConfig>,
     service_name: &str,
     environment: &str,
@@ -228,9 +232,11 @@ pub fn init_logging_full(
         None => None,
     };
 
-    let masker: Arc<dyn masking::Masker> = Arc::new(masking::DefaultMasker::new(
-        &masking::MaskingConfig::default(),
-    ));
+    let effective_masking = masking_cfg
+        .cloned()
+        .unwrap_or_default();
+    let masker: Arc<dyn masking::Masker> =
+        Arc::new(masking::DefaultMasker::new(&effective_masking));
     let writer = masking::MaskingMakeWriter::new(std::io::stdout, masker);
 
     let guard = match cfg.format {

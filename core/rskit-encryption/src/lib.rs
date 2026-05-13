@@ -29,12 +29,10 @@
 //! ```
 
 pub mod aes_gcm;
-pub mod argon2id;
 pub mod chacha20;
 pub mod traits;
 
 pub use aes_gcm::AesGcmEncryptor;
-pub use argon2id::Argon2idHasher;
 pub use chacha20::ChaCha20Encryptor;
 pub use traits::{Algorithm, Encryptor};
 
@@ -60,7 +58,6 @@ pub fn new_encryptor(key: &[u8], algorithm: Algorithm) -> Box<dyn Encryptor> {
     match algorithm {
         Algorithm::AesGcm => Box::new(AesGcmEncryptor::new(key)),
         Algorithm::ChaCha20Poly1305 => Box::new(ChaCha20Encryptor::new(key)),
-        Algorithm::Argon2id => Box::new(Argon2idHasher::new()),
     }
 }
 

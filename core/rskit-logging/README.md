@@ -64,8 +64,8 @@ logging:
 | `init_logging(cfg)` | Basic init from `LoggingConfig` |
 | `init_logging_env()` | Init from `RUST_LOG` only (no config needed) |
 | `init_logging_with_masking(cfg, masking_cfg)` | Init with sensitive data masking |
-| `init_logging_with_options(cfg, sampling, module_levels)` | Init with sampling + module overrides |
-| `init_logging_full(cfg, sampling, module_levels, otlp, name, env, ver)` | Full init with all features (requires `otlp` feature) |
+| `init_logging_with_options(cfg, sampling, module_levels, masking)` | Init with sampling + module overrides |
+| `init_logging_full(cfg, sampling, module_levels, masking, otlp, name, env, ver)` | Full init with all features (requires `otlp` feature) |
 
 ### Full Configuration Example
 
@@ -102,10 +102,16 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         ..Default::default()
     };
 
+    let masking = MaskingConfig {
+        enabled: true,
+        ..Default::default()
+    };
+
     let _guard = init_logging_full(
         &cfg,
         Some(&sampling),
         Some(&module_levels),
+        Some(&masking),
         Some(&otlp),
         "my-service",
         "production",
@@ -232,7 +238,7 @@ module_levels.insert("sqlx".to_string(), "warn".to_string());
 module_levels.insert("rdkafka".to_string(), "off".to_string());
 module_levels.insert("hyper".to_string(), "error".to_string());
 
-let _guard = init_logging_with_options(&cfg, None, Some(&module_levels));
+let _guard = init_logging_with_options(&cfg, None, Some(&module_levels), None);
 // Generates filter: "info,hyper=error,rdkafka=off,sqlx=warn"
 ```
 
@@ -277,6 +283,7 @@ let _guard = rskit_logging::init_logging_full(
     &cfg,
     Some(&sampling),       // optional sampling
     Some(&module_levels),  // optional module overrides
+    None,                  // optional masking config
     Some(&otlp),           // OTLP config
     "my-service",          // service name
     "production",          // environment
@@ -395,7 +402,7 @@ fn process_order(id: &str) {
 | `init_logging(cfg)` | Basic subscriber init |
 | `init_logging_env()` | Init from `RUST_LOG` only |
 | `init_logging_with_masking(cfg, masking)` | Init with output masking |
-| `init_logging_with_options(cfg, sampling, modules)` | Init with sampling + module levels |
+| `init_logging_with_options(cfg, sampling, modules, masking)` | Init with sampling + module levels |
 | `init_logging_full(...)` | Full init with OTLP (`otlp` feature) |
 | `init_global(cfg)` | Set global subscriber |
 | `init_global_with_masking(cfg, masking)` | Global subscriber with masking |
