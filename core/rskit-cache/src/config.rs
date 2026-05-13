@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use rskit_util::SecretString;
 use serde::{Deserialize, Serialize};
 
 /// Cache backend selection and common key settings.
@@ -50,7 +51,7 @@ pub struct RedisConfig {
     #[serde(default = "default_port")]
     pub port: u16,
     /// Optional password for Redis AUTH.
-    pub password: Option<String>,
+    pub password: Option<SecretString>,
     /// Redis database index (default: 0).
     #[serde(default)]
     pub database: u8,
@@ -101,7 +102,10 @@ impl RedisConfig {
         match &self.password {
             Some(pw) => format!(
                 "redis://:{}@{}:{}/{}",
-                pw, self.host, self.port, self.database
+                pw.expose(),
+                self.host,
+                self.port,
+                self.database
             ),
             None => format!("redis://{}:{}/{}", self.host, self.port, self.database),
         }
@@ -150,7 +154,7 @@ mod tests {
     #[test]
     fn connection_url_with_password() {
         let cfg = RedisConfig {
-            password: Some("secret".into()),
+            password: Some(SecretString::new("secret")),
             ..Default::default()
         };
         assert_eq!(cfg.connection_url(), "redis://:secret@127.0.0.1:6379/0");

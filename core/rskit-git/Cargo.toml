@@ -13,10 +13,13 @@ homepage.workspace = true
 testutil = ["dep:tempfile"]
 
 [dependencies]
-rskit-errors = { path = "../rskit-errors" }
+# External
 git2 = { version = "0.20", default-features = false, features = ["https", "ssh"] }
 thiserror = { workspace = true }
 tempfile = { version = "3", optional = true }
+
+# Internal
+rskit-errors = { path = "../rskit-errors" }
 
 [dev-dependencies]
 tempfile = "3"

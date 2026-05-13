@@ -26,8 +26,7 @@ mysql = ["sqlx-core", "sqlx/mysql"]
 sqlite = ["sqlx-core", "sqlx/sqlite"]
 
 [dependencies]
-rskit-errors    = { path = "../rskit-errors" }
-rskit-bootstrap = { path = "../rskit-bootstrap" }
+# External
 serde           = { workspace = true }
 serde_json      = { workspace = true }
 async-trait     = { workspace = true }
@@ -36,4 +35,10 @@ tracing         = { workspace = true }
 sqlx            = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "uuid", "chrono", "json"], optional = true }
 chrono          = { workspace = true }
 uuid            = { workspace = true }
-validator       = { workspace = true }
+validator = { workspace = true }
+
+# Internal
+rskit-errors    = { path = "../rskit-errors" }
+rskit-bootstrap = { path = "../rskit-bootstrap" }
+rskit-validation = { path = "../rskit-validation" }
+rskit-util   = { path = "../rskit-util" }

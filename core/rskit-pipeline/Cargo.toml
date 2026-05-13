@@ -18,7 +18,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-rskit-errors     = { path = "../rskit-errors" }
+# External
 tokio            = { workspace = true }
 tokio-util       = { workspace = true, features = ["rt"] }
 futures          = { workspace = true }
@@ -28,6 +28,9 @@ pin-project-lite = { workspace = true }
 tracing          = { workspace = true }
 tokio-stream     = "0.1"
 parking_lot      = { workspace = true }
+
+# Internal
+rskit-errors     = { path = "../rskit-errors" }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full", "test-util"] }

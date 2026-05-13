@@ -16,7 +16,7 @@ use rskit_errors::{AppError, AppResult};
 
 // ── Test config ──────────────────────────────────────────────────────────────
 
-#[derive(Debug, Default, serde::Deserialize, validator::Validate)]
+#[derive(Debug, Default, serde::Deserialize, rskit_validation::Validate)]
 struct TestCfg {
     #[serde(default)]
     service: ServiceConfig,

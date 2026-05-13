@@ -21,7 +21,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-rskit-errors  = { version = "0.1.0", path = "../rskit-errors" }
+# External
 serde         = { workspace = true }
 serde_json    = { workspace = true }
 async-trait   = { workspace = true }
@@ -41,6 +41,10 @@ tower         = "0.5"
 http          = "1.0"
 zeroize       = { workspace = true }
 reqwest       = { workspace = true }
+
+# Internal
+rskit-errors  = { path = "../rskit-errors" }
+rskit-util    = { path = "../rskit-util" }
 
 [dev-dependencies]
 tokio         = { workspace = true, features = ["full", "macros", "rt-multi-thread"] }

@@ -18,6 +18,8 @@
 
 use std::fmt::Display;
 
+pub use validator::{self, Validate};
+
 use rskit_errors::{AppError, AppResult, ErrorCode};
 
 // ── FieldError ────────────────────────────────────────────────────────────────

@@ -27,18 +27,20 @@ otlp = [
 ]
 
 [dependencies]
-rskit-config       = { path = "../rskit-config" }
+# External
 parking_lot        = { workspace = true }
 regex              = { workspace = true }
 serde              = { workspace = true }
 tracing            = { workspace = true }
 tracing-subscriber = { workspace = true }
-
 # Optional OTLP dependencies (enabled via `otlp` feature)
 opentelemetry                  = { workspace = true, optional = true }
 opentelemetry_sdk              = { workspace = true, optional = true }
 opentelemetry-appender-tracing = { workspace = true, optional = true }
 opentelemetry-otlp             = { workspace = true, optional = true }
+
+# Internal
+rskit-config       = { path = "../rskit-config" }
 
 [dev-dependencies]
 serde_json = { workspace = true }

@@ -23,13 +23,7 @@ server  = ["rmcp/server", "rmcp/transport-io", "rmcp/transport-streamable-http-s
 client  = ["rmcp/client", "rmcp/transport-child-process"]
 
 [dependencies]
-rskit-ai     = { path = "../rskit-ai" }
-rskit-component = { path = "../rskit-component" }
-rskit-tool   = { path = "../rskit-tool" }
-rskit-schema = { path = "../rskit-schema" }
-rskit-errors = { path = "../rskit-errors" }
-rskit-skill  = { path = "../rskit-skill" }
-rskit-authz  = { path = "../rskit-authz" }
+# External
 rmcp         = { version = "1.5", default-features = false, features = ["transport-async-rw"] }
 serde        = { workspace = true }
 serde_json   = { workspace = true }
@@ -39,6 +33,15 @@ async-trait  = { workspace = true }
 thiserror    = { workspace = true }
 parking_lot  = { workspace = true }
 url          = "2"
+
+# Internal
+rskit-ai     = { path = "../rskit-ai" }
+rskit-component = { path = "../rskit-component" }
+rskit-tool   = { path = "../rskit-tool" }
+rskit-schema = { path = "../rskit-schema" }
+rskit-errors = { path = "../rskit-errors" }
+rskit-skill  = { path = "../rskit-skill" }
+rskit-authz  = { path = "../rskit-authz" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }

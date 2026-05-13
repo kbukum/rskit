@@ -18,11 +18,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-rskit-errors     = { path = "../rskit-errors" }
-rskit-bootstrap  = { path = "../rskit-bootstrap" }
-rskit-provider   = { path = "../rskit-provider" }
-rskit-pipeline   = { path = "../rskit-pipeline" }
-rskit-resilience = { path = "../rskit-resilience" }
+# External
 tokio            = { workspace = true }
 tokio-util       = { workspace = true }
 futures          = { workspace = true }
@@ -32,3 +28,10 @@ uuid             = { workspace = true }
 chrono           = { workspace = true }
 async-trait      = { workspace = true }
 parking_lot      = { workspace = true }
+
+# Internal
+rskit-errors     = { path = "../rskit-errors" }
+rskit-bootstrap  = { path = "../rskit-bootstrap" }
+rskit-provider   = { path = "../rskit-provider" }
+rskit-pipeline   = { path = "../rskit-pipeline" }
+rskit-resilience = { path = "../rskit-resilience" }

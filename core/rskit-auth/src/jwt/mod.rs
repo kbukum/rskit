@@ -3,5 +3,5 @@
 mod config;
 mod service;
 
-pub use config::{JwtAlgorithm, JwtConfig, JwtKeyMaterial};
+pub use config::{AsymmetricAlgorithm, JwtAlgorithm, JwtConfig, JwtKeyMaterial, KeyPair};
 pub use service::JwtService;

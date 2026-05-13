@@ -27,7 +27,11 @@ pub mod clock;
 /// Deep-merge utilities for [`serde_json::Value`].
 pub mod merge;
 
+/// Secret-value wrappers that mask content in Display, Debug, and serialisation.
+pub mod secret;
+
 pub use clock::{Clock, FakeClock, SystemClock};
 pub use merge::deep_merge;
 pub use parse::{mask_secret, parse_size};
 pub use sanitize::{is_safe_string, sanitize_env_value, sanitize_string};
+pub use secret::SecretString;

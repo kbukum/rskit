@@ -18,7 +18,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-rskit-errors  = { path = "../rskit-errors" }
+# External
 tokio         = { workspace = true }
 tokio-util    = { workspace = true }
 governor      = { workspace = true }
@@ -31,3 +31,6 @@ tower-service = { workspace = true }
 futures-util  = { workspace = true }
 pin-project-lite = { workspace = true }
 serde         = { workspace = true, features = ["derive"] }
+
+# Internal
+rskit-errors  = { path = "../rskit-errors" }

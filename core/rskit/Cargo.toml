@@ -34,9 +34,10 @@ rskit-bootstrap  = { version = "0.1.0", path = "../rskit-bootstrap" }
 rskit-component  = { version = "0.1.0", path = "../rskit-component" }
 rskit-provider   = { version = "0.1.0", path = "../rskit-provider" }
 rskit-pipeline   = { version = "0.1.0", path = "../rskit-pipeline" }
-rskit-resilience = { version = "0.1.0", path = "../rskit-resilience" }
+rskit-resilience = { path = "../rskit-resilience" }
 rskit-worker     = { version = "0.1.0", path = "../rskit-worker" }
-rskit-validation = { version = "0.1.0", path = "../rskit-validation" }
+rskit-validation = { path = "../rskit-validation" }
+validator = { workspace = true }
 rskit-chain      = { version = "0.1.0", path = "../rskit-chain", optional = true }
 rskit-process    = { version = "0.1.0", path = "../rskit-process", optional = true }
 rskit-stateful   = { version = "0.1.0", path = "../rskit-stateful", optional = true }
@@ -55,7 +56,7 @@ rskit-messaging     = { version = "0.1.0", path = "../rskit-messaging",     opti
 rskit-messaging-kafka = { version = "0.1.0", path = "../../contrib/messaging/kafka", optional = true }
 rskit-messaging-nats = { version = "0.1.0", path = "../../contrib/messaging/nats", optional = true }
 rskit-messaging-rabbitmq = { version = "0.1.0", path = "../../contrib/messaging/rabbitmq", optional = true }
-rskit-observability = { version = "0.1.0", path = "../rskit-observability",  optional = true }
+rskit-observability = { path = "../rskit-observability", optional = true }
 rskit-authz         = { version = "0.1.0", path = "../rskit-authz",         optional = true }
 rskit-security      = { version = "0.1.0", path = "../rskit-security",      optional = true }
 rskit-discovery     = { version = "0.1.0", path = "../rskit-discovery",     optional = true }

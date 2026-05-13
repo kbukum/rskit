@@ -18,9 +18,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-rskit-errors    = { path = "../rskit-errors" }
-rskit-bootstrap = { path = "../rskit-bootstrap" }
-rskit-logging   = { path = "../rskit-logging" }
+# External
 serde           = { workspace = true }
 async-trait     = { workspace = true }
 tokio           = { workspace = true }
@@ -32,10 +30,16 @@ tower-http      = { version = "0.6", features = ["cors", "trace", "request-id", 
 hyper            = { version = "1", features = ["full"] }
 hyper-util      = { version = "0.1", features = ["tokio"] }
 http             = "1"
-validator        = { workspace = true }
+validator = { workspace = true }
 serde_json      = { workspace = true }
 uuid            = { workspace = true }
 parking_lot     = { workspace = true }
+
+# Internal
+rskit-errors    = { path = "../rskit-errors" }
+rskit-bootstrap = { path = "../rskit-bootstrap" }
+rskit-logging   = { path = "../rskit-logging" }
+rskit-validation = { path = "../rskit-validation" }
 
 [dev-dependencies]
 criterion = { workspace = true }

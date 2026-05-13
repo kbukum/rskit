@@ -1,5 +1,6 @@
 use std::{fmt, time::Duration};
 
+use rskit_util::SecretString;
 use serde::Deserialize;
 
 /// Public JWT algorithm policy for rskit.
@@ -36,6 +37,66 @@ impl JwtAlgorithm {
     }
 }
 
+/// Asymmetric signing algorithm.
+#[derive(Clone, Copy, PartialEq, Eq, Deserialize)]
+#[non_exhaustive]
+pub enum AsymmetricAlgorithm {
+    /// RSA-SHA256.
+    #[serde(rename = "RS256")]
+    Rs256,
+    /// ECDSA P-256 / SHA-256.
+    #[serde(rename = "ES256")]
+    Es256,
+    /// Ed25519 / `EdDSA`.
+    #[serde(rename = "EDDSA")]
+    EdDsa,
+}
+
+impl AsymmetricAlgorithm {
+    /// Map to the public-facing [`JwtAlgorithm`].
+    #[must_use]
+    pub const fn as_jwt_algorithm(self) -> JwtAlgorithm {
+        match self {
+            Self::Rs256 => JwtAlgorithm::Rs256,
+            Self::Es256 => JwtAlgorithm::Es256,
+            Self::EdDsa => JwtAlgorithm::EdDsa,
+        }
+    }
+}
+
+impl fmt::Debug for AsymmetricAlgorithm {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Rs256 => f.write_str("RS256"),
+            Self::Es256 => f.write_str("ES256"),
+            Self::EdDsa => f.write_str("EdDSA"),
+        }
+    }
+}
+
+// Algorithm identifier is not secret — no-op zeroize.
+impl zeroize::Zeroize for AsymmetricAlgorithm {
+    fn zeroize(&mut self) {}
+}
+
+/// PEM key pair for asymmetric algorithms.
+#[derive(Clone, Deserialize, zeroize::Zeroize, zeroize::ZeroizeOnDrop)]
+pub struct KeyPair {
+    /// PKCS#8 (or PKCS#1 for RSA) private key PEM.
+    pub private_key_pem: SecretString,
+    /// `SubjectPublicKeyInfo` public key PEM.
+    pub public_key_pem: SecretString,
+}
+
+impl fmt::Debug for KeyPair {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("KeyPair")
+            .field("private_key_pem", &self.private_key_pem)
+            .field("public_key_pem", &self.public_key_pem)
+            .finish()
+    }
+}
+
 /// Key material used to sign and verify JWTs.
 #[derive(Clone, Deserialize, zeroize::Zeroize, zeroize::ZeroizeOnDrop)]
 #[non_exhaustive]
@@ -43,28 +104,15 @@ pub enum JwtKeyMaterial {
     /// Explicit internal-only HMAC secret.
     Hs256Internal {
         /// Shared secret used for signing and verification.
-        secret: String,
+        secret: SecretString,
     },
-    /// RSA PEM key pair.
-    Rs256 {
-        /// PKCS#8 or PKCS#1 private key PEM.
-        private_key_pem: String,
-        /// `SubjectPublicKeyInfo` public key PEM.
-        public_key_pem: String,
-    },
-    /// EC P-256 PEM key pair.
-    Es256 {
-        /// PKCS#8 private key PEM.
-        private_key_pem: String,
-        /// `SubjectPublicKeyInfo` public key PEM.
-        public_key_pem: String,
-    },
-    /// Ed25519 PEM key pair.
-    EdDsa {
-        /// PKCS#8 private key PEM.
-        private_key_pem: String,
-        /// `SubjectPublicKeyInfo` public key PEM.
-        public_key_pem: String,
+    /// Asymmetric PEM key pair (RS256, ES256, or `EdDSA`).
+    Asymmetric {
+        /// Which asymmetric algorithm this key pair is for.
+        algorithm: AsymmetricAlgorithm,
+        /// The PEM key pair.
+        #[serde(flatten)]
+        keys: KeyPair,
     },
 }
 
@@ -74,34 +122,22 @@ impl JwtKeyMaterial {
     pub const fn algorithm(&self) -> JwtAlgorithm {
         match self {
             Self::Hs256Internal { .. } => JwtAlgorithm::Hs256Internal,
-            Self::Rs256 { .. } => JwtAlgorithm::Rs256,
-            Self::Es256 { .. } => JwtAlgorithm::Es256,
-            Self::EdDsa { .. } => JwtAlgorithm::EdDsa,
+            Self::Asymmetric { algorithm, .. } => algorithm.as_jwt_algorithm(),
         }
     }
 }
 
 impl fmt::Debug for JwtKeyMaterial {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Hs256Internal { .. } => formatter
+            Self::Hs256Internal { secret } => f
                 .debug_struct("Hs256Internal")
-                .field("secret", &"<redacted>")
+                .field("secret", secret)
                 .finish(),
-            Self::Rs256 { .. } => formatter
-                .debug_struct("Rs256")
-                .field("private_key_pem", &"<redacted>")
-                .field("public_key_pem", &"<redacted>")
-                .finish(),
-            Self::Es256 { .. } => formatter
-                .debug_struct("Es256")
-                .field("private_key_pem", &"<redacted>")
-                .field("public_key_pem", &"<redacted>")
-                .finish(),
-            Self::EdDsa { .. } => formatter
-                .debug_struct("EdDsa")
-                .field("private_key_pem", &"<redacted>")
-                .field("public_key_pem", &"<redacted>")
+            Self::Asymmetric { algorithm, keys } => f
+                .debug_struct("Asymmetric")
+                .field("algorithm", algorithm)
+                .field("keys", keys)
                 .finish(),
         }
     }
@@ -133,6 +169,30 @@ impl JwtConfig {
         Duration::from_secs(30)
     }
 
+    /// Create an asymmetric key configuration.
+    #[must_use]
+    pub fn asymmetric(
+        algorithm: AsymmetricAlgorithm,
+        private_key_pem: impl Into<String>,
+        public_key_pem: impl Into<String>,
+        issuer: impl Into<String>,
+        audience: Vec<String>,
+    ) -> Self {
+        Self {
+            key_material: JwtKeyMaterial::Asymmetric {
+                algorithm,
+                keys: KeyPair {
+                    private_key_pem: SecretString::new(private_key_pem),
+                    public_key_pem: SecretString::new(public_key_pem),
+                },
+            },
+            issuer: issuer.into(),
+            audience,
+            ttl: Self::default_ttl(),
+            leeway: Self::default_leeway(),
+        }
+    }
+
     /// Create an explicit internal-only HS256 configuration.
     #[must_use]
     pub fn hs256_internal(
@@ -142,7 +202,7 @@ impl JwtConfig {
     ) -> Self {
         Self {
             key_material: JwtKeyMaterial::Hs256Internal {
-                secret: secret.into(),
+                secret: SecretString::new(secret),
             },
             issuer: issuer.into(),
             audience,
@@ -159,16 +219,13 @@ impl JwtConfig {
         issuer: impl Into<String>,
         audience: Vec<String>,
     ) -> Self {
-        Self {
-            key_material: JwtKeyMaterial::Rs256 {
-                private_key_pem: private_key_pem.into(),
-                public_key_pem: public_key_pem.into(),
-            },
-            issuer: issuer.into(),
+        Self::asymmetric(
+            AsymmetricAlgorithm::Rs256,
+            private_key_pem,
+            public_key_pem,
+            issuer,
             audience,
-            ttl: Self::default_ttl(),
-            leeway: Self::default_leeway(),
-        }
+        )
     }
 
     /// Create an ES256 configuration from PEM-encoded keys.
@@ -179,16 +236,13 @@ impl JwtConfig {
         issuer: impl Into<String>,
         audience: Vec<String>,
     ) -> Self {
-        Self {
-            key_material: JwtKeyMaterial::Es256 {
-                private_key_pem: private_key_pem.into(),
-                public_key_pem: public_key_pem.into(),
-            },
-            issuer: issuer.into(),
+        Self::asymmetric(
+            AsymmetricAlgorithm::Es256,
+            private_key_pem,
+            public_key_pem,
+            issuer,
             audience,
-            ttl: Self::default_ttl(),
-            leeway: Self::default_leeway(),
-        }
+        )
     }
 
     /// Create an `EdDSA` configuration from PEM-encoded keys.
@@ -199,16 +253,13 @@ impl JwtConfig {
         issuer: impl Into<String>,
         audience: Vec<String>,
     ) -> Self {
-        Self {
-            key_material: JwtKeyMaterial::EdDsa {
-                private_key_pem: private_key_pem.into(),
-                public_key_pem: public_key_pem.into(),
-            },
-            issuer: issuer.into(),
+        Self::asymmetric(
+            AsymmetricAlgorithm::EdDsa,
+            private_key_pem,
+            public_key_pem,
+            issuer,
             audience,
-            ttl: Self::default_ttl(),
-            leeway: Self::default_leeway(),
-        }
+        )
     }
 
     /// Override the configured token TTL.
@@ -247,27 +298,31 @@ impl fmt::Debug for JwtConfig {
 
 #[cfg(test)]
 mod tests {
-    use super::{JwtConfig, JwtKeyMaterial};
+    use super::*;
 
     #[test]
     fn jwt_key_material_debug_redacts_secret_values() {
         let symmetric = format!(
             "{:?}",
             JwtKeyMaterial::Hs256Internal {
-                secret: "super-secret-value".into(),
+                secret: SecretString::new("super-secret-value"),
             }
         );
-        assert!(symmetric.contains("<redacted>"));
+        assert!(symmetric.contains("***"));
         assert!(!symmetric.contains("super-secret-value"));
 
         let asymmetric = format!(
             "{:?}",
-            JwtKeyMaterial::Rs256 {
-                private_key_pem: "private-pem".into(),
-                public_key_pem: "public-pem".into(),
+            JwtKeyMaterial::Asymmetric {
+                algorithm: AsymmetricAlgorithm::Rs256,
+                keys: KeyPair {
+                    private_key_pem: SecretString::new("private-pem"),
+                    public_key_pem: SecretString::new("public-pem"),
+                },
             }
         );
-        assert!(asymmetric.contains("<redacted>"));
+        assert!(asymmetric.contains("***"));
+        assert!(asymmetric.contains("RS256"));
         assert!(!asymmetric.contains("private-pem"));
         assert!(!asymmetric.contains("public-pem"));
     }
@@ -282,8 +337,45 @@ mod tests {
 
         let formatted = format!("{config:?}");
 
-        assert!(formatted.contains("<redacted>"));
+        assert!(formatted.contains("***"));
         assert!(!formatted.contains("another-secret-value"));
         assert!(formatted.contains("issuer.example"));
+    }
+
+    #[test]
+    fn convenience_constructors_delegate_to_asymmetric() {
+        let rs = JwtConfig::rs256("priv", "pub", "iss", vec!["aud".into()]);
+        assert_eq!(rs.algorithm(), JwtAlgorithm::Rs256);
+
+        let es = JwtConfig::es256("priv", "pub", "iss", vec!["aud".into()]);
+        assert_eq!(es.algorithm(), JwtAlgorithm::Es256);
+
+        let ed = JwtConfig::eddsa("priv", "pub", "iss", vec!["aud".into()]);
+        assert_eq!(ed.algorithm(), JwtAlgorithm::EdDsa);
+    }
+
+    #[test]
+    fn asymmetric_algorithm_roundtrip_serde() {
+        let json = r#""RS256""#;
+        let alg: AsymmetricAlgorithm = serde_json::from_str(json).unwrap();
+        assert_eq!(alg, AsymmetricAlgorithm::Rs256);
+
+        let json = r#""EDDSA""#;
+        let alg: AsymmetricAlgorithm = serde_json::from_str(json).unwrap();
+        assert_eq!(alg, AsymmetricAlgorithm::EdDsa);
+    }
+
+    #[test]
+    fn key_material_serde_symmetric() {
+        let json = r#"{"Hs256Internal": {"secret": "my-secret"}}"#;
+        let mat: JwtKeyMaterial = serde_json::from_str(json).unwrap();
+        assert_eq!(mat.algorithm(), JwtAlgorithm::Hs256Internal);
+    }
+
+    #[test]
+    fn key_material_serde_asymmetric() {
+        let json = r#"{"Asymmetric": {"algorithm": "RS256", "private_key_pem": "priv", "public_key_pem": "pub"}}"#;
+        let mat: JwtKeyMaterial = serde_json::from_str(json).unwrap();
+        assert_eq!(mat.algorithm(), JwtAlgorithm::Rs256);
     }
 }

@@ -18,8 +18,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-rskit-errors   = { path = "../rskit-errors" }
-rskit-provider = { path = "../rskit-provider" }
+# External
 serde_json   = { workspace = true }
 async-trait  = { workspace = true }
 tokio        = { workspace = true }
@@ -27,3 +26,7 @@ tracing      = { workspace = true }
 futures      = { workspace = true }
 tokio-util   = { workspace = true }
 parking_lot  = { workspace = true }
+
+# Internal
+rskit-errors   = { path = "../rskit-errors" }
+rskit-provider = { path = "../rskit-provider" }

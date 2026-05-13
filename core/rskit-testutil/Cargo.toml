@@ -18,9 +18,12 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-rskit-errors   = { path = "../rskit-errors" }
-rskit-provider = { path = "../rskit-provider" }
+# External
 async-trait    = { workspace = true }
 tokio          = { workspace = true }
 parking_lot    = { workspace = true }
 uuid           = { workspace = true }
+
+# Internal
+rskit-errors   = { path = "../rskit-errors" }
+rskit-provider = { path = "../rskit-provider" }

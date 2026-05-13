@@ -10,7 +10,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use rskit_config::{LogFormat, LogOutput, LoggingConfig};
-use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt};
+use tracing_subscriber::{fmt, layer::SubscriberExt};
 
 use crate::masking;
 use crate::sampling::{SamplingConfig, SamplingLayer};
@@ -30,96 +30,16 @@ pub struct GlobalLoggingGuard {
 ///
 /// Safe to call multiple times from `main` — subsequent calls are no-ops and
 /// the original subscriber is kept.
+///
+/// Does **not** enable masking.  Use [`init_global_with_masking`] or
+/// [`init_global_with_options`] when masking is required.
 pub fn init_global(cfg: &LoggingConfig) -> GlobalLoggingGuard {
-    if GLOBAL_INIT
-        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-        .is_err()
-    {
-        return GlobalLoggingGuard { _private: () };
-    }
-
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&cfg.level));
-
-    let make_writer = make_writer_for(&cfg.output);
-
-    match cfg.format {
-        LogFormat::Json => {
-            let layer = fmt::layer()
-                .json()
-                .with_current_span(true)
-                .with_span_list(true)
-                .with_writer(make_writer);
-            let subscriber = tracing_subscriber::registry().with(filter).with(layer);
-            if let Err(e) = tracing::subscriber::set_global_default(subscriber) {
-                tracing::warn!("global subscriber already installed, skipping: {e}");
-            }
-        }
-        LogFormat::Console => {
-            let layer = fmt::layer().pretty().with_writer(make_writer);
-            let subscriber = tracing_subscriber::registry().with(filter).with(layer);
-            if let Err(e) = tracing::subscriber::set_global_default(subscriber) {
-                tracing::warn!("global subscriber already installed, skipping: {e}");
-            }
-        }
-    }
-
-    GlobalLoggingGuard { _private: () }
+    init_global_with_options(cfg, None, None, None)
 }
 
 /// Returns `true` if [`init_global`] has been called at least once.
 pub fn is_global_init() -> bool {
     GLOBAL_INIT.load(Ordering::SeqCst)
-}
-
-/// Enhanced global init with optional sampling and per-module level overrides.
-///
-/// Same semantics as [`init_global`] (idempotent, global-lifetime subscriber)
-/// but adds support for [`SamplingLayer`] and per-module filter directives.
-pub fn init_global_with_options(
-    cfg: &LoggingConfig,
-    sampling_cfg: Option<&SamplingConfig>,
-    module_levels: Option<&HashMap<String, String>>,
-) -> GlobalLoggingGuard {
-    if GLOBAL_INIT
-        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-        .is_err()
-    {
-        return GlobalLoggingGuard { _private: () };
-    }
-
-    let filter = crate::build_filter(&cfg.level, module_levels);
-    let make_writer = make_writer_for(&cfg.output);
-
-    let sampling_layer = sampling_cfg.filter(|s| s.enabled).map(SamplingLayer::new);
-
-    match cfg.format {
-        LogFormat::Json => {
-            let layer = fmt::layer()
-                .json()
-                .with_current_span(true)
-                .with_span_list(true)
-                .with_writer(make_writer);
-            let subscriber = tracing_subscriber::registry()
-                .with(filter)
-                .with(sampling_layer)
-                .with(layer);
-            if let Err(e) = tracing::subscriber::set_global_default(subscriber) {
-                tracing::warn!("global subscriber already installed, skipping: {e}");
-            }
-        }
-        LogFormat::Console => {
-            let layer = fmt::layer().pretty().with_writer(make_writer);
-            let subscriber = tracing_subscriber::registry()
-                .with(filter)
-                .with(sampling_layer)
-                .with(layer);
-            if let Err(e) = tracing::subscriber::set_global_default(subscriber) {
-                tracing::warn!("global subscriber already installed, skipping: {e}");
-            }
-        }
-    }
-
-    GlobalLoggingGuard { _private: () }
 }
 
 /// Initialise a global subscriber with sensitive data masking.
@@ -133,10 +53,30 @@ pub fn init_global_with_masking(
     cfg: &LoggingConfig,
     masking_cfg: &masking::MaskingConfig,
 ) -> GlobalLoggingGuard {
-    if !masking_cfg.enabled {
-        return init_global(cfg);
-    }
+    let m = if masking_cfg.enabled {
+        Some(masking_cfg)
+    } else {
+        None
+    };
+    init_global_with_options(cfg, None, None, m)
+}
 
+/// Enhanced global init with optional sampling, per-module levels, and masking.
+///
+/// This is the primary global initialisation entry point.  All other
+/// `init_global*` functions delegate here.
+///
+/// Same semantics as [`init_global`] (idempotent, global-lifetime subscriber)
+/// but adds support for [`SamplingLayer`], per-module filter directives, and
+/// output masking.
+///
+/// Pass `masking_cfg: None` to disable masking entirely.
+pub fn init_global_with_options(
+    cfg: &LoggingConfig,
+    sampling_cfg: Option<&SamplingConfig>,
+    module_levels: Option<&HashMap<String, String>>,
+    masking_cfg: Option<&masking::MaskingConfig>,
+) -> GlobalLoggingGuard {
     if GLOBAL_INIT
         .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
         .is_err()
@@ -144,28 +84,66 @@ pub fn init_global_with_masking(
         return GlobalLoggingGuard { _private: () };
     }
 
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&cfg.level));
-    let masker: Arc<dyn masking::Masker> = Arc::new(masking::DefaultMasker::new(masking_cfg));
-    let inner_writer = make_writer_for(&cfg.output);
-    let writer = masking::MaskingMakeWriter::new(inner_writer, masker);
+    let filter = crate::build_filter(&cfg.level, module_levels);
+    let base_writer = make_writer_for(&cfg.output);
 
-    match cfg.format {
-        LogFormat::Json => {
-            let layer = fmt::layer()
-                .json()
-                .with_current_span(true)
-                .with_span_list(true)
-                .with_writer(writer);
-            let subscriber = tracing_subscriber::registry().with(filter).with(layer);
-            if let Err(e) = tracing::subscriber::set_global_default(subscriber) {
-                tracing::warn!("global subscriber already installed, skipping: {e}");
+    let sampling_layer = sampling_cfg.filter(|s| s.enabled).map(SamplingLayer::new);
+
+    if let Some(m) = masking_cfg.filter(|m| m.enabled) {
+        let masker: Arc<dyn masking::Masker> = Arc::new(masking::DefaultMasker::new(m));
+        let writer = masking::MaskingMakeWriter::new(base_writer, masker);
+
+        match cfg.format {
+            LogFormat::Json => {
+                let layer = fmt::layer()
+                    .json()
+                    .with_current_span(true)
+                    .with_span_list(true)
+                    .with_writer(writer);
+                let subscriber = tracing_subscriber::registry()
+                    .with(filter)
+                    .with(sampling_layer)
+                    .with(layer);
+                if let Err(e) = tracing::subscriber::set_global_default(subscriber) {
+                    tracing::warn!("global subscriber already installed, skipping: {e}");
+                }
+            }
+            LogFormat::Console => {
+                let layer = fmt::layer().pretty().with_writer(writer);
+                let subscriber = tracing_subscriber::registry()
+                    .with(filter)
+                    .with(sampling_layer)
+                    .with(layer);
+                if let Err(e) = tracing::subscriber::set_global_default(subscriber) {
+                    tracing::warn!("global subscriber already installed, skipping: {e}");
+                }
             }
         }
-        LogFormat::Console => {
-            let layer = fmt::layer().pretty().with_writer(writer);
-            let subscriber = tracing_subscriber::registry().with(filter).with(layer);
-            if let Err(e) = tracing::subscriber::set_global_default(subscriber) {
-                tracing::warn!("global subscriber already installed, skipping: {e}");
+    } else {
+        match cfg.format {
+            LogFormat::Json => {
+                let layer = fmt::layer()
+                    .json()
+                    .with_current_span(true)
+                    .with_span_list(true)
+                    .with_writer(base_writer);
+                let subscriber = tracing_subscriber::registry()
+                    .with(filter)
+                    .with(sampling_layer)
+                    .with(layer);
+                if let Err(e) = tracing::subscriber::set_global_default(subscriber) {
+                    tracing::warn!("global subscriber already installed, skipping: {e}");
+                }
+            }
+            LogFormat::Console => {
+                let layer = fmt::layer().pretty().with_writer(base_writer);
+                let subscriber = tracing_subscriber::registry()
+                    .with(filter)
+                    .with(sampling_layer)
+                    .with(layer);
+                if let Err(e) = tracing::subscriber::set_global_default(subscriber) {
+                    tracing::warn!("global subscriber already installed, skipping: {e}");
+                }
             }
         }
     }

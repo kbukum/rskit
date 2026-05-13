@@ -183,7 +183,7 @@ async fn errors_resilience_various_error_codes_through_breaker() {
 
 // ─── 2. Config → Bootstrap ──────────────────────────────────────────────────
 
-#[derive(Debug, Deserialize, validator::Validate, Default)]
+#[derive(Debug, Deserialize, rskit_validation::Validate, Default)]
 struct TestConfig {
     #[serde(default)]
     service: rskit_config::ServiceConfig,

@@ -134,7 +134,7 @@ hyper-util = { version = "0.1", features = ["tokio"] }
 
 # Auth (Phase 2)
 jsonwebtoken = { version = "10", features = ["rust_crypto"] }
-argon2 = "0.5"
+argon2 = { version = "0.5", features = ["password-hash", "rand"] }
 
 # Database (Phase 3)
 sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "postgres", "mysql", "sqlite", "uuid", "chrono", "json"] }
@@ -172,7 +172,7 @@ criterion = { version = "0.8", features = ["html_reports", "async_tokio"] }
 insta = { version = "1.47", features = ["json", "yaml", "redactions"] }
 
 # Internal path crates
-rskit-ai = { path = "rskit-ai", version = "0.1.0" }
+rskit-ai = { path = "rskit-ai" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

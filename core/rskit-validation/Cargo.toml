@@ -18,10 +18,14 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-rskit-errors = { path = "../rskit-errors" }
+# External
 serde        = { workspace = true }
 serde_json   = { workspace = true }
 regex        = "1"
 once_cell    = "1"
 uuid         = { workspace = true }
 chrono       = { workspace = true }
+validator = { workspace = true }
+
+# Internal
+rskit-errors = { path = "../rskit-errors" }
