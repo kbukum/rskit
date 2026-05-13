@@ -28,7 +28,7 @@ pub mod response;
 
 pub use code::ErrorCode;
 pub use error::AppError;
-pub use response::{ProblemDetail, set_type_base_uri, type_base_uri};
+pub use response::ProblemDetail;
 
 /// Convenience alias used throughout rskit crates.
 pub type AppResult<T> = Result<T, AppError>;

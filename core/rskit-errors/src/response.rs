@@ -1,44 +1,13 @@
 use std::collections::HashMap;
-use std::sync::OnceLock;
 
 use serde::{Deserialize, Serialize};
 
 use crate::AppError;
 use crate::code::ErrorCode;
 
-// ── Configurable type base URI ────────────────────────────────────────────────
-
-static TYPE_BASE_URI: OnceLock<String> = OnceLock::new();
-
+// The default base URI for RFC 9457 `type` fields produced by the `From` impls.
+// Transport layers that need a custom domain call `ProblemDetail::with_base_uri`.
 const DEFAULT_TYPE_BASE_URI: &str = "https://rskit.dev/errors/";
-
-/// Override the base URI used in RFC 9457 `type` fields.
-///
-/// Must end with `/`; a trailing slash is appended automatically if absent.
-/// Logs a warning and silently keeps the first value if called more than once
-/// (idempotent for the same process).
-pub fn set_type_base_uri(uri: impl Into<String>) {
-    let mut uri = uri.into();
-    if !uri.ends_with('/') {
-        uri.push('/');
-    }
-    if TYPE_BASE_URI.set(uri).is_err() {
-        tracing::warn!(
-            "rskit-errors: set_type_base_uri: base URI is already set; ignoring second call"
-        );
-    }
-}
-
-/// Returns the current type base URI.
-///
-/// Defaults to `"https://rskit.dev/errors/"` unless overridden via
-/// [`set_type_base_uri`].
-pub fn type_base_uri() -> &'static str {
-    TYPE_BASE_URI
-        .get()
-        .map(|s| s.as_str())
-        .unwrap_or(DEFAULT_TYPE_BASE_URI)
-}
 
 // ── ProblemDetail ─────────────────────────────────────────────────────────────
 
@@ -102,10 +71,27 @@ fn code_to_title(code: ErrorCode) -> String {
         .join(" ")
 }
 
-impl From<&AppError> for ProblemDetail {
-    fn from(err: &AppError) -> Self {
+impl ProblemDetail {
+    /// Build a [`ProblemDetail`] using `base_uri` as the RFC 9457 `type` prefix.
+    ///
+    /// The default [`From`] impls use `"https://rskit.dev/errors/"`. Call this
+    /// constructor when the serving application should advertise its own error
+    /// documentation domain (typically configured in the HTTP middleware layer).
+    ///
+    /// `base_uri` must end with `/`; a trailing slash is appended automatically
+    /// if absent.
+    pub fn with_base_uri(base_uri: &str, err: &AppError) -> Self {
+        let base = if base_uri.ends_with('/') {
+            base_uri.to_string()
+        } else {
+            format!("{base_uri}/")
+        };
+        Self::build(&base, err)
+    }
+
+    fn build(base_uri: &str, err: &AppError) -> Self {
         Self {
-            error_type: format!("{}{}", type_base_uri(), code_to_kebab(err.code)),
+            error_type: format!("{}{}", base_uri, code_to_kebab(err.code)),
             title: code_to_title(err.code),
             status: err.http_status.as_u16(),
             detail: err.message.clone(),
@@ -114,6 +100,12 @@ impl From<&AppError> for ProblemDetail {
             retryable: err.retryable,
             details: err.details.clone(),
         }
+    }
+}
+
+impl From<&AppError> for ProblemDetail {
+    fn from(err: &AppError) -> Self {
+        Self::build(DEFAULT_TYPE_BASE_URI, err)
     }
 }
 
@@ -305,15 +297,41 @@ mod tests {
         assert!(pd.instance.is_none());
     }
 
-    // ── type_base_uri ─────────────────────────────────────────────────────
+    // ── ProblemDetail::with_base_uri ───────────────────────────────────────
 
     #[test]
-    fn type_base_uri_default() {
-        // May have been set by a prior test in this process, so just check it's
-        // a valid HTTPS URI ending with '/'.
-        let uri = type_base_uri();
-        assert!(uri.starts_with("https://"), "uri: {uri}");
-        assert!(uri.ends_with('/'), "uri: {uri}");
+    fn with_base_uri_overrides_type_prefix() {
+        let err = AppError::new(ErrorCode::NotFound, "gone");
+        let pd = ProblemDetail::with_base_uri("https://example.com/errors", &err);
+        assert!(
+            pd.error_type.starts_with("https://example.com/errors/"),
+            "type was: {}",
+            pd.error_type
+        );
+        assert!(
+            pd.error_type.ends_with("not-found"),
+            "type was: {}",
+            pd.error_type
+        );
+    }
+
+    #[test]
+    fn with_base_uri_appends_trailing_slash() {
+        let err = AppError::new(ErrorCode::NotFound, "gone");
+        let without = ProblemDetail::with_base_uri("https://example.com/errors", &err);
+        let with_slash = ProblemDetail::with_base_uri("https://example.com/errors/", &err);
+        assert_eq!(without.error_type, with_slash.error_type);
+    }
+
+    #[test]
+    fn default_from_uses_rskit_dev_base() {
+        let err = AppError::new(ErrorCode::NotFound, "gone");
+        let pd = ProblemDetail::from(&err);
+        assert!(
+            pd.error_type.starts_with("https://rskit.dev/errors/"),
+            "type was: {}",
+            pd.error_type
+        );
     }
 
     #[test]

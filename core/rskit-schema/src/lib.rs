@@ -4,6 +4,8 @@
 //! JSON Schema documents from any type implementing `JsonSchema`, plus a
 //! runtime validator for checking JSON values against schemas.
 
+#![warn(missing_docs)]
+
 pub use schemars::JsonSchema;
 use schemars::SchemaGenerator;
 use serde_json::Value;
@@ -50,7 +52,9 @@ pub fn generate_with<T: JsonSchema>(opts: Options) -> Json {
 /// A single validation error with a JSON-pointer path.
 #[derive(Debug, Clone)]
 pub struct ValidationError {
+    /// Dot-separated JSON path to the failing value (empty string for the root).
     pub path: String,
+    /// Human-readable description of the constraint that was violated.
     pub message: String,
 }
 
@@ -67,7 +71,9 @@ impl std::fmt::Display for ValidationError {
 /// Outcome of validating a value against a schema.
 #[derive(Debug, Clone)]
 pub struct ValidationResult {
+    /// `true` if the value satisfies every constraint in the schema.
     pub valid: bool,
+    /// All constraint violations found; empty when `valid` is `true`.
     pub errors: Vec<ValidationError>,
 }
 
@@ -243,25 +249,6 @@ fn child_path(parent: &str, child: &str) -> String {
     } else {
         format!("{parent}.{child}")
     }
-}
-
-/// Validate structured model output against a JSON Schema 2020-12-compatible schema subset.
-pub fn validate_structured_output(schema: &Value, value: &Value) -> ValidationResult {
-    validate(schema, value)
-}
-
-/// Validate an MCP elicitation schema subset.
-pub fn validate_elicitation_schema(schema: &Value) -> ValidationResult {
-    let meta_schema = serde_json::json!({
-        "type": "object",
-        "properties": {
-            "type": { "enum": ["object"] },
-            "properties": { "type": "object" },
-            "required": { "type": "array", "items": { "type": "string" } }
-        },
-        "required": ["type", "properties"]
-    });
-    validate(&meta_schema, schema)
 }
 
 #[cfg(test)]
