@@ -14,14 +14,17 @@ categories             = ["data-structures"]
 keywords               = ["dataset", "pipeline", "collector", "etl"]
 
 [dependencies]
-rskit-errors = { path = "../rskit-errors" }
-rskit-cli    = { path = "../rskit-cli" }
+# External
 image        = { version = "0.25", optional = true }
 serde        = { workspace = true }
 serde_json   = { workspace = true }
 tokio        = { workspace = true }
 tracing      = { workspace = true }
 async-trait  = { workspace = true }
+
+# Internal
+rskit-errors = { path = "../rskit-errors" }
+rskit-cli    = { path = "../rskit-cli" }
 
 [features]
 default = ["image-transform"]

@@ -14,8 +14,7 @@ categories             = ["multimedia", "asynchronous"]
 keywords               = ["media", "video", "audio", "pipeline"]
 
 [dependencies]
-rskit-errors = { path = "../rskit-errors" }
-rskit-storage   = { path = "../rskit-storage" }
+# External
 serde        = { workspace = true, features = ["rc"] }
 serde_json   = { workspace = true }
 chrono       = { workspace = true }
@@ -23,11 +22,18 @@ tracing      = { workspace = true }
 async-trait  = { workspace = true }
 tokio-util   = { workspace = true, features = ["rt"] }
 
+# Internal
+rskit-errors = { path = "../rskit-errors" }
+rskit-storage   = { path = "../rskit-storage" }
+
 [dev-dependencies]
+# External
 tokio      = { workspace = true, features = ["test-util"] }
 serde_json = { workspace = true }
-rskit-storage = { path = "../rskit-storage" }
 insta = { workspace = true }
+
+# Internal
+rskit-storage = { path = "../rskit-storage" }
 
 [package.metadata.docs.rs]
 all-features = true

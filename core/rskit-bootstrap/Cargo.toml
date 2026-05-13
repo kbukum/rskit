@@ -18,21 +18,24 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-rskit-errors = { path = "../rskit-errors" }
-rskit-config = { path = "../rskit-config" }
-rskit-logging = { path = "../rskit-logging" }
-rskit-component = { path = "../rskit-component" }
-rskit-hook = { path = "../rskit-hook" }
+# External
 tokio        = { workspace = true }
 tokio-util   = { workspace = true }
 tracing      = { workspace = true }
 async-trait  = { workspace = true }
 futures-util = { workspace = true }
 futures      = { workspace = true }
-rskit-validation = { path = "../rskit-validation" }
 validator = { workspace = true }
 parking_lot  = { workspace = true }
 serde        = { workspace = true }
+
+# Internal
+rskit-errors = { path = "../rskit-errors" }
+rskit-config = { path = "../rskit-config" }
+rskit-logging = { path = "../rskit-logging" }
+rskit-component = { path = "../rskit-component" }
+rskit-hook = { path = "../rskit-hook" }
+rskit-validation = { path = "../rskit-validation" }
 
 [dev-dependencies]
 tokio        = { workspace = true, features = ["full"] }

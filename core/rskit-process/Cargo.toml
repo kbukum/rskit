@@ -18,11 +18,14 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
+# External
 tokio      = { workspace = true, features = ["process", "time", "signal", "sync"] }
-rskit-errors = { path = "../rskit-errors" }
 thiserror  = { workspace = true }
 tracing    = { workspace = true }
 libc       = "0.2"
+
+# Internal
+rskit-errors = { path = "../rskit-errors" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full", "test-util"] }

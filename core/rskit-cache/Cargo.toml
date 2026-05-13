@@ -22,8 +22,7 @@ default = []
 redis = ["dep:redis"]
 
 [dependencies]
-rskit-errors    = { path = "../rskit-errors" }
-rskit-bootstrap = { path = "../rskit-bootstrap" }
+# External
 serde           = { workspace = true }
 serde_json      = { workspace = true }
 async-trait     = { workspace = true }
@@ -31,6 +30,10 @@ tokio           = { workspace = true }
 tracing         = { workspace = true }
 parking_lot     = { workspace = true }
 redis           = { workspace = true, optional = true }
+
+# Internal
+rskit-errors    = { path = "../rskit-errors" }
+rskit-bootstrap = { path = "../rskit-bootstrap" }
 rskit-util   = { path = "../rskit-util" }
 
 [dev-dependencies]

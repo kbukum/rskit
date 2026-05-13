@@ -14,11 +14,14 @@ categories             = ["command-line-interface"]
 keywords               = ["cli", "progress", "signal", "terminal"]
 
 [dependencies]
-rskit-errors    = { path = "../rskit-errors" }
-rskit-bootstrap = { path = "../rskit-bootstrap" }
+# External
 indicatif       = { workspace = true }
 tokio           = { workspace = true }
 tokio-util      = { workspace = true }
+
+# Internal
+rskit-errors    = { path = "../rskit-errors" }
+rskit-bootstrap = { path = "../rskit-bootstrap" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "full"] }

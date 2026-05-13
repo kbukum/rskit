@@ -22,9 +22,7 @@ default = []
 consul = ["dep:reqwest"]
 
 [dependencies]
-rskit-bootstrap = { path = "../rskit-bootstrap" }
-rskit-errors = { path = "../rskit-errors" }
-rskit-resilience = { path = "../rskit-resilience" }
+# External
 serde        = { workspace = true }
 serde_json   = { workspace = true }
 toml         = { workspace = true }
@@ -36,3 +34,8 @@ dashmap      = { workspace = true }
 rand         = { workspace = true }
 parking_lot  = { workspace = true }
 reqwest      = { workspace = true, optional = true }
+
+# Internal
+rskit-bootstrap = { path = "../rskit-bootstrap" }
+rskit-errors = { path = "../rskit-errors" }
+rskit-resilience = { path = "../rskit-resilience" }

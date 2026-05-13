@@ -18,15 +18,18 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-rskit-errors = { path = "../rskit-errors" }
-rskit-util   = { path = "../rskit-util" }
+# External
 serde        = { workspace = true }
 serde_json   = { workspace = true }
 config       = { workspace = true }
 dotenvy      = { workspace = true }
-rskit-validation = { path = "../rskit-validation" }
 validator = { workspace = true }
 tracing      = { workspace = true }
+
+# Internal
+rskit-errors = { path = "../rskit-errors" }
+rskit-util   = { path = "../rskit-util" }
+rskit-validation = { path = "../rskit-validation" }
 
 [dev-dependencies]
 parking_lot = { workspace = true }

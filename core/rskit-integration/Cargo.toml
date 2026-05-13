@@ -8,17 +8,8 @@ publish = false
 description = "Cross-layer integration tests for rskit"
 
 [dependencies]
-rskit-errors     = { path = "../rskit-errors" }
-rskit-config     = { path = "../rskit-config" }
-rskit-bootstrap  = { path = "../rskit-bootstrap" }
-rskit-resilience = { path = "../rskit-resilience" }
-rskit-provider   = { path = "../rskit-provider" }
-rskit-pipeline   = { path = "../rskit-pipeline" }
-rskit-validation = { path = "../rskit-validation" }
+# External
 validator = { workspace = true }
-rskit-di         = { path = "../rskit-di" }
-rskit-auth       = { path = "../rskit-auth" }
-rskit-authz      = { path = "../rskit-authz" }
 tokio            = { workspace = true }
 async-trait      = { workspace = true }
 serde            = { workspace = true }
@@ -26,3 +17,15 @@ serde_json       = { workspace = true }
 futures          = { workspace = true }
 parking_lot      = { workspace = true }
 http             = { workspace = true }
+
+# Internal
+rskit-errors     = { path = "../rskit-errors" }
+rskit-config     = { path = "../rskit-config" }
+rskit-bootstrap  = { path = "../rskit-bootstrap" }
+rskit-resilience = { path = "../rskit-resilience" }
+rskit-provider   = { path = "../rskit-provider" }
+rskit-pipeline   = { path = "../rskit-pipeline" }
+rskit-validation = { path = "../rskit-validation" }
+rskit-di         = { path = "../rskit-di" }
+rskit-auth       = { path = "../rskit-auth" }
+rskit-authz      = { path = "../rskit-authz" }

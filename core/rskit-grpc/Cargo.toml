@@ -18,10 +18,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-rskit-errors   = { path = "../rskit-errors" }
-rskit-resilience = { path = "../rskit-resilience" }
-rskit-server   = { path = "../rskit-server", optional = true }
-rskit-discovery = { path = "../rskit-discovery", optional = true }
+# External
 tonic          = { workspace = true }
 tokio          = { workspace = true, features = ["test-util"] }
 tower          = { workspace = true }
@@ -30,6 +27,12 @@ async-trait    = { workspace = true }
 serde          = { workspace = true }
 http           = { workspace = true }
 chrono         = { workspace = true }
+
+# Internal
+rskit-errors   = { path = "../rskit-errors" }
+rskit-resilience = { path = "../rskit-resilience" }
+rskit-server   = { path = "../rskit-server", optional = true }
+rskit-discovery = { path = "../rskit-discovery", optional = true }
 
 [dev-dependencies]
 tokio-util     = { workspace = true }

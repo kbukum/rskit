@@ -23,10 +23,7 @@ provider-bridge = ["dep:rskit-provider"]
 bridges = ["provider-bridge"]
 
 [dependencies]
-rskit-errors      = { path = "../rskit-errors" }
-rskit-bootstrap   = { path = "../rskit-bootstrap" }
-rskit-resilience  = { path = "../rskit-resilience" }
-rskit-provider  = { path = "../rskit-provider", optional = true }
+# External
 serde           = { workspace = true }
 serde_json      = { workspace = true }
 async-trait     = { workspace = true }
@@ -40,3 +37,8 @@ parking_lot     = { workspace = true }
 chrono          = { workspace = true }
 uuid            = { workspace = true }
 
+# Internal
+rskit-errors      = { path = "../rskit-errors" }
+rskit-bootstrap   = { path = "../rskit-bootstrap" }
+rskit-resilience  = { path = "../rskit-resilience" }
+rskit-provider  = { path = "../rskit-provider", optional = true }

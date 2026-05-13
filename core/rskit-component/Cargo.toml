@@ -17,13 +17,16 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-rskit-errors = { path = "../rskit-errors" }
+# External
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 parking_lot = { workspace = true }
 serde = { workspace = true }
 async-trait = { workspace = true }
+
+# Internal
+rskit-errors = { path = "../rskit-errors" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }

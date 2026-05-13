@@ -18,6 +18,16 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
+# External
+async-trait  = { workspace = true }
+tokio        = { workspace = true }
+serde        = { workspace = true }
+serde_json   = { workspace = true }
+futures      = { workspace = true }
+async-stream = { workspace = true }
+tracing      = { workspace = true }
+
+# Internal
 rskit-ai = { workspace = true }
 rskit-component = { path = "../rskit-component" }
 rskit-errors   = { path = "../rskit-errors" }
@@ -26,13 +36,6 @@ rskit-provider = { path = "../rskit-provider" }
 rskit-resilience = { path = "../rskit-resilience" }
 rskit-tool     = { path = "../rskit-tool" }
 rskit-hook     = { path = "../rskit-hook" }
-async-trait  = { workspace = true }
-tokio        = { workspace = true }
-serde        = { workspace = true }
-serde_json   = { workspace = true }
-futures      = { workspace = true }
-async-stream = { workspace = true }
-tracing      = { workspace = true }
 
 [dev-dependencies]
 schemars     = { workspace = true }

@@ -17,14 +17,17 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-rskit-ai = { workspace = true }
-rskit-component = { path = "../rskit-component" }
-rskit-errors = { path = "../rskit-errors" }
-rskit-provider = { path = "../rskit-provider" }
+# External
 serde        = { workspace = true }
 serde_json   = { workspace = true }
 async-trait  = { workspace = true }
 tracing      = { workspace = true }
+
+# Internal
+rskit-ai = { workspace = true }
+rskit-component = { path = "../rskit-component" }
+rskit-errors = { path = "../rskit-errors" }
+rskit-provider = { path = "../rskit-provider" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }
