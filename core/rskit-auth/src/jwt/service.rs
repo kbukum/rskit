@@ -5,7 +5,7 @@ use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation};
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use serde::{Serialize, de::DeserializeOwned};
 
-use super::config::{JwtConfig, JwtKeyMaterial};
+use super::config::{AsymmetricAlgorithm, JwtConfig, JwtKeyMaterial};
 use crate::traits::{TokenGenerator, TokenValidator};
 
 /// JWT sign/verify service generic over the claims type `C`.
@@ -75,33 +75,28 @@ fn build_keys(key_material: &JwtKeyMaterial) -> AppResult<(EncodingKey, Decoding
                 DecodingKey::from_secret(secret.expose().as_bytes()),
             ))
         }
-        JwtKeyMaterial::Rs256 {
-            private_key_pem,
-            public_key_pem,
-        } => Ok((
-            EncodingKey::from_rsa_pem(private_key_pem.expose().as_bytes())
-                .map_err(|error| jwt_key_error(&error))?,
-            DecodingKey::from_rsa_pem(public_key_pem.expose().as_bytes())
-                .map_err(|error| jwt_key_error(&error))?,
-        )),
-        JwtKeyMaterial::Es256 {
-            private_key_pem,
-            public_key_pem,
-        } => Ok((
-            EncodingKey::from_ec_pem(private_key_pem.expose().as_bytes())
-                .map_err(|error| jwt_key_error(&error))?,
-            DecodingKey::from_ec_pem(public_key_pem.expose().as_bytes())
-                .map_err(|error| jwt_key_error(&error))?,
-        )),
-        JwtKeyMaterial::EdDsa {
-            private_key_pem,
-            public_key_pem,
-        } => Ok((
-            EncodingKey::from_ed_pem(private_key_pem.expose().as_bytes())
-                .map_err(|error| jwt_key_error(&error))?,
-            DecodingKey::from_ed_pem(public_key_pem.expose().as_bytes())
-                .map_err(|error| jwt_key_error(&error))?,
-        )),
+        JwtKeyMaterial::Asymmetric { algorithm, keys } => {
+            let priv_pem = keys.private_key_pem.expose().as_bytes();
+            let pub_pem = keys.public_key_pem.expose().as_bytes();
+            let (enc, dec) = match algorithm {
+                AsymmetricAlgorithm::Rs256 => (
+                    EncodingKey::from_rsa_pem(priv_pem),
+                    DecodingKey::from_rsa_pem(pub_pem),
+                ),
+                AsymmetricAlgorithm::Es256 => (
+                    EncodingKey::from_ec_pem(priv_pem),
+                    DecodingKey::from_ec_pem(pub_pem),
+                ),
+                AsymmetricAlgorithm::EdDsa => (
+                    EncodingKey::from_ed_pem(priv_pem),
+                    DecodingKey::from_ed_pem(pub_pem),
+                ),
+            };
+            Ok((
+                enc.map_err(|e| jwt_key_error(&e))?,
+                dec.map_err(|e| jwt_key_error(&e))?,
+            ))
+        }
     }
 }
 
