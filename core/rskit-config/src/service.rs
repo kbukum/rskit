@@ -18,9 +18,11 @@ pub struct ServiceConfig {
     pub version: String,
 
     /// Network address the service binds to.
+    #[serde(default = "ServiceConfig::default_address")]
     pub address: String,
 
     /// Network port the service listens on.
+    #[serde(default = "ServiceConfig::default_port")]
     pub port: u16,
 
     /// Enable verbose debug output.

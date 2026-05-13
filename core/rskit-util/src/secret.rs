@@ -2,12 +2,23 @@
 
 use std::fmt;
 
+use subtle::ConstantTimeEq;
+
 const SECRET_MASK: &str = "***";
 
 /// A string wrapper that masks its value in [`fmt::Display`], [`fmt::Debug`], and JSON
 /// serialisation to prevent accidental secret exposure in logs or config dumps.
 ///
 /// Use [`SecretString::expose()`] to access the plaintext.
+///
+/// # Security properties
+///
+/// - **Zeroize on drop:** the backing memory is zeroed when this value is dropped
+///   (via [`zeroize::ZeroizeOnDrop`]).
+/// - **Constant-time equality:** comparisons use [`subtle::ConstantTimeEq`] to
+///   prevent timing side-channel attacks.
+/// - **Clone creates a zeroed copy:** cloned instances are independently zeroed
+///   on drop.
 ///
 /// # Examples
 ///
@@ -18,7 +29,7 @@ const SECRET_MASK: &str = "***";
 /// assert_eq!(format!("{s}"), "***");
 /// assert_eq!(s.expose(), "hunter2");
 /// ```
-#[derive(Clone, Default)]
+#[derive(Clone, Default, zeroize::Zeroize, zeroize::ZeroizeOnDrop)]
 pub struct SecretString {
     value: String,
 }
@@ -30,9 +41,7 @@ impl SecretString {
             value: value.into(),
         }
     }
-}
 
-impl SecretString {
     /// Return the plaintext value.
     pub fn expose(&self) -> &str {
         &self.value
@@ -49,11 +58,14 @@ impl SecretString {
     }
 }
 
-impl zeroize::Zeroize for SecretString {
-    fn zeroize(&mut self) {
-        self.value.zeroize();
+impl PartialEq for SecretString {
+    /// Constant-time comparison to prevent timing side-channel attacks.
+    fn eq(&self, other: &Self) -> bool {
+        self.value.as_bytes().ct_eq(other.value.as_bytes()).into()
     }
 }
+
+impl Eq for SecretString {}
 
 impl fmt::Display for SecretString {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -88,14 +100,6 @@ impl<'de> serde::Deserialize<'de> for SecretString {
         Ok(Self::new(s))
     }
 }
-
-impl PartialEq for SecretString {
-    fn eq(&self, other: &Self) -> bool {
-        self.value == other.value
-    }
-}
-
-impl Eq for SecretString {}
 
 #[cfg(test)]
 mod tests {
@@ -142,5 +146,22 @@ mod tests {
     fn json_deserializes_plaintext() {
         let s: SecretString = serde_json::from_str(r#""actual_value""#).unwrap();
         assert_eq!(s.expose(), "actual_value");
+    }
+
+    #[test]
+    fn equality_is_constant_time() {
+        let a = SecretString::new("same-value");
+        let b = SecretString::new("same-value");
+        let c = SecretString::new("different");
+        assert_eq!(a, b);
+        assert_ne!(a, c);
+    }
+
+    #[test]
+    fn clone_produces_equal_independent_copy() {
+        let a = SecretString::new("cloned-secret");
+        let b = a.clone();
+        assert_eq!(a.expose(), b.expose());
+        assert_eq!(a, b);
     }
 }
