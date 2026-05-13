@@ -12,7 +12,7 @@ const SECRET_MASK: &str = "***";
 /// # Examples
 ///
 /// ```
-/// use rskit_config::SecretString;
+/// use rskit_util::SecretString;
 ///
 /// let s = SecretString::new("hunter2");
 /// assert_eq!(format!("{s}"), "***");

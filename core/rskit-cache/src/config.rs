@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use rskit_config::SecretString;
+use rskit_util::SecretString;
 use serde::{Deserialize, Serialize};
 
 /// Cache backend selection and common key settings.

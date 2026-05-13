@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use rskit_config::SecretString;
+use rskit_util::SecretString;
 use rskit_validation::Validate;
 use serde::{Deserialize, Deserializer};
 

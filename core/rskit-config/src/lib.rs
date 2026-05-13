@@ -3,11 +3,10 @@
 #![warn(missing_docs)]
 
 mod loader;
-mod secret;
 mod service;
 
 pub use loader::{ConfigLoader, load_config};
-pub use secret::SecretString;
+pub use rskit_util::SecretString;
 pub use service::{Environment, LogFormat, LogOutput, LoggingConfig, ServiceConfig};
 
 /// Trait that every application config struct must implement.

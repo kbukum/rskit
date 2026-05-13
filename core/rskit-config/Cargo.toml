@@ -19,13 +19,13 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 rskit-errors = { path = "../rskit-errors" }
+rskit-util   = { path = "../rskit-util" }
 serde        = { workspace = true }
 serde_json   = { workspace = true }
 config       = { workspace = true }
 dotenvy      = { workspace = true }
 rskit-validation = { path = "../rskit-validation" }
 validator = { workspace = true }
-zeroize      = { workspace = true }
 tracing      = { workspace = true }
 
 [dev-dependencies]

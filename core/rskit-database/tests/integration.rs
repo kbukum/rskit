@@ -4,7 +4,7 @@ use std::time::Duration;
 use rskit_database::SqlRepository;
 #[cfg(feature = "sqlite")]
 use rskit_database::register_sqlite;
-use rskit_config::SecretString;
+use rskit_util::SecretString;
 use rskit_database::{DatabaseConfig, DatabaseRegistry, DbDriver, FindOpts, SslMode};
 
 #[test]

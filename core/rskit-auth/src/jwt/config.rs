@@ -1,6 +1,6 @@
 use std::{fmt, time::Duration};
 
-use rskit_config::SecretString;
+use rskit_util::SecretString;
 use serde::Deserialize;
 
 /// Public JWT algorithm policy for rskit.

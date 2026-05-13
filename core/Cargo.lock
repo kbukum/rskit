@@ -5303,8 +5303,8 @@ dependencies = [
  "parking_lot",
  "rand 0.10.1",
  "reqwest 0.13.3",
- "rskit-config",
  "rskit-errors",
+ "rskit-util",
  "serde",
  "serde_json",
  "sha2 0.11.0",
@@ -5371,8 +5371,8 @@ dependencies = [
  "parking_lot",
  "redis",
  "rskit-bootstrap",
- "rskit-config",
  "rskit-errors",
+ "rskit-util",
  "serde",
  "serde_json",
  "tokio",
@@ -5424,6 +5424,7 @@ dependencies = [
  "dotenvy",
  "parking_lot",
  "rskit-errors",
+ "rskit-util",
  "rskit-validation",
  "serde",
  "serde_json",
@@ -5431,7 +5432,6 @@ dependencies = [
  "tokio",
  "tracing",
  "validator",
- "zeroize",
 ]
 
 [[package]]
@@ -5456,8 +5456,8 @@ dependencies = [
  "async-trait",
  "chrono",
  "rskit-bootstrap",
- "rskit-config",
  "rskit-errors",
+ "rskit-util",
  "rskit-validation",
  "serde",
  "serde_json",
@@ -6242,8 +6242,10 @@ dependencies = [
  "chrono",
  "parking_lot",
  "regex",
+ "serde",
  "serde_json",
  "tokio",
+ "zeroize",
 ]
 
 [[package]]

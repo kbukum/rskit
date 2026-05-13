@@ -21,9 +21,12 @@ rustdoc-args = ["--cfg", "docsrs"]
 chrono       = { workspace = true }
 parking_lot  = { workspace = true }
 regex        = { workspace = true }
+serde        = { workspace = true }
 serde_json   = { workspace = true }
+zeroize      = { workspace = true }
 
 [dev-dependencies]
+serde_json   = { workspace = true }
 tokio = { workspace = true }
 
 [lints]
