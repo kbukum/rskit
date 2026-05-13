@@ -93,7 +93,7 @@ impl ProblemDetail {
         Self {
             error_type: format!("{}{}", base_uri, code_to_kebab(err.code)),
             title: code_to_title(err.code),
-            status: err.http_status.as_u16(),
+            status: err.code.http_status().as_u16(),
             detail: err.message.clone(),
             instance: None,
             code: err.code,
@@ -104,12 +104,22 @@ impl ProblemDetail {
 }
 
 impl From<&AppError> for ProblemDetail {
+    /// Converts using the default `https://rskit.dev/errors/` type URI base.
+    ///
+    /// Suitable for internal tooling, tests, and gRPC detail payloads.
+    /// **Production HTTP services** should call [`ProblemDetail::with_base_uri`]
+    /// so the `type` URI advertises the application's own error-documentation
+    /// domain rather than `rskit.dev`.
     fn from(err: &AppError) -> Self {
         Self::build(DEFAULT_TYPE_BASE_URI, err)
     }
 }
 
 impl From<AppError> for ProblemDetail {
+    /// Converts using the default `https://rskit.dev/errors/` type URI base.
+    ///
+    /// See [`From<&AppError>`] for guidance on when to use
+    /// [`ProblemDetail::with_base_uri`] instead.
     fn from(err: AppError) -> Self {
         ProblemDetail::from(&err)
     }

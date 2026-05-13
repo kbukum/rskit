@@ -37,7 +37,7 @@ impl From<std::str::Utf8Error> for AppError {
 
 impl From<&AppError> for http::StatusCode {
     fn from(e: &AppError) -> Self {
-        e.http_status
+        e.code.http_status()
     }
 }
 

@@ -5,9 +5,14 @@ use axum::{
 use rskit_errors::{AppError, ProblemDetail};
 use tower::{Layer, Service};
 
-// ── Newtype so we can implement IntoResponse (orphan rule) ────────────────────
+// ── HttpError ─────────────────────────────────────────────────────────────────
 
 /// Wrapper around [`AppError`] that implements axum's [`IntoResponse`].
+///
+/// The default [`IntoResponse`] impl uses the `https://rskit.dev/errors/` type
+/// URI base.  Production services should use [`HttpError::with_type_base_uri`]
+/// (or build a `ProblemDetail` explicitly) so the `type` field in the response
+/// body advertises the application's own error-documentation domain.
 pub struct HttpError(pub AppError);
 
 impl From<AppError> for HttpError {
@@ -18,9 +23,27 @@ impl From<AppError> for HttpError {
 
 impl IntoResponse for HttpError {
     fn into_response(self) -> Response {
-        let status = StatusCode::from_u16(self.0.http_status.as_u16())
+        let status = StatusCode::from_u16(self.0.code.http_status().as_u16())
             .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
         let body = serde_json::to_string(&ProblemDetail::from(&self.0)).unwrap_or_default();
+        (status, [("content-type", "application/problem+json")], body).into_response()
+    }
+}
+
+impl HttpError {
+    /// Build an axum [`Response`] using `base_uri` as the RFC 9457 `type` prefix.
+    ///
+    /// Use this in HTTP middleware / error handlers that know the application's
+    /// configured error-documentation domain.
+    ///
+    /// ```rust,ignore
+    /// return HttpError::into_response_with_type_base(err, "https://myapp.com/errors");
+    /// ```
+    pub fn into_response_with_type_base(err: AppError, base_uri: &str) -> Response {
+        let status = StatusCode::from_u16(err.code.http_status().as_u16())
+            .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+        let body = serde_json::to_string(&ProblemDetail::with_base_uri(base_uri, &err))
+            .unwrap_or_default();
         (status, [("content-type", "application/problem+json")], body).into_response()
     }
 }

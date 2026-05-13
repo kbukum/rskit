@@ -1219,7 +1219,7 @@ fn validate_error_has_correct_http_status() {
         .required("name", "")
         .validate()
         .unwrap_err();
-    assert_eq!(err.http_status.as_u16(), 422); // UNPROCESSABLE_ENTITY
+    assert_eq!(err.code.http_status().as_u16(), 422); // UNPROCESSABLE_ENTITY
 }
 
 #[test]

@@ -20,6 +20,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 schemars   = { workspace = true }
 serde_json = { workspace = true }
+jsonschema = { workspace = true }
 
 [dev-dependencies]
 serde = { workspace = true }

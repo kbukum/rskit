@@ -323,7 +323,7 @@ fn validation_errors_produces_correct_app_error() {
 
     let err = result.unwrap_err();
     assert_eq!(err.code, ErrorCode::InvalidInput);
-    assert_eq!(err.http_status, http::StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(err.code.http_status(), http::StatusCode::UNPROCESSABLE_ENTITY);
 }
 
 #[test]
@@ -739,7 +739,7 @@ fn error_fluent_builder_integration() {
         .with_detail("attempted_at", "2024-01-01");
 
     assert_eq!(err.code, ErrorCode::NotFound);
-    assert_eq!(err.http_status, http::StatusCode::NOT_FOUND);
+    assert_eq!(err.code.http_status(), http::StatusCode::NOT_FOUND);
     assert!(!err.retryable);
 
     assert_eq!(err.details["search_field"], "email");

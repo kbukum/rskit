@@ -49,10 +49,11 @@ pub fn generate_with<T: JsonSchema>(opts: Options) -> Json {
 
 // ── Schema Validation ───────────────────────────────────────────────────────
 
-/// A single validation error with a JSON-pointer path.
+/// A single validation error with a path to the failing value.
 #[derive(Debug, Clone)]
 pub struct ValidationError {
-    /// Dot-separated JSON path to the failing value (empty string for the root).
+    /// Dot-notation path to the failing value (e.g. `"user.address.zip"`).
+    /// Empty string when the error is at the root of the document.
     pub path: String,
     /// Human-readable description of the constraint that was violated.
     pub message: String,
@@ -68,7 +69,7 @@ impl std::fmt::Display for ValidationError {
     }
 }
 
-/// Outcome of validating a value against a schema.
+/// Outcome of validating a value against a JSON Schema.
 #[derive(Debug, Clone)]
 pub struct ValidationResult {
     /// `true` if the value satisfies every constraint in the schema.
@@ -78,177 +79,61 @@ pub struct ValidationResult {
 }
 
 /// Validate a JSON value against a JSON Schema.
+///
+/// Uses the `jsonschema` crate (full JSON Schema Draft 7 support including
+/// `$ref`, `allOf`, `anyOf`, `oneOf`, `additionalProperties`, `pattern`, etc.).
+///
+/// If `schema` is itself invalid the returned result will contain a single
+/// error at the root path describing why the schema could not be compiled.
 pub fn validate(schema: &Value, value: &Value) -> ValidationResult {
-    let mut errors = Vec::new();
-    validate_value(schema, value, "", &mut errors);
+    let validator = match jsonschema::options().build(schema) {
+        Ok(v) => v,
+        Err(e) => {
+            return ValidationResult {
+                valid: false,
+                errors: vec![ValidationError {
+                    path: String::new(),
+                    message: format!("invalid schema: {e}"),
+                }],
+            };
+        }
+    };
+
+    let errors: Vec<ValidationError> = validator
+        .iter_errors(value)
+        .map(|e| ValidationError {
+            path: json_pointer_to_dot_path(&e.instance_path().to_string()),
+            message: e.to_string(),
+        })
+        .collect();
+
     ValidationResult {
         valid: errors.is_empty(),
         errors,
     }
 }
 
-fn validate_value(schema: &Value, value: &Value, path: &str, errors: &mut Vec<ValidationError>) {
-    let Some(obj) = schema.as_object() else {
-        return;
-    };
-
-    // type check
-    if let Some(type_val) = obj.get("type")
-        && let Some(expected) = type_val.as_str()
-        && !type_matches(expected, value)
-    {
-        errors.push(ValidationError {
-            path: path.to_string(),
-            message: format!(
-                "expected type \"{expected}\", got {}",
-                json_type_name(value)
-            ),
-        });
-        return; // no point checking further constraints
+/// Convert a JSON Pointer (`/a/b/0`) to dot-notation (`a.b[0]`).
+fn json_pointer_to_dot_path(pointer: &str) -> String {
+    if pointer.is_empty() || pointer == "/" {
+        return String::new();
     }
-
-    // enum
-    if let Some(enum_vals) = obj.get("enum").and_then(|v| v.as_array())
-        && !enum_vals.iter().any(|e| e == value)
-    {
-        errors.push(ValidationError {
-            path: path.to_string(),
-            message: format!("value not in enum: {value}"),
-        });
-    }
-
-    // string constraints
-    if let Some(s) = value.as_str() {
-        if let Some(min) = obj.get("minLength").and_then(|v| v.as_u64())
-            && (s.len() as u64) < min
-        {
-            errors.push(ValidationError {
-                path: path.to_string(),
-                message: format!("string length {} < minLength {min}", s.len()),
-            });
-        }
-        if let Some(max) = obj.get("maxLength").and_then(|v| v.as_u64())
-            && (s.len() as u64) > max
-        {
-            errors.push(ValidationError {
-                path: path.to_string(),
-                message: format!("string length {} > maxLength {max}", s.len()),
-            });
+    let mut result = String::new();
+    for segment in pointer.trim_start_matches('/').split('/') {
+        // Unescape JSON Pointer escape sequences: ~1 → /, ~0 → ~
+        let decoded = segment.replace("~1", "/").replace("~0", "~");
+        if result.is_empty() {
+            result.push_str(&decoded);
+        } else if decoded.bytes().all(|b| b.is_ascii_digit()) {
+            result.push('[');
+            result.push_str(&decoded);
+            result.push(']');
+        } else {
+            result.push('.');
+            result.push_str(&decoded);
         }
     }
-
-    // number constraints
-    if value.is_number()
-        && let Some(n) = value.as_f64()
-    {
-        if let Some(min) = obj.get("minimum").and_then(|v| v.as_f64())
-            && n < min
-        {
-            errors.push(ValidationError {
-                path: path.to_string(),
-                message: format!("value {n} < minimum {min}"),
-            });
-        }
-        if let Some(max) = obj.get("maximum").and_then(|v| v.as_f64())
-            && n > max
-        {
-            errors.push(ValidationError {
-                path: path.to_string(),
-                message: format!("value {n} > maximum {max}"),
-            });
-        }
-    }
-
-    // object constraints
-    if let Some(map) = value.as_object() {
-        // required fields
-        if let Some(required) = obj.get("required").and_then(|v| v.as_array()) {
-            for req in required {
-                if let Some(field) = req.as_str()
-                    && !map.contains_key(field)
-                {
-                    errors.push(ValidationError {
-                        path: child_path(path, field),
-                        message: format!("required field \"{field}\" is missing"),
-                    });
-                }
-            }
-        }
-
-        // properties
-        if let Some(props) = obj.get("properties").and_then(|v| v.as_object()) {
-            for (key, prop_schema) in props {
-                if let Some(prop_value) = map.get(key) {
-                    validate_value(prop_schema, prop_value, &child_path(path, key), errors);
-                }
-            }
-        }
-    }
-
-    // array constraints
-    if let Some(arr) = value.as_array() {
-        if let Some(min) = obj.get("minItems").and_then(|v| v.as_u64())
-            && (arr.len() as u64) < min
-        {
-            errors.push(ValidationError {
-                path: path.to_string(),
-                message: format!("array length {} < minItems {min}", arr.len()),
-            });
-        }
-        if let Some(max) = obj.get("maxItems").and_then(|v| v.as_u64())
-            && (arr.len() as u64) > max
-        {
-            errors.push(ValidationError {
-                path: path.to_string(),
-                message: format!("array length {} > maxItems {max}", arr.len()),
-            });
-        }
-
-        // items schema
-        if let Some(item_schema) = obj.get("items") {
-            for (i, item) in arr.iter().enumerate() {
-                validate_value(item_schema, item, &format!("{path}[{i}]"), errors);
-            }
-        }
-    }
-}
-
-fn type_matches(expected: &str, value: &Value) -> bool {
-    match expected {
-        "object" => value.is_object(),
-        "array" => value.is_array(),
-        "string" => value.is_string(),
-        "number" => value.is_number(),
-        "integer" => value.is_i64() || value.is_u64(),
-        "boolean" => value.is_boolean(),
-        "null" => value.is_null(),
-        _ => true,
-    }
-}
-
-fn json_type_name(value: &Value) -> &'static str {
-    match value {
-        Value::Null => "null",
-        Value::Bool(_) => "boolean",
-        Value::Number(n) => {
-            if n.is_i64() || n.is_u64() {
-                "integer"
-            } else {
-                "number"
-            }
-        }
-        Value::String(_) => "string",
-        Value::Array(_) => "array",
-        Value::Object(_) => "object",
-    }
-}
-
-fn child_path(parent: &str, child: &str) -> String {
-    if parent.is_empty() {
-        child.to_string()
-    } else {
-        format!("{parent}.{child}")
-    }
+    result
 }
 
 #[cfg(test)]
@@ -494,7 +379,10 @@ mod tests {
         });
         let r = validate(&schema, &json!({"user": {}}));
         assert!(!r.valid);
-        assert!(r.errors[0].path.contains("name"));
+        // JSON Schema reports required violations at the parent object path;
+        // the missing field name appears in the error message.
+        assert_eq!(r.errors[0].path, "user");
+        assert!(r.errors[0].message.contains("name"));
     }
 
     #[test]

@@ -9,6 +9,10 @@ use crate::code::ErrorCode;
 /// Carries a machine-readable [`ErrorCode`], a human-readable message,
 /// optional key→value details for rich error responses, and an optional
 /// cause chain compatible with `std::error::Error`.
+///
+/// HTTP status is not stored here — call [`ErrorCode::http_status()`] on
+/// `.code` when a transport mapping is needed.  This keeps `AppError` free
+/// of HTTP coupling so it can be used at every layer of the stack.
 #[derive(Debug)]
 pub struct AppError {
     /// Machine-readable error classification.
@@ -17,8 +21,6 @@ pub struct AppError {
     pub message: String,
     /// Whether the operation that produced this error is safe to retry.
     pub retryable: bool,
-    /// Canonical HTTP status code for this error.
-    pub http_status: http::StatusCode,
     /// Arbitrary key-value pairs for rich error responses.
     pub details: HashMap<String, Value>,
     /// Optional underlying error that caused this one.
@@ -42,13 +44,10 @@ impl AppError {
 
     /// Create a new [`AppError`] from `code` and a human-readable `message`.
     pub fn new(code: ErrorCode, message: impl Into<String>) -> Self {
-        let retryable = code.is_retryable();
-        let http_status = code.http_status();
         Self {
             code,
             message: message.into(),
-            retryable,
-            http_status,
+            retryable: code.is_retryable(),
             details: HashMap::new(),
             cause: None,
         }
@@ -307,9 +306,9 @@ mod tests {
     }
 
     #[test]
-    fn new_sets_http_status_from_code() {
+    fn code_http_status_from_code() {
         let err = AppError::new(ErrorCode::NotFound, "missing");
-        assert_eq!(err.http_status, http::StatusCode::NOT_FOUND);
+        assert_eq!(err.code.http_status(), http::StatusCode::NOT_FOUND);
     }
 
     #[test]

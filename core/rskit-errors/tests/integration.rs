@@ -159,7 +159,7 @@ fn is_retryable_all_codes_exhaustive() {
 fn not_found_has_correct_code_and_status() {
     let err = AppError::not_found("user", Some("42"));
     assert_eq!(err.code, ErrorCode::NotFound);
-    assert_eq!(err.http_status.as_u16(), 404);
+    assert_eq!(err.code.http_status().as_u16(), 404);
     assert!(!err.is_retryable());
     assert!(err.message.contains("user"));
     assert!(err.message.contains("42"));
@@ -178,7 +178,7 @@ fn service_unavailable_constructor() {
     let err = AppError::service_unavailable("payment-api");
     assert_eq!(err.code, ErrorCode::ServiceUnavailable);
     assert!(err.retryable);
-    assert_eq!(err.http_status.as_u16(), 503);
+    assert_eq!(err.code.http_status().as_u16(), 503);
     assert!(err.message.contains("payment-api"));
 }
 
@@ -187,7 +187,7 @@ fn connection_failed_constructor() {
     let err = AppError::connection_failed("redis");
     assert_eq!(err.code, ErrorCode::ConnectionFailed);
     assert!(err.retryable);
-    assert_eq!(err.http_status.as_u16(), 502);
+    assert_eq!(err.code.http_status().as_u16(), 502);
     assert!(err.message.contains("redis"));
 }
 
@@ -196,7 +196,7 @@ fn timeout_constructor() {
     let err = AppError::timeout("db query");
     assert_eq!(err.code, ErrorCode::Timeout);
     assert!(err.retryable);
-    assert_eq!(err.http_status.as_u16(), 504);
+    assert_eq!(err.code.http_status().as_u16(), 504);
     assert!(err.message.contains("db query"));
 }
 
@@ -205,7 +205,7 @@ fn rate_limited_constructor() {
     let err = AppError::rate_limited();
     assert_eq!(err.code, ErrorCode::RateLimited);
     assert!(err.retryable);
-    assert_eq!(err.http_status.as_u16(), 429);
+    assert_eq!(err.code.http_status().as_u16(), 429);
 }
 
 #[test]
@@ -213,7 +213,7 @@ fn already_exists_constructor() {
     let err = AppError::already_exists("email");
     assert_eq!(err.code, ErrorCode::AlreadyExists);
     assert!(!err.retryable);
-    assert_eq!(err.http_status.as_u16(), 409);
+    assert_eq!(err.code.http_status().as_u16(), 409);
     assert!(err.message.contains("email"));
 }
 
@@ -222,7 +222,7 @@ fn conflict_constructor() {
     let err = AppError::conflict("version mismatch");
     assert_eq!(err.code, ErrorCode::Conflict);
     assert!(!err.retryable);
-    assert_eq!(err.http_status.as_u16(), 409);
+    assert_eq!(err.code.http_status().as_u16(), 409);
     assert!(err.message.contains("version mismatch"));
 }
 
@@ -231,7 +231,7 @@ fn invalid_input_constructor() {
     let err = AppError::invalid_input("email", "must contain @");
     assert_eq!(err.code, ErrorCode::InvalidInput);
     assert!(!err.retryable);
-    assert_eq!(err.http_status.as_u16(), 422);
+    assert_eq!(err.code.http_status().as_u16(), 422);
     assert!(err.message.contains("email"));
     assert!(err.message.contains("must contain @"));
 }
@@ -241,7 +241,7 @@ fn missing_field_constructor() {
     let err = AppError::missing_field("username");
     assert_eq!(err.code, ErrorCode::MissingField);
     assert!(!err.retryable);
-    assert_eq!(err.http_status.as_u16(), 422);
+    assert_eq!(err.code.http_status().as_u16(), 422);
     assert!(err.message.contains("username"));
 }
 
@@ -250,7 +250,7 @@ fn invalid_format_constructor() {
     let err = AppError::invalid_format("date", "ISO 8601");
     assert_eq!(err.code, ErrorCode::InvalidFormat);
     assert!(!err.retryable);
-    assert_eq!(err.http_status.as_u16(), 422);
+    assert_eq!(err.code.http_status().as_u16(), 422);
     assert!(err.message.contains("date"));
     assert!(err.message.contains("ISO 8601"));
 }
@@ -260,7 +260,7 @@ fn unauthorized_constructor() {
     let err = AppError::unauthorized("missing bearer token");
     assert_eq!(err.code, ErrorCode::Unauthorized);
     assert!(!err.retryable);
-    assert_eq!(err.http_status.as_u16(), 401);
+    assert_eq!(err.code.http_status().as_u16(), 401);
     assert!(err.message.contains("missing bearer token"));
 }
 
@@ -269,7 +269,7 @@ fn forbidden_constructor() {
     let err = AppError::forbidden("admin only");
     assert_eq!(err.code, ErrorCode::Forbidden);
     assert!(!err.retryable);
-    assert_eq!(err.http_status.as_u16(), 403);
+    assert_eq!(err.code.http_status().as_u16(), 403);
     assert!(err.message.contains("admin only"));
 }
 
@@ -278,7 +278,7 @@ fn token_expired_constructor() {
     let err = AppError::token_expired();
     assert_eq!(err.code, ErrorCode::TokenExpired);
     assert!(!err.retryable);
-    assert_eq!(err.http_status.as_u16(), 401);
+    assert_eq!(err.code.http_status().as_u16(), 401);
     assert!(err.message.contains("expired"));
 }
 
@@ -287,7 +287,7 @@ fn invalid_token_constructor() {
     let err = AppError::invalid_token();
     assert_eq!(err.code, ErrorCode::InvalidToken);
     assert!(!err.retryable);
-    assert_eq!(err.http_status.as_u16(), 401);
+    assert_eq!(err.code.http_status().as_u16(), 401);
     assert!(err.message.contains("invalid"));
 }
 
@@ -297,7 +297,7 @@ fn internal_constructor_wraps_cause() {
     let err = AppError::internal(cause);
     assert_eq!(err.code, ErrorCode::Internal);
     assert!(!err.retryable);
-    assert_eq!(err.http_status.as_u16(), 500);
+    assert_eq!(err.code.http_status().as_u16(), 500);
     // message must be generic — must NOT expose the cause to callers
     assert_eq!(err.message, "internal server error");
     assert!(
@@ -313,7 +313,7 @@ fn database_error_constructor_wraps_cause() {
     let err = AppError::database_error(cause);
     assert_eq!(err.code, ErrorCode::DatabaseError);
     assert!(!err.retryable);
-    assert_eq!(err.http_status.as_u16(), 500);
+    assert_eq!(err.code.http_status().as_u16(), 500);
     // message must be generic — must NOT expose the cause to callers
     assert_eq!(err.message, "database error");
     assert!(
@@ -329,7 +329,7 @@ fn external_service_constructor() {
     let err = AppError::external_service("stripe", cause);
     assert_eq!(err.code, ErrorCode::ExternalService);
     assert!(err.retryable);
-    assert_eq!(err.http_status.as_u16(), 502);
+    assert_eq!(err.code.http_status().as_u16(), 502);
     assert!(err.cause.is_some());
     assert_eq!(
         err.details.get("service").and_then(|v| v.as_str()),

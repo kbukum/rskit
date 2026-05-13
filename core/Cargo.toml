@@ -124,7 +124,8 @@ http = "1"
 regex = "1"
 once_cell = "1"
 base64 = "0.22"
-schemars = "1"
+schemars    = "1"
+jsonschema  = { version = "0.46", default-features = false }
 
 # HTTP server (Phase 2)
 axum = { version = "0.8", features = ["http2", "ws"] }
