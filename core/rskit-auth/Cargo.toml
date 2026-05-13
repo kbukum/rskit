@@ -41,7 +41,7 @@ tower         = "0.5"
 http          = "1.0"
 zeroize       = { workspace = true }
 reqwest       = { workspace = true }
-rskit-config = { version = "0.1.0", path = "../rskit-config" }
+rskit-config = { path = "../rskit-config" }
 
 [dev-dependencies]
 tokio         = { workspace = true, features = ["full", "macros", "rt-multi-thread"] }

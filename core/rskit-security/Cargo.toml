@@ -21,7 +21,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-rskit-errors = { version = "0.1.0", path = "../rskit-errors" }
+rskit-errors = { path = "../rskit-errors" }
 http         = { workspace = true }
 tower        = { workspace = true }
 
