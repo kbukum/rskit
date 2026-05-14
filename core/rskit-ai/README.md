@@ -7,7 +7,6 @@ Shared AI vocabulary for rskit AI/ML crates: messages, multimodal content, tool-
 ```mermaid
 graph TD
     errors[rskit-errors]
-    util[rskit-util]
     version[rskit-version]
     ai[rskit-ai]
     chat[chat types]
@@ -22,7 +21,6 @@ graph TD
     skill[rskit-skill]
 
     errors --> ai
-    util --> ai
     version --> ai
     ai --> chat
     ai --> stream

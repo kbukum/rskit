@@ -722,11 +722,16 @@ mod tests {
     fn test_registry() -> Arc<Registry> {
         let registry = Registry::new();
         registry
-            .register(from_fn(
-                "echo",
-                "Echo a message back",
-                |_ctx: Context, input: EchoInput| async move { Ok(text_result(&input.message)) },
-            ))
+            .register(
+                from_fn(
+                    "echo",
+                    "Echo a message back",
+                    |_ctx: Context, input: EchoInput| async move {
+                        Ok(text_result(&input.message))
+                    },
+                )
+                .unwrap(),
+            )
             .unwrap();
         Arc::new(registry)
     }

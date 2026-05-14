@@ -679,21 +679,24 @@ mod tests {
         let attempts = Arc::new(AtomicU32::new(0));
         let attempts_for_tool = Arc::clone(&attempts);
         registry
-            .register(from_fn(
-                "add",
-                "Add two numbers",
-                move |_ctx: Context, input: AddInput| {
-                    let attempts = Arc::clone(&attempts_for_tool);
-                    async move {
-                        let attempt = attempts.fetch_add(1, Ordering::SeqCst);
-                        if attempt == 0 {
-                            Err(AppError::connection_failed("add"))
-                        } else {
-                            Ok(text_result(&format!("{}", input.a + input.b)))
+            .register(
+                from_fn(
+                    "add",
+                    "Add two numbers",
+                    move |_ctx: Context, input: AddInput| {
+                        let attempts = Arc::clone(&attempts_for_tool);
+                        async move {
+                            let attempt = attempts.fetch_add(1, Ordering::SeqCst);
+                            if attempt == 0 {
+                                Err(AppError::connection_failed("add"))
+                            } else {
+                                Ok(text_result(&format!("{}", input.a + input.b)))
+                            }
                         }
-                    }
-                },
-            ))
+                    },
+                )
+                .unwrap(),
+            )
             .unwrap();
 
         // First call: model requests tool

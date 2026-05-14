@@ -39,7 +39,7 @@ impl ServiceConfig {
         "service".to_string()
     }
     fn default_version() -> String {
-        env!("CARGO_PKG_VERSION").to_string()
+        rskit_version::package_version().to_string()
     }
     fn default_address() -> String {
         "0.0.0.0".to_string()
@@ -251,7 +251,7 @@ mod tests {
     #[test]
     fn service_config_default_version_is_cargo_pkg() {
         let cfg = ServiceConfig::default();
-        assert_eq!(cfg.version, env!("CARGO_PKG_VERSION"));
+        assert_eq!(cfg.version, rskit_version::package_version());
     }
 
     #[test]

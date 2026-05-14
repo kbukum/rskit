@@ -26,15 +26,15 @@ use crate::result::ToolResult;
 ///
 /// let tool = from_fn("search", "Search the web", |_ctx, input: SearchInput| async move {
 ///     Ok(rskit_tool::result::text_result(&format!("found: {}", input.query)))
-/// });
+/// })?;
 /// ```
-pub fn from_fn<I, F, Fut>(name: &str, description: &str, handler: F) -> Box<dyn Callable>
+pub fn from_fn<I, F, Fut>(name: &str, description: &str, handler: F) -> AppResult<Box<dyn Callable>>
 where
     I: DeserializeOwned + JsonSchema + Send + 'static,
     F: Fn(Context, I) -> Fut + Send + Sync + 'static,
     Fut: Future<Output = AppResult<ToolResult>> + Send + 'static,
 {
-    let input_schema = rskit_schema::generate::<I>();
+    let input_schema = rskit_schema::generate::<I>()?;
 
     let def = Definition {
         name: name.to_string(),
@@ -45,11 +45,11 @@ where
         envelope: crate::Envelope::default(),
     };
 
-    Box::new(FnTool {
+    Ok(Box::new(FnTool {
         definition: def,
         handler,
         _phantom: std::marker::PhantomData,
-    })
+    }))
 }
 
 struct FnTool<F, I> {
@@ -86,14 +86,18 @@ where
 ///
 /// The handler takes only the input (no Context) and returns `AppResult<O>`.
 /// The output is automatically serialized to JSON.
-pub fn from_fn_simple<I, O, F, Fut>(name: &str, description: &str, handler: F) -> Box<dyn Callable>
+pub fn from_fn_simple<I, O, F, Fut>(
+    name: &str,
+    description: &str,
+    handler: F,
+) -> AppResult<Box<dyn Callable>>
 where
     I: DeserializeOwned + JsonSchema + Send + 'static,
     O: Serialize + Send + 'static,
     F: Fn(I) -> Fut + Send + Sync + 'static,
     Fut: Future<Output = AppResult<O>> + Send + 'static,
 {
-    let input_schema = rskit_schema::generate::<I>();
+    let input_schema = rskit_schema::generate::<I>()?;
 
     let def = Definition {
         name: name.to_string(),
@@ -104,11 +108,11 @@ where
         envelope: crate::Envelope::default(),
     };
 
-    Box::new(SimpleFnTool {
+    Ok(Box::new(SimpleFnTool {
         definition: def,
         handler,
         _phantom: std::marker::PhantomData,
-    })
+    }))
 }
 
 struct SimpleFnTool<F, I, O> {

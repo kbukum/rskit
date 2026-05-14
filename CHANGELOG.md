@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — Foundations
+- **rskit-util**: reduced the L0 utility crate to a minimal domain-free
+  dependency surface.
+- **rskit-config**: moved `SecretString` ownership out of `rskit-util`.
+- **rskit-errors**: removed mutable global problem-detail URI configuration and
+  standardized cancellation HTTP mapping on `408 Request Timeout`.
+- **rskit-version**: added canonical package-version helpers and routed service
+  defaults/health metadata through them.
+
 ### Changed — Storage Adapter Boundaries
 - **rskit-storage**: removed the feature-gated GCS backend from the core crate
   so storage remains local/trait-focused and does not own Google Cloud SDK

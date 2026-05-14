@@ -34,7 +34,7 @@ redis           = { workspace = true, optional = true }
 # Internal
 rskit-errors    = { path = "../rskit-errors" }
 rskit-bootstrap = { path = "../rskit-bootstrap" }
-rskit-util   = { path = "../rskit-util" }
+rskit-config    = { path = "../rskit-config" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

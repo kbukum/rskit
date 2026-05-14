@@ -25,10 +25,12 @@ config       = { workspace = true }
 dotenvy      = { workspace = true }
 validator = { workspace = true }
 tracing      = { workspace = true }
+subtle       = "2.6"
+zeroize      = { workspace = true }
 
 # Internal
 rskit-errors = { path = "../rskit-errors" }
-rskit-util   = { path = "../rskit-util" }
+rskit-version = { path = "../rskit-version" }
 rskit-validation = { path = "../rskit-validation" }
 
 [dev-dependencies]

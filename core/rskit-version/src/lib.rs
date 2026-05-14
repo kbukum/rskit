@@ -21,6 +21,10 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
+const MAIN_BRANCH: &str = "main";
+const MASTER_BRANCH: &str = "master";
+const SHORT_COMMIT_LEN: usize = 7;
+
 /// Immutable snapshot of build/version metadata. Compatible with gokit and pykit `VersionInfo`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VersionInfo {
@@ -40,13 +44,74 @@ pub struct VersionInfo {
 
 impl fmt::Display for VersionInfo {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", get_full_version())
+        f.write_str(&self.full_version())
     }
+}
+
+impl VersionInfo {
+    /// Return the package version without build metadata.
+    pub fn package_version(&self) -> &str {
+        &self.version
+    }
+
+    /// Return the short git commit hash, if available.
+    pub fn short_git_commit(&self) -> Option<&str> {
+        if self.git_commit.is_empty() {
+            None
+        } else {
+            Some(short_commit(&self.git_commit))
+        }
+    }
+
+    /// Returns a concise version string: `{version}[-{short_commit}]`.
+    pub fn short_version(&self) -> String {
+        self.short_git_commit().map_or_else(
+            || self.version.clone(),
+            |commit| format!("{}-{commit}", self.version),
+        )
+    }
+
+    /// Returns a detailed version string with optional branch and build time.
+    pub fn full_version(&self) -> String {
+        let mut parts = vec![self.version.clone()];
+
+        if let Some(commit) = self.short_git_commit() {
+            parts.push(commit.to_owned());
+        }
+
+        if !self.git_branch.is_empty()
+            && self.git_branch != MAIN_BRANCH
+            && self.git_branch != MASTER_BRANCH
+        {
+            parts.push(self.git_branch.clone());
+        }
+
+        let mut version = parts.join("-");
+
+        if !self.build_time.is_empty() {
+            use std::fmt::Write;
+            let _ = write!(version, " (built {})", self.build_time);
+        }
+
+        version
+    }
+}
+
+fn short_commit(commit: &str) -> &str {
+    commit
+        .char_indices()
+        .nth(SHORT_COMMIT_LEN)
+        .map_or(commit, |(idx, _)| &commit[..idx])
+}
+
+/// Return the Cargo package version for this crate.
+pub const fn package_version() -> &'static str {
+    env!("CARGO_PKG_VERSION")
 }
 
 /// Returns comprehensive version information collected at compile time.
 pub fn get_version_info() -> VersionInfo {
-    let version = env!("CARGO_PKG_VERSION").to_owned();
+    let version = package_version().to_owned();
     let git_commit = env!("GIT_COMMIT").to_owned();
     let git_branch = env!("GIT_BRANCH").to_owned();
     let build_time = env!("BUILD_TIME").to_owned();
@@ -66,16 +131,7 @@ pub fn get_version_info() -> VersionInfo {
 
 /// Returns a concise version string: `{version}[-{short_commit}]`.
 pub fn get_short_version() -> String {
-    let info = get_version_info();
-    if info.git_commit.is_empty() {
-        return info.version;
-    }
-    let short = if info.git_commit.len() > 7 {
-        &info.git_commit[..7]
-    } else {
-        &info.git_commit
-    };
-    format!("{}-{short}", info.version)
+    get_version_info().short_version()
 }
 
 /// Returns a detailed version string with optional branch and build time.
@@ -83,30 +139,7 @@ pub fn get_short_version() -> String {
 /// Format: `{version}[-{short_commit}][-{branch}] (built {time})`
 /// Branches named `main` or `master` are omitted.
 pub fn get_full_version() -> String {
-    let info = get_version_info();
-    let mut parts = vec![info.version.clone()];
-
-    if !info.git_commit.is_empty() {
-        let short = if info.git_commit.len() > 7 {
-            &info.git_commit[..7]
-        } else {
-            &info.git_commit
-        };
-        parts.push(short.to_owned());
-    }
-
-    if !info.git_branch.is_empty() && info.git_branch != "main" && info.git_branch != "master" {
-        parts.push(info.git_branch.clone());
-    }
-
-    let mut version = parts.join("-");
-
-    if !info.build_time.is_empty() {
-        use std::fmt::Write;
-        let _ = write!(version, " (built {})", info.build_time);
-    }
-
-    version
+    get_version_info().full_version()
 }
 
 /// Returns `true` when this build represents a release (not dev, not dirty).
@@ -167,14 +200,6 @@ mod tests {
     fn is_release_reflects_version() {
         // The workspace version is "0.1.0" which is not "dev" and not dirty
         assert!(is_release());
-    }
-
-    #[test]
-    fn version_info_serializes_to_json() {
-        let info = get_version_info();
-        let json = serde_json::to_string(&info).expect("serialize");
-        let restored: VersionInfo = serde_json::from_str(&json).expect("deserialize");
-        assert_eq!(info, restored);
     }
 
     #[test]

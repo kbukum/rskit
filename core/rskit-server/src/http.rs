@@ -284,7 +284,7 @@ pub fn healthz_router() -> Router {
     async fn healthz_handler() -> Json<LivenessResponse> {
         Json(LivenessResponse {
             status: "ok",
-            version: env!("CARGO_PKG_VERSION"),
+            version: rskit_version::package_version(),
         })
     }
 
