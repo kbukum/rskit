@@ -18,6 +18,7 @@ fn streamed_tool_uses(events: &[&[u8]]) -> Vec<rskit_ai::ToolUseBlock> {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn parses_non_streaming_fixtures() {
     let cases = [
         FixtureCase {

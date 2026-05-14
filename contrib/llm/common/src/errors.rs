@@ -233,8 +233,8 @@ mod tests {
             error_type: None,
         };
         assert_eq!(api_err.to_genai_error(), GenAiError::RateLimited);
-        let app_err: AppError = api_err.into();
-        assert_eq!(app_err.code, ErrorCode::RateLimited);
+        let converted: AppError = api_err.into();
+        assert_eq!(converted.code, ErrorCode::RateLimited);
     }
 
     #[test]

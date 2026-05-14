@@ -55,7 +55,8 @@ mod tests {
             |_ctx: Context, input: AddInput| async move {
                 Ok(text_result(&format!("{}", input.a + input.b)))
             },
-        );
+        )
+        .unwrap();
 
         assert_eq!(tool.definition().name, "add");
         assert_eq!(tool.definition().description, "Add two numbers");
@@ -74,7 +75,8 @@ mod tests {
             Ok(AddOutput {
                 sum: input.a + input.b,
             })
-        });
+        })
+        .unwrap();
 
         let ctx = Context::new();
         let result = tool
@@ -89,7 +91,8 @@ mod tests {
     async fn test_from_fn_schema_generated() {
         let tool = from_fn("add", "Add", |_ctx: Context, _input: AddInput| async move {
             Ok(text_result("0"))
-        });
+        })
+        .unwrap();
 
         let schema = &tool.definition().input_schema;
         assert!(schema.is_object());
@@ -103,7 +106,8 @@ mod tests {
     async fn test_from_fn_invalid_input() {
         let tool = from_fn("add", "Add", |_ctx: Context, _input: AddInput| async move {
             Ok(text_result("0"))
-        });
+        })
+        .unwrap();
 
         let ctx = Context::new();
         let result = tool.call(&ctx, serde_json::json!({"x": 1})).await;
@@ -114,7 +118,8 @@ mod tests {
     async fn test_validate() {
         let tool = from_fn("add", "Add", |_ctx: Context, _input: AddInput| async move {
             Ok(text_result("0"))
-        });
+        })
+        .unwrap();
 
         let valid = tool.validate(&serde_json::json!({"a": 1, "b": 2}));
         assert!(valid.valid);
@@ -134,7 +139,8 @@ mod tests {
             |_ctx: Context, input: AddInput| async move {
                 Ok(text_result(&format!("{}", input.a + input.b)))
             },
-        );
+        )
+        .unwrap();
 
         registry.register(tool).unwrap();
         assert_eq!(registry.len(), 1);
@@ -155,10 +161,12 @@ mod tests {
 
         let t1 = from_fn("dup", "First", |_ctx: Context, _: AddInput| async move {
             Ok(text_result("1"))
-        });
+        })
+        .unwrap();
         let t2 = from_fn("dup", "Second", |_ctx: Context, _: AddInput| async move {
             Ok(text_result("2"))
-        });
+        })
+        .unwrap();
 
         registry.register(t1).unwrap();
         assert!(registry.register(t2).is_err());
@@ -178,10 +186,12 @@ mod tests {
 
         let t1 = from_fn("alpha", "A tool", |_ctx: Context, _: AddInput| async move {
             Ok(text_result("a"))
-        });
+        })
+        .unwrap();
         let t2 = from_fn("beta", "B tool", |_ctx: Context, _: AddInput| async move {
             Ok(text_result("b"))
-        });
+        })
+        .unwrap();
 
         registry.register(t1).unwrap();
         registry.register(t2).unwrap();
@@ -198,18 +208,24 @@ mod tests {
     async fn test_registry_search() {
         let registry = Registry::new();
         registry
-            .register(from_fn(
-                "file_read",
-                "Read a file",
-                |_ctx: Context, _: AddInput| async move { Ok(text_result("")) },
-            ))
+            .register(
+                from_fn(
+                    "file_read",
+                    "Read a file",
+                    |_ctx: Context, _: AddInput| async move { Ok(text_result("")) },
+                )
+                .unwrap(),
+            )
             .unwrap();
         registry
-            .register(from_fn(
-                "web_search",
-                "Search the web",
-                |_ctx: Context, _: AddInput| async move { Ok(text_result("")) },
-            ))
+            .register(
+                from_fn(
+                    "web_search",
+                    "Search the web",
+                    |_ctx: Context, _: AddInput| async move { Ok(text_result("")) },
+                )
+                .unwrap(),
+            )
             .unwrap();
 
         let results = registry.search("file");

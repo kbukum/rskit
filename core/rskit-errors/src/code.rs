@@ -92,10 +92,8 @@ impl ErrorCode {
                 http::StatusCode::INTERNAL_SERVER_ERROR
             }
             ErrorCode::ExternalService => http::StatusCode::BAD_GATEWAY,
-            // 499 Client Closed Request (non-standard but widely used for cancellation)
-            ErrorCode::Cancelled => {
-                http::StatusCode::from_u16(499).unwrap_or(http::StatusCode::INTERNAL_SERVER_ERROR)
-            }
+            // Use standard 408 instead of non-standard 499 so HTTP mappings are portable.
+            ErrorCode::Cancelled => http::StatusCode::REQUEST_TIMEOUT,
             #[allow(unreachable_patterns)]
             _ => http::StatusCode::INTERNAL_SERVER_ERROR,
         }

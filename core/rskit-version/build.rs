@@ -1,5 +1,6 @@
 //! Build script that captures git and build metadata as compile-time environment variables.
 
+use std::env;
 use std::process::Command;
 
 fn run_git(args: &[&str]) -> String {
@@ -25,19 +26,40 @@ fn build_time_rfc3339() -> String {
         .unwrap_or_default()
 }
 
-fn main() {
-    let git_commit = run_git(&["rev-parse", "HEAD"]);
-    let git_branch = run_git(&["rev-parse", "--abbrev-ref", "HEAD"]);
-    let build_time = build_time_rfc3339();
-
-    let rust_version = Command::new("rustc")
-        .arg("--version")
+fn command_stdout(program: &str, args: &[&str]) -> String {
+    Command::new(program)
+        .args(args)
         .output()
         .ok()
         .filter(|o| o.status.success())
         .and_then(|o| String::from_utf8(o.stdout).ok())
         .map(|s| s.trim().to_owned())
-        .unwrap_or_default();
+        .unwrap_or_default()
+}
+
+fn rust_version() -> String {
+    let rustc = env::var("RUSTC").unwrap_or_else(|_| "rustc".to_owned());
+    let version = command_stdout(&rustc, &["--version"]);
+    if version.starts_with("rustc ") {
+        return version;
+    }
+
+    let rustup_rustc = command_stdout("rustup", &["which", "rustc"]);
+    if !rustup_rustc.is_empty() {
+        let version = command_stdout(&rustup_rustc, &["--version"]);
+        if version.starts_with("rustc ") {
+            return version;
+        }
+    }
+
+    version
+}
+
+fn main() {
+    let git_commit = run_git(&["rev-parse", "HEAD"]);
+    let git_branch = run_git(&["rev-parse", "--abbrev-ref", "HEAD"]);
+    let build_time = build_time_rfc3339();
+    let rust_version = rust_version();
 
     println!("cargo:rustc-env=GIT_COMMIT={git_commit}");
     println!("cargo:rustc-env=GIT_BRANCH={git_branch}");

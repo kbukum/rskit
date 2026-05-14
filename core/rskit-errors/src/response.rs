@@ -1,43 +1,15 @@
 use std::collections::HashMap;
-use std::sync::OnceLock;
 
 use serde::{Deserialize, Serialize};
 
 use crate::AppError;
 use crate::code::ErrorCode;
 
-// ── Configurable type base URI ────────────────────────────────────────────────
-
-static TYPE_BASE_URI: OnceLock<String> = OnceLock::new();
-
 const DEFAULT_TYPE_BASE_URI: &str = "https://rskit.dev/errors/";
 
-/// Override the base URI used in RFC 9457 `type` fields.
-///
-/// Must end with `/`; a trailing slash is appended automatically if absent.
-/// Logs a warning and silently keeps the first value if called more than once
-/// (idempotent for the same process).
-pub fn set_type_base_uri(uri: impl Into<String>) {
-    let mut uri = uri.into();
-    if !uri.ends_with('/') {
-        uri.push('/');
-    }
-    if TYPE_BASE_URI.set(uri).is_err() {
-        tracing::warn!(
-            "rskit-errors: set_type_base_uri: base URI is already set; ignoring second call"
-        );
-    }
-}
-
-/// Returns the current type base URI.
-///
-/// Defaults to `"https://rskit.dev/errors/"` unless overridden via
-/// [`set_type_base_uri`].
-pub fn type_base_uri() -> &'static str {
-    TYPE_BASE_URI
-        .get()
-        .map(|s| s.as_str())
-        .unwrap_or(DEFAULT_TYPE_BASE_URI)
+/// Returns the canonical RFC 9457 type base URI used by rskit errors.
+pub const fn type_base_uri() -> &'static str {
+    DEFAULT_TYPE_BASE_URI
 }
 
 // ── ProblemDetail ─────────────────────────────────────────────────────────────
@@ -309,8 +281,6 @@ mod tests {
 
     #[test]
     fn type_base_uri_default() {
-        // May have been set by a prior test in this process, so just check it's
-        // a valid HTTPS URI ending with '/'.
         let uri = type_base_uri();
         assert!(uri.starts_with("https://"), "uri: {uri}");
         assert!(uri.ends_with('/'), "uri: {uri}");

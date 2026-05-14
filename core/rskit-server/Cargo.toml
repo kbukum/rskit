@@ -45,6 +45,7 @@ rskit-bootstrap  = { path = "../rskit-bootstrap" }
 rskit-resilience = { path = "../rskit-resilience" }
 rskit-security   = { path = "../rskit-security" }
 rskit-validation = { path = "../rskit-validation" }
+rskit-version    = { path = "../rskit-version" }
 
 [dev-dependencies]
 futures          = { workspace = true }

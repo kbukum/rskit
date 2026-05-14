@@ -44,7 +44,7 @@ reqwest       = { workspace = true }
 
 # Internal
 rskit-errors  = { path = "../rskit-errors" }
-rskit-util    = { path = "../rskit-util" }
+rskit-config  = { path = "../rskit-config" }
 
 [dev-dependencies]
 tokio         = { workspace = true, features = ["full", "macros", "rt-multi-thread"] }

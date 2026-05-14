@@ -27,6 +27,7 @@ fn http_status_all_codes_exhaustive() {
         (ErrorCode::Internal, 500),
         (ErrorCode::DatabaseError, 500),
         (ErrorCode::ExternalService, 502),
+        (ErrorCode::Cancelled, 408),
     ];
     for (code, expected) in cases {
         assert_eq!(
@@ -63,6 +64,7 @@ fn grpc_code_all_error_codes_exhaustive() {
         (ErrorCode::Internal, tonic::Code::Internal),
         (ErrorCode::DatabaseError, tonic::Code::Internal),
         (ErrorCode::ExternalService, tonic::Code::Internal),
+        (ErrorCode::Cancelled, tonic::Code::Cancelled),
     ];
     for (code, expected_grpc) in cases {
         let err = AppError::new(code, "test");
@@ -96,6 +98,7 @@ fn grpc_status_to_app_error_roundtrip() {
         (tonic::Code::InvalidArgument, ErrorCode::InvalidInput),
         (tonic::Code::Unauthenticated, ErrorCode::Unauthorized),
         (tonic::Code::PermissionDenied, ErrorCode::Forbidden),
+        (tonic::Code::Cancelled, ErrorCode::Cancelled),
     ];
     for (grpc_code, expected_error_code) in cases {
         let status = tonic::Status::new(grpc_code, "test msg");
@@ -142,6 +145,7 @@ fn is_retryable_all_codes_exhaustive() {
         ErrorCode::InvalidToken,
         ErrorCode::Internal,
         ErrorCode::DatabaseError,
+        ErrorCode::Cancelled,
     ];
     for code in retryable {
         assert!(code.is_retryable(), "{:?} should be retryable", code);

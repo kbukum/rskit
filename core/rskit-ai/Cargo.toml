@@ -25,5 +25,4 @@ semver       = { version = "1", features = ["serde"] }
 
 # Internal
 rskit-errors = { path = "../rskit-errors" }
-rskit-util   = { path = "../rskit-util" }
 rskit-version = { path = "../rskit-version" }

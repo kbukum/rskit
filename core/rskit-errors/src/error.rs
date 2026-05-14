@@ -57,24 +57,28 @@ impl AppError {
     // ── Fluent builder methods ──────────────────────────────────────────
 
     /// Attach an underlying cause to this error.
+    #[must_use]
     pub fn with_cause(mut self, cause: impl std::error::Error + Send + Sync + 'static) -> Self {
         self.cause = Some(Box::new(cause));
         self
     }
 
     /// Add a single key-value detail entry.
+    #[must_use]
     pub fn with_detail(mut self, key: impl Into<String>, value: impl Into<Value>) -> Self {
         self.details.insert(key.into(), value.into());
         self
     }
 
     /// Merge a map of detail entries into this error.
+    #[must_use]
     pub fn with_details(mut self, details: HashMap<String, Value>) -> Self {
         self.details.extend(details);
         self
     }
 
     /// Override whether this error is considered retryable.
+    #[must_use]
     pub fn retryable(mut self, r: bool) -> Self {
         self.retryable = r;
         self
@@ -240,6 +244,7 @@ impl AppError {
     ///     .context("load profile");
     /// assert_eq!(err.message, "load profile: user not found");
     /// ```
+    #[must_use]
     pub fn context(mut self, msg: impl Into<String>) -> Self {
         let new_msg = format!("{}: {}", msg.into(), self.message);
         self.message = new_msg;
@@ -264,6 +269,31 @@ impl AppError {
             self.code,
             ErrorCode::Unauthorized | ErrorCode::TokenExpired | ErrorCode::InvalidToken
         )
+    }
+
+    /// Machine-readable error classification.
+    pub const fn code(&self) -> ErrorCode {
+        self.code
+    }
+
+    /// Human-readable error message.
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+
+    /// Canonical HTTP status code for this error.
+    pub const fn http_status(&self) -> http::StatusCode {
+        self.http_status
+    }
+
+    /// Additional structured error details.
+    pub fn details(&self) -> &HashMap<String, Value> {
+        &self.details
+    }
+
+    /// Underlying source error, if one was attached.
+    pub fn cause(&self) -> Option<&(dyn std::error::Error + Send + Sync + 'static)> {
+        self.cause.as_deref()
     }
 }
 

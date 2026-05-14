@@ -4,6 +4,9 @@
 //! JSON Schema documents from any type implementing `JsonSchema`, plus a
 //! runtime validator for checking JSON values against schemas.
 
+#![warn(missing_docs)]
+
+use rskit_errors::{AppError, AppResult, ErrorCode};
 pub use schemars::JsonSchema;
 use schemars::SchemaGenerator;
 use serde_json::Value;
@@ -14,9 +17,15 @@ pub type Json = serde_json::Value;
 // ── Schema Generation ───────────────────────────────────────────────────────
 
 /// Generate a JSON Schema from a type implementing `JsonSchema`.
-pub fn generate<T: JsonSchema>() -> Json {
+pub fn generate<T: JsonSchema>() -> AppResult<Json> {
     let schema = SchemaGenerator::default().into_root_schema_for::<T>();
-    serde_json::to_value(schema).unwrap_or_default()
+    serde_json::to_value(schema).map_err(|err| {
+        AppError::new(
+            ErrorCode::Internal,
+            format!("failed to serialize generated JSON schema: {err}"),
+        )
+        .with_cause(err)
+    })
 }
 
 /// Options for customizing schema generation.
@@ -29,9 +38,15 @@ pub struct Options {
 }
 
 /// Generate a JSON Schema with custom options.
-pub fn generate_with<T: JsonSchema>(opts: Options) -> Json {
+pub fn generate_with<T: JsonSchema>(opts: Options) -> AppResult<Json> {
     let schema = SchemaGenerator::default().into_root_schema_for::<T>();
-    let mut value = serde_json::to_value(schema).unwrap_or_default();
+    let mut value = serde_json::to_value(schema).map_err(|err| {
+        AppError::new(
+            ErrorCode::Internal,
+            format!("failed to serialize generated JSON schema: {err}"),
+        )
+        .with_cause(err)
+    })?;
 
     if let Some(obj) = value.as_object_mut() {
         if let Some(title) = opts.title {
@@ -42,7 +57,7 @@ pub fn generate_with<T: JsonSchema>(opts: Options) -> Json {
         }
     }
 
-    value
+    Ok(value)
 }
 
 // ── Schema Validation ───────────────────────────────────────────────────────
@@ -50,7 +65,9 @@ pub fn generate_with<T: JsonSchema>(opts: Options) -> Json {
 /// A single validation error with a JSON-pointer path.
 #[derive(Debug, Clone)]
 pub struct ValidationError {
+    /// JSON Pointer path to the failing value.
     pub path: String,
+    /// Human-readable validation failure message.
     pub message: String,
 }
 
@@ -67,201 +84,73 @@ impl std::fmt::Display for ValidationError {
 /// Outcome of validating a value against a schema.
 #[derive(Debug, Clone)]
 pub struct ValidationResult {
+    /// Whether the value satisfied the schema.
     pub valid: bool,
+    /// Validation failures. Empty when `valid` is true.
     pub errors: Vec<ValidationError>,
+}
+
+/// Reusable compiled JSON Schema validator.
+pub struct CompiledSchema {
+    validator: jsonschema::Validator,
+}
+
+impl CompiledSchema {
+    /// Validate a JSON value against this compiled schema.
+    pub fn validate(&self, value: &Value) -> ValidationResult {
+        validation_result(&self.validator, value)
+    }
+}
+
+/// Compile a JSON Schema once for repeated validation.
+pub fn compile(schema: &Value) -> AppResult<CompiledSchema> {
+    jsonschema::validator_for(schema)
+        .map(|validator| CompiledSchema { validator })
+        .map_err(|err| {
+            AppError::new(
+                ErrorCode::InvalidInput,
+                format!("invalid JSON Schema: {err}"),
+            )
+            .with_cause(err)
+        })
 }
 
 /// Validate a JSON value against a JSON Schema.
 pub fn validate(schema: &Value, value: &Value) -> ValidationResult {
-    let mut errors = Vec::new();
-    validate_value(schema, value, "", &mut errors);
+    let validator = match compile(schema) {
+        Ok(validator) => validator,
+        Err(err) => {
+            return ValidationResult {
+                valid: false,
+                errors: vec![ValidationError {
+                    path: String::new(),
+                    message: err.message().to_owned(),
+                }],
+            };
+        }
+    };
+
+    validator.validate(value)
+}
+
+fn validation_result(validator: &jsonschema::Validator, value: &Value) -> ValidationResult {
+    let errors = validator
+        .iter_errors(value)
+        .map(|err| ValidationError {
+            path: err.instance_path().to_string(),
+            message: err.to_string(),
+        })
+        .collect::<Vec<_>>();
+
     ValidationResult {
         valid: errors.is_empty(),
         errors,
     }
 }
 
-fn validate_value(schema: &Value, value: &Value, path: &str, errors: &mut Vec<ValidationError>) {
-    let Some(obj) = schema.as_object() else {
-        return;
-    };
-
-    // type check
-    if let Some(type_val) = obj.get("type")
-        && let Some(expected) = type_val.as_str()
-        && !type_matches(expected, value)
-    {
-        errors.push(ValidationError {
-            path: path.to_string(),
-            message: format!(
-                "expected type \"{expected}\", got {}",
-                json_type_name(value)
-            ),
-        });
-        return; // no point checking further constraints
-    }
-
-    // enum
-    if let Some(enum_vals) = obj.get("enum").and_then(|v| v.as_array())
-        && !enum_vals.iter().any(|e| e == value)
-    {
-        errors.push(ValidationError {
-            path: path.to_string(),
-            message: format!("value not in enum: {value}"),
-        });
-    }
-
-    // string constraints
-    if let Some(s) = value.as_str() {
-        if let Some(min) = obj.get("minLength").and_then(|v| v.as_u64())
-            && (s.len() as u64) < min
-        {
-            errors.push(ValidationError {
-                path: path.to_string(),
-                message: format!("string length {} < minLength {min}", s.len()),
-            });
-        }
-        if let Some(max) = obj.get("maxLength").and_then(|v| v.as_u64())
-            && (s.len() as u64) > max
-        {
-            errors.push(ValidationError {
-                path: path.to_string(),
-                message: format!("string length {} > maxLength {max}", s.len()),
-            });
-        }
-    }
-
-    // number constraints
-    if value.is_number()
-        && let Some(n) = value.as_f64()
-    {
-        if let Some(min) = obj.get("minimum").and_then(|v| v.as_f64())
-            && n < min
-        {
-            errors.push(ValidationError {
-                path: path.to_string(),
-                message: format!("value {n} < minimum {min}"),
-            });
-        }
-        if let Some(max) = obj.get("maximum").and_then(|v| v.as_f64())
-            && n > max
-        {
-            errors.push(ValidationError {
-                path: path.to_string(),
-                message: format!("value {n} > maximum {max}"),
-            });
-        }
-    }
-
-    // object constraints
-    if let Some(map) = value.as_object() {
-        // required fields
-        if let Some(required) = obj.get("required").and_then(|v| v.as_array()) {
-            for req in required {
-                if let Some(field) = req.as_str()
-                    && !map.contains_key(field)
-                {
-                    errors.push(ValidationError {
-                        path: child_path(path, field),
-                        message: format!("required field \"{field}\" is missing"),
-                    });
-                }
-            }
-        }
-
-        // properties
-        if let Some(props) = obj.get("properties").and_then(|v| v.as_object()) {
-            for (key, prop_schema) in props {
-                if let Some(prop_value) = map.get(key) {
-                    validate_value(prop_schema, prop_value, &child_path(path, key), errors);
-                }
-            }
-        }
-    }
-
-    // array constraints
-    if let Some(arr) = value.as_array() {
-        if let Some(min) = obj.get("minItems").and_then(|v| v.as_u64())
-            && (arr.len() as u64) < min
-        {
-            errors.push(ValidationError {
-                path: path.to_string(),
-                message: format!("array length {} < minItems {min}", arr.len()),
-            });
-        }
-        if let Some(max) = obj.get("maxItems").and_then(|v| v.as_u64())
-            && (arr.len() as u64) > max
-        {
-            errors.push(ValidationError {
-                path: path.to_string(),
-                message: format!("array length {} > maxItems {max}", arr.len()),
-            });
-        }
-
-        // items schema
-        if let Some(item_schema) = obj.get("items") {
-            for (i, item) in arr.iter().enumerate() {
-                validate_value(item_schema, item, &format!("{path}[{i}]"), errors);
-            }
-        }
-    }
-}
-
-fn type_matches(expected: &str, value: &Value) -> bool {
-    match expected {
-        "object" => value.is_object(),
-        "array" => value.is_array(),
-        "string" => value.is_string(),
-        "number" => value.is_number(),
-        "integer" => value.is_i64() || value.is_u64(),
-        "boolean" => value.is_boolean(),
-        "null" => value.is_null(),
-        _ => true,
-    }
-}
-
-fn json_type_name(value: &Value) -> &'static str {
-    match value {
-        Value::Null => "null",
-        Value::Bool(_) => "boolean",
-        Value::Number(n) => {
-            if n.is_i64() || n.is_u64() {
-                "integer"
-            } else {
-                "number"
-            }
-        }
-        Value::String(_) => "string",
-        Value::Array(_) => "array",
-        Value::Object(_) => "object",
-    }
-}
-
-fn child_path(parent: &str, child: &str) -> String {
-    if parent.is_empty() {
-        child.to_string()
-    } else {
-        format!("{parent}.{child}")
-    }
-}
-
 /// Validate structured model output against a JSON Schema 2020-12-compatible schema subset.
 pub fn validate_structured_output(schema: &Value, value: &Value) -> ValidationResult {
     validate(schema, value)
-}
-
-/// Validate an MCP elicitation schema subset.
-pub fn validate_elicitation_schema(schema: &Value) -> ValidationResult {
-    let meta_schema = serde_json::json!({
-        "type": "object",
-        "properties": {
-            "type": { "enum": ["object"] },
-            "properties": { "type": "object" },
-            "required": { "type": "array", "items": { "type": "string" } }
-        },
-        "required": ["type", "properties"]
-    });
-    validate(&meta_schema, schema)
 }
 
 #[cfg(test)]
@@ -295,7 +184,7 @@ mod tests {
 
     #[test]
     fn test_generate_simple() {
-        let schema = generate::<Simple>();
+        let schema = generate::<Simple>().unwrap();
         assert!(schema.is_object());
         let obj = schema.as_object().unwrap();
         assert_eq!(obj.get("type").and_then(|v| v.as_str()), Some("object"));
@@ -307,7 +196,7 @@ mod tests {
 
     #[test]
     fn test_generate_required_fields() {
-        let schema = generate::<Simple>();
+        let schema = generate::<Simple>().unwrap();
         let obj = schema.as_object().unwrap();
         let required = obj.get("required").and_then(|v| v.as_array()).unwrap();
         let names: Vec<&str> = required.iter().filter_map(|v| v.as_str()).collect();
@@ -317,7 +206,7 @@ mod tests {
 
     #[test]
     fn test_generate_nested() {
-        let schema = generate::<Nested>();
+        let schema = generate::<Nested>().unwrap();
         let obj = schema.as_object().unwrap();
         let props = obj.get("properties").unwrap().as_object().unwrap();
         assert!(props.contains_key("user"));
@@ -329,7 +218,8 @@ mod tests {
         let schema = generate_with::<Simple>(Options {
             title: Some("Person".to_string()),
             ..Default::default()
-        });
+        })
+        .unwrap();
         let obj = schema.as_object().unwrap();
         assert_eq!(obj.get("title").and_then(|v| v.as_str()), Some("Person"));
     }
@@ -339,7 +229,8 @@ mod tests {
         let schema = generate_with::<Simple>(Options {
             description: Some("A person record".to_string()),
             ..Default::default()
-        });
+        })
+        .unwrap();
         let obj = schema.as_object().unwrap();
         assert_eq!(
             obj.get("description").and_then(|v| v.as_str()),
@@ -349,7 +240,7 @@ mod tests {
 
     #[test]
     fn test_string_type_properties() {
-        let schema = generate::<Simple>();
+        let schema = generate::<Simple>().unwrap();
         let props = schema
             .as_object()
             .unwrap()
@@ -369,7 +260,7 @@ mod tests {
 
     #[test]
     fn test_integer_type_properties() {
-        let schema = generate::<Simple>();
+        let schema = generate::<Simple>().unwrap();
         let props = schema
             .as_object()
             .unwrap()
@@ -507,7 +398,7 @@ mod tests {
         });
         let r = validate(&schema, &json!({"user": {}}));
         assert!(!r.valid);
-        assert!(r.errors[0].path.contains("name"));
+        assert!(r.errors[0].message.contains("name"));
     }
 
     #[test]
@@ -555,6 +446,25 @@ mod tests {
         assert!(validate(&schema, &json!(42)).valid);
         assert!(validate(&schema, &json!("hi")).valid);
         assert!(validate(&schema, &json!(null)).valid);
+    }
+
+    #[test]
+    fn validate_invalid_schema_returns_error_result() {
+        let schema = json!({"type": "not-a-json-schema-type"});
+        let result = validate(&schema, &json!("value"));
+        assert!(!result.valid);
+        assert_eq!(result.errors.len(), 1);
+        assert_eq!(result.errors[0].path, "");
+        assert!(result.errors[0].message.contains("invalid JSON Schema"));
+    }
+
+    #[test]
+    fn compiled_schema_reuses_validator() {
+        let schema = json!({"type": "string"});
+        let validator = compile(&schema).unwrap();
+
+        assert!(validator.validate(&json!("value")).valid);
+        assert!(!validator.validate(&json!(42)).valid);
     }
 
     #[test]
