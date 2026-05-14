@@ -160,6 +160,8 @@ jobs:
         with:
           tool: cargo-nextest
       - run: |
+          export CARGO="$(rustup which cargo)"
+          export RUSTC="$(rustup which rustc)"
           cargo-nextest nextest run --manifest-path core/Cargo.toml --workspace --profile ci
           cargo-nextest nextest run --manifest-path contrib/Cargo.toml --workspace --profile ci
 
