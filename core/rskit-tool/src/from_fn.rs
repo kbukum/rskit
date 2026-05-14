@@ -2,7 +2,7 @@
 
 use async_trait::async_trait;
 use rskit_errors::{AppError, AppResult, ErrorCode};
-use rskit_schema::ValidationResult;
+use rskit_schema::{CompiledSchema, ValidationResult};
 use schemars::JsonSchema;
 use serde::{Serialize, de::DeserializeOwned};
 
@@ -35,6 +35,7 @@ where
     Fut: Future<Output = AppResult<ToolResult>> + Send + 'static,
 {
     let input_schema = rskit_schema::generate::<I>()?;
+    let input_validator = rskit_schema::compile(&input_schema)?;
 
     let def = Definition {
         name: name.to_string(),
@@ -47,6 +48,7 @@ where
 
     Ok(Box::new(FnTool {
         definition: def,
+        input_validator,
         handler,
         _phantom: std::marker::PhantomData,
     }))
@@ -54,6 +56,7 @@ where
 
 struct FnTool<F, I> {
     definition: Definition,
+    input_validator: CompiledSchema,
     handler: F,
     _phantom: std::marker::PhantomData<fn(I)>,
 }
@@ -70,7 +73,7 @@ where
     }
 
     fn validate(&self, input: &serde_json::Value) -> ValidationResult {
-        rskit_schema::validate(&self.definition.input_schema, input)
+        self.input_validator.validate(input)
     }
 
     async fn call(&self, ctx: &Context, input: serde_json::Value) -> AppResult<ToolResult> {
@@ -98,6 +101,7 @@ where
     Fut: Future<Output = AppResult<O>> + Send + 'static,
 {
     let input_schema = rskit_schema::generate::<I>()?;
+    let input_validator = rskit_schema::compile(&input_schema)?;
 
     let def = Definition {
         name: name.to_string(),
@@ -110,6 +114,7 @@ where
 
     Ok(Box::new(SimpleFnTool {
         definition: def,
+        input_validator,
         handler,
         _phantom: std::marker::PhantomData,
     }))
@@ -117,6 +122,7 @@ where
 
 struct SimpleFnTool<F, I, O> {
     definition: Definition,
+    input_validator: CompiledSchema,
     handler: F,
     _phantom: std::marker::PhantomData<fn(I) -> O>,
 }
@@ -134,7 +140,7 @@ where
     }
 
     fn validate(&self, input: &serde_json::Value) -> ValidationResult {
-        rskit_schema::validate(&self.definition.input_schema, input)
+        self.input_validator.validate(input)
     }
 
     async fn call(&self, _ctx: &Context, input: serde_json::Value) -> AppResult<ToolResult> {

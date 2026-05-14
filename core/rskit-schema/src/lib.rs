@@ -24,6 +24,7 @@ pub fn generate<T: JsonSchema>() -> AppResult<Json> {
             ErrorCode::Internal,
             format!("failed to serialize generated JSON schema: {err}"),
         )
+        .with_cause(err)
     })
 }
 
@@ -44,6 +45,7 @@ pub fn generate_with<T: JsonSchema>(opts: Options) -> AppResult<Json> {
             ErrorCode::Internal,
             format!("failed to serialize generated JSON schema: {err}"),
         )
+        .with_cause(err)
     })?;
 
     if let Some(obj) = value.as_object_mut() {
@@ -88,21 +90,50 @@ pub struct ValidationResult {
     pub errors: Vec<ValidationError>,
 }
 
+/// Reusable compiled JSON Schema validator.
+pub struct CompiledSchema {
+    validator: jsonschema::Validator,
+}
+
+impl CompiledSchema {
+    /// Validate a JSON value against this compiled schema.
+    pub fn validate(&self, value: &Value) -> ValidationResult {
+        validation_result(&self.validator, value)
+    }
+}
+
+/// Compile a JSON Schema once for repeated validation.
+pub fn compile(schema: &Value) -> AppResult<CompiledSchema> {
+    jsonschema::validator_for(schema)
+        .map(|validator| CompiledSchema { validator })
+        .map_err(|err| {
+            AppError::new(
+                ErrorCode::InvalidInput,
+                format!("invalid JSON Schema: {err}"),
+            )
+            .with_cause(err)
+        })
+}
+
 /// Validate a JSON value against a JSON Schema.
 pub fn validate(schema: &Value, value: &Value) -> ValidationResult {
-    let validator = match jsonschema::validator_for(schema) {
+    let validator = match compile(schema) {
         Ok(validator) => validator,
         Err(err) => {
             return ValidationResult {
                 valid: false,
                 errors: vec![ValidationError {
                     path: String::new(),
-                    message: format!("invalid JSON Schema: {err}"),
+                    message: err.message().to_owned(),
                 }],
             };
         }
     };
 
+    validator.validate(value)
+}
+
+fn validation_result(validator: &jsonschema::Validator, value: &Value) -> ValidationResult {
     let errors = validator
         .iter_errors(value)
         .map(|err| ValidationError {
@@ -415,6 +446,25 @@ mod tests {
         assert!(validate(&schema, &json!(42)).valid);
         assert!(validate(&schema, &json!("hi")).valid);
         assert!(validate(&schema, &json!(null)).valid);
+    }
+
+    #[test]
+    fn validate_invalid_schema_returns_error_result() {
+        let schema = json!({"type": "not-a-json-schema-type"});
+        let result = validate(&schema, &json!("value"));
+        assert!(!result.valid);
+        assert_eq!(result.errors.len(), 1);
+        assert_eq!(result.errors[0].path, "");
+        assert!(result.errors[0].message.contains("invalid JSON Schema"));
+    }
+
+    #[test]
+    fn compiled_schema_reuses_validator() {
+        let schema = json!({"type": "string"});
+        let validator = compile(&schema).unwrap();
+
+        assert!(validator.validate(&json!("value")).valid);
+        assert!(!validator.validate(&json!(42)).valid);
     }
 
     #[test]

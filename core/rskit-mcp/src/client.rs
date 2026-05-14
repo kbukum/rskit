@@ -10,7 +10,7 @@ use rmcp::model::{CallToolRequestParams, Tool};
 use rmcp::service::{Peer, RoleClient, RunningService};
 use rskit_ai::semconv;
 use rskit_errors::{AppError, AppResult, ErrorCode};
-use rskit_schema::ValidationResult;
+use rskit_schema::{CompiledSchema, ValidationResult};
 use rskit_tool::Callable;
 use rskit_tool::Definition;
 use rskit_tool::context::Context;
@@ -31,6 +31,7 @@ pub struct ClientConfig {
 /// Delegates `call()` to the MCP session's `call_tool` method.
 struct RemoteTool {
     definition: Definition,
+    input_validator: Result<CompiledSchema, ValidationResult>,
     mcp_name: String,
     peer: Arc<Peer<RoleClient>>,
 }
@@ -42,7 +43,10 @@ impl Callable for RemoteTool {
     }
 
     fn validate(&self, input: &serde_json::Value) -> ValidationResult {
-        rskit_schema::validate(&self.definition.input_schema, input)
+        match &self.input_validator {
+            Ok(validator) => validator.validate(input),
+            Err(result) => result.clone(),
+        }
     }
 
     async fn call(&self, _ctx: &Context, input: serde_json::Value) -> AppResult<ToolResult> {
@@ -91,14 +95,27 @@ pub fn wrap_tools(
         .iter()
         .map(|tool| {
             let def = convert::tool_to_definition(tool, &config.prefix);
+            let input_validator =
+                rskit_schema::compile(&def.input_schema).map_err(validation_result_from_error);
             let mcp_name = tool.name.to_string();
             Box::new(RemoteTool {
                 definition: def,
+                input_validator,
                 mcp_name,
                 peer: peer.clone(),
             }) as Box<dyn Callable>
         })
         .collect()
+}
+
+fn validation_result_from_error(err: AppError) -> ValidationResult {
+    ValidationResult {
+        valid: false,
+        errors: vec![rskit_schema::ValidationError {
+            path: String::new(),
+            message: err.message().to_owned(),
+        }],
+    }
 }
 
 /// Connect to an MCP server, discover tools, and return them as [`Callable`]s.
