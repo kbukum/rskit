@@ -17,8 +17,5 @@ keywords   = ["utilities", "helpers", "async"]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
-[dependencies]
-parking_lot  = { workspace = true }
-
 [lints]
 workspace = true

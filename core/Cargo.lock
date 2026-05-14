@@ -6402,9 +6402,6 @@ dependencies = [
 [[package]]
 name = "rskit-util"
 version = "0.1.0"
-dependencies = [
- "parking_lot",
-]
 
 [[package]]
 name = "rskit-validation"

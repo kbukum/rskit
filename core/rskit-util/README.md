@@ -2,13 +2,13 @@
 
 Minimal L0 utility crate for the rskit ecosystem.
 
-`rskit-util` intentionally keeps a tiny dependency surface (`std` plus
-`parking_lot`) so higher layers can depend on it cheaply. Domain-owned helpers
-live in their owning crates instead:
+`rskit-util` intentionally has no external dependency surface so higher layers
+can depend on it cheaply. Domain-owned helpers live in their owning crates
+instead:
 
-- Secret masking: `rskit-config::SecretString`
-- Validation: `rskit-validation`
-- Schema generation: `rskit-schema`
+- Secret masking: `rskit_config::SecretString`
+- Validation: `rskit_validation`
+- Schema generation: `rskit_schema`
 - Test clocks and runtime time control: use the owning crate's abstractions
 
 ## Usage
