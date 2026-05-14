@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use rskit_errors::{AppError, AppResult};
 
@@ -207,13 +207,18 @@ impl ConfigLoader {
         if let Some(path) = &self.env_file {
             sources.push(self.dotenv_source_from_path(path, "env file")?);
         } else if let Some(path) = find_default_env_file() {
-            sources.push(self.dotenv_source_from_path(&path, ".env file")?);
+            match self.dotenv_source_from_path(&path, ".env file") {
+                Ok(source) => sources.push(source),
+                Err(err) => {
+                    tracing::warn!(error = %err, "failed to load auto-discovered .env file")
+                }
+            }
         }
 
         Ok(sources)
     }
 
-    fn dotenv_source_from_path(&self, path: &PathBuf, label: &str) -> AppResult<config::Config> {
+    fn dotenv_source_from_path(&self, path: &Path, label: &str) -> AppResult<config::Config> {
         let iter = dotenvy::from_path_iter(path).map_err(|e| {
             AppError::invalid_input(
                 "config",

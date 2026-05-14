@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **rskit-util**: reduced the L0 utility crate to a minimal domain-free
   dependency surface.
 - **rskit-config**: moved `SecretString` ownership out of `rskit-util`.
+- **rskit-config**: made config loading precedence explicit with programmatic
+  defaults and overrides; dotenv files now feed typed config loading without
+  mutating the process environment.
 - **rskit-errors**: removed mutable global problem-detail URI configuration and
   standardized cancellation HTTP mapping on `408 Request Timeout`.
 - **rskit-version**: added canonical package-version helpers and routed service

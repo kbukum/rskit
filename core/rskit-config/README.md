@@ -30,6 +30,12 @@ Profile files requested through `with_profile` and explicit `.env` files request
 through `with_env_file` are fail-closed: missing or malformed files return an
 `AppError` during `load()` instead of being silently ignored.
 
+Dotenv values are loaded into the `ConfigLoader` source chain only; they do not
+mutate the process environment. Code that needs dotenv-backed values should read
+them from the typed config returned by `load()` rather than from `std::env`.
+Malformed auto-discovered `.env` files are logged and skipped so optional local
+developer files do not prevent startup.
+
 ## Usage
 
 ```toml
