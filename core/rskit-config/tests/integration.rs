@@ -105,13 +105,16 @@ fn loader_with_env_prefix_changes_prefix() {
 #[test]
 fn loader_builder_methods_chain() {
     let loader = ConfigLoader::new()
+        .with_default("app_port", 7000_i64)
         .with_config_file("app.toml")
         .with_env_file(".env.local")
-        .with_env_prefix("SVC");
+        .with_env_prefix("SVC")
+        .with_override("app_port", 9000_i64);
     let debug = format!("{:?}", loader);
     assert!(debug.contains("app.toml"));
     assert!(debug.contains(".env.local"));
     assert!(debug.contains("SVC"));
+    assert!(debug.contains("app_port"));
 }
 
 #[test]
@@ -269,6 +272,46 @@ fn load_precedence_real_env_over_dotenv() {
     clear_required_env();
 }
 
+#[test]
+fn load_precedence_file_over_programmatic_default() {
+    let _guard = ENV_LOCK.lock();
+    set_required_env();
+
+    let dir = tempfile::tempdir().unwrap();
+    let toml_path = dir.path().join("test.toml");
+    std::fs::write(&toml_path, b"app_port = 2222\n").unwrap();
+
+    let cfg: TestConfig = ConfigLoader::new()
+        .with_default("app_port", 1111_i64)
+        .with_config_file(&toml_path)
+        .load()
+        .expect("should load");
+    assert_eq!(cfg.app_port, 2222);
+
+    clear_required_env();
+}
+
+#[test]
+fn load_precedence_programmatic_override_wins() {
+    let _guard = ENV_LOCK.lock();
+    set_required_env();
+
+    let dir = tempfile::tempdir().unwrap();
+    let toml_path = dir.path().join("test.toml");
+    std::fs::write(&toml_path, b"app_port = 1111\n").unwrap();
+    unsafe { std::env::set_var("APP_PORT", "2222") };
+
+    let cfg: TestConfig = ConfigLoader::new()
+        .with_config_file(&toml_path)
+        .with_override("app_port", 3333_i64)
+        .load()
+        .expect("should load");
+    assert_eq!(cfg.app_port, 3333);
+
+    unsafe { std::env::remove_var("APP_PORT") };
+    clear_required_env();
+}
+
 // ── load_config() convenience function ──────────────────────────────
 
 #[test]
@@ -329,6 +372,35 @@ fn missing_config_file_succeeds_with_defaults() {
         .load()
         .expect("missing file should not fail");
     assert_eq!(cfg.app_port, 8080);
+    clear_required_env();
+}
+
+#[test]
+fn profile_from_environment_requires_environment_value() {
+    let _guard = ENV_LOCK.lock();
+    set_required_env();
+    let previous = std::env::var("ENVIRONMENT").ok();
+    unsafe { std::env::remove_var("ENVIRONMENT") };
+
+    let result: Result<TestConfig, _> = ConfigLoader::new().with_profile("").load();
+    assert!(result.is_err());
+
+    if let Some(value) = previous {
+        unsafe { std::env::set_var("ENVIRONMENT", value) };
+    }
+    clear_required_env();
+}
+
+#[test]
+fn explicit_profile_requires_profile_env_file() {
+    let _guard = ENV_LOCK.lock();
+    set_required_env();
+
+    let result: Result<TestConfig, _> = ConfigLoader::new()
+        .with_profile("profile_that_should_not_exist_for_tests")
+        .load();
+    assert!(result.is_err());
+
     clear_required_env();
 }
 
