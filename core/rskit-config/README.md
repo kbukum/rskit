@@ -10,18 +10,31 @@ Load application config from TOML files, `.env` files, and environment variables
 
 ## Features
 
-- Layered loading: TOML file → `.env` → `APP__SECTION__KEY` env vars
+- Layered loading: defaults → TOML file → `.env` → `APP__SECTION__KEY` env vars → explicit overrides
 - Serde-based deserialization into any `Deserialize` + `Validate` type
 - Optional `.env` file support via `dotenvy`
 - Configurable env prefix
+- Programmatic defaults and overrides with deterministic precedence
 - Profile-specific env files (`config/profiles/{profile}.env`)
 
 ## Loading Order (lowest → highest priority)
 
-1. TOML file (`with_config_file`)
-2. Profile env file (`config/profiles/{profile}.env`, via `with_profile`)
-3. `.env` file
-4. Environment variables (`__` separator, optional prefix via `with_env_prefix`)
+1. Programmatic defaults (`with_default`)
+2. TOML file (`with_config_file`)
+3. Profile env file (`config/profiles/{profile}.env`, via `with_profile`)
+4. `.env` file
+5. Environment variables (`__` separator, optional prefix via `with_env_prefix`)
+6. Programmatic overrides (`with_override`)
+
+Profile files requested through `with_profile` and explicit `.env` files requested
+through `with_env_file` are fail-closed: missing or malformed files return an
+`AppError` during `load()` instead of being silently ignored.
+
+Dotenv values are loaded into the `ConfigLoader` source chain only; they do not
+mutate the process environment. Code that needs dotenv-backed values should read
+them from the typed config returned by `load()` rather than from `std::env`.
+Malformed auto-discovered `.env` files are logged and skipped so optional local
+developer files do not prevent startup.
 
 ## Usage
 
@@ -51,8 +64,10 @@ impl AppConfig for Config {
 }
 
 let cfg: Config = ConfigLoader::new()
+    .with_default("grpc_port", 50051_i64)
     .with_config_file("config/app.toml")
     .with_env_prefix("MYAPP")
+    .with_override("name", "api")
     .load()?;
 ```
 

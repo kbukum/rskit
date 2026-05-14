@@ -1,4 +1,5 @@
-use std::path::PathBuf;
+use std::borrow::Cow;
+use std::path::{Path, PathBuf};
 
 use rskit_errors::{AppError, AppResult};
 
@@ -7,29 +8,51 @@ use crate::AppConfig;
 /// Loads typed configuration from layered sources.
 ///
 /// Resolution order (last wins):
-/// 1. `config.toml` / `config/{service}.toml` (optional)
-/// 2. Profile env file `config/profiles/{profile}.env` (optional, via [`ConfigLoader::with_profile`])
-/// 3. `.env` file via dotenvy (optional)
-/// 4. Environment variables with `__` separator, no prefix by default
+/// 1. Programmatic defaults from [`ConfigLoader::with_default`]
+/// 2. `config.toml` / `config/config.toml` or the file from [`ConfigLoader::with_config_file`]
+/// 3. Profile env file `config/profiles/{profile}.env` (via [`ConfigLoader::with_profile`])
+/// 4. `.env` file via dotenvy
+/// 5. Environment variables with `__` separator, no prefix by default
 ///    (`DATABASE__HOST` → `database.host`).
 ///    A prefix can be set with [`ConfigLoader::with_env_prefix`].
+/// 6. Programmatic overrides from [`ConfigLoader::with_override`]
 #[derive(Debug, Default)]
 pub struct ConfigLoader {
+    defaults: Vec<(String, config::Value)>,
     config_file: Option<PathBuf>,
     env_file: Option<PathBuf>,
     env_prefix: String,
-    profile: Option<String>,
+    profile: Option<Profile>,
+    overrides: Vec<(String, config::Value)>,
+}
+
+#[derive(Debug)]
+enum Profile {
+    Name(String),
+    FromEnvironment,
 }
 
 impl ConfigLoader {
     /// Create a new [`ConfigLoader`] with default settings (no env prefix).
     pub fn new() -> Self {
         Self {
+            defaults: Vec::new(),
             config_file: None,
             env_file: None,
             env_prefix: String::new(),
             profile: None,
+            overrides: Vec::new(),
         }
+    }
+
+    /// Set a programmatic default value.
+    ///
+    /// Defaults are loaded before files and environment variables, so every
+    /// external source can override them.
+    #[must_use]
+    pub fn with_default(mut self, key: impl Into<String>, value: impl Into<config::Value>) -> Self {
+        self.defaults.push((key.into(), value.into()));
+        self
     }
 
     /// Explicitly set the TOML config file path.
@@ -55,26 +78,47 @@ impl ConfigLoader {
     }
 
     /// Set the configuration profile (e.g., "development", "docker", "staging").
-    /// Loads `config/profiles/{profile}.env` before the main `.env` file.
-    /// If an empty string is passed, reads the profile name from the `ENVIRONMENT` env var.
+    ///
+    /// Loads `config/profiles/{profile}.env` before the main `.env` file. If an
+    /// empty string is passed, the profile name is read from the `ENVIRONMENT`
+    /// environment variable during [`ConfigLoader::load`]. Missing profile names
+    /// or missing profile files are treated as configuration errors.
     #[must_use]
     pub fn with_profile(mut self, profile: impl Into<String>) -> Self {
         let p = profile.into();
         self.profile = Some(if p.is_empty() {
-            std::env::var("ENVIRONMENT").unwrap_or_default()
+            Profile::FromEnvironment
         } else {
-            p
+            Profile::Name(p)
         });
+        self
+    }
+
+    /// Set a programmatic override value.
+    ///
+    /// Overrides are loaded after files and environment variables, so they have
+    /// the highest precedence and cannot be replaced by other sources.
+    #[must_use]
+    pub fn with_override(
+        mut self,
+        key: impl Into<String>,
+        value: impl Into<config::Value>,
+    ) -> Self {
+        self.overrides.push((key.into(), value.into()));
         self
     }
 
     /// Load and deserialize configuration into `T`.
     pub fn load<T: AppConfig>(&self) -> AppResult<T> {
-        // Step 1: load .env (if present) so env vars are available to config-rs
-        self.load_env_file();
+        let dotenv_sources = self.dotenv_sources()?;
 
-        // Step 2: build the config-rs source chain
         let mut builder = config::Config::builder();
+
+        for (key, value) in &self.defaults {
+            builder = builder
+                .set_default(key, value.clone())
+                .map_err(|e| AppError::invalid_input("config", e.to_string()))?;
+        }
 
         // TOML file
         if let Some(path) = &self.config_file {
@@ -90,6 +134,10 @@ impl ConfigLoader {
             }
         }
 
+        for source in dotenv_sources {
+            builder = builder.add_source(source);
+        }
+
         // Environment variables
         let env_source = if self.env_prefix.is_empty() {
             config::Environment::default()
@@ -101,6 +149,12 @@ impl ConfigLoader {
                 .try_parsing(true)
         };
         builder = builder.add_source(env_source);
+
+        for (key, value) in &self.overrides {
+            builder = builder
+                .set_override(key, value.clone())
+                .map_err(|e| AppError::invalid_input("config", e.to_string()))?;
+        }
 
         let raw = builder
             .build()
@@ -118,40 +172,131 @@ impl ConfigLoader {
         Ok(cfg)
     }
 
-    fn load_env_file(&self) {
-        // 1. Load profile env file first (if profile is set)
-        if let Some(profile) = &self.profile
-            && !profile.is_empty()
-        {
-            let profile_paths = [
-                format!("./config/profiles/{profile}.env"),
-                format!("../config/profiles/{profile}.env"),
-                format!("../../config/profiles/{profile}.env"),
-            ];
-            for path in &profile_paths {
-                if std::path::Path::new(path).exists() {
-                    if let Err(e) = dotenvy::from_path(path) {
-                        tracing::warn!(path, error = %e, "failed to load profile env file");
-                    }
-                    break;
+    fn dotenv_sources(&self) -> AppResult<Vec<config::Config>> {
+        let mut sources = Vec::new();
+
+        if let Some(profile) = &self.profile {
+            let profile_name = match profile {
+                Profile::Name(name) => Cow::Borrowed(name.as_str()),
+                Profile::FromEnvironment => std::env::var("ENVIRONMENT")
+                    .map_err(|_| {
+                        AppError::invalid_input(
+                            "config",
+                            "ENVIRONMENT must be set when profile is resolved from the environment",
+                        )
+                    })?
+                    .trim()
+                    .to_owned()
+                    .into(),
+            };
+            if profile_name.trim().is_empty() {
+                return Err(AppError::invalid_input(
+                    "config",
+                    "profile name cannot be empty",
+                ));
+            }
+            let path = find_profile_env_file(profile_name.as_ref()).ok_or_else(|| {
+                AppError::invalid_input(
+                    "config",
+                    format!("profile env file not found for profile '{profile_name}'"),
+                )
+            })?;
+            sources.push(self.dotenv_source_from_path(&path, "profile env file")?);
+        }
+
+        if let Some(path) = &self.env_file {
+            sources.push(self.dotenv_source_from_path(path, "env file")?);
+        } else if let Some(path) = find_default_env_file() {
+            match self.dotenv_source_from_path(&path, ".env file") {
+                Ok(source) => sources.push(source),
+                Err(err) => {
+                    tracing::warn!(error = %err, "failed to load auto-discovered .env file")
                 }
             }
         }
 
-        // 2. Load main .env file (existing behavior)
-        if let Some(path) = &self.env_file {
-            if let Err(e) = dotenvy::from_path(path) {
-                tracing::warn!(path = %path.display(), error = %e, "failed to load env file");
-            }
-        } else {
-            // Try the default `.env` in the current directory — silently ignore absence
-            // (missing .env is normal; parse errors are not)
-            match dotenvy::dotenv() {
-                Ok(_) | Err(dotenvy::Error::Io(_)) => {}
-                Err(e) => tracing::warn!(error = %e, "failed to parse .env file"),
+        Ok(sources)
+    }
+
+    fn dotenv_source_from_path(&self, path: &Path, label: &str) -> AppResult<config::Config> {
+        let iter = dotenvy::from_path_iter(path).map_err(|e| {
+            AppError::invalid_input(
+                "config",
+                format!("failed to load {label} '{}': {e}", path.display()),
+            )
+        })?;
+
+        let mut builder = config::Config::builder();
+        for item in iter {
+            let (key, value) = item.map_err(|e| {
+                AppError::invalid_input(
+                    "config",
+                    format!("failed to parse {label} '{}': {e}", path.display()),
+                )
+            })?;
+            if let Some(key) = normalize_env_key(&self.env_prefix, &key) {
+                builder = builder
+                    .set_override(key, parse_env_value(value))
+                    .map_err(|e| AppError::invalid_input("config", e.to_string()))?;
             }
         }
+
+        builder
+            .build()
+            .map_err(|e| AppError::invalid_input("config", e.to_string()))
     }
+}
+
+fn find_profile_env_file(profile: &str) -> Option<PathBuf> {
+    [
+        format!("./config/profiles/{profile}.env"),
+        format!("../config/profiles/{profile}.env"),
+        format!("../../config/profiles/{profile}.env"),
+    ]
+    .into_iter()
+    .map(PathBuf::from)
+    .find(|path| path.exists())
+}
+
+fn find_default_env_file() -> Option<PathBuf> {
+    find_upwards_env_file()
+}
+
+fn find_upwards_env_file() -> Option<PathBuf> {
+    let mut dir = std::env::current_dir().ok()?;
+    loop {
+        let candidate = dir.join(".env");
+        if candidate.exists() {
+            return Some(candidate);
+        }
+        if !dir.pop() {
+            return None;
+        }
+    }
+}
+
+fn normalize_env_key(prefix: &str, key: &str) -> Option<String> {
+    let key = key.to_ascii_lowercase();
+    if prefix.is_empty() {
+        return Some(key.replace("__", "."));
+    }
+
+    let prefix = prefix.to_ascii_lowercase();
+    key.strip_prefix(&format!("{prefix}__"))
+        .map(|stripped| stripped.replace("__", "."))
+}
+
+fn parse_env_value(value: String) -> config::Value {
+    if let Ok(value) = value.parse::<bool>() {
+        return value.into();
+    }
+    if let Ok(value) = value.parse::<i64>() {
+        return value.into();
+    }
+    if let Ok(value) = value.parse::<f64>() {
+        return value.into();
+    }
+    value.into()
 }
 
 /// Convenience function: create a default [`ConfigLoader`] and call [`ConfigLoader::load`].
