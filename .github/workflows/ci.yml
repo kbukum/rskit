@@ -160,8 +160,8 @@ jobs:
         with:
           tool: cargo-nextest
       - run: |
-          cargo nextest run --manifest-path core/Cargo.toml --workspace --profile ci
-          cargo nextest run --manifest-path contrib/Cargo.toml --workspace --profile ci
+          cargo-nextest nextest run --manifest-path core/Cargo.toml --workspace --profile ci
+          cargo-nextest nextest run --manifest-path contrib/Cargo.toml --workspace --profile ci
 
   # ---------------------------------------------------------------------------
   # Documentation (ensure no broken intra-doc links)
