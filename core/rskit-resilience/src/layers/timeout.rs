@@ -59,7 +59,8 @@ where
     }
 
     fn call(&mut self, req: Req) -> Self::Future {
-        let mut service = self.inner.clone();
+        let clone = self.inner.clone();
+        let mut service = std::mem::replace(&mut self.inner, clone);
         let timeout = self.timeout;
         Box::pin(async move {
             tokio::time::timeout(timeout, service.call(req))

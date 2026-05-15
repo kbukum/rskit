@@ -3,6 +3,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use rskit_errors::AppError;
+use tower::ServiceExt;
 
 use crate::RetryPolicy;
 
@@ -60,14 +61,24 @@ where
     }
 
     fn call(&mut self, req: Req) -> Self::Future {
-        let base = self.inner.clone();
+        let clone = self.inner.clone();
+        let ready_service = std::mem::replace(&mut self.inner, clone);
+        let template = self.inner.clone();
+        let mut first_attempt = Some(ready_service);
         let policy = self.policy.clone();
         Box::pin(async move {
             policy
                 .execute(move || {
-                    let mut service = base.clone();
                     let req = req.clone();
-                    async move { service.call(req).await }
+                    let service = first_attempt.take();
+                    let already_ready = service.is_some();
+                    let mut service = service.unwrap_or_else(|| template.clone());
+                    async move {
+                        if !already_ready {
+                            service.ready().await?;
+                        }
+                        service.call(req).await
+                    }
                 })
                 .await
                 .map_err(|err| err.last_error)

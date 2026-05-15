@@ -60,7 +60,8 @@ where
     }
 
     fn call(&mut self, req: Req) -> Self::Future {
-        let mut service = self.inner.clone();
+        let clone = self.inner.clone();
+        let mut service = std::mem::replace(&mut self.inner, clone);
         let bulkhead = self.bulkhead.clone();
         Box::pin(async move { bulkhead.execute(|| service.call(req)).await })
     }
