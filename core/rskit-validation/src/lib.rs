@@ -400,6 +400,7 @@ mod tests {
         assert!(input::validate_safe_path("tenant/report.json").is_ok());
         assert!(input::validate_safe_path("../secret").is_err());
         assert!(input::validate_safe_path("tenant\\..\\secret").is_err());
+        assert!(input::validate_safe_path("tenant/..\\secret").is_err());
     }
 
     #[test]

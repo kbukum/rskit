@@ -88,6 +88,10 @@ impl HttpServerBuilder {
     }
 
     /// Apply CORS from the server config (no-op if `cors` is `None`).
+    ///
+    /// # Errors
+    /// Returns an error when the configured CORS policy contains invalid origins,
+    /// methods, headers, or max-age values.
     #[must_use = "builder methods return a new builder; use the returned value"]
     pub fn with_cors(mut self) -> AppResult<Self> {
         if let Some(cors_cfg) = self.config.cors.as_ref() {
