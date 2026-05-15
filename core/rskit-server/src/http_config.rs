@@ -1,11 +1,11 @@
 use std::time::Duration;
 
 pub use rskit_http::CorsPolicy;
-use rskit_validation::Validate;
 use serde::Deserialize;
+use validator::{Validate, ValidationError, ValidationErrors};
 
 /// HTTP server configuration owned by `rskit-server`.
-#[derive(Debug, Clone, Deserialize, Validate)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct HttpServerConfig {
     /// Bind address (default: `0.0.0.0`).
     #[serde(default = "HttpServerConfig::default_host")]
@@ -13,7 +13,6 @@ pub struct HttpServerConfig {
 
     /// Bind port (default: `8080`).
     #[serde(default = "HttpServerConfig::default_port")]
-    #[validate(range(min = 1, max = 65535))]
     pub port: u16,
 
     /// Maximum time to wait for a request header (default: 30 s).
@@ -34,6 +33,30 @@ pub struct HttpServerConfig {
 
     /// Optional CORS policy.
     pub cors: Option<CorsPolicy>,
+}
+
+impl Validate for HttpServerConfig {
+    fn validate(&self) -> Result<(), ValidationErrors> {
+        let mut errors = ValidationErrors::new();
+
+        if self.port == 0 {
+            errors.add("port", ValidationError::new("range"));
+        }
+
+        if let Some(cors) = &self.cors
+            && let Err(error) = cors.validate()
+        {
+            let mut validation_error = ValidationError::new("invalid_cors");
+            validation_error.message = Some(error.to_string().into());
+            errors.add("cors", validation_error);
+        }
+
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
+    }
 }
 
 impl Default for HttpServerConfig {
