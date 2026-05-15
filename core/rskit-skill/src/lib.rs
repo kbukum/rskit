@@ -276,7 +276,7 @@ pub enum SkillError {
         path: PathBuf,
         /// Source error.
         #[source]
-        source: serde_yml::Error,
+        source: serde_norway::Error,
     },
     /// Manifest is invalid.
     #[error("invalid skill manifest: {0}")]
@@ -371,7 +371,7 @@ impl<V: Verifier> Loader<V> {
             source,
         })?;
         let manifest: Manifest =
-            serde_yml::from_str(&data).map_err(|source| SkillError::ParseManifest {
+            serde_norway::from_str(&data).map_err(|source| SkillError::ParseManifest {
                 path: manifest_path,
                 source,
             })?;
@@ -643,7 +643,7 @@ mod tests {
     fn write_pack(root: &Path, manifest: &Manifest) {
         fs::write(
             root.join(MANIFEST_FILE_NAME),
-            serde_yml::to_string(manifest).expect("serialize manifest"),
+            serde_norway::to_string(manifest).expect("serialize manifest"),
         )
         .expect("write manifest");
         fs::write(root.join(SKILL_MD_FILE_NAME), "# Demo\nUse this skill.").expect("write body");
@@ -691,7 +691,7 @@ mod tests {
 
     #[test]
     fn parses_manifest_yaml() {
-        let manifest: Manifest = serde_yml::from_str(
+        let manifest: Manifest = serde_norway::from_str(
             r#"
 schema_version: "1"
 name: demo
