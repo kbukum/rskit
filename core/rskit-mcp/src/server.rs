@@ -708,8 +708,8 @@ mod tests {
     use super::*;
     use parking_lot::Mutex;
 
-    use rskit_validation::ValidationResult;
     use rskit_tool::{Callable, Definition, ToolResult, from_fn, text_result};
+    use rskit_validation::ValidationResult;
     use schemars::JsonSchema;
     use serde::Deserialize;
     use serde_json::json;

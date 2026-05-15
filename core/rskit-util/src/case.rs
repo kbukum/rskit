@@ -10,13 +10,10 @@ pub fn to_title_case(s: &str) -> String {
     s.split('_')
         .map(|word| {
             let mut chars = word.chars();
-            match chars.next() {
-                None => String::new(),
-                Some(first) => {
-                    let rest: String = chars.map(|c| c.to_ascii_lowercase()).collect();
-                    format!("{}{}", first.to_ascii_uppercase(), rest)
-                }
-            }
+            chars.next().map_or_else(String::new, |first| {
+                let rest: String = chars.map(|c| c.to_ascii_lowercase()).collect();
+                format!("{}{}", first.to_ascii_uppercase(), rest)
+            })
         })
         .collect::<Vec<_>>()
         .join(" ")
