@@ -307,7 +307,7 @@ mod tests {
 
     #[test]
     fn rate_limiter_accessible_from_facade() {
-        let rl = RateLimiter::new("facade-rl", 10, 5);
+        let rl = RateLimiter::new("facade-rl", 10, 5).unwrap();
         assert!(rl.check().is_ok());
     }
 

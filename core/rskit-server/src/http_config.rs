@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+pub use rskit_security::CorsConfig;
 use rskit_validation::Validate;
 use serde::Deserialize;
 
@@ -79,19 +80,4 @@ impl HttpServerConfig {
             format!("{}:{}", self.host, self.port)
         }
     }
-}
-
-/// Cross-origin resource sharing configuration.
-#[derive(Debug, Clone, Deserialize)]
-pub struct CorsConfig {
-    /// Allowed origins.
-    pub allowed_origins: Vec<String>,
-    /// Allowed HTTP methods.
-    pub allowed_methods: Vec<String>,
-    /// Allowed request headers.
-    pub allowed_headers: Vec<String>,
-    /// Whether to allow sending credentials (cookies, auth headers).
-    pub allow_credentials: bool,
-    /// Cache duration for pre-flight responses.
-    pub max_age: Duration,
 }

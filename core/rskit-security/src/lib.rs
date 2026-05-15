@@ -6,14 +6,16 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use http::{
-    HeaderName, HeaderValue, Request, Response,
+    HeaderName, HeaderValue, Method, Request, Response,
     header::{
         CONTENT_SECURITY_POLICY, REFERRER_POLICY, STRICT_TRANSPORT_SECURITY,
         X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS,
     },
 };
 use rskit_errors::{AppError, AppResult};
+use rskit_validation::Validator;
 use tower::{Layer, Service};
+use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer};
 
 const HSTS_HEADER_VALUE: &str = "max-age=63072000; includeSubDomains; preload";
 const CSP_HEADER_VALUE: &str =
@@ -335,70 +337,208 @@ mod tests {
             "AllowInsecureLocal with all headers disabled must be rejected"
         );
     }
-}
 
-/// Verification result for signed artifacts.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum VerificationResult {
-    /// Verification passed.
-    Verified,
-    /// Verification produced warnings and may proceed under warn policy.
-    Warning(Vec<String>),
-    /// Verification denied the artifact.
-    Denied(String),
-}
+    #[test]
+    fn cors_defaults_are_deny_by_default() {
+        let config = CorsConfig::default();
+        assert!(config.allowed_origins.is_empty());
+        assert!(config.layer().is_ok());
+    }
 
-/// Generic verifier contract for skill signatures and supply-chain artifacts.
-pub trait Verifier<T>: Send + Sync {
-    /// Verify an artifact.
-    fn verify(&self, artifact: &T) -> VerificationResult;
-}
+    #[test]
+    fn cors_rejects_wildcard_origin() {
+        let config = CorsConfig {
+            allowed_origins: vec!["*".to_string()],
+            allowed_methods: vec!["GET".to_string()],
+            allowed_headers: vec!["authorization".to_string()],
+            allow_credentials: false,
+            max_age: std::time::Duration::from_mins(1),
+        };
+        assert!(config.layer().is_err());
+    }
 
-/// Streamable HTTP hardening configuration for MCP endpoints.
-#[derive(Debug, Clone)]
-pub struct McpHttpSecurityConfig {
-    /// Allowed Origin header values.
-    pub allowed_origins: Vec<String>,
-    /// Bind host. Defaults should be loopback.
-    pub bind_host: String,
-    /// Maximum request payload bytes.
-    pub max_payload_bytes: usize,
-    /// Whether OAuth 2.1 + PKCE is required.
-    pub require_oauth_pkce: bool,
-}
+    #[test]
+    fn path_validation_rejects_traversal_and_mixed_separators() {
+        assert!(validate_safe_path("tenant/report.json").is_ok());
+        assert!(validate_safe_path("../secret").is_err());
+        assert!(validate_safe_path("tenant\\..\\secret").is_err());
+    }
 
-impl Default for McpHttpSecurityConfig {
-    fn default() -> Self {
-        Self {
-            allowed_origins: Vec::new(),
-            bind_host: "127.0.0.1".to_string(),
-            max_payload_bytes: 1_048_576,
-            require_oauth_pkce: true,
-        }
+    #[test]
+    fn unicode_hardening_rejects_rtl_override_and_selected_confusables() {
+        assert!(reject_dangerous_unicode("identifier", "safe-id").is_ok());
+        assert!(reject_dangerous_unicode("identifier", "safe\u{202e}txt").is_err());
+        assert!(reject_dangerous_unicode("identifier", "раypal").is_err());
+        assert!(reject_dangerous_unicode("identifier", "павел").is_ok());
     }
 }
 
-impl McpHttpSecurityConfig {
-    /// Validate hardened MCP HTTP defaults.
+/// Cross-origin resource sharing configuration.
+///
+/// The default is deny-by-default: no origins, methods, headers, or credentials
+/// are allowed unless explicitly configured.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct CorsConfig {
+    /// Allowed Origin header values.
+    pub allowed_origins: Vec<String>,
+    /// Allowed HTTP methods.
+    pub allowed_methods: Vec<String>,
+    /// Allowed request headers.
+    pub allowed_headers: Vec<String>,
+    /// Whether to allow credentials.
+    pub allow_credentials: bool,
+    /// Cache duration for pre-flight responses.
+    pub max_age: std::time::Duration,
+}
+
+impl CorsConfig {
+    /// Validate the CORS policy.
+    ///
+    /// # Errors
+    /// Returns an error when an origin, method, or header is invalid or when
+    /// wildcard origins are combined with credentials.
     pub fn validate(&self) -> AppResult<()> {
-        let is_loopback = matches!(self.bind_host.as_str(), "127.0.0.1" | "::1" | "localhost")
-            || self
-                .bind_host
-                .parse::<std::net::IpAddr>()
-                .is_ok_and(|ip| ip.is_loopback());
-        if !is_loopback && self.allowed_origins.is_empty() {
+        for origin in &self.allowed_origins {
+            Validator::new().url("allowed_origins", origin).validate()?;
+            if origin == "*" {
+                return Err(AppError::invalid_input(
+                    "allowed_origins",
+                    "wildcard origins are not allowed",
+                ));
+            }
+        }
+        if self.allow_credentials && self.allowed_origins.is_empty() {
             return Err(AppError::invalid_input(
                 "allowed_origins",
-                "non-loopback MCP HTTP endpoints require explicit Origin allow-list",
-            ));
-        }
-        if self.max_payload_bytes == 0 {
-            return Err(AppError::invalid_input(
-                "max_payload_bytes",
-                "payload limit must be greater than zero",
+                "credentials require an explicit origin allow-list",
             ));
         }
         Ok(())
     }
+
+    /// Build a Tower CORS layer from this explicit policy.
+    ///
+    /// # Errors
+    /// Returns an error when any configured origin, method, or header is invalid.
+    pub fn layer(&self) -> AppResult<CorsLayer> {
+        self.validate()?;
+
+        let origins = self
+            .allowed_origins
+            .iter()
+            .map(|origin| header_value(&http::header::ORIGIN, origin))
+            .collect::<AppResult<Vec<_>>>()?;
+        let methods = self
+            .allowed_methods
+            .iter()
+            .map(|method| {
+                method.parse::<Method>().map_err(|error| {
+                    AppError::invalid_input("allowed_methods", format!("invalid method: {error}"))
+                })
+            })
+            .collect::<AppResult<Vec<_>>>()?;
+        let headers = self
+            .allowed_headers
+            .iter()
+            .map(|header| {
+                HeaderName::from_bytes(header.as_bytes()).map_err(|error| {
+                    AppError::invalid_input("allowed_headers", format!("invalid header: {error}"))
+                })
+            })
+            .collect::<AppResult<Vec<_>>>()?;
+
+        let mut layer = CorsLayer::new()
+            .allow_origin(AllowOrigin::list(origins))
+            .allow_methods(AllowMethods::list(methods))
+            .allow_headers(AllowHeaders::list(headers))
+            .allow_credentials(self.allow_credentials);
+
+        if !self.max_age.is_zero() {
+            layer = layer.max_age(self.max_age);
+        }
+
+        Ok(layer)
+    }
+}
+
+/// Validate that a path-like input cannot traverse outside its base.
+pub fn validate_safe_path(path: &str) -> AppResult<()> {
+    reject_dangerous_unicode("path", path)?;
+    if path.is_empty()
+        || path.starts_with('/')
+        || path.starts_with('\\')
+        || path.split(['/', '\\']).any(|segment| {
+            segment.is_empty() || segment == "." || segment == ".." || segment.contains(':')
+        })
+    {
+        return Err(AppError::invalid_input(
+            "path",
+            "path must be relative and must not contain traversal segments",
+        ));
+    }
+    Ok(())
+}
+
+/// Reject Unicode controls and selected confusable/security-sensitive code points.
+pub fn reject_dangerous_unicode(field: &str, value: &str) -> AppResult<()> {
+    let contains_ascii_latin = value.chars().any(|ch| ch.is_ascii_alphabetic());
+    for ch in value.chars() {
+        if ch.is_control()
+            || matches!(
+                ch,
+                '\u{202A}'..='\u{202E}'
+                    | '\u{2066}'..='\u{2069}'
+                    | '\u{200E}'
+                    | '\u{200F}'
+            )
+            || (contains_ascii_latin && is_common_latin_confusable(ch))
+        {
+            return Err(AppError::invalid_input(
+                field,
+                "input contains forbidden Unicode control or confusable characters",
+            ));
+        }
+    }
+    Ok(())
+}
+
+const fn is_common_latin_confusable(ch: char) -> bool {
+    matches!(
+        ch,
+        // Common Cyrillic and Greek lookalikes used in mixed-script spoofing.
+        'А' | 'В'
+            | 'Е'
+            | 'К'
+            | 'М'
+            | 'Н'
+            | 'О'
+            | 'Р'
+            | 'С'
+            | 'Т'
+            | 'Х'
+            | 'а'
+            | 'е'
+            | 'о'
+            | 'р'
+            | 'с'
+            | 'у'
+            | 'х'
+            | 'Α'
+            | 'Β'
+            | 'Ε'
+            | 'Ζ'
+            | 'Η'
+            | 'Ι'
+            | 'Κ'
+            | 'Μ'
+            | 'Ν'
+            | 'Ο'
+            | 'Ρ'
+            | 'Τ'
+            | 'Υ'
+            | 'Χ'
+            | 'α'
+            | 'ο'
+            | 'ρ'
+    )
 }

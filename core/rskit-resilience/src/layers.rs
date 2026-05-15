@@ -24,12 +24,21 @@ use crate::{Bulkhead, CircuitBreaker, RateLimiter, RetryPolicy};
 
 /// Tower layer that retries failed requests according to a [`RetryPolicy`].
 #[derive(Clone)]
-pub struct RetryLayer(pub RetryPolicy);
+pub struct RetryLayer {
+    policy: RetryPolicy,
+}
 
 impl RetryLayer {
     /// Create a new [`RetryLayer`] from the given policy.
+    #[must_use]
     pub fn new(policy: RetryPolicy) -> Self {
-        Self(policy)
+        Self { policy }
+    }
+
+    /// Borrow the configured retry policy.
+    #[must_use]
+    pub const fn policy(&self) -> &RetryPolicy {
+        &self.policy
     }
 }
 
@@ -38,7 +47,7 @@ impl<S> tower::Layer<S> for RetryLayer {
     fn layer(&self, inner: S) -> Self::Service {
         RetryService {
             inner,
-            policy: self.0.clone(),
+            policy: self.policy.clone(),
         }
     }
 }
@@ -52,10 +61,10 @@ pub struct RetryService<S> {
 
 impl<S, Req> tower::Service<Req> for RetryService<S>
 where
-    S: tower::Service<Req, Error = AppError> + Clone + Send + 'static,
+    S: tower::Service<Req, Error = AppError> + Clone + Send + Sync + 'static,
     S::Future: Send + 'static,
     S::Response: Send + 'static,
-    Req: Clone + Send + 'static,
+    Req: Clone + Send + Sync + 'static,
 {
     type Response = S::Response;
     type Error = AppError;
@@ -72,39 +81,14 @@ where
         let base = self.inner.clone();
         let policy = self.policy.clone();
         Box::pin(async move {
-            let mut last_err: Option<AppError> = None;
-            for attempt in 0..policy.max_attempts {
-                let mut s = base.clone();
-                let r = req.clone();
-                match s.call(r).await {
-                    Ok(v) => return Ok(v),
-                    Err(e) => {
-                        let retryable = if let Some(ref pred) = policy.retry_if {
-                            pred(&e)
-                        } else {
-                            e.is_retryable()
-                        };
-                        if !retryable || attempt + 1 >= policy.max_attempts {
-                            return Err(e);
-                        }
-                        let delay = policy.backoff(attempt + 1);
-                        tracing::debug!(
-                            attempt = attempt + 1,
-                            delay_ms = delay.as_millis(),
-                            error = %e,
-                            "retrying after error"
-                        );
-                        tokio::time::sleep(delay).await;
-                        last_err = Some(e);
-                    }
-                }
-            }
-            Err(last_err.unwrap_or_else(|| {
-                AppError::new(
-                    rskit_errors::ErrorCode::Internal,
-                    "retry exhausted with no error",
-                )
-            }))
+            policy
+                .execute(|| {
+                    let mut s = base.clone();
+                    let r = req.clone();
+                    async move { s.call(r).await }
+                })
+                .await
+                .map_err(|err| err.last_error)
         })
     }
 }
@@ -113,12 +97,21 @@ where
 
 /// Tower layer that wraps a service with a [`CircuitBreaker`].
 #[derive(Clone)]
-pub struct CircuitBreakerLayer(pub CircuitBreaker);
+pub struct CircuitBreakerLayer {
+    breaker: CircuitBreaker,
+}
 
 impl CircuitBreakerLayer {
     /// Create a new [`CircuitBreakerLayer`] from the given breaker.
+    #[must_use]
     pub fn new(cb: CircuitBreaker) -> Self {
-        Self(cb)
+        Self { breaker: cb }
+    }
+
+    /// Borrow the configured circuit breaker.
+    #[must_use]
+    pub const fn breaker(&self) -> &CircuitBreaker {
+        &self.breaker
     }
 }
 
@@ -127,7 +120,7 @@ impl<S> tower::Layer<S> for CircuitBreakerLayer {
     fn layer(&self, inner: S) -> Self::Service {
         CircuitBreakerService {
             inner,
-            cb: self.0.clone(),
+            cb: self.breaker.clone(),
         }
     }
 }
@@ -165,12 +158,21 @@ where
 
 /// Tower layer that limits concurrency via a [`Bulkhead`].
 #[derive(Clone)]
-pub struct BulkheadLayer(pub Bulkhead);
+pub struct BulkheadLayer {
+    bulkhead: Bulkhead,
+}
 
 impl BulkheadLayer {
     /// Create a new [`BulkheadLayer`] from the given bulkhead.
+    #[must_use]
     pub fn new(bh: Bulkhead) -> Self {
-        Self(bh)
+        Self { bulkhead: bh }
+    }
+
+    /// Borrow the configured bulkhead.
+    #[must_use]
+    pub const fn bulkhead(&self) -> &Bulkhead {
+        &self.bulkhead
     }
 }
 
@@ -179,7 +181,7 @@ impl<S> tower::Layer<S> for BulkheadLayer {
     fn layer(&self, inner: S) -> Self::Service {
         BulkheadService {
             inner,
-            bh: self.0.clone(),
+            bh: self.bulkhead.clone(),
         }
     }
 }
@@ -217,12 +219,21 @@ where
 
 /// Tower layer that rate-limits a service via [`RateLimiter`].
 #[derive(Clone)]
-pub struct RateLimitLayer(pub RateLimiter);
+pub struct RateLimitLayer {
+    limiter: RateLimiter,
+}
 
 impl RateLimitLayer {
     /// Create a new [`RateLimitLayer`] from the given limiter.
+    #[must_use]
     pub fn new(rl: RateLimiter) -> Self {
-        Self(rl)
+        Self { limiter: rl }
+    }
+
+    /// Borrow the configured rate limiter.
+    #[must_use]
+    pub const fn limiter(&self) -> &RateLimiter {
+        &self.limiter
     }
 }
 
@@ -231,8 +242,74 @@ impl<S> tower::Layer<S> for RateLimitLayer {
     fn layer(&self, inner: S) -> Self::Service {
         RateLimitService {
             inner,
-            rl: self.0.clone(),
+            rl: self.limiter.clone(),
         }
+    }
+}
+
+// ─── Timeout ─────────────────────────────────────────────────────────────────
+
+/// Tower layer that bounds each service call by a timeout.
+#[derive(Debug, Clone, Copy)]
+pub struct TimeoutLayer {
+    timeout: std::time::Duration,
+}
+
+impl TimeoutLayer {
+    /// Create a timeout layer with a finite timeout.
+    #[must_use]
+    pub const fn new(timeout: std::time::Duration) -> Self {
+        Self { timeout }
+    }
+
+    /// Return the configured timeout.
+    #[must_use]
+    pub const fn timeout(&self) -> std::time::Duration {
+        self.timeout
+    }
+}
+
+impl<S> tower::Layer<S> for TimeoutLayer {
+    type Service = TimeoutService<S>;
+
+    fn layer(&self, inner: S) -> Self::Service {
+        TimeoutService {
+            inner,
+            timeout: self.timeout,
+        }
+    }
+}
+
+/// Tower service that applies a finite timeout to each call.
+#[derive(Debug, Clone)]
+pub struct TimeoutService<S> {
+    inner: S,
+    timeout: std::time::Duration,
+}
+
+impl<S, Req> tower::Service<Req> for TimeoutService<S>
+where
+    S: tower::Service<Req, Error = AppError> + Clone + Send + 'static,
+    S::Future: Send + 'static,
+    S::Response: Send + 'static,
+    Req: Send + 'static,
+{
+    type Response = S::Response;
+    type Error = AppError;
+    type Future = Pin<Box<dyn Future<Output = Result<S::Response, AppError>> + Send>>;
+
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
+
+    fn call(&mut self, req: Req) -> Self::Future {
+        let mut svc = self.inner.clone();
+        let timeout = self.timeout;
+        Box::pin(async move {
+            tokio::time::timeout(timeout, svc.call(req))
+                .await
+                .map_err(|_| AppError::timeout("resilience timeout"))?
+        })
     }
 }
 
@@ -282,7 +359,7 @@ mod tests {
 
     use crate::{
         Bulkhead, BulkheadConfig, CbConfig, CircuitBreaker, RateLimiter, RetryPolicy,
-        layers::{BulkheadLayer, CircuitBreakerLayer, RateLimitLayer, RetryLayer},
+        layers::{BulkheadLayer, CircuitBreakerLayer, RateLimitLayer, RetryLayer, TimeoutLayer},
     };
 
     // ── Helper: service_fn that counts calls and returns a preset result ───────
@@ -430,7 +507,7 @@ mod tests {
 
     #[tokio::test]
     async fn rate_limit_layer_allows_first_call() {
-        let rl = RateLimiter::new("test", 10, 5);
+        let rl = RateLimiter::new("test", 10, 5).unwrap();
         let svc = tower::service_fn(|req: i32| async move { Ok::<i32, AppError>(req) });
         let mut svc = ServiceBuilder::new()
             .layer(RateLimitLayer::new(rl))
@@ -443,7 +520,7 @@ mod tests {
     #[tokio::test]
     async fn rate_limit_layer_rejects_when_exhausted() {
         // burst=1 — only 1 token available
-        let rl = RateLimiter::new("test", 1, 1);
+        let rl = RateLimiter::new("test", 1, 1).unwrap();
         let svc = tower::service_fn(|req: i32| async move { Ok::<i32, AppError>(req) });
         let mut svc = ServiceBuilder::new()
             .layer(RateLimitLayer::new(rl))
@@ -456,5 +533,19 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(err.code, ErrorCode::RateLimited);
+    }
+
+    #[tokio::test]
+    async fn timeout_layer_bounds_slow_service() {
+        let svc = tower::service_fn(|_req: i32| async move {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            Ok::<i32, AppError>(1)
+        });
+        let mut svc = ServiceBuilder::new()
+            .layer(TimeoutLayer::new(Duration::from_millis(1)))
+            .service(svc);
+
+        let err = svc.ready().await.unwrap().call(0).await.unwrap_err();
+        assert_eq!(err.code, ErrorCode::Timeout);
     }
 }

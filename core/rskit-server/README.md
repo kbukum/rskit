@@ -9,6 +9,7 @@ Service-facing server abstractions for rskit.
 - exposes health routers and lifecycle-managed startup/shutdown
 - remains the home for shared server lifecycle pieces consumed by `rskit-grpc`
 - keeps TLS policy ownership for service-facing transports; `rskit-http` stays transport-only
+- consumes `rskit-security` for secure headers and CORS policy construction
 
 ## Usage
 

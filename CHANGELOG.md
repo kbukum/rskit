@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — Cross-Cutting
+- **rskit-observability**: replaced process-global tracer initialization with injectable OpenTelemetry providers for traces, metrics, and logs, with OTLP gRPC/HTTP support.
+- **rskit-resilience**: added elapsed-time retry bounds and a composable Tower timeout layer.
+- **rskit-security**: centralized deny-by-default CORS and reusable path/Unicode hardening primitives; `rskit-server` now consumes the security-owned CORS policy.
+
 ### Changed — Pattern Contracts
 - **rskit-hook**: replaced public downcast-based hook payload handling with typed hook registration and added a bounded in-process event bus.
 - **rskit-provider**: narrowed L2 provider contracts to canonical shapes plus `TowerProvider`, removing cross-cutting middleware ownership from the pattern crate.

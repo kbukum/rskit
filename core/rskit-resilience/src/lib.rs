@@ -6,8 +6,6 @@
 pub mod bulkhead;
 /// Asynchronous circuit breaker with closed / open / half-open states.
 pub mod circuit_breaker;
-/// Graceful degradation manager for tracking dependency health.
-pub mod degradation;
 /// [`tower::Layer`] wrappers for each resilience primitive.
 pub mod layers;
 /// High-level composition API for resilience primitives.
@@ -19,9 +17,8 @@ pub mod retry;
 
 pub use bulkhead::{Bulkhead, BulkheadConfig};
 pub use circuit_breaker::{CbConfig, CbState, CircuitBreaker};
-pub use degradation::{DegradationManager, ServiceHealth, ServiceStatus};
 pub use policy::Policy;
 pub use rate_limiter::{RateLimiter, RateLimiterConfig};
 pub use retry::{BackoffKind, ConstantBackoff, LinearBackoff, RetryError, RetryPolicy};
 
-pub use layers::{BulkheadLayer, CircuitBreakerLayer, RateLimitLayer, RetryLayer};
+pub use layers::{BulkheadLayer, CircuitBreakerLayer, RateLimitLayer, RetryLayer, TimeoutLayer};

@@ -11,26 +11,26 @@ use rskit_observability::{
 #[test]
 fn operation_context_new_fields() {
     let ctx = OperationContext::new("my-svc", "create-user", "req-123", "user-456");
-    assert_eq!(ctx.service_name, "my-svc");
-    assert_eq!(ctx.operation_name, "create-user");
-    assert_eq!(ctx.request_id, "req-123");
-    assert_eq!(ctx.user_id, "user-456");
+    assert_eq!(ctx.service_name(), "my-svc");
+    assert_eq!(ctx.operation_name(), "create-user");
+    assert_eq!(ctx.request_id(), "req-123");
+    assert_eq!(ctx.user_id(), "user-456");
 }
 
 #[test]
 fn operation_context_new_empty_strings() {
     let ctx = OperationContext::new("", "", "", "");
-    assert_eq!(ctx.service_name, "");
-    assert_eq!(ctx.operation_name, "");
-    assert_eq!(ctx.request_id, "");
-    assert_eq!(ctx.user_id, "");
+    assert_eq!(ctx.service_name(), "");
+    assert_eq!(ctx.operation_name(), "");
+    assert_eq!(ctx.request_id(), "");
+    assert_eq!(ctx.user_id(), "");
 }
 
 #[test]
 fn operation_context_accepts_string_and_str() {
     let svc = String::from("svc");
     let ctx = OperationContext::new(svc, "op", "req", "user");
-    assert_eq!(ctx.service_name, "svc");
+    assert_eq!(ctx.service_name(), "svc");
 }
 
 // ── OperationContext: elapsed ───────────────────────────────────────────────

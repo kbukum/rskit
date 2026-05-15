@@ -5,6 +5,8 @@ use serde::Deserialize;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
 
+use crate::tracer::{OtlpProtocol, SERVICE_NAME};
+
 /// Configuration for the OpenTelemetry metrics pipeline.
 #[derive(Debug, Clone, Deserialize)]
 pub struct MetricsConfig {
@@ -12,7 +14,7 @@ pub struct MetricsConfig {
     pub service_name: String,
     /// How often metrics are exported to the collector.
     pub export_interval: Duration,
-    /// OTLP gRPC endpoint. When `None`, metrics are collected but not exported.
+    /// OTLP endpoint. When `None`, metrics are collected but not exported.
     pub otlp_endpoint: Option<String>,
 }
 
@@ -66,13 +68,21 @@ impl MetricsHandle {
 
 /// Initialise an OpenTelemetry metrics pipeline with optional OTLP export.
 pub fn init_metrics(cfg: &MetricsConfig) -> AppResult<MetricsHandle> {
+    init_metrics_with_protocol(cfg, OtlpProtocol::Grpc)
+}
+
+/// Initialise an OpenTelemetry metrics pipeline with an explicit OTLP protocol.
+pub fn init_metrics_with_protocol(
+    cfg: &MetricsConfig,
+    protocol: OtlpProtocol,
+) -> AppResult<MetricsHandle> {
     use opentelemetry::metrics::MeterProvider as _;
     use opentelemetry::{InstrumentationScope, KeyValue};
     use opentelemetry_sdk::Resource;
     use opentelemetry_sdk::metrics::SdkMeterProvider;
 
     let resource = Resource::builder_empty()
-        .with_attributes([KeyValue::new("service.name", cfg.service_name.clone())])
+        .with_attributes([KeyValue::new(SERVICE_NAME, cfg.service_name.clone())])
         .build();
 
     let mut builder = SdkMeterProvider::builder().with_resource(resource);
@@ -81,13 +91,18 @@ pub fn init_metrics(cfg: &MetricsConfig) -> AppResult<MetricsHandle> {
         use opentelemetry_otlp::{MetricExporter, WithExportConfig};
         use opentelemetry_sdk::metrics::PeriodicReader;
 
-        let exporter = MetricExporter::builder()
-            .with_tonic()
-            .with_endpoint(endpoint)
-            .build()
-            .map_err(|e| {
-                AppError::new(ErrorCode::Internal, format!("OTLP metric exporter: {e}"))
-            })?;
+        let exporter = match protocol {
+            OtlpProtocol::Grpc => MetricExporter::builder()
+                .with_tonic()
+                .with_endpoint(endpoint)
+                .build(),
+            OtlpProtocol::HttpBinary => MetricExporter::builder()
+                .with_http()
+                .with_protocol(opentelemetry_otlp::Protocol::HttpBinary)
+                .with_endpoint(endpoint)
+                .build(),
+        }
+        .map_err(|e| AppError::new(ErrorCode::Internal, format!("OTLP metric exporter: {e}")))?;
 
         let reader = PeriodicReader::builder(exporter)
             .with_interval(cfg.export_interval)

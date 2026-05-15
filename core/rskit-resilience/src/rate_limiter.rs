@@ -40,6 +40,23 @@ impl RateLimiterConfig {
         self.burst = burst;
         self
     }
+
+    /// Validate that the token bucket is bounded and non-zero.
+    pub fn validate(&self) -> AppResult<()> {
+        if self.per_second == 0 {
+            return Err(AppError::invalid_input(
+                "per_second",
+                "rate limit must be greater than zero",
+            ));
+        }
+        if self.burst == 0 {
+            return Err(AppError::invalid_input(
+                "burst",
+                "rate limit burst must be greater than zero",
+            ));
+        }
+        Ok(())
+    }
 }
 
 /// Token-bucket rate limiter backed by `governor`.
@@ -60,22 +77,31 @@ impl std::fmt::Debug for RateLimiter {
 impl RateLimiter {
     /// Create a rate limiter that allows `per_second` requests/second with a
     /// burst capacity of `burst`.
-    #[must_use]
-    pub fn new(name: impl Into<String>, per_second: u32, burst: u32) -> Self {
+    pub fn new(name: impl Into<String>, per_second: u32, burst: u32) -> AppResult<Self> {
         let config = RateLimiterConfig::new(name, per_second, burst);
         Self::from_config(config)
     }
 
     /// Create a rate limiter from a configuration object.
-    #[must_use]
-    pub fn from_config(config: RateLimiterConfig) -> Self {
-        let per_sec = NonZeroU32::new(config.per_second.max(1)).unwrap_or(NonZeroU32::MIN);
-        let burst_size = NonZeroU32::new(config.burst.max(1)).unwrap_or(NonZeroU32::MIN);
+    pub fn from_config(config: RateLimiterConfig) -> AppResult<Self> {
+        config.validate()?;
+        let Some(per_sec) = NonZeroU32::new(config.per_second) else {
+            return Err(AppError::invalid_input(
+                "per_second",
+                "rate limit must be greater than zero",
+            ));
+        };
+        let Some(burst_size) = NonZeroU32::new(config.burst) else {
+            return Err(AppError::invalid_input(
+                "burst",
+                "rate limit burst must be greater than zero",
+            ));
+        };
         let quota = Quota::per_second(per_sec).allow_burst(burst_size);
-        Self {
+        Ok(Self {
             inner: Arc::new(GovRateLimiter::direct(quota)),
             name: config.name,
-        }
+        })
     }
 
     /// Non-blocking check: returns `Ok(())` if a token was acquired, or
@@ -105,19 +131,13 @@ impl RateLimiter {
     }
 }
 
-impl From<RateLimiterConfig> for RateLimiter {
-    fn from(config: RateLimiterConfig) -> Self {
-        Self::from_config(config)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[tokio::test]
     async fn check_allows_up_to_burst_limit() {
-        let rl = RateLimiter::new("test", 1, 5);
+        let rl = RateLimiter::new("test", 1, 5).unwrap();
         for _ in 0..5 {
             assert!(rl.check().is_ok());
         }
@@ -125,7 +145,7 @@ mod tests {
 
     #[tokio::test]
     async fn check_rejects_when_bucket_exhausted() {
-        let rl = RateLimiter::new("test", 1, 3);
+        let rl = RateLimiter::new("test", 1, 3).unwrap();
         for _ in 0..3 {
             let _ = rl.check();
         }
@@ -136,7 +156,7 @@ mod tests {
     #[tokio::test]
     async fn check_returns_rate_limited_error_code() {
         use rskit_errors::ErrorCode;
-        let rl = RateLimiter::new("test", 1, 1);
+        let rl = RateLimiter::new("test", 1, 1).unwrap();
         let _ = rl.check();
         let err = rl.check().unwrap_err();
         assert_eq!(err.code, ErrorCode::RateLimited);
@@ -144,7 +164,7 @@ mod tests {
 
     #[tokio::test]
     async fn until_ready_cancels_when_token_cancelled() {
-        let rl = RateLimiter::new("test", 1, 1);
+        let rl = RateLimiter::new("test", 1, 1).unwrap();
         let _ = rl.check();
 
         let cancel = CancellationToken::new();
@@ -157,7 +177,13 @@ mod tests {
 
     #[test]
     fn from_config_builds_rate_limiter() {
-        let limiter = RateLimiter::from_config(RateLimiterConfig::new("cfg", 10, 2));
+        let limiter = RateLimiter::from_config(RateLimiterConfig::new("cfg", 10, 2)).unwrap();
         assert!(limiter.check().is_ok());
+    }
+
+    #[test]
+    fn from_config_rejects_zero_limits() {
+        assert!(RateLimiter::from_config(RateLimiterConfig::new("zero-rate", 0, 1)).is_err());
+        assert!(RateLimiter::from_config(RateLimiterConfig::new("zero-burst", 1, 0)).is_err());
     }
 }

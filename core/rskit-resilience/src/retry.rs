@@ -101,6 +101,8 @@ pub struct RetryPolicy {
     pub initial_backoff: Duration,
     /// Upper bound on any single backoff delay.
     pub max_backoff: Duration,
+    /// Upper bound on total retry elapsed time, including the first attempt.
+    pub max_elapsed_time: Duration,
     /// Multiplier applied on each successive retry when using exponential backoff.
     pub backoff_factor: f64,
     /// Whether to add uniform jitter to each backoff delay.
@@ -125,6 +127,7 @@ impl std::fmt::Debug for RetryPolicy {
             .field("max_attempts", &self.max_attempts)
             .field("initial_backoff", &self.initial_backoff)
             .field("max_backoff", &self.max_backoff)
+            .field("max_elapsed_time", &self.max_elapsed_time)
             .field("backoff_factor", &self.backoff_factor)
             .field("jitter", &self.jitter)
             .field("backoff_kind", &self.backoff_kind)
@@ -141,6 +144,7 @@ impl Clone for RetryPolicy {
             max_attempts: self.max_attempts,
             initial_backoff: self.initial_backoff,
             max_backoff: self.max_backoff,
+            max_elapsed_time: self.max_elapsed_time,
             backoff_factor: self.backoff_factor,
             jitter: self.jitter,
             backoff_kind: self.backoff_kind,
@@ -157,6 +161,7 @@ impl Default for RetryPolicy {
             max_attempts: 3,
             initial_backoff: Duration::from_millis(100),
             max_backoff: Duration::from_secs(10),
+            max_elapsed_time: Duration::from_secs(30),
             backoff_factor: 2.0,
             jitter: true,
             backoff_kind: BackoffKind::Exponential,
@@ -192,6 +197,13 @@ impl RetryPolicy {
     #[must_use]
     pub fn with_max_backoff(mut self, d: Duration) -> Self {
         self.max_backoff = d;
+        self
+    }
+
+    /// Set the total elapsed-time cap for all attempts and backoff sleeps.
+    #[must_use]
+    pub fn with_max_elapsed_time(mut self, d: Duration) -> Self {
+        self.max_elapsed_time = d;
         self
     }
 
@@ -252,6 +264,7 @@ impl RetryPolicy {
         Fut: std::future::Future<Output = AppResult<T>>,
     {
         let mut attempt = 0usize;
+        let started = std::time::Instant::now();
         loop {
             attempt += 1;
             match f().await {
@@ -262,7 +275,10 @@ impl RetryPolicy {
                         .as_ref()
                         .map(|predicate| predicate(&e))
                         .unwrap_or_else(|| e.is_retryable());
-                    if attempt >= self.max_attempts || !should_retry {
+                    if attempt >= self.max_attempts
+                        || !should_retry
+                        || started.elapsed() >= self.max_elapsed_time
+                    {
                         return Err(RetryError {
                             attempts: attempt,
                             last_error: e,
@@ -278,6 +294,12 @@ impl RetryPolicy {
                         error = %e,
                         "retrying after delay"
                     );
+                    if started.elapsed().saturating_add(delay) > self.max_elapsed_time {
+                        return Err(RetryError {
+                            attempts: attempt,
+                            last_error: e,
+                        });
+                    }
                     tokio::time::sleep(delay).await;
                 }
             }
@@ -458,5 +480,23 @@ mod tests {
             .with_jitter(false);
 
         assert_eq!(policy.backoff_delay(3), Duration::from_millis(30));
+    }
+
+    #[tokio::test]
+    async fn execute_stops_before_elapsed_time_cap() {
+        let policy = RetryPolicy::new()
+            .with_max_attempts(10)
+            .with_initial_backoff(Duration::from_millis(50))
+            .with_jitter(false)
+            .with_max_elapsed_time(Duration::from_millis(10));
+
+        let result = policy
+            .execute(|| async {
+                Err::<(), AppError>(AppError::new(ErrorCode::ConnectionFailed, "test"))
+            })
+            .await;
+
+        let err = result.unwrap_err();
+        assert_eq!(err.attempts, 1);
     }
 }

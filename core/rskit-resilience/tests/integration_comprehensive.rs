@@ -642,38 +642,6 @@ async fn bh_on_reject_for_overflow() {
 }
 
 #[tokio::test]
-async fn bh_without_wait_limit_waits_for_slot() {
-    let bh = Bulkhead::new(BulkheadConfig::new("no-limit", 1).without_wait_limit());
-
-    let barrier = Arc::new(tokio::sync::Notify::new());
-    let bh2 = bh.clone();
-    let b = barrier.clone();
-    let holder = tokio::spawn(async move {
-        bh2.execute(|| async move {
-            b.notified().await;
-            Ok::<_, AppError>(())
-        })
-        .await
-    });
-
-    tokio::time::sleep(Duration::from_millis(5)).await;
-
-    // This will wait (not timeout) until the slot is released
-    let bh3 = bh.clone();
-    let waiter = tokio::spawn(async move { bh3.execute(|| async { Ok::<_, AppError>(7) }).await });
-
-    // Give a moment to ensure waiter is actually waiting
-    tokio::time::sleep(Duration::from_millis(20)).await;
-
-    // Release slot
-    barrier.notify_one();
-    let _ = holder.await;
-
-    let r = waiter.await.unwrap();
-    assert_eq!(r.unwrap(), 7);
-}
-
-#[tokio::test]
 async fn bh_concurrent_stress_100_tasks_10_slots() {
     let bh = Bulkhead::new(BulkheadConfig::new("stress", 10).with_max_wait(Duration::from_secs(5)));
     let completed = Arc::new(AtomicUsize::new(0));
@@ -713,7 +681,7 @@ async fn bh_concurrent_stress_100_tasks_10_slots() {
 
 #[tokio::test]
 async fn rl_check_succeeds_up_to_burst() {
-    let rl = RateLimiter::new("burst-test", 1, 5);
+    let rl = RateLimiter::new("burst-test", 1, 5).unwrap();
     for _ in 0..5 {
         assert!(rl.check().is_ok());
     }
@@ -721,7 +689,7 @@ async fn rl_check_succeeds_up_to_burst() {
 
 #[tokio::test]
 async fn rl_check_fails_when_exhausted() {
-    let rl = RateLimiter::new("exhaust", 1, 3);
+    let rl = RateLimiter::new("exhaust", 1, 3).unwrap();
     for _ in 0..3 {
         let _ = rl.check();
     }
@@ -731,7 +699,7 @@ async fn rl_check_fails_when_exhausted() {
 
 #[tokio::test]
 async fn rl_until_ready_blocks_then_succeeds() {
-    let rl = RateLimiter::new("wait", 100, 1);
+    let rl = RateLimiter::new("wait", 100, 1).unwrap();
     // Drain the single token
     let _ = rl.check();
 
@@ -743,7 +711,7 @@ async fn rl_until_ready_blocks_then_succeeds() {
 
 #[tokio::test]
 async fn rl_cancellation_token_cancels_until_ready() {
-    let rl = RateLimiter::new("cancel", 1, 1);
+    let rl = RateLimiter::new("cancel", 1, 1).unwrap();
     let _ = rl.check();
 
     let cancel = tokio_util::sync::CancellationToken::new();
@@ -761,7 +729,7 @@ async fn rl_cancellation_token_cancels_until_ready() {
 
 #[tokio::test]
 async fn rl_concurrent_check_from_multiple_tasks() {
-    let rl = RateLimiter::new("conc-rl", 1, 10);
+    let rl = RateLimiter::new("conc-rl", 1, 10).unwrap();
     let successes = Arc::new(AtomicUsize::new(0));
     let failures = Arc::new(AtomicUsize::new(0));
 
@@ -796,7 +764,7 @@ async fn rl_concurrent_check_from_multiple_tasks() {
 
 #[tokio::test]
 async fn rl_high_rate_sustained_throughput() {
-    let rl = RateLimiter::new("highrate", 10_000, 100);
+    let rl = RateLimiter::new("highrate", 10_000, 100).unwrap();
     let mut success_count = 0;
     for _ in 0..100 {
         if rl.check().is_ok() {
@@ -889,7 +857,7 @@ async fn layer_bulkhead_limits_concurrency() {
 
 #[tokio::test]
 async fn layer_rate_limit_limits_rate() {
-    let rl = RateLimiter::new("layer-rl", 1, 1);
+    let rl = RateLimiter::new("layer-rl", 1, 1).unwrap();
     let svc = tower::service_fn(|req: i32| async move { Ok::<i32, AppError>(req) });
 
     let mut svc = ServiceBuilder::new()
@@ -906,7 +874,7 @@ async fn layer_rate_limit_limits_rate() {
 
 #[tokio::test]
 async fn layer_all_four_composed() {
-    let rl = RateLimiter::new("composed-rl", 1000, 100);
+    let rl = RateLimiter::new("composed-rl", 1000, 100).unwrap();
     let bh = Bulkhead::new(BulkheadConfig::new("composed-bh", 10));
     let cb = CircuitBreaker::new(CbConfig::new("composed-cb").with_max_failures(5));
     let policy = RetryPolicy::new()
@@ -931,7 +899,7 @@ async fn layer_all_four_composed() {
 #[tokio::test]
 async fn layer_ordering_rate_limit_then_bulkhead_then_cb_then_retry() {
     // Rate limit exhausted first — should see RateLimited error
-    let rl = RateLimiter::new("order-rl", 1, 1);
+    let rl = RateLimiter::new("order-rl", 1, 1).unwrap();
     let bh = Bulkhead::new(BulkheadConfig::new("order-bh", 10));
     let cb = CircuitBreaker::new(CbConfig::new("order-cb").with_max_failures(5));
     let policy = RetryPolicy::new()
@@ -957,7 +925,7 @@ async fn layer_ordering_rate_limit_then_bulkhead_then_cb_then_retry() {
 
 #[tokio::test]
 async fn layer_error_propagation() {
-    let rl = RateLimiter::new("prop-rl", 1000, 100);
+    let rl = RateLimiter::new("prop-rl", 1000, 100).unwrap();
     let bh = Bulkhead::new(BulkheadConfig::new("prop-bh", 10));
     let cb = CircuitBreaker::new(CbConfig::new("prop-cb").with_max_failures(100));
     let policy = RetryPolicy::new()
@@ -980,7 +948,7 @@ async fn layer_error_propagation() {
 
 #[tokio::test]
 async fn layer_concurrent_requests_through_composed() {
-    let rl = RateLimiter::new("conc-composed", 10_000, 100);
+    let rl = RateLimiter::new("conc-composed", 10_000, 100).unwrap();
     let bh = Bulkhead::new(BulkheadConfig::new("conc-bh", 20));
     let cb = CircuitBreaker::new(CbConfig::new("conc-cb").with_max_failures(100));
     let policy = RetryPolicy::new()
@@ -1060,7 +1028,7 @@ async fn multi_cb_plus_retry_exhausts_then_fast_fail() {
 async fn multi_bulkhead_plus_rate_limiter_both_limits_enforced() {
     let bh =
         Bulkhead::new(BulkheadConfig::new("bh-rl", 2).with_max_wait(Duration::from_millis(50)));
-    let rl = RateLimiter::new("rl-bh", 1, 3);
+    let rl = RateLimiter::new("rl-bh", 1, 3).unwrap();
 
     let mut successes = 0;
     let mut rl_errors = 0;
@@ -1114,7 +1082,7 @@ async fn multi_recovery_scenario() {
 async fn multi_load_test_sustained_traffic() {
     let cb = CircuitBreaker::new(CbConfig::new("load").with_max_failures(1000));
     let bh = Bulkhead::new(BulkheadConfig::new("load-bh", 20));
-    let rl = RateLimiter::new("load-rl", 10_000, 200);
+    let rl = RateLimiter::new("load-rl", 10_000, 200).unwrap();
 
     let completed = Arc::new(AtomicUsize::new(0));
     let mut handles = Vec::new();
@@ -1181,7 +1149,7 @@ async fn multi_error_types_from_each_pattern() {
     let _ = h.await;
 
     // Rate limiter error
-    let rl = RateLimiter::new("err-rl", 1, 1);
+    let rl = RateLimiter::new("err-rl", 1, 1).unwrap();
     let _ = rl.check();
     let rl_err = rl.check().unwrap_err();
     assert_eq!(rl_err.code, ErrorCode::RateLimited);

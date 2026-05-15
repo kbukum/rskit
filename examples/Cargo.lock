@@ -2006,6 +2006,8 @@ name = "rskit-hook"
 version = "0.1.0"
 dependencies = [
  "parking_lot",
+ "rskit-errors",
+ "tokio",
  "tokio-util",
  "tracing",
 ]
@@ -2109,7 +2111,6 @@ dependencies = [
  "parking_lot",
  "pin-project-lite",
  "rskit-errors",
- "rskit-resilience",
  "tokio",
  "tower",
  "tower-layer",
