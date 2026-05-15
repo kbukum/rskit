@@ -53,6 +53,7 @@ impl Policy {
     }
 
     /// Enable rate limiting from configuration.
+    #[must_use = "builder methods return an updated policy; use the returned value"]
     pub fn try_with_rate_limiter_config(mut self, config: RateLimiterConfig) -> AppResult<Self> {
         self.rate_limiter = Some(RateLimiter::from_config(config)?);
         Ok(self)

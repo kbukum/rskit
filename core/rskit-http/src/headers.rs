@@ -239,3 +239,77 @@ where
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use http::{StatusCode, header::HeaderValue};
+    use tower::{ServiceBuilder, ServiceExt, service_fn};
+
+    #[tokio::test]
+    async fn defaults_apply_secure_headers() {
+        let service = ServiceBuilder::new()
+            .layer(SecurityHeadersLayer::new(&SecurityHeadersConfig::default()).unwrap())
+            .service(service_fn(|_req: Request<()>| async {
+                Ok::<_, std::convert::Infallible>(
+                    Response::builder().status(StatusCode::OK).body(()).unwrap(),
+                )
+            }));
+
+        let response = service.oneshot(Request::new(())).await.unwrap();
+        let headers = response.headers();
+
+        assert_eq!(
+            headers.get(STRICT_TRANSPORT_SECURITY),
+            Some(&HeaderValue::from_static(HSTS_HEADER_VALUE))
+        );
+        assert_eq!(
+            headers.get(X_CONTENT_TYPE_OPTIONS),
+            Some(&HeaderValue::from_static(X_CONTENT_TYPE_OPTIONS_VALUE))
+        );
+        assert_eq!(
+            headers.get(X_FRAME_OPTIONS),
+            Some(&HeaderValue::from_static(X_FRAME_OPTIONS_VALUE))
+        );
+    }
+
+    #[tokio::test]
+    async fn insecure_local_mode_omits_hsts() {
+        let service = ServiceBuilder::new()
+            .layer(
+                SecurityHeadersLayer::new(
+                    &SecurityHeadersConfig::default()
+                        .with_transport_security(TransportSecurity::AllowInsecureLocal),
+                )
+                .unwrap(),
+            )
+            .service(service_fn(|_req: Request<()>| async {
+                Ok::<_, std::convert::Infallible>(
+                    Response::builder().status(StatusCode::OK).body(()).unwrap(),
+                )
+            }));
+
+        let response = service.oneshot(Request::new(())).await.unwrap();
+        assert!(response.headers().get(STRICT_TRANSPORT_SECURITY).is_none());
+        assert!(response.headers().get(CONTENT_SECURITY_POLICY).is_some());
+    }
+
+    #[tokio::test]
+    async fn existing_headers_are_not_overwritten() {
+        let service = ServiceBuilder::new()
+            .layer(SecurityHeadersLayer::new(&SecurityHeadersConfig::default()).unwrap())
+            .service(service_fn(|_req: Request<()>| async {
+                let mut response = Response::builder().status(StatusCode::OK).body(()).unwrap();
+                response
+                    .headers_mut()
+                    .insert(REFERRER_POLICY, HeaderValue::from_static("same-origin"));
+                Ok::<_, std::convert::Infallible>(response)
+            }));
+
+        let response = service.oneshot(Request::new(())).await.unwrap();
+        assert_eq!(
+            response.headers().get(REFERRER_POLICY),
+            Some(&HeaderValue::from_static("same-origin"))
+        );
+    }
+}

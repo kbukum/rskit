@@ -266,10 +266,29 @@ impl RetryPolicy {
         let mut attempt = 0usize;
         let started = tokio::time::Instant::now();
         loop {
+            let Some(remaining) = self.max_elapsed_time.checked_sub(started.elapsed()) else {
+                return Err(RetryError {
+                    attempts: attempt,
+                    last_error: AppError::timeout("retry elapsed time"),
+                });
+            };
+            if remaining.is_zero() {
+                return Err(RetryError {
+                    attempts: attempt,
+                    last_error: AppError::timeout("retry elapsed time"),
+                });
+            }
+
             attempt += 1;
-            match f().await {
-                Ok(v) => return Ok(v),
-                Err(e) => {
+            match tokio::time::timeout(remaining, f()).await {
+                Err(_) => {
+                    return Err(RetryError {
+                        attempts: attempt,
+                        last_error: AppError::timeout("retry elapsed time"),
+                    });
+                }
+                Ok(Ok(v)) => return Ok(v),
+                Ok(Err(e)) => {
                     let should_retry = self
                         .retry_if
                         .as_ref()
@@ -294,7 +313,7 @@ impl RetryPolicy {
                         error = %e,
                         "retrying after delay"
                     );
-                    if started.elapsed().saturating_add(delay) > self.max_elapsed_time {
+                    if started.elapsed().saturating_add(delay) >= self.max_elapsed_time {
                         return Err(RetryError {
                             attempts: attempt,
                             last_error: e,

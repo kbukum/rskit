@@ -84,19 +84,16 @@ impl RateLimiter {
 
     /// Create a rate limiter from a configuration object.
     pub fn from_config(config: RateLimiterConfig) -> AppResult<Self> {
-        config.validate()?;
-        let Some(per_sec) = NonZeroU32::new(config.per_second) else {
-            return Err(AppError::invalid_input(
-                "per_second",
-                "rate limit must be greater than zero",
-            ));
-        };
-        let Some(burst_size) = NonZeroU32::new(config.burst) else {
-            return Err(AppError::invalid_input(
-                "burst",
-                "rate limit burst must be greater than zero",
-            ));
-        };
+        let per_sec = non_zero(
+            "per_second",
+            config.per_second,
+            "rate limit must be greater than zero",
+        )?;
+        let burst_size = non_zero(
+            "burst",
+            config.burst,
+            "rate limit burst must be greater than zero",
+        )?;
         let quota = Quota::per_second(per_sec).allow_burst(burst_size);
         Ok(Self {
             inner: Arc::new(GovRateLimiter::direct(quota)),
@@ -129,6 +126,10 @@ impl RateLimiter {
             }
         }
     }
+}
+
+fn non_zero(field: &'static str, value: u32, message: &'static str) -> AppResult<NonZeroU32> {
+    NonZeroU32::new(value).ok_or_else(|| AppError::invalid_input(field, message))
 }
 
 #[cfg(test)]

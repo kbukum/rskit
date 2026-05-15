@@ -11,6 +11,7 @@ use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer};
 /// The default is deny-by-default: no origins, methods, headers, or credentials
 /// are allowed unless explicitly configured.
 #[derive(Debug, Clone, Default, serde::Deserialize)]
+#[serde(default)]
 pub struct CorsPolicy {
     /// Allowed Origin header values.
     pub allowed_origins: Vec<String>,
@@ -170,6 +171,17 @@ mod tests {
         assert!(policy.allowed_methods.is_empty());
         assert!(policy.allowed_headers.is_empty());
         assert!(policy.validate().is_ok());
+    }
+
+    #[test]
+    fn omitted_fields_deserialize_to_deny_by_default_values() {
+        let policy: CorsPolicy =
+            serde_json::from_str(r#"{"allowed_origins":["https://example.com"]}"#).unwrap();
+        assert_eq!(policy.allowed_origins, vec!["https://example.com"]);
+        assert!(policy.allowed_methods.is_empty());
+        assert!(policy.allowed_headers.is_empty());
+        assert!(!policy.allow_credentials);
+        assert!(policy.max_age.is_zero());
     }
 
     #[test]
