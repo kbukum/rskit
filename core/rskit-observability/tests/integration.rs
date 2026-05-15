@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use rskit_observability::{MetricsConfig, TracingConfig};
+use rskit_observability::{LogsConfig, MetricsConfig, OtlpProtocol, TracingConfig};
 
 // ── TracingConfig ───────────────────────────────────────────────────────────
 
@@ -51,6 +51,18 @@ fn metrics_config_without_endpoint() {
         otlp_endpoint: None,
     };
     assert!(cfg.otlp_endpoint.is_none());
+}
+
+#[test]
+fn logs_config_supports_http_otlp_protocol() {
+    let cfg = LogsConfig {
+        service_name: "local".into(),
+        otlp_endpoint: None,
+        protocol: OtlpProtocol::HttpBinary,
+        export_timeout: Duration::from_secs(5),
+    };
+    let handle = rskit_observability::init_logs(&cfg).unwrap();
+    assert!(handle.shutdown().is_ok());
 }
 
 // ── Propagation (no external dependency) ────────────────────────────────────

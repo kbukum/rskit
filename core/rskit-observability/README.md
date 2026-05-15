@@ -1,6 +1,6 @@
 # rskit-observability — OpenTelemetry Integration
 
-OpenTelemetry tracing, metrics, and context propagation.
+OpenTelemetry tracing, metrics, logs, and context propagation.
 
 [![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/rskit-observability.svg)](https://crates.io/crates/rskit-observability)
@@ -10,12 +10,14 @@ OpenTelemetry tracing, metrics, and context propagation.
 
 ## Features
 
-- `init_tracer()` — OTLP exporter with configurable sampling via `TracingConfig`
-- `init_metrics()` — OTLP metrics pipeline via `MetricsConfig`
+- `tracer_provider()` / `init_tracer()` — injectable OTLP trace provider with configurable sampling via `TracingConfig`
+- `init_metrics()` — injectable OTLP metrics pipeline via `MetricsConfig`
+- `init_logs()` — injectable OTLP log provider via `LogsConfig`
 - `OperationContext` — tracks service, operation, request ID, and elapsed time
 - `ServiceHealth` — aggregate health status across registered components
 - `HealthStatus` — Healthy / Degraded / Unhealthy
 - W3C Trace-Context propagation (`extract_trace_context` / `inject_trace_context`)
+- OTLP over gRPC and HTTP/protobuf via `OtlpProtocol`
 
 ## Usage
 
@@ -30,7 +32,7 @@ use rskit_observability::{OperationContext, ServiceHealth, HealthStatus};
 let ctx = OperationContext::new("order-svc", "create_order", "req-1", "user-42");
 // ... do work ...
 ctx.end_operation("success", None);
-println!("elapsed: {:?}", ctx.elapsed());
+let _elapsed = ctx.elapsed();
 
 let health = ServiceHealth::new("order-svc", "0.1.0");
 health.register("db");

@@ -22,6 +22,6 @@ pub use component::GrpcServer;
 pub use config::{GrpcServerConfig, TlsConfig};
 pub use error_layer::ErrorLayer;
 pub use http::{HttpServer, HttpServerBuilder, health_router, healthz_router};
-pub use http_config::{CorsConfig, HttpServerConfig};
+pub use http_config::{CorsPolicy, HttpServerConfig};
 pub use middleware::{HTTP_INTERCEPTOR_ORDER, HttpMiddlewareStack, RouterTransform};
-pub use rskit_security::{SecurityHeadersConfig, SecurityHeadersLayer, TransportSecurity};
+pub use rskit_http::{SecurityHeadersConfig, SecurityHeadersLayer, TransportSecurity};

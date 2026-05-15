@@ -27,12 +27,10 @@ pub use hitl::{
 pub use registry::{BatchOptions, Registry};
 pub use result::{ToolResult, error_result, json_result, text_result};
 
-// Re-export for convenience
-pub use rskit_errors::{AppError, AppResult};
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rskit_errors::AppResult;
     use schemars::JsonSchema;
     use serde::{Deserialize, Serialize};
 

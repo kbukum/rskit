@@ -8,7 +8,8 @@ use rskit_resilience::{
 #[tokio::test]
 async fn compose_rate_bulkhead_circuit_timeout_retry() {
     let policy = Policy::new()
-        .with_rate_limiter(RateLimiterConfig::new("example-rate", 10, 1))
+        .try_with_rate_limiter_config(RateLimiterConfig::new("example-rate", 10, 1))
+        .unwrap()
         .with_bulkhead(BulkheadConfig::new("example-bulkhead", 2))
         .with_circuit_breaker(CbConfig::new("example-circuit").with_max_failures(2))
         .with_timeout(Duration::from_secs(1))

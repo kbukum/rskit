@@ -4,9 +4,10 @@ use std::time::Duration;
 use axum::{Router, body::Body, http::Request, routing::get};
 use rskit_bootstrap::Registry;
 use rskit_server::{
-    CorsConfig, HTTP_INTERCEPTOR_ORDER, HttpMiddlewareStack, HttpServerBuilder, HttpServerConfig,
+    CorsPolicy, HTTP_INTERCEPTOR_ORDER, HttpMiddlewareStack, HttpServerBuilder, HttpServerConfig,
     health_router, healthz_router,
 };
+use rskit_validation::Validate;
 use tokio_util::sync::CancellationToken;
 use tower::ServiceExt;
 
@@ -62,8 +63,8 @@ async fn health_routes_return_expected_statuses() {
 }
 
 #[test]
-fn cors_config_is_exposed_from_server_crate() {
-    let cfg = CorsConfig {
+fn cors_policy_is_exposed_from_server_crate() {
+    let cfg = CorsPolicy {
         allowed_origins: vec!["https://example.com".to_string()],
         allowed_methods: vec!["GET".to_string()],
         allowed_headers: vec!["authorization".to_string()],
@@ -71,4 +72,17 @@ fn cors_config_is_exposed_from_server_crate() {
         max_age: Duration::from_secs(60),
     };
     assert_eq!(cfg.allowed_origins[0], "https://example.com");
+}
+
+#[test]
+fn http_config_validation_rejects_invalid_cors_policy() {
+    let cfg = HttpServerConfig {
+        cors: Some(CorsPolicy {
+            allowed_origins: vec!["*".to_string()],
+            ..CorsPolicy::default()
+        }),
+        ..HttpServerConfig::default()
+    };
+
+    assert!(cfg.validate().is_err());
 }

@@ -22,7 +22,7 @@ pub mod storage;
 pub mod types;
 pub mod viz;
 
-// Re-export key types for convenience.
+// Primary crate API.
 pub use evaluator::{Evaluator, EvaluatorFunc, FromProvider};
 pub use result::{BenchRunResult, MetricResult};
 pub use run_storage::{FileRunStorage, ListOptions, RunStorage};

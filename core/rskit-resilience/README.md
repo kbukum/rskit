@@ -1,4 +1,4 @@
-# rskit-resilience — Retry, Circuit Breaker, Bulkhead, Rate Limiter
+# rskit-resilience — Retry, Circuit Breaker, Bulkhead, Rate Limiter, Timeout
 
 Production-grade resilience primitives with Tower layer integration.
 
@@ -10,11 +10,11 @@ Production-grade resilience primitives with Tower layer integration.
 
 ## Features
 
-- Exponential backoff + jitter retry via `RetryPolicy`
+- Exponential backoff + jitter retry via `RetryPolicy`, bounded by attempts and elapsed time
 - Three-state circuit breaker (`Closed` / `Open` / `HalfOpen`) backed by `parking_lot`
 - Semaphore-based bulkhead for concurrency limiting
 - `governor`-backed rate limiter
-- Tower layers: `RetryLayer`, `CircuitBreakerLayer`, `BulkheadLayer`, `RateLimitLayer`
+- Tower layers: `RetryLayer`, `CircuitBreakerLayer`, `BulkheadLayer`, `RateLimitLayer`, `TimeoutLayer`
 
 ## Usage
 
@@ -30,7 +30,8 @@ use std::time::Duration;
 let cb = CircuitBreaker::new(CbConfig::new("my-service"));
 let retry = RetryPolicy::new()
     .with_max_attempts(3)
-    .with_initial_backoff(Duration::from_millis(100));
+    .with_initial_backoff(Duration::from_millis(100))
+    .with_max_elapsed_time(Duration::from_secs(5));
 
 let result = retry.execute(|| async {
     cb.execute(|| async { call_downstream().await }).await

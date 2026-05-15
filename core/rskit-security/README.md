@@ -1,13 +1,11 @@
-# rskit-security — Security Headers
+# rskit-security — Shared Security Configuration
 
-Secure-by-default HTTP response headers and transport policy helpers for rskit services.
+Shared TLS and security configuration for rskit transports.
 
 ## Features
 
-- `SecurityHeadersLayer` — tower layer that applies CSP, HSTS, `X-Content-Type-Options`,
-  `X-Frame-Options`, `Referrer-Policy`, and `Permissions-Policy`
-- `SecurityHeadersConfig` — builder with secure defaults and TLS-aware HSTS policy
-- `TransportSecurity` — explicit secure-production vs insecure-local transport mode
+- `TlsConfig` — certificate, key, CA bundle, server name, and verification settings
+- `TlsVersion` — minimum TLS version policy
 
 ## Usage
 
@@ -17,8 +15,13 @@ rskit-security = "0.1"
 ```
 
 ```rust
-use rskit_security::{SecurityHeadersConfig, SecurityHeadersLayer, TransportSecurity};
+use rskit_security::{TlsConfig, TlsVersion};
 
-let config = SecurityHeadersConfig::default().with_transport_security(TransportSecurity::HttpsOnly);
-let layer = SecurityHeadersLayer::new(&config).unwrap();
+let tls = TlsConfig {
+    ca_file: Some("certs/ca.pem".to_string()),
+    server_name: Some("api.example.com".to_string()),
+    min_version: TlsVersion::Tls12,
+    ..Default::default()
+};
+tls.validate().unwrap();
 ```

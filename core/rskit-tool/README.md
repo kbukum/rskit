@@ -4,7 +4,7 @@ Tool definitions, callable adapters, JSON Schema I/O, structured results, regist
 
 ## Middleware ownership
 
-`rskit-tool` intentionally does not expose local `with_logging`, `with_timeout`, `with_recover`, retry, metrics, validation, or result-limit middleware. Compose those concerns with their canonical owners: `tracing`/`rskit-observability`, `tower`/`rskit-resilience`, `rskit-schema`/`rskit-validation`, and `rskit-security`.
+`rskit-tool` intentionally does not expose local `with_logging`, `with_timeout`, `with_recover`, retry, metrics, validation, or result-limit middleware. Compose those concerns with their canonical owners: `tracing`/`rskit-observability`, `tower`/`rskit-resilience`, and `rskit-schema`/`rskit-validation`.
 
 ## Envelope
 

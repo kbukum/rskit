@@ -6137,15 +6137,12 @@ dependencies = [
 name = "rskit-observability"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "http 1.4.0",
  "opentelemetry",
  "opentelemetry-otlp",
  "opentelemetry_sdk",
  "parking_lot",
- "rskit-bootstrap",
  "rskit-errors",
- "rskit-logging",
  "serde",
  "serde_json",
  "tokio",
@@ -6234,10 +6231,8 @@ dependencies = [
 name = "rskit-security"
 version = "0.1.0"
 dependencies = [
- "http 1.4.0",
  "rskit-errors",
- "tokio",
- "tower 0.5.3",
+ "serde",
 ]
 
 [[package]]
@@ -6253,8 +6248,8 @@ dependencies = [
  "rskit-bootstrap",
  "rskit-config",
  "rskit-errors",
+ "rskit-http",
  "rskit-resilience",
- "rskit-security",
  "rskit-validation",
  "rskit-version",
  "serde",

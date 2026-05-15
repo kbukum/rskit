@@ -22,6 +22,50 @@ pub use validator::{self, Validate};
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
 
+/// Validation helpers for path and text inputs.
+pub mod input {
+    use rskit_errors::{AppError, AppResult};
+
+    /// Validate that a path-like input cannot traverse outside its base.
+    pub fn validate_safe_path(path: &str) -> AppResult<()> {
+        reject_unicode_controls("path", path)?;
+        if path.is_empty()
+            || path.starts_with('/')
+            || path.starts_with('\\')
+            || path.split(['/', '\\']).any(|segment| {
+                segment.is_empty() || segment == "." || segment == ".." || segment.contains(':')
+            })
+        {
+            return Err(AppError::invalid_input(
+                "path",
+                "path must be relative and must not contain traversal segments",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Reject control characters that can hide or reorder text.
+    pub fn reject_unicode_controls(field: &str, value: &str) -> AppResult<()> {
+        for ch in value.chars() {
+            if ch.is_control()
+                || matches!(
+                    ch,
+                    '\u{202A}'..='\u{202E}'
+                        | '\u{2066}'..='\u{2069}'
+                        | '\u{200E}'
+                        | '\u{200F}'
+                )
+            {
+                return Err(AppError::invalid_input(
+                    field,
+                    "input contains forbidden Unicode control characters",
+                ));
+            }
+        }
+        Ok(())
+    }
+}
+
 // ── FieldError ────────────────────────────────────────────────────────────────
 
 /// A single field validation failure.
@@ -349,5 +393,20 @@ mod tests {
     fn uuid_validates() {
         assert!(validate_uuid("550e8400-e29b-41d4-a716-446655440000"));
         assert!(!validate_uuid("not-a-uuid"));
+    }
+
+    #[test]
+    fn path_validation_rejects_traversal_and_mixed_separators() {
+        assert!(input::validate_safe_path("tenant/report.json").is_ok());
+        assert!(input::validate_safe_path("../secret").is_err());
+        assert!(input::validate_safe_path("tenant\\..\\secret").is_err());
+        assert!(input::validate_safe_path("tenant/..\\secret").is_err());
+    }
+
+    #[test]
+    fn unicode_validation_rejects_control_characters() {
+        assert!(input::reject_unicode_controls("identifier", "safe-id").is_ok());
+        assert!(input::reject_unicode_controls("identifier", "safe\u{202e}txt").is_err());
+        assert!(input::reject_unicode_controls("identifier", "павел").is_ok());
     }
 }

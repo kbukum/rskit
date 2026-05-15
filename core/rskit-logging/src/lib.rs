@@ -292,7 +292,7 @@ pub fn init_logging_full(
     Ok(LoggingGuard(guard))
 }
 
-// Re-export tracing macros for convenience — callers can `use rskit_logging::*`
+// Logging macros exposed by this crate.
 pub use tracing::{debug, error, info, instrument, trace, warn};
 
 #[cfg(test)]

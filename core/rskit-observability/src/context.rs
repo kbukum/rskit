@@ -6,19 +6,16 @@ use std::time::Instant;
 use tracing::Span;
 
 use crate::metrics::MetricsHandle;
+use crate::tracer::set_operation_attributes;
 
 /// Tracks observability context for a single operation.
 ///
 /// Mirrors Go's `observability.OperationContext`.
 pub struct OperationContext {
-    /// Name of the service performing the operation.
-    pub service_name: String,
-    /// Name of the operation being performed.
-    pub operation_name: String,
-    /// Unique request identifier for correlation.
-    pub request_id: String,
-    /// Identifier of the user initiating the request.
-    pub user_id: String,
+    service_name: String,
+    operation_name: String,
+    request_id: String,
+    user_id: String,
     start_time: Instant,
     metrics: Option<Arc<MetricsHandle>>,
 }
@@ -48,16 +45,43 @@ impl OperationContext {
         self
     }
 
+    /// Name of the service performing the operation.
+    #[must_use]
+    pub fn service_name(&self) -> &str {
+        &self.service_name
+    }
+
+    /// Name of the operation being performed.
+    #[must_use]
+    pub fn operation_name(&self) -> &str {
+        &self.operation_name
+    }
+
+    /// Unique request identifier for correlation.
+    #[must_use]
+    pub fn request_id(&self) -> &str {
+        &self.request_id
+    }
+
+    /// Identifier of the user initiating the request.
+    ///
+    /// This is retained for caller-side correlation and is not emitted to spans
+    /// by default to avoid leaking user identifiers into telemetry backends.
+    #[must_use]
+    pub fn user_id(&self) -> &str {
+        &self.user_id
+    }
+
     /// Create a tracing span for a sub-operation.
     pub fn start_span(&self, name: &str) -> Span {
-        tracing::info_span!(
-            "operation",
-            otel.name = name,
-            service.name = %self.service_name,
-            operation.name = %self.operation_name,
-            request.id = %self.request_id,
-            user.id = %self.user_id,
-        )
+        let span = tracing::info_span!("operation", otel.name = name);
+        set_operation_attributes(
+            &span,
+            &self.service_name,
+            &self.operation_name,
+            &self.request_id,
+        );
+        span
     }
 
     /// Record the end of the operation with status and optional error.

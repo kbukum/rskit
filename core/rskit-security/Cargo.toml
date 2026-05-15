@@ -1,6 +1,6 @@
 [package]
 name        = "rskit-security"
-description = "Security headers and transport security policy for rskit services"
+description = "Shared TLS and security configuration for rskit transports"
 version.workspace      = true
 edition.workspace      = true
 license.workspace      = true
@@ -10,8 +10,8 @@ repository.workspace   = true
 homepage.workspace     = true
 documentation          = "https://docs.rs/rskit-security"
 readme                 = "README.md"
-categories             = ["web-programming", "network-programming"]
-keywords               = ["security", "headers", "csp", "hsts"]
+categories             = ["network-programming", "config"]
+keywords               = ["security", "tls", "mtls", "certificate"]
 
 [lints]
 workspace = true
@@ -22,11 +22,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 # External
-http         = { workspace = true }
-tower        = { workspace = true }
+serde        = { workspace = true }
 
 # Internal
 rskit-errors = { path = "../rskit-errors" }
-
-[dev-dependencies]
-tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

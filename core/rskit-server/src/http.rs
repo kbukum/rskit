@@ -4,15 +4,14 @@ use async_trait::async_trait;
 use axum::Router;
 use rskit_bootstrap::{Component, Health, Registry};
 use rskit_errors::{AppError, AppResult, ErrorCode};
-use rskit_security::{SecurityHeadersConfig, SecurityHeadersLayer};
+use rskit_http::{SecurityHeadersConfig, SecurityHeadersLayer};
 use tokio_util::sync::CancellationToken;
 use tower_http::{
-    cors::CorsLayer,
     request_id::{MakeRequestUuid, SetRequestIdLayer},
     trace::TraceLayer,
 };
 
-use crate::http_config::{CorsConfig, HttpServerConfig};
+use crate::http_config::HttpServerConfig;
 use crate::middleware::HttpMiddlewareStack;
 
 /// Builder for [`HttpServer`].
@@ -89,13 +88,17 @@ impl HttpServerBuilder {
     }
 
     /// Apply CORS from the server config (no-op if `cors` is `None`).
-    #[must_use]
-    pub fn with_cors(mut self) -> Self {
-        if let Some(cors_cfg) = &self.config.cors.clone() {
-            let cors = build_cors_layer(cors_cfg);
+    ///
+    /// # Errors
+    /// Returns an error when the configured CORS policy contains invalid origins,
+    /// methods, headers, or max-age values.
+    #[must_use = "builder methods return a new builder; use the returned value"]
+    pub fn with_cors(mut self) -> AppResult<Self> {
+        if let Some(cors_cfg) = self.config.cors.as_ref() {
+            let cors = cors_cfg.layer()?;
             self.router = self.router.layer(cors);
         }
-        self
+        Ok(self)
     }
 
     /// Add automatic `X-Request-Id` injection.
@@ -166,16 +169,6 @@ impl HttpServerBuilder {
             ))),
         }
     }
-}
-
-fn build_cors_layer(cfg: &CorsConfig) -> CorsLayer {
-    use tower_http::cors::AllowOrigin;
-    let origins: Vec<_> = cfg
-        .allowed_origins
-        .iter()
-        .filter_map(|origin| origin.parse().ok())
-        .collect();
-    CorsLayer::new().allow_origin(AllowOrigin::list(origins))
 }
 
 /// HTTP server that implements the [`Component`] lifecycle.

@@ -20,7 +20,6 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 # External
 serde           = { workspace = true }
-async-trait     = { workspace = true }
 tokio           = { workspace = true }
 tracing         = { workspace = true }
 tracing-subscriber = { workspace = true }
@@ -33,8 +32,6 @@ http            = { workspace = true }
 
 # Internal
 rskit-errors    = { path = "../rskit-errors" }
-rskit-bootstrap = { path = "../rskit-bootstrap" }
-rskit-logging   = { path = "../rskit-logging" }
 
 [dev-dependencies]
 serde_json = { workspace = true }

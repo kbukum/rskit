@@ -42,8 +42,8 @@ tower-http       = { workspace = true }
 rskit-errors     = { path = "../rskit-errors" }
 rskit-config     = { path = "../rskit-config" }
 rskit-bootstrap  = { path = "../rskit-bootstrap" }
+rskit-http       = { path = "../rskit-http" }
 rskit-resilience = { path = "../rskit-resilience" }
-rskit-security   = { path = "../rskit-security" }
 rskit-validation = { path = "../rskit-validation" }
 rskit-version    = { path = "../rskit-version" }
 

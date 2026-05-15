@@ -1,7 +1,7 @@
 use std::future::Future;
 use std::time::Duration;
 
-use rskit_errors::AppError;
+use rskit_errors::{AppError, AppResult};
 
 use crate::{
     Bulkhead, BulkheadConfig, CbConfig, CircuitBreaker, RateLimiter, RateLimiterConfig, RetryPolicy,
@@ -45,11 +45,18 @@ impl Policy {
         self
     }
 
-    /// Enable rate limiting.
+    /// Enable rate limiting with a pre-built limiter.
     #[must_use]
-    pub fn with_rate_limiter(mut self, config: RateLimiterConfig) -> Self {
-        self.rate_limiter = Some(RateLimiter::from_config(config));
+    pub fn with_rate_limiter(mut self, rate_limiter: RateLimiter) -> Self {
+        self.rate_limiter = Some(rate_limiter);
         self
+    }
+
+    /// Enable rate limiting from configuration.
+    #[must_use = "builder methods return an updated policy; use the returned value"]
+    pub fn try_with_rate_limiter_config(mut self, config: RateLimiterConfig) -> AppResult<Self> {
+        self.rate_limiter = Some(RateLimiter::from_config(config)?);
+        Ok(self)
     }
 
     /// Enable an execution timeout for the entire policy invocation.
@@ -268,7 +275,8 @@ mod tests {
     #[tokio::test]
     async fn policy_combines_outer_guards() {
         let policy = Policy::new()
-            .with_rate_limiter(RateLimiterConfig::new("policy", 10, 2))
+            .try_with_rate_limiter_config(RateLimiterConfig::new("policy", 10, 2))
+            .unwrap()
             .with_bulkhead(BulkheadConfig::new("policy", 1))
             .with_circuit_breaker(CbConfig::new("policy"))
             .with_retry(RetryPolicy::new().with_linear_backoff(LinearBackoff::new(

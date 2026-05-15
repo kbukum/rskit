@@ -11,8 +11,7 @@ pub struct BulkheadConfig {
     /// Maximum number of concurrent in-flight operations.
     pub max_concurrent: usize,
     /// How long to wait for a permit before returning `RateLimited`.
-    /// `None` means wait forever.
-    pub max_wait: Option<Duration>,
+    pub max_wait: Duration,
     /// Called when a permit cannot be acquired (bulkhead full).
     pub on_reject: Option<Arc<dyn Fn() + Send + Sync>>,
     /// Called when a permit is successfully acquired.
@@ -52,7 +51,7 @@ impl Default for BulkheadConfig {
         Self {
             name: "bulkhead".to_string(),
             max_concurrent: 32,
-            max_wait: Some(Duration::from_secs(5)),
+            max_wait: Duration::from_secs(5),
             on_reject: None,
             on_acquire: None,
             on_release: None,
@@ -73,14 +72,7 @@ impl BulkheadConfig {
     /// Set the maximum wait time for a permit before returning [`AppError::rate_limited`].
     #[must_use]
     pub fn with_max_wait(mut self, d: Duration) -> Self {
-        self.max_wait = Some(d);
-        self
-    }
-
-    /// Disable the wait limit — callers will block until a permit is available.
-    #[must_use]
-    pub fn without_wait_limit(mut self) -> Self {
-        self.max_wait = None;
+        self.max_wait = d;
         self
     }
 
@@ -140,19 +132,10 @@ impl Bulkhead {
         F: FnOnce() -> Fut,
         Fut: std::future::Future<Output = AppResult<T>>,
     {
-        let permit_result = match self.config.max_wait {
-            Some(timeout) => tokio::time::timeout(timeout, self.sem.acquire())
-                .await
-                .map_err(|_| {
-                    AppError::rate_limited().with_detail("bulkhead", self.config.name.clone())
-                })
-                .and_then(|r| r.map_err(|_| AppError::service_unavailable("bulkhead closed"))),
-            None => self
-                .sem
-                .acquire()
-                .await
-                .map_err(|_| AppError::service_unavailable("bulkhead closed")),
-        };
+        let permit_result = tokio::time::timeout(self.config.max_wait, self.sem.acquire())
+            .await
+            .map_err(|_| AppError::rate_limited().with_detail("bulkhead", self.config.name.clone()))
+            .and_then(|r| r.map_err(|_| AppError::service_unavailable("bulkhead closed")));
 
         let _permit = match permit_result {
             Ok(p) => p,

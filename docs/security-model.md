@@ -45,9 +45,9 @@ This document covers the current Rust-side security posture for `rskit-auth`, `r
 - ABAC deny overrides RBAC or ABAC allow
 - No policy match means access is denied
 
-## HTTP / transport security
+## HTTP security
 
-- `rskit-security` emits secure-by-default headers:
+- `rskit-http` provides secure-by-default HTTP response headers:
   - `Strict-Transport-Security` (HTTPS mode)
   - `Content-Security-Policy`
   - `X-Content-Type-Options`
@@ -55,6 +55,11 @@ This document covers the current Rust-side security posture for `rskit-auth`, `r
   - `Referrer-Policy`
   - `Permissions-Policy`
 - Local insecure development mode omits HSTS while retaining the remaining headers
+- `rskit-http` owns CORS policy because CORS is specific to HTTP/browser clients.
+
+## Transport security
+
+- `rskit-security` owns shared TLS configuration for transports.
 
 ## Encryption
 
