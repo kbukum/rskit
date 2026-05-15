@@ -5,3 +5,6 @@
 //! owning crates instead of this L0 crate.
 
 #![warn(missing_docs)]
+
+/// String case conversion utilities.
+pub mod case;

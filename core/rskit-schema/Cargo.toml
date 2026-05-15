@@ -3,7 +3,7 @@ name        = "rskit-schema"
 description = "JSON Schema generation from Rust types via schemars"
 version.workspace      = true
 edition.workspace      = true
-license.workspace      = true
+license.workspace     = true
 rust-version.workspace = true
 authors.workspace      = true
 repository.workspace   = true
@@ -21,7 +21,6 @@ rustdoc-args = ["--cfg", "docsrs"]
 # External dependencies
 schemars   = { workspace = true }
 serde_json = { workspace = true }
-jsonschema = { workspace = true }
 
 # Internal dependencies
 rskit-errors = { path = "../rskit-errors" }

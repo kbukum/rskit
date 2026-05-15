@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use rskit_util::case;
+
 use crate::AppError;
 use crate::code::ErrorCode;
 
@@ -53,25 +55,12 @@ pub struct ProblemDetail {
 
 /// Convert an `ErrorCode`'s `SCREAMING_SNAKE_CASE` representation to `kebab-case`.
 fn code_to_kebab(code: ErrorCode) -> String {
-    code.as_str().to_ascii_lowercase().replace('_', "-")
+    case::to_kebab_case(code.as_str())
 }
 
 /// Convert an `ErrorCode`'s `SCREAMING_SNAKE_CASE` representation to `Title Case`.
 fn code_to_title(code: ErrorCode) -> String {
-    code.as_str()
-        .split('_')
-        .map(|word| {
-            let mut chars = word.chars();
-            match chars.next() {
-                None => String::new(),
-                Some(first) => {
-                    let rest: String = chars.map(|c| c.to_ascii_lowercase()).collect();
-                    format!("{}{}", first.to_ascii_uppercase(), rest)
-                }
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
+    case::to_title_case(code.as_str())
 }
 
 impl From<&AppError> for ProblemDetail {

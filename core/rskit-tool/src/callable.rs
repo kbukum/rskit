@@ -2,7 +2,7 @@
 
 use async_trait::async_trait;
 use rskit_errors::AppResult;
-use rskit_schema::ValidationResult;
+use rskit_validation::ValidationResult;
 
 use crate::context::Context;
 use crate::definition::Definition;

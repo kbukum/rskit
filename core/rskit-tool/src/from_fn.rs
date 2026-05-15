@@ -2,7 +2,7 @@
 
 use async_trait::async_trait;
 use rskit_errors::{AppError, AppResult, ErrorCode};
-use rskit_schema::{CompiledSchema, ValidationResult};
+use rskit_validation::{CompiledSchema, ValidationResult};
 use schemars::JsonSchema;
 use serde::{Serialize, de::DeserializeOwned};
 
@@ -35,7 +35,7 @@ where
     Fut: Future<Output = AppResult<ToolResult>> + Send + 'static,
 {
     let input_schema = rskit_schema::generate::<I>()?;
-    let input_validator = rskit_schema::compile(&input_schema)?;
+    let input_validator = rskit_validation::compile(&input_schema)?;
 
     let def = Definition {
         name: name.to_string(),
@@ -101,7 +101,7 @@ where
     Fut: Future<Output = AppResult<O>> + Send + 'static,
 {
     let input_schema = rskit_schema::generate::<I>()?;
-    let input_validator = rskit_schema::compile(&input_schema)?;
+    let input_validator = rskit_validation::compile(&input_schema)?;
 
     let def = Definition {
         name: name.to_string(),

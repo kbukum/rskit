@@ -591,7 +591,7 @@ fn validate_tool_output(
         .output
         .clone()
         .unwrap_or_else(|| serde_json::Value::String(result.content.clone()));
-    let validation = rskit_schema::validate(schema, &candidate);
+    let validation = rskit_validation::validate(schema, &candidate);
     if validation.valid {
         return None;
     }
@@ -708,7 +708,7 @@ mod tests {
     use super::*;
     use parking_lot::Mutex;
 
-    use rskit_schema::ValidationResult;
+    use rskit_validation::ValidationResult;
     use rskit_tool::{Callable, Definition, ToolResult, from_fn, text_result};
     use schemars::JsonSchema;
     use serde::Deserialize;
