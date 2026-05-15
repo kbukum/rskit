@@ -8,16 +8,11 @@ pub type BoxStream<O> = Pin<Box<dyn FuturesStream<Item = AppResult<O>> + Send + 
 
 // ─── Base ─────────────────────────────────────────────────────────────────────
 
-/// Identity and availability for a provider.
+/// Stable identity for a provider.
 #[async_trait::async_trait]
 pub trait Provider: Send + Sync {
     /// Stable name identifying this provider instance (used in logs and spans).
     fn name(&self) -> &'static str;
-
-    /// Non-blocking availability check (e.g. connection pool not exhausted).
-    async fn is_available(&self) -> bool {
-        true
-    }
 }
 
 // ─── Interaction patterns ─────────────────────────────────────────────────────
@@ -40,8 +35,8 @@ where
     I: Send + 'static,
     O: Send + 'static,
 {
-    /// Open a stream of responses for the given input.
-    async fn stream(&self, input: I) -> AppResult<BoxStream<O>>;
+    /// Execute the request and return a stream of responses.
+    async fn execute(&self, input: I) -> AppResult<BoxStream<O>>;
 }
 
 /// Write-only (Kafka publish, webhook, S3 put, log sink).
@@ -78,20 +73,4 @@ where
     async fn recv(&mut self) -> AppResult<Option<O>>;
     /// Close the channel gracefully.
     async fn close(&mut self) -> AppResult<()>;
-}
-
-// ─── Lifecycle helpers (optional — for providers that need setup/teardown) ────
-
-/// Providers that need async initialisation before first use.
-#[async_trait::async_trait]
-pub trait Initializable: Provider {
-    /// Perform async initialisation (e.g. establish a connection pool).
-    async fn init(&self) -> AppResult<()>;
-}
-
-/// Providers that hold resources needing explicit cleanup.
-#[async_trait::async_trait]
-pub trait Closeable: Provider {
-    /// Release resources held by this provider.
-    async fn close(&self) -> AppResult<()>;
 }

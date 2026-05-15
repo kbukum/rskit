@@ -83,7 +83,7 @@ pub use rskit_logging as logging;
 /// Retry, circuit breaker, bulkhead, rate limiter — and tower layers.
 pub use rskit_resilience as resilience;
 
-/// Provider traits + tower bridge + middleware.
+/// Provider traits + tower bridge.
 pub use rskit_provider as provider;
 
 /// `futures::Stream` extension trait + operators.

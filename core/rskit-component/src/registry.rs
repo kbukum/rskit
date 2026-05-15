@@ -118,13 +118,14 @@ impl Registry {
 
             self.set_state(snapshot.index, State::Starting);
             tracing::debug!(component = snapshot.name, "starting component");
-            match snapshot.component.start().await {
-                Ok(()) => {
+            match tokio::time::timeout(self.config.start_timeout, snapshot.component.start()).await
+            {
+                Ok(Ok(())) => {
                     self.set_state(snapshot.index, State::Running);
                     started_names.push(snapshot.name);
                     tracing::debug!(component = snapshot.component.name(), "component started");
                 }
-                Err(error) => {
+                Ok(Err(error)) => {
                     self.set_state(snapshot.index, State::Failed);
                     let rollback_results = self.rollback_started(&started_names).await;
                     let rollback_errors = rollback_results
@@ -133,6 +134,49 @@ impl Registry {
                             result.error.map(|err| format!("{}: {err}", result.name))
                         })
                         .collect::<Vec<_>>();
+                    return if rollback_errors.is_empty() {
+                        Err(error)
+                    } else {
+                        Err(error
+                            .context(format!("rollback failures: {}", rollback_errors.join("; "))))
+                    };
+                }
+                Err(_) => {
+                    self.set_state(snapshot.index, State::Failed);
+                    match tokio::time::timeout(self.config.stop_timeout, snapshot.component.stop())
+                        .await
+                    {
+                        Ok(Ok(())) => {
+                            tracing::debug!(
+                                component = snapshot.component.name(),
+                                "component stopped after start timeout"
+                            );
+                        }
+                        Ok(Err(error)) => {
+                            tracing::error!(
+                                component = snapshot.component.name(),
+                                error = %error,
+                                "component start timed out and stop cleanup failed"
+                            );
+                        }
+                        Err(_) => {
+                            tracing::error!(
+                                component = snapshot.component.name(),
+                                "component start timed out and stop cleanup also timed out"
+                            );
+                        }
+                    }
+                    let rollback_results = self.rollback_started(&started_names).await;
+                    let rollback_errors = rollback_results
+                        .into_iter()
+                        .filter_map(|result| {
+                            result.error.map(|err| format!("{}: {err}", result.name))
+                        })
+                        .collect::<Vec<_>>();
+                    let error = AppError::new(
+                        ErrorCode::Timeout,
+                        format!("component '{}' start timed out", snapshot.name),
+                    );
                     return if rollback_errors.is_empty() {
                         Err(error)
                     } else {
@@ -175,11 +219,12 @@ impl Registry {
             let components = Arc::clone(&self.components);
             let semaphore = Arc::clone(&semaphore);
             let cancel = cancel.clone();
+            let start_timeout = self.config.start_timeout;
             join_set.spawn(async move {
                 let _permit = semaphore.acquire_owned().await.map_err(|_| {
                     AppError::new(ErrorCode::Cancelled, "component startup was cancelled")
                 })?;
-                start_component_snapshot(components, snapshot, cancel).await
+                start_component_snapshot(components, snapshot, cancel, start_timeout).await
             });
         }
 
@@ -254,8 +299,8 @@ impl Registry {
         for snapshot in snapshots {
             self.set_state(snapshot.index, State::Stopping);
             tracing::debug!(component = snapshot.name, "stopping component");
-            match snapshot.component.stop().await {
-                Ok(()) => {
+            match tokio::time::timeout(self.config.stop_timeout, snapshot.component.stop()).await {
+                Ok(Ok(())) => {
                     self.set_state(snapshot.index, State::Stopped);
                     tracing::debug!(component = snapshot.component.name(), "component stopped");
                     results.push(StopResult {
@@ -263,8 +308,20 @@ impl Registry {
                         error: None,
                     });
                 }
-                Err(error) => {
+                Ok(Err(error)) => {
                     self.set_state(snapshot.index, State::Failed);
+                    tracing::warn!(component = snapshot.component.name(), error = %error, "error stopping component");
+                    results.push(StopResult {
+                        name: snapshot.name,
+                        error: Some(error),
+                    });
+                }
+                Err(_) => {
+                    self.set_state(snapshot.index, State::Failed);
+                    let error = AppError::new(
+                        ErrorCode::Timeout,
+                        format!("component '{}' stop timed out", snapshot.name),
+                    );
                     tracing::warn!(component = snapshot.component.name(), error = %error, "error stopping component");
                     results.push(StopResult {
                         name: snapshot.name,
@@ -341,19 +398,29 @@ impl Registry {
         let mut results = Vec::with_capacity(snapshots.len());
         for snapshot in snapshots {
             self.set_state(snapshot.index, State::Stopping);
-            match snapshot.component.stop().await {
-                Ok(()) => {
+            match tokio::time::timeout(self.config.stop_timeout, snapshot.component.stop()).await {
+                Ok(Ok(())) => {
                     self.set_state(snapshot.index, State::Stopped);
                     results.push(StopResult {
                         name: snapshot.name,
                         error: None,
                     });
                 }
-                Err(error) => {
+                Ok(Err(error)) => {
                     self.set_state(snapshot.index, State::Failed);
                     results.push(StopResult {
                         name: snapshot.name,
                         error: Some(error),
+                    });
+                }
+                Err(_) => {
+                    self.set_state(snapshot.index, State::Failed);
+                    results.push(StopResult {
+                        name: snapshot.name.clone(),
+                        error: Some(AppError::new(
+                            ErrorCode::Timeout,
+                            format!("component '{}' stop timed out", snapshot.name),
+                        )),
                     });
                 }
             }
@@ -366,6 +433,7 @@ async fn start_component_snapshot(
     components: Arc<RwLock<Vec<RegisteredComponent>>>,
     snapshot: ComponentSnapshot,
     cancel: CancellationToken,
+    start_timeout: Duration,
 ) -> AppResult<()> {
     if cancel.is_cancelled() {
         restore_state(&components, snapshot.index, snapshot.state);
@@ -377,15 +445,34 @@ async fn start_component_snapshot(
     }
 
     tracing::debug!(component = snapshot.name, "starting component (concurrent)");
-    match snapshot.component.start().await {
-        Ok(()) => {
+    let start = tokio::time::timeout(start_timeout, snapshot.component.start());
+    tokio::pin!(start);
+    tokio::select! {
+        () = cancel.cancelled() => {
+            restore_state(&components, snapshot.index, snapshot.state);
+            tracing::warn!(
+                component = snapshot.name,
+                "startup cancelled during dispatch"
+            );
+            Ok(())
+        }
+        result = &mut start => match result {
+            Ok(Ok(())) => {
             update_state(&components, snapshot.index, State::Running);
             tracing::debug!(component = snapshot.name, "component started");
             Ok(())
         }
-        Err(error) => {
+            Ok(Err(error)) => {
             update_state(&components, snapshot.index, State::Failed);
             Err(error)
+        }
+            Err(_) => {
+            update_state(&components, snapshot.index, State::Failed);
+            Err(AppError::new(
+                ErrorCode::Timeout,
+                format!("component '{}' start timed out", snapshot.name),
+            ))
+        }
         }
     }
 }
@@ -543,6 +630,23 @@ mod tests {
         assert_eq!(never_start_count.load(Ordering::SeqCst), 0);
     }
 
+    #[tokio::test(start_paused = true)]
+    async fn start_timeout_marks_component_failed() {
+        let component = Arc::new(MockComponent::new("slow").with_delay(Duration::from_secs(60)));
+        let mut registry = Registry::with_config(RegistryConfig {
+            start_timeout: Duration::from_secs(1),
+            ..RegistryConfig::default()
+        });
+        registry.register(component);
+
+        let error = registry
+            .start_all()
+            .await
+            .expect_err("slow component should time out");
+        assert_eq!(error.code, rskit_errors::ErrorCode::Timeout);
+        assert_eq!(registry.state("slow"), Some(State::Failed));
+    }
+
     #[test]
     fn health_all_supports_concurrent_snapshots() {
         let gate = Arc::new(Mutex::new(()));
@@ -611,6 +715,46 @@ mod tests {
         assert_eq!(registry.state("b"), Some(State::Failed));
     }
 
+    #[tokio::test(start_paused = true)]
+    async fn stop_timeout_is_reported_per_component() {
+        struct SlowStopComponent;
+
+        #[async_trait::async_trait]
+        impl Component for SlowStopComponent {
+            fn name(&self) -> &str {
+                "slow-stop"
+            }
+
+            async fn start(&self) -> rskit_errors::AppResult<()> {
+                Ok(())
+            }
+
+            async fn stop(&self) -> rskit_errors::AppResult<()> {
+                tokio::time::sleep(Duration::from_secs(60)).await;
+                Ok(())
+            }
+
+            fn health(&self) -> Health {
+                Health::healthy(self.name())
+            }
+        }
+
+        let mut registry = Registry::with_config(RegistryConfig {
+            stop_timeout: Duration::from_secs(1),
+            ..RegistryConfig::default()
+        });
+        registry.register(Arc::new(SlowStopComponent));
+        registry.start_all().await.expect("start should succeed");
+
+        let results = registry.stop_all_detailed().await;
+        assert_eq!(results.len(), 1);
+        assert_eq!(
+            results[0].error.as_ref().map(|error| error.code),
+            Some(rskit_errors::ErrorCode::Timeout)
+        );
+        assert_eq!(registry.state("slow-stop"), Some(State::Failed));
+    }
+
     #[tokio::test]
     async fn concurrent_start_all_rolls_back_running_components_after_failure() {
         let ok = Arc::new(MockComponent::new("ok").with_delay(Duration::from_millis(5)));
@@ -629,8 +773,11 @@ mod tests {
             .start_all_concurrent(CancellationToken::new())
             .await;
         assert!(result.is_err());
-        assert_eq!(registry.state("ok"), Some(State::Stopped));
+        let ok_state = registry.state("ok");
+        assert!(matches!(ok_state, Some(State::Created | State::Stopped)));
         assert_eq!(registry.state("fail"), Some(State::Failed));
-        assert_eq!(ok_stop_count.load(Ordering::SeqCst), 1);
+        if ok_state == Some(State::Stopped) {
+            assert_eq!(ok_stop_count.load(Ordering::SeqCst), 1);
+        }
     }
 }

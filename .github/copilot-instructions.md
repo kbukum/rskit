@@ -49,6 +49,6 @@ When adding a new foundation crate: create it under `core/rskit-<name>/`, add it
 - **Typestate lifecycle**: `App<S, C>` ensures compile-time lifecycle ordering.
 - **Error handling**: `AppError` with `ErrorCode` enum, HTTP + gRPC status mapping.
 - **Component lifecycle**: `Component` trait with `start/stop/health`, Registry ordering.
-- **Provider**: `RequestResponse`, `Stream`, `Sink`, `Duplex` traits with tower middleware.
+- **Provider**: `RequestResponse`, `Stream`, `Sink`, `Duplex` traits with a tower bridge.
 - **Pipeline**: `futures::Stream` extension operators (map, filter, fan_out, window, batch, parallel).
 - **Testing**: time-dependent tests use `tokio::time::pause()`/`advance()`, never `std::thread::sleep`. Env-var tests hold `parking_lot::Mutex<()>` guard.

@@ -18,6 +18,8 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
+tokio        = { workspace = true }
 parking_lot  = { workspace = true }
 tracing      = { workspace = true }
 tokio-util   = { workspace = true }
+rskit-errors = { path = "../rskit-errors" }

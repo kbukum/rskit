@@ -6,6 +6,49 @@ use rskit_errors::AppResult;
 
 use crate::Container;
 
+/// Typed dependency resolver contract for constructors that need `T`.
+pub trait Resolve<T>
+where
+    T: Send + Sync + 'static,
+{
+    /// Resolve `T` from the dependency graph.
+    fn resolve(&self) -> AppResult<Arc<T>>;
+}
+
+/// Typed dependency resolver contract that panics when `T` is unavailable.
+///
+/// This is intended for tests and startup-only wiring where failure should abort
+/// immediately. Runtime paths should prefer [`Resolve`].
+pub trait MustResolve<T>
+where
+    T: Send + Sync + 'static,
+{
+    /// Resolve `T` or panic with a descriptive message.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `T` is not registered or its factory returns an error.
+    fn must_resolve(&self) -> Arc<T>;
+}
+
+impl<T> Resolve<T> for Container
+where
+    T: Send + Sync + 'static,
+{
+    fn resolve(&self) -> AppResult<Arc<T>> {
+        Container::resolve::<T>(self)
+    }
+}
+
+impl<T> MustResolve<T> for Container
+where
+    T: Send + Sync + 'static,
+{
+    fn must_resolve(&self) -> Arc<T> {
+        must_resolve::<T>(self)
+    }
+}
+
 /// Register a lazily constructed singleton for `T`.
 pub fn provide<T, F>(container: &Container, factory: F)
 where
@@ -54,7 +97,9 @@ mod tests {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
-    use super::{must_resolve, provide, provide_singleton, provide_transient, resolve};
+    use super::{
+        MustResolve, Resolve, must_resolve, provide, provide_singleton, provide_transient, resolve,
+    };
     use crate::Container;
 
     #[derive(Debug)]
@@ -104,5 +149,18 @@ mod tests {
 
         assert_ne!(first.value, second.value);
         assert!(!Arc::ptr_eq(&first, &second));
+    }
+
+    #[test]
+    fn resolve_traits_delegate_to_container() {
+        let container = Container::new();
+        provide_singleton(&container, Arc::new(Service { value: 7 }));
+
+        let via_trait = <Container as Resolve<Service>>::resolve(&container)
+            .expect("trait resolve should succeed");
+        assert_eq!(via_trait.value, 7);
+
+        let via_must = <Container as MustResolve<Service>>::must_resolve(&container);
+        assert_eq!(via_must.value, 7);
     }
 }

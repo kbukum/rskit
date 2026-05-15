@@ -12,6 +12,7 @@ Lightweight `Arc`-based runtime dependency injection container.
 
 - Three registration modes: eager (`register`), lazy factory (`register_factory`), singleton (`register_singleton`)
 - Type-keyed resolution via `TypeId` — no strings, no macros
+- `Resolve<T>` and `MustResolve<T>` traits for constructor-oriented workflows
 - Thread-safe with `parking_lot::RwLock`
 - `Closeable` trait for async resource cleanup
 - Returns `AppResult` for idiomatic error handling
@@ -30,10 +31,11 @@ use rskit_di::Container;
 struct Config { db_url: String }
 
 let container = Container::new();
-container.register(Arc::new(Config { db_url: "postgres://…".into() }));
+container.register(Arc::new(Config { db_url: "postgres://...".into() }));
 
-let cfg: Arc<Config> = container.resolve().unwrap();
-println!("{}", cfg.db_url);
+let cfg: Arc<Config> = container.resolve()?;
+assert_eq!(cfg.db_url, "postgres://...");
+# Ok::<(), rskit_errors::AppError>(())
 ```
 
 ## See Also

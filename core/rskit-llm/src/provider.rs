@@ -129,7 +129,7 @@ impl<P: Provider + 'static> rskit_provider::Provider for LlmStream<P> {
 impl<P: Provider + 'static> rskit_provider::Stream<CompletionRequest, StreamEventRef>
     for LlmStream<P>
 {
-    async fn stream(
+    async fn execute(
         &self,
         input: CompletionRequest,
     ) -> AppResult<ProviderBoxStream<StreamEventRef>> {

@@ -82,6 +82,7 @@ where
     provider: Box<dyn RequestResponse<I, O> + Send + Sync>,
     to_input: TI,
     to_prediction: TO,
+    availability: Option<Box<dyn Fn() -> BoxFuture<'static, bool> + Send + Sync>>,
     _phantom: std::marker::PhantomData<L>,
 }
 
@@ -102,8 +103,23 @@ where
             provider: Box::new(provider),
             to_input,
             to_prediction,
+            availability: None,
             _phantom: std::marker::PhantomData,
         }
+    }
+
+    /// Attach an explicit availability check for the adapted evaluator.
+    ///
+    /// Provider availability is intentionally not part of the canonical L2
+    /// provider contract. Domains that need it can supply a check at the
+    /// adapter boundary without forcing every provider to implement one.
+    #[must_use]
+    pub fn with_availability<F>(mut self, availability: F) -> Self
+    where
+        F: Fn() -> BoxFuture<'static, bool> + Send + Sync + 'static,
+    {
+        self.availability = Some(Box::new(availability));
+        self
     }
 }
 
@@ -121,12 +137,76 @@ where
     }
 
     async fn is_available(&self) -> bool {
-        self.provider.is_available().await
+        match &self.availability {
+            Some(availability) => availability().await,
+            None => true,
+        }
     }
 
     async fn evaluate(&self, input: Vec<u8>) -> AppResult<Prediction<L>> {
         let converted_input = (self.to_input)(input);
         let output = self.provider.execute(converted_input).await?;
         Ok((self.to_prediction)(output))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Evaluator, FromProvider};
+    use crate::types::Prediction;
+    use rskit_errors::AppResult;
+    use rskit_provider::{Provider, RequestResponse};
+
+    struct BytesProvider;
+
+    #[async_trait::async_trait]
+    impl Provider for BytesProvider {
+        fn name(&self) -> &'static str {
+            "bytes"
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl RequestResponse<Vec<u8>, usize> for BytesProvider {
+        async fn execute(&self, input: Vec<u8>) -> AppResult<usize> {
+            Ok(input.len())
+        }
+    }
+
+    #[tokio::test]
+    async fn from_provider_defaults_available() {
+        let evaluator = FromProvider::new(
+            BytesProvider,
+            |input| input,
+            |size| Prediction {
+                label: size.to_string(),
+                ..Prediction::default()
+            },
+        );
+
+        assert!(evaluator.is_available().await);
+    }
+
+    #[tokio::test]
+    async fn from_provider_uses_explicit_availability() {
+        let evaluator = FromProvider::new(
+            BytesProvider,
+            |input| input,
+            |size| Prediction {
+                label: size.to_string(),
+                ..Prediction::default()
+            },
+        )
+        .with_availability(|| Box::pin(async { false }));
+
+        assert!(!evaluator.is_available().await);
+        assert_eq!(
+            evaluator
+                .evaluate(vec![1, 2, 3])
+                .await
+                .expect("evaluate should succeed")
+                .label,
+            "3"
+        );
     }
 }
