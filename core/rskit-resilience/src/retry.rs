@@ -264,7 +264,7 @@ impl RetryPolicy {
         Fut: std::future::Future<Output = AppResult<T>>,
     {
         let mut attempt = 0usize;
-        let started = std::time::Instant::now();
+        let started = tokio::time::Instant::now();
         loop {
             attempt += 1;
             match f().await {

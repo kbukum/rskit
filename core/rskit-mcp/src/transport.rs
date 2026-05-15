@@ -42,7 +42,7 @@ impl TryFrom<&str> for TransportKind {
     }
 }
 
-/// Build a Streamable HTTP server config with loopback-safe defaults.
+/// Build a Streamable HTTP server config with localhost-only defaults.
 pub fn streamable_http_server_config(
     allowed_hosts: impl IntoIterator<Item = impl Into<String>>,
     allowed_origins: impl IntoIterator<Item = impl Into<String>>,

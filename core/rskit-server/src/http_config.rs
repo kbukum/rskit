@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-pub use rskit_security::CorsConfig;
+pub use rskit_http::CorsPolicy;
 use rskit_validation::Validate;
 use serde::Deserialize;
 
@@ -33,7 +33,7 @@ pub struct HttpServerConfig {
     pub enable_h2c: bool,
 
     /// Optional CORS policy.
-    pub cors: Option<CorsConfig>,
+    pub cors: Option<CorsPolicy>,
 }
 
 impl Default for HttpServerConfig {

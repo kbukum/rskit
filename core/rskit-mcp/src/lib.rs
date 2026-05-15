@@ -7,7 +7,7 @@
 //! - **Client**: connect to an MCP server and wrap remote tools as rskit [`Callable`](rskit_tool::Callable)
 //! - **Convert**: bidirectional type conversions between rskit and MCP types
 //! - **Skill integration**: consumes top-level `rskit-skill`; remote MCP servers are tool sources
-//! - **Transport helpers**: validate canonical transport names and build loopback-safe
+//! - **Transport helpers**: validate canonical transport names and build localhost-only
 //!   Streamable HTTP configuration defaults
 
 pub mod convert;
@@ -23,7 +23,6 @@ pub mod authorizer;
 #[cfg(feature = "client")]
 pub mod client;
 
-// Re-export key types for convenience
 pub use convert::{
     app_error_to_mcp_error, call_result_to_tool_result, definition_to_tool,
     definitions_to_list_result, tool_result_to_call_result, tool_to_definition,
@@ -44,6 +43,3 @@ pub use transport::{
 
 #[cfg(feature = "client")]
 pub use client::{ClientConfig, discover_tools, wrap_tools};
-
-// Re-export rmcp for downstream convenience
-pub use rmcp;

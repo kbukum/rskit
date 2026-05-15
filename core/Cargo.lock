@@ -6231,13 +6231,8 @@ dependencies = [
 name = "rskit-security"
 version = "0.1.0"
 dependencies = [
- "http 1.4.0",
  "rskit-errors",
- "rskit-validation",
  "serde",
- "tokio",
- "tower 0.5.3",
- "tower-http",
 ]
 
 [[package]]
@@ -6253,8 +6248,8 @@ dependencies = [
  "rskit-bootstrap",
  "rskit-config",
  "rskit-errors",
+ "rskit-http",
  "rskit-resilience",
- "rskit-security",
  "rskit-validation",
  "rskit-version",
  "serde",

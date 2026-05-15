@@ -8,8 +8,7 @@ Service-facing server abstractions for rskit.
 - defines the canonical interceptor ordering: tracing -> logging -> auth -> validation -> handler -> metrics
 - exposes health routers and lifecycle-managed startup/shutdown
 - remains the home for shared server lifecycle pieces consumed by `rskit-grpc`
-- keeps TLS policy ownership for service-facing transports; `rskit-http` stays transport-only
-- consumes `rskit-security` for secure headers and CORS policy construction
+- consumes `rskit-http` for HTTP transport policy and Tower layer construction
 
 ## Usage
 

@@ -1,16 +1,11 @@
-# rskit-security — Security Headers, CORS, and Input Hardening
+# rskit-security — Shared Security Configuration
 
-Secure-by-default HTTP response headers, deny-by-default CORS, and input hardening helpers for rskit services.
+Shared TLS and security configuration for rskit transports.
 
 ## Features
 
-- `SecurityHeadersLayer` — tower layer that applies CSP, HSTS, `X-Content-Type-Options`,
-  `X-Frame-Options`, `Referrer-Policy`, and `Permissions-Policy`
-- `SecurityHeadersConfig` — builder with secure defaults and TLS-aware HSTS policy
-- `TransportSecurity` — explicit secure-production vs insecure-local transport mode
-- `CorsConfig` — explicit CORS policy that denies by default and rejects wildcard origins
-- `validate_safe_path()` — reusable path traversal prevention
-- `reject_dangerous_unicode()` — rejects RTL controls and common confusable characters
+- `TlsConfig` — certificate, key, CA bundle, server name, and verification settings
+- `TlsVersion` — minimum TLS version policy
 
 ## Usage
 
@@ -20,15 +15,13 @@ rskit-security = "0.1"
 ```
 
 ```rust
-use rskit_security::{
-    CorsConfig, SecurityHeadersConfig, SecurityHeadersLayer, TransportSecurity, validate_safe_path,
+use rskit_security::{TlsConfig, TlsVersion};
+
+let tls = TlsConfig {
+    ca_file: Some("certs/ca.pem".to_string()),
+    server_name: Some("api.example.com".to_string()),
+    min_version: TlsVersion::Tls12,
+    ..Default::default()
 };
-
-let config = SecurityHeadersConfig::default().with_transport_security(TransportSecurity::HttpsOnly);
-let layer = SecurityHeadersLayer::new(&config).unwrap();
-
-let cors = CorsConfig::default();
-let _cors_layer = cors.layer().unwrap();
-
-validate_safe_path("tenant/report.json").unwrap();
+tls.validate().unwrap();
 ```

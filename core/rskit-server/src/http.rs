@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use axum::Router;
 use rskit_bootstrap::{Component, Health, Registry};
 use rskit_errors::{AppError, AppResult, ErrorCode};
-use rskit_security::{SecurityHeadersConfig, SecurityHeadersLayer};
+use rskit_http::{SecurityHeadersConfig, SecurityHeadersLayer};
 use tokio_util::sync::CancellationToken;
 use tower_http::{
     request_id::{MakeRequestUuid, SetRequestIdLayer},
@@ -90,7 +90,7 @@ impl HttpServerBuilder {
     /// Apply CORS from the server config (no-op if `cors` is `None`).
     #[must_use = "builder methods return a new builder; use the returned value"]
     pub fn with_cors(mut self) -> AppResult<Self> {
-        if let Some(cors_cfg) = &self.config.cors.clone() {
+        if let Some(cors_cfg) = self.config.cors.as_ref() {
             let cors = cors_cfg.layer()?;
             self.router = self.router.layer(cors);
         }

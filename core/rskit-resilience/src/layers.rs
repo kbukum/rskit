@@ -61,10 +61,10 @@ pub struct RetryService<S> {
 
 impl<S, Req> tower::Service<Req> for RetryService<S>
 where
-    S: tower::Service<Req, Error = AppError> + Clone + Send + Sync + 'static,
+    S: tower::Service<Req, Error = AppError> + Clone + Send + 'static,
     S::Future: Send + 'static,
     S::Response: Send + 'static,
-    Req: Clone + Send + Sync + 'static,
+    Req: Clone + Send + 'static,
 {
     type Response = S::Response;
     type Error = AppError;
@@ -82,7 +82,7 @@ where
         let policy = self.policy.clone();
         Box::pin(async move {
             policy
-                .execute(|| {
+                .execute(move || {
                     let mut s = base.clone();
                     let r = req.clone();
                     async move { s.call(r).await }

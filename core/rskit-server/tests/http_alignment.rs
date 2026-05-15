@@ -4,7 +4,7 @@ use std::time::Duration;
 use axum::{Router, body::Body, http::Request, routing::get};
 use rskit_bootstrap::Registry;
 use rskit_server::{
-    CorsConfig, HTTP_INTERCEPTOR_ORDER, HttpMiddlewareStack, HttpServerBuilder, HttpServerConfig,
+    CorsPolicy, HTTP_INTERCEPTOR_ORDER, HttpMiddlewareStack, HttpServerBuilder, HttpServerConfig,
     health_router, healthz_router,
 };
 use tokio_util::sync::CancellationToken;
@@ -63,7 +63,7 @@ async fn health_routes_return_expected_statuses() {
 
 #[test]
 fn cors_config_is_exposed_from_server_crate() {
-    let cfg = CorsConfig {
+    let cfg = CorsPolicy {
         allowed_origins: vec!["https://example.com".to_string()],
         allowed_methods: vec!["GET".to_string()],
         allowed_headers: vec!["authorization".to_string()],

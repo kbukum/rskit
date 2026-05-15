@@ -27,7 +27,7 @@ pub enum OtlpProtocol {
 pub struct TracingConfig {
     /// Logical service name reported in every span.
     pub service_name: String,
-    /// OTLP gRPC collector endpoint (e.g. `http://localhost:4317`).
+    /// OTLP collector endpoint for the selected exporter protocol.
     pub endpoint: String,
     /// Sampling probability in `0.0..=1.0`.
     pub sample_rate: f64,

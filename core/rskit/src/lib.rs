@@ -18,7 +18,7 @@
 //! | `messaging-rabbitmq` | `RabbitMQ` messaging adapter |
 //! | `observability` | `rskit-observability` (OpenTelemetry) |
 //! | `authz`  | `rskit-authz` (RBAC/ABAC) |
-//! | `security` | `rskit-security` (security headers) |
+//! | `security` | `rskit-security` (TLS/security configuration) |
 //! | `discovery` | `rskit-discovery` (service discovery) |
 //! | `testutil` | `rskit-testutil` (test helpers) |
 //! | `sse`    | `rskit-sse` (Server-Sent Events) |
@@ -171,7 +171,7 @@ pub use rskit_observability as observability;
 #[cfg(feature = "authz")]
 pub use rskit_authz as authz;
 
-/// Security headers and transport security policy.
+/// Shared TLS and security configuration.
 #[cfg(feature = "security")]
 pub use rskit_security as security;
 

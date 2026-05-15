@@ -10,7 +10,9 @@ This crate keeps reusable HTTP transport primitives:
 - `HttpError`
 - `ErrorHandlerLayer`
 - `RequestId` / `CorrelationId`
+- `CorsPolicy`
+- `SecurityHeadersConfig` / `SecurityHeadersLayer`
 - tenant extraction helpers and middleware
 
-TLS policy, health routes, and service interceptor ordering remain owned by `rskit-server`
-so `rskit-http` stays transport-only.
+Cross-transport TLS settings remain in `rskit-security`. Health routes and service
+interceptor ordering remain in `rskit-server`.
