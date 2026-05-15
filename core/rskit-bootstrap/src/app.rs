@@ -6,7 +6,7 @@ use futures_util::future::BoxFuture;
 use rskit_component::{Component, Registry};
 use rskit_config::AppConfig;
 use rskit_errors::{AppError, AppResult};
-use rskit_hook::{HookError, HookResult, Registry as HookRegistry};
+use rskit_hook::{HookError, HookResult, LifecycleHookRegistry as HookRegistry};
 use tokio_util::sync::CancellationToken;
 
 use crate::hooks::{LifecycleEvent, LifecycleEventType};
@@ -30,13 +30,7 @@ fn register_lifecycle_hook(
     event_type: LifecycleEventType,
     hook: AsyncHook,
 ) {
-    let _unsubscribe = hooks.on(event_type.event_type(), move |cancel, event| {
-        let Some(event) = event.as_any().downcast_ref::<LifecycleEvent>() else {
-            return Err(HookError::fatal(
-                "unexpected bootstrap lifecycle event payload",
-            ));
-        };
-
+    let _unsubscribe = hooks.on::<LifecycleEvent>(event_type.event_type(), move |cancel, event| {
         let runtime = event.runtime_handle().clone();
         let hook = Arc::clone(&hook);
         let (sender, receiver) = sync_channel(1);

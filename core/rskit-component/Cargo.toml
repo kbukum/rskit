@@ -29,4 +29,4 @@ async-trait = { workspace = true }
 rskit-errors = { path = "../rskit-errors" }
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["full"] }
+tokio = { workspace = true, features = ["full", "test-util"] }

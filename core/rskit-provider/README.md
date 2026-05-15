@@ -1,6 +1,6 @@
 # rskit-provider — Async I/O Interaction Traits
 
-Typed async interaction traits (`Provider`, `RequestResponse`, `Sink`, `Duplex`) with Tower bridge and middleware layers.
+Typed async interaction traits (`Provider`, `RequestResponse`, `Stream`, `Sink`, `Duplex`) with a Tower bridge.
 
 [![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/rskit-provider.svg)](https://crates.io/crates/rskit-provider)
@@ -14,7 +14,11 @@ Typed async interaction traits (`Provider`, `RequestResponse`, `Sink`, `Duplex`)
 - `Stream<I,O>` — request → async stream of responses
 - `Sink<I>` — fire-and-forget
 - `Duplex<I,O>` — bidirectional streaming
-- Tower bridge for composing providers with middleware
+- Tower bridge for adapting `tower::Service` to `RequestResponse`
+
+Cross-cutting behavior such as retry, rate limiting, circuit breaking, logging,
+and tracing belongs above these L2 contracts. Compose those concerns with
+`rskit-resilience` tower layers before wrapping a service with `TowerProvider`.
 
 ## Usage
 
@@ -25,13 +29,20 @@ async-trait = "0.1"
 ```
 
 ```rust
-use rskit_provider::traits::RequestResponse;
+use rskit_provider::{Provider, RequestResponse};
 
 struct EchoProvider;
 
 #[async_trait::async_trait]
+impl Provider for EchoProvider {
+    fn name(&self) -> &'static str {
+        "echo"
+    }
+}
+
+#[async_trait::async_trait]
 impl RequestResponse<String, String> for EchoProvider {
-    async fn call(&self, input: String) -> rskit_errors::AppResult<String> {
+    async fn execute(&self, input: String) -> rskit_errors::AppResult<String> {
         Ok(input.to_uppercase())
     }
 }

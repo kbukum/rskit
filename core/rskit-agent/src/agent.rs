@@ -93,7 +93,7 @@ pub struct Agent {
     config: AgentConfig,
 }
 
-fn emit_hook(hooks: &HookRegistry, event: &dyn Event, token: CancellationToken) -> bool {
+fn emit_hook<E: Event>(hooks: &HookRegistry, event: &E, token: CancellationToken) -> bool {
     match hooks.emit(event, token.clone()) {
         Ok(()) => false,
         Err(error) => {
@@ -827,7 +827,7 @@ mod tests {
         let provider = Arc::new(MockProvider::single_text("Hello"));
         let hooks = Arc::new(HookRegistry::new());
 
-        let _unsub = hooks.on(crate::turn_start_type(), |_, _| {
+        let _unsub = hooks.on::<crate::hooks::TurnStart>(crate::turn_start_type(), |_, _| {
             Err(HookError::fatal("blocked by policy"))
         });
 
@@ -861,15 +861,12 @@ mod tests {
         let observed = Arc::new(AtomicU32::new(0));
         let observed_clone = Arc::clone(&observed);
 
-        let _unsub = hooks.on(crate::pre_llm_call_type(), move |_, event| {
-            let call = event
-                .as_any()
-                .downcast_ref::<crate::hooks::PreLLMCall>()
-                .expect("pre LLM call event");
-            assert_eq!(call.request.model, "test-model");
-            observed_clone.fetch_add(1, Ordering::SeqCst);
-            Ok(())
-        });
+        let _unsub =
+            hooks.on::<crate::hooks::PreLLMCall>(crate::pre_llm_call_type(), move |_, event| {
+                assert_eq!(event.request.model, "test-model");
+                observed_clone.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            });
 
         let agent = Agent::new(
             provider,
@@ -895,16 +892,18 @@ mod tests {
         let post_count = Arc::new(AtomicU32::new(0));
 
         let pc = pre_count.clone();
-        let _unsub1 = hooks.on(crate::pre_llm_call_type(), move |_, _| {
-            pc.fetch_add(1, Ordering::SeqCst);
-            Ok(())
-        });
+        let _unsub1 =
+            hooks.on::<crate::hooks::PreLLMCall>(crate::pre_llm_call_type(), move |_, _| {
+                pc.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            });
 
         let poc = post_count.clone();
-        let _unsub2 = hooks.on(crate::post_llm_call_type(), move |_, _| {
-            poc.fetch_add(1, Ordering::SeqCst);
-            Ok(())
-        });
+        let _unsub2 =
+            hooks.on::<crate::hooks::PostLLMCall>(crate::post_llm_call_type(), move |_, _| {
+                poc.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            });
 
         let agent = Agent::new(
             provider,

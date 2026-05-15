@@ -1,6 +1,6 @@
 [package]
 name        = "rskit-provider"
-description = "Provider traits (request-response, stream, sink, duplex) with tower middleware"
+description = "Provider traits (request-response, stream, sink, duplex) with a tower bridge"
 version.workspace     = true
 edition.workspace     = true
 license.workspace     = true
@@ -33,4 +33,3 @@ parking_lot      = { workspace = true }
 
 # Internal
 rskit-errors     = { path = "../rskit-errors" }
-rskit-resilience = { path = "../rskit-resilience" }

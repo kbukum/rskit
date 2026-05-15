@@ -1,7 +1,5 @@
 //! Bootstrap lifecycle hook events.
 
-use std::any::Any;
-
 use rskit_hook::{Event, EventType};
 
 /// Lifecycle events emitted by [`crate::App`] during startup and shutdown.
@@ -37,10 +35,6 @@ impl LifecycleEvent {
 impl Event for LifecycleEvent {
     fn event_type(&self) -> EventType {
         self.kind.event_type()
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
     }
 }
 

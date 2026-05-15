@@ -3,8 +3,6 @@
 //! Each struct implements [`rskit_hook::Event`] so it can be emitted through
 //! a [`rskit_hook::HookRegistry`].
 
-use std::any::Any;
-
 use rskit_hook::{Event, EventType};
 use rskit_llm::types::{AssistantMessage, CompletionRequest, CompletionResponse};
 use rskit_tool::ToolResult;
@@ -104,9 +102,6 @@ impl Event for OnEvent {
     fn event_type(&self) -> EventType {
         on_event_type()
     }
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
 }
 
 /// Canonical observe-only MCP call event.
@@ -119,9 +114,6 @@ pub struct OnMCPCall {
 impl Event for OnMCPCall {
     fn event_type(&self) -> EventType {
         on_mcp_call_type()
-    }
-    fn as_any(&self) -> &dyn Any {
-        self
     }
 }
 
@@ -140,9 +132,6 @@ impl Event for OnMCPResult {
     fn event_type(&self) -> EventType {
         on_mcp_result_type()
     }
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
 }
 
 /// Fired before a tool call is executed.
@@ -155,9 +144,6 @@ pub struct PreToolCall {
 impl Event for PreToolCall {
     fn event_type(&self) -> EventType {
         pre_tool_call_type()
-    }
-    fn as_any(&self) -> &dyn Any {
-        self
     }
 }
 
@@ -174,9 +160,6 @@ impl Event for PostToolCall {
     fn event_type(&self) -> EventType {
         post_tool_call_type()
     }
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
 }
 
 /// Fired before an LLM completion request is sent.
@@ -188,9 +171,6 @@ pub struct PreLLMCall {
 impl Event for PreLLMCall {
     fn event_type(&self) -> EventType {
         pre_llm_call_type()
-    }
-    fn as_any(&self) -> &dyn Any {
-        self
     }
 }
 
@@ -205,9 +185,6 @@ impl Event for PostLLMCall {
     fn event_type(&self) -> EventType {
         post_llm_call_type()
     }
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
 }
 
 /// Fired when an error occurs anywhere in the pipeline.
@@ -221,9 +198,6 @@ impl Event for OnError {
     fn event_type(&self) -> EventType {
         on_error_type()
     }
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
 }
 
 /// Fired at the start of an agent turn.
@@ -235,9 +209,6 @@ pub struct TurnStart {
 impl Event for TurnStart {
     fn event_type(&self) -> EventType {
         turn_start_type()
-    }
-    fn as_any(&self) -> &dyn Any {
-        self
     }
 }
 
@@ -251,9 +222,6 @@ pub struct TurnEnd {
 impl Event for TurnEnd {
     fn event_type(&self) -> EventType {
         turn_end_type()
-    }
-    fn as_any(&self) -> &dyn Any {
-        self
     }
 }
 
@@ -269,9 +237,7 @@ mod tests {
             input: serde_json::json!({"x": 1}),
         };
         assert_eq!(event.event_type(), EventType::new("on_tool_call"));
-        let any = event.as_any();
-        let downcasted = any.downcast_ref::<PreToolCall>().unwrap();
-        assert_eq!(downcasted.name, "calculator");
+        assert_eq!(event.name, "calculator");
     }
 
     #[test]
@@ -314,8 +280,7 @@ mod tests {
     fn test_turn_start_event() {
         let event = TurnStart { turn: 0 };
         assert_eq!(event.event_type(), EventType::new("on_turn_start"));
-        let any = event.as_any();
-        assert_eq!(any.downcast_ref::<TurnStart>().unwrap().turn, 0);
+        assert_eq!(event.turn, 0);
     }
 
     #[test]

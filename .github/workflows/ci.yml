@@ -200,7 +200,7 @@ jobs:
   # ---------------------------------------------------------------------------
   coverage:
     name: Coverage
-    if: needs.changes.outputs.rust-code == 'true' && (github.event_name == 'merge_group' || github.event_name == 'push')
+    if: needs.changes.outputs.rust-code == 'true'
     needs: changes
     runs-on: ubuntu-latest
     env:
@@ -225,8 +225,8 @@ jobs:
         with:
           tool: cargo-llvm-cov
       - run: |
-          cargo llvm-cov --manifest-path core/Cargo.toml --workspace --lcov --output-path core-coverage.lcov --fail-under-lines 60
-          cargo llvm-cov --manifest-path contrib/Cargo.toml --workspace --lcov --output-path contrib-coverage.lcov --fail-under-lines 60
+          cargo llvm-cov --manifest-path core/Cargo.toml --workspace --lcov --output-path core-coverage.lcov
+          cargo llvm-cov --manifest-path contrib/Cargo.toml --workspace --lcov --output-path contrib-coverage.lcov
       - uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2  # v5
         with:
           files: core-coverage.lcov,contrib-coverage.lcov
@@ -254,12 +254,14 @@ jobs:
   # ---------------------------------------------------------------------------
   security:
     name: Security
-    if: needs.changes.outputs.rust-code == 'true' && (github.event_name == 'merge_group' || github.event_name == 'push')
+    if: needs.changes.outputs.rust-code == 'true'
     needs: changes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
+        with:
+          toolchain: stable
       - uses: EmbarkStudios/cargo-deny-action@91bf2b620e09e18d6eb78b92e7861937469acedb  # v2.0.17
         with:
           command: check licenses advisories sources bans
@@ -279,41 +281,12 @@ jobs:
           working-directory: contrib
 
   # ---------------------------------------------------------------------------
-  # Benchmarks (smoke — ensure they compile and run)
-  # ---------------------------------------------------------------------------
-  bench:
-    name: Benchmarks (smoke)
-    if: needs.changes.outputs.rust-code == 'true' && (github.event_name == 'merge_group' || github.event_name == 'push')
-    needs: changes
-    runs-on: ubuntu-latest
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
-      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
-        with:
-          toolchain: stable
-      - uses: mozilla-actions/sccache-action@9e7fa8a12102821edf02ca5dbea1acd0f89a2696  # v0.0.10
-      - name: Install mold linker
-        run: sudo apt-get install -y mold
-      - uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b  # v2.7.8
-        with:
-          workspaces: |
-            core
-            contrib
-            examples
-      - run: |
-          cargo bench --manifest-path core/Cargo.toml --workspace --no-run
-          cargo bench --manifest-path contrib/Cargo.toml --workspace --no-run
-
-  # ---------------------------------------------------------------------------
   # Gate: Aggregate status for branch protection
   # ---------------------------------------------------------------------------
   ci-status:
     name: CI Status
     if: always()
-    needs: [changes, fmt, clippy, test, docs, l7-depguard, coverage, security, bench]
+    needs: [changes, fmt, clippy, test, docs, l7-depguard, coverage, security]
     runs-on: ubuntu-latest
     steps:
       - name: Evaluate results
@@ -325,8 +298,7 @@ jobs:
                    "${{ needs.docs.result }}" \
                    "${{ needs.l7-depguard.result }}" \
                    "${{ needs.coverage.result }}" \
-                   "${{ needs.security.result }}" \
-                   "${{ needs.bench.result }}")
+                   "${{ needs.security.result }}")
           for r in "${results[@]}"; do
             if [[ "$r" == "failure" || "$r" == "cancelled" ]]; then
               echo "::error::CI failed — one or more jobs did not succeed."

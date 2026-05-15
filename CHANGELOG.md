@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — Pattern Contracts
+- **rskit-hook**: replaced public downcast-based hook payload handling with typed hook registration and added a bounded in-process event bus.
+- **rskit-provider**: narrowed L2 provider contracts to canonical shapes plus `TowerProvider`, removing cross-cutting middleware ownership from the pattern crate.
+- **rskit-component**: enforced registry start/stop timeout configuration in lifecycle state transitions.
+- **rskit-di**: added typed `Resolve<T>` and `MustResolve<T>` resolver traits.
+- **rskit-skill**: replaced the unmaintained YAML parser dependency with a maintained serde-compatible fork.
+
 ### Changed — Foundations
 - **rskit-util**: reduced the L0 utility crate to a minimal domain-free
   dependency surface.

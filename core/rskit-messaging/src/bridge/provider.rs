@@ -60,7 +60,7 @@ pub fn producer_as_sink<T: Send + Sync + 'static>(
 
 /// Wraps a [`MessageConsumer`] as a [`Stream<(), Message<T>>`](Stream).
 ///
-/// Calling [`Stream::stream`] returns an unbounded stream of consumed
+/// Calling [`Stream::execute`] returns an unbounded stream of consumed
 /// messages. The stream yields items until an error occurs.
 pub struct ConsumerStream<T: Send + Sync + 'static> {
     name: &'static str,
@@ -76,7 +76,7 @@ impl<T: Send + Sync + 'static> Provider for ConsumerStream<T> {
 
 #[async_trait]
 impl<T: Send + Sync + Clone + 'static> Stream<(), Message<T>> for ConsumerStream<T> {
-    async fn stream(&self, _input: ()) -> AppResult<BoxStream<Message<T>>> {
+    async fn execute(&self, _input: ()) -> AppResult<BoxStream<Message<T>>> {
         let consumer = Arc::clone(&self.consumer);
         let stream = async_stream::try_stream! {
             loop {
@@ -160,7 +160,7 @@ mod tests {
             .await
             .unwrap();
 
-        let stream = cs.stream(()).await.unwrap();
+        let stream = cs.execute(()).await.unwrap();
         let items: Vec<_> = tokio::time::timeout(Duration::from_millis(200), async {
             stream.take(2).collect::<Vec<_>>().await
         })

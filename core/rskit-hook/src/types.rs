@@ -1,12 +1,10 @@
-//! Generic observe-only hook types.
+//! Generic observe-only hook event types.
 //!
-//! Domain-specific event types implement [`Event`]. Handlers receive read-only
-//! event references and can only return success or a typed [`HookError`].
+//! Domain-specific event types implement [`Event`]. Handlers receive read-only,
+//! concrete event references and can only return success or a typed [`HookError`].
 
 use std::any::Any;
 use std::fmt;
-
-use tokio_util::sync::CancellationToken;
 
 /// A string-based event type identifier.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -32,13 +30,14 @@ impl fmt::Display for EventType {
     }
 }
 
-/// Trait that all hook events must implement.
-pub trait Event: Any + Send + Sync {
-    /// The event type discriminator for this event.
+/// Trait that all hook and in-process bus events must implement.
+///
+/// The public hook API dispatches on the concrete Rust event type. The
+/// [`EventType`] remains available as stable human-readable metadata for logs,
+/// metrics, and diagnostics.
+pub trait Event: Any + Send + Sync + 'static {
+    /// Return the event type discriminator for this event.
     fn event_type(&self) -> EventType;
-
-    /// Upcast to `&dyn Any` for downcasting in handlers.
-    fn as_any(&self) -> &dyn Any;
 }
 
 /// Hook failure. Fatal errors are rare and may stop the owning loop.
@@ -91,9 +90,6 @@ impl std::error::Error for HookError {}
 /// The outcome returned by a hook handler.
 pub type HookResult = Result<(), HookError>;
 
-/// A boxed function that handles a hook event.
-pub type HookHandler = Box<dyn Fn(CancellationToken, &dyn Event) -> HookResult + Send + Sync>;
-
 #[cfg(test)]
 mod tests {
     use super::{Event, EventType, HookError, HookResult};
@@ -106,9 +102,6 @@ mod tests {
         fn event_type(&self) -> EventType {
             EventType::new("ping")
         }
-        fn as_any(&self) -> &dyn std::any::Any {
-            self
-        }
     }
 
     #[test]
@@ -118,10 +111,10 @@ mod tests {
     }
 
     #[test]
-    fn event_trait_downcasts() {
+    fn event_type_is_static_metadata() {
         let ping = Ping { count: 42 };
-        let downcasted = ping.as_any().downcast_ref::<Ping>().expect("ping downcast");
-        assert_eq!(downcasted.count, 42);
+        assert_eq!(ping.event_type(), EventType::new("ping"));
+        assert_eq!(ping.count, 42);
     }
 
     #[test]

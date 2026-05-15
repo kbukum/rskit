@@ -16,9 +16,15 @@ pub trait Component: Send + Sync {
     fn name(&self) -> &str;
 
     /// Start the component.
+    ///
+    /// Implementations must be cancel-safe: if the future is dropped because a
+    /// registry timeout expires, a subsequent [`Component::stop`] call must be
+    /// able to clean up any partially initialized resources.
     async fn start(&self) -> AppResult<()>;
 
     /// Stop the component gracefully.
+    ///
+    /// Implementations must be cancel-safe and idempotent.
     async fn stop(&self) -> AppResult<()>;
 
     /// Return an instantaneous health snapshot.
