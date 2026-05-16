@@ -77,7 +77,7 @@ let cfg: Config = ConfigLoader::new()
 |-------|------|---------|-------------|
 | `name` | `String` | `"service"` | Service name |
 | `environment` | `Environment` | `Development` | Deployment environment |
-| `version` | `String` | `CARGO_PKG_VERSION` | Service version |
+| `version` | `String` | `rskit_version::package_version()` | Service version |
 | `address` | `String` | `"0.0.0.0"` | Service bind address |
 | `port` | `u16` | `50051` | Service port |
 | `debug` | `bool` | `false` | Debug mode |

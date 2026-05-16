@@ -10,11 +10,11 @@ use rmcp::model::{CallToolRequestParams, Tool};
 use rmcp::service::{Peer, RoleClient, RunningService};
 use rskit_ai::semconv;
 use rskit_errors::{AppError, AppResult, ErrorCode};
-use rskit_schema::{CompiledSchema, ValidationResult};
 use rskit_tool::Callable;
 use rskit_tool::Definition;
 use rskit_tool::context::Context;
 use rskit_tool::result::ToolResult;
+use rskit_validation::{CompiledSchema, ValidationError, ValidationResult};
 use tracing::Instrument;
 
 use crate::convert;
@@ -96,7 +96,7 @@ pub fn wrap_tools(
         .map(|tool| {
             let def = convert::tool_to_definition(tool, &config.prefix);
             let input_validator =
-                rskit_schema::compile(&def.input_schema).map_err(validation_result_from_error);
+                rskit_validation::compile(&def.input_schema).map_err(validation_result_from_error);
             let mcp_name = tool.name.to_string();
             Box::new(RemoteTool {
                 definition: def,
@@ -111,7 +111,7 @@ pub fn wrap_tools(
 fn validation_result_from_error(err: AppError) -> ValidationResult {
     ValidationResult {
         valid: false,
-        errors: vec![rskit_schema::ValidationError {
+        errors: vec![ValidationError {
             path: String::new(),
             message: err.message().to_owned(),
         }],

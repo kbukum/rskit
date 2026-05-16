@@ -42,6 +42,7 @@ rskit-schema = { path = "../rskit-schema" }
 rskit-errors = { path = "../rskit-errors" }
 rskit-skill  = { path = "../rskit-skill" }
 rskit-authz  = { path = "../rskit-authz" }
+rskit-validation = { path = "../rskit-validation" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }

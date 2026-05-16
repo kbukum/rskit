@@ -6006,6 +6006,7 @@ dependencies = [
  "rskit-schema",
  "rskit-skill",
  "rskit-tool",
+ "rskit-validation",
  "schemars 1.2.1",
  "serde",
  "serde_json",
@@ -6220,7 +6221,6 @@ dependencies = [
 name = "rskit-schema"
 version = "0.1.0"
 dependencies = [
- "jsonschema",
  "rskit-errors",
  "schemars 1.2.1",
  "serde",
@@ -6377,6 +6377,7 @@ dependencies = [
  "rskit-component",
  "rskit-errors",
  "rskit-schema",
+ "rskit-validation",
  "schemars 1.2.1",
  "serde",
  "serde_json",
@@ -6394,6 +6395,7 @@ name = "rskit-validation"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "jsonschema",
  "once_cell",
  "regex",
  "rskit-errors",
