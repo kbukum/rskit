@@ -114,7 +114,7 @@ jobs:
       - name: Install mold linker
         run: sudo apt-get install -y mold
       - uses: mozilla-actions/sccache-action@9e7fa8a12102821edf02ca5dbea1acd0f89a2696  # v0.0.10
-      - uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b  # v2.7.8
+      - uses: Swatinem/rust-cache@65012b490220f477f20ab979e35ae732e6de4e68  # v2.7.8
         with:
           workspaces: |
             core
@@ -149,14 +149,14 @@ jobs:
       - name: Install mold linker (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get install -y mold
-      - uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b  # v2.7.8
+      - uses: Swatinem/rust-cache@65012b490220f477f20ab979e35ae732e6de4e68  # v2.7.8
         with:
           key: ${{ matrix.os }}-${{ matrix.rust }}
           workspaces: |
             core
             contrib
             examples
-      - uses: taiki-e/install-action@ec28e287910af896fd98e04056d31fa68607e7ad  # v2
+      - uses: taiki-e/install-action@184183c2401be73c3bf42c2e61268aa5855379c1  # v2
         with:
           tool: cargo-nextest
       - run: |
@@ -185,7 +185,7 @@ jobs:
       - uses: mozilla-actions/sccache-action@9e7fa8a12102821edf02ca5dbea1acd0f89a2696  # v0.0.10
       - name: Install mold linker
         run: sudo apt-get install -y mold
-      - uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b  # v2.7.8
+      - uses: Swatinem/rust-cache@65012b490220f477f20ab979e35ae732e6de4e68  # v2.7.8
         with:
           workspaces: |
             core
@@ -215,13 +215,13 @@ jobs:
       - uses: mozilla-actions/sccache-action@9e7fa8a12102821edf02ca5dbea1acd0f89a2696  # v0.0.10
       - name: Install mold linker
         run: sudo apt-get install -y mold
-      - uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b  # v2.7.8
+      - uses: Swatinem/rust-cache@65012b490220f477f20ab979e35ae732e6de4e68  # v2.7.8
         with:
           workspaces: |
             core
             contrib
             examples
-      - uses: taiki-e/install-action@ec28e287910af896fd98e04056d31fa68607e7ad  # v2
+      - uses: taiki-e/install-action@184183c2401be73c3bf42c2e61268aa5855379c1  # v2
         with:
           tool: cargo-llvm-cov
       - run: |
@@ -262,11 +262,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: stable
-      - uses: EmbarkStudios/cargo-deny-action@91bf2b620e09e18d6eb78b92e7861937469acedb  # v2.0.17
+      - uses: EmbarkStudios/cargo-deny-action@6c8f9facfa5047ec02d8485b6bf52b587b7777d1  # v2.0.18
         with:
           command: check licenses advisories sources bans
           manifest-path: core/Cargo.toml
-      - uses: EmbarkStudios/cargo-deny-action@91bf2b620e09e18d6eb78b92e7861937469acedb  # v2.0.17
+      - uses: EmbarkStudios/cargo-deny-action@6c8f9facfa5047ec02d8485b6bf52b587b7777d1  # v2.0.18
         with:
           command: check licenses advisories sources bans
           manifest-path: contrib/Cargo.toml
