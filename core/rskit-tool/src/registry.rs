@@ -346,8 +346,8 @@ mod tests {
         fn definition(&self) -> &Definition {
             &self.def
         }
-        fn validate(&self, _input: &serde_json::Value) -> rskit_schema::ValidationResult {
-            rskit_schema::ValidationResult {
+        fn validate(&self, _input: &serde_json::Value) -> rskit_validation::ValidationResult {
+            rskit_validation::ValidationResult {
                 valid: true,
                 errors: Vec::new(),
             }

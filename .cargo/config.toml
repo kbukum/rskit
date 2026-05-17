@@ -17,9 +17,9 @@ xtask = "run --package xtask --"
 # Linker optimization: use mold on Linux for faster linking.
 # Install mold: `sudo apt install mold` (Ubuntu) or `brew install mold` (macOS w/ Homebrew).
 # If mold is not available, comment out or remove the [target.'cfg(target_os = "linux")'] section below.
-#[target.'cfg(target_os = "linux")']
-#linker = "clang"
-#rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+[target.'cfg(target_os = "linux")']
+linker = "clang"
+rustflags = ["-C", "link-arg=-fuse-ld=mold"]
 
 # macOS (Apple Silicon): use lld for faster linking.
 # Install: brew install llvm (provides lld at /opt/homebrew/opt/llvm/bin/ld64.lld)
