@@ -5700,6 +5700,7 @@ name = "rskit-errors"
 version = "0.1.0"
 dependencies = [
  "http 1.4.0",
+ "rskit-util",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -6220,7 +6221,6 @@ dependencies = [
 name = "rskit-schema"
 version = "0.1.0"
 dependencies = [
- "jsonschema",
  "rskit-errors",
  "schemars 1.2.1",
  "serde",
@@ -6394,9 +6394,11 @@ name = "rskit-validation"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "jsonschema",
  "once_cell",
  "regex",
  "rskit-errors",
+ "rskit-util",
  "serde",
  "serde_json",
  "uuid",

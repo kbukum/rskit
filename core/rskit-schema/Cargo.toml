@@ -21,7 +21,6 @@ rustdoc-args = ["--cfg", "docsrs"]
 # External dependencies
 schemars   = { workspace = true }
 serde_json = { workspace = true }
-jsonschema = { workspace = true }
 
 # Internal dependencies
 rskit-errors = { path = "../rskit-errors" }

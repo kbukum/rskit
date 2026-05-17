@@ -22,6 +22,10 @@ pub use validator::{self, Validate};
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
 
+/// JSON Schema validation.
+pub mod json_schema;
+pub use json_schema::*;
+
 /// Validation helpers for path and text inputs.
 pub mod input {
     use rskit_errors::{AppError, AppResult};
@@ -29,13 +33,7 @@ pub mod input {
     /// Validate that a path-like input cannot traverse outside its base.
     pub fn validate_safe_path(path: &str) -> AppResult<()> {
         reject_unicode_controls("path", path)?;
-        if path.is_empty()
-            || path.starts_with('/')
-            || path.starts_with('\\')
-            || path.split(['/', '\\']).any(|segment| {
-                segment.is_empty() || segment == "." || segment == ".." || segment.contains(':')
-            })
-        {
+        if !rskit_util::is_safe_path(path) {
             return Err(AppError::invalid_input(
                 "path",
                 "path must be relative and must not contain traversal segments",
@@ -46,21 +44,11 @@ pub mod input {
 
     /// Reject control characters that can hide or reorder text.
     pub fn reject_unicode_controls(field: &str, value: &str) -> AppResult<()> {
-        for ch in value.chars() {
-            if ch.is_control()
-                || matches!(
-                    ch,
-                    '\u{202A}'..='\u{202E}'
-                        | '\u{2066}'..='\u{2069}'
-                        | '\u{200E}'
-                        | '\u{200F}'
-                )
-            {
-                return Err(AppError::invalid_input(
-                    field,
-                    "input contains forbidden Unicode control characters",
-                ));
-            }
+        if rskit_util::has_unicode_controls(value) {
+            return Err(AppError::invalid_input(
+                field,
+                "input contains forbidden Unicode control characters",
+            ));
         }
         Ok(())
     }

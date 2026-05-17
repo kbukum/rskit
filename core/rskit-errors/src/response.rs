@@ -51,34 +51,15 @@ pub struct ProblemDetail {
     pub details: HashMap<String, serde_json::Value>,
 }
 
-/// Convert an `ErrorCode`'s `SCREAMING_SNAKE_CASE` representation to `kebab-case`.
-fn code_to_kebab(code: ErrorCode) -> String {
-    code.as_str().to_ascii_lowercase().replace('_', "-")
-}
-
-/// Convert an `ErrorCode`'s `SCREAMING_SNAKE_CASE` representation to `Title Case`.
-fn code_to_title(code: ErrorCode) -> String {
-    code.as_str()
-        .split('_')
-        .map(|word| {
-            let mut chars = word.chars();
-            match chars.next() {
-                None => String::new(),
-                Some(first) => {
-                    let rest: String = chars.map(|c| c.to_ascii_lowercase()).collect();
-                    format!("{}{}", first.to_ascii_uppercase(), rest)
-                }
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
 impl From<&AppError> for ProblemDetail {
     fn from(err: &AppError) -> Self {
         Self {
-            error_type: format!("{}{}", type_base_uri(), code_to_kebab(err.code)),
-            title: code_to_title(err.code),
+            error_type: format!(
+                "{}{}",
+                type_base_uri(),
+                rskit_util::to_kebab_case(err.code.as_str())
+            ),
+            title: rskit_util::to_title_case(err.code.as_str()),
             status: err.http_status.as_u16(),
             detail: err.message.clone(),
             instance: None,
@@ -104,40 +85,52 @@ mod tests {
 
     #[test]
     fn kebab_not_found() {
-        assert_eq!(code_to_kebab(ErrorCode::NotFound), "not-found");
+        assert_eq!(
+            rskit_util::to_kebab_case(ErrorCode::NotFound.as_str()),
+            "not-found"
+        );
     }
 
     #[test]
     fn kebab_service_unavailable() {
         assert_eq!(
-            code_to_kebab(ErrorCode::ServiceUnavailable),
+            rskit_util::to_kebab_case(ErrorCode::ServiceUnavailable.as_str()),
             "service-unavailable"
         );
     }
 
     #[test]
     fn kebab_internal() {
-        assert_eq!(code_to_kebab(ErrorCode::Internal), "internal-error");
+        assert_eq!(
+            rskit_util::to_kebab_case(ErrorCode::Internal.as_str()),
+            "internal-error"
+        );
     }
 
     // ── code_to_title ─────────────────────────────────────────────────────
 
     #[test]
     fn title_not_found() {
-        assert_eq!(code_to_title(ErrorCode::NotFound), "Not Found");
+        assert_eq!(
+            rskit_util::to_title_case(ErrorCode::NotFound.as_str()),
+            "Not Found"
+        );
     }
 
     #[test]
     fn title_service_unavailable() {
         assert_eq!(
-            code_to_title(ErrorCode::ServiceUnavailable),
+            rskit_util::to_title_case(ErrorCode::ServiceUnavailable.as_str()),
             "Service Unavailable"
         );
     }
 
     #[test]
     fn title_internal() {
-        assert_eq!(code_to_title(ErrorCode::Internal), "Internal Error");
+        assert_eq!(
+            rskit_util::to_title_case(ErrorCode::Internal.as_str()),
+            "Internal Error"
+        );
     }
 
     // ── ProblemDetail::from(&AppError) ────────────────────────────────────

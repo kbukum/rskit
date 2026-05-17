@@ -13,7 +13,7 @@ pub struct ServiceConfig {
     #[serde(default)]
     pub environment: Environment,
 
-    /// Semver version string, defaults to `CARGO_PKG_VERSION`.
+    /// Semver version string, defaults to the version provided by `rskit-version`.
     #[serde(default = "ServiceConfig::default_version")]
     pub version: String,
 
