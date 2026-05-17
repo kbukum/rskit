@@ -10,11 +10,11 @@ use rmcp::model::{CallToolRequestParams, Tool};
 use rmcp::service::{Peer, RoleClient, RunningService};
 use rskit_ai::semconv;
 use rskit_errors::{AppError, AppResult, ErrorCode};
-use rskit_validation::{CompiledSchema, ValidationResult};
 use rskit_tool::Callable;
 use rskit_tool::Definition;
 use rskit_tool::context::Context;
 use rskit_tool::result::ToolResult;
+use rskit_validation::{CompiledSchema, ValidationResult};
 use tracing::Instrument;
 
 use crate::convert;
