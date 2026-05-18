@@ -14,10 +14,10 @@ pub const HTTP_INTERCEPTOR_ORDER: [&str; 5] =
 /// These layers wrap every HTTP server before application middleware executes.
 pub const HTTP_BASELINE_LAYER_ORDER: [&str; 5] = [
     "request_id",
+    "cors",
+    "security_headers",
     "body_limit",
     "timeout",
-    "security_headers",
-    "cors",
 ];
 
 /// Boxed router transform used to inject transport middleware without exposing

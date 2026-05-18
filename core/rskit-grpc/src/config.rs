@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_resilience::Policy;
-use rskit_security::{TlsConfig, TlsVersion};
+use rskit_security::TlsConfig;
 use serde::{Deserialize, Serialize};
 
 /// Configuration for a gRPC client channel.
@@ -139,12 +139,6 @@ pub(crate) fn validate_grpc_tls(tls: &TlsConfig) -> AppResult<()> {
             "gRPC client TLS does not allow disabling peer verification",
         ));
     }
-    if tls.min_version != TlsVersion::Tls12 {
-        return Err(AppError::invalid_input(
-            "tls.min_version",
-            "gRPC client TLS uses tonic/rustls defaults with TLS 1.3 preferred and TLS 1.2 as the minimum floor",
-        ));
-    }
     Ok(())
 }
 
@@ -187,6 +181,16 @@ mod tests {
         });
 
         assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn validate_accepts_stricter_tls13_floor() {
+        let cfg = GrpcClientConfig::new("example.com:443").with_tls(TlsConfig {
+            min_version: rskit_security::TlsVersion::Tls13,
+            ..Default::default()
+        });
+
+        assert!(cfg.validate().is_ok());
     }
 
     #[test]

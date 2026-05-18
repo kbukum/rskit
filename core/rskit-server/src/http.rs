@@ -40,17 +40,7 @@ pub struct HttpServerBuilder {
     cancel: CancellationToken,
     router: Router,
     middleware: HttpMiddlewareStack,
-    baseline: BaselineState,
-}
-
-#[derive(Debug, Clone, Copy, Default)]
-struct BaselineState {
-    tracing: bool,
-    request_id: bool,
-    body_limit: bool,
-    timeout: bool,
-    security_headers: bool,
-    cors: bool,
+    security_headers: Option<SecurityHeadersConfig>,
 }
 
 impl HttpServerBuilder {
@@ -61,7 +51,7 @@ impl HttpServerBuilder {
             cancel,
             router: Router::new(),
             middleware: HttpMiddlewareStack::new(),
-            baseline: BaselineState::default(),
+            security_headers: None,
         }
     }
 
@@ -125,22 +115,16 @@ impl HttpServerBuilder {
     /// Returns an error when the configured CORS policy contains invalid origins,
     /// methods, headers, or max-age values.
     #[must_use = "builder methods return a new builder; use the returned value"]
-    pub fn with_cors(mut self) -> AppResult<Self> {
+    pub fn with_cors(self) -> AppResult<Self> {
         if let Some(cors_cfg) = self.config.cors.as_ref() {
-            let cors = cors_cfg.layer()?;
-            self.router = self.router.layer(cors);
+            let _ = cors_cfg.layer()?;
         }
-        self.baseline.cors = true;
         Ok(self)
     }
 
     /// Add automatic `X-Request-Id` injection.
     #[must_use]
-    pub fn with_request_id(mut self) -> Self {
-        self.router = self
-            .router
-            .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid));
-        self.baseline.request_id = true;
+    pub fn with_request_id(self) -> Self {
         self
     }
 
@@ -163,9 +147,8 @@ impl HttpServerBuilder {
         mut self,
         config: SecurityHeadersConfig,
     ) -> AppResult<Self> {
-        let layer = SecurityHeadersLayer::new(&config)?;
-        self.router = self.router.layer(layer);
-        self.baseline.security_headers = true;
+        let _ = SecurityHeadersLayer::new(&config)?;
+        self.security_headers = Some(config);
         Ok(self)
     }
 
@@ -191,7 +174,6 @@ impl HttpServerBuilder {
         self.middleware = self
             .middleware
             .with_tracing_transform(move |router| router.layer(trace_layer.clone()));
-        self.baseline.tracing = true;
         self
     }
 
@@ -199,54 +181,60 @@ impl HttpServerBuilder {
     /// # Errors
     /// Returns an error when baseline transport middleware configuration is invalid.
     pub fn build(self) -> AppResult<HttpServer> {
-        let mut builder = self;
-        if !builder.baseline.tracing {
-            builder = builder.with_tracing();
-        }
-        if !builder.baseline.request_id {
-            builder = builder.with_request_id();
-        }
-        if !builder.baseline.body_limit {
-            builder = builder.with_body_limit();
-        }
-        if !builder.baseline.timeout {
-            builder = builder.with_timeout();
-        }
-        if !builder.baseline.security_headers {
-            builder = builder.with_security_headers()?;
-        }
-        if !builder.baseline.cors {
-            builder = builder.with_cors()?;
-        }
+        let builder = self.with_tracing();
+        let security_headers = builder.security_headers.clone();
+        let request_timeout = builder.config.request_timeout;
+        let max_body_bytes = builder.config.max_body_bytes;
+        let cors = builder.config.cors.clone();
+        let router = builder.middleware.apply(builder.router);
+        let router = apply_baseline_layers(
+            router,
+            security_headers,
+            request_timeout,
+            max_body_bytes,
+            cors,
+        )?;
         Ok(HttpServer {
             config: Arc::new(builder.config),
             cancel: builder.cancel,
-            router: Arc::new(tokio::sync::Mutex::new(Some(
-                builder.middleware.apply(builder.router),
-            ))),
+            router: Arc::new(tokio::sync::Mutex::new(Some(router))),
         })
     }
 
     /// Add the configured request body limit.
     #[must_use]
-    pub fn with_body_limit(mut self) -> Self {
-        self.router = self
-            .router
-            .layer(DefaultBodyLimit::max(self.config.max_body_bytes));
-        self.baseline.body_limit = true;
+    pub fn with_body_limit(self) -> Self {
         self
     }
 
     /// Add the configured request timeout.
     #[must_use]
-    pub fn with_timeout(mut self) -> Self {
-        self.router = self.router.layer(TimeoutLayer::with_status_code(
-            StatusCode::REQUEST_TIMEOUT,
-            self.config.request_timeout,
-        ));
-        self.baseline.timeout = true;
+    pub fn with_timeout(self) -> Self {
         self
     }
+}
+
+fn apply_baseline_layers(
+    router: Router,
+    security_headers: Option<SecurityHeadersConfig>,
+    request_timeout: Duration,
+    max_body_bytes: usize,
+    cors: Option<crate::CorsPolicy>,
+) -> AppResult<Router> {
+    let security_headers = SecurityHeadersLayer::new(&security_headers.unwrap_or_default())?;
+    let router = router
+        .layer(TimeoutLayer::with_status_code(
+            StatusCode::REQUEST_TIMEOUT,
+            request_timeout,
+        ))
+        .layer(DefaultBodyLimit::max(max_body_bytes))
+        .layer(security_headers);
+    let router = if let Some(cors_cfg) = cors.as_ref() {
+        router.layer(cors_cfg.layer()?)
+    } else {
+        router
+    };
+    Ok(router.layer(SetRequestIdLayer::x_request_id(MakeRequestUuid)))
 }
 
 /// HTTP server that implements the [`Component`] lifecycle.

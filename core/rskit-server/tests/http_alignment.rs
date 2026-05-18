@@ -30,10 +30,10 @@ fn interceptor_order_is_locked() {
         HTTP_BASELINE_LAYER_ORDER,
         [
             "request_id",
-            "body_limit",
-            "timeout",
+            "cors",
             "security_headers",
-            "cors"
+            "body_limit",
+            "timeout"
         ]
     );
 }

@@ -76,6 +76,12 @@ impl Auth {
                         format!("invalid API key header name '{name}'"),
                     ));
                 }
+                if value.parse::<http::HeaderValue>().is_err() {
+                    return Err(AppError::new(
+                        ErrorCode::InvalidInput,
+                        format!("invalid API key header value for '{name}'"),
+                    ));
+                }
                 Ok(Some((name.clone(), value.clone())))
             }
             Auth::None => Ok(None),
@@ -91,5 +97,16 @@ impl fmt::Display for Auth {
             Auth::ApiKey { name, .. } => write!(f, "ApiKey({})", name),
             Auth::None => write!(f, "None"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn api_key_rejects_invalid_header_value() {
+        let auth = Auth::api_key("x-api-key", "bad\nvalue");
+        assert!(auth.header().is_err());
     }
 }
