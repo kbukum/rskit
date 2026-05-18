@@ -15,6 +15,8 @@ pub struct ServiceInstance {
     pub port: u16,
     /// Whether the instance is currently healthy.
     pub healthy: bool,
+    /// Relative load-balancing weight. Zero is treated as one by weighted balancers.
+    pub weight: u32,
     /// Freeform tags for filtering (e.g. `["canary", "us-east-1"]`).
     pub tags: Vec<String>,
     /// Arbitrary key-value metadata.

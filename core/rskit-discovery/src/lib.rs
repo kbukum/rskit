@@ -29,12 +29,12 @@ pub mod server;
 /// Core discovery and registry traits.
 pub mod traits;
 
-pub use balancer::{LeastConnections, LoadBalancer, Random, RoundRobin};
+pub use balancer::{LeastConnections, LoadBalancer, Random, RoundRobin, Weighted};
 pub use component::DiscoveryComponent;
 pub use config::DiscoveryConfig;
 #[cfg(feature = "consul")]
 pub use consul::ConsulDiscovery;
-pub use factory::{ProviderFactory, ProviderPair, create_provider, register_provider};
+pub use factory::{DiscoveryRegistry, ProviderFactory, ProviderPair};
 pub use instance::ServiceInstance;
 pub use memory::InMemoryDiscovery;
 pub use resolve::resolve_addr;

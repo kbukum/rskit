@@ -5,6 +5,7 @@ use crate::request::{Request, RequestBody};
 use crate::response::Response;
 use reqwest::Client;
 use rskit_errors::{AppError, AppResult, ErrorCode};
+use rskit_security::{TlsConfig, TlsVersion};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
@@ -33,6 +34,9 @@ impl HttpClient {
 
         if let Some(ua) = &config.user_agent {
             builder = builder.user_agent(ua.clone());
+        }
+        if let Some(tls) = &config.tls {
+            builder = apply_tls(builder, tls)?;
         }
 
         let client = builder.build().map_err(|e| {
@@ -117,34 +121,28 @@ impl HttpClient {
         };
 
         for (name, value) in &self.config.default_headers {
-            if let Ok(hv) = value.parse::<reqwest::header::HeaderValue>()
-                && let Ok(hn) = name.parse::<reqwest::header::HeaderName>()
-            {
-                request = request.header(hn, hv);
-            }
+            let hn = parse_header_name(name)?;
+            let hv = parse_header_value(name, value)?;
+            request = request.header(hn, hv);
         }
 
         for (name, value) in &req.headers {
-            if let Ok(hv) = value.parse::<reqwest::header::HeaderValue>()
-                && let Ok(hn) = name.parse::<reqwest::header::HeaderName>()
-            {
-                request = request.header(hn, hv);
-            }
+            let hn = parse_header_name(name)?;
+            let hv = parse_header_value(name, value)?;
+            request = request.header(hn, hv);
         }
 
         if let Some(query) = &req.query {
             request = request.query(query);
         }
 
-        let mut headers = reqwest::header::HeaderMap::new();
         let auth = req.auth.as_ref().or(self.config.auth.as_ref());
-        if let Some(auth) = auth {
-            auth.apply(&mut headers);
-        }
-        for (name, value) in headers {
-            if let Some(name) = name {
-                request = request.header(name, value);
-            }
+        if let Some(auth) = auth
+            && let Some((name, value)) = auth.header()?
+        {
+            let hn = parse_header_name(&name)?;
+            let hv = parse_header_value(&name, &value)?;
+            request = request.header(hn, hv);
         }
 
         if let Some(body) = &req.body {
@@ -268,6 +266,91 @@ fn map_transport_error(error: reqwest::Error) -> AppError {
         ErrorCode::ExternalService
     };
     AppError::new(code, format!("http request failed: {}", error))
+}
+
+fn apply_tls(
+    mut builder: reqwest::ClientBuilder,
+    tls: &TlsConfig,
+) -> AppResult<reqwest::ClientBuilder> {
+    tls.validate()?;
+
+    builder = match tls.min_version {
+        TlsVersion::Tls12 => builder.min_tls_version(reqwest::tls::Version::TLS_1_2),
+        TlsVersion::Tls13 => builder.min_tls_version(reqwest::tls::Version::TLS_1_3),
+        _ => builder.min_tls_version(reqwest::tls::Version::TLS_1_3),
+    };
+
+    if tls.skip_verify {
+        tracing::warn!("HTTP client TLS certificate verification disabled by explicit config");
+        builder = builder.danger_accept_invalid_certs(true);
+    }
+
+    if let Some(ca_file) = &tls.ca_file {
+        let pem = std::fs::read(ca_file).map_err(|error| {
+            AppError::new(
+                ErrorCode::InvalidInput,
+                format!("failed to read HTTP CA bundle '{ca_file}': {error}"),
+            )
+            .with_cause(error)
+        })?;
+        let cert = reqwest::Certificate::from_pem(&pem).map_err(|error| {
+            AppError::new(
+                ErrorCode::InvalidInput,
+                format!("invalid HTTP CA bundle '{ca_file}': {error}"),
+            )
+            .with_cause(error)
+        })?;
+        builder = builder.add_root_certificate(cert);
+    }
+
+    if let (Some(cert_file), Some(key_file)) = (&tls.cert_file, &tls.key_file) {
+        let mut pem = std::fs::read(cert_file).map_err(|error| {
+            AppError::new(
+                ErrorCode::InvalidInput,
+                format!("failed to read HTTP client certificate '{cert_file}': {error}"),
+            )
+            .with_cause(error)
+        })?;
+        let mut key = std::fs::read(key_file).map_err(|error| {
+            AppError::new(
+                ErrorCode::InvalidInput,
+                format!("failed to read HTTP client key '{key_file}': {error}"),
+            )
+            .with_cause(error)
+        })?;
+        pem.append(&mut key);
+        let identity = reqwest::Identity::from_pem(&pem).map_err(|error| {
+            AppError::new(
+                ErrorCode::InvalidInput,
+                format!("invalid HTTP client identity '{cert_file}'/'{key_file}': {error}"),
+            )
+            .with_cause(error)
+        })?;
+        builder = builder.identity(identity);
+    }
+
+    Ok(builder)
+}
+
+fn parse_header_name(name: &str) -> AppResult<reqwest::header::HeaderName> {
+    name.parse::<reqwest::header::HeaderName>()
+        .map_err(|error| {
+            AppError::new(
+                ErrorCode::InvalidInput,
+                format!("invalid HTTP header name '{name}': {error}"),
+            )
+        })
+}
+
+fn parse_header_value(name: &str, value: &str) -> AppResult<reqwest::header::HeaderValue> {
+    value
+        .parse::<reqwest::header::HeaderValue>()
+        .map_err(|error| {
+            AppError::new(
+                ErrorCode::InvalidInput,
+                format!("invalid HTTP header value for '{name}': {error}"),
+            )
+        })
 }
 
 #[cfg(test)]

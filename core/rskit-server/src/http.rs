@@ -1,17 +1,37 @@
+use std::fs::File;
+use std::future::Future;
+use std::io::BufReader;
+use std::net::SocketAddr;
+use std::pin::pin;
 use std::sync::Arc;
+use std::time::Duration;
 
 use async_trait::async_trait;
-use axum::Router;
+use axum::body::Body;
+use axum::extract::DefaultBodyLimit;
+use axum::serve::Listener;
+use axum::{Router, http::StatusCode};
+use hyper::body::Incoming;
+use hyper_util::rt::{TokioExecutor, TokioIo, TokioTimer};
+use hyper_util::server::conn::auto::Builder as HyperBuilder;
+use hyper_util::service::TowerToHyperService;
 use rskit_bootstrap::{Component, Health, Registry};
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_http::{SecurityHeadersConfig, SecurityHeadersLayer};
+use rskit_security::{TlsConfig, TlsVersion};
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::net::{TcpListener, TcpStream};
+use tokio_rustls::{TlsAcceptor, server::TlsStream};
 use tokio_util::sync::CancellationToken;
+use tower::ServiceExt;
 use tower_http::{
     request_id::{MakeRequestUuid, SetRequestIdLayer},
+    timeout::TimeoutLayer,
     trace::TraceLayer,
 };
 
-use crate::http_config::HttpServerConfig;
+use crate::http_config::{HttpServerConfig, validate_http_tls_config};
 use crate::middleware::HttpMiddlewareStack;
 
 /// Builder for [`HttpServer`].
@@ -160,14 +180,42 @@ impl HttpServerBuilder {
     }
 
     /// Consume the builder and produce an [`HttpServer`].
-    pub fn build(self) -> HttpServer {
-        HttpServer {
-            config: Arc::new(self.config),
-            cancel: self.cancel,
+    /// # Errors
+    /// Returns an error when baseline transport middleware configuration is invalid.
+    pub fn build(self) -> AppResult<HttpServer> {
+        let mut builder = self
+            .with_tracing()
+            .with_request_id()
+            .with_body_limit()
+            .with_timeout();
+        builder = builder.with_security_headers()?;
+        builder = builder.with_cors()?;
+        Ok(HttpServer {
+            config: Arc::new(builder.config),
+            cancel: builder.cancel,
             router: Arc::new(tokio::sync::Mutex::new(Some(
-                self.middleware.apply(self.router),
+                builder.middleware.apply(builder.router),
             ))),
-        }
+        })
+    }
+
+    /// Add the configured request body limit.
+    #[must_use]
+    pub fn with_body_limit(mut self) -> Self {
+        self.router = self
+            .router
+            .layer(DefaultBodyLimit::max(self.config.max_body_bytes));
+        self
+    }
+
+    /// Add the configured request timeout.
+    #[must_use]
+    pub fn with_timeout(mut self) -> Self {
+        self.router = self.router.layer(TimeoutLayer::with_status_code(
+            StatusCode::REQUEST_TIMEOUT,
+            self.config.request_timeout,
+        ));
+        self
     }
 }
 
@@ -200,28 +248,36 @@ impl Component for HttpServer {
             .take()
             .ok_or_else(|| AppError::new(ErrorCode::Internal, "HTTP server already started"))?;
 
-        let addr: std::net::SocketAddr = self.config.bind_addr().parse().map_err(|error| {
+        let addr: SocketAddr = self.config.bind_addr().parse().map_err(|error| {
             AppError::new(
                 ErrorCode::Internal,
                 format!("invalid bind address: {error}"),
             )
         })?;
+        let tls_acceptor = if let Some(tls) = &self.config.tls {
+            Some(build_tls_acceptor(tls)?)
+        } else {
+            None
+        };
 
         let cancel = self.cancel.clone();
+        let config = Arc::clone(&self.config);
         tokio::spawn(async move {
-            let listener = match tokio::net::TcpListener::bind(addr).await {
+            let listener = match TcpListener::bind(addr).await {
                 Ok(listener) => listener,
                 Err(error) => {
                     tracing::error!(error = ?error, %addr, "HTTP server bind failed");
                     return;
                 }
             };
-            tracing::info!(%addr, "HTTP server listening");
-            if let Err(error) = axum::serve(listener, router)
-                .with_graceful_shutdown(async move { cancel.cancelled().await })
-                .await
-            {
-                tracing::error!(error = ?error, "HTTP server error");
+
+            if let Some(acceptor) = tls_acceptor {
+                tracing::info!(%addr, "HTTPS server listening");
+                let listener = TlsListener { listener, acceptor };
+                serve_listener(listener, router, Arc::clone(&config), cancel).await;
+            } else {
+                tracing::info!(%addr, "HTTP server listening");
+                serve_listener(listener, router, Arc::clone(&config), cancel).await;
             }
         });
 
@@ -236,6 +292,197 @@ impl Component for HttpServer {
     fn health(&self) -> Health {
         Health::healthy("http-server")
     }
+}
+
+async fn serve_listener<L>(
+    mut listener: L,
+    router: Router,
+    config: Arc<HttpServerConfig>,
+    cancel: CancellationToken,
+) where
+    L: Listener<Addr = SocketAddr> + Send + 'static,
+    L::Io: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    loop {
+        tokio::select! {
+            () = cancel.cancelled() => break,
+            (io, addr) = listener.accept() => {
+                let router = router.clone();
+                let config = Arc::clone(&config);
+                let shutdown = cancel.clone().cancelled_owned();
+                tokio::spawn(async move {
+                    serve_connection(io, addr, router, config, shutdown).await;
+                });
+            }
+        }
+    }
+}
+
+async fn serve_connection<I, F>(
+    io: I,
+    addr: SocketAddr,
+    router: Router,
+    config: Arc<HttpServerConfig>,
+    shutdown: F,
+) where
+    I: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    F: Future<Output = ()> + Send + 'static,
+{
+    let service = router.map_request(|request: http::Request<Incoming>| request.map(Body::new));
+    let hyper_service = TowerToHyperService::new(service);
+    let mut builder = HyperBuilder::new(TokioExecutor::new());
+    builder
+        .http1()
+        .timer(TokioTimer::new())
+        .header_read_timeout(Some(config.read_timeout))
+        .keep_alive(true);
+    builder
+        .http2()
+        .timer(TokioTimer::new())
+        .keep_alive_interval(Some(config.idle_timeout))
+        .keep_alive_timeout(config.read_timeout)
+        .enable_connect_protocol();
+
+    let io = TokioIo::new(io);
+    let mut connection = pin!(builder.serve_connection_with_upgrades(io, hyper_service));
+    let mut shutdown = pin!(shutdown);
+
+    loop {
+        tokio::select! {
+            result = connection.as_mut() => {
+                if let Err(error) = result {
+                    tracing::debug!(error = ?error, %addr, "HTTP connection finished with error");
+                }
+                break;
+            }
+            () = &mut shutdown => {
+                connection.as_mut().graceful_shutdown();
+            }
+        }
+    }
+}
+
+struct TlsListener {
+    listener: TcpListener,
+    acceptor: TlsAcceptor,
+}
+
+impl Listener for TlsListener {
+    type Io = TlsStream<TcpStream>;
+    type Addr = SocketAddr;
+
+    async fn accept(&mut self) -> (Self::Io, Self::Addr) {
+        loop {
+            match self.listener.accept().await {
+                Ok((stream, addr)) => match self.acceptor.accept(stream).await {
+                    Ok(stream) => return (stream, addr),
+                    Err(error) => {
+                        tracing::warn!(error = ?error, %addr, "TLS handshake failed");
+                    }
+                },
+                Err(error) if is_connection_accept_error(&error) => {}
+                Err(error) => {
+                    tracing::error!(error = ?error, "HTTP TLS accept failed");
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                }
+            }
+        }
+    }
+
+    fn local_addr(&self) -> std::io::Result<Self::Addr> {
+        self.listener.local_addr()
+    }
+}
+
+fn is_connection_accept_error(error: &std::io::Error) -> bool {
+    matches!(
+        error.kind(),
+        std::io::ErrorKind::ConnectionRefused
+            | std::io::ErrorKind::ConnectionAborted
+            | std::io::ErrorKind::ConnectionReset
+    )
+}
+
+fn build_tls_acceptor(tls: &TlsConfig) -> AppResult<TlsAcceptor> {
+    validate_http_tls_config(tls)?;
+    let cert_file = tls.cert_file.as_deref().ok_or_else(|| {
+        AppError::invalid_input("tls.cert_file", "cert_file is required for HTTPS serving")
+    })?;
+    let key_file = tls.key_file.as_deref().ok_or_else(|| {
+        AppError::invalid_input("tls.key_file", "key_file is required for HTTPS serving")
+    })?;
+
+    let certs = load_certs(cert_file)?;
+    let key = load_private_key(key_file)?;
+    let versions = match tls.min_version {
+        TlsVersion::Tls12 => vec![&rustls::version::TLS13, &rustls::version::TLS12],
+        TlsVersion::Tls13 => vec![&rustls::version::TLS13],
+        _ => vec![&rustls::version::TLS13],
+    };
+    let mut config = rustls::ServerConfig::builder_with_protocol_versions(&versions)
+        .with_no_client_auth()
+        .with_single_cert(certs, key)
+        .map_err(|error| {
+            AppError::new(
+                ErrorCode::InvalidInput,
+                format!("invalid HTTP TLS certificate/key pair: {error}"),
+            )
+            .with_cause(error)
+        })?;
+    config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+    Ok(TlsAcceptor::from(Arc::new(config)))
+}
+
+fn load_certs(path: &str) -> AppResult<Vec<CertificateDer<'static>>> {
+    let file = File::open(path).map_err(|error| {
+        AppError::new(
+            ErrorCode::InvalidInput,
+            format!("failed to open HTTP TLS certificate file '{path}': {error}"),
+        )
+        .with_cause(error)
+    })?;
+    let mut reader = BufReader::new(file);
+    let certs = rustls_pemfile::certs(&mut reader)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| {
+            AppError::new(
+                ErrorCode::InvalidInput,
+                format!("failed to parse HTTP TLS certificate file '{path}': {error}"),
+            )
+            .with_cause(error)
+        })?;
+    if certs.is_empty() {
+        return Err(AppError::invalid_input(
+            "tls.cert_file",
+            "certificate file must contain at least one certificate",
+        ));
+    }
+    Ok(certs)
+}
+
+fn load_private_key(path: &str) -> AppResult<PrivateKeyDer<'static>> {
+    let file = File::open(path).map_err(|error| {
+        AppError::new(
+            ErrorCode::InvalidInput,
+            format!("failed to open HTTP TLS key file '{path}': {error}"),
+        )
+        .with_cause(error)
+    })?;
+    let mut reader = BufReader::new(file);
+    rustls_pemfile::private_key(&mut reader)
+        .map_err(|error| {
+            AppError::new(
+                ErrorCode::InvalidInput,
+                format!("failed to parse HTTP TLS key file '{path}': {error}"),
+            )
+            .with_cause(error)
+        })?
+        .ok_or_else(|| {
+            AppError::invalid_input(
+                "tls.key_file",
+                "key file must contain one PKCS#8, PKCS#1, or SEC1 private key",
+            )
+        })
 }
 
 /// Add a `/health` endpoint returning JSON from a [`Registry`].

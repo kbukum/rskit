@@ -1,6 +1,6 @@
 [package]
 name        = "rskit-http"
-description = "Axum transport details for rskit server integrations"
+description = "Framework-neutral HTTP abstractions and Tower adapters for rskit transport"
 version.workspace     = true
 edition.workspace     = true
 license.workspace     = true
@@ -10,8 +10,8 @@ repository.workspace   = true
 homepage.workspace     = true
 documentation = "https://docs.rs/rskit-http"
 readme = "README.md"
-categories = ["web-programming::http-server"]
-keywords   = ["axum", "http", "server"]
+categories = ["web-programming"]
+keywords   = ["http", "transport", "headers"]
 
 [package.metadata.docs.rs]
 all-features = true
@@ -39,6 +39,7 @@ parking_lot     = { workspace = true }
 rskit-errors    = { path = "../rskit-errors" }
 rskit-bootstrap = { path = "../rskit-bootstrap" }
 rskit-logging   = { path = "../rskit-logging" }
+rskit-security  = { path = "../rskit-security" }
 rskit-validation = { path = "../rskit-validation" }
 
 [dev-dependencies]

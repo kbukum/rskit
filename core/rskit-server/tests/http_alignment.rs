@@ -3,9 +3,10 @@ use std::time::Duration;
 
 use axum::{Router, body::Body, http::Request, routing::get};
 use rskit_bootstrap::Registry;
+use rskit_security::TlsVersion;
 use rskit_server::{
-    CorsPolicy, HTTP_INTERCEPTOR_ORDER, HttpMiddlewareStack, HttpServerBuilder, HttpServerConfig,
-    health_router, healthz_router,
+    CorsPolicy, HTTP_BASELINE_LAYER_ORDER, HTTP_INTERCEPTOR_ORDER, HttpMiddlewareStack,
+    HttpServerBuilder, HttpServerConfig, HttpTlsConfig, health_router, healthz_router,
 };
 use rskit_validation::Validate;
 use tokio_util::sync::CancellationToken;
@@ -25,6 +26,16 @@ fn interceptor_order_is_locked() {
         HTTP_INTERCEPTOR_ORDER,
         ["tracing", "logging", "auth", "validation", "metrics"]
     );
+    assert_eq!(
+        HTTP_BASELINE_LAYER_ORDER,
+        [
+            "request_id",
+            "security_headers",
+            "cors",
+            "body_limit",
+            "timeout"
+        ]
+    );
 }
 
 #[test]
@@ -33,7 +44,8 @@ fn builder_accepts_ordered_middleware_stack() {
         .with_middleware_stack(HttpMiddlewareStack::new())
         .with_router(Router::new().route("/", get(|| async { "ok" })))
         .with_request_id()
-        .build();
+        .build()
+        .unwrap();
     assert_eq!(server.bind_addr(), "0.0.0.0:8080");
 }
 
@@ -85,4 +97,44 @@ fn http_config_validation_rejects_invalid_cors_policy() {
     };
 
     assert!(cfg.validate().is_err());
+}
+
+#[test]
+fn http_tls_requires_server_identity() {
+    let cfg = HttpServerConfig {
+        tls: Some(HttpTlsConfig::default()),
+        ..HttpServerConfig::default()
+    };
+
+    assert!(cfg.validate().is_err());
+}
+
+#[test]
+fn http_tls_rejects_client_only_options() {
+    let cfg = HttpServerConfig {
+        tls: Some(HttpTlsConfig {
+            cert_file: Some("cert.pem".to_string()),
+            key_file: Some("key.pem".to_string()),
+            server_name: Some("example.com".to_string()),
+            ..HttpTlsConfig::default()
+        }),
+        ..HttpServerConfig::default()
+    };
+
+    assert!(cfg.validate().is_err());
+}
+
+#[test]
+fn http_tls_accepts_certificate_key_pair() {
+    let cfg = HttpServerConfig {
+        tls: Some(HttpTlsConfig {
+            cert_file: Some("cert.pem".to_string()),
+            key_file: Some("key.pem".to_string()),
+            min_version: TlsVersion::Tls12,
+            ..HttpTlsConfig::default()
+        }),
+        ..HttpServerConfig::default()
+    };
+
+    assert!(cfg.validate().is_ok());
 }

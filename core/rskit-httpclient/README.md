@@ -7,6 +7,7 @@ Async HTTP client for rskit with auth, headers, injected resilience policies, an
 - Async HTTP client built on `reqwest`
 - Support for Bearer, Basic, and API key authentication
 - Configurable timeouts, headers, and redirect behavior
+- Explicit TLS trust, identity, and minimum-version configuration via `rskit-security`
 - Optional `rskit-resilience::Policy` integration for retry, timeout, circuit breaker, and rate limiting
 - URL building with base URL support
 - JSON request/response serialization via `serde`

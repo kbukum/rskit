@@ -54,6 +54,33 @@ impl LoadBalancer for Random {
     }
 }
 
+/// Picks an instance randomly according to each instance's relative weight.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Weighted;
+
+impl LoadBalancer for Weighted {
+    fn pick<'a>(&self, instances: &'a [ServiceInstance]) -> Option<&'a ServiceInstance> {
+        if instances.is_empty() {
+            return None;
+        }
+
+        let total = instances
+            .iter()
+            .map(|instance| instance.weight.max(1))
+            .sum::<u32>();
+        use rand::RngExt;
+        let mut slot = rand::rng().random_range(0..total);
+        for instance in instances {
+            let weight = instance.weight.max(1);
+            if slot < weight {
+                return Some(instance);
+            }
+            slot -= weight;
+        }
+        instances.last()
+    }
+}
+
 /// Tracks in-flight requests per instance and picks the one with the fewest.
 pub struct LeastConnections {
     in_flight: DashMap<String, AtomicUsize>,
@@ -115,6 +142,7 @@ mod tests {
             address: "127.0.0.1".into(),
             port: 8080,
             healthy: true,
+            weight: 1,
             tags: vec![],
             metadata: HashMap::new(),
         }
@@ -141,6 +169,13 @@ mod tests {
     fn random_non_empty() {
         let instances = vec![instance("a"), instance("b")];
         let picked = Random.pick(&instances);
+        assert!(picked.is_some());
+    }
+
+    #[test]
+    fn weighted_non_empty() {
+        let instances = vec![instance("a"), instance("b")];
+        let picked = Weighted.pick(&instances);
         assert!(picked.is_some());
     }
 

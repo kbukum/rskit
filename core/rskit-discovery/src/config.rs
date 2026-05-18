@@ -5,6 +5,7 @@
 
 use std::collections::HashMap;
 
+use rskit_errors::{AppError, AppResult};
 use serde::Deserialize;
 
 /// Top-level discovery configuration.
@@ -72,16 +73,22 @@ impl DiscoveryConfig {
     }
 
     /// Validate that required fields are present.
-    pub fn validate(&self) -> Result<(), String> {
+    pub fn validate(&self) -> AppResult<()> {
         if !self.enabled {
             return Ok(());
         }
         if self.registration.enabled {
             if self.registration.service_name.is_empty() {
-                return Err("discovery.registration.service_name is required".into());
+                return Err(AppError::invalid_input(
+                    "discovery.registration.service_name",
+                    "service name is required",
+                ));
             }
             if self.registration.service_port == 0 {
-                return Err("discovery.registration.service_port must be > 0".into());
+                return Err(AppError::invalid_input(
+                    "discovery.registration.service_port",
+                    "service port must be greater than zero",
+                ));
             }
         }
         Ok(())
@@ -101,6 +108,7 @@ impl DiscoveryConfig {
             address: reg.service_address.clone(),
             port: reg.service_port,
             healthy: true,
+            weight: 1,
             tags: reg.tags.clone(),
             metadata: reg.metadata.clone(),
         }
@@ -170,8 +178,13 @@ impl RegistrationConfig {
     }
 
     /// Parse the retry interval as a [`Duration`](std::time::Duration).
-    pub fn retry_duration(&self) -> std::time::Duration {
-        parse_duration(&self.retry_interval).unwrap_or(std::time::Duration::from_secs(2))
+    pub fn retry_duration(&self) -> AppResult<std::time::Duration> {
+        parse_duration(&self.retry_interval).ok_or_else(|| {
+            AppError::invalid_input(
+                "discovery.registration.retry_interval",
+                format!("invalid duration '{}'", self.retry_interval),
+            )
+        })
     }
 }
 

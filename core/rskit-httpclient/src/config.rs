@@ -2,6 +2,7 @@
 
 use crate::auth::Auth;
 use rskit_resilience::Policy;
+use rskit_security::TlsConfig;
 use std::collections::HashMap;
 use std::time::Duration;
 
@@ -38,6 +39,9 @@ pub struct HttpClientConfig {
 
     /// Optional resilience policy applied to transport execution.
     pub resilience_policy: Option<Policy>,
+
+    /// Explicit TLS certificate, trust, and verification configuration.
+    pub tls: Option<TlsConfig>,
 }
 
 impl std::fmt::Debug for HttpClientConfig {
@@ -52,6 +56,7 @@ impl std::fmt::Debug for HttpClientConfig {
             .field("follow_redirects", &self.follow_redirects)
             .field("max_redirects", &self.max_redirects)
             .field("has_resilience_policy", &self.resilience_policy.is_some())
+            .field("tls", &self.tls)
             .finish()
     }
 }
@@ -122,6 +127,13 @@ impl HttpClientConfig {
         self.resilience_policy = Some(policy);
         self
     }
+
+    /// Sets explicit TLS certificate, trust, and verification configuration.
+    #[must_use]
+    pub fn with_tls(mut self, tls: TlsConfig) -> Self {
+        self.tls = Some(tls);
+        self
+    }
 }
 
 impl Default for HttpClientConfig {
@@ -136,6 +148,7 @@ impl Default for HttpClientConfig {
             follow_redirects: true,
             max_redirects: 5,
             resilience_policy: None,
+            tls: None,
         }
     }
 }

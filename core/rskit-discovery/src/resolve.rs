@@ -17,12 +17,15 @@ use crate::traits::Discovery;
 pub async fn resolve_addr(disc: &dyn Discovery, service: &str) -> AppResult<(String, u16)> {
     let instances = disc.resolve(service).await?;
 
-    let inst = instances.first().ok_or_else(|| {
-        AppError::new(
-            ErrorCode::NotFound,
-            format!("resolve \"{service}\": no healthy instances found"),
-        )
-    })?;
+    let inst = instances
+        .iter()
+        .find(|instance| instance.healthy)
+        .ok_or_else(|| {
+            AppError::new(
+                ErrorCode::NotFound,
+                format!("resolve \"{service}\": no healthy instances found"),
+            )
+        })?;
 
     Ok((inst.address.clone(), inst.port))
 }

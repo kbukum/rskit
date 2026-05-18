@@ -32,6 +32,7 @@ base64       = { workspace = true }
 # Internal
 rskit-errors = { path = "../rskit-errors" }
 rskit-resilience = { path = "../rskit-resilience" }
+rskit-security = { path = "../rskit-security" }
 
 [dev-dependencies]
 futures      = { workspace = true }

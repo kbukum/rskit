@@ -2,16 +2,8 @@ use std::time::Duration;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_resilience::Policy;
+use rskit_security::{TlsConfig, TlsVersion};
 use serde::{Deserialize, Serialize};
-
-/// TLS configuration for gRPC clients.
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct GrpcTlsConfig {
-    /// Override the TLS server name used for certificate verification.
-    pub domain_name: Option<String>,
-    /// Optional PEM-encoded CA bundle used in addition to enabled roots.
-    pub ca_cert_path: Option<String>,
-}
 
 /// Configuration for a gRPC client channel.
 #[derive(Clone, Serialize, Deserialize)]
@@ -20,8 +12,8 @@ pub struct GrpcClientConfig {
     /// Target address for the gRPC server (for example `localhost:50051`).
     pub target: String,
 
-    /// Optional TLS configuration. When omitted, the channel uses plaintext.
-    pub tls: Option<GrpcTlsConfig>,
+    /// Optional shared TLS configuration. When omitted, the channel uses plaintext.
+    pub tls: Option<TlsConfig>,
 
     /// Default timeout for unary RPCs.
     pub timeout: Duration,
@@ -88,9 +80,9 @@ impl GrpcClientConfig {
         }
     }
 
-    /// Enable TLS with default modern roots.
+    /// Enable TLS with shared security configuration and default modern roots.
     #[must_use]
-    pub fn with_tls(mut self, tls: GrpcTlsConfig) -> Self {
+    pub fn with_tls(mut self, tls: TlsConfig) -> Self {
         self.tls = Some(tls);
         self
     }
@@ -125,6 +117,10 @@ impl GrpcClientConfig {
             ));
         }
 
+        if let Some(tls) = &self.tls {
+            validate_grpc_tls(tls)?;
+        }
+
         Ok(())
     }
 
@@ -133,6 +129,23 @@ impl GrpcClientConfig {
     pub fn address(&self) -> &str {
         &self.target
     }
+}
+
+pub(crate) fn validate_grpc_tls(tls: &TlsConfig) -> AppResult<()> {
+    tls.validate()?;
+    if tls.skip_verify {
+        return Err(AppError::invalid_input(
+            "tls.skip_verify",
+            "gRPC client TLS does not allow disabling peer verification",
+        ));
+    }
+    if tls.min_version != TlsVersion::Tls12 {
+        return Err(AppError::invalid_input(
+            "tls.min_version",
+            "gRPC client TLS uses tonic/rustls defaults with TLS 1.3 preferred and TLS 1.2 as the minimum floor",
+        ));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -149,18 +162,31 @@ mod tests {
 
     #[test]
     fn with_tls_sets_explicit_tls_configuration() {
-        let cfg = GrpcClientConfig::new("example.com:443").with_tls(GrpcTlsConfig {
-            domain_name: Some("api.example.com".to_string()),
-            ca_cert_path: Some("certs/ca.pem".to_string()),
+        let cfg = GrpcClientConfig::new("example.com:443").with_tls(TlsConfig {
+            server_name: Some("api.example.com".to_string()),
+            ca_file: Some("certs/ca.pem".to_string()),
+            cert_file: Some("certs/client.pem".to_string()),
+            key_file: Some("certs/client.key".to_string()),
+            ..Default::default()
         });
         assert_eq!(
-            cfg.tls.as_ref().and_then(|tls| tls.domain_name.as_deref()),
+            cfg.tls.as_ref().and_then(|tls| tls.server_name.as_deref()),
             Some("api.example.com")
         );
         assert_eq!(
-            cfg.tls.as_ref().and_then(|tls| tls.ca_cert_path.as_deref()),
+            cfg.tls.as_ref().and_then(|tls| tls.ca_file.as_deref()),
             Some("certs/ca.pem")
         );
+    }
+
+    #[test]
+    fn validate_rejects_unsupported_insecure_tls_options() {
+        let cfg = GrpcClientConfig::new("example.com:443").with_tls(TlsConfig {
+            skip_verify: true,
+            ..Default::default()
+        });
+
+        assert!(cfg.validate().is_err());
     }
 
     #[test]

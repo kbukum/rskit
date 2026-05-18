@@ -27,9 +27,11 @@ pub mod discovery;
 #[cfg(feature = "client")]
 pub use channel::GrpcChannel;
 #[cfg(feature = "client")]
-pub use config::{GrpcClientConfig, GrpcTlsConfig};
+pub use config::GrpcClientConfig;
 #[cfg(feature = "client")]
 pub use errors::{app_error_to_status, status_to_app_error};
+#[cfg(feature = "client")]
+pub use rskit_security::TlsConfig as GrpcClientTlsConfig;
 
 #[cfg(all(feature = "client", feature = "discovery"))]
 pub use discovery::{DiscoveryChannel, DiscoveryChannelConfig};

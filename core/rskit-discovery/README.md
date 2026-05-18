@@ -37,7 +37,7 @@ async fn example() {
     let inst = ServiceInstance {
         id: "api-1".into(), name: "api".into(),
         address: "10.0.0.1".into(), port: 8080,
-        healthy: true, tags: vec![], metadata: HashMap::new(),
+        healthy: true, weight: 1, tags: vec![], metadata: HashMap::new(),
     };
     disco.register(&inst).await.unwrap();
 

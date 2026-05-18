@@ -48,8 +48,8 @@ struct UnicodeEvent {
 
 #[tokio::test]
 async fn multiple_concurrent_publishers() {
-    let bus = SseBus::new(256);
-    let mut stream = std::pin::pin!(bus.subscribe());
+    let bus = SseBus::new(256).unwrap();
+    let mut stream = std::pin::pin!(bus.subscribe_after(None));
 
     let mut handles = Vec::new();
     for i in 0..5 {
@@ -84,7 +84,7 @@ async fn multiple_concurrent_publishers() {
 
 #[tokio::test]
 async fn multiple_concurrent_subscribers_all_receive() {
-    let bus = SseBus::new(64);
+    let bus = SseBus::new(64).unwrap();
 
     let mut streams: Vec<_> = (0..10).map(|_| Box::pin(bus.subscribe())).collect();
     assert_eq!(bus.subscriber_count(), 10);
@@ -108,8 +108,8 @@ async fn multiple_concurrent_subscribers_all_receive() {
 #[tokio::test]
 async fn slow_subscriber_channel_overflow() {
     // Small capacity — overflow is expected
-    let bus: SseBus<TestEvent> = SseBus::new(4);
-    let mut stream = std::pin::pin!(bus.subscribe());
+    let bus: SseBus<TestEvent> = SseBus::new(4).unwrap();
+    let mut stream = std::pin::pin!(bus.subscribe_after(None));
 
     // Publish more messages than the channel can hold
     for i in 0..10 {
@@ -135,7 +135,7 @@ async fn slow_subscriber_channel_overflow() {
 
 #[tokio::test]
 async fn subscriber_count_decreases_on_drop() {
-    let bus: SseBus<TestEvent> = SseBus::new(16);
+    let bus: SseBus<TestEvent> = SseBus::new(16).unwrap();
     assert_eq!(bus.subscriber_count(), 0);
 
     {
@@ -153,7 +153,7 @@ async fn subscriber_count_decreases_on_drop() {
 
 #[tokio::test]
 async fn event_ordering_preserved_for_single_subscriber() {
-    let bus = SseBus::new(128);
+    let bus = SseBus::new(128).unwrap();
     let mut stream = std::pin::pin!(bus.subscribe());
 
     for i in 0..50 {
@@ -173,7 +173,7 @@ async fn event_ordering_preserved_for_single_subscriber() {
 
 #[tokio::test]
 async fn event_ordering_across_multiple_subscribers() {
-    let bus = SseBus::new(128);
+    let bus = SseBus::new(128).unwrap();
     let mut s1 = std::pin::pin!(bus.subscribe());
     let mut s2 = std::pin::pin!(bus.subscribe());
 
@@ -203,7 +203,7 @@ async fn event_ordering_across_multiple_subscribers() {
 
 #[tokio::test]
 async fn serialize_empty_struct() {
-    let bus: SseBus<EmptyEvent> = SseBus::new(16);
+    let bus: SseBus<EmptyEvent> = SseBus::new(16).unwrap();
     let mut stream = std::pin::pin!(bus.subscribe());
 
     bus.publish(EmptyEvent {}).unwrap();
@@ -218,7 +218,7 @@ async fn serialize_empty_struct() {
 
 #[tokio::test]
 async fn serialize_nested_objects() {
-    let bus: SseBus<NestedEvent> = SseBus::new(16);
+    let bus: SseBus<NestedEvent> = SseBus::new(16).unwrap();
     let mut stream = std::pin::pin!(bus.subscribe());
 
     bus.publish(NestedEvent {
@@ -240,7 +240,7 @@ async fn serialize_nested_objects() {
 
 #[tokio::test]
 async fn serialize_unicode_content() {
-    let bus: SseBus<UnicodeEvent> = SseBus::new(16);
+    let bus: SseBus<UnicodeEvent> = SseBus::new(16).unwrap();
     let mut stream = std::pin::pin!(bus.subscribe());
 
     bus.publish(UnicodeEvent {
@@ -258,7 +258,7 @@ async fn serialize_unicode_content() {
 
 #[tokio::test]
 async fn serialize_large_payload() {
-    let bus: SseBus<TestEvent> = SseBus::new(16);
+    let bus: SseBus<TestEvent> = SseBus::new(16).unwrap();
     let mut stream = std::pin::pin!(bus.subscribe());
 
     let large_msg = "x".repeat(100_000);
@@ -278,7 +278,7 @@ async fn serialize_large_payload() {
 
 #[tokio::test]
 async fn channel_capacity_one() {
-    let bus: SseBus<TestEvent> = SseBus::new(1);
+    let bus: SseBus<TestEvent> = SseBus::new(1).unwrap();
     let mut stream = std::pin::pin!(bus.subscribe());
 
     bus.publish(TestEvent::new("only")).unwrap();
@@ -291,11 +291,17 @@ async fn channel_capacity_one() {
     assert!(event.is_ok());
 }
 
-#[tokio::test]
-async fn publish_without_subscribers_returns_error() {
-    let bus: SseBus<TestEvent> = SseBus::new(16);
-    let result = bus.publish(TestEvent::new("nobody"));
+#[test]
+fn channel_capacity_zero_is_rejected() {
+    let result = SseBus::<TestEvent>::new(0);
     assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn publish_without_subscribers_is_buffered() {
+    let bus: SseBus<TestEvent> = SseBus::new(16).unwrap();
+    let result = bus.publish(TestEvent::new("nobody"));
+    assert!(result.is_ok());
 }
 
 // ---------------------------------------------------------------------------
@@ -303,19 +309,12 @@ async fn publish_without_subscribers_returns_error() {
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
-async fn subscribe_after_publish_misses_earlier_events() {
-    let bus = SseBus::new(64);
+async fn subscribe_after_publish_replays_buffered_events() {
+    let bus = SseBus::new(64).unwrap();
 
-    // Publish before subscribing — message is lost
-    let _s_temp = bus.subscribe(); // need at least one subscriber for publish to succeed
     bus.publish(TestEvent::new("before")).unwrap();
-    drop(_s_temp);
 
-    // New subscriber should NOT see the earlier message
-    let mut stream = std::pin::pin!(bus.subscribe());
-
-    // Publish a new message
-    bus.publish(TestEvent::new("after")).unwrap();
+    let mut stream = std::pin::pin!(bus.subscribe_after(None));
 
     let timeout = Duration::from_millis(200);
     let event = tokio::time::timeout(timeout, stream.next())
@@ -327,7 +326,7 @@ async fn subscribe_after_publish_misses_earlier_events() {
 
 #[tokio::test]
 async fn drop_subscriber_during_publishing() {
-    let bus = SseBus::new(64);
+    let bus = SseBus::new(64).unwrap();
     let s1 = bus.subscribe();
     let mut s2 = std::pin::pin!(bus.subscribe());
     assert_eq!(bus.subscriber_count(), 2);
@@ -373,7 +372,7 @@ struct OptionEvent {
 
 #[tokio::test]
 async fn type_safety_int_event() {
-    let bus: SseBus<IntEvent> = SseBus::new(16);
+    let bus: SseBus<IntEvent> = SseBus::new(16).unwrap();
     let mut stream = std::pin::pin!(bus.subscribe());
 
     bus.publish(IntEvent { value: 42 }).unwrap();
@@ -388,7 +387,7 @@ async fn type_safety_int_event() {
 
 #[tokio::test]
 async fn type_safety_bool_event() {
-    let bus: SseBus<BoolEvent> = SseBus::new(16);
+    let bus: SseBus<BoolEvent> = SseBus::new(16).unwrap();
     let mut stream = std::pin::pin!(bus.subscribe());
 
     bus.publish(BoolEvent { flag: true }).unwrap();
@@ -403,7 +402,7 @@ async fn type_safety_bool_event() {
 
 #[tokio::test]
 async fn type_safety_vec_event() {
-    let bus: SseBus<VecEvent> = SseBus::new(16);
+    let bus: SseBus<VecEvent> = SseBus::new(16).unwrap();
     let mut stream = std::pin::pin!(bus.subscribe());
 
     bus.publish(VecEvent {
@@ -421,7 +420,7 @@ async fn type_safety_vec_event() {
 
 #[tokio::test]
 async fn type_safety_option_event() {
-    let bus: SseBus<OptionEvent> = SseBus::new(16);
+    let bus: SseBus<OptionEvent> = SseBus::new(16).unwrap();
     let mut stream = std::pin::pin!(bus.subscribe());
 
     bus.publish(OptionEvent {
@@ -446,7 +445,7 @@ async fn type_safety_option_event() {
 
 #[tokio::test]
 async fn stress_many_events_single_subscriber() {
-    let bus = SseBus::new(1024);
+    let bus = SseBus::new(1024).unwrap();
     let mut stream = std::pin::pin!(bus.subscribe());
 
     let count = 500;
@@ -467,7 +466,7 @@ async fn stress_many_events_single_subscriber() {
 
 #[tokio::test]
 async fn stress_many_subscribers_single_event() {
-    let bus = SseBus::new(16);
+    let bus = SseBus::new(16).unwrap();
     let sub_count = 50;
 
     let mut streams: Vec<_> = (0..sub_count).map(|_| Box::pin(bus.subscribe())).collect();
@@ -491,7 +490,7 @@ async fn stress_many_subscribers_single_event() {
 
 #[tokio::test]
 async fn all_subscribers_get_independent_copies() {
-    let bus = SseBus::new(16);
+    let bus = SseBus::new(16).unwrap();
     let mut s1 = std::pin::pin!(bus.subscribe());
     let mut s2 = std::pin::pin!(bus.subscribe());
 

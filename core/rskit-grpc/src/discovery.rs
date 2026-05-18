@@ -510,6 +510,7 @@ mod tests {
                     address: "localhost".to_string(),
                     port: 9090,
                     healthy: true,
+                    weight: 1,
                     tags: vec![],
                     metadata: Default::default(),
                 }])
@@ -753,6 +754,7 @@ mod tests {
             address: address.to_string(),
             port: port.parse().unwrap(),
             healthy: true,
+            weight: 1,
             tags: vec![],
             metadata: Default::default(),
         }
