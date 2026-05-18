@@ -131,7 +131,10 @@ jsonschema = { version = "0.46.5", default-features = false }
 axum = { version = "0.8", features = ["http2", "ws"] }
 tower-http = { version = "0.6", features = ["cors", "trace", "request-id", "timeout"] }
 hyper = { version = "1", features = ["full"] }
-hyper-util = { version = "0.1", features = ["tokio"] }
+hyper-util = { version = "0.1", features = ["tokio", "server-auto", "service"] }
+rustls = "0.23.40"
+rustls-pemfile = "2.2.0"
+tokio-rustls = "0.26.4"
 
 # Auth (Phase 2)
 jsonwebtoken = { version = "10", features = ["rust_crypto"] }

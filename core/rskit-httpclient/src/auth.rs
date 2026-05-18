@@ -1,6 +1,7 @@
 //! Authentication types for HTTP requests.
 
 use base64::Engine;
+use rskit_errors::{AppError, AppResult, ErrorCode};
 use std::fmt;
 
 /// Authentication method for HTTP requests.
@@ -50,29 +51,40 @@ impl Auth {
         }
     }
 
-    /// Applies authentication to a request header map.
-    pub(crate) fn apply(&self, headers: &mut reqwest::header::HeaderMap) {
+    /// Returns the header name and value for this authentication method.
+    ///
+    /// # Errors
+    /// Returns an error when the configured API-key header is invalid.
+    pub fn header(&self) -> AppResult<Option<(String, String)>> {
         match self {
-            Auth::Bearer(token) => {
-                if let Ok(value) = format!("Bearer {}", token).parse() {
-                    headers.insert(reqwest::header::AUTHORIZATION, value);
-                }
-            }
+            Auth::Bearer(token) => Ok(Some((
+                "authorization".to_string(),
+                format!("Bearer {token}"),
+            ))),
             Auth::Basic { username, password } => {
                 let credentials = format!("{}:{}", username, password);
                 let encoded = base64::engine::general_purpose::STANDARD.encode(&credentials);
-                if let Ok(value) = format!("Basic {}", encoded).parse() {
-                    headers.insert(reqwest::header::AUTHORIZATION, value);
-                }
+                Ok(Some((
+                    "authorization".to_string(),
+                    format!("Basic {encoded}"),
+                )))
             }
             Auth::ApiKey { name, value } => {
-                if let Ok(header_name) = name.parse::<reqwest::header::HeaderName>()
-                    && let Ok(header_value) = value.parse::<reqwest::header::HeaderValue>()
-                {
-                    headers.insert(header_name, header_value);
+                if name.parse::<http::HeaderName>().is_err() {
+                    return Err(AppError::new(
+                        ErrorCode::InvalidInput,
+                        format!("invalid API key header name '{name}'"),
+                    ));
                 }
+                if value.parse::<http::HeaderValue>().is_err() {
+                    return Err(AppError::new(
+                        ErrorCode::InvalidInput,
+                        format!("invalid API key header value for '{name}'"),
+                    ));
+                }
+                Ok(Some((name.clone(), value.clone())))
             }
-            Auth::None => {}
+            Auth::None => Ok(None),
         }
     }
 }
@@ -85,5 +97,16 @@ impl fmt::Display for Auth {
             Auth::ApiKey { name, .. } => write!(f, "ApiKey({})", name),
             Auth::None => write!(f, "None"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn api_key_rejects_invalid_header_value() {
+        let auth = Auth::api_key("x-api-key", "bad\nvalue");
+        assert!(auth.header().is_err());
     }
 }

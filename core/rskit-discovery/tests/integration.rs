@@ -11,6 +11,7 @@ fn instance(id: &str, name: &str) -> ServiceInstance {
         address: "127.0.0.1".into(),
         port: 8080,
         healthy: true,
+        weight: 1,
         tags: vec![],
         metadata: HashMap::new(),
     }

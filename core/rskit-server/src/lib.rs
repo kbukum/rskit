@@ -23,5 +23,8 @@ pub use config::{GrpcServerConfig, TlsConfig};
 pub use error_layer::ErrorLayer;
 pub use http::{HttpServer, HttpServerBuilder, health_router, healthz_router};
 pub use http_config::{CorsPolicy, HttpServerConfig};
-pub use middleware::{HTTP_INTERCEPTOR_ORDER, HttpMiddlewareStack, RouterTransform};
-pub use rskit_http::{SecurityHeadersConfig, SecurityHeadersLayer, TransportSecurity};
+pub use middleware::{
+    HTTP_BASELINE_LAYER_ORDER, HTTP_INTERCEPTOR_ORDER, HttpMiddlewareStack, RouterTransform,
+};
+pub use rskit_http::SecurityHeadersLayer;
+pub use rskit_security::{SecurityHeadersConfig, TlsConfig as HttpTlsConfig, TransportSecurity};

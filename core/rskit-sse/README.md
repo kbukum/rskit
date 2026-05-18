@@ -1,6 +1,6 @@
 # rskit-sse — Server-Sent Events Bus
 
-Server-Sent Events broadcast bus with Axum integration.
+Server-Sent Events broadcast bus with bounded replay and Axum adapters.
 
 [![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/rskit-sse.svg)](https://crates.io/crates/rskit-sse)
@@ -10,18 +10,20 @@ Server-Sent Events broadcast bus with Axum integration.
 
 ## Features
 
-- `SseBus<T>` — broadcast-backed event bus for any `Clone + Serialize` type
-- `publish(event)` sends to all active subscribers
-- `subscribe()` returns an Axum-compatible SSE `Stream`
-- Automatic JSON serialization of events
+- `SseBus<T>` — bounded broadcast-backed event bus for any `Clone + Serialize` type
+- `publish(event)` assigns an event id, stores bounded replay, and sends to active subscribers
+- `subscribe()` returns toolkit-native `SseEvent<T>` values
+- `subscribe_after(last_event_id)` replays retained events newer than a client cursor
+- `subscribe_axum()` and `subscribe_axum_after()` adapt events to Axum SSE streams
 - `subscriber_count()` for monitoring
 
 ## Delivery contract
 
-- Subscribers receive events published after they subscribe; earlier events are not replayed.
+- Live subscribers receive events published after they subscribe.
+- Reconnecting subscribers can replay retained events with `Last-Event-ID`.
 - Per-subscriber ordering follows publish order for delivered events.
-- Reconnection metadata (`id`, `retry`, `Last-Event-ID`) and heartbeat frames stay
-  application-owned at the handler layer; `SseBus` only supplies the broadcast data stream.
+- Slow subscribers may skip lagged live events; skipped events can be recovered only while
+  they remain in the bounded replay buffer.
 
 ## Usage
 
@@ -37,9 +39,9 @@ use serde::Serialize;
 #[derive(Clone, Serialize)]
 struct Status { progress: u32 }
 
-let bus = SseBus::new(16);
+let bus = SseBus::new(16)?;
 
-// In an Axum handler: return bus.subscribe() as SSE response
+// In an Axum handler: return bus.subscribe_axum() as an SSE response stream.
 bus.publish(Status { progress: 50 }).unwrap();
 println!("subscribers: {}", bus.subscriber_count());
 ```

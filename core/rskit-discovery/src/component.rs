@@ -14,7 +14,7 @@ use rskit_resilience::{ConstantBackoff, Policy, RetryPolicy};
 use tracing::{debug, info, warn};
 
 use crate::config::DiscoveryConfig;
-use crate::factory;
+use crate::factory::DiscoveryRegistry;
 use crate::traits::{Discovery, Registry};
 
 /// A lifecycle-managed discovery component.
@@ -25,6 +25,7 @@ use crate::traits::{Discovery, Registry};
 /// deregisters.
 pub struct DiscoveryComponent {
     config: DiscoveryConfig,
+    providers: DiscoveryRegistry,
     registry: Mutex<Option<Arc<dyn Registry>>>,
     discovery: Mutex<Option<Arc<dyn Discovery>>>,
     instance_id: Mutex<Option<String>>,
@@ -35,6 +36,19 @@ impl DiscoveryComponent {
     pub fn new(config: DiscoveryConfig) -> Self {
         Self {
             config,
+            providers: DiscoveryRegistry::builtins(),
+            registry: Mutex::new(None),
+            discovery: Mutex::new(None),
+            instance_id: Mutex::new(None),
+        }
+    }
+
+    /// Create a discovery component with an explicit provider registry.
+    #[must_use]
+    pub fn with_registry(config: DiscoveryConfig, providers: DiscoveryRegistry) -> Self {
+        Self {
+            config,
+            providers,
             registry: Mutex::new(None),
             discovery: Mutex::new(None),
             instance_id: Mutex::new(None),
@@ -59,9 +73,6 @@ impl Component for DiscoveryComponent {
     }
 
     async fn start(&self) -> AppResult<()> {
-        // Initialise built-in provider factories (idempotent).
-        factory::init_builtin();
-
         let mut config = self.config.clone();
         config.apply_defaults();
 
@@ -71,17 +82,15 @@ impl Component for DiscoveryComponent {
                 provider: "static".to_string(),
                 ..config
             };
-            let (reg, disc) = factory::create_provider(&cfg_static)?;
+            let (reg, disc) = self.providers.create(&cfg_static)?;
             *self.registry.lock() = Some(reg);
             *self.discovery.lock() = Some(disc);
             return Ok(());
         }
 
-        config.validate().map_err(|e| {
-            AppError::new(ErrorCode::InvalidInput, format!("discovery config: {e}"))
-        })?;
+        config.validate()?;
 
-        let (reg, disc) = factory::create_provider(&config)?;
+        let (reg, disc) = self.providers.create(&config)?;
         *self.registry.lock() = Some(reg.clone());
         *self.discovery.lock() = Some(disc);
 
@@ -114,7 +123,7 @@ impl Component for DiscoveryComponent {
             let max_retries = config.registration.max_retries.max(1) as usize;
             let retry_policy = RetryPolicy::new()
                 .with_max_attempts(max_retries)
-                .with_constant_backoff(ConstantBackoff::new(config.registration.retry_duration()))
+                .with_constant_backoff(ConstantBackoff::new(config.registration.retry_duration()?))
                 .with_jitter(false)
                 .with_on_retry({
                     let instance_id = instance_id.clone();

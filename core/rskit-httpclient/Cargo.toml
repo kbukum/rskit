@@ -32,6 +32,7 @@ base64       = { workspace = true }
 # Internal
 rskit-errors = { path = "../rskit-errors" }
 rskit-resilience = { path = "../rskit-resilience" }
+rskit-security = { path = "../rskit-security" }
 
 [dev-dependencies]
 futures      = { workspace = true }
@@ -39,3 +40,7 @@ tokio        = { workspace = true }
 wiremock     = "0.6"
 tempfile     = { workspace = true }
 insta        = { workspace = true }
+
+[features]
+default = []
+danger-tls = []

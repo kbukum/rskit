@@ -271,6 +271,7 @@ mod tests {
             address: "127.0.0.1".to_string(),
             port: 8080,
             healthy: true,
+            weight: 1,
             tags: vec!["test".to_string()],
             metadata: Default::default(),
         };
@@ -307,6 +308,7 @@ mod tests {
             address: "127.0.0.1".to_string(),
             port: 8081,
             healthy: true,
+            weight: 1,
             tags: vec![],
             metadata: Default::default(),
         };
@@ -340,6 +342,7 @@ mod tests {
             address: "127.0.0.1".to_string(),
             port: 8082,
             healthy: true,
+            weight: 1,
             tags: vec![],
             metadata: Default::default(),
         };
@@ -376,6 +379,7 @@ mod tests {
             address: "192.168.1.1".to_string(),
             port: 9000,
             healthy: true,
+            weight: 1,
             tags: vec!["prod".to_string()],
             metadata: Default::default(),
         };

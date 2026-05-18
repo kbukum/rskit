@@ -134,6 +134,7 @@ impl Discovery for ConsulDiscovery {
                     address: svc.address,
                     port: svc.port,
                     healthy: true, // only passing services are returned
+                    weight: 1,
                     tags: svc.tags,
                     metadata: svc.meta,
                 }
@@ -271,6 +272,7 @@ impl Watcher for ConsulDiscovery {
                                             address: svc.address,
                                             port: svc.port,
                                             healthy: true,
+                                            weight: 1,
                                             tags: svc.tags,
                                             metadata: svc.meta,
                                         }

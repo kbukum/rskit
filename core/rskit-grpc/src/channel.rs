@@ -1,12 +1,13 @@
 use std::sync::Arc;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
+use rskit_security::TlsConfig;
 use tokio::fs;
 use tokio::sync::RwLock;
-use tonic::transport::{Certificate, Channel, ClientTlsConfig, Endpoint};
+use tonic::transport::{Certificate, Channel, ClientTlsConfig, Endpoint, Identity};
 use tracing::{debug, warn};
 
-use crate::config::{GrpcClientConfig, GrpcTlsConfig};
+use crate::config::{GrpcClientConfig, validate_grpc_tls};
 
 /// Lazy-connecting gRPC channel wrapper.
 pub struct GrpcChannel {
@@ -159,31 +160,50 @@ async fn build_endpoint(config: &GrpcClientConfig) -> AppResult<Endpoint> {
 
 async fn build_tls_config(
     config: &GrpcClientConfig,
-    tls: &GrpcTlsConfig,
+    tls: &TlsConfig,
 ) -> AppResult<ClientTlsConfig> {
+    validate_grpc_tls(tls)?;
     let mut tls_config = ClientTlsConfig::new()
         .with_enabled_roots()
         .domain_name(default_tls_domain_name(config, tls));
 
-    if let Some(ca_cert_path) = &tls.ca_cert_path {
-        let pem = fs::read(ca_cert_path).await.map_err(|error| {
+    if let Some(ca_file) = &tls.ca_file {
+        let pem = fs::read(ca_file).await.map_err(|error| {
             AppError::new(
                 ErrorCode::InvalidInput,
-                format!(
-                    "failed to read gRPC CA bundle '{}': {}",
-                    ca_cert_path, error
-                ),
+                format!("failed to read gRPC CA bundle '{}': {}", ca_file, error),
             )
             .with_cause(error)
         })?;
         tls_config = tls_config.ca_certificate(Certificate::from_pem(pem));
     }
 
+    if let (Some(cert_file), Some(key_file)) = (&tls.cert_file, &tls.key_file) {
+        let cert = fs::read(cert_file).await.map_err(|error| {
+            AppError::new(
+                ErrorCode::InvalidInput,
+                format!(
+                    "failed to read gRPC client certificate '{}': {}",
+                    cert_file, error
+                ),
+            )
+            .with_cause(error)
+        })?;
+        let key = fs::read(key_file).await.map_err(|error| {
+            AppError::new(
+                ErrorCode::InvalidInput,
+                format!("failed to read gRPC client key '{}': {}", key_file, error),
+            )
+            .with_cause(error)
+        })?;
+        tls_config = tls_config.identity(Identity::from_pem(cert, key));
+    }
+
     Ok(tls_config)
 }
 
-fn default_tls_domain_name(config: &GrpcClientConfig, tls: &GrpcTlsConfig) -> String {
-    if let Some(domain_name) = tls.domain_name.as_ref().filter(|value| !value.is_empty()) {
+fn default_tls_domain_name(config: &GrpcClientConfig, tls: &TlsConfig) -> String {
+    if let Some(domain_name) = tls.server_name.as_ref().filter(|value| !value.is_empty()) {
         return domain_name.clone();
     }
 
@@ -211,8 +231,8 @@ mod tests {
     async fn build_endpoint_uses_https_when_tls_is_enabled() {
         let ca_cert_path = concat!(env!("CARGO_MANIFEST_DIR"), "/testdata/ca.pem").to_string();
         let endpoint = build_endpoint(&GrpcClientConfig::new("example.com:443").with_tls(
-            GrpcTlsConfig {
-                ca_cert_path: Some(ca_cert_path),
+            TlsConfig {
+                ca_file: Some(ca_cert_path),
                 ..Default::default()
             },
         ))
@@ -223,16 +243,16 @@ mod tests {
 
     #[test]
     fn default_tls_domain_name_uses_ipv6_host_without_brackets() {
-        let tls = GrpcTlsConfig::default();
+        let tls = TlsConfig::default();
         let config = GrpcClientConfig::new("[::1]:50051").with_tls(tls.clone());
         assert_eq!(default_tls_domain_name(&config, &tls), "::1");
     }
 
     #[test]
     fn default_tls_domain_name_prefers_explicit_domain() {
-        let tls = GrpcTlsConfig {
-            domain_name: Some("grpc.internal".to_string()),
-            ca_cert_path: None,
+        let tls = TlsConfig {
+            server_name: Some("grpc.internal".to_string()),
+            ..Default::default()
         };
         let config = GrpcClientConfig::new("127.0.0.1:50051").with_tls(tls.clone());
         assert_eq!(default_tls_domain_name(&config, &tls), "grpc.internal");

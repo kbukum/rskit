@@ -26,7 +26,7 @@ pub struct TlsConfig {
     pub key_file: Option<String>,
     /// Override the certificate server name.
     pub server_name: Option<String>,
-    /// Minimum TLS version. Defaults to TLS 1.2.
+    /// Minimum TLS version. Defaults to TLS 1.2 while rustls prefers TLS 1.3.
     #[serde(default)]
     pub min_version: TlsVersion,
 }

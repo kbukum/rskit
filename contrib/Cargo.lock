@@ -4588,6 +4588,7 @@ dependencies = [
  "reqwest 0.13.3",
  "rskit-errors",
  "rskit-resilience",
+ "rskit-security",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -5006,6 +5007,15 @@ dependencies = [
  "rskit-errors",
  "schemars 1.2.1",
  "serde_json",
+]
+
+[[package]]
+name = "rskit-security"
+version = "0.1.0"
+dependencies = [
+ "http 1.4.0",
+ "rskit-errors",
+ "serde",
 ]
 
 [[package]]

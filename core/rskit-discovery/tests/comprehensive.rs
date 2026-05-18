@@ -17,6 +17,7 @@ fn make_instance(id: &str, name: &str) -> ServiceInstance {
         address: "127.0.0.1".into(),
         port: 8080,
         healthy: true,
+        weight: 1,
         tags: vec![],
         metadata: HashMap::new(),
     }
@@ -29,6 +30,7 @@ fn make_full_instance(id: &str, name: &str, addr: &str, port: u16) -> ServiceIns
         address: addr.into(),
         port,
         healthy: true,
+        weight: 1,
         tags: vec!["prod".into(), "us-east-1".into()],
         metadata: HashMap::from([
             ("version".into(), "1.0".into()),
@@ -80,6 +82,7 @@ fn instance_tags_and_metadata_preservation() {
         address: "h".into(),
         port: 80,
         healthy: true,
+        weight: 1,
         tags: vec!["canary".into(), "v2".into(), "gpu".into()],
         metadata,
     };
@@ -104,6 +107,7 @@ fn instance_port_zero() {
         address: "localhost".into(),
         port: 0,
         healthy: true,
+        weight: 1,
         tags: vec![],
         metadata: HashMap::new(),
     };
@@ -132,6 +136,7 @@ fn instance_special_characters_in_name() {
         address: "host".into(),
         port: 80,
         healthy: true,
+        weight: 1,
         tags: vec![],
         metadata: HashMap::new(),
     };
@@ -147,6 +152,7 @@ fn instance_very_long_service_name() {
         address: "h".into(),
         port: 80,
         healthy: true,
+        weight: 1,
         tags: vec![],
         metadata: HashMap::new(),
     };

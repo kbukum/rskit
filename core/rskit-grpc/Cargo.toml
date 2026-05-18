@@ -31,6 +31,7 @@ chrono         = { workspace = true }
 # Internal
 rskit-errors   = { path = "../rskit-errors" }
 rskit-resilience = { path = "../rskit-resilience" }
+rskit-security = { path = "../rskit-security" }
 rskit-server   = { path = "../rskit-server", optional = true }
 rskit-discovery = { path = "../rskit-discovery", optional = true }
 

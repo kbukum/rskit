@@ -17,20 +17,20 @@ impl TestEvent {
 
 #[tokio::test]
 async fn create_sse_bus() {
-    let bus: SseBus<TestEvent> = SseBus::new(16);
+    let bus: SseBus<TestEvent> = SseBus::new(16).unwrap();
     assert_eq!(bus.subscriber_count(), 0);
 }
 
 #[tokio::test]
 async fn subscribe_returns_stream() {
-    let bus: SseBus<TestEvent> = SseBus::new(16);
+    let bus: SseBus<TestEvent> = SseBus::new(16).unwrap();
     let _stream = bus.subscribe();
     assert_eq!(bus.subscriber_count(), 1);
 }
 
 #[tokio::test]
 async fn publish_event_reaches_subscriber() {
-    let bus = SseBus::new(16);
+    let bus = SseBus::new(16).unwrap();
     let mut stream = std::pin::pin!(bus.subscribe());
 
     bus.publish(TestEvent::new("hello")).unwrap();
@@ -45,7 +45,7 @@ async fn publish_event_reaches_subscriber() {
 
 #[tokio::test]
 async fn multiple_subscribers_receive_same_event() {
-    let bus = SseBus::new(16);
+    let bus = SseBus::new(16).unwrap();
     let mut s1 = std::pin::pin!(bus.subscribe());
     let mut s2 = std::pin::pin!(bus.subscribe());
     assert_eq!(bus.subscriber_count(), 2);
@@ -69,7 +69,7 @@ async fn multiple_subscribers_receive_same_event() {
 
 #[tokio::test]
 async fn subscriber_count_updates_correctly() {
-    let bus: SseBus<TestEvent> = SseBus::new(16);
+    let bus: SseBus<TestEvent> = SseBus::new(16).unwrap();
     assert_eq!(bus.subscriber_count(), 0);
 
     let _s1 = bus.subscribe();
@@ -80,15 +80,15 @@ async fn subscriber_count_updates_correctly() {
 }
 
 #[tokio::test]
-async fn publish_without_subscribers_returns_error() {
-    let bus: SseBus<TestEvent> = SseBus::new(16);
+async fn publish_without_subscribers_is_buffered() {
+    let bus: SseBus<TestEvent> = SseBus::new(16).unwrap();
     let result = bus.publish(TestEvent::new("nobody listening"));
-    assert!(result.is_err());
+    assert!(result.is_ok());
 }
 
 #[tokio::test]
 async fn multiple_events_arrive_in_order() {
-    let bus = SseBus::new(16);
+    let bus = SseBus::new(16).unwrap();
     let mut stream = std::pin::pin!(bus.subscribe());
 
     bus.publish(TestEvent::new("first")).unwrap();
