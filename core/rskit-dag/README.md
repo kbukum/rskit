@@ -12,8 +12,9 @@ Directed acyclic graph task orchestrator with parallel execution.
 
 - `Dag` — build a graph with `add_node` and `add_edge`, then `execute`
 - `DagNode` trait — implement `id()` and async `execute(inputs, cancel)`
-- Topological sort via Kahn's algorithm with cycle detection
-- Maximum parallelism — independent nodes run concurrently
+- `TypedDagNode` adapter — wrap typed input/output contracts at DAG boundaries
+- Topological sort via Kahn's algorithm; `add_edge` rejects cycles immediately
+- Maximum parallelism — independent nodes run concurrently under a bounded default
 - Dependency outputs passed as `HashMap<String, serde_json::Value>`
 - Cancellation via `tokio_util::sync::CancellationToken`
 
@@ -29,14 +30,14 @@ Directed acyclic graph task orchestrator with parallel execution.
 
 ### Cycle-detection guarantee
 
-`Dag::execute` always runs a topological-sort validation before scheduling work. Cyclic graphs
-return `ErrorCode::InvalidInput` and no node is started.
+`Dag::add_edge` rejects any edge that would create a cycle. `Dag::execute` also runs a
+topological-sort validation before scheduling work.
 
 ### Parallel sibling execution
 
 Nodes whose dependencies are satisfied are spawned as siblings and run concurrently. By default,
-parallelism is bounded only by the Tokio runtime. Use `Dag::with_max_parallelism(n)` to cap the
-number of concurrently executing nodes; `n` is clamped to at least one.
+parallelism is bounded by the host's available parallelism. Use
+`Dag::with_max_parallelism(n)` to set the cap; `n` is clamped to at least one.
 
 ## Usage
 

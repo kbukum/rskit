@@ -20,6 +20,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 # External
 serde_json   = { workspace = true }
+serde        = { workspace = true }
 async-trait  = { workspace = true }
 tokio        = { workspace = true }
 tracing      = { workspace = true }

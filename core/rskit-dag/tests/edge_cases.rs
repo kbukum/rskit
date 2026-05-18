@@ -450,18 +450,16 @@ async fn test_all_nodes_receive_cancel_token() {
 
 #[tokio::test]
 async fn test_self_cycle() {
-    let dag = Dag::new()
+    let result = Dag::new()
         .add_node(TestNode::new("a", 1))
-        .add_edge("a", "a")
-        .unwrap();
+        .add_edge("a", "a");
 
-    let result = dag.topological_sort();
     assert!(result.is_err(), "self-cycle should be detected");
 }
 
 #[tokio::test]
 async fn test_three_node_cycle() {
-    let dag = Dag::new()
+    let result = Dag::new()
         .add_node(TestNode::new("a", 1))
         .add_node(TestNode::new("b", 2))
         .add_node(TestNode::new("c", 3))
@@ -469,17 +467,15 @@ async fn test_three_node_cycle() {
         .unwrap()
         .add_edge("b", "c")
         .unwrap()
-        .add_edge("c", "a")
-        .unwrap();
+        .add_edge("c", "a");
 
-    assert!(dag.topological_sort().is_err());
-    assert!(dag.execute(CancellationToken::new()).await.is_err());
+    assert!(result.is_err());
 }
 
 #[tokio::test]
 async fn test_cycle_in_subgraph() {
     // a → b → c → b  (b↔c cycle; a is root)
-    let dag = Dag::new()
+    let result = Dag::new()
         .add_node(TestNode::new("a", 1))
         .add_node(TestNode::new("b", 2))
         .add_node(TestNode::new("c", 3))
@@ -487,10 +483,9 @@ async fn test_cycle_in_subgraph() {
         .unwrap()
         .add_edge("b", "c")
         .unwrap()
-        .add_edge("c", "b")
-        .unwrap();
+        .add_edge("c", "b");
 
-    assert!(dag.topological_sort().is_err());
+    assert!(result.is_err());
 }
 
 #[tokio::test]
@@ -500,13 +495,14 @@ async fn test_large_ring_cycle() {
     for i in 0..10 {
         dag = dag.add_node(TestNode::new(&format!("n{i}"), 1));
     }
-    for i in 0..10 {
+    for i in 0..9 {
         dag = dag
             .add_edge(&format!("n{i}"), &format!("n{}", (i + 1) % 10))
             .unwrap();
     }
 
-    assert!(dag.topological_sort().is_err());
+    let result = dag.add_edge("n9", "n0");
+    assert!(result.is_err());
 }
 
 // ===========================================================================

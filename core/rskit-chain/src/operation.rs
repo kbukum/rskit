@@ -1,44 +1,115 @@
 use rskit_errors::AppResult;
-use serde_json::Value;
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
-/// Progress callback type for chain operations.
-///
-/// Receives a percentage (0–100) and an optional human-readable message.
-pub type ProgressFn = Box<dyn Fn(u8, Option<String>) + Send + Sync>;
+/// Boxed future returned by chain steps.
+pub type StepFuture<T> = Pin<Box<dyn Future<Output = AppResult<T>> + Send + 'static>>;
 
-/// A single operation in a sequential chain.
-///
-/// Each operation receives the output of the previous operation (or the initial
-/// input) as a JSON value, and produces a JSON value output for the next
-/// operation.
-pub trait ChainOperation: Send + Sync {
-    /// Unique identifier for this operation.
-    fn id(&self) -> &str;
+type StepProgressFn = Arc<dyn Fn(u8, Option<String>) + Send + Sync>;
+type ExecuteFn<I, O> = dyn Fn(I, StepContext) -> StepFuture<O> + Send + Sync;
+type CleanupFn = dyn Fn() -> StepFuture<()> + Send + Sync;
 
-    /// Human-readable name (defaults to [`id`](Self::id)).
-    fn name(&self) -> &str {
-        self.id()
+/// Per-step execution context.
+#[derive(Clone)]
+pub struct StepContext {
+    cancel: CancellationToken,
+    progress: Option<StepProgressFn>,
+}
+
+impl StepContext {
+    pub(crate) fn new(cancel: CancellationToken, progress: Option<StepProgressFn>) -> Self {
+        Self { cancel, progress }
     }
 
-    /// Execute the operation.
-    ///
-    /// - `input`:    output from the previous step (or chain input for the first step)
-    /// - `progress`: callback for progress updates (0–100 percent, optional message)
-    /// - `cancel`:   token to check for cancellation between processing units
-    fn execute(
-        &self,
-        input: Value,
-        progress: ProgressFn,
-        cancel: CancellationToken,
-    ) -> Pin<Box<dyn Future<Output = AppResult<Value>> + Send + '_>>;
+    /// Return the cancellation token shared by the chain execution.
+    #[must_use]
+    pub fn cancellation_token(&self) -> &CancellationToken {
+        &self.cancel
+    }
 
-    /// Optional cleanup when the chain fails after this operation completed.
-    ///
-    /// Used to delete intermediate files, release resources, etc.
-    fn cleanup(&self, _output: &Value) -> Pin<Box<dyn Future<Output = ()> + Send + '_>> {
-        Box::pin(async {})
+    /// Whether cancellation has been requested.
+    #[must_use]
+    pub fn is_cancelled(&self) -> bool {
+        self.cancel.is_cancelled()
+    }
+
+    /// Report step-local progress.
+    pub fn progress(&self, percent: u8, message: Option<String>) {
+        if let Some(progress) = &self.progress {
+            progress(percent.min(100), message);
+        }
+    }
+}
+
+/// A typed operation in a sequential chain.
+pub struct Step<I, O> {
+    id: String,
+    name: String,
+    execute: Arc<ExecuteFn<I, O>>,
+    cleanup: Option<Arc<CleanupFn>>,
+}
+
+impl<I, O> Step<I, O>
+where
+    I: Send + 'static,
+    O: Send + 'static,
+{
+    /// Create a typed chain step.
+    #[must_use]
+    pub fn new<F, Fut>(id: impl Into<String>, name: impl Into<String>, execute: F) -> Self
+    where
+        F: Fn(I, StepContext) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = AppResult<O>> + Send + 'static,
+    {
+        Self {
+            id: id.into(),
+            name: name.into(),
+            execute: Arc::new(move |input, context| Box::pin(execute(input, context))),
+            cleanup: None,
+        }
+    }
+
+    /// Create a typed chain step using `id` as the display name.
+    #[must_use]
+    pub fn from_fn<F, Fut>(id: impl Into<String>, execute: F) -> Self
+    where
+        F: Fn(I, StepContext) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = AppResult<O>> + Send + 'static,
+    {
+        let id = id.into();
+        Self::new(id.clone(), id, execute)
+    }
+
+    /// Register cleanup to run if a later step fails or cancellation interrupts the chain.
+    #[must_use]
+    pub fn with_cleanup<F, Fut>(mut self, cleanup: F) -> Self
+    where
+        F: Fn() -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = AppResult<()>> + Send + 'static,
+    {
+        self.cleanup = Some(Arc::new(move || Box::pin(cleanup())));
+        self
+    }
+
+    /// Unique step identifier.
+    #[must_use]
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    /// Human-readable step name.
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub(crate) fn execute(&self, input: I, context: StepContext) -> StepFuture<O> {
+        (self.execute)(input, context)
+    }
+
+    pub(crate) fn cleanup(&self) -> Option<Arc<CleanupFn>> {
+        self.cleanup.clone()
     }
 }

@@ -4,13 +4,19 @@ use crate::{AppError, AppResult, Command, ErrorCode, ProcessConfig, ProcessResul
 use std::io;
 use std::time::Instant;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
+use tokio::process::Child;
 use tokio::process::Command as TokioCommand;
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
 
-/// Execute a subprocess with the given configuration.
-pub async fn run(command: &Command, config: &ProcessConfig) -> AppResult<ProcessResult> {
+/// Execute a subprocess with the given configuration and cancellation token.
+pub async fn run_with_cancel(
+    command: &Command,
+    config: &ProcessConfig,
+    cancel: CancellationToken,
+) -> AppResult<ProcessResult> {
     if command.program.is_empty() {
         return Err(AppError::invalid_input("program", "must not be empty"));
     }
@@ -74,53 +80,49 @@ pub async fn run(command: &Command, config: &ProcessConfig) -> AppResult<Process
     }
 
     let pid = child.id();
-    let (exit_code, timed_out, synthetic_stderr) = if let Some(timeout_duration) = config.timeout {
-        match timeout(timeout_duration, child.wait()).await {
-            Ok(Ok(status)) => (status.code(), false, None),
-            Ok(Err(error)) => {
-                return Err(AppError::new(
-                    ErrorCode::Internal,
-                    format!("process execution error: {error}"),
-                ));
+    let (exit_code, timed_out, cancelled, synthetic_stderr) = if let Some(timeout_duration) =
+        config.timeout
+    {
+        tokio::select! {
+            _ = cancel.cancelled() => {
+                debug!(program = %command.program, "process cancelled, sending SIGTERM");
+                let (exit_code, stderr) = terminate_and_wait(&mut child, pid, config.grace_period, "cancellation").await;
+                (exit_code, false, true, stderr)
             }
-            Err(_) => {
-                debug!(program = %command.program, timeout = ?timeout_duration, "process timeout, sending SIGTERM");
-                terminate_process_group(pid, libc::SIGTERM);
-
-                match timeout(config.grace_period, child.wait()).await {
-                    Ok(Ok(status)) => (status.code(), true, None),
+            wait_result = timeout(timeout_duration, child.wait()) => {
+                match wait_result {
+                    Ok(Ok(status)) => (status.code(), false, false, None),
                     Ok(Err(error)) => {
-                        warn!("error waiting for process after SIGTERM: {error}");
-                        terminate_process_group(pid, libc::SIGKILL);
-                        (
-                            None,
-                            true,
-                            Some(format!(
-                                "process killed (error during grace period: {error})"
-                            )),
-                        )
+                        return Err(AppError::new(
+                            ErrorCode::Internal,
+                            format!("process execution error: {error}"),
+                        ));
                     }
                     Err(_) => {
-                        debug!("grace period expired, sending SIGKILL");
-                        terminate_process_group(pid, libc::SIGKILL);
-                        let _ = child.wait().await;
-                        (
-                            None,
-                            true,
-                            Some("process killed by SIGKILL after timeout".to_string()),
-                        )
+                        debug!(program = %command.program, timeout = ?timeout_duration, "process timeout, sending SIGTERM");
+                        let (exit_code, stderr) = terminate_and_wait(&mut child, pid, config.grace_period, "timeout").await;
+                        (exit_code, true, false, stderr)
                     }
                 }
             }
         }
     } else {
-        match child.wait().await {
-            Ok(status) => (status.code(), false, None),
-            Err(error) => {
-                return Err(AppError::new(
-                    ErrorCode::Internal,
-                    format!("process execution error: {error}"),
-                ));
+        tokio::select! {
+            _ = cancel.cancelled() => {
+                debug!(program = %command.program, "process cancelled, sending SIGTERM");
+                let (exit_code, stderr) = terminate_and_wait(&mut child, pid, config.grace_period, "cancellation").await;
+                (exit_code, false, true, stderr)
+            }
+            wait_result = child.wait() => {
+                match wait_result {
+                    Ok(status) => (status.code(), false, false, None),
+                    Err(error) => {
+                        return Err(AppError::new(
+                            ErrorCode::Internal,
+                            format!("process execution error: {error}"),
+                        ));
+                    }
+                }
             }
         }
     };
@@ -156,7 +158,42 @@ pub async fn run(command: &Command, config: &ProcessConfig) -> AppResult<Process
         "process completed"
     );
 
+    if cancelled {
+        return Err(AppError::new(ErrorCode::Cancelled, "process cancelled"));
+    }
+
     Ok(result)
+}
+
+async fn terminate_and_wait(
+    child: &mut Child,
+    pid: Option<u32>,
+    grace_period: std::time::Duration,
+    reason: &str,
+) -> (Option<i32>, Option<String>) {
+    terminate_process_group(pid, libc::SIGTERM);
+    match timeout(grace_period, child.wait()).await {
+        Ok(Ok(status)) => (status.code(), None),
+        Ok(Err(error)) => {
+            warn!("error waiting for process after SIGTERM: {error}");
+            terminate_process_group(pid, libc::SIGKILL);
+            (
+                None,
+                Some(format!(
+                    "process killed (error during grace period after {reason}: {error})"
+                )),
+            )
+        }
+        Err(_) => {
+            debug!("grace period expired, sending SIGKILL");
+            terminate_process_group(pid, libc::SIGKILL);
+            let _ = child.wait().await;
+            (
+                None,
+                Some(format!("process killed by SIGKILL after {reason}")),
+            )
+        }
+    }
 }
 
 fn spawn_reader<R>(

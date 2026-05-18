@@ -1,18 +1,32 @@
 use std::marker::PhantomData;
-use std::sync::{Arc, mpsc::sync_channel};
+use std::sync::Arc;
 use std::time::Duration;
 
 use futures_util::future::BoxFuture;
 use rskit_component::{Component, Registry};
 use rskit_config::AppConfig;
-use rskit_errors::{AppError, AppResult};
-use rskit_hook::{HookError, HookResult, LifecycleHookRegistry as HookRegistry};
+use rskit_di::Container;
+use rskit_errors::{AppError, AppResult, ErrorCode};
+use rskit_hook::{EventBus, EventBusConfig};
+use rskit_provider::Provider;
 use tokio_util::sync::CancellationToken;
 
 use crate::hooks::{LifecycleEvent, LifecycleEventType};
 
-/// Typestate marker: App not yet started.
+/// Typestate marker retained only as the unbuildable initial marker.
+///
+/// Applications are constructed through [`AppBuilder`], which validates config
+/// and returns [`App<Built, C>`].
 pub struct Unconfigured;
+
+/// Typestate marker for a built application whose components are not running.
+pub struct Built;
+
+/// Typestate marker for an application with started components.
+pub struct Started;
+
+/// Typestate marker for an application that has completed shutdown.
+pub struct Stopped;
 
 type AsyncHook =
     Arc<dyn Fn(CancellationToken) -> BoxFuture<'static, AppResult<()>> + Send + Sync + 'static>;
@@ -25,130 +39,164 @@ where
     Arc::new(move |token| Box::pin(f(token)))
 }
 
-fn register_lifecycle_hook(
-    hooks: &Arc<HookRegistry>,
-    event_type: LifecycleEventType,
-    hook: AsyncHook,
-) {
-    let _unsubscribe = hooks.on::<LifecycleEvent>(event_type.event_type(), move |cancel, event| {
-        let runtime = event.runtime_handle().clone();
-        let hook = Arc::clone(&hook);
-        let (sender, receiver) = sync_channel(1);
-        runtime.spawn(async move {
-            let result = hook(cancel).await;
-            let _ = sender.send(result);
-        });
+#[derive(Default)]
+struct LifecycleHooks {
+    before_start: Vec<AsyncHook>,
+    after_start: Vec<AsyncHook>,
+    before_stop: Vec<AsyncHook>,
+    after_stop: Vec<AsyncHook>,
+}
 
-        match receiver.recv() {
-            Ok(Ok(())) => Ok(()),
-            Ok(Err(error)) => {
-                tracing::error!(error = ?error, "lifecycle hook failed");
-                Err(HookError::fatal(error.to_string()))
-            }
-            Err(error) => Err(HookError::fatal(AppError::internal(error).to_string())),
+#[derive(Debug, Clone, Copy)]
+enum LifecyclePhase {
+    BeforeStart,
+    AfterStart,
+    BeforeStop,
+    AfterStop,
+}
+
+impl LifecyclePhase {
+    const fn label(self) -> &'static str {
+        match self {
+            Self::BeforeStart => "before_start",
+            Self::AfterStart => "after_start",
+            Self::BeforeStop => "before_stop",
+            Self::AfterStop => "after_stop",
         }
-    });
-}
-
-fn phase_label(event_type: LifecycleEventType) -> &'static str {
-    match event_type {
-        LifecycleEventType::EventStart => "on_start",
-        LifecycleEventType::EventReady => "on_ready",
-        LifecycleEventType::EventStop => "on_stop",
     }
-}
 
-fn hook_result_to_error(event_type: LifecycleEventType, result: HookResult) -> AppResult<()> {
-    match result {
-        Ok(()) => Ok(()),
-        Err(error) => {
-            if error.is_fatal() {
-                let phase = phase_label(event_type);
-                tracing::error!(phase, ?error, "fatal hook error");
-                return Err(AppError::internal(error).context(format!("{phase} hook failed")));
-            }
-
-            tracing::warn!(
-                phase = phase_label(event_type),
-                error = %error,
-                "non-fatal hook error"
-            );
-            Ok(())
+    const fn event_type(self) -> LifecycleEventType {
+        match self {
+            Self::BeforeStart => LifecycleEventType::BeforeStart,
+            Self::AfterStart => LifecycleEventType::AfterStart,
+            Self::BeforeStop => LifecycleEventType::BeforeStop,
+            Self::AfterStop => LifecycleEventType::AfterStop,
         }
     }
 }
 
-/// Builder for [`App`]. Validates config before handing off to the lifecycle.
+/// Builder for [`App`].
+///
+/// The builder is the composition root for configuration validation,
+/// component registration, dependency injection, provider registration, and
+/// lifecycle hook ordering.
 pub struct AppBuilder<C: AppConfig> {
     config: C,
     graceful_timeout: Duration,
     components: Vec<Arc<dyn Component>>,
-    hooks: Arc<HookRegistry>,
+    container: Arc<Container>,
+    lifecycle_events: EventBus<LifecycleEvent>,
+    hooks: LifecycleHooks,
 }
 
 impl<C: AppConfig> AppBuilder<C> {
     /// Create a new builder with the given application configuration.
+    #[must_use]
     pub fn new(config: C) -> Self {
         Self {
             config,
             graceful_timeout: Duration::from_secs(30),
             components: Vec::new(),
-            hooks: Arc::new(HookRegistry::new()),
+            container: Arc::new(Container::new()),
+            lifecycle_events: EventBus::new(EventBusConfig::default()),
+            hooks: LifecycleHooks::default(),
         }
     }
 
-    /// Set the graceful shutdown timeout (default: 30 s).
+    /// Set the graceful shutdown timeout.
     #[must_use]
     pub fn with_graceful_timeout(mut self, timeout: Duration) -> Self {
         self.graceful_timeout = timeout;
         self
     }
 
-    /// Register a component to be started and stopped by the app.
+    /// Register a component to be started and stopped by the app lifecycle.
     #[must_use]
     pub fn with_component(mut self, component: Arc<dyn Component>) -> Self {
         self.components.push(component);
         self
     }
 
-    /// Register a hook called after components start and before readiness checks.
+    /// Use an existing typed DI container as the application container.
     #[must_use]
-    pub fn on_start<F, Fut>(self, hook: F) -> Self
+    pub fn with_container(mut self, container: Arc<Container>) -> Self {
+        self.container = container;
+        self
+    }
+
+    /// Use an existing bounded lifecycle event bus.
+    #[must_use]
+    pub fn with_lifecycle_event_bus(mut self, lifecycle_events: EventBus<LifecycleEvent>) -> Self {
+        self.lifecycle_events = lifecycle_events;
+        self
+    }
+
+    /// Register a typed dependency in the application DI container.
+    #[must_use]
+    pub fn with_dependency<T>(self, dependency: Arc<T>) -> Self
+    where
+        T: Send + Sync + 'static,
+    {
+        self.container.register(dependency);
+        self
+    }
+
+    /// Register a provider implementation in the application DI container.
+    #[must_use]
+    pub fn with_provider<P>(self, provider: Arc<P>) -> Self
+    where
+        P: Provider + Send + Sync + 'static,
+    {
+        self.container.register(provider);
+        self
+    }
+
+    /// Register a hook called before components start.
+    #[must_use]
+    pub fn before_start<F, Fut>(mut self, hook: F) -> Self
     where
         F: Fn(CancellationToken) -> Fut + Send + Sync + 'static,
         Fut: std::future::Future<Output = AppResult<()>> + Send + 'static,
     {
-        let hook = make_hook(hook);
-        register_lifecycle_hook(&self.hooks, LifecycleEventType::EventStart, hook);
+        self.hooks.before_start.push(make_hook(hook));
         self
     }
 
-    /// Register a hook called after readiness checks and before the app is ready.
+    /// Register a hook called after components start and readiness checks pass.
     #[must_use]
-    pub fn on_ready<F, Fut>(self, hook: F) -> Self
+    pub fn after_start<F, Fut>(mut self, hook: F) -> Self
     where
         F: Fn(CancellationToken) -> Fut + Send + Sync + 'static,
         Fut: std::future::Future<Output = AppResult<()>> + Send + 'static,
     {
-        let hook = make_hook(hook);
-        register_lifecycle_hook(&self.hooks, LifecycleEventType::EventReady, hook);
+        self.hooks.after_start.push(make_hook(hook));
         self
     }
 
-    /// Register a hook called during graceful shutdown before components stop.
+    /// Register a hook called before components stop.
     #[must_use]
-    pub fn on_stop<F, Fut>(self, hook: F) -> Self
+    pub fn before_stop<F, Fut>(mut self, hook: F) -> Self
     where
         F: Fn(CancellationToken) -> Fut + Send + Sync + 'static,
         Fut: std::future::Future<Output = AppResult<()>> + Send + 'static,
     {
-        let hook = make_hook(hook);
-        register_lifecycle_hook(&self.hooks, LifecycleEventType::EventStop, hook);
+        self.hooks.before_stop.push(make_hook(hook));
         self
     }
 
-    /// Validate config and build the App.
-    pub fn build(self) -> AppResult<App<Unconfigured, C>> {
+    /// Register a hook called after components stop.
+    #[must_use]
+    pub fn after_stop<F, Fut>(mut self, hook: F) -> Self
+    where
+        F: Fn(CancellationToken) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = AppResult<()>> + Send + 'static,
+    {
+        self.hooks.after_stop.push(make_hook(hook));
+        self
+    }
+
+    /// Validate config and build the application in the [`Built`] state.
+    pub fn build(self) -> AppResult<App<Built, C>> {
         self.config
             .validate()
             .map_err(|error| AppError::invalid_input("config", error.to_string()))?;
@@ -161,8 +209,9 @@ impl<C: AppConfig> AppBuilder<C> {
         Ok(App {
             _state: PhantomData,
             config: Arc::new(self.config),
+            container: self.container,
             registry,
-            on_configure: Vec::new(),
+            lifecycle_events: self.lifecycle_events,
             hooks: self.hooks,
             graceful_timeout: self.graceful_timeout,
             shutdown_token: CancellationToken::new(),
@@ -172,85 +221,48 @@ impl<C: AppConfig> AppBuilder<C> {
 
 /// Application orchestrator with typestate lifecycle.
 ///
-/// # Lifecycle
+/// Valid transitions are compile-time scoped:
 ///
 /// ```text
-/// build()
-///   → on_configure hooks
-///   → start_all components
-///   → on_start hooks
-///   → ready_check
-///   → on_ready hooks
-///   → wait for SIGINT/SIGTERM or manual cancel
-///   → on_stop hooks
-///   → stop_all components (LIFO)
+/// AppBuilder::build() -> App<Built, C>
+/// App<Built, C>::start() -> App<Started, C>
+/// App<Started, C>::stop() -> App<Stopped, C>
 /// ```
 pub struct App<S, C> {
     _state: PhantomData<S>,
     config: Arc<C>,
+    container: Arc<Container>,
     registry: Registry,
-    on_configure: Vec<AsyncHook>,
-    hooks: Arc<HookRegistry>,
+    lifecycle_events: EventBus<LifecycleEvent>,
+    hooks: LifecycleHooks,
     graceful_timeout: Duration,
     shutdown_token: CancellationToken,
 }
 
-impl<C: AppConfig> App<Unconfigured, C> {
-    /// Convenience: creates an [`AppBuilder`].
+impl<C: AppConfig> App<Built, C> {
+    /// Create an [`AppBuilder`].
     pub fn builder(config: C) -> AppBuilder<C> {
         AppBuilder::new(config)
     }
+}
 
-    /// Register a hook called before components are started.
-    #[must_use]
-    pub fn on_configure<F, Fut>(mut self, hook: F) -> Self
-    where
-        F: Fn(CancellationToken) -> Fut + Send + Sync + 'static,
-        Fut: std::future::Future<Output = AppResult<()>> + Send + 'static,
-    {
-        self.on_configure.push(make_hook(hook));
-        self
-    }
-
-    /// Register a hook called after components start and before readiness checks.
-    #[must_use]
-    pub fn on_start<F, Fut>(self, hook: F) -> Self
-    where
-        F: Fn(CancellationToken) -> Fut + Send + Sync + 'static,
-        Fut: std::future::Future<Output = AppResult<()>> + Send + 'static,
-    {
-        self.register_event_hook(LifecycleEventType::EventStart, make_hook(hook))
-    }
-
-    /// Register a hook called after readiness checks and before the app is ready.
-    #[must_use]
-    pub fn on_ready<F, Fut>(self, hook: F) -> Self
-    where
-        F: Fn(CancellationToken) -> Fut + Send + Sync + 'static,
-        Fut: std::future::Future<Output = AppResult<()>> + Send + 'static,
-    {
-        self.register_event_hook(LifecycleEventType::EventReady, make_hook(hook))
-    }
-
-    /// Register a hook called during graceful shutdown before components stop.
-    #[must_use]
-    pub fn on_stop<F, Fut>(self, hook: F) -> Self
-    where
-        F: Fn(CancellationToken) -> Fut + Send + Sync + 'static,
-        Fut: std::future::Future<Output = AppResult<()>> + Send + 'static,
-    {
-        self.register_event_hook(LifecycleEventType::EventStop, make_hook(hook))
-    }
-
-    fn register_event_hook(self, event_type: LifecycleEventType, hook: AsyncHook) -> Self {
-        register_lifecycle_hook(&self.hooks, event_type, hook);
-        self
-    }
-
+impl<C> App<Built, C> {
     /// Return a clone of the shared application configuration.
     #[must_use]
     pub fn config(&self) -> Arc<C> {
         Arc::clone(&self.config)
+    }
+
+    /// Return the typed application DI container.
+    #[must_use]
+    pub fn container(&self) -> Arc<Container> {
+        Arc::clone(&self.container)
+    }
+
+    /// Return the bounded lifecycle event bus used by this app.
+    #[must_use]
+    pub fn lifecycle_event_bus(&self) -> EventBus<LifecycleEvent> {
+        self.lifecycle_events.clone()
     }
 
     /// Clone the shutdown token to share with long-running tasks.
@@ -259,51 +271,57 @@ impl<C: AppConfig> App<Unconfigured, C> {
         self.shutdown_token.clone()
     }
 
-    /// Run as a long-running service.
-    pub async fn run(self) -> AppResult<()> {
-        self.startup().await?;
-
-        tracing::debug!("service ready — waiting for shutdown signal");
-        wait_for_signal(self.shutdown_token.clone()).await;
-
-        self.graceful_shutdown().await
-    }
-
-    /// Run a finite task (CLI tools / batch jobs).
-    pub async fn run_task<F, Fut>(self, task: F) -> AppResult<()>
+    /// Register a hook called before components start.
+    #[must_use]
+    pub fn before_start<F, Fut>(mut self, hook: F) -> Self
     where
-        F: FnOnce(Arc<C>, CancellationToken) -> Fut,
-        Fut: std::future::Future<Output = AppResult<()>>,
+        F: Fn(CancellationToken) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = AppResult<()>> + Send + 'static,
     {
-        self.startup().await?;
-
-        let task_result = tokio::select! {
-            result = task(Arc::clone(&self.config), self.shutdown_token.clone()) => result,
-            _ = wait_for_signal_owned(self.shutdown_token.clone()) => {
-                tracing::info!("task cancelled by signal");
-                Ok(())
-            }
-        };
-
-        let stop_hook_result = self
-            .emit_lifecycle_hooks(LifecycleEventType::EventStop)
-            .await;
-        let stop_components_result = self.registry.stop_all().await;
-        if let Err(error) = &stop_components_result {
-            tracing::warn!(error = %error, "component shutdown error");
-        }
-
-        if task_result.is_ok() {
-            stop_hook_result?;
-            stop_components_result?;
-        }
-
-        task_result
+        self.hooks.before_start.push(make_hook(hook));
+        self
     }
 
-    async fn startup(&self) -> AppResult<()> {
+    /// Register a hook called after components start and readiness checks pass.
+    #[must_use]
+    pub fn after_start<F, Fut>(mut self, hook: F) -> Self
+    where
+        F: Fn(CancellationToken) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = AppResult<()>> + Send + 'static,
+    {
+        self.hooks.after_start.push(make_hook(hook));
+        self
+    }
+
+    /// Register a hook called before components stop.
+    #[must_use]
+    pub fn before_stop<F, Fut>(mut self, hook: F) -> Self
+    where
+        F: Fn(CancellationToken) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = AppResult<()>> + Send + 'static,
+    {
+        self.hooks.before_stop.push(make_hook(hook));
+        self
+    }
+
+    /// Register a hook called after components stop.
+    #[must_use]
+    pub fn after_stop<F, Fut>(mut self, hook: F) -> Self
+    where
+        F: Fn(CancellationToken) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = AppResult<()>> + Send + 'static,
+    {
+        self.hooks.after_stop.push(make_hook(hook));
+        self
+    }
+}
+
+impl<C: AppConfig> App<Built, C> {
+    /// Start components and transition to [`Started`].
+    pub async fn start(self) -> AppResult<App<Started, C>> {
         crate::summary::print_startup(self.config.service_config(), self.registry.len());
-        self.configure().await?;
+        self.run_hooks(LifecyclePhase::BeforeStart, &self.hooks.before_start)
+            .await?;
 
         if let Err(error) = self.registry.start_all().await {
             return Err(self
@@ -311,36 +329,58 @@ impl<C: AppConfig> App<Unconfigured, C> {
                 .await);
         }
 
-        if let Err(error) = self
-            .emit_lifecycle_hooks(LifecycleEventType::EventStart)
-            .await
-        {
-            return Err(self
-                .rollback_startup_failure(error.context("startup hooks failed"), true)
-                .await);
-        }
-
         if let Err(error) = self.ready_check() {
-            tracing::warn!(error = %error, "ready check reported issues");
-        }
-
-        if let Err(error) = self
-            .emit_lifecycle_hooks(LifecycleEventType::EventReady)
-            .await
-        {
             return Err(self
-                .rollback_startup_failure(error.context("ready hooks failed"), true)
+                .rollback_startup_failure(error.context("component readiness failed"), true)
                 .await);
         }
 
-        Ok(())
+        if let Err(error) = self
+            .run_hooks(LifecyclePhase::AfterStart, &self.hooks.after_start)
+            .await
+        {
+            return Err(self
+                .rollback_startup_failure(error.context("after_start hooks failed"), true)
+                .await);
+        }
+
+        Ok(App {
+            _state: PhantomData,
+            config: self.config,
+            container: self.container,
+            registry: self.registry,
+            lifecycle_events: self.lifecycle_events,
+            hooks: self.hooks,
+            graceful_timeout: self.graceful_timeout,
+            shutdown_token: self.shutdown_token,
+        })
     }
 
-    async fn configure(&self) -> AppResult<()> {
-        for hook in &self.on_configure {
-            hook(self.shutdown_token.clone()).await?;
+    /// Run as a long-running service until a signal or shutdown token fires.
+    pub async fn run(self) -> AppResult<()> {
+        let started = self.start().await?;
+        wait_for_signal(started.shutdown_token.clone()).await;
+        started.stop().await.map(|_| ())
+    }
+
+    /// Run a finite task after startup, then stop the app.
+    pub async fn run_task<F, Fut>(self, task: F) -> AppResult<()>
+    where
+        F: FnOnce(Arc<C>, CancellationToken) -> Fut,
+        Fut: std::future::Future<Output = AppResult<()>>,
+    {
+        let started = self.start().await?;
+        let task_result = tokio::select! {
+            result = task(Arc::clone(&started.config), started.shutdown_token.clone()) => result,
+            _ = wait_for_signal_owned(started.shutdown_token.clone()) => {
+                Err(AppError::new(ErrorCode::Cancelled, "task cancelled by shutdown signal"))
+            }
+        };
+        let stop_result = started.stop().await.map(|_| ());
+        if task_result.is_ok() {
+            stop_result?;
         }
-        Ok(())
+        task_result
     }
 
     fn ready_check(&self) -> AppResult<()> {
@@ -365,28 +405,18 @@ impl<C: AppConfig> App<Unconfigured, C> {
         }
     }
 
-    async fn emit_lifecycle_hooks(&self, event_type: LifecycleEventType) -> AppResult<()> {
-        let hooks = Arc::clone(&self.hooks);
-        let event = LifecycleEvent::new(event_type, tokio::runtime::Handle::current());
-        let cancel = self.shutdown_token.clone();
-        let result = tokio::task::spawn_blocking(move || hooks.emit(&event, cancel))
-            .await
-            .map_err(AppError::internal)?;
-        hook_result_to_error(event_type, result)
-    }
-
     async fn rollback_startup_failure(
         &self,
         mut error: AppError,
         stop_components: bool,
     ) -> AppError {
         if let Err(stop_hook_error) = self
-            .emit_lifecycle_hooks(LifecycleEventType::EventStop)
+            .run_hooks(LifecyclePhase::BeforeStop, &self.hooks.before_stop)
             .await
         {
-            tracing::warn!(error = %stop_hook_error, "stop hook error during startup rollback");
+            tracing::warn!(error = %stop_hook_error, "before_stop hook failed during startup rollback");
             error = error.context(format!(
-                "startup rollback stop hooks failed: {stop_hook_error}"
+                "startup rollback before_stop hooks failed: {stop_hook_error}"
             ));
         }
 
@@ -396,28 +426,154 @@ impl<C: AppConfig> App<Unconfigured, C> {
                 "startup rollback component stop failed: {stop_error}"
             ));
         }
-
         error
     }
+}
 
-    async fn graceful_shutdown(self) -> AppResult<()> {
+impl<C> App<Built, C> {
+    async fn run_hooks(&self, phase: LifecyclePhase, hooks: &[AsyncHook]) -> AppResult<()> {
+        run_hooks(
+            phase,
+            hooks,
+            self.shutdown_token.clone(),
+            &self.lifecycle_events,
+        )
+        .await
+    }
+}
+
+impl<C> App<Started, C> {
+    /// Return a clone of the shared application configuration.
+    #[must_use]
+    pub fn config(&self) -> Arc<C> {
+        Arc::clone(&self.config)
+    }
+
+    /// Return the typed application DI container.
+    #[must_use]
+    pub fn container(&self) -> Arc<Container> {
+        Arc::clone(&self.container)
+    }
+
+    /// Return the bounded lifecycle event bus used by this app.
+    #[must_use]
+    pub fn lifecycle_event_bus(&self) -> EventBus<LifecycleEvent> {
+        self.lifecycle_events.clone()
+    }
+
+    /// Clone the shutdown token to share with long-running tasks.
+    #[must_use]
+    pub fn shutdown_token(&self) -> CancellationToken {
+        self.shutdown_token.clone()
+    }
+
+    /// Stop components and transition to [`Stopped`].
+    pub async fn stop(self) -> AppResult<App<Stopped, C>> {
+        let mut stop_error: Option<AppError> = None;
         let stop_result = tokio::time::timeout(
             self.graceful_timeout,
-            self.emit_lifecycle_hooks(LifecycleEventType::EventStop),
+            run_hooks(
+                LifecyclePhase::BeforeStop,
+                &self.hooks.before_stop,
+                self.shutdown_token.clone(),
+                &self.lifecycle_events,
+            ),
         )
         .await;
 
         match stop_result {
             Ok(Ok(())) => {}
-            Ok(Err(error)) => tracing::warn!(error = %error, "stop hook error"),
-            Err(_) => tracing::warn!("graceful shutdown timeout — forcing stop"),
+            Ok(Err(error)) => {
+                tracing::warn!(error = %error, "before_stop hook error");
+                stop_error = Some(error);
+            }
+            Err(_) => {
+                tracing::warn!("graceful shutdown timeout elapsed during before_stop hooks");
+                stop_error = Some(AppError::new(
+                    ErrorCode::Timeout,
+                    "graceful shutdown timeout elapsed during before_stop hooks",
+                ));
+            }
         }
 
         if let Err(error) = self.registry.stop_all().await {
             tracing::warn!(error = %error, "component shutdown error");
+            record_stop_error(&mut stop_error, error, "component shutdown failed");
+        }
+
+        if let Err(error) = run_hooks(
+            LifecyclePhase::AfterStop,
+            &self.hooks.after_stop,
+            self.shutdown_token.clone(),
+            &self.lifecycle_events,
+        )
+        .await
+        {
+            record_stop_error(&mut stop_error, error, "after_stop hooks failed");
+        }
+
+        if let Err(error) = self.container.close().await {
+            record_stop_error(&mut stop_error, error, "container close failed");
         }
         tracing::info!("shutdown complete");
-        Ok(())
+
+        if let Some(error) = stop_error {
+            return Err(error);
+        }
+
+        Ok(App {
+            _state: PhantomData,
+            config: self.config,
+            container: self.container,
+            registry: self.registry,
+            lifecycle_events: self.lifecycle_events,
+            hooks: self.hooks,
+            graceful_timeout: self.graceful_timeout,
+            shutdown_token: self.shutdown_token,
+        })
+    }
+}
+
+impl<C> App<Stopped, C> {
+    /// Return a clone of the shared application configuration.
+    #[must_use]
+    pub fn config(&self) -> Arc<C> {
+        Arc::clone(&self.config)
+    }
+
+    /// Return the bounded lifecycle event bus used by this app.
+    #[must_use]
+    pub fn lifecycle_event_bus(&self) -> EventBus<LifecycleEvent> {
+        self.lifecycle_events.clone()
+    }
+}
+
+async fn run_hooks(
+    phase: LifecyclePhase,
+    hooks: &[AsyncHook],
+    token: CancellationToken,
+    lifecycle_events: &EventBus<LifecycleEvent>,
+) -> AppResult<()> {
+    lifecycle_events.publish(LifecycleEvent::new(phase.event_type()))?;
+    for hook in hooks {
+        if token.is_cancelled() {
+            return Err(AppError::new(
+                ErrorCode::Cancelled,
+                format!("{} hook dispatch cancelled", phase.label()),
+            ));
+        }
+        hook(token.clone())
+            .await
+            .map_err(|error| error.context(format!("{} hook failed", phase.label())))?;
+    }
+    Ok(())
+}
+
+fn record_stop_error(stop_error: &mut Option<AppError>, error: AppError, context: &str) {
+    if let Some(existing) = stop_error.take() {
+        *stop_error = Some(existing.context(format!("{context}: {error}")));
+    } else {
+        *stop_error = Some(error);
     }
 }
 
@@ -443,11 +599,9 @@ mod tests {
 
     use parking_lot::Mutex;
     use rskit_config::ServiceConfig;
-    use rskit_hook::HookError;
     use tokio_util::sync::CancellationToken;
 
-    use super::{AppBuilder, hook_result_to_error};
-    use crate::hooks::LifecycleEventType;
+    use super::AppBuilder;
 
     #[derive(Debug, Default, serde::Deserialize, rskit_validation::Validate)]
     struct TestCfg {
@@ -465,94 +619,118 @@ mod tests {
 
     #[tokio::test]
     async fn app_builder_builds_successfully() {
-        let cfg = TestCfg::default();
-        let result = AppBuilder::new(cfg).build();
-        assert!(
-            result.is_ok(),
-            "AppBuilder::build should succeed with a valid config"
-        );
+        let result = AppBuilder::new(TestCfg::default()).build();
+        assert!(result.is_ok());
     }
 
     #[tokio::test]
-    async fn builder_lifecycle_hooks_run_in_order() {
-        let cfg = TestCfg::default();
+    async fn lifecycle_hooks_run_in_order() {
         let order = Arc::new(Mutex::new(Vec::new()));
-        let start_order = Arc::clone(&order);
-        let ready_order = Arc::clone(&order);
-        let stop_order = Arc::clone(&order);
+        let before_start = Arc::clone(&order);
+        let after_start = Arc::clone(&order);
+        let before_stop = Arc::clone(&order);
+        let after_stop = Arc::clone(&order);
 
-        let app = AppBuilder::new(cfg)
-            .on_start(move |_token| {
-                let order = Arc::clone(&start_order);
+        let app = AppBuilder::new(TestCfg::default())
+            .before_start(move |_token| {
+                let order = Arc::clone(&before_start);
                 async move {
-                    order.lock().push("start");
+                    order.lock().push("before_start");
                     Ok(())
                 }
             })
-            .on_ready(move |_token| {
-                let order = Arc::clone(&ready_order);
+            .after_start(move |_token| {
+                let order = Arc::clone(&after_start);
                 async move {
-                    order.lock().push("ready");
+                    order.lock().push("after_start");
                     Ok(())
                 }
             })
-            .on_stop(move |_token| {
-                let order = Arc::clone(&stop_order);
+            .before_stop(move |_token| {
+                let order = Arc::clone(&before_stop);
                 async move {
-                    order.lock().push("stop");
+                    order.lock().push("before_stop");
+                    Ok(())
+                }
+            })
+            .after_stop(move |_token| {
+                let order = Arc::clone(&after_stop);
+                async move {
+                    order.lock().push("after_stop");
                     Ok(())
                 }
             })
             .build()
             .expect("build should succeed");
 
-        let result = app
-            .run_task(|_cfg: Arc<TestCfg>, _cancel: CancellationToken| async move { Ok(()) })
-            .await;
+        app.run_task(|_cfg: Arc<TestCfg>, _cancel: CancellationToken| async move { Ok(()) })
+            .await
+            .expect("run_task should complete");
 
-        assert!(result.is_ok(), "run_task should complete with Ok(())");
-        assert_eq!(*order.lock(), vec!["start", "ready", "stop"]);
+        assert_eq!(
+            *order.lock(),
+            vec!["before_start", "after_start", "before_stop", "after_stop"]
+        );
+    }
+
+    #[tokio::test]
+    async fn lifecycle_events_are_published() {
+        let app = AppBuilder::new(TestCfg::default())
+            .build()
+            .expect("build should succeed");
+        let mut subscriber = app.lifecycle_event_bus().subscribe();
+
+        app.run_task(|_cfg: Arc<TestCfg>, _cancel: CancellationToken| async move { Ok(()) })
+            .await
+            .expect("run_task should complete");
+
+        let before_start = subscriber.recv().await.expect("before_start event");
+        let after_start = subscriber.recv().await.expect("after_start event");
+        let before_stop = subscriber.recv().await.expect("before_stop event");
+        let after_stop = subscriber.recv().await.expect("after_stop event");
+        assert_eq!(before_start.kind(), crate::LifecycleEventType::BeforeStart);
+        assert_eq!(after_start.kind(), crate::LifecycleEventType::AfterStart);
+        assert_eq!(before_stop.kind(), crate::LifecycleEventType::BeforeStop);
+        assert_eq!(after_stop.kind(), crate::LifecycleEventType::AfterStop);
     }
 
     #[tokio::test]
     async fn app_run_task_executes_and_exits() {
-        let cfg = TestCfg::default();
-        let app = AppBuilder::new(cfg).build().expect("build should succeed");
+        let app = AppBuilder::new(TestCfg::default())
+            .build()
+            .expect("build should succeed");
         let runs = Arc::new(AtomicUsize::new(0));
         let run_counter = Arc::clone(&runs);
 
-        let result = app
-            .run_task(move |_cfg: Arc<TestCfg>, _cancel: CancellationToken| {
-                let runs = Arc::clone(&run_counter);
-                async move {
-                    runs.fetch_add(1, Ordering::SeqCst);
-                    Ok::<(), rskit_errors::AppError>(())
-                }
-            })
-            .await;
+        app.run_task(move |_cfg: Arc<TestCfg>, _cancel: CancellationToken| {
+            let runs = Arc::clone(&run_counter);
+            async move {
+                runs.fetch_add(1, Ordering::SeqCst);
+                Ok::<(), rskit_errors::AppError>(())
+            }
+        })
+        .await
+        .expect("task should run");
 
-        assert!(result.is_ok(), "run_task should complete with Ok(())");
         assert_eq!(runs.load(Ordering::SeqCst), 1);
     }
 
-    #[test]
-    fn non_fatal_hook_error_is_logged_and_ignored() {
-        let result = hook_result_to_error(
-            LifecycleEventType::EventStart,
-            Err(HookError::new("warn only")),
-        );
+    #[tokio::test]
+    async fn hook_failure_stops_startup() {
+        let app = AppBuilder::new(TestCfg::default())
+            .before_start(|_| async {
+                Err::<(), _>(rskit_errors::AppError::new(
+                    rskit_errors::ErrorCode::Internal,
+                    "hard fail",
+                ))
+            })
+            .build()
+            .expect("build should succeed");
 
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn fatal_hook_error_becomes_app_error() {
-        let result = hook_result_to_error(
-            LifecycleEventType::EventStart,
-            Err(HookError::fatal("hard fail")),
-        );
-
-        let error = result.expect_err("fatal hook error should fail");
-        assert!(error.to_string().contains("on_start hook failed"));
+        let error = app
+            .run_task(|_cfg: Arc<TestCfg>, _cancel: CancellationToken| async move { Ok(()) })
+            .await
+            .expect_err("hook failure should fail startup");
+        assert!(error.to_string().contains("before_start hook failed"));
     }
 }

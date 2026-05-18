@@ -36,8 +36,8 @@ pub struct Dag {
     edges: HashMap<String, Vec<String>>,
     /// Reverse edges: `to_id` → upstream dependencies
     reverse_edges: HashMap<String, Vec<String>>,
-    /// Optional limit on concurrent node execution.
-    max_parallelism: Option<usize>,
+    /// Limit on concurrent node execution.
+    max_parallelism: usize,
     /// Failure handling strategy.
     failure_policy: FailurePolicy,
 }
@@ -56,7 +56,7 @@ impl Dag {
             nodes: HashMap::new(),
             edges: HashMap::new(),
             reverse_edges: HashMap::new(),
-            max_parallelism: None,
+            max_parallelism: default_parallelism(),
             failure_policy: FailurePolicy::FailFast,
         }
     }
@@ -64,7 +64,7 @@ impl Dag {
     /// Set the maximum number of nodes that can execute concurrently.
     #[must_use]
     pub fn with_max_parallelism(mut self, max: usize) -> Self {
-        self.max_parallelism = Some(max.max(1));
+        self.max_parallelism = max.max(1);
         self
     }
 
@@ -97,6 +97,13 @@ impl Dag {
             return Err(AppError::new(
                 ErrorCode::InvalidInput,
                 format!("DAG node '{to}' not found"),
+            ));
+        }
+
+        if self.path_exists(to, from) {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                format!("DAG edge '{from}' -> '{to}' would create a cycle"),
             ));
         }
 
@@ -171,9 +178,7 @@ impl Dag {
         let _ = self.topological_sort()?;
 
         let outputs = Arc::new(Mutex::new(HashMap::<String, serde_json::Value>::new()));
-        let semaphore = self
-            .max_parallelism
-            .map(|n| Arc::new(tokio::sync::Semaphore::new(n)));
+        let semaphore = Arc::new(tokio::sync::Semaphore::new(self.max_parallelism));
 
         let mut remaining_in_degree: HashMap<String, usize> = self
             .nodes
@@ -198,7 +203,7 @@ impl Dag {
                     id.clone(),
                     initial_inputs.clone(),
                     cancel.clone(),
-                    semaphore.clone(),
+                    Arc::clone(&semaphore),
                     &mut join_set,
                     &mut pending,
                 )?;
@@ -272,7 +277,7 @@ impl Dag {
         cancel: &CancellationToken,
         initial_inputs: &HashMap<String, serde_json::Value>,
         outputs: &Arc<Mutex<HashMap<String, serde_json::Value>>>,
-        semaphore: &Option<Arc<tokio::sync::Semaphore>>,
+        semaphore: &Arc<tokio::sync::Semaphore>,
         join_set: &mut JoinSet<NodeExecution>,
         remaining_in_degree: &mut HashMap<String, usize>,
         pending: &mut HashSet<String>,
@@ -297,7 +302,7 @@ impl Dag {
                             dependent_id.clone(),
                             inputs,
                             cancel.clone(),
-                            semaphore.clone(),
+                            Arc::clone(semaphore),
                             join_set,
                             pending,
                         )?;
@@ -337,7 +342,7 @@ impl Dag {
         node_id: String,
         inputs: HashMap<String, serde_json::Value>,
         cancel: CancellationToken,
-        semaphore: Option<Arc<tokio::sync::Semaphore>>,
+        semaphore: Arc<tokio::sync::Semaphore>,
         join_set: &mut JoinSet<NodeExecution>,
         pending: &mut HashSet<String>,
     ) -> AppResult<()> {
@@ -349,14 +354,10 @@ impl Dag {
         })?);
         pending.insert(node_id.clone());
         join_set.spawn(async move {
-            let permit_result = match semaphore {
-                Some(ref limit) => limit
-                    .acquire()
-                    .await
-                    .map(Some)
-                    .map_err(|_| AppError::new(ErrorCode::Internal, "DAG semaphore closed")),
-                None => Ok(None),
-            };
+            let permit_result = semaphore
+                .acquire()
+                .await
+                .map_err(|_| AppError::new(ErrorCode::Internal, "DAG semaphore closed"));
 
             match permit_result {
                 Ok(_permit) => {
@@ -374,6 +375,27 @@ impl Dag {
         });
         Ok(())
     }
+
+    fn path_exists(&self, from: &str, to: &str) -> bool {
+        let mut stack = vec![from.to_string()];
+        let mut visited = HashSet::new();
+        while let Some(node_id) = stack.pop() {
+            if node_id == to {
+                return true;
+            }
+            if !visited.insert(node_id.clone()) {
+                continue;
+            }
+            if let Some(children) = self.edges.get(&node_id) {
+                stack.extend(children.iter().cloned());
+            }
+        }
+        false
+    }
+}
+
+fn default_parallelism() -> usize {
+    std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get)
 }
 
 fn mark_skipped_dependents(
@@ -608,8 +630,7 @@ mod tests {
                 value: 0,
             });
 
-        let dag = dag.add_edge("a", "b").unwrap().add_edge("b", "a").unwrap();
-        let result = dag.topological_sort();
+        let result = dag.add_edge("a", "b").unwrap().add_edge("b", "a");
         assert!(result.is_err());
     }
 }

@@ -225,28 +225,28 @@ async fn lifecycle_hooks_execute_in_order() {
     let app = AppBuilder::new(cfg)
         .build()
         .unwrap()
-        .on_configure(move |_tok| {
+        .before_start(move |_tok| {
             let o = o1.clone();
             async move {
                 o.lock().push("configure".into());
                 Ok(())
             }
         })
-        .on_start(move |_tok| {
+        .before_start(move |_tok| {
             let o = o2.clone();
             async move {
                 o.lock().push("start".into());
                 Ok(())
             }
         })
-        .on_ready(move |_tok| {
+        .after_start(move |_tok| {
             let o = o3.clone();
             async move {
                 o.lock().push("ready".into());
                 Ok(())
             }
         })
-        .on_stop(move |_tok| {
+        .before_stop(move |_tok| {
             let o = o4.clone();
             async move {
                 o.lock().push("stop".into());
@@ -273,7 +273,7 @@ async fn configure_hook_error_propagates() {
     let app = AppBuilder::new(cfg)
         .build()
         .unwrap()
-        .on_configure(|_tok| async { Err(AppError::service_unavailable("configure boom")) });
+        .before_start(|_tok| async { Err(AppError::service_unavailable("configure boom")) });
 
     let result = app.run_task(|_cfg, _cancel| async move { Ok(()) }).await;
     assert!(result.is_err());
@@ -285,7 +285,7 @@ async fn start_hook_error_propagates() {
     let app = AppBuilder::new(cfg)
         .build()
         .unwrap()
-        .on_start(|_tok| async { Err(AppError::service_unavailable("start boom")) });
+        .before_start(|_tok| async { Err(AppError::service_unavailable("start boom")) });
 
     let result = app.run_task(|_cfg, _cancel| async move { Ok(()) }).await;
     assert!(result.is_err());
@@ -297,7 +297,7 @@ async fn stop_hook_error_propagates() {
     let app = AppBuilder::new(cfg)
         .build()
         .unwrap()
-        .on_stop(|_tok| async { Err(AppError::service_unavailable("stop boom")) });
+        .before_stop(|_tok| async { Err(AppError::service_unavailable("stop boom")) });
 
     let result = app.run_task(|_cfg, _cancel| async move { Ok(()) }).await;
     assert!(result.is_err());
@@ -312,8 +312,8 @@ async fn hook_error_stops_subsequent_hooks() {
     let app = AppBuilder::new(cfg)
         .build()
         .unwrap()
-        .on_start(|_tok| async { Err(AppError::service_unavailable("first fails")) })
-        .on_start(move |_tok| {
+        .before_start(|_tok| async { Err(AppError::service_unavailable("first fails")) })
+        .before_start(move |_tok| {
             let called = second_called_clone.clone();
             async move {
                 called.store(true, Ordering::SeqCst);
@@ -576,7 +576,7 @@ async fn graceful_timeout_on_slow_stop_hook() {
         .with_graceful_timeout(Duration::from_millis(100))
         .build()
         .unwrap()
-        .on_stop(|_tok| async {
+        .before_stop(|_tok| async {
             tokio::time::sleep(Duration::from_secs(10)).await;
             Ok(())
         });
@@ -591,8 +591,7 @@ async fn graceful_timeout_on_slow_stop_hook() {
     let result = tokio::time::timeout(Duration::from_secs(5), app.run()).await;
 
     assert!(result.is_ok(), "should complete within 5 seconds");
-    // The run itself returns Ok because graceful_shutdown logs warning but returns Ok
-    assert!(result.unwrap().is_ok());
+    assert!(result.unwrap().is_err());
 }
 
 // ── 11. CancellationToken propagation ────────────────────────────────────────
@@ -790,14 +789,14 @@ async fn full_lifecycle_with_components_and_hooks() {
         .with_component(comp)
         .build()
         .unwrap()
-        .on_start(move |_tok| {
+        .before_start(move |_tok| {
             let o = o_start.clone();
             async move {
                 o.lock().push("hook:start".into());
                 Ok(())
             }
         })
-        .on_stop(move |_tok| {
+        .before_stop(move |_tok| {
             let o = o_stop.clone();
             async move {
                 o.lock().push("hook:stop".into());
@@ -809,8 +808,7 @@ async fn full_lifecycle_with_components_and_hooks() {
     assert!(result.is_ok());
 
     let executed = order.lock();
-    // Components start before hooks, hooks stop before components
-    assert_eq!(*executed, vec!["db", "hook:start", "hook:stop", "db"],);
+    assert_eq!(*executed, vec!["hook:start", "db", "hook:stop", "db"],);
 }
 
 #[tokio::test]

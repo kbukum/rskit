@@ -132,23 +132,25 @@ where
     /// Apply multiple functions to the same item and collect all results.
     fn rfan_out<O, F, Fut>(
         self,
+        max_branches: usize,
         fns: Vec<F>,
-    ) -> impl Stream<Item = Vec<AppResult<O>>> + Send + 'static
+    ) -> impl Stream<Item = AppResult<Vec<O>>> + Send + 'static
     where
         O: Send + 'static,
         Self::Item: Clone,
         F: Fn(Self::Item) -> Fut + Clone + Send + Sync + 'static,
         Fut: Future<Output = AppResult<O>> + Send + 'static,
     {
-        concurrent::fan_out(self, fns)
+        concurrent::fan_out(self, max_branches, fns)
     }
 
-    /// Collect items into fixed-duration non-overlapping windows.
+    /// Collect items into non-overlapping windows bounded by time and item count.
     fn rtumbling_window(
         self,
         duration: Duration,
+        max_items: usize,
     ) -> impl Stream<Item = Vec<Self::Item>> + Send + 'static {
-        windowing::tumbling_window(self, duration)
+        windowing::tumbling_window(self, duration, max_items)
     }
 
     /// Emit sliding windows of `size` items, advancing by `step` items each time.
@@ -188,23 +190,6 @@ where
         other: impl Stream<Item = Self::Item> + Send + 'static,
     ) -> impl Stream<Item = Self::Item> + Send + 'static {
         futures::stream::select(self, other)
-    }
-
-    /// Buffer up to `size` items from the upstream, allowing it to produce ahead.
-    ///
-    /// A zero size is clamped to one because Tokio bounded channels must have positive capacity.
-    fn rbuffer(self, size: usize) -> impl Stream<Item = Self::Item> + Send + 'static {
-        let capacity = size.max(1);
-        let (tx, rx) = tokio::sync::mpsc::channel(capacity);
-        tokio::spawn(async move {
-            let mut stream = std::pin::pin!(self);
-            while let Some(item) = stream.next().await {
-                if tx.send(item).await.is_err() {
-                    break;
-                }
-            }
-        });
-        tokio_stream::wrappers::ReceiverStream::new(rx)
     }
 }
 

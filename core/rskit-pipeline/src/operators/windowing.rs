@@ -9,6 +9,7 @@ use futures::{Stream, StreamExt as _};
 pub fn tumbling_window<S, T>(
     stream: S,
     duration: Duration,
+    max_items: usize,
 ) -> impl Stream<Item = Vec<T>> + Send + 'static
 where
     S: Stream<Item = T> + Send + 'static,
@@ -16,7 +17,8 @@ where
 {
     async_stream::stream! {
         tokio::pin!(stream);
-        let mut buf: Vec<T> = Vec::new();
+        let max_items = max_items.max(1);
+        let mut buf: Vec<T> = Vec::with_capacity(max_items.min(1024));
         let mut deadline = tokio::time::Instant::now() + duration;
         loop {
             tokio::select! {
@@ -24,6 +26,10 @@ where
                     match item {
                         Some(v) => {
                             buf.push(v);
+                            if buf.len() >= max_items {
+                                yield std::mem::take(&mut buf);
+                                deadline = tokio::time::Instant::now() + duration;
+                            }
                         }
                         None => {
                             if !buf.is_empty() {
@@ -59,6 +65,7 @@ where
 {
     async_stream::stream! {
         tokio::pin!(stream);
+        let size = size.max(1);
         let mut buf: Vec<T> = Vec::with_capacity(size);
         let mut deadline: Option<tokio::time::Instant> = None;
 

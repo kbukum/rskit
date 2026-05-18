@@ -6,10 +6,9 @@
 pub mod app;
 /// Lifecycle hook events.
 pub mod hooks;
-/// Startup summary printer.
-pub mod summary;
+mod summary;
 
-pub use app::{App, AppBuilder, Unconfigured};
+pub use app::{App, AppBuilder, Built, Started, Stopped, Unconfigured};
 pub use hooks::{LifecycleEvent, LifecycleEventType};
 pub use rskit_component::component;
 pub use rskit_component::health;

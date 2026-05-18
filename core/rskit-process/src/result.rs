@@ -45,21 +45,22 @@ impl ProcessResult {
     /// # Example
     ///
     /// ```no_run
-    /// use rskit_process::{Command, ProcessConfig, run};
+    /// use rskit_process::{Command, ProcessConfig, run_with_cancel};
+    /// use tokio_util::sync::CancellationToken;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let cmd = Command::new("echo").arg("hello");
-    /// let result = run(&cmd, &ProcessConfig::default()).await?;
+    /// let result = run_with_cancel(&cmd, &ProcessConfig::default(), CancellationToken::new()).await?;
     /// result.check()?;
     /// # Ok(())
     /// # }
     /// ```
     pub fn check(&self) -> crate::AppResult<&Self> {
         if self.timed_out {
-            return Err(crate::AppError::new(
-                crate::ErrorCode::Timeout,
-                "process timed out",
-            ));
+            return Err(
+                crate::AppError::new(crate::ErrorCode::Timeout, "process timed out")
+                    .with_detail("timed_out", true),
+            );
         }
 
         match self.exit_code {
@@ -67,11 +68,12 @@ impl ProcessResult {
             Some(code) => Err(crate::AppError::new(
                 crate::ErrorCode::Internal,
                 format!("process exited with code {}", code),
-            )),
-            None => Err(crate::AppError::new(
-                crate::ErrorCode::Internal,
-                "process was killed",
-            )),
+            )
+            .with_detail("exit_code", code)),
+            None => Err(
+                crate::AppError::new(crate::ErrorCode::Internal, "process was killed")
+                    .with_detail("killed", true),
+            ),
         }
     }
 }

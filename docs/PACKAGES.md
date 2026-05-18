@@ -104,8 +104,8 @@ rskit-logging      → rskit-config
 rskit-resilience   → rskit-errors
 rskit-provider     → rskit-errors, rskit-resilience
 rskit-pipeline     → rskit-errors
-rskit-bootstrap    → rskit-errors, rskit-config, rskit-logging
-rskit-worker       → rskit-errors, rskit-provider, rskit-pipeline, rskit-resilience
+rskit-bootstrap    → rskit-errors, rskit-config, rskit-logging, rskit-component, rskit-di, rskit-hook, rskit-provider, rskit-validation
+rskit-worker       → rskit-errors, rskit-provider
 rskit-server       → rskit-bootstrap, rskit-errors, rskit-config, rskit-resilience
 rskit (facade)     → all above
 ```
