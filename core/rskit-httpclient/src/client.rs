@@ -286,10 +286,7 @@ fn apply_tls(
         _ => builder.min_tls_version(reqwest::tls::Version::TLS_1_3),
     };
 
-    if tls.skip_verify {
-        tracing::warn!("HTTP client TLS certificate verification disabled by explicit config");
-        builder = builder.danger_accept_invalid_certs(true);
-    }
+    builder = apply_skip_verify(builder, tls.skip_verify)?;
 
     if let Some(ca_file) = &tls.ca_file {
         let pem = std::fs::read(ca_file).map_err(|error| {
@@ -336,6 +333,29 @@ fn apply_tls(
     }
 
     Ok(builder)
+}
+
+fn apply_skip_verify(
+    builder: reqwest::ClientBuilder,
+    skip_verify: bool,
+) -> AppResult<reqwest::ClientBuilder> {
+    if !skip_verify {
+        return Ok(builder);
+    }
+
+    #[cfg(all(feature = "danger-tls", debug_assertions))]
+    {
+        tracing::warn!("HTTP client TLS certificate verification disabled by explicit config");
+        Ok(builder.danger_accept_invalid_certs(true))
+    }
+
+    #[cfg(not(all(feature = "danger-tls", debug_assertions)))]
+    {
+        Err(AppError::invalid_input(
+            "tls.skip_verify",
+            "HTTP client TLS certificate verification can only be disabled in debug builds with the danger-tls feature",
+        ))
+    }
 }
 
 fn parse_header_name(name: &str) -> AppResult<reqwest::header::HeaderName> {
@@ -406,5 +426,20 @@ mod tests {
         });
 
         assert!(HttpClient::new(config).is_err());
+    }
+
+    #[test]
+    fn tls_skip_verify_is_release_guarded() {
+        let config = HttpClientConfig::new().with_tls(TlsConfig {
+            skip_verify: true,
+            ..Default::default()
+        });
+
+        let result = HttpClient::new(config);
+        if cfg!(all(feature = "danger-tls", debug_assertions)) {
+            assert!(result.is_ok());
+        } else {
+            assert!(result.is_err());
+        }
     }
 }

@@ -40,3 +40,7 @@ tokio        = { workspace = true }
 wiremock     = "0.6"
 tempfile     = { workspace = true }
 insta        = { workspace = true }
+
+[features]
+default = []
+danger-tls = []

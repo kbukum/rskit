@@ -153,27 +153,10 @@ impl HttpServerBuilder {
     }
 
     /// Add the canonical tracing phase.
+    ///
+    /// Tracing is owned by [`build`](Self::build) so this remains a compatibility no-op.
     #[must_use]
-    pub fn with_tracing(mut self) -> Self {
-        use http::Request;
-        use tower_http::trace::DefaultOnResponse;
-        use tracing::Level;
-
-        let trace_layer = TraceLayer::new_for_http()
-            .make_span_with(|request: &Request<_>| {
-                let path = request.uri().path();
-                tracing::info_span!(
-                    "http_request",
-                    method = %request.method(),
-                    "http.target" = path,
-                    status_code = tracing::field::Empty,
-                )
-            })
-            .on_response(DefaultOnResponse::new().level(Level::INFO));
-
-        self.middleware = self
-            .middleware
-            .with_tracing_transform(move |router| router.layer(trace_layer.clone()));
+    pub fn with_tracing(self) -> Self {
         self
     }
 
@@ -181,12 +164,13 @@ impl HttpServerBuilder {
     /// # Errors
     /// Returns an error when baseline transport middleware configuration is invalid.
     pub fn build(self) -> AppResult<HttpServer> {
-        let builder = self.with_tracing();
+        let builder = self;
         let security_headers = builder.security_headers.clone();
         let request_timeout = builder.config.request_timeout;
         let max_body_bytes = builder.config.max_body_bytes;
         let cors = builder.config.cors.clone();
         let router = builder.middleware.apply(builder.router);
+        let router = apply_canonical_tracing(router);
         let router = apply_baseline_layers(
             router,
             security_headers,
@@ -212,6 +196,26 @@ impl HttpServerBuilder {
     pub fn with_timeout(self) -> Self {
         self
     }
+}
+
+fn apply_canonical_tracing(router: Router) -> Router {
+    use http::Request;
+    use tower_http::trace::DefaultOnResponse;
+    use tracing::Level;
+
+    let trace_layer = TraceLayer::new_for_http()
+        .make_span_with(|request: &Request<_>| {
+            let path = request.uri().path();
+            tracing::info_span!(
+                "http_request",
+                method = %request.method(),
+                "http.target" = path,
+                status_code = tracing::field::Empty,
+            )
+        })
+        .on_response(DefaultOnResponse::new().level(Level::INFO));
+
+    router.layer(trace_layer)
 }
 
 fn apply_baseline_layers(

@@ -126,6 +126,8 @@ impl<T: Clone + Send + Sync + Serialize + 'static> SseBus<T> {
     ) -> impl Stream<Item = Result<SseEvent<T>, Infallible>> {
         let (replay, rx) = {
             let state = self.state.lock();
+            // Hold the publish state lock across snapshot + subscribe so no event can be
+            // published between replay collection and live receiver creation.
             let replay = replay_after(&state.replay, last_event_id);
             let rx = self.tx.subscribe();
             (replay, rx)
