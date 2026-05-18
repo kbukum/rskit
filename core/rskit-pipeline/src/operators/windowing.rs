@@ -20,7 +20,8 @@ where
     async_stream::stream! {
         tokio::pin!(stream);
         let max_items = max_items.max(1);
-        let mut buf: Vec<T> = Vec::with_capacity(max_items.min(TUMBLING_WINDOW_INITIAL_CAPACITY_LIMIT));
+        let initial_capacity = max_items.min(TUMBLING_WINDOW_INITIAL_CAPACITY_LIMIT);
+        let mut buf: Vec<T> = Vec::with_capacity(initial_capacity);
         let mut deadline = tokio::time::Instant::now() + duration;
         loop {
             tokio::select! {
@@ -29,13 +30,13 @@ where
                         Some(v) => {
                             buf.push(v);
                             if buf.len() >= max_items {
-                                yield std::mem::take(&mut buf);
+                                yield take_window(&mut buf, initial_capacity);
                                 deadline = tokio::time::Instant::now() + duration;
                             }
                         }
                         None => {
                             if !buf.is_empty() {
-                                yield std::mem::take(&mut buf);
+                                yield take_window(&mut buf, initial_capacity);
                             }
                             break;
                         }
@@ -43,13 +44,17 @@ where
                 }
                 _ = tokio::time::sleep_until(deadline) => {
                     if !buf.is_empty() {
-                        yield std::mem::take(&mut buf);
+                        yield take_window(&mut buf, initial_capacity);
                     }
                     deadline = tokio::time::Instant::now() + duration;
                 }
             }
         }
     }
+}
+
+fn take_window<T>(buf: &mut Vec<T>, next_capacity: usize) -> Vec<T> {
+    std::mem::replace(buf, Vec::with_capacity(next_capacity))
 }
 
 /// Collect up to `size` items into a batch.

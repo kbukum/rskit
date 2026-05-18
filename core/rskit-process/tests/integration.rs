@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use rskit_process::{Command, ProcessConfig, run_with_cancel};
+use rskit_process::{Command, ErrorCode, ProcessConfig, run_with_cancel};
 use tokio_util::sync::CancellationToken;
 
 #[tokio::test]
@@ -118,5 +118,9 @@ async fn cancellation_terminates_process() {
     cancel.cancel();
 
     let result = run_with_cancel(&command, &ProcessConfig::default(), cancel).await;
-    assert!(result.is_err());
+    let error = result.expect_err("cancellation should fail");
+    assert_eq!(error.code, ErrorCode::Cancelled);
+    assert!(error.details().contains_key("duration_ms"));
+    assert!(error.details().contains_key("stdout"));
+    assert!(error.details().contains_key("stderr"));
 }

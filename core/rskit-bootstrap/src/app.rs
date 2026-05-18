@@ -73,6 +73,10 @@ impl LifecyclePhase {
             Self::AfterStop => LifecycleEventType::AfterStop,
         }
     }
+
+    const fn fail_when_cancelled(self) -> bool {
+        matches!(self, Self::BeforeStart | Self::AfterStart)
+    }
 }
 
 /// Builder for [`App`].
@@ -556,7 +560,7 @@ async fn run_hooks(
 ) -> AppResult<()> {
     lifecycle_events.publish(LifecycleEvent::new(phase.event_type()))?;
     for hook in hooks {
-        if token.is_cancelled() {
+        if phase.fail_when_cancelled() && token.is_cancelled() {
             return Err(AppError::new(
                 ErrorCode::Cancelled,
                 format!("{} hook dispatch cancelled", phase.label()),
@@ -732,5 +736,38 @@ mod tests {
             .await
             .expect_err("hook failure should fail startup");
         assert!(error.to_string().contains("before_start hook failed"));
+    }
+
+    #[tokio::test]
+    async fn stop_hooks_run_after_shutdown_token_is_cancelled() {
+        let ran = Arc::new(AtomicUsize::new(0));
+        let before_stop_ran = Arc::clone(&ran);
+        let after_stop_ran = Arc::clone(&ran);
+
+        let app = AppBuilder::new(TestCfg::default())
+            .before_stop(move |_token| {
+                let ran = Arc::clone(&before_stop_ran);
+                async move {
+                    ran.fetch_add(1, Ordering::SeqCst);
+                    Ok(())
+                }
+            })
+            .after_stop(move |_token| {
+                let ran = Arc::clone(&after_stop_ran);
+                async move {
+                    ran.fetch_add(1, Ordering::SeqCst);
+                    Ok(())
+                }
+            })
+            .build()
+            .expect("build should succeed")
+            .start()
+            .await
+            .expect("start should succeed");
+
+        app.shutdown_token().cancel();
+        app.stop().await.expect("stop hooks should still run");
+
+        assert_eq!(ran.load(Ordering::SeqCst), 2);
     }
 }

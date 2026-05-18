@@ -159,7 +159,15 @@ pub async fn run_with_cancel(
     );
 
     if cancelled {
-        return Err(AppError::new(ErrorCode::Cancelled, "process cancelled"));
+        let mut error = AppError::new(ErrorCode::Cancelled, "process cancelled")
+            .with_detail("timed_out", result.timed_out)
+            .with_detail("duration_ms", result.duration.as_millis() as u64)
+            .with_detail("stdout", result.stdout.clone())
+            .with_detail("stderr", result.stderr.clone());
+        if let Some(exit_code) = result.exit_code {
+            error = error.with_detail("exit_code", exit_code);
+        }
+        return Err(error);
     }
 
     Ok(result)
