@@ -66,12 +66,12 @@ impl LoadBalancer for Weighted {
 
         let total = instances
             .iter()
-            .map(|instance| instance.weight.max(1))
-            .sum::<u32>();
+            .map(|instance| u64::from(instance.weight.max(1)))
+            .sum::<u64>();
         use rand::RngExt;
         let mut slot = rand::rng().random_range(0..total);
         for instance in instances {
-            let weight = instance.weight.max(1);
+            let weight = u64::from(instance.weight.max(1));
             if slot < weight {
                 return Some(instance);
             }

@@ -1,7 +1,6 @@
 use std::collections::VecDeque;
 use std::convert::Infallible;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use axum::response::sse::Event;
@@ -61,10 +60,14 @@ impl<T> SseEvent<T> {
 /// the newest available events.
 pub struct SseBus<T: Clone + Send + Sync + 'static> {
     tx: broadcast::Sender<SseEvent<T>>,
-    replay: Arc<Mutex<VecDeque<SseEvent<T>>>>,
+    state: Arc<Mutex<SseState<T>>>,
     capacity: usize,
-    next_id: AtomicU64,
     retry: Option<Duration>,
+}
+
+struct SseState<T> {
+    replay: VecDeque<SseEvent<T>>,
+    next_id: u64,
 }
 
 impl<T: Clone + Send + Sync + Serialize + 'static> SseBus<T> {
@@ -77,9 +80,11 @@ impl<T: Clone + Send + Sync + Serialize + 'static> SseBus<T> {
         let (tx, _) = broadcast::channel(capacity);
         Ok(Self {
             tx,
-            replay: Arc::new(Mutex::new(VecDeque::with_capacity(capacity))),
+            state: Arc::new(Mutex::new(SseState {
+                replay: VecDeque::with_capacity(capacity),
+                next_id: 1,
+            })),
             capacity,
-            next_id: AtomicU64::new(1),
             retry: None,
         })
     }
@@ -96,13 +101,15 @@ impl<T: Clone + Send + Sync + Serialize + 'static> SseBus<T> {
     /// Publishing without subscribers is successful; the event remains available
     /// for bounded replay until it is evicted by newer events.
     pub fn publish(&self, data: T) -> AppResult<SseEvent<T>> {
+        let mut state = self.state.lock();
         let event = SseEvent {
-            id: self.next_id.fetch_add(1, Ordering::Relaxed).to_string(),
+            id: state.next_id.to_string(),
             event: None,
             retry: self.retry,
             data,
         };
-        self.push_replay(event.clone());
+        state.next_id += 1;
+        push_replay(&mut state.replay, self.capacity, event.clone());
         let _ = self.tx.send(event.clone());
         Ok(event)
     }
@@ -117,8 +124,13 @@ impl<T: Clone + Send + Sync + Serialize + 'static> SseBus<T> {
         &self,
         last_event_id: Option<&str>,
     ) -> impl Stream<Item = Result<SseEvent<T>, Infallible>> {
-        let replay = self.replay_after(last_event_id);
-        stream::iter(replay.into_iter().map(Ok)).chain(self.live_stream())
+        let (replay, rx) = {
+            let state = self.state.lock();
+            let replay = replay_after(&state.replay, last_event_id);
+            let rx = self.tx.subscribe();
+            (replay, rx)
+        };
+        stream::iter(replay.into_iter().map(Ok)).chain(live_stream_from(rx))
     }
 
     /// Create an axum-compatible SSE stream adapter.
@@ -142,37 +154,42 @@ impl<T: Clone + Send + Sync + Serialize + 'static> SseBus<T> {
         self.tx.receiver_count()
     }
 
-    fn push_replay(&self, event: SseEvent<T>) {
-        let mut replay = self.replay.lock();
-        if replay.len() == self.capacity {
-            replay.pop_front();
-        }
-        replay.push_back(event);
-    }
-
-    fn replay_after(&self, last_event_id: Option<&str>) -> Vec<SseEvent<T>> {
-        let last = last_event_id.and_then(|value| value.parse::<u64>().ok());
-        self.replay
-            .lock()
-            .iter()
-            .filter(|event| {
-                last.is_none_or(|last| event.id.parse::<u64>().is_ok_and(|id| id > last))
-            })
-            .cloned()
-            .collect()
-    }
-
     fn live_stream(&self) -> impl Stream<Item = Result<SseEvent<T>, Infallible>> {
-        BroadcastStream::new(self.tx.subscribe()).filter_map(|result| async move {
-            match result {
-                Ok(item) => Some(Ok(item)),
-                Err(err) => {
-                    tracing::warn!(error = %err, "SSE subscriber lagged; skipping missed events");
-                    None
-                }
-            }
-        })
+        live_stream_from(self.tx.subscribe())
     }
+}
+
+fn push_replay<T>(replay: &mut VecDeque<SseEvent<T>>, capacity: usize, event: SseEvent<T>) {
+    if replay.len() == capacity {
+        replay.pop_front();
+    }
+    replay.push_back(event);
+}
+
+fn replay_after<T: Clone>(
+    replay: &VecDeque<SseEvent<T>>,
+    last_event_id: Option<&str>,
+) -> Vec<SseEvent<T>> {
+    let last = last_event_id.and_then(|value| value.parse::<u64>().ok());
+    replay
+        .iter()
+        .filter(|event| last.is_none_or(|last| event.id.parse::<u64>().is_ok_and(|id| id > last)))
+        .cloned()
+        .collect()
+}
+
+fn live_stream_from<T: Clone + Send + Sync + 'static>(
+    rx: broadcast::Receiver<SseEvent<T>>,
+) -> impl Stream<Item = Result<SseEvent<T>, Infallible>> {
+    BroadcastStream::new(rx).filter_map(|result| async move {
+        match result {
+            Ok(item) => Some(Ok(item)),
+            Err(err) => {
+                tracing::warn!(error = %err, "SSE subscriber lagged; skipping missed events");
+                None
+            }
+        }
+    })
 }
 
 fn validate_capacity(capacity: usize) -> AppResult<()> {

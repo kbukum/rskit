@@ -21,8 +21,8 @@ use rskit_http::{SecurityHeadersConfig, SecurityHeadersLayer};
 use rskit_security::{TlsConfig, TlsVersion};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::net::{TcpListener, TcpStream};
-use tokio_rustls::{TlsAcceptor, server::TlsStream};
+use tokio::net::TcpListener;
+use tokio_rustls::TlsAcceptor;
 use tokio_util::sync::CancellationToken;
 use tower::ServiceExt;
 use tower_http::{
@@ -40,6 +40,17 @@ pub struct HttpServerBuilder {
     cancel: CancellationToken,
     router: Router,
     middleware: HttpMiddlewareStack,
+    baseline: BaselineState,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct BaselineState {
+    tracing: bool,
+    request_id: bool,
+    body_limit: bool,
+    timeout: bool,
+    security_headers: bool,
+    cors: bool,
 }
 
 impl HttpServerBuilder {
@@ -50,6 +61,7 @@ impl HttpServerBuilder {
             cancel,
             router: Router::new(),
             middleware: HttpMiddlewareStack::new(),
+            baseline: BaselineState::default(),
         }
     }
 
@@ -118,6 +130,7 @@ impl HttpServerBuilder {
             let cors = cors_cfg.layer()?;
             self.router = self.router.layer(cors);
         }
+        self.baseline.cors = true;
         Ok(self)
     }
 
@@ -127,6 +140,7 @@ impl HttpServerBuilder {
         self.router = self
             .router
             .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid));
+        self.baseline.request_id = true;
         self
     }
 
@@ -151,6 +165,7 @@ impl HttpServerBuilder {
     ) -> AppResult<Self> {
         let layer = SecurityHeadersLayer::new(&config)?;
         self.router = self.router.layer(layer);
+        self.baseline.security_headers = true;
         Ok(self)
     }
 
@@ -176,6 +191,7 @@ impl HttpServerBuilder {
         self.middleware = self
             .middleware
             .with_tracing_transform(move |router| router.layer(trace_layer.clone()));
+        self.baseline.tracing = true;
         self
     }
 
@@ -183,13 +199,25 @@ impl HttpServerBuilder {
     /// # Errors
     /// Returns an error when baseline transport middleware configuration is invalid.
     pub fn build(self) -> AppResult<HttpServer> {
-        let mut builder = self
-            .with_tracing()
-            .with_request_id()
-            .with_body_limit()
-            .with_timeout();
-        builder = builder.with_security_headers()?;
-        builder = builder.with_cors()?;
+        let mut builder = self;
+        if !builder.baseline.tracing {
+            builder = builder.with_tracing();
+        }
+        if !builder.baseline.request_id {
+            builder = builder.with_request_id();
+        }
+        if !builder.baseline.body_limit {
+            builder = builder.with_body_limit();
+        }
+        if !builder.baseline.timeout {
+            builder = builder.with_timeout();
+        }
+        if !builder.baseline.security_headers {
+            builder = builder.with_security_headers()?;
+        }
+        if !builder.baseline.cors {
+            builder = builder.with_cors()?;
+        }
         Ok(HttpServer {
             config: Arc::new(builder.config),
             cancel: builder.cancel,
@@ -205,6 +233,7 @@ impl HttpServerBuilder {
         self.router = self
             .router
             .layer(DefaultBodyLimit::max(self.config.max_body_bytes));
+        self.baseline.body_limit = true;
         self
     }
 
@@ -215,6 +244,7 @@ impl HttpServerBuilder {
             StatusCode::REQUEST_TIMEOUT,
             self.config.request_timeout,
         ));
+        self.baseline.timeout = true;
         self
     }
 }
@@ -273,11 +303,17 @@ impl Component for HttpServer {
 
             if let Some(acceptor) = tls_acceptor {
                 tracing::info!(%addr, "HTTPS server listening");
-                let listener = TlsListener { listener, acceptor };
-                serve_listener(listener, router, Arc::clone(&config), cancel).await;
+                serve_tls_listener(listener, acceptor, router, Arc::clone(&config), cancel).await;
             } else {
                 tracing::info!(%addr, "HTTP server listening");
-                serve_listener(listener, router, Arc::clone(&config), cancel).await;
+                serve_listener(
+                    listener,
+                    router,
+                    Arc::clone(&config),
+                    cancel,
+                    config.enable_h2c,
+                )
+                .await;
             }
         });
 
@@ -299,6 +335,7 @@ async fn serve_listener<L>(
     router: Router,
     config: Arc<HttpServerConfig>,
     cancel: CancellationToken,
+    allow_h2: bool,
 ) where
     L: Listener<Addr = SocketAddr> + Send + 'static,
     L::Io: AsyncRead + AsyncWrite + Unpin + Send + 'static,
@@ -311,8 +348,50 @@ async fn serve_listener<L>(
                 let config = Arc::clone(&config);
                 let shutdown = cancel.clone().cancelled_owned();
                 tokio::spawn(async move {
-                    serve_connection(io, addr, router, config, shutdown).await;
+                    serve_connection(io, addr, router, config, shutdown, allow_h2).await;
                 });
+            }
+        }
+    }
+}
+
+async fn serve_tls_listener(
+    listener: TcpListener,
+    acceptor: TlsAcceptor,
+    router: Router,
+    config: Arc<HttpServerConfig>,
+    cancel: CancellationToken,
+) {
+    loop {
+        tokio::select! {
+            () = cancel.cancelled() => break,
+            result = listener.accept() => {
+                match result {
+                    Ok((stream, addr)) => {
+                        let acceptor = acceptor.clone();
+                        let router = router.clone();
+                        let config = Arc::clone(&config);
+                        let shutdown = cancel.clone().cancelled_owned();
+                        tokio::spawn(async move {
+                            match tokio::time::timeout(config.read_timeout, acceptor.accept(stream)).await {
+                                Ok(Ok(stream)) => {
+                                    serve_connection(stream, addr, router, config, shutdown, true).await;
+                                }
+                                Ok(Err(error)) => {
+                                    tracing::warn!(error = ?error, %addr, "TLS handshake failed");
+                                }
+                                Err(_) => {
+                                    tracing::warn!(%addr, "TLS handshake timed out");
+                                }
+                            }
+                        });
+                    }
+                    Err(error) if is_connection_accept_error(&error) => {}
+                    Err(error) => {
+                        tracing::error!(error = ?error, "HTTP TLS accept failed");
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                    }
+                }
             }
         }
     }
@@ -324,6 +403,7 @@ async fn serve_connection<I, F>(
     router: Router,
     config: Arc<HttpServerConfig>,
     shutdown: F,
+    allow_h2: bool,
 ) where
     I: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     F: Future<Output = ()> + Send + 'static,
@@ -344,53 +424,41 @@ async fn serve_connection<I, F>(
         .enable_connect_protocol();
 
     let io = TokioIo::new(io);
-    let mut connection = pin!(builder.serve_connection_with_upgrades(io, hyper_service));
-    let mut shutdown = pin!(shutdown);
+    if allow_h2 {
+        let mut connection = pin!(builder.serve_connection_with_upgrades(io, hyper_service));
+        let mut shutdown = pin!(shutdown);
 
-    loop {
         tokio::select! {
             result = connection.as_mut() => {
                 if let Err(error) = result {
                     tracing::debug!(error = ?error, %addr, "HTTP connection finished with error");
                 }
-                break;
             }
             () = &mut shutdown => {
                 connection.as_mut().graceful_shutdown();
-            }
-        }
-    }
-}
-
-struct TlsListener {
-    listener: TcpListener,
-    acceptor: TlsAcceptor,
-}
-
-impl Listener for TlsListener {
-    type Io = TlsStream<TcpStream>;
-    type Addr = SocketAddr;
-
-    async fn accept(&mut self) -> (Self::Io, Self::Addr) {
-        loop {
-            match self.listener.accept().await {
-                Ok((stream, addr)) => match self.acceptor.accept(stream).await {
-                    Ok(stream) => return (stream, addr),
-                    Err(error) => {
-                        tracing::warn!(error = ?error, %addr, "TLS handshake failed");
-                    }
-                },
-                Err(error) if is_connection_accept_error(&error) => {}
-                Err(error) => {
-                    tracing::error!(error = ?error, "HTTP TLS accept failed");
-                    tokio::time::sleep(Duration::from_secs(1)).await;
+                if let Err(error) = connection.as_mut().await {
+                    tracing::debug!(error = ?error, %addr, "HTTP connection finished with error after graceful shutdown");
                 }
             }
         }
-    }
+    } else {
+        let http1 = builder.http1();
+        let mut connection = pin!(http1.serve_connection_with_upgrades(io, hyper_service));
+        let mut shutdown = pin!(shutdown);
 
-    fn local_addr(&self) -> std::io::Result<Self::Addr> {
-        self.listener.local_addr()
+        tokio::select! {
+            result = connection.as_mut() => {
+                if let Err(error) = result {
+                    tracing::debug!(error = ?error, %addr, "HTTP/1 connection finished with error");
+                }
+            }
+            () = &mut shutdown => {
+                connection.as_mut().graceful_shutdown();
+                if let Err(error) = connection.as_mut().await {
+                    tracing::debug!(error = ?error, %addr, "HTTP/1 connection finished with error after graceful shutdown");
+                }
+            }
+        }
     }
 }
 

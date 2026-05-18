@@ -273,6 +273,12 @@ fn apply_tls(
     tls: &TlsConfig,
 ) -> AppResult<reqwest::ClientBuilder> {
     tls.validate()?;
+    if tls.server_name.is_some() {
+        return Err(AppError::invalid_input(
+            "tls.server_name",
+            "HTTP client TLS server_name overrides are not supported by reqwest; omit the override so certificate verification uses the URL host",
+        ));
+    }
 
     builder = match tls.min_version {
         TlsVersion::Tls12 => builder.min_tls_version(reqwest::tls::Version::TLS_1_2),
@@ -390,5 +396,15 @@ mod tests {
             client.config.user_agent,
             Some("test-client/1.0".to_string())
         );
+    }
+
+    #[test]
+    fn tls_server_name_override_is_rejected() {
+        let config = HttpClientConfig::new().with_tls(TlsConfig {
+            server_name: Some("api.internal".to_string()),
+            ..Default::default()
+        });
+
+        assert!(HttpClient::new(config).is_err());
     }
 }
