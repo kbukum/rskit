@@ -35,7 +35,8 @@ where
 /// Apply multiple functions to the same item concurrently, collecting results.
 ///
 /// All functions are applied to a clone of each item; all results are
-/// collected into a `Vec` in the order of `fns`.
+/// collected into a `Vec` in the order of `fns`. Branch futures are polled
+/// concurrently by the stream task and short-circuit on the first branch error.
 pub fn fan_out<S, T, O, F, Fut>(
     stream: S,
     max_branches: usize,

@@ -3,7 +3,8 @@
 //! A chain is a statically typed sequence where each step receives the previous
 //! step's output and returns the next step's input type. Execution short-circuits
 //! on the first [`AppError`](rskit_errors::AppError), checks cancellation between
-//! steps, and runs registered cleanup actions for already-completed steps.
+//! steps, and runs registered cleanup actions for already-completed steps when
+//! a later failure or cancellation interrupts the chain.
 //!
 //! # Quick start
 //!
@@ -117,6 +118,33 @@ mod tests {
         assert_eq!(error.code, ErrorCode::Internal);
         assert!(error.message.contains("fail"));
         assert!(cleaned.load(Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn cleanup_failure_does_not_hide_step_failure() {
+        let chain = ChainBuilder::new()
+            .step(
+                Step::from_fn("reserve", |value: u32, _context| async move {
+                    Ok::<_, AppError>(value + 1)
+                })
+                .with_cleanup(|| async {
+                    Err::<(), AppError>(AppError::new(ErrorCode::Internal, "cleanup failure"))
+                }),
+            )
+            .step(Step::from_fn("fail", |_value: u32, _context| async move {
+                Err::<u32, AppError>(AppError::invalid_input("input", "primary failure"))
+            }))
+            .build();
+
+        let error = chain
+            .execute(0u32, None, CancellationToken::new())
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.code, ErrorCode::InvalidInput);
+        assert!(error.message.contains("chain step `fail` failed"));
+        assert!(error.message.contains("primary failure"));
+        assert!(error.message.contains("cleanup failure"));
     }
 
     #[tokio::test]

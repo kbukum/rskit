@@ -3,6 +3,8 @@ use std::time::Duration;
 
 use futures::{Stream, StreamExt as _};
 
+const TUMBLING_WINDOW_INITIAL_CAPACITY_LIMIT: usize = 1024;
+
 /// Collect items into non-overlapping time windows.
 ///
 /// A window is emitted after `duration` has elapsed since the first item.
@@ -18,7 +20,7 @@ where
     async_stream::stream! {
         tokio::pin!(stream);
         let max_items = max_items.max(1);
-        let mut buf: Vec<T> = Vec::with_capacity(max_items.min(1024));
+        let mut buf: Vec<T> = Vec::with_capacity(max_items.min(TUMBLING_WINDOW_INITIAL_CAPACITY_LIMIT));
         let mut deadline = tokio::time::Instant::now() + duration;
         loop {
             tokio::select! {

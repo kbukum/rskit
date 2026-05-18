@@ -38,7 +38,7 @@ Operators available on any `futures::Stream` via `RskitStreamExt`:
 | batch | `RskitStreamExt::rbatch` | Emit up to `size` items, or the partial batch when `timeout` elapses/upstream ends. |
 | window | `RskitStreamExt::rtumbling_window` | Emit non-overlapping windows bounded by duration and item count. |
 | sliding | `RskitStreamExt::rsliding_window` | Emit overlapping item-count windows advancing by `step`. |
-| fan_out | `RskitStreamExt::rfan_out` | Apply a bounded number of async functions to each item and collect per-item results. |
+| fan_out | `RskitStreamExt::rfan_out` | Apply a bounded number of async functions to each item, poll branch futures concurrently in the stream task, and short-circuit on the first branch error. |
 | parallel | `RskitStreamExt::rparallel` | Process items concurrently with bounded parallelism; output order is not guaranteed. |
 | merge | `RskitStreamExt::rmerge`, `merge` | Yield items from whichever input stream is ready first. |
 | partition | `RskitStreamExt::rpartition` | Route each item to matching or remainder stream; one closed side does not close the other. |

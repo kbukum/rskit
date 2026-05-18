@@ -62,8 +62,11 @@ where
             Box::pin(async move {
                 let mut state = previous(input, context.clone()).await?;
                 if context.cancel.is_cancelled() {
-                    run_cleanups(state.cleanups).await?;
-                    return Err(cancelled_error(step.id()));
+                    let mut error = cancelled_error(step.id());
+                    if let Err(cleanup_error) = run_cleanups(state.cleanups).await {
+                        error = error.context(format!("{cleanup_error}"));
+                    }
+                    return Err(error);
                 }
 
                 emit_progress(
@@ -94,8 +97,11 @@ where
                 let output = match step.execute(state.output, step_context).await {
                     Ok(output) => output,
                     Err(error) => {
-                        run_cleanups(state.cleanups).await?;
-                        return Err(error.context(format!("chain step `{}` failed", step.id())));
+                        let mut error = error.context(format!("chain step `{}` failed", step.id()));
+                        if let Err(cleanup_error) = run_cleanups(state.cleanups).await {
+                            error = error.context(format!("{cleanup_error}"));
+                        }
+                        return Err(error);
                     }
                 };
 

@@ -373,7 +373,7 @@ impl<C: AppConfig> App<Built, C> {
         let task_result = tokio::select! {
             result = task(Arc::clone(&started.config), started.shutdown_token.clone()) => result,
             _ = wait_for_signal_owned(started.shutdown_token.clone()) => {
-                Err(AppError::new(ErrorCode::Cancelled, "task cancelled by shutdown signal"))
+                Ok(())
             }
         };
         let stop_result = started.stop().await.map(|_| ());

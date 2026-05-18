@@ -82,7 +82,7 @@ where
         Self::new(id.clone(), id, execute)
     }
 
-    /// Register cleanup to run if a later step fails or cancellation interrupts the chain.
+    /// Register cleanup to run only if a later step fails or cancellation interrupts the chain.
     #[must_use]
     pub fn with_cleanup<F, Fut>(mut self, cleanup: F) -> Self
     where

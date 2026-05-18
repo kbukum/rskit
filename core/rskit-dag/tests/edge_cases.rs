@@ -565,7 +565,7 @@ async fn test_diamond_parallelism() {
 #[tokio::test]
 async fn test_large_parallel_execution() {
     // 20 independent 50ms nodes — should complete in ~50ms, not 1000ms
-    let mut dag = Dag::new();
+    let mut dag = Dag::new().with_max_parallelism(20);
     for i in 0..20 {
         dag = dag.add_node(SlowNode::new(
             &format!("p{i}"),

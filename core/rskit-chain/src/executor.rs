@@ -1,5 +1,5 @@
 use crate::types::StepProgress;
-use rskit_errors::AppResult;
+use rskit_errors::{AppError, AppResult};
 use std::future::Future;
 use std::marker::PhantomData;
 use std::pin::Pin;
@@ -30,10 +30,18 @@ pub(crate) type ChainRunner<I, O> = Arc<
 >;
 
 pub(crate) async fn run_cleanups(mut cleanups: Vec<CleanupAction>) -> AppResult<()> {
+    let mut cleanup_error: Option<AppError> = None;
     while let Some(cleanup) = cleanups.pop() {
-        cleanup().await?;
+        if let Err(error) = cleanup().await {
+            cleanup_error = Some(match cleanup_error {
+                Some(existing) => {
+                    existing.context(format!("additional chain cleanup failed: {error}"))
+                }
+                None => error.context("chain cleanup failed"),
+            });
+        }
     }
-    Ok(())
+    cleanup_error.map_or(Ok(()), Err)
 }
 
 /// Executes a typed sequence of steps.
