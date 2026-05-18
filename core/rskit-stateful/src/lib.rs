@@ -1,4 +1,4 @@
-//! Stateful accumulation primitives with configurable flush triggers.
+//! Typed state machines and stateful accumulation primitives.
 
 #![warn(missing_docs)]
 
@@ -6,6 +6,8 @@
 pub mod accumulator;
 /// Accumulator configuration and builders.
 pub mod config;
+/// Typed state machine primitives.
+pub mod machine;
 /// Multiplexed manager for keyed accumulators.
 pub mod manager;
 /// Value measurers used for thresholds and capacity.
@@ -19,6 +21,7 @@ pub mod trigger;
 
 pub use accumulator::Accumulator;
 pub use config::AccumulatorConfig;
+pub use machine::{AuditEntry, State, StateMachine, StatePersistence, StateSnapshot, Transition};
 pub use manager::Manager;
 pub use measurer::{ByteSizeMeasurer, CountMeasurer, Measurer};
 pub use memory_store::MemoryStore;

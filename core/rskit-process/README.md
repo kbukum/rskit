@@ -23,8 +23,9 @@ This crate provides functionality to execute external processes with:
 ## Usage
 
 ```rust
-use rskit_process::{Command, ProcessConfig, run};
+use rskit_process::{Command, ProcessConfig, run_with_cancel};
 use std::time::Duration;
+use tokio_util::sync::CancellationToken;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -37,9 +38,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         grace_period: Duration::from_secs(5),
         capture_output: true,
         inherit_env: true,
+        max_output_bytes: Some(rskit_process::DEFAULT_MAX_OUTPUT_BYTES),
     };
 
-    let result = run(&cmd, &config).await?;
+    let result = run_with_cancel(&cmd, &config, CancellationToken::new()).await?;
     println!("Output: {}", result.stdout);
     println!("Exit code: {:?}", result.exit_code);
     println!("Timed out: {}", result.timed_out);
@@ -55,7 +57,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```rust
 let cmd = Command::new("ls").arg("-la").arg("/tmp");
-let result = run(&cmd, &ProcessConfig::default()).await?;
+let result = run_with_cancel(&cmd, &ProcessConfig::default(), CancellationToken::new()).await?;
 println!("{}", result.stdout);
 ```
 
@@ -66,7 +68,7 @@ let cmd = Command::new("cargo")
     .args(vec!["build", "--release"])
     .dir("/path/to/project");
     
-let result = run(&cmd, &ProcessConfig::default()).await?;
+let result = run_with_cancel(&cmd, &ProcessConfig::default(), CancellationToken::new()).await?;
 ```
 
 ### With environment variables
@@ -77,7 +79,7 @@ let cmd = Command::new("sh")
     .arg("echo $MY_VAR")
     .env("MY_VAR", "my_value");
     
-let result = run(&cmd, &ProcessConfig::default()).await?;
+let result = run_with_cancel(&cmd, &ProcessConfig::default(), CancellationToken::new()).await?;
 ```
 
 ### With stdin
@@ -86,7 +88,7 @@ let result = run(&cmd, &ProcessConfig::default()).await?;
 let cmd = Command::new("cat")
     .stdin(b"hello world".to_vec());
     
-let result = run(&cmd, &ProcessConfig::default()).await?;
+let result = run_with_cancel(&cmd, &ProcessConfig::default(), CancellationToken::new()).await?;
 println!("{}", result.stdout);  // "hello world"
 ```
 
@@ -98,10 +100,11 @@ let config = ProcessConfig {
     grace_period: Duration::from_secs(2),
     capture_output: true,
     inherit_env: true,
+    max_output_bytes: Some(rskit_process::DEFAULT_MAX_OUTPUT_BYTES),
 };
 
 let cmd = Command::new("sleep").arg("5");
-let result = run(&cmd, &config).await?;
+let result = run_with_cancel(&cmd, &config, CancellationToken::new()).await?;
 
 if result.timed_out {
     eprintln!("Process was killed due to timeout");

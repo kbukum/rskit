@@ -73,11 +73,11 @@ async fn main() -> AppResult<()> {
 
     AppBuilder::new(config)
         .build()?
-        .on_start(|cfg, _cancel| async move {
-            println!("Starting {}", cfg.service_config().name);
+        .before_start(|_cancel| async move {
+            println!("Starting.");
             Ok(())
         })
-        .on_ready(|_cfg, _cancel| async move {
+        .after_start(|_cancel| async move {
             println!("Ready.");
             Ok(())
         })

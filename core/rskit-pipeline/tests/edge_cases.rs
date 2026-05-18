@@ -142,18 +142,14 @@ async fn test_rfan_out_with_errors() {
         )))
     };
 
-    let results: Vec<Vec<AppResult<u32>>> = from_slice(vec![10u32, 20])
-        .rfan_out(vec![ok_fn, err_fn])
+    let results: Vec<AppResult<Vec<u32>>> = from_slice(vec![10u32, 20])
+        .rfan_out(2, vec![ok_fn, err_fn])
         .collect::<Vec<_>>()
         .await;
 
     assert_eq!(results.len(), 2);
-    // For item 10: first fn succeeds (11), second fn errors
-    assert_eq!(*results[0][0].as_ref().unwrap(), 11);
-    assert!(results[0][1].is_err());
-    // For item 20: first fn succeeds (21), second fn errors
-    assert_eq!(*results[1][0].as_ref().unwrap(), 21);
-    assert!(results[1][1].is_err());
+    assert!(results[0].is_err());
+    assert!(results[1].is_err());
 }
 
 // ── 9. Complex chain: 5 operators ────────────────────────────────────────

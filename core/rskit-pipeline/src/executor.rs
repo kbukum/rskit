@@ -13,12 +13,33 @@ pub type StepFn<T> =
 
 /// A named step in an executable pipeline.
 pub struct Step<T> {
+    id: String,
+    name: String,
+    execute: StepFn<T>,
+}
+
+impl<T> Step<T> {
+    /// Create a sequential pipeline step.
+    #[must_use]
+    pub fn new(id: impl Into<String>, name: impl Into<String>, execute: StepFn<T>) -> Self {
+        Self {
+            id: id.into(),
+            name: name.into(),
+            execute,
+        }
+    }
+
     /// Unique identifier for this step.
-    pub id: String,
+    #[must_use]
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
     /// Human-readable name for progress reporting.
-    pub name: String,
-    /// The async function to execute.
-    pub execute: StepFn<T>,
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.name
+    }
 }
 
 /// Progress report emitted before and after each step.
@@ -134,14 +155,14 @@ mod tests {
 
     fn make_step(id: &str, transform: fn(i32) -> AppResult<i32>) -> Step<i32> {
         let id_owned = id.to_string();
-        Step {
-            id: id.to_string(),
-            name: id.to_string(),
-            execute: Box::new(move |val| {
+        Step::new(
+            id,
+            id,
+            Box::new(move |val| {
                 let _id = id_owned.clone();
                 Box::pin(async move { transform(val) })
             }),
-        }
+        )
     }
 
     #[tokio::test]

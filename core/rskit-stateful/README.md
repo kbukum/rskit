@@ -1,4 +1,4 @@
-# rskit-stateful — Stateful Accumulators
+# rskit-stateful — State Machines and Accumulators
 
 Stateful accumulation primitives with pluggable stores, configurable flush triggers, size limits,
 TTL expiration, and keyed manager cleanup.
@@ -11,6 +11,8 @@ TTL expiration, and keyed manager cleanup.
 
 ## Features
 
+- `StateMachine<S, C>` for guarded typed transitions with audit and persistence hooks
+- `Transition<S, C>` for named transitions with optional guards and actions
 - `Accumulator<V>` for buffered append/flush workflows
 - `AccumulatorConfig<V>` with TTL, keep-alive, max-size, triggers, and custom measurers
 - `Trigger<V>` implementations for size, byte-size, and time-based flushes
@@ -46,6 +48,7 @@ assert_eq!(accumulator.append(3)?, Some(vec![1, 2, 3]));
 
 ## Key types
 
+- `StateMachine<S, C>` — apply typed guarded transitions and record an audit log
 - `Accumulator<V>` — append values, flush manually, or flush when triggers fire
 - `AccumulatorConfig<V>` — builder for TTL, keep-alive, max-size, triggers, and measurer
 - `Manager<K, V>` — route values to keyed accumulators and clean up expired entries

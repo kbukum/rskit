@@ -248,19 +248,21 @@ mod tests {
 
         // First check: single add_one function
         let stream_a = from_slice(vec![5u32, 10u32]);
-        let res_a: Vec<Vec<_>> = stream_a.rfan_out(vec![add_one]).collect().await;
-        assert_eq!(*res_a[0][0].as_ref().unwrap(), 6u32);
-        assert_eq!(*res_a[1][0].as_ref().unwrap(), 11u32);
+        let res_a: Vec<_> = stream_a.rfan_out(1, vec![add_one]).collect().await;
+        let res_a: Vec<Vec<_>> = res_a.into_iter().map(Result::unwrap).collect();
+        assert_eq!(res_a[0][0], 6u32);
+        assert_eq!(res_a[1][0], 11u32);
 
         // Second check: two homogeneous functions of the same concrete type
         let stream_b = from_slice(vec![5u32, 10u32]);
-        let res_b: Vec<Vec<_>> = stream_b.rfan_out(vec![add_one, mul_two]).collect().await;
+        let res_b: Vec<_> = stream_b.rfan_out(2, vec![add_one, mul_two]).collect().await;
+        let res_b: Vec<Vec<_>> = res_b.into_iter().map(Result::unwrap).collect();
         // item 5  → [5+1=6, 5*2=10]
-        assert_eq!(*res_b[0][0].as_ref().unwrap(), 6u32);
-        assert_eq!(*res_b[0][1].as_ref().unwrap(), 10u32);
+        assert_eq!(res_b[0][0], 6u32);
+        assert_eq!(res_b[0][1], 10u32);
         // item 10 → [10+1=11, 10*2=20]
-        assert_eq!(*res_b[1][0].as_ref().unwrap(), 11u32);
-        assert_eq!(*res_b[1][1].as_ref().unwrap(), 20u32);
+        assert_eq!(res_b[1][0], 11u32);
+        assert_eq!(res_b[1][1], 20u32);
     }
 
     /// `rfan_out` with a single function behaves like rmap.
@@ -269,10 +271,11 @@ mod tests {
         let stream = from_slice(vec![3u32, 7u32]);
         // Non-capturing closure is Copy + Clone.
         let f = |x: u32| std::future::ready(Ok::<u32, rskit_errors::AppError>(x + 100));
-        let results: Vec<Vec<_>> = stream.rfan_out(vec![f]).collect().await;
+        let results: Vec<_> = stream.rfan_out(1, vec![f]).collect().await;
+        let results: Vec<Vec<_>> = results.into_iter().map(Result::unwrap).collect();
         assert_eq!(results.len(), 2);
-        assert_eq!(*results[0][0].as_ref().unwrap(), 103u32);
-        assert_eq!(*results[1][0].as_ref().unwrap(), 107u32);
+        assert_eq!(results[0][0], 103u32);
+        assert_eq!(results[1][0], 107u32);
     }
 
     // ── Windowing: rbatch ─────────────────────────────────────────────────
@@ -396,7 +399,7 @@ mod tests {
 
         let handle = tokio::spawn(async move {
             stream
-                .rtumbling_window(Duration::from_millis(100))
+                .rtumbling_window(Duration::from_millis(100), 128)
                 .collect::<Vec<_>>()
                 .await
         });
@@ -425,7 +428,7 @@ mod tests {
         let stream = from_slice::<u32>(vec![]);
         let handle = tokio::spawn(async move {
             stream
-                .rtumbling_window(Duration::from_millis(100))
+                .rtumbling_window(Duration::from_millis(100), 128)
                 .collect::<Vec<_>>()
                 .await
         });

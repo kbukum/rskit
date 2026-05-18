@@ -79,15 +79,13 @@ async fn topological_sort_respects_dependencies() {
 
 #[tokio::test]
 async fn cycle_detection_returns_error() {
-    let dag = Dag::new()
+    let result = Dag::new()
         .add_node(TestNode::new("a", 1))
         .add_node(TestNode::new("b", 2))
         .add_edge("a", "b")
         .unwrap()
-        .add_edge("b", "a")
-        .unwrap();
+        .add_edge("b", "a");
 
-    let result = dag.topological_sort();
     assert!(result.is_err());
 }
 

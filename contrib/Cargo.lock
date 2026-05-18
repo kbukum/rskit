@@ -4489,9 +4489,11 @@ dependencies = [
  "parking_lot",
  "rskit-component",
  "rskit-config",
+ "rskit-di",
  "rskit-errors",
  "rskit-hook",
  "rskit-logging",
+ "rskit-provider",
  "rskit-validation",
  "serde",
  "tokio",
@@ -4528,6 +4530,16 @@ dependencies = [
  "tracing",
  "validator",
  "zeroize",
+]
+
+[[package]]
+name = "rskit-di"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "parking_lot",
+ "rskit-errors",
+ "tokio",
 ]
 
 [[package]]

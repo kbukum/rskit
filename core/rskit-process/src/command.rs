@@ -4,6 +4,9 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration;
 
+/// Default maximum retained bytes for each captured output stream.
+pub const DEFAULT_MAX_OUTPUT_BYTES: usize = 1024 * 1024;
+
 /// Configuration for subprocess execution behavior.
 #[derive(Debug, Clone)]
 pub struct ProcessConfig {
@@ -28,8 +31,24 @@ impl Default for ProcessConfig {
             grace_period: Duration::from_secs(5),
             capture_output: true,
             inherit_env: true,
-            max_output_bytes: None,
+            max_output_bytes: Some(DEFAULT_MAX_OUTPUT_BYTES),
         }
+    }
+}
+
+impl ProcessConfig {
+    /// Set the maximum retained bytes for each captured output stream.
+    #[must_use]
+    pub fn with_max_output_bytes(mut self, bytes: usize) -> Self {
+        self.max_output_bytes = Some(bytes);
+        self
+    }
+
+    /// Disable output capture bounds.
+    #[must_use]
+    pub fn with_unbounded_output(mut self) -> Self {
+        self.max_output_bytes = None;
+        self
     }
 }
 

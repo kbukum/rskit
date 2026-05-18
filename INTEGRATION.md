@@ -349,10 +349,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 **Code example**:
 
 ```rust
-use rskit_process::{Command, ProcessConfig, run_command};
+use rskit_process::{Command, ProcessConfig, run_with_cancel};
 use rskit_errors::{AppError, ErrorCode};
 use rskit_logging::Logger;
 use std::time::Duration;
+use tokio_util::sync::CancellationToken;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -360,7 +361,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     // Configure subprocess execution
     let config = ProcessConfig {
-        timeout: Duration::from_secs(30),
+        timeout: Some(Duration::from_secs(30)),
         ..Default::default()
     };
     
@@ -372,19 +373,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "-c:v", "libx264",
             "-preset", "fast",
             "output.mp4",
-        ])
-        .config(config);
+        ]);
     
-    match run_command(cmd, &log).await {
+    match run_with_cancel(&cmd, &config, CancellationToken::new()).await {
         Ok(result) => {
             println!("Process succeeded");
-            println!("Exit code: {}", result.exit_code);
+            println!("Exit code: {:?}", result.exit_code);
             println!("Stdout: {}", result.stdout);
         }
         Err(e) => {
             // Map process errors to AppError for consistent handling
             let app_err = AppError::new(
-                ErrorCode::ProcessFailed,
+                ErrorCode::Internal,
                 format!("Video encoding failed: {}", e),
             );
             log.error(&app_err.to_string());
@@ -397,7 +397,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 **Modules involved**:
-- `rskit-process` — `Command`, `ProcessConfig`, `run_command`
+- `rskit-process` — `Command`, `ProcessConfig`, `run_with_cancel`
 - `rskit-errors` — `AppError`, `ErrorCode`
 - `rskit-logging` — `Logger`
 - `tokio` — async runtime

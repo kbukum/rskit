@@ -10,4 +10,4 @@ mod node;
 
 pub use as_tool::{DagTool, ToolConfig, as_tool};
 pub use dag::{Dag, FailurePolicy};
-pub use node::DagNode;
+pub use node::{DagNode, TypedDagNode};

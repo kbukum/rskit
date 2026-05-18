@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **rskit-component**: enforced registry start/stop timeout configuration in lifecycle state transitions.
 - **rskit-di**: added typed `Resolve<T>` and `MustResolve<T>` resolver traits.
 - **rskit-skill**: replaced the unmaintained YAML parser dependency with a maintained serde-compatible fork.
+- **L4 composition crates**: aligned bootstrap lifecycle hooks with start/stop boundaries and typed lifecycle events, made pipeline fan-out/windowing bounded, replaced JSON chain operations with typed sequential composition, tightened DAG cycle/parallelism guarantees, removed worker ticker coupling, added typed state machines, and made process execution explicitly cancellable with bounded output by default.
 
 ### Changed — Foundations
 - **rskit-util**: reduced the L0 utility crate to a minimal domain-free
@@ -143,7 +144,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Component` async trait with `start`, `stop`, `health`
 - `Health`, `HealthStatus` (Healthy / Degraded / Unhealthy)
 - `Registry` — ordered `start_all` / reverse-order `stop_all`
-- `App<Unconfigured, C>` typestate with `AppBuilder`, lifecycle hooks (`on_configure`, `on_start`, `on_ready`, `on_stop`)
+- `App<Built, C>` typestate with `AppBuilder`, lifecycle hooks (`before_start`, `after_start`, `before_stop`, `after_stop`)
 - `run_task` for driving a single async closure with graceful shutdown
 
 #### `rskit-resilience`

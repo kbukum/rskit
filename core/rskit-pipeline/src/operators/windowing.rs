@@ -3,12 +3,15 @@ use std::time::Duration;
 
 use futures::{Stream, StreamExt as _};
 
+const TUMBLING_WINDOW_INITIAL_CAPACITY_LIMIT: usize = 1024;
+
 /// Collect items into non-overlapping time windows.
 ///
 /// A window is emitted after `duration` has elapsed since the first item.
 pub fn tumbling_window<S, T>(
     stream: S,
     duration: Duration,
+    max_items: usize,
 ) -> impl Stream<Item = Vec<T>> + Send + 'static
 where
     S: Stream<Item = T> + Send + 'static,
@@ -16,7 +19,9 @@ where
 {
     async_stream::stream! {
         tokio::pin!(stream);
-        let mut buf: Vec<T> = Vec::new();
+        let max_items = max_items.max(1);
+        let initial_capacity = max_items.min(TUMBLING_WINDOW_INITIAL_CAPACITY_LIMIT);
+        let mut buf: Vec<T> = Vec::with_capacity(initial_capacity);
         let mut deadline = tokio::time::Instant::now() + duration;
         loop {
             tokio::select! {
@@ -24,10 +29,14 @@ where
                     match item {
                         Some(v) => {
                             buf.push(v);
+                            if buf.len() >= max_items {
+                                yield take_window(&mut buf, initial_capacity);
+                                deadline = tokio::time::Instant::now() + duration;
+                            }
                         }
                         None => {
                             if !buf.is_empty() {
-                                yield std::mem::take(&mut buf);
+                                yield take_window(&mut buf, initial_capacity);
                             }
                             break;
                         }
@@ -35,13 +44,17 @@ where
                 }
                 _ = tokio::time::sleep_until(deadline) => {
                     if !buf.is_empty() {
-                        yield std::mem::take(&mut buf);
+                        yield take_window(&mut buf, initial_capacity);
                     }
                     deadline = tokio::time::Instant::now() + duration;
                 }
             }
         }
     }
+}
+
+fn take_window<T>(buf: &mut Vec<T>, next_capacity: usize) -> Vec<T> {
+    std::mem::replace(buf, Vec::with_capacity(next_capacity))
 }
 
 /// Collect up to `size` items into a batch.
@@ -59,6 +72,7 @@ where
 {
     async_stream::stream! {
         tokio::pin!(stream);
+        let size = size.max(1);
         let mut buf: Vec<T> = Vec::with_capacity(size);
         let mut deadline: Option<tokio::time::Instant> = None;
 

@@ -28,7 +28,6 @@ Operators available on any `futures::Stream` via `RskitStreamExt`:
 - `rsliding_window` — overlapping item-count windows
 - `rdistinct` — first occurrence only
 - `rtake` / `rskip` — bounded prefix operators
-- `rbuffer` — bounded producer/consumer decoupling
 
 ## Operator reference
 
@@ -37,9 +36,9 @@ Operators available on any `futures::Stream` via `RskitStreamExt`:
 | map | `RskitStreamExt::rmap` | Transform each item with a fallible async function. |
 | filter | `RskitStreamExt::rfilter` | Keep items matching a synchronous predicate. |
 | batch | `RskitStreamExt::rbatch` | Emit up to `size` items, or the partial batch when `timeout` elapses/upstream ends. |
-| window | `RskitStreamExt::rtumbling_window` | Emit non-overlapping fixed-duration windows. |
+| window | `RskitStreamExt::rtumbling_window` | Emit non-overlapping windows bounded by duration and item count. |
 | sliding | `RskitStreamExt::rsliding_window` | Emit overlapping item-count windows advancing by `step`. |
-| fan_out | `RskitStreamExt::rfan_out` | Apply multiple async functions to each item and collect per-item results. |
+| fan_out | `RskitStreamExt::rfan_out` | Apply a bounded number of async functions to each item, poll branch futures concurrently in the stream task, and short-circuit on the first branch error. |
 | parallel | `RskitStreamExt::rparallel` | Process items concurrently with bounded parallelism; output order is not guaranteed. |
 | merge | `RskitStreamExt::rmerge`, `merge` | Yield items from whichever input stream is ready first. |
 | partition | `RskitStreamExt::rpartition` | Route each item to matching or remainder stream; one closed side does not close the other. |
@@ -48,7 +47,6 @@ Operators available on any `futures::Stream` via `RskitStreamExt`:
 | distinct | `RskitStreamExt::rdistinct` | Emit the first occurrence of each item. |
 | take | `RskitStreamExt::rtake` | Emit only the first `n` items. |
 | skip | `RskitStreamExt::rskip` | Drop the first `n` items. |
-| buffer | `RskitStreamExt::rbuffer` | Decouple producer and consumer with a bounded Tokio channel; `0` is clamped to capacity `1`. |
 
 ## Usage
 

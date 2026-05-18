@@ -14,8 +14,6 @@ pub mod handler;
 pub mod pool;
 /// [`TaskHandle`] returned to callers after task submission.
 pub mod task;
-/// Periodic ticker worker implementing the [`rskit_bootstrap::Component`] trait.
-pub mod ticker;
 
 pub use bridge::{as_provider, from_provider};
 pub use dispatch::{DispatchStrategy, RoundRobinDispatcher};
@@ -23,7 +21,6 @@ pub use event::{Event, EventKind, Progress};
 pub use handler::Handler;
 pub use pool::{OverflowPolicy, Pool, PoolConfig, PoolStats};
 pub use task::TaskHandle;
-pub use ticker::{TickFuture, TickerWorker};
 
 #[cfg(test)]
 mod tests {

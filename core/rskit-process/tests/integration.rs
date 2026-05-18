@@ -1,11 +1,18 @@
 use std::time::Duration;
 
-use rskit_process::{Command, ProcessConfig, run};
+use rskit_process::{Command, ErrorCode, ProcessConfig, run_with_cancel};
+use tokio_util::sync::CancellationToken;
 
 #[tokio::test]
 async fn runs_command_and_captures_stdout() {
     let command = Command::new("/usr/bin/printf").args(["%s", "hello"]);
-    let result = run(&command, &ProcessConfig::default()).await.unwrap();
+    let result = run_with_cancel(
+        &command,
+        &ProcessConfig::default(),
+        CancellationToken::new(),
+    )
+    .await
+    .unwrap();
 
     assert_eq!(result.stdout, "hello");
     assert_eq!(result.stderr, "");
@@ -16,7 +23,13 @@ async fn runs_command_and_captures_stdout() {
 #[tokio::test]
 async fn writes_stdin_to_process() {
     let command = Command::new("/bin/cat").stdin(b"echoed".to_vec());
-    let result = run(&command, &ProcessConfig::default()).await.unwrap();
+    let result = run_with_cancel(
+        &command,
+        &ProcessConfig::default(),
+        CancellationToken::new(),
+    )
+    .await
+    .unwrap();
 
     assert_eq!(result.stdout, "echoed");
 }
@@ -26,7 +39,13 @@ async fn scrub_env_starts_with_empty_environment() {
     let command = Command::new("/usr/bin/env")
         .env("ONLY_ME", "present")
         .scrub_env();
-    let result = run(&command, &ProcessConfig::default()).await.unwrap();
+    let result = run_with_cancel(
+        &command,
+        &ProcessConfig::default(),
+        CancellationToken::new(),
+    )
+    .await
+    .unwrap();
 
     assert!(result.stdout.contains("ONLY_ME=present"));
     assert!(!result.stdout.contains("PATH="));
@@ -41,7 +60,9 @@ async fn max_output_bytes_limits_captured_output() {
         ..ProcessConfig::default()
     };
 
-    let result = run(&command, &config).await.unwrap();
+    let result = run_with_cancel(&command, &config, CancellationToken::new())
+        .await
+        .unwrap();
     assert_eq!(result.stdout.len(), 32);
     assert!(result.stdout.chars().all(|ch| ch == 'x'));
 }
@@ -55,7 +76,9 @@ async fn timeout_escalates_and_marks_result() {
         ..ProcessConfig::default()
     };
 
-    let result = run(&command, &config).await.unwrap();
+    let result = run_with_cancel(&command, &config, CancellationToken::new())
+        .await
+        .unwrap();
     assert!(result.timed_out);
     assert!(result.exit_code.is_none() || result.exit_code != Some(0));
 }
@@ -63,7 +86,13 @@ async fn timeout_escalates_and_marks_result() {
 #[tokio::test]
 async fn argv_only_execution_prevents_shell_injection() {
     let command = Command::new("/usr/bin/printf").args(["%s", "$(echo injected); rm -rf /"]);
-    let result = run(&command, &ProcessConfig::default()).await.unwrap();
+    let result = run_with_cancel(
+        &command,
+        &ProcessConfig::default(),
+        CancellationToken::new(),
+    )
+    .await
+    .unwrap();
 
     assert_eq!(result.stdout, "$(echo injected); rm -rf /");
 }
@@ -71,7 +100,27 @@ async fn argv_only_execution_prevents_shell_injection() {
 #[tokio::test]
 async fn process_result_check_reports_failures() {
     let command = Command::new("/usr/bin/false");
-    let result = run(&command, &ProcessConfig::default()).await.unwrap();
+    let result = run_with_cancel(
+        &command,
+        &ProcessConfig::default(),
+        CancellationToken::new(),
+    )
+    .await
+    .unwrap();
 
     assert!(result.check().is_err());
+}
+
+#[tokio::test]
+async fn cancellation_terminates_process() {
+    let command = Command::new("/bin/sleep").arg("2");
+    let cancel = CancellationToken::new();
+    cancel.cancel();
+
+    let result = run_with_cancel(&command, &ProcessConfig::default(), cancel).await;
+    let error = result.expect_err("cancellation should fail");
+    assert_eq!(error.code, ErrorCode::Cancelled);
+    assert!(error.details().contains_key("duration_ms"));
+    assert!(error.details().contains_key("stdout"));
+    assert!(error.details().contains_key("stderr"));
 }

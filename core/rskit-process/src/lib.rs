@@ -11,8 +11,9 @@
 //! # Example
 //!
 //! ```no_run
-//! use rskit_process::{Command, ProcessConfig, run};
+//! use rskit_process::{Command, ProcessConfig, run_with_cancel};
 //! use std::time::Duration;
+//! use tokio_util::sync::CancellationToken;
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! let cmd = Command::new("echo")
@@ -24,10 +25,10 @@
 //!     grace_period: Duration::from_secs(5),
 //!     capture_output: true,
 //!     inherit_env: true,
-//!     max_output_bytes: None,
+//!     max_output_bytes: Some(rskit_process::DEFAULT_MAX_OUTPUT_BYTES),
 //! };
 //!
-//! let result = run(&cmd, &config).await?;
+//! let result = run_with_cancel(&cmd, &config, CancellationToken::new()).await?;
 //! println!("stdout: {}", result.stdout);
 //! println!("exit code: {:?}", result.exit_code);
 //! # Ok(())
@@ -40,9 +41,9 @@ mod command;
 mod result;
 mod runner;
 
-pub use command::{Command, ProcessConfig};
+pub use command::{Command, DEFAULT_MAX_OUTPUT_BYTES, ProcessConfig};
 pub use result::ProcessResult;
-pub use runner::run;
+pub use runner::run_with_cancel;
 
 /// Re-export error types
 pub use rskit_errors::{AppError, AppResult, ErrorCode};

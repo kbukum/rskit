@@ -34,7 +34,9 @@ rskit-errors = { path = "../rskit-errors" }
 rskit-config = { path = "../rskit-config" }
 rskit-logging = { path = "../rskit-logging" }
 rskit-component = { path = "../rskit-component" }
+rskit-di = { path = "../rskit-di" }
 rskit-hook = { path = "../rskit-hook" }
+rskit-provider = { path = "../rskit-provider" }
 rskit-validation = { path = "../rskit-validation" }
 
 [dev-dependencies]

@@ -28,8 +28,8 @@ use rskit_bootstrap::{AppBuilder, Component, Health};
 
 AppBuilder::new(my_config)
     .build()?
-    .on_start(|cfg, _cancel| async move {
-        tracing::info!("starting {}", cfg.service_config().name);
+    .before_start(|_cancel| async move {
+        tracing::info!("starting");
         Ok(())
     })
     .run()
