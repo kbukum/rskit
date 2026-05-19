@@ -88,19 +88,3 @@ async fn memory_cache_honors_subsecond_ttl() {
     *now.lock() += Duration::from_millis(250);
     assert_eq!(cache.get("short").await.unwrap(), None);
 }
-
-#[cfg(feature = "redis")]
-mod redis_integration {
-    use rskit_cache::{RedisClient, RedisConfig};
-
-    #[tokio::test]
-    #[ignore = "requires running Redis server"]
-    async fn client_set_and_get() {
-        let cfg = RedisConfig::default();
-        let client = RedisClient::new(cfg).await.unwrap();
-        client.set("test_key", "hello", None).await.unwrap();
-        let val = client.get("test_key").await.unwrap();
-        assert_eq!(val.as_deref(), Some("hello"));
-        client.delete("test_key").await.unwrap();
-    }
-}

@@ -5,12 +5,12 @@ use std::sync::Arc;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
 
-use crate::{InMemoryVectorStore, VectorStore};
+use crate::{InMemoryVectorStore, VectorStore, VectorStoreConfig};
 
 /// Factory for a named vector store backend.
 pub trait VectorFactory: Send + Sync {
     /// Create a vector store backend instance.
-    fn create(&self) -> AppResult<Arc<dyn VectorStore>>;
+    fn create(&self, config: &VectorStoreConfig) -> AppResult<Arc<dyn VectorStore>>;
 }
 
 /// Explicit vector store backend registry.
@@ -61,24 +61,24 @@ impl VectorStoreRegistry {
         self.factories.is_empty()
     }
 
-    /// Create a backend by name.
-    pub fn build(&self, name: &str) -> AppResult<Arc<dyn VectorStore>> {
+    /// Build the backend selected by [`VectorStoreConfig::backend`].
+    pub fn build(&self, config: &VectorStoreConfig) -> AppResult<Arc<dyn VectorStore>> {
         self.factories
-            .get(name)
+            .get(&config.backend)
             .ok_or_else(|| {
                 AppError::new(
                     ErrorCode::NotFound,
-                    format!("vectorstore backend '{name}' is not registered"),
+                    format!("vectorstore backend '{}' is not registered", config.backend),
                 )
             })?
-            .create()
+            .create(config)
     }
 }
 
 struct MemoryFactory;
 
 impl VectorFactory for MemoryFactory {
-    fn create(&self) -> AppResult<Arc<dyn VectorStore>> {
+    fn create(&self, _config: &VectorStoreConfig) -> AppResult<Arc<dyn VectorStore>> {
         Ok(Arc::new(InMemoryVectorStore::new()))
     }
 }
@@ -116,7 +116,7 @@ mod tests {
         let mut registry = VectorStoreRegistry::new();
         register_memory(&mut registry).unwrap();
 
-        let store = registry.build("memory").unwrap();
+        let store = registry.build(&VectorStoreConfig::default()).unwrap();
 
         assert!(Arc::strong_count(&store) >= 1);
     }
@@ -125,7 +125,7 @@ mod tests {
     fn registry_rejects_unregistered_backend() {
         let registry = VectorStoreRegistry::new();
 
-        let err = registry.build("memory").err().unwrap();
+        let err = registry.build(&VectorStoreConfig::default()).err().unwrap();
 
         assert_eq!(err.code, ErrorCode::NotFound);
     }

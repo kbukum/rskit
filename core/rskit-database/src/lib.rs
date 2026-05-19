@@ -1,22 +1,19 @@
-//! Database contracts with feature-gated sqlx backend support.
+//! Database contracts with an in-memory default and opt-in adapter backends.
 //!
 //! This crate provides:
 //!
-//! - [`DatabaseConfig`] — connection pool configuration with serde support.
-//! - `Database` — an async pool wrapping `sqlx::AnyPool` when the `sqlx-any`
-//!   feature is enabled.
+//! - [`DatabaseConfig`] — backend selection and common pool configuration.
+//! - [`DatabaseClient`] — vendor-neutral async execution and transaction contract.
+//! - [`InMemoryDatabase`] — local backend for tests and development.
 //! - [`Repository`] — a generic trait for entity CRUD operations.
 //! - [`FindOpts`] — builder for paginated / filtered queries.
-//! - `SqlRepository` — base helper struct for SQL-backed repositories when the
-//!   `sqlx-any` feature is enabled.
 //! - [`query`] — HTTP query-string parsing and pagination helpers.
 
 #![warn(missing_docs)]
 
 /// Database configuration types.
 pub mod config;
-/// Database pool and `Component` implementation.
-#[cfg(feature = "sqlx-any")]
+/// Database client contracts and in-memory backend.
 pub mod database;
 /// HTTP query parameter parsing and pagination.
 pub mod query;
@@ -27,18 +24,13 @@ pub mod repository;
 /// Tenant-scoping helpers for multi-tenant queries.
 pub mod tenant;
 
-pub use config::{DatabaseConfig, DbDriver, SslMode};
-#[cfg(feature = "sqlx-any")]
-pub use database::Database;
+pub use config::{DatabaseConfig, MemoryDatabaseConfig};
+pub use database::{
+    DatabaseClient, DatabaseQuery, DatabaseResult, DatabaseTransaction, InMemoryDatabase,
+};
 pub use query::{
     PaginatedResult, Pagination, QueryConfig, QueryParams, SortOrder, parse_query_string,
 };
-pub use registry::{
-    DatabaseRegistry, register_mysql, register_postgres, register_sqlite, register_sqlx_any,
-};
-#[cfg(feature = "sqlx-any")]
-pub use repository::SqlRepository;
+pub use registry::{DatabaseFactory, DatabaseRegistry, register_memory};
 pub use repository::{FindOpts, Repository};
 pub use tenant::TenantScope;
-#[cfg(feature = "sqlx-any")]
-pub use tenant::set_session_variable;

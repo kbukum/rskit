@@ -141,6 +141,17 @@ impl VectorStore for InMemoryVectorStore {
             )
         })?;
 
+        if vector.len() != col.dimensions {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                format!(
+                    "vector dimensions mismatch: expected {}, got {}",
+                    col.dimensions,
+                    vector.len()
+                ),
+            ));
+        }
+
         let mut scored: Vec<SearchResult> = col
             .points
             .iter()

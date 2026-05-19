@@ -280,25 +280,20 @@ impl FileStore for GcsStore {
     }
 }
 
-struct GcsFactory;
+struct GcsFactory {
+    config: GcsStoreConfig,
+}
 
 #[async_trait::async_trait]
 impl StorageFactory for GcsFactory {
-    async fn create(&self, config: &StorageConfig) -> AppResult<Arc<dyn FileStore>> {
-        let gcs_config: GcsStoreConfig =
-            serde_json::from_value(config.options.clone()).map_err(|e| {
-                AppError::new(
-                    ErrorCode::InvalidInput,
-                    format!("invalid GCS storage config: {e}"),
-                )
-            })?;
-        Ok(Arc::new(GcsStore::new(gcs_config).await?))
+    async fn create(&self, _config: &StorageConfig) -> AppResult<Arc<dyn FileStore>> {
+        Ok(Arc::new(GcsStore::new(self.config.clone()).await?))
     }
 }
 
 /// Explicitly register the Google Cloud Storage backend.
-pub fn register_gcs(registry: &mut StorageRegistry) -> AppResult<()> {
-    registry.register("gcs", Arc::new(GcsFactory))
+pub fn register_gcs(registry: &mut StorageRegistry, config: GcsStoreConfig) -> AppResult<()> {
+    registry.register("gcs", Arc::new(GcsFactory { config }))
 }
 
 #[cfg(test)]
@@ -341,7 +336,15 @@ mod tests {
     #[test]
     fn register_gcs_adds_backend_without_constructing_client() {
         let mut registry = StorageRegistry::new();
-        register_gcs(&mut registry).unwrap();
+        register_gcs(
+            &mut registry,
+            GcsStoreConfig {
+                bucket: "test".into(),
+                prefix: None,
+                anonymous: true,
+            },
+        )
+        .unwrap();
         assert!(registry.contains("gcs"));
     }
 }

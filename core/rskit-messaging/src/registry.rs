@@ -1,22 +1,33 @@
 //! Explicit messaging adapter registry.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
 
+use crate::config::BrokerConfig;
 use crate::traits::{MessageConsumer, MessageProducer};
 
-type ProducerFactory<T> = Box<dyn Fn() -> AppResult<Arc<dyn MessageProducer<T>>> + Send + Sync>;
-type ConsumerFactory<T> = Box<dyn Fn() -> AppResult<Arc<dyn MessageConsumer<T>>> + Send + Sync>;
+/// Producer/consumer pair created for a messaging backend.
+pub struct MessagingBackend<T: Send + Sync + 'static> {
+    /// Producer for the selected backend.
+    pub producer: Arc<dyn MessageProducer<T>>,
+    /// Consumer for the selected backend.
+    pub consumer: Arc<dyn MessageConsumer<T>>,
+}
+
+/// Factory for a named messaging backend.
+pub trait MessagingFactory<T: Send + Sync + 'static>: Send + Sync {
+    /// Build a producer/consumer pair from broker configuration.
+    fn create(&self, config: &BrokerConfig) -> AppResult<MessagingBackend<T>>;
+}
 
 /// Application-owned registry of messaging adapter factories.
 ///
 /// Adapters are registered explicitly by application composition code. Importing
 /// an adapter module does not mutate global state or dial external services.
 pub struct MessagingRegistry<T: Send + Sync + 'static> {
-    producers: HashMap<String, ProducerFactory<T>>,
-    consumers: HashMap<String, ConsumerFactory<T>>,
+    factories: BTreeMap<String, Arc<dyn MessagingFactory<T>>>,
 }
 
 impl<T: Send + Sync + 'static> MessagingRegistry<T> {
@@ -24,16 +35,15 @@ impl<T: Send + Sync + 'static> MessagingRegistry<T> {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            producers: HashMap::new(),
-            consumers: HashMap::new(),
+            factories: BTreeMap::new(),
         }
     }
 
-    /// Register a producer factory under `adapter`.
-    pub fn register_producer(
+    /// Register a backend factory under `adapter`.
+    pub fn register_backend(
         &mut self,
         adapter: impl Into<String>,
-        factory: impl Fn() -> AppResult<Arc<dyn MessageProducer<T>>> + Send + Sync + 'static,
+        factory: Arc<dyn MessagingFactory<T>>,
     ) -> AppResult<()> {
         let adapter = adapter.into();
         if adapter.is_empty() {
@@ -42,75 +52,60 @@ impl<T: Send + Sync + 'static> MessagingRegistry<T> {
                 "messaging adapter name is required",
             ));
         }
-        if self.producers.contains_key(&adapter) {
+        if self.factories.contains_key(&adapter) {
             return Err(AppError::new(
-                ErrorCode::InvalidInput,
-                format!("messaging producer adapter '{adapter}' is already registered"),
+                ErrorCode::AlreadyExists,
+                format!("messaging adapter '{adapter}' is already registered"),
             ));
         }
-        self.producers.insert(adapter, Box::new(factory));
+        self.factories.insert(adapter, factory);
         Ok(())
     }
 
-    /// Register a consumer factory under `adapter`.
-    pub fn register_consumer(
-        &mut self,
-        adapter: impl Into<String>,
-        factory: impl Fn() -> AppResult<Arc<dyn MessageConsumer<T>>> + Send + Sync + 'static,
-    ) -> AppResult<()> {
-        let adapter = adapter.into();
-        if adapter.is_empty() {
-            return Err(AppError::new(
-                ErrorCode::InvalidInput,
-                "messaging adapter name is required",
-            ));
-        }
-        if self.consumers.contains_key(&adapter) {
-            return Err(AppError::new(
-                ErrorCode::InvalidInput,
-                format!("messaging consumer adapter '{adapter}' is already registered"),
-            ));
-        }
-        self.consumers.insert(adapter, Box::new(factory));
-        Ok(())
-    }
-
-    /// Construct a producer for `adapter`.
-    pub fn producer(&self, adapter: &str) -> AppResult<Arc<dyn MessageProducer<T>>> {
-        let factory = self.producers.get(adapter).ok_or_else(|| {
+    /// Build producer and consumer for [`BrokerConfig::adapter`].
+    pub fn build(&self, config: &BrokerConfig) -> AppResult<MessagingBackend<T>> {
+        config.validate()?;
+        let factory = self.factories.get(&config.adapter).ok_or_else(|| {
             AppError::new(
-                ErrorCode::InvalidInput,
-                format!("messaging producer adapter '{adapter}' is not registered"),
+                ErrorCode::NotFound,
+                format!("messaging adapter '{}' is not registered", config.adapter),
             )
         })?;
-        factory()
+        factory.create(config)
     }
 
-    /// Construct a consumer for `adapter`.
-    pub fn consumer(&self, adapter: &str) -> AppResult<Arc<dyn MessageConsumer<T>>> {
-        let factory = self.consumers.get(adapter).ok_or_else(|| {
-            AppError::new(
-                ErrorCode::InvalidInput,
-                format!("messaging consumer adapter '{adapter}' is not registered"),
-            )
-        })?;
-        factory()
+    /// Construct a producer for [`BrokerConfig::adapter`].
+    pub fn producer(&self, config: &BrokerConfig) -> AppResult<Arc<dyn MessageProducer<T>>> {
+        self.build(config).map(|backend| backend.producer)
     }
 
-    /// Return registered producer adapter names.
+    /// Construct a consumer for [`BrokerConfig::adapter`].
+    pub fn consumer(&self, config: &BrokerConfig) -> AppResult<Arc<dyn MessageConsumer<T>>> {
+        self.build(config).map(|backend| backend.consumer)
+    }
+
+    /// Return registered adapter names.
     #[must_use]
-    pub fn producer_adapters(&self) -> Vec<&str> {
-        let mut names: Vec<&str> = self.producers.keys().map(String::as_str).collect();
-        names.sort_unstable();
-        names
+    pub fn adapters(&self) -> Vec<&str> {
+        self.factories.keys().map(String::as_str).collect()
     }
 
-    /// Return registered consumer adapter names.
+    /// Return true when no adapters are registered.
     #[must_use]
-    pub fn consumer_adapters(&self) -> Vec<&str> {
-        let mut names: Vec<&str> = self.consumers.keys().map(String::as_str).collect();
-        names.sort_unstable();
-        names
+    pub fn is_empty(&self) -> bool {
+        self.factories.is_empty()
+    }
+
+    /// Number of registered adapters.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.factories.len()
+    }
+
+    /// Return true when `adapter` is registered.
+    #[must_use]
+    pub fn contains(&self, adapter: &str) -> bool {
+        self.factories.contains_key(adapter)
     }
 }
 
@@ -128,25 +123,19 @@ mod tests {
     #[test]
     fn new_registry_is_empty_and_has_no_side_effects() {
         let registry = MessagingRegistry::<String>::new();
-        assert!(registry.producer_adapters().is_empty());
-        assert!(registry.consumer_adapters().is_empty());
-        assert!(registry.producer("kafka").is_err());
+        assert!(registry.is_empty());
+        assert!(registry.adapters().is_empty());
+        assert!(registry.producer(&BrokerConfig::default()).is_err());
     }
 
     #[test]
-    fn rejects_duplicate_producer_adapter() {
+    fn rejects_duplicate_adapter() {
         let mut registry = MessagingRegistry::<String>::new();
         let broker = InMemoryBroker::new(8);
-        let producer = broker.producer();
-        registry
-            .register_producer("memory", move || Ok(Arc::new(producer.clone())))
-            .unwrap();
-        let broker = InMemoryBroker::new(8);
-        let producer = broker.producer();
-        assert!(
-            registry
-                .register_producer("memory", move || Ok(Arc::new(producer.clone())))
-                .is_err()
-        );
+        crate::memory::register(&mut registry, broker.clone()).unwrap();
+
+        let err = crate::memory::register(&mut registry, broker).unwrap_err();
+
+        assert_eq!(err.code, ErrorCode::AlreadyExists);
     }
 }

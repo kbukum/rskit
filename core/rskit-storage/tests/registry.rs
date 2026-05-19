@@ -17,11 +17,10 @@ async fn explicit_local_registration_builds_store_from_config() {
 
     let config = StorageConfig {
         backend: "local".into(),
-        options: serde_json::to_value(LocalStoreConfig {
+        local: LocalStoreConfig {
             root_dir: root_dir.path().to_path_buf(),
             auto_create: true,
-        })
-        .unwrap(),
+        },
     };
 
     let store = registry.build(&config).await.unwrap();
@@ -45,7 +44,7 @@ async fn unregistered_storage_backend_errors() {
     let registry = StorageRegistry::new();
     let config = StorageConfig {
         backend: "s3".into(),
-        options: serde_json::json!({}),
+        local: LocalStoreConfig::default(),
     };
 
     let err = registry.build(&config).await.err().unwrap();

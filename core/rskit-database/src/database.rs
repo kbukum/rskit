@@ -1,144 +1,228 @@
-//! Database pool and `Component` implementation.
+//! Vendor-neutral database client contracts and the in-memory backend.
 
+use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 use async_trait::async_trait;
-use sqlx::AnyPool;
-use sqlx::any::{AnyPoolOptions, AnyQueryResult};
-use tracing::{error, info, warn};
-
+use parking_lot::Mutex;
 use rskit_bootstrap::{Component, Health};
 use rskit_errors::{AppError, AppResult, ErrorCode};
+use serde::{Deserialize, Serialize};
 
-use crate::config::DatabaseConfig;
+use crate::config::{DatabaseConfig, MemoryDatabaseConfig};
 
-/// Async connection pool wrapping [`sqlx::AnyPool`].
-///
-/// Implements the `Component` trait for lifecycle management and health
-/// reporting.  Queries that exceed the configured `slow_query_threshold` are
-/// automatically logged at `WARN` level.
-pub struct Database {
-    pool: AnyPool,
-    config: DatabaseConfig,
-    connected: AtomicBool,
+/// Backend-neutral database statement.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DatabaseQuery {
+    /// Statement text in the backend's query language.
+    pub statement: String,
+    /// Positional parameters encoded as backend-neutral JSON values.
+    #[serde(default)]
+    pub parameters: Vec<serde_json::Value>,
 }
 
-impl Database {
-    /// Create a new [`Database`] from the given configuration.
-    ///
-    /// This installs the default sqlx `Any` drivers, builds the connection URL
-    /// from `config`, and opens the pool.
-    pub async fn new(config: DatabaseConfig) -> AppResult<Self> {
-        sqlx::any::install_default_drivers();
+impl DatabaseQuery {
+    /// Create a query without positional parameters.
+    #[must_use]
+    pub fn new(statement: impl Into<String>) -> Self {
+        Self {
+            statement: statement.into(),
+            parameters: Vec::new(),
+        }
+    }
 
-        let url = config.connection_url();
+    /// Add one positional parameter.
+    #[must_use]
+    pub fn with_parameter(mut self, value: impl Into<serde_json::Value>) -> Self {
+        self.parameters.push(value.into());
+        self
+    }
+}
 
-        let pool = AnyPoolOptions::new()
-            .max_connections(config.max_connections)
-            .min_connections(config.min_connections)
-            .acquire_timeout(config.connect_timeout)
-            .idle_timeout(config.idle_timeout)
-            .max_lifetime(config.max_lifetime)
-            .connect(&url)
-            .await
-            .map_err(|e| {
-                error!(error = %e, "failed to create database pool");
-                AppError::new(
-                    ErrorCode::DatabaseError,
-                    format!("failed to connect to database: {e}"),
-                )
-            })?;
+/// Backend-neutral database execution result.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DatabaseResult {
+    /// Rows affected by the statement, when the backend reports it.
+    pub rows_affected: u64,
+}
 
-        info!(
-            driver = %config.driver,
-            host = %config.host,
-            port = config.port,
-            database = %config.database,
-            max_connections = config.max_connections,
-            "database pool created"
-        );
+/// Active database transaction.
+#[async_trait]
+pub trait DatabaseTransaction: Send + Sync {
+    /// Execute a statement inside the transaction.
+    async fn execute(&self, query: DatabaseQuery) -> AppResult<DatabaseResult>;
+    /// Commit the transaction.
+    async fn commit(self: Box<Self>) -> AppResult<()>;
+    /// Roll back the transaction.
+    async fn rollback(self: Box<Self>) -> AppResult<()>;
+}
 
-        Ok(Self {
-            pool,
+/// Vendor-neutral database client.
+#[async_trait]
+pub trait DatabaseClient: Send + Sync {
+    /// Execute a statement.
+    async fn execute(&self, query: DatabaseQuery) -> AppResult<DatabaseResult>;
+    /// Begin a transaction.
+    async fn begin(&self) -> AppResult<Box<dyn DatabaseTransaction>>;
+    /// Validate that the backend is usable.
+    async fn ping(&self) -> AppResult<()>;
+}
+
+/// In-memory database backend for local development and tests.
+#[derive(Debug)]
+pub struct InMemoryDatabase {
+    config: MemoryDatabaseConfig,
+    connected: AtomicBool,
+    history: Mutex<VecDeque<DatabaseQuery>>,
+}
+
+impl InMemoryDatabase {
+    /// Create an in-memory database backend.
+    #[must_use]
+    pub fn new(config: MemoryDatabaseConfig) -> Self {
+        Self {
             config,
             connected: AtomicBool::new(true),
-        })
-    }
-
-    /// Return a reference to the underlying [`AnyPool`].
-    pub fn pool(&self) -> &AnyPool {
-        &self.pool
-    }
-
-    /// Execute a raw SQL statement, returning the query result.
-    ///
-    /// Queries that take longer than [`DatabaseConfig::slow_query_threshold`]
-    /// are logged at `WARN` level.
-    pub async fn execute(&self, query: &str) -> AppResult<AnyQueryResult> {
-        let start = Instant::now();
-
-        let result = sqlx::query(query).execute(&self.pool).await.map_err(|e| {
-            error!(error = %e, query = %query, "query execution failed");
-            AppError::new(ErrorCode::DatabaseError, format!("query failed: {e}"))
-        })?;
-
-        let elapsed = start.elapsed();
-        if elapsed > self.config.slow_query_threshold {
-            warn!(
-                elapsed_ms = elapsed.as_millis() as u64,
-                query = %query,
-                "slow query detected"
-            );
+            history: Mutex::new(VecDeque::new()),
         }
+    }
 
-        Ok(result)
+    /// Return recorded statements retained by this backend.
+    #[must_use]
+    pub fn recorded_queries(&self) -> Vec<DatabaseQuery> {
+        self.history.lock().iter().cloned().collect()
+    }
+
+    fn record(&self, query: DatabaseQuery) {
+        if self.config.statement_history == 0 {
+            return;
+        }
+        let mut history = self.history.lock();
+        if history.len() == self.config.statement_history {
+            history.pop_front();
+        }
+        history.push_back(query);
+    }
+}
+
+impl Default for InMemoryDatabase {
+    fn default() -> Self {
+        Self::new(MemoryDatabaseConfig::default())
     }
 }
 
 #[async_trait]
-impl Component for Database {
+impl DatabaseClient for InMemoryDatabase {
+    async fn execute(&self, query: DatabaseQuery) -> AppResult<DatabaseResult> {
+        if !self.connected.load(Ordering::SeqCst) {
+            return Err(AppError::new(
+                ErrorCode::ConnectionFailed,
+                "in-memory database is stopped",
+            ));
+        }
+        if query.statement.trim().is_empty() {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                "database query statement is required",
+            ));
+        }
+        self.record(query);
+        Ok(DatabaseResult { rows_affected: 1 })
+    }
+
+    async fn begin(&self) -> AppResult<Box<dyn DatabaseTransaction>> {
+        self.ping().await?;
+        Ok(Box::new(InMemoryTransaction {
+            started_at: Instant::now(),
+            queries: Mutex::new(Vec::new()),
+            committed: AtomicBool::new(false),
+            rolled_back: AtomicBool::new(false),
+        }))
+    }
+
+    async fn ping(&self) -> AppResult<()> {
+        if self.connected.load(Ordering::SeqCst) {
+            Ok(())
+        } else {
+            Err(AppError::new(
+                ErrorCode::ConnectionFailed,
+                "in-memory database is stopped",
+            ))
+        }
+    }
+}
+
+#[async_trait]
+impl Component for InMemoryDatabase {
     fn name(&self) -> &str {
         "database"
     }
 
     async fn start(&self) -> AppResult<()> {
-        // Verify connectivity by acquiring a connection from the pool.
-        self.pool.acquire().await.map_err(|e| {
-            self.connected.store(false, Ordering::SeqCst);
-            error!(error = %e, "database ping failed during start");
-            AppError::new(
-                ErrorCode::DatabaseError,
-                format!("database ping failed: {e}"),
-            )
-        })?;
-
         self.connected.store(true, Ordering::SeqCst);
-        info!("database component started");
         Ok(())
     }
 
     async fn stop(&self) -> AppResult<()> {
         self.connected.store(false, Ordering::SeqCst);
-        self.pool.close().await;
-        info!("database component stopped");
         Ok(())
     }
 
     fn health(&self) -> Health {
-        if self.connected.load(Ordering::SeqCst) && !self.pool.is_closed() {
+        if self.connected.load(Ordering::SeqCst) {
             Health::healthy("database")
         } else {
-            Health::unhealthy("database", "pool is closed or disconnected")
+            Health::unhealthy("database", "backend is stopped")
         }
     }
 }
 
-impl std::fmt::Debug for Database {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Database")
-            .field("config", &self.config)
-            .field("connected", &self.connected.load(Ordering::Relaxed))
-            .finish_non_exhaustive()
+#[derive(Debug)]
+struct InMemoryTransaction {
+    started_at: Instant,
+    queries: Mutex<Vec<DatabaseQuery>>,
+    committed: AtomicBool,
+    rolled_back: AtomicBool,
+}
+
+#[async_trait]
+impl DatabaseTransaction for InMemoryTransaction {
+    async fn execute(&self, query: DatabaseQuery) -> AppResult<DatabaseResult> {
+        if query.statement.trim().is_empty() {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                "database query statement is required",
+            ));
+        }
+        self.queries.lock().push(query);
+        Ok(DatabaseResult { rows_affected: 1 })
     }
+
+    async fn commit(self: Box<Self>) -> AppResult<()> {
+        if self.rolled_back.load(Ordering::SeqCst) {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                "database transaction was already rolled back",
+            ));
+        }
+        self.committed.store(true, Ordering::SeqCst);
+        let _elapsed = self.started_at.elapsed();
+        Ok(())
+    }
+
+    async fn rollback(self: Box<Self>) -> AppResult<()> {
+        if self.committed.load(Ordering::SeqCst) {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                "database transaction was already committed",
+            ));
+        }
+        self.rolled_back.store(true, Ordering::SeqCst);
+        Ok(())
+    }
+}
+
+pub(crate) fn memory_from_config(config: &DatabaseConfig) -> InMemoryDatabase {
+    InMemoryDatabase::new(config.memory.clone())
 }

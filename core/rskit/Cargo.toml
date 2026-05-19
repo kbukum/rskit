@@ -52,6 +52,7 @@ rskit-auth          = { version = "0.1.0", path = "../rskit-auth",          opti
 rskit-di            = { version = "0.1.0", path = "../rskit-di",            optional = true }
 rskit-database      = { version = "0.1.0", path = "../rskit-database",      optional = true }
 rskit-cache         = { version = "0.1.0", path = "../rskit-cache",         optional = true }
+rskit-cache-redis   = { version = "0.1.0", path = "../../contrib/cache/redis", optional = true }
 rskit-messaging     = { version = "0.1.0", path = "../rskit-messaging",     optional = true }
 rskit-messaging-kafka = { version = "0.1.0", path = "../../contrib/messaging/kafka", optional = true }
 rskit-messaging-nats = { version = "0.1.0", path = "../../contrib/messaging/nats", optional = true }
@@ -81,6 +82,8 @@ rskit-cli           = { version = "0.1.0", path = "../rskit-cli",           opti
 rskit-git           = { version = "0.1.0", path = "../rskit-git",           optional = true }
 rskit-dataset       = { version = "0.1.0", path = "../rskit-dataset",       optional = true }
 rskit-bench         = { version = "0.1.0", path = "../rskit-bench",         optional = true }
+rskit-vectorstore   = { version = "0.1.0", path = "../rskit-vectorstore",   optional = true }
+rskit-vectorstore-qdrant = { version = "0.1.0", path = "../../contrib/vectorstore/qdrant", optional = true }
 
 [dev-dependencies]
 tokio       = { workspace = true, features = ["full"] }
@@ -98,6 +101,7 @@ auth          = ["dep:rskit-auth"]
 di            = ["dep:rskit-di"]
 database      = ["dep:rskit-database"]
 cache         = ["dep:rskit-cache"]
+cache-redis   = ["cache", "dep:rskit-cache-redis"]
 messaging     = ["dep:rskit-messaging"]
 messaging-kafka = ["messaging", "dep:rskit-messaging-kafka"]
 messaging-nats = ["messaging", "dep:rskit-messaging-nats"]
@@ -129,14 +133,17 @@ cli           = ["dep:rskit-cli"]
 git           = ["dep:rskit-git"]
 dataset       = ["dep:rskit-dataset", "cli"]
 bench         = ["dep:rskit-bench"]
+vectorstore   = ["dep:rskit-vectorstore"]
+vectorstore-qdrant = ["vectorstore", "dep:rskit-vectorstore-qdrant"]
 chain         = ["dep:rskit-chain"]
 process       = ["dep:rskit-process"]
 stateful      = ["dep:rskit-stateful"]
 test-util     = []
 full          = [
     "server", "grpc", "encryption", "http", "httpclient", "auth", "di", "database", "cache", "messaging",
-    "messaging-kafka", "messaging-nats", "messaging-rabbitmq",
+    "cache-redis", "messaging-kafka", "messaging-nats", "messaging-rabbitmq",
     "observability", "authz", "security", "discovery", "testutil", "sse", "dag", "genai", "llm",
     "inference", "inference-triton", "inference-vllm", "inference-tgi",
-    "prompt", "skill", "media-full", "storage", "workload", "cli", "dataset", "bench", "chain", "process", "stateful",
+    "prompt", "skill", "media-full", "storage", "storage-s3", "storage-gcs", "workload", "cli", "dataset", "bench",
+    "vectorstore", "vectorstore-qdrant", "chain", "process", "stateful",
 ]

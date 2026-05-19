@@ -21,6 +21,15 @@ pub struct LocalStoreConfig {
     pub auto_create: bool,
 }
 
+impl Default for LocalStoreConfig {
+    fn default() -> Self {
+        Self {
+            root_dir: std::env::temp_dir().join("rskit-storage"),
+            auto_create: true,
+        }
+    }
+}
+
 /// Local filesystem storage backend.
 pub struct LocalStore {
     config: LocalStoreConfig,
@@ -69,12 +78,17 @@ impl FileStore for LocalStore {
             })?;
         }
 
-        let data = source.read_all().await?;
-        let size = data.len() as u64;
-        tokio::fs::write(&target, &data).await.map_err(|e| {
+        let mut reader = source.reader().await?;
+        let mut file = tokio::fs::File::create(&target).await.map_err(|e| {
             AppError::new(
                 ErrorCode::Internal,
-                format!("failed to write {}: {e}", target.display()),
+                format!("failed to create {}: {e}", target.display()),
+            )
+        })?;
+        let size = tokio::io::copy(&mut reader, &mut file).await.map_err(|e| {
+            AppError::new(
+                ErrorCode::Internal,
+                format!("failed to stream {}: {e}", target.display()),
             )
         })?;
 

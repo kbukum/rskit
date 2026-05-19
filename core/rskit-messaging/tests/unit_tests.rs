@@ -515,11 +515,22 @@ fn noop_error_classifier_default() {
 #[test]
 fn core_registry_starts_empty_for_binary_payloads() {
     let registry = rskit_messaging::MessagingRegistry::<Vec<u8>>::new();
-    assert!(registry.producer_adapters().is_empty());
-    assert!(registry.consumer_adapters().is_empty());
-    assert!(registry.producer("kafka").is_err());
-    assert!(registry.producer("nats").is_err());
-    assert!(registry.producer("rabbitmq").is_err());
+    assert!(registry.adapters().is_empty());
+    assert!(
+        registry
+            .producer(&rskit_messaging::BrokerConfig::new("kafka"))
+            .is_err()
+    );
+    assert!(
+        registry
+            .producer(&rskit_messaging::BrokerConfig::new("nats"))
+            .is_err()
+    );
+    assert!(
+        registry
+            .producer(&rskit_messaging::BrokerConfig::new("rabbitmq"))
+            .is_err()
+    );
 }
 
 #[test]

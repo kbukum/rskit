@@ -32,16 +32,19 @@ use rskit_storage_gcs::{GcsStoreConfig, register_gcs};
 
 # async fn example() -> rskit_errors::AppResult<()> {
 let mut registry = StorageRegistry::new();
-register_gcs(&mut registry)?;
+register_gcs(
+    &mut registry,
+    GcsStoreConfig {
+        bucket: "assets".into(),
+        prefix: Some("uploads".into()),
+        anonymous: false,
+    },
+)?;
 
 let store = registry
     .build(&StorageConfig {
         backend: "gcs".into(),
-        options: serde_json::to_value(GcsStoreConfig {
-            bucket: "assets".into(),
-            prefix: Some("uploads".into()),
-            anonymous: false,
-        })?,
+        ..Default::default()
     })
     .await?;
 # Ok(())

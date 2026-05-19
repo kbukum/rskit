@@ -60,11 +60,12 @@ pub fn producer_as_sink<T: Send + Sync + 'static>(
 
 /// Wraps a [`MessageConsumer`] as a [`Stream<(), Message<T>>`](Stream).
 ///
-/// Calling [`Stream::execute`] returns an unbounded stream of consumed
-/// messages. The stream yields items until an error occurs.
+/// Calling [`Stream::execute`] returns a bounded stream of consumed messages.
+/// The stream yields at most `max_messages` items before completing.
 pub struct ConsumerStream<T: Send + Sync + 'static> {
     name: &'static str,
     consumer: Arc<dyn MessageConsumer<T>>,
+    max_messages: usize,
 }
 
 #[async_trait]
@@ -78,8 +79,9 @@ impl<T: Send + Sync + 'static> Provider for ConsumerStream<T> {
 impl<T: Send + Sync + Clone + 'static> Stream<(), Message<T>> for ConsumerStream<T> {
     async fn execute(&self, _input: ()) -> AppResult<BoxStream<Message<T>>> {
         let consumer = Arc::clone(&self.consumer);
+        let max_messages = self.max_messages;
         let stream = async_stream::try_stream! {
-            loop {
+            for _ in 0..max_messages {
                 let msg = consumer.recv().await?;
                 yield msg;
             }
@@ -94,7 +96,21 @@ pub fn consumer_as_stream<T: Send + Sync + 'static>(
     name: &'static str,
     consumer: Arc<dyn MessageConsumer<T>>,
 ) -> ConsumerStream<T> {
-    ConsumerStream { name, consumer }
+    consumer_as_bounded_stream(name, consumer, 1024)
+}
+
+/// Create a [`ConsumerStream`] that yields at most `max_messages` messages.
+#[must_use]
+pub fn consumer_as_bounded_stream<T: Send + Sync + 'static>(
+    name: &'static str,
+    consumer: Arc<dyn MessageConsumer<T>>,
+    max_messages: usize,
+) -> ConsumerStream<T> {
+    ConsumerStream {
+        name,
+        consumer,
+        max_messages: max_messages.max(1),
+    }
 }
 
 #[cfg(test)]

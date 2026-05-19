@@ -10,12 +10,15 @@
 //! | `http`   | `rskit-http` (axum transport details) |
 //! | `auth`   | `rskit-auth` (JWT, OIDC, password) |
 //! | `di`     | `rskit-di` (dependency injection) |
-//! | `database` | `rskit-database` (sqlx) |
-//! | `cache`  | `rskit-cache` (Redis) |
+//! | `database` | `rskit-database` (core + memory backend) |
+//! | `cache`  | `rskit-cache` (core + memory backend) |
+//! | `cache-redis` | Redis cache adapter |
 //! | `messaging` | `rskit-messaging` (core abstractions + in-memory backend) |
 //! | `messaging-kafka` | `Kafka` messaging adapter |
 //! | `messaging-nats` | NATS messaging adapter |
 //! | `messaging-rabbitmq` | `RabbitMQ` messaging adapter |
+//! | `vectorstore` | `rskit-vectorstore` (core + memory backend) |
+//! | `vectorstore-qdrant` | Qdrant vector store adapter |
 //! | `observability` | `rskit-observability` (OpenTelemetry) |
 //! | `authz`  | `rskit-authz` (RBAC/ABAC) |
 //! | `security` | `rskit-security` (TLS/security configuration) |
@@ -139,13 +142,17 @@ pub use rskit_auth as auth;
 #[cfg(feature = "di")]
 pub use rskit_di as di;
 
-/// sqlx-based async database pool with repository pattern.
+/// Database contracts with in-memory default and adapter registry.
 #[cfg(feature = "database")]
 pub use rskit_database as database;
 
-/// Redis client with typed store and Component lifecycle.
+/// Cache contracts with in-memory default and adapter registry.
 #[cfg(feature = "cache")]
 pub use rskit_cache as cache;
+
+/// Redis cache adapter.
+#[cfg(feature = "cache-redis")]
+pub use rskit_cache_redis as cache_redis;
 
 /// Message broker abstractions and in-memory backend.
 #[cfg(feature = "messaging")]
@@ -234,6 +241,14 @@ pub use rskit_storage_s3 as storage_s3;
 /// Google Cloud Storage backend.
 #[cfg(feature = "storage-gcs")]
 pub use rskit_storage_gcs as storage_gcs;
+
+/// Vector store contracts with in-memory default and adapter registry.
+#[cfg(feature = "vectorstore")]
+pub use rskit_vectorstore as vectorstore;
+
+/// Qdrant vector store adapter.
+#[cfg(feature = "vectorstore-qdrant")]
+pub use rskit_vectorstore_qdrant as vectorstore_qdrant;
 
 /// Media types, codec/format registry, pipeline builder.
 #[cfg(feature = "media")]

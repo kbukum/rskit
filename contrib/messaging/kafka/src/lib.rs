@@ -16,7 +16,8 @@ use rdkafka::producer::{FutureProducer, FutureRecord, Producer};
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_messaging::{
     BrokerConfigExt, CommitStrategy, DeliveryGuarantee, Event, EventConsumer, EventProducer,
-    Message, MessageConsumer, MessageProducer, MessagingRegistry,
+    Message, MessageConsumer, MessageProducer, MessagingBackend, MessagingFactory,
+    MessagingRegistry,
 };
 use tokio_stream::StreamExt;
 use tracing::debug;
@@ -187,13 +188,25 @@ pub fn register(registry: &mut MessagingRegistry<Vec<u8>>, config: KafkaConfig) 
         return Ok(());
     }
     let adapter = config.base.adapter.clone();
-    let producer_config = config.clone();
-    registry.register_producer(adapter.clone(), move || {
-        Ok(Arc::new(KafkaProducer::new(&producer_config)?) as Arc<dyn MessageProducer<Vec<u8>>>)
-    })?;
-    registry.register_consumer(adapter, move || {
-        Ok(Arc::new(KafkaConsumer::new(&config)?) as Arc<dyn MessageConsumer<Vec<u8>>>)
-    })
+    registry.register_backend(adapter, Arc::new(KafkaFactory { config }))
+}
+
+struct KafkaFactory {
+    config: KafkaConfig,
+}
+
+impl MessagingFactory<Vec<u8>> for KafkaFactory {
+    fn create(
+        &self,
+        _config: &rskit_messaging::BrokerConfig,
+    ) -> AppResult<MessagingBackend<Vec<u8>>> {
+        Ok(MessagingBackend {
+            producer: Arc::new(KafkaProducer::new(&self.config)?)
+                as Arc<dyn MessageProducer<Vec<u8>>>,
+            consumer: Arc::new(KafkaConsumer::new(&self.config)?)
+                as Arc<dyn MessageConsumer<Vec<u8>>>,
+        })
+    }
 }
 
 fn base_client_config(config: &KafkaConfig) -> ClientConfig {
@@ -337,8 +350,7 @@ mod tests {
     fn register_adds_kafka_factories_without_creating_clients() {
         let mut registry = MessagingRegistry::<Vec<u8>>::new();
         register(&mut registry, KafkaConfig::default()).unwrap();
-        assert_eq!(registry.producer_adapters(), vec!["kafka"]);
-        assert_eq!(registry.consumer_adapters(), vec!["kafka"]);
+        assert_eq!(registry.adapters(), vec!["kafka"]);
     }
 
     #[test]

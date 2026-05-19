@@ -2,60 +2,13 @@
 //!
 //! Mirrors gokit's `database/tenant.go`.  Provides:
 //!
-//! - `set_session_variable` — sets a PostgreSQL session variable via
-//!   `set_config()` for Row Level Security (RLS) policies.
-//! - [`TenantScope`] — a builder for constructing tenant-filtered SQL
-//!   `WHERE` clauses.
-
-#[cfg(feature = "sqlx-any")]
-use tracing::{debug, error};
-
-#[cfg(feature = "sqlx-any")]
-use rskit_errors::{AppError, AppResult, ErrorCode};
-
-/// Set a PostgreSQL session variable using `set_config()`.
-///
-/// When `is_local` is `true`, the variable is scoped to the current
-/// transaction only.  This is used for PostgreSQL Row Level Security (RLS)
-/// policies that read session variables via `current_setting()`.
-///
-/// # Examples
-///
-/// ```ignore
-/// set_session_variable(&pool, "app.workspace_id", "ws-123", true).await?;
-/// ```
-#[cfg(feature = "sqlx-any")]
-pub async fn set_session_variable(
-    pool: &sqlx::AnyPool,
-    name: &str,
-    value: &str,
-    is_local: bool,
-) -> AppResult<()> {
-    debug!(name, value, is_local, "setting session variable");
-
-    sqlx::query("SELECT set_config($1, $2, $3)")
-        .bind(name)
-        .bind(value)
-        .bind(is_local)
-        .execute(pool)
-        .await
-        .map_err(|e| {
-            error!(error = %e, name, "failed to set session variable");
-            AppError::new(
-                ErrorCode::DatabaseError,
-                format!("failed to set session variable '{name}': {e}"),
-            )
-        })?;
-
-    Ok(())
-}
+//! - [`TenantScope`] — a builder for constructing tenant-filtered query
+//!   predicate fragments.
 
 /// Helper for building tenant-scoped SQL `WHERE` clauses.
 ///
-/// Mirrors gokit's `ScopeToTenant` by associating a column name with a
-/// tenant value.  Since sqlx does not provide a query builder, this struct
-/// produces clause fragments and exposes the bind value for manual query
-/// construction.
+/// Mirrors gokit's `ScopeToTenant` by associating a field name with a tenant
+/// value. Adapter crates decide how to bind the returned value.
 ///
 /// # Examples
 ///

@@ -12,10 +12,24 @@ use super::{FileStore, LocalStore, LocalStoreConfig};
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct StorageConfig {
     /// Backend name looked up in an injected [`StorageRegistry`].
+    #[serde(default = "default_backend")]
     pub backend: String,
-    /// Backend-specific JSON options.
+    /// Local filesystem backend options.
     #[serde(default)]
-    pub options: serde_json::Value,
+    pub local: LocalStoreConfig,
+}
+
+impl Default for StorageConfig {
+    fn default() -> Self {
+        Self {
+            backend: default_backend(),
+            local: LocalStoreConfig::default(),
+        }
+    }
+}
+
+fn default_backend() -> String {
+    "local".to_owned()
 }
 
 /// Async factory for storage backends.
@@ -93,14 +107,7 @@ struct LocalFactory;
 #[async_trait::async_trait]
 impl StorageFactory for LocalFactory {
     async fn create(&self, config: &StorageConfig) -> AppResult<Arc<dyn FileStore>> {
-        let local_config: LocalStoreConfig = serde_json::from_value(config.options.clone())
-            .map_err(|e| {
-                AppError::new(
-                    ErrorCode::InvalidInput,
-                    format!("invalid local storage config: {e}"),
-                )
-            })?;
-        Ok(Arc::new(LocalStore::new(local_config)?))
+        Ok(Arc::new(LocalStore::new(config.local.clone())?))
     }
 }
 
