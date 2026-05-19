@@ -124,10 +124,7 @@ impl RedisClient {
     }
 
     fn prefixed_key(&self, key: &str) -> String {
-        self.config
-            .key_prefix
-            .as_ref()
-            .map_or_else(|| key.to_owned(), |prefix| format!("{prefix}:{key}"))
+        prefixed_key(key, self.config.key_prefix.as_deref())
     }
 
     fn conn(&self) -> redis::aio::ConnectionManager {
@@ -214,6 +211,10 @@ fn redis_ttl_millis(ttl: Duration) -> AppResult<u64> {
     })
 }
 
+fn prefixed_key(key: &str, prefix: Option<&str>) -> String {
+    prefix.map_or_else(|| key.to_owned(), |prefix| format!("{prefix}:{key}"))
+}
+
 mod duration_seconds {
     use std::time::Duration;
 
@@ -231,5 +232,82 @@ mod duration_seconds {
         S: Serializer,
     {
         serializer.serialize_u64(duration.as_secs())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn connection_url_uses_auth_when_password_is_set() {
+        let config = RedisConfig {
+            host: "redis.example.test".to_owned(),
+            port: 6380,
+            password: Some(SecretString::new("secret")),
+            database: 2,
+            ..RedisConfig::default()
+        };
+
+        assert_eq!(
+            config.connection_url(),
+            "redis://:secret@redis.example.test:6380/2"
+        );
+    }
+
+    #[test]
+    fn connection_url_omits_auth_without_password() {
+        let config = RedisConfig {
+            host: "redis.example.test".to_owned(),
+            port: 6380,
+            database: 2,
+            ..RedisConfig::default()
+        };
+
+        assert_eq!(config.connection_url(), "redis://redis.example.test:6380/2");
+    }
+
+    #[test]
+    fn debug_masks_password() {
+        let config = RedisConfig {
+            password: Some(SecretString::new("secret")),
+            ..RedisConfig::default()
+        };
+
+        let debug = format!("{config:?}");
+
+        assert!(!debug.contains("secret"));
+        assert!(debug.contains("<redacted>"));
+    }
+
+    #[test]
+    fn ttl_millis_rounds_sub_millisecond_up() {
+        assert_eq!(redis_ttl_millis(Duration::from_nanos(1)).unwrap(), 1);
+    }
+
+    #[test]
+    fn ttl_millis_rejects_overflow() {
+        let err = redis_ttl_millis(Duration::from_secs(u64::MAX))
+            .expect_err("huge TTL should overflow Redis milliseconds");
+
+        assert_eq!(err.code, ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn key_prefix_is_applied_when_configured() {
+        assert_eq!(prefixed_key("user:1", Some("app")), "app:user:1");
+        assert_eq!(prefixed_key("user:1", None), "user:1");
+    }
+
+    #[tokio::test]
+    async fn zero_connect_timeout_is_rejected_without_network() {
+        let config = RedisConfig {
+            connect_timeout: Duration::ZERO,
+            ..RedisConfig::default()
+        };
+
+        let err = RedisClient::new(config).await.err().unwrap();
+
+        assert_eq!(err.code, ErrorCode::InvalidInput);
     }
 }

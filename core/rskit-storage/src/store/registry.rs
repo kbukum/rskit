@@ -58,7 +58,13 @@ impl StorageRegistry {
         name: impl Into<String>,
         factory: Arc<dyn StorageFactory>,
     ) -> AppResult<()> {
-        let name = name.into();
+        let name = name.into().trim().to_owned();
+        if name.is_empty() {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                "storage backend name is required",
+            ));
+        }
         if self.factories.contains_key(&name) {
             return Err(AppError::new(
                 ErrorCode::AlreadyExists,
@@ -89,12 +95,19 @@ impl StorageRegistry {
 
     /// Build the backend selected by [`StorageConfig::backend`].
     pub async fn build(&self, config: &StorageConfig) -> AppResult<Arc<dyn FileStore>> {
+        let backend = config.backend.trim();
+        if backend.is_empty() {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                "storage backend name is required",
+            ));
+        }
         self.factories
-            .get(&config.backend)
+            .get(backend)
             .ok_or_else(|| {
                 AppError::new(
                     ErrorCode::NotFound,
-                    format!("storage backend '{}' is not registered", config.backend),
+                    format!("storage backend '{backend}' is not registered"),
                 )
             })?
             .create(config)

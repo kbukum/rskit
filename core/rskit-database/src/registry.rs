@@ -34,7 +34,7 @@ impl DatabaseRegistry {
         name: impl Into<String>,
         factory: Arc<dyn DatabaseFactory>,
     ) -> AppResult<()> {
-        let name = name.into();
+        let name = name.into().trim().to_owned();
         if name.is_empty() {
             return Err(AppError::new(
                 ErrorCode::InvalidInput,
@@ -71,12 +71,19 @@ impl DatabaseRegistry {
 
     /// Build the backend selected by [`DatabaseConfig::backend`].
     pub async fn build(&self, config: &DatabaseConfig) -> AppResult<Arc<dyn DatabaseClient>> {
+        let backend = config.backend.trim();
+        if backend.is_empty() {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                "database backend name is required",
+            ));
+        }
         self.factories
-            .get(&config.backend)
+            .get(backend)
             .ok_or_else(|| {
                 AppError::new(
                     ErrorCode::NotFound,
-                    format!("database backend '{}' is not registered", config.backend),
+                    format!("database backend '{backend}' is not registered"),
                 )
             })?
             .create(config)
@@ -96,4 +103,36 @@ impl DatabaseFactory for MemoryFactory {
 /// Explicitly register the in-memory backend.
 pub fn register_memory(registry: &mut DatabaseRegistry) -> AppResult<()> {
     registry.register("memory", Arc::new(MemoryFactory))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn build_rejects_blank_backend() {
+        let registry = DatabaseRegistry::new();
+        let config = DatabaseConfig {
+            backend: "  ".to_owned(),
+            ..DatabaseConfig::default()
+        };
+
+        let err = registry.build(&config).await.err().unwrap();
+
+        assert_eq!(err.code, ErrorCode::InvalidInput);
+    }
+
+    #[tokio::test]
+    async fn build_normalizes_backend_before_lookup() {
+        let mut registry = DatabaseRegistry::new();
+        register_memory(&mut registry).unwrap();
+        let config = DatabaseConfig {
+            backend: " memory ".to_owned(),
+            ..DatabaseConfig::default()
+        };
+
+        let database = registry.build(&config).await.unwrap();
+
+        assert!(Arc::strong_count(&database) >= 1);
+    }
 }

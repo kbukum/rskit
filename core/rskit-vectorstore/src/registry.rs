@@ -32,7 +32,13 @@ impl VectorStoreRegistry {
         name: impl Into<String>,
         factory: Arc<dyn VectorFactory>,
     ) -> AppResult<()> {
-        let name = name.into();
+        let name = name.into().trim().to_owned();
+        if name.is_empty() {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                "vectorstore backend name is required",
+            ));
+        }
         if self.factories.contains_key(&name) {
             return Err(AppError::new(
                 ErrorCode::AlreadyExists,
@@ -63,18 +69,19 @@ impl VectorStoreRegistry {
 
     /// Build the backend selected by [`VectorStoreConfig::backend`].
     pub fn build(&self, config: &VectorStoreConfig) -> AppResult<Arc<dyn VectorStore>> {
-        if config.backend.trim().is_empty() {
+        let backend = config.backend.trim();
+        if backend.is_empty() {
             return Err(AppError::new(
                 ErrorCode::InvalidInput,
                 "vectorstore backend name is required",
             ));
         }
         self.factories
-            .get(&config.backend)
+            .get(backend)
             .ok_or_else(|| {
                 AppError::new(
                     ErrorCode::NotFound,
-                    format!("vectorstore backend '{}' is not registered", config.backend),
+                    format!("vectorstore backend '{backend}' is not registered"),
                 )
             })?
             .create(config)
@@ -120,6 +127,18 @@ mod tests {
     }
 
     #[test]
+    fn registry_rejects_blank_registration_name() {
+        let mut registry = VectorStoreRegistry::new();
+
+        let err = registry
+            .register(" ", Arc::new(MemoryFactory))
+            .err()
+            .unwrap();
+
+        assert_eq!(err.code, ErrorCode::InvalidInput);
+    }
+
+    #[test]
     fn registry_builds_memory_backend_after_explicit_registration() {
         let mut registry = VectorStoreRegistry::new();
         register_memory(&mut registry).unwrap();
@@ -149,5 +168,19 @@ mod tests {
         let err = registry.build(&config).err().unwrap();
 
         assert_eq!(err.code, ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn registry_normalizes_backend_before_lookup() {
+        let mut registry = VectorStoreRegistry::new();
+        register_memory(&mut registry).unwrap();
+        let config = VectorStoreConfig {
+            backend: " memory ".to_owned(),
+            ..VectorStoreConfig::default()
+        };
+
+        let store = registry.build(&config).unwrap();
+
+        assert!(Arc::strong_count(&store) >= 1);
     }
 }

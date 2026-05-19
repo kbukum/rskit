@@ -51,7 +51,13 @@ impl CacheRegistry {
         name: impl Into<String>,
         factory: Arc<dyn CacheFactory>,
     ) -> AppResult<()> {
-        let name = name.into();
+        let name = name.into().trim().to_owned();
+        if name.is_empty() {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                "cache backend name is required",
+            ));
+        }
         if self.factories.contains_key(&name) {
             return Err(AppError::new(
                 ErrorCode::AlreadyExists,
@@ -82,10 +88,17 @@ impl CacheRegistry {
 
     /// Build the backend selected by [`CacheConfig::backend`].
     pub async fn build(&self, config: &CacheConfig) -> AppResult<Arc<dyn CacheBackend>> {
-        let factory = self.factories.get(&config.backend).ok_or_else(|| {
+        let backend = config.backend.trim();
+        if backend.is_empty() {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                "cache backend name is required",
+            ));
+        }
+        let factory = self.factories.get(backend).ok_or_else(|| {
             AppError::new(
                 ErrorCode::NotFound,
-                format!("cache backend '{}' is not registered", config.backend),
+                format!("cache backend '{backend}' is not registered"),
             )
         })?;
         factory.create(config).await
