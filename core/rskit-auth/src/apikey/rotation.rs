@@ -89,10 +89,7 @@ impl<S: Store> Manager<S> {
         scopes: &[String],
         expires_at: Option<DateTime<Utc>>,
     ) -> Result<(GenerateResult, Key), AppError> {
-        let issued = self
-            .hasher
-            .generate_key(prefix)
-            .map_err(invalid_input_error)?;
+        let issued = self.hasher.generate_key(prefix)?;
         let record = Key {
             id: key_id.to_string(),
             owner_id: owner_id.to_string(),
@@ -117,7 +114,7 @@ impl<S: Store> Manager<S> {
         plain_key: &str,
         required_scopes: &[String],
     ) -> Result<Key, AppError> {
-        let (key_prefix, _secret) = split_key(plain_key).map_err(invalid_input_error)?;
+        let (key_prefix, _secret) = split_key(plain_key)?;
         let candidates = self.store.list_by_prefix(&key_prefix).await?;
 
         let mut matched: Option<Key> = None;

@@ -103,8 +103,29 @@ impl OidcConfig {
                 "OIDC audience must not be empty".into(),
             ));
         }
+        if self.allowed_algorithms.is_empty() {
+            return Err(OidcError::Configuration(
+                "OIDC allowed algorithms must not be empty".into(),
+            ));
+        }
+        if self
+            .allowed_algorithms
+            .iter()
+            .any(|algorithm| !is_approved_oidc_algorithm(*algorithm))
+        {
+            return Err(OidcError::Configuration(
+                "OIDC allowed algorithms must be asymmetric RS256, ES256, or EdDSA".into(),
+            ));
+        }
         Ok(())
     }
+}
+
+const fn is_approved_oidc_algorithm(algorithm: Algorithm) -> bool {
+    matches!(
+        algorithm,
+        Algorithm::RS256 | Algorithm::ES256 | Algorithm::EdDSA
+    )
 }
 
 fn is_allowed_redirect_uri(url: &Url) -> bool {
@@ -117,4 +138,43 @@ fn is_allowed_redirect_uri(url: &Url) -> bool {
         return matches!(host, "localhost" | "127.0.0.1" | "::1");
     }
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use jsonwebtoken::Algorithm;
+
+    use super::{OidcClientType, OidcConfig};
+
+    #[test]
+    fn oidc_config_rejects_empty_or_symmetric_algorithm_policy() {
+        let empty = OidcConfig::new(
+            "https://issuer.example",
+            "client",
+            "https://app.example/callback",
+            OidcClientType::Public,
+        )
+        .with_allowed_algorithms(Vec::new());
+        assert!(empty.validate().is_err());
+
+        let symmetric = OidcConfig::new(
+            "https://issuer.example",
+            "client",
+            "https://app.example/callback",
+            OidcClientType::Public,
+        )
+        .with_allowed_algorithms(vec![Algorithm::HS256]);
+        assert!(symmetric.validate().is_err());
+    }
+
+    #[test]
+    fn oidc_config_allows_localhost_development_redirects() {
+        let config = OidcConfig::new(
+            "https://issuer.example",
+            "client",
+            "http://localhost:3000/callback",
+            OidcClientType::Public,
+        );
+        assert!(config.validate().is_ok());
+    }
 }

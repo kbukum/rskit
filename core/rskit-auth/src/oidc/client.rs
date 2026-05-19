@@ -38,7 +38,7 @@ impl OidcClient<ReqwestOidcHttpClient> {
     /// # Errors
     /// Returns an error when the configuration is invalid.
     pub fn new(config: OidcConfig) -> Result<Self, OidcError> {
-        Self::with_http_client(config, ReqwestOidcHttpClient::default())
+        Self::with_http_client(config, ReqwestOidcHttpClient::new()?)
     }
 }
 

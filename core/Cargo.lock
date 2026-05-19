@@ -5455,6 +5455,7 @@ dependencies = [
  "reqwest 0.13.3",
  "rskit-config",
  "rskit-errors",
+ "rskit-httpclient",
  "serde",
  "serde_json",
  "sha2 0.11.0",
@@ -5470,8 +5471,12 @@ dependencies = [
 name = "rskit-authz"
 version = "0.1.0"
 dependencies = [
+ "http 1.4.0",
+ "rskit-errors",
  "serde",
  "serde_json",
+ "tokio",
+ "tower 0.5.3",
 ]
 
 [[package]]

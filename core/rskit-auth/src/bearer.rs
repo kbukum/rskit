@@ -1,51 +1,32 @@
-//! Tower middleware for API key validation.
+//! Tower middleware for header-only bearer-token authentication.
 
-use async_trait::async_trait;
-use http::{Request, Response, StatusCode, header::HeaderName};
-use rskit_errors::AppError;
-use std::sync::Arc;
+use std::{future::Future, marker::PhantomData, pin::Pin, sync::Arc};
+
+use http::{Request, Response, StatusCode, header};
 use tower::{Layer, Service};
 
-use super::Key;
-use crate::{AuthOutcome, MissingCredentialPolicy};
+use crate::{AuthClaims, AuthOutcome, MissingCredentialPolicy, traits::TokenValidator};
 
-/// Validates an API key and returns its metadata.
-#[async_trait]
-pub trait KeyValidator: Send + Sync {
-    /// Look up a key by its plaintext value, validate it, and return metadata.
-    async fn validate_key(&self, plain_key: &str) -> Result<Key, AppError>;
-}
-
-/// Tower Layer for API key validation.
-///
-/// If the configured header is absent, the request is rejected unless
-/// [`ApiKeyLayer::accept_missing`] is enabled.
-/// If present but invalid, returns 401.
+/// Tower layer that validates `Authorization: Bearer <token>` headers.
 #[derive(Clone)]
-pub struct ApiKeyLayer<V> {
+pub struct BearerAuthLayer<V, C> {
     validator: Arc<V>,
-    header_name: HeaderName,
     missing_policy: MissingCredentialPolicy,
+    _claims: PhantomData<fn() -> C>,
 }
 
-impl<V: KeyValidator + 'static> ApiKeyLayer<V> {
-    /// Create a new layer using the default `x-api-key` header.
+impl<V: 'static, C> BearerAuthLayer<V, C> {
+    /// Create a new bearer-auth layer that rejects missing credentials.
+    #[must_use]
     pub fn new(validator: V) -> Self {
         Self {
             validator: Arc::new(validator),
-            header_name: HeaderName::from_static("x-api-key"),
             missing_policy: MissingCredentialPolicy::RejectMissing,
+            _claims: PhantomData,
         }
     }
 
-    /// Override the header name used for key extraction.
-    #[must_use]
-    pub fn with_header(mut self, name: HeaderName) -> Self {
-        self.header_name = name;
-        self
-    }
-
-    /// Explicitly accept requests with no API-key header.
+    /// Explicitly accept requests with no credentials.
     #[must_use]
     pub const fn accept_missing(mut self) -> Self {
         self.missing_policy = MissingCredentialPolicy::AcceptMissing;
@@ -53,43 +34,43 @@ impl<V: KeyValidator + 'static> ApiKeyLayer<V> {
     }
 }
 
-impl<S, V> Layer<S> for ApiKeyLayer<V>
+impl<S, V, C> Layer<S> for BearerAuthLayer<V, C>
 where
-    V: KeyValidator + 'static,
+    V: 'static,
 {
-    type Service = ApiKeyService<S, V>;
+    type Service = BearerAuthService<S, V, C>;
 
     fn layer(&self, inner: S) -> Self::Service {
-        ApiKeyService {
+        BearerAuthService {
             inner,
             validator: Arc::clone(&self.validator),
-            header_name: self.header_name.clone(),
             missing_policy: self.missing_policy,
+            _claims: PhantomData,
         }
     }
 }
 
+/// Tower service produced by [`BearerAuthLayer`].
 #[derive(Clone)]
-pub struct ApiKeyService<S, V> {
+pub struct BearerAuthService<S, V, C> {
     inner: S,
     validator: Arc<V>,
-    header_name: HeaderName,
     missing_policy: MissingCredentialPolicy,
+    _claims: PhantomData<fn() -> C>,
 }
 
-impl<S, V, ReqBody, ResBody> Service<Request<ReqBody>> for ApiKeyService<S, V>
+impl<S, V, C, ReqBody, ResBody> Service<Request<ReqBody>> for BearerAuthService<S, V, C>
 where
     S: Service<Request<ReqBody>, Response = Response<ResBody>> + Clone + Send + 'static,
     S::Future: Send + 'static,
-    V: KeyValidator + 'static,
+    V: TokenValidator<C> + 'static,
+    C: Clone + Send + Sync + 'static,
     ReqBody: Send + 'static,
     ResBody: Default + Send + 'static,
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future = std::pin::Pin<
-        Box<dyn std::future::Future<Output = Result<Self::Response, Self::Error>> + Send>,
-    >;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
     fn poll_ready(
         &mut self,
@@ -102,31 +83,30 @@ where
         let clone = self.inner.clone();
         let mut inner = std::mem::replace(&mut self.inner, clone);
         let validator = Arc::clone(&self.validator);
-        let header_name = self.header_name.clone();
         let missing_policy = self.missing_policy;
 
         Box::pin(async move {
-            match extract_api_key(&req, &header_name) {
+            match extract_bearer_token(&req) {
                 CredentialExtraction::Missing => {
                     if missing_policy == MissingCredentialPolicy::AcceptMissing {
                         let mut req = req;
-                        req.extensions_mut().insert(AuthOutcome::<Key>::Missing);
+                        req.extensions_mut().insert(AuthOutcome::<C>::Missing);
                         inner.call(req).await
                     } else {
-                        Ok(unauthorized_response())
+                        Ok(unauthorized_bearer_response())
                     }
                 }
-                CredentialExtraction::Invalid => Ok(unauthorized_response()),
-                CredentialExtraction::Present(plain_key) => {
-                    if let Ok(key) = validator.validate_key(plain_key).await {
+                CredentialExtraction::Invalid => Ok(unauthorized_bearer_response()),
+                CredentialExtraction::Present(token) => match validator.validate(token).await {
+                    Ok(claims) => {
                         let mut req = req;
-                        req.extensions_mut().insert(key.clone());
-                        req.extensions_mut().insert(AuthOutcome::Authenticated(key));
+                        req.extensions_mut().insert(AuthClaims(claims.clone()));
+                        req.extensions_mut()
+                            .insert(AuthOutcome::Authenticated(claims));
                         inner.call(req).await
-                    } else {
-                        Ok(unauthorized_response())
                     }
-                }
+                    Err(_) => Ok(unauthorized_bearer_response()),
+                },
             }
         })
     }
@@ -138,11 +118,8 @@ enum CredentialExtraction<'a> {
     Present(&'a str),
 }
 
-fn extract_api_key<'a, B>(
-    req: &'a Request<B>,
-    header_name: &HeaderName,
-) -> CredentialExtraction<'a> {
-    let mut values = req.headers().get_all(header_name).iter();
+fn extract_bearer_token<B>(req: &Request<B>) -> CredentialExtraction<'_> {
+    let mut values = req.headers().get_all(header::AUTHORIZATION).iter();
     let Some(value) = values.next() else {
         return CredentialExtraction::Missing;
     };
@@ -152,15 +129,22 @@ fn extract_api_key<'a, B>(
     let Ok(value) = value.to_str() else {
         return CredentialExtraction::Invalid;
     };
-    if value.trim().is_empty() || value.chars().any(char::is_whitespace) {
+    let Some(token) = value.strip_prefix("Bearer ") else {
+        return CredentialExtraction::Invalid;
+    };
+    if token.is_empty() || token.chars().any(char::is_whitespace) {
         return CredentialExtraction::Invalid;
     }
-    CredentialExtraction::Present(value)
+    CredentialExtraction::Present(token)
 }
 
-fn unauthorized_response<ResBody: Default>() -> Response<ResBody> {
+fn unauthorized_bearer_response<ResBody: Default>() -> Response<ResBody> {
     let mut response = Response::new(ResBody::default());
     *response.status_mut() = StatusCode::UNAUTHORIZED;
+    response.headers_mut().insert(
+        header::WWW_AUTHENTICATE,
+        http::HeaderValue::from_static(r#"Bearer realm="rskit""#),
+    );
     response
 }
 
@@ -169,33 +153,27 @@ mod tests {
     use std::{convert::Infallible, future::Ready};
 
     use async_trait::async_trait;
-    use chrono::Utc;
     use http::{Request, Response, StatusCode};
-    use rskit_errors::AppError;
+    use rskit_errors::{AppError, AppResult};
+    use serde::{Deserialize, Serialize};
     use tower::{Layer, Service};
 
-    use super::{ApiKeyLayer, CredentialExtraction, KeyValidator, extract_api_key};
-    use crate::{AuthOutcome, apikey::Key};
+    use super::{BearerAuthLayer, CredentialExtraction, extract_bearer_token};
+    use crate::{AuthClaims, AuthOutcome, TokenValidator};
+
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+    struct Claims {
+        sub: String,
+    }
 
     struct Validator;
 
     #[async_trait]
-    impl KeyValidator for Validator {
-        async fn validate_key(&self, plain_key: &str) -> Result<Key, AppError> {
-            if plain_key == "pk.secret" {
-                Ok(Key {
-                    id: "key-1".into(),
-                    owner_id: "user-1".into(),
-                    name: "primary".into(),
-                    key_prefix: "pk".into(),
-                    key_digest: "digest".into(),
-                    scopes: vec!["read".into()],
-                    is_active: true,
-                    expires_at: None,
-                    grace_ends_at: None,
-                    rotated_by_id: None,
-                    last_used_at: None,
-                    created_at: Utc::now(),
+    impl TokenValidator<Claims> for Validator {
+        async fn validate(&self, token: &str) -> AppResult<Claims> {
+            if token == "good.token" {
+                Ok(Claims {
+                    sub: "user-1".into(),
                 })
             } else {
                 Err(AppError::invalid_token())
@@ -219,12 +197,12 @@ mod tests {
         }
 
         fn call(&mut self, request: Request<()>) -> Self::Future {
-            let status = if request.extensions().get::<Key>().is_some()
-                && request.extensions().get::<AuthOutcome<Key>>().is_some()
-            {
+            let has_claims = request.extensions().get::<AuthClaims<Claims>>().is_some();
+            let has_outcome = request.extensions().get::<AuthOutcome<Claims>>().is_some();
+            let status = if has_claims && has_outcome {
                 StatusCode::OK
             } else if matches!(
-                request.extensions().get::<AuthOutcome<Key>>(),
+                request.extensions().get::<AuthOutcome<Claims>>(),
                 Some(AuthOutcome::Missing)
             ) {
                 StatusCode::NO_CONTENT
@@ -236,52 +214,53 @@ mod tests {
     }
 
     #[test]
-    fn api_key_extraction_requires_single_non_empty_header() {
-        let header = http::header::HeaderName::from_static("x-api-key");
+    fn bearer_extraction_requires_single_authorization_header() {
         let request = http::Request::builder()
-            .header(&header, "pk.secret")
+            .header(http::header::AUTHORIZATION, "Bearer abc.def.ghi")
             .body(())
             .unwrap();
+
         assert!(matches!(
-            extract_api_key(&request, &header),
-            CredentialExtraction::Present("pk.secret")
+            extract_bearer_token(&request),
+            CredentialExtraction::Present("abc.def.ghi")
         ));
 
         let request = http::Request::builder()
-            .header(&header, "one")
-            .header(&header, "two")
+            .header(http::header::AUTHORIZATION, "Bearer one")
+            .header(http::header::AUTHORIZATION, "Bearer two")
             .body(())
             .unwrap();
+
         assert!(matches!(
-            extract_api_key(&request, &header),
+            extract_bearer_token(&request),
             CredentialExtraction::Invalid
         ));
     }
 
     #[test]
-    fn api_key_extraction_rejects_blank_or_whitespace_values() {
-        let header = http::header::HeaderName::from_static("x-api-key");
+    fn bearer_extraction_rejects_missing_or_malformed_values() {
         let missing = http::Request::builder().body(()).unwrap();
         assert!(matches!(
-            extract_api_key(&missing, &header),
+            extract_bearer_token(&missing),
             CredentialExtraction::Missing
         ));
 
-        for value in ["", "   ", "pk.secret with-space"] {
+        for value in ["bearer token", "Bearer ", "Bearer token with-space"] {
             let request = http::Request::builder()
-                .header(&header, value)
+                .header(http::header::AUTHORIZATION, value)
                 .body(())
                 .unwrap();
             assert!(matches!(
-                extract_api_key(&request, &header),
+                extract_bearer_token(&request),
                 CredentialExtraction::Invalid
             ));
         }
     }
 
     #[tokio::test]
-    async fn api_key_layer_rejects_missing_by_default_and_accepts_valid_keys() {
-        let mut service = ApiKeyLayer::new(Validator).layer(ExtensionCheckingService);
+    async fn bearer_layer_rejects_missing_by_default_and_accepts_valid_tokens() {
+        let mut service =
+            BearerAuthLayer::<_, Claims>::new(Validator).layer(ExtensionCheckingService);
 
         let missing = service
             .call(Request::builder().body(()).unwrap())
@@ -292,7 +271,7 @@ mod tests {
         let valid = service
             .call(
                 Request::builder()
-                    .header("x-api-key", "pk.secret")
+                    .header(http::header::AUTHORIZATION, "Bearer good.token")
                     .body(())
                     .unwrap(),
             )
@@ -302,8 +281,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn api_key_layer_accept_missing_does_not_accept_invalid_keys() {
-        let mut service = ApiKeyLayer::new(Validator)
+    async fn bearer_layer_accept_missing_is_explicit_and_invalid_still_fails() {
+        let mut service = BearerAuthLayer::<_, Claims>::new(Validator)
             .accept_missing()
             .layer(ExtensionCheckingService);
 
@@ -316,7 +295,7 @@ mod tests {
         let invalid = service
             .call(
                 Request::builder()
-                    .header("x-api-key", "pk.bad")
+                    .header(http::header::AUTHORIZATION, "Bearer bad.token")
                     .body(())
                     .unwrap(),
             )

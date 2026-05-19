@@ -8,6 +8,8 @@ pub mod checker;
 pub mod engine;
 /// Wildcard permission matching.
 pub mod matcher;
+/// Tower authorization middleware.
+pub mod middleware;
 
 pub use checker::Checker;
 pub use engine::{
@@ -15,8 +17,9 @@ pub use engine::{
     Request, Resource, Role, Subject,
 };
 pub use matcher::{match_any, match_pattern};
+pub use middleware::{AuthorizationLayer, AuthorizationService, RequestAuthorizer};
 
-/// Canonical authorization decision for agentic resources.
+/// Transport-agnostic authorization decision.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[non_exhaustive]
 pub enum AuthzDecision {
@@ -28,12 +31,12 @@ pub enum AuthzDecision {
     RequiresHumanApproval(String),
 }
 
-/// Canonical authorization request for skill/tool/resource decisions.
+/// Transport-agnostic authorization request for a principal, action, and resource.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct AuthzRequest {
     /// Principal identifier.
     pub principal: String,
-    /// Action such as `skill:activate`, `skill:invoke`, `tool:invoke`, or `resource:read`.
+    /// Action being performed.
     pub action: String,
     /// Resource identifier.
     pub resource: String,
@@ -45,7 +48,7 @@ pub struct AuthzRequest {
     pub attributes: serde_json::Value,
 }
 
-/// Injected authorization decider used by AI modules.
+/// Object-safe authorization decider used at integration boundaries.
 pub trait Decider: Send + Sync {
     /// Decide one authorization request.
     fn decide(&self, request: &AuthzRequest) -> AuthzDecision;
