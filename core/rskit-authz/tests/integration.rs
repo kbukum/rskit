@@ -78,7 +78,7 @@ fn explicit_deny_overrides_role_grants() {
     let deny = engine.authorize(&request("editor", "delete", "article"));
     assert!(allow.allowed);
     assert!(!deny.allowed);
-    assert_eq!(deny.reason, "denied by policy: deny-delete");
+    assert_eq!(deny.reason, "denied by policy");
 }
 
 #[test]

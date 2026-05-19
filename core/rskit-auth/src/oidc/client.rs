@@ -33,12 +33,13 @@ pub struct OidcClient<H = ReqwestOidcHttpClient> {
 }
 
 impl OidcClient<ReqwestOidcHttpClient> {
-    /// Create an OIDC client using reqwest.
+    /// Create an OIDC client using the default HTTP client.
     ///
     /// # Errors
-    /// Returns an error when the configuration is invalid.
+    /// Returns an error when the configuration is invalid or the default HTTP client cannot be
+    /// constructed.
     pub fn new(config: OidcConfig) -> Result<Self, OidcError> {
-        Self::with_http_client(config, ReqwestOidcHttpClient::default())
+        Self::with_http_client(config, ReqwestOidcHttpClient::new()?)
     }
 }
 

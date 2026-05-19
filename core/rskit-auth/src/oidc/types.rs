@@ -1,3 +1,5 @@
+use std::fmt;
+
 use base64::Engine;
 use serde::Deserialize;
 use sha2::Digest;
@@ -27,7 +29,7 @@ pub struct OidcProviderMetadata {
 }
 
 /// Built authorization request plus correlated anti-CSRF state.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct OidcAuthorizationRequest {
     /// Fully rendered authorization URL.
     pub url: String,
@@ -39,8 +41,20 @@ pub struct OidcAuthorizationRequest {
     pub pkce: Option<PkcePair>,
 }
 
+impl fmt::Debug for OidcAuthorizationRequest {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("OidcAuthorizationRequest")
+            .field("url", &"<redacted>")
+            .field("state", &"<redacted>")
+            .field("nonce", &"<redacted>")
+            .field("pkce", &self.pkce.as_ref().map(|_| "<redacted>"))
+            .finish()
+    }
+}
+
 /// Token exchange parameters validated against the authorization request state.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct OidcTokenExchangeRequest {
     /// Token endpoint discovered from the provider.
     pub token_endpoint: String,
@@ -54,8 +68,24 @@ pub struct OidcTokenExchangeRequest {
     pub code_verifier: Option<String>,
 }
 
+impl fmt::Debug for OidcTokenExchangeRequest {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("OidcTokenExchangeRequest")
+            .field("token_endpoint", &self.token_endpoint)
+            .field("code", &"<redacted>")
+            .field("redirect_uri", &self.redirect_uri)
+            .field("state", &"<redacted>")
+            .field(
+                "code_verifier",
+                &self.code_verifier.as_ref().map(|_| "<redacted>"),
+            )
+            .finish()
+    }
+}
+
 /// PKCE verifier/challenge pair.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct PkcePair {
     /// High-entropy verifier.
     pub verifier: String,
@@ -63,6 +93,17 @@ pub struct PkcePair {
     pub challenge: String,
     /// Challenge method, always `S256`.
     pub method: &'static str,
+}
+
+impl fmt::Debug for PkcePair {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("PkcePair")
+            .field("verifier", &"<redacted>")
+            .field("challenge", &"<redacted>")
+            .field("method", &self.method)
+            .finish()
+    }
 }
 
 impl PkcePair {
@@ -146,6 +187,45 @@ impl Audiences {
         match self {
             Self::One(value) => vec![value],
             Self::Many(values) => values,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{OidcAuthorizationRequest, OidcTokenExchangeRequest, PkcePair};
+
+    #[test]
+    fn oidc_debug_masks_callback_secrets() {
+        let pkce = PkcePair {
+            verifier: "verifier-secret".into(),
+            challenge: "challenge-secret".into(),
+            method: "S256",
+        };
+        let authorization = OidcAuthorizationRequest {
+            url: "https://issuer/authorize?state=state-secret&nonce=nonce-secret".into(),
+            state: "state-secret".into(),
+            nonce: "nonce-secret".into(),
+            pkce: Some(pkce.clone()),
+        };
+        let exchange = OidcTokenExchangeRequest {
+            token_endpoint: "https://issuer/token".into(),
+            code: "code-secret".into(),
+            redirect_uri: "https://app/callback".into(),
+            state: "state-secret".into(),
+            code_verifier: Some(pkce.verifier.clone()),
+        };
+
+        let formatted = format!("{authorization:?} {exchange:?} {pkce:?}");
+
+        for secret in [
+            "state-secret",
+            "nonce-secret",
+            "verifier-secret",
+            "challenge-secret",
+            "code-secret",
+        ] {
+            assert!(!formatted.contains(secret), "{formatted}");
         }
     }
 }

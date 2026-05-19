@@ -5,6 +5,7 @@ use std::fmt;
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
 use hmac::{Hmac, KeyInit, Mac};
+use rskit_errors::{AppError, AppResult, ErrorCode};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 
@@ -34,15 +35,17 @@ impl HashingConfig {
     }
 
     /// Validate the configuration.
-    pub fn validate(&self) -> Result<(), String> {
+    pub fn validate(&self) -> AppResult<()> {
         if self.pepper.len() < MIN_PEPPER_BYTES {
-            return Err(format!(
-                "apikey: pepper must be at least {MIN_PEPPER_BYTES} bytes"
+            return Err(AppError::invalid_input(
+                "pepper",
+                format!("pepper must be at least {MIN_PEPPER_BYTES} bytes"),
             ));
         }
         if self.entropy_bytes < MIN_ENTROPY_BYTES {
-            return Err(format!(
-                "apikey: entropy_bytes must be at least {MIN_ENTROPY_BYTES}"
+            return Err(AppError::invalid_input(
+                "entropy_bytes",
+                format!("entropy_bytes must be at least {MIN_ENTROPY_BYTES}"),
             ));
         }
         Ok(())
@@ -60,7 +63,7 @@ impl fmt::Debug for HashingConfig {
 }
 
 /// Persisted API key metadata.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Key {
     /// Unique identifier for this key.
     pub id: String,
@@ -86,6 +89,26 @@ pub struct Key {
     pub last_used_at: Option<DateTime<Utc>>,
     /// Creation timestamp.
     pub created_at: DateTime<Utc>,
+}
+
+impl fmt::Debug for Key {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("Key")
+            .field("id", &self.id)
+            .field("owner_id", &self.owner_id)
+            .field("name", &self.name)
+            .field("key_prefix", &self.key_prefix)
+            .field("key_digest", &"<redacted>")
+            .field("scopes", &self.scopes)
+            .field("is_active", &self.is_active)
+            .field("expires_at", &self.expires_at)
+            .field("grace_ends_at", &self.grace_ends_at)
+            .field("rotated_by_id", &self.rotated_by_id)
+            .field("last_used_at", &self.last_used_at)
+            .field("created_at", &self.created_at)
+            .finish()
+    }
 }
 
 impl Key {
@@ -125,7 +148,7 @@ impl fmt::Debug for GenerateResult {
             .debug_struct("GenerateResult")
             .field("plain_key", &"<redacted>")
             .field("key_prefix", &self.key_prefix)
-            .field("key_digest", &self.key_digest)
+            .field("key_digest", &"<redacted>")
             .finish()
     }
 }
@@ -152,13 +175,18 @@ impl fmt::Debug for Hasher {
 
 impl Hasher {
     /// Construct a new hasher, validating config and pre-initializing the HMAC key.
-    pub fn new(mut config: HashingConfig) -> Result<Self, String> {
+    pub fn new(mut config: HashingConfig) -> AppResult<Self> {
         if config.entropy_bytes == 0 {
             config.entropy_bytes = DEFAULT_ENTROPY_BYTES;
         }
         config.validate()?;
-        let hmac_prototype = HmacSha256::new_from_slice(config.pepper.as_bytes())
-            .map_err(|e| format!("apikey: failed to initialize HMAC key: {e}"))?;
+        let hmac_prototype =
+            HmacSha256::new_from_slice(config.pepper.as_bytes()).map_err(|error| {
+                AppError::new(
+                    ErrorCode::InvalidInput,
+                    format!("invalid API key pepper: {error}"),
+                )
+            })?;
         Ok(Self {
             config,
             hmac_prototype,
@@ -172,7 +200,7 @@ impl Hasher {
     }
 
     /// Generate a new API key with the supplied prefix.
-    pub fn generate_key(&self, prefix: &str) -> Result<GenerateResult, String> {
+    pub fn generate_key(&self, prefix: &str) -> AppResult<GenerateResult> {
         validate_prefix(prefix)?;
 
         let mut random_bytes = vec![0_u8; self.config.entropy_bytes];
@@ -206,12 +234,12 @@ impl Hasher {
 }
 
 /// Split a plaintext key into `(prefix, secret)`.
-pub fn split_key(plain_key: &str) -> Result<(String, String), String> {
+pub fn split_key(plain_key: &str) -> AppResult<(String, String)> {
     let Some((prefix, secret)) = plain_key.split_once('.') else {
-        return Err(String::from("apikey: invalid key format"));
+        return Err(AppError::invalid_input("api_key", "invalid API key format"));
     };
     if prefix.is_empty() || secret.is_empty() {
-        return Err(String::from("apikey: invalid key format"));
+        return Err(AppError::invalid_input("api_key", "invalid API key format"));
     }
     Ok((prefix.to_string(), secret.to_string()))
 }
@@ -239,16 +267,20 @@ pub fn validate(key: &Key) -> Result<(), KeyValidationError> {
     Ok(())
 }
 
-fn validate_prefix(prefix: &str) -> Result<(), String> {
+fn validate_prefix(prefix: &str) -> AppResult<()> {
     if prefix.is_empty() {
-        return Err(String::from("apikey: prefix must be non-empty"));
+        return Err(AppError::invalid_input(
+            "prefix",
+            "prefix must be non-empty",
+        ));
     }
     if prefix
         .chars()
         .any(|char| !char.is_ascii_alphanumeric() && char != '-' && char != '_')
     {
-        return Err(String::from(
-            "apikey: prefix must contain only [A-Za-z0-9_-]",
+        return Err(AppError::invalid_input(
+            "prefix",
+            "prefix must contain only [A-Za-z0-9_-]",
         ));
     }
     Ok(())
@@ -295,5 +327,43 @@ mod tests {
     fn split_key_rejects_malformed_values() {
         assert!(split_key("pk.secret").is_ok());
         assert!(split_key("malformed").is_err());
+    }
+
+    #[test]
+    fn hashing_config_rejects_short_pepper_and_entropy() {
+        let short_pepper = HashingConfig {
+            pepper: "short".into(),
+            entropy_bytes: 32,
+        };
+        assert!(short_pepper.validate().is_err());
+
+        let short_entropy = HashingConfig {
+            pepper: "p".repeat(32),
+            entropy_bytes: 1,
+        };
+        assert!(short_entropy.validate().is_err());
+    }
+
+    #[test]
+    fn key_debug_redacts_digest() {
+        let key = crate::apikey::Key {
+            id: "key-1".into(),
+            owner_id: "user-1".into(),
+            name: "primary".into(),
+            key_prefix: "pk".into(),
+            key_digest: "digest-secret".into(),
+            scopes: Vec::new(),
+            is_active: true,
+            expires_at: None,
+            grace_ends_at: None,
+            rotated_by_id: None,
+            last_used_at: None,
+            created_at: chrono::Utc::now(),
+        };
+
+        let formatted = format!("{key:?}");
+
+        assert!(formatted.contains("<redacted>"));
+        assert!(!formatted.contains("digest-secret"));
     }
 }

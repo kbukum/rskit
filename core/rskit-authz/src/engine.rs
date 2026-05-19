@@ -2,6 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use rskit_errors::{AppError, AppResult};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -78,17 +79,19 @@ pub struct Role {
 /// Result of a matched policy.
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum Effect {
     /// Allow the request.
-    #[default]
     Allow,
     /// Deny the request.
+    #[default]
     Deny,
 }
 
 /// Source of an attribute used by a condition.
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum AttributeSource {
     /// Read from subject attributes.
     #[default]
@@ -102,6 +105,7 @@ pub enum AttributeSource {
 /// Comparison operator for ABAC conditions.
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum Operator {
     /// Exact equality.
     #[default]
@@ -162,14 +166,17 @@ pub struct Engine {
 
 impl Engine {
     /// Construct an engine from roles and policies.
-    pub fn new(roles: Vec<Role>, policies: Vec<Policy>) -> Result<Self, String> {
+    pub fn new(roles: Vec<Role>, policies: Vec<Policy>) -> AppResult<Self> {
         let mut indexed_roles = HashMap::with_capacity(roles.len());
         for role in roles {
             if role.name.is_empty() {
-                return Err(String::from("authz: role name is required"));
+                return Err(AppError::invalid_input(
+                    "role.name",
+                    "role name is required",
+                ));
             }
             if indexed_roles.insert(role.name.clone(), role).is_some() {
-                return Err(String::from("authz: duplicate role"));
+                return Err(AppError::invalid_input("role.name", "duplicate role"));
             }
         }
         Ok(Self {
@@ -186,7 +193,7 @@ impl Engine {
             if policy.effect == Effect::Deny && policy.matches(request) {
                 return Decision {
                     allowed: false,
-                    reason: format!("denied by policy: {}", policy.name),
+                    reason: String::from("denied by policy"),
                 };
             }
         }
@@ -204,7 +211,7 @@ impl Engine {
             if policy.effect == Effect::Allow && policy.matches(request) {
                 return Decision {
                     allowed: true,
-                    reason: format!("allowed by policy: {}", policy.name),
+                    reason: String::from("allowed by policy"),
                 };
             }
         }
