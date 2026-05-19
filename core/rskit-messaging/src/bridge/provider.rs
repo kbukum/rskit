@@ -122,7 +122,7 @@ pub fn consumer_as_bounded_stream<T: Send + Sync + 'static>(
     ConsumerStream {
         name,
         consumer,
-        max_messages: Some(max_messages.max(1)),
+        max_messages: Some(max_messages),
     }
 }
 
@@ -223,6 +223,21 @@ mod tests {
         assert_eq!(items.len(), 2);
         assert_eq!(items[0].as_ref().unwrap().payload, "a");
         assert_eq!(items[1].as_ref().unwrap().payload, "b");
+    }
+
+    #[tokio::test]
+    async fn bounded_consumer_stream_with_zero_limit_completes_immediately() {
+        let broker = InMemoryBroker::<String>::new(16);
+        let consumer = Arc::new(broker.consumer());
+        consumer.subscribe(&["stream-t"]).await.unwrap();
+
+        let cs = consumer_as_bounded_stream("test-stream", consumer, 0);
+        let stream = cs.execute(()).await.unwrap();
+        let items = tokio::time::timeout(Duration::from_millis(50), stream.collect::<Vec<_>>())
+            .await
+            .unwrap();
+
+        assert!(items.is_empty());
     }
 
     #[tokio::test]

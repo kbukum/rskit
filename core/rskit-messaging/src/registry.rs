@@ -56,13 +56,8 @@ impl<T: Send + Sync + 'static> MessagingRegistry<T> {
         adapter: impl Into<String>,
         factory: Arc<dyn MessagingFactory<T>>,
     ) -> AppResult<()> {
-        let adapter = adapter.into();
-        if adapter.is_empty() {
-            return Err(AppError::new(
-                ErrorCode::InvalidInput,
-                "messaging adapter name is required",
-            ));
-        }
+        let adapter = adapter.into().trim().to_owned();
+        BrokerConfig::new(adapter.clone()).validate()?;
         if self.factories.contains_key(&adapter) {
             return Err(AppError::new(
                 ErrorCode::AlreadyExists,
@@ -166,6 +161,37 @@ mod tests {
         let err = crate::memory::register(&mut registry, broker).unwrap_err();
 
         assert_eq!(err.code, ErrorCode::AlreadyExists);
+    }
+
+    #[test]
+    fn rejects_blank_adapter_registration() {
+        let mut registry = MessagingRegistry::<String>::new();
+        let factory = CountingFactory {
+            producer_calls: Arc::new(AtomicUsize::new(0)),
+            consumer_calls: Arc::new(AtomicUsize::new(0)),
+        };
+
+        let err = registry
+            .register_backend(" ", Arc::new(factory))
+            .expect_err("blank adapter must fail");
+
+        assert_eq!(err.code, ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn normalizes_adapter_registration_name() {
+        let mut registry = MessagingRegistry::<String>::new();
+        let factory = CountingFactory {
+            producer_calls: Arc::new(AtomicUsize::new(0)),
+            consumer_calls: Arc::new(AtomicUsize::new(0)),
+        };
+
+        registry
+            .register_backend(" counting ", Arc::new(factory))
+            .unwrap();
+
+        assert!(registry.contains("counting"));
+        assert!(!registry.contains(" counting "));
     }
 
     #[test]

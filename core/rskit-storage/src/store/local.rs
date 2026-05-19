@@ -2,7 +2,8 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::time::Duration;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use chrono::Utc;
 use rskit_errors::{AppError, AppResult, ErrorCode};
@@ -11,6 +12,8 @@ use serde::{Deserialize, Serialize};
 use crate::FileSource;
 
 use super::{FileStore, ProgressCallback, StoredFile};
+
+static NEXT_DEFAULT_ROOT_ID: AtomicU64 = AtomicU64::new(0);
 
 /// Configuration for the local file store.
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -24,10 +27,21 @@ pub struct LocalStoreConfig {
 impl Default for LocalStoreConfig {
     fn default() -> Self {
         Self {
-            root_dir: std::env::temp_dir().join("rskit-storage"),
+            root_dir: default_local_root_dir(),
             auto_create: true,
         }
     }
+}
+
+fn default_local_root_dir() -> PathBuf {
+    let sequence = NEXT_DEFAULT_ROOT_ID.fetch_add(1, Ordering::Relaxed);
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_nanos());
+    std::env::temp_dir().join(format!(
+        "rskit-storage-{}-{nanos}-{sequence}",
+        std::process::id()
+    ))
 }
 
 /// Local filesystem storage backend.
@@ -248,5 +262,22 @@ impl FileStore for LocalStore {
         })?;
 
         self.head(to_key).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_root_dir_is_isolated_per_config() {
+        let first = LocalStoreConfig::default();
+        let second = LocalStoreConfig::default();
+
+        assert!(first.auto_create);
+        assert!(second.auto_create);
+        assert_ne!(first.root_dir, second.root_dir);
+        assert!(first.root_dir.starts_with(std::env::temp_dir()));
+        assert!(second.root_dir.starts_with(std::env::temp_dir()));
     }
 }
