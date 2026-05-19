@@ -8,9 +8,10 @@ use async_trait::async_trait;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use tokio::sync::{Mutex, broadcast};
 
+use crate::config::BrokerConfig;
 use crate::event::Event;
 use crate::message::Message;
-use crate::registry::MessagingRegistry;
+use crate::registry::{MessagingFactory, MessagingRegistry};
 use crate::traits::{EventConsumer, EventProducer, MessageConsumer, MessageProducer};
 
 const ADAPTER_NAME: &str = "memory";
@@ -36,11 +37,12 @@ pub struct InMemoryBroker<T: Clone + Send + Sync + 'static> {
 impl<T: Clone + Send + Sync + 'static> InMemoryBroker<T> {
     /// Create a broker with the given channel capacity.
     pub fn new(capacity: usize) -> Self {
-        let (tx, _) = broadcast::channel(capacity);
+        let limit = capacity.max(1);
+        let (tx, _) = broadcast::channel(limit);
         Self {
             tx,
-            history: Arc::new(Mutex::new(VecDeque::new())),
-            history_limit: None,
+            history: Arc::new(Mutex::new(VecDeque::with_capacity(limit))),
+            history_limit: Some(limit),
             topics: Arc::new(Mutex::new(HashSet::new())),
             notify: Arc::new(tokio::sync::Notify::new()),
         }
@@ -59,10 +61,11 @@ impl<T: Clone + Send + Sync + 'static> InMemoryBroker<T> {
 
     /// Create a broker with explicit channel capacity and bounded history limit.
     ///
-    /// The default [`InMemoryBroker::new`] preserves all history. Use this constructor
-    /// when tests intentionally need bounded memory.
+    /// The default [`InMemoryBroker::new`] bounds history by channel capacity. Use this
+    /// constructor when tests need a different history limit.
     #[must_use]
     pub fn with_history_limit(capacity: usize, history_limit: usize) -> Self {
+        let capacity = capacity.max(1);
         let limit = history_limit.max(1);
         let (tx, _) = broadcast::channel(capacity);
         Self {
@@ -143,13 +146,21 @@ pub fn register<T: Clone + Send + Sync + 'static>(
     registry: &mut MessagingRegistry<T>,
     broker: InMemoryBroker<T>,
 ) -> AppResult<()> {
-    let producer_broker = broker.clone();
-    registry.register_producer(ADAPTER_NAME, move || {
-        Ok(Arc::new(producer_broker.producer()) as Arc<dyn MessageProducer<T>>)
-    })?;
-    registry.register_consumer(ADAPTER_NAME, move || {
-        Ok(Arc::new(broker.consumer()) as Arc<dyn MessageConsumer<T>>)
-    })
+    registry.register_backend(ADAPTER_NAME, Arc::new(MemoryFactory { broker }))
+}
+
+struct MemoryFactory<T: Clone + Send + Sync + 'static> {
+    broker: InMemoryBroker<T>,
+}
+
+impl<T: Clone + Send + Sync + 'static> MessagingFactory<T> for MemoryFactory<T> {
+    fn create_producer(&self, _config: &BrokerConfig) -> AppResult<Arc<dyn MessageProducer<T>>> {
+        Ok(Arc::new(self.broker.producer()))
+    }
+
+    fn create_consumer(&self, _config: &BrokerConfig) -> AppResult<Arc<dyn MessageConsumer<T>>> {
+        Ok(Arc::new(self.broker.consumer()))
+    }
 }
 
 /// An in-memory message producer.
@@ -390,10 +401,10 @@ mod tests {
 
         register(&mut registry, broker).unwrap();
 
-        assert_eq!(registry.producer_adapters(), vec!["memory"]);
-        assert_eq!(registry.consumer_adapters(), vec!["memory"]);
-        let producer = registry.producer("memory").unwrap();
-        let consumer = registry.consumer("memory").unwrap();
+        assert_eq!(registry.adapters(), vec!["memory"]);
+        let config = BrokerConfig::default();
+        let producer = registry.producer(&config).unwrap();
+        let consumer = registry.consumer(&config).unwrap();
         consumer.subscribe(&["events"]).await.unwrap();
         producer
             .send(Message::new("events", "registered".to_string()))
@@ -653,7 +664,7 @@ mod tests {
         assert_eq!(msg.payload, "delayed");
     }
     #[tokio::test]
-    async fn default_history_preserves_more_than_legacy_limit() {
+    async fn default_history_is_bounded_by_capacity() {
         let broker: InMemoryBroker<usize> = InMemoryBroker::new(8);
         let producer = broker.producer();
         let _consumer = broker.consumer();
@@ -663,8 +674,8 @@ mod tests {
         }
 
         let messages = broker.messages("history").await;
-        assert_eq!(messages.len(), 1030);
-        assert_eq!(messages.first().map(|msg| msg.payload), Some(0));
+        assert_eq!(messages.len(), 8);
+        assert_eq!(messages.first().map(|msg| msg.payload), Some(1022));
     }
 
     #[tokio::test]
@@ -684,5 +695,17 @@ mod tests {
             .map(|msg| msg.payload)
             .collect::<Vec<_>>();
         assert_eq!(payloads, vec![2, 3]);
+    }
+
+    #[tokio::test]
+    async fn zero_capacity_is_clamped() {
+        let broker: InMemoryBroker<usize> = InMemoryBroker::new(0);
+        let producer = broker.producer();
+        let _consumer = broker.consumer();
+
+        producer.send(Message::new("history", 1)).await.unwrap();
+
+        let messages = broker.messages("history").await;
+        assert_eq!(messages.len(), 1);
     }
 }

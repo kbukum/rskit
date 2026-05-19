@@ -140,12 +140,6 @@ tokio-rustls = "0.26.4"
 jsonwebtoken = { version = "10", features = ["rust_crypto"] }
 argon2 = { version = "0.5", features = ["password-hash", "rand"] }
 
-# Database (Phase 3)
-sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "postgres", "mysql", "sqlite", "uuid", "chrono", "json"] }
-
-# Cache (Phase 3)
-redis = { version = "1.2", features = ["tokio-comp", "connection-manager"] }
-
 # Observability (Phase 4)
 opentelemetry = "0.31"
 opentelemetry_sdk = { version = "0.31", features = ["rt-tokio", "logs"] }

@@ -1,23 +1,13 @@
 //! Repository trait and helpers for the data-access layer.
 
-#[cfg(feature = "sqlx-any")]
-use std::marker::PhantomData;
-#[cfg(feature = "sqlx-any")]
-use std::sync::Arc;
-
 use async_trait::async_trait;
 
 use rskit_errors::AppResult;
 
-#[cfg(feature = "sqlx-any")]
-use crate::Database;
-
 /// Generic repository interface for CRUD operations.
 ///
-/// Implement this trait for each entity type.  The `SqlRepository` struct
-/// provides a convenient base that holds a `Database` reference and table
-/// name, but does **not** implement this trait itself because the SQL required
-/// is entity-specific.
+/// Implement this trait for each entity type. Backend-specific repository
+/// helpers belong in adapter crates so the core contract remains vendor-neutral.
 #[async_trait]
 pub trait Repository<T, ID>: Send + Sync
 where
@@ -92,48 +82,5 @@ impl FindOpts {
     pub fn filter(mut self, col: &str, val: impl Into<serde_json::Value>) -> Self {
         self.filters.push((col.to_owned(), val.into()));
         self
-    }
-}
-
-/// Base helper for SQL-backed repositories.
-///
-/// Holds an `Arc<Database>` and a table name.  Concrete repository
-/// implementations can embed this struct and delegate to its accessors when
-/// building queries.
-#[cfg(feature = "sqlx-any")]
-pub struct SqlRepository<T> {
-    db: Arc<Database>,
-    table_name: &'static str,
-    _marker: PhantomData<T>,
-}
-
-#[cfg(feature = "sqlx-any")]
-impl<T> SqlRepository<T> {
-    /// Create a new `SqlRepository` for the given table.
-    pub fn new(db: Arc<Database>, table_name: &'static str) -> Self {
-        Self {
-            db,
-            table_name,
-            _marker: PhantomData,
-        }
-    }
-
-    /// Return a reference to the underlying `Database`.
-    pub fn db(&self) -> &Database {
-        &self.db
-    }
-
-    /// Return the table name this repository targets.
-    pub fn table_name(&self) -> &str {
-        self.table_name
-    }
-}
-
-#[cfg(feature = "sqlx-any")]
-impl<T> std::fmt::Debug for SqlRepository<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SqlRepository")
-            .field("table_name", &self.table_name)
-            .finish_non_exhaustive()
     }
 }

@@ -60,11 +60,13 @@ pub fn producer_as_sink<T: Send + Sync + 'static>(
 
 /// Wraps a [`MessageConsumer`] as a [`Stream<(), Message<T>>`](Stream).
 ///
-/// Calling [`Stream::execute`] returns an unbounded stream of consumed
-/// messages. The stream yields items until an error occurs.
+/// Calling [`Stream::execute`] returns a backpressure-aware stream that receives
+/// one message at a time. Use [`consumer_as_bounded_stream`] when the stream
+/// should complete after a fixed number of messages.
 pub struct ConsumerStream<T: Send + Sync + 'static> {
     name: &'static str,
     consumer: Arc<dyn MessageConsumer<T>>,
+    max_messages: Option<usize>,
 }
 
 #[async_trait]
@@ -78,10 +80,19 @@ impl<T: Send + Sync + 'static> Provider for ConsumerStream<T> {
 impl<T: Send + Sync + Clone + 'static> Stream<(), Message<T>> for ConsumerStream<T> {
     async fn execute(&self, _input: ()) -> AppResult<BoxStream<Message<T>>> {
         let consumer = Arc::clone(&self.consumer);
+        let max_messages = self.max_messages;
         let stream = async_stream::try_stream! {
-            loop {
-                let msg = consumer.recv().await?;
-                yield msg;
+            match max_messages {
+                Some(max_messages) => {
+                    for _ in 0..max_messages {
+                        let msg = consumer.recv().await?;
+                        yield msg;
+                    }
+                }
+                None => loop {
+                    let msg = consumer.recv().await?;
+                    yield msg;
+                }
             }
         };
         Ok(Box::pin(stream))
@@ -94,7 +105,25 @@ pub fn consumer_as_stream<T: Send + Sync + 'static>(
     name: &'static str,
     consumer: Arc<dyn MessageConsumer<T>>,
 ) -> ConsumerStream<T> {
-    ConsumerStream { name, consumer }
+    ConsumerStream {
+        name,
+        consumer,
+        max_messages: None,
+    }
+}
+
+/// Create a [`ConsumerStream`] that yields at most `max_messages` messages.
+#[must_use]
+pub fn consumer_as_bounded_stream<T: Send + Sync + 'static>(
+    name: &'static str,
+    consumer: Arc<dyn MessageConsumer<T>>,
+    max_messages: usize,
+) -> ConsumerStream<T> {
+    ConsumerStream {
+        name,
+        consumer,
+        max_messages: Some(max_messages),
+    }
 }
 
 #[cfg(test)]
@@ -170,6 +199,45 @@ mod tests {
         assert_eq!(items.len(), 2);
         assert_eq!(items[0].as_ref().unwrap().payload, "a");
         assert_eq!(items[1].as_ref().unwrap().payload, "b");
+    }
+
+    #[tokio::test]
+    async fn bounded_consumer_stream_completes_after_limit() {
+        let broker = InMemoryBroker::<String>::new(16);
+        let producer = broker.producer();
+        let consumer = Arc::new(broker.consumer());
+        consumer.subscribe(&["stream-t"]).await.unwrap();
+
+        let cs = consumer_as_bounded_stream("test-stream", consumer, 2);
+
+        for value in ["a", "b", "c"] {
+            producer
+                .send(Message::new("stream-t", value.to_owned()))
+                .await
+                .unwrap();
+        }
+
+        let stream = cs.execute(()).await.unwrap();
+        let items = stream.collect::<Vec<_>>().await;
+
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].as_ref().unwrap().payload, "a");
+        assert_eq!(items[1].as_ref().unwrap().payload, "b");
+    }
+
+    #[tokio::test]
+    async fn bounded_consumer_stream_with_zero_limit_completes_immediately() {
+        let broker = InMemoryBroker::<String>::new(16);
+        let consumer = Arc::new(broker.consumer());
+        consumer.subscribe(&["stream-t"]).await.unwrap();
+
+        let cs = consumer_as_bounded_stream("test-stream", consumer, 0);
+        let stream = cs.execute(()).await.unwrap();
+        let items = tokio::time::timeout(Duration::from_millis(50), stream.collect::<Vec<_>>())
+            .await
+            .unwrap();
+
+        assert!(items.is_empty());
     }
 
     #[tokio::test]

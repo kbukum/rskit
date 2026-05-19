@@ -7,7 +7,7 @@ use parking_lot::Mutex as ParkingMutex;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use tracing::debug;
 
-use crate::store::{PointPayload, SearchFilter, SearchResult, VectorStore};
+use crate::store::{PointPayload, SearchFilter, SearchResult, SimilarityMetric, VectorStore};
 
 struct StoredPoint {
     id: String,
@@ -17,6 +17,7 @@ struct StoredPoint {
 
 struct Collection {
     dimensions: usize,
+    metric: SimilarityMetric,
     points: Vec<StoredPoint>,
 }
 
@@ -24,13 +25,21 @@ struct Collection {
 ///
 /// Intended for unit tests and prototyping — not suitable for production workloads.
 pub struct InMemoryVectorStore {
+    default_metric: SimilarityMetric,
     collections: ParkingMutex<HashMap<String, Collection>>,
 }
 
 impl InMemoryVectorStore {
     /// Create a new empty in-memory vector store.
     pub fn new() -> Self {
+        Self::with_metric(SimilarityMetric::Cosine)
+    }
+
+    /// Create a new empty in-memory vector store with the metric used for new collections.
+    #[must_use]
+    pub fn with_metric(default_metric: SimilarityMetric) -> Self {
         Self {
+            default_metric,
             collections: ParkingMutex::new(HashMap::new()),
         }
     }
@@ -50,6 +59,29 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
         return 0.0;
     }
     dot / (norm_a * norm_b)
+}
+
+fn dot_product(a: &[f32], b: &[f32]) -> f32 {
+    a.iter().zip(b.iter()).map(|(x, y)| x * y).sum()
+}
+
+fn l2_score(a: &[f32], b: &[f32]) -> f32 {
+    -a.iter()
+        .zip(b.iter())
+        .map(|(x, y)| {
+            let delta = x - y;
+            delta * delta
+        })
+        .sum::<f32>()
+        .sqrt()
+}
+
+fn similarity_score(metric: SimilarityMetric, a: &[f32], b: &[f32]) -> f32 {
+    match metric {
+        SimilarityMetric::Cosine => cosine_similarity(a, b),
+        SimilarityMetric::Dot => dot_product(a, b),
+        SimilarityMetric::L2 => l2_score(a, b),
+    }
 }
 
 fn matches_filter(payload: &PointPayload, filter: &SearchFilter) -> bool {
@@ -74,6 +106,7 @@ impl VectorStore for InMemoryVectorStore {
             .entry(collection.to_string())
             .or_insert_with(|| Collection {
                 dimensions,
+                metric: self.default_metric,
                 points: Vec::new(),
             });
         Ok(())
@@ -141,6 +174,17 @@ impl VectorStore for InMemoryVectorStore {
             )
         })?;
 
+        if vector.len() != col.dimensions {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                format!(
+                    "vector dimensions mismatch: expected {}, got {}",
+                    col.dimensions,
+                    vector.len()
+                ),
+            ));
+        }
+
         let mut scored: Vec<SearchResult> = col
             .points
             .iter()
@@ -151,7 +195,7 @@ impl VectorStore for InMemoryVectorStore {
             })
             .map(|p| SearchResult {
                 id: p.id.clone(),
-                score: cosine_similarity(&vector, &p.vector),
+                score: similarity_score(col.metric, &vector, &p.vector),
                 payload: p.payload.clone(),
             })
             .collect();
@@ -216,6 +260,29 @@ mod tests {
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].id, "1");
         assert!((results[0].score - 1.0).abs() < 1e-6);
+    }
+
+    #[tokio::test]
+    async fn configured_metric_is_used_for_new_collections() {
+        let store = InMemoryVectorStore::with_metric(SimilarityMetric::Dot);
+        store.ensure_collection("test", 2).await.unwrap();
+
+        store
+            .upsert("test", "long", vec![10.0, 0.0], PointPayload::new())
+            .await
+            .unwrap();
+        store
+            .upsert("test", "unit", vec![1.0, 0.0], PointPayload::new())
+            .await
+            .unwrap();
+
+        let results = store
+            .search("test", vec![1.0, 0.0], 10, None)
+            .await
+            .unwrap();
+
+        assert_eq!(results[0].id, "long");
+        assert_eq!(results[0].score, 10.0);
     }
 
     #[tokio::test]
@@ -312,6 +379,19 @@ mod tests {
             .await;
 
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_search_wrong_dimensions_returns_invalid_input() {
+        let store = InMemoryVectorStore::new();
+        store.ensure_collection("test", 3).await.unwrap();
+
+        let err = store
+            .search("test", vec![1.0, 0.0], 10, None)
+            .await
+            .expect_err("dimension mismatch must fail");
+
+        assert_eq!(err.code, ErrorCode::InvalidInput);
     }
 
     #[tokio::test]

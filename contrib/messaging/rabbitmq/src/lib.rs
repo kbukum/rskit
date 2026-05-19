@@ -21,7 +21,7 @@ use parking_lot::Mutex as SyncMutex;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_messaging::{
     BrokerConfigExt, Event, EventConsumer, EventProducer, Message, MessageConsumer,
-    MessageProducer, MessagingRegistry,
+    MessageProducer, MessagingFactory, MessagingRegistry,
 };
 use tokio::sync::{Mutex, mpsc};
 use tokio::task::JoinHandle;
@@ -347,14 +347,27 @@ pub fn register(
         return Ok(());
     }
     let adapter = config.base.adapter.clone();
-    let producer_config = config.clone();
-    registry.register_producer(adapter.clone(), move || {
-        Ok(Arc::new(RabbitMqProducer::new(producer_config.clone())?)
-            as Arc<dyn MessageProducer<Vec<u8>>>)
-    })?;
-    registry.register_consumer(adapter, move || {
-        Ok(Arc::new(RabbitMqConsumer::new(config.clone())?) as Arc<dyn MessageConsumer<Vec<u8>>>)
-    })
+    registry.register_backend(adapter, Arc::new(RabbitMqFactory { config }))
+}
+
+struct RabbitMqFactory {
+    config: RabbitMqConfig,
+}
+
+impl MessagingFactory<Vec<u8>> for RabbitMqFactory {
+    fn create_producer(
+        &self,
+        _config: &rskit_messaging::BrokerConfig,
+    ) -> AppResult<Arc<dyn MessageProducer<Vec<u8>>>> {
+        Ok(Arc::new(RabbitMqProducer::new(self.config.clone())?))
+    }
+
+    fn create_consumer(
+        &self,
+        _config: &rskit_messaging::BrokerConfig,
+    ) -> AppResult<Arc<dyn MessageConsumer<Vec<u8>>>> {
+        Ok(Arc::new(RabbitMqConsumer::new(self.config.clone())?))
+    }
 }
 
 fn spawn_consumer_task(
@@ -507,8 +520,7 @@ mod tests {
     fn register_adds_rabbitmq_factories_without_connecting() {
         let mut registry = MessagingRegistry::<Vec<u8>>::new();
         register(&mut registry, RabbitMqConfig::default()).unwrap();
-        assert_eq!(registry.producer_adapters(), vec!["rabbitmq"]);
-        assert_eq!(registry.consumer_adapters(), vec!["rabbitmq"]);
+        assert_eq!(registry.adapters(), vec!["rabbitmq"]);
     }
 
     #[test]

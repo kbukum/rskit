@@ -1,0 +1,25 @@
+[package]
+name        = "rskit-vectorstore-qdrant"
+description = "Qdrant adapter for rskit-vectorstore"
+version.workspace      = true
+edition.workspace      = true
+license.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+documentation          = "https://docs.rs/rskit-vectorstore-qdrant"
+readme                 = "README.md"
+categories             = ["database"]
+keywords               = ["vector", "qdrant", "adapter"]
+
+[dependencies]
+qdrant-client = ">=1.13, <1.18"
+serde         = { workspace = true }
+serde_json    = { workspace = true }
+async-trait   = { workspace = true }
+tracing       = { workspace = true }
+
+rskit-errors      = { workspace = true }
+rskit-config      = { workspace = true }
+rskit-vectorstore = { workspace = true }

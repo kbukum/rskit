@@ -1,6 +1,6 @@
 [package]
 name        = "rskit-cache"
-description = "Cache abstraction with in-memory default and opt-in Redis backend"
+description = "Cache abstraction with in-memory default and opt-in adapter backends"
 version.workspace     = true
 edition.workspace     = true
 license.workspace     = true
@@ -11,15 +11,11 @@ homepage.workspace     = true
 documentation = "https://docs.rs/rskit-cache"
 readme = "README.md"
 categories = ["caching"]
-keywords   = ["cache", "memory", "redis", "store"]
+keywords   = ["cache", "memory", "store"]
 
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
-
-[features]
-default = []
-redis = ["dep:redis"]
 
 [dependencies]
 # External
@@ -29,12 +25,9 @@ async-trait     = { workspace = true }
 tokio           = { workspace = true }
 tracing         = { workspace = true }
 parking_lot     = { workspace = true }
-redis           = { workspace = true, optional = true }
 
 # Internal
 rskit-errors    = { path = "../rskit-errors" }
-rskit-bootstrap = { path = "../rskit-bootstrap" }
-rskit-config    = { path = "../rskit-config" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

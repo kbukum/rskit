@@ -18,7 +18,7 @@ use parking_lot::Mutex as SyncMutex;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_messaging::{
     BrokerConfigExt, Event, EventConsumer, EventProducer, Message, MessageConsumer,
-    MessageProducer, MessagingRegistry,
+    MessageProducer, MessagingFactory, MessagingRegistry,
 };
 use tokio::sync::{Mutex, mpsc};
 use tokio::task::JoinHandle;
@@ -314,14 +314,27 @@ pub fn register(registry: &mut MessagingRegistry<Vec<u8>>, config: NatsConfig) -
         return Ok(());
     }
     let adapter = config.base.adapter.clone();
-    let producer_config = config.clone();
-    registry.register_producer(adapter.clone(), move || {
-        Ok(Arc::new(NatsProducer::new(producer_config.clone())?)
-            as Arc<dyn MessageProducer<Vec<u8>>>)
-    })?;
-    registry.register_consumer(adapter, move || {
-        Ok(Arc::new(NatsConsumer::new(config.clone())?) as Arc<dyn MessageConsumer<Vec<u8>>>)
-    })
+    registry.register_backend(adapter, Arc::new(NatsFactory { config }))
+}
+
+struct NatsFactory {
+    config: NatsConfig,
+}
+
+impl MessagingFactory<Vec<u8>> for NatsFactory {
+    fn create_producer(
+        &self,
+        _config: &rskit_messaging::BrokerConfig,
+    ) -> AppResult<Arc<dyn MessageProducer<Vec<u8>>>> {
+        Ok(Arc::new(NatsProducer::new(self.config.clone())?))
+    }
+
+    fn create_consumer(
+        &self,
+        _config: &rskit_messaging::BrokerConfig,
+    ) -> AppResult<Arc<dyn MessageConsumer<Vec<u8>>>> {
+        Ok(Arc::new(NatsConsumer::new(self.config.clone())?))
+    }
 }
 
 async fn connect(config: &NatsConfig) -> Result<Client, async_nats::ConnectError> {
@@ -394,8 +407,7 @@ mod tests {
     fn register_adds_nats_factories_without_connecting() {
         let mut registry = MessagingRegistry::<Vec<u8>>::new();
         register(&mut registry, NatsConfig::default()).unwrap();
-        assert_eq!(registry.producer_adapters(), vec!["nats"]);
-        assert_eq!(registry.consumer_adapters(), vec!["nats"]);
+        assert_eq!(registry.adapters(), vec!["nats"]);
     }
 
     #[test]

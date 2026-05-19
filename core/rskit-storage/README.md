@@ -65,10 +65,10 @@ register_local(&mut registry)?;
 let store = registry
     .build(&StorageConfig {
         backend: "local".into(),
-        options: serde_json::to_value(LocalStoreConfig {
+        local: LocalStoreConfig {
             root_dir: "data".into(),
             auto_create: true,
-        })?,
+        },
     })
     .await?;
 # Ok(())

@@ -1,6 +1,6 @@
 [package]
 name        = "rskit-vectorstore"
-description = "Vector store abstraction with in-memory default and opt-in Qdrant backend"
+description = "Vector store abstraction with in-memory default and opt-in adapter backends"
 version.workspace     = true
 edition.workspace     = true
 license.workspace     = true
@@ -10,15 +10,11 @@ repository.workspace   = true
 homepage.workspace     = true
 documentation = "https://docs.rs/rskit-vectorstore"
 categories = ["database"]
-keywords   = ["vector", "qdrant", "similarity", "search"]
+keywords   = ["vector", "memory", "similarity", "search"]
 
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
-
-[features]
-default = []
-qdrant = ["dep:qdrant-client"]
 
 [dependencies]
 # External
@@ -27,7 +23,6 @@ serde_json    = { workspace = true }
 async-trait   = { workspace = true }
 tracing       = { workspace = true }
 parking_lot   = { workspace = true }
-qdrant-client = { version = ">=1.13, <1.18", optional = true }
 
 # Internal
 rskit-errors  = { path = "../rskit-errors" }

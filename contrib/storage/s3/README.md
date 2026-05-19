@@ -23,20 +23,23 @@ use rskit_storage_s3::{S3StoreConfig, register_s3};
 
 # async fn example() -> rskit_errors::AppResult<()> {
 let mut registry = StorageRegistry::new();
-register_s3(&mut registry)?;
+register_s3(
+    &mut registry,
+    S3StoreConfig {
+        bucket: "assets".into(),
+        region: Some("us-east-1".into()),
+        endpoint: None,
+        prefix: Some("uploads".into()),
+        force_path_style: false,
+        access_key_id: None,
+        secret_access_key: None,
+    },
+)?;
 
 let store = registry
     .build(&StorageConfig {
         backend: "s3".into(),
-        options: serde_json::to_value(S3StoreConfig {
-            bucket: "assets".into(),
-            region: Some("us-east-1".into()),
-            endpoint: None,
-            prefix: Some("uploads".into()),
-            force_path_style: false,
-            access_key_id: None,
-            secret_access_key: None,
-        })?,
+        ..Default::default()
     })
     .await?;
 # Ok(())

@@ -1,6 +1,6 @@
 [package]
 name        = "rskit-database"
-description = "Database contracts with feature-gated sqlx backend support"
+description = "Database contracts with in-memory default and opt-in adapter backends"
 version.workspace     = true
 edition.workspace     = true
 license.workspace     = true
@@ -11,19 +11,11 @@ homepage.workspace     = true
 documentation = "https://docs.rs/rskit-database"
 readme = "README.md"
 categories = ["database"]
-keywords   = ["database", "sqlx", "repository"]
+keywords   = ["database", "memory", "repository"]
 
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
-
-[features]
-default = []
-sqlx-core = ["dep:sqlx"]
-sqlx-any = ["sqlx-core", "sqlx/any"]
-postgres = ["sqlx-core", "sqlx/postgres"]
-mysql = ["sqlx-core", "sqlx/mysql"]
-sqlite = ["sqlx-core", "sqlx/sqlite"]
 
 [dependencies]
 # External
@@ -32,10 +24,10 @@ serde_json      = { workspace = true }
 async-trait     = { workspace = true }
 tokio           = { workspace = true }
 tracing         = { workspace = true }
-sqlx            = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "uuid", "chrono", "json"], optional = true }
 chrono          = { workspace = true }
 uuid            = { workspace = true }
 validator = { workspace = true }
+parking_lot     = { workspace = true }
 
 # Internal
 rskit-errors    = { path = "../rskit-errors" }

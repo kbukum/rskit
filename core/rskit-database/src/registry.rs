@@ -1,15 +1,24 @@
 //! Explicit database backend registry.
 
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
 
-use crate::DbDriver;
+use crate::config::DatabaseConfig;
+use crate::database::{DatabaseClient, memory_from_config};
 
-/// Explicit set of enabled database backends.
-#[derive(Debug, Default, Clone)]
+/// Factory for a named database backend.
+#[async_trait::async_trait]
+pub trait DatabaseFactory: Send + Sync {
+    /// Build a database client from database configuration.
+    async fn create(&self, config: &DatabaseConfig) -> AppResult<Arc<dyn DatabaseClient>>;
+}
+
+/// Explicit database backend registry.
+#[derive(Default)]
 pub struct DatabaseRegistry {
-    drivers: BTreeSet<DbDriver>,
+    factories: BTreeMap<String, Arc<dyn DatabaseFactory>>,
 }
 
 impl DatabaseRegistry {
@@ -19,107 +28,111 @@ impl DatabaseRegistry {
         Self::default()
     }
 
-    /// Register a supported driver.
-    #[cfg(any(feature = "postgres", feature = "mysql", feature = "sqlite"))]
-    pub(crate) fn register(&mut self, driver: DbDriver) -> AppResult<()> {
-        if self.drivers.contains(&driver) {
+    /// Register a backend factory under `name`.
+    pub fn register(
+        &mut self,
+        name: impl Into<String>,
+        factory: Arc<dyn DatabaseFactory>,
+    ) -> AppResult<()> {
+        let name = name.into().trim().to_owned();
+        if name.is_empty() {
             return Err(AppError::new(
-                ErrorCode::AlreadyExists,
-                format!("database driver '{driver}' is already registered"),
+                ErrorCode::InvalidInput,
+                "database backend name is required",
             ));
         }
-        self.drivers.insert(driver);
+        if self.factories.contains_key(&name) {
+            return Err(AppError::new(
+                ErrorCode::AlreadyExists,
+                format!("database backend '{name}' is already registered"),
+            ));
+        }
+        self.factories.insert(name, factory);
         Ok(())
     }
 
-    /// Return true when the driver has been explicitly registered.
+    /// Return true when the backend has been explicitly registered.
     #[must_use]
-    pub fn contains(&self, driver: &DbDriver) -> bool {
-        self.drivers.contains(driver)
+    pub fn contains(&self, name: &str) -> bool {
+        self.factories.contains_key(name)
     }
 
-    /// Number of registered database drivers.
+    /// Number of registered database backends.
     #[must_use]
     pub fn len(&self) -> usize {
-        self.drivers.len()
+        self.factories.len()
     }
 
-    /// Return true when no drivers are registered.
+    /// Return true when no backends are registered.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.drivers.is_empty()
+        self.factories.is_empty()
+    }
+
+    /// Build the backend selected by [`DatabaseConfig::backend`].
+    pub async fn build(&self, config: &DatabaseConfig) -> AppResult<Arc<dyn DatabaseClient>> {
+        let backend = config.backend.trim();
+        if backend.is_empty() {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                "database backend name is required",
+            ));
+        }
+        self.factories
+            .get(backend)
+            .ok_or_else(|| {
+                AppError::new(
+                    ErrorCode::NotFound,
+                    format!("database backend '{backend}' is not registered"),
+                )
+            })?
+            .create(config)
+            .await
     }
 }
 
-/// Register the generic sqlx Any selector boundary.
-#[cfg(feature = "sqlx-any")]
-pub fn register_sqlx_any(registry: &mut DatabaseRegistry) -> AppResult<()> {
-    let before = registry.len();
-    #[cfg(feature = "postgres")]
-    registry.register(DbDriver::Postgres)?;
-    #[cfg(feature = "mysql")]
-    registry.register(DbDriver::Mysql)?;
-    #[cfg(feature = "sqlite")]
-    registry.register(DbDriver::Sqlite)?;
-    if registry.len() == before {
-        return Err(AppError::new(
-            ErrorCode::InvalidInput,
-            "database sqlx-any registration requires at least one concrete driver feature",
-        ));
+struct MemoryFactory;
+
+#[async_trait::async_trait]
+impl DatabaseFactory for MemoryFactory {
+    async fn create(&self, config: &DatabaseConfig) -> AppResult<Arc<dyn DatabaseClient>> {
+        Ok(Arc::new(memory_from_config(config)))
     }
-    Ok(())
 }
 
-/// Register PostgreSQL backend support.
-#[cfg(feature = "postgres")]
-pub fn register_postgres(registry: &mut DatabaseRegistry) -> AppResult<()> {
-    registry.register(DbDriver::Postgres)
+/// Explicitly register the in-memory backend.
+pub fn register_memory(registry: &mut DatabaseRegistry) -> AppResult<()> {
+    registry.register("memory", Arc::new(MemoryFactory))
 }
 
-/// Register MySQL backend support.
-#[cfg(feature = "mysql")]
-pub fn register_mysql(registry: &mut DatabaseRegistry) -> AppResult<()> {
-    registry.register(DbDriver::Mysql)
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-/// Register SQLite backend support.
-#[cfg(feature = "sqlite")]
-pub fn register_sqlite(registry: &mut DatabaseRegistry) -> AppResult<()> {
-    registry.register(DbDriver::Sqlite)
-}
+    #[tokio::test]
+    async fn build_rejects_blank_backend() {
+        let registry = DatabaseRegistry::new();
+        let config = DatabaseConfig {
+            backend: "  ".to_owned(),
+            ..DatabaseConfig::default()
+        };
 
-/// PostgreSQL registration is unavailable unless the `postgres` feature is enabled.
-#[cfg(not(feature = "postgres"))]
-pub fn register_postgres(_registry: &mut DatabaseRegistry) -> AppResult<()> {
-    Err(AppError::new(
-        ErrorCode::InvalidInput,
-        "database postgres backend feature is not enabled",
-    ))
-}
+        let err = registry.build(&config).await.err().unwrap();
 
-/// MySQL registration is unavailable unless the `mysql` feature is enabled.
-#[cfg(not(feature = "mysql"))]
-pub fn register_mysql(_registry: &mut DatabaseRegistry) -> AppResult<()> {
-    Err(AppError::new(
-        ErrorCode::InvalidInput,
-        "database mysql backend feature is not enabled",
-    ))
-}
+        assert_eq!(err.code, ErrorCode::InvalidInput);
+    }
 
-/// SQLite registration is unavailable unless the `sqlite` feature is enabled.
-#[cfg(not(feature = "sqlite"))]
-pub fn register_sqlite(_registry: &mut DatabaseRegistry) -> AppResult<()> {
-    Err(AppError::new(
-        ErrorCode::InvalidInput,
-        "database sqlite backend feature is not enabled",
-    ))
-}
+    #[tokio::test]
+    async fn build_normalizes_backend_before_lookup() {
+        let mut registry = DatabaseRegistry::new();
+        register_memory(&mut registry).unwrap();
+        let config = DatabaseConfig {
+            backend: " memory ".to_owned(),
+            ..DatabaseConfig::default()
+        };
 
-/// sqlx Any registration is unavailable unless the `sqlx-any` feature is enabled.
-#[cfg(not(feature = "sqlx-any"))]
-pub fn register_sqlx_any(_registry: &mut DatabaseRegistry) -> AppResult<()> {
-    Err(AppError::new(
-        ErrorCode::InvalidInput,
-        "database sqlx-any backend feature is not enabled",
-    ))
+        let database = registry.build(&config).await.unwrap();
+
+        assert!(Arc::strong_count(&database) >= 1);
+    }
 }

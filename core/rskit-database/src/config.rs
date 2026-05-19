@@ -2,129 +2,81 @@
 
 use std::time::Duration;
 
-use rskit_config::SecretString;
 use rskit_validation::Validate;
-use serde::{Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize};
 
-/// Supported database drivers.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum DbDriver {
-    /// PostgreSQL.
-    Postgres,
-    /// MySQL / MariaDB.
-    Mysql,
-    /// SQLite (file or in-memory).
-    Sqlite,
-}
-
-impl std::fmt::Display for DbDriver {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            DbDriver::Postgres => f.write_str("postgres"),
-            DbDriver::Mysql => f.write_str("mysql"),
-            DbDriver::Sqlite => f.write_str("sqlite"),
-        }
-    }
-}
-
-/// TLS / SSL connection mode.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum SslMode {
-    /// Do not use TLS.
-    Disable,
-    /// Use TLS if the server supports it.
-    #[default]
-    Prefer,
-    /// Require TLS; fail if unavailable.
-    Require,
-}
-
-impl std::fmt::Display for SslMode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            SslMode::Disable => f.write_str("disable"),
-            SslMode::Prefer => f.write_str("prefer"),
-            SslMode::Require => f.write_str("require"),
-        }
-    }
-}
-
-/// Connection pool and query-logging configuration.
-#[derive(Debug, Clone, Deserialize, Validate)]
+/// Config-driven database backend selection.
+#[derive(Debug, Clone, Deserialize, Serialize, Validate)]
 pub struct DatabaseConfig {
-    /// Database driver to use.
-    pub driver: DbDriver,
-    /// Hostname or IP address of the database server.
-    pub host: String,
-    /// TCP port of the database server.
-    pub port: u16,
-    /// Username for authentication.
-    pub user: String,
-    /// Password for authentication.
-    pub password: SecretString,
-    /// Database / schema name.
-    pub database: String,
-    /// Maximum number of connections in the pool (default: 10).
+    /// Backend name looked up in an injected [`crate::DatabaseRegistry`].
+    #[serde(default = "default_backend")]
+    pub backend: String,
+    /// In-memory backend options.
+    #[serde(default)]
+    pub memory: MemoryDatabaseConfig,
+    /// Maximum number of logical connections in the selected backend.
     #[serde(default = "default_max_connections")]
     pub max_connections: u32,
-    /// Minimum number of idle connections to maintain (default: 1).
+    /// Minimum number of idle logical connections to maintain.
     #[serde(default = "default_min_connections")]
     pub min_connections: u32,
-    /// Timeout for establishing a new connection (default: 30s).
+    /// Timeout for establishing a backend connection.
     #[serde(
         default = "default_connect_timeout",
         deserialize_with = "deserialize_duration_secs"
     )]
     pub connect_timeout: Duration,
-    /// Close idle connections after this duration.
-    #[serde(default, deserialize_with = "deserialize_option_duration_secs")]
-    pub idle_timeout: Option<Duration>,
-    /// Maximum lifetime of a connection before it is recycled.
-    #[serde(default, deserialize_with = "deserialize_option_duration_secs")]
-    pub max_lifetime: Option<Duration>,
-    /// Queries slower than this threshold are logged at WARN level (default: 1s).
+    /// Queries slower than this threshold are reported by backends that support slow-query logging.
     #[serde(
         default = "default_slow_query_threshold",
         deserialize_with = "deserialize_duration_secs"
     )]
     pub slow_query_threshold: Duration,
-    /// TLS connection mode (default: prefer).
-    #[serde(default)]
-    pub ssl_mode: SslMode,
 }
 
-impl DatabaseConfig {
-    /// Build the database connection URL from the configuration fields.
-    pub fn connection_url(&self) -> String {
-        match self.driver {
-            DbDriver::Postgres => {
-                format!(
-                    "postgres://{}:{}@{}:{}/{}?sslmode={}",
-                    self.user,
-                    self.password.expose(),
-                    self.host,
-                    self.port,
-                    self.database,
-                    self.ssl_mode,
-                )
-            }
-            DbDriver::Mysql => {
-                format!(
-                    "mysql://{}:{}@{}:{}/{}",
-                    self.user,
-                    self.password.expose(),
-                    self.host,
-                    self.port,
-                    self.database,
-                )
-            }
-            DbDriver::Sqlite => {
-                format!("sqlite:{}", self.database)
-            }
+impl Default for DatabaseConfig {
+    fn default() -> Self {
+        Self {
+            backend: default_backend(),
+            memory: MemoryDatabaseConfig::default(),
+            max_connections: default_max_connections(),
+            min_connections: default_min_connections(),
+            connect_timeout: default_connect_timeout(),
+            slow_query_threshold: default_slow_query_threshold(),
         }
     }
+}
+
+/// In-memory database backend configuration.
+#[derive(Debug, Clone, Deserialize, Serialize, Validate)]
+pub struct MemoryDatabaseConfig {
+    /// Logical database name used for diagnostics.
+    #[serde(default = "default_memory_name")]
+    pub name: String,
+    /// Maximum number of recorded statements kept for diagnostics. `0` disables recording.
+    #[serde(default = "default_statement_history")]
+    pub statement_history: usize,
+}
+
+impl Default for MemoryDatabaseConfig {
+    fn default() -> Self {
+        Self {
+            name: default_memory_name(),
+            statement_history: default_statement_history(),
+        }
+    }
+}
+
+fn default_backend() -> String {
+    "memory".to_owned()
+}
+
+fn default_memory_name() -> String {
+    "default".to_owned()
+}
+
+fn default_statement_history() -> usize {
+    256
 }
 
 fn default_max_connections() -> u32 {
@@ -151,112 +103,33 @@ where
     Ok(Duration::from_secs(secs))
 }
 
-fn deserialize_option_duration_secs<'de, D>(deserializer: D) -> Result<Option<Duration>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let opt = Option::<u64>::deserialize(deserializer)?;
-    Ok(opt.map(Duration::from_secs))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn postgres_connection_url() {
-        let cfg = DatabaseConfig {
-            driver: DbDriver::Postgres,
-            host: "localhost".into(),
-            port: 5432,
-            user: "admin".into(),
-            password: SecretString::new("secret"),
-            database: "mydb".into(),
-            max_connections: 10,
-            min_connections: 1,
-            connect_timeout: Duration::from_secs(30),
-            idle_timeout: None,
-            max_lifetime: None,
-            slow_query_threshold: Duration::from_secs(1),
-            ssl_mode: SslMode::Disable,
-        };
-        assert_eq!(
-            cfg.connection_url(),
-            "postgres://admin:secret@localhost:5432/mydb?sslmode=disable"
-        );
-    }
+    fn default_config_selects_memory() {
+        let cfg = DatabaseConfig::default();
 
-    #[test]
-    fn mysql_connection_url() {
-        let cfg = DatabaseConfig {
-            driver: DbDriver::Mysql,
-            host: "db.example.com".into(),
-            port: 3306,
-            user: "root".into(),
-            password: SecretString::new("pw"),
-            database: "app".into(),
-            max_connections: 5,
-            min_connections: 1,
-            connect_timeout: Duration::from_secs(10),
-            idle_timeout: None,
-            max_lifetime: None,
-            slow_query_threshold: Duration::from_secs(2),
-            ssl_mode: SslMode::Require,
-        };
-        assert_eq!(
-            cfg.connection_url(),
-            "mysql://root:pw@db.example.com:3306/app"
-        );
-    }
-
-    #[test]
-    fn sqlite_connection_url() {
-        let cfg = DatabaseConfig {
-            driver: DbDriver::Sqlite,
-            host: String::new(),
-            port: 0,
-            user: String::new(),
-            password: SecretString::default(),
-            database: ":memory:".into(),
-            max_connections: 1,
-            min_connections: 1,
-            connect_timeout: Duration::from_secs(5),
-            idle_timeout: None,
-            max_lifetime: None,
-            slow_query_threshold: Duration::from_secs(1),
-            ssl_mode: SslMode::Disable,
-        };
-        assert_eq!(cfg.connection_url(), "sqlite::memory:");
-    }
-
-    #[test]
-    fn ssl_mode_defaults_to_prefer() {
-        assert_eq!(SslMode::default(), SslMode::Prefer);
-    }
-
-    #[test]
-    fn db_driver_display() {
-        assert_eq!(DbDriver::Postgres.to_string(), "postgres");
-        assert_eq!(DbDriver::Mysql.to_string(), "mysql");
-        assert_eq!(DbDriver::Sqlite.to_string(), "sqlite");
+        assert_eq!(cfg.backend, "memory");
+        assert_eq!(cfg.memory.name, "default");
+        assert_eq!(cfg.memory.statement_history, 256);
+        assert_eq!(cfg.max_connections, 10);
+        assert_eq!(cfg.min_connections, 1);
+        assert_eq!(cfg.connect_timeout, Duration::from_secs(30));
+        assert_eq!(cfg.slow_query_threshold, Duration::from_secs(1));
     }
 
     #[test]
     fn deserialize_config_from_json() {
         let json = r#"{
-            "driver": "postgres",
-            "host": "localhost",
-            "port": 5432,
-            "user": "admin",
-            "password": "pass",
-            "database": "testdb"
+            "backend": "memory",
+            "memory": {"name": "testdb", "statement_history": 32}
         }"#;
         let cfg: DatabaseConfig = serde_json::from_str(json).unwrap();
-        assert_eq!(cfg.driver, DbDriver::Postgres);
-        assert_eq!(cfg.max_connections, 10);
-        assert_eq!(cfg.min_connections, 1);
-        assert_eq!(cfg.connect_timeout, Duration::from_secs(30));
-        assert_eq!(cfg.slow_query_threshold, Duration::from_secs(1));
-        assert_eq!(cfg.ssl_mode, SslMode::Prefer);
+
+        assert_eq!(cfg.backend, "memory");
+        assert_eq!(cfg.memory.name, "testdb");
+        assert_eq!(cfg.memory.statement_history, 32);
     }
 }

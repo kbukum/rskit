@@ -391,25 +391,20 @@ fn resolve_credentials(config: &S3StoreConfig) -> AppResult<(String, String)> {
     Ok((key, secret))
 }
 
-struct S3Factory;
+struct S3Factory {
+    config: S3StoreConfig,
+}
 
 #[async_trait::async_trait]
 impl StorageFactory for S3Factory {
-    async fn create(&self, config: &StorageConfig) -> AppResult<Arc<dyn FileStore>> {
-        let s3_config: S3StoreConfig =
-            serde_json::from_value(config.options.clone()).map_err(|e| {
-                AppError::new(
-                    ErrorCode::InvalidInput,
-                    format!("invalid S3 storage config: {e}"),
-                )
-            })?;
-        Ok(Arc::new(S3Store::new(s3_config)?))
+    async fn create(&self, _config: &StorageConfig) -> AppResult<Arc<dyn FileStore>> {
+        Ok(Arc::new(S3Store::new(self.config.clone())?))
     }
 }
 
 /// Explicitly register the S3 backend in an injected storage registry.
-pub fn register_s3(registry: &mut StorageRegistry) -> AppResult<()> {
-    registry.register("s3", Arc::new(S3Factory))
+pub fn register_s3(registry: &mut StorageRegistry, config: S3StoreConfig) -> AppResult<()> {
+    registry.register("s3", Arc::new(S3Factory { config }))
 }
 
 #[cfg(test)]

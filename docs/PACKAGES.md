@@ -35,8 +35,9 @@ rskit is a **Cargo workspace** with a facade crate (`rskit`), foundation crates 
 
 | Crate | Description |
 |-------|-------------|
-| `rskit-database` | sqlx async pool with repository pattern |
-| `rskit-cache` | Redis client with typed store and Component lifecycle |
+| `rskit-database` | Database contracts with in-memory default and adapter registry |
+| `rskit-cache` | Cache contracts with in-memory default and adapter registry |
+| `rskit-cache-redis` | Redis cache adapter |
 | `rskit-messaging` | Message broker abstractions with memory default and opt-in Kafka/NATS/RabbitMQ adapter crates |
 | `rskit-httpclient` | Async HTTP client with auth and resilience |
 | `rskit-grpc` | Aligned gRPC transport entrypoint with client + server features |
@@ -59,7 +60,8 @@ rskit is a **Cargo workspace** with a facade crate (`rskit`), foundation crates 
 | `rskit-llm-providers` | LLM implementations — OpenAI, Anthropic, Gemini |
 | `rskit-embedding` | Embedding provider abstractions for vector search |
 | `rskit-inference` | Inference provider abstractions |
-| `rskit-vectorstore` | Vector store abstractions (Qdrant + in-memory) |
+| `rskit-vectorstore` | Vector store abstractions (in-memory default) |
+| `rskit-vectorstore-qdrant` | Qdrant vector store adapter |
 | `rskit-agent` | Agentic loop — LLM orchestration, tool execution |
 | `rskit-tool` | Tool definitions, auto-wiring, registry, middleware |
 | `rskit-hook` | Generic event hook system |

@@ -12,10 +12,24 @@ use super::{FileStore, LocalStore, LocalStoreConfig};
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct StorageConfig {
     /// Backend name looked up in an injected [`StorageRegistry`].
+    #[serde(default = "default_backend")]
     pub backend: String,
-    /// Backend-specific JSON options.
+    /// Local filesystem backend options.
     #[serde(default)]
-    pub options: serde_json::Value,
+    pub local: LocalStoreConfig,
+}
+
+impl Default for StorageConfig {
+    fn default() -> Self {
+        Self {
+            backend: default_backend(),
+            local: LocalStoreConfig::default(),
+        }
+    }
+}
+
+fn default_backend() -> String {
+    "local".to_owned()
 }
 
 /// Async factory for storage backends.
@@ -44,7 +58,13 @@ impl StorageRegistry {
         name: impl Into<String>,
         factory: Arc<dyn StorageFactory>,
     ) -> AppResult<()> {
-        let name = name.into();
+        let name = name.into().trim().to_owned();
+        if name.is_empty() {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                "storage backend name is required",
+            ));
+        }
         if self.factories.contains_key(&name) {
             return Err(AppError::new(
                 ErrorCode::AlreadyExists,
@@ -75,12 +95,19 @@ impl StorageRegistry {
 
     /// Build the backend selected by [`StorageConfig::backend`].
     pub async fn build(&self, config: &StorageConfig) -> AppResult<Arc<dyn FileStore>> {
+        let backend = config.backend.trim();
+        if backend.is_empty() {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                "storage backend name is required",
+            ));
+        }
         self.factories
-            .get(&config.backend)
+            .get(backend)
             .ok_or_else(|| {
                 AppError::new(
                     ErrorCode::NotFound,
-                    format!("storage backend '{}' is not registered", config.backend),
+                    format!("storage backend '{backend}' is not registered"),
                 )
             })?
             .create(config)
@@ -93,14 +120,7 @@ struct LocalFactory;
 #[async_trait::async_trait]
 impl StorageFactory for LocalFactory {
     async fn create(&self, config: &StorageConfig) -> AppResult<Arc<dyn FileStore>> {
-        let local_config: LocalStoreConfig = serde_json::from_value(config.options.clone())
-            .map_err(|e| {
-                AppError::new(
-                    ErrorCode::InvalidInput,
-                    format!("invalid local storage config: {e}"),
-                )
-            })?;
-        Ok(Arc::new(LocalStore::new(local_config)?))
+        Ok(Arc::new(LocalStore::new(config.local.clone())?))
     }
 }
 

@@ -5,12 +5,12 @@ use std::sync::Arc;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
 
-use crate::{InMemoryVectorStore, VectorStore};
+use crate::{InMemoryVectorStore, VectorStore, VectorStoreConfig};
 
 /// Factory for a named vector store backend.
 pub trait VectorFactory: Send + Sync {
     /// Create a vector store backend instance.
-    fn create(&self) -> AppResult<Arc<dyn VectorStore>>;
+    fn create(&self, config: &VectorStoreConfig) -> AppResult<Arc<dyn VectorStore>>;
 }
 
 /// Explicit vector store backend registry.
@@ -32,7 +32,13 @@ impl VectorStoreRegistry {
         name: impl Into<String>,
         factory: Arc<dyn VectorFactory>,
     ) -> AppResult<()> {
-        let name = name.into();
+        let name = name.into().trim().to_owned();
+        if name.is_empty() {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                "vectorstore backend name is required",
+            ));
+        }
         if self.factories.contains_key(&name) {
             return Err(AppError::new(
                 ErrorCode::AlreadyExists,
@@ -61,25 +67,34 @@ impl VectorStoreRegistry {
         self.factories.is_empty()
     }
 
-    /// Create a backend by name.
-    pub fn build(&self, name: &str) -> AppResult<Arc<dyn VectorStore>> {
+    /// Build the backend selected by [`VectorStoreConfig::backend`].
+    pub fn build(&self, config: &VectorStoreConfig) -> AppResult<Arc<dyn VectorStore>> {
+        let backend = config.backend.trim();
+        if backend.is_empty() {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                "vectorstore backend name is required",
+            ));
+        }
         self.factories
-            .get(name)
+            .get(backend)
             .ok_or_else(|| {
                 AppError::new(
                     ErrorCode::NotFound,
-                    format!("vectorstore backend '{name}' is not registered"),
+                    format!("vectorstore backend '{backend}' is not registered"),
                 )
             })?
-            .create()
+            .create(config)
     }
 }
 
 struct MemoryFactory;
 
 impl VectorFactory for MemoryFactory {
-    fn create(&self) -> AppResult<Arc<dyn VectorStore>> {
-        Ok(Arc::new(InMemoryVectorStore::new()))
+    fn create(&self, config: &VectorStoreConfig) -> AppResult<Arc<dyn VectorStore>> {
+        Ok(Arc::new(InMemoryVectorStore::with_metric(
+            config.memory.metric,
+        )))
     }
 }
 
@@ -112,11 +127,23 @@ mod tests {
     }
 
     #[test]
+    fn registry_rejects_blank_registration_name() {
+        let mut registry = VectorStoreRegistry::new();
+
+        let err = registry
+            .register(" ", Arc::new(MemoryFactory))
+            .err()
+            .unwrap();
+
+        assert_eq!(err.code, ErrorCode::InvalidInput);
+    }
+
+    #[test]
     fn registry_builds_memory_backend_after_explicit_registration() {
         let mut registry = VectorStoreRegistry::new();
         register_memory(&mut registry).unwrap();
 
-        let store = registry.build("memory").unwrap();
+        let store = registry.build(&VectorStoreConfig::default()).unwrap();
 
         assert!(Arc::strong_count(&store) >= 1);
     }
@@ -125,8 +152,35 @@ mod tests {
     fn registry_rejects_unregistered_backend() {
         let registry = VectorStoreRegistry::new();
 
-        let err = registry.build("memory").err().unwrap();
+        let err = registry.build(&VectorStoreConfig::default()).err().unwrap();
 
         assert_eq!(err.code, ErrorCode::NotFound);
+    }
+
+    #[test]
+    fn registry_rejects_blank_backend() {
+        let registry = VectorStoreRegistry::new();
+        let config = VectorStoreConfig {
+            backend: "  ".to_owned(),
+            ..VectorStoreConfig::default()
+        };
+
+        let err = registry.build(&config).err().unwrap();
+
+        assert_eq!(err.code, ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn registry_normalizes_backend_before_lookup() {
+        let mut registry = VectorStoreRegistry::new();
+        register_memory(&mut registry).unwrap();
+        let config = VectorStoreConfig {
+            backend: " memory ".to_owned(),
+            ..VectorStoreConfig::default()
+        };
+
+        let store = registry.build(&config).unwrap();
+
+        assert!(Arc::strong_count(&store) >= 1);
     }
 }
