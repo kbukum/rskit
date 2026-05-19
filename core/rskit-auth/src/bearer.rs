@@ -90,6 +90,7 @@ where
                 CredentialExtraction::Missing => {
                     if missing_policy == MissingCredentialPolicy::AcceptMissing {
                         let mut req = req;
+                        req.extensions_mut().remove::<AuthClaims<C>>();
                         req.extensions_mut().insert(AuthOutcome::<C>::Missing);
                         inner.call(req).await
                     } else {
@@ -318,5 +319,20 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(invalid.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn bearer_layer_accept_missing_clears_stale_claims() {
+        let mut service = BearerAuthLayer::<_, Claims>::new(Validator)
+            .accept_missing()
+            .layer(ExtensionCheckingService);
+        let mut request = Request::builder().body(()).unwrap();
+        request.extensions_mut().insert(AuthClaims(Claims {
+            sub: "stale-user".into(),
+        }));
+
+        let response = service.call(request).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
     }
 }

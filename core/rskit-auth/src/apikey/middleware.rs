@@ -110,6 +110,7 @@ where
                 CredentialExtraction::Missing => {
                     if missing_policy == MissingCredentialPolicy::AcceptMissing {
                         let mut req = req;
+                        req.extensions_mut().remove::<Key>();
                         req.extensions_mut().insert(AuthOutcome::<Key>::Missing);
                         inner.call(req).await
                     } else {
@@ -323,5 +324,31 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(invalid.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn api_key_layer_accept_missing_clears_stale_key() {
+        let mut service = ApiKeyLayer::new(Validator)
+            .accept_missing()
+            .layer(ExtensionCheckingService);
+        let mut request = Request::builder().body(()).unwrap();
+        request.extensions_mut().insert(Key {
+            id: "stale-key".into(),
+            owner_id: "user-1".into(),
+            name: "stale".into(),
+            key_prefix: "pk".into(),
+            key_digest: "digest".into(),
+            scopes: vec!["read".into()],
+            is_active: true,
+            expires_at: None,
+            grace_ends_at: None,
+            rotated_by_id: None,
+            last_used_at: None,
+            created_at: Utc::now(),
+        });
+
+        let response = service.call(request).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
     }
 }
