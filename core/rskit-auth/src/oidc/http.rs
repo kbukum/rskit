@@ -1,3 +1,5 @@
+use std::fmt;
+
 use async_trait::async_trait;
 use rskit_httpclient::{Auth, HttpClient, HttpClientConfig, Request};
 use serde_json::Value;
@@ -12,7 +14,6 @@ pub trait OidcHttpClient: Send + Sync {
 }
 
 /// Default OIDC HTTP client backed by the canonical `rskit-httpclient`.
-#[derive(Debug)]
 pub struct ReqwestOidcHttpClient {
     client: HttpClient,
 }
@@ -31,10 +32,25 @@ impl ReqwestOidcHttpClient {
     /// # Errors
     /// Returns an error when the HTTP client cannot be constructed.
     pub fn with_config(config: HttpClientConfig) -> Result<Self, OidcError> {
-        let client = HttpClient::new(config)
+        let client = HttpClient::new(sanitize_oidc_config(config))
             .map_err(|error| OidcError::ProviderUnreachable(error.to_string()))?;
         Ok(Self { client })
     }
+}
+
+impl fmt::Debug for ReqwestOidcHttpClient {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ReqwestOidcHttpClient")
+            .field("client", &"<redacted>")
+            .finish()
+    }
+}
+
+fn sanitize_oidc_config(mut config: HttpClientConfig) -> HttpClientConfig {
+    config.base_url = None;
+    config.default_headers.clear();
+    config.auth = None;
+    config
 }
 
 #[async_trait]
@@ -65,7 +81,7 @@ impl OidcHttpClient for ReqwestOidcHttpClient {
 mod tests {
     use std::time::Duration;
 
-    use rskit_httpclient::HttpClientConfig;
+    use rskit_httpclient::{Auth, HttpClientConfig};
 
     use super::ReqwestOidcHttpClient;
 
@@ -78,5 +94,33 @@ mod tests {
     fn oidc_http_client_accepts_explicit_config() {
         let config = HttpClientConfig::new().with_timeout(Duration::from_secs(5));
         assert!(ReqwestOidcHttpClient::with_config(config).is_ok());
+    }
+
+    #[test]
+    fn oidc_http_client_redacts_debug_output() {
+        let config = HttpClientConfig::new().with_auth(Auth::bearer("secret-token"));
+        let client = ReqwestOidcHttpClient::with_config(config).unwrap();
+
+        let formatted = format!("{client:?}");
+
+        assert!(formatted.contains("<redacted>"));
+        assert!(!formatted.contains("secret-token"));
+        assert!(!formatted.contains("HttpClientConfig"));
+    }
+
+    #[test]
+    fn oidc_http_client_drops_cross_origin_defaults() {
+        let config = HttpClientConfig::new()
+            .with_base_url("https://internal.example")
+            .with_header("authorization", "Bearer leaked")
+            .with_header("x-api-key", "leaked")
+            .with_auth(Auth::api_key("x-other-key", "leaked"));
+
+        let client = ReqwestOidcHttpClient::with_config(config).unwrap();
+        let config = client.client.config();
+
+        assert!(config.base_url.is_none());
+        assert!(config.default_headers.is_empty());
+        assert!(config.auth.is_none());
     }
 }

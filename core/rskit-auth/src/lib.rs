@@ -4,7 +4,7 @@
 
 /// API key generation, hashing, validation, and rotation with grace periods.
 pub mod apikey;
-/// JWT algorithm typestate — prevents algorithm confusion attacks at compile time.
+/// Header-only bearer authentication middleware.
 mod bearer;
 /// Auth claims stored in request extensions / task-locals.
 pub mod context;

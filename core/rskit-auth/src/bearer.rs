@@ -129,9 +129,13 @@ fn extract_bearer_token<B>(req: &Request<B>) -> CredentialExtraction<'_> {
     let Ok(value) = value.to_str() else {
         return CredentialExtraction::Invalid;
     };
-    let Some(token) = value.strip_prefix("Bearer ") else {
+    let Some((scheme, token)) = value.split_once(' ') else {
         return CredentialExtraction::Invalid;
     };
+    if !scheme.eq_ignore_ascii_case("Bearer") {
+        return CredentialExtraction::Invalid;
+    }
+    let token = token.trim_start_matches(' ');
     if token.is_empty() || token.chars().any(char::is_whitespace) {
         return CredentialExtraction::Invalid;
     }
@@ -215,15 +219,21 @@ mod tests {
 
     #[test]
     fn bearer_extraction_requires_single_authorization_header() {
-        let request = http::Request::builder()
-            .header(http::header::AUTHORIZATION, "Bearer abc.def.ghi")
-            .body(())
-            .unwrap();
+        for value in [
+            "Bearer abc.def.ghi",
+            "bearer abc.def.ghi",
+            "Bearer  abc.def.ghi",
+        ] {
+            let request = http::Request::builder()
+                .header(http::header::AUTHORIZATION, value)
+                .body(())
+                .unwrap();
 
-        assert!(matches!(
-            extract_bearer_token(&request),
-            CredentialExtraction::Present("abc.def.ghi")
-        ));
+            assert!(matches!(
+                extract_bearer_token(&request),
+                CredentialExtraction::Present("abc.def.ghi")
+            ));
+        }
 
         let request = http::Request::builder()
             .header(http::header::AUTHORIZATION, "Bearer one")
@@ -245,7 +255,13 @@ mod tests {
             CredentialExtraction::Missing
         ));
 
-        for value in ["bearer token", "Bearer ", "Bearer token with-space"] {
+        for value in [
+            "Basic token",
+            "Bearer ",
+            "Bearer token with-space",
+            "Bearer\ttoken",
+            " Bearer token",
+        ] {
             let request = http::Request::builder()
                 .header(http::header::AUTHORIZATION, value)
                 .body(())
