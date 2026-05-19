@@ -272,7 +272,9 @@ fn filter_condition_to_qdrant(field: String, value: serde_json::Value) -> AppRes
         let signed = i64::try_from(n).map_err(|_| {
             AppError::new(
                 ErrorCode::InvalidInput,
-                format!("unsupported Qdrant unsigned integer filter value for field '{field}'"),
+                format!(
+                    "Qdrant integer filter value for field '{field}' must fit in i64; encode larger unsigned values as strings"
+                ),
             )
         })?;
         return Ok(Condition::matches(field, signed));
@@ -292,8 +294,22 @@ fn filter_condition_to_qdrant(field: String, value: serde_json::Value) -> AppRes
     }
     Err(AppError::new(
         ErrorCode::InvalidInput,
-        "unsupported Qdrant filter value",
+        format!(
+            "unsupported Qdrant filter value for field '{field}' with JSON kind {}; use string, integer, float, or bool",
+            json_value_kind(&value)
+        ),
     ))
+}
+
+fn json_value_kind(value: &serde_json::Value) -> &'static str {
+    match value {
+        serde_json::Value::Null => "null",
+        serde_json::Value::Bool(_) => "bool",
+        serde_json::Value::Number(_) => "number",
+        serde_json::Value::String(_) => "string",
+        serde_json::Value::Array(_) => "array",
+        serde_json::Value::Object(_) => "object",
+    }
 }
 
 fn qdrant_value_to_json(v: qdrant_client::qdrant::Value) -> serde_json::Value {

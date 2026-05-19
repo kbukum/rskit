@@ -11,7 +11,7 @@ use tokio::sync::{Mutex, broadcast};
 use crate::config::BrokerConfig;
 use crate::event::Event;
 use crate::message::Message;
-use crate::registry::{MessagingBackend, MessagingFactory, MessagingRegistry};
+use crate::registry::{MessagingFactory, MessagingRegistry};
 use crate::traits::{EventConsumer, EventProducer, MessageConsumer, MessageProducer};
 
 const ADAPTER_NAME: &str = "memory";
@@ -154,11 +154,12 @@ struct MemoryFactory<T: Clone + Send + Sync + 'static> {
 }
 
 impl<T: Clone + Send + Sync + 'static> MessagingFactory<T> for MemoryFactory<T> {
-    fn create(&self, _config: &BrokerConfig) -> AppResult<MessagingBackend<T>> {
-        Ok(MessagingBackend {
-            producer: Arc::new(self.broker.producer()) as Arc<dyn MessageProducer<T>>,
-            consumer: Arc::new(self.broker.consumer()) as Arc<dyn MessageConsumer<T>>,
-        })
+    fn create_producer(&self, _config: &BrokerConfig) -> AppResult<Arc<dyn MessageProducer<T>>> {
+        Ok(Arc::new(self.broker.producer()))
+    }
+
+    fn create_consumer(&self, _config: &BrokerConfig) -> AppResult<Arc<dyn MessageConsumer<T>>> {
+        Ok(Arc::new(self.broker.consumer()))
     }
 }
 

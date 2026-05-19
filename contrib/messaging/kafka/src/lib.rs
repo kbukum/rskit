@@ -16,8 +16,7 @@ use rdkafka::producer::{FutureProducer, FutureRecord, Producer};
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_messaging::{
     BrokerConfigExt, CommitStrategy, DeliveryGuarantee, Event, EventConsumer, EventProducer,
-    Message, MessageConsumer, MessageProducer, MessagingBackend, MessagingFactory,
-    MessagingRegistry,
+    Message, MessageConsumer, MessageProducer, MessagingFactory, MessagingRegistry,
 };
 use tokio_stream::StreamExt;
 use tracing::debug;
@@ -196,16 +195,18 @@ struct KafkaFactory {
 }
 
 impl MessagingFactory<Vec<u8>> for KafkaFactory {
-    fn create(
+    fn create_producer(
         &self,
         _config: &rskit_messaging::BrokerConfig,
-    ) -> AppResult<MessagingBackend<Vec<u8>>> {
-        Ok(MessagingBackend {
-            producer: Arc::new(KafkaProducer::new(&self.config)?)
-                as Arc<dyn MessageProducer<Vec<u8>>>,
-            consumer: Arc::new(KafkaConsumer::new(&self.config)?)
-                as Arc<dyn MessageConsumer<Vec<u8>>>,
-        })
+    ) -> AppResult<Arc<dyn MessageProducer<Vec<u8>>>> {
+        Ok(Arc::new(KafkaProducer::new(&self.config)?))
+    }
+
+    fn create_consumer(
+        &self,
+        _config: &rskit_messaging::BrokerConfig,
+    ) -> AppResult<Arc<dyn MessageConsumer<Vec<u8>>>> {
+        Ok(Arc::new(KafkaConsumer::new(&self.config)?))
     }
 }
 

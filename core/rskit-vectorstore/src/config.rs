@@ -27,7 +27,7 @@ impl Default for VectorStoreConfig {
 /// In-memory vector store options.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct MemoryVectorStoreConfig {
-    /// Default metric documented for collections created by the memory backend.
+    /// Default metric used for collections created by the memory backend.
     #[serde(default)]
     pub metric: SimilarityMetric,
 }

@@ -18,7 +18,7 @@ use parking_lot::Mutex as SyncMutex;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_messaging::{
     BrokerConfigExt, Event, EventConsumer, EventProducer, Message, MessageConsumer,
-    MessageProducer, MessagingBackend, MessagingFactory, MessagingRegistry,
+    MessageProducer, MessagingFactory, MessagingRegistry,
 };
 use tokio::sync::{Mutex, mpsc};
 use tokio::task::JoinHandle;
@@ -322,16 +322,18 @@ struct NatsFactory {
 }
 
 impl MessagingFactory<Vec<u8>> for NatsFactory {
-    fn create(
+    fn create_producer(
         &self,
         _config: &rskit_messaging::BrokerConfig,
-    ) -> AppResult<MessagingBackend<Vec<u8>>> {
-        Ok(MessagingBackend {
-            producer: Arc::new(NatsProducer::new(self.config.clone())?)
-                as Arc<dyn MessageProducer<Vec<u8>>>,
-            consumer: Arc::new(NatsConsumer::new(self.config.clone())?)
-                as Arc<dyn MessageConsumer<Vec<u8>>>,
-        })
+    ) -> AppResult<Arc<dyn MessageProducer<Vec<u8>>>> {
+        Ok(Arc::new(NatsProducer::new(self.config.clone())?))
+    }
+
+    fn create_consumer(
+        &self,
+        _config: &rskit_messaging::BrokerConfig,
+    ) -> AppResult<Arc<dyn MessageConsumer<Vec<u8>>>> {
+        Ok(Arc::new(NatsConsumer::new(self.config.clone())?))
     }
 }
 

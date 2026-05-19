@@ -21,7 +21,7 @@ use parking_lot::Mutex as SyncMutex;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_messaging::{
     BrokerConfigExt, Event, EventConsumer, EventProducer, Message, MessageConsumer,
-    MessageProducer, MessagingBackend, MessagingFactory, MessagingRegistry,
+    MessageProducer, MessagingFactory, MessagingRegistry,
 };
 use tokio::sync::{Mutex, mpsc};
 use tokio::task::JoinHandle;
@@ -355,16 +355,18 @@ struct RabbitMqFactory {
 }
 
 impl MessagingFactory<Vec<u8>> for RabbitMqFactory {
-    fn create(
+    fn create_producer(
         &self,
         _config: &rskit_messaging::BrokerConfig,
-    ) -> AppResult<MessagingBackend<Vec<u8>>> {
-        Ok(MessagingBackend {
-            producer: Arc::new(RabbitMqProducer::new(self.config.clone())?)
-                as Arc<dyn MessageProducer<Vec<u8>>>,
-            consumer: Arc::new(RabbitMqConsumer::new(self.config.clone())?)
-                as Arc<dyn MessageConsumer<Vec<u8>>>,
-        })
+    ) -> AppResult<Arc<dyn MessageProducer<Vec<u8>>>> {
+        Ok(Arc::new(RabbitMqProducer::new(self.config.clone())?))
+    }
+
+    fn create_consumer(
+        &self,
+        _config: &rskit_messaging::BrokerConfig,
+    ) -> AppResult<Arc<dyn MessageConsumer<Vec<u8>>>> {
+        Ok(Arc::new(RabbitMqConsumer::new(self.config.clone())?))
     }
 }
 

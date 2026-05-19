@@ -78,8 +78,10 @@ impl VectorStoreRegistry {
 struct MemoryFactory;
 
 impl VectorFactory for MemoryFactory {
-    fn create(&self, _config: &VectorStoreConfig) -> AppResult<Arc<dyn VectorStore>> {
-        Ok(Arc::new(InMemoryVectorStore::new()))
+    fn create(&self, config: &VectorStoreConfig) -> AppResult<Arc<dyn VectorStore>> {
+        Ok(Arc::new(InMemoryVectorStore::with_metric(
+            config.memory.metric,
+        )))
     }
 }
 
