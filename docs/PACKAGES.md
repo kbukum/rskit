@@ -36,7 +36,8 @@ rskit is a **Cargo workspace** with a facade crate (`rskit`), foundation crates 
 | Crate | Description |
 |-------|-------------|
 | `rskit-database` | Database contracts with in-memory default and adapter registry |
-| `rskit-cache` | Redis client with typed store and Component lifecycle |
+| `rskit-cache` | Cache contracts with in-memory default and adapter registry |
+| `rskit-cache-redis` | Redis cache adapter |
 | `rskit-messaging` | Message broker abstractions with memory default and opt-in Kafka/NATS/RabbitMQ adapter crates |
 | `rskit-httpclient` | Async HTTP client with auth and resilience |
 | `rskit-grpc` | Aligned gRPC transport entrypoint with client + server features |

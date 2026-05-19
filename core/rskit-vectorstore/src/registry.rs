@@ -63,6 +63,12 @@ impl VectorStoreRegistry {
 
     /// Build the backend selected by [`VectorStoreConfig::backend`].
     pub fn build(&self, config: &VectorStoreConfig) -> AppResult<Arc<dyn VectorStore>> {
+        if config.backend.trim().is_empty() {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                "vectorstore backend name is required",
+            ));
+        }
         self.factories
             .get(&config.backend)
             .ok_or_else(|| {
@@ -130,5 +136,18 @@ mod tests {
         let err = registry.build(&VectorStoreConfig::default()).err().unwrap();
 
         assert_eq!(err.code, ErrorCode::NotFound);
+    }
+
+    #[test]
+    fn registry_rejects_blank_backend() {
+        let registry = VectorStoreRegistry::new();
+        let config = VectorStoreConfig {
+            backend: "  ".to_owned(),
+            ..VectorStoreConfig::default()
+        };
+
+        let err = registry.build(&config).err().unwrap();
+
+        assert_eq!(err.code, ErrorCode::InvalidInput);
     }
 }
