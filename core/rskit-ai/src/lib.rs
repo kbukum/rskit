@@ -672,7 +672,7 @@ mod tests {
         let operations = [
             (semconv::Operation::Chat, "chat"),
             (semconv::Operation::TextCompletion, "text_completion"),
-            (semconv::Operation::Embedding, "embedding"),
+            (semconv::Operation::Embedding, "embeddings"),
             (semconv::Operation::AgentTurn, "agent.turn"),
             (semconv::Operation::LlmCall, "llm.call"),
             (semconv::Operation::ToolCall, "tool.call"),

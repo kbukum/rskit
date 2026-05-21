@@ -16,7 +16,7 @@ use rskit_llm::types::{
     AssistantMessage, CompletionRequest, CompletionResponse, Message, ToolDefinition, Usage,
 };
 use rskit_resilience::Policy;
-use rskit_tool::{Context, Registry, ToolResult};
+use rskit_tool::{Context, Registry, ToolInput, ToolResult};
 use tracing::Instrument;
 
 use crate::hooks;
@@ -291,7 +291,7 @@ impl Agent {
                             });
                         }
                         tool_calls_used += 1;
-                        let input = serde_json::Value::Object(tc.input.clone());
+                        let input = ToolInput::new(serde_json::Value::Object(tc.input.clone()))?;
 
                         if let Some(ref hooks) = self.config.hooks
                             && emit_hook(
@@ -434,7 +434,7 @@ impl Agent {
         tools: &Registry,
         tool_use_id: &str,
         name: &str,
-        input: serde_json::Value,
+        input: ToolInput,
     ) -> AppResult<ToolResult> {
         let timeout = self.config.tool_timeout;
         let policy = self.config.policy.clone();

@@ -1,6 +1,6 @@
-# rskit-mcp MCP 2025-06-18 conformance
+# rskit-mcp MCP conformance
 
-This document tracks `rskit-mcp` conformance to the
+This document tracks `rskit-mcp` conformance to the implemented
 [Model Context Protocol](https://modelcontextprotocol.io/) revision
 **2025-06-18**.
 
@@ -25,3 +25,18 @@ Transports are locked to `stdio` and `streamable_http`; `sse` is not exposed as 
 | OAuth 2.1 + PKCE | Partial | Helper config and default requirement seam; full authorization server integration is composition-owned. |
 
 Remote MCP servers are tool sources, not skills. Skill manifests live in `rskit-skill`.
+
+## 2025-11-25 gap analysis
+
+The current stable MCP revision is **2025-11-25**. `rskit-mcp` does not claim
+full conformance to that revision yet. The known gaps are:
+
+| Capability | Status | Notes |
+|---|---|---|
+| OpenID Connect discovery / OAuth metadata | Gap | Authorization delegates to `rskit-authz`; OAuth resource-server discovery wiring is composition-owned and not implemented in this crate. |
+| OAuth Client ID metadata / CIMD | Gap | Client metadata document support is not exposed by the current transport helpers. |
+| Incremental scope consent / elicitation URL mode | Gap | HITL and authz seams exist, but interactive scope escalation is not modeled yet. |
+| Icons metadata for tools/resources/prompts | Gap | Current conversion preserves core tool annotations only. |
+| Sampling tool calling | Gap | Sampling seams depend on upstream SDK exposure and host orchestration. |
+| Experimental Tasks lifecycle | Gap | Task states and lifecycle events are not implemented. |
+| Cross-app access controls | Gap | Policy enforcement remains delegated to injected authz decisions and host composition. |

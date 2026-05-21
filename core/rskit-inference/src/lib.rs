@@ -19,20 +19,14 @@ pub mod echo;
 pub mod inference;
 /// Explicit adapter registry.
 pub mod registry;
-/// Hugging Face TGI adapter (OAI-compatible chat completions).
-pub mod tgi;
 /// Runtime-neutral request, response, value, descriptor, and error types.
 pub mod types;
-/// vLLM adapter (OAI-compatible text completions).
-pub mod vllm;
 
 pub use echo::{Echo, register as register_echo};
 pub use inference::{Inference, StreamingInference};
 pub use registry::{Factory, Registry, RegistryError, default_registry};
 pub use rskit_ai::{Model, StreamEvent, StreamEventRef, Usage};
-pub use tgi::{TGI_KIND, TgiAdapter, register as register_tgi};
 pub use types::{
     InferenceDescriptor, InferenceError, PredictRequest, PredictResponse, PredictStatus,
     ServingProtocol, Tensor, TensorData, Value,
 };
-pub use vllm::{VLLM_KIND, VllmAdapter, register as register_vllm};

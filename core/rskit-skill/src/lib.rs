@@ -8,6 +8,11 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use parking_lot::RwLock;
+use rskit_config::{AppConfig, ConfigLoader, ServiceConfig};
+use rskit_errors::AppError;
+use rskit_validation::Validate;
+use rskit_validation::Validator;
+use rskit_validation::input::validate_safe_path;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -87,17 +92,39 @@ pub struct Manifest {
 impl Manifest {
     /// Validate required string fields.
     pub fn validate(&self) -> Result<(), SkillError> {
-        for (field, value) in [
-            ("schema_version", &self.schema_version),
-            ("name", &self.name),
-            ("version", &self.version),
-            ("description", &self.description),
-        ] {
-            if value.trim().is_empty() {
-                return Err(SkillError::InvalidManifest(format!("{field} is required")));
-            }
+        Validator::new()
+            .required("schema_version", &self.schema_version)
+            .required("name", &self.name)
+            .required("version", &self.version)
+            .required("description", &self.description)
+            .validate()
+            .map_err(|error| SkillError::InvalidManifest(error.to_string()))?;
+
+        for script in &self.scripts {
+            validate_safe_path(&script.path)
+                .map_err(|error| SkillError::InvalidManifest(error.to_string()))?;
         }
         Ok(())
+    }
+}
+
+/// Config-loader compatible skill activation source.
+#[derive(Debug, Clone, Deserialize, rskit_validation::Validate)]
+pub struct SkillLoaderConfig {
+    /// Embedded service config for canonical `rskit-config` loading.
+    #[serde(default)]
+    #[validate(nested)]
+    pub service: ServiceConfig,
+    /// Root directory of the skill pack to activate.
+    #[validate(length(min = 1))]
+    pub root: String,
+}
+
+impl AppConfig for SkillLoaderConfig {
+    fn apply_defaults(&mut self) {}
+
+    fn service_config(&self) -> &ServiceConfig {
+        &self.service
     }
 }
 
@@ -401,12 +428,47 @@ impl<V: Verifier> Loader<V> {
             assets,
         })
     }
+
+    /// Activate a skill using canonical `rskit-config` source resolution.
+    pub fn activate_from_config(&self, loader: &ConfigLoader) -> Result<Pack, SkillError> {
+        let config = loader
+            .load::<SkillLoaderConfig>()
+            .map_err(|error| SkillError::InvalidManifest(error.to_string()))?;
+        self.activate(config.root)
+    }
 }
 
 /// Source of skill packs.
 pub trait Provider: Send + Sync {
     /// Return metadata for available packs.
     fn manifests(&self) -> Result<Vec<Manifest>, SkillError>;
+}
+
+impl From<SkillError> for AppError {
+    fn from(value: SkillError) -> Self {
+        match value {
+            SkillError::NotFound(name) => AppError::not_found("skill", Some(name.as_str())),
+            SkillError::AlreadyRegistered(name) => {
+                AppError::already_exists(format!("skill {name}"))
+            }
+            SkillError::InvalidManifest(message) | SkillError::Verification(message) => {
+                AppError::invalid_input("skill", message)
+            }
+            SkillError::Io { path, source } => AppError::new(
+                rskit_errors::ErrorCode::Internal,
+                format!("skill I/O failed for {}: {source}", path.display()),
+            )
+            .with_cause(source),
+            SkillError::ParseManifest { path, source } => AppError::new(
+                rskit_errors::ErrorCode::InvalidInput,
+                format!(
+                    "skill manifest parse failed for {}: {source}",
+                    path.display()
+                ),
+            )
+            .with_cause(source),
+        }
+    }
 }
 
 /// Registry abstraction for skills.
@@ -750,9 +812,7 @@ safety: read-only
         let mut manifest = manifest("demo");
         manifest.name.clear();
         let error = manifest.validate().expect_err("empty name rejected");
-        assert!(
-            matches!(error, SkillError::InvalidManifest(message) if message == "name is required")
-        );
+        assert!(matches!(error, SkillError::InvalidManifest(message) if message.contains("name")));
 
         let root = test_root("parse-error");
         fs::write(root.join(MANIFEST_FILE_NAME), "name: [bad").expect("write malformed yaml");

@@ -5722,11 +5722,9 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "bytes",
- "reqwest 0.13.3",
  "rskit-ai",
  "rskit-component",
  "rskit-errors",
- "rskit-httpclient",
  "rskit-provider",
  "rskit-tool",
  "serde",
@@ -5836,6 +5834,7 @@ dependencies = [
  "rskit-llm-anthropic",
  "rskit-llm-openai",
  "rskit-provider",
+ "rskit-tool",
  "serde",
  "serde_json",
  "tokio",
@@ -6202,11 +6201,15 @@ name = "rskit-skill"
 version = "0.1.0"
 dependencies = [
  "parking_lot",
+ "rskit-config",
+ "rskit-errors",
+ "rskit-validation",
  "serde",
  "serde_json",
  "serde_norway",
  "sha2 0.10.9",
  "thiserror 2.0.18",
+ "validator",
 ]
 
 [[package]]

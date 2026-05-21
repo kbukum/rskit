@@ -1,175 +1,357 @@
-//! Hugging Face TGI REST adapter for `rskit-inference`.
+//! Hugging Face Text Generation Inference (TGI) adapter via OAI-compatible endpoint.
 //!
-//! This crate implements [`rskit_inference::Inference`] and
-//! [`rskit_inference::StreamingInference`] against Hugging Face's
-//! Text Generation Inference (TGI) REST API. Explicit registration,
-//! descriptor, and streaming-capable trait surface without
-//! auto-registration or globals.
+//! TGI exposes an OpenAI-compatible `/v1/chat/completions` endpoint from v2+.
+//! Older deployments may only expose `/generate`; this adapter targets the
+//! modern OAI-compatible path, which is the recommended production interface.
 
 #![warn(missing_docs)]
 
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use rskit_ai::{Capabilities, Model, Provider as ModelProvider, StreamEventRef, Usage};
+use rskit_component::{Component, Health};
 use rskit_errors::AppResult;
-use rskit_httpclient::{HttpClient, HttpClientConfig};
+use rskit_httpclient::{Auth, HttpClient, HttpClientConfig, Request};
 use rskit_inference::{
     Factory, Inference, InferenceDescriptor, InferenceError, PredictRequest, PredictResponse,
-    Registry, RegistryError, ServingProtocol, StreamEventRef, StreamingInference,
+    PredictStatus, Registry, RegistryError, ServingProtocol, StreamingInference, Value,
 };
 use rskit_tool::Envelope;
 use serde::{Deserialize, Serialize};
 use tokio_stream::Stream;
 
-/// Registry kind for the TGI adapter skeleton.
-pub const KIND: &str = "tgi";
+/// Registry kind for the TGI adapter.
+pub const TGI_KIND: &str = "tgi";
+/// Registry kind alias for generic adapter wiring.
+pub const KIND: &str = TGI_KIND;
 
-/// Configuration for the Hugging Face TGI REST adapter skeleton.
+/// Configuration for the TGI OAI-compatible adapter.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
-    /// Adapter endpoint base URL.
-    #[serde(default = "default_endpoint")]
-    pub endpoint: String,
-    /// Descriptor name.
-    #[serde(default = "default_name")]
-    pub name: String,
-    /// Descriptor description.
-    #[serde(default = "default_description")]
-    pub description: String,
+    /// Base URL of the TGI server, for example `http://localhost:8080`.
+    pub base_url: String,
+    /// Default model identifier.
+    #[serde(default = "default_model")]
+    pub model: String,
+    /// Optional bearer token for authenticated TGI deployments.
+    #[serde(default)]
+    pub api_key: Option<String>,
+    /// Max new tokens for generation.
+    #[serde(default = "default_max_tokens")]
+    pub max_tokens: u32,
 }
 
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            endpoint: default_endpoint(),
-            name: default_name(),
-            description: default_description(),
-        }
-    }
+fn default_model() -> String {
+    "tgi".into()
 }
 
-/// Hugging Face TGI REST adapter skeleton.
-pub struct Adapter {
-    config: Config,
+fn default_max_tokens() -> u32 {
+    256
+}
+
+/// TGI adapter using the OAI-compatible chat-completions endpoint.
+pub struct TgiAdapter {
     client: HttpClient,
+    config: Config,
 }
 
-#[async_trait]
-impl rskit_provider::Provider for Adapter {
-    fn name(&self) -> &'static str {
-        KIND
-    }
-}
-
-#[async_trait]
-impl rskit_provider::RequestResponse<PredictRequest, PredictResponse> for Adapter {
-    async fn execute(&self, input: PredictRequest) -> AppResult<PredictResponse> {
-        self.predict(input).await.map_err(Into::into)
-    }
-}
-
-impl Adapter {
-    /// Create an adapter with the default canonical HTTP client.
+impl TgiAdapter {
+    /// Create a new TGI adapter from config.
     pub fn new(config: Config) -> AppResult<Self> {
-        let client = HttpClient::new(HttpClientConfig::new().with_base_url(&config.endpoint))?;
-        Ok(Self::with_http_client(config, client))
+        let mut http_config = HttpClientConfig::new().with_base_url(&config.base_url);
+        if let Some(key) = &config.api_key {
+            http_config = http_config.with_auth(Auth::bearer(key));
+        }
+        Ok(Self {
+            client: HttpClient::new(http_config)?,
+            config,
+        })
     }
 
     /// Create an adapter with an injected canonical HTTP client.
     #[must_use]
     pub fn with_http_client(config: Config, client: HttpClient) -> Self {
-        Self { config, client }
+        Self { client, config }
     }
 
     /// Create an adapter with an injected raw reqwest client.
     #[must_use]
     pub fn with_reqwest_client(config: Config, client: reqwest::Client) -> Self {
-        let client = HttpClient::from_parts(
-            HttpClientConfig::new().with_base_url(&config.endpoint),
-            client,
-        );
-        Self::with_http_client(config, client)
+        let mut http_config = HttpClientConfig::new().with_base_url(&config.base_url);
+        if let Some(key) = &config.api_key {
+            http_config = http_config.with_auth(Auth::bearer(key));
+        }
+        Self::with_http_client(config, HttpClient::from_parts(http_config, client))
+    }
+}
+
+#[derive(Serialize)]
+struct OaiChatRequest {
+    model: String,
+    messages: Vec<OaiMessage>,
+    max_tokens: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    temperature: Option<f32>,
+    stream: bool,
+}
+
+#[derive(Serialize)]
+struct OaiMessage {
+    role: String,
+    content: String,
+}
+
+#[derive(Deserialize)]
+struct OaiChatResponse {
+    model: String,
+    choices: Vec<OaiChatChoice>,
+    usage: OaiUsage,
+}
+
+#[derive(Deserialize)]
+struct OaiChatChoice {
+    message: OaiChatMessage,
+    finish_reason: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct OaiChatMessage {
+    content: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct OaiUsage {
+    prompt_tokens: u32,
+    completion_tokens: u32,
+}
+
+#[async_trait]
+impl rskit_provider::Provider for TgiAdapter {
+    fn name(&self) -> &'static str {
+        TGI_KIND
     }
 }
 
 #[async_trait]
-impl Inference for Adapter {
-    async fn predict(&self, _request: PredictRequest) -> Result<PredictResponse, InferenceError> {
-        let _client = &self.client;
-        Err(InferenceError::NotImplemented(
-            "Hugging Face TGI REST adapter implementation pending; PRs welcome",
-        ))
+impl rskit_provider::RequestResponse<PredictRequest, PredictResponse> for TgiAdapter {
+    async fn execute(&self, input: PredictRequest) -> AppResult<PredictResponse> {
+        self.predict(input).await.map_err(Into::into)
+    }
+}
+
+#[async_trait]
+impl Inference for TgiAdapter {
+    async fn predict(&self, request: PredictRequest) -> Result<PredictResponse, InferenceError> {
+        let prompt = request
+            .inputs
+            .get("prompt")
+            .or_else(|| request.inputs.get("text"))
+            .and_then(|value| match value {
+                Value::Text { text } => Some(text.clone()),
+                _ => None,
+            })
+            .unwrap_or_default();
+
+        let model = if request.model_name.is_empty() {
+            self.config.model.clone()
+        } else {
+            request.model_name.clone()
+        };
+
+        let max_tokens = request
+            .parameters
+            .get("max_tokens")
+            .and_then(serde_json::Value::as_u64)
+            .map(|value| value as u32)
+            .unwrap_or(self.config.max_tokens);
+
+        let temperature = request
+            .parameters
+            .get("temperature")
+            .and_then(serde_json::Value::as_f64)
+            .map(|value| value as f32);
+
+        let body = OaiChatRequest {
+            model: model.clone(),
+            messages: vec![OaiMessage {
+                role: "user".to_string(),
+                content: prompt,
+            }],
+            max_tokens,
+            temperature,
+            stream: false,
+        };
+
+        let req = Request::post("/v1/chat/completions")
+            .json_body(&body)
+            .map_err(|err| InferenceError::Decode(format!("failed to build request: {err}")))?;
+
+        let resp = self.client.send(req).await.map_err(InferenceError::from)?;
+        if !resp.is_success() {
+            let status = resp.status().as_u16();
+            let body = resp.text().unwrap_or_default();
+            return Err(InferenceError::Server { status, body });
+        }
+
+        let text = resp
+            .text()
+            .map_err(|err| InferenceError::Decode(err.to_string()))?;
+        let oai: OaiChatResponse =
+            serde_json::from_str(&text).map_err(|err| InferenceError::Decode(err.to_string()))?;
+
+        let generated = oai
+            .choices
+            .first()
+            .and_then(|choice| choice.message.content.clone())
+            .unwrap_or_default();
+        let finish = oai
+            .choices
+            .first()
+            .and_then(|choice| choice.finish_reason.as_deref())
+            .map(|reason| ("finish_reason".to_string(), reason.to_string()))
+            .into_iter()
+            .collect();
+
+        Ok(PredictResponse {
+            outputs: std::collections::HashMap::from([(
+                "text".to_string(),
+                Value::Text { text: generated },
+            )]),
+            usage: Usage {
+                input_tokens: oai.usage.prompt_tokens as u64,
+                output_tokens: oai.usage.completion_tokens as u64,
+                ..Usage::default()
+            },
+            model: Model {
+                name: oai.model,
+                provider: ModelProvider::Custom("tgi".to_string()),
+                version: request.model_version,
+                capabilities: Capabilities::default(),
+            },
+            status: PredictStatus::Success,
+            metadata: finish,
+        })
     }
 
     fn descriptor(&self) -> InferenceDescriptor {
         InferenceDescriptor {
-            name: self.config.name.clone(),
-            description: self.config.description.clone(),
+            name: TGI_KIND.to_string(),
+            description: "Hugging Face TGI text generation via OAI-compatible /v1/chat/completions"
+                .to_string(),
             serving_protocol: ServingProtocol::TgiRest,
-            envelope: Envelope {
-                scopes: vec!["inference:predict".to_owned()],
-                ..Envelope::default()
-            },
+            envelope: Envelope::default(),
         }
     }
 }
 
 #[async_trait]
-impl StreamingInference for Adapter {
+impl StreamingInference for TgiAdapter {
     async fn predict_stream(
         &self,
         _request: PredictRequest,
     ) -> Result<Box<dyn Stream<Item = StreamEventRef> + Send + Unpin>, InferenceError> {
-        let _client = &self.client;
         Err(InferenceError::NotImplemented(
-            "Hugging Face TGI REST streaming implementation pending; PRs welcome",
+            "TGI streaming is not implemented by this adapter yet",
         ))
     }
 }
 
 #[async_trait]
-impl rskit_component::Component for Adapter {
+impl Component for TgiAdapter {
     fn name(&self) -> &str {
-        &self.config.name
+        "rskit-inference.tgi"
     }
 
-    async fn start(&self) -> rskit_errors::AppResult<()> {
+    async fn start(&self) -> AppResult<()> {
         Ok(())
     }
 
-    async fn stop(&self) -> rskit_errors::AppResult<()> {
+    async fn stop(&self) -> AppResult<()> {
         Ok(())
     }
 
-    fn health(&self) -> rskit_component::Health {
-        rskit_component::Health::healthy(self.name())
+    fn health(&self) -> Health {
+        Health::healthy(self.name())
     }
 }
 
-/// Register this adapter skeleton in an explicit registry.
+/// Explicitly register the TGI adapter factory.
 pub fn register(registry: &mut Registry) -> Result<(), RegistryError> {
     let factory: Factory = Arc::new(|config| {
-        let config = if config.is_null() {
-            Config::default()
-        } else {
-            serde_json::from_value::<Config>(config)
-                .map_err(|err| InferenceError::Decode(err.to_string()))?
-        };
+        let config: Config = serde_json::from_value(config)
+            .map_err(|err| InferenceError::Decode(err.to_string()))?;
         Ok(Arc::new(
-            Adapter::new(config).map_err(InferenceError::from)?,
+            TgiAdapter::new(config).map_err(|err| InferenceError::Decode(err.to_string()))?,
         ))
     });
-    registry.register(KIND, factory)
+    registry.register(TGI_KIND, factory)
 }
 
-fn default_endpoint() -> String {
-    "http://localhost:8000".to_owned()
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-fn default_name() -> String {
-    "tgi".to_owned()
-}
+    #[test]
+    fn tgi_descriptor() {
+        let adapter = TgiAdapter::new(Config {
+            base_url: "http://localhost:8080".into(),
+            model: "tiiuae/falcon-7b".into(),
+            api_key: None,
+            max_tokens: 256,
+        })
+        .unwrap();
+        let desc = adapter.descriptor();
+        assert_eq!(desc.name, TGI_KIND);
+        assert_eq!(desc.serving_protocol, ServingProtocol::TgiRest);
+    }
 
-fn default_description() -> String {
-    "Hugging Face TGI REST adapter skeleton; implementation pending; PRs welcome".to_owned()
+    #[test]
+    fn register_adds_tgi_kind() {
+        let mut registry = Registry::new();
+        register(&mut registry).expect("register tgi");
+        assert!(registry.kinds().contains(&TGI_KIND.to_string()));
+    }
+
+    #[test]
+    fn config_defaults() {
+        let config: Config =
+            serde_json::from_str(r#"{"base_url":"http://localhost:8080"}"#).unwrap();
+        assert_eq!(config.model, "tgi");
+        assert_eq!(config.max_tokens, 256);
+        assert!(config.api_key.is_none());
+    }
+
+    #[tokio::test]
+    async fn predict_transport_error_on_bad_url() {
+        let adapter = TgiAdapter::new(Config {
+            base_url: "http://127.0.0.1:1".into(),
+            model: "test".into(),
+            api_key: None,
+            max_tokens: 64,
+        })
+        .unwrap();
+
+        let req = PredictRequest {
+            model_name: "test".into(),
+            inputs: std::collections::HashMap::from([(
+                "prompt".to_string(),
+                Value::Text {
+                    text: "hello".into(),
+                },
+            )]),
+            ..PredictRequest::default()
+        };
+
+        let err = adapter.predict(req).await.unwrap_err();
+        assert!(
+            matches!(
+                err,
+                InferenceError::Transport(_)
+                    | InferenceError::Server { .. }
+                    | InferenceError::Policy(_)
+            ),
+            "unexpected err: {err:?}"
+        );
+    }
 }

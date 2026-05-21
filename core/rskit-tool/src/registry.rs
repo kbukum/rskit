@@ -12,6 +12,7 @@ use crate::callable::Callable;
 use crate::context::Context;
 use crate::definition::{Definition, ExecutionHint};
 use crate::hitl::{Decision, HumanApproval, SensitivityEvaluator, ToolCall, denied_error};
+use crate::io::ToolInput;
 use crate::result::ToolResult;
 
 /// Options for passive batch tool execution.
@@ -111,12 +112,7 @@ impl Registry {
 
     /// Call a tool by name with a context. Runs the HITL stages (sensitivity
     /// → human approval) if configured before invoking the tool.
-    pub async fn call(
-        &self,
-        name: &str,
-        ctx: &Context,
-        input: serde_json::Value,
-    ) -> AppResult<ToolResult> {
+    pub async fn call(&self, name: &str, ctx: &Context, input: ToolInput) -> AppResult<ToolResult> {
         let span = tracing::info_span!(
             "tool.call",
             "gen_ai.operation.name" = semconv::Operation::ToolCall.as_str(),
@@ -127,6 +123,7 @@ impl Registry {
             let tool = self.get(name).ok_or_else(|| {
                 AppError::new(ErrorCode::NotFound, format!("tool not found: {name:?}"))
             })?;
+            validate_tool_input(tool.as_ref(), &input)?;
             self.run_hitl(tool.as_ref(), ctx, &input).await?;
             tool.call(ctx, input).await
         }
@@ -138,7 +135,7 @@ impl Registry {
         &self,
         tool: &dyn Callable,
         ctx: &Context,
-        input: &serde_json::Value,
+        input: &ToolInput,
     ) -> AppResult<()> {
         let evaluator = match &self.sensitivity {
             Some(e) => e.clone(),
@@ -204,7 +201,7 @@ impl Registry {
     /// goes through the same HITL stages as [`Registry::call`].
     pub async fn call_batch(
         &self,
-        calls: Vec<(&str, serde_json::Value)>,
+        calls: Vec<(&str, ToolInput)>,
         ctx: &Context,
         options: BatchOptions,
     ) -> Vec<AppResult<ToolResult>> {
@@ -234,6 +231,7 @@ impl Registry {
                                 format!("tool not found: {name:?}"),
                             ));
                         };
+                        validate_tool_input(tool.as_ref(), &input)?;
                         if let Some(evaluator) = sensitivity {
                             let definition = tool.definition();
                             let call = ToolCall {
@@ -303,6 +301,26 @@ impl Registry {
     }
 }
 
+fn validate_tool_input(tool: &dyn Callable, input: &ToolInput) -> AppResult<()> {
+    let validation = tool.validate(input);
+    if validation.valid {
+        return Ok(());
+    }
+    let details = validation
+        .errors
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join("; ");
+    Err(AppError::new(
+        ErrorCode::InvalidInput,
+        format!(
+            "invalid tool input for {:?}: {details}",
+            tool.definition().name
+        ),
+    ))
+}
+
 #[async_trait::async_trait]
 impl Component for Registry {
     fn name(&self) -> &str {
@@ -346,18 +364,18 @@ mod tests {
         fn definition(&self) -> &Definition {
             &self.def
         }
-        fn validate(&self, _input: &serde_json::Value) -> rskit_schema::ValidationResult {
+        fn validate(&self, _input: &ToolInput) -> rskit_schema::ValidationResult {
             rskit_schema::ValidationResult {
                 valid: true,
                 errors: Vec::new(),
             }
         }
-        async fn call(&self, _ctx: &Context, input: serde_json::Value) -> AppResult<ToolResult> {
+        async fn call(&self, _ctx: &Context, input: ToolInput) -> AppResult<ToolResult> {
             Ok(ToolResult {
-                output: Some(input),
+                output: Some(crate::ToolOutput::from(input.into_json())),
                 content: "ok".to_owned(),
                 is_error: false,
-                metadata: std::collections::HashMap::new(),
+                metadata: crate::ToolMetadata::new(),
             })
         }
     }
@@ -367,7 +385,7 @@ mod tests {
             def: Definition {
                 name: name.to_owned(),
                 description: "stub".to_owned(),
-                input_schema: json!({"type": "object"}),
+                input_schema: crate::ToolSchema::new(json!({"type": "object"})).unwrap(),
                 output_schema: None,
                 annotations: crate::Annotations::default(),
                 envelope: env,
@@ -398,7 +416,11 @@ mod tests {
 
         let ctx = Context::new();
         let err = registry
-            .call("danger", &ctx, json!({"msg": "hi"}))
+            .call(
+                "danger",
+                &ctx,
+                ToolInput::new(json!({"msg": "hi"})).unwrap(),
+            )
             .await
             .expect_err("sensitive call denied");
         assert_eq!(err.code, ErrorCode::Forbidden);
@@ -413,7 +435,7 @@ mod tests {
 
         let ctx = Context::new();
         let result = registry
-            .call("safe", &ctx, json!({"msg": "hi"}))
+            .call("safe", &ctx, ToolInput::new(json!({"msg": "hi"})).unwrap())
             .await
             .unwrap();
         assert!(!result.is_error);
@@ -440,7 +462,7 @@ mod tests {
 
         let ctx = Context::new();
         let err = registry
-            .call("any", &ctx, json!({"msg": "x"}))
+            .call("any", &ctx, ToolInput::new(json!({"msg": "x"})).unwrap())
             .await
             .expect_err("denied by human approval default");
         assert_eq!(err.code, ErrorCode::Forbidden);

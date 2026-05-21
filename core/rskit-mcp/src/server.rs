@@ -20,6 +20,7 @@ use rskit_component::{Component, Health};
 use tracing;
 use tracing::Instrument;
 
+use rskit_tool::ToolInput;
 use rskit_tool::context::Context;
 use rskit_tool::registry::Registry;
 
@@ -32,8 +33,8 @@ pub struct ToolAuthorizationRequest {
     pub tool_name: String,
     /// Exposed MCP tool name.
     pub mcp_name: String,
-    /// Raw invocation arguments.
-    pub arguments: serde_json::Value,
+    /// Validated invocation arguments.
+    pub arguments: ToolInput,
 }
 
 /// MCP tool authorization decision.
@@ -322,9 +323,20 @@ impl RegistryHandler {
                 )]);
             }
 
-            let input = match request.arguments {
+            let input_value = match request.arguments {
                 Some(args) => serde_json::Value::Object(args),
                 None => serde_json::Value::Object(serde_json::Map::new()),
+            };
+            let input = match ToolInput::new(input_value) {
+                Ok(input) => input,
+                Err(error) => {
+                    event.outcome = String::from("invalid_input");
+                    event.error = error.to_string();
+                    self.audit_tool_call(event).await;
+                    return CallToolResult::error(vec![rmcp::model::Content::text(
+                        "tool input must be a JSON object",
+                    )]);
+                }
             };
 
             match self
@@ -356,7 +368,7 @@ impl RegistryHandler {
             }
 
             if self.config.max_input_bytes > 0
-                && json_size_bytes(&input) > self.config.max_input_bytes
+                && json_size_bytes(input.as_json()) > self.config.max_input_bytes
             {
                 event.outcome = String::from("input_too_large");
                 event.error = format!("input size exceeds {} bytes", self.config.max_input_bytes);
@@ -574,7 +586,7 @@ fn json_size_bytes(value: &serde_json::Value) -> usize {
 
 fn result_size_bytes(result: &rskit_tool::result::ToolResult) -> usize {
     if let Some(output) = &result.output {
-        return json_size_bytes(output);
+        return json_size_bytes(output.as_json());
     }
     result.content.len()
 }
@@ -590,8 +602,9 @@ fn validate_tool_output(
     let candidate = result
         .output
         .clone()
+        .map(rskit_tool::ToolOutput::into_json)
         .unwrap_or_else(|| serde_json::Value::String(result.content.clone()));
-    let validation = rskit_schema::validate(schema, &candidate);
+    let validation = rskit_schema::validate(schema.as_json(), &candidate);
     if validation.valid {
         return None;
     }
@@ -900,7 +913,7 @@ mod tests {
             &self.definition
         }
 
-        fn validate(&self, _input: &serde_json::Value) -> ValidationResult {
+        fn validate(&self, _input: &ToolInput) -> ValidationResult {
             ValidationResult {
                 valid: true,
                 errors: Vec::new(),
@@ -910,13 +923,13 @@ mod tests {
         async fn call(
             &self,
             _ctx: &Context,
-            _input: serde_json::Value,
+            _input: ToolInput,
         ) -> rskit_errors::AppResult<ToolResult> {
             Ok(ToolResult {
-                output: Some(json!({"sum": "bad"})),
+                output: Some(json!({"sum": "bad"}).into()),
                 content: String::from("{\"sum\":\"bad\"}"),
                 is_error: false,
-                metadata: std::collections::HashMap::new(),
+                metadata: rskit_tool::ToolMetadata::new(),
             })
         }
     }
@@ -929,12 +942,18 @@ mod tests {
                 definition: Definition {
                     name: String::from("bad_output"),
                     description: String::from("Return invalid output"),
-                    input_schema: json!({"type": "object", "properties": {}}),
-                    output_schema: Some(json!({
-                        "type": "object",
-                        "properties": {"sum": {"type": "integer"}},
-                        "required": ["sum"]
-                    })),
+                    input_schema: rskit_tool::ToolSchema::new(
+                        json!({"type": "object", "properties": {}}),
+                    )
+                    .unwrap(),
+                    output_schema: Some(
+                        rskit_tool::ToolSchema::new(json!({
+                            "type": "object",
+                            "properties": {"sum": {"type": "integer"}},
+                            "required": ["sum"]
+                        }))
+                        .unwrap(),
+                    ),
                     annotations: rskit_tool::Annotations::default(),
                     envelope: rskit_tool::Envelope::default(),
                 },

@@ -1,172 +1,335 @@
-//! vLLM raw REST adapter for `rskit-inference`.
-//!
-//! The crate locks the backend split shape: explicit registration, descriptor,
-//! and streaming-capable trait surface without auto-registration or globals.
+//! vLLM inference adapter using the OAI-compatible `/v1/completions` endpoint.
 
 #![warn(missing_docs)]
 
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use rskit_ai::{Capabilities, Model, Provider as ModelProvider, StreamEventRef, Usage};
+use rskit_component::{Component, Health};
 use rskit_errors::AppResult;
-use rskit_httpclient::{HttpClient, HttpClientConfig};
+use rskit_httpclient::{Auth, HttpClient, HttpClientConfig, Request};
 use rskit_inference::{
     Factory, Inference, InferenceDescriptor, InferenceError, PredictRequest, PredictResponse,
-    Registry, RegistryError, ServingProtocol, StreamEventRef, StreamingInference,
+    PredictStatus, Registry, RegistryError, ServingProtocol, StreamingInference, Value,
 };
 use rskit_tool::Envelope;
 use serde::{Deserialize, Serialize};
 use tokio_stream::Stream;
 
 /// Registry kind for the vLLM adapter.
-pub const KIND: &str = "vllm";
+pub const VLLM_KIND: &str = "vllm";
+/// Registry kind alias for generic adapter wiring.
+pub const KIND: &str = VLLM_KIND;
 
-/// Configuration for the vLLM raw REST adapter.
+/// Configuration for the vLLM OAI-compatible adapter.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
-    /// Adapter endpoint base URL.
-    #[serde(default = "default_endpoint")]
-    pub endpoint: String,
-    /// Descriptor name.
-    #[serde(default = "default_name")]
-    pub name: String,
-    /// Descriptor description.
-    #[serde(default = "default_description")]
-    pub description: String,
+    /// Base URL of the vLLM server, for example `http://localhost:8000`.
+    pub base_url: String,
+    /// Default model name if not provided in the request.
+    #[serde(default = "default_model")]
+    pub model: String,
+    /// Optional bearer token for authenticated vLLM deployments.
+    #[serde(default)]
+    pub api_key: Option<String>,
+    /// Max tokens for generation.
+    #[serde(default = "default_max_tokens")]
+    pub max_tokens: u32,
 }
 
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            endpoint: default_endpoint(),
-            name: default_name(),
-            description: default_description(),
-        }
-    }
+fn default_model() -> String {
+    "default".into()
 }
 
-/// vLLM raw REST adapter.
-pub struct Adapter {
-    config: Config,
+fn default_max_tokens() -> u32 {
+    256
+}
+
+/// vLLM adapter using the OAI-compatible text generation endpoint.
+pub struct VllmAdapter {
     client: HttpClient,
+    config: Config,
 }
 
-#[async_trait]
-impl rskit_provider::Provider for Adapter {
-    fn name(&self) -> &'static str {
-        KIND
-    }
-}
-
-#[async_trait]
-impl rskit_provider::RequestResponse<PredictRequest, PredictResponse> for Adapter {
-    async fn execute(&self, input: PredictRequest) -> AppResult<PredictResponse> {
-        self.predict(input).await.map_err(Into::into)
-    }
-}
-
-impl Adapter {
-    /// Create an adapter with the default canonical HTTP client.
+impl VllmAdapter {
+    /// Create a new vLLM adapter from config.
     pub fn new(config: Config) -> AppResult<Self> {
-        let client = HttpClient::new(HttpClientConfig::new().with_base_url(&config.endpoint))?;
-        Ok(Self::with_http_client(config, client))
+        let mut http_config = HttpClientConfig::new().with_base_url(&config.base_url);
+        if let Some(key) = &config.api_key {
+            http_config = http_config.with_auth(Auth::bearer(key));
+        }
+        Ok(Self {
+            client: HttpClient::new(http_config)?,
+            config,
+        })
     }
 
     /// Create an adapter with an injected canonical HTTP client.
     #[must_use]
     pub fn with_http_client(config: Config, client: HttpClient) -> Self {
-        Self { config, client }
+        Self { client, config }
     }
 
     /// Create an adapter with an injected raw reqwest client.
     #[must_use]
     pub fn with_reqwest_client(config: Config, client: reqwest::Client) -> Self {
-        let client = HttpClient::from_parts(
-            HttpClientConfig::new().with_base_url(&config.endpoint),
-            client,
-        );
-        Self::with_http_client(config, client)
+        let mut http_config = HttpClientConfig::new().with_base_url(&config.base_url);
+        if let Some(key) = &config.api_key {
+            http_config = http_config.with_auth(Auth::bearer(key));
+        }
+        Self::with_http_client(config, HttpClient::from_parts(http_config, client))
+    }
+}
+
+#[derive(Serialize)]
+struct OaiCompletionRequest {
+    model: String,
+    prompt: String,
+    max_tokens: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    temperature: Option<f32>,
+    stream: bool,
+}
+
+#[derive(Deserialize)]
+struct OaiCompletionResponse {
+    model: String,
+    choices: Vec<OaiChoice>,
+    usage: OaiUsage,
+}
+
+#[derive(Deserialize)]
+struct OaiChoice {
+    text: String,
+    finish_reason: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct OaiUsage {
+    prompt_tokens: u32,
+    completion_tokens: u32,
+}
+
+#[async_trait]
+impl rskit_provider::Provider for VllmAdapter {
+    fn name(&self) -> &'static str {
+        VLLM_KIND
     }
 }
 
 #[async_trait]
-impl Inference for Adapter {
-    async fn predict(&self, _request: PredictRequest) -> Result<PredictResponse, InferenceError> {
-        let _client = &self.client;
-        Err(InferenceError::NotImplemented(
-            "vLLM raw REST adapter implementation pending; PRs welcome",
-        ))
+impl rskit_provider::RequestResponse<PredictRequest, PredictResponse> for VllmAdapter {
+    async fn execute(&self, input: PredictRequest) -> AppResult<PredictResponse> {
+        self.predict(input).await.map_err(Into::into)
+    }
+}
+
+#[async_trait]
+impl Inference for VllmAdapter {
+    async fn predict(&self, request: PredictRequest) -> Result<PredictResponse, InferenceError> {
+        let prompt = request
+            .inputs
+            .get("prompt")
+            .or_else(|| request.inputs.get("text"))
+            .and_then(|value| match value {
+                Value::Text { text } => Some(text.clone()),
+                _ => None,
+            })
+            .unwrap_or_default();
+
+        let model = if request.model_name.is_empty() {
+            self.config.model.clone()
+        } else {
+            request.model_name.clone()
+        };
+
+        let max_tokens = request
+            .parameters
+            .get("max_tokens")
+            .and_then(serde_json::Value::as_u64)
+            .map(|value| value as u32)
+            .unwrap_or(self.config.max_tokens);
+
+        let temperature = request
+            .parameters
+            .get("temperature")
+            .and_then(serde_json::Value::as_f64)
+            .map(|value| value as f32);
+
+        let body = OaiCompletionRequest {
+            model: model.clone(),
+            prompt,
+            max_tokens,
+            temperature,
+            stream: false,
+        };
+
+        let req = Request::post("/v1/completions")
+            .json_body(&body)
+            .map_err(|err| InferenceError::Decode(format!("failed to build request: {err}")))?;
+
+        let resp = self.client.send(req).await.map_err(InferenceError::from)?;
+        if !resp.is_success() {
+            let status = resp.status().as_u16();
+            let body = resp.text().unwrap_or_default();
+            return Err(InferenceError::Server { status, body });
+        }
+
+        let text = resp
+            .text()
+            .map_err(|err| InferenceError::Decode(err.to_string()))?;
+        let oai: OaiCompletionResponse =
+            serde_json::from_str(&text).map_err(|err| InferenceError::Decode(err.to_string()))?;
+
+        let generated = oai
+            .choices
+            .first()
+            .map(|choice| choice.text.clone())
+            .unwrap_or_default();
+        let finish = oai
+            .choices
+            .first()
+            .and_then(|choice| choice.finish_reason.as_deref())
+            .map(|reason| ("finish_reason".to_string(), reason.to_string()))
+            .into_iter()
+            .collect();
+
+        Ok(PredictResponse {
+            outputs: std::collections::HashMap::from([(
+                "text".to_string(),
+                Value::Text { text: generated },
+            )]),
+            usage: Usage {
+                input_tokens: oai.usage.prompt_tokens as u64,
+                output_tokens: oai.usage.completion_tokens as u64,
+                ..Usage::default()
+            },
+            model: Model {
+                name: oai.model,
+                provider: ModelProvider::Custom("vllm".to_string()),
+                version: request.model_version,
+                capabilities: Capabilities::default(),
+            },
+            status: PredictStatus::Success,
+            metadata: finish,
+        })
     }
 
     fn descriptor(&self) -> InferenceDescriptor {
         InferenceDescriptor {
-            name: self.config.name.clone(),
-            description: self.config.description.clone(),
+            name: VLLM_KIND.to_string(),
+            description: "vLLM text generation via OAI-compatible /v1/completions".to_string(),
             serving_protocol: ServingProtocol::VllmRest,
-            envelope: Envelope {
-                scopes: vec!["inference:predict".to_owned()],
-                ..Envelope::default()
-            },
+            envelope: Envelope::default(),
         }
     }
 }
 
 #[async_trait]
-impl StreamingInference for Adapter {
+impl StreamingInference for VllmAdapter {
     async fn predict_stream(
         &self,
         _request: PredictRequest,
     ) -> Result<Box<dyn Stream<Item = StreamEventRef> + Send + Unpin>, InferenceError> {
-        let _client = &self.client;
         Err(InferenceError::NotImplemented(
-            "vLLM raw REST streaming implementation pending; PRs welcome",
+            "vLLM streaming is not implemented by this adapter yet",
         ))
     }
+}
+
+/// Explicitly register the vLLM adapter factory.
+pub fn register(registry: &mut Registry) -> Result<(), RegistryError> {
+    let factory: Factory = Arc::new(|config| {
+        let config: Config = serde_json::from_value(config)
+            .map_err(|err| InferenceError::Decode(err.to_string()))?;
+        Ok(Arc::new(
+            VllmAdapter::new(config).map_err(|err| InferenceError::Decode(err.to_string()))?,
+        ))
+    });
+    registry.register(VLLM_KIND, factory)
 }
 
 #[async_trait]
-impl rskit_component::Component for Adapter {
+impl Component for VllmAdapter {
     fn name(&self) -> &str {
-        &self.config.name
+        "rskit-inference.vllm"
     }
 
-    async fn start(&self) -> rskit_errors::AppResult<()> {
+    async fn start(&self) -> AppResult<()> {
         Ok(())
     }
 
-    async fn stop(&self) -> rskit_errors::AppResult<()> {
+    async fn stop(&self) -> AppResult<()> {
         Ok(())
     }
 
-    fn health(&self) -> rskit_component::Health {
-        rskit_component::Health::healthy(self.name())
+    fn health(&self) -> Health {
+        Health::healthy(self.name())
     }
 }
 
-/// Register this adapter in an explicit registry.
-pub fn register(registry: &mut Registry) -> Result<(), RegistryError> {
-    let factory: Factory = Arc::new(|config| {
-        let config = if config.is_null() {
-            Config::default()
-        } else {
-            serde_json::from_value::<Config>(config)
-                .map_err(|err| InferenceError::Decode(err.to_string()))?
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    #[test]
+    fn vllm_descriptor() {
+        let adapter = VllmAdapter::new(Config {
+            base_url: "http://localhost:8000".into(),
+            model: "llama3".into(),
+            api_key: None,
+            max_tokens: 256,
+        })
+        .unwrap();
+        let desc = adapter.descriptor();
+        assert_eq!(desc.name, VLLM_KIND);
+        assert_eq!(desc.serving_protocol, ServingProtocol::VllmRest);
+    }
+
+    #[test]
+    fn register_adds_vllm_kind() {
+        let mut registry = Registry::new();
+        register(&mut registry).expect("register vllm");
+        assert!(registry.kinds().contains(&VLLM_KIND.to_string()));
+    }
+
+    #[test]
+    fn config_defaults() {
+        let config: Config =
+            serde_json::from_str(r#"{"base_url":"http://localhost:8000"}"#).unwrap();
+        assert_eq!(config.model, "default");
+        assert_eq!(config.max_tokens, 256);
+        assert!(config.api_key.is_none());
+    }
+
+    #[tokio::test]
+    async fn predict_extracts_text_input() {
+        let adapter = VllmAdapter::new(Config {
+            base_url: "http://127.0.0.1:1".into(),
+            model: "test".into(),
+            api_key: None,
+            max_tokens: 64,
+        })
+        .unwrap();
+
+        let inputs = HashMap::from([("prompt".to_string(), Value::Text { text: "hi".into() })]);
+        let req = PredictRequest {
+            model_name: "test".into(),
+            inputs,
+            ..PredictRequest::default()
         };
-        Ok(Arc::new(
-            Adapter::new(config).map_err(InferenceError::from)?,
-        ))
-    });
-    registry.register(KIND, factory)
-}
 
-fn default_endpoint() -> String {
-    "http://localhost:8000".to_owned()
-}
-
-fn default_name() -> String {
-    "vllm".to_owned()
-}
-
-fn default_description() -> String {
-    "vLLM raw REST adapter; implementation pending; PRs welcome".to_owned()
+        let err = adapter.predict(req).await.unwrap_err();
+        assert!(
+            matches!(
+                err,
+                InferenceError::Transport(_)
+                    | InferenceError::Server { .. }
+                    | InferenceError::Policy(_)
+            ),
+            "unexpected err: {err:?}"
+        );
+    }
 }

@@ -101,8 +101,6 @@ impl ToolAuthorizer for DeciderToolAuthorizer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::Value;
-
     struct StaticDecider {
         decision: AuthzDecision,
     }
@@ -116,7 +114,7 @@ mod tests {
         ToolAuthorizationRequest {
             tool_name: name.to_owned(),
             mcp_name: name.to_owned(),
-            arguments: Value::Null,
+            arguments: rskit_tool::ToolInput::empty(),
         }
     }
 

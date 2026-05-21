@@ -11,10 +11,9 @@ use rmcp::service::{Peer, RoleClient, RunningService};
 use rskit_ai::semconv;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_schema::{CompiledSchema, ValidationResult};
-use rskit_tool::Callable;
-use rskit_tool::Definition;
 use rskit_tool::context::Context;
 use rskit_tool::result::ToolResult;
+use rskit_tool::{Callable, Definition, ToolInput};
 use tracing::Instrument;
 
 use crate::convert;
@@ -42,14 +41,14 @@ impl Callable for RemoteTool {
         &self.definition
     }
 
-    fn validate(&self, input: &serde_json::Value) -> ValidationResult {
+    fn validate(&self, input: &ToolInput) -> ValidationResult {
         match &self.input_validator {
-            Ok(validator) => validator.validate(input),
+            Ok(validator) => validator.validate(input.as_json()),
             Err(result) => result.clone(),
         }
     }
 
-    async fn call(&self, _ctx: &Context, input: serde_json::Value) -> AppResult<ToolResult> {
+    async fn call(&self, _ctx: &Context, input: ToolInput) -> AppResult<ToolResult> {
         let span = tracing::info_span!(
             "mcp.request",
             "gen_ai.operation.name" = semconv::Operation::McpRequest.as_str(),
@@ -58,7 +57,7 @@ impl Callable for RemoteTool {
             "mcp.tool_name" = self.mcp_name.as_str(),
         );
         async {
-            let arguments = match input {
+            let arguments = match input.into_json() {
                 serde_json::Value::Object(map) => Some(map),
                 _ => None,
             };
@@ -90,20 +89,20 @@ pub fn wrap_tools(
     tools: &[Tool],
     peer: Arc<Peer<RoleClient>>,
     config: &ClientConfig,
-) -> Vec<Box<dyn Callable>> {
+) -> AppResult<Vec<Box<dyn Callable>>> {
     tools
         .iter()
         .map(|tool| {
-            let def = convert::tool_to_definition(tool, &config.prefix);
-            let input_validator =
-                rskit_schema::compile(&def.input_schema).map_err(validation_result_from_error);
+            let def = convert::tool_to_definition(tool, &config.prefix)?;
+            let input_validator = rskit_schema::compile(def.input_schema.as_json())
+                .map_err(validation_result_from_error);
             let mcp_name = tool.name.to_string();
-            Box::new(RemoteTool {
+            Ok(Box::new(RemoteTool {
                 definition: def,
                 input_validator,
                 mcp_name,
                 peer: peer.clone(),
-            }) as Box<dyn Callable>
+            }) as Box<dyn Callable>)
         })
         .collect()
 }
@@ -146,7 +145,7 @@ where
     })?;
 
     let peer = Arc::new(client.peer().clone());
-    Ok(wrap_tools(&result.tools, peer, config))
+    wrap_tools(&result.tools, peer, config)
 }
 
 #[cfg(test)]

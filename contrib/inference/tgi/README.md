@@ -1,7 +1,7 @@
 # rskit-inference-tgi
 
-Hugging Face TGI REST adapter skeleton for `rskit-inference`.
+Hugging Face TGI REST adapter for `rskit-inference`.
 
-Implementation pending; PRs welcome. This crate intentionally provides only the
-explicit `register(&mut Registry)` factory wiring, descriptor, and trait shape.
-It performs no auto-registration and has no global registry.
+This crate implements the OAI-compatible `/v1/chat/completions` path with
+explicit `register(&mut Registry)` factory wiring. It performs no
+auto-registration and has no global registry.

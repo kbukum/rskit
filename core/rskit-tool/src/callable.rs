@@ -6,6 +6,7 @@ use rskit_schema::ValidationResult;
 
 use crate::context::Context;
 use crate::definition::Definition;
+use crate::io::ToolInput;
 use crate::result::ToolResult;
 
 /// Type-erased tool interface for heterogeneous registries.
@@ -15,8 +16,8 @@ pub trait Callable: Send + Sync {
     fn definition(&self) -> &Definition;
 
     /// Validate input against the tool's input schema.
-    fn validate(&self, input: &serde_json::Value) -> ValidationResult;
+    fn validate(&self, input: &ToolInput) -> ValidationResult;
 
     /// Execute the tool with a context and JSON input.
-    async fn call(&self, ctx: &Context, input: serde_json::Value) -> AppResult<ToolResult>;
+    async fn call(&self, ctx: &Context, input: ToolInput) -> AppResult<ToolResult>;
 }

@@ -9,6 +9,7 @@ mod definition;
 pub mod envelope;
 mod from_fn;
 pub mod hitl;
+pub mod io;
 pub mod registry;
 pub mod result;
 
@@ -24,13 +25,14 @@ pub use hitl::{
     Decision, DenyHumanApproval, DenyOnSensitive, HumanApproval, SensitivityEvaluator, ToolCall,
     denied_error,
 };
+pub use io::{ToolInput, ToolMetadata, ToolOutput, ToolSchema};
 pub use registry::{BatchOptions, Registry};
 pub use result::{ToolResult, error_result, json_result, text_result};
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rskit_errors::AppResult;
+    use rskit_errors::{AppResult, ErrorCode};
     use schemars::JsonSchema;
     use serde::{Deserialize, Serialize};
 
@@ -61,7 +63,10 @@ mod tests {
 
         let ctx = Context::new();
         let result = tool
-            .call(&ctx, serde_json::json!({"a": 1, "b": 2}))
+            .call(
+                &ctx,
+                ToolInput::new(serde_json::json!({"a": 1, "b": 2})).unwrap(),
+            )
             .await
             .unwrap();
         assert_eq!(result.text(), "3");
@@ -78,7 +83,10 @@ mod tests {
 
         let ctx = Context::new();
         let result = tool
-            .call(&ctx, serde_json::json!({"a": 1, "b": 2}))
+            .call(
+                &ctx,
+                ToolInput::new(serde_json::json!({"a": 1, "b": 2})).unwrap(),
+            )
             .await
             .unwrap();
         assert!(result.output.is_some());
@@ -108,7 +116,9 @@ mod tests {
         .unwrap();
 
         let ctx = Context::new();
-        let result = tool.call(&ctx, serde_json::json!({"x": 1})).await;
+        let result = tool
+            .call(&ctx, ToolInput::new(serde_json::json!({"x": 1})).unwrap())
+            .await;
         assert!(result.is_err());
     }
 
@@ -119,10 +129,11 @@ mod tests {
         })
         .unwrap();
 
-        let valid = tool.validate(&serde_json::json!({"a": 1, "b": 2}));
+        let valid = tool.validate(&ToolInput::new(serde_json::json!({"a": 1, "b": 2})).unwrap());
         assert!(valid.valid);
 
-        let invalid = tool.validate(&serde_json::json!(42));
+        let invalid =
+            tool.validate(&ToolInput::new(serde_json::json!({"a": "bad", "b": 2})).unwrap());
         assert!(!invalid.valid);
     }
 
@@ -147,10 +158,40 @@ mod tests {
 
         let ctx = Context::new();
         let result = registry
-            .call("add", &ctx, serde_json::json!({"a": 3, "b": 4}))
+            .call(
+                "add",
+                &ctx,
+                ToolInput::new(serde_json::json!({"a": 3, "b": 4})).unwrap(),
+            )
             .await
             .unwrap();
         assert_eq!(result.text(), "7");
+    }
+
+    #[tokio::test]
+    async fn test_registry_rejects_schema_invalid_input() {
+        let registry = Registry::new();
+        let tool = from_fn(
+            "add",
+            "Add two numbers",
+            |_ctx: Context, input: AddInput| async move {
+                Ok(text_result(&format!("{}", input.a + input.b)))
+            },
+        )
+        .unwrap();
+        registry.register(tool).unwrap();
+
+        let err = registry
+            .call(
+                "add",
+                &Context::new(),
+                ToolInput::new(serde_json::json!({"a": "bad", "b": 2})).unwrap(),
+            )
+            .await
+            .unwrap_err();
+
+        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert!(err.message().contains("invalid tool input"));
     }
 
     #[tokio::test]
@@ -174,7 +215,13 @@ mod tests {
     async fn test_registry_not_found() {
         let registry = Registry::new();
         let ctx = Context::new();
-        let result = registry.call("missing", &ctx, serde_json::json!({})).await;
+        let result = registry
+            .call(
+                "missing",
+                &ctx,
+                ToolInput::new(serde_json::json!({})).unwrap(),
+            )
+            .await;
         assert!(result.is_err());
     }
 
@@ -240,7 +287,7 @@ mod tests {
         let def = Definition {
             name: "test".to_string(),
             description: "Test tool".to_string(),
-            input_schema: serde_json::json!({"type": "object"}),
+            input_schema: ToolSchema::new(serde_json::json!({"type": "object"})).unwrap(),
             output_schema: None,
             annotations: Annotations {
                 title: "Test".to_string(),
@@ -308,13 +355,13 @@ mod tests {
         fn definition(&self) -> &Definition {
             &self.0
         }
-        fn validate(&self, _input: &serde_json::Value) -> rskit_schema::ValidationResult {
+        fn validate(&self, _input: &ToolInput) -> rskit_schema::ValidationResult {
             rskit_schema::ValidationResult {
                 valid: true,
                 errors: vec![],
             }
         }
-        async fn call(&self, _ctx: &Context, _input: serde_json::Value) -> AppResult<ToolResult> {
+        async fn call(&self, _ctx: &Context, _input: ToolInput) -> AppResult<ToolResult> {
             Ok(text_result("stub"))
         }
     }
@@ -323,7 +370,7 @@ mod tests {
         Box::new(StubTool(Definition {
             name: name.to_string(),
             description: name.to_string(),
-            input_schema: serde_json::json!({"type": "object"}),
+            input_schema: ToolSchema::new(serde_json::json!({"type": "object"})).unwrap(),
             output_schema: None,
             annotations,
             envelope: Envelope::default(),
@@ -377,7 +424,7 @@ mod tests {
     #[test]
     fn test_context_metadata() {
         let mut ctx = Context::new();
-        ctx.set("key", serde_json::json!("value"));
+        ctx.set("key", serde_json::json!("value").into());
         assert_eq!(ctx.get("key").unwrap(), &serde_json::json!("value"));
         assert!(ctx.get("missing").is_none());
     }
@@ -416,7 +463,7 @@ mod tests {
     #[test]
     fn test_tool_result_metadata() {
         let mut r = text_result("hi");
-        r.set_meta("timing_ms", serde_json::json!(42));
+        r.set_meta("timing_ms", serde_json::json!(42).into());
         assert_eq!(r.metadata.get("timing_ms").unwrap(), &serde_json::json!(42));
     }
 }

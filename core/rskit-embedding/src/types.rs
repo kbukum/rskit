@@ -1,6 +1,53 @@
 //! Embedding data types, distance metrics, and aggregation functions.
 
-use serde::{Deserialize, Serialize};
+use rskit_errors::{AppError, AppResult, ErrorCode};
+use serde::{Deserialize, Deserializer, Serialize, de};
+
+/// Provider-specific embedding options.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(transparent)]
+pub struct EmbeddingOptions(serde_json::Value);
+
+impl EmbeddingOptions {
+    /// Create options from a JSON object.
+    pub fn new(value: serde_json::Value) -> AppResult<Self> {
+        if value.is_object() {
+            Ok(Self(value))
+        } else {
+            Err(AppError::new(
+                ErrorCode::InvalidInput,
+                "embedding options must be a JSON object",
+            ))
+        }
+    }
+
+    /// Borrow the structured options.
+    #[must_use]
+    pub fn as_json(&self) -> &serde_json::Value {
+        &self.0
+    }
+
+    /// Consume the wrapper and return structured options.
+    #[must_use]
+    pub fn into_json(self) -> serde_json::Value {
+        self.0
+    }
+}
+
+impl<'de> Deserialize<'de> for EmbeddingOptions {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Self::new(serde_json::Value::deserialize(deserializer)?).map_err(de::Error::custom)
+    }
+}
+
+impl Default for EmbeddingOptions {
+    fn default() -> Self {
+        Self(serde_json::Value::Object(serde_json::Map::new()))
+    }
+}
 
 /// Canonical embedding request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -11,7 +58,7 @@ pub struct EmbedRequest {
     pub inputs: Vec<EmbedInput>,
     /// Provider-specific knobs.
     #[serde(default)]
-    pub options: serde_json::Value,
+    pub options: EmbeddingOptions,
 }
 
 /// Multimodal embedding input.
@@ -84,5 +131,14 @@ mod tests {
         let e = Embedding::new(vec![1.0, 2.0], 3);
         assert_eq!(e.dimensions, 2);
         assert_eq!(e.index, 3);
+    }
+
+    #[test]
+    fn embedding_options_reject_non_object() {
+        let err = serde_json::from_str::<EmbeddingOptions>("null").unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("embedding options must be a JSON object")
+        );
     }
 }

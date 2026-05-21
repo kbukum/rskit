@@ -244,7 +244,7 @@ pub enum ServingProtocol {
 pub enum InferenceError {
     /// Transport error from the injected HTTP client.
     #[error("transport: {0}")]
-    Transport(#[from] reqwest::Error),
+    Transport(String),
     /// Response decode or protocol mapping failure.
     #[error("decode: {0}")]
     Decode(String),
@@ -278,6 +278,9 @@ impl From<AppError> for InferenceError {
         match value.code {
             ErrorCode::Timeout => Self::Timeout,
             ErrorCode::Cancelled => Self::Cancelled,
+            ErrorCode::ExternalService
+            | ErrorCode::ServiceUnavailable
+            | ErrorCode::ConnectionFailed => Self::Transport(value.to_string()),
             _ => Self::Policy(value.to_string()),
         }
     }
