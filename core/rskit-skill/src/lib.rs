@@ -109,7 +109,7 @@ impl Manifest {
 }
 
 /// Config-loader compatible skill activation source.
-#[derive(Debug, Clone, Deserialize, rskit_validation::Validate)]
+#[derive(Debug, Clone, Deserialize, Validate)]
 pub struct SkillLoaderConfig {
     /// Embedded service config for canonical `rskit-config` loading.
     #[serde(default)]
