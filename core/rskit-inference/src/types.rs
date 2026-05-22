@@ -242,9 +242,9 @@ pub enum ServingProtocol {
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum InferenceError {
-    /// Transport error from the injected HTTP client.
+    /// Transport error from an injected client or adapter boundary.
     #[error("transport: {0}")]
-    Transport(String),
+    Transport(#[source] AppError),
     /// Response decode or protocol mapping failure.
     #[error("decode: {0}")]
     Decode(String),
@@ -280,7 +280,7 @@ impl From<AppError> for InferenceError {
             ErrorCode::Cancelled => Self::Cancelled,
             ErrorCode::ExternalService
             | ErrorCode::ServiceUnavailable
-            | ErrorCode::ConnectionFailed => Self::Transport(value.to_string()),
+            | ErrorCode::ConnectionFailed => Self::Transport(value),
             _ => Self::Policy(value.to_string()),
         }
     }
@@ -296,6 +296,11 @@ impl From<InferenceError> for AppError {
                 ErrorCode::ExternalService,
                 format!("inference runtime returned status {status}: {body}"),
             ),
+            InferenceError::Transport(error) => AppError::new(
+                ErrorCode::ExternalService,
+                format!("inference transport failed: {}", error.message),
+            )
+            .with_cause(error),
             other => AppError::new(ErrorCode::ExternalService, other.to_string()),
         }
     }
