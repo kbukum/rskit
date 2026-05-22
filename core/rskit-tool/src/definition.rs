@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::envelope::Envelope;
+use crate::io::ToolSchema;
 
 /// How the frontend should handle the tool result.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
@@ -70,10 +71,10 @@ pub struct Definition {
     /// Human-readable description.
     pub description: String,
     /// JSON Schema for the tool's input parameters.
-    pub input_schema: serde_json::Value,
+    pub input_schema: ToolSchema,
     /// Optional JSON Schema for the tool's output.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub output_schema: Option<serde_json::Value>,
+    pub output_schema: Option<ToolSchema>,
     /// Behavioral hints that are orthogonal to the executable permission envelope.
     #[serde(default)]
     pub annotations: Annotations,

@@ -5,6 +5,7 @@
 
 use rskit_hook::{Event, EventType};
 use rskit_llm::types::{AssistantMessage, CompletionRequest, CompletionResponse};
+use rskit_tool::ToolInput;
 use rskit_tool::ToolResult;
 
 // ── Event type constants ────────────────────────────────────────────────────
@@ -138,7 +139,7 @@ impl Event for OnMCPResult {
 #[derive(Debug, Clone)]
 pub struct PreToolCall {
     pub name: String,
-    pub input: serde_json::Value,
+    pub input: ToolInput,
 }
 
 impl Event for PreToolCall {
@@ -151,7 +152,7 @@ impl Event for PreToolCall {
 #[derive(Debug, Clone)]
 pub struct PostToolCall {
     pub name: String,
-    pub input: serde_json::Value,
+    pub input: ToolInput,
     pub result: Option<ToolResult>,
     pub error: Option<String>,
 }
@@ -229,12 +230,13 @@ impl Event for TurnEnd {
 mod tests {
     use super::*;
     use rskit_hook::EventType;
+    use rskit_tool::ToolInput;
 
     #[test]
     fn test_pre_tool_call_event() {
         let event = PreToolCall {
             name: "calculator".to_string(),
-            input: serde_json::json!({"x": 1}),
+            input: ToolInput::new(serde_json::json!({"x": 1})).unwrap(),
         };
         assert_eq!(event.event_type(), EventType::new("on_tool_call"));
         assert_eq!(event.name, "calculator");
@@ -244,7 +246,7 @@ mod tests {
     fn test_post_tool_call_event() {
         let event = PostToolCall {
             name: "calculator".to_string(),
-            input: serde_json::json!({}),
+            input: ToolInput::new(serde_json::json!({})).unwrap(),
             result: None,
             error: Some("timeout".to_string()),
         };

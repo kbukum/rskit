@@ -23,7 +23,6 @@ serde        = { workspace = true }
 serde_json   = { workspace = true }
 async-trait  = { workspace = true }
 bytes        = { workspace = true, features = ["serde"] }
-reqwest      = { workspace = true }
 thiserror    = { workspace = true }
 tokio-stream = { workspace = true }
 uuid         = { version = "1", features = ["v7"] }
@@ -34,7 +33,6 @@ rskit-component = { path = "../rskit-component" }
 rskit-errors = { path = "../rskit-errors" }
 rskit-provider = { path = "../rskit-provider" }
 rskit-tool   = { path = "../rskit-tool" }
-rskit-httpclient = { path = "../rskit-httpclient" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }

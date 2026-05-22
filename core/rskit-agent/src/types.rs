@@ -3,7 +3,7 @@
 use rskit_ai::{FinishReason, StreamEventRef};
 use rskit_errors::AppError;
 use rskit_llm::types::{AssistantMessage, Message, Usage};
-use rskit_tool::ToolResult;
+use rskit_tool::{ToolInput, ToolResult};
 use serde::{Deserialize, Serialize};
 
 // ── StopReason ──────────────────────────────────────────────────────────────
@@ -101,7 +101,7 @@ pub enum AgentEvent {
     ToolExecuting {
         tool_use_id: String,
         name: String,
-        input: serde_json::Value,
+        input: ToolInput,
     },
     /// A tool call completed.
     ToolComplete {

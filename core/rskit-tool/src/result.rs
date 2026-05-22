@@ -2,14 +2,15 @@
 
 use rskit_ai::ToolResultBlock;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+
+use crate::io::{ToolMetadata, ToolOutput};
 
 /// The outcome of executing a tool.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolResult {
     /// Structured JSON output (for programmatic consumption).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub output: Option<serde_json::Value>,
+    pub output: Option<ToolOutput>,
     /// Human-readable text content.
     #[serde(default)]
     pub content: String,
@@ -17,8 +18,8 @@ pub struct ToolResult {
     #[serde(default)]
     pub is_error: bool,
     /// Arbitrary metadata attached to the result.
-    #[serde(skip_serializing_if = "HashMap::is_empty", default)]
-    pub metadata: HashMap<String, serde_json::Value>,
+    #[serde(skip_serializing_if = "ToolMetadata::is_empty", default)]
+    pub metadata: ToolMetadata,
 }
 
 impl ToolResult {
@@ -37,7 +38,7 @@ impl ToolResult {
     }
 
     /// Insert a metadata key-value pair.
-    pub fn set_meta(&mut self, key: &str, value: serde_json::Value) {
+    pub fn set_meta(&mut self, key: &str, value: ToolOutput) {
         self.metadata.insert(key.to_string(), value);
     }
 }
@@ -48,7 +49,7 @@ pub fn text_result(content: &str) -> ToolResult {
         output: None,
         content: content.to_string(),
         is_error: false,
-        metadata: HashMap::new(),
+        metadata: ToolMetadata::new(),
     }
 }
 
@@ -58,18 +59,18 @@ pub fn error_result(content: &str) -> ToolResult {
         output: None,
         content: content.to_string(),
         is_error: true,
-        metadata: HashMap::new(),
+        metadata: ToolMetadata::new(),
     }
 }
 
 /// Create a success result by serializing a value to JSON.
 pub fn json_result<T: Serialize>(value: &T) -> std::result::Result<ToolResult, serde_json::Error> {
-    let json = serde_json::to_value(value)?;
     let content = serde_json::to_string(value)?;
+    let json = serde_json::to_value(value)?;
     Ok(ToolResult {
-        output: Some(json),
+        output: Some(ToolOutput::from(json)),
         content,
         is_error: false,
-        metadata: HashMap::new(),
+        metadata: ToolMetadata::new(),
     })
 }

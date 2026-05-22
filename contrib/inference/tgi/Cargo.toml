@@ -1,6 +1,6 @@
 [package]
 name        = "rskit-inference-tgi"
-description = "Hugging Face TGI REST adapter skeleton for rskit-inference"
+description = "Hugging Face TGI REST adapter for rskit-inference"
 version.workspace      = true
 edition.workspace      = true
 license.workspace      = true

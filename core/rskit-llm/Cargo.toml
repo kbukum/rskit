@@ -31,6 +31,7 @@ rskit-ai = { workspace = true }
 rskit-component   = { path = "../rskit-component" }
 rskit-errors      = { path = "../rskit-errors" }
 rskit-provider    = { path = "../rskit-provider" }
+rskit-tool        = { path = "../rskit-tool" }
 
 [dev-dependencies]
 # External

@@ -293,7 +293,7 @@ mod tests {
                     capabilities: rskit_ai::Capabilities::default(),
                 },
                 inputs: vec![EmbedInput::Text("retry".into())],
-                options: serde_json::Value::Null,
+                options: rskit_embedding::EmbeddingOptions::default(),
             })
             .await
             .unwrap();

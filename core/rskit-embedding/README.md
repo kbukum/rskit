@@ -32,7 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             inputs: vec![EmbedInput::Text(
                 "native provider shapes keep pipelines composable".into(),
             )],
-            options: serde_json::Value::Null,
+            options: rskit_embedding::EmbeddingOptions::default(),
         })
         .await?;
 

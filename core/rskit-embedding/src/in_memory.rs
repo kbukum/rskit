@@ -116,6 +116,7 @@ impl Component for InMemoryProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::EmbeddingOptions;
     use rskit_ai::{Capabilities, Model, Provider as ModelProvider};
 
     fn model() -> Model {
@@ -136,7 +137,7 @@ mod tests {
                 EmbedInput::Text("hello".into()),
                 EmbedInput::Text("world".into()),
             ],
-            options: serde_json::Value::Null,
+            options: EmbeddingOptions::default(),
         };
         let response = provider.embed(req.clone()).await.expect("embed");
         let again = provider.embed(req).await.expect("embed again");
@@ -152,7 +153,7 @@ mod tests {
         let req = EmbedRequest {
             model: model(),
             inputs: vec![EmbedInput::Text("x".into())],
-            options: serde_json::json!({}),
+            options: EmbeddingOptions::default(),
         };
         let responses = provider
             .embed_batch(vec![req.clone(), req])

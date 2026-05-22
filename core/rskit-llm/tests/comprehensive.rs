@@ -223,7 +223,11 @@ fn completion_request_all_fields() {
     let tool_def = ToolDefinition {
         name: "get_weather".into(),
         description: "Get weather for a city".into(),
-        input_schema: serde_json::json!({"type": "object", "properties": {"city": {"type": "string"}}}),
+        input_schema: rskit_tool::ToolSchema::new(serde_json::json!({
+            "type": "object",
+            "properties": {"city": {"type": "string"}}
+        }))
+        .unwrap(),
         output_schema: None,
     };
     let req = CompletionRequest {

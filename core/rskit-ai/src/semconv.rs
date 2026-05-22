@@ -61,7 +61,7 @@ impl Operation {
         match self {
             Self::Chat => "chat",
             Self::TextCompletion => "text_completion",
-            Self::Embedding => "embedding",
+            Self::Embedding => "embeddings",
             Self::AgentRun => "agent.run",
             Self::AgentTurn => "agent.turn",
             Self::LlmCall => "llm.call",
@@ -78,7 +78,7 @@ impl Operation {
         match value {
             "chat" => Some(Self::Chat),
             "text_completion" => Some(Self::TextCompletion),
-            "embedding" => Some(Self::Embedding),
+            "embeddings" | "embedding" => Some(Self::Embedding),
             "agent.run" => Some(Self::AgentRun),
             "agent.turn" => Some(Self::AgentTurn),
             "llm.call" => Some(Self::LlmCall),

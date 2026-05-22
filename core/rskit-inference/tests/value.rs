@@ -74,6 +74,8 @@ fn tensor_numeric_data_round_trips_by_dtype() {
 
 #[test]
 fn serving_protocol_and_error_conversions_round_trip() {
+    use std::error::Error;
+
     let protocol = rskit_inference::ServingProtocol::KServeV2Http;
     let encoded = serde_json::to_string(&protocol).expect("serialize protocol");
     assert_eq!(encoded, "\"k_serve_v2_http\"");
@@ -83,6 +85,12 @@ fn serving_protocol_and_error_conversions_round_trip() {
 
     let timeout: rskit_inference::InferenceError = rskit_errors::AppError::timeout("test").into();
     assert!(matches!(timeout, rskit_inference::InferenceError::Timeout));
+    let transport: rskit_inference::InferenceError =
+        rskit_errors::AppError::connection_failed("runtime").into();
+    assert!(matches!(
+        transport.source().map(ToString::to_string).as_deref(),
+        Some(source) if source.contains("connection failed: runtime")
+    ));
     let app_error: rskit_errors::AppError = rskit_inference::InferenceError::Cancelled.into();
     assert_eq!(app_error.code, rskit_errors::ErrorCode::Cancelled);
 }

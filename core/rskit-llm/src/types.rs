@@ -1,3 +1,4 @@
+use rskit_tool::ToolSchema;
 use serde::{Deserialize, Serialize};
 
 pub use rskit_ai::chat::{
@@ -16,10 +17,10 @@ pub struct ToolDefinition {
     /// Human-readable tool description.
     pub description: String,
     /// JSON Schema for the tool input shape.
-    pub input_schema: serde_json::Value,
+    pub input_schema: ToolSchema,
     /// Optional JSON Schema for the tool output shape.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub output_schema: Option<serde_json::Value>,
+    pub output_schema: Option<ToolSchema>,
 }
 
 /// Controls how the model selects tools.

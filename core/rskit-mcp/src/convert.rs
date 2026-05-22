@@ -5,8 +5,11 @@ use std::sync::Arc;
 use rmcp::model::{
     CallToolResult, Content, ErrorData, ListToolsResult, RawContent, Tool, ToolAnnotations,
 };
+use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_tool::result::ToolResult;
-use rskit_tool::{Annotations, Definition, Envelope, NetworkPolicy, Safety};
+use rskit_tool::{
+    Annotations, Definition, Envelope, NetworkPolicy, Safety, ToolOutput, ToolSchema,
+};
 
 // ── Kit Definition → MCP Tool ──────────────────────────────────────────────
 
@@ -20,13 +23,13 @@ pub fn definition_to_tool(def: &Definition, prefix: &str) -> Tool {
         format!("{prefix}{}", def.name)
     };
 
-    let input_schema = value_to_json_object(&def.input_schema);
+    let input_schema = value_to_json_object(def.input_schema.as_json());
 
     let mut tool = Tool::new(name, def.description.clone(), input_schema);
     tool = tool.with_annotations(to_mcp_annotations(def));
 
     if let Some(ref output_schema) = def.output_schema
-        && let Some(obj) = output_schema.as_object()
+        && let Some(obj) = output_schema.as_json().as_object()
     {
         tool = tool.with_raw_output_schema(Arc::new(obj.clone()));
     }
@@ -72,7 +75,7 @@ pub fn definitions_to_list_result(defs: &[Definition], prefix: &str) -> ListTool
 /// Convert an MCP [`Tool`] to an rskit [`Definition`].
 ///
 /// An optional `prefix` is stripped from the tool name.
-pub fn tool_to_definition(tool: &Tool, prefix: &str) -> Definition {
+pub fn tool_to_definition(tool: &Tool, prefix: &str) -> AppResult<Definition> {
     let raw_name = tool.name.as_ref();
     let name = if !prefix.is_empty() && raw_name.starts_with(prefix) {
         raw_name[prefix.len()..].to_string()
@@ -80,12 +83,22 @@ pub fn tool_to_definition(tool: &Tool, prefix: &str) -> Definition {
         raw_name.to_string()
     };
 
-    let input_schema = tool.schema_as_json_value();
+    let input_schema = mcp_schema_to_tool_schema(raw_name, "input", tool.schema_as_json_value())?;
 
     let output_schema = tool
         .output_schema
         .as_ref()
-        .map(|s| serde_json::to_value(s.as_ref()).unwrap_or_default());
+        .map(|schema| {
+            let value = serde_json::to_value(schema.as_ref()).map_err(|err| {
+                AppError::new(
+                    ErrorCode::InvalidInput,
+                    format!("invalid MCP output schema for tool {raw_name:?}: {err}"),
+                )
+                .with_cause(err)
+            })?;
+            mcp_schema_to_tool_schema(raw_name, "output", value)
+        })
+        .transpose()?;
 
     let annotations = tool
         .annotations
@@ -107,7 +120,7 @@ pub fn tool_to_definition(tool: &Tool, prefix: &str) -> Definition {
         .and_then(|a| a.destructive_hint)
         .unwrap_or(false);
 
-    Definition {
+    Ok(Definition {
         name,
         description: tool.description.as_deref().unwrap_or("").to_string(),
         input_schema,
@@ -123,7 +136,22 @@ pub fn tool_to_definition(tool: &Tool, prefix: &str) -> Definition {
             },
             ..Envelope::default()
         },
-    }
+    })
+}
+
+fn mcp_schema_to_tool_schema(
+    raw_name: &str,
+    schema_kind: &str,
+    value: serde_json::Value,
+) -> AppResult<ToolSchema> {
+    ToolSchema::new(value).map_err(|err| {
+        let message = err.message().to_owned();
+        AppError::new(
+            ErrorCode::InvalidInput,
+            format!("invalid MCP {schema_kind} schema for tool {raw_name:?}: {message}"),
+        )
+        .with_cause(err)
+    })
 }
 
 // ── Kit ToolResult → MCP CallToolResult ────────────────────────────────────
@@ -135,13 +163,13 @@ pub fn tool_result_to_call_result(result: &ToolResult) -> CallToolResult {
     if result.is_error {
         let mut r = CallToolResult::error(content);
         if let Some(ref output) = result.output {
-            r.structured_content = Some(output.clone());
+            r.structured_content = Some(output.as_json().clone());
         }
         r
     } else {
-        match result.output {
-            Some(ref output) => {
-                let mut r = CallToolResult::structured(output.clone());
+        match &result.output {
+            Some(output) => {
+                let mut r = CallToolResult::structured(output.as_json().clone());
                 r.content = content;
                 r
             }
@@ -150,7 +178,7 @@ pub fn tool_result_to_call_result(result: &ToolResult) -> CallToolResult {
     }
 }
 
-/// Convert an rskit [`AppError`](rskit_errors::AppError) to an MCP [`ErrorData`].
+/// Convert an rskit [`AppError`] to an MCP [`ErrorData`].
 pub fn app_error_to_mcp_error(err: &rskit_errors::AppError) -> ErrorData {
     ErrorData::new(
         rmcp::model::ErrorCode::INTERNAL_ERROR,
@@ -176,7 +204,7 @@ pub fn call_result_to_tool_result(result: &CallToolResult) -> ToolResult {
         .collect::<Vec<_>>()
         .join("\n");
 
-    let output = result.structured_content.clone();
+    let output = result.structured_content.clone().map(ToolOutput::from);
     let is_error = result.is_error.unwrap_or(false);
 
     ToolResult {
@@ -213,18 +241,20 @@ mod tests {
         NetworkRule, Safety,
     };
     use serde_json::json;
+    use std::error::Error;
 
     fn sample_definition() -> Definition {
         Definition {
             name: "search".to_string(),
             description: "Search the web".to_string(),
-            input_schema: json!({
+            input_schema: ToolSchema::new(json!({
                 "type": "object",
                 "properties": {
                     "query": {"type": "string"}
                 },
                 "required": ["query"]
-            }),
+            }))
+            .unwrap(),
             output_schema: None,
             annotations: Annotations {
                 title: "Web Search".to_string(),
@@ -273,7 +303,7 @@ mod tests {
     fn test_tool_to_definition_strips_prefix() {
         let def = sample_definition();
         let tool = definition_to_tool(&def, "myserver_");
-        let round_tripped = tool_to_definition(&tool, "myserver_");
+        let round_tripped = tool_to_definition(&tool, "myserver_").unwrap();
         assert_eq!(round_tripped.name, "search");
         assert_eq!(round_tripped.description, "Search the web");
     }
@@ -282,8 +312,34 @@ mod tests {
     fn test_tool_to_definition_no_prefix() {
         let def = sample_definition();
         let tool = definition_to_tool(&def, "");
-        let round_tripped = tool_to_definition(&tool, "");
+        let round_tripped = tool_to_definition(&tool, "").unwrap();
         assert_eq!(round_tripped.name, "search");
+    }
+
+    #[test]
+    fn mcp_schema_error_labels_invalid_input_schema_with_tool_name() {
+        let error = mcp_schema_to_tool_schema("broken", "input", json!("not-an-object"))
+            .expect_err("invalid input schema rejected");
+
+        assert!(
+            error
+                .message()
+                .contains("invalid MCP input schema for tool \"broken\"")
+        );
+        assert!(error.source().is_some());
+    }
+
+    #[test]
+    fn mcp_schema_error_labels_invalid_output_schema_with_tool_name() {
+        let error = mcp_schema_to_tool_schema("broken", "output", json!("not-an-object"))
+            .expect_err("invalid output schema rejected");
+
+        assert!(
+            error
+                .message()
+                .contains("invalid MCP output schema for tool \"broken\"")
+        );
+        assert!(error.source().is_some());
     }
 
     #[test]
@@ -304,10 +360,10 @@ mod tests {
     #[test]
     fn test_tool_result_with_structured_output() {
         let result = ToolResult {
-            output: Some(json!({"count": 42})),
+            output: Some(json!({"count": 42}).into()),
             content: "42 results".to_string(),
             is_error: false,
-            metadata: std::collections::HashMap::new(),
+            metadata: rskit_tool::ToolMetadata::new(),
         };
         let mcp_result = tool_result_to_call_result(&result);
         assert_eq!(mcp_result.structured_content, Some(json!({"count": 42})));
@@ -341,7 +397,7 @@ mod tests {
     fn test_roundtrip_annotations_preserved() {
         let def = sample_definition();
         let tool = definition_to_tool(&def, "");
-        let round_tripped = tool_to_definition(&tool, "");
+        let round_tripped = tool_to_definition(&tool, "").unwrap();
         let ann = round_tripped.annotations;
         assert_eq!(ann.title, "Web Search");
         assert_eq!(ann.idempotent_hint, Some(true));

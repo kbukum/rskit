@@ -1,7 +1,8 @@
 //! Execution context for tool calls.
 
-use std::collections::HashMap;
 use tokio_util::sync::CancellationToken;
+
+use crate::io::{ToolMetadata, ToolOutput};
 
 /// Carries per-request metadata and cancellation through tool execution.
 #[derive(Clone)]
@@ -12,7 +13,7 @@ pub struct Context {
     pub tool_use_id: String,
     /// Maximum size (in bytes) for the result content.
     pub max_result_size: usize,
-    metadata: HashMap<String, serde_json::Value>,
+    metadata: ToolMetadata,
     cancel_token: CancellationToken,
 }
 
@@ -22,7 +23,7 @@ impl Context {
             request_id: String::new(),
             tool_use_id: String::new(),
             max_result_size: 0,
-            metadata: HashMap::new(),
+            metadata: ToolMetadata::new(),
             cancel_token: CancellationToken::new(),
         }
     }
@@ -34,11 +35,11 @@ impl Context {
         }
     }
 
-    pub fn set(&mut self, key: &str, value: serde_json::Value) {
+    pub fn set(&mut self, key: &str, value: ToolOutput) {
         self.metadata.insert(key.to_string(), value);
     }
 
-    pub fn get(&self, key: &str) -> Option<&serde_json::Value> {
+    pub fn get(&self, key: &str) -> Option<&ToolOutput> {
         self.metadata.get(key)
     }
 

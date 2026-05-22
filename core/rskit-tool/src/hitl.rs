@@ -8,10 +8,11 @@
 
 use async_trait::async_trait;
 use rskit_errors::{AppError, AppResult};
-use serde_json::Value;
+use rskit_schema::Json;
 
 use crate::context::Context;
 use crate::envelope::{Envelope, SensitiveMatcher, SensitivePredicate};
+use crate::io::ToolInput;
 
 /// One tool invocation as seen by the HITL stages.
 #[derive(Debug, Clone)]
@@ -19,7 +20,7 @@ pub struct ToolCall {
     /// Registered tool name.
     pub name: String,
     /// Validated tool input.
-    pub input: Value,
+    pub input: ToolInput,
 }
 
 /// Sensitivity decision returned by a [`SensitivityEvaluator`].
@@ -107,8 +108,8 @@ pub fn denied_error(reason: impl Into<String>) -> AppError {
     AppError::forbidden(reason.into())
 }
 
-fn predicate_matches(input: &Value, predicate: &SensitivePredicate) -> bool {
-    let value = match select_jsonpath(input, &predicate.jsonpath) {
+fn predicate_matches(input: &ToolInput, predicate: &SensitivePredicate) -> bool {
+    let value = match select_jsonpath(input.as_json(), &predicate.jsonpath) {
         Some(v) => v,
         None => return false,
     };
@@ -124,7 +125,7 @@ fn predicate_matches(input: &Value, predicate: &SensitivePredicate) -> bool {
     }
 }
 
-fn select_jsonpath<'a>(value: &'a Value, path: &str) -> Option<&'a Value> {
+fn select_jsonpath<'a>(value: &'a Json, path: &str) -> Option<&'a Json> {
     let trimmed = path.trim();
     let after_root = trimmed.strip_prefix('$').unwrap_or(trimmed);
     let after_root = after_root.strip_prefix('.').unwrap_or(after_root);
@@ -137,7 +138,7 @@ fn select_jsonpath<'a>(value: &'a Value, path: &str) -> Option<&'a Value> {
             return None;
         }
         match cursor {
-            Value::Object(map) => {
+            Json::Object(map) => {
                 cursor = map.get(segment)?;
             }
             _ => return None,
@@ -182,10 +183,10 @@ mod tests {
     use crate::envelope::{Envelope, SensitiveMatcher, SensitivePredicate};
     use serde_json::json;
 
-    fn call(input: Value) -> ToolCall {
+    fn call(input: Json) -> ToolCall {
         ToolCall {
             name: "demo".to_owned(),
-            input,
+            input: ToolInput::new(input).unwrap(),
         }
     }
 

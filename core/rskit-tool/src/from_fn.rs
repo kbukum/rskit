@@ -9,6 +9,7 @@ use serde::{Serialize, de::DeserializeOwned};
 use crate::callable::Callable;
 use crate::context::Context;
 use crate::definition::Definition;
+use crate::io::{ToolInput, ToolMetadata, ToolOutput, ToolSchema};
 use crate::result::ToolResult;
 
 /// Create a tool from an async handler function.
@@ -40,7 +41,7 @@ where
     let def = Definition {
         name: name.to_string(),
         description: description.to_string(),
-        input_schema,
+        input_schema: ToolSchema::new(input_schema)?,
         output_schema: None,
         annotations: crate::Annotations::default(),
         envelope: crate::Envelope::default(),
@@ -72,12 +73,12 @@ where
         &self.definition
     }
 
-    fn validate(&self, input: &serde_json::Value) -> ValidationResult {
-        self.input_validator.validate(input)
+    fn validate(&self, input: &ToolInput) -> ValidationResult {
+        self.input_validator.validate(input.as_json())
     }
 
-    async fn call(&self, ctx: &Context, input: serde_json::Value) -> AppResult<ToolResult> {
-        let typed_input: I = serde_json::from_value(input).map_err(|e| {
+    async fn call(&self, ctx: &Context, input: ToolInput) -> AppResult<ToolResult> {
+        let typed_input: I = serde_json::from_value(input.into_json()).map_err(|e| {
             AppError::new(ErrorCode::InvalidInput, format!("invalid tool input: {e}"))
         })?;
 
@@ -106,7 +107,7 @@ where
     let def = Definition {
         name: name.to_string(),
         description: description.to_string(),
-        input_schema,
+        input_schema: ToolSchema::new(input_schema)?,
         output_schema: None,
         annotations: crate::Annotations::default(),
         envelope: crate::Envelope::default(),
@@ -139,30 +140,31 @@ where
         &self.definition
     }
 
-    fn validate(&self, input: &serde_json::Value) -> ValidationResult {
-        self.input_validator.validate(input)
+    fn validate(&self, input: &ToolInput) -> ValidationResult {
+        self.input_validator.validate(input.as_json())
     }
 
-    async fn call(&self, _ctx: &Context, input: serde_json::Value) -> AppResult<ToolResult> {
-        let typed_input: I = serde_json::from_value(input).map_err(|e| {
+    async fn call(&self, _ctx: &Context, input: ToolInput) -> AppResult<ToolResult> {
+        let typed_input: I = serde_json::from_value(input.into_json()).map_err(|e| {
             AppError::new(ErrorCode::InvalidInput, format!("invalid tool input: {e}"))
         })?;
 
         let output = (self.handler)(typed_input).await?;
 
-        let json = serde_json::to_value(&output).map_err(|e| {
+        let json = ToolOutput::from_serializable(&output)?;
+        let content = serde_json::to_string(&output).map_err(|e| {
             AppError::new(
                 ErrorCode::Internal,
-                format!("failed to serialize tool output: {e}"),
+                format!("failed to serialize tool output content: {e}"),
             )
+            .with_cause(e)
         })?;
-        let content = serde_json::to_string(&output).unwrap_or_default();
 
         Ok(ToolResult {
             output: Some(json),
             content,
             is_error: false,
-            metadata: std::collections::HashMap::new(),
+            metadata: ToolMetadata::new(),
         })
     }
 }

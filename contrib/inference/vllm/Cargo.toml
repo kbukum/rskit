@@ -1,6 +1,6 @@
 [package]
 name        = "rskit-inference-vllm"
-description = "vLLM raw REST adapter skeleton for rskit-inference"
+description = "vLLM REST adapter for rskit-inference"
 version.workspace      = true
 edition.workspace      = true
 license.workspace      = true
