@@ -83,7 +83,7 @@ pub fn tool_to_definition(tool: &Tool, prefix: &str) -> AppResult<Definition> {
         raw_name.to_string()
     };
 
-    let input_schema = ToolSchema::new(tool.schema_as_json_value())?;
+    let input_schema = mcp_schema_to_tool_schema(raw_name, "input", tool.schema_as_json_value())?;
 
     let output_schema = tool
         .output_schema
@@ -96,7 +96,7 @@ pub fn tool_to_definition(tool: &Tool, prefix: &str) -> AppResult<Definition> {
                 )
                 .with_cause(err)
             })?;
-            ToolSchema::new(value)
+            mcp_schema_to_tool_schema(raw_name, "output", value)
         })
         .transpose()?;
 
@@ -136,6 +136,22 @@ pub fn tool_to_definition(tool: &Tool, prefix: &str) -> AppResult<Definition> {
             },
             ..Envelope::default()
         },
+    })
+}
+
+fn mcp_schema_to_tool_schema(
+    raw_name: &str,
+    schema_kind: &str,
+    value: serde_json::Value,
+) -> AppResult<ToolSchema> {
+    ToolSchema::new(value).map_err(|err| {
+        AppError::new(
+            ErrorCode::InvalidInput,
+            format!(
+                "invalid MCP {schema_kind} schema for tool {raw_name:?}: {}",
+                err.message()
+            ),
+        )
     })
 }
 
@@ -298,6 +314,30 @@ mod tests {
         let tool = definition_to_tool(&def, "");
         let round_tripped = tool_to_definition(&tool, "").unwrap();
         assert_eq!(round_tripped.name, "search");
+    }
+
+    #[test]
+    fn mcp_schema_error_labels_invalid_input_schema_with_tool_name() {
+        let error = mcp_schema_to_tool_schema("broken", "input", json!("not-an-object"))
+            .expect_err("invalid input schema rejected");
+
+        assert!(
+            error
+                .message()
+                .contains("invalid MCP input schema for tool \"broken\"")
+        );
+    }
+
+    #[test]
+    fn mcp_schema_error_labels_invalid_output_schema_with_tool_name() {
+        let error = mcp_schema_to_tool_schema("broken", "output", json!("not-an-object"))
+            .expect_err("invalid output schema rejected");
+
+        assert!(
+            error
+                .message()
+                .contains("invalid MCP output schema for tool \"broken\"")
+        );
     }
 
     #[test]
