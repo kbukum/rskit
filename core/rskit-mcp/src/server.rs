@@ -339,6 +339,43 @@ impl RegistryHandler {
                 }
             };
 
+            if self.config.max_input_bytes > 0
+                && json_size_bytes(input.as_json()) > self.config.max_input_bytes
+            {
+                event.outcome = String::from("input_too_large");
+                event.error = format!("input size exceeds {} bytes", self.config.max_input_bytes);
+                self.audit_tool_call(event).await;
+                return CallToolResult::error(vec![rmcp::model::Content::text(format!(
+                    "input too large: exceeds {} bytes",
+                    self.config.max_input_bytes
+                ))]);
+            }
+
+            let tool = match self.registry.get(tool_name) {
+                Some(tool) => tool,
+                None => {
+                    event.outcome = String::from("not_found");
+                    event.error = format!("tool not found: {tool_name}");
+                    self.audit_tool_call(event).await;
+                    return CallToolResult::error(vec![rmcp::model::Content::text(format!(
+                        "tool not found: {tool_name}"
+                    ))]);
+                }
+            };
+
+            let validation = tool.validate(&input);
+            if !validation.valid {
+                let details = validation_error_details(&validation);
+                event.outcome = String::from("invalid_input");
+                event.error = details.clone();
+                self.audit_tool_call(event).await;
+                return CallToolResult::error(vec![rmcp::model::Content::text(format!(
+                    "invalid tool input: {details}"
+                ))]);
+            }
+
+            let tool_def = tool.definition().clone();
+
             match self
                 .authorize_tool_call(ToolAuthorizationRequest {
                     tool_name: tool_name.to_string(),
@@ -367,23 +404,7 @@ impl RegistryHandler {
                 }
             }
 
-            if self.config.max_input_bytes > 0
-                && json_size_bytes(input.as_json()) > self.config.max_input_bytes
-            {
-                event.outcome = String::from("input_too_large");
-                event.error = format!("input size exceeds {} bytes", self.config.max_input_bytes);
-                self.audit_tool_call(event).await;
-                return CallToolResult::error(vec![rmcp::model::Content::text(format!(
-                    "input too large: exceeds {} bytes",
-                    self.config.max_input_bytes
-                ))]);
-            }
-
             let ctx = Context::new();
-            let tool_def = self
-                .registry
-                .get(tool_name)
-                .map(|tool| tool.definition().clone());
 
             let result = match self.registry.call(tool_name, &ctx, input).await {
                 Ok(result) => {
@@ -400,9 +421,7 @@ impl RegistryHandler {
                                 format!("result too large: exceeds {limit} bytes"),
                             )]);
                         }
-                        if let Some(definition) = &tool_def
-                            && let Some(message) = validate_tool_output(definition, &result)
-                        {
+                        if let Some(message) = validate_tool_output(&tool_def, &result) {
                             event.outcome = String::from("output_validation_error");
                             event.error = message.clone();
                             self.audit_tool_call(event).await;
@@ -582,6 +601,20 @@ fn denied_message(reason: &str) -> String {
 
 fn json_size_bytes(value: &serde_json::Value) -> usize {
     serde_json::to_vec(value).map_or(0, |bytes| bytes.len())
+}
+
+fn validation_error_details(validation: &rskit_schema::ValidationResult) -> String {
+    let details = validation
+        .errors
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join("; ");
+    if details.is_empty() {
+        String::from("schema validation failed")
+    } else {
+        details
+    }
 }
 
 fn result_size_bytes(result: &rskit_tool::result::ToolResult) -> usize {
@@ -838,6 +871,24 @@ mod tests {
         }
     }
 
+    struct RecordingAuthorizer {
+        calls: Arc<Mutex<Vec<String>>>,
+    }
+
+    #[async_trait]
+    impl ToolAuthorizer for RecordingAuthorizer {
+        async fn authorize_tool(
+            &self,
+            request: &ToolAuthorizationRequest,
+        ) -> Result<ToolAuthorizationDecision, String> {
+            self.calls.lock().push(request.tool_name.clone());
+            Ok(ToolAuthorizationDecision {
+                allowed: true,
+                reason: String::from("allowed"),
+            })
+        }
+    }
+
     struct RecordingAuditSink {
         events: Arc<Mutex<Vec<ToolAuditEvent>>>,
     }
@@ -877,6 +928,66 @@ mod tests {
         assert_eq!(captured.len(), 1);
         assert_eq!(captured[0].tool_name, "echo");
         assert_eq!(captured[0].outcome, "denied");
+    }
+
+    #[tokio::test]
+    async fn invalid_input_is_rejected_before_authorization() {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let config = ServerConfig {
+            tool_authorizer: Some(Arc::new(RecordingAuthorizer {
+                calls: Arc::clone(&calls),
+            })),
+            tool_audit_sink: Some(Arc::new(RecordingAuditSink {
+                events: Arc::clone(&events),
+            })),
+            ..Default::default()
+        };
+        let handler = create_server("test", "0.1.0", test_registry(), config);
+
+        let request: CallToolRequestParams = serde_json::from_value(json!({
+            "name": "echo",
+            "arguments": {}
+        }))
+        .unwrap();
+        let result = handler.handle_call_tool(request).await;
+
+        assert_eq!(result.is_error, Some(true));
+        assert!(
+            first_text(&result)
+                .unwrap_or_default()
+                .starts_with("invalid tool input:")
+        );
+        assert!(calls.lock().is_empty());
+        assert_eq!(events.lock()[0].outcome, "invalid_input");
+    }
+
+    #[tokio::test]
+    async fn unknown_tool_is_rejected_before_authorization() {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let config = ServerConfig {
+            tool_authorizer: Some(Arc::new(RecordingAuthorizer {
+                calls: Arc::clone(&calls),
+            })),
+            tool_audit_sink: Some(Arc::new(RecordingAuditSink {
+                events: Arc::clone(&events),
+            })),
+            ..Default::default()
+        };
+        let handler = create_server("test", "0.1.0", test_registry(), config);
+
+        let request: CallToolRequestParams = serde_json::from_value(json!({
+            "name": "missing",
+            "arguments": {}
+        }))
+        .unwrap();
+        let result = handler.handle_call_tool(request).await;
+
+        assert_eq!(result.is_error, Some(true));
+        assert_eq!(first_text(&result), Some("tool not found: missing"));
+        assert!(calls.lock().is_empty());
+        assert_eq!(events.lock()[0].outcome, "not_found");
     }
 
     #[tokio::test]

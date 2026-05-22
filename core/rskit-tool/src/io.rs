@@ -147,9 +147,13 @@ pub struct ToolOutput(Json);
 impl ToolOutput {
     /// Create structured output from a serializable value.
     pub fn from_serializable<T: Serialize>(value: &T) -> AppResult<Self> {
-        serde_json::to_value(value)
-            .map(Self)
-            .map_err(|err| AppError::new(ErrorCode::Internal, err.to_string()).with_cause(err))
+        serde_json::to_value(value).map(Self).map_err(|err| {
+            AppError::new(
+                ErrorCode::Internal,
+                format!("failed to serialize tool output: {err}"),
+            )
+            .with_cause(err)
+        })
     }
 
     /// Borrow the structured JSON output.
@@ -191,6 +195,7 @@ pub type ToolMetadata = HashMap<String, ToolOutput>;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde::ser::{Error as _, SerializeStruct};
 
     #[test]
     fn schema_deserialization_rejects_non_object() {
@@ -205,5 +210,38 @@ mod tests {
     fn input_deserialization_rejects_non_object() {
         let err = serde_json::from_str::<ToolInput>("[]").unwrap_err();
         assert!(err.to_string().contains("tool input must be a JSON object"));
+    }
+
+    #[test]
+    fn output_serialization_error_has_context() {
+        struct FailingOutput;
+
+        impl Serialize for FailingOutput {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                let mut state = serializer.serialize_struct("FailingOutput", 1)?;
+                state.serialize_field("bad", &FailingField)?;
+                state.end()
+            }
+        }
+
+        struct FailingField;
+
+        impl Serialize for FailingField {
+            fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                Err(S::Error::custom("boom"))
+            }
+        }
+
+        let err = ToolOutput::from_serializable(&FailingOutput).unwrap_err();
+        assert!(
+            err.message()
+                .contains("failed to serialize tool output: boom")
+        );
     }
 }
