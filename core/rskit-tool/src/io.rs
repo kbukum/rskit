@@ -103,6 +103,12 @@ impl ToolInput {
         Self(Json::Object(serde_json::Map::new()))
     }
 
+    /// Create tool input from a JSON object map.
+    #[must_use]
+    pub fn from_object(object: serde_json::Map<String, Json>) -> Self {
+        Self(Json::Object(object))
+    }
+
     /// Borrow the JSON object payload.
     #[must_use]
     pub fn as_json(&self) -> &Json {

@@ -13,6 +13,7 @@ use rskit_errors::AppError;
 use rskit_validation::Validate;
 use rskit_validation::Validator;
 use rskit_validation::input::validate_safe_path;
+use rskit_validation::validator::{ValidationError, ValidationErrors};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -109,15 +110,32 @@ impl Manifest {
 }
 
 /// Config-loader compatible skill activation source.
-#[derive(Debug, Clone, Deserialize, Validate)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct SkillLoaderConfig {
     /// Embedded service config for canonical `rskit-config` loading.
     #[serde(default)]
-    #[validate(nested)]
     pub service: ServiceConfig,
     /// Root directory of the skill pack to activate.
-    #[validate(length(min = 1))]
     pub root: String,
+}
+
+impl Validate for SkillLoaderConfig {
+    fn validate(&self) -> Result<(), ValidationErrors> {
+        let mut errors = ValidationErrors::new();
+        if let Err(error) = self.service.validate() {
+            let mut validation_error = ValidationError::new("invalid_service");
+            validation_error.message = Some(error.to_string().into());
+            errors.add("service", validation_error);
+        }
+        if self.root.trim().is_empty() {
+            errors.add("root", ValidationError::new("length"));
+        }
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
+    }
 }
 
 impl AppConfig for SkillLoaderConfig {
@@ -308,6 +326,9 @@ pub enum SkillError {
     /// Manifest is invalid.
     #[error("invalid skill manifest: {0}")]
     InvalidManifest(String),
+    /// Config source resolution or validation failed.
+    #[error("skill config failed: {0}")]
+    Config(String),
     /// Verification failed.
     #[error("skill verification failed: {0}")]
     Verification(String),
@@ -433,7 +454,7 @@ impl<V: Verifier> Loader<V> {
     pub fn activate_from_config(&self, loader: &ConfigLoader) -> Result<Pack, SkillError> {
         let config = loader
             .load::<SkillLoaderConfig>()
-            .map_err(|error| SkillError::InvalidManifest(error.to_string()))?;
+            .map_err(|error| SkillError::Config(error.to_string()))?;
         self.activate(config.root)
     }
 }
@@ -451,9 +472,9 @@ impl From<SkillError> for AppError {
             SkillError::AlreadyRegistered(name) => {
                 AppError::already_exists(format!("skill {name}"))
             }
-            SkillError::InvalidManifest(message) | SkillError::Verification(message) => {
-                AppError::invalid_input("skill", message)
-            }
+            SkillError::InvalidManifest(message)
+            | SkillError::Config(message)
+            | SkillError::Verification(message) => AppError::invalid_input("skill", message),
             SkillError::Io { path, source } => AppError::new(
                 rskit_errors::ErrorCode::Internal,
                 format!("skill I/O failed for {}: {source}", path.display()),
@@ -857,6 +878,15 @@ safety: read-only
             .expect_err("denied manifest rejected");
         assert!(matches!(denied, SkillError::Verification(message) if message == "blocked"));
         fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn loader_reports_config_failures_separately() {
+        let error = Loader::default()
+            .activate_from_config(&ConfigLoader::new())
+            .expect_err("missing root config rejected");
+
+        assert!(matches!(error, SkillError::Config(message) if message.contains("root")));
     }
 
     #[test]

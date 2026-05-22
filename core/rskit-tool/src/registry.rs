@@ -306,16 +306,19 @@ fn validate_tool_input(tool: &dyn Callable, input: &ToolInput) -> AppResult<()> 
     if validation.valid {
         return Ok(());
     }
-    let details = validation
+    let mut details = validation
         .errors
         .iter()
         .map(ToString::to_string)
         .collect::<Vec<_>>()
         .join("; ");
+    if details.is_empty() {
+        details = String::from("schema validation failed");
+    }
     Err(AppError::new(
         ErrorCode::InvalidInput,
         format!(
-            "invalid tool input for {:?}: {details}",
+            "invalid tool input for {}: {details}",
             tool.definition().name
         ),
     ))
@@ -357,6 +360,7 @@ mod tests {
 
     struct StubTool {
         def: Definition,
+        valid: bool,
     }
 
     #[async_trait::async_trait]
@@ -366,7 +370,7 @@ mod tests {
         }
         fn validate(&self, _input: &ToolInput) -> rskit_schema::ValidationResult {
             rskit_schema::ValidationResult {
-                valid: true,
+                valid: self.valid,
                 errors: Vec::new(),
             }
         }
@@ -390,6 +394,21 @@ mod tests {
                 annotations: crate::Annotations::default(),
                 envelope: env,
             },
+            valid: true,
+        })
+    }
+
+    fn invalid_stub(name: &str) -> Box<dyn Callable> {
+        Box::new(StubTool {
+            def: Definition {
+                name: name.to_owned(),
+                description: "stub".to_owned(),
+                input_schema: crate::ToolSchema::new(json!({"type": "object"})).unwrap(),
+                output_schema: None,
+                annotations: crate::Annotations::default(),
+                envelope: Envelope::default(),
+            },
+            valid: false,
         })
     }
 
@@ -466,5 +485,23 @@ mod tests {
             .await
             .expect_err("denied by human approval default");
         assert_eq!(err.code, ErrorCode::Forbidden);
+    }
+
+    #[tokio::test]
+    async fn invalid_input_without_details_uses_fallback_message() {
+        let registry = Registry::new();
+        registry
+            .register(invalid_stub("broken"))
+            .expect("register invalid stub");
+
+        let err = registry
+            .call("broken", &Context::new(), ToolInput::empty())
+            .await
+            .expect_err("invalid input rejected");
+
+        assert_eq!(
+            err.message(),
+            "invalid tool input for broken: schema validation failed"
+        );
     }
 }

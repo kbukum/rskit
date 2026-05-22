@@ -323,21 +323,7 @@ impl RegistryHandler {
                 )]);
             }
 
-            let input_value = match request.arguments {
-                Some(args) => serde_json::Value::Object(args),
-                None => serde_json::Value::Object(serde_json::Map::new()),
-            };
-            let input = match ToolInput::new(input_value) {
-                Ok(input) => input,
-                Err(error) => {
-                    event.outcome = String::from("invalid_input");
-                    event.error = error.to_string();
-                    self.audit_tool_call(event).await;
-                    return CallToolResult::error(vec![rmcp::model::Content::text(
-                        "tool input must be a JSON object",
-                    )]);
-                }
-            };
+            let input = ToolInput::from_object(request.arguments.unwrap_or_default());
 
             if self.config.max_input_bytes > 0
                 && json_size_bytes(input.as_json()) > self.config.max_input_bytes
