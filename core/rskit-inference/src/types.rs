@@ -298,7 +298,7 @@ impl From<InferenceError> for AppError {
             ),
             InferenceError::Transport(error) => AppError::new(
                 ErrorCode::ExternalService,
-                format!("inference transport failed: {}", error.message),
+                format!("inference transport failed: {}", error.message()),
             )
             .with_cause(error),
             other => AppError::new(ErrorCode::ExternalService, other.to_string()),

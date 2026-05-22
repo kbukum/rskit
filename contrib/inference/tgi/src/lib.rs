@@ -190,7 +190,9 @@ impl Inference for TgiAdapter {
         let resp = self.client.send(req).await.map_err(InferenceError::from)?;
         if !resp.is_success() {
             let status = resp.status().as_u16();
-            let body = resp.text().unwrap_or_default();
+            let body = resp
+                .text()
+                .unwrap_or_else(|err| format!("<failed to decode response body: {err}>"));
             return Err(InferenceError::Server { status, body });
         }
 
