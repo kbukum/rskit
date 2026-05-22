@@ -113,6 +113,29 @@ impl Registry {
     /// Call a tool by name with a context. Runs the HITL stages (sensitivity
     /// → human approval) if configured before invoking the tool.
     pub async fn call(&self, name: &str, ctx: &Context, input: ToolInput) -> AppResult<ToolResult> {
+        self.call_inner(name, ctx, input, true).await
+    }
+
+    /// Call a tool after the caller has already validated the input schema.
+    ///
+    /// This still runs HITL stages before invoking the tool, but skips the
+    /// schema validation pass performed by [`Registry::call`].
+    pub async fn call_validated(
+        &self,
+        name: &str,
+        ctx: &Context,
+        input: ToolInput,
+    ) -> AppResult<ToolResult> {
+        self.call_inner(name, ctx, input, false).await
+    }
+
+    async fn call_inner(
+        &self,
+        name: &str,
+        ctx: &Context,
+        input: ToolInput,
+        validate_input: bool,
+    ) -> AppResult<ToolResult> {
         let span = tracing::info_span!(
             "tool.call",
             "gen_ai.operation.name" = semconv::Operation::ToolCall.as_str(),
@@ -123,7 +146,9 @@ impl Registry {
             let tool = self.get(name).ok_or_else(|| {
                 AppError::new(ErrorCode::NotFound, format!("tool not found: {name:?}"))
             })?;
-            validate_tool_input(tool.as_ref(), &input)?;
+            if validate_input {
+                validate_tool_input(tool.as_ref(), &input)?;
+            }
             self.run_hitl(tool.as_ref(), ctx, &input).await?;
             tool.call(ctx, input).await
         }
@@ -503,5 +528,20 @@ mod tests {
             err.message(),
             "invalid tool input for broken: schema validation failed"
         );
+    }
+
+    #[tokio::test]
+    async fn call_validated_skips_schema_validation() {
+        let registry = Registry::new();
+        registry
+            .register(invalid_stub("prechecked"))
+            .expect("register invalid stub");
+
+        let result = registry
+            .call_validated("prechecked", &Context::new(), ToolInput::empty())
+            .await
+            .expect("prevalidated call skips schema validation");
+
+        assert!(!result.is_error);
     }
 }

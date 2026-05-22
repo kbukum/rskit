@@ -157,6 +157,7 @@ where
                 ErrorCode::Internal,
                 format!("failed to serialize tool output content: {e}"),
             )
+            .with_cause(e)
         })?;
 
         Ok(ToolResult {

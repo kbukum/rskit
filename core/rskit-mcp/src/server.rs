@@ -392,7 +392,7 @@ impl RegistryHandler {
 
             let ctx = Context::new();
 
-            let result = match self.registry.call(tool_name, &ctx, input).await {
+            let result = match self.registry.call_validated(tool_name, &ctx, input).await {
                 Ok(result) => {
                     if result.is_error {
                         event.outcome = String::from("tool_error");

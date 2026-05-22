@@ -145,13 +145,12 @@ fn mcp_schema_to_tool_schema(
     value: serde_json::Value,
 ) -> AppResult<ToolSchema> {
     ToolSchema::new(value).map_err(|err| {
+        let message = err.message().to_owned();
         AppError::new(
             ErrorCode::InvalidInput,
-            format!(
-                "invalid MCP {schema_kind} schema for tool {raw_name:?}: {}",
-                err.message()
-            ),
+            format!("invalid MCP {schema_kind} schema for tool {raw_name:?}: {message}"),
         )
+        .with_cause(err)
     })
 }
 
@@ -242,6 +241,7 @@ mod tests {
         NetworkRule, Safety,
     };
     use serde_json::json;
+    use std::error::Error;
 
     fn sample_definition() -> Definition {
         Definition {
@@ -326,6 +326,7 @@ mod tests {
                 .message()
                 .contains("invalid MCP input schema for tool \"broken\"")
         );
+        assert!(error.source().is_some());
     }
 
     #[test]
@@ -338,6 +339,7 @@ mod tests {
                 .message()
                 .contains("invalid MCP output schema for tool \"broken\"")
         );
+        assert!(error.source().is_some());
     }
 
     #[test]
