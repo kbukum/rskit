@@ -72,7 +72,7 @@ async fn run_process(
     cancel: CancellationToken,
     observer: Option<OutputObserver>,
 ) -> AppResult<ProcessResult> {
-    if command.program.is_empty() {
+    if command.program.as_os_str().is_empty() {
         return Err(AppError::invalid_input("program", "must not be empty"));
     }
 
@@ -114,7 +114,7 @@ async fn run_process(
         });
     }
 
-    debug!(program = %command.program, args = ?command.args, "spawning process");
+    debug!(program = %command.program.display(), args = ?command.args, "spawning process");
     let mut child = cmd.spawn().map_err(|error| {
         AppError::new(
             ErrorCode::Internal,
@@ -154,7 +154,7 @@ async fn run_process(
     {
         tokio::select! {
             _ = cancel.cancelled() => {
-                debug!(program = %command.program, "process cancelled, sending SIGTERM");
+                debug!(program = %command.program.display(), "process cancelled, sending SIGTERM");
                 let (exit_code, stderr) = terminate_and_wait(&mut child, pid, config.grace_period, "cancellation").await;
                 (exit_code, false, true, stderr)
             }
@@ -168,7 +168,7 @@ async fn run_process(
                         ));
                     }
                     Err(_) => {
-                        debug!(program = %command.program, timeout = ?timeout_duration, "process timeout, sending SIGTERM");
+                        debug!(program = %command.program.display(), timeout = ?timeout_duration, "process timeout, sending SIGTERM");
                         let (exit_code, stderr) = terminate_and_wait(&mut child, pid, config.grace_period, "timeout").await;
                         (exit_code, true, false, stderr)
                     }
@@ -178,7 +178,7 @@ async fn run_process(
     } else {
         tokio::select! {
             _ = cancel.cancelled() => {
-                debug!(program = %command.program, "process cancelled, sending SIGTERM");
+                debug!(program = %command.program.display(), "process cancelled, sending SIGTERM");
                 let (exit_code, stderr) = terminate_and_wait(&mut child, pid, config.grace_period, "cancellation").await;
                 (exit_code, false, true, stderr)
             }

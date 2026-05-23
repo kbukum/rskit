@@ -26,8 +26,8 @@ on nothing higher):
 1. **Foundation** — `rskit-errors`, `rskit-config`, `rskit-logging`,
    `rskit-validation`
 2. **Utilities** — `rskit-encryption`, `rskit-schema`, `rskit-storage`,
-   `rskit-media`, `rskit-media-image`, `rskit-media-audio`,
-   `rskit-media-ffmpeg`
+    `rskit-media`, `rskit-media-image`, `rskit-media-audio`,
+   `rskit-media-ffmpeg`, `rskit-process`
 3. **Patterns** — `rskit-provider`, `rskit-resilience`, `rskit-hook`,
    `rskit-chain`
 4. **Frameworks** — `rskit-di`, `rskit-bootstrap`, `rskit-observability`
@@ -41,7 +41,7 @@ on nothing higher):
 9. **AI/ML** — `rskit-llm`, `rskit-llm-providers`, `rskit-bench`,
    `rskit-dataset`, `rskit-embedding`, `rskit-inference`,
    `rskit-vectorstore`, `rskit-mcp`, `rskit-agent`, `rskit-tool`
-10. **Platform** — `rskit-discovery`, `rskit-process`, `rskit-cli`,
+10. **Platform** — `rskit-discovery`, `rskit-cli`,
     `rskit-explain`, `rskit-integration`, `rskit-testutil`
 
 When a foundation crate needs a service that lives in a higher layer

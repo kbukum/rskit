@@ -21,7 +21,7 @@ pub(crate) async fn run_capture_with_cancel(
     timeout: Option<Duration>,
     cancel: CancellationToken,
 ) -> AppResult<ProcessResult> {
-    let command = process_command(program_to_string(&program)?).args(args);
+    let command = process_command(program).args(args);
     let config = ProcessConfig {
         timeout,
         ..ProcessConfig::default()
@@ -49,7 +49,7 @@ pub(crate) async fn run_ffmpeg_observed(
     cancel: CancellationToken,
     stderr_line: impl Fn(&str) + Send + Sync + 'static,
 ) -> AppResult<ProcessResult> {
-    let command = process_command(program_to_string(&program)?).args(args);
+    let command = process_command(program).args(args);
     let config = ProcessConfig {
         timeout,
         ..ProcessConfig::default()
@@ -61,18 +61,6 @@ pub(crate) async fn run_ffmpeg_observed(
         OutputObserver::new().with_stderr_line(stderr_line),
     )
     .await
-}
-
-fn program_to_string(program: &std::path::Path) -> AppResult<String> {
-    program.to_str().map(ToOwned::to_owned).ok_or_else(|| {
-        AppError::new(
-            ErrorCode::InvalidInput,
-            format!(
-                "process program path is not valid UTF-8: {}",
-                program.display()
-            ),
-        )
-    })
 }
 
 pub(crate) fn ensure_success(result: &ProcessResult, context: &str) -> AppResult<()> {

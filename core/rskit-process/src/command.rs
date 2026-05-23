@@ -56,7 +56,7 @@ impl ProcessConfig {
 #[derive(Debug, Clone)]
 pub struct Command {
     /// Program name or path to execute.
-    pub program: String,
+    pub program: PathBuf,
     /// Command-line arguments.
     pub args: Vec<String>,
     /// Working directory for the process.
@@ -72,7 +72,7 @@ pub struct Command {
 impl Command {
     /// Create a new command with just a program name.
     #[must_use]
-    pub fn new<S: Into<String>>(program: S) -> Self {
+    pub fn new<P: Into<PathBuf>>(program: P) -> Self {
         Self {
             program: program.into(),
             args: Vec::new(),
@@ -144,6 +144,6 @@ impl Command {
 
 /// Create a subprocess command.
 #[must_use]
-pub fn command<S: Into<String>>(program: S) -> Command {
+pub fn command<P: Into<PathBuf>>(program: P) -> Command {
     Command::new(program)
 }

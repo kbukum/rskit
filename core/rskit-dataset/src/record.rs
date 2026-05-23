@@ -22,6 +22,8 @@ const MAX_JSON_ARRAY_BYTES: u64 = 1024 * 1024;
 pub enum DatasetFormat {
     /// Comma-separated values with a header row.
     Csv,
+    /// JSON array of records, intended for bounded fixture-style datasets.
+    JsonArray,
     /// Newline-delimited JSON records.
     JsonLines,
 }
