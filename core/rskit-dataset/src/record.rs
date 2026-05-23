@@ -15,6 +15,7 @@ use tokio::sync::mpsc;
 pub type BoxRecordStream = Pin<Box<dyn Stream<Item = AppResult<DatasetRecord>> + Send + 'static>>;
 
 const MAX_JSON_ARRAY_BYTES: u64 = 1024 * 1024;
+const MAX_JSON_LINE_BYTES: usize = 1024 * 1024;
 
 /// Format identifier for built-in dataset record readers and writers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -219,15 +220,13 @@ impl DatasetReader for JsonLinesReader {
                     return;
                 }
             };
-            for line in std::io::BufRead::lines(std::io::BufReader::new(file)) {
-                let record = line
-                    .map_err(|error| {
-                        AppError::new(
-                            ErrorCode::Internal,
-                            format!("failed to read JSON line: {error}"),
-                        )
-                    })
-                    .and_then(|line| record_from_json_str(&line));
+            let mut reader = std::io::BufReader::new(file);
+            loop {
+                let record = match read_json_line_bounded(&mut reader) {
+                    Ok(Some(line)) => record_from_json_bytes(&line),
+                    Ok(None) => return,
+                    Err(error) => Err(error),
+                };
                 if !send_record(&tx, record) {
                     return;
                 }
@@ -524,14 +523,62 @@ where
     })
 }
 
-fn record_from_json_str(line: &str) -> AppResult<DatasetRecord> {
-    let value = serde_json::from_str(line).map_err(|error| {
+fn record_from_json_bytes(line: &[u8]) -> AppResult<DatasetRecord> {
+    let value = serde_json::from_slice(line).map_err(|error| {
         AppError::new(
             ErrorCode::InvalidInput,
             format!("failed to parse JSON record: {error}"),
         )
     })?;
     record_from_value(value)
+}
+
+fn read_json_line_bounded(reader: &mut impl std::io::BufRead) -> AppResult<Option<Vec<u8>>> {
+    let mut line = Vec::new();
+
+    loop {
+        let available = reader.fill_buf().map_err(|error| {
+            AppError::new(
+                ErrorCode::Internal,
+                format!("failed to read JSON line: {error}"),
+            )
+        })?;
+        if available.is_empty() {
+            return if line.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(line))
+            };
+        }
+
+        let consumed = match available.iter().position(|byte| *byte == b'\n') {
+            Some(pos) => {
+                let end = pos + 1;
+                append_json_line_chunk(&mut line, &available[..end])?;
+                end
+            }
+            None => {
+                append_json_line_chunk(&mut line, available)?;
+                available.len()
+            }
+        };
+        reader.consume(consumed);
+
+        if line.last() == Some(&b'\n') {
+            return Ok(Some(line));
+        }
+    }
+}
+
+fn append_json_line_chunk(line: &mut Vec<u8>, chunk: &[u8]) -> AppResult<()> {
+    if line.len().saturating_add(chunk.len()) > MAX_JSON_LINE_BYTES {
+        return Err(AppError::new(
+            ErrorCode::InvalidInput,
+            format!("JSON Lines record exceeded max {MAX_JSON_LINE_BYTES} bytes"),
+        ));
+    }
+    line.extend_from_slice(chunk);
+    Ok(())
 }
 
 fn record_from_value(value: Value) -> AppResult<DatasetRecord> {

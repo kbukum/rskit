@@ -172,6 +172,22 @@ async fn json_lines_records_select_filter_and_write_streaming() {
 }
 
 #[tokio::test]
+async fn json_lines_reader_rejects_oversized_records() {
+    let dir = TempDir::new().unwrap();
+    let input = dir.path().join("records.jsonl");
+    std::fs::write(
+        &input,
+        format!("{{\"blob\":\"{}\"}}\n", "x".repeat(1024 * 1024)),
+    )
+    .unwrap();
+
+    let mut records = Box::new(JsonLinesReader::new(&input)).stream();
+    let err = records.next().await.unwrap().unwrap_err();
+
+    assert!(err.to_string().contains("exceeded max"));
+}
+
+#[tokio::test]
 async fn csv_writer_rejects_records_with_different_columns() {
     let dir = TempDir::new().unwrap();
     let output = dir.path().join("records.csv");

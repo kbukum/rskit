@@ -505,24 +505,22 @@ async fn process_source(
     let resume_ai = resume_stats.as_ref().map(|s| s.ai).unwrap_or(0);
 
     // Notify main loop that we're starting
-    let _ = ctx
-        .event_tx
-        .send(WorkerEvent::Started {
+    send_worker_event(
+        ctx,
+        WorkerEvent::Started {
             index: idx,
             name: name.clone(),
             max_items,
-        })
-        .await;
+        },
+    )
+    .await;
 
     // Send initial progress for resumed sources so the bar shows the starting point
     if resume_total > 0 {
-        let _ = ctx
-            .event_tx
-            .send(WorkerEvent::Progress {
-                index: idx,
-                count: resume_total,
-            })
-            .await;
+        let _ = ctx.event_tx.try_send(WorkerEvent::Progress {
+            index: idx,
+            count: resume_total,
+        });
     }
 
     tracing::debug!(source = name.as_str(), resume = resume_total, "fetching");
@@ -622,16 +620,17 @@ async fn process_source(
             } else {
                 stream_outcome
             };
-            let _ = ctx
-                .event_tx
-                .send(WorkerEvent::Completed {
+            send_worker_event(
+                ctx,
+                WorkerEvent::Completed {
                     index: idx,
                     name,
                     stats,
                     cache_key,
                     outcome,
-                })
-                .await;
+                },
+            )
+            .await;
         }
         Err(e) => {
             let err_str = e.to_string();
@@ -640,16 +639,32 @@ async fn process_source(
             } else {
                 err_str
             };
-            let _ = ctx
-                .event_tx
-                .send(WorkerEvent::Failed {
+            send_worker_event(
+                ctx,
+                WorkerEvent::Failed {
                     index: idx,
                     name,
                     error: short_err,
                     stats,
                     cache_key,
-                })
-                .await;
+                },
+            )
+            .await;
+        }
+    }
+}
+
+async fn send_worker_event(ctx: &WorkerContext, event: WorkerEvent) {
+    if ctx.cancel.is_cancelled() {
+        let _ = ctx.event_tx.try_send(event);
+        return;
+    }
+
+    tokio::select! {
+        biased;
+        _ = ctx.cancel.cancelled() => {}
+        result = ctx.event_tx.send(event) => {
+            let _ = result;
         }
     }
 }
