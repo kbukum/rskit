@@ -1,0 +1,417 @@
+//! Streaming row/record dataset abstractions.
+
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+use std::pin::Pin;
+
+use futures::{Stream, stream};
+use futures_util::StreamExt as _;
+use rskit_errors::{AppError, AppResult, ErrorCode};
+use rskit_pipeline::RskitStreamExt;
+use serde_json::Value;
+
+/// Boxed stream of structured dataset records.
+pub type BoxRecordStream = Pin<Box<dyn Stream<Item = AppResult<DatasetRecord>> + Send + 'static>>;
+
+/// Format identifier for built-in dataset record readers and writers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum DatasetFormat {
+    /// Comma-separated values with a header row.
+    Csv,
+    /// Newline-delimited JSON records.
+    JsonLines,
+}
+
+/// Format-agnostic structured dataset row.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DatasetRecord {
+    fields: BTreeMap<String, Value>,
+}
+
+impl DatasetRecord {
+    /// Create a record from named fields.
+    #[must_use]
+    pub fn new(fields: BTreeMap<String, Value>) -> Self {
+        Self { fields }
+    }
+
+    /// Create a record from any iterator of named fields.
+    #[must_use]
+    pub fn from_fields<I, K>(fields: I) -> Self
+    where
+        I: IntoIterator<Item = (K, Value)>,
+        K: Into<String>,
+    {
+        Self {
+            fields: fields
+                .into_iter()
+                .map(|(key, value)| (key.into(), value))
+                .collect(),
+        }
+    }
+
+    /// Borrow a field by name.
+    #[must_use]
+    pub fn get(&self, name: &str) -> Option<&Value> {
+        self.fields.get(name)
+    }
+
+    /// Borrow all record fields in deterministic key order.
+    #[must_use]
+    pub fn fields(&self) -> &BTreeMap<String, Value> {
+        &self.fields
+    }
+
+    /// Consume this record into its fields.
+    #[must_use]
+    pub fn into_fields(self) -> BTreeMap<String, Value> {
+        self.fields
+    }
+
+    /// Return a projected record with only the requested columns.
+    #[must_use]
+    pub fn select(&self, columns: &[String]) -> Self {
+        let fields = columns
+            .iter()
+            .filter_map(|column| {
+                self.fields
+                    .get(column)
+                    .map(|value| (column.clone(), value.clone()))
+            })
+            .collect();
+        Self { fields }
+    }
+
+    /// Convert this record to a JSON object.
+    #[must_use]
+    pub fn into_json(self) -> Value {
+        Value::Object(self.fields.into_iter().collect())
+    }
+}
+
+/// Streaming reader for structured dataset records.
+pub trait DatasetReader: Send + 'static {
+    /// Convert this reader into a record stream.
+    fn stream(self: Box<Self>) -> BoxRecordStream;
+}
+
+/// Streaming writer for structured dataset records.
+#[async_trait::async_trait]
+pub trait DatasetWriter: Send + Sync {
+    /// Write records to `path`, returning the number of records written.
+    async fn write(&self, records: BoxRecordStream, path: &Path) -> AppResult<usize>;
+}
+
+/// CSV record reader backed by the `csv` crate.
+pub struct CsvReader {
+    path: PathBuf,
+}
+
+impl CsvReader {
+    /// Create a CSV reader for a local path.
+    #[must_use]
+    pub fn new(path: impl Into<PathBuf>) -> Self {
+        Self { path: path.into() }
+    }
+}
+
+impl DatasetReader for CsvReader {
+    fn stream(self: Box<Self>) -> BoxRecordStream {
+        let path = self.path;
+        let reader = match csv::Reader::from_path(&path) {
+            Ok(mut reader) => {
+                let headers = match reader.headers() {
+                    Ok(headers) => headers.clone(),
+                    Err(error) => {
+                        return Box::pin(stream::once(async move {
+                            Err(AppError::new(
+                                ErrorCode::InvalidInput,
+                                format!(
+                                    "failed to read CSV headers from {}: {error}",
+                                    path.display()
+                                ),
+                            ))
+                        }));
+                    }
+                };
+                Ok((reader, headers))
+            }
+            Err(error) => Err(AppError::new(
+                ErrorCode::Internal,
+                format!("failed to open CSV dataset {}: {error}", path.display()),
+            )),
+        };
+
+        match reader {
+            Ok((reader, headers)) => Box::pin(stream::unfold(
+                (reader, headers),
+                |(mut reader, headers)| async move {
+                    let mut raw = csv::StringRecord::new();
+                    match reader.read_record(&mut raw) {
+                        Ok(true) => {
+                            let fields = headers
+                                .iter()
+                                .zip(raw.iter())
+                                .map(|(key, value)| {
+                                    (key.to_string(), Value::String(value.to_string()))
+                                })
+                                .collect();
+                            Some((Ok(DatasetRecord::new(fields)), (reader, headers)))
+                        }
+                        Ok(false) => None,
+                        Err(error) => Some((
+                            Err(AppError::new(
+                                ErrorCode::InvalidInput,
+                                format!("failed to read CSV record: {error}"),
+                            )),
+                            (reader, headers),
+                        )),
+                    }
+                },
+            )),
+            Err(error) => Box::pin(stream::once(async move { Err(error) })),
+        }
+    }
+}
+
+/// Newline-delimited JSON record reader.
+pub struct JsonLinesReader {
+    path: PathBuf,
+}
+
+impl JsonLinesReader {
+    /// Create a JSON Lines reader for a local path.
+    #[must_use]
+    pub fn new(path: impl Into<PathBuf>) -> Self {
+        Self { path: path.into() }
+    }
+}
+
+impl DatasetReader for JsonLinesReader {
+    fn stream(self: Box<Self>) -> BoxRecordStream {
+        let path = self.path;
+        let file = match std::fs::File::open(&path) {
+            Ok(file) => file,
+            Err(error) => {
+                return Box::pin(stream::once(async move {
+                    Err(AppError::new(
+                        ErrorCode::Internal,
+                        format!(
+                            "failed to open JSON Lines dataset {}: {error}",
+                            path.display()
+                        ),
+                    ))
+                }));
+            }
+        };
+        let lines = std::io::BufRead::lines(std::io::BufReader::new(file));
+        Box::pin(stream::iter(lines.map(|line| {
+            let line = line.map_err(|error| {
+                AppError::new(
+                    ErrorCode::Internal,
+                    format!("failed to read JSON line: {error}"),
+                )
+            })?;
+            record_from_json_str(&line)
+        })))
+    }
+}
+
+/// Bounded JSON array reader for small fixture-style datasets.
+pub struct JsonArrayReader {
+    path: PathBuf,
+}
+
+impl JsonArrayReader {
+    /// Create a JSON array reader for a local path.
+    #[must_use]
+    pub fn new(path: impl Into<PathBuf>) -> Self {
+        Self { path: path.into() }
+    }
+}
+
+impl DatasetReader for JsonArrayReader {
+    fn stream(self: Box<Self>) -> BoxRecordStream {
+        let path = self.path;
+        let records = match std::fs::File::open(&path)
+            .map_err(|error| {
+                AppError::new(
+                    ErrorCode::Internal,
+                    format!("failed to open JSON dataset {}: {error}", path.display()),
+                )
+            })
+            .and_then(|file| {
+                serde_json::from_reader::<_, Vec<Value>>(file).map_err(|error| {
+                    AppError::new(
+                        ErrorCode::InvalidInput,
+                        format!("failed to parse JSON dataset {}: {error}", path.display()),
+                    )
+                })
+            }) {
+            Ok(values) => values
+                .into_iter()
+                .map(record_from_value)
+                .collect::<Vec<_>>(),
+            Err(error) => vec![Err(error)],
+        };
+        Box::pin(stream::iter(records))
+    }
+}
+
+/// CSV writer for structured records.
+pub struct CsvWriter;
+
+#[async_trait::async_trait]
+impl DatasetWriter for CsvWriter {
+    async fn write(&self, mut records: BoxRecordStream, path: &Path) -> AppResult<usize> {
+        let mut writer = csv::Writer::from_path(path).map_err(|error| {
+            AppError::new(
+                ErrorCode::Internal,
+                format!("failed to create CSV dataset {}: {error}", path.display()),
+            )
+        })?;
+        let mut headers: Option<Vec<String>> = None;
+        let mut count = 0usize;
+        while let Some(record) = records.next().await {
+            let record = record?;
+            let columns = headers.get_or_insert_with(|| record.fields.keys().cloned().collect());
+            if count == 0 {
+                writer
+                    .write_record(columns.iter())
+                    .map_err(AppError::internal)?;
+            }
+            let row = columns
+                .iter()
+                .map(|column| {
+                    record
+                        .fields
+                        .get(column)
+                        .map(value_to_cell)
+                        .unwrap_or_default()
+                })
+                .collect::<Vec<_>>();
+            writer.write_record(row).map_err(AppError::internal)?;
+            count += 1;
+        }
+        writer.flush().map_err(AppError::internal)?;
+        Ok(count)
+    }
+}
+
+/// JSON Lines writer for structured records.
+pub struct JsonLinesWriter;
+
+#[async_trait::async_trait]
+impl DatasetWriter for JsonLinesWriter {
+    async fn write(&self, mut records: BoxRecordStream, path: &Path) -> AppResult<usize> {
+        use std::io::Write as _;
+
+        let mut file = std::fs::File::create(path).map_err(|error| {
+            AppError::new(
+                ErrorCode::Internal,
+                format!(
+                    "failed to create JSON Lines dataset {}: {error}",
+                    path.display()
+                ),
+            )
+        })?;
+        let mut count = 0usize;
+        while let Some(record) = records.next().await {
+            let json = record?.into_json();
+            serde_json::to_writer(&mut file, &json).map_err(AppError::internal)?;
+            file.write_all(b"\n").map_err(AppError::internal)?;
+            count += 1;
+        }
+        Ok(count)
+    }
+}
+
+/// JSON array writer for small fixture-style datasets.
+pub struct JsonArrayWriter;
+
+#[async_trait::async_trait]
+impl DatasetWriter for JsonArrayWriter {
+    async fn write(&self, mut records: BoxRecordStream, path: &Path) -> AppResult<usize> {
+        let mut values = Vec::new();
+        while let Some(record) = records.next().await {
+            values.push(record?.into_json());
+        }
+        let file = std::fs::File::create(path).map_err(|error| {
+            AppError::new(
+                ErrorCode::Internal,
+                format!("failed to create JSON dataset {}: {error}", path.display()),
+            )
+        })?;
+        serde_json::to_writer_pretty(file, &values).map_err(AppError::internal)?;
+        Ok(values.len())
+    }
+}
+
+/// Project a record stream to the requested columns.
+pub fn select_columns<S>(
+    records: S,
+    columns: Vec<String>,
+) -> impl Stream<Item = AppResult<DatasetRecord>>
+where
+    S: Stream<Item = AppResult<DatasetRecord>> + Send + 'static,
+{
+    records.rmap(move |record| {
+        let columns = columns.clone();
+        async move { record.map(|record| record.select(&columns)) }
+    })
+}
+
+/// Filter a record stream with a fallible predicate.
+pub fn filter_records<S, F>(
+    records: S,
+    predicate: F,
+) -> impl Stream<Item = AppResult<DatasetRecord>>
+where
+    S: Stream<Item = AppResult<DatasetRecord>> + Send + 'static,
+    F: Fn(&DatasetRecord) -> AppResult<bool> + Clone + Send + Sync + 'static,
+{
+    records.filter_map(move |record| {
+        let predicate = predicate.clone();
+        async move {
+            match record {
+                Ok(record) => match predicate(&record) {
+                    Ok(true) => Some(Ok(record)),
+                    Ok(false) => None,
+                    Err(error) => Some(Err(error)),
+                },
+                Err(error) => Some(Err(error)),
+            }
+        }
+    })
+}
+
+fn record_from_json_str(line: &str) -> AppResult<DatasetRecord> {
+    let value = serde_json::from_str(line).map_err(|error| {
+        AppError::new(
+            ErrorCode::InvalidInput,
+            format!("failed to parse JSON record: {error}"),
+        )
+    })?;
+    record_from_value(value)
+}
+
+fn record_from_value(value: Value) -> AppResult<DatasetRecord> {
+    match value {
+        Value::Object(fields) => Ok(DatasetRecord::new(fields.into_iter().collect())),
+        _ => Err(AppError::new(
+            ErrorCode::InvalidInput,
+            "dataset record must be a JSON object",
+        )),
+    }
+}
+
+fn value_to_cell(value: &Value) -> String {
+    match value {
+        Value::Null => String::new(),
+        Value::String(value) => value.clone(),
+        Value::Bool(value) => value.to_string(),
+        Value::Number(value) => value.to_string(),
+        Value::Array(_) | Value::Object(_) => value.to_string(),
+    }
+}

@@ -141,3 +141,9 @@ impl Command {
         self
     }
 }
+
+/// Create a subprocess command.
+#[must_use]
+pub fn command<S: Into<String>>(program: S) -> Command {
+    Command::new(program)
+}

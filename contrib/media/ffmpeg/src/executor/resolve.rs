@@ -14,6 +14,7 @@ use rskit_storage::FileSource;
 
 use crate::command::SourceHints;
 use crate::config::FfmpegConfig;
+use crate::process::run_capture_lossy;
 
 use super::FfmpegExecutor;
 
@@ -125,22 +126,23 @@ impl FfmpegExecutor {
             _ => return None,
         };
 
-        let output = tokio::process::Command::new(self.config.ffprobe_bin())
-            .args([
+        let output = run_capture_lossy(
+            self.config.ffprobe_bin(),
+            [
                 "-v",
                 "quiet",
                 "-show_entries",
                 "format=duration",
                 "-of",
                 "csv=p=0",
-            ])
-            .arg(&path)
-            .output()
-            .await
-            .ok()?;
+                &path.to_string_lossy(),
+            ],
+            self.config.timeout,
+        )
+        .await
+        .ok()?;
 
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let secs: f64 = stdout.trim().parse().ok()?;
+        let secs: f64 = output.stdout.trim().parse().ok()?;
         Some(Duration::from_secs_f64(secs))
     }
 
@@ -163,24 +165,25 @@ impl FfmpegExecutor {
             _ => return SourceHints::default(),
         };
 
-        let output = tokio::process::Command::new(self.config.ffprobe_bin())
-            .args([
+        let output = run_capture_lossy(
+            self.config.ffprobe_bin(),
+            [
                 "-v",
                 "quiet",
                 "-show_entries",
                 "stream=codec_type",
                 "-of",
                 "csv=p=0",
-            ])
-            .arg(&path)
-            .output()
-            .await;
+                &path.to_string_lossy(),
+            ],
+            self.config.timeout,
+        )
+        .await;
 
         match output {
             Ok(out) => {
-                let stdout = String::from_utf8_lossy(&out.stdout);
-                let has_audio = stdout.lines().any(|l| l.trim() == "audio");
-                let has_video = stdout.lines().any(|l| l.trim() == "video");
+                let has_audio = out.stdout.lines().any(|l| l.trim() == "audio");
+                let has_video = out.stdout.lines().any(|l| l.trim() == "video");
                 SourceHints {
                     has_audio: Some(has_audio),
                     has_video: Some(has_video),

@@ -10,6 +10,7 @@ use rskit_media::{
 use rskit_storage::FileSource;
 
 use super::FfmpegProbe;
+use crate::process::{ensure_success, run_capture_lossy};
 
 impl FfmpegProbe {
     /// Detect scene changes via FFmpeg's `select` filter with `scene` metric.
@@ -21,8 +22,9 @@ impl FfmpegProbe {
         let resolved = source.to_local_path().await?;
         let threshold = threshold.clamp(0.0, 1.0);
 
-        let output = tokio::process::Command::new(self.config.ffmpeg_bin())
-            .args([
+        let output = run_capture_lossy(
+            self.config.ffmpeg_bin(),
+            [
                 "-i",
                 &resolved.path().to_string_lossy(),
                 "-vf",
@@ -30,18 +32,18 @@ impl FfmpegProbe {
                 "-f",
                 "null",
                 "-",
-            ])
-            .output()
-            .await
-            .map_err(|e| {
-                AppError::new(
-                    ErrorCode::Internal,
-                    format!("ffmpeg scene_detect failed: {e}"),
-                )
-            })?;
+            ],
+            self.config.timeout,
+        )
+        .await
+        .map_err(|e| {
+            AppError::new(
+                ErrorCode::Internal,
+                format!("ffmpeg scene_detect failed: {e}"),
+            )
+        })?;
 
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        Ok(parse_showinfo_timestamps(&stderr))
+        Ok(parse_showinfo_timestamps(&output.stderr))
     }
 
     /// Extract keyframe positions via `ffprobe -show_frames`.
@@ -54,8 +56,9 @@ impl FfmpegProbe {
     ) -> AppResult<Vec<KeyframeInfo>> {
         let resolved = source.to_local_path().await?;
 
-        let output = tokio::process::Command::new(self.config.ffprobe_bin())
-            .args([
+        let output = run_capture_lossy(
+            self.config.ffprobe_bin(),
+            [
                 "-v",
                 "quiet",
                 "-select_streams",
@@ -65,26 +68,21 @@ impl FfmpegProbe {
                 "frame=pts_time,pkt_size,pict_type,key_frame,coded_picture_number",
                 "-print_format",
                 "json",
-            ])
-            .arg(resolved.path())
-            .output()
-            .await
-            .map_err(|e| {
-                AppError::new(
-                    ErrorCode::Internal,
-                    format!("ffprobe keyframes failed: {e}"),
-                )
-            })?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(AppError::new(
+                &resolved.path().to_string_lossy(),
+            ],
+            self.config.timeout,
+        )
+        .await
+        .map_err(|e| {
+            AppError::new(
                 ErrorCode::Internal,
-                format!("ffprobe keyframes failed: {stderr}"),
-            ));
-        }
+                format!("ffprobe keyframes failed: {e}"),
+            )
+        })?;
 
-        let json: serde_json::Value = serde_json::from_slice(&output.stdout).map_err(|e| {
+        ensure_success(&output, "ffprobe keyframes")?;
+
+        let json: serde_json::Value = serde_json::from_str(&output.stdout).map_err(|e| {
             AppError::new(
                 ErrorCode::Internal,
                 format!("ffprobe keyframes output is not valid JSON: {e}"),
@@ -105,8 +103,9 @@ impl FfmpegProbe {
         let threshold_db = noise_threshold_db.clamp(-96.0, 0.0);
         let min_secs = min_duration.as_secs_f64().max(0.01);
 
-        let output = tokio::process::Command::new(self.config.ffmpeg_bin())
-            .args([
+        let output = run_capture_lossy(
+            self.config.ffmpeg_bin(),
+            [
                 "-i",
                 &resolved.path().to_string_lossy(),
                 "-af",
@@ -114,18 +113,18 @@ impl FfmpegProbe {
                 "-f",
                 "null",
                 "-",
-            ])
-            .output()
-            .await
-            .map_err(|e| {
-                AppError::new(
-                    ErrorCode::Internal,
-                    format!("ffmpeg silence_detect failed: {e}"),
-                )
-            })?;
+            ],
+            self.config.timeout,
+        )
+        .await
+        .map_err(|e| {
+            AppError::new(
+                ErrorCode::Internal,
+                format!("ffmpeg silence_detect failed: {e}"),
+            )
+        })?;
 
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        Ok(parse_silence_intervals(&stderr))
+        Ok(parse_silence_intervals(&output.stderr))
     }
 
     /// Extract chapter markers from the media container via ffprobe.

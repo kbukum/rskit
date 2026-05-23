@@ -4,18 +4,26 @@ use rskit_errors::{AppError, AppResult, ErrorCode};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
+/// Result returned by a publish target.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PublishResult {
+    /// Target identifier.
     pub target_name: String,
+    /// Published location.
     pub location: String,
+    /// Number of files published or observed by the target.
     pub files_published: usize,
+    /// Human-readable publish summary.
     pub message: String,
 }
 
+/// Destination for collected dataset output.
 #[async_trait::async_trait]
 pub trait Target: Send + Sync {
+    /// Stable target name.
     fn name(&self) -> &str;
 
+    /// Publish the dataset directory and optional metadata.
     async fn publish(
         &self,
         directory: &Path,

@@ -1928,8 +1928,10 @@ dependencies = [
  "async-trait",
  "bytes",
  "libc",
+ "parking_lot",
  "rskit-errors",
  "rskit-media",
+ "rskit-process",
  "rskit-storage",
  "serde",
  "serde_json",
@@ -1966,6 +1968,18 @@ dependencies = [
  "rskit-errors",
  "tokio",
  "tokio-stream",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "rskit-process"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "rskit-errors",
+ "thiserror",
+ "tokio",
  "tokio-util",
  "tracing",
 ]

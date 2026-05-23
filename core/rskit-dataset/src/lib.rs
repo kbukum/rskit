@@ -1,24 +1,63 @@
-//! Dataset collection framework — source, transform, target, collector.
+//! Dataset collection framework — streaming sources, transforms, targets, and schema validation.
+
+#![warn(missing_docs)]
 
 pub mod collector;
 pub mod manifest;
+pub mod record;
+pub mod schema;
 pub mod source;
+pub mod stream;
 pub mod target;
 pub mod transform;
 
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+
+use rskit_errors::{AppError, AppResult, ErrorCode};
 use serde::{Deserialize, Serialize};
 
 pub use collector::{Collector, CollectorConfig, CollectorResult, NullProgress, ProgressCallback};
-pub use manifest::Manifest;
-pub use source::Source;
+pub use manifest::{CacheStatus, Manifest, SourceEntry, SourceStats};
+pub use record::{
+    BoxRecordStream, DatasetFormat, DatasetReader, DatasetRecord, DatasetWriter, JsonArrayReader,
+    JsonArrayWriter, JsonLinesReader, JsonLinesWriter, filter_records, select_columns,
+};
+pub use schema::{DatasetSchema, validate_record};
+pub use source::{BoxDataStream, Source};
+pub use stream::DatasetStreamExt;
 pub use target::{PublishResult, Target};
-pub use transform::Transform;
+pub use transform::{ResizeTransform, Transform};
+
+/// Default threshold above which payloads should be represented as files.
+pub const DEFAULT_MAX_IN_MEMORY_BYTES: usize = 8 * 1024 * 1024;
+
+/// Runtime limits for dataset streaming and bounded materialization.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DatasetLimits {
+    /// Largest payload that may be held in memory by bounded helpers.
+    pub max_in_memory_bytes: usize,
+    /// Bounded channel capacity for source/collector stream plumbing.
+    pub stream_buffer: usize,
+}
+
+impl Default for DatasetLimits {
+    fn default() -> Self {
+        Self {
+            max_in_memory_bytes: DEFAULT_MAX_IN_MEMORY_BYTES,
+            stream_buffer: 64,
+        }
+    }
+}
 
 /// Binary classification label.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[non_exhaustive]
 #[repr(u8)]
 pub enum Label {
+    /// Human-authored / real sample.
     Real = 0,
+    /// AI-generated sample.
     AiGenerated = 1,
 }
 
@@ -33,10 +72,15 @@ impl std::fmt::Display for Label {
 
 /// Supported media types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum MediaType {
+    /// Image sample.
     Image,
+    /// Text sample.
     Text,
+    /// Audio sample.
     Audio,
+    /// Video sample.
     Video,
 }
 
@@ -51,41 +95,298 @@ impl std::fmt::Display for MediaType {
     }
 }
 
-/// A single data sample flowing through the pipeline.
+/// Payload for a single dataset item.
+///
+/// In-memory payloads can only be constructed through checked constructors so
+/// large datasets do not accidentally bypass [`DatasetLimits`].
+#[derive(Debug, Clone)]
+pub struct DataPayload {
+    kind: DataPayloadKind,
+}
+
+#[derive(Debug, Clone)]
+enum DataPayloadKind {
+    Bytes(Vec<u8>),
+    File(PathBuf),
+}
+
+impl DataPayload {
+    /// Create a bounded in-memory payload with explicit limits.
+    pub fn bytes(bytes: Vec<u8>, limits: &DatasetLimits) -> AppResult<Self> {
+        if bytes.len() > limits.max_in_memory_bytes {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                format!(
+                    "in-memory dataset payload is {} bytes, exceeding max_in_memory_bytes={}",
+                    bytes.len(),
+                    limits.max_in_memory_bytes
+                ),
+            ));
+        }
+        Ok(Self {
+            kind: DataPayloadKind::Bytes(bytes),
+        })
+    }
+
+    /// Create a bounded in-memory payload using [`DatasetLimits::default`].
+    pub fn bytes_default(bytes: Vec<u8>) -> AppResult<Self> {
+        Self::bytes(bytes, &DatasetLimits::default())
+    }
+
+    /// Create a file-backed payload for streaming large data.
+    #[must_use]
+    pub fn file(path: impl Into<PathBuf>) -> Self {
+        Self {
+            kind: DataPayloadKind::File(path.into()),
+        }
+    }
+
+    /// Returns true when this payload is memory-backed.
+    #[must_use]
+    pub fn is_bytes(&self) -> bool {
+        matches!(self.kind, DataPayloadKind::Bytes(_))
+    }
+
+    /// Borrow the file path when this is a file-backed payload.
+    #[must_use]
+    pub fn as_file(&self) -> Option<&Path> {
+        match &self.kind {
+            DataPayloadKind::File(path) => Some(path),
+            DataPayloadKind::Bytes(_) => None,
+        }
+    }
+
+    /// Return the payload size in bytes when it can be determined.
+    pub fn len(&self) -> AppResult<u64> {
+        match &self.kind {
+            DataPayloadKind::Bytes(bytes) => Ok(bytes.len() as u64),
+            DataPayloadKind::File(path) => std::fs::metadata(path)
+                .map(|metadata| metadata.len())
+                .map_err(|error| {
+                    AppError::new(
+                        ErrorCode::Internal,
+                        format!("failed to stat payload file {}: {error}", path.display()),
+                    )
+                }),
+        }
+    }
+
+    /// Return true when the payload has zero bytes.
+    pub fn is_empty(&self) -> AppResult<bool> {
+        self.len().map(|len| len == 0)
+    }
+
+    /// Read a payload into memory only if it is within configured bounds.
+    pub fn read_bytes_bounded(&self, limits: &DatasetLimits) -> AppResult<Vec<u8>> {
+        let len = self.len()?;
+        if len > limits.max_in_memory_bytes as u64 {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                format!(
+                    "dataset payload is {len} bytes, exceeding max_in_memory_bytes={}",
+                    limits.max_in_memory_bytes
+                ),
+            ));
+        }
+        match &self.kind {
+            DataPayloadKind::Bytes(bytes) => Ok(bytes.clone()),
+            DataPayloadKind::File(path) => std::fs::read(path).map_err(|error| {
+                AppError::new(
+                    ErrorCode::Internal,
+                    format!("failed to read payload file {}: {error}", path.display()),
+                )
+            }),
+        }
+    }
+
+    /// Write the payload to `path`, streaming file payloads without materializing them.
+    pub fn write_to_path(&self, path: &Path, limits: &DatasetLimits) -> AppResult<u64> {
+        match &self.kind {
+            DataPayloadKind::Bytes(bytes) => {
+                if bytes.len() > limits.max_in_memory_bytes {
+                    return Err(AppError::new(
+                        ErrorCode::InvalidInput,
+                        format!(
+                            "in-memory dataset payload is {} bytes, exceeding max_in_memory_bytes={}",
+                            bytes.len(),
+                            limits.max_in_memory_bytes
+                        ),
+                    ));
+                }
+                std::fs::write(path, bytes).map_err(|error| {
+                    AppError::new(
+                        ErrorCode::Internal,
+                        format!("failed to write dataset item {}: {error}", path.display()),
+                    )
+                })?;
+                Ok(bytes.len() as u64)
+            }
+            DataPayloadKind::File(source) => {
+                let mut input = std::fs::File::open(source).map_err(|error| {
+                    AppError::new(
+                        ErrorCode::Internal,
+                        format!("failed to open payload file {}: {error}", source.display()),
+                    )
+                })?;
+                let mut output = std::fs::File::create(path).map_err(|error| {
+                    AppError::new(
+                        ErrorCode::Internal,
+                        format!("failed to create dataset item {}: {error}", path.display()),
+                    )
+                })?;
+                std::io::copy(&mut input, &mut output).map_err(|error| {
+                    AppError::new(
+                        ErrorCode::Internal,
+                        format!(
+                            "failed to stream payload {} to {}: {error}",
+                            source.display(),
+                            path.display()
+                        ),
+                    )
+                })
+            }
+        }
+    }
+}
+
+/// A single data sample flowing through the dataset pipeline.
 #[derive(Debug, Clone)]
 pub struct DataItem {
-    pub content: Vec<u8>,
+    /// Payload bytes or file reference.
+    payload: DataPayload,
+    /// Dataset label.
     pub label: Label,
+    /// Media kind for the sample.
     pub media_type: MediaType,
+    /// Logical source name.
     pub source_name: String,
+    /// File extension including the leading dot.
     pub extension: String,
-    pub metadata: std::collections::HashMap<String, String>,
+    /// String metadata attached to the sample.
+    pub metadata: HashMap<String, String>,
 }
 
 impl DataItem {
+    /// Create an item from bounded in-memory bytes.
     pub fn new(
-        content: Vec<u8>,
+        bytes: Vec<u8>,
+        label: Label,
+        media_type: MediaType,
+        source_name: impl Into<String>,
+    ) -> AppResult<Self> {
+        Self::new_bytes(bytes, label, media_type, source_name)
+    }
+
+    /// Create an item from bounded in-memory bytes.
+    pub fn new_bytes(
+        bytes: Vec<u8>,
+        label: Label,
+        media_type: MediaType,
+        source_name: impl Into<String>,
+    ) -> AppResult<Self> {
+        Self::new_bytes_with_limits(
+            bytes,
+            label,
+            media_type,
+            source_name,
+            &DatasetLimits::default(),
+        )
+    }
+
+    /// Create an item from bounded in-memory bytes with explicit limits.
+    pub fn new_bytes_with_limits(
+        bytes: Vec<u8>,
+        label: Label,
+        media_type: MediaType,
+        source_name: impl Into<String>,
+        limits: &DatasetLimits,
+    ) -> AppResult<Self> {
+        Ok(Self {
+            payload: DataPayload::bytes(bytes, limits)?,
+            label,
+            media_type,
+            source_name: source_name.into(),
+            extension: ".jpg".to_string(),
+            metadata: HashMap::new(),
+        })
+    }
+
+    /// Create an item from a file path for streaming large payloads.
+    #[must_use]
+    pub fn new_file(
+        path: impl Into<PathBuf>,
         label: Label,
         media_type: MediaType,
         source_name: impl Into<String>,
     ) -> Self {
         Self {
-            content,
+            payload: DataPayload::file(path),
             label,
             media_type,
             source_name: source_name.into(),
-            extension: ".jpg".to_string(),
-            metadata: std::collections::HashMap::new(),
+            extension: ".bin".to_string(),
+            metadata: HashMap::new(),
         }
     }
 
+    /// Borrow the item payload.
+    #[must_use]
+    pub fn payload(&self) -> &DataPayload {
+        &self.payload
+    }
+
+    /// Replace the payload after validating it against explicit limits.
+    pub fn try_with_payload(
+        mut self,
+        payload: DataPayload,
+        limits: &DatasetLimits,
+    ) -> AppResult<Self> {
+        if payload.is_bytes() && payload.len()? > limits.max_in_memory_bytes as u64 {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                format!(
+                    "in-memory dataset payload exceeds max_in_memory_bytes={}",
+                    limits.max_in_memory_bytes
+                ),
+            ));
+        }
+        self.payload = payload;
+        Ok(self)
+    }
+
+    /// Set the output extension.
+    #[must_use]
     pub fn with_extension(mut self, ext: impl Into<String>) -> Self {
         self.extension = ext.into();
         self
     }
 
+    /// Attach string metadata.
+    #[must_use]
     pub fn with_metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.metadata.insert(key.into(), value.into());
         self
+    }
+
+    /// Validate the item against configured limits and path safety rules.
+    pub fn validate(&self, limits: &DatasetLimits) -> AppResult<()> {
+        rskit_validation::input::validate_safe_path(self.extension.trim_start_matches('.'))?;
+        let len = self.payload.len()?;
+        if self.payload.is_bytes() && len > limits.max_in_memory_bytes as u64 {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                format!(
+                    "in-memory dataset payload is {len} bytes, exceeding max_in_memory_bytes={}",
+                    limits.max_in_memory_bytes
+                ),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Write this item to `path` using the configured payload limits.
+    pub fn write_to_path(&self, path: &Path, limits: &DatasetLimits) -> AppResult<u64> {
+        self.validate(limits)?;
+        self.payload.write_to_path(path, limits)
     }
 }

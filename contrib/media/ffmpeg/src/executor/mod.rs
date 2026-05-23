@@ -13,6 +13,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::command::FfmpegCommand;
 use crate::config::FfmpegConfig;
+use crate::process::run_capture_lossy;
 
 /// FFmpeg-based media executor with concurrency control and hw accel fallback.
 pub struct FfmpegExecutor {
@@ -35,9 +36,7 @@ impl FfmpegExecutor {
 
     /// Check that ffmpeg is available and return its version.
     pub async fn check_available(&self) -> AppResult<String> {
-        let output = tokio::process::Command::new(self.config.ffmpeg_bin())
-            .arg("-version")
-            .output()
+        let output = run_capture_lossy(self.config.ffmpeg_bin(), ["-version"], self.config.timeout)
             .await
             .map_err(|e| {
                 AppError::new(
@@ -46,8 +45,12 @@ impl FfmpegExecutor {
                 )
             })?;
 
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let version = stdout.lines().next().unwrap_or("unknown").to_string();
+        let version = output
+            .stdout
+            .lines()
+            .next()
+            .unwrap_or("unknown")
+            .to_string();
         Ok(version)
     }
 

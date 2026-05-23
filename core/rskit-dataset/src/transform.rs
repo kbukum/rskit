@@ -1,11 +1,15 @@
 //! Transform trait and built-in transforms.
 
-use crate::DataItem;
+use crate::{DataItem, DataPayload, DatasetLimits};
+use rskit_errors::{AppError, AppResult, ErrorCode};
+use rskit_validation::Validator;
 
 /// Protocol for data transforms.
 pub trait Transform: Send + Sync {
+    /// Stable transform name.
     fn name(&self) -> &str;
-    fn apply(&self, item: DataItem) -> Option<DataItem>;
+    /// Apply the transform, returning `Ok(None)` when the item is filtered out.
+    fn apply(&self, item: DataItem, limits: &DatasetLimits) -> AppResult<Option<DataItem>>;
 }
 
 /// Resize images to a fixed size and re-encode as JPEG.
@@ -19,18 +23,27 @@ pub struct ResizeTransform {
 
 #[cfg(feature = "image-transform")]
 impl ResizeTransform {
-    pub fn new(width: u32, height: u32) -> Self {
-        Self {
+    /// Create a resize transform after validating dimensions.
+    pub fn new(width: u32, height: u32) -> AppResult<Self> {
+        Validator::new()
+            .min_value("width", width, 1)
+            .min_value("height", height, 1)
+            .validate()?;
+        Ok(Self {
             width,
             height,
             quality: 85,
             name: format!("resize-{width}x{height}"),
-        }
+        })
     }
 
-    pub fn with_quality(mut self, quality: u8) -> Self {
+    /// Set JPEG quality after validating the accepted encoder range.
+    pub fn with_quality(mut self, quality: u8) -> AppResult<Self> {
+        Validator::new()
+            .in_range("quality", quality, 1, 100)
+            .validate()?;
         self.quality = quality;
-        self
+        Ok(self)
     }
 }
 
@@ -40,15 +53,26 @@ impl Transform for ResizeTransform {
         &self.name
     }
 
-    fn apply(&self, item: DataItem) -> Option<DataItem> {
+    fn apply(&self, item: DataItem, limits: &DatasetLimits) -> AppResult<Option<DataItem>> {
         use image::ImageReader;
         use std::io::Cursor;
 
-        let img = ImageReader::new(Cursor::new(&item.content))
+        let bytes = item.payload().read_bytes_bounded(limits)?;
+        let img = ImageReader::new(Cursor::new(&bytes))
             .with_guessed_format()
-            .ok()?
+            .map_err(|error| {
+                AppError::new(
+                    ErrorCode::InvalidInput,
+                    format!("image format detection failed: {error}"),
+                )
+            })?
             .decode()
-            .ok()?;
+            .map_err(|error| {
+                AppError::new(
+                    ErrorCode::InvalidInput,
+                    format!("image decode failed: {error}"),
+                )
+            })?;
 
         let resized = img.resize_exact(
             self.width,
@@ -60,12 +84,13 @@ impl Transform for ResizeTransform {
         let mut cursor = Cursor::new(&mut buf);
         resized
             .write_to(&mut cursor, image::ImageFormat::Jpeg)
-            .ok()?;
+            .map_err(|error| {
+                AppError::new(ErrorCode::Internal, format!("image encode failed: {error}"))
+            })?;
 
-        Some(DataItem {
-            content: buf,
-            extension: ".jpg".to_string(),
-            ..item
-        })
+        Ok(Some(
+            item.try_with_payload(DataPayload::bytes(buf, limits)?, limits)?
+                .with_extension(".jpg"),
+        ))
     }
 }

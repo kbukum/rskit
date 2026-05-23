@@ -85,17 +85,31 @@ resolve_crate_name() {
 
 resolve_manifest_path() {
   local crate="$1"
-  if cargo metadata --manifest-path core/Cargo.toml --no-deps --format-version 1 2>/dev/null | grep -q "\"name\":\"$crate\""; then
+  if metadata_has_workspace_package core/Cargo.toml "$crate"; then
     printf '%s\n' "core/Cargo.toml"
     return 0
   fi
 
-  if cargo metadata --manifest-path contrib/Cargo.toml --no-deps --format-version 1 2>/dev/null | grep -q "\"name\":\"$crate\""; then
+  if metadata_has_workspace_package contrib/Cargo.toml "$crate"; then
     printf '%s\n' "contrib/Cargo.toml"
     return 0
   fi
 
   return 1
+}
+
+metadata_has_workspace_package() {
+  local manifest="$1"
+  local crate="$2"
+  cargo metadata --manifest-path "$manifest" --no-deps --format-version 1 2>/dev/null \
+    | "$python_bin" -c 'import json, sys
+data = json.load(sys.stdin)
+members = set(data.get("workspace_members", []))
+crate = sys.argv[1]
+for package in data.get("packages", []):
+    if package.get("id") in members and package.get("name") == crate:
+        raise SystemExit(0)
+raise SystemExit(1)' "$crate"
 }
 
 run_module_checks() {
@@ -110,7 +124,9 @@ run_module_checks() {
 
   echo "==> Checking $module ($crate)"
   cargo clippy --manifest-path "$manifest" -p "$crate" -- -D warnings
-  if command -v cargo-nextest >/dev/null 2>&1; then
+  if [[ "${CHECK_DOMAIN_TEST_RUNNER:-}" == "cargo-test" ]]; then
+    cargo test --manifest-path "$manifest" -p "$crate" -- --test-threads="${CHECK_DOMAIN_TEST_THREADS:-1}"
+  elif command -v cargo-nextest >/dev/null 2>&1; then
     cargo nextest run --manifest-path "$manifest" -p "$crate"
   else
     cargo test --manifest-path "$manifest" -p "$crate"

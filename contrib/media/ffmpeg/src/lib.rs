@@ -14,6 +14,7 @@ mod executor;
 mod filter_map;
 mod hw_accel;
 mod probe;
+mod process;
 mod progress;
 
 pub use command::{FfmpegCommand, SourceHints};

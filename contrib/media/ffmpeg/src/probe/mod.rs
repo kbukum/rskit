@@ -20,6 +20,7 @@ use rskit_media::{
 use rskit_storage::FileSource;
 
 use crate::config::FfmpegConfig;
+use crate::process::{ensure_success, run_capture_lossy};
 
 /// FFmpeg-based media probe using `ffprobe`.
 pub struct FfmpegProbe {
@@ -34,19 +35,22 @@ impl FfmpegProbe {
 
     /// Check that ffprobe is available and return its version.
     pub async fn check_available(&self) -> AppResult<String> {
-        let output = tokio::process::Command::new(self.config.ffprobe_bin())
-            .arg("-version")
-            .output()
-            .await
-            .map_err(|e| {
-                AppError::new(
-                    ErrorCode::ServiceUnavailable,
-                    format!("ffprobe not found: {e}"),
-                )
-            })?;
+        let output =
+            run_capture_lossy(self.config.ffprobe_bin(), ["-version"], self.config.timeout)
+                .await
+                .map_err(|e| {
+                    AppError::new(
+                        ErrorCode::ServiceUnavailable,
+                        format!("ffprobe not found: {e}"),
+                    )
+                })?;
 
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let version = stdout.lines().next().unwrap_or("unknown").to_string();
+        let version = output
+            .stdout
+            .lines()
+            .next()
+            .unwrap_or("unknown")
+            .to_string();
         Ok(version)
     }
 
@@ -55,8 +59,9 @@ impl FfmpegProbe {
         let resolved = source.to_local_path().await?;
         let path = resolved.path();
 
-        let output = tokio::process::Command::new(self.config.ffprobe_bin())
-            .args([
+        let output = run_capture_lossy(
+            self.config.ffprobe_bin(),
+            [
                 "-v",
                 "quiet",
                 "-print_format",
@@ -64,26 +69,21 @@ impl FfmpegProbe {
                 "-show_format",
                 "-show_streams",
                 "-show_chapters",
-            ])
-            .arg(path)
-            .output()
-            .await
-            .map_err(|e| {
-                AppError::new(
-                    ErrorCode::Internal,
-                    format!("ffprobe execution failed: {e}"),
-                )
-            })?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(AppError::new(
+                &path.to_string_lossy(),
+            ],
+            self.config.timeout,
+        )
+        .await
+        .map_err(|e| {
+            AppError::new(
                 ErrorCode::Internal,
-                format!("ffprobe failed: {stderr}"),
-            ));
-        }
+                format!("ffprobe execution failed: {e}"),
+            )
+        })?;
 
-        let json: serde_json::Value = serde_json::from_slice(&output.stdout).map_err(|e| {
+        ensure_success(&output, "ffprobe")?;
+
+        let json: serde_json::Value = serde_json::from_str(&output.stdout).map_err(|e| {
             AppError::new(
                 ErrorCode::Internal,
                 format!("ffprobe output is not valid JSON: {e}"),

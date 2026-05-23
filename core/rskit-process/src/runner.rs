@@ -2,8 +2,9 @@
 
 use crate::{AppError, AppResult, Command, ErrorCode, ProcessConfig, ProcessResult};
 use std::io;
+use std::sync::Arc;
 use std::time::Instant;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio::process::Child;
 use tokio::process::Command as TokioCommand;
 use tokio::task::JoinHandle;
@@ -11,11 +12,62 @@ use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
 
+/// Callback invoked for line-oriented process output.
+pub type OutputLineCallback = Arc<dyn Fn(&str) + Send + Sync + 'static>;
+
+/// Optional callbacks for line-oriented process output.
+#[derive(Clone, Default)]
+pub struct OutputObserver {
+    stdout_line: Option<OutputLineCallback>,
+    stderr_line: Option<OutputLineCallback>,
+}
+
+impl OutputObserver {
+    /// Create an observer without callbacks.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Observe each stdout line.
+    #[must_use]
+    pub fn with_stdout_line(mut self, callback: impl Fn(&str) + Send + Sync + 'static) -> Self {
+        self.stdout_line = Some(Arc::new(callback));
+        self
+    }
+
+    /// Observe each stderr line.
+    #[must_use]
+    pub fn with_stderr_line(mut self, callback: impl Fn(&str) + Send + Sync + 'static) -> Self {
+        self.stderr_line = Some(Arc::new(callback));
+        self
+    }
+}
+
 /// Execute a subprocess with the given configuration and cancellation token.
 pub async fn run_with_cancel(
     command: &Command,
     config: &ProcessConfig,
     cancel: CancellationToken,
+) -> AppResult<ProcessResult> {
+    run_process(command, config, cancel, None).await
+}
+
+/// Execute a subprocess and observe stdout/stderr lines as they are emitted.
+pub async fn run_with_observer(
+    command: &Command,
+    config: &ProcessConfig,
+    cancel: CancellationToken,
+    observer: OutputObserver,
+) -> AppResult<ProcessResult> {
+    run_process(command, config, cancel, Some(observer)).await
+}
+
+async fn run_process(
+    command: &Command,
+    config: &ProcessConfig,
+    cancel: CancellationToken,
+    observer: Option<OutputObserver>,
 ) -> AppResult<ProcessResult> {
     if command.program.is_empty() {
         return Err(AppError::invalid_input("program", "must not be empty"));
@@ -42,6 +94,8 @@ pub async fn run_with_cancel(
     }
     if command.stdin.is_some() {
         cmd.stdin(std::process::Stdio::piped());
+    } else {
+        cmd.stdin(std::process::Stdio::null());
     }
 
     #[cfg(unix)]
@@ -65,8 +119,20 @@ pub async fn run_with_cancel(
         )
     })?;
 
-    let stdout_task = spawn_reader(child.stdout.take(), config.max_output_bytes);
-    let stderr_task = spawn_reader(child.stderr.take(), config.max_output_bytes);
+    let stdout_task = spawn_reader(
+        child.stdout.take(),
+        config.max_output_bytes,
+        observer
+            .as_ref()
+            .and_then(|observer| observer.stdout_line.clone()),
+    );
+    let stderr_task = spawn_reader(
+        child.stderr.take(),
+        config.max_output_bytes,
+        observer
+            .as_ref()
+            .and_then(|observer| observer.stderr_line.clone()),
+    );
 
     if let Some(stdin_data) = &command.stdin
         && let Some(mut stdin) = child.stdin.take()
@@ -207,11 +273,15 @@ async fn terminate_and_wait(
 fn spawn_reader<R>(
     reader: Option<R>,
     max_output_bytes: Option<usize>,
+    line_callback: Option<OutputLineCallback>,
 ) -> Option<JoinHandle<io::Result<String>>>
 where
     R: AsyncRead + Unpin + Send + 'static,
 {
-    reader.map(|reader| tokio::spawn(read_output(reader, max_output_bytes)))
+    reader.map(|reader| match line_callback {
+        Some(callback) => tokio::spawn(read_observed_lines(reader, max_output_bytes, callback)),
+        None => tokio::spawn(read_output(reader, max_output_bytes)),
+    })
 }
 
 async fn collect_reader(task: Option<JoinHandle<io::Result<String>>>) -> AppResult<String> {
@@ -245,6 +315,40 @@ where
     }
 
     Ok(String::from_utf8_lossy(&captured).into_owned())
+}
+
+async fn read_observed_lines<R>(
+    reader: R,
+    max_output_bytes: Option<usize>,
+    line_callback: OutputLineCallback,
+) -> io::Result<String>
+where
+    R: AsyncRead + Unpin,
+{
+    let mut reader = tokio::io::BufReader::new(reader);
+    let mut captured = String::new();
+    let mut remaining = max_output_bytes.unwrap_or(usize::MAX);
+    let mut line = String::new();
+
+    loop {
+        line.clear();
+        let read = reader.read_line(&mut line).await?;
+        if read == 0 {
+            break;
+        }
+
+        let observed = line.trim_end_matches(['\r', '\n']);
+        line_callback(observed);
+
+        if remaining > 0 {
+            let bytes = line.as_bytes();
+            let to_copy = remaining.min(bytes.len());
+            captured.push_str(&String::from_utf8_lossy(&bytes[..to_copy]));
+            remaining -= to_copy;
+        }
+    }
+
+    Ok(captured)
 }
 
 fn terminate_process_group(pid: Option<u32>, signal: i32) {

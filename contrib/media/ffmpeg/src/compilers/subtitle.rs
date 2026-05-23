@@ -5,6 +5,8 @@ use rskit_media::{ops::SubtitleConfig, subtitle::SubtitleTrack};
 
 use super::CompileContext;
 
+const MAX_SUBTITLE_BYTES: u64 = 1024 * 1024;
+
 pub(crate) fn compile_burn_subtitles(
     ctx: &mut CompileContext,
     subs: &SubtitleTrack,
@@ -37,12 +39,7 @@ pub(crate) fn compile_add_subtitles(
 ) -> AppResult<()> {
     use rskit_media::ops::SubtitleSource;
     let sub_content = match &cfg.source {
-        SubtitleSource::File(path) => std::fs::read_to_string(path).map_err(|e| {
-            rskit_errors::AppError::new(
-                rskit_errors::ErrorCode::Internal,
-                format!("failed to read subtitle file: {e}"),
-            )
-        })?,
+        SubtitleSource::File(path) => read_subtitle_file(path)?,
         SubtitleSource::Inline(s) => s.clone(),
         _ => {
             return Err(rskit_errors::AppError::new(
@@ -71,4 +68,33 @@ pub(crate) fn compile_add_subtitles(
         .push(format!("subtitles=filename={escaped}"));
     ctx.cmd.temp_files.push(temp);
     Ok(())
+}
+
+fn read_subtitle_file(path: &std::path::Path) -> AppResult<String> {
+    let size = std::fs::metadata(path)
+        .map_err(|e| {
+            rskit_errors::AppError::new(
+                rskit_errors::ErrorCode::Internal,
+                format!("failed to stat subtitle file: {e}"),
+            )
+        })?
+        .len();
+    if size > MAX_SUBTITLE_BYTES {
+        return Err(rskit_errors::AppError::new(
+            rskit_errors::ErrorCode::InvalidInput,
+            format!("subtitle file is {size} bytes, exceeding max {MAX_SUBTITLE_BYTES}"),
+        ));
+    }
+    let bytes = std::fs::read(path).map_err(|e| {
+        rskit_errors::AppError::new(
+            rskit_errors::ErrorCode::Internal,
+            format!("failed to read subtitle file: {e}"),
+        )
+    })?;
+    String::from_utf8(bytes).map_err(|e| {
+        rskit_errors::AppError::new(
+            rskit_errors::ErrorCode::InvalidInput,
+            format!("subtitle file is not valid UTF-8: {e}"),
+        )
+    })
 }

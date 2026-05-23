@@ -13,6 +13,7 @@ use rskit_storage::{FileSink, FileSource, TempFile};
 use crate::command::FfmpegCommand;
 use crate::config::FfmpegConfig;
 use crate::hw_accel::HwAccel;
+use crate::process::run_capture_lossy;
 
 use super::FfmpegExecutor;
 
@@ -160,17 +161,17 @@ impl FfmpegExecutor {
     /// Query FFmpeg for available software AV1 decoders.
     /// Returns the best available one, or None if none are compiled in.
     async fn find_sw_av1_decoder(config: &FfmpegConfig) -> Option<String> {
-        let output = tokio::process::Command::new(config.ffmpeg_bin())
-            .args(["-hide_banner", "-decoders"])
-            .output()
-            .await
-            .ok()?;
-
-        let stdout = String::from_utf8_lossy(&output.stdout);
+        let output = run_capture_lossy(
+            config.ffmpeg_bin(),
+            ["-hide_banner", "-decoders"],
+            config.timeout,
+        )
+        .await
+        .ok()?;
 
         // Prefer libdav1d (fastest), then libaom-av1, then libgav1
         for decoder in &["libdav1d", "libaom-av1", "libgav1"] {
-            if stdout.lines().any(|line| line.contains(decoder)) {
+            if output.stdout.lines().any(|line| line.contains(decoder)) {
                 return Some((*decoder).to_string());
             }
         }
