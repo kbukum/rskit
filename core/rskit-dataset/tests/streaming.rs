@@ -84,6 +84,22 @@ fn file_payload_streams_to_destination_without_materializing() {
 }
 
 #[test]
+fn file_payload_write_to_same_path_is_noop() {
+    let dir = TempDir::new().unwrap();
+    let source_path = dir.path().join("source.bin");
+    std::fs::write(&source_path, b"same file payload").unwrap();
+
+    let item = DataItem::new_file(&source_path, Label::Real, MediaType::Text, "file")
+        .with_extension(".bin");
+    let written = item
+        .write_to_path(&source_path, &DatasetLimits::default())
+        .unwrap();
+
+    assert_eq!(written, 17);
+    assert_eq!(std::fs::read(source_path).unwrap(), b"same file payload");
+}
+
+#[test]
 fn byte_payload_above_limit_is_rejected() {
     let limits = DatasetLimits {
         max_in_memory_bytes: 3,

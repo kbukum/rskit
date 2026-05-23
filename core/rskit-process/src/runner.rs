@@ -95,6 +95,18 @@ async fn run_process(
         cmd.stdout(std::process::Stdio::piped());
         cmd.stderr(std::process::Stdio::piped());
     }
+    let stdout_observer = observer
+        .as_ref()
+        .and_then(|observer| observer.stdout_line.clone());
+    let stderr_observer = observer
+        .as_ref()
+        .and_then(|observer| observer.stderr_line.clone());
+    if stdout_observer.is_some() {
+        cmd.stdout(std::process::Stdio::piped());
+    }
+    if stderr_observer.is_some() {
+        cmd.stderr(std::process::Stdio::piped());
+    }
     if command.stdin.is_some() {
         cmd.stdin(std::process::Stdio::piped());
     } else {
@@ -125,16 +137,14 @@ async fn run_process(
     let stdout_task = spawn_reader(
         child.stdout.take(),
         config.max_output_bytes,
-        observer
-            .as_ref()
-            .and_then(|observer| observer.stdout_line.clone()),
+        stdout_observer,
+        config.capture_output,
     );
     let stderr_task = spawn_reader(
         child.stderr.take(),
         config.max_output_bytes,
-        observer
-            .as_ref()
-            .and_then(|observer| observer.stderr_line.clone()),
+        stderr_observer,
+        config.capture_output,
     );
 
     if let Some(stdin_data) = &command.stdin
@@ -281,13 +291,19 @@ fn spawn_reader<R>(
     reader: Option<R>,
     max_output_bytes: Option<usize>,
     line_callback: Option<OutputLineCallback>,
+    retain_output: bool,
 ) -> Option<JoinHandle<io::Result<CapturedOutput>>>
 where
     R: AsyncRead + Unpin + Send + 'static,
 {
     reader.map(|reader| match line_callback {
-        Some(callback) => tokio::spawn(read_observed_lines(reader, max_output_bytes, callback)),
-        None => tokio::spawn(read_output(reader, max_output_bytes)),
+        Some(callback) => tokio::spawn(read_observed_lines(
+            reader,
+            max_output_bytes,
+            callback,
+            retain_output,
+        )),
+        None => tokio::spawn(read_output(reader, max_output_bytes, retain_output)),
     })
 }
 
@@ -315,6 +331,7 @@ async fn collect_reader(
 async fn read_output<R>(
     mut reader: R,
     max_output_bytes: Option<usize>,
+    retain_output: bool,
 ) -> io::Result<CapturedOutput>
 where
     R: AsyncRead + Unpin,
@@ -329,14 +346,14 @@ where
         if read == 0 {
             break;
         }
-        if remaining > 0 {
+        if retain_output && remaining > 0 {
             let to_copy = remaining.min(read);
             captured.extend_from_slice(&buffer[..to_copy]);
             remaining -= to_copy;
             if to_copy < read {
                 truncated = true;
             }
-        } else {
+        } else if retain_output {
             truncated = true;
         }
     }
@@ -351,6 +368,7 @@ async fn read_observed_lines<R>(
     reader: R,
     max_output_bytes: Option<usize>,
     line_callback: OutputLineCallback,
+    retain_output: bool,
 ) -> io::Result<CapturedOutput>
 where
     R: AsyncRead + Unpin,
@@ -373,14 +391,14 @@ where
             break;
         }
 
-        if remaining > 0 {
+        if retain_output && remaining > 0 {
             let to_copy = remaining.min(read);
             captured.extend_from_slice(&buffer[..to_copy]);
             remaining -= to_copy;
             if to_copy < read {
                 capture_truncated = true;
             }
-        } else {
+        } else if retain_output {
             capture_truncated = true;
         }
 

@@ -116,6 +116,33 @@ async fn observer_caps_long_lines_before_newline() {
 }
 
 #[tokio::test]
+async fn observer_runs_when_capture_output_is_disabled() {
+    let observed = Arc::new(Mutex::new(Vec::new()));
+    let command = Command::new("/usr/bin/printf").args(["observed\\n"]);
+    let config = ProcessConfig {
+        capture_output: false,
+        ..ProcessConfig::default()
+    };
+
+    let result = rskit_process::run_with_observer(
+        &command,
+        &config,
+        CancellationToken::new(),
+        OutputObserver::new().with_stdout_line({
+            let observed = Arc::clone(&observed);
+            move |line| observed.lock().push(line.to_string())
+        }),
+    )
+    .await
+    .unwrap();
+
+    assert!(result.success());
+    assert!(result.stdout.is_empty());
+    assert!(result.stdout_bytes.is_empty());
+    assert_eq!(observed.lock().as_slice(), ["observed"]);
+}
+
+#[tokio::test]
 async fn timeout_escalates_and_marks_result() {
     let command = Command::new("/bin/sh").args(["-c", "printf 123456789abcdef >&2; sleep 2"]);
     let config = ProcessConfig {

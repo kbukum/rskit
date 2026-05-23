@@ -220,6 +220,9 @@ impl DataPayload {
                 Ok(bytes.len() as u64)
             }
             DataPayloadKind::File(source) => {
+                if is_same_file(source, path)? {
+                    return self.len();
+                }
                 let mut input = std::fs::File::open(source).map_err(|error| {
                     AppError::new(
                         ErrorCode::Internal,
@@ -245,6 +248,31 @@ impl DataPayload {
             }
         }
     }
+}
+
+fn is_same_file(source: &Path, destination: &Path) -> AppResult<bool> {
+    if !destination.exists() {
+        return Ok(false);
+    }
+    let source = std::fs::canonicalize(source).map_err(|error| {
+        AppError::new(
+            ErrorCode::Internal,
+            format!(
+                "failed to canonicalize payload file {}: {error}",
+                source.display()
+            ),
+        )
+    })?;
+    let destination = std::fs::canonicalize(destination).map_err(|error| {
+        AppError::new(
+            ErrorCode::Internal,
+            format!(
+                "failed to canonicalize dataset item {}: {error}",
+                destination.display()
+            ),
+        )
+    })?;
+    Ok(source == destination)
 }
 
 /// A single data sample flowing through the dataset pipeline.
