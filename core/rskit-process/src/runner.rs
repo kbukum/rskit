@@ -1,7 +1,11 @@
 //! Process execution runtime.
 
-use crate::{AppError, AppResult, Command, ErrorCode, ProcessConfig, ProcessResult};
+use crate::{
+    AppError, AppResult, Command, ErrorCode, ProcessConfig, ProcessResult,
+    command::DEFAULT_MAX_OUTPUT_BYTES,
+};
 use std::io;
+use std::sync::Arc;
 use std::time::Instant;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio::process::Child;
@@ -11,13 +15,64 @@ use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
 
+/// Callback invoked for line-oriented process output.
+pub type OutputLineCallback = Arc<dyn Fn(&str) + Send + Sync + 'static>;
+
+/// Optional callbacks for line-oriented process output.
+#[derive(Clone, Default)]
+pub struct OutputObserver {
+    stdout_line: Option<OutputLineCallback>,
+    stderr_line: Option<OutputLineCallback>,
+}
+
+impl OutputObserver {
+    /// Create an observer without callbacks.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Observe each stdout line.
+    #[must_use]
+    pub fn with_stdout_line(mut self, callback: impl Fn(&str) + Send + Sync + 'static) -> Self {
+        self.stdout_line = Some(Arc::new(callback));
+        self
+    }
+
+    /// Observe each stderr line.
+    #[must_use]
+    pub fn with_stderr_line(mut self, callback: impl Fn(&str) + Send + Sync + 'static) -> Self {
+        self.stderr_line = Some(Arc::new(callback));
+        self
+    }
+}
+
 /// Execute a subprocess with the given configuration and cancellation token.
 pub async fn run_with_cancel(
     command: &Command,
     config: &ProcessConfig,
     cancel: CancellationToken,
 ) -> AppResult<ProcessResult> {
-    if command.program.is_empty() {
+    run_process(command, config, cancel, None).await
+}
+
+/// Execute a subprocess and observe stdout/stderr lines as they are emitted.
+pub async fn run_with_observer(
+    command: &Command,
+    config: &ProcessConfig,
+    cancel: CancellationToken,
+    observer: OutputObserver,
+) -> AppResult<ProcessResult> {
+    run_process(command, config, cancel, Some(observer)).await
+}
+
+async fn run_process(
+    command: &Command,
+    config: &ProcessConfig,
+    cancel: CancellationToken,
+    observer: Option<OutputObserver>,
+) -> AppResult<ProcessResult> {
+    if command.program.as_os_str().is_empty() {
         return Err(AppError::invalid_input("program", "must not be empty"));
     }
 
@@ -40,8 +95,22 @@ pub async fn run_with_cancel(
         cmd.stdout(std::process::Stdio::piped());
         cmd.stderr(std::process::Stdio::piped());
     }
+    let stdout_observer = observer
+        .as_ref()
+        .and_then(|observer| observer.stdout_line.clone());
+    let stderr_observer = observer
+        .as_ref()
+        .and_then(|observer| observer.stderr_line.clone());
+    if stdout_observer.is_some() {
+        cmd.stdout(std::process::Stdio::piped());
+    }
+    if stderr_observer.is_some() {
+        cmd.stderr(std::process::Stdio::piped());
+    }
     if command.stdin.is_some() {
         cmd.stdin(std::process::Stdio::piped());
+    } else {
+        cmd.stdin(std::process::Stdio::null());
     }
 
     #[cfg(unix)]
@@ -57,7 +126,7 @@ pub async fn run_with_cancel(
         });
     }
 
-    debug!(program = %command.program, args = ?command.args, "spawning process");
+    debug!(program = %command.program.display(), args = ?command.args, "spawning process");
     let mut child = cmd.spawn().map_err(|error| {
         AppError::new(
             ErrorCode::Internal,
@@ -65,8 +134,18 @@ pub async fn run_with_cancel(
         )
     })?;
 
-    let stdout_task = spawn_reader(child.stdout.take(), config.max_output_bytes);
-    let stderr_task = spawn_reader(child.stderr.take(), config.max_output_bytes);
+    let stdout_task = spawn_reader(
+        child.stdout.take(),
+        config.max_output_bytes,
+        stdout_observer,
+        config.capture_output,
+    );
+    let stderr_task = spawn_reader(
+        child.stderr.take(),
+        config.max_output_bytes,
+        stderr_observer,
+        config.capture_output,
+    );
 
     if let Some(stdin_data) = &command.stdin
         && let Some(mut stdin) = child.stdin.take()
@@ -85,7 +164,7 @@ pub async fn run_with_cancel(
     {
         tokio::select! {
             _ = cancel.cancelled() => {
-                debug!(program = %command.program, "process cancelled, sending SIGTERM");
+                debug!(program = %command.program.display(), "process cancelled, sending SIGTERM");
                 let (exit_code, stderr) = terminate_and_wait(&mut child, pid, config.grace_period, "cancellation").await;
                 (exit_code, false, true, stderr)
             }
@@ -99,7 +178,7 @@ pub async fn run_with_cancel(
                         ));
                     }
                     Err(_) => {
-                        debug!(program = %command.program, timeout = ?timeout_duration, "process timeout, sending SIGTERM");
+                        debug!(program = %command.program.display(), timeout = ?timeout_duration, "process timeout, sending SIGTERM");
                         let (exit_code, stderr) = terminate_and_wait(&mut child, pid, config.grace_period, "timeout").await;
                         (exit_code, true, false, stderr)
                     }
@@ -109,7 +188,7 @@ pub async fn run_with_cancel(
     } else {
         tokio::select! {
             _ = cancel.cancelled() => {
-                debug!(program = %command.program, "process cancelled, sending SIGTERM");
+                debug!(program = %command.program.display(), "process cancelled, sending SIGTERM");
                 let (exit_code, stderr) = terminate_and_wait(&mut child, pid, config.grace_period, "cancellation").await;
                 (exit_code, false, true, stderr)
             }
@@ -127,26 +206,30 @@ pub async fn run_with_cancel(
         }
     };
 
-    let mut stdout = collect_reader(stdout_task).await?;
-    let mut stderr = collect_reader(stderr_task).await?;
+    let stdout_output = collect_reader(stdout_task).await?;
+    let stdout_bytes = stdout_output.bytes;
+    let stdout = String::from_utf8_lossy(&stdout_bytes).into_owned();
+    let stdout_truncated = stdout_output.truncated;
+    let stderr_output = collect_reader(stderr_task).await?;
+    let mut stderr_bytes = stderr_output.bytes;
+    let mut stderr_truncated = stderr_output.truncated;
     if let Some(extra_stderr) = synthetic_stderr {
-        if !stderr.is_empty() {
-            stderr.push('\n');
-        }
-        stderr.push_str(&extra_stderr);
+        stderr_truncated |= append_bounded_stderr(
+            &mut stderr_bytes,
+            extra_stderr.as_bytes(),
+            config.max_output_bytes,
+        );
     }
-
-    if config.capture_output
-        && let Some(limit) = config.max_output_bytes
-    {
-        stdout.truncate(limit);
-        stderr.truncate(limit);
-    }
+    let stderr = String::from_utf8_lossy(&stderr_bytes).into_owned();
 
     let result = ProcessResult {
         exit_code,
         stdout,
+        stdout_bytes,
         stderr,
+        stderr_bytes,
+        stdout_truncated,
+        stderr_truncated,
         duration: start.elapsed(),
         timed_out,
     };
@@ -179,12 +262,16 @@ async fn terminate_and_wait(
     grace_period: std::time::Duration,
     reason: &str,
 ) -> (Option<i32>, Option<String>) {
-    terminate_process_group(pid, libc::SIGTERM);
+    if !terminate_process_group(pid, libc::SIGTERM) {
+        let _ = child.start_kill();
+    }
     match timeout(grace_period, child.wait()).await {
         Ok(Ok(status)) => (status.code(), None),
         Ok(Err(error)) => {
             warn!("error waiting for process after SIGTERM: {error}");
-            terminate_process_group(pid, libc::SIGKILL);
+            if !terminate_process_group(pid, libc::SIGKILL) {
+                let _ = child.start_kill();
+            }
             (
                 None,
                 Some(format!(
@@ -194,7 +281,9 @@ async fn terminate_and_wait(
         }
         Err(_) => {
             debug!("grace period expired, sending SIGKILL");
-            terminate_process_group(pid, libc::SIGKILL);
+            if !terminate_process_group(pid, libc::SIGKILL) {
+                let _ = child.start_kill();
+            }
             let _ = child.wait().await;
             (
                 None,
@@ -207,47 +296,200 @@ async fn terminate_and_wait(
 fn spawn_reader<R>(
     reader: Option<R>,
     max_output_bytes: Option<usize>,
-) -> Option<JoinHandle<io::Result<String>>>
+    line_callback: Option<OutputLineCallback>,
+    retain_output: bool,
+) -> Option<JoinHandle<io::Result<CapturedOutput>>>
 where
     R: AsyncRead + Unpin + Send + 'static,
 {
-    reader.map(|reader| tokio::spawn(read_output(reader, max_output_bytes)))
+    reader.map(|reader| match line_callback {
+        Some(callback) => tokio::spawn(read_observed_lines(
+            reader,
+            max_output_bytes,
+            callback,
+            retain_output,
+        )),
+        None => tokio::spawn(read_output(reader, max_output_bytes, retain_output)),
+    })
 }
 
-async fn collect_reader(task: Option<JoinHandle<io::Result<String>>>) -> AppResult<String> {
+#[derive(Debug)]
+struct CapturedOutput {
+    bytes: Vec<u8>,
+    truncated: bool,
+}
+
+async fn collect_reader(
+    task: Option<JoinHandle<io::Result<CapturedOutput>>>,
+) -> AppResult<CapturedOutput> {
     match task {
         Some(task) => task
             .await
             .map_err(AppError::internal)?
             .map_err(AppError::internal),
-        None => Ok(String::new()),
+        None => Ok(CapturedOutput {
+            bytes: Vec::new(),
+            truncated: false,
+        }),
     }
 }
 
-async fn read_output<R>(mut reader: R, max_output_bytes: Option<usize>) -> io::Result<String>
+async fn read_output<R>(
+    mut reader: R,
+    max_output_bytes: Option<usize>,
+    retain_output: bool,
+) -> io::Result<CapturedOutput>
 where
     R: AsyncRead + Unpin,
 {
     let mut captured = Vec::new();
     let mut buffer = [0_u8; 4096];
     let mut remaining = max_output_bytes.unwrap_or(usize::MAX);
+    let mut truncated = false;
 
     loop {
         let read = reader.read(&mut buffer).await?;
         if read == 0 {
             break;
         }
-        if remaining > 0 {
+        if retain_output && remaining > 0 {
             let to_copy = remaining.min(read);
             captured.extend_from_slice(&buffer[..to_copy]);
             remaining -= to_copy;
+            if to_copy < read {
+                truncated = true;
+            }
+        } else if retain_output {
+            truncated = true;
         }
     }
 
-    Ok(String::from_utf8_lossy(&captured).into_owned())
+    Ok(CapturedOutput {
+        bytes: captured,
+        truncated,
+    })
 }
 
-fn terminate_process_group(pid: Option<u32>, signal: i32) {
+async fn read_observed_lines<R>(
+    reader: R,
+    max_output_bytes: Option<usize>,
+    line_callback: OutputLineCallback,
+    retain_output: bool,
+) -> io::Result<CapturedOutput>
+where
+    R: AsyncRead + Unpin,
+{
+    let mut reader = tokio::io::BufReader::new(reader);
+    let mut captured = Vec::new();
+    let mut remaining = max_output_bytes.unwrap_or(usize::MAX);
+    let mut line = Vec::new();
+    let max_line_bytes = max_output_bytes.unwrap_or(DEFAULT_MAX_OUTPUT_BYTES);
+    let mut line_truncated = false;
+    let mut skip_lf_after_cr = false;
+    let mut buffer = [0_u8; 4096];
+    let mut capture_truncated = false;
+
+    loop {
+        let read = reader.read(&mut buffer).await?;
+        if read == 0 {
+            if !line.is_empty() && !line_truncated {
+                emit_observed_line(&line, &line_callback);
+            }
+            break;
+        }
+
+        if retain_output && remaining > 0 {
+            let to_copy = remaining.min(read);
+            captured.extend_from_slice(&buffer[..to_copy]);
+            remaining -= to_copy;
+            if to_copy < read {
+                capture_truncated = true;
+            }
+        } else if retain_output {
+            capture_truncated = true;
+        }
+
+        for byte in &buffer[..read] {
+            if *byte == b'\n' && skip_lf_after_cr {
+                skip_lf_after_cr = false;
+                continue;
+            }
+            skip_lf_after_cr = false;
+
+            if *byte == b'\n' || *byte == b'\r' {
+                if !line_truncated {
+                    line.push(*byte);
+                    emit_observed_line(&line, &line_callback);
+                }
+                line.clear();
+                line_truncated = false;
+                skip_lf_after_cr = *byte == b'\r';
+                continue;
+            }
+
+            if line_truncated {
+                continue;
+            }
+
+            if line.len() < max_line_bytes {
+                line.push(*byte);
+            } else {
+                emit_observed_line(&line, &line_callback);
+                line.clear();
+                line_truncated = true;
+            }
+        }
+    }
+
+    Ok(CapturedOutput {
+        bytes: captured,
+        truncated: capture_truncated,
+    })
+}
+
+fn emit_observed_line(line: &[u8], line_callback: &OutputLineCallback) {
+    let observed = String::from_utf8_lossy(line);
+    let observed = observed.trim_end_matches(['\r', '\n']);
+    line_callback(observed);
+}
+
+fn append_bounded_stderr(
+    stderr: &mut Vec<u8>,
+    extra: &[u8],
+    max_output_bytes: Option<usize>,
+) -> bool {
+    let Some(limit) = max_output_bytes else {
+        if !stderr.is_empty() {
+            stderr.push(b'\n');
+        }
+        stderr.extend_from_slice(extra);
+        return false;
+    };
+
+    if stderr.len() >= limit {
+        return true;
+    }
+
+    let mut truncated = false;
+    if !stderr.is_empty() {
+        stderr.push(b'\n');
+        if stderr.len() > limit {
+            stderr.truncate(limit);
+            return true;
+        }
+    }
+
+    let remaining = limit.saturating_sub(stderr.len());
+    if extra.len() > remaining {
+        stderr.extend_from_slice(&extra[..remaining]);
+        truncated = true;
+    } else {
+        stderr.extend_from_slice(extra);
+    }
+    truncated
+}
+
+fn terminate_process_group(pid: Option<u32>, signal: i32) -> bool {
     if let Some(pid) = pid {
         #[cfg(unix)]
         // SAFETY: `kill` is invoked with the negated process-group id created by
@@ -259,8 +501,11 @@ fn terminate_process_group(pid: Option<u32>, signal: i32) {
                 let error = io::Error::last_os_error();
                 if error.raw_os_error() != Some(libc::ESRCH) {
                     warn!(signal, "failed to send signal: {error}");
+                    return false;
                 }
             }
+            return true;
         }
     }
+    false
 }

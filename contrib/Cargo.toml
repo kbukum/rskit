@@ -30,6 +30,7 @@ rskit-llm = { path = "../core/rskit-llm", version = "0.1.0" }
 rskit-ai = { path = "../core/rskit-ai", version = "0.1.0" }
 rskit-inference = { path = "../core/rskit-inference", version = "0.1.0" }
 rskit-media = { path = "../core/rskit-media", version = "0.1.0" }
+rskit-process = { path = "../core/rskit-process", version = "0.1.0" }
 rskit-vectorstore = { path = "../core/rskit-vectorstore", version = "0.1.0" }
 rskit-config = { path = "../core/rskit-config", version = "0.1.0" }
 rskit-logging = { path = "../core/rskit-logging", version = "0.1.0" }

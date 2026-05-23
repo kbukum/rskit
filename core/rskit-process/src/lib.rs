@@ -41,9 +41,9 @@ mod command;
 mod result;
 mod runner;
 
-pub use command::{Command, DEFAULT_MAX_OUTPUT_BYTES, ProcessConfig};
+pub use command::{Command, DEFAULT_MAX_OUTPUT_BYTES, ProcessConfig, command};
 pub use result::ProcessResult;
-pub use runner::run_with_cancel;
+pub use runner::{OutputObserver, run_with_cancel, run_with_observer};
 
 /// Re-export error types
 pub use rskit_errors::{AppError, AppResult, ErrorCode};

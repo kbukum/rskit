@@ -4,18 +4,26 @@ use rskit_errors::{AppError, AppResult, ErrorCode};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
+/// Result returned by a publish target.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PublishResult {
+    /// Target identifier.
     pub target_name: String,
+    /// Published location.
     pub location: String,
+    /// Number of files published or observed by the target.
     pub files_published: usize,
+    /// Human-readable publish summary.
     pub message: String,
 }
 
+/// Destination for collected dataset output.
 #[async_trait::async_trait]
 pub trait Target: Send + Sync {
+    /// Stable target name.
     fn name(&self) -> &str;
 
+    /// Publish the dataset directory and optional metadata.
     async fn publish(
         &self,
         directory: &Path,
@@ -37,14 +45,23 @@ impl Target for LocalTarget {
         directory: &Path,
         _metadata: Option<&std::collections::HashMap<String, String>>,
     ) -> AppResult<PublishResult> {
-        let mut file_count = 0usize;
-        if directory.exists() {
-            for entry in walkdir(directory)? {
-                if entry.is_file() {
-                    file_count += 1;
+        let directory = directory.to_path_buf();
+        let file_count = tokio::task::spawn_blocking({
+            let directory = directory.clone();
+            move || {
+                let mut file_count = 0usize;
+                if directory.exists() {
+                    for entry in walkdir(&directory)? {
+                        if entry.is_file() {
+                            file_count += 1;
+                        }
+                    }
                 }
+                Ok::<usize, AppError>(file_count)
             }
-        }
+        })
+        .await
+        .map_err(AppError::internal)??;
         Ok(PublishResult {
             target_name: self.name().to_string(),
             location: directory.display().to_string(),

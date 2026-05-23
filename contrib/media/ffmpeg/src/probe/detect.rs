@@ -1,5 +1,6 @@
 //! Detection and structural analysis — scenes, keyframes, silence, chapters.
 
+use std::ffi::OsString;
 use std::time::Duration;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
@@ -10,6 +11,7 @@ use rskit_media::{
 use rskit_storage::FileSource;
 
 use super::FfmpegProbe;
+use crate::process::{ensure_success, run_capture, with_context};
 
 impl FfmpegProbe {
     /// Detect scene changes via FFmpeg's `select` filter with `scene` metric.
@@ -21,27 +23,24 @@ impl FfmpegProbe {
         let resolved = source.to_local_path().await?;
         let threshold = threshold.clamp(0.0, 1.0);
 
-        let output = tokio::process::Command::new(self.config.ffmpeg_bin())
-            .args([
-                "-i",
-                &resolved.path().to_string_lossy(),
-                "-vf",
-                &format!("select='gt(scene\\,{threshold})',showinfo"),
-                "-f",
-                "null",
-                "-",
-            ])
-            .output()
-            .await
-            .map_err(|e| {
-                AppError::new(
-                    ErrorCode::Internal,
-                    format!("ffmpeg scene_detect failed: {e}"),
-                )
-            })?;
+        let output = run_capture(
+            self.config.ffmpeg_bin(),
+            vec![
+                OsString::from("-i"),
+                resolved.path().as_os_str().to_os_string(),
+                OsString::from("-vf"),
+                OsString::from(format!("select='gt(scene\\,{threshold})',showinfo")),
+                OsString::from("-f"),
+                OsString::from("null"),
+                OsString::from("-"),
+            ],
+            self.config.timeout,
+        )
+        .await
+        .map_err(|e| with_context(e, "ffmpeg scene_detect failed"))?;
 
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        Ok(parse_showinfo_timestamps(&stderr))
+        ensure_success(&output, "ffmpeg scene_detect")?;
+        Ok(parse_showinfo_timestamps(&output.stderr))
     }
 
     /// Extract keyframe positions via `ffprobe -show_frames`.
@@ -54,42 +53,34 @@ impl FfmpegProbe {
     ) -> AppResult<Vec<KeyframeInfo>> {
         let resolved = source.to_local_path().await?;
 
-        let output = tokio::process::Command::new(self.config.ffprobe_bin())
-            .args([
-                "-v",
-                "quiet",
-                "-select_streams",
-                "v:0",
-                "-show_frames",
-                "-show_entries",
-                "frame=pts_time,pkt_size,pict_type,key_frame,coded_picture_number",
-                "-print_format",
-                "json",
-            ])
-            .arg(resolved.path())
-            .output()
-            .await
-            .map_err(|e| {
+        let output = run_capture(
+            self.config.ffprobe_bin(),
+            vec![
+                OsString::from("-v"),
+                OsString::from("quiet"),
+                OsString::from("-select_streams"),
+                OsString::from("v:0"),
+                OsString::from("-show_frames"),
+                OsString::from("-show_entries"),
+                OsString::from("frame=pts_time,pkt_size,pict_type,key_frame,coded_picture_number"),
+                OsString::from("-print_format"),
+                OsString::from("json"),
+                resolved.path().as_os_str().to_os_string(),
+            ],
+            self.config.timeout,
+        )
+        .await
+        .map_err(|e| with_context(e, "ffprobe keyframes failed"))?;
+
+        ensure_success(&output, "ffprobe keyframes")?;
+
+        let json: serde_json::Value =
+            serde_json::from_slice(&output.stdout_bytes).map_err(|e| {
                 AppError::new(
                     ErrorCode::Internal,
-                    format!("ffprobe keyframes failed: {e}"),
+                    format!("ffprobe keyframes output is not valid JSON: {e}"),
                 )
             })?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(AppError::new(
-                ErrorCode::Internal,
-                format!("ffprobe keyframes failed: {stderr}"),
-            ));
-        }
-
-        let json: serde_json::Value = serde_json::from_slice(&output.stdout).map_err(|e| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!("ffprobe keyframes output is not valid JSON: {e}"),
-            )
-        })?;
 
         Ok(parse_keyframes(&json))
     }
@@ -105,27 +96,24 @@ impl FfmpegProbe {
         let threshold_db = noise_threshold_db.clamp(-96.0, 0.0);
         let min_secs = min_duration.as_secs_f64().max(0.01);
 
-        let output = tokio::process::Command::new(self.config.ffmpeg_bin())
-            .args([
-                "-i",
-                &resolved.path().to_string_lossy(),
-                "-af",
-                &format!("silencedetect=noise={threshold_db}dB:d={min_secs}"),
-                "-f",
-                "null",
-                "-",
-            ])
-            .output()
-            .await
-            .map_err(|e| {
-                AppError::new(
-                    ErrorCode::Internal,
-                    format!("ffmpeg silence_detect failed: {e}"),
-                )
-            })?;
+        let output = run_capture(
+            self.config.ffmpeg_bin(),
+            vec![
+                OsString::from("-i"),
+                resolved.path().as_os_str().to_os_string(),
+                OsString::from("-af"),
+                OsString::from(format!("silencedetect=noise={threshold_db}dB:d={min_secs}")),
+                OsString::from("-f"),
+                OsString::from("null"),
+                OsString::from("-"),
+            ],
+            self.config.timeout,
+        )
+        .await
+        .map_err(|e| with_context(e, "ffmpeg silence_detect failed"))?;
 
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        Ok(parse_silence_intervals(&stderr))
+        ensure_success(&output, "ffmpeg silence_detect")?;
+        Ok(parse_silence_intervals(&output.stderr))
     }
 
     /// Extract chapter markers from the media container via ffprobe.

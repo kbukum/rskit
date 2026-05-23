@@ -13,6 +13,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::command::FfmpegCommand;
 use crate::config::FfmpegConfig;
+use crate::process::{ensure_success, run_capture_lossy};
 
 /// FFmpeg-based media executor with concurrency control and hw accel fallback.
 pub struct FfmpegExecutor {
@@ -35,9 +36,7 @@ impl FfmpegExecutor {
 
     /// Check that ffmpeg is available and return its version.
     pub async fn check_available(&self) -> AppResult<String> {
-        let output = tokio::process::Command::new(self.config.ffmpeg_bin())
-            .arg("-version")
-            .output()
+        let output = run_capture_lossy(self.config.ffmpeg_bin(), ["-version"], self.config.timeout)
             .await
             .map_err(|e| {
                 AppError::new(
@@ -46,8 +45,18 @@ impl FfmpegExecutor {
                 )
             })?;
 
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let version = stdout.lines().next().unwrap_or("unknown").to_string();
+        ensure_success(&output, "ffmpeg").map_err(|e| {
+            AppError::new(
+                ErrorCode::ServiceUnavailable,
+                format!("ffmpeg not available: {e}"),
+            )
+        })?;
+        let version = output
+            .stdout
+            .lines()
+            .next()
+            .unwrap_or("unknown")
+            .to_string();
         Ok(version)
     }
 
@@ -127,19 +136,10 @@ impl MediaExecutor for FfmpegExecutor {
         on_progress: Option<Box<dyn Fn(Progress) + Send + Sync>>,
         cancel: CancellationToken,
     ) -> AppResult<FileSource> {
-        let run_fut = self.run_with_retry(source, ops, sink, on_progress);
-
-        tokio::select! {
-            biased;
-            _ = cancel.cancelled() => {
-                tracing::info!("media pipeline cancelled by token");
-                Err(AppError::new(ErrorCode::Cancelled, "media pipeline cancelled"))
-            }
-            result = run_fut => {
-                let output_file = result?;
-                resolve_output(output_file, sink).await
-            }
-        }
+        let output_file = self
+            .run_with_retry_cancelable(source, ops, sink, on_progress, cancel)
+            .await?;
+        resolve_output(output_file, sink).await
     }
 }
 

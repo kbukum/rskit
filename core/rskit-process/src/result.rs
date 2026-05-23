@@ -9,8 +9,16 @@ pub struct ProcessResult {
     pub exit_code: Option<i32>,
     /// Captured standard output as a string.
     pub stdout: String,
+    /// Captured standard output as raw bytes before lossy UTF-8 conversion.
+    pub stdout_bytes: Vec<u8>,
     /// Captured standard error as a string.
     pub stderr: String,
+    /// Captured standard error as raw bytes before lossy UTF-8 conversion.
+    pub stderr_bytes: Vec<u8>,
+    /// Whether stdout exceeded the configured capture limit.
+    pub stdout_truncated: bool,
+    /// Whether stderr exceeded the configured capture limit.
+    pub stderr_truncated: bool,
     /// Total duration the process ran.
     pub duration: Duration,
     /// Whether the process was killed due to timeout.
@@ -29,7 +37,11 @@ impl ProcessResult {
     /// let result = ProcessResult {
     ///     exit_code: Some(0),
     ///     stdout: "output".to_string(),
+    ///     stdout_bytes: b"output".to_vec(),
     ///     stderr: "".to_string(),
+    ///     stderr_bytes: Vec::new(),
+    ///     stdout_truncated: false,
+    ///     stderr_truncated: false,
     ///     duration: Duration::from_secs(1),
     ///     timed_out: false,
     /// };

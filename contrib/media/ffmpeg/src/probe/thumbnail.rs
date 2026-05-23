@@ -1,5 +1,6 @@
 //! Thumbnail and visual extraction methods for [`FfmpegProbe`].
 
+use std::ffi::OsString;
 use std::time::Duration;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
@@ -8,6 +9,7 @@ use rskit_media::time::Timestamp;
 use rskit_storage::FileSource;
 
 use super::FfmpegProbe;
+use crate::process::{ensure_success, run_capture, with_context};
 
 impl FfmpegProbe {
     /// Extract a single thumbnail frame at a given timestamp.
@@ -21,38 +23,28 @@ impl FfmpegProbe {
         let tmp = rskit_storage::TempFile::with_extension("jpg")?;
 
         let mut args = vec![
-            "-ss".to_string(),
-            at.to_ffmpeg_time(),
-            "-i".to_string(),
-            resolved.path().to_string_lossy().to_string(),
-            "-vframes".to_string(),
-            "1".to_string(),
+            OsString::from("-ss"),
+            OsString::from(at.to_ffmpeg_time()),
+            OsString::from("-i"),
+            resolved.path().as_os_str().to_os_string(),
+            OsString::from("-vframes"),
+            OsString::from("1"),
         ];
 
         if let Some(res) = resolution {
             args.extend([
-                "-vf".to_string(),
-                format!("scale={}:{}", res.width, res.height),
+                OsString::from("-vf"),
+                OsString::from(format!("scale={}:{}", res.width, res.height)),
             ]);
         }
 
-        args.extend(["-y".to_string(), tmp.path().to_string_lossy().to_string()]);
+        args.extend([OsString::from("-y"), tmp.path().as_os_str().to_os_string()]);
 
-        let output = tokio::process::Command::new(self.config.ffmpeg_bin())
-            .args(&args)
-            .output()
+        let output = run_capture(self.config.ffmpeg_bin(), args, self.config.timeout)
             .await
-            .map_err(|e| {
-                AppError::new(ErrorCode::Internal, format!("ffmpeg thumbnail failed: {e}"))
-            })?;
+            .map_err(|e| with_context(e, "ffmpeg thumbnail failed"))?;
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(AppError::new(
-                ErrorCode::Internal,
-                format!("ffmpeg thumbnail failed: {stderr}"),
-            ));
-        }
+        ensure_success(&output, "ffmpeg thumbnail")?;
 
         Ok(tmp.into_source())
     }
@@ -73,31 +65,22 @@ impl FfmpegProbe {
             vf.push_str(&format!(",scale={}:{}", res.width, res.height));
         }
 
-        let output = tokio::process::Command::new(self.config.ffmpeg_bin())
-            .args([
-                "-i",
-                &resolved.path().to_string_lossy(),
-                "-vf",
-                &vf,
-                "-y",
-                &pattern.to_string_lossy(),
-            ])
-            .output()
-            .await
-            .map_err(|e| {
-                AppError::new(
-                    ErrorCode::Internal,
-                    format!("ffmpeg thumbnails failed: {e}"),
-                )
-            })?;
+        let output = run_capture(
+            self.config.ffmpeg_bin(),
+            vec![
+                OsString::from("-i"),
+                resolved.path().as_os_str().to_os_string(),
+                OsString::from("-vf"),
+                OsString::from(vf),
+                OsString::from("-y"),
+                pattern.as_os_str().to_os_string(),
+            ],
+            self.config.timeout,
+        )
+        .await
+        .map_err(|e| with_context(e, "ffmpeg thumbnails failed"))?;
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(AppError::new(
-                ErrorCode::Internal,
-                format!("ffmpeg thumbnails failed: {stderr}"),
-            ));
-        }
+        ensure_success(&output, "ffmpeg thumbnails")?;
 
         collect_images(tmp_dir.path()).await
     }
@@ -121,33 +104,24 @@ impl FfmpegProbe {
             columns,
         );
 
-        let output = tokio::process::Command::new(self.config.ffmpeg_bin())
-            .args([
-                "-i",
-                &resolved.path().to_string_lossy(),
-                "-vf",
-                &vf,
-                "-frames:v",
-                "1",
-                "-y",
-                &tmp.path().to_string_lossy(),
-            ])
-            .output()
-            .await
-            .map_err(|e| {
-                AppError::new(
-                    ErrorCode::Internal,
-                    format!("ffmpeg sprite_sheet failed: {e}"),
-                )
-            })?;
+        let output = run_capture(
+            self.config.ffmpeg_bin(),
+            vec![
+                OsString::from("-i"),
+                resolved.path().as_os_str().to_os_string(),
+                OsString::from("-vf"),
+                OsString::from(vf),
+                OsString::from("-frames:v"),
+                OsString::from("1"),
+                OsString::from("-y"),
+                tmp.path().as_os_str().to_os_string(),
+            ],
+            self.config.timeout,
+        )
+        .await
+        .map_err(|e| with_context(e, "ffmpeg sprite_sheet failed"))?;
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(AppError::new(
-                ErrorCode::Internal,
-                format!("ffmpeg sprite_sheet failed: {stderr}"),
-            ));
-        }
+        ensure_success(&output, "ffmpeg sprite_sheet")?;
 
         Ok(tmp.into_source())
     }
@@ -161,33 +135,27 @@ impl FfmpegProbe {
         let resolved = source.to_local_path().await?;
         let tmp = rskit_storage::TempFile::with_extension("png")?;
 
-        let output = tokio::process::Command::new(self.config.ffmpeg_bin())
-            .args([
-                "-i",
-                &resolved.path().to_string_lossy(),
-                "-filter_complex",
-                &format!(
+        let output = run_capture(
+            self.config.ffmpeg_bin(),
+            vec![
+                OsString::from("-i"),
+                resolved.path().as_os_str().to_os_string(),
+                OsString::from("-filter_complex"),
+                OsString::from(format!(
                     "showwavespic=s={}x{}:colors=#4080ff",
                     resolution.width, resolution.height,
-                ),
-                "-frames:v",
-                "1",
-                "-y",
-                &tmp.path().to_string_lossy(),
-            ])
-            .output()
-            .await
-            .map_err(|e| {
-                AppError::new(ErrorCode::Internal, format!("ffmpeg waveform failed: {e}"))
-            })?;
+                )),
+                OsString::from("-frames:v"),
+                OsString::from("1"),
+                OsString::from("-y"),
+                tmp.path().as_os_str().to_os_string(),
+            ],
+            self.config.timeout,
+        )
+        .await
+        .map_err(|e| with_context(e, "ffmpeg waveform failed"))?;
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(AppError::new(
-                ErrorCode::Internal,
-                format!("ffmpeg waveform failed: {stderr}"),
-            ));
-        }
+        ensure_success(&output, "ffmpeg waveform")?;
 
         Ok(tmp.into_source())
     }

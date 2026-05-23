@@ -5116,8 +5116,10 @@ dependencies = [
  "bytes",
  "insta",
  "libc",
+ "parking_lot",
  "rskit-errors",
  "rskit-media",
+ "rskit-process",
  "rskit-storage",
  "serde",
  "serde_json",
@@ -5231,6 +5233,18 @@ dependencies = [
  "tracing",
  "tracing-opentelemetry",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "rskit-process"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "rskit-errors",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
+ "tracing",
 ]
 
 [[package]]

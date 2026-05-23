@@ -1,5 +1,6 @@
 //! Hardware acceleration detection and configuration.
 
+use crate::process::run_capture_lossy;
 use serde::Deserialize;
 
 /// Hardware acceleration mode for FFmpeg.
@@ -45,19 +46,15 @@ impl HwAccel {
 
     /// Detect available hardware acceleration methods by querying FFmpeg.
     pub async fn detect_available() -> Vec<HwAccel> {
-        let output = tokio::process::Command::new("ffmpeg")
-            .args(["-hide_banner", "-hwaccels"])
-            .output()
-            .await;
+        let output = run_capture_lossy("ffmpeg".into(), ["-hide_banner", "-hwaccels"], None).await;
 
         let Ok(output) = output else {
             return Vec::new();
         };
 
-        let stdout = String::from_utf8_lossy(&output.stdout);
         let mut available = Vec::new();
 
-        for line in stdout.lines() {
+        for line in output.stdout.lines() {
             let line = line.trim();
             match line {
                 "videotoolbox" => available.push(HwAccel::VideoToolbox),

@@ -1,8 +1,79 @@
 use rskit_media::{
-    Registry,
+    MediaPipeline, Registry,
     codec::{self, Codec, CodecKind},
+    filter::filters,
     format::{self, Format},
+    ops::{
+        FilterConfig, FilterPreset, FlipDirection, ImageFormat, InterpolateConfig,
+        InterpolateModel, MediaOp, OverlayConfig, OverlayPosition, OverlayType, Position,
+        ResizeMode, SceneDetectConfig, Size, SubtitleConfig, SubtitleFormat, SubtitleSource,
+        TextOverlay, ThumbnailConfig, UpscaleConfig, UpscaleModel,
+    },
+    presets,
+    spatial::Resolution,
+    subtitle::SubtitleTrack,
+    time::{Segment, TimeRange},
 };
+use rskit_storage::{FileSink, FileSource};
+use std::time::Duration;
+
+struct DeterministicExecutor;
+
+#[async_trait::async_trait]
+impl rskit_media::executor::MediaExecutor for DeterministicExecutor {
+    async fn execute(
+        &self,
+        source: &FileSource,
+        ops: &[MediaOp],
+        sink: Option<&FileSink>,
+    ) -> rskit_errors::AppResult<FileSource> {
+        let bytes = source.read_all().await?;
+        let output = format!(
+            "fixture_hash={:016x}\nsink={sink:?}\nops={ops:#?}\noutput_hash={:016x}\n",
+            stable_hash(&bytes),
+            stable_hash(format!("{ops:#?}|{sink:?}|{:?}", bytes.as_ref()).as_bytes()),
+        );
+        Ok(FileSource::from_bytes(output.into_bytes()))
+    }
+
+    async fn execute_with_progress(
+        &self,
+        source: &FileSource,
+        ops: &[MediaOp],
+        sink: Option<&FileSink>,
+        _on_progress: Box<dyn Fn(rskit_media::pipeline::Progress) + Send + Sync>,
+    ) -> rskit_errors::AppResult<FileSource> {
+        self.execute(source, ops, sink).await
+    }
+
+    fn supports(&self, _op: &MediaOp) -> bool {
+        true
+    }
+
+    fn preview(
+        &self,
+        _source: &FileSource,
+        ops: &[MediaOp],
+    ) -> rskit_errors::AppResult<Vec<String>> {
+        Ok(ops.iter().map(|op| format!("{op:?}")).collect())
+    }
+}
+
+fn stable_hash(bytes: &[u8]) -> u64 {
+    bytes.iter().fold(0xcbf29ce484222325, |hash, byte| {
+        (hash ^ u64::from(*byte)).wrapping_mul(0x100000001b3)
+    })
+}
+
+async fn snapshot_executed_pipeline(name: &str, pipeline: MediaPipeline) {
+    let output = pipeline
+        .execute(&DeterministicExecutor)
+        .await
+        .expect("deterministic executor should run");
+    let bytes = output.read_all().await.expect("output should be readable");
+    let text = String::from_utf8(bytes.to_vec()).expect("output is utf8");
+    insta::assert_snapshot!(name, text);
+}
 
 // ── Registry Codec Lookups ──────────────────────────────────────────
 
@@ -209,4 +280,98 @@ fn codecs_for_format_mkv() {
     let reg = Registry::default();
     let codecs = collect_codecs_for_format(&reg, &Format::new(format::MKV));
     insta::assert_debug_snapshot!("codecs_for_format_mkv", codecs);
+}
+
+#[tokio::test]
+async fn media_pipeline_temporal_spatial_audio_golden() {
+    let source = FileSource::from_bytes(b"rskit golden video fixture v1".to_vec());
+    let pipeline = MediaPipeline::from(&source)
+        .extract(TimeRange::from_seconds(1.0, 3.0))
+        .extract_many(vec![
+            Segment::new(TimeRange::from_seconds(4.0, 6.0)).with_label("clip"),
+        ])
+        .resize(Resolution::new(1920, 1080), ResizeMode::Fit)
+        .crop(rskit_media::ops::CropRegion::new(10, 20, 640, 360))
+        .rotate(rskit_media::ops::Rotation::Degrees90)
+        .flip(FlipDirection::Horizontal)
+        .pad(1920, 1080, "black")
+        .speed(1.25)
+        .reverse()
+        .volume(0.8)
+        .normalize_audio()
+        .fade_in(Duration::from_secs(2))
+        .fade_out(Duration::from_secs(3))
+        .strip_audio()
+        .strip_video()
+        .filter(filters::denoise(3))
+        .transcode(presets::mp4_h264());
+
+    snapshot_executed_pipeline("media_pipeline_temporal_spatial_audio", pipeline).await;
+}
+
+#[tokio::test]
+async fn media_pipeline_composition_advanced_golden() {
+    let source = FileSource::from_bytes(b"rskit golden video fixture v1".to_vec());
+    let overlay_source = FileSource::from_bytes(b"rskit golden overlay fixture v1".to_vec());
+    let audio_source = FileSource::from_bytes(b"rskit golden audio fixture v1".to_vec());
+    let subtitle_track = SubtitleTrack::new().add(TimeRange::from_seconds(0.0, 1.5), "hello");
+
+    let pipeline = MediaPipeline::from(&source)
+        .overlay(&overlay_source, OverlayPosition::TopLeft(10, 20), 0.75)
+        .concat_with_transition(
+            &FileSource::from_path("/fixtures/second.mp4"),
+            rskit_media::ops::Transition::Cut,
+        )
+        .replace_audio(&audio_source)
+        .mix_audio(&audio_source, 0.5)
+        .burn_subtitles(subtitle_track)
+        .apply_filter(FilterConfig {
+            preset: FilterPreset::Warm,
+            intensity: 0.4,
+            custom_params: None,
+        })
+        .add_overlay(OverlayConfig {
+            overlay_type: OverlayType::Text(TextOverlay {
+                text: "sample".to_string(),
+                font_family: Some("Inter".to_string()),
+                font_size: Some(24),
+                color: Some("#ffffff".to_string()),
+            }),
+            position: Position { x: 0.5, y: 0.1 },
+            size: Some(Size {
+                width: 0.3,
+                height: 0.1,
+            }),
+            opacity: 0.9,
+            time_range: Some(TimeRange::from_seconds(0.0, 2.0)),
+        })
+        .generate_thumbnail(ThumbnailConfig {
+            timestamp: 1.0,
+            width: Some(320),
+            height: None,
+            format: ImageFormat::Jpeg,
+            quality: Some(85),
+        })
+        .detect_scenes(SceneDetectConfig::default())
+        .add_subtitles(SubtitleConfig {
+            source: SubtitleSource::Inline("1\n00:00:00,000 --> 00:00:01,000\nhello".to_string()),
+            format: SubtitleFormat::Srt,
+            style: None,
+        })
+        .upscale(UpscaleConfig {
+            model: UpscaleModel::RealEsrganX4Plus,
+            scale: 4,
+            denoise_strength: Some(0.2),
+        })
+        .interpolate(InterpolateConfig {
+            model: InterpolateModel::Rife,
+            multiplier: 2,
+        })
+        .select_tracks(vec![0, 1])
+        .select_tracks_by_kind(vec![
+            rskit_media::TrackKind::Video,
+            rskit_media::TrackKind::Audio,
+        ]);
+
+    snapshot_executed_pipeline("media_pipeline_composition_advanced", pipeline).await;
 }

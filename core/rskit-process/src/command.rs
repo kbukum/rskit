@@ -1,6 +1,7 @@
 //! Command configuration for subprocess execution.
 
 use std::collections::HashMap;
+use std::ffi::OsString;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -56,9 +57,9 @@ impl ProcessConfig {
 #[derive(Debug, Clone)]
 pub struct Command {
     /// Program name or path to execute.
-    pub program: String,
+    pub program: PathBuf,
     /// Command-line arguments.
-    pub args: Vec<String>,
+    pub args: Vec<OsString>,
     /// Working directory for the process.
     pub dir: Option<PathBuf>,
     /// Environment variables to set (may be merged with parent env).
@@ -72,7 +73,7 @@ pub struct Command {
 impl Command {
     /// Create a new command with just a program name.
     #[must_use]
-    pub fn new<S: Into<String>>(program: S) -> Self {
+    pub fn new<P: Into<PathBuf>>(program: P) -> Self {
         Self {
             program: program.into(),
             args: Vec::new(),
@@ -85,7 +86,7 @@ impl Command {
 
     /// Add a command-line argument.
     #[must_use]
-    pub fn arg<S: Into<String>>(mut self, arg: S) -> Self {
+    pub fn arg<S: Into<OsString>>(mut self, arg: S) -> Self {
         self.args.push(arg.into());
         self
     }
@@ -95,7 +96,7 @@ impl Command {
     pub fn args<I>(mut self, args: I) -> Self
     where
         I: IntoIterator,
-        I::Item: Into<String>,
+        I::Item: Into<OsString>,
     {
         self.args.extend(args.into_iter().map(Into::into));
         self
@@ -140,4 +141,10 @@ impl Command {
         self.scrub_env = true;
         self
     }
+}
+
+/// Create a subprocess command.
+#[must_use]
+pub fn command<P: Into<PathBuf>>(program: P) -> Command {
+    Command::new(program)
 }

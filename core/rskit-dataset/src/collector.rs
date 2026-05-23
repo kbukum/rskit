@@ -8,15 +8,16 @@
 //!
 //! Supports incremental builds via `.manifest.json` caching.
 
-use rskit_cli::CancellationToken;
 use rskit_errors::{AppError, AppResult, ErrorCode};
+use tokio_util::sync::CancellationToken;
 
 use crate::manifest::{CacheStatus, Manifest, SourceStats};
 use crate::source::Source;
 use crate::target::{PublishResult, Target};
 use crate::transform::Transform;
-use crate::{DataItem, Label};
+use crate::{DatasetLimits, Label};
 
+use futures_util::StreamExt as _;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -32,10 +33,16 @@ type WorkReceiver =
 /// Configuration for the collector.
 #[derive(Debug, Clone)]
 pub struct CollectorConfig {
+    /// Directory where dataset output and manifest files are written.
     pub output_dir: PathBuf,
+    /// Maximum number of sources processed concurrently.
     pub concurrency: usize,
+    /// Per-source timeout in seconds. Non-positive means no timeout.
     pub source_timeout_secs: f64,
+    /// Ignore manifest cache and rebuild from sources.
     pub force: bool,
+    /// Dataset streaming and materialization limits.
+    pub limits: DatasetLimits,
 }
 
 impl Default for CollectorConfig {
@@ -45,6 +52,7 @@ impl Default for CollectorConfig {
             concurrency: 4,
             source_timeout_secs: 600.0,
             force: false,
+            limits: DatasetLimits::default(),
         }
     }
 }
@@ -54,23 +62,34 @@ impl Default for CollectorConfig {
 /// Result of a collection run.
 #[derive(Debug, Clone, Default)]
 pub struct CollectorResult {
+    /// Total items emitted or reused from cache.
     pub total_items: usize,
+    /// Count of real-labeled items.
     pub real_count: usize,
+    /// Count of AI-generated-labeled items.
     pub ai_count: usize,
+    /// Per-source collection statistics.
     pub source_stats: std::collections::HashMap<String, SourceStats>,
+    /// Source names skipped because a completed cache entry was available.
     pub cached_sources: Vec<String>,
+    /// Results returned by publish targets.
     pub publish_results: Vec<PublishResult>,
+    /// Wall-clock duration in seconds.
     pub duration_seconds: f64,
+    /// Output directory used by the collector.
     pub output_dir: PathBuf,
 }
 
 // ── Worker Events ────────────────────────────────────────────────────────
 
-/// How a source fetch concluded.
+/// How a source stream concluded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SourceOutcome {
+enum SourceOutcome {
+    /// Source reached the end of its stream.
     Done,
+    /// Source exceeded the configured timeout.
     TimedOut,
+    /// Source stopped because cancellation was requested.
     Cancelled,
 }
 
@@ -110,8 +129,9 @@ struct WorkerContext {
     real_dir: PathBuf,
     ai_dir: PathBuf,
     timeout_secs: f64,
+    limits: DatasetLimits,
     cancel: CancellationToken,
-    event_tx: mpsc::UnboundedSender<WorkerEvent>,
+    event_tx: mpsc::Sender<WorkerEvent>,
 }
 
 // ── Progress Callback ────────────────────────────────────────────────────
@@ -124,13 +144,21 @@ struct WorkerContext {
 /// All methods have default no-op implementations, so you only override
 /// what you need.
 pub trait ProgressCallback: Send {
+    /// Called when a source starts streaming.
     fn on_source_start(&self, _index: usize, _name: &str, _max_items: Option<usize>) {}
+    /// Called after a source emits or resumes item progress.
     fn on_source_progress(&self, _index: usize, _count: usize) {}
+    /// Called when a source finishes successfully or partially.
     fn on_source_done(&self, _index: usize, _name: &str, _stats: &SourceStats) {}
+    /// Called when a source is skipped from manifest cache.
     fn on_source_cached(&self, _index: usize, _name: &str, _stats: &SourceStats) {}
+    /// Called when source processing fails.
     fn on_source_error(&self, _index: usize, _name: &str, _error: &str) {}
+    /// Called before publishing to a target.
     fn on_publish_start(&self, _target: &str) {}
+    /// Called after a target publishes successfully.
     fn on_publish_done(&self, _target: &str, _result: &PublishResult) {}
+    /// Called when target publishing fails.
     fn on_publish_error(&self, _target: &str, _error: &str) {}
 }
 
@@ -150,6 +178,7 @@ pub struct Collector {
 }
 
 impl Collector {
+    /// Create a collector from explicit source, transform, target, config, and progress contracts.
     pub fn new(
         sources: Vec<Box<dyn Source>>,
         transforms: Vec<Box<dyn Transform>>,
@@ -178,15 +207,7 @@ impl Collector {
         // Prepare output directories
         let real_dir = out.join("real");
         let ai_dir = out.join("ai");
-        std::fs::create_dir_all(&real_dir).map_err(|e| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!("failed to create real dir: {e}"),
-            )
-        })?;
-        std::fs::create_dir_all(&ai_dir).map_err(|e| {
-            AppError::new(ErrorCode::Internal, format!("failed to create ai dir: {e}"))
-        })?;
+        prepare_output_dirs(real_dir.clone(), ai_dir.clone()).await?;
 
         let mut result = CollectorResult {
             output_dir: out.clone(),
@@ -199,7 +220,7 @@ impl Collector {
         let mut manifest = if cfg.force {
             Manifest::default()
         } else {
-            Manifest::load(out)
+            load_manifest(out.to_path_buf()).await?
         };
 
         // Separate cached vs to-fetch (partial sources are resumed, not skipped)
@@ -246,14 +267,19 @@ impl Collector {
 
         if !sources_to_fetch.is_empty() {
             // File counter past existing files
-            let existing = count_files(&real_dir) + count_files(&ai_dir);
+            let existing = count_existing_files(real_dir.clone(), ai_dir.clone()).await?;
             let file_counter = Arc::new(AtomicUsize::new(existing));
 
             // Channels: work distribution + event reporting
             let (work_tx, work_rx) =
                 mpsc::channel::<(usize, Box<dyn Source>, Option<SourceStats>)>(total_sources);
             let work_rx = Arc::new(tokio::sync::Mutex::new(work_rx));
-            let (event_tx, mut event_rx) = mpsc::unbounded_channel::<WorkerEvent>();
+            let event_capacity = cfg
+                .limits
+                .stream_buffer
+                .max(total_sources.saturating_mul(4))
+                .max(1);
+            let (event_tx, mut event_rx) = mpsc::channel::<WorkerEvent>(event_capacity);
 
             // Spawn worker pool
             let num_workers = cfg.concurrency.min(sources_to_fetch.len());
@@ -266,6 +292,7 @@ impl Collector {
                     real_dir: real_dir.clone(),
                     ai_dir: ai_dir.clone(),
                     timeout_secs: cfg.source_timeout_secs,
+                    limits: cfg.limits,
                     cancel: cancel.clone(),
                     event_tx: event_tx.clone(),
                 };
@@ -289,6 +316,7 @@ impl Collector {
 
             // ── Main event loop ──────────────────────────────────────
             let mut completed_count = 0usize;
+            let mut cancellation_seen = false;
             loop {
                 tokio::select! {
                     event = event_rx.recv() => {
@@ -313,7 +341,7 @@ impl Collector {
                                         manifest.mark_partial(name.clone(), cache_key.clone(), stats.clone());
                                     }
                                 }
-                                if let Err(e) = manifest.save(out) {
+                                if let Err(e) = save_manifest(out.to_path_buf(), manifest.clone()).await {
                                     tracing::warn!(error = %e, "failed to save manifest");
                                 }
 
@@ -328,7 +356,7 @@ impl Collector {
                                     result.real_count += stats.real;
                                     result.ai_count += stats.ai;
                                     manifest.mark_partial(name.clone(), cache_key.clone(), stats.clone());
-                                    if let Err(e) = manifest.save(out) {
+                                    if let Err(e) = save_manifest(out.to_path_buf(), manifest.clone()).await {
                                         tracing::warn!(error = %e, "failed to save manifest");
                                     }
                                 }
@@ -338,9 +366,9 @@ impl Collector {
                             None => break, // All workers done, channel closed
                         }
                     }
-                    _ = cancel.cancelled() => {
+                    _ = cancel.cancelled(), if !cancellation_seen => {
                         tracing::debug!(completed = completed_count, "cancelled, waiting for workers");
-                        break;
+                        cancellation_seen = true;
                     }
                 }
             }
@@ -420,7 +448,7 @@ impl Collector {
         result.duration_seconds = start.elapsed().as_secs_f64();
 
         // Save final manifest
-        manifest.save(out)?;
+        save_manifest(out.to_path_buf(), manifest).await?;
 
         tracing::debug!(
             total = result.total_items,
@@ -470,15 +498,19 @@ async fn process_source(
     let resume_ai = resume_stats.as_ref().map(|s| s.ai).unwrap_or(0);
 
     // Notify main loop that we're starting
-    let _ = ctx.event_tx.send(WorkerEvent::Started {
-        index: idx,
-        name: name.clone(),
-        max_items,
-    });
+    send_worker_event(
+        ctx,
+        WorkerEvent::Started {
+            index: idx,
+            name: name.clone(),
+            max_items,
+        },
+    )
+    .await;
 
     // Send initial progress for resumed sources so the bar shows the starting point
     if resume_total > 0 {
-        let _ = ctx.event_tx.send(WorkerEvent::Progress {
+        let _ = ctx.event_tx.try_send(WorkerEvent::Progress {
             index: idx,
             count: resume_total,
         });
@@ -486,108 +518,116 @@ async fn process_source(
 
     tracing::debug!(source = name.as_str(), resume = resume_total, "fetching");
 
-    // Per-source counters — start from resume values so progress is cumulative
-    let src_total = AtomicUsize::new(resume_total);
-    let src_real = AtomicUsize::new(resume_real);
-    let src_ai = AtomicUsize::new(resume_ai);
-
     let source_start = Instant::now();
     let timeout_secs = ctx.timeout_secs;
-    let event_tx = ctx.event_tx.clone();
+    let cache_key = source.cache_key();
 
-    // The callback captures shared refs to atomics (Send-safe) and a cloned sender
-    let mut callback = |item: DataItem| -> bool {
-        // Soft timeout check
-        if timeout_secs > 0.0 && source_start.elapsed().as_secs_f64() > timeout_secs {
-            return false;
+    // Per-source counters — start from resume values so progress is cumulative.
+    let mut total = resume_total;
+    let mut real = resume_real;
+    let mut ai = resume_ai;
+    let mut fetched_offset = resume_stats.as_ref().map(|s| s.fetched_offset).unwrap_or(0);
+
+    let mut stream = source.stream(ctx.cancel.clone());
+
+    let process_stream = async {
+        while let Some(item) = stream.next().await {
+            if timeout_secs > 0.0 && source_start.elapsed().as_secs_f64() > timeout_secs {
+                return Ok::<SourceOutcome, AppError>(SourceOutcome::TimedOut);
+            }
+            let item = item?;
+            let pending_offset = item
+                .source_offset()
+                .unwrap_or_else(|| fetched_offset.saturating_add(1));
+            let mut transformed = Some(item);
+            for transform in ctx.transforms.iter() {
+                transformed = match transformed {
+                    Some(item) => transform.apply(item, &ctx.limits)?,
+                    None => None,
+                };
+            }
+            let Some(transformed) = transformed else {
+                fetched_offset = pending_offset;
+                continue;
+            };
+
+            let file_idx = ctx.file_counter.fetch_add(1, Ordering::SeqCst);
+            let subdir = if transformed.label == Label::Real {
+                &ctx.real_dir
+            } else {
+                &ctx.ai_dir
+            };
+            let path = subdir.join(format!("{:06}{}", file_idx, transformed.extension));
+            let label = transformed.label;
+            let limits = ctx.limits;
+            tokio::task::spawn_blocking(move || transformed.write_to_path(&path, &limits))
+                .await
+                .map_err(AppError::internal)??;
+            fetched_offset = pending_offset;
+
+            if label == Label::Real {
+                real += 1;
+            } else {
+                ai += 1;
+            }
+            total += 1;
+
+            if !ctx.cancel.is_cancelled() {
+                let _ = ctx.event_tx.try_send(WorkerEvent::Progress {
+                    index: idx,
+                    count: total,
+                });
+            }
         }
-
-        // Apply transforms
-        let mut transformed: Option<DataItem> = Some(item);
-        for t in ctx.transforms.iter() {
-            transformed = transformed.and_then(|i| t.apply(i));
-        }
-        let transformed = match transformed {
-            Some(item) => item,
-            None => return true, // Filtered out, continue
-        };
-
-        // Save to disk
-        let file_idx = ctx.file_counter.fetch_add(1, Ordering::SeqCst);
-        let subdir = if transformed.label == Label::Real {
-            &ctx.real_dir
-        } else {
-            &ctx.ai_dir
-        };
-        let path = subdir.join(format!("{:06}{}", file_idx, transformed.extension));
-
-        if let Err(e) = std::fs::write(&path, &transformed.content) {
-            tracing::error!(path = %path.display(), error = %e, "failed to write file");
-            return true;
-        }
-
-        // Update counters
-        if transformed.label == Label::Real {
-            src_real.fetch_add(1, Ordering::Relaxed);
-        } else {
-            src_ai.fetch_add(1, Ordering::Relaxed);
-        }
-        let total = src_total.fetch_add(1, Ordering::Relaxed) + 1;
-
-        // Send lightweight progress event
-        let _ = event_tx.send(WorkerEvent::Progress {
-            index: idx,
-            count: total,
-        });
-
-        true
+        Ok::<SourceOutcome, AppError>(SourceOutcome::Done)
     };
 
-    // Fetch with hard timeout via select!
+    // Consume with hard timeout via select.
     let mut timed_out = false;
     let fetch_result = if timeout_secs > 0.0 {
         tokio::select! {
-            result = source.fetch(&ctx.cancel, &mut callback) => result,
-            _ = ctx.cancel.cancelled() => Ok(0),
+            result = process_stream => result,
+            _ = ctx.cancel.cancelled() => Ok(SourceOutcome::Cancelled),
             _ = tokio::time::sleep(Duration::from_secs_f64(timeout_secs)) => {
                 timed_out = true;
-                Ok(0)
+                Ok(SourceOutcome::TimedOut)
             }
         }
     } else {
         tokio::select! {
-            result = source.fetch(&ctx.cancel, &mut callback) => result,
-            _ = ctx.cancel.cancelled() => Ok(0),
+            result = process_stream => result,
+            _ = ctx.cancel.cancelled() => Ok(SourceOutcome::Cancelled),
         }
     };
 
-    // Release callback borrows on atomics
-    let _ = callback;
-
     let stats = SourceStats {
-        total: src_total.load(Ordering::Relaxed),
-        real: src_real.load(Ordering::Relaxed),
-        ai: src_ai.load(Ordering::Relaxed),
-        fetched_offset: source.last_offset(),
+        total,
+        real,
+        ai,
+        fetched_offset,
     };
 
     // Report outcome to main loop
     match fetch_result {
-        Ok(_) => {
+        Ok(stream_outcome) => {
             let outcome = if ctx.cancel.is_cancelled() {
                 SourceOutcome::Cancelled
             } else if timed_out {
                 SourceOutcome::TimedOut
             } else {
-                SourceOutcome::Done
+                stream_outcome
             };
-            let _ = ctx.event_tx.send(WorkerEvent::Completed {
-                index: idx,
-                name,
-                stats,
-                cache_key: source.cache_key(),
-                outcome,
-            });
+            send_worker_event(
+                ctx,
+                WorkerEvent::Completed {
+                    index: idx,
+                    name,
+                    stats,
+                    cache_key,
+                    outcome,
+                },
+            )
+            .await;
         }
         Err(e) => {
             let err_str = e.to_string();
@@ -596,27 +636,77 @@ async fn process_source(
             } else {
                 err_str
             };
-            let _ = ctx.event_tx.send(WorkerEvent::Failed {
-                index: idx,
-                name,
-                error: short_err,
-                stats,
-                cache_key: source.cache_key(),
-            });
+            send_worker_event(
+                ctx,
+                WorkerEvent::Failed {
+                    index: idx,
+                    name,
+                    error: short_err,
+                    stats,
+                    cache_key,
+                },
+            )
+            .await;
         }
     }
 }
 
-fn count_files(dir: &Path) -> usize {
+async fn send_worker_event(ctx: &WorkerContext, event: WorkerEvent) {
+    let _ = ctx.event_tx.send(event).await;
+}
+
+async fn prepare_output_dirs(real_dir: PathBuf, ai_dir: PathBuf) -> AppResult<()> {
+    tokio::task::spawn_blocking(move || {
+        std::fs::create_dir_all(&real_dir).map_err(|e| {
+            AppError::new(
+                ErrorCode::Internal,
+                format!("failed to create real dir: {e}"),
+            )
+        })?;
+        std::fs::create_dir_all(&ai_dir).map_err(|e| {
+            AppError::new(ErrorCode::Internal, format!("failed to create ai dir: {e}"))
+        })
+    })
+    .await
+    .map_err(AppError::internal)?
+}
+
+async fn load_manifest(output_dir: PathBuf) -> AppResult<Manifest> {
+    tokio::task::spawn_blocking(move || Manifest::load(&output_dir))
+        .await
+        .map_err(AppError::internal)?
+}
+
+async fn save_manifest(output_dir: PathBuf, manifest: Manifest) -> AppResult<()> {
+    tokio::task::spawn_blocking(move || manifest.save(&output_dir))
+        .await
+        .map_err(AppError::internal)?
+}
+
+async fn count_existing_files(real_dir: PathBuf, ai_dir: PathBuf) -> AppResult<usize> {
+    tokio::task::spawn_blocking(move || Ok(count_files(&real_dir)? + count_files(&ai_dir)?))
+        .await
+        .map_err(AppError::internal)?
+}
+
+fn count_files(dir: &Path) -> AppResult<usize> {
     if !dir.exists() {
-        return 0;
+        return Ok(0);
     }
     std::fs::read_dir(dir)
+        .map_err(|error| {
+            AppError::new(
+                ErrorCode::Internal,
+                format!(
+                    "failed to read dataset output directory {}: {error}",
+                    dir.display()
+                ),
+            )
+        })
         .map(|entries| {
             entries
-                .filter_map(|e| e.ok())
-                .filter(|e| e.path().is_file())
+                .filter_map(Result::ok)
+                .filter(|entry| entry.path().is_file())
                 .count()
         })
-        .unwrap_or(0)
 }

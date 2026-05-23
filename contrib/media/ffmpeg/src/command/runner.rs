@@ -3,18 +3,18 @@
 //! Handles spawning the `ffmpeg` process, stderr streaming for progress
 //! and error diagnostics, timeout enforcement, and process-group cleanup.
 
+use std::collections::VecDeque;
 use std::sync::Arc;
 
+use parking_lot::Mutex;
 use rskit_media::pipeline::Progress;
 
 use crate::config::FfmpegConfig;
+use crate::process::run_ffmpeg_observed;
 use crate::progress::FfmpegProgressParser;
+use tokio_util::sync::CancellationToken;
 
 use super::FfmpegCommand;
-
-#[cfg(unix)]
-#[allow(unused_imports)]
-use std::os::unix::process::CommandExt;
 
 impl FfmpegCommand {
     /// Run the compiled FFmpeg command.
@@ -31,126 +31,86 @@ impl FfmpegCommand {
         on_progress: Option<Box<dyn Fn(Progress) + Send + Sync>>,
         output_path: &std::path::Path,
     ) -> Result<(), crate::error::FfmpegError> {
-        let mut args = self.to_args();
-        args.push(output_path.to_string_lossy().to_string());
+        self.run_with_cancel(config, on_progress, output_path, CancellationToken::new())
+            .await
+    }
 
-        tracing::debug!(cmd = %format!("ffmpeg {}", args.join(" ")), "executing ffmpeg");
+    /// Run the compiled FFmpeg command with cancellation support.
+    pub async fn run_with_cancel(
+        &self,
+        config: &FfmpegConfig,
+        on_progress: Option<Box<dyn Fn(Progress) + Send + Sync>>,
+        output_path: &std::path::Path,
+        cancel: CancellationToken,
+    ) -> Result<(), crate::error::FfmpegError> {
+        let mut args = self.to_os_args();
+        args.push(output_path.as_os_str().to_os_string());
 
-        let mut command = tokio::process::Command::new(config.ffmpeg_bin());
-        command
-            .args(&args)
-            .stderr(std::process::Stdio::piped())
-            .stdout(std::process::Stdio::null())
-            .stdin(std::process::Stdio::null());
+        tracing::debug!(args = ?args, "executing ffmpeg");
 
-        // Process group isolation on Unix — allows clean SIGTERM of all child processes
-        #[cfg(unix)]
-        unsafe {
-            command.pre_exec(|| {
-                // Create new process group so we can kill the entire group
-                libc::setpgid(0, 0);
-                Ok(())
+        let max_stderr_lines = config.max_stderr_lines.max(1);
+        let stderr_lines = Arc::new(Mutex::new(VecDeque::with_capacity(max_stderr_lines)));
+        let progress_callback = on_progress.map(Arc::new);
+        let result = run_ffmpeg_observed(config.ffmpeg_bin(), args, config.timeout, cancel, {
+            let stderr_lines = Arc::clone(&stderr_lines);
+            move |line| {
+                if let Some(ref cb) = progress_callback {
+                    let parser = FfmpegProgressParser::new(None);
+                    if let Some(progress) = parser.parse_line(line) {
+                        cb(progress);
+                    }
+                }
+                push_stderr_line(&stderr_lines, max_stderr_lines, line);
+            }
+        })
+        .await
+        .map_err(|error| crate::error::FfmpegError {
+            kind: match error.code() {
+                rskit_errors::ErrorCode::Timeout => crate::error::FfmpegErrorKind::Timeout,
+                rskit_errors::ErrorCode::Cancelled => crate::error::FfmpegErrorKind::Cancelled,
+                _ => crate::error::FfmpegErrorKind::SpawnFailed,
+            },
+            exit_code: None,
+            stderr: String::new(),
+            message: format!("ffmpeg execution failed: {error}"),
+        })?;
+
+        let stderr_output = stderr_lines
+            .lock()
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        if result.timed_out {
+            let timeout = config
+                .timeout
+                .map(|duration| format!("{duration:?}"))
+                .unwrap_or_else(|| "configured timeout".to_string());
+            return Err(crate::error::FfmpegError {
+                kind: crate::error::FfmpegErrorKind::Timeout,
+                exit_code: result.exit_code,
+                stderr: crate::error::truncate_stderr(&stderr_output, config.max_stderr_lines),
+                message: format!("ffmpeg timed out after {timeout}"),
             });
         }
 
-        let mut child = command.spawn().map_err(|e| crate::error::FfmpegError {
-            kind: crate::error::FfmpegErrorKind::SpawnFailed,
-            exit_code: None,
-            stderr: String::new(),
-            message: format!("failed to spawn ffmpeg: {e}"),
-        })?;
-
-        let child_pid = child.id();
-
-        // Set up stderr reader for both progress parsing and error capture.
-        // If stderr is unexpectedly unavailable, fail with a typed spawn error
-        // rather than panicking on a runtime process path.
-        let stderr = child
-            .stderr
-            .take()
-            .ok_or_else(|| crate::error::FfmpegError {
-                kind: crate::error::FfmpegErrorKind::SpawnFailed,
-                exit_code: None,
-                stderr: String::new(),
-                message: "ffmpeg stderr was not piped during command setup".to_string(),
-            })?;
-        let reader = tokio::io::BufReader::new(stderr);
-        use tokio::io::AsyncBufReadExt;
-        let mut lines = reader.lines();
-
-        // Channel for collecting stderr lines (for error diagnostics)
-        let (stderr_tx, mut stderr_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
-        // Channel for progress updates
-        let progress_callback = on_progress.map(Arc::new);
-
-        let stderr_task = tokio::spawn({
-            let progress_callback = progress_callback.clone();
-            let parser = FfmpegProgressParser::new(None);
-            async move {
-                while let Ok(Some(line)) = lines.next_line().await {
-                    // Try parsing progress
-                    if let Some(ref cb) = progress_callback
-                        && let Some(progress) = parser.parse_line(&line)
-                    {
-                        cb(progress);
-                    }
-                    // Always collect stderr for error diagnostics
-                    let _ = stderr_tx.send(line);
-                }
-            }
-        });
-
-        // Wait for child with optional timeout
-        let wait_result = if let Some(timeout_dur) = config.timeout {
-            match tokio::time::timeout(timeout_dur, child.wait()).await {
-                Ok(result) => result.map_err(|e| crate::error::FfmpegError {
-                    kind: crate::error::FfmpegErrorKind::Unknown,
-                    exit_code: None,
-                    stderr: String::new(),
-                    message: format!("ffmpeg process error: {e}"),
-                }),
-                Err(_) => {
-                    // Timeout — kill the process
-                    tracing::warn!("FFmpeg process timed out after {:?}, killing", timeout_dur);
-                    Self::kill_process(&mut child, child_pid);
-                    return Err(crate::error::FfmpegError {
-                        kind: crate::error::FfmpegErrorKind::Timeout,
-                        exit_code: None,
-                        stderr: String::new(),
-                        message: format!("ffmpeg timed out after {timeout_dur:?}"),
-                    });
-                }
-            }
-        } else {
-            child.wait().await.map_err(|e| crate::error::FfmpegError {
-                kind: crate::error::FfmpegErrorKind::Unknown,
-                exit_code: None,
-                stderr: String::new(),
-                message: format!("ffmpeg process error: {e}"),
-            })
-        };
-
-        // Wait for stderr reader to finish
-        let _ = stderr_task.await;
-
-        // Collect all stderr lines
-        let mut stderr_lines = Vec::new();
-        while let Ok(line) = stderr_rx.try_recv() {
-            stderr_lines.push(line);
-        }
-        let stderr_output = stderr_lines.join("\n");
-
-        let status = wait_result?;
-
-        if !status.success() {
-            let exit_code = status.code();
+        if !result.success() {
+            let exit_code = result.exit_code;
             let truncated_stderr =
                 crate::error::truncate_stderr(&stderr_output, config.max_stderr_lines);
-            let kind = crate::error::classify_error(exit_code, &stderr_output);
+            let classification_stderr = if result.stderr.is_empty() {
+                stderr_output.clone()
+            } else if stderr_output.is_empty() {
+                result.stderr.clone()
+            } else {
+                format!("{}\n{}", result.stderr, stderr_output)
+            };
+            let kind = crate::error::classify_error(exit_code, &classification_stderr);
 
             let message = format!(
-                "ffmpeg exited with status: {} (classified: {:?})",
-                status, kind
+                "ffmpeg exited with status: {:?} (classified: {:?})",
+                exit_code, kind
             );
 
             let err = crate::error::FfmpegError {
@@ -165,19 +125,12 @@ impl FfmpegCommand {
 
         Ok(())
     }
+}
 
-    /// Kill an FFmpeg child process and its process group.
-    fn kill_process(child: &mut tokio::process::Child, _pid: Option<u32>) {
-        // Try graceful SIGTERM first on Unix
-        #[cfg(unix)]
-        if let Some(pid) = _pid {
-            unsafe {
-                // Send SIGTERM to the process group
-                libc::kill(-(pid as i32), libc::SIGTERM);
-            }
-        }
-
-        // Then force kill via tokio
-        let _ = child.start_kill();
+fn push_stderr_line(lines: &Mutex<VecDeque<String>>, max_stderr_lines: usize, line: &str) {
+    let mut lines = lines.lock();
+    if lines.len() == max_stderr_lines {
+        lines.pop_front();
     }
+    lines.push_back(line.to_string());
 }

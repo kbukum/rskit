@@ -7,6 +7,7 @@ CONTRIB_MANIFEST = contrib/Cargo.toml
 EXAMPLES_MANIFEST = examples/Cargo.toml
 WORKSPACE_MANIFESTS = $(CORE_MANIFEST) $(CONTRIB_MANIFEST)
 FORMAT_MANIFESTS = $(WORKSPACE_MANIFESTS) $(EXAMPLES_MANIFEST)
+TEST_THREADS ?= 1
 
 # Test filter: pass -- $(T) when T is set
 _T = $(if $(T),-- $(T))
@@ -55,7 +56,11 @@ test:
 ## Run tests using nextest (parallel, with retries in CI)
 test-nextest:
 	@echo "==> Running tests with nextest..."
+ifeq ($(TEST_RUNNER),cargo-test)
+	$(call run_cargo_target,test,-- --test-threads=$(TEST_THREADS),$(WORKSPACE_MANIFESTS))
+else
 	$(call run_cargo_target,nextest run,$(if $(PROFILE),--profile $(PROFILE)),$(WORKSPACE_MANIFESTS))
+endif
 
 ## Run only doctests (nextest doesn't support doctests)
 test-doc:

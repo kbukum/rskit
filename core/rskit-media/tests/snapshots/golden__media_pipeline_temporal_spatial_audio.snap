@@ -1,0 +1,133 @@
+---
+source: rskit-media/tests/golden.rs
+expression: text
+---
+fixture_hash=3a3334d9062511a2
+sink=None
+ops=[
+    Extract(
+        TimeRange {
+            start: Timestamp(
+                1000000,
+            ),
+            end: Timestamp(
+                3000000,
+            ),
+        },
+    ),
+    ExtractMany(
+        [
+            Segment {
+                range: TimeRange {
+                    start: Timestamp(
+                        4000000,
+                    ),
+                    end: Timestamp(
+                        6000000,
+                    ),
+                },
+                label: Some(
+                    "clip",
+                ),
+                confidence: None,
+                metadata: {},
+            },
+        ],
+    ),
+    Resize(
+        ResizeOp {
+            resolution: Resolution {
+                width: 1920,
+                height: 1080,
+            },
+            mode: Fit,
+        },
+    ),
+    Crop(
+        CropRegion {
+            x: 10,
+            y: 20,
+            width: 640,
+            height: 360,
+        },
+    ),
+    Rotate(
+        Degrees90,
+    ),
+    Flip(
+        Horizontal,
+    ),
+    Pad(
+        PadOp {
+            width: 1920,
+            height: 1080,
+            color: "black",
+        },
+    ),
+    Speed(
+        1.25,
+    ),
+    Reverse,
+    Volume(
+        0.8,
+    ),
+    NormalizeAudio,
+    FadeIn(
+        2s,
+    ),
+    FadeOut(
+        3s,
+    ),
+    StripAudio,
+    StripVideo,
+    Filter(
+        Filter {
+            name: "denoise",
+            target: Video,
+            params: Params(
+                {
+                    "strength": Int(
+                        3,
+                    ),
+                },
+            ),
+        },
+    ),
+    Transcode(
+        OutputConfig {
+            format: Format(
+                "mp4",
+            ),
+            video: Some(
+                VideoSettings {
+                    codec: Codec(
+                        "h264",
+                    ),
+                    resolution: None,
+                    frame_rate: None,
+                    quality: Some(
+                        Medium,
+                    ),
+                    bitrate: None,
+                    speed: None,
+                    profile: None,
+                    level: None,
+                },
+            ),
+            audio: Some(
+                AudioSettings {
+                    codec: Codec(
+                        "aac",
+                    ),
+                    sample_rate: None,
+                    channels: None,
+                    bitrate: None,
+                },
+            ),
+            streaming: None,
+            strip_metadata: false,
+            extra: {},
+        },
+    ),
+]
+output_hash=ab69ae3f9565b377

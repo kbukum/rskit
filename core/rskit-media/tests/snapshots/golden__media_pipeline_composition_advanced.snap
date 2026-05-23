@@ -1,0 +1,172 @@
+---
+source: rskit-media/tests/golden.rs
+expression: text
+---
+fixture_hash=3a3334d9062511a2
+sink=None
+ops=[
+    Overlay(
+        OverlayOp {
+            source: Bytes(
+                b"rskit golden overlay fixture v1",
+            ),
+            position: TopLeft(
+                10,
+                20,
+            ),
+            opacity: 0.75,
+            time_range: None,
+            scale: None,
+        },
+    ),
+    Concat(
+        ConcatOp {
+            source: Path(
+                "/fixtures/second.mp4",
+            ),
+            transition: Some(
+                Cut,
+            ),
+        },
+    ),
+    ReplaceAudio(
+        ReplaceAudioOp {
+            audio_source: Bytes(
+                b"rskit golden audio fixture v1",
+            ),
+            offset: None,
+        },
+    ),
+    MixAudio(
+        MixAudioOp {
+            audio_source: Bytes(
+                b"rskit golden audio fixture v1",
+            ),
+            volume: 0.5,
+            offset: None,
+        },
+    ),
+    BurnSubtitles(
+        SubtitleTrack {
+            entries: [
+                SubtitleEntry {
+                    range: TimeRange {
+                        start: Timestamp(
+                            0,
+                        ),
+                        end: Timestamp(
+                            1500000,
+                        ),
+                    },
+                    text: "hello",
+                    style: None,
+                },
+            ],
+            language: None,
+            default_style: None,
+        },
+    ),
+    ApplyFilter(
+        FilterConfig {
+            preset: Warm,
+            intensity: 0.4,
+            custom_params: None,
+        },
+    ),
+    AddOverlay(
+        OverlayConfig {
+            overlay_type: Text(
+                TextOverlay {
+                    text: "sample",
+                    font_family: Some(
+                        "Inter",
+                    ),
+                    font_size: Some(
+                        24,
+                    ),
+                    color: Some(
+                        "#ffffff",
+                    ),
+                },
+            ),
+            position: Position {
+                x: 0.5,
+                y: 0.1,
+            },
+            size: Some(
+                Size {
+                    width: 0.3,
+                    height: 0.1,
+                },
+            ),
+            opacity: 0.9,
+            time_range: Some(
+                TimeRange {
+                    start: Timestamp(
+                        0,
+                    ),
+                    end: Timestamp(
+                        2000000,
+                    ),
+                },
+            ),
+        },
+    ),
+    GenerateThumbnail(
+        ThumbnailConfig {
+            timestamp: 1.0,
+            width: Some(
+                320,
+            ),
+            height: None,
+            format: Jpeg,
+            quality: Some(
+                85,
+            ),
+        },
+    ),
+    DetectScenes(
+        SceneDetectConfig {
+            threshold: 0.3,
+            min_scene_duration: 1.0,
+            method: ContentAware,
+        },
+    ),
+    AddSubtitles(
+        SubtitleConfig {
+            source: Inline(
+                "1\n00:00:00,000 --> 00:00:01,000\nhello",
+            ),
+            format: Srt,
+            style: None,
+        },
+    ),
+    Upscale(
+        UpscaleConfig {
+            model: RealEsrganX4Plus,
+            scale: 4,
+            denoise_strength: Some(
+                0.2,
+            ),
+        },
+    ),
+    Interpolate(
+        InterpolateConfig {
+            model: Rife,
+            multiplier: 2,
+        },
+    ),
+    SelectTracks(
+        [
+            0,
+            1,
+        ],
+    ),
+    SelectTracksByKind(
+        [
+            Video,
+            Audio,
+        ],
+    ),
+]
+output_hash=305cb075b96623a8

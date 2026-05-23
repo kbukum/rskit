@@ -11,29 +11,37 @@ use std::path::Path;
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Manifest {
     #[serde(default)]
+    /// Cache entries keyed by source name.
     pub sources: HashMap<String, SourceEntry>,
 }
 
 /// Cache entry for a single source.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SourceEntry {
+    /// Source cache key/configuration used when the entry was written.
     pub config: serde_json::Value,
+    /// Source item statistics.
     pub stats: SourceStats,
+    /// Cache status string (`done` or `partial`).
     pub status: String,
 }
 
 /// Statistics for a completed source.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SourceStats {
+    /// Total items collected for the source.
     pub total: usize,
+    /// Real-labeled item count.
     pub real: usize,
+    /// AI-generated item count.
     pub ai: usize,
-    /// API offset reached (for resume). 0 means start from beginning.
+    /// Source-reported resume cursor. Falls back to fetched source-item count for count-based sources.
     #[serde(default)]
     pub fetched_offset: usize,
 }
 
 const MANIFEST_FILE: &str = ".manifest.json";
+const MAX_MANIFEST_BYTES: u64 = 1024 * 1024;
 
 /// Result of checking whether a source has cached data.
 #[derive(Debug, Clone)]
@@ -48,35 +56,42 @@ pub enum CacheStatus {
 
 impl Manifest {
     /// Load manifest from the output directory. Returns empty manifest if not found.
-    pub fn load(output_dir: &Path) -> Self {
+    pub fn load(output_dir: &Path) -> AppResult<Self> {
         let path = output_dir.join(MANIFEST_FILE);
-        if path.exists() {
-            match std::fs::read_to_string(&path) {
-                Ok(content) => match serde_json::from_str(&content) {
-                    Ok(manifest) => return manifest,
-                    Err(e) => {
-                        tracing::warn!(error = %e, "failed to parse manifest, starting fresh");
-                    }
-                },
-                Err(e) => {
-                    tracing::warn!(error = %e, "failed to read manifest, starting fresh");
-                }
-            }
+        match read_manifest_bounded(&path) {
+            Ok(bytes) => serde_json::from_slice(&bytes).map_err(|e| {
+                AppError::new(
+                    ErrorCode::InvalidInput,
+                    format!("manifest parse failed for {}: {e}", path.display()),
+                )
+            }),
+            Err(error) if error.code() == ErrorCode::NotFound => Ok(Self::default()),
+            Err(error) => Err(error),
         }
-        Self::default()
     }
 
     /// Save manifest to the output directory.
     pub fn save(&self, output_dir: &Path) -> AppResult<()> {
         let path = output_dir.join(MANIFEST_FILE);
+        let tmp_path = output_dir.join(format!("{MANIFEST_FILE}.tmp"));
         let content = serde_json::to_string_pretty(self).map_err(|e| {
             AppError::new(
                 ErrorCode::Internal,
                 format!("manifest serialize failed: {e}"),
             )
         })?;
-        std::fs::write(path, content).map_err(|e| {
+        std::fs::write(&tmp_path, content).map_err(|e| {
             AppError::new(ErrorCode::Internal, format!("manifest write failed: {e}"))
+        })?;
+        std::fs::rename(&tmp_path, &path).map_err(|e| {
+            AppError::new(
+                ErrorCode::Internal,
+                format!(
+                    "manifest replace failed from {} to {}: {e}",
+                    tmp_path.display(),
+                    path.display()
+                ),
+            )
         })?;
         Ok(())
     }
@@ -160,6 +175,43 @@ impl Manifest {
     }
 }
 
+fn read_manifest_bounded(path: &Path) -> AppResult<Vec<u8>> {
+    use std::io::Read as _;
+
+    let mut file = std::fs::File::open(path).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            return AppError::new(
+                ErrorCode::NotFound,
+                format!("manifest not found: {}", path.display()),
+            );
+        }
+        AppError::new(
+            ErrorCode::Internal,
+            format!("manifest read failed for {}: {e}", path.display()),
+        )
+    })?;
+    let mut bytes = Vec::new();
+    file.by_ref()
+        .take(MAX_MANIFEST_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|e| {
+            AppError::new(
+                ErrorCode::Internal,
+                format!("manifest read failed for {}: {e}", path.display()),
+            )
+        })?;
+    if bytes.len() as u64 > MAX_MANIFEST_BYTES {
+        return Err(AppError::new(
+            ErrorCode::InvalidInput,
+            format!(
+                "manifest {} exceeded max {MAX_MANIFEST_BYTES} bytes while reading",
+                path.display()
+            ),
+        ));
+    }
+    Ok(bytes)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -183,7 +235,7 @@ mod tests {
         );
 
         manifest.save(dir.path()).unwrap();
-        let loaded = Manifest::load(dir.path());
+        let loaded = Manifest::load(dir.path()).unwrap();
 
         assert!(loaded.is_cached("hf:org/dataset", &config).is_some());
         let stats = loaded.is_cached("hf:org/dataset", &config).unwrap();
@@ -209,7 +261,7 @@ mod tests {
         );
         manifest.save(dir.path()).unwrap();
 
-        let loaded = Manifest::load(dir.path());
+        let loaded = Manifest::load(dir.path()).unwrap();
         let config2 = serde_json::json!({"repo": "org/dataset", "max_items": 500});
         assert!(loaded.is_cached("source", &config2).is_none());
     }
@@ -217,7 +269,7 @@ mod tests {
     #[test]
     fn test_manifest_empty_dir() {
         let dir = TempDir::new().unwrap();
-        let manifest = Manifest::load(dir.path());
+        let manifest = Manifest::load(dir.path()).unwrap();
         assert!(manifest.sources.is_empty());
     }
 
@@ -239,7 +291,7 @@ mod tests {
         );
         manifest.save(dir.path()).unwrap();
 
-        let loaded = Manifest::load(dir.path());
+        let loaded = Manifest::load(dir.path()).unwrap();
         let stats = loaded.is_cached("hf:org/dataset", &config);
         assert!(stats.is_some(), "partial with items should be cached");
         assert_eq!(stats.unwrap().total, 500);
@@ -263,7 +315,7 @@ mod tests {
         );
         manifest.save(dir.path()).unwrap();
 
-        let loaded = Manifest::load(dir.path());
+        let loaded = Manifest::load(dir.path()).unwrap();
         assert!(loaded.is_cached("source", &config).is_none());
     }
 
@@ -285,7 +337,7 @@ mod tests {
         );
         manifest.save(dir.path()).unwrap();
 
-        let loaded = Manifest::load(dir.path());
+        let loaded = Manifest::load(dir.path()).unwrap();
         match loaded.cache_status("hf:org/dataset", &config, Some(1000)) {
             CacheStatus::Partial(stats) => {
                 assert_eq!(stats.fetched_offset, 600);
@@ -313,7 +365,7 @@ mod tests {
         );
         manifest.save(dir.path()).unwrap();
 
-        let loaded = Manifest::load(dir.path());
+        let loaded = Manifest::load(dir.path()).unwrap();
         match loaded.cache_status("src", &config, Some(1000)) {
             CacheStatus::Done(stats) => assert_eq!(stats.total, 1000),
             other => panic!("expected Done, got {other:?}"),

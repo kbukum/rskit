@@ -13,6 +13,8 @@ use rskit_storage::{FileSink, FileSource, TempFile};
 use crate::command::FfmpegCommand;
 use crate::config::FfmpegConfig;
 use crate::hw_accel::HwAccel;
+use crate::process::run_capture_lossy_with_cancel;
+use tokio_util::sync::CancellationToken;
 
 use super::FfmpegExecutor;
 
@@ -24,6 +26,19 @@ impl FfmpegExecutor {
         ops: &[MediaOp],
         sink: Option<&FileSink>,
         on_progress: Option<Box<dyn Fn(Progress) + Send + Sync>>,
+    ) -> AppResult<std::path::PathBuf> {
+        self.run_with_retry_cancelable(source, ops, sink, on_progress, CancellationToken::new())
+            .await
+    }
+
+    /// Run an FFmpeg command with retry and cancellation support.
+    pub(crate) async fn run_with_retry_cancelable(
+        &self,
+        source: &FileSource,
+        ops: &[MediaOp],
+        sink: Option<&FileSink>,
+        on_progress: Option<Box<dyn Fn(Progress) + Send + Sync>>,
+        cancel: CancellationToken,
     ) -> AppResult<std::path::PathBuf> {
         let ext = self.determine_output_extension(ops);
         let output_file = match sink {
@@ -38,12 +53,15 @@ impl FfmpegExecutor {
             _ => TempFile::with_extension(&ext)?.path().to_path_buf(),
         };
 
-        // Acquire semaphore permit (blocks if max concurrent reached)
-        let _permit = self
-            .semaphore
-            .acquire()
-            .await
-            .map_err(|_| AppError::new(ErrorCode::Internal, "semaphore closed"))?;
+        let _permit = tokio::select! {
+            biased;
+            _ = cancel.cancelled() => {
+                return Err(AppError::new(ErrorCode::Cancelled, "media pipeline cancelled"));
+            }
+            permit = self.semaphore.acquire() => {
+                permit.map_err(|_| AppError::new(ErrorCode::Internal, "semaphore closed"))?
+            }
+        };
 
         tracing::debug!(
             available_permits = self.semaphore.available_permits(),
@@ -51,11 +69,13 @@ impl FfmpegExecutor {
         );
 
         // Build source hints by quick-probing when concat-style ops are present
-        let hints = self.build_source_hints(source, ops).await;
+        let hints = self.build_source_hints(source, ops, cancel.clone()).await?;
 
         // Resolve duration-aware timeout: probe source duration and infer
         // operation kind so the timeout scales with content length.
-        let effective_config = self.resolve_effective_config(source, ops).await;
+        let effective_config = self
+            .resolve_effective_config(source, ops, cancel.clone())
+            .await?;
 
         // Wrap in Arc so the callback survives hw accel fallback retry
         let on_progress: Option<Arc<dyn Fn(Progress) + Send + Sync>> = on_progress.map(Arc::from);
@@ -73,7 +93,9 @@ impl FfmpegExecutor {
             let cb = Arc::clone(cb);
             Box::new(move |p: Progress| cb(p)) as Box<dyn Fn(Progress) + Send + Sync>
         });
-        let result = cmd.run(&effective_config, progress_cb, &output_file).await;
+        let result = cmd
+            .run_with_cancel(&effective_config, progress_cb, &output_file, cancel.clone())
+            .await;
 
         match result {
             Ok(()) => Ok(output_file),
@@ -102,7 +124,9 @@ impl FfmpegExecutor {
                     // If stderr indicates AV1 decode failure, try to find a software
                     // AV1 decoder (libdav1d preferred, libaom-av1 as alternative).
                     if Self::is_av1_decode_failure(&ffmpeg_err.stderr) {
-                        if let Some(sw_decoder) = Self::find_sw_av1_decoder(&self.config).await {
+                        if let Some(sw_decoder) =
+                            Self::find_sw_av1_decoder(&self.config, cancel.clone()).await?
+                        {
                             tracing::info!(
                                 decoder = %sw_decoder,
                                 "Using software AV1 decoder for fallback"
@@ -135,7 +159,7 @@ impl FfmpegExecutor {
                     });
 
                     cmd_fallback
-                        .run(&fallback_config, progress_cb, &output_file)
+                        .run_with_cancel(&fallback_config, progress_cb, &output_file, cancel)
                         .await
                         .map_err(|e| e.into_app_error())?;
                     Ok(output_file)
@@ -159,23 +183,36 @@ impl FfmpegExecutor {
 
     /// Query FFmpeg for available software AV1 decoders.
     /// Returns the best available one, or None if none are compiled in.
-    async fn find_sw_av1_decoder(config: &FfmpegConfig) -> Option<String> {
-        let output = tokio::process::Command::new(config.ffmpeg_bin())
-            .args(["-hide_banner", "-decoders"])
-            .output()
-            .await
-            .ok()?;
-
-        let stdout = String::from_utf8_lossy(&output.stdout);
+    async fn find_sw_av1_decoder(
+        config: &FfmpegConfig,
+        cancel: CancellationToken,
+    ) -> AppResult<Option<String>> {
+        let output = run_capture_lossy_with_cancel(
+            config.ffmpeg_bin(),
+            ["-hide_banner", "-decoders"],
+            config.timeout,
+            cancel,
+        )
+        .await
+        .map_err(|error| {
+            if error.code() == ErrorCode::Cancelled {
+                error
+            } else {
+                AppError::new(
+                    ErrorCode::Internal,
+                    format!("failed to query software AV1 decoders: {error}"),
+                )
+            }
+        })?;
 
         // Prefer libdav1d (fastest), then libaom-av1, then libgav1
         for decoder in &["libdav1d", "libaom-av1", "libgav1"] {
-            if stdout.lines().any(|line| line.contains(decoder)) {
-                return Some((*decoder).to_string());
+            if output.stdout.lines().any(|line| line.contains(decoder)) {
+                return Ok(Some((*decoder).to_string()));
             }
         }
 
-        None
+        Ok(None)
     }
 }
 

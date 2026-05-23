@@ -6,14 +6,18 @@
 //! - [`FfmpegExecutor::quick_probe_duration`] — lightweight ffprobe for duration only
 //! - [`FfmpegExecutor::build_source_hints`] — detect audio/video streams for hints
 
+use std::ffi::OsString;
 use std::time::Duration;
 
+use rskit_errors::{AppResult, ErrorCode};
 use rskit_media::ops::MediaOp;
 use rskit_media::timeout::OperationKind;
 use rskit_storage::FileSource;
 
 use crate::command::SourceHints;
 use crate::config::FfmpegConfig;
+use crate::process::run_capture_with_cancel;
+use tokio_util::sync::CancellationToken;
 
 use super::FfmpegExecutor;
 
@@ -94,13 +98,14 @@ impl FfmpegExecutor {
         &self,
         source: &FileSource,
         ops: &[MediaOp],
-    ) -> FfmpegConfig {
+        cancel: CancellationToken,
+    ) -> AppResult<FfmpegConfig> {
         // If no calculator is configured, skip the probe entirely.
         if self.config.timeout_calculator.is_none() {
-            return self.config.clone();
+            return Ok(self.config.clone());
         }
 
-        let source_duration = self.quick_probe_duration(source).await;
+        let source_duration = self.quick_probe_duration(source, cancel).await?;
         let op_kind = infer_operation_kind(ops);
 
         if let Some(resolved) = self.config.resolve_timeout(source_duration, Some(op_kind)) {
@@ -112,36 +117,53 @@ impl FfmpegExecutor {
             );
             let mut cfg = self.config.clone();
             cfg.timeout = Some(resolved);
-            cfg
+            Ok(cfg)
         } else {
-            self.config.clone()
+            Ok(self.config.clone())
         }
     }
 
     /// Quick ffprobe to get source duration (for timeout calculation).
-    pub(crate) async fn quick_probe_duration(&self, source: &FileSource) -> Option<Duration> {
+    pub(crate) async fn quick_probe_duration(
+        &self,
+        source: &FileSource,
+        cancel: CancellationToken,
+    ) -> AppResult<Option<Duration>> {
         let path = match source {
             FileSource::Path(p) => p.clone(),
-            _ => return None,
+            _ => return Ok(None),
         };
 
-        let output = tokio::process::Command::new(self.config.ffprobe_bin())
-            .args([
-                "-v",
-                "quiet",
-                "-show_entries",
-                "format=duration",
-                "-of",
-                "csv=p=0",
-            ])
-            .arg(&path)
-            .output()
-            .await
-            .ok()?;
+        let output = run_capture_with_cancel(
+            self.config.ffprobe_bin(),
+            vec![
+                OsString::from("-v"),
+                OsString::from("quiet"),
+                OsString::from("-show_entries"),
+                OsString::from("format=duration"),
+                OsString::from("-of"),
+                OsString::from("csv=p=0"),
+                path.as_os_str().to_os_string(),
+            ],
+            self.config.timeout,
+            cancel,
+        )
+        .await
+        .map_err(|error| {
+            if error.code() == ErrorCode::Cancelled {
+                error
+            } else {
+                rskit_errors::AppError::new(
+                    ErrorCode::Internal,
+                    format!("failed to probe source duration: {error}"),
+                )
+            }
+        })?;
 
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let secs: f64 = stdout.trim().parse().ok()?;
-        Some(Duration::from_secs_f64(secs))
+        let Some(secs) = output.stdout.trim().parse::<f64>().ok() else {
+            return Ok(None);
+        };
+        Ok(Some(Duration::from_secs_f64(secs)))
     }
 
     /// Build source hints by quick-probing when concat/extract-many ops need stream info.
@@ -149,44 +171,48 @@ impl FfmpegExecutor {
         &self,
         source: &FileSource,
         ops: &[MediaOp],
-    ) -> SourceHints {
+        cancel: CancellationToken,
+    ) -> AppResult<SourceHints> {
         let needs_hints = ops
             .iter()
             .any(|op| matches!(op, MediaOp::ExtractMany(_) | MediaOp::Concat(_)));
         if !needs_hints {
-            return SourceHints::default();
+            return Ok(SourceHints::default());
         }
 
         // Quick ffprobe to detect stream types
         let path = match source {
             FileSource::Path(p) => p.clone(),
-            _ => return SourceHints::default(),
+            _ => return Ok(SourceHints::default()),
         };
 
-        let output = tokio::process::Command::new(self.config.ffprobe_bin())
-            .args([
-                "-v",
-                "quiet",
-                "-show_entries",
-                "stream=codec_type",
-                "-of",
-                "csv=p=0",
-            ])
-            .arg(&path)
-            .output()
-            .await;
+        let output = run_capture_with_cancel(
+            self.config.ffprobe_bin(),
+            vec![
+                OsString::from("-v"),
+                OsString::from("quiet"),
+                OsString::from("-show_entries"),
+                OsString::from("stream=codec_type"),
+                OsString::from("-of"),
+                OsString::from("csv=p=0"),
+                path.as_os_str().to_os_string(),
+            ],
+            self.config.timeout,
+            cancel,
+        )
+        .await;
 
         match output {
             Ok(out) => {
-                let stdout = String::from_utf8_lossy(&out.stdout);
-                let has_audio = stdout.lines().any(|l| l.trim() == "audio");
-                let has_video = stdout.lines().any(|l| l.trim() == "video");
-                SourceHints {
+                let has_audio = out.stdout.lines().any(|l| l.trim() == "audio");
+                let has_video = out.stdout.lines().any(|l| l.trim() == "video");
+                Ok(SourceHints {
                     has_audio: Some(has_audio),
                     has_video: Some(has_video),
-                }
+                })
             }
-            Err(_) => SourceHints::default(),
+            Err(error) if error.code() == ErrorCode::Cancelled => Err(error),
+            Err(_) => Ok(SourceHints::default()),
         }
     }
 }

@@ -1,6 +1,6 @@
-# rskit-dataset — Dataset Collection Framework
+# rskit-dataset — Streaming Dataset Collection Framework
 
-Dataset collection framework: source, transform, target, and collector orchestrator.
+Streaming dataset collection framework: source, transform, target, schema validation, and collector orchestration.
 
 [![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/rskit-dataset.svg)](https://crates.io/crates/rskit-dataset)
@@ -10,11 +10,14 @@ Dataset collection framework: source, transform, target, and collector orchestra
 
 ## Features
 
-- ETL pipeline: `Source` → `Transform` → `Target` orchestrated by `Collector`
-- `DataItem` with content bytes, `Label` (Real / AiGenerated), and `MediaType` (Image, Text, Audio, Video)
+- ETL pipeline: streaming `Source` → fallible `Transform` → `Target` orchestrated by `Collector`
+- `DataItem` with checked in-memory payload construction for small samples and file-backed streaming payloads for large samples
 - Parallel fetching with configurable concurrency
 - `Manifest` — incremental build cache for resumable collection
-- `CollectorConfig` — output dir, concurrency, timeout, force-rebuild
+- `DatasetLimits` — configurable memory threshold and bounded stream buffers
+- Schema validation delegated to `rskit-schema`
+- Stream adapters for `rskit-pipeline`
+- Streaming `DatasetRecord` readers/writers with JSON Lines and CSV support plus filter/column-selection operators
 - Progress callback support via `ProgressCallback`
 
 ## Usage
@@ -25,7 +28,7 @@ rskit-dataset = "0.1"
 ```
 
 ```rust
-use rskit_dataset::{Collector, CollectorConfig, DataItem, Label, MediaType};
+use rskit_dataset::{CollectorConfig, DataItem, DatasetLimits, Label, MediaType};
 use std::path::PathBuf;
 
 let config = CollectorConfig {
@@ -33,11 +36,13 @@ let config = CollectorConfig {
     concurrency: 4,
     source_timeout_secs: 300.0,
     force: false,
+    limits: DatasetLimits::default(),
 };
-let collector = Collector::new(config).unwrap();
 
-// Implement Source, Transform, Target traits for your pipeline
-// let result = collector.collect(sources, transforms, targets).await?;
+let item = DataItem::new_bytes(vec![1, 2, 3], Label::Real, MediaType::Image, "local")?
+    .with_extension(".bin");
+
+// Implement Source, Transform, and Target traits, then construct Collector::new(...)
 ```
 
 ## See Also
