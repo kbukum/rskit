@@ -9,6 +9,7 @@
 use std::ffi::OsString;
 use std::time::Duration;
 
+use rskit_errors::{AppResult, ErrorCode};
 use rskit_media::ops::MediaOp;
 use rskit_media::timeout::OperationKind;
 use rskit_storage::FileSource;
@@ -98,13 +99,13 @@ impl FfmpegExecutor {
         source: &FileSource,
         ops: &[MediaOp],
         cancel: CancellationToken,
-    ) -> FfmpegConfig {
+    ) -> AppResult<FfmpegConfig> {
         // If no calculator is configured, skip the probe entirely.
         if self.config.timeout_calculator.is_none() {
-            return self.config.clone();
+            return Ok(self.config.clone());
         }
 
-        let source_duration = self.quick_probe_duration(source, cancel).await;
+        let source_duration = self.quick_probe_duration(source, cancel).await?;
         let op_kind = infer_operation_kind(ops);
 
         if let Some(resolved) = self.config.resolve_timeout(source_duration, Some(op_kind)) {
@@ -116,9 +117,9 @@ impl FfmpegExecutor {
             );
             let mut cfg = self.config.clone();
             cfg.timeout = Some(resolved);
-            cfg
+            Ok(cfg)
         } else {
-            self.config.clone()
+            Ok(self.config.clone())
         }
     }
 
@@ -127,10 +128,10 @@ impl FfmpegExecutor {
         &self,
         source: &FileSource,
         cancel: CancellationToken,
-    ) -> Option<Duration> {
+    ) -> AppResult<Option<Duration>> {
         let path = match source {
             FileSource::Path(p) => p.clone(),
-            _ => return None,
+            _ => return Ok(None),
         };
 
         let output = run_capture_with_cancel(
@@ -148,10 +149,21 @@ impl FfmpegExecutor {
             cancel,
         )
         .await
-        .ok()?;
+        .map_err(|error| {
+            if error.code() == ErrorCode::Cancelled {
+                error
+            } else {
+                rskit_errors::AppError::new(
+                    ErrorCode::Internal,
+                    format!("failed to probe source duration: {error}"),
+                )
+            }
+        })?;
 
-        let secs: f64 = output.stdout.trim().parse().ok()?;
-        Some(Duration::from_secs_f64(secs))
+        let Some(secs) = output.stdout.trim().parse::<f64>().ok() else {
+            return Ok(None);
+        };
+        Ok(Some(Duration::from_secs_f64(secs)))
     }
 
     /// Build source hints by quick-probing when concat/extract-many ops need stream info.
@@ -160,18 +172,18 @@ impl FfmpegExecutor {
         source: &FileSource,
         ops: &[MediaOp],
         cancel: CancellationToken,
-    ) -> SourceHints {
+    ) -> AppResult<SourceHints> {
         let needs_hints = ops
             .iter()
             .any(|op| matches!(op, MediaOp::ExtractMany(_) | MediaOp::Concat(_)));
         if !needs_hints {
-            return SourceHints::default();
+            return Ok(SourceHints::default());
         }
 
         // Quick ffprobe to detect stream types
         let path = match source {
             FileSource::Path(p) => p.clone(),
-            _ => return SourceHints::default(),
+            _ => return Ok(SourceHints::default()),
         };
 
         let output = run_capture_with_cancel(
@@ -194,12 +206,13 @@ impl FfmpegExecutor {
             Ok(out) => {
                 let has_audio = out.stdout.lines().any(|l| l.trim() == "audio");
                 let has_video = out.stdout.lines().any(|l| l.trim() == "video");
-                SourceHints {
+                Ok(SourceHints {
                     has_audio: Some(has_audio),
                     has_video: Some(has_video),
-                }
+                })
             }
-            Err(_) => SourceHints::default(),
+            Err(error) if error.code() == ErrorCode::Cancelled => Err(error),
+            Err(_) => Ok(SourceHints::default()),
         }
     }
 }

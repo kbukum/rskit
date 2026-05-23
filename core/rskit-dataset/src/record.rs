@@ -381,7 +381,13 @@ fn stream_from_blocking_reader(
     producer: impl FnOnce(mpsc::Sender<AppResult<DatasetRecord>>) + Send + 'static,
 ) -> BoxRecordStream {
     let (tx, rx) = mpsc::channel(8);
-    std::thread::spawn(move || producer(tx));
+    if tokio::runtime::Handle::try_current().is_ok() {
+        let handle = tokio::task::spawn_blocking(move || producer(tx));
+        drop(handle);
+    } else {
+        let handle = std::thread::spawn(move || producer(tx));
+        drop(handle);
+    }
     Box::pin(stream::unfold(rx, |mut rx| async {
         rx.recv().await.map(|item| (item, rx))
     }))

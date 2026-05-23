@@ -69,13 +69,13 @@ impl FfmpegExecutor {
         );
 
         // Build source hints by quick-probing when concat-style ops are present
-        let hints = self.build_source_hints(source, ops, cancel.clone()).await;
+        let hints = self.build_source_hints(source, ops, cancel.clone()).await?;
 
         // Resolve duration-aware timeout: probe source duration and infer
         // operation kind so the timeout scales with content length.
         let effective_config = self
             .resolve_effective_config(source, ops, cancel.clone())
-            .await;
+            .await?;
 
         // Wrap in Arc so the callback survives hw accel fallback retry
         let on_progress: Option<Arc<dyn Fn(Progress) + Send + Sync>> = on_progress.map(Arc::from);
