@@ -13,7 +13,7 @@ use rskit_storage::{FileSink, FileSource, TempFile};
 use crate::command::FfmpegCommand;
 use crate::config::FfmpegConfig;
 use crate::hw_accel::HwAccel;
-use crate::process::run_capture_lossy;
+use crate::process::run_capture_lossy_with_cancel;
 use tokio_util::sync::CancellationToken;
 
 use super::FfmpegExecutor;
@@ -124,7 +124,9 @@ impl FfmpegExecutor {
                     // If stderr indicates AV1 decode failure, try to find a software
                     // AV1 decoder (libdav1d preferred, libaom-av1 as alternative).
                     if Self::is_av1_decode_failure(&ffmpeg_err.stderr) {
-                        if let Some(sw_decoder) = Self::find_sw_av1_decoder(&self.config).await {
+                        if let Some(sw_decoder) =
+                            Self::find_sw_av1_decoder(&self.config, cancel.clone()).await
+                        {
                             tracing::info!(
                                 decoder = %sw_decoder,
                                 "Using software AV1 decoder for fallback"
@@ -181,11 +183,15 @@ impl FfmpegExecutor {
 
     /// Query FFmpeg for available software AV1 decoders.
     /// Returns the best available one, or None if none are compiled in.
-    async fn find_sw_av1_decoder(config: &FfmpegConfig) -> Option<String> {
-        let output = run_capture_lossy(
+    async fn find_sw_av1_decoder(
+        config: &FfmpegConfig,
+        cancel: CancellationToken,
+    ) -> Option<String> {
+        let output = run_capture_lossy_with_cancel(
             config.ffmpeg_bin(),
             ["-hide_banner", "-decoders"],
             config.timeout,
+            cancel,
         )
         .await
         .ok()?;
