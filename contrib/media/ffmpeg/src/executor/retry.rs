@@ -125,7 +125,7 @@ impl FfmpegExecutor {
                     // AV1 decoder (libdav1d preferred, libaom-av1 as alternative).
                     if Self::is_av1_decode_failure(&ffmpeg_err.stderr) {
                         if let Some(sw_decoder) =
-                            Self::find_sw_av1_decoder(&self.config, cancel.clone()).await
+                            Self::find_sw_av1_decoder(&self.config, cancel.clone()).await?
                         {
                             tracing::info!(
                                 decoder = %sw_decoder,
@@ -186,7 +186,7 @@ impl FfmpegExecutor {
     async fn find_sw_av1_decoder(
         config: &FfmpegConfig,
         cancel: CancellationToken,
-    ) -> Option<String> {
+    ) -> AppResult<Option<String>> {
         let output = run_capture_lossy_with_cancel(
             config.ffmpeg_bin(),
             ["-hide_banner", "-decoders"],
@@ -194,16 +194,25 @@ impl FfmpegExecutor {
             cancel,
         )
         .await
-        .ok()?;
+        .map_err(|error| {
+            if error.code() == ErrorCode::Cancelled {
+                error
+            } else {
+                AppError::new(
+                    ErrorCode::Internal,
+                    format!("failed to query software AV1 decoders: {error}"),
+                )
+            }
+        })?;
 
         // Prefer libdav1d (fastest), then libaom-av1, then libgav1
         for decoder in &["libdav1d", "libaom-av1", "libgav1"] {
             if output.stdout.lines().any(|line| line.contains(decoder)) {
-                return Some((*decoder).to_string());
+                return Ok(Some((*decoder).to_string()));
             }
         }
 
-        None
+        Ok(None)
     }
 }
 

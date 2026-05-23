@@ -305,8 +305,16 @@ fn same_file_metadata(left: &std::fs::Metadata, right: &std::fs::Metadata) -> bo
 #[cfg(windows)]
 fn same_file_metadata(left: &std::fs::Metadata, right: &std::fs::Metadata) -> bool {
     use std::os::windows::fs::MetadataExt as _;
-    left.volume_serial_number() == right.volume_serial_number()
-        && left.file_index() == right.file_index()
+    matches!(
+        (
+            left.volume_serial_number(),
+            left.file_index(),
+            right.volume_serial_number(),
+            right.file_index()
+        ),
+        (Some(left_volume), Some(left_index), Some(right_volume), Some(right_index))
+            if left_volume == right_volume && left_index == right_index
+    )
 }
 
 #[cfg(not(any(unix, windows)))]

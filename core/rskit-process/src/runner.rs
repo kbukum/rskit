@@ -262,12 +262,16 @@ async fn terminate_and_wait(
     grace_period: std::time::Duration,
     reason: &str,
 ) -> (Option<i32>, Option<String>) {
-    terminate_process_group(pid, libc::SIGTERM);
+    if !terminate_process_group(pid, libc::SIGTERM) {
+        let _ = child.start_kill();
+    }
     match timeout(grace_period, child.wait()).await {
         Ok(Ok(status)) => (status.code(), None),
         Ok(Err(error)) => {
             warn!("error waiting for process after SIGTERM: {error}");
-            terminate_process_group(pid, libc::SIGKILL);
+            if !terminate_process_group(pid, libc::SIGKILL) {
+                let _ = child.start_kill();
+            }
             (
                 None,
                 Some(format!(
@@ -277,7 +281,9 @@ async fn terminate_and_wait(
         }
         Err(_) => {
             debug!("grace period expired, sending SIGKILL");
-            terminate_process_group(pid, libc::SIGKILL);
+            if !terminate_process_group(pid, libc::SIGKILL) {
+                let _ = child.start_kill();
+            }
             let _ = child.wait().await;
             (
                 None,
@@ -483,7 +489,7 @@ fn append_bounded_stderr(
     truncated
 }
 
-fn terminate_process_group(pid: Option<u32>, signal: i32) {
+fn terminate_process_group(pid: Option<u32>, signal: i32) -> bool {
     if let Some(pid) = pid {
         #[cfg(unix)]
         // SAFETY: `kill` is invoked with the negated process-group id created by
@@ -495,8 +501,11 @@ fn terminate_process_group(pid: Option<u32>, signal: i32) {
                 let error = io::Error::last_os_error();
                 if error.raw_os_error() != Some(libc::ESRCH) {
                     warn!(signal, "failed to send signal: {error}");
+                    return false;
                 }
             }
+            return true;
         }
     }
+    false
 }
