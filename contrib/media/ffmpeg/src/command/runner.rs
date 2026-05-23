@@ -95,7 +95,7 @@ impl FfmpegCommand {
             let exit_code = result.exit_code;
             let truncated_stderr =
                 crate::error::truncate_stderr(&stderr_output, config.max_stderr_lines);
-            let kind = crate::error::classify_error(exit_code, &stderr_output);
+            let kind = crate::error::classify_error(exit_code, &result.stderr);
 
             let message = format!(
                 "ffmpeg exited with status: {:?} (classified: {:?})",

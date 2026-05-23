@@ -202,12 +202,13 @@ async fn run_process(
     let stdout_truncated = stdout_output.truncated;
     let stderr_output = collect_reader(stderr_task).await?;
     let mut stderr_bytes = stderr_output.bytes;
-    let stderr_truncated = stderr_output.truncated;
+    let mut stderr_truncated = stderr_output.truncated;
     if let Some(extra_stderr) = synthetic_stderr {
-        if !stderr_bytes.is_empty() {
-            stderr_bytes.push(b'\n');
-        }
-        stderr_bytes.extend_from_slice(extra_stderr.as_bytes());
+        stderr_truncated |= append_bounded_stderr(
+            &mut stderr_bytes,
+            extra_stderr.as_bytes(),
+            config.max_output_bytes,
+        );
     }
     let stderr = String::from_utf8_lossy(&stderr_bytes).into_owned();
 
@@ -418,6 +419,42 @@ fn emit_observed_line(line: &[u8], line_callback: &OutputLineCallback) {
     let observed = String::from_utf8_lossy(line);
     let observed = observed.trim_end_matches(['\r', '\n']);
     line_callback(observed);
+}
+
+fn append_bounded_stderr(
+    stderr: &mut Vec<u8>,
+    extra: &[u8],
+    max_output_bytes: Option<usize>,
+) -> bool {
+    let Some(limit) = max_output_bytes else {
+        if !stderr.is_empty() {
+            stderr.push(b'\n');
+        }
+        stderr.extend_from_slice(extra);
+        return false;
+    };
+
+    if stderr.len() >= limit {
+        return true;
+    }
+
+    let mut truncated = false;
+    if !stderr.is_empty() {
+        stderr.push(b'\n');
+        if stderr.len() > limit {
+            stderr.truncate(limit);
+            return true;
+        }
+    }
+
+    let remaining = limit.saturating_sub(stderr.len());
+    if extra.len() > remaining {
+        stderr.extend_from_slice(&extra[..remaining]);
+        truncated = true;
+    } else {
+        stderr.extend_from_slice(extra);
+    }
+    truncated
 }
 
 fn terminate_process_group(pid: Option<u32>, signal: i32) {

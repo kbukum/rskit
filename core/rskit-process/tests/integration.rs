@@ -117,10 +117,11 @@ async fn observer_caps_long_lines_before_newline() {
 
 #[tokio::test]
 async fn timeout_escalates_and_marks_result() {
-    let command = Command::new("/bin/sleep").arg("2");
+    let command = Command::new("/bin/sh").args(["-c", "printf 123456789abcdef >&2; sleep 2"]);
     let config = ProcessConfig {
         timeout: Some(Duration::from_millis(50)),
         grace_period: Duration::from_millis(10),
+        max_output_bytes: Some(8),
         ..ProcessConfig::default()
     };
 
@@ -129,6 +130,8 @@ async fn timeout_escalates_and_marks_result() {
         .unwrap();
     assert!(result.timed_out);
     assert!(result.exit_code.is_none() || result.exit_code != Some(0));
+    assert!(result.stderr_bytes.len() <= 8);
+    assert!(result.stderr_truncated);
 }
 
 #[tokio::test]

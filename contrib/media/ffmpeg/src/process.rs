@@ -85,14 +85,14 @@ pub(crate) async fn run_ffmpeg_observed(
 }
 
 pub(crate) fn ensure_success(result: &ProcessResult, context: &str) -> AppResult<()> {
-    if result.success() {
-        return Ok(());
-    }
     if result.timed_out {
         return Err(AppError::new(
             ErrorCode::Timeout,
             format!("{context} timed out: {}", result.stderr),
         ));
+    }
+    if result.success() {
+        return Ok(());
     }
     Err(AppError::new(
         ErrorCode::Internal,
