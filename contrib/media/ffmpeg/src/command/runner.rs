@@ -83,11 +83,15 @@ impl FfmpegCommand {
             .join("\n");
 
         if result.timed_out {
+            let timeout = config
+                .timeout
+                .map(|duration| format!("{duration:?}"))
+                .unwrap_or_else(|| "configured timeout".to_string());
             return Err(crate::error::FfmpegError {
                 kind: crate::error::FfmpegErrorKind::Timeout,
                 exit_code: result.exit_code,
                 stderr: crate::error::truncate_stderr(&stderr_output, config.max_stderr_lines),
-                message: format!("ffmpeg timed out after {:?}", config.timeout),
+                message: format!("ffmpeg timed out after {timeout}"),
             });
         }
 

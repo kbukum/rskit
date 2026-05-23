@@ -46,7 +46,12 @@ impl FfmpegProbe {
                     )
                 })?;
 
-        ensure_success(&output, "ffprobe")?;
+        ensure_success(&output, "ffprobe").map_err(|e| {
+            AppError::new(
+                ErrorCode::ServiceUnavailable,
+                format!("ffprobe not available: {e}"),
+            )
+        })?;
         let version = output
             .stdout
             .lines()

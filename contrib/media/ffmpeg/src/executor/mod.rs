@@ -45,7 +45,12 @@ impl FfmpegExecutor {
                 )
             })?;
 
-        ensure_success(&output, "ffmpeg")?;
+        ensure_success(&output, "ffmpeg").map_err(|e| {
+            AppError::new(
+                ErrorCode::ServiceUnavailable,
+                format!("ffmpeg not available: {e}"),
+            )
+        })?;
         let version = output
             .stdout
             .lines()

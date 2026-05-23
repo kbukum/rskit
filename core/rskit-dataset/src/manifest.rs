@@ -89,14 +89,25 @@ impl Manifest {
     /// Save manifest to the output directory.
     pub fn save(&self, output_dir: &Path) -> AppResult<()> {
         let path = output_dir.join(MANIFEST_FILE);
+        let tmp_path = output_dir.join(format!("{MANIFEST_FILE}.tmp"));
         let content = serde_json::to_string_pretty(self).map_err(|e| {
             AppError::new(
                 ErrorCode::Internal,
                 format!("manifest serialize failed: {e}"),
             )
         })?;
-        std::fs::write(path, content).map_err(|e| {
+        std::fs::write(&tmp_path, content).map_err(|e| {
             AppError::new(ErrorCode::Internal, format!("manifest write failed: {e}"))
+        })?;
+        std::fs::rename(&tmp_path, &path).map_err(|e| {
+            AppError::new(
+                ErrorCode::Internal,
+                format!(
+                    "manifest replace failed from {} to {}: {e}",
+                    tmp_path.display(),
+                    path.display()
+                ),
+            )
         })?;
         Ok(())
     }
