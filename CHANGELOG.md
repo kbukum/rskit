@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Media/dataset**: redesigned dataset items around bounded byte/file
   payloads, streaming source contracts, explicit transform errors, schema
   validation via `rskit-schema`, and `rskit-pipeline` stream adapters.
+- **rskit-process**: changed command program/argument storage to OS-native
+  path/string values, added raw stdout/stderr bytes and truncation indicators
+  to process results, and added line-observed process execution for streaming
+  subprocess diagnostics.
 - **L7 AI contracts**: strengthened tool schemas/input/output with typed wrappers,
   moved TGI/vLLM inference adapters from core to contrib, removed `reqwest::Error`
   from the public inference error surface, and aligned GenAI embedding span
