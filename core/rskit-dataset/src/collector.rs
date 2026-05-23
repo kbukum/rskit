@@ -535,6 +535,7 @@ async fn process_source(
     let mut total = resume_total;
     let mut real = resume_real;
     let mut ai = resume_ai;
+    let mut fetched_offset = resume_stats.as_ref().map(|s| s.fetched_offset).unwrap_or(0);
 
     let mut stream = source.stream(ctx.cancel.clone());
 
@@ -544,6 +545,8 @@ async fn process_source(
                 return Ok::<SourceOutcome, AppError>(SourceOutcome::TimedOut);
             }
             let item = item?;
+            let item_source_offset = item.source_offset();
+            fetched_offset = item_source_offset.unwrap_or_else(|| fetched_offset.saturating_add(1));
             let mut transformed = Some(item);
             for transform in ctx.transforms.iter() {
                 transformed = match transformed {
@@ -603,7 +606,7 @@ async fn process_source(
         total,
         real,
         ai,
-        fetched_offset: total,
+        fetched_offset,
     };
 
     // Report outcome to main loop

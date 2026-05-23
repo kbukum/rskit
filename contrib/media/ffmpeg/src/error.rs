@@ -58,7 +58,7 @@ impl FfmpegError {
         let code = match self.kind {
             FfmpegErrorKind::HwAccelUnavailable => ErrorCode::ServiceUnavailable,
             FfmpegErrorKind::Timeout => ErrorCode::Timeout,
-            FfmpegErrorKind::Cancelled => ErrorCode::Internal,
+            FfmpegErrorKind::Cancelled => ErrorCode::Cancelled,
             FfmpegErrorKind::InvalidInput => ErrorCode::InvalidInput,
             FfmpegErrorKind::CodecError => ErrorCode::Internal,
             FfmpegErrorKind::OutputError => ErrorCode::Internal,

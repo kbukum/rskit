@@ -206,3 +206,33 @@ async fn json_array_reader_rejects_oversized_fixture_files() {
 
     assert!(err.to_string().contains("exceeding max"));
 }
+
+#[tokio::test]
+async fn json_array_writer_streams_records_without_buffering() {
+    let dir = TempDir::new().unwrap();
+    let output = dir.path().join("records.json");
+    let records = stream::iter([
+        Ok(DatasetRecord::from_fields([("id", json!("a"))])),
+        Ok(DatasetRecord::from_fields([("id", json!("b"))])),
+    ]);
+
+    let written = rskit_dataset::JsonArrayWriter
+        .write(Box::pin(records), output.as_path())
+        .await
+        .unwrap();
+
+    assert_eq!(written, 2);
+    assert_eq!(
+        std::fs::read_to_string(output).unwrap(),
+        r#"[{"id":"a"},{"id":"b"}]"#
+    );
+}
+
+#[test]
+fn data_item_carries_source_resume_offset() {
+    let item = DataItem::new_bytes(b"x".to_vec(), Label::Real, MediaType::Text, "source")
+        .unwrap()
+        .with_source_offset(42);
+
+    assert_eq!(item.source_offset(), Some(42));
+}

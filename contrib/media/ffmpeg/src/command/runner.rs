@@ -63,10 +63,10 @@ impl FfmpegCommand {
         })
         .await
         .map_err(|error| crate::error::FfmpegError {
-            kind: if error.code() == rskit_errors::ErrorCode::Timeout {
-                crate::error::FfmpegErrorKind::Timeout
-            } else {
-                crate::error::FfmpegErrorKind::SpawnFailed
+            kind: match error.code() {
+                rskit_errors::ErrorCode::Timeout => crate::error::FfmpegErrorKind::Timeout,
+                rskit_errors::ErrorCode::Cancelled => crate::error::FfmpegErrorKind::Cancelled,
+                _ => crate::error::FfmpegErrorKind::SpawnFailed,
             },
             exit_code: None,
             stderr: String::new(),

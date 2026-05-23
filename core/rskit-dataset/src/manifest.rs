@@ -35,7 +35,7 @@ pub struct SourceStats {
     pub real: usize,
     /// AI-generated item count.
     pub ai: usize,
-    /// API offset reached (for resume). 0 means start from beginning.
+    /// Source-reported resume cursor. Falls back to fetched source-item count for count-based sources.
     #[serde(default)]
     pub fetched_offset: usize,
 }

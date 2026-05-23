@@ -420,18 +420,29 @@ pub struct JsonArrayWriter;
 #[async_trait::async_trait]
 impl DatasetWriter for JsonArrayWriter {
     async fn write(&self, mut records: BoxRecordStream, path: &Path) -> AppResult<usize> {
-        let mut values = Vec::new();
-        while let Some(record) = records.next().await {
-            values.push(record?.into_json());
-        }
+        use std::io::Write as _;
+
         let file = std::fs::File::create(path).map_err(|error| {
             AppError::new(
                 ErrorCode::Internal,
                 format!("failed to create JSON dataset {}: {error}", path.display()),
             )
         })?;
-        serde_json::to_writer_pretty(file, &values).map_err(AppError::internal)?;
-        Ok(values.len())
+        let mut writer = std::io::BufWriter::new(file);
+        writer.write_all(b"[").map_err(AppError::internal)?;
+
+        let mut count = 0usize;
+        while let Some(record) = records.next().await {
+            if count > 0 {
+                writer.write_all(b",").map_err(AppError::internal)?;
+            }
+            serde_json::to_writer(&mut writer, &record?.into_json()).map_err(AppError::internal)?;
+            count += 1;
+        }
+
+        writer.write_all(b"]").map_err(AppError::internal)?;
+        writer.flush().map_err(AppError::internal)?;
+        Ok(count)
     }
 }
 

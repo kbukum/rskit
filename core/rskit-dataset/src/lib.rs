@@ -265,6 +265,8 @@ pub struct DataItem {
     pub extension: String,
     /// String metadata attached to the sample.
     pub metadata: HashMap<String, String>,
+    /// Source-reported resume cursor after this item, if available.
+    source_offset: Option<usize>,
 }
 
 impl DataItem {
@@ -309,6 +311,7 @@ impl DataItem {
             source_name: source_name.into(),
             extension: ".jpg".to_string(),
             metadata: HashMap::new(),
+            source_offset: None,
         })
     }
 
@@ -327,6 +330,7 @@ impl DataItem {
             source_name: source_name.into(),
             extension: ".bin".to_string(),
             metadata: HashMap::new(),
+            source_offset: None,
         }
     }
 
@@ -353,6 +357,19 @@ impl DataItem {
         }
         self.payload = payload;
         Ok(self)
+    }
+
+    /// Return the source-provided resume cursor after this item, if available.
+    #[must_use]
+    pub fn source_offset(&self) -> Option<usize> {
+        self.source_offset
+    }
+
+    /// Attach a source-provided resume cursor.
+    #[must_use]
+    pub fn with_source_offset(mut self, offset: usize) -> Self {
+        self.source_offset = Some(offset);
+        self
     }
 
     /// Set the output extension.
