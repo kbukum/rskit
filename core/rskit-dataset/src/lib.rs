@@ -251,9 +251,30 @@ impl DataPayload {
 }
 
 fn is_same_file(source: &Path, destination: &Path) -> AppResult<bool> {
-    if !destination.exists() {
-        return Ok(false);
+    let source_metadata = std::fs::metadata(source).map_err(|error| {
+        AppError::new(
+            ErrorCode::Internal,
+            format!("failed to stat payload file {}: {error}", source.display()),
+        )
+    })?;
+    let destination_metadata = match std::fs::metadata(destination) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => {
+            return Err(AppError::new(
+                ErrorCode::Internal,
+                format!(
+                    "failed to stat dataset item {}: {error}",
+                    destination.display()
+                ),
+            ));
+        }
+    };
+
+    if same_file_metadata(&source_metadata, &destination_metadata) {
+        return Ok(true);
     }
+
     let source = std::fs::canonicalize(source).map_err(|error| {
         AppError::new(
             ErrorCode::Internal,
@@ -273,6 +294,17 @@ fn is_same_file(source: &Path, destination: &Path) -> AppResult<bool> {
         )
     })?;
     Ok(source == destination)
+}
+
+#[cfg(unix)]
+fn same_file_metadata(left: &std::fs::Metadata, right: &std::fs::Metadata) -> bool {
+    use std::os::unix::fs::MetadataExt as _;
+    left.dev() == right.dev() && left.ino() == right.ino()
+}
+
+#[cfg(not(unix))]
+fn same_file_metadata(_left: &std::fs::Metadata, _right: &std::fs::Metadata) -> bool {
+    false
 }
 
 /// A single data sample flowing through the dataset pipeline.

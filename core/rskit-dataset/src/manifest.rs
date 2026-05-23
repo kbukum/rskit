@@ -58,33 +58,32 @@ impl Manifest {
     /// Load manifest from the output directory. Returns empty manifest if not found.
     pub fn load(output_dir: &Path) -> AppResult<Self> {
         let path = output_dir.join(MANIFEST_FILE);
-        if path.exists() {
-            let size = std::fs::metadata(&path)
-                .map_err(|e| {
+        match std::fs::metadata(&path) {
+            Ok(metadata) => {
+                let size = metadata.len();
+                if size > MAX_MANIFEST_BYTES {
+                    return Err(AppError::new(
+                        ErrorCode::InvalidInput,
+                        format!(
+                            "manifest {} is {size} bytes, exceeding max {MAX_MANIFEST_BYTES}",
+                            path.display()
+                        ),
+                    ));
+                }
+                let bytes = read_manifest_bounded(&path)?;
+                serde_json::from_slice(&bytes).map_err(|e| {
                     AppError::new(
-                        ErrorCode::Internal,
-                        format!("manifest stat failed for {}: {e}", path.display()),
+                        ErrorCode::InvalidInput,
+                        format!("manifest parse failed for {}: {e}", path.display()),
                     )
-                })?
-                .len();
-            if size > MAX_MANIFEST_BYTES {
-                return Err(AppError::new(
-                    ErrorCode::InvalidInput,
-                    format!(
-                        "manifest {} is {size} bytes, exceeding max {MAX_MANIFEST_BYTES}",
-                        path.display()
-                    ),
-                ));
+                })
             }
-            let bytes = read_manifest_bounded(&path)?;
-            return serde_json::from_slice(&bytes).map_err(|e| {
-                AppError::new(
-                    ErrorCode::InvalidInput,
-                    format!("manifest parse failed for {}: {e}", path.display()),
-                )
-            });
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
+            Err(error) => Err(AppError::new(
+                ErrorCode::Internal,
+                format!("manifest stat failed for {}: {error}", path.display()),
+            )),
         }
-        Ok(Self::default())
     }
 
     /// Save manifest to the output directory.

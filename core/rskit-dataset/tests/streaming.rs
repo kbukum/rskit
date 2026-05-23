@@ -99,6 +99,26 @@ fn file_payload_write_to_same_path_is_noop() {
     assert_eq!(std::fs::read(source_path).unwrap(), b"same file payload");
 }
 
+#[cfg(unix)]
+#[test]
+fn file_payload_write_to_hard_link_is_noop() {
+    let dir = TempDir::new().unwrap();
+    let source_path = dir.path().join("source.bin");
+    let link_path = dir.path().join("link.bin");
+    std::fs::write(&source_path, b"hard link payload").unwrap();
+    std::fs::hard_link(&source_path, &link_path).unwrap();
+
+    let item = DataItem::new_file(&source_path, Label::Real, MediaType::Text, "file")
+        .with_extension(".bin");
+    let written = item
+        .write_to_path(&link_path, &DatasetLimits::default())
+        .unwrap();
+
+    assert_eq!(written, 17);
+    assert_eq!(std::fs::read(source_path).unwrap(), b"hard link payload");
+    assert_eq!(std::fs::read(link_path).unwrap(), b"hard link payload");
+}
+
 #[test]
 fn byte_payload_above_limit_is_rejected() {
     let limits = DatasetLimits {
