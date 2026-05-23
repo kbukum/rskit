@@ -30,7 +30,7 @@ pub(crate) async fn run_capture_with_cancel(
         ..ProcessConfig::default()
     };
     let result = rskit_process::run_with_cancel(&command, &config, cancel).await?;
-    if result.stdout.len() >= MAX_CAPTURE_BYTES || result.stderr.len() >= MAX_CAPTURE_BYTES {
+    if result.stdout_truncated || result.stderr_truncated {
         return Err(AppError::new(
             ErrorCode::InvalidInput,
             format!("process output reached capture limit of {MAX_CAPTURE_BYTES} bytes"),

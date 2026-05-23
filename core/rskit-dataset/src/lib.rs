@@ -193,12 +193,7 @@ impl DataPayload {
         }
         match &self.kind {
             DataPayloadKind::Bytes(bytes) => Ok(bytes.clone()),
-            DataPayloadKind::File(path) => std::fs::read(path).map_err(|error| {
-                AppError::new(
-                    ErrorCode::Internal,
-                    format!("failed to read payload file {}: {error}", path.display()),
-                )
-            }),
+            DataPayloadKind::File(path) => read_file_bounded(path, limits.max_in_memory_bytes),
         }
     }
 
@@ -390,7 +385,7 @@ impl DataItem {
 
     /// Validate the item against configured limits and path safety rules.
     pub fn validate(&self, limits: &DatasetLimits) -> AppResult<()> {
-        rskit_validation::input::validate_safe_path(self.extension.trim_start_matches('.'))?;
+        validate_extension(&self.extension)?;
         let len = self.payload.len()?;
         if self.payload.is_bytes() && len > limits.max_in_memory_bytes as u64 {
             return Err(AppError::new(
@@ -409,4 +404,52 @@ impl DataItem {
         self.validate(limits)?;
         self.payload.write_to_path(path, limits)
     }
+}
+
+fn validate_extension(extension: &str) -> AppResult<()> {
+    let extension = extension.trim_start_matches('.');
+    if extension.is_empty()
+        || extension.contains('/')
+        || extension.contains('\\')
+        || extension == "."
+        || extension == ".."
+        || extension.contains("..")
+    {
+        return Err(AppError::new(
+            ErrorCode::InvalidInput,
+            format!("invalid dataset item extension: {extension:?}"),
+        ));
+    }
+    rskit_validation::input::validate_safe_path(extension)
+}
+
+fn read_file_bounded(path: &Path, max_bytes: usize) -> AppResult<Vec<u8>> {
+    use std::io::Read as _;
+
+    let mut file = std::fs::File::open(path).map_err(|error| {
+        AppError::new(
+            ErrorCode::Internal,
+            format!("failed to open payload file {}: {error}", path.display()),
+        )
+    })?;
+    let mut bytes = Vec::new();
+    file.by_ref()
+        .take(max_bytes as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| {
+            AppError::new(
+                ErrorCode::Internal,
+                format!("failed to read payload file {}: {error}", path.display()),
+            )
+        })?;
+    if bytes.len() > max_bytes {
+        return Err(AppError::new(
+            ErrorCode::InvalidInput,
+            format!(
+                "dataset payload exceeded max_in_memory_bytes={max_bytes} while reading {}",
+                path.display()
+            ),
+        ));
+    }
+    Ok(bytes)
 }

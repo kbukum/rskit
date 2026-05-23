@@ -11,6 +11,10 @@ pub struct ProcessResult {
     pub stdout: String,
     /// Captured standard error as a string.
     pub stderr: String,
+    /// Whether stdout exceeded the configured capture limit.
+    pub stdout_truncated: bool,
+    /// Whether stderr exceeded the configured capture limit.
+    pub stderr_truncated: bool,
     /// Total duration the process ran.
     pub duration: Duration,
     /// Whether the process was killed due to timeout.
@@ -30,6 +34,8 @@ impl ProcessResult {
     ///     exit_code: Some(0),
     ///     stdout: "output".to_string(),
     ///     stderr: "".to_string(),
+    ///     stdout_truncated: false,
+    ///     stderr_truncated: false,
     ///     duration: Duration::from_secs(1),
     ///     timed_out: false,
     /// };

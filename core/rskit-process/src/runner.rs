@@ -196,8 +196,12 @@ async fn run_process(
         }
     };
 
-    let mut stdout = collect_reader(stdout_task).await?;
-    let mut stderr = collect_reader(stderr_task).await?;
+    let stdout_output = collect_reader(stdout_task).await?;
+    let stdout = stdout_output.text;
+    let stdout_truncated = stdout_output.truncated;
+    let stderr_output = collect_reader(stderr_task).await?;
+    let mut stderr = stderr_output.text;
+    let stderr_truncated = stderr_output.truncated;
     if let Some(extra_stderr) = synthetic_stderr {
         if !stderr.is_empty() {
             stderr.push('\n');
@@ -205,17 +209,12 @@ async fn run_process(
         stderr.push_str(&extra_stderr);
     }
 
-    if config.capture_output
-        && let Some(limit) = config.max_output_bytes
-    {
-        stdout.truncate(limit);
-        stderr.truncate(limit);
-    }
-
     let result = ProcessResult {
         exit_code,
         stdout,
         stderr,
+        stdout_truncated,
+        stderr_truncated,
         duration: start.elapsed(),
         timed_out,
     };
@@ -277,7 +276,7 @@ fn spawn_reader<R>(
     reader: Option<R>,
     max_output_bytes: Option<usize>,
     line_callback: Option<OutputLineCallback>,
-) -> Option<JoinHandle<io::Result<String>>>
+) -> Option<JoinHandle<io::Result<CapturedOutput>>>
 where
     R: AsyncRead + Unpin + Send + 'static,
 {
@@ -287,23 +286,38 @@ where
     })
 }
 
-async fn collect_reader(task: Option<JoinHandle<io::Result<String>>>) -> AppResult<String> {
+#[derive(Debug)]
+struct CapturedOutput {
+    text: String,
+    truncated: bool,
+}
+
+async fn collect_reader(
+    task: Option<JoinHandle<io::Result<CapturedOutput>>>,
+) -> AppResult<CapturedOutput> {
     match task {
         Some(task) => task
             .await
             .map_err(AppError::internal)?
             .map_err(AppError::internal),
-        None => Ok(String::new()),
+        None => Ok(CapturedOutput {
+            text: String::new(),
+            truncated: false,
+        }),
     }
 }
 
-async fn read_output<R>(mut reader: R, max_output_bytes: Option<usize>) -> io::Result<String>
+async fn read_output<R>(
+    mut reader: R,
+    max_output_bytes: Option<usize>,
+) -> io::Result<CapturedOutput>
 where
     R: AsyncRead + Unpin,
 {
     let mut captured = Vec::new();
     let mut buffer = [0_u8; 4096];
     let mut remaining = max_output_bytes.unwrap_or(usize::MAX);
+    let mut truncated = false;
 
     loop {
         let read = reader.read(&mut buffer).await?;
@@ -314,17 +328,25 @@ where
             let to_copy = remaining.min(read);
             captured.extend_from_slice(&buffer[..to_copy]);
             remaining -= to_copy;
+            if to_copy < read {
+                truncated = true;
+            }
+        } else {
+            truncated = true;
         }
     }
 
-    Ok(String::from_utf8_lossy(&captured).into_owned())
+    Ok(CapturedOutput {
+        text: String::from_utf8_lossy(&captured).into_owned(),
+        truncated,
+    })
 }
 
 async fn read_observed_lines<R>(
     reader: R,
     max_output_bytes: Option<usize>,
     line_callback: OutputLineCallback,
-) -> io::Result<String>
+) -> io::Result<CapturedOutput>
 where
     R: AsyncRead + Unpin,
 {
@@ -335,6 +357,7 @@ where
     let max_line_bytes = max_output_bytes.unwrap_or(DEFAULT_MAX_OUTPUT_BYTES);
     let mut line_truncated = false;
     let mut buffer = [0_u8; 4096];
+    let mut capture_truncated = false;
 
     loop {
         let read = reader.read(&mut buffer).await?;
@@ -349,6 +372,11 @@ where
             let to_copy = remaining.min(read);
             captured.extend_from_slice(&buffer[..to_copy]);
             remaining -= to_copy;
+            if to_copy < read {
+                capture_truncated = true;
+            }
+        } else {
+            capture_truncated = true;
         }
 
         for byte in &buffer[..read] {
@@ -376,7 +404,10 @@ where
         }
     }
 
-    Ok(String::from_utf8_lossy(&captured).into_owned())
+    Ok(CapturedOutput {
+        text: String::from_utf8_lossy(&captured).into_owned(),
+        truncated: capture_truncated,
+    })
 }
 
 fn emit_observed_line(line: &[u8], line_callback: &OutputLineCallback) {

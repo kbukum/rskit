@@ -85,16 +85,39 @@ fn read_subtitle_file(path: &std::path::Path) -> AppResult<String> {
             format!("subtitle file is {size} bytes, exceeding max {MAX_SUBTITLE_BYTES}"),
         ));
     }
-    let bytes = std::fs::read(path).map_err(|e| {
-        rskit_errors::AppError::new(
-            rskit_errors::ErrorCode::Internal,
-            format!("failed to read subtitle file: {e}"),
-        )
-    })?;
+    let bytes = read_bounded(path, MAX_SUBTITLE_BYTES)?;
     String::from_utf8(bytes).map_err(|e| {
         rskit_errors::AppError::new(
             rskit_errors::ErrorCode::InvalidInput,
             format!("subtitle file is not valid UTF-8: {e}"),
         )
     })
+}
+
+fn read_bounded(path: &std::path::Path, max_bytes: u64) -> AppResult<Vec<u8>> {
+    use std::io::Read as _;
+
+    let mut file = std::fs::File::open(path).map_err(|e| {
+        rskit_errors::AppError::new(
+            rskit_errors::ErrorCode::Internal,
+            format!("failed to open subtitle file: {e}"),
+        )
+    })?;
+    let mut bytes = Vec::new();
+    file.by_ref()
+        .take(max_bytes + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|e| {
+            rskit_errors::AppError::new(
+                rskit_errors::ErrorCode::Internal,
+                format!("failed to read subtitle file: {e}"),
+            )
+        })?;
+    if bytes.len() as u64 > max_bytes {
+        return Err(rskit_errors::AppError::new(
+            rskit_errors::ErrorCode::InvalidInput,
+            format!("subtitle file exceeded max {max_bytes} bytes"),
+        ));
+    }
+    Ok(bytes)
 }

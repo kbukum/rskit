@@ -45,6 +45,7 @@ impl ResizeTransform {
     }
 
     /// Set JPEG quality after validating the accepted encoder range.
+    #[must_use = "builder methods return the updated transform"]
     pub fn with_quality(mut self, quality: u8) -> AppResult<Self> {
         Validator::new()
             .in_range("quality", quality, 1, 100)
