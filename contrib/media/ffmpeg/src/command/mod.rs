@@ -194,39 +194,10 @@ impl FfmpegCommand {
 
     /// Build the final FFmpeg CLI argument list (excluding the output path).
     pub fn to_args(&self) -> Vec<String> {
-        let mut args = Vec::new();
-
-        args.extend(self.global_opts.clone());
-
-        for input in &self.inputs {
-            if let Some(seek) = &input.seek_to {
-                args.extend(["-ss".into(), seek.to_ffmpeg_time()]);
-            }
-            if let Some(dur) = &input.duration {
-                args.extend(["-t".into(), format!("{:.3}", dur.as_secs_f64())]);
-            }
-            args.push("-i".into());
-            match &input.source {
-                FileSource::Path(p) => args.push(p.to_string_lossy().to_string()),
-                FileSource::Temp(t) => args.push(t.path().to_string_lossy().to_string()),
-                _ => args.push("pipe:0".into()),
-            }
-        }
-
-        if let Some(complex) = &self.complex_filter {
-            args.extend(["-filter_complex".into(), complex.clone()]);
-        } else {
-            if !self.video_filters.is_empty() {
-                args.extend(["-vf".into(), self.video_filters.join(",")]);
-            }
-            if !self.audio_filters.is_empty() {
-                args.extend(["-af".into(), self.audio_filters.join(",")]);
-            }
-        }
-
-        args.extend(self.output_opts.clone());
-
-        args
+        self.to_os_args()
+            .into_iter()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect()
     }
 
     /// Build the final FFmpeg CLI argument list preserving OS-native path arguments.

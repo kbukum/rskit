@@ -566,10 +566,14 @@ async fn process_source(
                 &ctx.ai_dir
             };
             let path = subdir.join(format!("{:06}{}", file_idx, transformed.extension));
-            transformed.write_to_path(&path, &ctx.limits)?;
+            let label = transformed.label;
+            let limits = ctx.limits;
+            tokio::task::spawn_blocking(move || transformed.write_to_path(&path, &limits))
+                .await
+                .map_err(AppError::internal)??;
             fetched_offset = pending_offset;
 
-            if transformed.label == Label::Real {
+            if label == Label::Real {
                 real += 1;
             } else {
                 ai += 1;
