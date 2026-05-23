@@ -1,10 +1,13 @@
 //! Process execution runtime.
 
-use crate::{AppError, AppResult, Command, ErrorCode, ProcessConfig, ProcessResult};
+use crate::{
+    AppError, AppResult, Command, ErrorCode, ProcessConfig, ProcessResult,
+    command::DEFAULT_MAX_OUTPUT_BYTES,
+};
 use std::io;
 use std::sync::Arc;
 use std::time::Instant;
-use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio::process::Child;
 use tokio::process::Command as TokioCommand;
 use tokio::task::JoinHandle;
@@ -329,26 +332,57 @@ where
     let mut captured = Vec::new();
     let mut remaining = max_output_bytes.unwrap_or(usize::MAX);
     let mut line = Vec::new();
+    let max_line_bytes = max_output_bytes.unwrap_or(DEFAULT_MAX_OUTPUT_BYTES);
+    let mut line_truncated = false;
+    let mut buffer = [0_u8; 4096];
 
     loop {
-        line.clear();
-        let read = reader.read_until(b'\n', &mut line).await?;
+        let read = reader.read(&mut buffer).await?;
         if read == 0 {
+            if !line.is_empty() && !line_truncated {
+                emit_observed_line(&line, &line_callback);
+            }
             break;
         }
 
-        let observed = String::from_utf8_lossy(&line);
-        let observed = observed.trim_end_matches(['\r', '\n']);
-        line_callback(observed);
-
         if remaining > 0 {
-            let to_copy = remaining.min(line.len());
-            captured.extend_from_slice(&line[..to_copy]);
+            let to_copy = remaining.min(read);
+            captured.extend_from_slice(&buffer[..to_copy]);
             remaining -= to_copy;
+        }
+
+        for byte in &buffer[..read] {
+            if *byte == b'\n' {
+                if !line_truncated {
+                    line.push(*byte);
+                    emit_observed_line(&line, &line_callback);
+                }
+                line.clear();
+                line_truncated = false;
+                continue;
+            }
+
+            if line_truncated {
+                continue;
+            }
+
+            if line.len() < max_line_bytes {
+                line.push(*byte);
+            } else {
+                emit_observed_line(&line, &line_callback);
+                line.clear();
+                line_truncated = true;
+            }
         }
     }
 
     Ok(String::from_utf8_lossy(&captured).into_owned())
+}
+
+fn emit_observed_line(line: &[u8], line_callback: &OutputLineCallback) {
+    let observed = String::from_utf8_lossy(line);
+    let observed = observed.trim_end_matches(['\r', '\n']);
+    line_callback(observed);
 }
 
 fn terminate_process_group(pid: Option<u32>, signal: i32) {

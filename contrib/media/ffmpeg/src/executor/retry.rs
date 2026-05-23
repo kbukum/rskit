@@ -14,6 +14,7 @@ use crate::command::FfmpegCommand;
 use crate::config::FfmpegConfig;
 use crate::hw_accel::HwAccel;
 use crate::process::run_capture_lossy;
+use tokio_util::sync::CancellationToken;
 
 use super::FfmpegExecutor;
 
@@ -25,6 +26,19 @@ impl FfmpegExecutor {
         ops: &[MediaOp],
         sink: Option<&FileSink>,
         on_progress: Option<Box<dyn Fn(Progress) + Send + Sync>>,
+    ) -> AppResult<std::path::PathBuf> {
+        self.run_with_retry_cancelable(source, ops, sink, on_progress, CancellationToken::new())
+            .await
+    }
+
+    /// Run an FFmpeg command with retry and cancellation support.
+    pub(crate) async fn run_with_retry_cancelable(
+        &self,
+        source: &FileSource,
+        ops: &[MediaOp],
+        sink: Option<&FileSink>,
+        on_progress: Option<Box<dyn Fn(Progress) + Send + Sync>>,
+        cancel: CancellationToken,
     ) -> AppResult<std::path::PathBuf> {
         let ext = self.determine_output_extension(ops);
         let output_file = match sink {
@@ -74,7 +88,9 @@ impl FfmpegExecutor {
             let cb = Arc::clone(cb);
             Box::new(move |p: Progress| cb(p)) as Box<dyn Fn(Progress) + Send + Sync>
         });
-        let result = cmd.run(&effective_config, progress_cb, &output_file).await;
+        let result = cmd
+            .run_with_cancel(&effective_config, progress_cb, &output_file, cancel.clone())
+            .await;
 
         match result {
             Ok(()) => Ok(output_file),
@@ -136,7 +152,7 @@ impl FfmpegExecutor {
                     });
 
                     cmd_fallback
-                        .run(&fallback_config, progress_cb, &output_file)
+                        .run_with_cancel(&fallback_config, progress_cb, &output_file, cancel)
                         .await
                         .map_err(|e| e.into_app_error())?;
                     Ok(output_file)

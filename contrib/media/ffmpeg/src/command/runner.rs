@@ -11,6 +11,7 @@ use rskit_media::pipeline::Progress;
 use crate::config::FfmpegConfig;
 use crate::process::run_ffmpeg_observed;
 use crate::progress::FfmpegProgressParser;
+use tokio_util::sync::CancellationToken;
 
 use super::FfmpegCommand;
 
@@ -29,6 +30,18 @@ impl FfmpegCommand {
         on_progress: Option<Box<dyn Fn(Progress) + Send + Sync>>,
         output_path: &std::path::Path,
     ) -> Result<(), crate::error::FfmpegError> {
+        self.run_with_cancel(config, on_progress, output_path, CancellationToken::new())
+            .await
+    }
+
+    /// Run the compiled FFmpeg command with cancellation support.
+    pub async fn run_with_cancel(
+        &self,
+        config: &FfmpegConfig,
+        on_progress: Option<Box<dyn Fn(Progress) + Send + Sync>>,
+        output_path: &std::path::Path,
+        cancel: CancellationToken,
+    ) -> Result<(), crate::error::FfmpegError> {
         let mut args = self.to_args();
         args.push(output_path.to_string_lossy().to_string());
 
@@ -36,7 +49,7 @@ impl FfmpegCommand {
 
         let stderr_lines = Arc::new(Mutex::new(Vec::new()));
         let progress_callback = on_progress.map(Arc::new);
-        let result = run_ffmpeg_observed(config.ffmpeg_bin(), args, config.timeout, {
+        let result = run_ffmpeg_observed(config.ffmpeg_bin(), args, config.timeout, cancel, {
             let stderr_lines = Arc::clone(&stderr_lines);
             move |line| {
                 if let Some(ref cb) = progress_callback {

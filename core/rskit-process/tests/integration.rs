@@ -90,6 +90,32 @@ async fn observer_handles_non_utf8_output_lossily() {
 }
 
 #[tokio::test]
+async fn observer_caps_long_lines_before_newline() {
+    let observed = Arc::new(Mutex::new(Vec::new()));
+    let command = Command::new("/usr/bin/printf").args(["%s", "x".repeat(128).as_str()]);
+    let config = ProcessConfig {
+        max_output_bytes: Some(32),
+        ..ProcessConfig::default()
+    };
+
+    let result = rskit_process::run_with_observer(
+        &command,
+        &config,
+        CancellationToken::new(),
+        OutputObserver::new().with_stdout_line({
+            let observed = Arc::clone(&observed);
+            move |line| observed.lock().push(line.to_string())
+        }),
+    )
+    .await
+    .unwrap();
+
+    assert!(result.success());
+    assert_eq!(result.stdout.len(), 32);
+    assert_eq!(observed.lock().as_slice(), ["x".repeat(32)]);
+}
+
+#[tokio::test]
 async fn timeout_escalates_and_marks_result() {
     let command = Command::new("/bin/sleep").arg("2");
     let config = ProcessConfig {

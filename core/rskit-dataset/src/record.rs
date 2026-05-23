@@ -14,6 +14,8 @@ use tokio::sync::mpsc;
 /// Boxed stream of structured dataset records.
 pub type BoxRecordStream = Pin<Box<dyn Stream<Item = AppResult<DatasetRecord>> + Send + 'static>>;
 
+const MAX_JSON_ARRAY_BYTES: u64 = 1024 * 1024;
+
 /// Format identifier for built-in dataset record readers and writers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -248,28 +250,62 @@ impl JsonArrayReader {
 impl DatasetReader for JsonArrayReader {
     fn stream(self: Box<Self>) -> BoxRecordStream {
         let path = self.path;
-        let records = match std::fs::File::open(&path)
-            .map_err(|error| {
-                AppError::new(
-                    ErrorCode::Internal,
-                    format!("failed to open JSON dataset {}: {error}", path.display()),
-                )
-            })
-            .and_then(|file| {
-                serde_json::from_reader::<_, Vec<Value>>(file).map_err(|error| {
-                    AppError::new(
+        stream_from_blocking_reader(move |tx| {
+            let size = match std::fs::metadata(&path) {
+                Ok(metadata) => metadata.len(),
+                Err(error) => {
+                    send_record(
+                        &tx,
+                        Err(AppError::new(
+                            ErrorCode::Internal,
+                            format!("failed to stat JSON dataset {}: {error}", path.display()),
+                        )),
+                    );
+                    return;
+                }
+            };
+            if size > MAX_JSON_ARRAY_BYTES {
+                send_record(
+                    &tx,
+                    Err(AppError::new(
                         ErrorCode::InvalidInput,
-                        format!("failed to parse JSON dataset {}: {error}", path.display()),
+                        format!(
+                            "JSON array dataset {} is {size} bytes, exceeding max {MAX_JSON_ARRAY_BYTES}",
+                            path.display()
+                        ),
+                    )),
+                );
+                return;
+            }
+
+            let values = match std::fs::File::open(&path)
+                .map_err(|error| {
+                    AppError::new(
+                        ErrorCode::Internal,
+                        format!("failed to open JSON dataset {}: {error}", path.display()),
                     )
                 })
-            }) {
-            Ok(values) => values
-                .into_iter()
-                .map(record_from_value)
-                .collect::<Vec<_>>(),
-            Err(error) => vec![Err(error)],
-        };
-        Box::pin(stream::iter(records))
+                .and_then(|file| {
+                    serde_json::from_reader::<_, Vec<Value>>(file).map_err(|error| {
+                        AppError::new(
+                            ErrorCode::InvalidInput,
+                            format!("failed to parse JSON dataset {}: {error}", path.display()),
+                        )
+                    })
+                }) {
+                Ok(values) => values,
+                Err(error) => {
+                    send_record(&tx, Err(error));
+                    return;
+                }
+            };
+
+            for value in values {
+                if !send_record(&tx, record_from_value(value)) {
+                    return;
+                }
+            }
+        })
     }
 }
 

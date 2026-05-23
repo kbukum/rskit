@@ -4,8 +4,8 @@ use futures::stream;
 use futures_util::StreamExt as _;
 use rskit_dataset::{
     BoxDataStream, CsvWriter, DataItem, DatasetLimits, DatasetReader, DatasetRecord, DatasetSchema,
-    DatasetStreamExt, DatasetWriter, JsonLinesReader, JsonLinesWriter, Label, MediaType, Source,
-    Target, Transform, filter_records, select_columns,
+    DatasetStreamExt, DatasetWriter, JsonArrayReader, JsonLinesReader, JsonLinesWriter, Label,
+    MediaType, Source, Target, Transform, filter_records, select_columns,
 };
 use rskit_errors::AppResult;
 use serde_json::json;
@@ -189,4 +189,20 @@ async fn csv_writer_rejects_records_with_different_columns() {
         .unwrap_err();
 
     assert!(err.to_string().contains("columns do not match"));
+}
+
+#[tokio::test]
+async fn json_array_reader_rejects_oversized_fixture_files() {
+    let dir = TempDir::new().unwrap();
+    let input = dir.path().join("records.json");
+    std::fs::write(
+        &input,
+        format!("[{{\"blob\":\"{}\"}}]", "x".repeat(1024 * 1024)),
+    )
+    .unwrap();
+
+    let mut records = Box::new(JsonArrayReader::new(&input)).stream();
+    let err = records.next().await.unwrap().unwrap_err();
+
+    assert!(err.to_string().contains("exceeding max"));
 }

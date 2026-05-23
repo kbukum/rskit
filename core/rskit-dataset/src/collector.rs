@@ -571,13 +571,12 @@ async fn process_source(
             }
             total += 1;
 
-            let _ = ctx
-                .event_tx
-                .send(WorkerEvent::Progress {
+            if !ctx.cancel.is_cancelled() {
+                let _ = ctx.event_tx.try_send(WorkerEvent::Progress {
                     index: idx,
                     count: total,
-                })
-                .await;
+                });
+            }
         }
         Ok::<SourceOutcome, AppError>(SourceOutcome::Done)
     };

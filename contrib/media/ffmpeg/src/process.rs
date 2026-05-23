@@ -12,12 +12,21 @@ pub(crate) async fn run_capture(
     args: impl IntoIterator<Item = String>,
     timeout: Option<Duration>,
 ) -> AppResult<ProcessResult> {
+    run_capture_with_cancel(program, args, timeout, CancellationToken::new()).await
+}
+
+pub(crate) async fn run_capture_with_cancel(
+    program: PathBuf,
+    args: impl IntoIterator<Item = String>,
+    timeout: Option<Duration>,
+    cancel: CancellationToken,
+) -> AppResult<ProcessResult> {
     let command = process_command(program.to_string_lossy().to_string()).args(args);
     let config = ProcessConfig {
         timeout,
         ..ProcessConfig::default()
     };
-    rskit_process::run_with_cancel(&command, &config, CancellationToken::new()).await
+    rskit_process::run_with_cancel(&command, &config, cancel).await
 }
 
 pub(crate) async fn run_capture_lossy(
@@ -37,6 +46,7 @@ pub(crate) async fn run_ffmpeg_observed(
     program: PathBuf,
     args: Vec<String>,
     timeout: Option<Duration>,
+    cancel: CancellationToken,
     stderr_line: impl Fn(&str) + Send + Sync + 'static,
 ) -> AppResult<ProcessResult> {
     let command = process_command(program.to_string_lossy().to_string()).args(args);
@@ -47,7 +57,7 @@ pub(crate) async fn run_ffmpeg_observed(
     rskit_process::run_with_observer(
         &command,
         &config,
-        CancellationToken::new(),
+        cancel,
         OutputObserver::new().with_stderr_line(stderr_line),
     )
     .await

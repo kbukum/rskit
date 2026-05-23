@@ -130,19 +130,10 @@ impl MediaExecutor for FfmpegExecutor {
         on_progress: Option<Box<dyn Fn(Progress) + Send + Sync>>,
         cancel: CancellationToken,
     ) -> AppResult<FileSource> {
-        let run_fut = self.run_with_retry(source, ops, sink, on_progress);
-
-        tokio::select! {
-            biased;
-            _ = cancel.cancelled() => {
-                tracing::info!("media pipeline cancelled by token");
-                Err(AppError::new(ErrorCode::Cancelled, "media pipeline cancelled"))
-            }
-            result = run_fut => {
-                let output_file = result?;
-                resolve_output(output_file, sink).await
-            }
-        }
+        let output_file = self
+            .run_with_retry_cancelable(source, ops, sink, on_progress, cancel)
+            .await?;
+        resolve_output(output_file, sink).await
     }
 }
 
