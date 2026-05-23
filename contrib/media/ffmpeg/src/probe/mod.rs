@@ -85,12 +85,13 @@ impl FfmpegProbe {
 
         ensure_success(&output, "ffprobe")?;
 
-        let json: serde_json::Value = serde_json::from_str(&output.stdout).map_err(|e| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!("ffprobe output is not valid JSON: {e}"),
-            )
-        })?;
+        let json: serde_json::Value =
+            serde_json::from_slice(&output.stdout_bytes).map_err(|e| {
+                AppError::new(
+                    ErrorCode::Internal,
+                    format!("ffprobe output is not valid JSON: {e}"),
+                )
+            })?;
 
         Ok(json)
     }

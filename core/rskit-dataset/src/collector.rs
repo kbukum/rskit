@@ -324,6 +324,7 @@ impl Collector {
 
             // ── Main event loop ──────────────────────────────────────
             let mut completed_count = 0usize;
+            let mut cancellation_seen = false;
             loop {
                 tokio::select! {
                     event = event_rx.recv() => {
@@ -373,9 +374,9 @@ impl Collector {
                             None => break, // All workers done, channel closed
                         }
                     }
-                    _ = cancel.cancelled() => {
+                    _ = cancel.cancelled(), if !cancellation_seen => {
                         tracing::debug!(completed = completed_count, "cancelled, waiting for workers");
-                        break;
+                        cancellation_seen = true;
                     }
                 }
             }
@@ -655,18 +656,7 @@ async fn process_source(
 }
 
 async fn send_worker_event(ctx: &WorkerContext, event: WorkerEvent) {
-    if ctx.cancel.is_cancelled() {
-        let _ = ctx.event_tx.try_send(event);
-        return;
-    }
-
-    tokio::select! {
-        biased;
-        _ = ctx.cancel.cancelled() => {}
-        result = ctx.event_tx.send(event) => {
-            let _ = result;
-        }
-    }
+    let _ = ctx.event_tx.send(event).await;
 }
 
 fn count_files(dir: &Path) -> AppResult<usize> {

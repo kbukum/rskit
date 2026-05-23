@@ -197,22 +197,26 @@ async fn run_process(
     };
 
     let stdout_output = collect_reader(stdout_task).await?;
-    let stdout = stdout_output.text;
+    let stdout_bytes = stdout_output.bytes;
+    let stdout = String::from_utf8_lossy(&stdout_bytes).into_owned();
     let stdout_truncated = stdout_output.truncated;
     let stderr_output = collect_reader(stderr_task).await?;
-    let mut stderr = stderr_output.text;
+    let mut stderr_bytes = stderr_output.bytes;
     let stderr_truncated = stderr_output.truncated;
     if let Some(extra_stderr) = synthetic_stderr {
-        if !stderr.is_empty() {
-            stderr.push('\n');
+        if !stderr_bytes.is_empty() {
+            stderr_bytes.push(b'\n');
         }
-        stderr.push_str(&extra_stderr);
+        stderr_bytes.extend_from_slice(extra_stderr.as_bytes());
     }
+    let stderr = String::from_utf8_lossy(&stderr_bytes).into_owned();
 
     let result = ProcessResult {
         exit_code,
         stdout,
+        stdout_bytes,
         stderr,
+        stderr_bytes,
         stdout_truncated,
         stderr_truncated,
         duration: start.elapsed(),
@@ -288,7 +292,7 @@ where
 
 #[derive(Debug)]
 struct CapturedOutput {
-    text: String,
+    bytes: Vec<u8>,
     truncated: bool,
 }
 
@@ -301,7 +305,7 @@ async fn collect_reader(
             .map_err(AppError::internal)?
             .map_err(AppError::internal),
         None => Ok(CapturedOutput {
-            text: String::new(),
+            bytes: Vec::new(),
             truncated: false,
         }),
     }
@@ -337,7 +341,7 @@ where
     }
 
     Ok(CapturedOutput {
-        text: String::from_utf8_lossy(&captured).into_owned(),
+        bytes: captured,
         truncated,
     })
 }
@@ -405,7 +409,7 @@ where
     }
 
     Ok(CapturedOutput {
-        text: String::from_utf8_lossy(&captured).into_owned(),
+        bytes: captured,
         truncated: capture_truncated,
     })
 }

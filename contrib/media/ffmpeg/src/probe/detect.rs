@@ -84,12 +84,13 @@ impl FfmpegProbe {
 
         ensure_success(&output, "ffprobe keyframes")?;
 
-        let json: serde_json::Value = serde_json::from_str(&output.stdout).map_err(|e| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!("ffprobe keyframes output is not valid JSON: {e}"),
-            )
-        })?;
+        let json: serde_json::Value =
+            serde_json::from_slice(&output.stdout_bytes).map_err(|e| {
+                AppError::new(
+                    ErrorCode::Internal,
+                    format!("ffprobe keyframes output is not valid JSON: {e}"),
+                )
+            })?;
 
         Ok(parse_keyframes(&json))
     }
