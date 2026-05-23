@@ -53,12 +53,15 @@ impl FfmpegExecutor {
             _ => TempFile::with_extension(&ext)?.path().to_path_buf(),
         };
 
-        // Acquire semaphore permit (blocks if max concurrent reached)
-        let _permit = self
-            .semaphore
-            .acquire()
-            .await
-            .map_err(|_| AppError::new(ErrorCode::Internal, "semaphore closed"))?;
+        let _permit = tokio::select! {
+            biased;
+            _ = cancel.cancelled() => {
+                return Err(AppError::new(ErrorCode::Cancelled, "media pipeline cancelled"));
+            }
+            permit = self.semaphore.acquire() => {
+                permit.map_err(|_| AppError::new(ErrorCode::Internal, "semaphore closed"))?
+            }
+        };
 
         tracing::debug!(
             available_permits = self.semaphore.available_permits(),
@@ -66,11 +69,13 @@ impl FfmpegExecutor {
         );
 
         // Build source hints by quick-probing when concat-style ops are present
-        let hints = self.build_source_hints(source, ops).await;
+        let hints = self.build_source_hints(source, ops, cancel.clone()).await;
 
         // Resolve duration-aware timeout: probe source duration and infer
         // operation kind so the timeout scales with content length.
-        let effective_config = self.resolve_effective_config(source, ops).await;
+        let effective_config = self
+            .resolve_effective_config(source, ops, cancel.clone())
+            .await;
 
         // Wrap in Arc so the callback survives hw accel fallback retry
         let on_progress: Option<Arc<dyn Fn(Progress) + Send + Sync>> = on_progress.map(Arc::from);

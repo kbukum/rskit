@@ -45,6 +45,7 @@ impl FfmpegProbe {
                     )
                 })?;
 
+        ensure_success(&output, "ffprobe")?;
         let version = output
             .stdout
             .lines()

@@ -43,6 +43,7 @@ impl FfmpegProbe {
             )
         })?;
 
+        ensure_success(&output, "ffmpeg scene_detect")?;
         Ok(parse_showinfo_timestamps(&output.stderr))
     }
 
@@ -124,6 +125,7 @@ impl FfmpegProbe {
             )
         })?;
 
+        ensure_success(&output, "ffmpeg silence_detect")?;
         Ok(parse_silence_intervals(&output.stderr))
     }
 

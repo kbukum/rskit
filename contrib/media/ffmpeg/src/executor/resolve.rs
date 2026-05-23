@@ -14,7 +14,8 @@ use rskit_storage::FileSource;
 
 use crate::command::SourceHints;
 use crate::config::FfmpegConfig;
-use crate::process::run_capture_lossy;
+use crate::process::run_capture_lossy_with_cancel;
+use tokio_util::sync::CancellationToken;
 
 use super::FfmpegExecutor;
 
@@ -95,13 +96,14 @@ impl FfmpegExecutor {
         &self,
         source: &FileSource,
         ops: &[MediaOp],
+        cancel: CancellationToken,
     ) -> FfmpegConfig {
         // If no calculator is configured, skip the probe entirely.
         if self.config.timeout_calculator.is_none() {
             return self.config.clone();
         }
 
-        let source_duration = self.quick_probe_duration(source).await;
+        let source_duration = self.quick_probe_duration(source, cancel).await;
         let op_kind = infer_operation_kind(ops);
 
         if let Some(resolved) = self.config.resolve_timeout(source_duration, Some(op_kind)) {
@@ -120,13 +122,17 @@ impl FfmpegExecutor {
     }
 
     /// Quick ffprobe to get source duration (for timeout calculation).
-    pub(crate) async fn quick_probe_duration(&self, source: &FileSource) -> Option<Duration> {
+    pub(crate) async fn quick_probe_duration(
+        &self,
+        source: &FileSource,
+        cancel: CancellationToken,
+    ) -> Option<Duration> {
         let path = match source {
             FileSource::Path(p) => p.clone(),
             _ => return None,
         };
 
-        let output = run_capture_lossy(
+        let output = run_capture_lossy_with_cancel(
             self.config.ffprobe_bin(),
             [
                 "-v",
@@ -138,6 +144,7 @@ impl FfmpegExecutor {
                 &path.to_string_lossy(),
             ],
             self.config.timeout,
+            cancel,
         )
         .await
         .ok()?;
@@ -151,6 +158,7 @@ impl FfmpegExecutor {
         &self,
         source: &FileSource,
         ops: &[MediaOp],
+        cancel: CancellationToken,
     ) -> SourceHints {
         let needs_hints = ops
             .iter()
@@ -165,7 +173,7 @@ impl FfmpegExecutor {
             _ => return SourceHints::default(),
         };
 
-        let output = run_capture_lossy(
+        let output = run_capture_lossy_with_cancel(
             self.config.ffprobe_bin(),
             [
                 "-v",
@@ -177,6 +185,7 @@ impl FfmpegExecutor {
                 &path.to_string_lossy(),
             ],
             self.config.timeout,
+            cancel,
         )
         .await;
 

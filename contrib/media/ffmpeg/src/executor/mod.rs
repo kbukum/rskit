@@ -13,7 +13,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::command::FfmpegCommand;
 use crate::config::FfmpegConfig;
-use crate::process::run_capture_lossy;
+use crate::process::{ensure_success, run_capture_lossy};
 
 /// FFmpeg-based media executor with concurrency control and hw accel fallback.
 pub struct FfmpegExecutor {
@@ -45,6 +45,7 @@ impl FfmpegExecutor {
                 )
             })?;
 
+        ensure_success(&output, "ffmpeg")?;
         let version = output
             .stdout
             .lines()
@@ -130,19 +131,10 @@ impl MediaExecutor for FfmpegExecutor {
         on_progress: Option<Box<dyn Fn(Progress) + Send + Sync>>,
         cancel: CancellationToken,
     ) -> AppResult<FileSource> {
-        let run = self.run_with_retry_cancelable(source, ops, sink, on_progress, cancel.clone());
-
-        tokio::select! {
-            biased;
-            _ = cancel.cancelled() => {
-                tracing::info!("media pipeline cancelled by token");
-                Err(AppError::new(ErrorCode::Cancelled, "media pipeline cancelled"))
-            }
-            result = run => {
-                let output_file = result?;
-                resolve_output(output_file, sink).await
-            }
-        }
+        let output_file = self
+            .run_with_retry_cancelable(source, ops, sink, on_progress, cancel)
+            .await?;
+        resolve_output(output_file, sink).await
     }
 }
 
