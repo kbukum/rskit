@@ -28,7 +28,9 @@ pub use schema::{DatasetSchema, validate_record};
 pub use source::{BoxDataStream, Source};
 pub use stream::DatasetStreamExt;
 pub use target::{PublishResult, Target};
-pub use transform::{ResizeTransform, Transform};
+#[cfg(feature = "image-transform")]
+pub use transform::ResizeTransform;
+pub use transform::Transform;
 
 /// Default threshold above which payloads should be represented as files.
 pub const DEFAULT_MAX_IN_MEMORY_BYTES: usize = 8 * 1024 * 1024;

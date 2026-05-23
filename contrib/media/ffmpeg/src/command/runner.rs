@@ -3,6 +3,7 @@
 //! Handles spawning the `ffmpeg` process, stderr streaming for progress
 //! and error diagnostics, timeout enforcement, and process-group cleanup.
 
+use std::collections::VecDeque;
 use std::sync::Arc;
 
 use parking_lot::Mutex;
@@ -47,7 +48,8 @@ impl FfmpegCommand {
 
         tracing::debug!(cmd = %format!("ffmpeg {}", args.join(" ")), "executing ffmpeg");
 
-        let stderr_lines = Arc::new(Mutex::new(Vec::new()));
+        let max_stderr_lines = config.max_stderr_lines.max(1);
+        let stderr_lines = Arc::new(Mutex::new(VecDeque::with_capacity(max_stderr_lines)));
         let progress_callback = on_progress.map(Arc::new);
         let result = run_ffmpeg_observed(config.ffmpeg_bin(), args, config.timeout, cancel, {
             let stderr_lines = Arc::clone(&stderr_lines);
@@ -58,7 +60,7 @@ impl FfmpegCommand {
                         cb(progress);
                     }
                 }
-                stderr_lines.lock().push(line.to_string());
+                push_stderr_line(&stderr_lines, max_stderr_lines, line);
             }
         })
         .await
@@ -73,7 +75,12 @@ impl FfmpegCommand {
             message: format!("ffmpeg execution failed: {error}"),
         })?;
 
-        let stderr_output = stderr_lines.lock().join("\n");
+        let stderr_output = stderr_lines
+            .lock()
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n");
 
         if result.timed_out {
             return Err(crate::error::FfmpegError {
@@ -107,4 +114,12 @@ impl FfmpegCommand {
 
         Ok(())
     }
+}
+
+fn push_stderr_line(lines: &Mutex<VecDeque<String>>, max_stderr_lines: usize, line: &str) {
+    let mut lines = lines.lock();
+    if lines.len() == max_stderr_lines {
+        lines.pop_front();
+    }
+    lines.push_back(line.to_string());
 }

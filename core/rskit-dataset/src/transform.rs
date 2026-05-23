@@ -1,7 +1,13 @@
 //! Transform trait and built-in transforms.
 
-use crate::{DataItem, DataPayload, DatasetLimits};
-use rskit_errors::{AppError, AppResult, ErrorCode};
+use crate::{DataItem, DatasetLimits};
+use rskit_errors::AppResult;
+
+#[cfg(feature = "image-transform")]
+use crate::DataPayload;
+#[cfg(feature = "image-transform")]
+use rskit_errors::{AppError, ErrorCode};
+#[cfg(feature = "image-transform")]
 use rskit_validation::Validator;
 
 /// Protocol for data transforms.
@@ -14,6 +20,7 @@ pub trait Transform: Send + Sync {
 
 /// Resize images to a fixed size and re-encode as JPEG.
 #[cfg(feature = "image-transform")]
+#[derive(Clone)]
 pub struct ResizeTransform {
     width: u32,
     height: u32,
