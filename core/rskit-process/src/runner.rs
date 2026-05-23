@@ -379,6 +379,7 @@ where
     let mut line = Vec::new();
     let max_line_bytes = max_output_bytes.unwrap_or(DEFAULT_MAX_OUTPUT_BYTES);
     let mut line_truncated = false;
+    let mut skip_lf_after_cr = false;
     let mut buffer = [0_u8; 4096];
     let mut capture_truncated = false;
 
@@ -403,13 +404,20 @@ where
         }
 
         for byte in &buffer[..read] {
-            if *byte == b'\n' {
+            if *byte == b'\n' && skip_lf_after_cr {
+                skip_lf_after_cr = false;
+                continue;
+            }
+            skip_lf_after_cr = false;
+
+            if *byte == b'\n' || *byte == b'\r' {
                 if !line_truncated {
                     line.push(*byte);
                     emit_observed_line(&line, &line_callback);
                 }
                 line.clear();
                 line_truncated = false;
+                skip_lf_after_cr = *byte == b'\r';
                 continue;
             }
 

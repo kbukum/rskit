@@ -3,9 +3,9 @@ use std::path::Path;
 use futures::stream;
 use futures_util::StreamExt as _;
 use rskit_dataset::{
-    BoxDataStream, CsvWriter, DataItem, DatasetLimits, DatasetReader, DatasetRecord, DatasetSchema,
-    DatasetStreamExt, DatasetWriter, JsonArrayReader, JsonLinesReader, JsonLinesWriter, Label,
-    MediaType, Source, Target, Transform, filter_records, select_columns,
+    BoxDataStream, CsvReader, CsvWriter, DataItem, DatasetLimits, DatasetReader, DatasetRecord,
+    DatasetSchema, DatasetStreamExt, DatasetWriter, JsonArrayReader, JsonLinesReader,
+    JsonLinesWriter, Label, MediaType, Source, Target, Transform, filter_records, select_columns,
 };
 use rskit_errors::AppResult;
 use serde_json::json;
@@ -184,6 +184,26 @@ async fn json_lines_records_select_filter_and_write_streaming() {
     assert_eq!(
         reread.into_iter().next().unwrap().unwrap(),
         DatasetRecord::from_fields([("id", json!("a"))])
+    );
+}
+
+#[tokio::test]
+async fn csv_reader_streams_header_mapped_records() {
+    let dir = TempDir::new().unwrap();
+    let input = dir.path().join("records.csv");
+    std::fs::write(&input, "id,label\na,real\nb,ai\n").unwrap();
+
+    let records = Box::new(CsvReader::new(&input))
+        .stream()
+        .collect::<Vec<_>>()
+        .await;
+
+    assert_eq!(
+        records.into_iter().collect::<Result<Vec<_>, _>>().unwrap(),
+        vec![
+            DatasetRecord::from_fields([("id", json!("a")), ("label", json!("real"))]),
+            DatasetRecord::from_fields([("id", json!("b")), ("label", json!("ai"))]),
+        ]
     );
 }
 
