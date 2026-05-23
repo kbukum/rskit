@@ -76,13 +76,8 @@ impl Manifest {
                     ),
                 ));
             }
-            let file = std::fs::File::open(&path).map_err(|e| {
-                AppError::new(
-                    ErrorCode::Internal,
-                    format!("manifest read failed for {}: {e}", path.display()),
-                )
-            })?;
-            return serde_json::from_reader(file).map_err(|e| {
+            let bytes = read_manifest_bounded(&path)?;
+            return serde_json::from_slice(&bytes).map_err(|e| {
                 AppError::new(
                     ErrorCode::InvalidInput,
                     format!("manifest parse failed for {}: {e}", path.display()),
@@ -184,6 +179,37 @@ impl Manifest {
             },
         );
     }
+}
+
+fn read_manifest_bounded(path: &Path) -> AppResult<Vec<u8>> {
+    use std::io::Read as _;
+
+    let mut file = std::fs::File::open(path).map_err(|e| {
+        AppError::new(
+            ErrorCode::Internal,
+            format!("manifest read failed for {}: {e}", path.display()),
+        )
+    })?;
+    let mut bytes = Vec::new();
+    file.by_ref()
+        .take(MAX_MANIFEST_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|e| {
+            AppError::new(
+                ErrorCode::Internal,
+                format!("manifest read failed for {}: {e}", path.display()),
+            )
+        })?;
+    if bytes.len() as u64 > MAX_MANIFEST_BYTES {
+        return Err(AppError::new(
+            ErrorCode::InvalidInput,
+            format!(
+                "manifest {} exceeded max {MAX_MANIFEST_BYTES} bytes while reading",
+                path.display()
+            ),
+        ));
+    }
+    Ok(bytes)
 }
 
 #[cfg(test)]

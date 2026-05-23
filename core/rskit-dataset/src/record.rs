@@ -279,27 +279,21 @@ impl DatasetReader for JsonArrayReader {
                 return;
             }
 
-            let values = match std::fs::File::open(&path)
-                .map_err(|error| {
-                    AppError::new(
-                        ErrorCode::Internal,
-                        format!("failed to open JSON dataset {}: {error}", path.display()),
-                    )
-                })
-                .and_then(|file| {
-                    serde_json::from_reader::<_, Vec<Value>>(file).map_err(|error| {
+            let values =
+                match read_bounded_file(&path, MAX_JSON_ARRAY_BYTES as usize).and_then(|bytes| {
+                    serde_json::from_slice::<Vec<Value>>(&bytes).map_err(|error| {
                         AppError::new(
                             ErrorCode::InvalidInput,
                             format!("failed to parse JSON dataset {}: {error}", path.display()),
                         )
                     })
                 }) {
-                Ok(values) => values,
-                Err(error) => {
-                    send_record(&tx, Err(error));
-                    return;
-                }
-            };
+                    Ok(values) => values,
+                    Err(error) => {
+                        send_record(&tx, Err(error));
+                        return;
+                    }
+                };
 
             for value in values {
                 if !send_record(&tx, record_from_value(value)) {
@@ -579,6 +573,37 @@ fn append_json_line_chunk(line: &mut Vec<u8>, chunk: &[u8]) -> AppResult<()> {
     }
     line.extend_from_slice(chunk);
     Ok(())
+}
+
+fn read_bounded_file(path: &Path, max_bytes: usize) -> AppResult<Vec<u8>> {
+    use std::io::Read as _;
+
+    let mut file = std::fs::File::open(path).map_err(|error| {
+        AppError::new(
+            ErrorCode::Internal,
+            format!("failed to open JSON dataset {}: {error}", path.display()),
+        )
+    })?;
+    let mut bytes = Vec::new();
+    file.by_ref()
+        .take(max_bytes as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| {
+            AppError::new(
+                ErrorCode::Internal,
+                format!("failed to read JSON dataset {}: {error}", path.display()),
+            )
+        })?;
+    if bytes.len() > max_bytes {
+        return Err(AppError::new(
+            ErrorCode::InvalidInput,
+            format!(
+                "JSON array dataset {} exceeded max {MAX_JSON_ARRAY_BYTES} bytes while reading",
+                path.display()
+            ),
+        ));
+    }
+    Ok(bytes)
 }
 
 fn record_from_value(value: Value) -> AppResult<DatasetRecord> {
