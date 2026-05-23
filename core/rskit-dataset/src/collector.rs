@@ -545,8 +545,9 @@ async fn process_source(
                 return Ok::<SourceOutcome, AppError>(SourceOutcome::TimedOut);
             }
             let item = item?;
-            let item_source_offset = item.source_offset();
-            fetched_offset = item_source_offset.unwrap_or_else(|| fetched_offset.saturating_add(1));
+            let pending_offset = item
+                .source_offset()
+                .unwrap_or_else(|| fetched_offset.saturating_add(1));
             let mut transformed = Some(item);
             for transform in ctx.transforms.iter() {
                 transformed = match transformed {
@@ -555,6 +556,7 @@ async fn process_source(
                 };
             }
             let Some(transformed) = transformed else {
+                fetched_offset = pending_offset;
                 continue;
             };
 
@@ -566,6 +568,7 @@ async fn process_source(
             };
             let path = subdir.join(format!("{:06}{}", file_idx, transformed.extension));
             transformed.write_to_path(&path, &ctx.limits)?;
+            fetched_offset = pending_offset;
 
             if transformed.label == Label::Real {
                 real += 1;

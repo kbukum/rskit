@@ -89,8 +89,8 @@ impl Transform for ResizeTransform {
 
         let mut buf = Vec::new();
         let mut cursor = Cursor::new(&mut buf);
-        resized
-            .write_to(&mut cursor, image::ImageFormat::Jpeg)
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut cursor, self.quality)
+            .encode_image(&resized)
             .map_err(|error| {
                 AppError::new(ErrorCode::Internal, format!("image encode failed: {error}"))
             })?;
