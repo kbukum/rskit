@@ -7,6 +7,8 @@ use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_process::{OutputObserver, ProcessConfig, ProcessResult, command as process_command};
 use tokio_util::sync::CancellationToken;
 
+const MAX_CAPTURE_BYTES: usize = 64 * 1024 * 1024;
+
 pub(crate) async fn run_capture(
     program: PathBuf,
     args: impl IntoIterator<Item = String>,
@@ -24,9 +26,17 @@ pub(crate) async fn run_capture_with_cancel(
     let command = process_command(program).args(args);
     let config = ProcessConfig {
         timeout,
+        max_output_bytes: Some(MAX_CAPTURE_BYTES),
         ..ProcessConfig::default()
     };
-    rskit_process::run_with_cancel(&command, &config, cancel).await
+    let result = rskit_process::run_with_cancel(&command, &config, cancel).await?;
+    if result.stdout.len() >= MAX_CAPTURE_BYTES || result.stderr.len() >= MAX_CAPTURE_BYTES {
+        return Err(AppError::new(
+            ErrorCode::InvalidInput,
+            format!("process output reached capture limit of {MAX_CAPTURE_BYTES} bytes"),
+        ));
+    }
+    Ok(result)
 }
 
 pub(crate) async fn run_capture_lossy(

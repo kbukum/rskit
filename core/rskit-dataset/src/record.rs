@@ -317,39 +317,52 @@ pub struct CsvWriter;
 #[async_trait::async_trait]
 impl DatasetWriter for CsvWriter {
     async fn write(&self, mut records: BoxRecordStream, path: &Path) -> AppResult<usize> {
-        let mut writer = csv::Writer::from_path(path).map_err(|error| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!("failed to create CSV dataset {}: {error}", path.display()),
-            )
-        })?;
-        let mut headers: Option<Vec<String>> = None;
-        let mut count = 0usize;
-        while let Some(record) = records.next().await {
-            let record = record?;
-            let columns = headers.get_or_insert_with(|| record.fields.keys().cloned().collect());
-            if count == 0 {
-                writer
-                    .write_record(columns.iter())
-                    .map_err(AppError::internal)?;
-            } else {
-                ensure_csv_columns(columns, &record)?;
+        let (tx, mut rx) = mpsc::channel::<AppResult<DatasetRecord>>(8);
+        let path = path.to_path_buf();
+        let writer = tokio::task::spawn_blocking(move || -> AppResult<usize> {
+            let mut writer = csv::Writer::from_path(&path).map_err(|error| {
+                AppError::new(
+                    ErrorCode::Internal,
+                    format!("failed to create CSV dataset {}: {error}", path.display()),
+                )
+            })?;
+            let mut headers: Option<Vec<String>> = None;
+            let mut count = 0usize;
+            while let Some(record) = rx.blocking_recv() {
+                let record = record?;
+                let columns =
+                    headers.get_or_insert_with(|| record.fields.keys().cloned().collect());
+                if count == 0 {
+                    writer
+                        .write_record(columns.iter())
+                        .map_err(AppError::internal)?;
+                } else {
+                    ensure_csv_columns(columns, &record)?;
+                }
+                let row = columns
+                    .iter()
+                    .map(|column| {
+                        record
+                            .fields
+                            .get(column)
+                            .map(value_to_cell)
+                            .unwrap_or_default()
+                    })
+                    .collect::<Vec<_>>();
+                writer.write_record(row).map_err(AppError::internal)?;
+                count += 1;
             }
-            let row = columns
-                .iter()
-                .map(|column| {
-                    record
-                        .fields
-                        .get(column)
-                        .map(value_to_cell)
-                        .unwrap_or_default()
-                })
-                .collect::<Vec<_>>();
-            writer.write_record(row).map_err(AppError::internal)?;
-            count += 1;
+            writer.flush().map_err(AppError::internal)?;
+            Ok(count)
+        });
+
+        while let Some(record) = records.next().await {
+            if tx.send(record).await.is_err() {
+                break;
+            }
         }
-        writer.flush().map_err(AppError::internal)?;
-        Ok(count)
+        drop(tx);
+        writer.await.map_err(AppError::internal)?
     }
 }
 
@@ -394,25 +407,37 @@ pub struct JsonLinesWriter;
 #[async_trait::async_trait]
 impl DatasetWriter for JsonLinesWriter {
     async fn write(&self, mut records: BoxRecordStream, path: &Path) -> AppResult<usize> {
-        use std::io::Write as _;
+        let (tx, mut rx) = mpsc::channel::<AppResult<DatasetRecord>>(8);
+        let path = path.to_path_buf();
+        let writer = tokio::task::spawn_blocking(move || -> AppResult<usize> {
+            use std::io::Write as _;
 
-        let mut file = std::fs::File::create(path).map_err(|error| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!(
-                    "failed to create JSON Lines dataset {}: {error}",
-                    path.display()
-                ),
-            )
-        })?;
-        let mut count = 0usize;
+            let mut file = std::fs::File::create(&path).map_err(|error| {
+                AppError::new(
+                    ErrorCode::Internal,
+                    format!(
+                        "failed to create JSON Lines dataset {}: {error}",
+                        path.display()
+                    ),
+                )
+            })?;
+            let mut count = 0usize;
+            while let Some(record) = rx.blocking_recv() {
+                let json = record?.into_json();
+                serde_json::to_writer(&mut file, &json).map_err(AppError::internal)?;
+                file.write_all(b"\n").map_err(AppError::internal)?;
+                count += 1;
+            }
+            Ok(count)
+        });
+
         while let Some(record) = records.next().await {
-            let json = record?.into_json();
-            serde_json::to_writer(&mut file, &json).map_err(AppError::internal)?;
-            file.write_all(b"\n").map_err(AppError::internal)?;
-            count += 1;
+            if tx.send(record).await.is_err() {
+                break;
+            }
         }
-        Ok(count)
+        drop(tx);
+        writer.await.map_err(AppError::internal)?
     }
 }
 
@@ -422,29 +447,42 @@ pub struct JsonArrayWriter;
 #[async_trait::async_trait]
 impl DatasetWriter for JsonArrayWriter {
     async fn write(&self, mut records: BoxRecordStream, path: &Path) -> AppResult<usize> {
-        use std::io::Write as _;
+        let (tx, mut rx) = mpsc::channel::<AppResult<DatasetRecord>>(8);
+        let path = path.to_path_buf();
+        let writer = tokio::task::spawn_blocking(move || -> AppResult<usize> {
+            use std::io::Write as _;
 
-        let file = std::fs::File::create(path).map_err(|error| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!("failed to create JSON dataset {}: {error}", path.display()),
-            )
-        })?;
-        let mut writer = std::io::BufWriter::new(file);
-        writer.write_all(b"[").map_err(AppError::internal)?;
+            let file = std::fs::File::create(&path).map_err(|error| {
+                AppError::new(
+                    ErrorCode::Internal,
+                    format!("failed to create JSON dataset {}: {error}", path.display()),
+                )
+            })?;
+            let mut writer = std::io::BufWriter::new(file);
+            writer.write_all(b"[").map_err(AppError::internal)?;
 
-        let mut count = 0usize;
-        while let Some(record) = records.next().await {
-            if count > 0 {
-                writer.write_all(b",").map_err(AppError::internal)?;
+            let mut count = 0usize;
+            while let Some(record) = rx.blocking_recv() {
+                if count > 0 {
+                    writer.write_all(b",").map_err(AppError::internal)?;
+                }
+                serde_json::to_writer(&mut writer, &record?.into_json())
+                    .map_err(AppError::internal)?;
+                count += 1;
             }
-            serde_json::to_writer(&mut writer, &record?.into_json()).map_err(AppError::internal)?;
-            count += 1;
-        }
 
-        writer.write_all(b"]").map_err(AppError::internal)?;
-        writer.flush().map_err(AppError::internal)?;
-        Ok(count)
+            writer.write_all(b"]").map_err(AppError::internal)?;
+            writer.flush().map_err(AppError::internal)?;
+            Ok(count)
+        });
+
+        while let Some(record) = records.next().await {
+            if tx.send(record).await.is_err() {
+                break;
+            }
+        }
+        drop(tx);
+        writer.await.map_err(AppError::internal)?
     }
 }
 
