@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed — Cross-Cutting
-- **L8 media/dataset**: redesigned dataset items around bounded byte/file
+- **Media/dataset**: redesigned dataset items around bounded byte/file
   payloads, streaming source contracts, explicit transform errors, schema
   validation via `rskit-schema`, and `rskit-pipeline` stream adapters.
 - **L7 AI contracts**: strengthened tool schemas/input/output with typed wrappers,
