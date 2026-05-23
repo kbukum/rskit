@@ -290,7 +290,7 @@ async fn json_array_reader_rejects_oversized_fixture_files() {
     let mut records = Box::new(JsonArrayReader::new(&input)).stream();
     let err = records.next().await.unwrap().unwrap_err();
 
-    assert!(err.to_string().contains("exceeding max"));
+    assert!(err.to_string().contains("exceeded max"));
 }
 
 #[tokio::test]

@@ -181,18 +181,20 @@ impl DataPayload {
 
     /// Read a payload into memory only if it is within configured bounds.
     pub fn read_bytes_bounded(&self, limits: &DatasetLimits) -> AppResult<Vec<u8>> {
-        let len = self.len()?;
-        if len > limits.max_in_memory_bytes as u64 {
-            return Err(AppError::new(
-                ErrorCode::InvalidInput,
-                format!(
-                    "dataset payload is {len} bytes, exceeding max_in_memory_bytes={}",
-                    limits.max_in_memory_bytes
-                ),
-            ));
-        }
         match &self.kind {
-            DataPayloadKind::Bytes(bytes) => Ok(bytes.clone()),
+            DataPayloadKind::Bytes(bytes) => {
+                if bytes.len() > limits.max_in_memory_bytes {
+                    return Err(AppError::new(
+                        ErrorCode::InvalidInput,
+                        format!(
+                            "dataset payload is {} bytes, exceeding max_in_memory_bytes={}",
+                            bytes.len(),
+                            limits.max_in_memory_bytes
+                        ),
+                    ));
+                }
+                Ok(bytes.clone())
+            }
             DataPayloadKind::File(path) => read_file_bounded(path, limits.max_in_memory_bytes),
         }
     }

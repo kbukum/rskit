@@ -254,33 +254,6 @@ impl DatasetReader for JsonArrayReader {
     fn stream(self: Box<Self>) -> BoxRecordStream {
         let path = self.path;
         stream_from_blocking_reader(move |tx| {
-            let size = match std::fs::metadata(&path) {
-                Ok(metadata) => metadata.len(),
-                Err(error) => {
-                    send_record(
-                        &tx,
-                        Err(AppError::new(
-                            ErrorCode::Internal,
-                            format!("failed to stat JSON dataset {}: {error}", path.display()),
-                        )),
-                    );
-                    return;
-                }
-            };
-            if size > MAX_JSON_ARRAY_BYTES {
-                send_record(
-                    &tx,
-                    Err(AppError::new(
-                        ErrorCode::InvalidInput,
-                        format!(
-                            "JSON array dataset {} is {size} bytes, exceeding max {MAX_JSON_ARRAY_BYTES}",
-                            path.display()
-                        ),
-                    )),
-                );
-                return;
-            }
-
             let values =
                 match read_bounded_file(&path, MAX_JSON_ARRAY_BYTES as usize).and_then(|bytes| {
                     serde_json::from_slice::<Vec<Value>>(&bytes).map_err(|error| {
@@ -382,14 +355,18 @@ fn ensure_csv_columns(columns: &[String], record: &DatasetRecord) -> AppResult<(
 fn stream_from_blocking_reader(
     producer: impl FnOnce(mpsc::Sender<AppResult<DatasetRecord>>) + Send + 'static,
 ) -> BoxRecordStream {
-    let (tx, rx) = mpsc::channel(8);
-    if tokio::runtime::Handle::try_current().is_ok() {
-        let handle = tokio::task::spawn_blocking(move || producer(tx));
-        drop(handle);
-    } else {
-        let handle = std::thread::spawn(move || producer(tx));
-        drop(handle);
+    if tokio::runtime::Handle::try_current().is_err() {
+        return Box::pin(stream::once(async {
+            Err(AppError::new(
+                ErrorCode::Internal,
+                "dataset readers require a Tokio runtime for blocking IO isolation",
+            ))
+        }));
     }
+
+    let (tx, rx) = mpsc::channel(8);
+    let handle = tokio::task::spawn_blocking(move || producer(tx));
+    drop(handle);
     Box::pin(stream::unfold(rx, |mut rx| async {
         rx.recv().await.map(|item| (item, rx))
     }))

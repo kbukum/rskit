@@ -207,15 +207,7 @@ impl Collector {
         // Prepare output directories
         let real_dir = out.join("real");
         let ai_dir = out.join("ai");
-        std::fs::create_dir_all(&real_dir).map_err(|e| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!("failed to create real dir: {e}"),
-            )
-        })?;
-        std::fs::create_dir_all(&ai_dir).map_err(|e| {
-            AppError::new(ErrorCode::Internal, format!("failed to create ai dir: {e}"))
-        })?;
+        prepare_output_dirs(real_dir.clone(), ai_dir.clone()).await?;
 
         let mut result = CollectorResult {
             output_dir: out.clone(),
@@ -228,7 +220,7 @@ impl Collector {
         let mut manifest = if cfg.force {
             Manifest::default()
         } else {
-            Manifest::load(out)?
+            load_manifest(out.to_path_buf()).await?
         };
 
         // Separate cached vs to-fetch (partial sources are resumed, not skipped)
@@ -275,7 +267,7 @@ impl Collector {
 
         if !sources_to_fetch.is_empty() {
             // File counter past existing files
-            let existing = count_files(&real_dir)? + count_files(&ai_dir)?;
+            let existing = count_existing_files(real_dir.clone(), ai_dir.clone()).await?;
             let file_counter = Arc::new(AtomicUsize::new(existing));
 
             // Channels: work distribution + event reporting
@@ -349,7 +341,7 @@ impl Collector {
                                         manifest.mark_partial(name.clone(), cache_key.clone(), stats.clone());
                                     }
                                 }
-                                if let Err(e) = manifest.save(out) {
+                                if let Err(e) = save_manifest(out.to_path_buf(), manifest.clone()).await {
                                     tracing::warn!(error = %e, "failed to save manifest");
                                 }
 
@@ -364,7 +356,7 @@ impl Collector {
                                     result.real_count += stats.real;
                                     result.ai_count += stats.ai;
                                     manifest.mark_partial(name.clone(), cache_key.clone(), stats.clone());
-                                    if let Err(e) = manifest.save(out) {
+                                    if let Err(e) = save_manifest(out.to_path_buf(), manifest.clone()).await {
                                         tracing::warn!(error = %e, "failed to save manifest");
                                     }
                                 }
@@ -456,7 +448,7 @@ impl Collector {
         result.duration_seconds = start.elapsed().as_secs_f64();
 
         // Save final manifest
-        manifest.save(out)?;
+        save_manifest(out.to_path_buf(), manifest).await?;
 
         tracing::debug!(
             total = result.total_items,
@@ -661,6 +653,40 @@ async fn process_source(
 
 async fn send_worker_event(ctx: &WorkerContext, event: WorkerEvent) {
     let _ = ctx.event_tx.send(event).await;
+}
+
+async fn prepare_output_dirs(real_dir: PathBuf, ai_dir: PathBuf) -> AppResult<()> {
+    tokio::task::spawn_blocking(move || {
+        std::fs::create_dir_all(&real_dir).map_err(|e| {
+            AppError::new(
+                ErrorCode::Internal,
+                format!("failed to create real dir: {e}"),
+            )
+        })?;
+        std::fs::create_dir_all(&ai_dir).map_err(|e| {
+            AppError::new(ErrorCode::Internal, format!("failed to create ai dir: {e}"))
+        })
+    })
+    .await
+    .map_err(AppError::internal)?
+}
+
+async fn load_manifest(output_dir: PathBuf) -> AppResult<Manifest> {
+    tokio::task::spawn_blocking(move || Manifest::load(&output_dir))
+        .await
+        .map_err(AppError::internal)?
+}
+
+async fn save_manifest(output_dir: PathBuf, manifest: Manifest) -> AppResult<()> {
+    tokio::task::spawn_blocking(move || manifest.save(&output_dir))
+        .await
+        .map_err(AppError::internal)?
+}
+
+async fn count_existing_files(real_dir: PathBuf, ai_dir: PathBuf) -> AppResult<usize> {
+    tokio::task::spawn_blocking(move || Ok(count_files(&real_dir)? + count_files(&ai_dir)?))
+        .await
+        .map_err(AppError::internal)?
 }
 
 fn count_files(dir: &Path) -> AppResult<usize> {

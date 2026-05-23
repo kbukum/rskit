@@ -71,20 +71,6 @@ pub(crate) fn compile_add_subtitles(
 }
 
 fn read_subtitle_file(path: &std::path::Path) -> AppResult<String> {
-    let size = std::fs::metadata(path)
-        .map_err(|e| {
-            rskit_errors::AppError::new(
-                rskit_errors::ErrorCode::Internal,
-                format!("failed to stat subtitle file: {e}"),
-            )
-        })?
-        .len();
-    if size > MAX_SUBTITLE_BYTES {
-        return Err(rskit_errors::AppError::new(
-            rskit_errors::ErrorCode::InvalidInput,
-            format!("subtitle file is {size} bytes, exceeding max {MAX_SUBTITLE_BYTES}"),
-        ));
-    }
     let bytes = read_bounded(path, MAX_SUBTITLE_BYTES)?;
     String::from_utf8(bytes).map_err(|e| {
         rskit_errors::AppError::new(

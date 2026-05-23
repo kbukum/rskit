@@ -58,31 +58,15 @@ impl Manifest {
     /// Load manifest from the output directory. Returns empty manifest if not found.
     pub fn load(output_dir: &Path) -> AppResult<Self> {
         let path = output_dir.join(MANIFEST_FILE);
-        match std::fs::metadata(&path) {
-            Ok(metadata) => {
-                let size = metadata.len();
-                if size > MAX_MANIFEST_BYTES {
-                    return Err(AppError::new(
-                        ErrorCode::InvalidInput,
-                        format!(
-                            "manifest {} is {size} bytes, exceeding max {MAX_MANIFEST_BYTES}",
-                            path.display()
-                        ),
-                    ));
-                }
-                let bytes = read_manifest_bounded(&path)?;
-                serde_json::from_slice(&bytes).map_err(|e| {
-                    AppError::new(
-                        ErrorCode::InvalidInput,
-                        format!("manifest parse failed for {}: {e}", path.display()),
-                    )
-                })
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
-            Err(error) => Err(AppError::new(
-                ErrorCode::Internal,
-                format!("manifest stat failed for {}: {error}", path.display()),
-            )),
+        match read_manifest_bounded(&path) {
+            Ok(bytes) => serde_json::from_slice(&bytes).map_err(|e| {
+                AppError::new(
+                    ErrorCode::InvalidInput,
+                    format!("manifest parse failed for {}: {e}", path.display()),
+                )
+            }),
+            Err(error) if error.code() == ErrorCode::NotFound => Ok(Self::default()),
+            Err(error) => Err(error),
         }
     }
 
@@ -195,6 +179,12 @@ fn read_manifest_bounded(path: &Path) -> AppResult<Vec<u8>> {
     use std::io::Read as _;
 
     let mut file = std::fs::File::open(path).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            return AppError::new(
+                ErrorCode::NotFound,
+                format!("manifest not found: {}", path.display()),
+            );
+        }
         AppError::new(
             ErrorCode::Internal,
             format!("manifest read failed for {}: {e}", path.display()),

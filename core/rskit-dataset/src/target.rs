@@ -45,14 +45,23 @@ impl Target for LocalTarget {
         directory: &Path,
         _metadata: Option<&std::collections::HashMap<String, String>>,
     ) -> AppResult<PublishResult> {
-        let mut file_count = 0usize;
-        if directory.exists() {
-            for entry in walkdir(directory)? {
-                if entry.is_file() {
-                    file_count += 1;
+        let directory = directory.to_path_buf();
+        let file_count = tokio::task::spawn_blocking({
+            let directory = directory.clone();
+            move || {
+                let mut file_count = 0usize;
+                if directory.exists() {
+                    for entry in walkdir(&directory)? {
+                        if entry.is_file() {
+                            file_count += 1;
+                        }
+                    }
                 }
+                Ok::<usize, AppError>(file_count)
             }
-        }
+        })
+        .await
+        .map_err(AppError::internal)??;
         Ok(PublishResult {
             target_name: self.name().to_string(),
             location: directory.display().to_string(),
