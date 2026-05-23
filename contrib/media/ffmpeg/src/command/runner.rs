@@ -43,10 +43,10 @@ impl FfmpegCommand {
         output_path: &std::path::Path,
         cancel: CancellationToken,
     ) -> Result<(), crate::error::FfmpegError> {
-        let mut args = self.to_args();
-        args.push(output_path.to_string_lossy().to_string());
+        let mut args = self.to_os_args();
+        args.push(output_path.as_os_str().to_os_string());
 
-        tracing::debug!(cmd = %format!("ffmpeg {}", args.join(" ")), "executing ffmpeg");
+        tracing::debug!(args = ?args, "executing ffmpeg");
 
         let max_stderr_lines = config.max_stderr_lines.max(1);
         let stderr_lines = Arc::new(Mutex::new(VecDeque::with_capacity(max_stderr_lines)));

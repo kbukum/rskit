@@ -6,6 +6,7 @@
 //! - [`FfmpegExecutor::quick_probe_duration`] — lightweight ffprobe for duration only
 //! - [`FfmpegExecutor::build_source_hints`] — detect audio/video streams for hints
 
+use std::ffi::OsString;
 use std::time::Duration;
 
 use rskit_media::ops::MediaOp;
@@ -14,7 +15,7 @@ use rskit_storage::FileSource;
 
 use crate::command::SourceHints;
 use crate::config::FfmpegConfig;
-use crate::process::run_capture_lossy_with_cancel;
+use crate::process::run_capture_with_cancel;
 use tokio_util::sync::CancellationToken;
 
 use super::FfmpegExecutor;
@@ -132,16 +133,16 @@ impl FfmpegExecutor {
             _ => return None,
         };
 
-        let output = run_capture_lossy_with_cancel(
+        let output = run_capture_with_cancel(
             self.config.ffprobe_bin(),
-            [
-                "-v",
-                "quiet",
-                "-show_entries",
-                "format=duration",
-                "-of",
-                "csv=p=0",
-                &path.to_string_lossy(),
+            vec![
+                OsString::from("-v"),
+                OsString::from("quiet"),
+                OsString::from("-show_entries"),
+                OsString::from("format=duration"),
+                OsString::from("-of"),
+                OsString::from("csv=p=0"),
+                path.as_os_str().to_os_string(),
             ],
             self.config.timeout,
             cancel,
@@ -173,16 +174,16 @@ impl FfmpegExecutor {
             _ => return SourceHints::default(),
         };
 
-        let output = run_capture_lossy_with_cancel(
+        let output = run_capture_with_cancel(
             self.config.ffprobe_bin(),
-            [
-                "-v",
-                "quiet",
-                "-show_entries",
-                "stream=codec_type",
-                "-of",
-                "csv=p=0",
-                &path.to_string_lossy(),
+            vec![
+                OsString::from("-v"),
+                OsString::from("quiet"),
+                OsString::from("-show_entries"),
+                OsString::from("stream=codec_type"),
+                OsString::from("-of"),
+                OsString::from("csv=p=0"),
+                path.as_os_str().to_os_string(),
             ],
             self.config.timeout,
             cancel,

@@ -1,5 +1,6 @@
 //! Thumbnail and visual extraction methods for [`FfmpegProbe`].
 
+use std::ffi::OsString;
 use std::time::Duration;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
@@ -22,22 +23,22 @@ impl FfmpegProbe {
         let tmp = rskit_storage::TempFile::with_extension("jpg")?;
 
         let mut args = vec![
-            "-ss".to_string(),
-            at.to_ffmpeg_time(),
-            "-i".to_string(),
-            resolved.path().to_string_lossy().to_string(),
-            "-vframes".to_string(),
-            "1".to_string(),
+            OsString::from("-ss"),
+            OsString::from(at.to_ffmpeg_time()),
+            OsString::from("-i"),
+            resolved.path().as_os_str().to_os_string(),
+            OsString::from("-vframes"),
+            OsString::from("1"),
         ];
 
         if let Some(res) = resolution {
             args.extend([
-                "-vf".to_string(),
-                format!("scale={}:{}", res.width, res.height),
+                OsString::from("-vf"),
+                OsString::from(format!("scale={}:{}", res.width, res.height)),
             ]);
         }
 
-        args.extend(["-y".to_string(), tmp.path().to_string_lossy().to_string()]);
+        args.extend([OsString::from("-y"), tmp.path().as_os_str().to_os_string()]);
 
         let output = run_capture(self.config.ffmpeg_bin(), args, self.config.timeout)
             .await
@@ -68,16 +69,14 @@ impl FfmpegProbe {
 
         let output = run_capture(
             self.config.ffmpeg_bin(),
-            [
-                "-i",
-                resolved.path().to_string_lossy().as_ref(),
-                "-vf",
-                &vf,
-                "-y",
-                pattern.to_string_lossy().as_ref(),
-            ]
-            .into_iter()
-            .map(str::to_string),
+            vec![
+                OsString::from("-i"),
+                resolved.path().as_os_str().to_os_string(),
+                OsString::from("-vf"),
+                OsString::from(vf),
+                OsString::from("-y"),
+                pattern.as_os_str().to_os_string(),
+            ],
             self.config.timeout,
         )
         .await
@@ -114,18 +113,16 @@ impl FfmpegProbe {
 
         let output = run_capture(
             self.config.ffmpeg_bin(),
-            [
-                "-i",
-                resolved.path().to_string_lossy().as_ref(),
-                "-vf",
-                &vf,
-                "-frames:v",
-                "1",
-                "-y",
-                tmp.path().to_string_lossy().as_ref(),
-            ]
-            .into_iter()
-            .map(str::to_string),
+            vec![
+                OsString::from("-i"),
+                resolved.path().as_os_str().to_os_string(),
+                OsString::from("-vf"),
+                OsString::from(vf),
+                OsString::from("-frames:v"),
+                OsString::from("1"),
+                OsString::from("-y"),
+                tmp.path().as_os_str().to_os_string(),
+            ],
             self.config.timeout,
         )
         .await
@@ -152,21 +149,19 @@ impl FfmpegProbe {
 
         let output = run_capture(
             self.config.ffmpeg_bin(),
-            [
-                "-i",
-                resolved.path().to_string_lossy().as_ref(),
-                "-filter_complex",
-                &format!(
+            vec![
+                OsString::from("-i"),
+                resolved.path().as_os_str().to_os_string(),
+                OsString::from("-filter_complex"),
+                OsString::from(format!(
                     "showwavespic=s={}x{}:colors=#4080ff",
                     resolution.width, resolution.height,
-                ),
-                "-frames:v",
-                "1",
-                "-y",
-                tmp.path().to_string_lossy().as_ref(),
-            ]
-            .into_iter()
-            .map(str::to_string),
+                )),
+                OsString::from("-frames:v"),
+                OsString::from("1"),
+                OsString::from("-y"),
+                tmp.path().as_os_str().to_os_string(),
+            ],
             self.config.timeout,
         )
         .await

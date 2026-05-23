@@ -1,6 +1,7 @@
 //! Command configuration for subprocess execution.
 
 use std::collections::HashMap;
+use std::ffi::OsString;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -58,7 +59,7 @@ pub struct Command {
     /// Program name or path to execute.
     pub program: PathBuf,
     /// Command-line arguments.
-    pub args: Vec<String>,
+    pub args: Vec<OsString>,
     /// Working directory for the process.
     pub dir: Option<PathBuf>,
     /// Environment variables to set (may be merged with parent env).
@@ -85,7 +86,7 @@ impl Command {
 
     /// Add a command-line argument.
     #[must_use]
-    pub fn arg<S: Into<String>>(mut self, arg: S) -> Self {
+    pub fn arg<S: Into<OsString>>(mut self, arg: S) -> Self {
         self.args.push(arg.into());
         self
     }
@@ -95,7 +96,7 @@ impl Command {
     pub fn args<I>(mut self, args: I) -> Self
     where
         I: IntoIterator,
-        I::Item: Into<String>,
+        I::Item: Into<OsString>,
     {
         self.args.extend(args.into_iter().map(Into::into));
         self

@@ -1,5 +1,6 @@
 //! Detection and structural analysis — scenes, keyframes, silence, chapters.
 
+use std::ffi::OsString;
 use std::time::Duration;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
@@ -10,7 +11,7 @@ use rskit_media::{
 use rskit_storage::FileSource;
 
 use super::FfmpegProbe;
-use crate::process::{ensure_success, run_capture_lossy};
+use crate::process::{ensure_success, run_capture};
 
 impl FfmpegProbe {
     /// Detect scene changes via FFmpeg's `select` filter with `scene` metric.
@@ -22,16 +23,16 @@ impl FfmpegProbe {
         let resolved = source.to_local_path().await?;
         let threshold = threshold.clamp(0.0, 1.0);
 
-        let output = run_capture_lossy(
+        let output = run_capture(
             self.config.ffmpeg_bin(),
-            [
-                "-i",
-                &resolved.path().to_string_lossy(),
-                "-vf",
-                &format!("select='gt(scene\\,{threshold})',showinfo"),
-                "-f",
-                "null",
-                "-",
+            vec![
+                OsString::from("-i"),
+                resolved.path().as_os_str().to_os_string(),
+                OsString::from("-vf"),
+                OsString::from(format!("select='gt(scene\\,{threshold})',showinfo")),
+                OsString::from("-f"),
+                OsString::from("null"),
+                OsString::from("-"),
             ],
             self.config.timeout,
         )
@@ -57,19 +58,19 @@ impl FfmpegProbe {
     ) -> AppResult<Vec<KeyframeInfo>> {
         let resolved = source.to_local_path().await?;
 
-        let output = run_capture_lossy(
+        let output = run_capture(
             self.config.ffprobe_bin(),
-            [
-                "-v",
-                "quiet",
-                "-select_streams",
-                "v:0",
-                "-show_frames",
-                "-show_entries",
-                "frame=pts_time,pkt_size,pict_type,key_frame,coded_picture_number",
-                "-print_format",
-                "json",
-                &resolved.path().to_string_lossy(),
+            vec![
+                OsString::from("-v"),
+                OsString::from("quiet"),
+                OsString::from("-select_streams"),
+                OsString::from("v:0"),
+                OsString::from("-show_frames"),
+                OsString::from("-show_entries"),
+                OsString::from("frame=pts_time,pkt_size,pict_type,key_frame,coded_picture_number"),
+                OsString::from("-print_format"),
+                OsString::from("json"),
+                resolved.path().as_os_str().to_os_string(),
             ],
             self.config.timeout,
         )
@@ -104,16 +105,16 @@ impl FfmpegProbe {
         let threshold_db = noise_threshold_db.clamp(-96.0, 0.0);
         let min_secs = min_duration.as_secs_f64().max(0.01);
 
-        let output = run_capture_lossy(
+        let output = run_capture(
             self.config.ffmpeg_bin(),
-            [
-                "-i",
-                &resolved.path().to_string_lossy(),
-                "-af",
-                &format!("silencedetect=noise={threshold_db}dB:d={min_secs}"),
-                "-f",
-                "null",
-                "-",
+            vec![
+                OsString::from("-i"),
+                resolved.path().as_os_str().to_os_string(),
+                OsString::from("-af"),
+                OsString::from(format!("silencedetect=noise={threshold_db}dB:d={min_secs}")),
+                OsString::from("-f"),
+                OsString::from("null"),
+                OsString::from("-"),
             ],
             self.config.timeout,
         )

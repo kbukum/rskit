@@ -1,5 +1,6 @@
 //! FFmpeg subprocess helpers backed by `rskit-process`.
 
+use std::ffi::OsString;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -11,7 +12,7 @@ const MAX_CAPTURE_BYTES: usize = 64 * 1024 * 1024;
 
 pub(crate) async fn run_capture(
     program: PathBuf,
-    args: impl IntoIterator<Item = String>,
+    args: impl IntoIterator<Item = OsString>,
     timeout: Option<Duration>,
 ) -> AppResult<ProcessResult> {
     run_capture_with_cancel(program, args, timeout, CancellationToken::new()).await
@@ -19,7 +20,7 @@ pub(crate) async fn run_capture(
 
 pub(crate) async fn run_capture_with_cancel(
     program: PathBuf,
-    args: impl IntoIterator<Item = String>,
+    args: impl IntoIterator<Item = OsString>,
     timeout: Option<Duration>,
     cancel: CancellationToken,
 ) -> AppResult<ProcessResult> {
@@ -55,7 +56,7 @@ pub(crate) async fn run_capture_lossy_with_cancel(
 ) -> AppResult<ProcessResult> {
     run_capture_with_cancel(
         program,
-        args.into_iter().map(|arg| arg.as_ref().to_string()),
+        args.into_iter().map(|arg| OsString::from(arg.as_ref())),
         timeout,
         cancel,
     )
@@ -64,7 +65,7 @@ pub(crate) async fn run_capture_lossy_with_cancel(
 
 pub(crate) async fn run_ffmpeg_observed(
     program: PathBuf,
-    args: Vec<String>,
+    args: Vec<OsString>,
     timeout: Option<Duration>,
     cancel: CancellationToken,
     stderr_line: impl Fn(&str) + Send + Sync + 'static,

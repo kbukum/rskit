@@ -9,6 +9,7 @@ mod detect;
 mod parse;
 mod thumbnail;
 
+use std::ffi::OsString;
 use std::time::Duration;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
@@ -20,7 +21,7 @@ use rskit_media::{
 use rskit_storage::FileSource;
 
 use crate::config::FfmpegConfig;
-use crate::process::{ensure_success, run_capture_lossy};
+use crate::process::{ensure_success, run_capture, run_capture_lossy};
 
 /// FFmpeg-based media probe using `ffprobe`.
 pub struct FfmpegProbe {
@@ -60,17 +61,17 @@ impl FfmpegProbe {
         let resolved = source.to_local_path().await?;
         let path = resolved.path();
 
-        let output = run_capture_lossy(
+        let output = run_capture(
             self.config.ffprobe_bin(),
-            [
-                "-v",
-                "quiet",
-                "-print_format",
-                "json",
-                "-show_format",
-                "-show_streams",
-                "-show_chapters",
-                &path.to_string_lossy(),
+            vec![
+                OsString::from("-v"),
+                OsString::from("quiet"),
+                OsString::from("-print_format"),
+                OsString::from("json"),
+                OsString::from("-show_format"),
+                OsString::from("-show_streams"),
+                OsString::from("-show_chapters"),
+                path.as_os_str().to_os_string(),
             ],
             self.config.timeout,
         )
