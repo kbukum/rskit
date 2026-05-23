@@ -21,7 +21,7 @@ use rskit_media::{
 use rskit_storage::FileSource;
 
 use crate::config::FfmpegConfig;
-use crate::process::{ensure_success, run_capture, run_capture_lossy};
+use crate::process::{ensure_success, run_capture, run_capture_lossy, with_context};
 
 /// FFmpeg-based media probe using `ffprobe`.
 pub struct FfmpegProbe {
@@ -76,12 +76,7 @@ impl FfmpegProbe {
             self.config.timeout,
         )
         .await
-        .map_err(|e| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!("ffprobe execution failed: {e}"),
-            )
-        })?;
+        .map_err(|e| with_context(e, "ffprobe execution failed"))?;
 
         ensure_success(&output, "ffprobe")?;
 

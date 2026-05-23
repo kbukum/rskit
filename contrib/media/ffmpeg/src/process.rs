@@ -31,6 +31,9 @@ pub(crate) async fn run_capture_with_cancel(
         ..ProcessConfig::default()
     };
     let result = rskit_process::run_with_cancel(&command, &config, cancel).await?;
+    if result.timed_out {
+        return Ok(result);
+    }
     if result.stdout_truncated || result.stderr_truncated {
         return Err(AppError::new(
             ErrorCode::InvalidInput,
@@ -82,6 +85,10 @@ pub(crate) async fn run_ffmpeg_observed(
         OutputObserver::new().with_stderr_line(stderr_line),
     )
     .await
+}
+
+pub(crate) fn with_context(error: AppError, context: impl std::fmt::Display) -> AppError {
+    AppError::new(error.code(), format!("{context}: {error}"))
 }
 
 pub(crate) fn ensure_success(result: &ProcessResult, context: &str) -> AppResult<()> {

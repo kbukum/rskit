@@ -11,7 +11,7 @@ use rskit_media::{
 use rskit_storage::FileSource;
 
 use super::FfmpegProbe;
-use crate::process::{ensure_success, run_capture};
+use crate::process::{ensure_success, run_capture, with_context};
 
 impl FfmpegProbe {
     /// Detect scene changes via FFmpeg's `select` filter with `scene` metric.
@@ -37,12 +37,7 @@ impl FfmpegProbe {
             self.config.timeout,
         )
         .await
-        .map_err(|e| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!("ffmpeg scene_detect failed: {e}"),
-            )
-        })?;
+        .map_err(|e| with_context(e, "ffmpeg scene_detect failed"))?;
 
         ensure_success(&output, "ffmpeg scene_detect")?;
         Ok(parse_showinfo_timestamps(&output.stderr))
@@ -75,12 +70,7 @@ impl FfmpegProbe {
             self.config.timeout,
         )
         .await
-        .map_err(|e| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!("ffprobe keyframes failed: {e}"),
-            )
-        })?;
+        .map_err(|e| with_context(e, "ffprobe keyframes failed"))?;
 
         ensure_success(&output, "ffprobe keyframes")?;
 
@@ -120,12 +110,7 @@ impl FfmpegProbe {
             self.config.timeout,
         )
         .await
-        .map_err(|e| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!("ffmpeg silence_detect failed: {e}"),
-            )
-        })?;
+        .map_err(|e| with_context(e, "ffmpeg silence_detect failed"))?;
 
         ensure_success(&output, "ffmpeg silence_detect")?;
         Ok(parse_silence_intervals(&output.stderr))

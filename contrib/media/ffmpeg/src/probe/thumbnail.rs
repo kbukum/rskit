@@ -9,7 +9,7 @@ use rskit_media::time::Timestamp;
 use rskit_storage::FileSource;
 
 use super::FfmpegProbe;
-use crate::process::{ensure_success, run_capture};
+use crate::process::{ensure_success, run_capture, with_context};
 
 impl FfmpegProbe {
     /// Extract a single thumbnail frame at a given timestamp.
@@ -42,9 +42,7 @@ impl FfmpegProbe {
 
         let output = run_capture(self.config.ffmpeg_bin(), args, self.config.timeout)
             .await
-            .map_err(|e| {
-                AppError::new(ErrorCode::Internal, format!("ffmpeg thumbnail failed: {e}"))
-            })?;
+            .map_err(|e| with_context(e, "ffmpeg thumbnail failed"))?;
 
         ensure_success(&output, "ffmpeg thumbnail")?;
 
@@ -80,12 +78,7 @@ impl FfmpegProbe {
             self.config.timeout,
         )
         .await
-        .map_err(|e| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!("ffmpeg thumbnails failed: {e}"),
-            )
-        })?;
+        .map_err(|e| with_context(e, "ffmpeg thumbnails failed"))?;
 
         ensure_success(&output, "ffmpeg thumbnails")?;
 
@@ -126,12 +119,7 @@ impl FfmpegProbe {
             self.config.timeout,
         )
         .await
-        .map_err(|e| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!("ffmpeg sprite_sheet failed: {e}"),
-            )
-        })?;
+        .map_err(|e| with_context(e, "ffmpeg sprite_sheet failed"))?;
 
         ensure_success(&output, "ffmpeg sprite_sheet")?;
 
@@ -165,7 +153,7 @@ impl FfmpegProbe {
             self.config.timeout,
         )
         .await
-        .map_err(|e| AppError::new(ErrorCode::Internal, format!("ffmpeg waveform failed: {e}")))?;
+        .map_err(|e| with_context(e, "ffmpeg waveform failed"))?;
 
         ensure_success(&output, "ffmpeg waveform")?;
 
