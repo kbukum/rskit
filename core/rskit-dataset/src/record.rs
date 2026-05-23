@@ -16,6 +16,7 @@ pub type BoxRecordStream = Pin<Box<dyn Stream<Item = AppResult<DatasetRecord>> +
 
 const MAX_JSON_ARRAY_BYTES: u64 = 1024 * 1024;
 const MAX_JSON_LINE_BYTES: usize = 1024 * 1024;
+const MAX_CSV_RECORD_BYTES: usize = 1024 * 1024;
 
 /// Format identifier for built-in dataset record readers and writers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -126,8 +127,8 @@ impl DatasetReader for CsvReader {
     fn stream(self: Box<Self>) -> BoxRecordStream {
         let path = self.path;
         stream_from_blocking_reader(move |tx| {
-            let mut reader = match csv::Reader::from_path(&path) {
-                Ok(reader) => reader,
+            let file = match std::fs::File::open(&path) {
+                Ok(file) => file,
                 Err(error) => {
                     send_record(
                         &tx,
@@ -139,28 +140,32 @@ impl DatasetReader for CsvReader {
                     return;
                 }
             };
+            let mut reader = std::io::BufReader::new(file);
 
-            let headers = match reader.headers() {
-                Ok(headers) => headers.clone(),
+            let headers = match read_line_bounded(&mut reader, MAX_CSV_RECORD_BYTES, "CSV header")
+                .and_then(|line| {
+                    line.map_or_else(
+                        || {
+                            Err(AppError::new(
+                                ErrorCode::InvalidInput,
+                                format!("CSV dataset {} is missing headers", path.display()),
+                            ))
+                        },
+                        |line| parse_csv_record(&line),
+                    )
+                }) {
+                Ok(headers) => headers,
                 Err(error) => {
-                    send_record(
-                        &tx,
-                        Err(AppError::new(
-                            ErrorCode::InvalidInput,
-                            format!(
-                                "failed to read CSV headers from {}: {error}",
-                                path.display()
-                            ),
-                        )),
-                    );
+                    send_record(&tx, Err(error));
                     return;
                 }
             };
 
-            let mut raw = csv::StringRecord::new();
             loop {
-                match reader.read_record(&mut raw) {
-                    Ok(true) => {
+                match read_line_bounded(&mut reader, MAX_CSV_RECORD_BYTES, "CSV record")
+                    .and_then(|line| line.map(|line| parse_csv_record(&line)).transpose())
+                {
+                    Ok(Some(raw)) => {
                         let fields = headers
                             .iter()
                             .zip(raw.iter())
@@ -170,15 +175,9 @@ impl DatasetReader for CsvReader {
                             return;
                         }
                     }
-                    Ok(false) => return,
+                    Ok(None) => return,
                     Err(error) => {
-                        send_record(
-                            &tx,
-                            Err(AppError::new(
-                                ErrorCode::InvalidInput,
-                                format!("failed to read CSV record: {error}"),
-                            )),
-                        );
+                        send_record(&tx, Err(error));
                         return;
                     }
                 }
@@ -225,7 +224,10 @@ impl DatasetReader for JsonLinesReader {
                 let record = match read_json_line_bounded(&mut reader) {
                     Ok(Some(line)) => record_from_json_bytes(&line),
                     Ok(None) => return,
-                    Err(error) => Err(error),
+                    Err(error) => {
+                        send_record(&tx, Err(error));
+                        return;
+                    }
                 };
                 if !send_record(&tx, record) {
                     return;
@@ -534,6 +536,14 @@ fn record_from_json_bytes(line: &[u8]) -> AppResult<DatasetRecord> {
 }
 
 fn read_json_line_bounded(reader: &mut impl std::io::BufRead) -> AppResult<Option<Vec<u8>>> {
+    read_line_bounded(reader, MAX_JSON_LINE_BYTES, "JSON Lines record")
+}
+
+fn read_line_bounded(
+    reader: &mut impl std::io::BufRead,
+    max_bytes: usize,
+    label: &str,
+) -> AppResult<Option<Vec<u8>>> {
     let mut line = Vec::new();
 
     loop {
@@ -554,11 +564,11 @@ fn read_json_line_bounded(reader: &mut impl std::io::BufRead) -> AppResult<Optio
         let consumed = match available.iter().position(|byte| *byte == b'\n') {
             Some(pos) => {
                 let end = pos + 1;
-                append_json_line_chunk(&mut line, &available[..end])?;
+                append_line_chunk(&mut line, &available[..end], max_bytes, label)?;
                 end
             }
             None => {
-                append_json_line_chunk(&mut line, available)?;
+                append_line_chunk(&mut line, available, max_bytes, label)?;
                 available.len()
             }
         };
@@ -570,15 +580,38 @@ fn read_json_line_bounded(reader: &mut impl std::io::BufRead) -> AppResult<Optio
     }
 }
 
-fn append_json_line_chunk(line: &mut Vec<u8>, chunk: &[u8]) -> AppResult<()> {
-    if line.len().saturating_add(chunk.len()) > MAX_JSON_LINE_BYTES {
+fn append_line_chunk(
+    line: &mut Vec<u8>,
+    chunk: &[u8],
+    max_bytes: usize,
+    label: &str,
+) -> AppResult<()> {
+    if line.len().saturating_add(chunk.len()) > max_bytes {
         return Err(AppError::new(
             ErrorCode::InvalidInput,
-            format!("JSON Lines record exceeded max {MAX_JSON_LINE_BYTES} bytes"),
+            format!("{label} exceeded max {max_bytes} bytes"),
         ));
     }
     line.extend_from_slice(chunk);
     Ok(())
+}
+
+fn parse_csv_record(line: &[u8]) -> AppResult<csv::StringRecord> {
+    let mut reader = csv::ReaderBuilder::new()
+        .has_headers(false)
+        .from_reader(line);
+    let mut records = reader.records();
+    match records.next() {
+        Some(Ok(record)) => Ok(record),
+        Some(Err(error)) => Err(AppError::new(
+            ErrorCode::InvalidInput,
+            format!("failed to parse CSV record: {error}"),
+        )),
+        None => Err(AppError::new(
+            ErrorCode::InvalidInput,
+            "CSV record was empty",
+        )),
+    }
 }
 
 fn read_bounded_file(path: &Path, max_bytes: usize) -> AppResult<Vec<u8>> {

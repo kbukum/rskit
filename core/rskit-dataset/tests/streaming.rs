@@ -228,6 +228,19 @@ async fn csv_reader_streams_header_mapped_records() {
 }
 
 #[tokio::test]
+async fn csv_reader_rejects_oversized_records() {
+    let dir = TempDir::new().unwrap();
+    let input = dir.path().join("records.csv");
+    std::fs::write(&input, format!("id\n{}\n", "x".repeat(1024 * 1024))).unwrap();
+
+    let mut records = Box::new(CsvReader::new(&input)).stream();
+    let err = records.next().await.unwrap().unwrap_err();
+
+    assert!(err.to_string().contains("exceeded max"));
+    assert!(records.next().await.is_none());
+}
+
+#[tokio::test]
 async fn json_lines_reader_rejects_oversized_records() {
     let dir = TempDir::new().unwrap();
     let input = dir.path().join("records.jsonl");
@@ -241,6 +254,7 @@ async fn json_lines_reader_rejects_oversized_records() {
     let err = records.next().await.unwrap().unwrap_err();
 
     assert!(err.to_string().contains("exceeded max"));
+    assert!(records.next().await.is_none());
 }
 
 #[tokio::test]
