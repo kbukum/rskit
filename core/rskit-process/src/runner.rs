@@ -326,29 +326,29 @@ where
     R: AsyncRead + Unpin,
 {
     let mut reader = tokio::io::BufReader::new(reader);
-    let mut captured = String::new();
+    let mut captured = Vec::new();
     let mut remaining = max_output_bytes.unwrap_or(usize::MAX);
-    let mut line = String::new();
+    let mut line = Vec::new();
 
     loop {
         line.clear();
-        let read = reader.read_line(&mut line).await?;
+        let read = reader.read_until(b'\n', &mut line).await?;
         if read == 0 {
             break;
         }
 
-        let observed = line.trim_end_matches(['\r', '\n']);
+        let observed = String::from_utf8_lossy(&line);
+        let observed = observed.trim_end_matches(['\r', '\n']);
         line_callback(observed);
 
         if remaining > 0 {
-            let bytes = line.as_bytes();
-            let to_copy = remaining.min(bytes.len());
-            captured.push_str(&String::from_utf8_lossy(&bytes[..to_copy]));
+            let to_copy = remaining.min(line.len());
+            captured.extend_from_slice(&line[..to_copy]);
             remaining -= to_copy;
         }
     }
 
-    Ok(captured)
+    Ok(String::from_utf8_lossy(&captured).into_owned())
 }
 
 fn terminate_process_group(pid: Option<u32>, signal: i32) {

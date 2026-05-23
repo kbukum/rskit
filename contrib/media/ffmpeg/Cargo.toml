@@ -17,7 +17,7 @@ keywords               = ["ffmpeg", "video", "audio", "transcoding"]
 rskit-errors.workspace = true
 rskit-storage.workspace = true
 rskit-media.workspace = true
-rskit-process = { path = "../../../core/rskit-process" }
+rskit-process.workspace = true
 tokio        = { workspace = true, features = ["process", "io-util", "sync", "time"] }
 tokio-util   = { workspace = true, features = ["rt"] }
 serde        = { workspace = true }

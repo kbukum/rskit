@@ -62,6 +62,15 @@ impl FfmpegCommand {
 
         let stderr_output = stderr_lines.lock().join("\n");
 
+        if result.timed_out {
+            return Err(crate::error::FfmpegError {
+                kind: crate::error::FfmpegErrorKind::Timeout,
+                exit_code: result.exit_code,
+                stderr: crate::error::truncate_stderr(&stderr_output, config.max_stderr_lines),
+                message: format!("ffmpeg timed out after {:?}", config.timeout),
+            });
+        }
+
         if !result.success() {
             let exit_code = result.exit_code;
             let truncated_stderr =

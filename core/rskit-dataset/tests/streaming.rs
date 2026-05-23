@@ -3,7 +3,7 @@ use std::path::Path;
 use futures::stream;
 use futures_util::StreamExt as _;
 use rskit_dataset::{
-    BoxDataStream, DataItem, DatasetLimits, DatasetReader, DatasetRecord, DatasetSchema,
+    BoxDataStream, CsvWriter, DataItem, DatasetLimits, DatasetReader, DatasetRecord, DatasetSchema,
     DatasetStreamExt, DatasetWriter, JsonLinesReader, JsonLinesWriter, Label, MediaType, Source,
     Target, Transform, filter_records, select_columns,
 };
@@ -169,4 +169,24 @@ async fn json_lines_records_select_filter_and_write_streaming() {
         reread.into_iter().next().unwrap().unwrap(),
         DatasetRecord::from_fields([("id", json!("a"))])
     );
+}
+
+#[tokio::test]
+async fn csv_writer_rejects_records_with_different_columns() {
+    let dir = TempDir::new().unwrap();
+    let output = dir.path().join("records.csv");
+    let records = stream::iter([
+        Ok(DatasetRecord::from_fields([("id", json!("a"))])),
+        Ok(DatasetRecord::from_fields([
+            ("id", json!("b")),
+            ("extra", json!(true)),
+        ])),
+    ]);
+
+    let err = CsvWriter
+        .write(Box::pin(records), output.as_path())
+        .await
+        .unwrap_err();
+
+    assert!(err.to_string().contains("columns do not match"));
 }

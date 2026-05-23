@@ -20,8 +20,9 @@ use serde::{Deserialize, Serialize};
 pub use collector::{Collector, CollectorConfig, CollectorResult, NullProgress, ProgressCallback};
 pub use manifest::{CacheStatus, Manifest, SourceEntry, SourceStats};
 pub use record::{
-    BoxRecordStream, DatasetFormat, DatasetReader, DatasetRecord, DatasetWriter, JsonArrayReader,
-    JsonArrayWriter, JsonLinesReader, JsonLinesWriter, filter_records, select_columns,
+    BoxRecordStream, CsvReader, CsvWriter, DatasetFormat, DatasetReader, DatasetRecord,
+    DatasetWriter, JsonArrayReader, JsonArrayWriter, JsonLinesReader, JsonLinesWriter,
+    filter_records, select_columns,
 };
 pub use schema::{DatasetSchema, validate_record};
 pub use source::{BoxDataStream, Source};

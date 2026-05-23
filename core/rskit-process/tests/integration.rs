@@ -1,6 +1,8 @@
 use std::time::Duration;
 
-use rskit_process::{Command, ErrorCode, ProcessConfig, run_with_cancel};
+use parking_lot::Mutex;
+use rskit_process::{Command, ErrorCode, OutputObserver, ProcessConfig, run_with_cancel};
+use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
 #[tokio::test]
@@ -65,6 +67,26 @@ async fn max_output_bytes_limits_captured_output() {
         .unwrap();
     assert_eq!(result.stdout.len(), 32);
     assert!(result.stdout.chars().all(|ch| ch == 'x'));
+}
+
+#[tokio::test]
+async fn observer_handles_non_utf8_output_lossily() {
+    let observed = Arc::new(Mutex::new(Vec::new()));
+    let command = Command::new("/usr/bin/printf").args(["%b", "\\377\\n"]);
+    let result = rskit_process::run_with_observer(
+        &command,
+        &ProcessConfig::default(),
+        CancellationToken::new(),
+        OutputObserver::new().with_stdout_line({
+            let observed = Arc::clone(&observed);
+            move |line| observed.lock().push(line.to_string())
+        }),
+    )
+    .await
+    .unwrap();
+
+    assert!(result.success());
+    assert_eq!(observed.lock().as_slice(), ["�"]);
 }
 
 #[tokio::test]

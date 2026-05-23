@@ -9,6 +9,7 @@ use futures_util::StreamExt as _;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_pipeline::RskitStreamExt;
 use serde_json::Value;
+use tokio::sync::mpsc;
 
 /// Boxed stream of structured dataset records.
 pub type BoxRecordStream = Pin<Box<dyn Stream<Item = AppResult<DatasetRecord>> + Send + 'static>>;
@@ -119,59 +120,65 @@ impl CsvReader {
 impl DatasetReader for CsvReader {
     fn stream(self: Box<Self>) -> BoxRecordStream {
         let path = self.path;
-        let reader = match csv::Reader::from_path(&path) {
-            Ok(mut reader) => {
-                let headers = match reader.headers() {
-                    Ok(headers) => headers.clone(),
-                    Err(error) => {
-                        return Box::pin(stream::once(async move {
-                            Err(AppError::new(
-                                ErrorCode::InvalidInput,
-                                format!(
-                                    "failed to read CSV headers from {}: {error}",
-                                    path.display()
-                                ),
-                            ))
-                        }));
-                    }
-                };
-                Ok((reader, headers))
-            }
-            Err(error) => Err(AppError::new(
-                ErrorCode::Internal,
-                format!("failed to open CSV dataset {}: {error}", path.display()),
-            )),
-        };
+        stream_from_blocking_reader(move |tx| {
+            let mut reader = match csv::Reader::from_path(&path) {
+                Ok(reader) => reader,
+                Err(error) => {
+                    send_record(
+                        &tx,
+                        Err(AppError::new(
+                            ErrorCode::Internal,
+                            format!("failed to open CSV dataset {}: {error}", path.display()),
+                        )),
+                    );
+                    return;
+                }
+            };
 
-        match reader {
-            Ok((reader, headers)) => Box::pin(stream::unfold(
-                (reader, headers),
-                |(mut reader, headers)| async move {
-                    let mut raw = csv::StringRecord::new();
-                    match reader.read_record(&mut raw) {
-                        Ok(true) => {
-                            let fields = headers
-                                .iter()
-                                .zip(raw.iter())
-                                .map(|(key, value)| {
-                                    (key.to_string(), Value::String(value.to_string()))
-                                })
-                                .collect();
-                            Some((Ok(DatasetRecord::new(fields)), (reader, headers)))
+            let headers = match reader.headers() {
+                Ok(headers) => headers.clone(),
+                Err(error) => {
+                    send_record(
+                        &tx,
+                        Err(AppError::new(
+                            ErrorCode::InvalidInput,
+                            format!(
+                                "failed to read CSV headers from {}: {error}",
+                                path.display()
+                            ),
+                        )),
+                    );
+                    return;
+                }
+            };
+
+            let mut raw = csv::StringRecord::new();
+            loop {
+                match reader.read_record(&mut raw) {
+                    Ok(true) => {
+                        let fields = headers
+                            .iter()
+                            .zip(raw.iter())
+                            .map(|(key, value)| (key.to_string(), Value::String(value.to_string())))
+                            .collect();
+                        if !send_record(&tx, Ok(DatasetRecord::new(fields))) {
+                            return;
                         }
-                        Ok(false) => None,
-                        Err(error) => Some((
+                    }
+                    Ok(false) => return,
+                    Err(error) => {
+                        send_record(
+                            &tx,
                             Err(AppError::new(
                                 ErrorCode::InvalidInput,
                                 format!("failed to read CSV record: {error}"),
                             )),
-                            (reader, headers),
-                        )),
+                        );
+                        return;
                     }
-                },
-            )),
-            Err(error) => Box::pin(stream::once(async move { Err(error) })),
-        }
+                }
+            }
+        })
     }
 }
 
@@ -191,30 +198,37 @@ impl JsonLinesReader {
 impl DatasetReader for JsonLinesReader {
     fn stream(self: Box<Self>) -> BoxRecordStream {
         let path = self.path;
-        let file = match std::fs::File::open(&path) {
-            Ok(file) => file,
-            Err(error) => {
-                return Box::pin(stream::once(async move {
-                    Err(AppError::new(
-                        ErrorCode::Internal,
-                        format!(
-                            "failed to open JSON Lines dataset {}: {error}",
-                            path.display()
-                        ),
-                    ))
-                }));
+        stream_from_blocking_reader(move |tx| {
+            let file = match std::fs::File::open(&path) {
+                Ok(file) => file,
+                Err(error) => {
+                    send_record(
+                        &tx,
+                        Err(AppError::new(
+                            ErrorCode::Internal,
+                            format!(
+                                "failed to open JSON Lines dataset {}: {error}",
+                                path.display()
+                            ),
+                        )),
+                    );
+                    return;
+                }
+            };
+            for line in std::io::BufRead::lines(std::io::BufReader::new(file)) {
+                let record = line
+                    .map_err(|error| {
+                        AppError::new(
+                            ErrorCode::Internal,
+                            format!("failed to read JSON line: {error}"),
+                        )
+                    })
+                    .and_then(|line| record_from_json_str(&line));
+                if !send_record(&tx, record) {
+                    return;
+                }
             }
-        };
-        let lines = std::io::BufRead::lines(std::io::BufReader::new(file));
-        Box::pin(stream::iter(lines.map(|line| {
-            let line = line.map_err(|error| {
-                AppError::new(
-                    ErrorCode::Internal,
-                    format!("failed to read JSON line: {error}"),
-                )
-            })?;
-            record_from_json_str(&line)
-        })))
+        })
     }
 }
 
@@ -280,6 +294,8 @@ impl DatasetWriter for CsvWriter {
                 writer
                     .write_record(columns.iter())
                     .map_err(AppError::internal)?;
+            } else {
+                ensure_csv_columns(columns, &record)?;
             }
             let row = columns
                 .iter()
@@ -297,6 +313,41 @@ impl DatasetWriter for CsvWriter {
         writer.flush().map_err(AppError::internal)?;
         Ok(count)
     }
+}
+
+fn ensure_csv_columns(columns: &[String], record: &DatasetRecord) -> AppResult<()> {
+    if record.fields.len() == columns.len()
+        && columns
+            .iter()
+            .all(|column| record.fields.contains_key(column.as_str()))
+    {
+        return Ok(());
+    }
+    Err(AppError::new(
+        ErrorCode::InvalidInput,
+        format!(
+            "CSV record columns do not match established header {:?}; record has {:?}",
+            columns,
+            record.fields.keys().collect::<Vec<_>>()
+        ),
+    ))
+}
+
+fn stream_from_blocking_reader(
+    producer: impl FnOnce(mpsc::Sender<AppResult<DatasetRecord>>) + Send + 'static,
+) -> BoxRecordStream {
+    let (tx, rx) = mpsc::channel(8);
+    std::thread::spawn(move || producer(tx));
+    Box::pin(stream::unfold(rx, |mut rx| async {
+        rx.recv().await.map(|item| (item, rx))
+    }))
+}
+
+fn send_record(
+    tx: &mpsc::Sender<AppResult<DatasetRecord>>,
+    item: AppResult<DatasetRecord>,
+) -> bool {
+    tx.blocking_send(item).is_ok()
 }
 
 /// JSON Lines writer for structured records.
