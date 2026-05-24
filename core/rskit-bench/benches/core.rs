@@ -1,30 +1,30 @@
 //! Core throughput benchmarks for rskit.
 use criterion::{Criterion, criterion_group, criterion_main};
 
-fn bench_registry_insert(c: &mut Criterion) {
-    use rskit::registry::TypedRegistry;
-    c.bench_function("registry_insert_1000", |b| {
+fn bench_btree_map_insert(c: &mut Criterion) {
+    use std::collections::BTreeMap;
+    c.bench_function("btree_map_insert_1000", |b| {
         b.iter(|| {
-            let reg: TypedRegistry<u32, String> = TypedRegistry::new();
+            let mut map: BTreeMap<u32, String> = BTreeMap::new();
             for i in 0u32..1000 {
-                reg.insert(i, format!("value-{i}"));
+                map.insert(i, format!("value-{i}"));
             }
         });
     });
 }
 
-fn bench_registry_get(c: &mut Criterion) {
-    use rskit::registry::TypedRegistry;
-    let reg: TypedRegistry<u32, String> = TypedRegistry::new();
+fn bench_btree_map_get(c: &mut Criterion) {
+    use std::collections::BTreeMap;
+    let mut map: BTreeMap<u32, String> = BTreeMap::new();
     for i in 0u32..1000 {
-        reg.insert(i, format!("value-{i}"));
+        map.insert(i, format!("value-{i}"));
     }
-    c.bench_function("registry_get_hit", |b| {
+    c.bench_function("btree_map_get_hit", |b| {
         b.iter(|| {
-            let _ = reg.get(&500);
+            let _ = map.get(&500);
         });
     });
 }
 
-criterion_group!(benches, bench_registry_insert, bench_registry_get);
+criterion_group!(benches, bench_btree_map_insert, bench_btree_map_get);
 criterion_main!(benches);

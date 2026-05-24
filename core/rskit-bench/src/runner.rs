@@ -3,22 +3,27 @@
 use crate::compare::RunComparator;
 use crate::dataset_loader::DatasetLoader;
 use crate::evaluator::Evaluator;
+use crate::execution::BenchExecutionPlan;
 use crate::metric::Suite;
 use crate::report_gen::Reporter;
 use crate::result::{BenchRunResult, BenchSampleResult, BranchResult, DatasetInfo, MetricResult};
 use crate::run_storage::RunStorage;
 use crate::schema;
 use crate::storage::generate_run_id;
-use crate::types::ScoredSample;
+use crate::types::{BenchSample, Prediction, ScoredSample};
+use futures::stream::{FuturesUnordered, StreamExt};
 use rskit_errors::{AppError, AppResult, ErrorCode};
+use rskit_worker::{Event, Handler, Pool};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
-use tokio::sync::Semaphore;
+use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
+use tracing::Instrument;
 
 struct Branch<L> {
     name: String,
-    evaluator: Box<dyn Evaluator<L>>,
+    evaluator: Arc<dyn Evaluator<L>>,
     tier: i32,
 }
 
@@ -110,7 +115,7 @@ where
     ) -> Self {
         self.branches.push(Branch {
             name: name.into(),
-            evaluator,
+            evaluator: Arc::from(evaluator),
             tier,
         });
         self
@@ -141,8 +146,33 @@ where
         loader: &DatasetLoader<L>,
         opts: RunOptions,
     ) -> AppResult<BenchRunResult> {
-        let start = Instant::now();
+        let execution = BenchExecutionPlan::new(&opts.tag, opts.concurrency);
+        let span = execution.operation.start_span("bench.run");
+        span.in_scope(|| {
+            tracing::info!(
+                tag = %opts.tag,
+                concurrency = opts.concurrency,
+                "benchmark run started"
+            );
+        });
+        let result = self
+            .run_with_execution(loader, opts, &execution)
+            .instrument(span)
+            .await;
+        match &result {
+            Ok(_) => execution.operation.end_operation("ok", None),
+            Err(error) => execution.operation.end_operation("error", Some(error)),
+        }
+        result
+    }
 
+    async fn run_with_execution(
+        &self,
+        loader: &DatasetLoader<L>,
+        opts: RunOptions,
+        execution: &BenchExecutionPlan,
+    ) -> AppResult<BenchRunResult> {
+        let start = Instant::now();
         let samples = loader.all()?;
         let dataset_info = {
             let mut label_distribution: HashMap<String, usize> = HashMap::new();
@@ -157,35 +187,49 @@ where
             }
         };
 
-        let semaphore = Arc::new(Semaphore::new(opts.concurrency));
         let mut branch_results = HashMap::new();
         let mut all_scored: Vec<ScoredSample<L>> = Vec::new();
         let mut sample_results: Vec<BenchSampleResult> = Vec::new();
 
         for branch in &self.branches {
             let branch_start = Instant::now();
+            let handler = Arc::new(EvaluationHandler {
+                evaluator: Arc::clone(&branch.evaluator),
+                branch_name: branch.name.clone(),
+                timeout_secs: opts.timeout_secs,
+            });
+            let pool = Pool::new(handler, execution.pool_config_for(&branch.name));
             let mut branch_metrics: HashMap<String, f64> = HashMap::new();
             let mut total_score_pos = 0.0_f64;
             let mut total_score_neg = 0.0_f64;
             let mut count_pos = 0usize;
             let mut count_neg = 0usize;
             let mut errors = 0usize;
+            let mut pending = FuturesUnordered::new();
+            let mut sample_iter = samples.iter();
+            let concurrency = opts.concurrency.max(1);
+            loop {
+                while pending.len() < concurrency {
+                    let Some(sample) = sample_iter.next() else {
+                        break;
+                    };
+                    let context = SampleFailureContext::from_sample(sample);
+                    let handle = pool.submit(sample.clone()).await?;
+                    let submitted_at = Instant::now();
+                    pending.push(async move { (context, submitted_at, handle.result().await) });
+                }
 
-            for sample in &samples {
-                let _permit =
-                    semaphore.clone().acquire_owned().await.map_err(|e| {
-                        AppError::new(ErrorCode::Internal, format!("semaphore: {e}"))
-                    })?;
-                let input = sample.input.clone();
-                let timeout = tokio::time::Duration::from_secs(opts.timeout_secs);
-
-                let sample_start = Instant::now();
-                let eval_result =
-                    tokio::time::timeout(timeout, branch.evaluator.evaluate(input)).await;
-                let sample_duration_ms = sample_start.elapsed().as_millis() as u64;
-
-                match eval_result {
-                    Ok(Ok(pred)) => {
+                // FuturesUnordered retires whichever worker result completes first,
+                // so a slow oldest task cannot block the submission window.
+                let Some((submitted_sample, submitted_at, result)) = pending.next().await else {
+                    break;
+                };
+                match result {
+                    Ok(EvaluationOutcome::Success {
+                        sample,
+                        prediction: pred,
+                        duration_ms,
+                    }) => {
                         let correct = pred.label.to_string() == sample.label.to_string();
                         if correct {
                             total_score_pos += pred.score;
@@ -205,7 +249,7 @@ where
                             score: pred.score,
                             correct,
                             branch_scores,
-                            duration_ms: sample_duration_ms,
+                            duration_ms,
                             error: String::new(),
                         });
 
@@ -214,11 +258,15 @@ where
                             prediction: pred,
                         });
                     }
-                    Ok(Err(e)) => {
+                    Ok(EvaluationOutcome::Failure {
+                        sample,
+                        duration_ms,
+                        error,
+                    }) => {
                         tracing::warn!(
                             sample_id = %sample.id,
                             branch = %branch.name,
-                            error = %e,
+                            error = %error,
                             "Evaluation failed"
                         );
                         errors += 1;
@@ -229,30 +277,27 @@ where
                             score: 0.0,
                             correct: false,
                             branch_scores: HashMap::new(),
-                            duration_ms: sample_duration_ms,
-                            error: e.to_string(),
+                            duration_ms,
+                            error,
                         });
                     }
-                    Err(_) => {
-                        tracing::warn!(
-                            sample_id = %sample.id,
-                            branch = %branch.name,
-                            "Evaluation timed out"
-                        );
+                    Err(error) => {
                         errors += 1;
-                        sample_results.push(BenchSampleResult {
-                            id: sample.id.clone(),
-                            label: sample.label.to_string(),
-                            predicted: String::new(),
-                            score: 0.0,
-                            correct: false,
-                            branch_scores: HashMap::new(),
-                            duration_ms: sample_duration_ms,
-                            error: "timeout".to_string(),
-                        });
+                        tracing::warn!(
+                            sample_id = %submitted_sample.id,
+                            branch = %branch.name,
+                            error = %error,
+                            "worker evaluation failed"
+                        );
+                        sample_results.push(failed_sample_context(
+                            &submitted_sample,
+                            submitted_at.elapsed().as_millis() as u64,
+                            format!("worker evaluation failed: {error}"),
+                        ));
                     }
                 }
             }
+            pool.shutdown().await?;
 
             let total = count_pos + count_neg + errors;
             if total > 0 {
@@ -334,14 +379,113 @@ where
         {
             let diff = comparator.compare(&prev, &result);
             if opts.fail_on_regression && diff.has_regression() {
-                return Err(AppError::new(
+                let error = AppError::new(
                     ErrorCode::Internal,
                     format!("Regression detected:\n{}", diff.summary()),
-                ));
+                );
+                return Err(error);
             }
             tracing::info!("{}", diff.summary());
         }
 
         Ok(result)
+    }
+}
+
+struct EvaluationHandler<L> {
+    evaluator: Arc<dyn Evaluator<L>>,
+    branch_name: String,
+    timeout_secs: u64,
+}
+
+struct SampleFailureContext {
+    id: String,
+    label: String,
+}
+
+impl SampleFailureContext {
+    fn from_sample<L: std::fmt::Display>(sample: &BenchSample<L>) -> Self {
+        Self {
+            id: sample.id.clone(),
+            label: sample.label.to_string(),
+        }
+    }
+}
+
+#[derive(Clone)]
+enum EvaluationOutcome<L> {
+    Success {
+        sample: BenchSample<L>,
+        prediction: Prediction<L>,
+        duration_ms: u64,
+    },
+    Failure {
+        sample: BenchSample<L>,
+        duration_ms: u64,
+        error: String,
+    },
+}
+
+#[async_trait::async_trait]
+impl<L> Handler<BenchSample<L>, EvaluationOutcome<L>> for EvaluationHandler<L>
+where
+    L: Clone + Send + Sync + std::fmt::Display + 'static,
+{
+    async fn handle(
+        &self,
+        sample: BenchSample<L>,
+        _emit: mpsc::Sender<Event<EvaluationOutcome<L>>>,
+        cancel: CancellationToken,
+    ) -> AppResult<EvaluationOutcome<L>> {
+        let start = Instant::now();
+        let input = sample.input.clone();
+        let timeout = tokio::time::Duration::from_secs(self.timeout_secs);
+        let eval = tokio::time::timeout(timeout, self.evaluator.evaluate(input));
+        let result = tokio::select! {
+            _ = cancel.cancelled() => {
+                return Ok(EvaluationOutcome::Failure {
+                    sample,
+                    duration_ms: start.elapsed().as_millis() as u64,
+                    error: "cancelled".to_string(),
+                });
+            }
+            result = eval => result,
+        };
+        let duration_ms = start.elapsed().as_millis() as u64;
+
+        match result {
+            Ok(Ok(prediction)) => Ok(EvaluationOutcome::Success {
+                sample,
+                prediction,
+                duration_ms,
+            }),
+            Ok(Err(error)) => Ok(EvaluationOutcome::Failure {
+                sample,
+                duration_ms,
+                error: error.to_string(),
+            }),
+            Err(_) => Ok(EvaluationOutcome::Failure {
+                sample,
+                duration_ms,
+                error: format!("timeout in {}", self.branch_name),
+            }),
+        }
+    }
+}
+
+fn failed_sample_context(
+    sample: &SampleFailureContext,
+    duration_ms: u64,
+    error: String,
+) -> BenchSampleResult {
+    BenchSampleResult {
+        id: sample.id.clone(),
+        label: sample.label.clone(),
+        predicted: String::new(),
+        score: 0.0,
+        correct: false,
+        branch_scores: HashMap::new(),
+        duration_ms,
+        error,
     }
 }

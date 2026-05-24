@@ -13,6 +13,6 @@ pub mod output;
 pub mod progress;
 pub mod signal;
 
-pub use output::{OutputKV, OutputTable};
+pub use output::{ErrorRenderer, ExitCode, OutputFormat, OutputKV, OutputTable};
 pub use progress::{MultiProgress, ProgressBar, ProgressStyle};
 pub use signal::CancellationToken;

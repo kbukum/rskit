@@ -1,6 +1,5 @@
 //! Management operations for the CLI backend.
 
-use std::process::Command;
 use std::time::{Duration, UNIX_EPOCH};
 
 use rskit_errors::{AppError, AppResult};
@@ -167,31 +166,18 @@ impl RemoteManager for Backend {
 
 impl ConfigReader for Backend {
     fn config_get(&self, key: &str) -> AppResult<String> {
-        let output = Command::new("git")
-            .args(["config", "--get", "--", key])
-            .current_dir(&self.root)
-            .env("GIT_TERMINAL_PROMPT", "0")
-            .output()
-            .map_err(|err| GitError::CommandFailed {
-                args: vec!["config".into(), "--get".into(), key.into()],
-                stdout: String::new(),
-                stderr: err.to_string(),
-            })?;
+        let args = ["config", "--get", "--", key];
+        let output = self.run_result(&args)?;
 
-        if output.status.success() {
-            Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
-        } else if output.status.code() == Some(1) {
+        if output.success() && !output.stdout_truncated && !output.stderr_truncated {
+            Ok(output.stdout.trim().to_string())
+        } else if output.exit_code == Some(1) {
             Err(GitError::ConfigNotFound {
                 key: key.to_string(),
             }
             .into())
         } else {
-            Err(GitError::CommandFailed {
-                args: vec!["config".into(), "--get".into(), key.into()],
-                stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
-                stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
-            }
-            .into())
+            Err(Backend::command_failed(&args, output))
         }
     }
 
@@ -257,25 +243,14 @@ impl Maintainer for Backend {
 }
 
 fn run_allow_empty(backend: &Backend, args: &[&str]) -> AppResult<Vec<u8>> {
-    let output = Command::new("git")
-        .args(args)
-        .current_dir(backend.root())
-        .env("GIT_TERMINAL_PROMPT", "0")
-        .output()
-        .map_err(|err| crate::error::GitError::CommandFailed {
-            args: args.iter().map(|arg| (*arg).to_string()).collect(),
-            stdout: String::new(),
-            stderr: err.to_string(),
-        })?;
-    if output.status.success() || output.status.code() == Some(1) {
-        Ok(output.stdout)
+    let output = backend.run_result(args)?;
+    if (output.success() || output.exit_code == Some(1))
+        && !output.stdout_truncated
+        && !output.stderr_truncated
+    {
+        Ok(output.stdout_bytes)
     } else {
-        Err(crate::error::GitError::CommandFailed {
-            args: args.iter().map(|arg| (*arg).to_string()).collect(),
-            stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
-            stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
-        }
-        .into())
+        Err(Backend::command_failed(args, output))
     }
 }
 

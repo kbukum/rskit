@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 
 use std::path::Path;
-use std::process::Command;
 
+use rskit_process::{ProcessConfig, command, run};
 use tempfile::TempDir;
 
 pub struct TestRepo {
@@ -99,17 +99,17 @@ fn write_file(dir: &Path, path: &str, content: &str) {
 }
 
 fn run_git(dir: &Path, args: &[&str]) -> String {
-    let out = Command::new("git")
-        .args(args)
-        .current_dir(dir)
-        .output()
-        .expect("failed to run git");
-    if !out.status.success() {
-        panic!(
-            "git {:?} failed: {}",
-            args,
-            String::from_utf8_lossy(&out.stderr)
-        );
+    let cmd = command("git").args(args.iter().copied()).dir(dir);
+    let out = run(
+        &cmd,
+        &ProcessConfig {
+            timeout: None,
+            ..ProcessConfig::default()
+        },
+    )
+    .expect("failed to run git");
+    if !out.success() {
+        panic!("git {:?} failed: {}", args, out.stderr);
     }
-    String::from_utf8_lossy(&out.stdout).to_string()
+    out.stdout
 }

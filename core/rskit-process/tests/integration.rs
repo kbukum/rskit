@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use parking_lot::Mutex;
-use rskit_process::{Command, ErrorCode, OutputObserver, ProcessConfig, run_with_cancel};
+use rskit_process::{Command, ErrorCode, OutputObserver, ProcessConfig, run, run_with_cancel};
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
@@ -183,6 +183,27 @@ async fn timeout_escalates_and_marks_result() {
 }
 
 #[tokio::test]
+async fn timeout_does_not_discard_captured_stderr_at_limit() {
+    let command = Command::new("/bin/sh").args([
+        "-c",
+        "trap '' TERM; printf 1234567 >&2; while :; do sleep 1; done",
+    ]);
+    let config = ProcessConfig {
+        timeout: Some(Duration::from_millis(50)),
+        grace_period: Duration::from_millis(10),
+        max_output_bytes: Some(8),
+        ..ProcessConfig::default()
+    };
+
+    let result = run_with_cancel(&command, &config, CancellationToken::new())
+        .await
+        .unwrap();
+    assert!(result.timed_out);
+    assert_eq!(result.stderr, "1234567p");
+    assert!(result.stderr_truncated);
+}
+
+#[tokio::test]
 async fn argv_only_execution_prevents_shell_injection() {
     let command = Command::new("/usr/bin/printf").args(["%s", "$(echo injected); rm -rf /"]);
     let result = run_with_cancel(
@@ -208,6 +229,44 @@ async fn process_result_check_reports_failures() {
     .unwrap();
 
     assert!(result.check().is_err());
+}
+
+#[test]
+fn blocking_run_captures_stdout() {
+    let command = Command::new("/usr/bin/printf").args(["%s", "hello"]);
+    let result = run(&command, &ProcessConfig::default()).unwrap();
+
+    assert_eq!(result.stdout, "hello");
+    assert_eq!(result.exit_code, Some(0));
+    assert!(result.success());
+}
+
+#[test]
+fn blocking_run_preserves_nonzero_exit_code() {
+    let command = Command::new("/usr/bin/false");
+    let result = run(&command, &ProcessConfig::default()).unwrap();
+
+    assert_eq!(result.exit_code, Some(1));
+    assert!(result.check().is_err());
+}
+
+#[test]
+fn blocking_timeout_does_not_discard_captured_stderr_at_limit() {
+    let command = Command::new("/bin/sh").args([
+        "-c",
+        "trap '' TERM; printf 1234567 >&2; while :; do sleep 1; done",
+    ]);
+    let config = ProcessConfig {
+        timeout: Some(Duration::from_millis(50)),
+        grace_period: Duration::from_millis(10),
+        max_output_bytes: Some(8),
+        ..ProcessConfig::default()
+    };
+
+    let result = run(&command, &config).unwrap();
+    assert!(result.timed_out);
+    assert_eq!(result.stderr, "1234567p");
+    assert!(result.stderr_truncated);
 }
 
 #[tokio::test]

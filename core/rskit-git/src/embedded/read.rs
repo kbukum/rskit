@@ -3,7 +3,7 @@
 use std::path::Path;
 use std::time::SystemTime;
 
-use rskit_errors::AppResult;
+use rskit_errors::{AppError, AppResult};
 
 use crate::error::GitError;
 use crate::options::{BlameOptions, LogOptions};
@@ -60,12 +60,11 @@ impl Differ for Backend {
         let mut entries = Vec::new();
 
         for entry in statuses.iter() {
-            if let Some(path) = entry.path() {
-                entries.push(StatusEntry {
-                    path: path.to_string(),
-                    state: entry_state_from_status(entry.status()),
-                });
-            }
+            let path = entry.path().map_err(GitError::Internal)?;
+            entries.push(StatusEntry {
+                path: path.to_string(),
+                state: entry_state_from_status(entry.status()),
+            });
         }
 
         Ok(entries)
@@ -201,7 +200,11 @@ impl Blamer for Backend {
 
         let mut entries = Vec::new();
         for hunk in blame.iter() {
-            let signature = signature_from_git2(&hunk.final_signature());
+            let signature = hunk
+                .final_signature()
+                .as_ref()
+                .map(signature_from_git2)
+                .ok_or_else(|| AppError::invalid_format("blame signature", "author signature"))?;
             let commit_oid = oid_from_git2(hunk.final_commit_id());
             let start = hunk.final_start_line();
             let end = start + hunk.lines_in_hunk();

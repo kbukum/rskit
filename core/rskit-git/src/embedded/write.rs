@@ -67,9 +67,7 @@ impl IndexManager for Backend {
 
         for entry in statuses.iter() {
             let status = entry.status();
-            let Some(path) = entry.path() else {
-                continue;
-            };
+            let path = entry.path().map_err(GitError::Internal)?;
 
             if status.is_conflicted() {
                 entries.push(StatusEntry {

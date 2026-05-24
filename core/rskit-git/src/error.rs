@@ -123,10 +123,16 @@ pub enum GitError {
     CommandFailed {
         /// CLI arguments that were attempted.
         args: Vec<String>,
+        /// Process exit code, if available.
+        exit_code: Option<i32>,
         /// Standard output (may contain conflict diagnostics).
         stdout: String,
         /// Standard error output.
         stderr: String,
+        /// Whether stdout exceeded the configured capture limit.
+        stdout_truncated: bool,
+        /// Whether stderr exceeded the configured capture limit.
+        stderr_truncated: bool,
     },
 
     /// Invalid object ID string.
@@ -189,10 +195,21 @@ impl From<GitError> for AppError {
             }
             GitError::CommandFailed {
                 args,
+                exit_code,
                 stdout,
                 stderr,
+                stdout_truncated,
+                stderr_truncated,
             } => {
                 let mut detail = format!("git {}: {}", args.join(" "), stderr);
+                if let Some(exit_code) = exit_code {
+                    detail.push_str(&format!(" (exit code: {exit_code})"));
+                }
+                if stdout_truncated || stderr_truncated {
+                    detail.push_str(&format!(
+                        " (stdout_truncated: {stdout_truncated}, stderr_truncated: {stderr_truncated})"
+                    ));
+                }
                 if !stdout.is_empty() {
                     detail.push_str("\nstdout: ");
                     detail.push_str(&stdout);

@@ -4,6 +4,20 @@ name: Bench
 # Criterion benchmarks and post results as a PR comment.
 
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '**/*.rs'
+      - '**/Cargo.toml'
+      - '**/Cargo.lock'
+      - '.github/workflows/bench.yml'
+  push:
+    branches: [main]
+    paths:
+      - '**/*.rs'
+      - '**/Cargo.toml'
+      - '**/Cargo.lock'
+      - '.github/workflows/bench.yml'
   workflow_dispatch:
 
 permissions:
@@ -41,8 +55,11 @@ jobs:
 
       - name: Run benchmarks
         run: |
-          cargo bench --manifest-path core/Cargo.toml --workspace --bench '*' -- --output-format bencher | tee output.txt
-          cargo bench --manifest-path contrib/Cargo.toml --workspace --bench '*' -- --output-format bencher | tee -a output.txt
+          set -euo pipefail
+          : > raw-output.txt
+          cargo bench --manifest-path core/Cargo.toml -p rskit-bench --bench metrics -- --quick --output-format bencher | tee -a raw-output.txt
+          cargo bench --manifest-path core/Cargo.toml -p rskit-bench --bench core -- --quick --output-format bencher | tee -a raw-output.txt
+          awk '/^bench:/ { printf "test rskit_bench_%03d ... %s\n", ++i, $0; next } { print }' raw-output.txt > output.txt
 
       - name: Store benchmark result
         uses: benchmark-action/github-action-benchmark@52576c92bccf6ac60c8223ec7eb2565637cae9ba  # v1.22.1

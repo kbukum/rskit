@@ -9,6 +9,7 @@ pub mod curves;
 pub mod dataset;
 pub mod dataset_loader;
 pub mod evaluator;
+pub mod execution;
 pub mod metric;
 pub mod metrics;
 pub mod middleware;
@@ -24,6 +25,7 @@ pub mod viz;
 
 // Primary crate API.
 pub use evaluator::{Evaluator, EvaluatorFunc, FromProvider};
+pub use execution::BenchExecutionPlan;
 pub use result::{BenchRunResult, MetricResult};
 pub use run_storage::{FileRunStorage, ListOptions, RunStorage};
 pub use runner::{BenchRunner, RunOptions};

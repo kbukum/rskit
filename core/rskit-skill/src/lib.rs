@@ -623,8 +623,18 @@ fn collect_assets(dir: PathBuf, assets: &mut Vec<Asset>) -> Result<(), SkillErro
             let digest = Sha256::digest(&data);
             assets.push(Asset {
                 path,
-                sha256: format!("{digest:x}"),
+                sha256: hex_lower(&digest),
             });
+        }
+
+        fn hex_lower(bytes: &[u8]) -> String {
+            const HEX: &[u8; 16] = b"0123456789abcdef";
+            let mut out = String::with_capacity(bytes.len() * 2);
+            for &byte in bytes {
+                out.push(HEX[(byte >> 4) as usize] as char);
+                out.push(HEX[(byte & 0x0f) as usize] as char);
+            }
+            out
         }
     }
     assets.sort_by(|left, right| left.path.cmp(&right.path));

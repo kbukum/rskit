@@ -16,12 +16,13 @@ keywords               = ["cli", "progress", "signal", "terminal"]
 [dependencies]
 # External
 indicatif       = { workspace = true }
-tokio           = { workspace = true }
 tokio-util      = { workspace = true }
+serde           = { workspace = true }
+serde_json      = { workspace = true }
+serde_norway    = { workspace = true }
 
 # Internal
 rskit-errors    = { path = "../rskit-errors" }
-rskit-bootstrap = { path = "../rskit-bootstrap" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "full"] }

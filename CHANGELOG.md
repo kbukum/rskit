@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed — Cross-Cutting
+- **L9 infrastructure**: made the `rskit` facade a pure re-export layer,
+  aligned facade feature flags with available crates, routed CLI-backed Git
+  commands through `rskit-process`, standardized CLI error/output rendering,
+  and added concrete workload, testutil, benchmark, and integration helpers.
 - **Media/dataset**: redesigned dataset items around bounded byte/file
   payloads, streaming source contracts, explicit transform errors, schema
   validation via `rskit-schema`, and `rskit-pipeline` stream adapters.

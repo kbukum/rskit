@@ -9,14 +9,15 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::time::Duration;
 
 use async_trait::async_trait;
-use rskit_auth::{JwtConfig, JwtService, TokenGenerator, TokenValidator};
-use rskit_authz::{Checker, Effect, Engine, Permission, Policy, Request, Resource, Role, Subject};
-use rskit_bootstrap::{AppBuilder, Component, Health, HealthStatus, Registry};
-use rskit_di::Container;
-use rskit_errors::{AppError, AppResult, ErrorCode};
-use rskit_pipeline::{RskitStreamExt, from_slice};
-use rskit_provider::{Provider, RequestResponse, request_response_fn};
-use rskit_resilience::{CbConfig, CbState, CircuitBreaker};
+use rskit::auth::{JwtConfig, JwtService, TokenGenerator, TokenValidator};
+use rskit::authz::{Checker, Effect, Engine, Permission, Policy, Request, Resource, Role, Subject};
+use rskit::di::Container;
+use rskit::pipeline::{RskitStreamExt, from_slice};
+use rskit::provider::{Provider, RequestResponse, request_response_fn};
+use rskit::resilience::{CbConfig, CbState, CircuitBreaker};
+use rskit::{
+    AppBuilder, AppError, AppResult, Component, ErrorCode, Health, HealthStatus, Registry,
+};
 use rskit_validation::Validator;
 use serde::{Deserialize, Serialize};
 
@@ -186,12 +187,12 @@ async fn errors_resilience_various_error_codes_through_breaker() {
 #[derive(Debug, Deserialize, rskit_validation::Validate, Default)]
 struct TestConfig {
     #[serde(default)]
-    service: rskit_config::ServiceConfig,
+    service: rskit::config::ServiceConfig,
 }
 
-impl rskit_config::AppConfig for TestConfig {
+impl rskit::config::AppConfig for TestConfig {
     fn apply_defaults(&mut self) {}
-    fn service_config(&self) -> &rskit_config::ServiceConfig {
+    fn service_config(&self) -> &rskit::config::ServiceConfig {
         &self.service
     }
 }
