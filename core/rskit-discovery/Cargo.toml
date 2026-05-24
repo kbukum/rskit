@@ -20,6 +20,8 @@ rustdoc-args = ["--cfg", "docsrs"]
 [features]
 default = []
 consul = ["dep:reqwest"]
+component = ["dep:rskit-bootstrap"]
+server = ["component"]
 
 [dependencies]
 # External
@@ -36,6 +38,6 @@ parking_lot  = { workspace = true }
 reqwest      = { workspace = true, optional = true }
 
 # Internal
-rskit-bootstrap = { path = "../rskit-bootstrap" }
+rskit-bootstrap = { path = "../rskit-bootstrap", optional = true }
 rskit-errors = { path = "../rskit-errors" }
 rskit-resilience = { path = "../rskit-resilience" }

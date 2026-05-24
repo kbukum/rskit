@@ -19,39 +19,64 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 # External
-tonic            = { workspace = true }
-tonic-health     = { workspace = true }
-tonic-reflection = { workspace = true }
+tonic            = { workspace = true, optional = true }
+tonic-health     = { workspace = true, optional = true }
+tonic-reflection = { workspace = true, optional = true }
 tokio            = { workspace = true }
 tokio-util       = { workspace = true }
-tower            = { workspace = true }
-tower-layer      = { workspace = true }
-tower-service    = { workspace = true }
+tower            = { workspace = true, optional = true }
+tower-layer      = { workspace = true, optional = true }
+tower-service    = { workspace = true, optional = true }
 tracing          = { workspace = true }
 async-trait      = { workspace = true }
 serde            = { workspace = true }
 serde_json       = { workspace = true }
 validator = { workspace = true }
 parking_lot      = { workspace = true }
-http             = { workspace = true }
-hyper            = { workspace = true }
-hyper-util       = { workspace = true }
-base64           = { workspace = true }
-axum             = { workspace = true }
-tower-http       = { workspace = true }
-rustls           = { workspace = true }
-rustls-pemfile   = { workspace = true }
-tokio-rustls     = { workspace = true }
+http             = { workspace = true, optional = true }
+hyper            = { workspace = true, optional = true }
+hyper-util       = { workspace = true, optional = true }
+base64           = { workspace = true, optional = true }
+axum             = { workspace = true, optional = true }
+tower-http       = { workspace = true, optional = true }
+rustls           = { workspace = true, optional = true }
+rustls-pemfile   = { workspace = true, optional = true }
+tokio-rustls     = { workspace = true, optional = true }
 
 # Internal
 rskit-errors     = { path = "../rskit-errors" }
-rskit-config     = { path = "../rskit-config" }
 rskit-bootstrap  = { path = "../rskit-bootstrap" }
-rskit-http       = { path = "../rskit-http" }
-rskit-resilience = { path = "../rskit-resilience" }
-rskit-security   = { path = "../rskit-security" }
+rskit-http       = { path = "../rskit-http", optional = true }
+rskit-security   = { path = "../rskit-security", optional = true }
 rskit-validation = { path = "../rskit-validation" }
-rskit-version    = { path = "../rskit-version" }
+rskit-version    = { path = "../rskit-version", optional = true }
+
+[features]
+default = ["http", "grpc"]
+http = [
+    "dep:axum",
+    "dep:http",
+    "dep:hyper",
+    "dep:hyper-util",
+    "dep:rskit-http",
+    "dep:rskit-security",
+    "dep:rskit-version",
+    "dep:rustls",
+    "dep:rustls-pemfile",
+    "dep:tokio-rustls",
+    "dep:tower",
+    "dep:tower-http",
+]
+grpc = [
+    "dep:base64",
+    "dep:http",
+    "dep:tonic",
+    "dep:tonic-health",
+    "dep:tonic-reflection",
+    "dep:tower",
+    "dep:tower-layer",
+    "dep:tower-service",
+]
 
 [dev-dependencies]
 futures          = { workspace = true }

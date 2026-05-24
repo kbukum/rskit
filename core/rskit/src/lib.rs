@@ -49,7 +49,6 @@
 //! | `media-full` | `FFmpeg` + image + audio backends |
 //! | `storage-s3` | `S3` storage backend |
 //! | `storage-gcs` | GCS storage backend |
-//! | `workload` | `rskit-workload` (workload management) |
 //! | `cli`    | `rskit-cli` (CLI helpers) |
 //! | `git`    | `rskit-git` (Git automation) |
 //! | `dataset` | `rskit-dataset` (dataset collection) |
@@ -293,10 +292,6 @@ pub use rskit_media_image as media_image;
 /// Pure Rust audio analysis backend.
 #[cfg(feature = "media-audio")]
 pub use rskit_media_audio as media_audio;
-
-/// Workload configuration and orchestration primitives.
-#[cfg(feature = "workload")]
-pub use rskit_workload as workload;
 
 /// CLI helpers: progress bars, cancellation tokens, output formatting.
 #[cfg(feature = "cli")]

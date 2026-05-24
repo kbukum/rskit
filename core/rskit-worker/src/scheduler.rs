@@ -1,18 +1,13 @@
-#![warn(missing_docs)]
-//! Workload management for rskit services.
-//!
-//! This crate defines serializable workload specs and thin scheduling helpers
-//! that compose with `rskit-worker` instead of inventing an alternate execution
-//! model.
+//! Workload specs and scheduling helpers built on the worker pool.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use futures::StreamExt;
 use rskit_errors::AppResult;
-use rskit_pipeline::from_slice;
-use rskit_worker::{Handler, Pool, PoolConfig};
 use serde::{Deserialize, Serialize};
+
+use crate::{Handler, Pool, PoolConfig};
 
 /// Workload manager configuration.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -156,9 +151,9 @@ impl WorkloadBatch {
         self
     }
 
-    /// Convert this batch into the canonical rskit pipeline stream.
+    /// Convert this batch into a stream of workload specs.
     pub fn into_stream(self) -> impl futures::Stream<Item = WorkloadSpec> + Send + 'static {
-        from_slice(self.workloads)
+        futures::stream::iter(self.workloads)
     }
 }
 
@@ -177,7 +172,7 @@ pub trait WorkloadScheduler: Send + Sync {
     /// Decide where the workload should execute.
     async fn schedule(&self, spec: &WorkloadSpec) -> AppResult<SchedulingDecision>;
 
-    /// Build an execution plan for a batch using the canonical pipeline stream.
+    /// Build an execution plan for a batch using a workload stream.
     async fn plan_batch(&self, batch: WorkloadBatch) -> AppResult<ExecutionPlan> {
         let name = batch.name.clone();
         let mut stream = batch.into_stream();
@@ -253,7 +248,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn worker_scheduler_plans_batch_through_pipeline_stream() {
+    async fn worker_scheduler_plans_batch_through_stream() {
         let scheduler = WorkerScheduler::new("default", WorkloadConfig::default());
         let plan = scheduler
             .plan_batch(

@@ -1,6 +1,6 @@
 [package]
 name        = "rskit-grpc"
-description = "tonic gRPC transport for rskit with aligned client and server entrypoints"
+description = "tonic gRPC client transport for rskit"
 version.workspace     = true
 edition.workspace     = true
 license.workspace     = true
@@ -32,7 +32,6 @@ chrono         = { workspace = true }
 rskit-errors   = { path = "../rskit-errors" }
 rskit-resilience = { path = "../rskit-resilience" }
 rskit-security = { path = "../rskit-security" }
-rskit-server   = { path = "../rskit-server", optional = true }
 rskit-discovery = { path = "../rskit-discovery", optional = true }
 
 [dev-dependencies]
@@ -42,5 +41,4 @@ parking_lot    = { workspace = true }
 [features]
 default    = ["client"]
 client     = []
-server     = ["dep:rskit-server"]
-discovery  = ["client", "rskit-discovery"]
+discovery  = ["client", "dep:rskit-discovery"]

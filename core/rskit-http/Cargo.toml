@@ -20,27 +20,16 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 # External
 serde           = { workspace = true }
-async-trait     = { workspace = true }
 tokio           = { workspace = true }
-tokio-util      = { workspace = true }
-tracing         = { workspace = true }
-axum            = { version = "0.8", features = ["http2"] }
 tower            = { workspace = true }
 tower-http      = { version = "0.6", features = ["cors", "trace", "request-id", "timeout"] }
-hyper            = { version = "1", features = ["full"] }
-hyper-util      = { version = "0.1", features = ["tokio"] }
 http             = "1"
-validator = { workspace = true }
 serde_json      = { workspace = true }
 uuid            = { workspace = true }
-parking_lot     = { workspace = true }
 
 # Internal
 rskit-errors    = { path = "../rskit-errors" }
-rskit-bootstrap = { path = "../rskit-bootstrap" }
-rskit-logging   = { path = "../rskit-logging" }
 rskit-security  = { path = "../rskit-security" }
-rskit-validation = { path = "../rskit-validation" }
 
 [dev-dependencies]
 criterion = { workspace = true }

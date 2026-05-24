@@ -31,3 +31,6 @@ criterion/
 # OS
 .DS_Store
 Thumbs.dbgraph.png
+
+/tmp/*
+!/tmp/.keep

@@ -3,12 +3,10 @@
 
 //! gRPC transport entrypoints for rskit.
 //!
-//! `rskit-grpc` owns the locked transport shape for client and server concerns:
-//! - `client` feature: lazy channels, TLS-aware dialing, discovery integration.
-//! - `server` feature: re-exports the lifecycle-managed tonic server types from
-//!   `rskit-server` so services consume a single `grpc` namespace.
-//! - Server interceptor contract: tracing -> logging -> auth -> validation ->
-//!   handler -> metrics.
+//! `rskit-grpc` owns client-side gRPC transport concerns: lazy channels,
+//! TLS-aware dialing, error mapping, and optional discovery integration.
+//!
+//! Lifecycle-managed gRPC servers are owned by `rskit-server`.
 
 #[cfg(feature = "client")]
 /// gRPC channel wrapper with lazy connection management.
@@ -35,6 +33,3 @@ pub use rskit_security::TlsConfig as GrpcClientTlsConfig;
 
 #[cfg(all(feature = "client", feature = "discovery"))]
 pub use discovery::{DiscoveryChannel, DiscoveryChannelConfig};
-
-#[cfg(feature = "server")]
-pub use rskit_server::{ErrorLayer, GrpcServer, GrpcServerBuilder, GrpcServerConfig, TlsConfig};

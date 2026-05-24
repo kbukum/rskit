@@ -12,6 +12,8 @@ pub mod event;
 pub mod handler;
 /// [`Pool`] and [`PoolConfig`] for managing concurrent task execution.
 pub mod pool;
+/// Workload specs and scheduler helpers built on the worker pool.
+pub mod scheduler;
 /// [`TaskHandle`] returned to callers after task submission.
 pub mod task;
 
@@ -20,6 +22,10 @@ pub use dispatch::{DispatchStrategy, RoundRobinDispatcher};
 pub use event::{Event, EventKind, Progress};
 pub use handler::Handler;
 pub use pool::{OverflowPolicy, Pool, PoolConfig, PoolStats};
+pub use scheduler::{
+    ExecutionPlan, ResourceRequirements, SchedulingDecision, WorkerScheduler, WorkloadBatch,
+    WorkloadConfig, WorkloadScheduler, WorkloadSpec,
+};
 pub use task::TaskHandle;
 
 #[cfg(test)]

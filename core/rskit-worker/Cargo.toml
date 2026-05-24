@@ -28,6 +28,7 @@ uuid             = { workspace = true }
 chrono           = { workspace = true }
 async-trait      = { workspace = true }
 parking_lot      = { workspace = true }
+serde            = { workspace = true }
 
 # Internal
 rskit-errors     = { path = "../rskit-errors" }
