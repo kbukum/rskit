@@ -11,9 +11,10 @@ use crate::run_storage::RunStorage;
 use crate::schema;
 use crate::storage::generate_run_id;
 use crate::types::{BenchSample, Prediction, ScoredSample};
+use futures::stream::{FuturesUnordered, StreamExt};
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_worker::{Event, Handler, Pool};
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::mpsc;
@@ -201,7 +202,7 @@ where
             let mut count_pos = 0usize;
             let mut count_neg = 0usize;
             let mut errors = 0usize;
-            let mut pending = VecDeque::new();
+            let mut pending = FuturesUnordered::new();
             let mut sample_iter = samples.iter();
             let concurrency = opts.concurrency.max(1);
             loop {
@@ -211,13 +212,14 @@ where
                     };
                     let context = SampleFailureContext::from_sample(sample);
                     let handle = pool.submit(sample.clone()).await?;
-                    pending.push_back((context, Instant::now(), handle));
+                    let submitted_at = Instant::now();
+                    pending.push(async move { (context, submitted_at, handle.result().await) });
                 }
 
-                let Some((submitted_sample, submitted_at, handle)) = pending.pop_front() else {
+                let Some((submitted_sample, submitted_at, result)) = pending.next().await else {
                     break;
                 };
-                match handle.result().await {
+                match result {
                     Ok(EvaluationOutcome::Success {
                         sample,
                         prediction: pred,
