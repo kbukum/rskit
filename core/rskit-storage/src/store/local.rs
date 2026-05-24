@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::FileSource;
 
-use super::{FileStore, ProgressCallback, StoredFile};
+use super::{FileStore, ProgressCallback, StoredFile, prefixed_key};
 
 static NEXT_DEFAULT_ROOT_ID: AtomicU64 = AtomicU64::new(0);
 
@@ -190,7 +190,8 @@ impl FileStore for LocalStore {
             })?;
 
             if meta.is_file() {
-                let key = format!("{}/{}", prefix, entry.file_name().to_string_lossy());
+                let filename = entry.file_name();
+                let key = prefixed_key(Some(prefix), filename.to_string_lossy().as_ref());
                 let stored_at = meta
                     .modified()
                     .map(chrono::DateTime::<chrono::Utc>::from)

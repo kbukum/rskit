@@ -602,6 +602,24 @@ async fn store_list_empty_prefix_returns_root_files() {
         "expected at least 1, got {}",
         items.len()
     );
+    assert!(items.iter().any(|item| item.key == "root.txt"));
+    assert!(items.iter().all(|item| !item.key.starts_with('/')));
+}
+
+#[tokio::test]
+async fn store_list_trailing_prefix_returns_normalized_keys() {
+    let dir = TempDir::new().unwrap();
+    let store = make_store(dir.path());
+
+    let source = FileSource::from_bytes(Bytes::from_static(b"nested"));
+    store
+        .upload(&source, "items/file.txt", None, None)
+        .await
+        .unwrap();
+
+    let items = store.list("items/", None).await.unwrap();
+    assert!(items.iter().any(|item| item.key == "items/file.txt"));
+    assert!(items.iter().all(|item| !item.key.contains("//")));
 }
 
 #[tokio::test]
