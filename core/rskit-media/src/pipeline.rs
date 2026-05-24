@@ -364,29 +364,26 @@ impl MediaPipeline {
         let mut has_strip_video = false;
 
         for op in &self.ops {
-            match op {
-                MediaOp::StripAudio => has_strip_audio = true,
-                MediaOp::StripVideo => has_strip_video = true,
-                MediaOp::Volume(_)
-                | MediaOp::NormalizeAudio
-                | MediaOp::MixAudio(_)
-                | MediaOp::ReplaceAudio(_)
-                    if has_strip_audio =>
-                {
-                    return Err(rskit_errors::AppError::new(
-                        rskit_errors::ErrorCode::InvalidInput,
-                        "audio operation after StripAudio has no effect",
-                    ));
-                }
-                MediaOp::Resize(_) | MediaOp::Crop(_) | MediaOp::Rotate(_) | MediaOp::Flip(_)
-                    if has_strip_video =>
-                {
-                    return Err(rskit_errors::AppError::new(
-                        rskit_errors::ErrorCode::InvalidInput,
-                        "video operation after StripVideo has no effect",
-                    ));
-                }
-                _ => {}
+            if matches!(op, MediaOp::StripAudio) {
+                has_strip_audio = true;
+                continue;
+            }
+            if matches!(op, MediaOp::StripVideo) {
+                has_strip_video = true;
+                continue;
+            }
+
+            if has_strip_audio && op.requires_audio_track() {
+                return Err(rskit_errors::AppError::new(
+                    rskit_errors::ErrorCode::InvalidInput,
+                    "audio operation after StripAudio has no effect",
+                ));
+            }
+            if has_strip_video && op.requires_video_track() {
+                return Err(rskit_errors::AppError::new(
+                    rskit_errors::ErrorCode::InvalidInput,
+                    "video operation after StripVideo has no effect",
+                ));
             }
         }
 

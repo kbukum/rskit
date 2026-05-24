@@ -30,55 +30,7 @@ pub(crate) fn infer_operation_kind(ops: &[MediaOp]) -> OperationKind {
     let mut heaviest = OperationKind::StreamCopy;
 
     for op in ops {
-        let kind = match op {
-            // Temporal / track selection — typically stream copy, fast
-            MediaOp::Extract(_)
-            | MediaOp::StripAudio
-            | MediaOp::StripVideo
-            | MediaOp::SelectTracks(_)
-            | MediaOp::SelectTracksByKind(_) => OperationKind::StreamCopy,
-
-            // Single frame extraction
-            MediaOp::GenerateThumbnail(_) => OperationKind::ThumbnailExtract,
-
-            // Multi-segment extraction (may need concat)
-            MediaOp::ExtractMany(_) => OperationKind::Filter,
-
-            // Scene detection
-            MediaOp::DetectScenes(_) => OperationKind::SceneDetect,
-
-            // Full transcode / concat
-            MediaOp::Resize(_) | MediaOp::Transcode(_) | MediaOp::Concat(_) => {
-                OperationKind::Transcode
-            }
-
-            // Video/audio filters
-            MediaOp::Crop(_)
-            | MediaOp::Rotate(_)
-            | MediaOp::Flip(_)
-            | MediaOp::Pad(_)
-            | MediaOp::Speed(_)
-            | MediaOp::Reverse
-            | MediaOp::Volume(_)
-            | MediaOp::NormalizeAudio
-            | MediaOp::FadeIn(_)
-            | MediaOp::FadeOut(_)
-            | MediaOp::Filter(_)
-            | MediaOp::Overlay(_)
-            | MediaOp::ReplaceAudio(_)
-            | MediaOp::MixAudio(_)
-            | MediaOp::ApplyFilter(_)
-            | MediaOp::AddOverlay(_) => OperationKind::Filter,
-
-            // Subtitle burn-in
-            MediaOp::BurnSubtitles(_) | MediaOp::AddSubtitles(_) => OperationKind::SubtitleBurn,
-
-            // AI-powered operations (external tools)
-            MediaOp::Upscale(_) | MediaOp::Interpolate(_) => OperationKind::MlInference,
-
-            // Unknown future variants — conservative default
-            _ => OperationKind::Transcode,
-        };
+        let kind = op.timeout_kind();
 
         if kind.default_multiplier() > heaviest.default_multiplier() {
             heaviest = kind;
@@ -173,9 +125,7 @@ impl FfmpegExecutor {
         ops: &[MediaOp],
         cancel: CancellationToken,
     ) -> AppResult<SourceHints> {
-        let needs_hints = ops
-            .iter()
-            .any(|op| matches!(op, MediaOp::ExtractMany(_) | MediaOp::Concat(_)));
+        let needs_hints = ops.iter().any(MediaOp::needs_stream_hints);
         if !needs_hints {
             return Ok(SourceHints::default());
         }

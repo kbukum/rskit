@@ -102,7 +102,7 @@ fn openai_adapter_constructs_with_valid_config() {
         base_url: "https://api.openai.com/v1".into(),
         model: "gpt-4o".into(),
         embedding_model: "text-embedding-3-small".into(),
-        embedding_dimensions: 1536,
+        embedding_dimensions: Some(1536),
     };
     let mut registry = rskit_llm::Registry::new();
     assert!(openai::register(&mut registry, cfg).is_ok());

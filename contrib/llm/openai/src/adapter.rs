@@ -190,7 +190,7 @@ mod tests {
             base_url: "https://api.openai.com/v1".into(),
             model: "gpt-4o".into(),
             embedding_model: "text-embedding-3-small".into(),
-            embedding_dimensions: 1536,
+            embedding_dimensions: Some(1536),
         };
         let adapter = new_adapter(&cfg);
         assert!(adapter.is_ok());
@@ -203,7 +203,7 @@ mod tests {
             base_url: "https://api.openai.com/v1".into(),
             model: "gpt-4o".into(),
             embedding_model: "text-embedding-3-small".into(),
-            embedding_dimensions: 1536,
+            embedding_dimensions: Some(1536),
         };
         let adapter = new_adapter(&cfg).unwrap();
         let _boxed: Box<dyn Provider> = Box::new(adapter);
@@ -216,7 +216,7 @@ mod tests {
             base_url: "https://api.openai.com/v1".into(),
             model: "gpt-4o".into(),
             embedding_model: "text-embedding-3-small".into(),
-            embedding_dimensions: 1536,
+            embedding_dimensions: Some(1536),
         };
         let adapter = new_adapter(&cfg).unwrap();
         let component: &dyn Component = &adapter;

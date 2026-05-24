@@ -30,10 +30,11 @@ pub use upscale::*;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    filter::Filter,
+    filter::{Filter, FilterTarget},
     output::OutputConfig,
     subtitle::SubtitleTrack,
     time::{Segment, TimeRange},
+    timeout::OperationKind,
     types::TrackKind,
 };
 use std::time::Duration;
@@ -126,4 +127,94 @@ pub enum MediaOp {
     Upscale(UpscaleConfig),
     /// AI frame interpolation using RIFE.
     Interpolate(InterpolateConfig),
+}
+
+impl MediaOp {
+    /// Classify this operation for duration-aware timeout calculation.
+    #[must_use]
+    pub fn timeout_kind(&self) -> OperationKind {
+        match self {
+            // Temporal / track selection — typically stream copy, fast.
+            Self::Extract(_)
+            | Self::StripAudio
+            | Self::StripVideo
+            | Self::SelectTracks(_)
+            | Self::SelectTracksByKind(_) => OperationKind::StreamCopy,
+
+            Self::GenerateThumbnail(_) => OperationKind::ThumbnailExtract,
+            Self::ExtractMany(_) => OperationKind::Filter,
+            Self::DetectScenes(_) => OperationKind::SceneDetect,
+            Self::Resize(_) | Self::Transcode(_) | Self::Concat(_) => OperationKind::Transcode,
+
+            Self::Crop(_)
+            | Self::Rotate(_)
+            | Self::Flip(_)
+            | Self::Pad(_)
+            | Self::Speed(_)
+            | Self::Reverse
+            | Self::Volume(_)
+            | Self::NormalizeAudio
+            | Self::FadeIn(_)
+            | Self::FadeOut(_)
+            | Self::Filter(_)
+            | Self::Overlay(_)
+            | Self::ReplaceAudio(_)
+            | Self::MixAudio(_)
+            | Self::ApplyFilter(_)
+            | Self::AddOverlay(_) => OperationKind::Filter,
+
+            Self::BurnSubtitles(_) | Self::AddSubtitles(_) => OperationKind::SubtitleBurn,
+            Self::Upscale(_) | Self::Interpolate(_) => OperationKind::MlInference,
+        }
+    }
+
+    /// Return whether this operation needs an audio track to be present.
+    #[must_use]
+    pub fn requires_audio_track(&self) -> bool {
+        match self {
+            Self::Volume(_)
+            | Self::NormalizeAudio
+            | Self::FadeIn(_)
+            | Self::FadeOut(_)
+            | Self::ReplaceAudio(_)
+            | Self::MixAudio(_) => true,
+            Self::Filter(filter) => filter.target == FilterTarget::Audio,
+            _ => false,
+        }
+    }
+
+    /// Return whether this operation needs a video/image track to be present.
+    #[must_use]
+    pub fn requires_video_track(&self) -> bool {
+        match self {
+            Self::Resize(_)
+            | Self::Crop(_)
+            | Self::Rotate(_)
+            | Self::Flip(_)
+            | Self::Pad(_)
+            | Self::FadeIn(_)
+            | Self::FadeOut(_)
+            | Self::Overlay(_)
+            | Self::BurnSubtitles(_)
+            | Self::ApplyFilter(_)
+            | Self::AddOverlay(_)
+            | Self::GenerateThumbnail(_)
+            | Self::DetectScenes(_)
+            | Self::AddSubtitles(_) => true,
+            Self::Filter(filter) => filter.target == FilterTarget::Video,
+            _ => false,
+        }
+    }
+
+    /// Return whether this operation needs source stream hints before compilation.
+    #[must_use]
+    pub fn needs_stream_hints(&self) -> bool {
+        matches!(self, Self::ExtractMany(_) | Self::Concat(_))
+    }
+
+    /// Return whether this operation is delegated to an external non-FFmpeg tool.
+    #[must_use]
+    pub fn requires_external_tool(&self) -> bool {
+        matches!(self, Self::Upscale(_) | Self::Interpolate(_))
+    }
 }

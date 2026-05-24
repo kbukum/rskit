@@ -15,7 +15,7 @@ use super::config::Config;
 pub struct EmbeddingProvider {
     client: HttpClient,
     model: String,
-    dimensions: usize,
+    dimensions: Option<usize>,
     policy: Option<Policy>,
 }
 
@@ -48,7 +48,8 @@ impl EmbeddingProvider {
 struct EmbeddingRequest {
     model: String,
     input: Vec<String>,
-    dimensions: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dimensions: Option<usize>,
 }
 
 #[derive(Deserialize)]
@@ -223,10 +224,34 @@ mod tests {
             base_url: "https://api.openai.com/v1".into(),
             model: "gpt-4o".into(),
             embedding_model: "text-embedding-3-small".into(),
-            embedding_dimensions: 1536,
+            embedding_dimensions: Some(1536),
         };
         let provider = EmbeddingProvider::new(&cfg).unwrap();
-        assert_eq!(provider.dimensions, 1536);
+        assert_eq!(provider.dimensions, Some(1536));
+    }
+
+    #[test]
+    fn embedding_request_omits_dimensions_when_unset() {
+        let body = EmbeddingRequest {
+            model: "text-embedding-ada-002".into(),
+            input: vec!["hello".into()],
+            dimensions: None,
+        };
+
+        let json = serde_json::to_value(body).unwrap();
+        assert!(json.get("dimensions").is_none());
+    }
+
+    #[test]
+    fn embedding_request_includes_dimensions_when_set() {
+        let body = EmbeddingRequest {
+            model: "text-embedding-3-small".into(),
+            input: vec!["hello".into()],
+            dimensions: Some(768),
+        };
+
+        let json = serde_json::to_value(body).unwrap();
+        assert_eq!(json["dimensions"], 768);
     }
 
     #[tokio::test]
@@ -270,7 +295,7 @@ mod tests {
             base_url: format!("http://{address}"),
             model: "gpt-4o".into(),
             embedding_model: "text-embedding-3-small".into(),
-            embedding_dimensions: 3,
+            embedding_dimensions: Some(3),
         };
         let provider = EmbeddingProvider::new(&cfg).unwrap().with_policy(
             Policy::new().with_retry(

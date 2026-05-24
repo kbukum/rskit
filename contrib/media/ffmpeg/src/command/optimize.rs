@@ -78,16 +78,6 @@ impl FfmpegCommand {
             match op {
                 MediaOp::StripAudio => has_strip_audio = true,
                 MediaOp::StripVideo => has_strip_video = true,
-                MediaOp::Volume(_)
-                | MediaOp::NormalizeAudio
-                | MediaOp::MixAudio(_)
-                | MediaOp::ReplaceAudio(_) => has_audio_op = true,
-                MediaOp::Resize(_)
-                | MediaOp::Crop(_)
-                | MediaOp::Rotate(_)
-                | MediaOp::Flip(_)
-                | MediaOp::Pad(_)
-                | MediaOp::BurnSubtitles(_) => has_video_op = true,
                 MediaOp::Overlay(_) => {
                     has_video_op = true;
                     overlay_count += 1;
@@ -95,11 +85,10 @@ impl FfmpegCommand {
                 MediaOp::Extract(_) => extract_count += 1,
                 MediaOp::ExtractMany(_) => extract_many_count += 1,
                 MediaOp::Concat(_) => concat_count += 1,
-                MediaOp::Filter(f) => match f.target {
-                    rskit_media::filter::FilterTarget::Video => has_video_op = true,
-                    rskit_media::filter::FilterTarget::Audio => has_audio_op = true,
-                },
-                _ => {}
+                _ => {
+                    has_audio_op |= op.requires_audio_track();
+                    has_video_op |= op.requires_video_track();
+                }
             }
         }
 
