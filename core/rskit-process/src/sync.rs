@@ -145,8 +145,13 @@ fn terminate_and_wait(
     pid: Option<u32>,
     grace_period: Duration,
 ) -> AppResult<(Option<i32>, bool, Option<String>)> {
-    if !terminate_process_group(pid, libc::SIGTERM) {
-        let _ = terminate_process(pid, libc::SIGTERM);
+    if !terminate_process_group(pid, libc::SIGTERM) && !terminate_process(pid, libc::SIGTERM) {
+        child.kill().map_err(|error| {
+            AppError::new(
+                ErrorCode::Internal,
+                format!("failed to terminate process after timeout: {error}"),
+            )
+        })?;
     }
 
     let deadline = Instant::now() + grace_period;
@@ -200,19 +205,25 @@ where
 {
     thread::spawn(move || {
         let mut bytes = Vec::new();
-        let truncated = match max_bytes {
-            Some(max) => {
-                let mut limited = reader.by_ref().take(max as u64 + 1);
-                limited.read_to_end(&mut bytes)?;
-                let truncated = bytes.len() > max;
-                bytes.truncate(max);
-                truncated
+        let mut buffer = [0_u8; 4096];
+        let mut remaining = max_bytes.unwrap_or(usize::MAX);
+        let mut truncated = false;
+        loop {
+            let read = reader.read(&mut buffer)?;
+            if read == 0 {
+                break;
             }
-            None => {
-                reader.read_to_end(&mut bytes)?;
-                false
+            if remaining > 0 {
+                let to_copy = remaining.min(read);
+                bytes.extend_from_slice(&buffer[..to_copy]);
+                remaining -= to_copy;
+                if to_copy < read {
+                    truncated = true;
+                }
+            } else {
+                truncated = true;
             }
-        };
+        }
         Ok(ReaderOutput { bytes, truncated })
     })
 }

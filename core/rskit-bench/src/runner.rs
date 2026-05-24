@@ -190,10 +190,11 @@ where
             let mut handles = Vec::with_capacity(samples.len());
 
             for sample in &samples {
-                handles.push(pool.submit(sample.clone()).await?);
+                let handle = pool.submit(sample.clone()).await?;
+                handles.push((sample.clone(), handle));
             }
 
-            for handle in handles {
+            for (submitted_sample, handle) in handles {
                 match handle.result().await {
                     Ok(EvaluationOutcome {
                         sample,
@@ -276,7 +277,17 @@ where
                     }
                     Err(error) => {
                         errors += 1;
-                        tracing::warn!(branch = %branch.name, error = %error, "worker evaluation failed");
+                        tracing::warn!(
+                            sample_id = %submitted_sample.id,
+                            branch = %branch.name,
+                            error = %error,
+                            "worker evaluation failed"
+                        );
+                        sample_results.push(failed_sample(
+                            &submitted_sample,
+                            0,
+                            format!("worker evaluation failed: {error}"),
+                        ));
                     }
                 }
             }
