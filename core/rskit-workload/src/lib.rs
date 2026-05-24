@@ -213,7 +213,7 @@ impl WorkerScheduler {
     #[must_use]
     pub fn pool<I, O, H>(&self, handler: Arc<H>) -> Pool<I, O>
     where
-        I: Clone + Send + 'static,
+        I: Send + 'static,
         O: Clone + Send + 'static,
         H: Handler<I, O> + 'static,
     {
