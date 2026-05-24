@@ -169,7 +169,7 @@ impl ConfigReader for Backend {
         let args = ["config", "--get", "--", key];
         let output = self.run_result(&args)?;
 
-        if output.success() {
+        if output.success() && !output.stdout_truncated && !output.stderr_truncated {
             Ok(output.stdout.trim().to_string())
         } else if output.exit_code == Some(1) {
             Err(GitError::ConfigNotFound {
@@ -244,7 +244,10 @@ impl Maintainer for Backend {
 
 fn run_allow_empty(backend: &Backend, args: &[&str]) -> AppResult<Vec<u8>> {
     let output = backend.run_result(args)?;
-    if output.success() || output.exit_code == Some(1) {
+    if (output.success() || output.exit_code == Some(1))
+        && !output.stdout_truncated
+        && !output.stderr_truncated
+    {
         Ok(output.stdout_bytes)
     } else {
         Err(Backend::command_failed(args, output))

@@ -32,7 +32,7 @@ impl Backend {
 
     pub(crate) fn run(&self, args: &[&str]) -> AppResult<Vec<u8>> {
         let output = self.run_result(args)?;
-        if output.success() {
+        if output.success() && !output.stdout_truncated && !output.stderr_truncated {
             Ok(output.stdout_bytes)
         } else {
             Err(Self::command_failed(args, output))
@@ -62,6 +62,8 @@ impl Backend {
             exit_code: output.exit_code,
             stdout: output.stdout.trim().to_string(),
             stderr: output.stderr.trim().to_string(),
+            stdout_truncated: output.stdout_truncated,
+            stderr_truncated: output.stderr_truncated,
         }
         .into()
     }
