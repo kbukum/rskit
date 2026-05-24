@@ -53,6 +53,7 @@ impl FfmpegCommand {
                         result.push(op.clone());
                     }
                 }
+
                 _ => result.push(op.clone()),
             }
         }
@@ -136,5 +137,24 @@ impl FfmpegCommand {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_rejects_audio_strip_before_dual_track_speed() {
+        let err = FfmpegCommand::validate_ops(&[MediaOp::StripAudio, MediaOp::Speed(2.0)])
+            .expect_err("speed compiles audio filters and must not follow StripAudio");
+        assert_eq!(err.code, rskit_errors::ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn validate_rejects_video_strip_before_dual_track_reverse() {
+        let err = FfmpegCommand::validate_ops(&[MediaOp::StripVideo, MediaOp::Reverse])
+            .expect_err("reverse compiles video filters and must not follow StripVideo");
+        assert_eq!(err.code, rskit_errors::ErrorCode::InvalidInput);
     }
 }

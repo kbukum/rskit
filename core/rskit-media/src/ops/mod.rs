@@ -172,10 +172,12 @@ impl MediaOp {
     #[must_use]
     pub fn requires_audio_track(&self) -> bool {
         match self {
-            Self::Volume(_)
-            | Self::NormalizeAudio
+            Self::Speed(_)
+            | Self::Reverse
             | Self::FadeIn(_)
             | Self::FadeOut(_)
+            | Self::Volume(_)
+            | Self::NormalizeAudio
             | Self::ReplaceAudio(_)
             | Self::MixAudio(_) => true,
             Self::Filter(filter) => filter.target == FilterTarget::Audio,
@@ -192,6 +194,8 @@ impl MediaOp {
             | Self::Rotate(_)
             | Self::Flip(_)
             | Self::Pad(_)
+            | Self::Speed(_)
+            | Self::Reverse
             | Self::FadeIn(_)
             | Self::FadeOut(_)
             | Self::Overlay(_)
@@ -216,5 +220,23 @@ impl MediaOp {
     #[must_use]
     pub fn requires_external_tool(&self) -> bool {
         matches!(self, Self::Upscale(_) | Self::Interpolate(_))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dual_track_operations_require_both_audio_and_video_tracks() {
+        for op in [
+            MediaOp::Speed(2.0),
+            MediaOp::Reverse,
+            MediaOp::FadeIn(Duration::from_secs(1)),
+            MediaOp::FadeOut(Duration::from_secs(1)),
+        ] {
+            assert!(op.requires_audio_track(), "{op:?} should require audio");
+            assert!(op.requires_video_track(), "{op:?} should require video");
+        }
     }
 }
