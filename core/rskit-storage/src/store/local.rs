@@ -5,7 +5,6 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use chrono::Utc;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use serde::{Deserialize, Serialize};
 
@@ -106,14 +105,7 @@ impl FileStore for LocalStore {
             )
         })?;
 
-        let ct = content_type.unwrap_or("application/octet-stream");
-        Ok(StoredFile {
-            key: key.to_string(),
-            size,
-            content_type: ct.to_string(),
-            stored_at: Utc::now(),
-            metadata: metadata.unwrap_or_default(),
-        })
+        Ok(StoredFile::new(key, size, content_type).with_metadata(metadata.unwrap_or_default()))
     }
 
     async fn upload_with_progress(
@@ -158,16 +150,12 @@ impl FileStore for LocalStore {
 
         let mime = crate::detect_mime(&FileSource::Path(path)).await?;
 
-        Ok(StoredFile {
-            key: key.to_string(),
-            size: meta.len(),
-            content_type: mime,
-            stored_at: meta
-                .modified()
-                .map(chrono::DateTime::<Utc>::from)
-                .unwrap_or_else(|_| Utc::now()),
-            metadata: HashMap::new(),
-        })
+        let stored_at = meta
+            .modified()
+            .map(chrono::DateTime::<chrono::Utc>::from)
+            .unwrap_or_else(|_| chrono::Utc::now());
+
+        Ok(StoredFile::new(key, meta.len(), Some(&mime)).with_stored_at(stored_at))
     }
 
     async fn list(&self, prefix: &str, limit: Option<usize>) -> AppResult<Vec<StoredFile>> {
@@ -203,16 +191,11 @@ impl FileStore for LocalStore {
 
             if meta.is_file() {
                 let key = format!("{}/{}", prefix, entry.file_name().to_string_lossy());
-                results.push(StoredFile {
-                    key,
-                    size: meta.len(),
-                    content_type: "application/octet-stream".to_string(),
-                    stored_at: meta
-                        .modified()
-                        .map(chrono::DateTime::<Utc>::from)
-                        .unwrap_or_else(|_| Utc::now()),
-                    metadata: HashMap::new(),
-                });
+                let stored_at = meta
+                    .modified()
+                    .map(chrono::DateTime::<chrono::Utc>::from)
+                    .unwrap_or_else(|_| chrono::Utc::now());
+                results.push(StoredFile::new(key, meta.len(), None).with_stored_at(stored_at));
             }
         }
 

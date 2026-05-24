@@ -78,6 +78,18 @@ pub enum BackoffKind {
     Linear,
 }
 
+/// Named retry configurations for common infrastructure integration patterns.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum RetryPreset {
+    /// Short retry loop for local tests and latency-sensitive operations.
+    Fast,
+    /// Balanced default for general service-to-service calls.
+    Standard,
+    /// More tolerant policy for external network dependencies.
+    ExternalService,
+}
+
 /// Retry policy with configurable backoff and retry predicate.
 ///
 /// # Example
@@ -177,6 +189,30 @@ impl RetryPolicy {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Create a policy from a named retry preset.
+    #[must_use]
+    pub fn from_preset(preset: RetryPreset) -> Self {
+        preset.policy()
+    }
+
+    /// Create a short retry loop for local tests and latency-sensitive operations.
+    #[must_use]
+    pub fn fast() -> Self {
+        RetryPreset::Fast.policy()
+    }
+
+    /// Create a balanced default policy for service-to-service calls.
+    #[must_use]
+    pub fn standard() -> Self {
+        RetryPreset::Standard.policy()
+    }
+
+    /// Create a more tolerant policy for external network dependencies.
+    #[must_use]
+    pub fn external_service() -> Self {
+        RetryPreset::ExternalService.policy()
     }
 
     /// Set the maximum number of attempts (including the first call).
@@ -357,6 +393,29 @@ impl RetryPolicy {
     }
 }
 
+impl RetryPreset {
+    /// Build the retry policy represented by this preset.
+    #[must_use]
+    pub fn policy(self) -> RetryPolicy {
+        match self {
+            Self::Fast => RetryPolicy::new()
+                .with_max_attempts(2)
+                .with_constant_backoff(ConstantBackoff::new(Duration::from_millis(10)))
+                .with_max_elapsed_time(Duration::from_secs(1)),
+            Self::Standard => RetryPolicy::new()
+                .with_max_attempts(3)
+                .with_initial_backoff(Duration::from_millis(100))
+                .with_max_backoff(Duration::from_secs(2))
+                .with_max_elapsed_time(Duration::from_secs(10)),
+            Self::ExternalService => RetryPolicy::new()
+                .with_max_attempts(4)
+                .with_initial_backoff(Duration::from_millis(200))
+                .with_max_backoff(Duration::from_secs(5))
+                .with_max_elapsed_time(Duration::from_secs(30)),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -499,6 +558,21 @@ mod tests {
             .with_jitter(false);
 
         assert_eq!(policy.backoff_delay(3), Duration::from_millis(30));
+    }
+
+    #[test]
+    fn retry_presets_create_expected_policies() {
+        let fast = RetryPolicy::fast().with_jitter(false);
+        assert_eq!(fast.max_attempts, 2);
+        assert_eq!(fast.backoff_delay(1), Duration::from_millis(10));
+
+        let standard = RetryPolicy::from_preset(RetryPreset::Standard);
+        assert_eq!(standard.max_attempts, 3);
+        assert_eq!(standard.max_elapsed_time, Duration::from_secs(10));
+
+        let external = RetryPreset::ExternalService.policy();
+        assert_eq!(external.max_attempts, 4);
+        assert_eq!(external.max_elapsed_time, Duration::from_secs(30));
     }
 
     #[tokio::test]

@@ -19,6 +19,8 @@ pub use bulkhead::{Bulkhead, BulkheadConfig};
 pub use circuit_breaker::{CbConfig, CbState, CircuitBreaker};
 pub use policy::Policy;
 pub use rate_limiter::{RateLimiter, RateLimiterConfig};
-pub use retry::{BackoffKind, ConstantBackoff, LinearBackoff, RetryError, RetryPolicy};
+pub use retry::{
+    BackoffKind, ConstantBackoff, LinearBackoff, RetryError, RetryPolicy, RetryPreset,
+};
 
 pub use layers::{BulkheadLayer, CircuitBreakerLayer, RateLimitLayer, RetryLayer, TimeoutLayer};

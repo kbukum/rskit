@@ -129,8 +129,8 @@ impl Provider for EmbeddingProvider {
                         async move {
                             let resp = self.client.send(request).await?;
                             if !resp.is_success() {
-                                let status = resp.status().as_u16();
-                                let text = resp.text().unwrap_or_default();
+                                let status = resp.status_u16();
+                                let text = resp.text_or_diagnostic();
                                 return Err(AppError::new(
                                     ErrorCode::ExternalService,
                                     format!("embedding API returned HTTP {status}"),
@@ -145,8 +145,8 @@ impl Provider for EmbeddingProvider {
             } else {
                 let resp = self.client.send(request).await?;
                 if !resp.is_success() {
-                    let status = resp.status().as_u16();
-                    let text = resp.text().unwrap_or_default();
+                    let status = resp.status_u16();
+                    let text = resp.text_or_diagnostic();
                     return Err(AppError::new(
                         ErrorCode::ExternalService,
                         format!("embedding API returned HTTP {status}"),
@@ -299,8 +299,7 @@ mod tests {
         };
         let provider = EmbeddingProvider::new(&cfg).unwrap().with_policy(
             Policy::new().with_retry(
-                RetryPolicy::new()
-                    .with_max_attempts(2)
+                RetryPolicy::fast()
                     .with_constant_backoff(ConstantBackoff::new(Duration::from_millis(1)))
                     .with_jitter(false),
             ),

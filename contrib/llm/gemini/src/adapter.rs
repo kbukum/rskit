@@ -82,8 +82,8 @@ impl GeminiAdapter {
         let response = self.client.send(request).await?;
 
         if !response.is_success() {
-            let status = response.status().as_u16();
-            let text = response.text().unwrap_or_default();
+            let status = response.status_u16();
+            let text = response.text_or_diagnostic();
             return Err(GeminiDialect::parse_error(status, &text));
         }
 

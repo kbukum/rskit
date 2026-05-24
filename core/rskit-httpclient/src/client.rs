@@ -161,10 +161,14 @@ impl HttpClient {
         self.send(Request::get(path)).await
     }
 
+    /// Executes a request and converts non-2xx responses into an error.
+    pub async fn send_checked(&self, req: Request) -> AppResult<Response> {
+        self.send(req).await?.error_for_status()
+    }
+
     /// Executes a GET request and parses the response as JSON.
     pub async fn get_json<T: DeserializeOwned>(&self, path: &str) -> AppResult<T> {
-        let resp = self.get(path).await?;
-        resp.error_for_status()?.json()
+        self.get(path).await?.checked_json()
     }
 
     /// Executes a POST request with a JSON body.
@@ -179,8 +183,7 @@ impl HttpClient {
         path: &str,
         body: &T,
     ) -> AppResult<R> {
-        let resp = self.post(path, body).await?;
-        resp.error_for_status()?.json()
+        self.post(path, body).await?.checked_json()
     }
 
     /// Executes a PUT request with a JSON body.
@@ -195,8 +198,7 @@ impl HttpClient {
         path: &str,
         body: &T,
     ) -> AppResult<R> {
-        let resp = self.put(path, body).await?;
-        resp.error_for_status()?.json()
+        self.put(path, body).await?.checked_json()
     }
 
     /// Executes a PATCH request with a JSON body.
@@ -211,8 +213,7 @@ impl HttpClient {
         path: &str,
         body: &T,
     ) -> AppResult<R> {
-        let resp = self.patch(path, body).await?;
-        resp.error_for_status()?.json()
+        self.patch(path, body).await?.checked_json()
     }
 
     /// Executes a DELETE request.

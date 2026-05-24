@@ -9,6 +9,7 @@ use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_storage::FileSource;
 use rskit_storage::store::{
     FileStore, ProgressCallback, StorageConfig, StorageFactory, StorageRegistry, StoredFile,
+    content_type_or_default, prefixed_key,
 };
 use serde::{Deserialize, Serialize};
 
@@ -111,10 +112,7 @@ impl S3Store {
     }
 
     fn full_key(&self, key: &str) -> String {
-        match &self.config.prefix {
-            Some(prefix) => format!("{prefix}/{key}"),
-            None => key.to_string(),
-        }
+        prefixed_key(self.config.prefix.as_deref(), key)
     }
 }
 
@@ -138,9 +136,7 @@ impl FileStore for S3Store {
             .key(&full_key)
             .body(data.to_vec().into());
 
-        if let Some(ct) = content_type {
-            req = req.content_type(ct);
-        }
+        req = req.content_type(content_type_or_default(content_type));
         if let Some(meta) = &metadata {
             for (k, v) in meta {
                 req = req.metadata(k, v);
@@ -151,15 +147,7 @@ impl FileStore for S3Store {
             .await
             .map_err(|e| AppError::new(ErrorCode::Internal, format!("S3 upload failed: {e}")))?;
 
-        Ok(StoredFile {
-            key: key.to_string(),
-            size,
-            content_type: content_type
-                .unwrap_or("application/octet-stream")
-                .to_string(),
-            stored_at: chrono::Utc::now(),
-            metadata: metadata.unwrap_or_default(),
-        })
+        Ok(StoredFile::new(key, size, content_type).with_metadata(metadata.unwrap_or_default()))
     }
 
     async fn upload_with_progress(
@@ -229,19 +217,16 @@ impl FileStore for S3Store {
             .await
             .map_err(|e| AppError::new(ErrorCode::NotFound, format!("S3 head failed: {e}")))?;
 
-        Ok(StoredFile {
-            key: key.to_string(),
-            size: resp.content_length().unwrap_or(0) as u64,
-            content_type: resp
-                .content_type()
-                .unwrap_or("application/octet-stream")
-                .to_string(),
-            stored_at: chrono::Utc::now(),
-            metadata: resp
-                .metadata()
+        Ok(StoredFile::new(
+            key,
+            resp.content_length().unwrap_or(0) as u64,
+            resp.content_type(),
+        )
+        .with_metadata(
+            resp.metadata()
                 .map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
                 .unwrap_or_default(),
-        })
+        ))
     }
 
     async fn list(&self, prefix: &str, limit: Option<usize>) -> AppResult<Vec<StoredFile>> {
@@ -264,12 +249,12 @@ impl FileStore for S3Store {
         let items = resp
             .contents()
             .iter()
-            .map(|obj| StoredFile {
-                key: obj.key().unwrap_or("").to_string(),
-                size: obj.size().unwrap_or(0) as u64,
-                content_type: "application/octet-stream".to_string(),
-                stored_at: chrono::Utc::now(),
-                metadata: HashMap::new(),
+            .map(|obj| {
+                StoredFile::new(
+                    obj.key().unwrap_or(""),
+                    obj.size().unwrap_or(0) as u64,
+                    None,
+                )
             })
             .collect();
 

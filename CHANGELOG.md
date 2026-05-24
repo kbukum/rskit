@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Architecture guardrails**: added a topology check for removed wrapper
   crates, facade/workload cleanup, optional server transport stacks, and
   contrib-adapter aggregation boundaries.
+- **Shared primitives**: added retry presets, checked HTTP response helpers,
+  and storage metadata/key helpers to reduce repeated adapter boilerplate.
 - **Media/dataset**: redesigned dataset items around bounded byte/file
   payloads, streaming source contracts, explicit transform errors, schema
   validation via `rskit-schema`, and `rskit-pipeline` stream adapters.
