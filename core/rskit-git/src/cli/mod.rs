@@ -6,9 +6,9 @@ mod read;
 mod write;
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use rskit_errors::AppResult;
+use rskit_process::{ProcessConfig, ProcessResult, command};
 
 use crate::core::Executor;
 use crate::error::GitError;
@@ -31,32 +31,39 @@ impl Backend {
     }
 
     pub(crate) fn run(&self, args: &[&str]) -> AppResult<Vec<u8>> {
-        let output = Command::new("git")
-            .args(args)
-            .current_dir(&self.root)
-            .env("GIT_TERMINAL_PROMPT", "0")
-            .output()
-            .map_err(|err| GitError::CommandFailed {
-                args: args.iter().map(|arg| (*arg).to_string()).collect(),
-                stdout: String::new(),
-                stderr: err.to_string(),
-            })?;
-
-        if output.status.success() {
-            Ok(output.stdout)
+        let output = self.run_result(args)?;
+        if output.success() {
+            Ok(output.stdout_bytes)
         } else {
-            Err(GitError::CommandFailed {
-                args: args.iter().map(|arg| (*arg).to_string()).collect(),
-                stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
-                stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
-            }
-            .into())
+            Err(Self::command_failed(args, output))
         }
+    }
+
+    pub(crate) fn run_result(&self, args: &[&str]) -> AppResult<ProcessResult> {
+        let command = command("git")
+            .args(args.iter().copied())
+            .dir(&self.root)
+            .env("GIT_TERMINAL_PROMPT", "0");
+        let config = ProcessConfig {
+            timeout: None,
+            ..ProcessConfig::default()
+        };
+        rskit_process::run(&command, &config)
     }
 
     #[allow(dead_code)]
     pub(crate) fn not_implemented<T>(&self, operation: &'static str) -> AppResult<T> {
         Err(GitError::NotImplemented { operation }.into())
+    }
+
+    pub(crate) fn command_failed(args: &[&str], output: ProcessResult) -> rskit_errors::AppError {
+        GitError::CommandFailed {
+            args: args.iter().map(|arg| (*arg).to_string()).collect(),
+            exit_code: output.exit_code,
+            stdout: output.stdout.trim().to_string(),
+            stderr: output.stderr.trim().to_string(),
+        }
+        .into()
     }
 }
 

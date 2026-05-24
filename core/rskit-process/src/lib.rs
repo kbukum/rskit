@@ -40,10 +40,12 @@
 mod command;
 mod result;
 mod runner;
+mod sync;
 
 pub use command::{Command, DEFAULT_MAX_OUTPUT_BYTES, ProcessConfig, command};
 pub use result::ProcessResult;
 pub use runner::{OutputObserver, run_with_cancel, run_with_observer};
+pub use sync::run;
 
 /// Re-export error types
 pub use rskit_errors::{AppError, AppResult, ErrorCode};

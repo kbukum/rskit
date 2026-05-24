@@ -18,7 +18,7 @@ Test utilities, mock providers, and assertion helpers for rskit services.
 ## Usage
 
 ```toml
-[dependencies]
+[dev-dependencies]
 rskit-testutil = "0.1"
 ```
 

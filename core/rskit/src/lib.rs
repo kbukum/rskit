@@ -1,12 +1,14 @@
 //! `rskit` — production Rust toolkit.
 //!
-//! This crate is a thin facade that re-exports all `rskit-*` sub-crates from a
-//! single namespace. Feature flags control optional transports:
+//! This crate is a pure facade that re-exports `rskit-*` sub-crates from a
+//! single namespace. It contains no implementation logic. Feature flags control
+//! optional modules:
 //!
 //! | Feature | Extra crate |
 //! |---------|-------------|
 //! | `server` | `rskit-server` (service-facing HTTP + lifecycle) |
 //! | `grpc`   | `rskit-grpc` (aligned gRPC client/server transport) |
+//! | `encryption` | `rskit-encryption` (encryption helpers) |
 //! | `http`   | `rskit-http` (axum transport details) |
 //! | `auth`   | `rskit-auth` (JWT, OIDC, password) |
 //! | `di`     | `rskit-di` (dependency injection) |
@@ -23,7 +25,6 @@
 //! | `authz`  | `rskit-authz` (RBAC/ABAC) |
 //! | `security` | `rskit-security` (TLS/security configuration) |
 //! | `discovery` | `rskit-discovery` (service discovery) |
-//! | `testutil` | `rskit-testutil` (test helpers) |
 //! | `sse`    | `rskit-sse` (Server-Sent Events) |
 //! | `dag`    | `rskit-dag` (DAG orchestration) |
 //! | `chain`  | `rskit-chain` (sequential execution) |
@@ -31,6 +32,11 @@
 //! | `stateful` | `rskit-stateful` (stateful accumulators) |
 //! | `genai` | `rskit-ai` (shared `GenAI` vocabulary) |
 //! | `llm`    | `rskit-llm` (LLM providers) |
+//! | `embedding` | `rskit-embedding` (embedding abstractions) |
+//! | `inference` | `rskit-inference` (model-serving abstractions) |
+//! | `tool` | `rskit-tool` (tool contracts) |
+//! | `agent` | `rskit-agent` (agent contracts) |
+//! | `mcp` | `rskit-mcp` (Model Context Protocol support) |
 //! | `storage` | `rskit-storage` (File I/O, storage) |
 //! | `media`  | `rskit-media` (media types, pipeline) |
 //! | `media-ffmpeg` | `rskit-media-ffmpeg` (`FFmpeg` backend) |
@@ -40,9 +46,13 @@
 //! | `storage-gcs` | GCS storage backend |
 //! | `workload` | `rskit-workload` (workload management) |
 //! | `cli`    | `rskit-cli` (CLI helpers) |
+//! | `git`    | `rskit-git` (Git automation) |
 //! | `dataset` | `rskit-dataset` (dataset collection) |
 //! | `bench`  | `rskit-bench` (ML benchmarking) |
 //! | `full`   | all features |
+//!
+//! Test helpers live in `rskit-testutil` and should be added directly as a
+//! `dev-dependency`; they are intentionally not part of this production facade.
 //!
 //! # Quick start
 //!
@@ -52,25 +62,6 @@
 //! ```
 
 #![warn(missing_docs)]
-
-// ── Supervised task helper ────────────────────────────────────────────────────
-
-pub mod task;
-pub use task::{SupervisedTask, supervise};
-
-// ── Generic typed registry ────────────────────────────────────────────────────
-
-pub mod registry;
-pub use registry::TypedRegistry;
-
-// ── Mockable clock abstraction ────────────────────────────────────────────────
-
-pub mod clock;
-pub use clock::{Clock, SystemClock};
-
-// NOTE(#64 RS-ME-29): Prefer `impl Trait` in function arguments over `Box<dyn Trait>`
-// for zero-cost abstraction in hot paths. Use `Box<dyn Trait>` only when
-// type erasure is genuinely needed (e.g., storing heterogeneous types in a collection).
 
 // ── Always-on sub-crate facades ──────────────────────────────────────────────
 
@@ -125,6 +116,10 @@ pub use rskit_server as server;
 /// Aligned gRPC transport namespace (opt-in via `grpc` feature).
 #[cfg(feature = "grpc")]
 pub use rskit_grpc as grpc;
+
+/// Encryption helpers (opt-in via `encryption` feature).
+#[cfg(feature = "encryption")]
+pub use rskit_encryption as encryption;
 
 /// Axum transport details used by `rskit-server`.
 #[cfg(feature = "http")]
@@ -186,10 +181,6 @@ pub use rskit_security as security;
 #[cfg(feature = "discovery")]
 pub use rskit_discovery as discovery;
 
-/// Test utilities, mock providers, and assertion helpers.
-#[cfg(feature = "testutil")]
-pub use rskit_testutil as testutil;
-
 /// Server-Sent Events bus with axum integration.
 #[cfg(feature = "sse")]
 pub use rskit_sse as sse;
@@ -205,6 +196,10 @@ pub use rskit_ai as genai;
 /// LLM provider abstractions for OpenAI and Anthropic.
 #[cfg(feature = "llm")]
 pub use rskit_llm as llm;
+
+/// Embedding provider abstractions and types.
+#[cfg(feature = "embedding")]
+pub use rskit_embedding as embedding;
 
 /// Model-serving runtime inference abstractions.
 #[cfg(feature = "inference")]
@@ -229,6 +224,18 @@ pub use rskit_ai::prompt;
 /// Skill manifests, loaders, registries, and verification contracts.
 #[cfg(feature = "skill")]
 pub use rskit_skill as skill;
+
+/// Tool schemas, callable contracts, and metadata wrappers.
+#[cfg(feature = "tool")]
+pub use rskit_tool as tool;
+
+/// Agent contracts and orchestration primitives.
+#[cfg(feature = "agent")]
+pub use rskit_agent as agent;
+
+/// Model Context Protocol contracts.
+#[cfg(feature = "mcp")]
+pub use rskit_mcp as mcp;
 
 /// File I/O, storage backends, MIME detection, temp files.
 #[cfg(feature = "storage")]
@@ -294,68 +301,3 @@ pub use rskit_logging::{LoggingGuard, init_logging, init_logging_env};
 pub use rskit_provider::traits::{Provider, RequestResponse, Sink};
 pub use rskit_resilience::{CircuitBreaker, RateLimiter, RetryPolicy};
 pub use rskit_worker::{Handler, Pool, PoolConfig, TaskHandle};
-
-#[cfg(test)]
-mod tests {
-    /// Verify the root re-exports compile and hold the expected types.
-    /// These are compile-time tests — if they build, the facade is wired correctly.
-    use super::*;
-
-    #[test]
-    fn error_code_accessible_from_facade() {
-        let e = AppError::new(ErrorCode::NotFound, "not found");
-        assert_eq!(e.code, ErrorCode::NotFound);
-        assert!(!e.is_retryable());
-    }
-
-    #[test]
-    fn retry_policy_accessible_from_facade() {
-        let p = RetryPolicy::new().with_max_attempts(2);
-        assert_eq!(p.max_attempts, 2);
-    }
-
-    #[test]
-    fn circuit_breaker_accessible_from_facade() {
-        let cb = CircuitBreaker::new(rskit_resilience::CbConfig::new("facade-cb"));
-        assert_eq!(cb.state(), rskit_resilience::CbState::Closed);
-    }
-
-    #[test]
-    fn rate_limiter_accessible_from_facade() {
-        let rl = RateLimiter::new("facade-rl", 10, 5).unwrap();
-        assert!(rl.check().is_ok());
-    }
-
-    #[tokio::test]
-    async fn pool_accessible_from_facade() {
-        use rskit_errors::AppResult;
-        use rskit_worker::Event;
-        use std::sync::Arc;
-        use tokio::sync::mpsc;
-        use tokio_util::sync::CancellationToken;
-
-        struct EchoHandler;
-        #[async_trait::async_trait]
-        impl Handler<i32, i32> for EchoHandler {
-            async fn handle(
-                &self,
-                task: i32,
-                _emit: mpsc::Sender<Event<i32>>,
-                _cancel: CancellationToken,
-            ) -> AppResult<i32> {
-                Ok(task)
-            }
-        }
-
-        let pool = Pool::new(Arc::new(EchoHandler), PoolConfig::new("facade-pool"));
-        let handle = pool.submit(99).await.unwrap();
-        assert_eq!(handle.result().await.unwrap(), 99);
-    }
-
-    #[test]
-    fn health_types_accessible_from_facade() {
-        let h = Health::healthy("svc");
-        assert_eq!(h.status, HealthStatus::Healthy);
-        assert!(h.is_healthy());
-    }
-}

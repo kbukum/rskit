@@ -1815,7 +1815,11 @@ version = "0.1.0"
 dependencies = [
  "indicatif",
  "rskit-bootstrap",
+ "rskit-config",
  "rskit-errors",
+ "rskit-logging",
+ "serde",
+ "serde_json",
  "tokio",
  "tokio-util",
 ]

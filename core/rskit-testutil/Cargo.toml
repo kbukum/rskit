@@ -23,7 +23,13 @@ async-trait    = { workspace = true }
 tokio          = { workspace = true }
 parking_lot    = { workspace = true }
 uuid           = { workspace = true }
+serde          = { workspace = true }
+validator      = { workspace = true }
 
 # Internal
 rskit-errors   = { path = "../rskit-errors" }
 rskit-provider = { path = "../rskit-provider" }
+rskit-component = { path = "../rskit-component" }
+rskit-hook     = { path = "../rskit-hook" }
+rskit-config   = { path = "../rskit-config" }
+rskit-validation = { path = "../rskit-validation" }

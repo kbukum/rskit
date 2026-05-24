@@ -1,7 +1,5 @@
 //! Write operations for the CLI backend.
 
-use std::process::Command;
-
 use rskit_errors::{AppError, AppResult};
 
 use crate::options::{CheckoutOptions, CherryPickOptions, MergeOptions, RebaseOptions};
@@ -275,14 +273,9 @@ fn conflict_stderr(error: &AppError) -> Option<String> {
 
 fn parse_conflict_paths(backend: &Backend) -> Vec<String> {
     // Query git directly for conflicted paths rather than parsing human-readable messages.
-    let output = Command::new("git")
-        .args(["diff", "--name-only", "--diff-filter=U"])
-        .current_dir(backend.root())
-        .env("GIT_TERMINAL_PROMPT", "0")
-        .output();
-    match output {
-        Ok(out) if out.status.success() => {
-            let mut paths: Vec<String> = String::from_utf8_lossy(&out.stdout)
+    match backend.run(&["diff", "--name-only", "--diff-filter=U"]) {
+        Ok(output) => {
+            let mut paths: Vec<String> = String::from_utf8_lossy(&output)
                 .lines()
                 .filter(|l| !l.trim().is_empty())
                 .map(str::to_string)

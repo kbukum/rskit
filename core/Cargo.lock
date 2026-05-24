@@ -2361,9 +2361,9 @@ dependencies = [
 
 [[package]]
 name = "git2"
-version = "0.20.4"
+version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b88256088d75a56f8ecfa070513a775dd9107f6530ef14919dac831af9cfe2b"
+checksum = "ddddbf932745a6be37109b6112d3ee09696106f848449069d3a57bba937ab82e"
 dependencies = [
  "bitflags",
  "libc",
@@ -5263,9 +5263,7 @@ name = "rskit"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "dashmap",
- "futures",
- "parking_lot",
+ "rskit-agent",
  "rskit-ai",
  "rskit-auth",
  "rskit-authz",
@@ -5282,6 +5280,7 @@ dependencies = [
  "rskit-dataset",
  "rskit-di",
  "rskit-discovery",
+ "rskit-embedding",
  "rskit-encryption",
  "rskit-errors",
  "rskit-git",
@@ -5294,6 +5293,7 @@ dependencies = [
  "rskit-inference-vllm",
  "rskit-llm",
  "rskit-logging",
+ "rskit-mcp",
  "rskit-media",
  "rskit-media-ffmpeg",
  "rskit-media-image",
@@ -5314,7 +5314,7 @@ dependencies = [
  "rskit-storage",
  "rskit-storage-gcs",
  "rskit-storage-s3",
- "rskit-testutil",
+ "rskit-tool",
  "rskit-validation",
  "rskit-vectorstore",
  "rskit-vectorstore-qdrant",
@@ -5322,7 +5322,6 @@ dependencies = [
  "rskit-workload",
  "tokio",
  "tokio-util",
- "tracing",
  "validator",
 ]
 
@@ -5411,11 +5410,14 @@ dependencies = [
  "parking_lot",
  "rskit",
  "rskit-errors",
+ "rskit-observability",
  "rskit-provider",
+ "rskit-worker",
  "serde",
  "serde_json",
  "tempfile",
  "tokio",
+ "tokio-util",
  "tracing",
 ]
 
@@ -5486,8 +5488,10 @@ name = "rskit-cli"
 version = "0.1.0"
 dependencies = [
  "indicatif",
- "rskit-bootstrap",
  "rskit-errors",
+ "serde",
+ "serde_json",
+ "serde_norway",
  "tokio",
  "tokio-util",
 ]
@@ -5658,6 +5662,7 @@ version = "0.1.0"
 dependencies = [
  "git2",
  "rskit-errors",
+ "rskit-process",
  "tempfile",
  "thiserror 2.0.18",
 ]
@@ -5832,18 +5837,9 @@ dependencies = [
  "futures",
  "http 1.4.0",
  "parking_lot",
- "rskit-auth",
- "rskit-authz",
- "rskit-bootstrap",
- "rskit-config",
- "rskit-di",
- "rskit-errors",
- "rskit-pipeline",
- "rskit-provider",
- "rskit-resilience",
+ "rskit",
  "rskit-validation",
  "serde",
- "serde_json",
  "tokio",
  "validator",
 ]
@@ -6236,7 +6232,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_norway",
- "sha2 0.10.9",
+ "sha2 0.11.0",
  "thiserror 2.0.18",
 ]
 
@@ -6323,10 +6319,16 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "parking_lot",
+ "rskit-component",
+ "rskit-config",
  "rskit-errors",
+ "rskit-hook",
  "rskit-provider",
+ "rskit-validation",
+ "serde",
  "tokio",
  "uuid",
+ "validator",
 ]
 
 [[package]]
@@ -6419,6 +6421,15 @@ dependencies = [
 [[package]]
 name = "rskit-workload"
 version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "futures",
+ "rskit-errors",
+ "rskit-pipeline",
+ "rskit-worker",
+ "serde",
+ "tokio",
+]
 
 [[package]]
 name = "rustc-hash"

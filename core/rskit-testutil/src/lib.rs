@@ -3,20 +3,23 @@
 //! Designed for use in `#[cfg(test)]` blocks and integration tests across
 //! the rskit ecosystem.
 //!
-// NOTE(#31): New async tests should use #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-// to catch concurrency bugs that only manifest with real parallelism.
-
-// NOTE(#31): New async tests should use #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-// to catch concurrency bugs that only manifest with real parallelism.
-
 #![warn(missing_docs)]
 
 /// Assertion helpers for `AppResult`.
 pub mod assertions;
+/// Fake components for lifecycle tests.
+pub mod component;
+/// Test config helpers.
+pub mod config;
+/// Hook and event-bus test helpers.
+pub mod hook;
 /// Generic mock provider for testing.
 pub mod mock_provider;
 
 pub use assertions::{assert_err_code, assert_ok};
+pub use component::FakeComponent;
+pub use config::TestAppConfig;
+pub use hook::TestEvent;
 pub use mock_provider::MockProvider;
 
 /// Use `#[tokio::test(flavor = "multi_thread", worker_threads = 2)]` for

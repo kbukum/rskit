@@ -11,6 +11,15 @@ description = "Workload management for rskit services"
 publish = false
 
 [dependencies]
+serde = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+rskit-errors = { path = "../rskit-errors" }
+rskit-pipeline = { path = "../rskit-pipeline" }
+rskit-worker = { path = "../rskit-worker" }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "full"] }
 
 [lints]
 workspace = true

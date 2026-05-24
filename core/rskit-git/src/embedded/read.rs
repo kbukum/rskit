@@ -9,8 +9,8 @@ use crate::error::GitError;
 use crate::options::{BlameOptions, LogOptions};
 use crate::read::{Blamer, Differ, LogReader, TreeReader};
 use crate::types::{
-    BlameLine, Commit, DiffEntry, DiffStats, EntryKind, EntryState, FileStatus, Oid, StatusEntry,
-    TreeEntry, TreeHash,
+    BlameLine, Commit, DiffEntry, DiffStats, EntryKind, EntryState, FileStatus, Oid, Signature,
+    StatusEntry, TreeEntry, TreeHash,
 };
 
 use super::{Backend, commit_from_git2, oid_from_git2, signature_from_git2};
@@ -60,12 +60,11 @@ impl Differ for Backend {
         let mut entries = Vec::new();
 
         for entry in statuses.iter() {
-            if let Some(path) = entry.path() {
-                entries.push(StatusEntry {
-                    path: path.to_string(),
-                    state: entry_state_from_status(entry.status()),
-                });
-            }
+            let path = entry.path().map_err(GitError::Internal)?;
+            entries.push(StatusEntry {
+                path: path.to_string(),
+                state: entry_state_from_status(entry.status()),
+            });
         }
 
         Ok(entries)
@@ -201,7 +200,15 @@ impl Blamer for Backend {
 
         let mut entries = Vec::new();
         for hunk in blame.iter() {
-            let signature = signature_from_git2(&hunk.final_signature());
+            let signature = hunk
+                .final_signature()
+                .as_ref()
+                .map(signature_from_git2)
+                .unwrap_or_else(|| Signature {
+                    name: String::new(),
+                    email: String::new(),
+                    when: std::time::UNIX_EPOCH,
+                });
             let commit_oid = oid_from_git2(hunk.final_commit_id());
             let start = hunk.final_start_line();
             let end = start + hunk.lines_in_hunk();

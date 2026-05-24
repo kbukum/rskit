@@ -3,22 +3,25 @@
 use crate::compare::RunComparator;
 use crate::dataset_loader::DatasetLoader;
 use crate::evaluator::Evaluator;
+use crate::execution::BenchExecutionPlan;
 use crate::metric::Suite;
 use crate::report_gen::Reporter;
 use crate::result::{BenchRunResult, BenchSampleResult, BranchResult, DatasetInfo, MetricResult};
 use crate::run_storage::RunStorage;
 use crate::schema;
 use crate::storage::generate_run_id;
-use crate::types::ScoredSample;
+use crate::types::{BenchSample, Prediction, ScoredSample};
 use rskit_errors::{AppError, AppResult, ErrorCode};
+use rskit_worker::{Event, Handler, Pool};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
-use tokio::sync::Semaphore;
+use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
 
 struct Branch<L> {
     name: String,
-    evaluator: Box<dyn Evaluator<L>>,
+    evaluator: Arc<dyn Evaluator<L>>,
     tier: i32,
 }
 
@@ -110,7 +113,7 @@ where
     ) -> Self {
         self.branches.push(Branch {
             name: name.into(),
-            evaluator,
+            evaluator: Arc::from(evaluator),
             tier,
         });
         self
@@ -142,6 +145,15 @@ where
         opts: RunOptions,
     ) -> AppResult<BenchRunResult> {
         let start = Instant::now();
+        let execution = BenchExecutionPlan::new(&opts.tag, opts.concurrency);
+        let span = execution.operation.start_span("bench.run");
+        span.in_scope(|| {
+            tracing::info!(
+                tag = %opts.tag,
+                concurrency = opts.concurrency,
+                "benchmark run started"
+            );
+        });
 
         let samples = loader.all()?;
         let dataset_info = {
@@ -157,35 +169,38 @@ where
             }
         };
 
-        let semaphore = Arc::new(Semaphore::new(opts.concurrency));
         let mut branch_results = HashMap::new();
         let mut all_scored: Vec<ScoredSample<L>> = Vec::new();
         let mut sample_results: Vec<BenchSampleResult> = Vec::new();
 
         for branch in &self.branches {
             let branch_start = Instant::now();
+            let handler = Arc::new(EvaluationHandler {
+                evaluator: Arc::clone(&branch.evaluator),
+                branch_name: branch.name.clone(),
+                timeout_secs: opts.timeout_secs,
+            });
+            let pool = Pool::new(handler, execution.pool_config());
             let mut branch_metrics: HashMap<String, f64> = HashMap::new();
             let mut total_score_pos = 0.0_f64;
             let mut total_score_neg = 0.0_f64;
             let mut count_pos = 0usize;
             let mut count_neg = 0usize;
             let mut errors = 0usize;
+            let mut handles = Vec::with_capacity(samples.len());
 
             for sample in &samples {
-                let _permit =
-                    semaphore.clone().acquire_owned().await.map_err(|e| {
-                        AppError::new(ErrorCode::Internal, format!("semaphore: {e}"))
-                    })?;
-                let input = sample.input.clone();
-                let timeout = tokio::time::Duration::from_secs(opts.timeout_secs);
+                handles.push(pool.submit(sample.clone()).await?);
+            }
 
-                let sample_start = Instant::now();
-                let eval_result =
-                    tokio::time::timeout(timeout, branch.evaluator.evaluate(input)).await;
-                let sample_duration_ms = sample_start.elapsed().as_millis() as u64;
-
-                match eval_result {
-                    Ok(Ok(pred)) => {
+            for handle in handles {
+                match handle.result().await {
+                    Ok(EvaluationOutcome {
+                        sample,
+                        prediction: Some(pred),
+                        duration_ms,
+                        error: None,
+                    }) => {
                         let correct = pred.label.to_string() == sample.label.to_string();
                         if correct {
                             total_score_pos += pred.score;
@@ -205,7 +220,7 @@ where
                             score: pred.score,
                             correct,
                             branch_scores,
-                            duration_ms: sample_duration_ms,
+                            duration_ms,
                             error: String::new(),
                         });
 
@@ -214,11 +229,16 @@ where
                             prediction: pred,
                         });
                     }
-                    Ok(Err(e)) => {
+                    Ok(EvaluationOutcome {
+                        sample,
+                        prediction: None,
+                        duration_ms,
+                        error: Some(error),
+                    }) => {
                         tracing::warn!(
                             sample_id = %sample.id,
                             branch = %branch.name,
-                            error = %e,
+                            error = %error,
                             "Evaluation failed"
                         );
                         errors += 1;
@@ -229,30 +249,38 @@ where
                             score: 0.0,
                             correct: false,
                             branch_scores: HashMap::new(),
-                            duration_ms: sample_duration_ms,
-                            error: e.to_string(),
+                            duration_ms,
+                            error,
                         });
                     }
-                    Err(_) => {
-                        tracing::warn!(
-                            sample_id = %sample.id,
-                            branch = %branch.name,
-                            "Evaluation timed out"
-                        );
+                    Ok(EvaluationOutcome {
+                        sample,
+                        prediction: Some(_),
+                        error: Some(error),
+                        duration_ms,
+                    }) => {
                         errors += 1;
-                        sample_results.push(BenchSampleResult {
-                            id: sample.id.clone(),
-                            label: sample.label.to_string(),
-                            predicted: String::new(),
-                            score: 0.0,
-                            correct: false,
-                            branch_scores: HashMap::new(),
-                            duration_ms: sample_duration_ms,
-                            error: "timeout".to_string(),
-                        });
+                        sample_results.push(failed_sample(&sample, duration_ms, error));
+                    }
+                    Ok(EvaluationOutcome {
+                        sample,
+                        duration_ms,
+                        ..
+                    }) => {
+                        errors += 1;
+                        sample_results.push(failed_sample(
+                            &sample,
+                            duration_ms,
+                            "evaluation produced no prediction".to_string(),
+                        ));
+                    }
+                    Err(error) => {
+                        errors += 1;
+                        tracing::warn!(branch = %branch.name, error = %error, "worker evaluation failed");
                     }
                 }
             }
+            pool.shutdown().await?;
 
             let total = count_pos + count_neg + errors;
             if total > 0 {
@@ -334,14 +362,101 @@ where
         {
             let diff = comparator.compare(&prev, &result);
             if opts.fail_on_regression && diff.has_regression() {
-                return Err(AppError::new(
+                let error = AppError::new(
                     ErrorCode::Internal,
                     format!("Regression detected:\n{}", diff.summary()),
-                ));
+                );
+                execution
+                    .operation
+                    .end_operation("regression", Some(&error));
+                return Err(error);
             }
             tracing::info!("{}", diff.summary());
         }
 
+        execution.operation.end_operation("ok", None);
         Ok(result)
+    }
+}
+
+struct EvaluationHandler<L> {
+    evaluator: Arc<dyn Evaluator<L>>,
+    branch_name: String,
+    timeout_secs: u64,
+}
+
+#[derive(Clone)]
+struct EvaluationOutcome<L> {
+    sample: BenchSample<L>,
+    prediction: Option<Prediction<L>>,
+    duration_ms: u64,
+    error: Option<String>,
+}
+
+#[async_trait::async_trait]
+impl<L> Handler<BenchSample<L>, EvaluationOutcome<L>> for EvaluationHandler<L>
+where
+    L: Clone + Send + Sync + std::fmt::Display + 'static,
+{
+    async fn handle(
+        &self,
+        sample: BenchSample<L>,
+        _emit: mpsc::Sender<Event<EvaluationOutcome<L>>>,
+        cancel: CancellationToken,
+    ) -> AppResult<EvaluationOutcome<L>> {
+        let start = Instant::now();
+        let input = sample.input.clone();
+        let timeout = tokio::time::Duration::from_secs(self.timeout_secs);
+        let eval = tokio::time::timeout(timeout, self.evaluator.evaluate(input));
+        let result = tokio::select! {
+            _ = cancel.cancelled() => {
+                return Ok(EvaluationOutcome {
+                    sample,
+                    prediction: None,
+                    duration_ms: start.elapsed().as_millis() as u64,
+                    error: Some("cancelled".to_string()),
+                });
+            }
+            result = eval => result,
+        };
+        let duration_ms = start.elapsed().as_millis() as u64;
+
+        match result {
+            Ok(Ok(prediction)) => Ok(EvaluationOutcome {
+                sample,
+                prediction: Some(prediction),
+                duration_ms,
+                error: None,
+            }),
+            Ok(Err(error)) => Ok(EvaluationOutcome {
+                sample,
+                prediction: None,
+                duration_ms,
+                error: Some(error.to_string()),
+            }),
+            Err(_) => Ok(EvaluationOutcome {
+                sample,
+                prediction: None,
+                duration_ms,
+                error: Some(format!("timeout in {}", self.branch_name)),
+            }),
+        }
+    }
+}
+
+fn failed_sample<L: std::fmt::Display>(
+    sample: &BenchSample<L>,
+    duration_ms: u64,
+    error: String,
+) -> BenchSampleResult {
+    BenchSampleResult {
+        id: sample.id.clone(),
+        label: sample.label.to_string(),
+        predicted: String::new(),
+        score: 0.0,
+        correct: false,
+        branch_scores: HashMap::new(),
+        duration_ms,
+        error,
     }
 }

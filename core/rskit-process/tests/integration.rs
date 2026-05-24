@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use parking_lot::Mutex;
-use rskit_process::{Command, ErrorCode, OutputObserver, ProcessConfig, run_with_cancel};
+use rskit_process::{Command, ErrorCode, OutputObserver, ProcessConfig, run, run_with_cancel};
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
@@ -207,6 +207,25 @@ async fn process_result_check_reports_failures() {
     .await
     .unwrap();
 
+    assert!(result.check().is_err());
+}
+
+#[test]
+fn blocking_run_captures_stdout() {
+    let command = Command::new("/usr/bin/printf").args(["%s", "hello"]);
+    let result = run(&command, &ProcessConfig::default()).unwrap();
+
+    assert_eq!(result.stdout, "hello");
+    assert_eq!(result.exit_code, Some(0));
+    assert!(result.success());
+}
+
+#[test]
+fn blocking_run_preserves_nonzero_exit_code() {
+    let command = Command::new("/usr/bin/false");
+    let result = run(&command, &ProcessConfig::default()).unwrap();
+
+    assert_eq!(result.exit_code, Some(1));
     assert!(result.check().is_err());
 }
 

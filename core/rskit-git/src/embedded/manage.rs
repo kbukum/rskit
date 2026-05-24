@@ -33,7 +33,7 @@ impl RefManager for Backend {
                     .get()
                     .target()
                     .map(oid_from_git2)
-                    .unwrap_or_else(|| oid_from_git2(git2::Oid::zero()));
+                    .unwrap_or_else(|| oid_from_git2(git2::Oid::ZERO_SHA1));
                 let upstream = if kind == BranchType::Local {
                     branch
                         .upstream()
@@ -57,7 +57,7 @@ impl RefManager for Backend {
     fn list_tags(&self) -> AppResult<Vec<Tag>> {
         let mut tags = Vec::new();
         let names = self.repo.tag_names(None).map_err(GitError::Internal)?;
-        for name in names.iter().flatten() {
+        for name in names.iter().filter_map(Result::ok).flatten() {
             let reference = self
                 .repo
                 .find_reference(&format!("refs/tags/{name}"))
@@ -73,6 +73,8 @@ impl RefManager for Backend {
                     tagger: tag.tagger().map(|sig| signature_from_git2(&sig)),
                     message: tag
                         .message()
+                        .ok()
+                        .flatten()
                         .unwrap_or_default()
                         .trim_end_matches('\n')
                         .to_string(),
@@ -155,7 +157,7 @@ impl RemoteManager for Backend {
         let remotes = self.repo.remotes().map_err(GitError::Internal)?;
         let mut items = Vec::new();
 
-        for name in remotes.iter().flatten() {
+        for name in remotes.iter().filter_map(Result::ok).flatten() {
             let remote = self.repo.find_remote(name).map_err(GitError::Internal)?;
             items.push(Remote {
                 name: name.to_string(),
@@ -164,6 +166,7 @@ impl RemoteManager for Backend {
                     .fetch_refspecs()
                     .map_err(GitError::Internal)?
                     .iter()
+                    .filter_map(Result::ok)
                     .flatten()
                     .map(str::to_string)
                     .collect(),
@@ -171,6 +174,7 @@ impl RemoteManager for Backend {
                     .push_refspecs()
                     .map_err(GitError::Internal)?
                     .iter()
+                    .filter_map(Result::ok)
                     .flatten()
                     .map(str::to_string)
                     .collect(),
@@ -254,9 +258,7 @@ impl ConfigReader for Backend {
 
         while let Some(entry) = entries.next() {
             let entry = entry.map_err(GitError::Internal)?;
-            let value = entry
-                .value()
-                .ok_or_else(|| AppError::invalid_input(key, "config value is not valid utf-8"))?;
+            let value = entry.value().map_err(GitError::Internal)?;
             values.push(value.to_string());
         }
 
@@ -296,6 +298,7 @@ fn push_refspecs(remote: &git2::Remote<'_>, opts: Option<&PushOptions>) -> AppRe
             .push_refspecs()
             .map_err(GitError::Internal)?
             .iter()
+            .filter_map(Result::ok)
             .flatten()
             .map(str::to_string)
             .collect::<Vec<_>>(),

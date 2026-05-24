@@ -21,11 +21,6 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-futures          = { workspace = true }
-dashmap          = { workspace = true }
-tokio            = { workspace = true, features = ["rt", "macros"] }
-tracing          = { workspace = true }
-parking_lot      = { workspace = true }
 # Always-on core crates
 rskit-errors     = { version = "0.1.0", path = "../rskit-errors" }
 rskit-config     = { version = "0.1.0", path = "../rskit-config" }
@@ -61,16 +56,19 @@ rskit-observability = { path = "../rskit-observability", optional = true }
 rskit-authz         = { version = "0.1.0", path = "../rskit-authz",         optional = true }
 rskit-security      = { version = "0.1.0", path = "../rskit-security",      optional = true }
 rskit-discovery     = { version = "0.1.0", path = "../rskit-discovery",     optional = true }
-rskit-testutil      = { version = "0.1.0", path = "../rskit-testutil",      optional = true }
 rskit-sse           = { version = "0.1.0", path = "../rskit-sse",           optional = true }
 rskit-dag           = { version = "0.1.0", path = "../rskit-dag",           optional = true }
 rskit-ai        = { version = "0.1.0", path = "../rskit-ai",        optional = true }
 rskit-llm           = { version = "0.1.0", path = "../rskit-llm",           optional = true }
+rskit-embedding     = { version = "0.1.0", path = "../rskit-embedding",     optional = true }
 rskit-inference     = { version = "0.1.0", path = "../rskit-inference",     optional = true }
 rskit-inference-triton = { version = "0.1.0", path = "../../contrib/inference/triton", optional = true }
 rskit-inference-vllm = { version = "0.1.0", path = "../../contrib/inference/vllm", optional = true }
 rskit-inference-tgi = { version = "0.1.0", path = "../../contrib/inference/tgi", optional = true }
 rskit-skill         = { version = "0.1.0", path = "../rskit-skill",         optional = true }
+rskit-tool          = { version = "0.1.0", path = "../rskit-tool",          optional = true }
+rskit-agent         = { version = "0.1.0", path = "../rskit-agent",         optional = true }
+rskit-mcp           = { version = "0.1.0", path = "../rskit-mcp",           optional = true }
 rskit-storage       = { version = "0.1.0", path = "../rskit-storage", optional = true }
 rskit-storage-s3    = { version = "0.1.0", path = "../../contrib/storage/s3", optional = true }
 rskit-storage-gcs   = { version = "0.1.0", path = "../../contrib/storage/gcs", optional = true }
@@ -110,17 +108,20 @@ observability = ["dep:rskit-observability"]
 authz         = ["dep:rskit-authz"]
 security      = ["dep:rskit-security"]
 discovery     = ["dep:rskit-discovery"]
-testutil      = ["dep:rskit-testutil"]
 sse           = ["dep:rskit-sse"]
 dag           = ["dep:rskit-dag"]
 genai        = ["dep:rskit-ai"]
 llm           = ["genai", "dep:rskit-llm"]
+embedding     = ["genai", "dep:rskit-embedding"]
 inference     = ["dep:rskit-inference"]
 inference-triton = ["inference", "dep:rskit-inference-triton"]
 inference-vllm = ["inference", "dep:rskit-inference-vllm"]
 inference-tgi = ["inference", "dep:rskit-inference-tgi"]
 prompt        = ["dep:rskit-ai"]
 skill         = ["dep:rskit-skill"]
+tool          = ["dep:rskit-tool"]
+agent         = ["dep:rskit-agent"]
+mcp           = ["dep:rskit-mcp"]
 storage       = ["dep:rskit-storage"]
 media         = ["dep:rskit-media", "storage"]
 media-ffmpeg  = ["dep:rskit-media-ffmpeg", "media"]
@@ -138,12 +139,11 @@ vectorstore-qdrant = ["vectorstore", "dep:rskit-vectorstore-qdrant"]
 chain         = ["dep:rskit-chain"]
 process       = ["dep:rskit-process"]
 stateful      = ["dep:rskit-stateful"]
-test-util     = []
 full          = [
     "server", "grpc", "encryption", "http", "httpclient", "auth", "di", "database", "cache", "messaging",
     "cache-redis", "messaging-kafka", "messaging-nats", "messaging-rabbitmq",
-    "observability", "authz", "security", "discovery", "testutil", "sse", "dag", "genai", "llm",
+    "observability", "authz", "security", "discovery", "sse", "dag", "genai", "llm", "embedding",
     "inference", "inference-triton", "inference-vllm", "inference-tgi",
-    "prompt", "skill", "media-full", "storage", "storage-s3", "storage-gcs", "workload", "cli", "dataset", "bench",
-    "vectorstore", "vectorstore-qdrant", "chain", "process", "stateful",
+    "prompt", "skill", "tool", "agent", "mcp", "media-full", "storage", "storage-s3", "storage-gcs",
+    "workload", "cli", "git", "dataset", "bench", "vectorstore", "vectorstore-qdrant", "chain", "process", "stateful",
 ]

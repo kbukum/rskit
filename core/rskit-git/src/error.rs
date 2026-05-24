@@ -123,6 +123,8 @@ pub enum GitError {
     CommandFailed {
         /// CLI arguments that were attempted.
         args: Vec<String>,
+        /// Process exit code, if available.
+        exit_code: Option<i32>,
         /// Standard output (may contain conflict diagnostics).
         stdout: String,
         /// Standard error output.
@@ -189,10 +191,14 @@ impl From<GitError> for AppError {
             }
             GitError::CommandFailed {
                 args,
+                exit_code,
                 stdout,
                 stderr,
             } => {
                 let mut detail = format!("git {}: {}", args.join(" "), stderr);
+                if let Some(exit_code) = exit_code {
+                    detail.push_str(&format!(" (exit code: {exit_code})"));
+                }
                 if !stdout.is_empty() {
                     detail.push_str("\nstdout: ");
                     detail.push_str(&stdout);

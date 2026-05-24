@@ -26,27 +26,32 @@ pub enum ProgressStyle {
 impl ProgressStyle {
     fn to_indicatif(&self) -> IndicatifStyle {
         match self {
-            ProgressStyle::Bar => IndicatifStyle::with_template(
+            ProgressStyle::Bar => style_or_default(
                 "{prefix:.bold} {wide_bar:.cyan/dim} {pos}/{len} {percent}% {elapsed}",
+                IndicatifStyle::default_bar,
             )
-            .unwrap()
             .progress_chars("━╸─"),
 
-            ProgressStyle::Spinner => {
-                IndicatifStyle::with_template("{spinner:.green} {prefix} {wide_msg}").unwrap()
-            }
+            ProgressStyle::Spinner => style_or_default(
+                "{spinner:.green} {prefix} {wide_msg}",
+                IndicatifStyle::default_spinner,
+            ),
 
-            ProgressStyle::Download => IndicatifStyle::with_template(
+            ProgressStyle::Download => style_or_default(
                 "{prefix:.bold} {wide_bar:.green/dim} {bytes}/{total_bytes} {bytes_per_sec} {eta}",
+                IndicatifStyle::default_bar,
             )
-            .unwrap()
             .progress_chars("━╸─"),
 
             ProgressStyle::Finished => {
-                IndicatifStyle::with_template("{prefix} {wide_msg}").unwrap()
+                style_or_default("{prefix} {wide_msg}", IndicatifStyle::default_spinner)
             }
         }
     }
+}
+
+fn style_or_default(template: &str, fallback: impl FnOnce() -> IndicatifStyle) -> IndicatifStyle {
+    IndicatifStyle::with_template(template).unwrap_or_else(|_| fallback())
 }
 
 /// A single progress bar wrapping `indicatif`.
@@ -143,6 +148,7 @@ pub struct MultiProgress {
 }
 
 impl MultiProgress {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             inner: IndicatifMultiProgress::new(),
@@ -150,6 +156,7 @@ impl MultiProgress {
     }
 
     /// Wrap an existing `indicatif::MultiProgress`.
+    #[must_use]
     pub fn from_raw(mp: IndicatifMultiProgress) -> Self {
         Self { inner: mp }
     }

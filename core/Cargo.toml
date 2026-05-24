@@ -86,6 +86,7 @@ pin-project-lite = "0.2"
 # Serialization
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+serde_norway = "0.9"
 toml = "1.1"
 
 # Config loading
@@ -160,6 +161,7 @@ tempfile = "3"
 mime_guess = "2"
 infer = "0.19"
 futures-core = "0.3"
+sha2 = "0.11"
 
 # CLI progress bars (rskit-cli)
 indicatif = "0.18"
