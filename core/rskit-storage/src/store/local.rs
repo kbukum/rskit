@@ -71,7 +71,7 @@ impl LocalStore {
     }
 
     fn resolve_path(&self, key: &str) -> PathBuf {
-        self.config.root_dir.join(key)
+        self.config.root_dir.join(prefixed_key(None, key))
     }
 }
 
@@ -84,7 +84,8 @@ impl FileStore for LocalStore {
         content_type: Option<&str>,
         metadata: Option<HashMap<String, String>>,
     ) -> AppResult<StoredFile> {
-        let target = self.resolve_path(key);
+        let key = prefixed_key(None, key);
+        let target = self.resolve_path(&key);
         if let Some(parent) = target.parent() {
             tokio::fs::create_dir_all(parent).await.map_err(|e| {
                 AppError::new(ErrorCode::Internal, format!("failed to create dirs: {e}"))
@@ -143,7 +144,8 @@ impl FileStore for LocalStore {
     }
 
     async fn head(&self, key: &str) -> AppResult<StoredFile> {
-        let path = self.resolve_path(key);
+        let key = prefixed_key(None, key);
+        let path = self.resolve_path(&key);
         let meta = tokio::fs::metadata(&path).await.map_err(|e| {
             AppError::new(ErrorCode::NotFound, format!("file not found {key}: {e}"))
         })?;

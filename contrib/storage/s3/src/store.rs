@@ -147,7 +147,8 @@ impl FileStore for S3Store {
             .await
             .map_err(|e| AppError::new(ErrorCode::Internal, format!("S3 upload failed: {e}")))?;
 
-        Ok(StoredFile::new(key, size, content_type).with_metadata(metadata.unwrap_or_default()))
+        Ok(StoredFile::new(prefixed_key(None, key), size, content_type)
+            .with_metadata(metadata.unwrap_or_default()))
     }
 
     async fn upload_with_progress(
@@ -218,7 +219,7 @@ impl FileStore for S3Store {
             .map_err(|e| AppError::new(ErrorCode::NotFound, format!("S3 head failed: {e}")))?;
 
         Ok(StoredFile::new(
-            key,
+            prefixed_key(None, key),
             resp.content_length().unwrap_or(0) as u64,
             resp.content_type(),
         )
@@ -428,6 +429,22 @@ mod tests {
         })
         .unwrap();
         assert_eq!(store.full_key("file.txt"), "pfx/file.txt");
+    }
+
+    #[test]
+    fn full_key_with_slash_only_prefix() {
+        let store = S3Store::new(Config {
+            bucket: "b".into(),
+            region: None,
+            endpoint: None,
+            prefix: Some("///".into()),
+            force_path_style: false,
+            access_key_id: Some("k".into()),
+            secret_access_key: Some("s".into()),
+        })
+        .unwrap();
+
+        assert_eq!(store.full_key("file.txt"), "file.txt");
     }
 
     #[test]

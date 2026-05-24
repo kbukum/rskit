@@ -623,6 +623,27 @@ async fn store_list_trailing_prefix_returns_normalized_keys() {
 }
 
 #[tokio::test]
+async fn store_leading_slash_keys_are_resolved_under_root() {
+    let dir = TempDir::new().unwrap();
+    let store = make_store(dir.path());
+
+    let source = FileSource::from_bytes(Bytes::from_static(b"rooted"));
+    let stored = store
+        .upload(&source, "/rooted.txt", None, None)
+        .await
+        .unwrap();
+
+    assert_eq!(stored.key, "rooted.txt");
+    assert!(dir.path().join("rooted.txt").exists());
+    assert!(store.exists("rooted.txt").await.unwrap());
+    assert_eq!(store.head("/rooted.txt").await.unwrap().key, "rooted.txt");
+
+    let items = store.list("/", None).await.unwrap();
+    assert!(items.iter().any(|item| item.key == "rooted.txt"));
+    assert!(items.iter().all(|item| !item.key.starts_with('/')));
+}
+
+#[tokio::test]
 async fn store_list_nonexistent_prefix_empty() {
     let dir = TempDir::new().unwrap();
     let store = make_store(dir.path());

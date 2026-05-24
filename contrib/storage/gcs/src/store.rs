@@ -138,7 +138,8 @@ impl FileStore for GcsStore {
             .await
             .map_err(|e| AppError::new(ErrorCode::Internal, format!("GCS upload failed: {e}")))?;
 
-        Ok(StoredFile::new(key, size, content_type).with_metadata(metadata.unwrap_or_default()))
+        Ok(StoredFile::new(prefixed_key(None, key), size, content_type)
+            .with_metadata(metadata.unwrap_or_default()))
     }
 
     async fn upload_with_progress(
@@ -207,7 +208,7 @@ impl FileStore for GcsStore {
             .await
             .map_err(|e| AppError::new(ErrorCode::NotFound, format!("GCS head failed: {e}")))?;
 
-        stored_file_from_object(key.to_string(), obj)
+        stored_file_from_object(prefixed_key(None, key), obj)
     }
 
     async fn list(&self, prefix: &str, limit: Option<usize>) -> AppResult<Vec<StoredFile>> {
@@ -308,6 +309,20 @@ mod tests {
         .unwrap();
 
         assert_eq!(store.full_key("image.png"), "uploads/image.png");
+    }
+
+    #[tokio::test]
+    #[ignore = "requires GCS network access; run with --include-ignored in a configured environment"]
+    async fn slash_only_prefix_is_ignored() {
+        let store = GcsStore::new(Config {
+            bucket: "public-assets".into(),
+            prefix: Some("///".into()),
+            anonymous: true,
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(store.full_key("image.png"), "image.png");
     }
 
     #[test]
