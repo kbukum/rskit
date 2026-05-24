@@ -21,7 +21,7 @@ pub struct EmbeddingProvider {
 
 impl EmbeddingProvider {
     /// Create a new embedding provider from an `OpenAI` [`Config`].
-    pub(super) fn new(cfg: &Config) -> AppResult<Self> {
+    pub fn new(cfg: &Config) -> AppResult<Self> {
         let http_cfg = HttpClientConfig::new()
             .with_base_url(&cfg.base_url)
             .with_auth(Auth::bearer(&cfg.api_key));
@@ -38,7 +38,7 @@ impl EmbeddingProvider {
 
     /// Inject a resilience policy for outbound embedding requests.
     #[must_use]
-    pub(super) fn with_policy(mut self, policy: Policy) -> Self {
+    pub fn with_policy(mut self, policy: Policy) -> Self {
         self.policy = Some(policy);
         self
     }
