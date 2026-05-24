@@ -153,6 +153,7 @@ where
                 "benchmark run started"
             );
         });
+        let _span_guard = span.enter();
         let result = self.run_with_execution(loader, opts, &execution).await;
         match &result {
             Ok(_) => execution.operation.end_operation("ok", None),
@@ -210,10 +211,10 @@ where
                     };
                     let context = SampleFailureContext::from_sample(sample);
                     let handle = pool.submit(sample.clone()).await?;
-                    pending.push_back((context, handle));
+                    pending.push_back((context, Instant::now(), handle));
                 }
 
-                let Some((submitted_sample, handle)) = pending.pop_front() else {
+                let Some((submitted_sample, submitted_at, handle)) = pending.pop_front() else {
                     break;
                 };
                 match handle.result().await {
@@ -283,7 +284,7 @@ where
                         );
                         sample_results.push(failed_sample_context(
                             &submitted_sample,
-                            0,
+                            submitted_at.elapsed().as_millis() as u64,
                             format!("worker evaluation failed: {error}"),
                         ));
                     }
