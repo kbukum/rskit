@@ -123,8 +123,8 @@ impl Registry {
 
     /// Build the configured executor for `name`.
     pub fn executor(&self, name: &str) -> AppResult<Arc<dyn MediaExecutor>> {
-        let name = name.trim();
-        self.executor_factories.get(name).ok_or_else(|| {
+        let name = Self::normalize_backend_name(name)?;
+        self.executor_factories.get(&name).ok_or_else(|| {
             AppError::new(
                 ErrorCode::NotFound,
                 format!("media executor '{name}' is not registered"),
@@ -134,8 +134,8 @@ impl Registry {
 
     /// Build the configured probe for `name`.
     pub fn probe(&self, name: &str) -> AppResult<Arc<dyn MediaProbe>> {
-        let name = name.trim();
-        self.probe_factories.get(name).ok_or_else(|| {
+        let name = Self::normalize_backend_name(name)?;
+        self.probe_factories.get(&name).ok_or_else(|| {
             AppError::new(
                 ErrorCode::NotFound,
                 format!("media probe '{name}' is not registered"),
@@ -495,5 +495,28 @@ impl Registry {
                 default_audio_codec: None,
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rskit_errors::ErrorCode;
+
+    use super::Registry;
+
+    #[test]
+    fn executor_rejects_empty_backend_name() {
+        let Err(err) = Registry::default().executor(" \t ") else {
+            panic!("empty executor name should be rejected");
+        };
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn probe_rejects_empty_backend_name() {
+        let Err(err) = Registry::default().probe(" \t ") else {
+            panic!("empty probe name should be rejected");
+        };
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
     }
 }

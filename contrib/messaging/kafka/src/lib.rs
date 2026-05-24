@@ -23,8 +23,8 @@ use tracing::debug;
 
 mod config;
 
-use crate::config::{Compression, OffsetReset, validate_topic};
-pub use config::KafkaConfig as Config;
+use crate::config::validate_topic;
+pub use config::{Compression, KafkaConfig as Config, OffsetReset, SecurityProtocol};
 
 /// Kafka-backed message producer wrapping an `rdkafka` `FutureProducer`.
 pub(crate) struct KafkaProducer {

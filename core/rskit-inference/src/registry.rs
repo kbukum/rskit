@@ -22,24 +22,32 @@ impl Registry {
 
     /// Register an adapter factory under a stable kind.
     pub fn register(&mut self, kind: &str, factory: Factory) -> Result<(), RegistryError> {
-        let normalized = kind.trim();
-        if normalized.is_empty() {
-            return Err(RegistryError::EmptyKind);
+        let kind = Self::normalize_kind(kind).map_err(|_| RegistryError::EmptyKind)?;
+        if self.factories.contains_key(&kind) {
+            return Err(RegistryError::DuplicateKind(kind));
         }
-        if self.factories.contains_key(normalized) {
-            return Err(RegistryError::DuplicateKind(normalized.to_owned()));
-        }
-        self.factories.insert(normalized.to_owned(), factory);
+        self.factories.insert(kind, factory);
         Ok(())
     }
 
     /// Build the configured adapter registered for `kind`.
     pub fn build(&self, kind: &str) -> Result<Arc<dyn Inference>, InferenceError> {
-        let normalized = kind.trim();
-        let factory = self.factories.get(normalized).ok_or_else(|| {
-            InferenceError::Decode(format!("unknown inference adapter {normalized:?}"))
-        })?;
+        let kind = Self::normalize_kind(kind)?;
+        let factory = self
+            .factories
+            .get(&kind)
+            .ok_or_else(|| InferenceError::Decode(format!("unknown inference adapter {kind:?}")))?;
         factory()
+    }
+
+    fn normalize_kind(kind: &str) -> Result<String, InferenceError> {
+        let kind = kind.trim();
+        if kind.is_empty() {
+            return Err(InferenceError::InvalidInput(
+                "inference adapter kind is required".to_owned(),
+            ));
+        }
+        Ok(kind.to_owned())
     }
 
     /// Return registered kinds in stable order.
@@ -68,4 +76,31 @@ pub enum RegistryError {
 #[must_use]
 pub fn default_registry() -> Registry {
     Registry::new()
+}
+
+#[cfg(test)]
+mod tests {
+    use rskit_errors::ErrorCode;
+
+    use super::{Registry, RegistryError};
+    use crate::InferenceError;
+
+    #[test]
+    fn register_rejects_empty_kind() {
+        let mut registry = Registry::new();
+        let factory = std::sync::Arc::new(|| unreachable!("factory should not run"));
+        let err = registry.register(" \t ", factory).unwrap_err();
+        assert_eq!(err, RegistryError::EmptyKind);
+    }
+
+    #[test]
+    fn build_rejects_empty_kind_as_invalid_input() {
+        let Err(err) = Registry::new().build(" \t ") else {
+            panic!("empty inference adapter kind should be rejected");
+        };
+        assert!(matches!(err, InferenceError::InvalidInput(_)));
+
+        let app_error = rskit_errors::AppError::from(err);
+        assert_eq!(app_error.code(), ErrorCode::InvalidInput);
+    }
 }

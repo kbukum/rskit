@@ -25,13 +25,7 @@ impl Registry {
 
     /// Register a configured provider factory under a stable kind.
     pub fn register(&mut self, kind: impl Into<String>, factory: Factory) -> AppResult<()> {
-        let kind = kind.into().trim().to_owned();
-        if kind.is_empty() {
-            return Err(AppError::new(
-                ErrorCode::InvalidInput,
-                "LLM provider kind is required",
-            ));
-        }
+        let kind = Self::normalize_kind(kind)?;
         if self.factories.contains_key(&kind) {
             return Err(AppError::new(
                 ErrorCode::AlreadyExists,
@@ -44,13 +38,24 @@ impl Registry {
 
     /// Build the configured provider for `kind`.
     pub fn build(&self, kind: &str) -> AppResult<Arc<dyn Provider>> {
-        let kind = kind.trim();
-        self.factories.get(kind).ok_or_else(|| {
+        let kind = Self::normalize_kind(kind)?;
+        self.factories.get(&kind).ok_or_else(|| {
             AppError::new(
                 ErrorCode::NotFound,
                 format!("LLM provider '{kind}' is not registered"),
             )
         })?()
+    }
+
+    fn normalize_kind(kind: impl Into<String>) -> AppResult<String> {
+        let kind = kind.into().trim().to_owned();
+        if kind.is_empty() {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                "LLM provider kind is required",
+            ));
+        }
+        Ok(kind)
     }
 
     /// Return registered provider kinds in stable order.
@@ -64,4 +69,19 @@ impl Registry {
 #[must_use]
 pub fn default_registry() -> Registry {
     Registry::new()
+}
+
+#[cfg(test)]
+mod tests {
+    use rskit_errors::ErrorCode;
+
+    use super::Registry;
+
+    #[test]
+    fn build_rejects_empty_provider_kind() {
+        let Err(err) = Registry::new().build(" \t ") else {
+            panic!("empty provider kind should be rejected");
+        };
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+    }
 }
