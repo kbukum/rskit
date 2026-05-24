@@ -16,6 +16,7 @@ use rskit_llm::Provider;
 use rskit_llm::types::{CompletionRequest, CompletionResponse};
 use rskit_resilience::Policy;
 use tracing::Instrument;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use super::config::Config;
 use super::dialect::GeminiDialect;
@@ -23,7 +24,7 @@ use super::dialect::GeminiDialect;
 const SYSTEM: &str = "gemini";
 
 /// A [`Provider`] backed by the Google Gemini API.
-pub struct GeminiAdapter {
+struct GeminiAdapter {
     client: HttpClient,
     model: String,
     api_key: String,
@@ -33,7 +34,7 @@ pub struct GeminiAdapter {
 
 /// Create a new [`Provider`] wired to Gemini with API key via the
 /// `x-goog-api-key` request header.
-pub fn new_adapter(cfg: &Config) -> AppResult<GeminiAdapter> {
+fn new_adapter(cfg: &Config) -> AppResult<GeminiAdapter> {
     let http_cfg = HttpClientConfig::new().with_base_url(&cfg.base_url);
 
     let client = HttpClient::new(http_cfg)?;
@@ -47,14 +48,18 @@ pub fn new_adapter(cfg: &Config) -> AppResult<GeminiAdapter> {
     })
 }
 
-impl GeminiAdapter {
-    /// Inject a resilience policy. Network calls are wrapped via `Policy::execute`.
-    #[must_use]
-    pub fn with_policy(mut self, policy: Policy) -> Self {
-        self.policy = Some(policy);
-        self
-    }
+/// Register the configured `Gemini` provider in an LLM registry.
+pub fn register(registry: &mut rskit_llm::Registry, config: Config) -> AppResult<()> {
+    registry.register(
+        "gemini",
+        std::sync::Arc::new(move || {
+            Ok(std::sync::Arc::new(new_adapter(&config)?)
+                as std::sync::Arc<dyn rskit_llm::Provider>)
+        }),
+    )
+}
 
+impl GeminiAdapter {
     fn record_call(&self) {
         let now_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -115,14 +120,14 @@ impl Provider for GeminiAdapter {
         }
 
         let span = tracing::info_span!("llm.complete");
-        span.record(semconv::SYSTEM, SYSTEM);
-        span.record(semconv::OPERATION_NAME, semconv::Operation::Chat.as_str());
-        span.record(semconv::REQUEST_MODEL, req.model.as_str());
+        span.set_attribute(semconv::SYSTEM, SYSTEM);
+        span.set_attribute(semconv::OPERATION_NAME, semconv::Operation::Chat.as_str());
+        span.set_attribute(semconv::REQUEST_MODEL, req.model.clone());
         if let Some(max) = req.max_tokens {
-            span.record(semconv::REQUEST_MAX_TOKENS, i64::from(max));
+            span.set_attribute(semconv::REQUEST_MAX_TOKENS, i64::from(max));
         }
         if let Some(temp) = req.temperature {
-            span.record(semconv::REQUEST_TEMPERATURE, f64::from(temp));
+            span.set_attribute(semconv::REQUEST_TEMPERATURE, f64::from(temp));
         }
 
         let policy = self.policy.clone();
@@ -140,12 +145,17 @@ impl Provider for GeminiAdapter {
             };
             self.record_call();
             let current = tracing::Span::current();
-            current.record(semconv::USAGE_INPUT_TOKENS, response.usage.input_tokens);
-            current.record(semconv::USAGE_OUTPUT_TOKENS, response.usage.output_tokens);
-            current.record(semconv::RESPONSE_MODEL, response.model.as_str());
-            if let Some(reason) = response.stop_reason {
-                let reason_str = format!("{reason:?}");
-                current.record(semconv::RESPONSE_FINISH_REASON, reason_str.as_str());
+            current.set_attribute(
+                semconv::USAGE_INPUT_TOKENS,
+                i64::try_from(response.usage.input_tokens).unwrap_or(i64::MAX),
+            );
+            current.set_attribute(
+                semconv::USAGE_OUTPUT_TOKENS,
+                i64::try_from(response.usage.output_tokens).unwrap_or(i64::MAX),
+            );
+            current.set_attribute(semconv::RESPONSE_MODEL, response.model.clone());
+            if let Some(reason) = response.stop_reason.as_ref() {
+                current.set_attribute(semconv::RESPONSE_FINISH_REASON, format!("{reason:?}"));
             }
             Ok::<_, AppError>(response)
         }

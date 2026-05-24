@@ -6,10 +6,10 @@ This crate provides explicit, side-effect-free registration of RabbitMQ producer
 
 ```rust,ignore
 use rskit_messaging::MessagingRegistry;
-use rskit_messaging_rabbitmq::{register, RabbitMqConfig};
+use rskit_messaging_rabbitmq::{Config, register};
 
 let mut registry = MessagingRegistry::<Vec<u8>>::new();
-register(&mut registry, RabbitMqConfig::default())?;
+register(&mut registry, Config::default())?;
 ```
 
-The generic `MessageConsumer` API supports at-most-once auto-acknowledged consumption. Handler-coupled acknowledgements require a dedicated ack-capable consumer API.
+The generic `MessageConsumer` API supports at-least-once broker delivery with adapter-managed acknowledgements and DLQ configuration through `Config`.

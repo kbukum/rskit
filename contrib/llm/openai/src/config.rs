@@ -1,9 +1,11 @@
 //! Configuration for the `OpenAI` provider.
 
+use std::fmt;
+
 use serde::Deserialize;
 
 /// `OpenAI` provider configuration.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct Config {
     /// `OpenAI` API key.
     pub api_key: String,
@@ -23,6 +25,18 @@ pub struct Config {
     /// Embedding vector dimensions.
     #[serde(default = "default_embedding_dimensions")]
     pub embedding_dimensions: usize,
+}
+
+impl fmt::Debug for Config {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Config")
+            .field("api_key", &"<redacted>")
+            .field("base_url", &self.base_url)
+            .field("model", &self.model)
+            .field("embedding_model", &self.embedding_model)
+            .field("embedding_dimensions", &self.embedding_dimensions)
+            .finish()
+    }
 }
 
 fn default_base_url() -> String {

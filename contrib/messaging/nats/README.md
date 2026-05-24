@@ -6,10 +6,10 @@ This crate provides explicit, side-effect-free registration of NATS producer and
 
 ```rust,ignore
 use rskit_messaging::MessagingRegistry;
-use rskit_messaging_nats::{register, NatsConfig};
+use rskit_messaging_nats::{Config, register};
 
 let mut registry = MessagingRegistry::<Vec<u8>>::new();
-register(&mut registry, NatsConfig::default())?;
+register(&mut registry, Config::default())?;
 ```
 
 The adapter targets NATS core at-most-once delivery. Use a JetStream-specific adapter for durable acknowledgements.

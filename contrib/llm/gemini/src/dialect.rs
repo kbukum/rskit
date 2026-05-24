@@ -20,7 +20,11 @@ use rskit_llm_common as common;
 use rskit_llm_common::{StreamChunk, StreamToolCall};
 
 /// Converts rskit types to/from the Gemini `generateContent` wire format.
-pub struct GeminiDialect;
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "dialect is shared only between crate-internal sibling modules"
+)]
+pub(crate) struct GeminiDialect;
 
 // --- Wire types (request/response) ---
 
@@ -143,7 +147,7 @@ fn parse_function_call(function_call: WireFunctionCall, index: usize) -> AppResu
 
 impl GeminiDialect {
     /// Build the JSON body for a `generateContent` request.
-    pub fn build_body(req: &CompletionRequest) -> AppResult<serde_json::Value> {
+    pub(crate) fn build_body(req: &CompletionRequest) -> AppResult<serde_json::Value> {
         let system_instruction = req.messages.iter().find_map(|m| match m {
             Message::System(s) => Some(WireContent {
                 role: None,
@@ -179,7 +183,7 @@ impl GeminiDialect {
     }
 
     /// Parse a successful `generateContent` response body.
-    pub fn parse_response(body: &str, model: &str) -> AppResult<CompletionResponse> {
+    pub(crate) fn parse_response(body: &str, model: &str) -> AppResult<CompletionResponse> {
         let resp: GenerateContentResponse = serde_json::from_str(body).map_err(|e| {
             AppError::new(
                 ErrorCode::ExternalService,
@@ -237,7 +241,7 @@ impl GeminiDialect {
     }
 
     /// Parse an error response body into an [`AppError`].
-    pub fn parse_error(status: u16, body: &str) -> AppError {
+    pub(crate) fn parse_error(status: u16, body: &str) -> AppError {
         common::parse_gemini_error(status, body).into()
     }
 
@@ -306,7 +310,7 @@ impl GeminiDialect {
     }
 
     /// Build the endpoint path for a given model.
-    pub fn endpoint(model: &str) -> String {
+    pub(crate) fn endpoint(model: &str) -> String {
         format!("/v1beta/models/{model}:generateContent")
     }
 }

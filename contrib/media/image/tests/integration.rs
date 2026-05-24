@@ -9,7 +9,7 @@ use rskit_media::{
     output::OutputConfig,
     spatial::Resolution,
 };
-use rskit_media_image::ImageProcessor;
+use rskit_media_image::__private::ImageProcessor;
 use rskit_storage::{FileSink, FileSource, TempDir, TempFile};
 
 // ── Fixture generation ──────────────────────────────────────────────────────
@@ -47,7 +47,7 @@ fn read_dimensions(source: &FileSource) -> (u32, u32) {
             (img.width(), img.height())
         }
         FileSource::Bytes(b) => {
-            let img = image::load_from_memory(b).expect("load from bytes");
+            let img = image::load_from_memory(b.as_ref()).expect("load from bytes");
             (img.width(), img.height())
         }
         FileSource::Temp(t) => {

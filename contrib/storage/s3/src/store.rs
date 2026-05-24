@@ -1,6 +1,7 @@
 //! S3 / MinIO storage backend implementing [`rskit_storage::FileStore`].
 
 use std::collections::HashMap;
+use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -15,8 +16,8 @@ use serde::{Deserialize, Serialize};
 ///
 /// Supports AWS S3 and S3-compatible services (MinIO, LocalStack, etc.)
 /// via `endpoint`, `force_path_style`, and explicit credentials.
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct S3StoreConfig {
+#[derive(Clone, Deserialize, Serialize)]
+pub struct Config {
     /// S3 bucket name.
     pub bucket: String,
     /// AWS region (e.g., `"us-east-1"`). Falls back to `AWS_REGION` or
@@ -38,13 +39,33 @@ pub struct S3StoreConfig {
     pub secret_access_key: Option<String>,
 }
 
+impl fmt::Debug for Config {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Config")
+            .field("bucket", &self.bucket)
+            .field("region", &self.region)
+            .field("endpoint", &self.endpoint)
+            .field("prefix", &self.prefix)
+            .field("force_path_style", &self.force_path_style)
+            .field(
+                "access_key_id",
+                &self.access_key_id.as_ref().map(|_| "<redacted>"),
+            )
+            .field(
+                "secret_access_key",
+                &self.secret_access_key.as_ref().map(|_| "<redacted>"),
+            )
+            .finish()
+    }
+}
+
 /// Amazon S3 / MinIO storage backend.
 ///
-/// Created via [`S3Store::new()`] with an [`S3StoreConfig`].
+/// Created by registering [`Config`] with the storage registry.
 /// Implements [`FileStore`] for use with any rskit-storage consumer.
-pub struct S3Store {
+struct S3Store {
     client: aws_sdk_s3::Client,
-    config: S3StoreConfig,
+    config: Config,
 }
 
 impl S3Store {
@@ -52,7 +73,7 @@ impl S3Store {
     ///
     /// Resolves credentials from config fields, then env vars.
     /// The client is synchronously constructed and reused for all operations.
-    pub fn new(config: S3StoreConfig) -> AppResult<Self> {
+    fn new(config: Config) -> AppResult<Self> {
         let (access_key, secret_key) = resolve_credentials(&config)?;
 
         let creds = aws_sdk_s3::config::Credentials::new(
@@ -89,73 +110,10 @@ impl S3Store {
         Ok(Self { client, config })
     }
 
-    /// Returns a reference to the underlying `aws_sdk_s3::Client`.
-    ///
-    /// Useful for advanced operations not covered by [`FileStore`].
-    pub fn client(&self) -> &aws_sdk_s3::Client {
-        &self.client
-    }
-
-    /// Returns the bucket name.
-    pub fn bucket(&self) -> &str {
-        &self.config.bucket
-    }
-
-    /// Returns the configured endpoint URL, if any.
-    pub fn endpoint(&self) -> Option<&str> {
-        self.config.endpoint.as_deref()
-    }
-
-    /// Upload a local file by path using streaming (avoids buffering the
-    /// entire file in memory).
-    ///
-    /// Returns the constructed URL (endpoint-based) or an S3 URI.
-    pub async fn upload_path(
-        &self,
-        local_path: &std::path::Path,
-        key: &str,
-        content_type: Option<&str>,
-    ) -> AppResult<String> {
-        let full_key = self.full_key(key);
-
-        let body = aws_sdk_s3::primitives::ByteStream::from_path(local_path)
-            .await
-            .map_err(|e| {
-                AppError::new(
-                    ErrorCode::Internal,
-                    format!("Failed to read file for upload: {e}"),
-                )
-            })?;
-
-        let mut req = self
-            .client
-            .put_object()
-            .bucket(&self.config.bucket)
-            .key(&full_key)
-            .body(body);
-
-        if let Some(ct) = content_type {
-            req = req.content_type(ct);
-        }
-
-        req.send()
-            .await
-            .map_err(|e| AppError::new(ErrorCode::Internal, format!("S3 upload failed: {e}")))?;
-
-        Ok(self.object_url(key))
-    }
-
     fn full_key(&self, key: &str) -> String {
         match &self.config.prefix {
             Some(prefix) => format!("{prefix}/{key}"),
             None => key.to_string(),
-        }
-    }
-
-    fn object_url(&self, key: &str) -> String {
-        match &self.config.endpoint {
-            Some(ep) => format!("{}/{}/{}", ep, self.config.bucket, key),
-            None => format!("s3://{}/{}", self.config.bucket, key),
         }
     }
 }
@@ -369,7 +327,7 @@ impl FileStore for S3Store {
 }
 
 /// Resolve AWS credentials from config fields or environment variables.
-fn resolve_credentials(config: &S3StoreConfig) -> AppResult<(String, String)> {
+fn resolve_credentials(config: &Config) -> AppResult<(String, String)> {
     if let (Some(key), Some(secret)) = (&config.access_key_id, &config.secret_access_key)
         && !key.is_empty()
         && !secret.is_empty()
@@ -392,7 +350,7 @@ fn resolve_credentials(config: &S3StoreConfig) -> AppResult<(String, String)> {
 }
 
 struct S3Factory {
-    config: S3StoreConfig,
+    config: Config,
 }
 
 #[async_trait::async_trait]
@@ -403,7 +361,7 @@ impl StorageFactory for S3Factory {
 }
 
 /// Explicitly register the S3 backend in an injected storage registry.
-pub fn register_s3(registry: &mut StorageRegistry, config: S3StoreConfig) -> AppResult<()> {
+pub fn register(registry: &mut StorageRegistry, config: Config) -> AppResult<()> {
     registry.register("s3", Arc::new(S3Factory { config }))
 }
 
@@ -414,7 +372,7 @@ mod tests {
     #[test]
     fn config_deserializes_with_defaults() {
         let json = r#"{"bucket": "test", "endpoint": "http://localhost:9000"}"#;
-        let cfg: S3StoreConfig = serde_json::from_str(json).unwrap();
+        let cfg: Config = serde_json::from_str(json).unwrap();
         assert_eq!(cfg.bucket, "test");
         assert!(!cfg.force_path_style);
         assert!(cfg.access_key_id.is_none());
@@ -432,7 +390,7 @@ mod tests {
             "access_key_id": "minio",
             "secret_access_key": "minio123"
         }"#;
-        let cfg: S3StoreConfig = serde_json::from_str(json).unwrap();
+        let cfg: Config = serde_json::from_str(json).unwrap();
         assert_eq!(cfg.bucket, "assets");
         assert!(cfg.force_path_style);
         assert_eq!(cfg.access_key_id.as_deref(), Some("minio"));
@@ -440,7 +398,7 @@ mod tests {
 
     #[test]
     fn resolve_explicit_credentials() {
-        let cfg = S3StoreConfig {
+        let cfg = Config {
             bucket: "test".into(),
             region: None,
             endpoint: None,
@@ -456,7 +414,7 @@ mod tests {
 
     #[test]
     fn resolve_empty_credentials_errors() {
-        let cfg = S3StoreConfig {
+        let cfg = Config {
             bucket: "test".into(),
             region: None,
             endpoint: None,
@@ -474,7 +432,7 @@ mod tests {
 
     #[test]
     fn full_key_with_prefix() {
-        let store = S3Store::new(S3StoreConfig {
+        let store = S3Store::new(Config {
             bucket: "b".into(),
             region: None,
             endpoint: None,
@@ -489,7 +447,7 @@ mod tests {
 
     #[test]
     fn full_key_without_prefix() {
-        let store = S3Store::new(S3StoreConfig {
+        let store = S3Store::new(Config {
             bucket: "b".into(),
             region: None,
             endpoint: None,
@@ -500,38 +458,5 @@ mod tests {
         })
         .unwrap();
         assert_eq!(store.full_key("file.txt"), "file.txt");
-    }
-
-    #[test]
-    fn object_url_with_endpoint() {
-        let store = S3Store::new(S3StoreConfig {
-            bucket: "assets".into(),
-            region: None,
-            endpoint: Some("http://localhost:9000".into()),
-            prefix: None,
-            force_path_style: true,
-            access_key_id: Some("k".into()),
-            secret_access_key: Some("s".into()),
-        })
-        .unwrap();
-        assert_eq!(
-            store.object_url("vid/file.mp4"),
-            "http://localhost:9000/assets/vid/file.mp4"
-        );
-    }
-
-    #[test]
-    fn object_url_without_endpoint() {
-        let store = S3Store::new(S3StoreConfig {
-            bucket: "assets".into(),
-            region: Some("us-east-1".into()),
-            endpoint: None,
-            prefix: None,
-            force_path_style: false,
-            access_key_id: Some("k".into()),
-            secret_access_key: Some("s".into()),
-        })
-        .unwrap();
-        assert_eq!(store.object_url("file.txt"), "s3://assets/file.txt");
     }
 }

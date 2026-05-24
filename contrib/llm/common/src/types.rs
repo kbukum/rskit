@@ -1,5 +1,3 @@
-#![cfg_attr(not(test), allow(dead_code))]
-
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 /// Incremental tool-call state extracted from a provider stream event.
 pub struct StreamToolCall {

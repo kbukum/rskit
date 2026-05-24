@@ -5,15 +5,15 @@ Google Cloud Storage adapter for `rskit-storage`.
 `rskit-storage-gcs` is an opt-in backend crate. The core `rskit-storage`
 crate contains the `FileStore` trait, `StorageRegistry`, and local filesystem
 backend; this crate owns the Google Cloud Storage client dependency and
-registers itself only when the application explicitly calls `register_gcs`.
+registers itself only when the application explicitly calls `register`.
 
 ## Authentication
 
-`GcsStore` uses Google application default credentials by default. It reads the
+The registered adapter uses Google application default credentials by default. It reads the
 standard `GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_APPLICATION_CREDENTIALS_JSON`,
 or metadata-server sources supported by `google-cloud-storage`.
 
-Set `GcsStoreConfig::anonymous` only for explicitly public buckets that require
+Set `Config::anonymous` only for explicitly public buckets that require
 unsigned requests.
 
 ## Installation
@@ -28,13 +28,13 @@ rskit-storage-gcs = "0.1"
 
 ```rust,no_run
 use rskit_storage::{StorageConfig, StorageRegistry};
-use rskit_storage_gcs::{GcsStoreConfig, register_gcs};
+use rskit_storage_gcs::{Config, register};
 
 # async fn example() -> rskit_errors::AppResult<()> {
 let mut registry = StorageRegistry::new();
-register_gcs(
+register(
     &mut registry,
-    GcsStoreConfig {
+    Config {
         bucket: "assets".into(),
         prefix: Some("uploads".into()),
         anonymous: false,

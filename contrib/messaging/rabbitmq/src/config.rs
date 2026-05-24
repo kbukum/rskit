@@ -1,3 +1,8 @@
+#![expect(
+    clippy::redundant_pub_crate,
+    reason = "config helpers are shared with the crate root but remain crate-internal"
+)]
+
 use std::fmt;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};

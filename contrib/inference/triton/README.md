@@ -8,7 +8,7 @@ Implemented:
 - versioned path `/v2/models/{name}/versions/{version}/infer`
 - `/v2/health/ready` health probe
 - FP32, INT64, and BYTES tensor encode/decode
-- injected `reqwest::Client`, optional `rskit-resilience::Policy`, optional `rskit_authz::Decider`
+- explicit `register(&mut Registry, Config)` wiring with optional `rskit-resilience::Policy`
 - OTel GenAI semantic-convention attributes via `tracing` spans
 
 At encode time, `PredictRequest::options` is merged into the KServe `parameters` object.

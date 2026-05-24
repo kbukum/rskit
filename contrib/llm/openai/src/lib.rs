@@ -5,12 +5,16 @@
 mod adapter;
 mod config;
 mod dialect;
+#[cfg(test)]
 mod embedding;
 
 #[cfg(test)]
 mod fixture_tests;
 
-pub use adapter::{OpenAiAdapter, new_adapter};
+pub use adapter::register;
 pub use config::Config;
-pub use dialect::OpenAiDialect;
-pub use embedding::EmbeddingProvider;
+
+#[doc(hidden)]
+pub mod __private {
+    pub use crate::dialect::OpenAiDialect;
+}

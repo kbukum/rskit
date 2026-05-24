@@ -11,7 +11,7 @@ use rskit_media::{
     probe::MediaProbe,
     spatial::Resolution,
 };
-use rskit_media_image::{ImageProbe, ImageProcessor};
+use rskit_media_image::__private::{ImageProbe, ImageProcessor};
 use rskit_storage::FileSource;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

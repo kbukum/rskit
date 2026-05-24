@@ -12,7 +12,11 @@ use rskit_llm_common as common;
 use rskit_llm_common::{StreamChunk, StreamToolCall};
 
 /// Converts rskit types to/from the Anthropic Messages API wire format.
-pub struct AnthropicDialect;
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "dialect is shared only between crate-internal sibling modules"
+)]
+pub(crate) struct AnthropicDialect;
 
 // --- Wire types ---
 
@@ -95,7 +99,7 @@ fn parse_stop_reason(reason: Option<&str>) -> FinishReason {
 
 impl AnthropicDialect {
     /// Build the JSON body for the Anthropic Messages API.
-    pub fn build_body(req: &CompletionRequest) -> AppResult<serde_json::Value> {
+    pub(crate) fn build_body(req: &CompletionRequest) -> AppResult<serde_json::Value> {
         let system_msg = req.messages.iter().find_map(|m| match m {
             Message::System(s) => Some(s.content.clone()),
             _ => None,
@@ -117,7 +121,7 @@ impl AnthropicDialect {
     }
 
     /// Parse a successful Messages API response body.
-    pub fn parse_response(body: &str) -> AppResult<CompletionResponse> {
+    pub(crate) fn parse_response(body: &str) -> AppResult<CompletionResponse> {
         let resp: ChatResponse = serde_json::from_str(body).map_err(|e| {
             AppError::new(
                 ErrorCode::ExternalService,
@@ -158,7 +162,7 @@ impl AnthropicDialect {
     }
 
     /// Parse an error response body into an [`AppError`].
-    pub fn parse_error(status: u16, body: &str) -> AppError {
+    pub(crate) fn parse_error(status: u16, body: &str) -> AppError {
         common::parse_anthropic_error(status, body).into()
     }
 
@@ -257,7 +261,7 @@ impl AnthropicDialect {
     }
 
     /// Returns the messages endpoint path.
-    pub const fn endpoint() -> &'static str {
+    pub(crate) const fn endpoint() -> &'static str {
         "/v1/messages"
     }
 }

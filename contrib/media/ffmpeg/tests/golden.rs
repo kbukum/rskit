@@ -11,7 +11,10 @@ use rskit_media::{
     subtitle::{SubtitleEntry, SubtitleTrack},
     time::{Segment, TimeRange},
 };
-use rskit_media_ffmpeg::{FfmpegCommand, FfmpegConfig, FfmpegExecutor, FfmpegProbe};
+use rskit_media_ffmpeg::{
+    __private::{FfmpegCommand, FfmpegExecutor, FfmpegProbe},
+    Config as FfmpegConfig,
+};
 use rskit_storage::{FileSink, FileSource, TempDir};
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -69,6 +72,7 @@ macro_rules! skip_without_subtitles {
 // ── Test 1: Probe real JPEG ──────────────────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "requires ffmpeg/ffprobe binaries"]
 async fn golden_probe_real_jpeg() {
     skip_without_ffmpeg!();
 
@@ -90,6 +94,7 @@ async fn golden_probe_real_jpeg() {
 // ── Test 2: Probe real WAV ───────────────────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "requires ffmpeg/ffprobe binaries"]
 async fn golden_probe_real_wav() {
     skip_without_ffmpeg!();
 
@@ -111,6 +116,7 @@ async fn golden_probe_real_wav() {
 // ── Test 3: Probe real MP4 ───────────────────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "requires ffmpeg/ffprobe binaries"]
 async fn golden_probe_real_mp4() {
     skip_without_ffmpeg!();
 
@@ -132,6 +138,7 @@ async fn golden_probe_real_mp4() {
 // ── Test 4: Process real image (resize) ──────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "requires ffmpeg/ffprobe binaries"]
 async fn golden_process_real_image() {
     skip_without_ffmpeg!();
 
@@ -168,6 +175,7 @@ async fn golden_process_real_image() {
 // ── Test 5: Process real audio (extract segment) ─────────────────────────────
 
 #[tokio::test]
+#[ignore = "requires ffmpeg/ffprobe binaries"]
 async fn golden_process_real_audio() {
     skip_without_ffmpeg!();
 
@@ -199,6 +207,7 @@ async fn golden_process_real_audio() {
 // ── Test 6: Process real video (resize) ──────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "requires ffmpeg/ffprobe binaries"]
 async fn golden_process_real_video() {
     skip_without_ffmpeg!();
 
@@ -235,6 +244,7 @@ async fn golden_process_real_video() {
 // ── Test 7: ExtractMany (multi-segment extraction) ───────────────────────────
 
 #[tokio::test]
+#[ignore = "requires ffmpeg/ffprobe binaries"]
 async fn golden_extract_many() {
     skip_without_ffmpeg!();
 
@@ -275,6 +285,7 @@ async fn golden_extract_many() {
 // ── Test 8: Video filter chain (grayscale + blur) ────────────────────────────
 
 #[tokio::test]
+#[ignore = "requires ffmpeg/ffprobe binaries"]
 async fn golden_filter_chain_video() {
     skip_without_ffmpeg!();
 
@@ -311,6 +322,7 @@ async fn golden_filter_chain_video() {
 // ── Test 9: BurnSubtitles ────────────────────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "requires ffmpeg/ffprobe binaries and subtitles filter"]
 async fn golden_burn_subtitles() {
     skip_without_ffmpeg!();
     skip_without_subtitles!();

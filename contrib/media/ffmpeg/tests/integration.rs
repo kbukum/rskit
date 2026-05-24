@@ -10,7 +10,10 @@ use rskit_media::{
     spatial::Resolution,
     time::TimeRange,
 };
-use rskit_media_ffmpeg::{FfmpegConfig, FfmpegExecutor, FfmpegProbe};
+use rskit_media_ffmpeg::{
+    __private::{FfmpegExecutor, FfmpegProbe},
+    Config as FfmpegConfig,
+};
 use rskit_storage::{FileSink, FileSource, TempDir, TempFile};
 
 /// Generate a 1-second test video (320×240, 25fps, with audio) using ffmpeg.
@@ -96,6 +99,7 @@ macro_rules! skip_without_ffmpeg {
 // ── FfmpegProbe tests ──────────────────────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "requires ffmpeg/ffprobe binaries"]
 async fn probe_check_available() {
     skip_without_ffmpeg!();
     let probe = FfmpegProbe::new(FfmpegConfig::default());
@@ -107,6 +111,7 @@ async fn probe_check_available() {
 }
 
 #[tokio::test]
+#[ignore = "requires ffmpeg/ffprobe binaries"]
 async fn probe_video_file() {
     skip_without_ffmpeg!();
     let video = generate_test_video().await;
@@ -131,6 +136,7 @@ async fn probe_video_file() {
 }
 
 #[tokio::test]
+#[ignore = "requires ffmpeg/ffprobe binaries"]
 async fn probe_audio_file() {
     skip_without_ffmpeg!();
     let audio = generate_test_audio().await;
@@ -146,6 +152,7 @@ async fn probe_audio_file() {
 }
 
 #[tokio::test]
+#[ignore = "requires ffmpeg/ffprobe binaries"]
 async fn probe_raw_json() {
     skip_without_ffmpeg!();
     let video = generate_test_video().await;
@@ -161,6 +168,7 @@ async fn probe_raw_json() {
 // ── FfmpegExecutor tests ───────────────────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "requires ffmpeg/ffprobe binaries"]
 async fn executor_resize_video() {
     skip_without_ffmpeg!();
     let video = generate_test_video().await;
@@ -189,6 +197,7 @@ async fn executor_resize_video() {
 }
 
 #[tokio::test]
+#[ignore = "requires ffmpeg/ffprobe binaries"]
 async fn executor_extract_segment() {
     skip_without_ffmpeg!();
     let video = generate_test_video().await;
@@ -213,6 +222,7 @@ async fn executor_extract_segment() {
 }
 
 #[tokio::test]
+#[ignore = "requires ffmpeg/ffprobe binaries"]
 async fn executor_strip_audio() {
     skip_without_ffmpeg!();
     let video = generate_test_video().await;
@@ -267,6 +277,7 @@ async fn executor_preview_returns_args() {
 // ── Performance: video processing timing ────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "requires ffmpeg/ffprobe binaries"]
 async fn perf_resize_timing() {
     skip_without_ffmpeg!();
     let video = generate_test_video().await;

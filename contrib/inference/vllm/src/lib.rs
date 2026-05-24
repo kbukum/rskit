@@ -17,13 +17,10 @@ use rskit_tool::Envelope;
 use serde::{Deserialize, Serialize};
 use tokio_stream::Stream;
 
-/// Registry kind for the vLLM adapter.
-pub const VLLM_KIND: &str = "vllm";
-/// Registry kind alias for generic adapter wiring.
-pub const KIND: &str = VLLM_KIND;
+const VLLM_KIND: &str = "vllm";
 
 /// Configuration for the vLLM OAI-compatible adapter.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Config {
     /// Base URL of the vLLM server, for example `http://localhost:8000`.
     pub base_url: String,
@@ -38,6 +35,17 @@ pub struct Config {
     pub max_tokens: u32,
 }
 
+impl std::fmt::Debug for Config {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Config")
+            .field("base_url", &self.base_url)
+            .field("model", &self.model)
+            .field("api_key", &self.api_key.as_ref().map(|_| "<redacted>"))
+            .field("max_tokens", &self.max_tokens)
+            .finish()
+    }
+}
+
 fn default_model() -> String {
     "default".into()
 }
@@ -47,14 +55,14 @@ fn default_max_tokens() -> u32 {
 }
 
 /// vLLM adapter using the OAI-compatible text generation endpoint.
-pub struct VllmAdapter {
+pub(crate) struct VllmAdapter {
     client: HttpClient,
     config: Config,
 }
 
 impl VllmAdapter {
     /// Create a new vLLM adapter from config.
-    pub fn new(config: Config) -> AppResult<Self> {
+    pub(crate) fn new(config: Config) -> AppResult<Self> {
         let mut http_config = HttpClientConfig::new().with_base_url(&config.base_url);
         if let Some(key) = &config.api_key {
             http_config = http_config.with_auth(Auth::bearer(key));
@@ -63,22 +71,6 @@ impl VllmAdapter {
             client: HttpClient::new(http_config)?,
             config,
         })
-    }
-
-    /// Create an adapter with an injected canonical HTTP client.
-    #[must_use]
-    pub fn with_http_client(config: Config, client: HttpClient) -> Self {
-        Self { client, config }
-    }
-
-    /// Create an adapter with an injected raw reqwest client.
-    #[must_use]
-    pub fn with_reqwest_client(config: Config, client: reqwest::Client) -> Self {
-        let mut http_config = HttpClientConfig::new().with_base_url(&config.base_url);
-        if let Some(key) = &config.api_key {
-            http_config = http_config.with_auth(Auth::bearer(key));
-        }
-        Self::with_http_client(config, HttpClient::from_parts(http_config, client))
     }
 }
 
@@ -241,14 +233,8 @@ impl StreamingInference for VllmAdapter {
 }
 
 /// Explicitly register the vLLM adapter factory.
-pub fn register(registry: &mut Registry) -> Result<(), RegistryError> {
-    let factory: Factory = Arc::new(|config| {
-        let config: Config = serde_json::from_value(config)
-            .map_err(|err| InferenceError::Decode(err.to_string()))?;
-        Ok(Arc::new(
-            VllmAdapter::new(config).map_err(|err| InferenceError::Decode(err.to_string()))?,
-        ))
-    });
+pub fn register(registry: &mut Registry, config: Config) -> Result<(), RegistryError> {
+    let factory: Factory = Arc::new(move || Ok(Arc::new(VllmAdapter::new(config.clone())?)));
     registry.register(VLLM_KIND, factory)
 }
 
@@ -293,7 +279,16 @@ mod tests {
     #[test]
     fn register_adds_vllm_kind() {
         let mut registry = Registry::new();
-        register(&mut registry).expect("register vllm");
+        register(
+            &mut registry,
+            Config {
+                base_url: "http://localhost:8000".into(),
+                model: "llama3".into(),
+                api_key: None,
+                max_tokens: 256,
+            },
+        )
+        .expect("register vllm");
         assert!(registry.kinds().contains(&VLLM_KIND.to_string()));
     }
 

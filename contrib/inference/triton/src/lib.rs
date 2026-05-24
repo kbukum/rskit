@@ -26,14 +26,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tracing::Instrument;
 
-/// Registry kind for the Triton KServe v2 HTTP adapter.
-pub const TRITON_KIND: &str = "triton";
+const TRITON_KIND: &str = "triton";
 
 const SYSTEM: &str = "triton";
 
 /// Configuration for Triton KServe v2 HTTP serving.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TritonConfig {
+pub struct Config {
     /// Base URL for the Triton HTTP endpoint.
     #[serde(default = "default_base_url")]
     pub base_url: String,
@@ -57,7 +56,7 @@ pub struct TritonConfig {
     pub scopes: Vec<String>,
 }
 
-impl Default for TritonConfig {
+impl Default for Config {
     fn default() -> Self {
         Self {
             base_url: default_base_url(),
@@ -72,10 +71,10 @@ impl Default for TritonConfig {
 }
 
 /// Triton KServe v2 HTTP inference adapter.
-pub struct TritonInference {
+pub(crate) struct TritonInference {
     client: HttpClient,
     #[expect(dead_code, reason = "stored for future introspection; original design")]
-    config: TritonConfig,
+    config: Config,
     descriptor: InferenceDescriptor,
     policy: Option<Policy>,
     decider: Option<Arc<dyn Decider>>,
@@ -97,7 +96,7 @@ impl rskit_provider::RequestResponse<PredictRequest, PredictResponse> for Triton
 
 impl TritonInference {
     /// Create a Triton adapter with the default canonical HTTP client.
-    pub fn new(config: TritonConfig) -> Result<Self, InferenceError> {
+    pub(crate) fn new(config: Config) -> Result<Self, InferenceError> {
         let client = HttpClient::new(
             HttpClientConfig::new().with_base_url(config.base_url.trim_end_matches('/')),
         )?;
@@ -106,7 +105,7 @@ impl TritonInference {
 
     /// Create a Triton adapter with an injected canonical HTTP client.
     #[must_use]
-    pub fn with_http_client(config: TritonConfig, client: HttpClient) -> Self {
+    pub(crate) fn with_http_client(config: Config, client: HttpClient) -> Self {
         let descriptor = descriptor_from_config(&config);
         Self {
             client,
@@ -115,35 +114,6 @@ impl TritonInference {
             policy: None,
             decider: None,
         }
-    }
-
-    /// Create a Triton adapter with an injected raw reqwest client.
-    #[must_use]
-    pub fn with_reqwest_client(config: TritonConfig, client: reqwest::Client) -> Self {
-        let http_client = HttpClient::from_parts(
-            HttpClientConfig::new().with_base_url(config.base_url.trim_end_matches('/')),
-            client,
-        );
-        Self::with_http_client(config, http_client)
-    }
-
-    /// Inject a resilience policy. The adapter does not implement inline retries.
-    #[must_use]
-    pub fn with_policy(mut self, policy: Policy) -> Self {
-        self.policy = Some(policy);
-        self
-    }
-
-    /// Inject an authorization decider. Absence means open-by-default.
-    #[must_use]
-    pub fn with_decider(mut self, decider: Arc<dyn Decider>) -> Self {
-        self.decider = Some(decider);
-        self
-    }
-
-    /// Return whether Triton reports `/v2/health/ready` successfully.
-    pub async fn health_check(&self) -> Result<bool, InferenceError> {
-        Ok(self.client.get("/v2/health/ready").await?.is_success())
     }
 
     async fn predict_authorized(
@@ -252,20 +222,12 @@ impl rskit_component::Component for TritonInference {
 }
 
 /// Register the Triton adapter factory in an explicit registry.
-pub fn register(registry: &mut Registry) -> Result<(), RegistryError> {
-    let factory: Factory = Arc::new(|config| {
-        let config = if config.is_null() {
-            TritonConfig::default()
-        } else {
-            serde_json::from_value::<TritonConfig>(config)
-                .map_err(|err| InferenceError::Decode(err.to_string()))?
-        };
-        Ok(Arc::new(TritonInference::new(config)?))
-    });
+pub fn register(registry: &mut Registry, config: Config) -> Result<(), RegistryError> {
+    let factory: Factory = Arc::new(move || Ok(Arc::new(TritonInference::new(config.clone())?)));
     registry.register(TRITON_KIND, factory)
 }
 
-fn descriptor_from_config(config: &TritonConfig) -> InferenceDescriptor {
+fn descriptor_from_config(config: &Config) -> InferenceDescriptor {
     InferenceDescriptor {
         name: config.name.clone(),
         description: config.description.clone(),
@@ -655,7 +617,7 @@ mod tests {
 
     #[test]
     fn config_defaults_and_descriptor_are_declared() {
-        let config = TritonConfig::default();
+        let config = Config::default();
         let descriptor = descriptor_from_config(&config);
         assert_eq!(descriptor.name, "triton");
         assert_eq!(descriptor.serving_protocol, ServingProtocol::KServeV2Http);
@@ -829,7 +791,7 @@ mod tests {
 
     #[test]
     fn authz_denial_returns_authorization_error() {
-        let config = TritonConfig::default();
+        let config = Config::default();
         let descriptor = descriptor_from_config(&config);
         let request = PredictRequest {
             model_name: "model".to_owned(),
@@ -844,7 +806,7 @@ mod tests {
     #[test]
     fn register_adds_triton_kind() {
         let mut registry = Registry::new();
-        register(&mut registry).expect("register triton");
+        register(&mut registry, Config::default()).expect("register triton");
         assert_eq!(registry.kinds(), vec![TRITON_KIND.to_owned()]);
     }
 }

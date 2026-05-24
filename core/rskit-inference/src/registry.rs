@@ -4,9 +4,8 @@ use thiserror::Error;
 
 use crate::{Inference, InferenceError};
 
-/// Factory function used to build an inference adapter from config.
-pub type Factory =
-    Arc<dyn Fn(serde_json::Value) -> Result<Arc<dyn Inference>, InferenceError> + Send + Sync>;
+/// Factory function used to build a configured inference adapter.
+pub type Factory = Arc<dyn Fn() -> Result<Arc<dyn Inference>, InferenceError> + Send + Sync>;
 
 /// Explicit registry of inference adapter factories.
 #[derive(Default)]
@@ -34,17 +33,13 @@ impl Registry {
         Ok(())
     }
 
-    /// Build an adapter from a registered kind and config value.
-    pub fn build(
-        &self,
-        kind: &str,
-        config: serde_json::Value,
-    ) -> Result<Arc<dyn Inference>, InferenceError> {
+    /// Build the configured adapter registered for `kind`.
+    pub fn build(&self, kind: &str) -> Result<Arc<dyn Inference>, InferenceError> {
         let normalized = kind.trim();
         let factory = self.factories.get(normalized).ok_or_else(|| {
             InferenceError::Decode(format!("unknown inference adapter {normalized:?}"))
         })?;
-        factory(config)
+        factory()
     }
 
     /// Return registered kinds in stable order.
@@ -69,7 +64,7 @@ pub enum RegistryError {
 /// Create an empty registry.
 ///
 /// Backends are intentionally not auto-registered. Consumers opt in by calling
-/// adapter crate `register(&mut Registry)` functions during composition.
+/// adapter crate `register(&mut Registry, Config)` functions during composition.
 #[must_use]
 pub fn default_registry() -> Registry {
     Registry::new()

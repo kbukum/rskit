@@ -2,10 +2,10 @@
 //!
 //! This crate implements [`rskit_storage::store::FileStore`] without adding
 //! Google Cloud dependencies to the core storage crate. Importing it has no
-//! side effects; applications call [`register_gcs`] with the registry they own.
+//! side effects; applications call [`register`] with the registry they own.
 
 #![warn(missing_docs)]
 
 mod store;
 
-pub use store::{GcsStore, GcsStoreConfig, register_gcs};
+pub use store::{Config, register};

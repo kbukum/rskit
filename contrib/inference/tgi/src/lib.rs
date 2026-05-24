@@ -21,13 +21,10 @@ use rskit_tool::Envelope;
 use serde::{Deserialize, Serialize};
 use tokio_stream::Stream;
 
-/// Registry kind for the TGI adapter.
-pub const TGI_KIND: &str = "tgi";
-/// Registry kind alias for generic adapter wiring.
-pub const KIND: &str = TGI_KIND;
+const TGI_KIND: &str = "tgi";
 
 /// Configuration for the TGI OAI-compatible adapter.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Config {
     /// Base URL of the TGI server, for example `http://localhost:8080`.
     pub base_url: String,
@@ -42,6 +39,17 @@ pub struct Config {
     pub max_tokens: u32,
 }
 
+impl std::fmt::Debug for Config {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Config")
+            .field("base_url", &self.base_url)
+            .field("model", &self.model)
+            .field("api_key", &self.api_key.as_ref().map(|_| "<redacted>"))
+            .field("max_tokens", &self.max_tokens)
+            .finish()
+    }
+}
+
 fn default_model() -> String {
     "tgi".into()
 }
@@ -51,14 +59,14 @@ fn default_max_tokens() -> u32 {
 }
 
 /// TGI adapter using the OAI-compatible chat-completions endpoint.
-pub struct TgiAdapter {
+pub(crate) struct TgiAdapter {
     client: HttpClient,
     config: Config,
 }
 
 impl TgiAdapter {
     /// Create a new TGI adapter from config.
-    pub fn new(config: Config) -> AppResult<Self> {
+    pub(crate) fn new(config: Config) -> AppResult<Self> {
         let mut http_config = HttpClientConfig::new().with_base_url(&config.base_url);
         if let Some(key) = &config.api_key {
             http_config = http_config.with_auth(Auth::bearer(key));
@@ -67,22 +75,6 @@ impl TgiAdapter {
             client: HttpClient::new(http_config)?,
             config,
         })
-    }
-
-    /// Create an adapter with an injected canonical HTTP client.
-    #[must_use]
-    pub fn with_http_client(config: Config, client: HttpClient) -> Self {
-        Self { client, config }
-    }
-
-    /// Create an adapter with an injected raw reqwest client.
-    #[must_use]
-    pub fn with_reqwest_client(config: Config, client: reqwest::Client) -> Self {
-        let mut http_config = HttpClientConfig::new().with_base_url(&config.base_url);
-        if let Some(key) = &config.api_key {
-            http_config = http_config.with_auth(Auth::bearer(key));
-        }
-        Self::with_http_client(config, HttpClient::from_parts(http_config, client))
     }
 }
 
@@ -279,14 +271,8 @@ impl Component for TgiAdapter {
 }
 
 /// Explicitly register the TGI adapter factory.
-pub fn register(registry: &mut Registry) -> Result<(), RegistryError> {
-    let factory: Factory = Arc::new(|config| {
-        let config: Config = serde_json::from_value(config)
-            .map_err(|err| InferenceError::Decode(err.to_string()))?;
-        Ok(Arc::new(
-            TgiAdapter::new(config).map_err(|err| InferenceError::Decode(err.to_string()))?,
-        ))
-    });
+pub fn register(registry: &mut Registry, config: Config) -> Result<(), RegistryError> {
+    let factory: Factory = Arc::new(move || Ok(Arc::new(TgiAdapter::new(config.clone())?)));
     registry.register(TGI_KIND, factory)
 }
 
@@ -311,7 +297,16 @@ mod tests {
     #[test]
     fn register_adds_tgi_kind() {
         let mut registry = Registry::new();
-        register(&mut registry).expect("register tgi");
+        register(
+            &mut registry,
+            Config {
+                base_url: "http://localhost:8080".into(),
+                model: "tiiuae/falcon-7b".into(),
+                api_key: None,
+                max_tokens: 256,
+            },
+        )
+        .expect("register tgi");
         assert!(registry.kinds().contains(&TGI_KIND.to_string()));
     }
 

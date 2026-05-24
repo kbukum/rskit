@@ -10,7 +10,7 @@ Native image processing backend using the `image` crate.
 
 ## Features
 
-- `ImageProcessor` — implements `MediaExecutor` for image operations
+- `register` — installs native image executor and probe factories into `rskit-media`
 - Spatial ops: resize (Fit / Fill / Pad), crop, rotate, flip
 - Filters: blur, sharpen, brightness, saturation, hue shift
 - Format support: PNG, JPEG, GIF, BMP, TIFF, WebP, AVIF
@@ -24,12 +24,14 @@ rskit-media-image = "0.1"
 ```
 
 ```rust
-use rskit_media_image::ImageProcessor;
-use rskit_media::{MediaPipeline, spatial::Resolution};
+use rskit_media::{MediaPipeline, Registry, spatial::Resolution};
+use rskit_media_image::{Config, register};
 use rskit_storage::FileSource;
 
 async fn example() {
-    let processor = ImageProcessor::new();
+    let mut registry = Registry::default();
+    register(&mut registry, Config)?;
+    let processor = registry.executor("image")?;
     let source = FileSource::from_path("photo.jpg");
 
     let pipeline = MediaPipeline::from(&source)

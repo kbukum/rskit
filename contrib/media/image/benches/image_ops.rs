@@ -10,7 +10,7 @@ use rskit_media::{
     ops::{CropRegion, FlipDirection, MediaOp, ResizeMode, ResizeOp, Rotation},
     spatial::Resolution,
 };
-use rskit_media_image::ImageProcessor;
+use rskit_media_image::__private::ImageProcessor;
 use rskit_storage::{FileSource, TempFile};
 
 /// Create a gradient test image at given dimensions.

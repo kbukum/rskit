@@ -3,9 +3,9 @@
 //! Usage:
 //!   cargo run --bin probe -- path/to/video.mp4
 
-use rskit_media::probe::MediaProbe;
+use rskit_media::Registry;
 use rskit_media::types::TrackKind;
-use rskit_media_ffmpeg::{FfmpegConfig, FfmpegProbe};
+use rskit_media_ffmpeg::{Config as FfmpegConfig, register as register_ffmpeg};
 use rskit_storage::FileSource;
 
 #[tokio::main]
@@ -15,7 +15,9 @@ async fn main() -> rskit_errors::AppResult<()> {
         .unwrap_or_else(|| "input.mp4".into());
 
     let source = FileSource::from_path(&path);
-    let probe = FfmpegProbe::new(FfmpegConfig::default());
+    let mut registry = Registry::default();
+    register_ffmpeg(&mut registry, FfmpegConfig::default())?;
+    let probe = registry.probe("ffmpeg")?;
     let info = probe.probe(&source).await?;
 
     println!("=== Media Info: {path} ===");

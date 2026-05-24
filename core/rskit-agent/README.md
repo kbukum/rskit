@@ -41,19 +41,19 @@ graph TD
 ## Quick start
 
 ```rust
-use std::sync::Arc;
-
 use rskit_agent::{Agent, AgentConfig};
 use rskit_llm::user;
-use rskit_llm_providers::ollama::{self, Config};
+use rskit_llm_ollama::{self as ollama, Config};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let provider = Arc::new(ollama::new_adapter(&Config {
+    let mut registry = rskit_llm::Registry::default();
+    ollama::register(&mut registry, Config {
         base_url: "http://localhost:11434".into(),
         model: "llama3.2".into(),
         api_key: None,
-    })?);
+    })?;
+    let provider = registry.provider("ollama")?;
 
     let agent = Agent::new(
         provider,

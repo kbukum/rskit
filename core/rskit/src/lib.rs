@@ -32,6 +32,10 @@
 //! | `stateful` | `rskit-stateful` (stateful accumulators) |
 //! | `genai` | `rskit-ai` (shared `GenAI` vocabulary) |
 //! | `llm`    | `rskit-llm` (LLM providers) |
+//! | `llm-openai` | OpenAI LLM adapter |
+//! | `llm-anthropic` | Anthropic LLM adapter |
+//! | `llm-ollama` | Ollama LLM adapter |
+//! | `llm-gemini` | Gemini LLM adapter |
 //! | `embedding` | `rskit-embedding` (embedding abstractions) |
 //! | `inference` | `rskit-inference` (model-serving abstractions) |
 //! | `tool` | `rskit-tool` (tool contracts) |
@@ -41,7 +45,8 @@
 //! | `media`  | `rskit-media` (media types, pipeline) |
 //! | `media-ffmpeg` | `rskit-media-ffmpeg` (`FFmpeg` backend) |
 //! | `media-image`  | `rskit-media-image` (image processing) |
-//! | `media-full` | ffmpeg + image backends |
+//! | `media-audio`  | `rskit-media-audio` (pure Rust audio analysis) |
+//! | `media-full` | ffmpeg + image + audio backends |
 //! | `storage-s3` | S3 storage backend |
 //! | `storage-gcs` | GCS storage backend |
 //! | `workload` | `rskit-workload` (workload management) |
@@ -197,6 +202,22 @@ pub use rskit_ai as genai;
 #[cfg(feature = "llm")]
 pub use rskit_llm as llm;
 
+/// OpenAI LLM adapter.
+#[cfg(feature = "llm-openai")]
+pub use rskit_llm_openai as llm_openai;
+
+/// Anthropic LLM adapter.
+#[cfg(feature = "llm-anthropic")]
+pub use rskit_llm_anthropic as llm_anthropic;
+
+/// Ollama LLM adapter.
+#[cfg(feature = "llm-ollama")]
+pub use rskit_llm_ollama as llm_ollama;
+
+/// Gemini LLM adapter.
+#[cfg(feature = "llm-gemini")]
+pub use rskit_llm_gemini as llm_gemini;
+
 /// Embedding provider abstractions and types.
 #[cfg(feature = "embedding")]
 pub use rskit_embedding as embedding;
@@ -268,6 +289,10 @@ pub use rskit_media_ffmpeg as media_ffmpeg;
 /// Native image processing backend using the `image` crate.
 #[cfg(feature = "media-image")]
 pub use rskit_media_image as media_image;
+
+/// Pure Rust audio analysis backend.
+#[cfg(feature = "media-audio")]
+pub use rskit_media_audio as media_audio;
 
 /// Workload configuration and orchestration primitives.
 #[cfg(feature = "workload")]

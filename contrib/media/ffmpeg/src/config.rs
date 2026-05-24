@@ -12,55 +12,55 @@ use crate::hw_accel::HwAccel;
 #[derive(Debug, Clone, Deserialize)]
 pub struct FfmpegConfig {
     /// Path to the `ffmpeg` binary (auto-detected if `None`).
-    pub ffmpeg_path: Option<PathBuf>,
+    pub(crate) ffmpeg_path: Option<PathBuf>,
     /// Path to the `ffprobe` binary (auto-detected if `None`).
-    pub ffprobe_path: Option<PathBuf>,
+    pub(crate) ffprobe_path: Option<PathBuf>,
     /// Directory for temporary files.
-    pub temp_dir: Option<PathBuf>,
+    pub(crate) temp_dir: Option<PathBuf>,
     /// Number of threads to use per FFmpeg process.
-    pub threads: Option<u32>,
+    pub(crate) threads: Option<u32>,
     /// Hardware acceleration mode.
-    pub hw_accel: Option<HwAccel>,
+    pub(crate) hw_accel: Option<HwAccel>,
     /// Fixed execution timeout per FFmpeg invocation.
     ///
     /// When a [`TimeoutCalculator`] is also configured, the calculator takes
     /// precedence if source duration and operation kind are available. This
     /// fixed timeout serves as the fallback when duration is unknown.
-    pub timeout: Option<Duration>,
+    pub(crate) timeout: Option<Duration>,
     /// Duration-aware timeout calculator.
     ///
     /// When set, timeouts are computed dynamically based on source duration
     /// and operation type using `base + (duration × multiplier)`. Falls back
     /// to the fixed `timeout` field when source duration is not available.
     #[serde(skip)]
-    pub timeout_calculator: Option<TimeoutCalculator>,
+    pub(crate) timeout_calculator: Option<TimeoutCalculator>,
     /// Whether to overwrite existing output files (`-y` flag).
-    pub overwrite: bool,
+    pub(crate) overwrite: bool,
     /// FFmpeg log level.
-    pub log_level: FfmpegLogLevel,
+    pub(crate) log_level: FfmpegLogLevel,
     /// Maximum number of concurrent FFmpeg processes.
     /// Defaults to `num_cpus / 2` (minimum 1) if `None`.
-    pub max_concurrent: Option<usize>,
+    pub(crate) max_concurrent: Option<usize>,
     /// When `true`, if an FFmpeg invocation fails due to hardware acceleration
     /// issues (e.g., macOS exit code 69 / VideoToolbox exhaustion), automatically
     /// retry with software-only decoding (`-hwaccel none`).
     /// Defaults to `true`.
     #[serde(default = "default_hw_accel_fallback")]
-    pub hw_accel_fallback: bool,
+    pub(crate) hw_accel_fallback: bool,
     /// Maximum number of retries for transient failures (hw accel exhaustion,
     /// timeouts). Does not retry permanent failures (invalid input, bad codec).
     /// Defaults to `1`.
     #[serde(default = "default_max_retries")]
-    pub max_retries: u32,
+    pub(crate) max_retries: u32,
     /// Maximum number of stderr lines to include in error messages.
     /// Defaults to `100`.
     #[serde(default = "default_max_stderr_lines")]
-    pub max_stderr_lines: usize,
+    pub(crate) max_stderr_lines: usize,
     /// Override the input video decoder (e.g., `"libdav1d"` for software AV1 decode).
     /// When set, emits `-c:v <decoder>` before the input, forcing FFmpeg to use
     /// this specific decoder instead of the default one.
     #[serde(default)]
-    pub input_video_decoder: Option<String>,
+    pub(crate) input_video_decoder: Option<String>,
 }
 
 fn default_hw_accel_fallback() -> bool {
@@ -97,6 +97,174 @@ impl Default for FfmpegConfig {
 }
 
 impl FfmpegConfig {
+    /// Override the path to the `ffmpeg` binary.
+    #[must_use]
+    pub fn with_ffmpeg_path(mut self, path: impl Into<PathBuf>) -> Self {
+        self.ffmpeg_path = Some(path.into());
+        self
+    }
+
+    /// Override the path to the `ffprobe` binary.
+    #[must_use]
+    pub fn with_ffprobe_path(mut self, path: impl Into<PathBuf>) -> Self {
+        self.ffprobe_path = Some(path.into());
+        self
+    }
+
+    /// Override the directory used for temporary files.
+    #[must_use]
+    pub fn with_temp_dir(mut self, path: impl Into<PathBuf>) -> Self {
+        self.temp_dir = Some(path.into());
+        self
+    }
+
+    /// Override the FFmpeg thread count.
+    #[must_use]
+    pub fn with_threads(mut self, threads: u32) -> Self {
+        self.threads = Some(threads);
+        self
+    }
+
+    /// Force software-only decoding.
+    #[must_use]
+    pub fn with_software_decode(mut self) -> Self {
+        self.hw_accel = Some(HwAccel::None);
+        self
+    }
+
+    /// Let FFmpeg auto-detect hardware acceleration.
+    #[must_use]
+    pub fn with_auto_hw_accel(mut self) -> Self {
+        self.hw_accel = Some(HwAccel::Auto);
+        self
+    }
+
+    /// Prefer macOS VideoToolbox hardware acceleration.
+    #[must_use]
+    pub fn with_videotoolbox(mut self) -> Self {
+        self.hw_accel = Some(HwAccel::VideoToolbox);
+        self
+    }
+
+    /// Prefer NVIDIA CUDA hardware acceleration.
+    #[must_use]
+    pub fn with_cuda(mut self) -> Self {
+        self.hw_accel = Some(HwAccel::Cuda);
+        self
+    }
+
+    /// Prefer Intel Quick Sync Video hardware acceleration.
+    #[must_use]
+    pub fn with_qsv(mut self) -> Self {
+        self.hw_accel = Some(HwAccel::Qsv);
+        self
+    }
+
+    /// Prefer VA-API hardware acceleration.
+    #[must_use]
+    pub fn with_vaapi(mut self) -> Self {
+        self.hw_accel = Some(HwAccel::Vaapi);
+        self
+    }
+
+    /// Prefer Vulkan hardware acceleration.
+    #[must_use]
+    pub fn with_vulkan(mut self) -> Self {
+        self.hw_accel = Some(HwAccel::Vulkan);
+        self
+    }
+
+    /// Prefer Direct3D 11 Video Acceleration.
+    #[must_use]
+    pub fn with_d3d11va(mut self) -> Self {
+        self.hw_accel = Some(HwAccel::D3d11va);
+        self
+    }
+
+    /// Override the fixed execution timeout used when no duration-aware timeout applies.
+    #[must_use]
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
+        self
+    }
+
+    /// Set whether FFmpeg should overwrite existing output files.
+    #[must_use]
+    pub fn with_overwrite(mut self, overwrite: bool) -> Self {
+        self.overwrite = overwrite;
+        self
+    }
+
+    /// Use quiet FFmpeg logging.
+    #[must_use]
+    pub fn with_quiet_log_level(mut self) -> Self {
+        self.log_level = FfmpegLogLevel::Quiet;
+        self
+    }
+
+    /// Use error-only FFmpeg logging.
+    #[must_use]
+    pub fn with_error_log_level(mut self) -> Self {
+        self.log_level = FfmpegLogLevel::Error;
+        self
+    }
+
+    /// Use warning-level FFmpeg logging.
+    #[must_use]
+    pub fn with_warning_log_level(mut self) -> Self {
+        self.log_level = FfmpegLogLevel::Warning;
+        self
+    }
+
+    /// Use informational FFmpeg logging.
+    #[must_use]
+    pub fn with_info_log_level(mut self) -> Self {
+        self.log_level = FfmpegLogLevel::Info;
+        self
+    }
+
+    /// Use debug FFmpeg logging.
+    #[must_use]
+    pub fn with_debug_log_level(mut self) -> Self {
+        self.log_level = FfmpegLogLevel::Debug;
+        self
+    }
+
+    /// Override the maximum number of concurrent FFmpeg processes.
+    #[must_use]
+    pub fn with_max_concurrent(mut self, max_concurrent: usize) -> Self {
+        self.max_concurrent = Some(max_concurrent);
+        self
+    }
+
+    /// Set whether hardware acceleration errors should fall back to software decoding.
+    #[must_use]
+    pub fn with_hw_accel_fallback(mut self, enabled: bool) -> Self {
+        self.hw_accel_fallback = enabled;
+        self
+    }
+
+    /// Override the maximum retry count for transient FFmpeg failures.
+    #[must_use]
+    pub fn with_max_retries(mut self, max_retries: u32) -> Self {
+        self.max_retries = max_retries;
+        self
+    }
+
+    /// Override the maximum stderr lines included in error messages.
+    #[must_use]
+    pub fn with_max_stderr_lines(mut self, max_stderr_lines: usize) -> Self {
+        self.max_stderr_lines = max_stderr_lines;
+        self
+    }
+
+    /// Override the input video decoder.
+    #[must_use]
+    pub fn with_input_video_decoder(mut self, decoder: impl Into<String>) -> Self {
+        self.input_video_decoder = Some(decoder.into());
+        self
+    }
+
     /// Resolve the path to the `ffmpeg` binary.
     pub fn ffmpeg_bin(&self) -> PathBuf {
         self.ffmpeg_path

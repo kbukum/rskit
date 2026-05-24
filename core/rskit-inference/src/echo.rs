@@ -61,7 +61,7 @@ impl Inference for Echo {
 
 /// Explicitly register the echo adapter.
 pub fn register(registry: &mut Registry) -> Result<(), RegistryError> {
-    let factory: Factory = std::sync::Arc::new(|_| Ok(std::sync::Arc::new(Echo)));
+    let factory: Factory = std::sync::Arc::new(|| Ok(std::sync::Arc::new(Echo)));
     registry.register(ECHO_KIND, factory)
 }
 

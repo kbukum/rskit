@@ -1,5 +1,3 @@
-#![cfg_attr(not(test), allow(dead_code))]
-
 use rskit_ai::ToolUseBlock;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use serde_json::{Map, Value};

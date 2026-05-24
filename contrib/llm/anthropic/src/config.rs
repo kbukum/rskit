@@ -1,9 +1,11 @@
 //! Configuration for the Anthropic provider.
 
+use std::fmt;
+
 use serde::Deserialize;
 
 /// Anthropic provider configuration.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct Config {
     /// Anthropic API key.
     pub api_key: String,
@@ -19,6 +21,17 @@ pub struct Config {
     /// Anthropic API version header value.
     #[serde(default = "default_api_version")]
     pub api_version: String,
+}
+
+impl fmt::Debug for Config {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Config")
+            .field("api_key", &"<redacted>")
+            .field("base_url", &self.base_url)
+            .field("model", &self.model)
+            .field("api_version", &self.api_version)
+            .finish()
+    }
 }
 
 fn default_base_url() -> String {
