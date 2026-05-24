@@ -80,7 +80,6 @@ rskit-media         = { version = "0.1.0", path = "../rskit-media",         opti
 rskit-media-ffmpeg  = { version = "0.1.0", path = "../../contrib/media/ffmpeg",  optional = true }
 rskit-media-image   = { version = "0.1.0", path = "../../contrib/media/image",   optional = true }
 rskit-media-audio   = { version = "0.1.0", path = "../../contrib/media/audio",   optional = true }
-rskit-workload      = { version = "0.1.0", path = "../rskit-workload",      optional = true }
 rskit-cli           = { version = "0.1.0", path = "../rskit-cli",           optional = true }
 rskit-git           = { version = "0.1.0", path = "../rskit-git",           optional = true }
 rskit-dataset       = { version = "0.1.0", path = "../rskit-dataset",       optional = true }
@@ -92,6 +91,10 @@ rskit-vectorstore-qdrant = { version = "0.1.0", path = "../../contrib/vectorstor
 tokio       = { workspace = true, features = ["full"] }
 tokio-util  = { workspace = true }
 async-trait = { workspace = true }
+futures     = { workspace = true }
+http        = { workspace = true }
+parking_lot = { workspace = true }
+serde       = { workspace = true }
 
 [features]
 default       = []
@@ -139,7 +142,6 @@ media-audio   = ["dep:rskit-media-audio", "media"]
 media-full    = ["media-ffmpeg", "media-image", "media-audio"]
 storage-s3    = ["storage", "dep:rskit-storage-s3"]
 storage-gcs   = ["storage", "dep:rskit-storage-gcs"]
-workload      = ["dep:rskit-workload"]
 cli           = ["dep:rskit-cli"]
 git           = ["dep:rskit-git"]
 dataset       = ["dep:rskit-dataset"]
@@ -156,5 +158,5 @@ full          = [
     "llm-openai", "llm-anthropic", "llm-ollama", "llm-gemini", "embedding",
     "inference", "inference-triton", "inference-vllm", "inference-tgi",
     "prompt", "skill", "tool", "agent", "mcp", "media-full", "storage", "storage-s3", "storage-gcs",
-    "workload", "cli", "git", "dataset", "bench", "vectorstore", "vectorstore-qdrant", "chain", "process", "stateful",
+    "cli", "git", "dataset", "bench", "vectorstore", "vectorstore-qdrant", "chain", "process", "stateful",
 ]

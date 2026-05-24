@@ -48,11 +48,9 @@ members = [
     "rskit-storage",
     "rskit-media",
     "rskit-mcp",
-    "rskit-workload",
     "rskit-cli",
     "rskit-dataset",
     "rskit-bench",
-    "rskit-integration",
 ]
 
 [workspace.package]

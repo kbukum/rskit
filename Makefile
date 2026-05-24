@@ -1,6 +1,6 @@
 .PHONY: all build test test-nextest test-doc test-affected test-coverage test-coverage-html lint fmt fmt-check check check-fast \
        check-core check-patterns check-crosscutting check-composition check-transport check-auth check-data check-ai \
-       check-media check-infra doc deny check-l7-edges clean help ci ci-test ci-lint ci-fmt ensure-act
+       check-media check-infra doc deny check-l7-edges check-topology clean help ci ci-test ci-lint ci-fmt ensure-act
 
 CORE_MANIFEST = core/Cargo.toml
 CONTRIB_MANIFEST = contrib/Cargo.toml
@@ -156,9 +156,15 @@ check-l7-edges:
 	@./scripts/check-l7-edges.sh
 	@echo "✓ L7 dependency edges OK"
 
-## Run cargo-deny checks (licenses, advisories, sources, bans) and L7 edge checks
+## Run module topology checks
+check-topology:
+	@echo "==> Checking module topology..."
+	@./scripts/check-topology.sh
+	@echo "✓ Module topology OK"
+
+## Run cargo-deny checks (licenses, advisories, sources, bans) and dependency edge checks
 ## Requires: cargo install cargo-deny
-deny: check-l7-edges
+deny: check-l7-edges check-topology
 	@echo "==> Running cargo-deny..."
 	@if [ -n "$(W)" ]; then \
 		cargo deny --manifest-path $(W)/Cargo.toml check licenses advisories sources bans; \

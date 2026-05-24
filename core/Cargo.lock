@@ -5263,6 +5263,9 @@ name = "rskit"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "futures",
+ "http 1.4.0",
+ "parking_lot",
  "rskit-agent",
  "rskit-ai",
  "rskit-auth",
@@ -5324,7 +5327,7 @@ dependencies = [
  "rskit-vectorstore",
  "rskit-vectorstore-qdrant",
  "rskit-worker",
- "rskit-workload",
+ "serde",
  "tokio",
  "tokio-util",
  "validator",
@@ -5685,7 +5688,6 @@ dependencies = [
  "rskit-errors",
  "rskit-resilience",
  "rskit-security",
- "rskit-server",
  "serde",
  "tokio",
  "tokio-util",
@@ -5709,27 +5711,16 @@ dependencies = [
 name = "rskit-http"
 version = "0.1.0"
 dependencies = [
- "async-trait",
- "axum 0.8.9",
  "criterion",
  "http 1.4.0",
- "hyper 1.9.0",
- "hyper-util",
- "parking_lot",
- "rskit-bootstrap",
  "rskit-errors",
- "rskit-logging",
  "rskit-security",
- "rskit-validation",
  "serde",
  "serde_json",
  "tokio",
- "tokio-util",
  "tower 0.5.3",
  "tower-http",
- "tracing",
  "uuid",
- "validator",
 ]
 
 [[package]]
@@ -5836,21 +5827,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rskit-integration"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "futures",
- "http 1.4.0",
- "parking_lot",
- "rskit",
- "rskit-validation",
- "serde",
- "tokio",
- "validator",
-]
-
-[[package]]
 name = "rskit-llm"
 version = "0.1.0"
 dependencies = [
@@ -5860,8 +5836,6 @@ dependencies = [
  "rskit-ai",
  "rskit-component",
  "rskit-errors",
- "rskit-llm-anthropic",
- "rskit-llm-openai",
  "rskit-provider",
  "rskit-tool",
  "serde",
@@ -6260,10 +6234,8 @@ dependencies = [
  "hyper-util",
  "parking_lot",
  "rskit-bootstrap",
- "rskit-config",
  "rskit-errors",
  "rskit-http",
- "rskit-resilience",
  "rskit-security",
  "rskit-validation",
  "rskit-version",
@@ -6476,23 +6448,11 @@ dependencies = [
  "parking_lot",
  "rskit-errors",
  "rskit-provider",
+ "serde",
  "tokio",
  "tokio-util",
  "tracing",
  "uuid",
-]
-
-[[package]]
-name = "rskit-workload"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "futures",
- "rskit-errors",
- "rskit-pipeline",
- "rskit-worker",
- "serde",
- "tokio",
 ]
 
 [[package]]

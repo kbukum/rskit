@@ -11,7 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **L9 infrastructure**: made the `rskit` facade a pure re-export layer,
   aligned facade feature flags with available crates, routed CLI-backed Git
   commands through `rskit-process`, standardized CLI error/output rendering,
-  and added concrete workload, testutil, benchmark, and integration helpers.
+  and added concrete testutil and benchmark helpers.
+- **Module boundaries**: folded workload scheduling into `rskit-worker`,
+  moved cross-layer integration coverage into the `rskit` facade tests,
+  removed gRPC server re-exports from `rskit-grpc`, and feature-gated
+  lifecycle-specific server/discovery surfaces.
+- **Architecture guardrails**: added a topology check for removed wrapper
+  crates, facade/workload cleanup, optional server transport stacks across
+  dependency tables, and contrib-adapter aggregation boundaries.
+- **Shared primitives**: added retry presets, checked HTTP response helpers,
+  and storage metadata/key helpers with safe local path resolution to reduce
+  repeated adapter boilerplate.
 - **Media/dataset**: redesigned dataset items around bounded byte/file
   payloads, streaming source contracts, explicit transform errors, schema
   validation via `rskit-schema`, and `rskit-pipeline` stream adapters.

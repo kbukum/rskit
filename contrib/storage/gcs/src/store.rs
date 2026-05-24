@@ -11,6 +11,7 @@ use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_storage::FileSource;
 use rskit_storage::store::{
     FileStore, ProgressCallback, StorageConfig, StorageFactory, StorageRegistry, StoredFile,
+    content_type_or_default, prefixed_key,
 };
 use serde::{Deserialize, Serialize};
 
@@ -84,10 +85,7 @@ impl GcsStore {
     }
 
     fn full_key(&self, key: &str) -> String {
-        self.config
-            .prefix
-            .as_ref()
-            .map_or_else(|| key.to_string(), |prefix| format!("{prefix}/{key}"))
+        prefixed_key(self.config.prefix.as_deref(), key)
     }
 
     fn bucket_resource(&self) -> String {
@@ -109,17 +107,10 @@ fn object_size(size: i64) -> AppResult<u64> {
 }
 
 fn stored_file_from_object(key: String, obj: Object) -> AppResult<StoredFile> {
-    Ok(StoredFile {
-        key,
-        size: object_size(obj.size)?,
-        content_type: if obj.content_type.is_empty() {
-            "application/octet-stream".to_string()
-        } else {
-            obj.content_type
-        },
-        stored_at: chrono::Utc::now(),
-        metadata: obj.metadata,
-    })
+    Ok(
+        StoredFile::new(key, object_size(obj.size)?, Some(&obj.content_type))
+            .with_metadata(obj.metadata),
+    )
 }
 
 #[async_trait::async_trait]
@@ -139,7 +130,7 @@ impl FileStore for GcsStore {
         let mut request = self
             .storage
             .write_object(bucket, full_key, data)
-            .set_content_type(content_type.unwrap_or("application/octet-stream"));
+            .set_content_type(content_type_or_default(content_type));
         if let Some(metadata) = metadata.clone() {
             request = request.set_metadata(metadata);
         }
@@ -147,15 +138,8 @@ impl FileStore for GcsStore {
             .await
             .map_err(|e| AppError::new(ErrorCode::Internal, format!("GCS upload failed: {e}")))?;
 
-        Ok(StoredFile {
-            key: key.to_string(),
-            size,
-            content_type: content_type
-                .unwrap_or("application/octet-stream")
-                .to_string(),
-            stored_at: chrono::Utc::now(),
-            metadata: metadata.unwrap_or_default(),
-        })
+        Ok(StoredFile::new(prefixed_key(None, key), size, content_type)
+            .with_metadata(metadata.unwrap_or_default()))
     }
 
     async fn upload_with_progress(
@@ -224,7 +208,7 @@ impl FileStore for GcsStore {
             .await
             .map_err(|e| AppError::new(ErrorCode::NotFound, format!("GCS head failed: {e}")))?;
 
-        stored_file_from_object(key.to_string(), obj)
+        stored_file_from_object(prefixed_key(None, key), obj)
     }
 
     async fn list(&self, prefix: &str, limit: Option<usize>) -> AppResult<Vec<StoredFile>> {
@@ -325,6 +309,20 @@ mod tests {
         .unwrap();
 
         assert_eq!(store.full_key("image.png"), "uploads/image.png");
+    }
+
+    #[tokio::test]
+    #[ignore = "requires GCS network access; run with --include-ignored in a configured environment"]
+    async fn slash_only_prefix_is_ignored() {
+        let store = GcsStore::new(Config {
+            bucket: "public-assets".into(),
+            prefix: Some("///".into()),
+            anonymous: true,
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(store.full_key("image.png"), "image.png");
     }
 
     #[test]

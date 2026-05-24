@@ -163,10 +163,8 @@ impl Inference for VllmAdapter {
 
         let resp = self.client.send(req).await.map_err(InferenceError::from)?;
         if !resp.is_success() {
-            let status = resp.status().as_u16();
-            let body = resp
-                .text()
-                .unwrap_or_else(|err| format!("<failed to decode response body: {err}>"));
+            let status = resp.status_u16();
+            let body = resp.text_or_diagnostic();
             return Err(InferenceError::Server { status, body });
         }
 

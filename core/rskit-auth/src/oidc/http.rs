@@ -65,14 +65,8 @@ impl OidcHttpClient for ReqwestOidcHttpClient {
             .send(request)
             .await
             .map_err(|error| OidcError::ProviderUnreachable(error.to_string()))?;
-        if !response.is_success() {
-            return Err(OidcError::ProviderUnreachable(format!(
-                "provider returned HTTP {}",
-                response.status()
-            )));
-        }
         response
-            .json()
+            .checked_json()
             .map_err(|error| OidcError::ProviderUnreachable(error.to_string()))
     }
 }

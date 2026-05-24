@@ -37,7 +37,3 @@ rskit-tool        = { path = "../rskit-tool" }
 # External
 tokio               = { workspace = true }
 serde_json          = { workspace = true }
-
-# Internal
-rskit-llm-openai = { path = "../../contrib/llm/openai" }
-rskit-llm-anthropic = { path = "../../contrib/llm/anthropic" }

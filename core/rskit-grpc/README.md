@@ -1,33 +1,24 @@
 # rskit-grpc
 
-Aligned gRPC transport entrypoint for rskit.
+Client-side gRPC transport entrypoint for rskit.
 
 ## Features
 
 - `client` (default): lazy tonic channels with TLS-aware dialing and optional discovery
-- `server`: re-exports `GrpcServerBuilder`, `GrpcServerConfig`, and `ErrorLayer` from `rskit-server`
 - `discovery`: enables `DiscoveryChannel`
 
 ## Usage
 
 ```toml
 [dependencies]
-rskit-grpc = { version = "0.1", features = ["client", "discovery", "server"] }
+rskit-grpc = { version = "0.1", features = ["client", "discovery"] }
 ```
 
 ```rust,ignore
-use rskit_grpc::{GrpcChannel, GrpcClientConfig, GrpcServerBuilder, GrpcServerConfig};
+use rskit_grpc::{GrpcChannel, GrpcClientConfig};
 
 let client = GrpcChannel::new(GrpcClientConfig::new("localhost:50051"));
-let server = GrpcServerBuilder::new(GrpcServerConfig::default()).build();
 ```
-
-## Interceptor ordering
-
-When the `server` feature is enabled, `rskit-grpc` re-exports `rskit-server`'s locked
-service interceptor contract:
-
-`tracing -> logging -> auth -> validation -> handler -> metrics`
 
 ## Discovery reconnect contract
 

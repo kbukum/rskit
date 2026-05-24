@@ -3,6 +3,8 @@
 //! Tests verify that modules work together correctly across architectural layers.
 //! Each test exercises at least 2 crates from different layers using real APIs.
 
+#![cfg(all(feature = "auth", feature = "authz", feature = "di"))]
+
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
@@ -452,7 +454,7 @@ async fn auth_authz_jwt_claims_feed_rbac() {
     let jwt_svc = JwtService::<TestClaims>::new(JwtConfig::hs256_internal(
         "integration-test-secret-key-0001",
         "https://issuer.rskit.test",
-        vec!["rskit-integration".into()],
+        vec!["rskit-cross-layer".into()],
     ))
     .unwrap();
 
@@ -462,7 +464,7 @@ async fn auth_authz_jwt_claims_feed_rbac() {
         sub: "user-1".into(),
         role: "admin".into(),
         iss: "https://issuer.rskit.test".into(),
-        aud: vec!["rskit-integration".into()],
+        aud: vec!["rskit-cross-layer".into()],
         exp: future_exp(),
         nbf: now.saturating_sub(1),
         iat: now,
@@ -531,7 +533,7 @@ async fn auth_authz_restricted_role() {
     let jwt_svc = JwtService::<TestClaims>::new(JwtConfig::hs256_internal(
         "restricted-secret-key-00000000001",
         "https://issuer.rskit.test",
-        vec!["rskit-integration".into()],
+        vec!["rskit-cross-layer".into()],
     ))
     .unwrap();
 
@@ -540,7 +542,7 @@ async fn auth_authz_restricted_role() {
         sub: "user-2".into(),
         role: "viewer".into(),
         iss: "https://issuer.rskit.test".into(),
-        aud: vec!["rskit-integration".into()],
+        aud: vec!["rskit-cross-layer".into()],
         exp: future_exp(),
         nbf: now.saturating_sub(1),
         iat: now,
@@ -599,7 +601,7 @@ async fn auth_authz_deny_overrides_allow() {
     let jwt_svc = JwtService::<TestClaims>::new(JwtConfig::hs256_internal(
         "deny-test-secret-key-000000000001",
         "https://issuer.rskit.test",
-        vec!["rskit-integration".into()],
+        vec!["rskit-cross-layer".into()],
     ))
     .unwrap();
 
@@ -608,7 +610,7 @@ async fn auth_authz_deny_overrides_allow() {
         sub: "user-3".into(),
         role: "editor".into(),
         iss: "https://issuer.rskit.test".into(),
-        aud: vec!["rskit-integration".into()],
+        aud: vec!["rskit-cross-layer".into()],
         exp: future_exp(),
         nbf: now.saturating_sub(1),
         iat: now,

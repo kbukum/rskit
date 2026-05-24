@@ -602,6 +602,76 @@ async fn store_list_empty_prefix_returns_root_files() {
         "expected at least 1, got {}",
         items.len()
     );
+    assert!(items.iter().any(|item| item.key == "root.txt"));
+    assert!(items.iter().all(|item| !item.key.starts_with('/')));
+}
+
+#[tokio::test]
+async fn store_list_trailing_prefix_returns_normalized_keys() {
+    let dir = TempDir::new().unwrap();
+    let store = make_store(dir.path());
+
+    let source = FileSource::from_bytes(Bytes::from_static(b"nested"));
+    store
+        .upload(&source, "items/file.txt", None, None)
+        .await
+        .unwrap();
+
+    let items = store.list("items/", None).await.unwrap();
+    assert!(items.iter().any(|item| item.key == "items/file.txt"));
+    assert!(items.iter().all(|item| !item.key.contains("//")));
+}
+
+#[tokio::test]
+async fn store_leading_slash_keys_are_resolved_under_root() {
+    let dir = TempDir::new().unwrap();
+    let store = make_store(dir.path());
+
+    let source = FileSource::from_bytes(Bytes::from_static(b"rooted"));
+    let stored = store
+        .upload(&source, "/rooted.txt", None, None)
+        .await
+        .unwrap();
+
+    assert_eq!(stored.key, "rooted.txt");
+    assert!(dir.path().join("rooted.txt").exists());
+    assert!(store.exists("rooted.txt").await.unwrap());
+    assert_eq!(store.head("/rooted.txt").await.unwrap().key, "rooted.txt");
+
+    let items = store.list("/", None).await.unwrap();
+    assert!(items.iter().any(|item| item.key == "rooted.txt"));
+    assert!(items.iter().all(|item| !item.key.starts_with('/')));
+}
+
+#[tokio::test]
+async fn store_rejects_path_traversal_keys() {
+    let dir = TempDir::new().unwrap();
+    let store = make_store(dir.path());
+    let source = FileSource::from_bytes(Bytes::from_static(b"escape"));
+
+    assert!(
+        store
+            .upload(&source, "../escape.txt", None, None)
+            .await
+            .is_err()
+    );
+    assert!(store.download("../escape.txt").await.is_err());
+    assert!(store.delete("../escape.txt").await.is_err());
+    assert!(store.exists("../escape.txt").await.is_err());
+    assert!(store.head("../escape.txt").await.is_err());
+    assert!(store.list("../", None).await.is_err());
+    assert!(
+        store
+            .presigned_url("../escape.txt", std::time::Duration::from_secs(60))
+            .await
+            .is_err()
+    );
+
+    store.upload(&source, "safe.txt", None, None).await.unwrap();
+    assert!(store.copy("../escape.txt", "copy.txt").await.is_err());
+    assert!(store.copy("safe.txt", "../copy.txt").await.is_err());
+    assert!(store.rename("../escape.txt", "renamed.txt").await.is_err());
+    assert!(store.rename("safe.txt", "../renamed.txt").await.is_err());
 }
 
 #[tokio::test]
