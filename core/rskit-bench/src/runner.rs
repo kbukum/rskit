@@ -19,6 +19,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
+use tracing::Instrument;
 
 struct Branch<L> {
     name: String,
@@ -154,8 +155,10 @@ where
                 "benchmark run started"
             );
         });
-        let _span_guard = span.enter();
-        let result = self.run_with_execution(loader, opts, &execution).await;
+        let result = self
+            .run_with_execution(loader, opts, &execution)
+            .instrument(span)
+            .await;
         match &result {
             Ok(_) => execution.operation.end_operation("ok", None),
             Err(error) => execution.operation.end_operation("error", Some(error)),
@@ -216,6 +219,8 @@ where
                     pending.push(async move { (context, submitted_at, handle.result().await) });
                 }
 
+                // FuturesUnordered retires whichever worker result completes first,
+                // so a slow oldest task cannot block the submission window.
                 let Some((submitted_sample, submitted_at, result)) = pending.next().await else {
                     break;
                 };
