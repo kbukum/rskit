@@ -471,12 +471,8 @@ fn append_bounded_stderr(
     }
 
     let mut truncated = false;
-    if !stderr.is_empty() {
+    if !stderr.is_empty() && stderr.len() + 1 < limit {
         stderr.push(b'\n');
-        if stderr.len() > limit {
-            stderr.truncate(limit);
-            return true;
-        }
     }
 
     let remaining = limit.saturating_sub(stderr.len());

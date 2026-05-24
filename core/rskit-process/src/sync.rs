@@ -256,17 +256,7 @@ fn append_bounded(target: &mut Vec<u8>, extra: &[u8], max_bytes: Option<usize>) 
     if target.len() >= limit {
         return true;
     }
-    if !target.is_empty() {
-        if target.len() + 1 >= limit {
-            let keep = target.len().saturating_sub(1);
-            target.truncate(keep);
-            target.push(b'\n');
-            let remaining = limit.saturating_sub(target.len());
-            if remaining > 0 {
-                target.extend_from_slice(&extra[..remaining.min(extra.len())]);
-            }
-            return true;
-        }
+    if !target.is_empty() && target.len() + 1 < limit {
         target.push(b'\n');
     }
     let remaining = limit.saturating_sub(target.len());
