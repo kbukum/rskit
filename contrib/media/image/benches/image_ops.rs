@@ -14,6 +14,13 @@ use rskit_media::{
 use rskit_storage::{FileSource, TempFile};
 use std::sync::Arc;
 
+fn image_executor() -> Arc<dyn MediaExecutor> {
+    let mut registry = Registry::default();
+    rskit_media_image::register(&mut registry, rskit_media_image::Config)
+        .expect("register image backend");
+    registry.executor("image").expect("image executor")
+}
+
 /// Create a gradient test image at given dimensions.
 fn create_fixture(width: u32, height: u32) -> TempFile {
     let mut img = RgbImage::new(width, height);
@@ -22,13 +29,6 @@ fn create_fixture(width: u32, height: u32) -> TempFile {
             let r = (x * 255 / width) as u8;
             let g = (y * 255 / height) as u8;
             img.put_pixel(x, y, Rgb([r, g, 128]));
-        }
-
-        fn image_executor() -> Arc<dyn MediaExecutor> {
-            let mut registry = Registry::default();
-            rskit_media_image::register(&mut registry, rskit_media_image::Config)
-                .expect("register image backend");
-            registry.executor("image").expect("image executor")
         }
     }
     let tmp = TempFile::with_extension("png").expect("create temp");
