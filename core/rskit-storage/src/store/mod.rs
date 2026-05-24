@@ -66,7 +66,8 @@ impl StoredFile {
 #[must_use]
 pub fn content_type_or_default(content_type: Option<&str>) -> &str {
     content_type
-        .filter(|value| !value.trim().is_empty())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
         .unwrap_or(DEFAULT_CONTENT_TYPE)
 }
 
@@ -148,6 +149,7 @@ mod tests {
         assert_eq!(content_type_or_default(None), DEFAULT_CONTENT_TYPE);
         assert_eq!(content_type_or_default(Some("  ")), DEFAULT_CONTENT_TYPE);
         assert_eq!(content_type_or_default(Some("text/plain")), "text/plain");
+        assert_eq!(content_type_or_default(Some(" text/plain ")), "text/plain");
     }
 
     #[test]
