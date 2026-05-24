@@ -69,11 +69,12 @@ def path_value(dep: object) -> str | None:
     return None
 
 
-def dependency(manifest: dict, name: str) -> object | None:
-    deps = manifest.get("dependencies", {})
-    if isinstance(deps, dict):
-        return deps.get(name)
-    return None
+def dependency_entries(manifest: dict, name: str) -> list[tuple[str, object]]:
+    entries: list[tuple[str, object]] = []
+    for table_name, deps in dependency_tables(manifest):
+        if name in deps:
+            entries.append((table_name, deps[name]))
+    return entries
 
 
 def features(manifest: dict) -> dict:
@@ -105,9 +106,9 @@ for cargo_toml in sorted((root / "core").glob("*/Cargo.toml")):
                 errors.append(f"{rel}: rskit-grpc must not depend on rskit-server")
 
     if crate in {"rskit-http", "rskit-discovery"}:
-        bootstrap = dependency(manifest, "rskit-bootstrap")
-        if bootstrap is not None and not is_optional(bootstrap):
-            errors.append(f"{rel}: rskit-bootstrap must be optional for {crate}")
+        for table_name, bootstrap in dependency_entries(manifest, "rskit-bootstrap"):
+            if not is_optional(bootstrap):
+                errors.append(f"{rel}: {table_name}.rskit-bootstrap must be optional for {crate}")
 
     if crate == "rskit-server":
         for dep_name in (
@@ -128,13 +129,15 @@ for cargo_toml in sorted((root / "core").glob("*/Cargo.toml")):
             "tower-layer",
             "tower-service",
         ):
-            dep = dependency(manifest, dep_name)
-            if dep is not None and not is_optional(dep):
-                errors.append(f"{rel}: heavy transport dependency {dep_name} must be optional")
+            for table_name, dep in dependency_entries(manifest, dep_name):
+                if not is_optional(dep):
+                    errors.append(
+                        f"{rel}: heavy transport dependency {table_name}.{dep_name} must be optional"
+                    )
 
     if crate == "rskit":
-        if dependency(manifest, "rskit-workload") is not None:
-            errors.append(f"{rel}: facade must not depend on removed rskit-workload")
+        for table_name, _ in dependency_entries(manifest, "rskit-workload"):
+            errors.append(f"{rel}: facade must not depend on removed {table_name}.rskit-workload")
         if "workload" in features(manifest):
             errors.append(f"{rel}: facade must not expose removed workload feature")
 
