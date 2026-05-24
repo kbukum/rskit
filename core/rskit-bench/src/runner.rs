@@ -193,7 +193,7 @@ where
                 branch_name: branch.name.clone(),
                 timeout_secs: opts.timeout_secs,
             });
-            let pool = Pool::new(handler, execution.pool_config());
+            let pool = Pool::new(handler, execution.pool_config_for(&branch.name));
             let mut branch_metrics: HashMap<String, f64> = HashMap::new();
             let mut total_score_pos = 0.0_f64;
             let mut total_score_neg = 0.0_f64;
@@ -217,11 +217,10 @@ where
                     break;
                 };
                 match handle.result().await {
-                    Ok(EvaluationOutcome {
+                    Ok(EvaluationOutcome::Success {
                         sample,
-                        prediction: Some(pred),
+                        prediction: pred,
                         duration_ms,
-                        error: None,
                     }) => {
                         let correct = pred.label.to_string() == sample.label.to_string();
                         if correct {
@@ -251,11 +250,10 @@ where
                             prediction: pred,
                         });
                     }
-                    Ok(EvaluationOutcome {
+                    Ok(EvaluationOutcome::Failure {
                         sample,
-                        prediction: None,
                         duration_ms,
-                        error: Some(error),
+                        error,
                     }) => {
                         tracing::warn!(
                             sample_id = %sample.id,
@@ -274,27 +272,6 @@ where
                             duration_ms,
                             error,
                         });
-                    }
-                    Ok(EvaluationOutcome {
-                        sample,
-                        prediction: Some(_),
-                        error: Some(error),
-                        duration_ms,
-                    }) => {
-                        errors += 1;
-                        sample_results.push(failed_sample(&sample, duration_ms, error));
-                    }
-                    Ok(EvaluationOutcome {
-                        sample,
-                        duration_ms,
-                        ..
-                    }) => {
-                        errors += 1;
-                        sample_results.push(failed_sample(
-                            &sample,
-                            duration_ms,
-                            "evaluation produced no prediction".to_string(),
-                        ));
                     }
                     Err(error) => {
                         errors += 1;
@@ -428,11 +405,17 @@ impl SampleFailureContext {
 }
 
 #[derive(Clone)]
-struct EvaluationOutcome<L> {
-    sample: BenchSample<L>,
-    prediction: Option<Prediction<L>>,
-    duration_ms: u64,
-    error: Option<String>,
+enum EvaluationOutcome<L> {
+    Success {
+        sample: BenchSample<L>,
+        prediction: Prediction<L>,
+        duration_ms: u64,
+    },
+    Failure {
+        sample: BenchSample<L>,
+        duration_ms: u64,
+        error: String,
+    },
 }
 
 #[async_trait::async_trait]
@@ -452,11 +435,10 @@ where
         let eval = tokio::time::timeout(timeout, self.evaluator.evaluate(input));
         let result = tokio::select! {
             _ = cancel.cancelled() => {
-                return Ok(EvaluationOutcome {
+                return Ok(EvaluationOutcome::Failure {
                     sample,
-                    prediction: None,
                     duration_ms: start.elapsed().as_millis() as u64,
-                    error: Some("cancelled".to_string()),
+                    error: "cancelled".to_string(),
                 });
             }
             result = eval => result,
@@ -464,23 +446,20 @@ where
         let duration_ms = start.elapsed().as_millis() as u64;
 
         match result {
-            Ok(Ok(prediction)) => Ok(EvaluationOutcome {
+            Ok(Ok(prediction)) => Ok(EvaluationOutcome::Success {
                 sample,
-                prediction: Some(prediction),
+                prediction,
                 duration_ms,
-                error: None,
             }),
-            Ok(Err(error)) => Ok(EvaluationOutcome {
+            Ok(Err(error)) => Ok(EvaluationOutcome::Failure {
                 sample,
-                prediction: None,
                 duration_ms,
-                error: Some(error.to_string()),
+                error: error.to_string(),
             }),
-            Err(_) => Ok(EvaluationOutcome {
+            Err(_) => Ok(EvaluationOutcome::Failure {
                 sample,
-                prediction: None,
                 duration_ms,
-                error: Some(format!("timeout in {}", self.branch_name)),
+                error: format!("timeout in {}", self.branch_name),
             }),
         }
     }
@@ -494,23 +473,6 @@ fn failed_sample_context(
     BenchSampleResult {
         id: sample.id.clone(),
         label: sample.label.clone(),
-        predicted: String::new(),
-        score: 0.0,
-        correct: false,
-        branch_scores: HashMap::new(),
-        duration_ms,
-        error,
-    }
-}
-
-fn failed_sample<L: std::fmt::Display>(
-    sample: &BenchSample<L>,
-    duration_ms: u64,
-    error: String,
-) -> BenchSampleResult {
-    BenchSampleResult {
-        id: sample.id.clone(),
-        label: sample.label.to_string(),
         predicted: String::new(),
         score: 0.0,
         correct: false,
