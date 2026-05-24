@@ -10,8 +10,7 @@ FFmpeg CLI backend for video/audio processing.
 
 ## Features
 
-- `FfmpegExecutor` — implements `MediaExecutor` by shelling out to `ffmpeg`
-- `FfmpegProbe` — implements `MediaProbe` via `ffprobe`
+- `register` — installs FFmpeg executor and probe factories into `rskit-media`
 - Hardware acceleration support (`HwAccel`: CUDA, VAAPI, etc.)
 - Real-time progress parsing from FFmpeg output
 - Configurable log levels via `FfmpegLogLevel`
@@ -25,20 +24,21 @@ rskit-media-ffmpeg = "0.1"
 ```
 
 ```rust
-use rskit_media_ffmpeg::{FfmpegExecutor, FfmpegConfig, FfmpegProbe};
 use rskit_media::registry::Registry;
+use rskit_media_ffmpeg::{Config, register};
 
-async fn example() {
-    let config = FfmpegConfig::default();
-    let registry = Registry::default();
-    let executor = FfmpegExecutor::new(config, registry);
+async fn example() -> rskit_errors::AppResult<()> {
+    let mut registry = Registry::default();
+    register(&mut registry, Config::default())?;
+    let executor = registry.executor("ffmpeg")?;
 
     // Probe a file for metadata
-    let probe = FfmpegProbe::default();
+    let probe = registry.probe("ffmpeg")?;
     // let meta = probe.probe(&FileSource::from_path("video.mp4")).await?;
 
     // Execute a MediaPipeline via FFmpeg subprocess
     // let result = executor.execute(&pipeline, &sink, progress_cb).await?;
+    Ok(())
 }
 ```
 

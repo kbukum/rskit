@@ -7,7 +7,7 @@ use rskit_media::{
     Registry, ops::ResizeMode, pipeline::MediaPipeline, presets, spatial::Resolution,
     time::TimeRange,
 };
-use rskit_media_ffmpeg::{FfmpegConfig, FfmpegExecutor};
+use rskit_media_ffmpeg::{Config as FfmpegConfig, register as register_ffmpeg};
 use rskit_storage::{FileSink, FileSource};
 
 #[tokio::main]
@@ -19,14 +19,16 @@ async fn main() -> rskit_errors::AppResult<()> {
 
     let source = FileSource::from_path(input);
     let sink = FileSink::Path(output.into());
-    let executor = FfmpegExecutor::new(FfmpegConfig::default(), Registry::default());
+    let mut registry = Registry::default();
+    register_ffmpeg(&mut registry, FfmpegConfig::default())?;
+    let executor = registry.executor("ffmpeg")?;
 
     let result = MediaPipeline::from(&source)
         .extract(TimeRange::from_seconds(time, time + 0.1))
         .resize(Resolution::new(640, 360), ResizeMode::Fit)
         .transcode(presets::jpeg())
         .output_to(sink)
-        .execute(&executor)
+        .execute(executor.as_ref())
         .await?;
 
     println!("Thumbnail saved to {output}: {:?}", result);

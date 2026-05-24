@@ -21,7 +21,7 @@ use super::dialect::AnthropicDialect;
 const SYSTEM: &str = "anthropic";
 
 /// A [`Provider`] backed by the Anthropic Messages API.
-pub struct AnthropicAdapter {
+struct AnthropicAdapter {
     client: HttpClient,
     model: String,
     api_version: String,
@@ -30,7 +30,7 @@ pub struct AnthropicAdapter {
 }
 
 /// Create a new [`Provider`] wired to Anthropic with `x-api-key` + `anthropic-version` headers.
-pub fn new_adapter(cfg: &Config) -> AppResult<AnthropicAdapter> {
+fn new_adapter(cfg: &Config) -> AppResult<AnthropicAdapter> {
     let http_cfg = HttpClientConfig::new()
         .with_base_url(&cfg.base_url)
         .with_auth(Auth::api_key("x-api-key", &cfg.api_key))
@@ -47,14 +47,18 @@ pub fn new_adapter(cfg: &Config) -> AppResult<AnthropicAdapter> {
     })
 }
 
-impl AnthropicAdapter {
-    /// Inject a resilience policy. Network calls are wrapped via `Policy::execute`.
-    #[must_use]
-    pub fn with_policy(mut self, policy: Policy) -> Self {
-        self.policy = Some(policy);
-        self
-    }
+/// Register the configured `Anthropic` provider in an LLM registry.
+pub fn register(registry: &mut rskit_llm::Registry, config: Config) -> AppResult<()> {
+    registry.register(
+        "anthropic",
+        std::sync::Arc::new(move || {
+            Ok(std::sync::Arc::new(new_adapter(&config)?)
+                as std::sync::Arc<dyn rskit_llm::Provider>)
+        }),
+    )
+}
 
+impl AnthropicAdapter {
     fn record_call(&self) {
         let now_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)

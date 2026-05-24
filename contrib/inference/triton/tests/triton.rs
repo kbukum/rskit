@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use bytes::Bytes;
-use rskit_inference::{Inference, PredictRequest, Tensor, TensorData, Value};
+use rskit_inference::{Inference, PredictRequest, Registry, Tensor, TensorData, Value};
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
     matchers::{method, path},
@@ -36,15 +36,13 @@ async fn predict_happy_path_round_trips_kserve_v2() {
         .mount(&server)
         .await;
 
-    let adapter =
-        rskit_inference_triton::TritonInference::new(rskit_inference_triton::TritonConfig {
-            base_url: server.uri(),
-            network_host: "127.0.0.1".to_owned(),
-            network_port: None,
-            network_scheme: "http".to_owned(),
-            ..rskit_inference_triton::TritonConfig::default()
-        })
-        .expect("adapter constructs");
+    let adapter = triton_adapter(rskit_inference_triton::Config {
+        base_url: server.uri(),
+        network_host: "127.0.0.1".to_owned(),
+        network_port: None,
+        network_scheme: "http".to_owned(),
+        ..rskit_inference_triton::Config::default()
+    });
 
     let mut inputs = HashMap::new();
     inputs.insert(
@@ -99,12 +97,10 @@ async fn predict_error_response_returns_server_error() {
         .mount(&server)
         .await;
 
-    let adapter =
-        rskit_inference_triton::TritonInference::new(rskit_inference_triton::TritonConfig {
-            base_url: server.uri(),
-            ..rskit_inference_triton::TritonConfig::default()
-        })
-        .expect("adapter constructs");
+    let adapter = triton_adapter(rskit_inference_triton::Config {
+        base_url: server.uri(),
+        ..rskit_inference_triton::Config::default()
+    });
 
     let err = adapter
         .predict(PredictRequest {
@@ -116,21 +112,8 @@ async fn predict_error_response_returns_server_error() {
     assert!(err.to_string().contains("status=503"));
 }
 
-#[tokio::test]
-async fn health_probe_reports_ready() {
-    let server = MockServer::start().await;
-    Mock::given(method("GET"))
-        .and(path("/v2/health/ready"))
-        .respond_with(ResponseTemplate::new(200))
-        .mount(&server)
-        .await;
-
-    let adapter =
-        rskit_inference_triton::TritonInference::new(rskit_inference_triton::TritonConfig {
-            base_url: server.uri(),
-            ..rskit_inference_triton::TritonConfig::default()
-        })
-        .expect("adapter constructs");
-
-    assert!(adapter.health_check().await.expect("health probe"));
+fn triton_adapter(config: rskit_inference_triton::Config) -> std::sync::Arc<dyn Inference> {
+    let mut registry = Registry::new();
+    rskit_inference_triton::register(&mut registry, config).expect("register triton");
+    registry.build("triton").expect("build triton")
 }

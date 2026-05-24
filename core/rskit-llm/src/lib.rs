@@ -11,12 +11,15 @@ pub mod stream_events;
 
 /// Provider trait with streaming, capabilities, and token counting.
 pub mod provider;
+/// Explicit LLM provider registry.
+pub mod registry;
 
 /// Component lifecycle mixin for LLM providers (D12).
 pub mod lifecycle;
 
 pub use lifecycle::Lifecycle;
 pub use provider::{LlmRequestResponse, LlmStream, Provider};
+pub use registry::{Factory, Registry, default_registry};
 pub use rskit_ai::chat::{
     AssistantMessage, Message, SystemMessage, ToolResultMessage, UserMessage, assistant, system,
     tool_result_msg, user,

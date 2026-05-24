@@ -19,11 +19,11 @@ use rskit_storage::FileSource;
 ///
 /// Extracts resolution, format, and color type from images without
 /// requiring FFmpeg. Faster than spawning an ffprobe process.
-pub struct ImageProbe;
+pub(crate) struct ImageProbe;
 
 impl ImageProbe {
     /// Create a new image probe.
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self
     }
 

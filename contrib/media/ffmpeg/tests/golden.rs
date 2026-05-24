@@ -1,8 +1,10 @@
 //! Golden/snapshot tests for rskit-media-ffmpeg using real fixture files.
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use rskit_media::{
+    Registry,
     executor::MediaExecutor,
     filter::filters,
     ops::{MediaOp, ResizeMode, ResizeOp},
@@ -11,7 +13,7 @@ use rskit_media::{
     subtitle::{SubtitleEntry, SubtitleTrack},
     time::{Segment, TimeRange},
 };
-use rskit_media_ffmpeg::{FfmpegCommand, FfmpegConfig, FfmpegExecutor, FfmpegProbe};
+use rskit_media_ffmpeg::Config as FfmpegConfig;
 use rskit_storage::{FileSink, FileSource, TempDir};
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -66,6 +68,40 @@ macro_rules! skip_without_subtitles {
     };
 }
 
+fn ffmpeg_executor() -> Arc<dyn MediaExecutor> {
+    let mut registry = Registry::default();
+    rskit_media_ffmpeg::register(&mut registry, FfmpegConfig::default())
+        .expect("register ffmpeg backend");
+    registry.executor("ffmpeg").expect("ffmpeg executor")
+}
+
+fn ffmpeg_probe() -> Arc<dyn MediaProbe> {
+    let mut registry = Registry::default();
+    rskit_media_ffmpeg::register(&mut registry, FfmpegConfig::default())
+        .expect("register ffmpeg backend");
+    registry.probe("ffmpeg").expect("ffmpeg probe")
+}
+
+fn normalized_preview(source: &FileSource, ops: &[MediaOp]) -> Vec<String> {
+    ffmpeg_executor()
+        .preview(source, ops)
+        .expect("preview command")
+        .into_iter()
+        .map(|line| {
+            line.split_whitespace()
+                .map(|arg| {
+                    if arg.ends_with("/ffmpeg") {
+                        "ffmpeg"
+                    } else {
+                        arg
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .collect()
+}
+
 // ── Test 1: Probe real JPEG ──────────────────────────────────────────────────
 
 #[tokio::test]
@@ -73,7 +109,7 @@ async fn golden_probe_real_jpeg() {
     skip_without_ffmpeg!();
 
     let source = FileSource::from_path(fixtures_dir().join("image/ai-generated.jpg"));
-    let probe = FfmpegProbe::new(FfmpegConfig::default());
+    let probe = ffmpeg_probe();
     let meta = probe.probe(&source).await.expect("probe JPEG");
 
     insta::assert_json_snapshot!("probe_real_jpeg", {
@@ -94,7 +130,7 @@ async fn golden_probe_real_wav() {
     skip_without_ffmpeg!();
 
     let source = FileSource::from_path(fixtures_dir().join("audio/ai-generated.wav"));
-    let probe = FfmpegProbe::new(FfmpegConfig::default());
+    let probe = ffmpeg_probe();
     let meta = probe.probe(&source).await.expect("probe WAV");
 
     insta::assert_json_snapshot!("probe_real_wav", {
@@ -115,7 +151,7 @@ async fn golden_probe_real_mp4() {
     skip_without_ffmpeg!();
 
     let source = FileSource::from_path(fixtures_dir().join("video/ai-generated.mp4"));
-    let probe = FfmpegProbe::new(FfmpegConfig::default());
+    let probe = ffmpeg_probe();
     let meta = probe.probe(&source).await.expect("probe MP4");
 
     insta::assert_json_snapshot!("probe_real_mp4", {
@@ -139,7 +175,7 @@ async fn golden_process_real_image() {
     let dir = TempDir::new().expect("temp dir");
     let out_path = dir.path().join("resized.jpg");
 
-    let executor = FfmpegExecutor::new(FfmpegConfig::default(), rskit_media::Registry::default());
+    let executor = ffmpeg_executor();
     let ops = vec![MediaOp::Resize(ResizeOp {
         resolution: Resolution::new(100, 100),
         mode: ResizeMode::Exact,
@@ -151,7 +187,7 @@ async fn golden_process_real_image() {
         .expect("execute resize image");
 
     // Verify output via probe
-    let probe = FfmpegProbe::new(FfmpegConfig::default());
+    let probe = ffmpeg_probe();
     let meta = probe.probe(&result).await.expect("probe resized image");
     let res = meta.resolution().expect("should have resolution");
 
@@ -175,7 +211,7 @@ async fn golden_process_real_audio() {
     let dir = TempDir::new().expect("temp dir");
     let out_path = dir.path().join("segment.wav");
 
-    let executor = FfmpegExecutor::new(FfmpegConfig::default(), rskit_media::Registry::default());
+    let executor = ffmpeg_executor();
     let ops = vec![MediaOp::Extract(TimeRange::from_seconds(0.0, 0.5))];
 
     let result = executor
@@ -183,7 +219,7 @@ async fn golden_process_real_audio() {
         .await
         .expect("execute extract audio");
 
-    let probe = FfmpegProbe::new(FfmpegConfig::default());
+    let probe = ffmpeg_probe();
     let meta = probe.probe(&result).await.expect("probe extracted audio");
 
     insta::assert_json_snapshot!("process_real_audio_extract", {
@@ -206,7 +242,7 @@ async fn golden_process_real_video() {
     let dir = TempDir::new().expect("temp dir");
     let out_path = dir.path().join("resized.mp4");
 
-    let executor = FfmpegExecutor::new(FfmpegConfig::default(), rskit_media::Registry::default());
+    let executor = ffmpeg_executor();
     let ops = vec![MediaOp::Resize(ResizeOp {
         resolution: Resolution::new(160, 120),
         mode: ResizeMode::Exact,
@@ -217,7 +253,7 @@ async fn golden_process_real_video() {
         .await
         .expect("execute resize video");
 
-    let probe = FfmpegProbe::new(FfmpegConfig::default());
+    let probe = ffmpeg_probe();
     let meta = probe.probe(&result).await.expect("probe resized video");
     let res = meta.resolution().expect("should have resolution");
 
@@ -242,7 +278,7 @@ async fn golden_extract_many() {
     let dir = TempDir::new().expect("temp dir");
     let out_path = dir.path().join("multi_seg.mp4");
 
-    let executor = FfmpegExecutor::new(FfmpegConfig::default(), rskit_media::Registry::default());
+    let executor = ffmpeg_executor();
 
     // ai-generated.mp4 is ~1.375s — extract two small segments
     let segments = vec![
@@ -256,7 +292,7 @@ async fn golden_extract_many() {
         .await
         .expect("execute extract-many");
 
-    let probe = FfmpegProbe::new(FfmpegConfig::default());
+    let probe = ffmpeg_probe();
     let meta = probe
         .probe(&result)
         .await
@@ -282,7 +318,7 @@ async fn golden_filter_chain_video() {
     let dir = TempDir::new().expect("temp dir");
     let out_path = dir.path().join("filtered.mp4");
 
-    let executor = FfmpegExecutor::new(FfmpegConfig::default(), rskit_media::Registry::default());
+    let executor = ffmpeg_executor();
     let ops = vec![
         MediaOp::Filter(filters::grayscale()),
         MediaOp::Filter(filters::blur(2.0)),
@@ -293,7 +329,7 @@ async fn golden_filter_chain_video() {
         .await
         .expect("execute filter chain");
 
-    let probe = FfmpegProbe::new(FfmpegConfig::default());
+    let probe = ffmpeg_probe();
     let meta = probe.probe(&result).await.expect("probe filtered video");
     let res = meta.resolution().expect("should have resolution");
 
@@ -329,7 +365,7 @@ async fn golden_burn_subtitles() {
         default_style: None,
     };
 
-    let executor = FfmpegExecutor::new(FfmpegConfig::default(), rskit_media::Registry::default());
+    let executor = ffmpeg_executor();
     let ops = vec![MediaOp::BurnSubtitles(srt)];
 
     let result = executor
@@ -337,7 +373,7 @@ async fn golden_burn_subtitles() {
         .await
         .expect("execute burn subtitles");
 
-    let probe = FfmpegProbe::new(FfmpegConfig::default());
+    let probe = ffmpeg_probe();
     let meta = probe.probe(&result).await.expect("probe subtitled video");
     let res = meta.resolution().expect("should have resolution");
 
@@ -352,10 +388,10 @@ async fn golden_burn_subtitles() {
     }));
 }
 
-// ── Test 10: Command compilation snapshot (streaming config) ─────────────────
+// ── Test 10: Public preview snapshot (streaming config) ──────────────────────
 
 #[test]
-fn golden_command_compile_hls() {
+fn golden_preview_hls() {
     use rskit_media::codec::Codec;
     use rskit_media::format::Format;
     use rskit_media::output::{
@@ -364,9 +400,6 @@ fn golden_command_compile_hls() {
     };
 
     let source = FileSource::from_path("/dev/null");
-    let config = FfmpegConfig::default();
-    let registry = rskit_media::Registry::default();
-
     let output = OutputConfig {
         format: Format::new("mp4"),
         video: Some(VideoSettings {
@@ -391,32 +424,16 @@ fn golden_command_compile_hls() {
     };
 
     let ops = vec![MediaOp::Transcode(output)];
-    let cmd = FfmpegCommand::compile(&source, &ops, None, &config, &registry)
-        .expect("compile HLS command");
-    let args = cmd.to_args();
+    let preview = normalized_preview(&source, &ops);
 
-    // Redact the input path which is absolute
-    let args: Vec<String> = args
-        .into_iter()
-        .map(|a| {
-            if a.starts_with('/') && a != "/dev/null" {
-                "[PATH]".into()
-            } else {
-                a
-            }
-        })
-        .collect();
-
-    insta::assert_json_snapshot!("command_compile_hls", &args);
+    insta::assert_json_snapshot!("preview_hls", &preview);
 }
 
-// ── Test 11: Command compilation snapshot (extract-many + filters) ───────────
+// ── Test 11: Public preview snapshot (extract-many + filters) ────────────────
 
 #[test]
-fn golden_command_compile_extract_many_with_filters() {
+fn golden_preview_extract_many_with_filters() {
     let source = FileSource::from_path("/dev/null");
-    let config = FfmpegConfig::default();
-    let registry = rskit_media::Registry::default();
 
     let segments = vec![
         Segment::new(TimeRange::from_seconds(0.0, 5.0)),
@@ -429,28 +446,15 @@ fn golden_command_compile_extract_many_with_filters() {
         MediaOp::Filter(filters::denoise(3)),
     ];
 
-    let cmd = FfmpegCommand::compile(&source, &ops, None, &config, &registry)
-        .expect("compile extract-many command");
-    let args = cmd.to_args();
+    let preview = normalized_preview(&source, &ops);
 
-    let args: Vec<String> = args
-        .into_iter()
-        .map(|a| {
-            if a.starts_with('/') && a != "/dev/null" {
-                "[PATH]".into()
-            } else {
-                a
-            }
-        })
-        .collect();
-
-    insta::assert_json_snapshot!("command_compile_extract_many_filters", &args);
+    insta::assert_json_snapshot!("preview_extract_many_filters", &preview);
 }
 
-// ── Test 12: optimize_ops snapshot ───────────────────────────────────────────
+// ── Test 12: Public preview verifies operation optimization ──────────────────
 
 #[test]
-fn golden_optimize_ops() {
+fn golden_preview_optimized_ops() {
     // Consecutive resizes — only last should survive
     let ops = vec![
         MediaOp::Resize(ResizeOp {
@@ -468,9 +472,8 @@ fn golden_optimize_ops() {
         MediaOp::Filter(filters::grayscale()),
     ];
 
-    let optimized = FfmpegCommand::optimize_ops(&ops);
+    let source = FileSource::from_path("/dev/null");
+    let preview = normalized_preview(&source, &ops);
 
-    let summary: Vec<String> = optimized.iter().map(|op| format!("{op:?}")).collect();
-
-    insta::assert_json_snapshot!("optimize_ops", &summary);
+    insta::assert_json_snapshot!("preview_optimized_ops", &preview);
 }

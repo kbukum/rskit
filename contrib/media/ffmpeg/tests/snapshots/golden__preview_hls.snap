@@ -1,0 +1,7 @@
+---
+source: media/ffmpeg/tests/golden.rs
+expression: "&preview"
+---
+[
+  "ffmpeg -y -loglevel warning -progress pipe:2 -i /dev/null -c:v libx264 -crf 23 -b:v 2000000 -preset fast -f mp4 -f hls -hls_time 4 -hls_list_size 5 -hls_playlist_type vod -hls_segment_filename seg_%03d.ts <output>"
+]

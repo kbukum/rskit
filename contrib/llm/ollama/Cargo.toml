@@ -20,7 +20,7 @@ rskit-errors.workspace = true
 rskit-component.workspace = true
 rskit-provider.workspace = true
 rskit-resilience.workspace = true
-rskit-llm-openai = { path = "../openai", version = "0.1.0" }
+rskit-llm-common.workspace = true
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

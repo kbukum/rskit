@@ -1,9 +1,11 @@
 //! Configuration for the Gemini provider.
 
+use std::fmt;
+
 use serde::Deserialize;
 
 /// Gemini provider configuration.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct Config {
     /// Google AI API key.
     pub api_key: String,
@@ -15,6 +17,16 @@ pub struct Config {
     /// Model name (e.g. `gemini-2.5-flash`).
     #[serde(default = "default_model")]
     pub model: String,
+}
+
+impl fmt::Debug for Config {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Config")
+            .field("api_key", &"<redacted>")
+            .field("base_url", &self.base_url)
+            .field("model", &self.model)
+            .finish()
+    }
 }
 
 fn default_base_url() -> String {

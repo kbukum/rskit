@@ -102,10 +102,11 @@ fn openai_adapter_constructs_with_valid_config() {
         base_url: "https://api.openai.com/v1".into(),
         model: "gpt-4o".into(),
         embedding_model: "text-embedding-3-small".into(),
-        embedding_dimensions: 1536,
+        embedding_dimensions: Some(1536),
     };
-    let adapter = openai::new_adapter(&cfg);
-    assert!(adapter.is_ok());
+    let mut registry = rskit_llm::Registry::new();
+    assert!(openai::register(&mut registry, cfg).is_ok());
+    assert!(registry.build("openai").is_ok());
 }
 
 #[test]
@@ -116,8 +117,9 @@ fn anthropic_adapter_constructs_with_valid_config() {
         model: "claude-sonnet-4-20250514".into(),
         api_version: "2023-06-01".into(),
     };
-    let adapter = anthropic::new_adapter(&cfg);
-    assert!(adapter.is_ok());
+    let mut registry = rskit_llm::Registry::new();
+    assert!(anthropic::register(&mut registry, cfg).is_ok());
+    assert!(registry.build("anthropic").is_ok());
 }
 
 // ── API call tests (require live API keys) ──────────────────────────────────
@@ -125,10 +127,10 @@ fn anthropic_adapter_constructs_with_valid_config() {
 #[tokio::test]
 #[ignore = "requires OpenAI API key"]
 async fn openai_complete_request() {
-    use rskit_llm::Provider;
-
     let cfg: openai::Config = serde_json::from_str(r#"{"api_key":"sk-real-key"}"#).unwrap();
-    let provider = openai::new_adapter(&cfg).unwrap();
+    let mut registry = rskit_llm::Registry::new();
+    openai::register(&mut registry, cfg).unwrap();
+    let provider = registry.build("openai").unwrap();
     let req = CompletionRequest {
         model: "gpt-4o-mini".into(),
         messages: vec![user("Say hello.")],
@@ -145,10 +147,10 @@ async fn openai_complete_request() {
 #[tokio::test]
 #[ignore = "requires Anthropic API key"]
 async fn anthropic_complete_request() {
-    use rskit_llm::Provider;
-
     let cfg: anthropic::Config = serde_json::from_str(r#"{"api_key":"sk-ant-real-key"}"#).unwrap();
-    let provider = anthropic::new_adapter(&cfg).unwrap();
+    let mut registry = rskit_llm::Registry::new();
+    anthropic::register(&mut registry, cfg).unwrap();
+    let provider = registry.build("anthropic").unwrap();
     let req = CompletionRequest {
         model: "claude-3-haiku-20240307".into(),
         messages: vec![user("Say hello.")],

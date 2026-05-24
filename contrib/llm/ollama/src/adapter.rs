@@ -20,7 +20,7 @@ use tracing::Instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use super::config::Config;
-use rskit_llm_openai::OpenAiDialect;
+use rskit_llm_common::OpenAiDialect;
 
 const SYSTEM: &str = "ollama";
 
@@ -28,7 +28,7 @@ const SYSTEM: &str = "ollama";
 ///
 /// Ollama mirrors the `OpenAI` `/v1/chat/completions` API, so this adapter
 /// reuses [`OpenAiDialect`] for all wire-format conversion.
-pub struct OllamaAdapter {
+struct OllamaAdapter {
     client: HttpClient,
     model: String,
     policy: Option<Policy>,
@@ -36,7 +36,7 @@ pub struct OllamaAdapter {
 }
 
 /// Create a new [`Provider`] wired to Ollama.
-pub fn new_adapter(cfg: &Config) -> AppResult<OllamaAdapter> {
+fn new_adapter(cfg: &Config) -> AppResult<OllamaAdapter> {
     let mut http_cfg = HttpClientConfig::new().with_base_url(&cfg.base_url);
 
     if let Some(key) = &cfg.api_key {
@@ -53,14 +53,18 @@ pub fn new_adapter(cfg: &Config) -> AppResult<OllamaAdapter> {
     })
 }
 
-impl OllamaAdapter {
-    /// Inject a resilience policy.
-    #[must_use]
-    pub fn with_policy(mut self, policy: Policy) -> Self {
-        self.policy = Some(policy);
-        self
-    }
+/// Register the configured `Ollama` provider in an LLM registry.
+pub fn register(registry: &mut rskit_llm::Registry, config: Config) -> AppResult<()> {
+    registry.register(
+        "ollama",
+        std::sync::Arc::new(move || {
+            Ok(std::sync::Arc::new(new_adapter(&config)?)
+                as std::sync::Arc<dyn rskit_llm::Provider>)
+        }),
+    )
+}
 
+impl OllamaAdapter {
     fn record_call(&self) {
         let now_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)

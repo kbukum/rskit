@@ -5292,9 +5292,14 @@ dependencies = [
  "rskit-inference-triton",
  "rskit-inference-vllm",
  "rskit-llm",
+ "rskit-llm-anthropic",
+ "rskit-llm-gemini",
+ "rskit-llm-ollama",
+ "rskit-llm-openai",
  "rskit-logging",
  "rskit-mcp",
  "rskit-media",
+ "rskit-media-audio",
  "rskit-media-ffmpeg",
  "rskit-media-image",
  "rskit-messaging",
@@ -5893,8 +5898,53 @@ version = "0.1.0"
 dependencies = [
  "rskit-ai",
  "rskit-errors",
+ "rskit-llm",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "rskit-llm-gemini"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "opentelemetry",
+ "reqwest 0.13.3",
+ "rskit-ai",
+ "rskit-component",
+ "rskit-errors",
+ "rskit-httpclient",
+ "rskit-llm",
+ "rskit-llm-common",
+ "rskit-provider",
+ "rskit-resilience",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-opentelemetry",
+]
+
+[[package]]
+name = "rskit-llm-ollama"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "opentelemetry",
+ "reqwest 0.13.3",
+ "rskit-ai",
+ "rskit-component",
+ "rskit-errors",
+ "rskit-httpclient",
+ "rskit-llm",
+ "rskit-llm-common",
+ "rskit-provider",
+ "rskit-resilience",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-opentelemetry",
 ]
 
 [[package]]
@@ -5974,6 +6024,19 @@ dependencies = [
  "serde_json",
  "tokio",
  "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "rskit-media-audio"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "rskit-errors",
+ "rskit-media",
+ "rskit-storage",
+ "tokio",
  "tracing",
 ]
 

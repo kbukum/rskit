@@ -1,12 +1,23 @@
 //! Data-driven codec & format registry.
 
 use std::collections::HashMap;
+use std::sync::Arc;
+
+use rskit_errors::{AppError, AppResult, ErrorCode};
 
 use crate::{
     codec::{self, Codec, CodecKind},
+    executor::MediaExecutor,
     format::{self, Format},
+    probe::MediaProbe,
     types::MediaType,
 };
+
+/// Factory function used to build a configured media executor.
+pub type ExecutorFactory = Arc<dyn Fn() -> AppResult<Arc<dyn MediaExecutor>> + Send + Sync>;
+
+/// Factory function used to build a configured media probe.
+pub type ProbeFactory = Arc<dyn Fn() -> AppResult<Arc<dyn MediaProbe>> + Send + Sync>;
 
 /// Metadata about a codec.
 #[derive(Debug, Clone)]
@@ -45,9 +56,12 @@ pub struct FormatInfo {
 }
 
 /// Central knowledge base for codec/format information and compatibility.
+#[derive(Clone)]
 pub struct Registry {
     codecs: HashMap<Codec, CodecInfo>,
     formats: HashMap<Format, FormatInfo>,
+    executor_factories: HashMap<String, ExecutorFactory>,
+    probe_factories: HashMap<String, ProbeFactory>,
 }
 
 impl Default for Registry {
@@ -55,6 +69,8 @@ impl Default for Registry {
         let mut reg = Self {
             codecs: HashMap::new(),
             formats: HashMap::new(),
+            executor_factories: HashMap::new(),
+            probe_factories: HashMap::new(),
         };
         reg.load_defaults();
         reg
@@ -72,11 +88,78 @@ impl Registry {
         self.formats.insert(info.id.clone(), info);
     }
 
+    /// Register a configured media executor factory.
+    pub fn register_executor(
+        &mut self,
+        name: impl Into<String>,
+        factory: ExecutorFactory,
+    ) -> AppResult<()> {
+        let name = Self::normalize_backend_name(name)?;
+        if self.executor_factories.contains_key(&name) {
+            return Err(AppError::new(
+                ErrorCode::AlreadyExists,
+                format!("media executor '{name}' is already registered"),
+            ));
+        }
+        self.executor_factories.insert(name, factory);
+        Ok(())
+    }
+
+    /// Register a configured media probe factory.
+    pub fn register_probe(
+        &mut self,
+        name: impl Into<String>,
+        factory: ProbeFactory,
+    ) -> AppResult<()> {
+        let name = Self::normalize_backend_name(name)?;
+        if self.probe_factories.contains_key(&name) {
+            return Err(AppError::new(
+                ErrorCode::AlreadyExists,
+                format!("media probe '{name}' is already registered"),
+            ));
+        }
+        self.probe_factories.insert(name, factory);
+        Ok(())
+    }
+
+    /// Build the configured executor for `name`.
+    pub fn executor(&self, name: &str) -> AppResult<Arc<dyn MediaExecutor>> {
+        let name = Self::normalize_backend_name(name)?;
+        self.executor_factories.get(&name).ok_or_else(|| {
+            AppError::new(
+                ErrorCode::NotFound,
+                format!("media executor '{name}' is not registered"),
+            )
+        })?()
+    }
+
+    /// Build the configured probe for `name`.
+    pub fn probe(&self, name: &str) -> AppResult<Arc<dyn MediaProbe>> {
+        let name = Self::normalize_backend_name(name)?;
+        self.probe_factories.get(&name).ok_or_else(|| {
+            AppError::new(
+                ErrorCode::NotFound,
+                format!("media probe '{name}' is not registered"),
+            )
+        })?()
+    }
+
     /// Check if a codec is compatible with a format.
     pub fn is_compatible(&self, codec: &Codec, format: &Format) -> bool {
         self.codecs
             .get(codec)
             .is_some_and(|info| info.compatible_formats.contains(format))
+    }
+
+    fn normalize_backend_name(name: impl Into<String>) -> AppResult<String> {
+        let name = name.into().trim().to_owned();
+        if name.is_empty() {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                "media backend name is required",
+            ));
+        }
+        Ok(name)
     }
 
     /// Get the default codec pair (video, audio) for a format.
@@ -413,5 +496,28 @@ impl Registry {
                 default_audio_codec: None,
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rskit_errors::ErrorCode;
+
+    use super::Registry;
+
+    #[test]
+    fn executor_rejects_empty_backend_name() {
+        let Err(err) = Registry::default().executor(" \t ") else {
+            panic!("empty executor name should be rejected");
+        };
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn probe_rejects_empty_backend_name() {
+        let Err(err) = Registry::default().probe(" \t ") else {
+            panic!("empty probe name should be rejected");
+        };
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
     }
 }

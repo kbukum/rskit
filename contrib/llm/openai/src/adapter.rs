@@ -16,12 +16,12 @@ use tracing::Instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use super::config::Config;
-use super::dialect::OpenAiDialect;
+use rskit_llm_common::OpenAiDialect;
 
 const SYSTEM: &str = "openai";
 
 /// A [`Provider`] backed by the `OpenAI` chat-completions API.
-pub struct OpenAiAdapter {
+struct OpenAiAdapter {
     client: HttpClient,
     model: String,
     policy: Option<Policy>,
@@ -29,7 +29,7 @@ pub struct OpenAiAdapter {
 }
 
 /// Create a new [`Provider`] wired to `OpenAI` with Bearer auth.
-pub fn new_adapter(cfg: &Config) -> AppResult<OpenAiAdapter> {
+fn new_adapter(cfg: &Config) -> AppResult<OpenAiAdapter> {
     let http_cfg = HttpClientConfig::new()
         .with_base_url(&cfg.base_url)
         .with_auth(Auth::bearer(&cfg.api_key));
@@ -44,14 +44,18 @@ pub fn new_adapter(cfg: &Config) -> AppResult<OpenAiAdapter> {
     })
 }
 
-impl OpenAiAdapter {
-    /// Inject a resilience policy. Network calls are wrapped via `Policy::execute`.
-    #[must_use]
-    pub fn with_policy(mut self, policy: Policy) -> Self {
-        self.policy = Some(policy);
-        self
-    }
+/// Register the configured `OpenAI` provider in an LLM registry.
+pub fn register(registry: &mut rskit_llm::Registry, config: Config) -> AppResult<()> {
+    registry.register(
+        "openai",
+        std::sync::Arc::new(move || {
+            Ok(std::sync::Arc::new(new_adapter(&config)?)
+                as std::sync::Arc<dyn rskit_llm::Provider>)
+        }),
+    )
+}
 
+impl OpenAiAdapter {
     fn record_call(&self) {
         let now_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -186,7 +190,7 @@ mod tests {
             base_url: "https://api.openai.com/v1".into(),
             model: "gpt-4o".into(),
             embedding_model: "text-embedding-3-small".into(),
-            embedding_dimensions: 1536,
+            embedding_dimensions: Some(1536),
         };
         let adapter = new_adapter(&cfg);
         assert!(adapter.is_ok());
@@ -199,7 +203,7 @@ mod tests {
             base_url: "https://api.openai.com/v1".into(),
             model: "gpt-4o".into(),
             embedding_model: "text-embedding-3-small".into(),
-            embedding_dimensions: 1536,
+            embedding_dimensions: Some(1536),
         };
         let adapter = new_adapter(&cfg).unwrap();
         let _boxed: Box<dyn Provider> = Box::new(adapter);
@@ -212,7 +216,7 @@ mod tests {
             base_url: "https://api.openai.com/v1".into(),
             model: "gpt-4o".into(),
             embedding_model: "text-embedding-3-small".into(),
-            embedding_dimensions: 1536,
+            embedding_dimensions: Some(1536),
         };
         let adapter = new_adapter(&cfg).unwrap();
         let component: &dyn Component = &adapter;

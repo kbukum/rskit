@@ -5,5 +5,5 @@
 mod adapter;
 mod config;
 
-pub use adapter::{OllamaAdapter, new_adapter};
+pub use adapter::register;
 pub use config::Config;

@@ -67,7 +67,7 @@ pub use output::{
 };
 pub use pipeline::{MediaPipeline, Progress};
 pub use probe::{Chapter, KeyframeInfo, MediaMetadata, MediaProbe, PictureType, SilenceInterval};
-pub use registry::{CodecInfo, FormatInfo, Registry};
+pub use registry::{CodecInfo, ExecutorFactory, FormatInfo, ProbeFactory, Registry};
 pub use spatial::{FrameRate, Resolution};
 pub use subtitle::{SubtitleEntry, SubtitlePosition, SubtitleStyle, SubtitleTrack};
 pub use time::{Segment, TimeRange, Timestamp};

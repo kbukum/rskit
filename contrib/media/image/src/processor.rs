@@ -11,11 +11,11 @@ use rskit_storage::{FileSink, FileSource, TempFile};
 ///
 /// Handles image operations (Resize, Crop, Rotate, Flip, subset of Filters,
 /// Transcode). Returns `Err(unsupported)` for video/audio operations.
-pub struct ImageProcessor;
+pub(crate) struct ImageProcessor;
 
 impl ImageProcessor {
     /// Create a new image processor.
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self
     }
 

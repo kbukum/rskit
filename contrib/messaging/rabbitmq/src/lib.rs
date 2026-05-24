@@ -28,15 +28,14 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
 
-/// `RabbitMQ` configuration types.
-pub mod config;
+mod config;
 
 use crate::config::{queue_for, validate_name};
-pub use config::RabbitMqConfig;
+pub use config::RabbitMqConfig as Config;
 
 /// RabbitMQ-backed message producer.
-pub struct RabbitMqProducer {
-    config: RabbitMqConfig,
+pub(crate) struct RabbitMqProducer {
+    config: Config,
     state: Mutex<Option<RabbitMqProducerState>>,
     declared_queues: Mutex<HashSet<String>>,
 }
@@ -48,7 +47,7 @@ struct RabbitMqProducerState {
 
 impl RabbitMqProducer {
     /// Create a producer that connects lazily on send.
-    pub fn new(config: RabbitMqConfig) -> AppResult<Self> {
+    pub(crate) fn new(config: Config) -> AppResult<Self> {
         config.validate()?;
         Ok(Self {
             config,
@@ -172,8 +171,8 @@ impl EventProducer for RabbitMqProducer {
 }
 
 /// RabbitMQ-backed message consumer.
-pub struct RabbitMqConsumer {
-    config: RabbitMqConfig,
+pub(crate) struct RabbitMqConsumer {
+    config: Config,
     sender: mpsc::Sender<Message<Vec<u8>>>,
     receiver: Mutex<mpsc::Receiver<Message<Vec<u8>>>>,
     subscriptions: SyncMutex<Vec<RabbitMqSubscription>>,
@@ -195,7 +194,7 @@ struct ConsumerTask {
 
 impl RabbitMqConsumer {
     /// Create a consumer that connects lazily on subscribe.
-    pub fn new(config: RabbitMqConfig) -> AppResult<Self> {
+    pub(crate) fn new(config: Config) -> AppResult<Self> {
         config.validate()?;
         let capacity = config.subscription_buffer;
         let (sender, receiver) = mpsc::channel(capacity);
@@ -338,10 +337,7 @@ impl EventConsumer for RabbitMqConsumer {
 }
 
 /// Register `RabbitMQ` producer and consumer factories for `Vec<u8>` payloads.
-pub fn register(
-    registry: &mut MessagingRegistry<Vec<u8>>,
-    config: RabbitMqConfig,
-) -> AppResult<()> {
+pub fn register(registry: &mut MessagingRegistry<Vec<u8>>, config: Config) -> AppResult<()> {
     config.validate()?;
     if !config.base.enabled {
         return Ok(());
@@ -351,7 +347,7 @@ pub fn register(
 }
 
 struct RabbitMqFactory {
-    config: RabbitMqConfig,
+    config: Config,
 }
 
 impl MessagingFactory<Vec<u8>> for RabbitMqFactory {
@@ -425,7 +421,7 @@ fn spawn_consumer_task(
     }
 }
 
-async fn connect(config: &RabbitMqConfig) -> AppResult<Connection> {
+async fn connect(config: &Config) -> AppResult<Connection> {
     tokio::time::timeout(
         Duration::from_millis(config.connection_timeout),
         Connection::connect(&config.uri, ConnectionProperties::default()),
@@ -519,13 +515,13 @@ mod tests {
     #[test]
     fn register_adds_rabbitmq_factories_without_connecting() {
         let mut registry = MessagingRegistry::<Vec<u8>>::new();
-        register(&mut registry, RabbitMqConfig::default()).unwrap();
+        register(&mut registry, Config::default()).unwrap();
         assert_eq!(registry.adapters(), vec!["rabbitmq"]);
     }
 
     #[test]
     fn rabbitmq_config_deserializes_adapter_defaults() {
-        let config: RabbitMqConfig = serde_json::from_str("{}").unwrap();
+        let config: Config = serde_json::from_str("{}").unwrap();
 
         assert_eq!(config.base.adapter, "rabbitmq");
         assert_eq!(config.uri, "amqps://127.0.0.1:5671/%2f");
@@ -534,7 +530,7 @@ mod tests {
 
     #[test]
     fn rabbitmq_defaults_use_supported_auto_ack_semantics() {
-        let config = RabbitMqConfig::default();
+        let config = Config::default();
 
         assert_eq!(config.base.adapter, "rabbitmq");
         assert_eq!(config.auto_ack, None);
@@ -551,7 +547,7 @@ mod tests {
 
     #[test]
     fn rabbitmq_auto_ack_follows_commit_strategy_default() {
-        let mut config = RabbitMqConfig::default();
+        let mut config = Config::default();
         config.base.commit_strategy = CommitStrategy::Auto;
         assert!(config.effective_auto_ack());
 
@@ -561,47 +557,47 @@ mod tests {
 
     #[test]
     fn rabbitmq_config_rejects_unsupported_semantics() {
-        let mut config = RabbitMqConfig::default();
+        let mut config = Config::default();
         config.base.delivery_guarantee = DeliveryGuarantee::ExactlyOnce;
         assert!(config.validate().is_err());
 
-        config = RabbitMqConfig::default();
+        config = Config::default();
         config.base.commit_strategy = CommitStrategy::PostHandlerSuccess;
         assert!(config.validate().is_err());
 
-        config = RabbitMqConfig::default();
+        config = Config::default();
         config.auto_ack = Some(false);
         assert!(config.validate().is_err());
     }
 
     #[test]
     fn rabbitmq_config_rejects_plaintext_without_dev_opt_in_and_bad_names() {
-        let mut config = RabbitMqConfig {
+        let mut config = Config {
             uri: "amqp://127.0.0.1:5672/%2f".to_string(),
-            ..RabbitMqConfig::default()
+            ..Config::default()
         };
         assert!(config.validate().is_err());
         config.allow_insecure_dev = true;
         assert!(config.validate().is_ok());
 
-        config = RabbitMqConfig {
+        config = Config {
             uri: "amqps://user:secret@example.test:5671/%2f".to_string(),
-            ..RabbitMqConfig::default()
+            ..Config::default()
         };
         assert!(config.validate().is_err());
 
-        config = RabbitMqConfig {
+        config = Config {
             queue_prefix: "bad prefix".to_string(),
-            ..RabbitMqConfig::default()
+            ..Config::default()
         };
         assert!(config.validate().is_err());
     }
 
     #[test]
     fn rabbitmq_config_debug_redacts_uri_credentials() {
-        let config = RabbitMqConfig {
+        let config = Config {
             uri: "amqp://user:password@example.test:5672/%2f".to_string(),
-            ..RabbitMqConfig::default()
+            ..Config::default()
         };
 
         let debug = format!("{config:?}");
@@ -614,7 +610,7 @@ mod tests {
 
     #[tokio::test]
     async fn producer_queue_declaration_cache_tracks_declared_queues() {
-        let producer = RabbitMqProducer::new(RabbitMqConfig::default()).unwrap();
+        let producer = RabbitMqProducer::new(Config::default()).unwrap();
 
         assert!(producer.needs_queue_declare("events").await);
         producer.mark_queue_declared("events").await;
@@ -624,9 +620,9 @@ mod tests {
 
     #[test]
     fn rabbitmq_queue_prefix_is_applied() {
-        let config = RabbitMqConfig {
+        let config = Config {
             queue_prefix: "svc.".to_string(),
-            ..RabbitMqConfig::default()
+            ..Config::default()
         };
 
         assert_eq!(queue_for(&config, "events").unwrap(), "svc.events");
@@ -634,9 +630,9 @@ mod tests {
 
     #[tokio::test]
     async fn producer_skips_declaration_cache_when_exchange_routes() {
-        let producer = RabbitMqProducer::new(RabbitMqConfig {
+        let producer = RabbitMqProducer::new(Config {
             exchange: "events-exchange".to_string(),
-            ..RabbitMqConfig::default()
+            ..Config::default()
         })
         .unwrap();
 
@@ -645,7 +641,7 @@ mod tests {
 
     #[test]
     fn consumer_lifecycle_starts_without_resources() {
-        let consumer = RabbitMqConsumer::new(RabbitMqConfig::default()).unwrap();
+        let consumer = RabbitMqConsumer::new(Config::default()).unwrap();
 
         assert!(consumer.subscriptions.lock().is_empty());
     }
@@ -672,30 +668,30 @@ mod tests {
     }
     #[test]
     fn rabbitmq_queue_prefix_validates_combined_queue() {
-        let config = RabbitMqConfig {
+        let config = Config {
             queue_prefix: "svc.".to_string(),
             base: rskit_messaging::BrokerConfig {
                 topics: vec!["bad queue".to_string()],
-                ..RabbitMqConfig::default().base
+                ..Config::default().base
             },
-            ..RabbitMqConfig::default()
+            ..Config::default()
         };
         assert!(config.validate().is_err());
 
-        let config = RabbitMqConfig {
+        let config = Config {
             queue_prefix: "x".repeat(248),
             base: rskit_messaging::BrokerConfig {
                 topics: vec!["too-long".to_string()],
-                ..RabbitMqConfig::default().base
+                ..Config::default().base
             },
-            ..RabbitMqConfig::default()
+            ..Config::default()
         };
         assert!(config.validate().is_err());
     }
 
     #[tokio::test]
     async fn recv_returns_when_subscribed_tasks_have_closed() {
-        let consumer = RabbitMqConsumer::new(RabbitMqConfig::default()).unwrap();
+        let consumer = RabbitMqConsumer::new(Config::default()).unwrap();
         consumer.subscribed.store(true, Ordering::SeqCst);
 
         let result = consumer.recv().await;

@@ -259,6 +259,9 @@ pub enum InferenceError {
     /// Request was denied by an injected authorization decider.
     #[error("authorization denied: {0}")]
     Authorization(String),
+    /// Request or adapter selection input was invalid.
+    #[error("invalid input: {0}")]
+    InvalidInput(String),
     /// Injected resilience policy failed the operation.
     #[error("policy: {0}")]
     Policy(String),
@@ -281,6 +284,9 @@ impl From<AppError> for InferenceError {
             ErrorCode::ExternalService
             | ErrorCode::ServiceUnavailable
             | ErrorCode::ConnectionFailed => Self::Transport(value),
+            ErrorCode::InvalidInput | ErrorCode::MissingField | ErrorCode::InvalidFormat => {
+                Self::InvalidInput(value.to_string())
+            }
             _ => Self::Policy(value.to_string()),
         }
     }
@@ -292,6 +298,7 @@ impl From<InferenceError> for AppError {
             InferenceError::Timeout => AppError::timeout("inference"),
             InferenceError::Cancelled => AppError::cancelled("inference"),
             InferenceError::Authorization(reason) => AppError::forbidden(reason),
+            InferenceError::InvalidInput(reason) => AppError::new(ErrorCode::InvalidInput, reason),
             InferenceError::Server { status, body } => AppError::new(
                 ErrorCode::ExternalService,
                 format!("inference runtime returned status {status}: {body}"),

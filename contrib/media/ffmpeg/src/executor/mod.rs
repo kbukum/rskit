@@ -13,10 +13,9 @@ use tokio_util::sync::CancellationToken;
 
 use crate::command::FfmpegCommand;
 use crate::config::FfmpegConfig;
-use crate::process::{ensure_success, run_capture_lossy};
 
 /// FFmpeg-based media executor with concurrency control and hw accel fallback.
-pub struct FfmpegExecutor {
+pub(crate) struct FfmpegExecutor {
     config: FfmpegConfig,
     registry: Registry,
     semaphore: Arc<Semaphore>,
@@ -24,7 +23,7 @@ pub struct FfmpegExecutor {
 
 impl FfmpegExecutor {
     /// Create a new executor with the given configuration and registry.
-    pub fn new(config: FfmpegConfig, registry: Registry) -> Self {
+    pub(crate) fn new(config: FfmpegConfig, registry: Registry) -> Self {
         let max = config.effective_max_concurrent();
         tracing::debug!(max_concurrent = max, "FfmpegExecutor initialized");
         Self {
@@ -32,32 +31,6 @@ impl FfmpegExecutor {
             config,
             registry,
         }
-    }
-
-    /// Check that ffmpeg is available and return its version.
-    pub async fn check_available(&self) -> AppResult<String> {
-        let output = run_capture_lossy(self.config.ffmpeg_bin(), ["-version"], self.config.timeout)
-            .await
-            .map_err(|e| {
-                AppError::new(
-                    ErrorCode::ServiceUnavailable,
-                    format!("ffmpeg not found: {e}"),
-                )
-            })?;
-
-        ensure_success(&output, "ffmpeg").map_err(|e| {
-            AppError::new(
-                ErrorCode::ServiceUnavailable,
-                format!("ffmpeg not available: {e}"),
-            )
-        })?;
-        let version = output
-            .stdout
-            .lines()
-            .next()
-            .unwrap_or("unknown")
-            .to_string();
-        Ok(version)
     }
 
     fn determine_output_extension(&self, ops: &[MediaOp]) -> String {
@@ -116,8 +89,7 @@ impl MediaExecutor for FfmpegExecutor {
     }
 
     fn supports(&self, op: &MediaOp) -> bool {
-        // Upscale and Interpolate require external AI tools, not FFmpeg
-        !matches!(op, MediaOp::Upscale(_) | MediaOp::Interpolate(_))
+        !op.requires_external_tool()
     }
 
     fn preview(&self, source: &FileSource, ops: &[MediaOp]) -> AppResult<Vec<String>> {

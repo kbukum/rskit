@@ -5,7 +5,7 @@ Amazon S3 and S3-compatible storage adapter for `rskit-storage`.
 `rskit-storage-s3` is an opt-in backend crate. The core `rskit-storage` crate
 contains the `FileStore` trait, `StorageRegistry`, and local filesystem backend;
 this crate owns the AWS SDK dependency and registers itself only when the
-application explicitly calls `register_s3`.
+application explicitly calls `register`.
 
 ## Installation
 
@@ -19,13 +19,13 @@ rskit-storage-s3 = "0.1"
 
 ```rust,no_run
 use rskit_storage::{StorageConfig, StorageRegistry};
-use rskit_storage_s3::{S3StoreConfig, register_s3};
+use rskit_storage_s3::{Config, register};
 
 # async fn example() -> rskit_errors::AppResult<()> {
 let mut registry = StorageRegistry::new();
-register_s3(
+register(
     &mut registry,
-    S3StoreConfig {
+    Config {
         bucket: "assets".into(),
         region: Some("us-east-1".into()),
         endpoint: None,

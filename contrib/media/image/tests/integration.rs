@@ -1,7 +1,8 @@
-//! Integration tests for rskit-media-image: ImageProcessor with real image fixtures.
+//! Integration tests for rskit-media-image with real image fixtures.
 
 use image::{ImageFormat, Rgb, RgbImage};
 use rskit_media::{
+    Registry,
     executor::MediaExecutor,
     filter::{Filter, FilterTarget, ParamValue, Params},
     format::Format,
@@ -9,8 +10,8 @@ use rskit_media::{
     output::OutputConfig,
     spatial::Resolution,
 };
-use rskit_media_image::ImageProcessor;
 use rskit_storage::{FileSink, FileSource, TempDir, TempFile};
+use std::sync::Arc;
 
 // ── Fixture generation ──────────────────────────────────────────────────────
 
@@ -39,6 +40,13 @@ fn create_jpeg(width: u32, height: u32) -> TempFile {
     tmp
 }
 
+fn image_executor() -> Arc<dyn MediaExecutor> {
+    let mut registry = Registry::default();
+    rskit_media_image::register(&mut registry, rskit_media_image::Config)
+        .expect("register image backend");
+    registry.executor("image").expect("image executor")
+}
+
 /// Read image dimensions from a FileSource.
 fn read_dimensions(source: &FileSource) -> (u32, u32) {
     match source {
@@ -47,7 +55,7 @@ fn read_dimensions(source: &FileSource) -> (u32, u32) {
             (img.width(), img.height())
         }
         FileSource::Bytes(b) => {
-            let img = image::load_from_memory(b).expect("load from bytes");
+            let img = image::load_from_memory(b.as_ref()).expect("load from bytes");
             (img.width(), img.height())
         }
         FileSource::Temp(t) => {
@@ -75,17 +83,14 @@ fn detect_image_format(source: &FileSource) -> ImageFormat {
 async fn resize_exact() {
     let fixture = create_gradient_png(100, 100);
     let source = FileSource::from_path(fixture.path());
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
 
     let ops = vec![MediaOp::Resize(ResizeOp {
         resolution: Resolution::new(50, 30),
         mode: ResizeMode::Exact,
     })];
 
-    let result = processor
-        .execute(&source, &ops, None)
-        .await
-        .expect("resize");
+    let result = backend.execute(&source, &ops, None).await.expect("resize");
     let (w, h) = read_dimensions(&result);
     assert_eq!((w, h), (50, 30));
 }
@@ -94,14 +99,14 @@ async fn resize_exact() {
 async fn resize_fit() {
     let fixture = create_gradient_png(200, 100);
     let source = FileSource::from_path(fixture.path());
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
 
     let ops = vec![MediaOp::Resize(ResizeOp {
         resolution: Resolution::new(100, 100),
         mode: ResizeMode::Fit,
     })];
 
-    let result = processor
+    let result = backend
         .execute(&source, &ops, None)
         .await
         .expect("resize fit");
@@ -116,14 +121,14 @@ async fn resize_fit() {
 async fn resize_fill() {
     let fixture = create_gradient_png(200, 100);
     let source = FileSource::from_path(fixture.path());
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
 
     let ops = vec![MediaOp::Resize(ResizeOp {
         resolution: Resolution::new(100, 100),
         mode: ResizeMode::Fill,
     })];
 
-    let result = processor
+    let result = backend
         .execute(&source, &ops, None)
         .await
         .expect("resize fill");
@@ -135,14 +140,14 @@ async fn resize_fill() {
 async fn resize_fit_width() {
     let fixture = create_gradient_png(200, 100);
     let source = FileSource::from_path(fixture.path());
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
 
     let ops = vec![MediaOp::Resize(ResizeOp {
         resolution: Resolution::new(100, 0),
         mode: ResizeMode::FitWidth,
     })];
 
-    let result = processor
+    let result = backend
         .execute(&source, &ops, None)
         .await
         .expect("resize fit width");
@@ -155,14 +160,14 @@ async fn resize_fit_width() {
 async fn resize_fit_height() {
     let fixture = create_gradient_png(200, 100);
     let source = FileSource::from_path(fixture.path());
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
 
     let ops = vec![MediaOp::Resize(ResizeOp {
         resolution: Resolution::new(0, 50),
         mode: ResizeMode::FitHeight,
     })];
 
-    let result = processor
+    let result = backend
         .execute(&source, &ops, None)
         .await
         .expect("resize fit height");
@@ -177,11 +182,11 @@ async fn resize_fit_height() {
 async fn crop_center() {
     let fixture = create_gradient_png(100, 100);
     let source = FileSource::from_path(fixture.path());
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
 
     let ops = vec![MediaOp::Crop(CropRegion::new(10, 10, 50, 40))];
 
-    let result = processor.execute(&source, &ops, None).await.expect("crop");
+    let result = backend.execute(&source, &ops, None).await.expect("crop");
     let (w, h) = read_dimensions(&result);
     assert_eq!((w, h), (50, 40));
 }
@@ -192,10 +197,10 @@ async fn crop_center() {
 async fn rotate_90() {
     let fixture = create_gradient_png(100, 50); // landscape
     let source = FileSource::from_path(fixture.path());
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
 
     let ops = vec![MediaOp::Rotate(Rotation::Degrees90)];
-    let result = processor
+    let result = backend
         .execute(&source, &ops, None)
         .await
         .expect("rotate 90");
@@ -207,10 +212,10 @@ async fn rotate_90() {
 async fn rotate_180() {
     let fixture = create_gradient_png(100, 50);
     let source = FileSource::from_path(fixture.path());
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
 
     let ops = vec![MediaOp::Rotate(Rotation::Degrees180)];
-    let result = processor
+    let result = backend
         .execute(&source, &ops, None)
         .await
         .expect("rotate 180");
@@ -222,10 +227,10 @@ async fn rotate_180() {
 async fn rotate_270() {
     let fixture = create_gradient_png(100, 50);
     let source = FileSource::from_path(fixture.path());
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
 
     let ops = vec![MediaOp::Rotate(Rotation::Degrees270)];
-    let result = processor
+    let result = backend
         .execute(&source, &ops, None)
         .await
         .expect("rotate 270");
@@ -239,13 +244,10 @@ async fn rotate_270() {
 async fn flip_horizontal() {
     let fixture = create_gradient_png(100, 100);
     let source = FileSource::from_path(fixture.path());
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
 
     let ops = vec![MediaOp::Flip(FlipDirection::Horizontal)];
-    let result = processor
-        .execute(&source, &ops, None)
-        .await
-        .expect("flip h");
+    let result = backend.execute(&source, &ops, None).await.expect("flip h");
     let (w, h) = read_dimensions(&result);
     assert_eq!((w, h), (100, 100), "flip should not change dimensions");
 }
@@ -254,13 +256,10 @@ async fn flip_horizontal() {
 async fn flip_vertical() {
     let fixture = create_gradient_png(100, 100);
     let source = FileSource::from_path(fixture.path());
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
 
     let ops = vec![MediaOp::Flip(FlipDirection::Vertical)];
-    let result = processor
-        .execute(&source, &ops, None)
-        .await
-        .expect("flip v");
+    let result = backend.execute(&source, &ops, None).await.expect("flip v");
     let (w, h) = read_dimensions(&result);
     assert_eq!((w, h), (100, 100));
 }
@@ -271,7 +270,7 @@ async fn flip_vertical() {
 async fn filter_grayscale() {
     let fixture = create_gradient_png(50, 50);
     let source = FileSource::from_path(fixture.path());
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
 
     let ops = vec![MediaOp::Filter(Filter {
         name: "grayscale".into(),
@@ -279,7 +278,7 @@ async fn filter_grayscale() {
         params: Params::new(),
     })];
 
-    let result = processor
+    let result = backend
         .execute(&source, &ops, None)
         .await
         .expect("grayscale");
@@ -291,7 +290,7 @@ async fn filter_grayscale() {
 async fn filter_blur() {
     let fixture = create_gradient_png(50, 50);
     let source = FileSource::from_path(fixture.path());
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
 
     let ops = vec![MediaOp::Filter(Filter {
         name: "blur".into(),
@@ -299,7 +298,7 @@ async fn filter_blur() {
         params: Params::new().set("radius", ParamValue::Float(2.0)),
     })];
 
-    let result = processor.execute(&source, &ops, None).await.expect("blur");
+    let result = backend.execute(&source, &ops, None).await.expect("blur");
     let (w, h) = read_dimensions(&result);
     assert_eq!((w, h), (50, 50));
 }
@@ -308,7 +307,7 @@ async fn filter_blur() {
 async fn filter_brightness() {
     let fixture = create_gradient_png(50, 50);
     let source = FileSource::from_path(fixture.path());
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
 
     let ops = vec![MediaOp::Filter(Filter {
         name: "brightness".into(),
@@ -316,7 +315,7 @@ async fn filter_brightness() {
         params: Params::new().set("value", ParamValue::Int(30)),
     })];
 
-    let result = processor
+    let result = backend
         .execute(&source, &ops, None)
         .await
         .expect("brightness");
@@ -328,7 +327,7 @@ async fn filter_brightness() {
 async fn filter_contrast() {
     let fixture = create_gradient_png(50, 50);
     let source = FileSource::from_path(fixture.path());
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
 
     let ops = vec![MediaOp::Filter(Filter {
         name: "contrast".into(),
@@ -336,7 +335,7 @@ async fn filter_contrast() {
         params: Params::new().set("value", ParamValue::Float(1.5)),
     })];
 
-    let result = processor
+    let result = backend
         .execute(&source, &ops, None)
         .await
         .expect("contrast");
@@ -350,7 +349,7 @@ async fn filter_contrast() {
 async fn transcode_png_to_jpeg() {
     let fixture = create_gradient_png(100, 100);
     let source = FileSource::from_path(fixture.path());
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
 
     let dir = TempDir::new().expect("temp dir");
     let out_path = dir.path().join("output.jpg");
@@ -366,7 +365,7 @@ async fn transcode_png_to_jpeg() {
     };
 
     let ops = vec![MediaOp::Transcode(config)];
-    let result = processor
+    let result = backend
         .execute(&source, &ops, Some(&sink))
         .await
         .expect("transcode");
@@ -384,7 +383,7 @@ async fn transcode_png_to_jpeg() {
 async fn transcode_png_to_webp() {
     let fixture = create_gradient_png(100, 100);
     let source = FileSource::from_path(fixture.path());
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
 
     let dir = TempDir::new().expect("temp dir");
     let out_path = dir.path().join("output.webp");
@@ -400,7 +399,7 @@ async fn transcode_png_to_webp() {
     };
 
     let ops = vec![MediaOp::Transcode(config)];
-    let result = processor
+    let result = backend
         .execute(&source, &ops, Some(&sink))
         .await
         .expect("transcode webp");
@@ -418,7 +417,7 @@ async fn transcode_png_to_webp() {
 async fn multi_op_resize_then_crop_then_rotate() {
     let fixture = create_gradient_png(200, 200);
     let source = FileSource::from_path(fixture.path());
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
 
     let ops = vec![
         MediaOp::Resize(ResizeOp {
@@ -429,7 +428,7 @@ async fn multi_op_resize_then_crop_then_rotate() {
         MediaOp::Rotate(Rotation::Degrees90),
     ];
 
-    let result = processor
+    let result = backend
         .execute(&source, &ops, None)
         .await
         .expect("multi-op");
@@ -444,14 +443,14 @@ async fn multi_op_resize_then_crop_then_rotate() {
 async fn output_to_path() {
     let fixture = create_gradient_png(50, 50);
     let source = FileSource::from_path(fixture.path());
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
 
     let dir = TempDir::new().expect("temp dir");
     let out_path = dir.path().join("result.png");
     let sink = FileSink::Path(out_path.clone());
 
     let ops = vec![MediaOp::Flip(FlipDirection::Horizontal)];
-    let result = processor
+    let result = backend
         .execute(&source, &ops, Some(&sink))
         .await
         .expect("output path");
@@ -469,10 +468,10 @@ async fn output_to_path() {
 async fn output_to_memory() {
     let fixture = create_gradient_png(50, 50);
     let source = FileSource::from_path(fixture.path());
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
 
     let ops = vec![MediaOp::Flip(FlipDirection::Horizontal)];
-    let result = processor
+    let result = backend
         .execute(&source, &ops, Some(&FileSink::Memory))
         .await
         .expect("output memory");
@@ -492,10 +491,10 @@ async fn output_to_memory() {
 async fn output_to_temp() {
     let fixture = create_gradient_png(50, 50);
     let source = FileSource::from_path(fixture.path());
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
 
     let ops = vec![MediaOp::Flip(FlipDirection::Horizontal)];
-    let result = processor
+    let result = backend
         .execute(&source, &ops, Some(&FileSink::Temp))
         .await
         .expect("output temp");
@@ -513,7 +512,7 @@ async fn output_to_temp() {
 
 #[test]
 fn supports_image_ops() {
-    let p = ImageProcessor::new();
+    let p = image_executor();
     assert!(p.supports(&MediaOp::Resize(ResizeOp {
         resolution: Resolution::p720(),
         mode: ResizeMode::Fit,
@@ -525,7 +524,7 @@ fn supports_image_ops() {
 
 #[test]
 fn rejects_video_ops() {
-    let p = ImageProcessor::new();
+    let p = image_executor();
     assert!(!p.supports(&MediaOp::StripAudio));
     assert!(!p.supports(&MediaOp::StripVideo));
     assert!(!p.supports(&MediaOp::Reverse));
@@ -537,14 +536,14 @@ fn rejects_video_ops() {
 async fn error_on_unsupported_op() {
     let fixture = create_gradient_png(50, 50);
     let source = FileSource::from_path(fixture.path());
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
 
     let ops = vec![MediaOp::StripAudio];
-    let result = processor.execute(&source, &ops, None).await;
+    let result = backend.execute(&source, &ops, None).await;
     assert!(result.is_err(), "should reject unsupported ops");
 }
 
-// ── Performance comparison: ImageProcessor vs raw image crate ───────────────
+// ── Performance comparison: registered image backend vs raw image crate ───────────────
 
 #[tokio::test]
 async fn perf_resize_comparison() {
@@ -552,21 +551,18 @@ async fn perf_resize_comparison() {
     let source = FileSource::from_path(fixture.path());
 
     // Warm up
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
     let ops = vec![MediaOp::Resize(ResizeOp {
         resolution: Resolution::new(200, 200),
         mode: ResizeMode::Exact,
     })];
 
-    // Measure ImageProcessor
+    // Measure registered image backend
     let start = std::time::Instant::now();
     for _ in 0..5 {
-        let _ = processor
-            .execute(&source, &ops, None)
-            .await
-            .expect("resize");
+        let _ = backend.execute(&source, &ops, None).await.expect("resize");
     }
-    let processor_time = start.elapsed() / 5;
+    let backend_time = start.elapsed() / 5;
 
     // Measure raw image crate
     let start = std::time::Instant::now();
@@ -577,19 +573,19 @@ async fn perf_resize_comparison() {
     let raw_time = start.elapsed() / 5;
 
     println!("=== Image Resize Performance (1000×1000 → 200×200, avg of 5) ===");
-    println!("  ImageProcessor:   {processor_time:?}");
+    println!("  registered image backend:   {backend_time:?}");
     println!("  Raw image crate:  {raw_time:?}");
     let overhead_pct = if raw_time.as_nanos() > 0 {
-        ((processor_time.as_nanos() as f64 / raw_time.as_nanos() as f64) - 1.0) * 100.0
+        ((backend_time.as_nanos() as f64 / raw_time.as_nanos() as f64) - 1.0) * 100.0
     } else {
         0.0
     };
     println!("  Overhead:         {overhead_pct:.1}%");
 
-    // ImageProcessor should not be more than 50% slower than raw
+    // registered image backend should not be more than 50% slower than raw
     assert!(
-        processor_time < raw_time * 3,
-        "ImageProcessor is too slow: {processor_time:?} vs {raw_time:?}"
+        backend_time < raw_time * 3,
+        "registered image backend is too slow: {backend_time:?} vs {raw_time:?}"
     );
 }
 
@@ -598,15 +594,15 @@ async fn perf_crop_comparison() {
     let fixture = create_gradient_png(1000, 1000);
     let source = FileSource::from_path(fixture.path());
 
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
     let ops = vec![MediaOp::Crop(CropRegion::new(100, 100, 500, 500))];
 
-    // Measure ImageProcessor
+    // Measure registered image backend
     let start = std::time::Instant::now();
     for _ in 0..5 {
-        let _ = processor.execute(&source, &ops, None).await.expect("crop");
+        let _ = backend.execute(&source, &ops, None).await.expect("crop");
     }
-    let processor_time = start.elapsed() / 5;
+    let backend_time = start.elapsed() / 5;
 
     // Measure raw image crate
     let start = std::time::Instant::now();
@@ -617,10 +613,10 @@ async fn perf_crop_comparison() {
     let raw_time = start.elapsed() / 5;
 
     println!("=== Image Crop Performance (1000×1000 → 500×500, avg of 5) ===");
-    println!("  ImageProcessor:   {processor_time:?}");
+    println!("  registered image backend:   {backend_time:?}");
     println!("  Raw image crate:  {raw_time:?}");
     let overhead_pct = if raw_time.as_nanos() > 0 {
-        ((processor_time.as_nanos() as f64 / raw_time.as_nanos() as f64) - 1.0) * 100.0
+        ((backend_time.as_nanos() as f64 / raw_time.as_nanos() as f64) - 1.0) * 100.0
     } else {
         0.0
     };
@@ -632,7 +628,7 @@ async fn perf_multi_op_pipeline() {
     let fixture = create_gradient_png(500, 500);
     let source = FileSource::from_path(fixture.path());
 
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
     let ops = vec![
         MediaOp::Resize(ResizeOp {
             resolution: Resolution::new(200, 200),
@@ -645,7 +641,7 @@ async fn perf_multi_op_pipeline() {
 
     let start = std::time::Instant::now();
     for _ in 0..5 {
-        let _ = processor
+        let _ = backend
             .execute(&source, &ops, None)
             .await
             .expect("multi-op");

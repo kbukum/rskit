@@ -25,19 +25,17 @@ pub(crate) struct FfmpegInput {
 /// generate more accurate filter graphs. Without hints, the builder uses conservative
 /// defaults.
 #[derive(Debug, Clone, Default)]
-pub struct SourceHints {
+pub(crate) struct SourceHints {
     /// Whether the primary source has at least one audio stream.
     /// `None` means unknown — the builder will assume audio exists (common case).
     pub has_audio: Option<bool>,
-    /// Whether the primary source has at least one video stream.
-    pub has_video: Option<bool>,
 }
 
 /// Compiled FFmpeg command ready for execution.
 ///
 /// Holds all inputs, filters, output options, and global flags. Use
 /// [`compile`](FfmpegCommand::compile) to construct from media operations.
-pub struct FfmpegCommand {
+pub(crate) struct FfmpegCommand {
     /// Input file specifications.
     pub(crate) inputs: Vec<FfmpegInput>,
     /// Video filter expressions (joined with `,` into a `-vf` chain).
@@ -60,7 +58,7 @@ impl FfmpegCommand {
     ///
     /// Uses default [`SourceHints`] (assumes audio present). For more accurate
     /// compilation when stream info is known, use [`compile_with_hints`](Self::compile_with_hints).
-    pub fn compile(
+    pub(crate) fn compile(
         source: &FileSource,
         ops: &[MediaOp],
         sink: Option<&FileSink>,
@@ -71,7 +69,7 @@ impl FfmpegCommand {
     }
 
     /// Compile operations into an FFmpeg command, using source hints for smarter output.
-    pub fn compile_with_hints(
+    pub(crate) fn compile_with_hints(
         source: &FileSource,
         ops: &[MediaOp],
         sink: Option<&FileSink>,
@@ -193,7 +191,7 @@ impl FfmpegCommand {
     }
 
     /// Build the final FFmpeg CLI argument list (excluding the output path).
-    pub fn to_args(&self) -> Vec<String> {
+    pub(crate) fn to_args(&self) -> Vec<String> {
         self.to_os_args()
             .into_iter()
             .map(|arg| arg.to_string_lossy().into_owned())
@@ -201,7 +199,7 @@ impl FfmpegCommand {
     }
 
     /// Build the final FFmpeg CLI argument list preserving OS-native path arguments.
-    pub fn to_os_args(&self) -> Vec<OsString> {
+    pub(crate) fn to_os_args(&self) -> Vec<OsString> {
         let mut args = Vec::new();
 
         args.extend(self.global_opts.iter().map(OsString::from));

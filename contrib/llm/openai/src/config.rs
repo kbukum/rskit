@@ -1,9 +1,11 @@
 //! Configuration for the `OpenAI` provider.
 
+use std::fmt;
+
 use serde::Deserialize;
 
 /// `OpenAI` provider configuration.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct Config {
     /// `OpenAI` API key.
     pub api_key: String,
@@ -20,9 +22,24 @@ pub struct Config {
     #[serde(default = "default_embedding_model")]
     pub embedding_model: String,
 
-    /// Embedding vector dimensions.
-    #[serde(default = "default_embedding_dimensions")]
-    pub embedding_dimensions: usize,
+    /// Optional embedding vector dimensions.
+    ///
+    /// Leave unset for models that do not accept a `dimensions` request field
+    /// or when the model default dimensionality should be used.
+    #[serde(default)]
+    pub embedding_dimensions: Option<usize>,
+}
+
+impl fmt::Debug for Config {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Config")
+            .field("api_key", &"<redacted>")
+            .field("base_url", &self.base_url)
+            .field("model", &self.model)
+            .field("embedding_model", &self.embedding_model)
+            .field("embedding_dimensions", &self.embedding_dimensions)
+            .finish()
+    }
 }
 
 fn default_base_url() -> String {
@@ -37,10 +54,6 @@ fn default_embedding_model() -> String {
     "text-embedding-3-small".into()
 }
 
-const fn default_embedding_dimensions() -> usize {
-    1536
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -53,7 +66,7 @@ mod tests {
         assert_eq!(cfg.base_url, "https://api.openai.com/v1");
         assert_eq!(cfg.model, "gpt-4o");
         assert_eq!(cfg.embedding_model, "text-embedding-3-small");
-        assert_eq!(cfg.embedding_dimensions, 1536);
+        assert_eq!(cfg.embedding_dimensions, None);
     }
 
     #[test]
@@ -69,6 +82,6 @@ mod tests {
         assert_eq!(cfg.base_url, "http://localhost:8080");
         assert_eq!(cfg.model, "gpt-3.5-turbo");
         assert_eq!(cfg.embedding_model, "text-embedding-ada-002");
-        assert_eq!(cfg.embedding_dimensions, 768);
+        assert_eq!(cfg.embedding_dimensions, Some(768));
     }
 }

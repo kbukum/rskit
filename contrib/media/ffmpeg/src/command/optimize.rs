@@ -17,7 +17,7 @@ impl FfmpegCommand {
     /// - Multiple volume adjustments: multiply factors
     /// - Speed(1.0): remove (no-op)
     /// - Multiple consecutive Extract: keep only the last
-    pub fn optimize_ops(ops: &[MediaOp]) -> Vec<MediaOp> {
+    pub(crate) fn optimize_ops(ops: &[MediaOp]) -> Vec<MediaOp> {
         let mut result: Vec<MediaOp> = Vec::with_capacity(ops.len());
 
         for op in ops {
@@ -53,6 +53,7 @@ impl FfmpegCommand {
                         result.push(op.clone());
                     }
                 }
+
                 _ => result.push(op.clone()),
             }
         }
@@ -64,7 +65,7 @@ impl FfmpegCommand {
     ///
     /// Catches invalid combinations that would cause FFmpeg to fail with
     /// cryptic errors or produce incorrect output.
-    pub fn validate_ops(ops: &[MediaOp]) -> AppResult<()> {
+    pub(crate) fn validate_ops(ops: &[MediaOp]) -> AppResult<()> {
         let mut has_strip_audio = false;
         let mut has_strip_video = false;
         let mut has_audio_op = false;
@@ -75,30 +76,16 @@ impl FfmpegCommand {
         let mut overlay_count = 0;
 
         for op in ops {
+            has_audio_op |= op.requires_audio_track();
+            has_video_op |= op.requires_video_track();
+
             match op {
                 MediaOp::StripAudio => has_strip_audio = true,
                 MediaOp::StripVideo => has_strip_video = true,
-                MediaOp::Volume(_)
-                | MediaOp::NormalizeAudio
-                | MediaOp::MixAudio(_)
-                | MediaOp::ReplaceAudio(_) => has_audio_op = true,
-                MediaOp::Resize(_)
-                | MediaOp::Crop(_)
-                | MediaOp::Rotate(_)
-                | MediaOp::Flip(_)
-                | MediaOp::Pad(_)
-                | MediaOp::BurnSubtitles(_) => has_video_op = true,
-                MediaOp::Overlay(_) => {
-                    has_video_op = true;
-                    overlay_count += 1;
-                }
+                MediaOp::Overlay(_) => overlay_count += 1,
                 MediaOp::Extract(_) => extract_count += 1,
                 MediaOp::ExtractMany(_) => extract_many_count += 1,
                 MediaOp::Concat(_) => concat_count += 1,
-                MediaOp::Filter(f) => match f.target {
-                    rskit_media::filter::FilterTarget::Video => has_video_op = true,
-                    rskit_media::filter::FilterTarget::Audio => has_audio_op = true,
-                },
                 _ => {}
             }
         }
@@ -147,5 +134,64 @@ impl FfmpegCommand {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_rejects_audio_strip_before_dual_track_speed() {
+        let err = FfmpegCommand::validate_ops(&[MediaOp::StripAudio, MediaOp::Speed(2.0)])
+            .expect_err("speed compiles audio filters and must not follow StripAudio");
+        assert_eq!(err.code, rskit_errors::ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn validate_rejects_video_strip_before_dual_track_reverse() {
+        let err = FfmpegCommand::validate_ops(&[MediaOp::StripVideo, MediaOp::Reverse])
+            .expect_err("reverse compiles video filters and must not follow StripVideo");
+        assert_eq!(err.code, rskit_errors::ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn validate_rejects_video_strip_before_extract_many() {
+        let err = FfmpegCommand::validate_ops(&[
+            MediaOp::StripVideo,
+            MediaOp::ExtractMany(vec![rskit_media::time::Segment::new(
+                rskit_media::time::TimeRange::from_seconds(0.0, 1.0),
+            )]),
+        ])
+        .expect_err(
+            "multi-segment extract compiles video concat pads and must not follow StripVideo",
+        );
+        assert_eq!(err.code, rskit_errors::ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn validate_rejects_video_strip_before_concat() {
+        let err = FfmpegCommand::validate_ops(&[
+            MediaOp::StripVideo,
+            MediaOp::Concat(rskit_media::ops::ConcatOp {
+                source: rskit_storage::FileSource::from_path("next.mp4"),
+                transition: None,
+            }),
+        ])
+        .expect_err("concat compiles video pads and must not follow StripVideo");
+        assert_eq!(err.code, rskit_errors::ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn validate_rejects_video_strip_before_replace_audio() {
+        let err = FfmpegCommand::validate_ops(&[
+            MediaOp::StripVideo,
+            MediaOp::ReplaceAudio(rskit_media::ops::ReplaceAudioOp {
+                audio_source: rskit_storage::FileSource::from_path("audio.wav"),
+                offset: None,
+            }),
+        ])
+        .expect_err("replace-audio maps the primary video stream and must not follow StripVideo");
+        assert_eq!(err.code, rskit_errors::ErrorCode::InvalidInput);
     }
 }

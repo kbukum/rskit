@@ -13,10 +13,11 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use rskit_errors::{AppError, AppResult, ErrorCode};
+use rskit_media::Registry;
 use rskit_media::executor::MediaExecutor;
 use rskit_media::ops::{CropRegion, MediaOp, ResizeMode, ResizeOp, Rotation};
 use rskit_media::spatial::Resolution;
-use rskit_media_image::ImageProcessor;
+use rskit_media_image::{Config as ImageConfig, register as register_image};
 use rskit_storage::{FileSink, FileSource, TempFile, detect_mime, file_meta};
 use rskit_worker::{Event, Handler, Progress};
 use tokio::sync::mpsc;
@@ -167,7 +168,7 @@ impl Handler<AgentTask, TaskOutput> for AgentHandler {
                     // Actual resize at step 6
                     if i == 6 {
                         let source = FileSource::from_path(&path);
-                        let processor = ImageProcessor::new();
+                        let processor = image_executor()?;
                         let ops = vec![MediaOp::Resize(ResizeOp {
                             resolution: Resolution::new(width, height),
                             mode: ResizeMode::Fit,
@@ -220,7 +221,7 @@ impl Handler<AgentTask, TaskOutput> for AgentHandler {
                 let total = steps.len() as u64;
 
                 let source = FileSource::from_path(&path);
-                let processor = ImageProcessor::new();
+                let processor = image_executor()?;
                 let ops = vec![
                     MediaOp::Resize(ResizeOp {
                         resolution: Resolution::new(400, 400),
@@ -236,6 +237,7 @@ impl Handler<AgentTask, TaskOutput> for AgentHandler {
                     if delay_ms > 0 {
                         tokio::time::sleep(Duration::from_millis(delay_ms)).await;
                     }
+
                     // Execute full pipeline at step 4
                     if i == 4 {
                         let _result = processor.execute(&source, &ops, None).await?;
@@ -354,6 +356,12 @@ pub fn format_size(bytes: u64) -> String {
     } else {
         format!("{bytes} B")
     }
+}
+
+fn image_executor() -> AppResult<std::sync::Arc<dyn MediaExecutor>> {
+    let mut registry = Registry::default();
+    register_image(&mut registry, ImageConfig)?;
+    registry.executor("image")
 }
 
 async fn emit_progress(

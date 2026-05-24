@@ -60,6 +60,10 @@ rskit-sse           = { version = "0.1.0", path = "../rskit-sse",           opti
 rskit-dag           = { version = "0.1.0", path = "../rskit-dag",           optional = true }
 rskit-ai        = { version = "0.1.0", path = "../rskit-ai",        optional = true }
 rskit-llm           = { version = "0.1.0", path = "../rskit-llm",           optional = true }
+rskit-llm-openai    = { version = "0.1.0", path = "../../contrib/llm/openai", optional = true }
+rskit-llm-anthropic = { version = "0.1.0", path = "../../contrib/llm/anthropic", optional = true }
+rskit-llm-ollama    = { version = "0.1.0", path = "../../contrib/llm/ollama", optional = true }
+rskit-llm-gemini    = { version = "0.1.0", path = "../../contrib/llm/gemini", optional = true }
 rskit-embedding     = { version = "0.1.0", path = "../rskit-embedding",     optional = true }
 rskit-inference     = { version = "0.1.0", path = "../rskit-inference",     optional = true }
 rskit-inference-triton = { version = "0.1.0", path = "../../contrib/inference/triton", optional = true }
@@ -75,6 +79,7 @@ rskit-storage-gcs   = { version = "0.1.0", path = "../../contrib/storage/gcs", o
 rskit-media         = { version = "0.1.0", path = "../rskit-media",         optional = true }
 rskit-media-ffmpeg  = { version = "0.1.0", path = "../../contrib/media/ffmpeg",  optional = true }
 rskit-media-image   = { version = "0.1.0", path = "../../contrib/media/image",   optional = true }
+rskit-media-audio   = { version = "0.1.0", path = "../../contrib/media/audio",   optional = true }
 rskit-workload      = { version = "0.1.0", path = "../rskit-workload",      optional = true }
 rskit-cli           = { version = "0.1.0", path = "../rskit-cli",           optional = true }
 rskit-git           = { version = "0.1.0", path = "../rskit-git",           optional = true }
@@ -112,6 +117,10 @@ sse           = ["dep:rskit-sse"]
 dag           = ["dep:rskit-dag"]
 genai        = ["dep:rskit-ai"]
 llm           = ["genai", "dep:rskit-llm"]
+llm-openai    = ["llm", "dep:rskit-llm-openai"]
+llm-anthropic = ["llm", "dep:rskit-llm-anthropic"]
+llm-ollama    = ["llm", "dep:rskit-llm-ollama"]
+llm-gemini    = ["llm", "dep:rskit-llm-gemini"]
 embedding     = ["genai", "dep:rskit-embedding"]
 inference     = ["dep:rskit-inference"]
 inference-triton = ["inference", "dep:rskit-inference-triton"]
@@ -126,7 +135,8 @@ storage       = ["dep:rskit-storage"]
 media         = ["dep:rskit-media", "storage"]
 media-ffmpeg  = ["dep:rskit-media-ffmpeg", "media"]
 media-image   = ["dep:rskit-media-image", "media"]
-media-full    = ["media-ffmpeg", "media-image"]
+media-audio   = ["dep:rskit-media-audio", "media"]
+media-full    = ["media-ffmpeg", "media-image", "media-audio"]
 storage-s3    = ["storage", "dep:rskit-storage-s3"]
 storage-gcs   = ["storage", "dep:rskit-storage-gcs"]
 workload      = ["dep:rskit-workload"]
@@ -142,7 +152,8 @@ stateful      = ["dep:rskit-stateful"]
 full          = [
     "server", "grpc", "encryption", "http", "httpclient", "auth", "di", "database", "cache", "messaging",
     "cache-redis", "messaging-kafka", "messaging-nats", "messaging-rabbitmq",
-    "observability", "authz", "security", "discovery", "sse", "dag", "genai", "llm", "embedding",
+    "observability", "authz", "security", "discovery", "sse", "dag", "genai", "llm",
+    "llm-openai", "llm-anthropic", "llm-ollama", "llm-gemini", "embedding",
     "inference", "inference-triton", "inference-vllm", "inference-tgi",
     "prompt", "skill", "tool", "agent", "mcp", "media-full", "storage", "storage-s3", "storage-gcs",
     "workload", "cli", "git", "dataset", "bench", "vectorstore", "vectorstore-qdrant", "chain", "process", "stateful",

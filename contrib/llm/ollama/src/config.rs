@@ -1,5 +1,7 @@
 //! Configuration for the Ollama provider.
 
+use std::fmt;
+
 use serde::Deserialize;
 
 /// Ollama provider configuration.
@@ -7,7 +9,7 @@ use serde::Deserialize;
 /// Ollama exposes an OpenAI-compatible chat-completions endpoint at
 /// `<base_url>/v1/chat/completions`. No API key is required for a local
 /// instance, but one may be set for remote/proxied deployments.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct Config {
     /// Base URL of the Ollama server (default: `http://localhost:11434`).
     #[serde(default = "default_base_url")]
@@ -20,6 +22,16 @@ pub struct Config {
     /// Optional API key for remote/proxied Ollama instances.
     #[serde(default)]
     pub api_key: Option<String>,
+}
+
+impl fmt::Debug for Config {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Config")
+            .field("base_url", &self.base_url)
+            .field("model", &self.model)
+            .field("api_key", &self.api_key.as_ref().map(|_| "<redacted>"))
+            .finish()
+    }
 }
 
 fn default_base_url() -> String {

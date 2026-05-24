@@ -25,21 +25,20 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
 
-/// NATS configuration types.
-pub mod config;
+mod config;
 
 use crate::config::{subject_for, validate_subject};
-pub use config::NatsConfig;
+pub use config::NatsConfig as Config;
 
 /// NATS-backed message producer.
-pub struct NatsProducer {
-    config: NatsConfig,
+pub(crate) struct NatsProducer {
+    config: Config,
     client: Mutex<Option<Client>>,
 }
 
 impl NatsProducer {
     /// Create a producer that connects lazily on first use.
-    pub fn new(config: NatsConfig) -> AppResult<Self> {
+    pub(crate) fn new(config: Config) -> AppResult<Self> {
         config.validate()?;
         Ok(Self {
             config,
@@ -129,8 +128,8 @@ impl EventProducer for NatsProducer {
 }
 
 /// NATS-backed message consumer.
-pub struct NatsConsumer {
-    config: NatsConfig,
+pub(crate) struct NatsConsumer {
+    config: Config,
     client: Mutex<Option<Client>>,
     sender: mpsc::Sender<Message<Vec<u8>>>,
     receiver: Mutex<mpsc::Receiver<Message<Vec<u8>>>>,
@@ -147,7 +146,7 @@ struct ConsumerTask {
 
 impl NatsConsumer {
     /// Create a consumer that connects lazily when subscribing.
-    pub fn new(config: NatsConfig) -> AppResult<Self> {
+    pub(crate) fn new(config: Config) -> AppResult<Self> {
         config.validate()?;
         let capacity = config.subscription_buffer;
         let (sender, receiver) = mpsc::channel(capacity);
@@ -308,7 +307,7 @@ impl EventConsumer for NatsConsumer {
 }
 
 /// Register NATS producer and consumer factories for `Vec<u8>` payloads.
-pub fn register(registry: &mut MessagingRegistry<Vec<u8>>, config: NatsConfig) -> AppResult<()> {
+pub fn register(registry: &mut MessagingRegistry<Vec<u8>>, config: Config) -> AppResult<()> {
     config.validate()?;
     if !config.base.enabled {
         return Ok(());
@@ -318,7 +317,7 @@ pub fn register(registry: &mut MessagingRegistry<Vec<u8>>, config: NatsConfig) -
 }
 
 struct NatsFactory {
-    config: NatsConfig,
+    config: Config,
 }
 
 impl MessagingFactory<Vec<u8>> for NatsFactory {
@@ -337,13 +336,13 @@ impl MessagingFactory<Vec<u8>> for NatsFactory {
     }
 }
 
-async fn connect(config: &NatsConfig) -> Result<Client, async_nats::ConnectError> {
+async fn connect(config: &Config) -> Result<Client, async_nats::ConnectError> {
     connect_options(config)
         .connect(config.servers.clone())
         .await
 }
 
-fn connect_options(config: &NatsConfig) -> ConnectOptions {
+fn connect_options(config: &Config) -> ConnectOptions {
     let mut options = ConnectOptions::new()
         .name(config.base.name.clone())
         .connection_timeout(Duration::from_millis(config.connection_timeout))
@@ -406,13 +405,13 @@ mod tests {
     #[test]
     fn register_adds_nats_factories_without_connecting() {
         let mut registry = MessagingRegistry::<Vec<u8>>::new();
-        register(&mut registry, NatsConfig::default()).unwrap();
+        register(&mut registry, Config::default()).unwrap();
         assert_eq!(registry.adapters(), vec!["nats"]);
     }
 
     #[test]
     fn nats_config_deserializes_adapter_defaults() {
-        let config: NatsConfig = serde_json::from_str("{}").unwrap();
+        let config: Config = serde_json::from_str("{}").unwrap();
 
         assert_eq!(config.base.adapter, "nats");
         assert_eq!(config.servers, vec!["tls://127.0.0.1:4222".to_string()]);
@@ -421,10 +420,10 @@ mod tests {
 
     #[test]
     fn nats_config_debug_redacts_url_credentials() {
-        let config = NatsConfig {
+        let config = Config {
             servers: vec!["nats://token:secret@example.test:4222".to_string()],
             subscription_buffer: 1,
-            ..NatsConfig::default()
+            ..Config::default()
         };
 
         let debug = format!("{config:?}");
@@ -437,15 +436,15 @@ mod tests {
 
     #[test]
     fn nats_config_validate_rejects_unsupported_semantics_and_bad_auth() {
-        let mut config = NatsConfig::default();
+        let mut config = Config::default();
         config.base.delivery_guarantee = DeliveryGuarantee::ExactlyOnce;
         assert!(config.validate().is_err());
 
-        config = NatsConfig::default();
+        config = Config::default();
         config.username = Some("user".to_string());
         assert!(config.validate().is_err());
 
-        config = NatsConfig::default();
+        config = Config::default();
         config.token = Some("token".to_string());
         config.password = Some("password".to_string());
         config.username = Some("user".to_string());
@@ -454,30 +453,30 @@ mod tests {
 
     #[test]
     fn nats_config_rejects_plaintext_without_dev_opt_in_and_bad_names() {
-        let mut config = NatsConfig {
+        let mut config = Config {
             servers: vec!["nats://127.0.0.1:4222".to_string()],
-            ..NatsConfig::default()
+            ..Config::default()
         };
         assert!(config.validate().is_err());
         config.allow_insecure_dev = true;
         assert!(config.validate().is_ok());
 
-        config = NatsConfig {
+        config = Config {
             servers: vec!["tls://token:secret@example.test:4222".to_string()],
-            ..NatsConfig::default()
+            ..Config::default()
         };
         assert!(config.validate().is_err());
 
-        config = NatsConfig::default();
+        config = Config::default();
         config.base.consumer_group = Some("bad group".to_string());
         assert!(config.validate().is_err());
     }
 
     #[test]
     fn nats_subject_prefix_is_applied_consistently() {
-        let config = NatsConfig {
+        let config = Config {
             subject_prefix: "svc.".to_string(),
-            ..NatsConfig::default()
+            ..Config::default()
         };
 
         assert_eq!(subject_for(&config, "events").unwrap(), "svc.events");
@@ -505,30 +504,30 @@ mod tests {
     }
     #[test]
     fn nats_subject_prefix_validates_combined_subject() {
-        let config = NatsConfig {
+        let config = Config {
             subject_prefix: "svc.".to_string(),
             base: rskit_messaging::BrokerConfig {
                 topics: vec!["bad subject".to_string()],
-                ..NatsConfig::default().base
+                ..Config::default().base
             },
-            ..NatsConfig::default()
+            ..Config::default()
         };
         assert!(config.validate().is_err());
 
-        let config = NatsConfig {
+        let config = Config {
             subject_prefix: "svc..".to_string(),
             base: rskit_messaging::BrokerConfig {
                 topics: vec!["events".to_string()],
-                ..NatsConfig::default().base
+                ..Config::default().base
             },
-            ..NatsConfig::default()
+            ..Config::default()
         };
         assert!(config.validate().is_err());
     }
 
     #[tokio::test]
     async fn recv_returns_when_subscribed_tasks_have_closed() {
-        let consumer = NatsConsumer::new(NatsConfig::default()).unwrap();
+        let consumer = NatsConsumer::new(Config::default()).unwrap();
         consumer.subscribed.store(true, Ordering::SeqCst);
 
         let result = consumer.recv().await;

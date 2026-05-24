@@ -40,7 +40,7 @@ impl Inference for FakeInference {
 }
 
 fn fake_factory() -> Factory {
-    Arc::new(|_config| Ok(Arc::new(FakeInference)))
+    Arc::new(|| Ok(Arc::new(FakeInference)))
 }
 
 #[test]
@@ -51,9 +51,7 @@ fn registers_and_builds_adapter() {
         .expect("register fake adapter");
 
     assert_eq!(registry.kinds(), vec!["fake".to_owned()]);
-    let adapter = registry
-        .build(" fake ", serde_json::Value::Null)
-        .expect("build fake adapter");
+    let adapter = registry.build(" fake ").expect("build fake adapter");
     assert_eq!(adapter.descriptor().name, "fake");
 }
 
@@ -81,7 +79,7 @@ fn rejects_duplicate_and_empty_kinds() {
 #[test]
 fn unknown_kind_returns_inference_error() {
     let registry = rskit_inference::Registry::new();
-    let err = match registry.build("missing", serde_json::Value::Null) {
+    let err = match registry.build("missing") {
         Ok(_) => panic!("unknown kind unexpectedly built"),
         Err(err) => err,
     };

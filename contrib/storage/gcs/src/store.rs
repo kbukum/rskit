@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 
 /// Configuration for the Google Cloud Storage backend.
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct GcsStoreConfig {
+pub struct Config {
     /// GCS bucket name.
     pub bucket: String,
     /// Key prefix for all objects.
@@ -30,15 +30,15 @@ pub struct GcsStoreConfig {
 }
 
 /// Google Cloud Storage backend.
-pub struct GcsStore {
+struct GcsStore {
     storage: Storage,
     control: StorageControl,
-    config: GcsStoreConfig,
+    config: Config,
 }
 
 impl GcsStore {
     /// Create a new Google Cloud Storage backend.
-    pub async fn new(config: GcsStoreConfig) -> AppResult<Self> {
+    async fn new(config: Config) -> AppResult<Self> {
         let (storage, control) = if config.anonymous {
             let storage = Storage::builder()
                 .with_credentials(AnonymousCredentials::new().build())
@@ -81,11 +81,6 @@ impl GcsStore {
             control,
             config,
         })
-    }
-
-    /// Returns the bucket name.
-    pub fn bucket(&self) -> &str {
-        &self.config.bucket
     }
 
     fn full_key(&self, key: &str) -> String {
@@ -281,7 +276,7 @@ impl FileStore for GcsStore {
 }
 
 struct GcsFactory {
-    config: GcsStoreConfig,
+    config: Config,
 }
 
 #[async_trait::async_trait]
@@ -292,7 +287,7 @@ impl StorageFactory for GcsFactory {
 }
 
 /// Explicitly register the Google Cloud Storage backend.
-pub fn register_gcs(registry: &mut StorageRegistry, config: GcsStoreConfig) -> AppResult<()> {
+pub fn register(registry: &mut StorageRegistry, config: Config) -> AppResult<()> {
     registry.register("gcs", Arc::new(GcsFactory { config }))
 }
 
@@ -303,7 +298,7 @@ mod tests {
     #[test]
     fn config_deserializes_with_authenticated_default() {
         let json = r#"{"bucket": "test"}"#;
-        let cfg: GcsStoreConfig = serde_json::from_str(json).unwrap();
+        let cfg: Config = serde_json::from_str(json).unwrap();
         assert_eq!(cfg.bucket, "test");
         assert!(cfg.prefix.is_none());
         assert!(!cfg.anonymous);
@@ -312,7 +307,7 @@ mod tests {
     #[test]
     fn config_deserializes_anonymous_opt_in() {
         let json = r#"{"bucket": "public-assets", "prefix": "uploads", "anonymous": true}"#;
-        let cfg: GcsStoreConfig = serde_json::from_str(json).unwrap();
+        let cfg: Config = serde_json::from_str(json).unwrap();
         assert_eq!(cfg.bucket, "public-assets");
         assert_eq!(cfg.prefix.as_deref(), Some("uploads"));
         assert!(cfg.anonymous);
@@ -321,7 +316,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires GCS network access; run with --include-ignored in a configured environment"]
     async fn anonymous_store_constructs_without_credentials() {
-        let store = GcsStore::new(GcsStoreConfig {
+        let store = GcsStore::new(Config {
             bucket: "public-assets".into(),
             prefix: Some("uploads".into()),
             anonymous: true,
@@ -329,16 +324,15 @@ mod tests {
         .await
         .unwrap();
 
-        assert_eq!(store.bucket(), "public-assets");
         assert_eq!(store.full_key("image.png"), "uploads/image.png");
     }
 
     #[test]
-    fn register_gcs_adds_backend_without_constructing_client() {
+    fn register_adds_backend_without_constructing_client() {
         let mut registry = StorageRegistry::new();
-        register_gcs(
+        register(
             &mut registry,
-            GcsStoreConfig {
+            Config {
                 bucket: "test".into(),
                 prefix: None,
                 anonymous: true,

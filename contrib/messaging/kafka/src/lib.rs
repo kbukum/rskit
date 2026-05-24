@@ -21,20 +21,19 @@ use rskit_messaging::{
 use tokio_stream::StreamExt;
 use tracing::debug;
 
-/// Kafka configuration types.
-pub mod config;
+mod config;
 
 use crate::config::validate_topic;
-pub use config::{Compression, KafkaConfig, OffsetReset, SecurityProtocol};
+pub use config::{Compression, KafkaConfig as Config, OffsetReset, SecurityProtocol};
 
 /// Kafka-backed message producer wrapping an `rdkafka` `FutureProducer`.
-pub struct KafkaProducer {
+pub(crate) struct KafkaProducer {
     producer: FutureProducer,
 }
 
 impl KafkaProducer {
     /// Create a new `KafkaProducer` from the given configuration.
-    pub fn new(config: &KafkaConfig) -> AppResult<Self> {
+    pub(crate) fn new(config: &Config) -> AppResult<Self> {
         config.validate()?;
         let producer: FutureProducer = producer_config(config).create().map_err(|e| {
             AppError::new(
@@ -105,13 +104,13 @@ impl EventProducer for KafkaProducer {
 }
 
 /// Kafka-backed message consumer wrapping an `rdkafka` `StreamConsumer`.
-pub struct KafkaConsumer {
+pub(crate) struct KafkaConsumer {
     consumer: StreamConsumer,
 }
 
 impl KafkaConsumer {
     /// Create a new `KafkaConsumer` from the given configuration.
-    pub fn new(config: &KafkaConfig) -> AppResult<Self> {
+    pub(crate) fn new(config: &Config) -> AppResult<Self> {
         config.validate()?;
         let consumer: StreamConsumer = consumer_config(config).create().map_err(|e| {
             AppError::new(
@@ -181,7 +180,7 @@ impl EventConsumer for KafkaConsumer {
 }
 
 /// Register Kafka producer and consumer factories for `Vec<u8>` payloads.
-pub fn register(registry: &mut MessagingRegistry<Vec<u8>>, config: KafkaConfig) -> AppResult<()> {
+pub fn register(registry: &mut MessagingRegistry<Vec<u8>>, config: Config) -> AppResult<()> {
     config.validate()?;
     if !config.base.enabled {
         return Ok(());
@@ -191,7 +190,7 @@ pub fn register(registry: &mut MessagingRegistry<Vec<u8>>, config: KafkaConfig) 
 }
 
 struct KafkaFactory {
-    config: KafkaConfig,
+    config: Config,
 }
 
 impl MessagingFactory<Vec<u8>> for KafkaFactory {
@@ -210,7 +209,7 @@ impl MessagingFactory<Vec<u8>> for KafkaFactory {
     }
 }
 
-fn base_client_config(config: &KafkaConfig) -> ClientConfig {
+fn base_client_config(config: &Config) -> ClientConfig {
     let mut cfg = ClientConfig::new();
     cfg.set("bootstrap.servers", config.brokers.join(","));
     cfg.set("security.protocol", config.security_protocol.to_string());
@@ -232,7 +231,7 @@ fn base_client_config(config: &KafkaConfig) -> ClientConfig {
     cfg
 }
 
-fn producer_config(config: &KafkaConfig) -> ClientConfig {
+fn producer_config(config: &Config) -> ClientConfig {
     let mut cfg = base_client_config(config);
     let compression = match config.compression {
         Compression::None => "none",
@@ -259,7 +258,7 @@ fn producer_config(config: &KafkaConfig) -> ClientConfig {
     cfg
 }
 
-fn consumer_config(config: &KafkaConfig) -> ClientConfig {
+fn consumer_config(config: &Config) -> ClientConfig {
     let mut cfg = base_client_config(config);
     if let Some(group) = config.effective_group_id() {
         cfg.set("group.id", group);
@@ -283,10 +282,11 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
+    use crate::config::SecurityProtocol;
 
     #[test]
     fn kafka_config_default_values() {
-        let config = KafkaConfig::default();
+        let config = Config::default();
 
         assert_eq!(config.base.adapter, "kafka");
         assert_eq!(config.brokers, vec!["localhost:9092".to_string()]);
@@ -302,7 +302,7 @@ mod tests {
 
     #[test]
     fn kafka_config_deserializes_adapter_defaults() {
-        let config: KafkaConfig = serde_json::from_str("{}").unwrap();
+        let config: Config = serde_json::from_str("{}").unwrap();
 
         assert_eq!(config.base.adapter, "kafka");
         assert_eq!(config.brokers, vec!["localhost:9092".to_string()]);
@@ -311,7 +311,7 @@ mod tests {
 
     #[test]
     fn kafka_config_validate_empty_brokers_fails() {
-        let mut config = KafkaConfig::default();
+        let mut config = Config::default();
         config.brokers.clear();
 
         let result = config.validate();
@@ -320,7 +320,7 @@ mod tests {
 
     #[test]
     fn kafka_config_rejects_unsupported_exactly_once() {
-        let mut config = KafkaConfig::default();
+        let mut config = Config::default();
         config.base.delivery_guarantee = DeliveryGuarantee::ExactlyOnce;
 
         assert!(config.validate().is_err());
@@ -350,37 +350,37 @@ mod tests {
     #[test]
     fn register_adds_kafka_factories_without_creating_clients() {
         let mut registry = MessagingRegistry::<Vec<u8>>::new();
-        register(&mut registry, KafkaConfig::default()).unwrap();
+        register(&mut registry, Config::default()).unwrap();
         assert_eq!(registry.adapters(), vec!["kafka"]);
     }
 
     #[test]
     fn kafka_config_rejects_plaintext_without_dev_opt_in_and_bad_names() {
-        let mut config = KafkaConfig {
+        let mut config = Config {
             security_protocol: SecurityProtocol::Plaintext,
-            ..KafkaConfig::default()
+            ..Config::default()
         };
         assert!(config.validate().is_err());
         config.allow_insecure_dev = true;
         assert!(config.validate().is_ok());
 
-        config = KafkaConfig::default();
+        config = Config::default();
         config.base.topics = vec!["bad topic".to_string()];
         assert!(config.validate().is_err());
 
-        config = KafkaConfig {
+        config = Config {
             brokers: vec!["kafka://user:secret@example.test:9092".to_string()],
-            ..KafkaConfig::default()
+            ..Config::default()
         };
         assert!(config.validate().is_err());
     }
 
     #[test]
     fn kafka_config_debug_redacts_credentials() {
-        let mut config = KafkaConfig {
+        let mut config = Config {
             sasl_username: Some("alice".to_string()),
             sasl_password: Some("secret".to_string()),
-            ..KafkaConfig::default()
+            ..Config::default()
         };
         config.brokers = vec!["kafka://broker-user:broker-pass@example.test:9092".to_string()];
 
