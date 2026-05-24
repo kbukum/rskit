@@ -35,12 +35,13 @@ pub fn register(
     config: Config,
 ) -> rskit_errors::AppResult<()> {
     let executor_config = config.clone();
+    let executor_registry = registry.clone();
     registry.register_executor(
         "ffmpeg",
         Arc::new(move || {
             Ok(Arc::new(executor::FfmpegExecutor::new(
                 executor_config.clone(),
-                rskit_media::Registry::default(),
+                executor_registry.clone(),
             )) as Arc<dyn rskit_media::MediaExecutor>)
         }),
     )?;

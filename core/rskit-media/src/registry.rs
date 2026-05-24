@@ -56,6 +56,7 @@ pub struct FormatInfo {
 }
 
 /// Central knowledge base for codec/format information and compatibility.
+#[derive(Clone)]
 pub struct Registry {
     codecs: HashMap<Codec, CodecInfo>,
     formats: HashMap<Format, FormatInfo>,

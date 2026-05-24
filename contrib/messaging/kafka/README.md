@@ -12,4 +12,4 @@ let mut registry = MessagingRegistry::<Vec<u8>>::new();
 register(&mut registry, Config::default())?;
 ```
 
-Configure broker endpoints, at-least-once delivery semantics, security, compression, and consumer groups through `Config`.
+Configure broker endpoints, at-most-once or at-least-once delivery semantics, security, compression, and consumer groups through `Config`. The direct consumer currently requires `commit_strategy=auto`, and DLQ routing is left to middleware.

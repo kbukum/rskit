@@ -12,7 +12,7 @@ use tracing::{Instrument, debug};
 use super::config::Config;
 
 /// OpenAI-compatible embedding provider backed by rskit-httpclient.
-struct EmbeddingProvider {
+pub struct EmbeddingProvider {
     client: HttpClient,
     model: String,
     dimensions: usize,
@@ -21,7 +21,7 @@ struct EmbeddingProvider {
 
 impl EmbeddingProvider {
     /// Create a new embedding provider from an `OpenAI` [`Config`].
-    fn new(cfg: &Config) -> AppResult<Self> {
+    pub fn new(cfg: &Config) -> AppResult<Self> {
         let http_cfg = HttpClientConfig::new()
             .with_base_url(&cfg.base_url)
             .with_auth(Auth::bearer(&cfg.api_key));
@@ -38,13 +38,13 @@ impl EmbeddingProvider {
 
     /// Return the configured embedding dimensionality.
     #[must_use]
-    const fn dimensions(&self) -> usize {
+    pub const fn dimensions(&self) -> usize {
         self.dimensions
     }
 
     /// Inject a resilience policy for outbound embedding requests.
     #[must_use]
-    fn with_policy(mut self, policy: Policy) -> Self {
+    pub fn with_policy(mut self, policy: Policy) -> Self {
         self.policy = Some(policy);
         self
     }

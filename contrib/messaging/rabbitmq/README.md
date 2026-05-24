@@ -12,4 +12,4 @@ let mut registry = MessagingRegistry::<Vec<u8>>::new();
 register(&mut registry, Config::default())?;
 ```
 
-The generic `MessageConsumer` API supports at-least-once broker delivery with adapter-managed acknowledgements and DLQ configuration through `Config`.
+The generic `MessageConsumer` API currently uses auto-acknowledged, at-most-once delivery. `Config::validate` requires `commit_strategy=auto`, `auto_ack=true`, and DLQ disabled; use middleware or a future ack-capable consumer API for retries, post-handler acknowledgements, or DLQ routing.
