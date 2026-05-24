@@ -3,14 +3,14 @@
 use std::path::Path;
 use std::time::SystemTime;
 
-use rskit_errors::AppResult;
+use rskit_errors::{AppError, AppResult};
 
 use crate::error::GitError;
 use crate::options::{BlameOptions, LogOptions};
 use crate::read::{Blamer, Differ, LogReader, TreeReader};
 use crate::types::{
-    BlameLine, Commit, DiffEntry, DiffStats, EntryKind, EntryState, FileStatus, Oid, Signature,
-    StatusEntry, TreeEntry, TreeHash,
+    BlameLine, Commit, DiffEntry, DiffStats, EntryKind, EntryState, FileStatus, Oid, StatusEntry,
+    TreeEntry, TreeHash,
 };
 
 use super::{Backend, commit_from_git2, oid_from_git2, signature_from_git2};
@@ -204,11 +204,7 @@ impl Blamer for Backend {
                 .final_signature()
                 .as_ref()
                 .map(signature_from_git2)
-                .unwrap_or_else(|| Signature {
-                    name: String::new(),
-                    email: String::new(),
-                    when: std::time::UNIX_EPOCH,
-                });
+                .ok_or_else(|| AppError::invalid_format("blame signature", "author signature"))?;
             let commit_oid = oid_from_git2(hunk.final_commit_id());
             let start = hunk.final_start_line();
             let end = start + hunk.lines_in_hunk();

@@ -144,7 +144,6 @@ where
         loader: &DatasetLoader<L>,
         opts: RunOptions,
     ) -> AppResult<BenchRunResult> {
-        let start = Instant::now();
         let execution = BenchExecutionPlan::new(&opts.tag, opts.concurrency);
         let span = execution.operation.start_span("bench.run");
         span.in_scope(|| {
@@ -154,7 +153,21 @@ where
                 "benchmark run started"
             );
         });
+        let result = self.run_with_execution(loader, opts, &execution).await;
+        match &result {
+            Ok(_) => execution.operation.end_operation("ok", None),
+            Err(error) => execution.operation.end_operation("error", Some(error)),
+        }
+        result
+    }
 
+    async fn run_with_execution(
+        &self,
+        loader: &DatasetLoader<L>,
+        opts: RunOptions,
+        execution: &BenchExecutionPlan,
+    ) -> AppResult<BenchRunResult> {
+        let start = Instant::now();
         let samples = loader.all()?;
         let dataset_info = {
             let mut label_distribution: HashMap<String, usize> = HashMap::new();
@@ -377,15 +390,11 @@ where
                     ErrorCode::Internal,
                     format!("Regression detected:\n{}", diff.summary()),
                 );
-                execution
-                    .operation
-                    .end_operation("regression", Some(&error));
                 return Err(error);
             }
             tracing::info!("{}", diff.summary());
         }
 
-        execution.operation.end_operation("ok", None);
         Ok(result)
     }
 }

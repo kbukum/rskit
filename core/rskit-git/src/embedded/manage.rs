@@ -57,18 +57,18 @@ impl RefManager for Backend {
     fn list_tags(&self) -> AppResult<Vec<Tag>> {
         let mut tags = Vec::new();
         let names = self.repo.tag_names(None).map_err(GitError::Internal)?;
-        for name in names.iter().filter_map(Result::ok).flatten() {
+        for name in collect_git_strings(names.iter())? {
             let reference = self
                 .repo
-                .find_reference(&format!("refs/tags/{name}"))
+                .find_reference(&format!("refs/tags/{}", name))
                 .map_err(GitError::Internal)?;
             let target = reference.target().ok_or_else(|| GitError::RefNotFound {
-                refname: name.to_string(),
+                refname: name.clone(),
             })?;
 
             if let Ok(tag) = self.repo.find_tag(target) {
                 tags.push(Tag {
-                    name: name.to_string(),
+                    name: name.clone(),
                     target: oid_from_git2(tag.target_id()),
                     tagger: tag.tagger().map(|sig| signature_from_git2(&sig)),
                     message: tag
@@ -81,7 +81,7 @@ impl RefManager for Backend {
                 });
             } else {
                 tags.push(Tag {
-                    name: name.to_string(),
+                    name,
                     target: oid_from_git2(target),
                     tagger: None,
                     message: String::new(),
@@ -157,27 +157,17 @@ impl RemoteManager for Backend {
         let remotes = self.repo.remotes().map_err(GitError::Internal)?;
         let mut items = Vec::new();
 
-        for name in remotes.iter().filter_map(Result::ok).flatten() {
-            let remote = self.repo.find_remote(name).map_err(GitError::Internal)?;
+        for name in collect_git_strings(remotes.iter())? {
+            let remote = self.repo.find_remote(&name).map_err(GitError::Internal)?;
             items.push(Remote {
-                name: name.to_string(),
+                name,
                 url: remote.url().unwrap_or_default().to_string(),
-                fetch_specs: remote
-                    .fetch_refspecs()
-                    .map_err(GitError::Internal)?
-                    .iter()
-                    .filter_map(Result::ok)
-                    .flatten()
-                    .map(str::to_string)
-                    .collect(),
-                push_specs: remote
-                    .push_refspecs()
-                    .map_err(GitError::Internal)?
-                    .iter()
-                    .filter_map(Result::ok)
-                    .flatten()
-                    .map(str::to_string)
-                    .collect(),
+                fetch_specs: collect_git_strings(
+                    remote.fetch_refspecs().map_err(GitError::Internal)?.iter(),
+                )?,
+                push_specs: collect_git_strings(
+                    remote.push_refspecs().map_err(GitError::Internal)?.iter(),
+                )?,
             });
         }
 
@@ -294,14 +284,7 @@ fn fetch_options_to_git2(opts: &FetchOptions) -> AppResult<git2::FetchOptions<'s
 fn push_refspecs(remote: &git2::Remote<'_>, opts: Option<&PushOptions>) -> AppResult<Vec<String>> {
     let mut refspecs = match opts {
         Some(o) if !o.refspecs.is_empty() => o.refspecs.clone(),
-        _ => remote
-            .push_refspecs()
-            .map_err(GitError::Internal)?
-            .iter()
-            .filter_map(Result::ok)
-            .flatten()
-            .map(str::to_string)
-            .collect::<Vec<_>>(),
+        _ => collect_git_strings(remote.push_refspecs().map_err(GitError::Internal)?.iter())?,
     };
 
     let force = opts.is_some_and(|o| o.force);
@@ -314,6 +297,19 @@ fn push_refspecs(remote: &git2::Remote<'_>, opts: Option<&PushOptions>) -> AppRe
     }
 
     Ok(refspecs)
+}
+
+fn collect_git_strings<'a>(
+    iter: impl IntoIterator<Item = Result<Option<&'a str>, git2::Error>>,
+) -> AppResult<Vec<String>> {
+    let mut values = Vec::new();
+    for item in iter {
+        let Some(value) = item.map_err(GitError::Internal)? else {
+            return Err(AppError::invalid_format("git string array", "utf-8 string"));
+        };
+        values.push(value.to_string());
+    }
+    Ok(values)
 }
 
 fn map_config_error(key: &str, err: git2::Error) -> rskit_errors::AppError {
