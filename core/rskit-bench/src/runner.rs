@@ -13,7 +13,7 @@ use crate::storage::generate_run_id;
 use crate::types::{BenchSample, Prediction, ScoredSample};
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_worker::{Event, Handler, Pool};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::mpsc;
@@ -200,14 +200,22 @@ where
             let mut count_pos = 0usize;
             let mut count_neg = 0usize;
             let mut errors = 0usize;
-            let mut handles = Vec::with_capacity(samples.len());
+            let mut pending = VecDeque::new();
+            let mut sample_iter = samples.iter();
+            let concurrency = opts.concurrency.max(1);
+            loop {
+                while pending.len() < concurrency {
+                    let Some(sample) = sample_iter.next() else {
+                        break;
+                    };
+                    let context = SampleFailureContext::from_sample(sample);
+                    let handle = pool.submit(sample.clone()).await?;
+                    pending.push_back((context, handle));
+                }
 
-            for sample in &samples {
-                let handle = pool.submit(sample.clone()).await?;
-                handles.push((sample.clone(), handle));
-            }
-
-            for (submitted_sample, handle) in handles {
+                let Some((submitted_sample, handle)) = pending.pop_front() else {
+                    break;
+                };
                 match handle.result().await {
                     Ok(EvaluationOutcome {
                         sample,
@@ -296,7 +304,7 @@ where
                             error = %error,
                             "worker evaluation failed"
                         );
-                        sample_results.push(failed_sample(
+                        sample_results.push(failed_sample_context(
                             &submitted_sample,
                             0,
                             format!("worker evaluation failed: {error}"),
@@ -405,6 +413,20 @@ struct EvaluationHandler<L> {
     timeout_secs: u64,
 }
 
+struct SampleFailureContext {
+    id: String,
+    label: String,
+}
+
+impl SampleFailureContext {
+    fn from_sample<L: std::fmt::Display>(sample: &BenchSample<L>) -> Self {
+        Self {
+            id: sample.id.clone(),
+            label: sample.label.to_string(),
+        }
+    }
+}
+
 #[derive(Clone)]
 struct EvaluationOutcome<L> {
     sample: BenchSample<L>,
@@ -461,6 +483,23 @@ where
                 error: Some(format!("timeout in {}", self.branch_name)),
             }),
         }
+    }
+}
+
+fn failed_sample_context(
+    sample: &SampleFailureContext,
+    duration_ms: u64,
+    error: String,
+) -> BenchSampleResult {
+    BenchSampleResult {
+        id: sample.id.clone(),
+        label: sample.label.clone(),
+        predicted: String::new(),
+        score: 0.0,
+        correct: false,
+        branch_scores: HashMap::new(),
+        duration_ms,
+        error,
     }
 }
 

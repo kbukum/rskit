@@ -35,6 +35,8 @@ pub enum ExitCode {
     Conflict = 5,
     /// Remote dependency or service failure.
     Unavailable = 69,
+    /// Command was rate limited.
+    RateLimited = 75,
     /// Command timed out.
     Timeout = 124,
     /// Command was cancelled.
@@ -66,7 +68,8 @@ impl From<ErrorCode> for ExitCode {
             ErrorCode::ServiceUnavailable
             | ErrorCode::ConnectionFailed
             | ErrorCode::ExternalService => Self::Unavailable,
-            ErrorCode::Timeout | ErrorCode::RateLimited => Self::Timeout,
+            ErrorCode::RateLimited => Self::RateLimited,
+            ErrorCode::Timeout => Self::Timeout,
             ErrorCode::Cancelled => Self::Cancelled,
             _ => Self::Failure,
         }

@@ -55,6 +55,7 @@ jobs:
 
       - name: Run benchmarks
         run: |
+          set -euo pipefail
           : > raw-output.txt
           cargo bench --manifest-path core/Cargo.toml -p rskit-bench --bench metrics -- --quick --output-format bencher | tee -a raw-output.txt
           cargo bench --manifest-path core/Cargo.toml -p rskit-bench --bench core -- --quick --output-format bencher | tee -a raw-output.txt
