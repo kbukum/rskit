@@ -10,6 +10,7 @@ Implemented:
   the service that hosts the adapter
 - FP32, INT64, and BYTES tensor encode/decode
 - explicit `register(&mut Registry, Config)` wiring with optional `rskit-resilience::Policy`
+  and `rskit-authz::Decider` configured on `Config`
 - OTel GenAI semantic-convention attributes via `tracing` spans
 
 At encode time, `PredictRequest::options` is merged into the KServe `parameters` object.

@@ -7,7 +7,7 @@
 
 #![warn(missing_docs)]
 
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, fmt, sync::Arc};
 
 use async_trait::async_trait;
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64_STANDARD};
@@ -31,7 +31,7 @@ const TRITON_KIND: &str = "triton";
 const SYSTEM: &str = "triton";
 
 /// Configuration for Triton KServe v2 HTTP serving.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Config {
     /// Base URL for the Triton HTTP endpoint.
     #[serde(default = "default_base_url")]
@@ -54,6 +54,12 @@ pub struct Config {
     /// Authz scopes declared in the executable envelope.
     #[serde(default = "default_scopes")]
     pub scopes: Vec<String>,
+    /// Optional resilience policy applied around prediction requests.
+    #[serde(skip)]
+    pub policy: Option<Policy>,
+    /// Optional authorization decider evaluated before prediction requests.
+    #[serde(skip)]
+    pub decider: Option<Arc<dyn Decider>>,
 }
 
 impl Default for Config {
@@ -66,7 +72,41 @@ impl Default for Config {
             network_port: default_network_port(),
             network_scheme: default_network_scheme(),
             scopes: default_scopes(),
+            policy: None,
+            decider: None,
         }
+    }
+}
+
+impl Config {
+    /// Configure a resilience policy for prediction requests.
+    #[must_use]
+    pub fn with_policy(mut self, policy: Policy) -> Self {
+        self.policy = Some(policy);
+        self
+    }
+
+    /// Configure an authorization decider for prediction requests.
+    #[must_use]
+    pub fn with_decider(mut self, decider: Arc<dyn Decider>) -> Self {
+        self.decider = Some(decider);
+        self
+    }
+}
+
+impl fmt::Debug for Config {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Config")
+            .field("base_url", &self.base_url)
+            .field("name", &self.name)
+            .field("description", &self.description)
+            .field("network_host", &self.network_host)
+            .field("network_port", &self.network_port)
+            .field("network_scheme", &self.network_scheme)
+            .field("scopes", &self.scopes)
+            .field("policy", &self.policy.as_ref().map(|_| "<configured>"))
+            .field("decider", &self.decider.as_ref().map(|_| "<configured>"))
+            .finish()
     }
 }
 
@@ -107,12 +147,14 @@ impl TritonInference {
     #[must_use]
     pub(crate) fn with_http_client(config: Config, client: HttpClient) -> Self {
         let descriptor = descriptor_from_config(&config);
+        let policy = config.policy.clone();
+        let decider = config.decider.clone();
         Self {
             client,
             config,
             descriptor,
-            policy: None,
-            decider: None,
+            policy,
+            decider,
         }
     }
 
@@ -799,6 +841,22 @@ mod tests {
         };
         let decider = DenyDecider;
         let err = authorize_prediction(Some(&decider), &descriptor, &request)
+            .expect_err("denied request");
+        assert!(matches!(err, InferenceError::Authorization(_)));
+    }
+
+    #[tokio::test]
+    async fn configured_decider_is_used_by_registered_adapter() {
+        let mut registry = Registry::new();
+        let config = Config::default().with_decider(Arc::new(DenyDecider));
+        register(&mut registry, config).expect("register triton");
+        let adapter = registry.build(TRITON_KIND).expect("build triton");
+        let err = adapter
+            .predict(PredictRequest {
+                model_name: "model".to_owned(),
+                ..PredictRequest::default()
+            })
+            .await
             .expect_err("denied request");
         assert!(matches!(err, InferenceError::Authorization(_)));
     }
