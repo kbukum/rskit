@@ -5836,8 +5836,6 @@ dependencies = [
  "rskit-ai",
  "rskit-component",
  "rskit-errors",
- "rskit-llm-anthropic",
- "rskit-llm-openai",
  "rskit-provider",
  "rskit-tool",
  "serde",

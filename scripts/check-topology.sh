@@ -42,7 +42,7 @@ def load(path: Path) -> dict:
 
 def dependency_tables(manifest: dict) -> list[tuple[str, dict]]:
     tables: list[tuple[str, dict]] = []
-    for name in ("dependencies", "build-dependencies"):
+    for name in ("dependencies", "dev-dependencies", "build-dependencies"):
         table = manifest.get(name, {})
         if isinstance(table, dict):
             tables.append((name, table))
@@ -50,7 +50,7 @@ def dependency_tables(manifest: dict) -> list[tuple[str, dict]]:
     if isinstance(target, dict):
         for cfg_name, cfg in target.items():
             if isinstance(cfg, dict):
-                for dep_name in ("dependencies", "build-dependencies"):
+                for dep_name in ("dependencies", "dev-dependencies", "build-dependencies"):
                     table = cfg.get(dep_name, {})
                     if isinstance(table, dict):
                         tables.append((f"target.{cfg_name}.{dep_name}", table))

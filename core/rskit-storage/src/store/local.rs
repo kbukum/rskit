@@ -1,7 +1,7 @@
 //! Local filesystem storage backend.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -43,6 +43,22 @@ fn default_local_root_dir() -> PathBuf {
     ))
 }
 
+fn normalize_local_key(key: &str) -> AppResult<String> {
+    let key = prefixed_key(None, key);
+    if Path::new(&key).components().any(|component| {
+        matches!(
+            component,
+            Component::ParentDir | Component::RootDir | Component::Prefix(_)
+        )
+    }) {
+        return Err(AppError::new(
+            ErrorCode::InvalidInput,
+            format!("storage key must stay within the configured root: {key}"),
+        ));
+    }
+    Ok(key)
+}
+
 /// Local filesystem storage backend.
 pub struct LocalStore {
     config: LocalStoreConfig,
@@ -70,8 +86,8 @@ impl LocalStore {
         Ok(Self { config })
     }
 
-    fn resolve_path(&self, key: &str) -> PathBuf {
-        self.config.root_dir.join(prefixed_key(None, key))
+    fn resolve_path(&self, key: &str) -> AppResult<PathBuf> {
+        Ok(self.config.root_dir.join(normalize_local_key(key)?))
     }
 }
 
@@ -84,8 +100,8 @@ impl FileStore for LocalStore {
         content_type: Option<&str>,
         metadata: Option<HashMap<String, String>>,
     ) -> AppResult<StoredFile> {
-        let key = prefixed_key(None, key);
-        let target = self.resolve_path(&key);
+        let key = normalize_local_key(key)?;
+        let target = self.config.root_dir.join(&key);
         if let Some(parent) = target.parent() {
             tokio::fs::create_dir_all(parent).await.map_err(|e| {
                 AppError::new(ErrorCode::Internal, format!("failed to create dirs: {e}"))
@@ -121,7 +137,7 @@ impl FileStore for LocalStore {
     }
 
     async fn download(&self, key: &str) -> AppResult<FileSource> {
-        let path = self.resolve_path(key);
+        let path = self.resolve_path(key)?;
         if !path.exists() {
             return Err(AppError::new(
                 ErrorCode::NotFound,
@@ -132,20 +148,20 @@ impl FileStore for LocalStore {
     }
 
     async fn delete(&self, key: &str) -> AppResult<()> {
-        let path = self.resolve_path(key);
+        let path = self.resolve_path(key)?;
         tokio::fs::remove_file(&path)
             .await
             .map_err(|e| AppError::new(ErrorCode::NotFound, format!("failed to delete {key}: {e}")))
     }
 
     async fn exists(&self, key: &str) -> AppResult<bool> {
-        let path = self.resolve_path(key);
+        let path = self.resolve_path(key)?;
         Ok(path.exists())
     }
 
     async fn head(&self, key: &str) -> AppResult<StoredFile> {
-        let key = prefixed_key(None, key);
-        let path = self.resolve_path(&key);
+        let key = normalize_local_key(key)?;
+        let path = self.config.root_dir.join(&key);
         let meta = tokio::fs::metadata(&path).await.map_err(|e| {
             AppError::new(ErrorCode::NotFound, format!("file not found {key}: {e}"))
         })?;
@@ -161,7 +177,7 @@ impl FileStore for LocalStore {
     }
 
     async fn list(&self, prefix: &str, limit: Option<usize>) -> AppResult<Vec<StoredFile>> {
-        let dir = self.resolve_path(prefix);
+        let dir = self.resolve_path(prefix)?;
         let mut results = Vec::new();
 
         if !dir.exists() {
@@ -206,13 +222,13 @@ impl FileStore for LocalStore {
     }
 
     async fn presigned_url(&self, key: &str, _expires_in: Duration) -> AppResult<String> {
-        let path = self.resolve_path(key);
+        let path = self.resolve_path(key)?;
         Ok(format!("file://{}", path.display()))
     }
 
     async fn copy(&self, from_key: &str, to_key: &str) -> AppResult<StoredFile> {
-        let from = self.resolve_path(from_key);
-        let to = self.resolve_path(to_key);
+        let from = self.resolve_path(from_key)?;
+        let to = self.resolve_path(to_key)?;
 
         if let Some(parent) = to.parent() {
             tokio::fs::create_dir_all(parent).await.map_err(|e| {
@@ -231,8 +247,8 @@ impl FileStore for LocalStore {
     }
 
     async fn rename(&self, from_key: &str, to_key: &str) -> AppResult<StoredFile> {
-        let from = self.resolve_path(from_key);
-        let to = self.resolve_path(to_key);
+        let from = self.resolve_path(from_key)?;
+        let to = self.resolve_path(to_key)?;
 
         if let Some(parent) = to.parent() {
             tokio::fs::create_dir_all(parent).await.map_err(|e| {
