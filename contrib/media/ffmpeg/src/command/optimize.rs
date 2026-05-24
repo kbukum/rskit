@@ -17,7 +17,7 @@ impl FfmpegCommand {
     /// - Multiple volume adjustments: multiply factors
     /// - Speed(1.0): remove (no-op)
     /// - Multiple consecutive Extract: keep only the last
-    pub fn optimize_ops(ops: &[MediaOp]) -> Vec<MediaOp> {
+    pub(crate) fn optimize_ops(ops: &[MediaOp]) -> Vec<MediaOp> {
         let mut result: Vec<MediaOp> = Vec::with_capacity(ops.len());
 
         for op in ops {
@@ -64,7 +64,7 @@ impl FfmpegCommand {
     ///
     /// Catches invalid combinations that would cause FFmpeg to fail with
     /// cryptic errors or produce incorrect output.
-    pub fn validate_ops(ops: &[MediaOp]) -> AppResult<()> {
+    pub(crate) fn validate_ops(ops: &[MediaOp]) -> AppResult<()> {
         let mut has_strip_audio = false;
         let mut has_strip_video = false;
         let mut has_audio_op = false;

@@ -1,8 +1,10 @@
 //! Golden/snapshot tests for rskit-media-image using real fixture files.
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use rskit_media::{
+    Registry,
     executor::MediaExecutor,
     filter::{Filter, FilterTarget, ParamValue, Params},
     format::Format,
@@ -11,7 +13,6 @@ use rskit_media::{
     probe::MediaProbe,
     spatial::Resolution,
 };
-use rskit_media_image::__private::{ImageProbe, ImageProcessor};
 use rskit_storage::FileSource;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -25,6 +26,20 @@ fn fixtures_dir() -> PathBuf {
         .parent()
         .unwrap()
         .join("tests/fixtures")
+}
+
+fn image_executor() -> Arc<dyn MediaExecutor> {
+    let mut registry = Registry::default();
+    rskit_media_image::register(&mut registry, rskit_media_image::Config)
+        .expect("register image backend");
+    registry.executor("image").expect("image executor")
+}
+
+fn image_probe() -> Arc<dyn MediaProbe> {
+    let mut registry = Registry::default();
+    rskit_media_image::register(&mut registry, rskit_media_image::Config)
+        .expect("register image backend");
+    registry.probe("image").expect("image probe")
 }
 
 fn read_dimensions(source: &FileSource) -> (u32, u32) {
@@ -59,13 +74,13 @@ fn source_bytes(source: &FileSource) -> Vec<u8> {
 #[tokio::test]
 async fn golden_resize_real_jpeg() {
     let source = FileSource::from_path(fixtures_dir().join("image/real-photo.jpg"));
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
     let ops = vec![MediaOp::Resize(ResizeOp {
         resolution: Resolution::new(100, 100),
         mode: ResizeMode::Exact,
     })];
 
-    let result = processor.execute(&source, &ops, None).await.unwrap();
+    let result = backend.execute(&source, &ops, None).await.unwrap();
     let (w, h) = read_dimensions(&result);
 
     insta::assert_json_snapshot!(
@@ -82,7 +97,7 @@ async fn golden_resize_real_jpeg() {
 
 #[tokio::test]
 async fn golden_multi_format_pipeline() {
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
     let ops = vec![
         MediaOp::Resize(ResizeOp {
             resolution: Resolution::new(150, 150),
@@ -93,12 +108,12 @@ async fn golden_multi_format_pipeline() {
 
     // Process JPEG
     let jpeg_source = FileSource::from_path(fixtures_dir().join("image/real-photo.jpg"));
-    let jpeg_result = processor.execute(&jpeg_source, &ops, None).await.unwrap();
+    let jpeg_result = backend.execute(&jpeg_source, &ops, None).await.unwrap();
     let (jw, jh) = read_dimensions(&jpeg_result);
 
     // Process PNG
     let png_source = FileSource::from_path(fixtures_dir().join("image/sample.png"));
-    let png_result = processor.execute(&png_source, &ops, None).await.unwrap();
+    let png_result = backend.execute(&png_source, &ops, None).await.unwrap();
     let (pw, ph) = read_dimensions(&png_result);
 
     insta::assert_json_snapshot!(
@@ -115,13 +130,13 @@ async fn golden_multi_format_pipeline() {
 #[tokio::test]
 async fn golden_crop_center_real_photo() {
     let source = FileSource::from_path(fixtures_dir().join("image/real-photo.jpg"));
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
 
     // real-photo.jpg is 500x378 — center crop 100x100
     let crop = CropRegion::center(Resolution::new(500, 378), 100, 100);
     let ops = vec![MediaOp::Crop(crop)];
 
-    let result = processor.execute(&source, &ops, None).await.unwrap();
+    let result = backend.execute(&source, &ops, None).await.unwrap();
     let (w, h) = read_dimensions(&result);
 
     insta::assert_json_snapshot!(
@@ -140,10 +155,10 @@ async fn golden_rotate_90() {
     // ai-generated.jpg is 270x270 (square), so rotation doesn't change dims.
     // Use real-photo.jpg (500x378) to see the swap.
     let source = FileSource::from_path(fixtures_dir().join("image/real-photo.jpg"));
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
     let ops = vec![MediaOp::Rotate(Rotation::Degrees90)];
 
-    let result = processor.execute(&source, &ops, None).await.unwrap();
+    let result = backend.execute(&source, &ops, None).await.unwrap();
     let (w, h) = read_dimensions(&result);
 
     // 500x378 rotated 90° → 378x500
@@ -163,10 +178,10 @@ async fn golden_rotate_90() {
 #[tokio::test]
 async fn golden_png_to_jpeg_conversion() {
     let source = FileSource::from_path(fixtures_dir().join("image/sample.png"));
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
     let ops = vec![MediaOp::Transcode(OutputConfig::new(Format::new("jpeg")))];
 
-    let result = processor.execute(&source, &ops, None).await.unwrap();
+    let result = backend.execute(&source, &ops, None).await.unwrap();
     let bytes = source_bytes(&result);
 
     // Verify it's actually JPEG by checking magic bytes
@@ -189,7 +204,7 @@ async fn golden_png_to_jpeg_conversion() {
 #[tokio::test]
 async fn golden_pipeline_resize_crop_rotate() {
     let source = FileSource::from_path(fixtures_dir().join("image/real-photo.jpg"));
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
     let ops = vec![
         MediaOp::Resize(ResizeOp {
             resolution: Resolution::new(200, 200),
@@ -199,7 +214,7 @@ async fn golden_pipeline_resize_crop_rotate() {
         MediaOp::Rotate(Rotation::Degrees90),
     ];
 
-    let result = processor.execute(&source, &ops, None).await.unwrap();
+    let result = backend.execute(&source, &ops, None).await.unwrap();
     let (w, h) = read_dimensions(&result);
 
     // 200x200 → crop center 100x100 → rotate 90° → 100x100 (square stays square)
@@ -218,7 +233,7 @@ async fn golden_pipeline_resize_crop_rotate() {
 #[tokio::test]
 async fn golden_image_filters_new() {
     let source = FileSource::from_path(fixtures_dir().join("image/sample.png"));
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
 
     // Apply sharpen filter
     let sharpen_ops = vec![MediaOp::Filter(Filter {
@@ -226,10 +241,7 @@ async fn golden_image_filters_new() {
         target: FilterTarget::Video,
         params: Params::new().set("amount", ParamValue::Float(1.5)),
     })];
-    let sharpen_result = processor
-        .execute(&source, &sharpen_ops, None)
-        .await
-        .unwrap();
+    let sharpen_result = backend.execute(&source, &sharpen_ops, None).await.unwrap();
     let (sw, sh) = read_dimensions(&sharpen_result);
 
     // Apply sepia filter
@@ -238,7 +250,7 @@ async fn golden_image_filters_new() {
         target: FilterTarget::Video,
         params: Params::new(),
     })];
-    let sepia_result = processor.execute(&source, &sepia_ops, None).await.unwrap();
+    let sepia_result = backend.execute(&source, &sepia_ops, None).await.unwrap();
     let (ew, eh) = read_dimensions(&sepia_result);
 
     // Apply invert filter
@@ -247,7 +259,7 @@ async fn golden_image_filters_new() {
         target: FilterTarget::Video,
         params: Params::new(),
     })];
-    let invert_result = processor.execute(&source, &invert_ops, None).await.unwrap();
+    let invert_result = backend.execute(&source, &invert_ops, None).await.unwrap();
     let (iw, ih) = read_dimensions(&invert_result);
 
     // Apply pixelate filter
@@ -256,10 +268,7 @@ async fn golden_image_filters_new() {
         target: FilterTarget::Video,
         params: Params::new().set("block_size", ParamValue::Int(8)),
     })];
-    let pixelate_result = processor
-        .execute(&source, &pixelate_ops, None)
-        .await
-        .unwrap();
+    let pixelate_result = backend.execute(&source, &pixelate_ops, None).await.unwrap();
     let (pw, ph) = read_dimensions(&pixelate_result);
 
     // sample.png dimensions
@@ -278,12 +287,12 @@ async fn golden_image_filters_new() {
     );
 }
 
-// ── Test 8: ImageProbe with real fixtures ────────────────────────────────────
+// ── Test 8: registered image probe with real fixtures ────────────────────────────────────
 
 #[tokio::test]
 async fn golden_image_probe_jpeg() {
     let source = FileSource::from_path(fixtures_dir().join("image/real-photo.jpg"));
-    let probe = ImageProbe::new();
+    let probe = image_probe();
     let meta = probe.probe(&source).await.expect("probe JPEG");
 
     insta::assert_json_snapshot!("image_probe_jpeg", {
@@ -298,7 +307,7 @@ async fn golden_image_probe_jpeg() {
 #[tokio::test]
 async fn golden_image_probe_png() {
     let source = FileSource::from_path(fixtures_dir().join("image/sample.png"));
-    let probe = ImageProbe::new();
+    let probe = image_probe();
     let meta = probe.probe(&source).await.expect("probe PNG");
 
     let res = meta.resolution().expect("should have resolution");
@@ -321,10 +330,10 @@ async fn golden_image_probe_png() {
 #[tokio::test]
 async fn golden_flip_horizontal() {
     let source = FileSource::from_path(fixtures_dir().join("image/real-photo.jpg"));
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
     let ops = vec![MediaOp::Flip(FlipDirection::Horizontal)];
 
-    let result = processor.execute(&source, &ops, None).await.unwrap();
+    let result = backend.execute(&source, &ops, None).await.unwrap();
     let (w, h) = read_dimensions(&result);
     let result_bytes = source_bytes(&result);
     let original_bytes = std::fs::read(fixtures_dir().join("image/real-photo.jpg")).unwrap();

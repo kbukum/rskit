@@ -1,4 +1,4 @@
-//! Criterion benchmarks comparing ImageProcessor vs raw `image` crate.
+//! Criterion benchmarks comparing the registered image backend vs raw `image` crate.
 //!
 //! Run:  cargo bench -p rskit-media-image
 //! Report: target/criterion/report/index.html
@@ -6,12 +6,13 @@
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use image::{Rgb, RgbImage, imageops};
 use rskit_media::{
+    Registry,
     executor::MediaExecutor,
     ops::{CropRegion, FlipDirection, MediaOp, ResizeMode, ResizeOp, Rotation},
     spatial::Resolution,
 };
-use rskit_media_image::__private::ImageProcessor;
 use rskit_storage::{FileSource, TempFile};
+use std::sync::Arc;
 
 /// Create a gradient test image at given dimensions.
 fn create_fixture(width: u32, height: u32) -> TempFile {
@@ -21,6 +22,13 @@ fn create_fixture(width: u32, height: u32) -> TempFile {
             let r = (x * 255 / width) as u8;
             let g = (y * 255 / height) as u8;
             img.put_pixel(x, y, Rgb([r, g, 128]));
+        }
+
+        fn image_executor() -> Arc<dyn MediaExecutor> {
+            let mut registry = Registry::default();
+            rskit_media_image::register(&mut registry, rskit_media_image::Config)
+                .expect("register image backend");
+            registry.executor("image").expect("image executor")
         }
     }
     let tmp = TempFile::with_extension("png").expect("create temp");
@@ -32,7 +40,7 @@ fn bench_resize(c: &mut Criterion) {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let fixture = create_fixture(1000, 1000);
     let source = FileSource::from_path(fixture.path());
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
     let ops = vec![MediaOp::Resize(ResizeOp {
         resolution: Resolution::new(200, 200),
         mode: ResizeMode::Exact,
@@ -40,8 +48,8 @@ fn bench_resize(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("resize_1000_to_200");
 
-    group.bench_function("ImageProcessor", |b| {
-        b.iter(|| rt.block_on(async { processor.execute(&source, &ops, None).await.unwrap() }))
+    group.bench_function("registered_image_backend", |b| {
+        b.iter(|| rt.block_on(async { backend.execute(&source, &ops, None).await.unwrap() }))
     });
 
     group.bench_function("raw_image_crate", |b| {
@@ -56,7 +64,7 @@ fn bench_resize(c: &mut Criterion) {
 
 fn bench_resize_sizes(c: &mut Criterion) {
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
 
     let mut group = c.benchmark_group("resize_various_sizes");
     group.sample_size(10);
@@ -70,11 +78,11 @@ fn bench_resize_sizes(c: &mut Criterion) {
         })];
 
         group.bench_with_input(
-            BenchmarkId::new("ImageProcessor", format!("{src_size}→{dst_size}")),
+            BenchmarkId::new("registered_image_backend", format!("{src_size}→{dst_size}")),
             &(src_size, dst_size),
             |b, _| {
                 b.iter(|| {
-                    rt.block_on(async { processor.execute(&source, &ops, None).await.unwrap() })
+                    rt.block_on(async { backend.execute(&source, &ops, None).await.unwrap() })
                 })
             },
         );
@@ -99,13 +107,13 @@ fn bench_crop(c: &mut Criterion) {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let fixture = create_fixture(1000, 1000);
     let source = FileSource::from_path(fixture.path());
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
     let ops = vec![MediaOp::Crop(CropRegion::new(100, 100, 500, 500))];
 
     let mut group = c.benchmark_group("crop_1000_to_500");
 
-    group.bench_function("ImageProcessor", |b| {
-        b.iter(|| rt.block_on(async { processor.execute(&source, &ops, None).await.unwrap() }))
+    group.bench_function("registered_image_backend", |b| {
+        b.iter(|| rt.block_on(async { backend.execute(&source, &ops, None).await.unwrap() }))
     });
 
     group.bench_function("raw_image_crate", |b| {
@@ -122,13 +130,13 @@ fn bench_rotate(c: &mut Criterion) {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let fixture = create_fixture(500, 500);
     let source = FileSource::from_path(fixture.path());
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
     let ops = vec![MediaOp::Rotate(Rotation::Degrees90)];
 
     let mut group = c.benchmark_group("rotate90_500");
 
-    group.bench_function("ImageProcessor", |b| {
-        b.iter(|| rt.block_on(async { processor.execute(&source, &ops, None).await.unwrap() }))
+    group.bench_function("registered_image_backend", |b| {
+        b.iter(|| rt.block_on(async { backend.execute(&source, &ops, None).await.unwrap() }))
     });
 
     group.bench_function("raw_image_crate", |b| {
@@ -145,7 +153,7 @@ fn bench_pipeline(c: &mut Criterion) {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let fixture = create_fixture(500, 500);
     let source = FileSource::from_path(fixture.path());
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
 
     let ops = vec![
         MediaOp::Resize(ResizeOp {
@@ -159,8 +167,8 @@ fn bench_pipeline(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("pipeline_4ops");
 
-    group.bench_function("ImageProcessor", |b| {
-        b.iter(|| rt.block_on(async { processor.execute(&source, &ops, None).await.unwrap() }))
+    group.bench_function("registered_image_backend", |b| {
+        b.iter(|| rt.block_on(async { backend.execute(&source, &ops, None).await.unwrap() }))
     });
 
     group.bench_function("raw_image_crate", |b| {
@@ -180,7 +188,7 @@ fn bench_blur(c: &mut Criterion) {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let fixture = create_fixture(500, 500);
     let source = FileSource::from_path(fixture.path());
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
 
     let ops = vec![MediaOp::Filter(rskit_media::filter::Filter {
         name: "blur".into(),
@@ -191,8 +199,8 @@ fn bench_blur(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("blur_500");
 
-    group.bench_function("ImageProcessor", |b| {
-        b.iter(|| rt.block_on(async { processor.execute(&source, &ops, None).await.unwrap() }))
+    group.bench_function("registered_image_backend", |b| {
+        b.iter(|| rt.block_on(async { backend.execute(&source, &ops, None).await.unwrap() }))
     });
 
     group.bench_function("raw_image_crate", |b| {
@@ -219,7 +227,7 @@ fn real_fixture_path(name: &str) -> std::path::PathBuf {
 
 fn bench_real_fixtures(c: &mut Criterion) {
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
     let ops = vec![MediaOp::Resize(ResizeOp {
         resolution: Resolution::new(200, 200),
         mode: ResizeMode::Exact,
@@ -234,14 +242,14 @@ fn bench_real_fixtures(c: &mut Criterion) {
     if jpeg_path.exists() {
         let source = FileSource::from_path(&jpeg_path);
         group.bench_function("real_jpeg_500x378", |b| {
-            b.iter(|| rt.block_on(async { processor.execute(&source, &ops, None).await.unwrap() }))
+            b.iter(|| rt.block_on(async { backend.execute(&source, &ops, None).await.unwrap() }))
         });
     }
 
     if png_path.exists() {
         let source = FileSource::from_path(&png_path);
         group.bench_function("real_png_600x600", |b| {
-            b.iter(|| rt.block_on(async { processor.execute(&source, &ops, None).await.unwrap() }))
+            b.iter(|| rt.block_on(async { backend.execute(&source, &ops, None).await.unwrap() }))
         });
     }
 
@@ -250,7 +258,7 @@ fn bench_real_fixtures(c: &mut Criterion) {
 
 fn bench_real_fixture_pipeline(c: &mut Criterion) {
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let processor = ImageProcessor::new();
+    let backend = image_executor();
 
     let ops = vec![
         MediaOp::Resize(ResizeOp {
@@ -271,14 +279,14 @@ fn bench_real_fixture_pipeline(c: &mut Criterion) {
     if jpeg_path.exists() {
         let source = FileSource::from_path(&jpeg_path);
         group.bench_function("real_jpeg_pipeline", |b| {
-            b.iter(|| rt.block_on(async { processor.execute(&source, &ops, None).await.unwrap() }))
+            b.iter(|| rt.block_on(async { backend.execute(&source, &ops, None).await.unwrap() }))
         });
     }
 
     if png_path.exists() {
         let source = FileSource::from_path(&png_path);
         group.bench_function("real_png_pipeline", |b| {
-            b.iter(|| rt.block_on(async { processor.execute(&source, &ops, None).await.unwrap() }))
+            b.iter(|| rt.block_on(async { backend.execute(&source, &ops, None).await.unwrap() }))
         });
     }
 

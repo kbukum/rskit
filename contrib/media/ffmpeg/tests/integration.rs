@@ -4,17 +4,15 @@
 use std::time::Duration;
 
 use rskit_media::{
+    Registry,
     executor::MediaExecutor,
     ops::{MediaOp, ResizeMode, ResizeOp},
     probe::MediaProbe,
     spatial::Resolution,
     time::TimeRange,
 };
-use rskit_media_ffmpeg::{
-    __private::{FfmpegExecutor, FfmpegProbe},
-    Config as FfmpegConfig,
-};
 use rskit_storage::{FileSink, FileSource, TempDir, TempFile};
+use std::sync::Arc;
 
 /// Generate a 1-second test video (320×240, 25fps, with audio) using ffmpeg.
 async fn generate_test_video() -> TempFile {
@@ -96,28 +94,39 @@ macro_rules! skip_without_ffmpeg {
     };
 }
 
+fn ffmpeg_executor() -> Arc<dyn MediaExecutor> {
+    let mut registry = Registry::default();
+    rskit_media_ffmpeg::register(&mut registry, rskit_media_ffmpeg::Config::default())
+        .expect("register ffmpeg backend");
+    registry.executor("ffmpeg").expect("ffmpeg executor")
+}
+
+fn ffmpeg_probe() -> Arc<dyn MediaProbe> {
+    let mut registry = Registry::default();
+    rskit_media_ffmpeg::register(&mut registry, rskit_media_ffmpeg::Config::default())
+        .expect("register ffmpeg backend");
+    registry.probe("ffmpeg").expect("ffmpeg probe")
+}
+
 // ── FfmpegProbe tests ──────────────────────────────────────────────────────
 
 #[tokio::test]
-#[ignore = "requires ffmpeg/ffprobe binaries"]
-async fn probe_check_available() {
+async fn probe_registered_backend() {
     skip_without_ffmpeg!();
-    let probe = FfmpegProbe::new(FfmpegConfig::default());
-    let version = probe
-        .check_available()
-        .await
-        .expect("ffprobe should be available");
-    assert!(version.contains("ffprobe"), "got: {version}");
+    let video = generate_test_video().await;
+    let source = FileSource::from_path(video.path());
+
+    let meta = ffmpeg_probe().probe(&source).await.expect("probe video");
+    assert!(meta.has_video(), "registered backend should probe video");
 }
 
 #[tokio::test]
-#[ignore = "requires ffmpeg/ffprobe binaries"]
 async fn probe_video_file() {
     skip_without_ffmpeg!();
     let video = generate_test_video().await;
     let source = FileSource::from_path(video.path());
 
-    let probe = FfmpegProbe::new(FfmpegConfig::default());
+    let probe = ffmpeg_probe();
     let meta = probe.probe(&source).await.expect("probe video");
 
     assert!(meta.has_video(), "should detect video track");
@@ -136,13 +145,12 @@ async fn probe_video_file() {
 }
 
 #[tokio::test]
-#[ignore = "requires ffmpeg/ffprobe binaries"]
 async fn probe_audio_file() {
     skip_without_ffmpeg!();
     let audio = generate_test_audio().await;
     let source = FileSource::from_path(audio.path());
 
-    let probe = FfmpegProbe::new(FfmpegConfig::default());
+    let probe = ffmpeg_probe();
     let meta = probe.probe(&source).await.expect("probe audio");
 
     assert!(!meta.has_video());
@@ -152,23 +160,18 @@ async fn probe_audio_file() {
 }
 
 #[tokio::test]
-#[ignore = "requires ffmpeg/ffprobe binaries"]
-async fn probe_raw_json() {
+async fn probe_metadata_contains_tracks() {
     skip_without_ffmpeg!();
     let video = generate_test_video().await;
     let source = FileSource::from_path(video.path());
 
-    let probe = FfmpegProbe::new(FfmpegConfig::default());
-    let json = probe.probe_raw(&source).await.expect("probe_raw");
-
-    assert!(json.get("format").is_some(), "JSON should have format");
-    assert!(json.get("streams").is_some(), "JSON should have streams");
+    let meta = ffmpeg_probe().probe(&source).await.expect("probe metadata");
+    assert!(!meta.tracks.is_empty(), "metadata should include tracks");
 }
 
 // ── FfmpegExecutor tests ───────────────────────────────────────────────────
 
 #[tokio::test]
-#[ignore = "requires ffmpeg/ffprobe binaries"]
 async fn executor_resize_video() {
     skip_without_ffmpeg!();
     let video = generate_test_video().await;
@@ -177,7 +180,7 @@ async fn executor_resize_video() {
     let dir = TempDir::new().expect("temp dir");
     let out_path = dir.path().join("resized.mp4");
 
-    let executor = FfmpegExecutor::new(FfmpegConfig::default(), rskit_media::Registry::default());
+    let executor = ffmpeg_executor();
     let ops = vec![MediaOp::Resize(ResizeOp {
         resolution: Resolution::new(160, 120),
         mode: ResizeMode::Exact,
@@ -189,7 +192,7 @@ async fn executor_resize_video() {
         .expect("execute resize");
 
     // Verify output exists and has correct dimensions
-    let probe = FfmpegProbe::new(FfmpegConfig::default());
+    let probe = ffmpeg_probe();
     let meta = probe.probe(&result).await.expect("probe result");
     let res = meta.resolution().expect("resolution");
     assert_eq!(res.width, 160);
@@ -197,7 +200,6 @@ async fn executor_resize_video() {
 }
 
 #[tokio::test]
-#[ignore = "requires ffmpeg/ffprobe binaries"]
 async fn executor_extract_segment() {
     skip_without_ffmpeg!();
     let video = generate_test_video().await;
@@ -206,7 +208,7 @@ async fn executor_extract_segment() {
     let dir = TempDir::new().expect("temp dir");
     let out_path = dir.path().join("segment.mp4");
 
-    let executor = FfmpegExecutor::new(FfmpegConfig::default(), rskit_media::Registry::default());
+    let executor = ffmpeg_executor();
     let ops = vec![MediaOp::Extract(TimeRange::from_seconds(0.0, 0.5))];
 
     let result = executor
@@ -215,14 +217,13 @@ async fn executor_extract_segment() {
         .expect("execute extract");
 
     // Verify output is shorter
-    let probe = FfmpegProbe::new(FfmpegConfig::default());
+    let probe = ffmpeg_probe();
     let meta = probe.probe(&result).await.expect("probe result");
     let dur = meta.duration.unwrap();
     assert!(dur.as_secs_f64() <= 0.7, "should be ~0.5s, got: {dur:?}");
 }
 
 #[tokio::test]
-#[ignore = "requires ffmpeg/ffprobe binaries"]
 async fn executor_strip_audio() {
     skip_without_ffmpeg!();
     let video = generate_test_video().await;
@@ -231,7 +232,7 @@ async fn executor_strip_audio() {
     let dir = TempDir::new().expect("temp dir");
     let out_path = dir.path().join("no_audio.mp4");
 
-    let executor = FfmpegExecutor::new(FfmpegConfig::default(), rskit_media::Registry::default());
+    let executor = ffmpeg_executor();
     let ops = vec![MediaOp::StripAudio];
 
     let result = executor
@@ -239,7 +240,7 @@ async fn executor_strip_audio() {
         .await
         .expect("execute strip audio");
 
-    let probe = FfmpegProbe::new(FfmpegConfig::default());
+    let probe = ffmpeg_probe();
     let meta = probe.probe(&result).await.expect("probe result");
     assert!(meta.has_video());
     assert!(!meta.has_audio(), "should not have audio track");
@@ -247,7 +248,7 @@ async fn executor_strip_audio() {
 
 #[tokio::test]
 async fn executor_supports() {
-    let executor = FfmpegExecutor::new(FfmpegConfig::default(), rskit_media::Registry::default());
+    let executor = ffmpeg_executor();
     assert!(executor.supports(&MediaOp::Resize(ResizeOp {
         resolution: Resolution::p720(),
         mode: ResizeMode::Fit,
@@ -259,7 +260,7 @@ async fn executor_supports() {
 #[tokio::test]
 async fn executor_preview_returns_args() {
     let source = FileSource::from_path("/tmp/test.mp4");
-    let executor = FfmpegExecutor::new(FfmpegConfig::default(), rskit_media::Registry::default());
+    let executor = ffmpeg_executor();
     let ops = vec![MediaOp::Resize(ResizeOp {
         resolution: Resolution::p720(),
         mode: ResizeMode::Exact,
@@ -277,7 +278,6 @@ async fn executor_preview_returns_args() {
 // ── Performance: video processing timing ────────────────────────────────────
 
 #[tokio::test]
-#[ignore = "requires ffmpeg/ffprobe binaries"]
 async fn perf_resize_timing() {
     skip_without_ffmpeg!();
     let video = generate_test_video().await;
@@ -286,7 +286,7 @@ async fn perf_resize_timing() {
     let dir = TempDir::new().expect("temp dir");
     let out_path = dir.path().join("perf_resized.mp4");
 
-    let executor = FfmpegExecutor::new(FfmpegConfig::default(), rskit_media::Registry::default());
+    let executor = ffmpeg_executor();
     let ops = vec![MediaOp::Resize(ResizeOp {
         resolution: Resolution::new(160, 120),
         mode: ResizeMode::Exact,

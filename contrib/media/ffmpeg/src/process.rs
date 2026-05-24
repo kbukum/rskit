@@ -43,14 +43,6 @@ pub(crate) async fn run_capture_with_cancel(
     Ok(result)
 }
 
-pub(crate) async fn run_capture_lossy(
-    program: PathBuf,
-    args: impl IntoIterator<Item = impl AsRef<str>>,
-    timeout: Option<Duration>,
-) -> AppResult<ProcessResult> {
-    run_capture_lossy_with_cancel(program, args, timeout, CancellationToken::new()).await
-}
-
 pub(crate) async fn run_capture_lossy_with_cancel(
     program: PathBuf,
     args: impl IntoIterator<Item = impl AsRef<str>>,

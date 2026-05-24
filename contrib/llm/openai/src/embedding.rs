@@ -21,7 +21,7 @@ pub struct EmbeddingProvider {
 
 impl EmbeddingProvider {
     /// Create a new embedding provider from an `OpenAI` [`Config`].
-    pub fn new(cfg: &Config) -> AppResult<Self> {
+    pub(super) fn new(cfg: &Config) -> AppResult<Self> {
         let http_cfg = HttpClientConfig::new()
             .with_base_url(&cfg.base_url)
             .with_auth(Auth::bearer(&cfg.api_key));
@@ -36,15 +36,9 @@ impl EmbeddingProvider {
         })
     }
 
-    /// Return the configured embedding dimensionality.
-    #[must_use]
-    pub const fn dimensions(&self) -> usize {
-        self.dimensions
-    }
-
     /// Inject a resilience policy for outbound embedding requests.
     #[must_use]
-    pub fn with_policy(mut self, policy: Policy) -> Self {
+    pub(super) fn with_policy(mut self, policy: Policy) -> Self {
         self.policy = Some(policy);
         self
     }
@@ -54,6 +48,7 @@ impl EmbeddingProvider {
 struct EmbeddingRequest {
     model: String,
     input: Vec<String>,
+    dimensions: usize,
 }
 
 #[derive(Deserialize)]
@@ -115,6 +110,7 @@ impl Provider for EmbeddingProvider {
             let body = EmbeddingRequest {
                 model: model.clone(),
                 input: texts,
+                dimensions: self.dimensions,
             };
 
             debug!(model = %model, count = body.input.len(), "requesting embeddings");
@@ -230,7 +226,7 @@ mod tests {
             embedding_dimensions: 1536,
         };
         let provider = EmbeddingProvider::new(&cfg).unwrap();
-        assert_eq!(provider.dimensions(), 1536);
+        assert_eq!(provider.dimensions, 1536);
     }
 
     #[tokio::test]

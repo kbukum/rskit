@@ -15,5 +15,6 @@ workspace = true
 [dependencies]
 rskit-ai.workspace = true
 rskit-errors.workspace = true
+rskit-llm.workspace = true
 serde.workspace = true
 serde_json.workspace = true

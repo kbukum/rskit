@@ -6,7 +6,8 @@ Implemented:
 
 - `Inference::predict` against `/v2/models/{name}/infer`
 - versioned path `/v2/models/{name}/versions/{version}/infer`
-- `/v2/health/ready` health probe
+- component health reports registration/configuration availability; readiness probing should be owned by
+  the service that hosts the adapter
 - FP32, INT64, and BYTES tensor encode/decode
 - explicit `register(&mut Registry, Config)` wiring with optional `rskit-resilience::Policy`
 - OTel GenAI semantic-convention attributes via `tracing` spans

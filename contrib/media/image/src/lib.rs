@@ -10,12 +10,6 @@ mod processor;
 
 use std::sync::Arc;
 
-#[doc(hidden)]
-pub mod __private {
-    pub use crate::probe::ImageProbe;
-    pub use crate::processor::ImageProcessor;
-}
-
 /// Configuration for the native image media backend.
 #[derive(Debug, Clone, Default)]
 pub struct Config;

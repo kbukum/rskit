@@ -205,10 +205,8 @@ impl FfmpegExecutor {
         match output {
             Ok(out) => {
                 let has_audio = out.stdout.lines().any(|l| l.trim() == "audio");
-                let has_video = out.stdout.lines().any(|l| l.trim() == "video");
                 Ok(SourceHints {
                     has_audio: Some(has_audio),
-                    has_video: Some(has_video),
                 })
             }
             Err(error) if error.code() == ErrorCode::Cancelled => Err(error),

@@ -4996,6 +4996,7 @@ version = "0.1.0"
 dependencies = [
  "rskit-ai",
  "rskit-errors",
+ "rskit-llm",
  "serde",
  "serde_json",
 ]
@@ -5034,7 +5035,7 @@ dependencies = [
  "rskit-errors",
  "rskit-httpclient",
  "rskit-llm",
- "rskit-llm-openai",
+ "rskit-llm-common",
  "rskit-provider",
  "rskit-resilience",
  "serde",

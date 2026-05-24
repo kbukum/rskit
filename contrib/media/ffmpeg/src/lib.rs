@@ -21,14 +21,6 @@ use std::sync::Arc;
 
 pub use config::FfmpegConfig as Config;
 
-#[doc(hidden)]
-pub mod __private {
-    pub use crate::command::{FfmpegCommand, SourceHints};
-    pub use crate::error::{FfmpegError, FfmpegErrorKind, classify_error};
-    pub use crate::executor::FfmpegExecutor;
-    pub use crate::probe::FfmpegProbe;
-}
-
 /// Register configured FFmpeg media executor and probe factories.
 pub fn register(
     registry: &mut rskit_media::Registry,

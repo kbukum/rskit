@@ -1,0 +1,7 @@
+---
+source: media/ffmpeg/tests/golden.rs
+expression: "&preview"
+---
+[
+  "ffmpeg -y -loglevel warning -progress pipe:2 -i /dev/null -vf scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setpts=PTS/2,format=gray -af volume=0.4,atempo=2 <output>"
+]

@@ -16,7 +16,7 @@ use tracing::Instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use super::config::Config;
-use super::dialect::OpenAiDialect;
+use rskit_llm_common::OpenAiDialect;
 
 const SYSTEM: &str = "openai";
 

@@ -7,8 +7,8 @@ use rskit_llm::types::{
 };
 use serde::{Deserialize, Serialize};
 
-use rskit_llm_common as common;
-use rskit_llm_common::{StreamChunk, StreamToolCall};
+use crate as common;
+use crate::{StreamChunk, StreamToolCall};
 
 /// Converts an rskit [`CompletionRequest`] into the `OpenAI` wire format and
 /// parses the response back into an rskit [`CompletionResponse`].
@@ -188,8 +188,7 @@ impl OpenAiDialect {
     }
 
     /// Parse a single SSE data payload from the streaming chat-completions API.
-    #[cfg_attr(not(test), allow(dead_code))]
-    pub(crate) fn parse_stream_chunk(data: &[u8]) -> AppResult<StreamChunk> {
+    pub fn parse_stream_chunk(data: &[u8]) -> AppResult<StreamChunk> {
         let s = std::str::from_utf8(data).map_err(|e| {
             AppError::new(
                 ErrorCode::InvalidFormat,

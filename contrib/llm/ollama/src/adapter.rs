@@ -20,7 +20,7 @@ use tracing::Instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use super::config::Config;
-use rskit_llm_openai::__private::OpenAiDialect;
+use rskit_llm_common::OpenAiDialect;
 
 const SYSTEM: &str = "ollama";
 

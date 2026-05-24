@@ -17,24 +17,6 @@ use tokio_util::sync::CancellationToken;
 use super::FfmpegCommand;
 
 impl FfmpegCommand {
-    /// Run the compiled FFmpeg command.
-    ///
-    /// Features:
-    /// - Process group isolation (setpgid) for clean cleanup on Unix
-    /// - Timeout enforcement via `tokio::time::timeout`
-    /// - Streaming stderr collection for both progress parsing and error diagnostics
-    /// - Progress reporting via `on_progress` callback (using mpsc channel)
-    /// - Full stderr included in error messages on failure
-    pub async fn run(
-        &self,
-        config: &FfmpegConfig,
-        on_progress: Option<Box<dyn Fn(Progress) + Send + Sync>>,
-        output_path: &std::path::Path,
-    ) -> Result<(), crate::error::FfmpegError> {
-        self.run_with_cancel(config, on_progress, output_path, CancellationToken::new())
-            .await
-    }
-
     /// Run the compiled FFmpeg command with cancellation support.
     pub async fn run_with_cancel(
         &self,

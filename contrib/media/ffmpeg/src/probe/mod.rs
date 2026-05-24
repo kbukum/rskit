@@ -21,48 +21,21 @@ use rskit_media::{
 use rskit_storage::FileSource;
 
 use crate::config::FfmpegConfig;
-use crate::process::{ensure_success, run_capture, run_capture_lossy, with_context};
+use crate::process::{ensure_success, run_capture, with_context};
 
 /// FFmpeg-based media probe using `ffprobe`.
-pub struct FfmpegProbe {
+pub(crate) struct FfmpegProbe {
     config: FfmpegConfig,
 }
 
 impl FfmpegProbe {
     /// Create a new probe with the given configuration.
-    pub fn new(config: FfmpegConfig) -> Self {
+    pub(crate) fn new(config: FfmpegConfig) -> Self {
         Self { config }
     }
 
-    /// Check that ffprobe is available and return its version.
-    pub async fn check_available(&self) -> AppResult<String> {
-        let output =
-            run_capture_lossy(self.config.ffprobe_bin(), ["-version"], self.config.timeout)
-                .await
-                .map_err(|e| {
-                    AppError::new(
-                        ErrorCode::ServiceUnavailable,
-                        format!("ffprobe not found: {e}"),
-                    )
-                })?;
-
-        ensure_success(&output, "ffprobe").map_err(|e| {
-            AppError::new(
-                ErrorCode::ServiceUnavailable,
-                format!("ffprobe not available: {e}"),
-            )
-        })?;
-        let version = output
-            .stdout
-            .lines()
-            .next()
-            .unwrap_or("unknown")
-            .to_string();
-        Ok(version)
-    }
-
     /// Run ffprobe and return the raw JSON output.
-    pub async fn probe_raw(&self, source: &FileSource) -> AppResult<serde_json::Value> {
+    pub(crate) async fn probe_raw(&self, source: &FileSource) -> AppResult<serde_json::Value> {
         let resolved = source.to_local_path().await?;
         let path = resolved.path();
 

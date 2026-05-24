@@ -1,7 +1,7 @@
 use serde_json::json;
 
-use super::dialect::OpenAiDialect;
 use rskit_llm_common as common;
+use rskit_llm_common::OpenAiDialect;
 
 struct FixtureCase<'a> {
     name: &'a str,
