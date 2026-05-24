@@ -376,13 +376,13 @@ impl MediaPipeline {
             if has_strip_audio && op.requires_audio_track() {
                 return Err(rskit_errors::AppError::new(
                     rskit_errors::ErrorCode::InvalidInput,
-                    "audio operation after StripAudio has no effect",
+                    "cannot apply audio operation after StripAudio",
                 ));
             }
             if has_strip_video && op.requires_video_track() {
                 return Err(rskit_errors::AppError::new(
                     rskit_errors::ErrorCode::InvalidInput,
-                    "video operation after StripVideo has no effect",
+                    "cannot apply video operation after StripVideo",
                 ));
             }
         }

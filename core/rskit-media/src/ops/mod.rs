@@ -189,7 +189,8 @@ impl MediaOp {
     #[must_use]
     pub fn requires_video_track(&self) -> bool {
         match self {
-            Self::Resize(_)
+            Self::ExtractMany(_)
+            | Self::Resize(_)
             | Self::Crop(_)
             | Self::Rotate(_)
             | Self::Flip(_)
@@ -199,6 +200,8 @@ impl MediaOp {
             | Self::FadeIn(_)
             | Self::FadeOut(_)
             | Self::Overlay(_)
+            | Self::Concat(_)
+            | Self::ReplaceAudio(_)
             | Self::BurnSubtitles(_)
             | Self::ApplyFilter(_)
             | Self::AddOverlay(_)
@@ -236,6 +239,23 @@ mod tests {
             MediaOp::FadeOut(Duration::from_secs(1)),
         ] {
             assert!(op.requires_audio_track(), "{op:?} should require audio");
+            assert!(op.requires_video_track(), "{op:?} should require video");
+        }
+    }
+
+    #[test]
+    fn video_graph_operations_require_video_tracks() {
+        for op in [
+            MediaOp::ExtractMany(vec![Segment::new(TimeRange::from_seconds(0.0, 1.0))]),
+            MediaOp::Concat(ConcatOp {
+                source: rskit_storage::FileSource::from_path("next.mp4"),
+                transition: None,
+            }),
+            MediaOp::ReplaceAudio(ReplaceAudioOp {
+                audio_source: rskit_storage::FileSource::from_path("audio.wav"),
+                offset: None,
+            }),
+        ] {
             assert!(op.requires_video_track(), "{op:?} should require video");
         }
     }

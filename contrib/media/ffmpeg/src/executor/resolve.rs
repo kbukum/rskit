@@ -4,7 +4,7 @@
 //! - [`infer_operation_kind`] — classify a `MediaOp` list into an [`OperationKind`]
 //! - [`FfmpegExecutor::resolve_effective_config`] — probe duration + compute timeout
 //! - [`FfmpegExecutor::quick_probe_duration`] — lightweight ffprobe for duration only
-//! - [`FfmpegExecutor::build_source_hints`] — detect audio/video streams for hints
+//! - [`FfmpegExecutor::build_source_hints`] — detect audio stream presence for hints
 
 use std::ffi::OsString;
 use std::time::Duration;
@@ -130,7 +130,7 @@ impl FfmpegExecutor {
             return Ok(SourceHints::default());
         }
 
-        // Quick ffprobe to detect stream types
+        // Quick ffprobe to detect whether audio pads should be included.
         let path = match source {
             FileSource::Path(p) => p.clone(),
             _ => return Ok(SourceHints::default()),
