@@ -28,7 +28,7 @@ use rskit_media::{MediaPipeline, Registry, spatial::Resolution};
 use rskit_media_image::{Config, register};
 use rskit_storage::FileSource;
 
-async fn example() {
+async fn example() -> rskit_errors::AppResult<()> {
     let mut registry = Registry::default();
     register(&mut registry, Config)?;
     let processor = registry.executor("image")?;
@@ -39,6 +39,7 @@ async fn example() {
 
     // Execute using the native image processor
     // let result = processor.execute(&pipeline, &sink, progress_cb).await?;
+    Ok(())
 }
 ```
 

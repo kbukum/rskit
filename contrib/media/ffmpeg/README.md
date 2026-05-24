@@ -27,7 +27,7 @@ rskit-media-ffmpeg = "0.1"
 use rskit_media::registry::Registry;
 use rskit_media_ffmpeg::{Config, register};
 
-async fn example() {
+async fn example() -> rskit_errors::AppResult<()> {
     let mut registry = Registry::default();
     register(&mut registry, Config::default())?;
     let executor = registry.executor("ffmpeg")?;
@@ -38,6 +38,7 @@ async fn example() {
 
     // Execute a MediaPipeline via FFmpeg subprocess
     // let result = executor.execute(&pipeline, &sink, progress_cb).await?;
+    Ok(())
 }
 ```
 

@@ -53,7 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         model: "llama3.2".into(),
         api_key: None,
     })?;
-    let provider = registry.provider("ollama")?;
+    let provider = registry.build("ollama")?;
 
     let agent = Agent::new(
         provider,

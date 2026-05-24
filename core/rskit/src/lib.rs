@@ -32,10 +32,10 @@
 //! | `stateful` | `rskit-stateful` (stateful accumulators) |
 //! | `genai` | `rskit-ai` (shared `GenAI` vocabulary) |
 //! | `llm`    | `rskit-llm` (LLM providers) |
-//! | `llm-openai` | OpenAI LLM adapter |
-//! | `llm-anthropic` | Anthropic LLM adapter |
-//! | `llm-ollama` | Ollama LLM adapter |
-//! | `llm-gemini` | Gemini LLM adapter |
+//! | `llm-openai` | `OpenAI` LLM adapter |
+//! | `llm-anthropic` | `Anthropic` LLM adapter |
+//! | `llm-ollama` | `Ollama` LLM adapter |
+//! | `llm-gemini` | `Gemini` LLM adapter |
 //! | `embedding` | `rskit-embedding` (embedding abstractions) |
 //! | `inference` | `rskit-inference` (model-serving abstractions) |
 //! | `tool` | `rskit-tool` (tool contracts) |
@@ -46,8 +46,8 @@
 //! | `media-ffmpeg` | `rskit-media-ffmpeg` (`FFmpeg` backend) |
 //! | `media-image`  | `rskit-media-image` (image processing) |
 //! | `media-audio`  | `rskit-media-audio` (pure Rust audio analysis) |
-//! | `media-full` | ffmpeg + image + audio backends |
-//! | `storage-s3` | S3 storage backend |
+//! | `media-full` | `FFmpeg` + image + audio backends |
+//! | `storage-s3` | `S3` storage backend |
 //! | `storage-gcs` | GCS storage backend |
 //! | `workload` | `rskit-workload` (workload management) |
 //! | `cli`    | `rskit-cli` (CLI helpers) |
