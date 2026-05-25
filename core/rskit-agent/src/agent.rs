@@ -153,6 +153,10 @@ impl Agent {
                 let has_tool_calls = response.has_tool_calls();
                 state.record_response(response);
 
+                if let Some(stop_reason) = stop::token_budget_stop(&state, &self.config) {
+                    return Ok(state.finish(turn + 1, stop_reason));
+                }
+
                 if !has_tool_calls {
                     return Ok(state.finish(turn + 1, StopReason::from(response_stop_reason)));
                 }
@@ -212,10 +216,6 @@ impl Agent {
                             .messages
                             .push(rskit_llm::tool_result_msg(&tc.id, &content, is_error));
                     }
-                }
-
-                if let Some(stop_reason) = stop::token_budget_stop(&state, &self.config) {
-                    return Ok(state.finish(turn + 1, stop_reason));
                 }
 
                 let caps = self.provider.capabilities();
@@ -645,6 +645,47 @@ mod tests {
 
         let result = agent.run(vec![types::user("go")]).await.unwrap();
         assert!(matches!(result.stop_reason, StopReason::MaxTokens));
+    }
+
+    #[tokio::test]
+    async fn max_budget_stops_after_final_response_without_tool_calls() {
+        let provider = Arc::new(MockProvider::new(vec![CompletionResponse {
+            message: AssistantMessage {
+                content: types::text_content("large final response"),
+                tool_calls: vec![],
+                usage: None,
+            },
+            model: "mock".to_string(),
+            usage: Usage {
+                input_tokens: 50,
+                output_tokens: 50,
+                cached_tokens: 0,
+                reasoning_tokens: 0,
+            },
+            stop_reason: Some(rskit_llm::FinishReason::Stop),
+        }]));
+
+        let agent = Agent::new(
+            provider,
+            AgentConfig {
+                tools: None,
+                hooks: None,
+                system_prompt: "sys".to_string(),
+                max_turns: 5,
+                max_tokens: 80,
+                wall_clock: Duration::from_secs(60),
+                max_tool_calls: 50,
+                tool_concurrency: 4,
+                tool_timeout: Duration::from_secs(30),
+                policy: None,
+                context_strategy: None,
+                model: String::new(),
+            },
+        );
+
+        let result = agent.run(vec![types::user("go")]).await.unwrap();
+        assert!(matches!(result.stop_reason, StopReason::MaxTokens));
+        assert_eq!(result.turn_count, 1);
     }
 
     #[tokio::test]

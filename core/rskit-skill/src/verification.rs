@@ -6,6 +6,7 @@ use crate::{Manifest, SkillError};
 
 /// Verification result.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum VerificationOutcome {
     /// Verification passed.
     Verified,
