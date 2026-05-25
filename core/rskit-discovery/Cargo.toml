@@ -19,7 +19,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 default = []
-consul = ["dep:reqwest"]
+consul = ["dep:rskit-httpclient"]
 component = ["dep:rskit-bootstrap"]
 server = ["component"]
 
@@ -35,9 +35,9 @@ tracing      = { workspace = true }
 dashmap      = { workspace = true }
 rand         = { workspace = true }
 parking_lot  = { workspace = true }
-reqwest      = { workspace = true, optional = true }
 
 # Internal
 rskit-bootstrap = { path = "../rskit-bootstrap", optional = true }
 rskit-errors = { path = "../rskit-errors" }
+rskit-httpclient = { path = "../rskit-httpclient", optional = true }
 rskit-resilience = { path = "../rskit-resilience" }

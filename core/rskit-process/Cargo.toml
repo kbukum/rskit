@@ -23,7 +23,7 @@ tokio      = { workspace = true, features = ["process", "time", "signal", "sync"
 tokio-util = { workspace = true }
 thiserror  = { workspace = true }
 tracing    = { workspace = true }
-libc       = "0.2"
+libc       = { workspace = true }
 
 # Internal
 rskit-errors = { path = "../rskit-errors" }

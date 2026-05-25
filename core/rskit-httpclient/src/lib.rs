@@ -53,4 +53,4 @@ pub use auth::Auth;
 pub use client::HttpClient;
 pub use config::HttpClientConfig;
 pub use request::{Request, RequestBody};
-pub use response::Response;
+pub use response::{ErrorResponse, Response};

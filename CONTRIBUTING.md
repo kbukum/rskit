@@ -205,10 +205,15 @@ chore(ci): pin cargo-deny to 0.16
 | `#[must_use]` on all `with_*` builder methods | All crates |
 | `#[non_exhaustive]` on public enums | All public enums that may grow |
 | `parking_lot::Mutex` instead of `std::sync::Mutex` | All crates (non-poisoning, consistent) |
+| Async locks | Only when lock ownership must cross `.await` or coordinate async waiters |
 | No `unsafe` without a `// SAFETY:` comment | All crates |
 | No `unwrap()` / `expect()` in library code | All crates (tests are fine) |
 | `tokio::time::pause()` for time-based tests | `rskit-pipeline`, `rskit-resilience` |
 | `#[allow(async_fn_in_trait)]` for public traits with default impls | As needed |
+
+Prefer synchronous `parking_lot` locks for in-memory state that is accessed and
+released within a synchronous critical section. Never hold any lock across
+unrelated I/O; document the reason when an async lock is intentionally required.
 
 ---
 

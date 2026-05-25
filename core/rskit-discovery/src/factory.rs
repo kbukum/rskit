@@ -69,7 +69,7 @@ impl DiscoveryRegistry {
                 } else {
                     Some(config.token.clone())
                 };
-                let consul = Arc::new(crate::consul::ConsulDiscovery::new(addr, token));
+                let consul = Arc::new(crate::consul::ConsulDiscovery::new(addr, token)?);
                 Ok((consul.clone(), consul))
             }),
         );

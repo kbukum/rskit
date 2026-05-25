@@ -4,7 +4,7 @@
 //! `tools/call` to the registry while providing sensible defaults for the
 //! rest of the protocol.
 
-use std::{future::Future, pin::Pin, sync::Arc};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use rmcp::handler::server::ServerHandler;
@@ -15,185 +15,14 @@ use rmcp::model::{
     ResourceTemplate, ServerCapabilities, ServerInfo, Tool,
 };
 use rmcp::service::{RequestContext, RoleServer};
-use rskit_ai::semconv;
 use rskit_component::{Component, Health};
-use tracing;
-use tracing::Instrument;
 
-use rskit_tool::ToolInput;
-use rskit_tool::context::Context;
 use rskit_tool::registry::Registry;
 
+use crate::config::ServerConfig;
 use crate::convert;
-
-/// MCP tool authorization input.
-#[derive(Debug, Clone)]
-pub struct ToolAuthorizationRequest {
-    /// Registry tool name.
-    pub tool_name: String,
-    /// Exposed MCP tool name.
-    pub mcp_name: String,
-    /// Validated invocation arguments.
-    pub arguments: ToolInput,
-}
-
-/// MCP tool authorization decision.
-#[derive(Debug, Clone)]
-pub struct ToolAuthorizationDecision {
-    /// Whether the call is allowed.
-    pub allowed: bool,
-    /// Human-readable reason.
-    pub reason: String,
-}
-
-/// Per-call MCP tool authorizer.
-#[async_trait]
-pub trait ToolAuthorizer: Send + Sync {
-    /// Evaluate the tool invocation before execution.
-    async fn authorize_tool(
-        &self,
-        request: &ToolAuthorizationRequest,
-    ) -> Result<ToolAuthorizationDecision, String>;
-}
-
-/// Final audit event for an MCP tool invocation.
-#[derive(Debug, Clone)]
-pub struct ToolAuditEvent {
-    /// Registry tool name.
-    pub tool_name: String,
-    /// Exposed MCP tool name.
-    pub mcp_name: String,
-    /// Final outcome.
-    pub outcome: String,
-    /// Decision or policy reason.
-    pub reason: String,
-    /// Error text, when present.
-    pub error: String,
-}
-
-/// Sink that receives MCP tool audit events.
-#[async_trait]
-pub trait ToolAuditSink: Send + Sync {
-    /// Record the final tool invocation event.
-    async fn record_tool_call(&self, event: ToolAuditEvent);
-}
-
-type PromptFuture = Pin<Box<dyn Future<Output = Result<GetPromptResult, rmcp::ErrorData>> + Send>>;
-type ResourceFuture =
-    Pin<Box<dyn Future<Output = Result<ReadResourceResult, rmcp::ErrorData>> + Send>>;
-
-/// Static MCP prompt registration.
-pub struct PromptEntry {
-    /// Prompt metadata exposed to clients.
-    pub prompt: Prompt,
-    handler: Arc<dyn Fn(GetPromptRequestParams) -> PromptFuture + Send + Sync>,
-}
-
-impl PromptEntry {
-    /// Construct a prompt entry from prompt metadata and an async handler.
-    pub fn new<F, Fut>(prompt: Prompt, handler: F) -> Self
-    where
-        F: Fn(GetPromptRequestParams) -> Fut + Send + Sync + 'static,
-        Fut: Future<Output = Result<GetPromptResult, rmcp::ErrorData>> + Send + 'static,
-    {
-        Self {
-            prompt,
-            handler: Arc::new(move |request| Box::pin(handler(request))),
-        }
-    }
-}
-
-impl Clone for PromptEntry {
-    fn clone(&self) -> Self {
-        Self {
-            prompt: self.prompt.clone(),
-            handler: Arc::clone(&self.handler),
-        }
-    }
-}
-
-/// Static MCP resource registration.
-pub struct ResourceEntry {
-    /// Resource metadata exposed to clients.
-    pub resource: Resource,
-    handler: Arc<dyn Fn(ReadResourceRequestParams) -> ResourceFuture + Send + Sync>,
-}
-
-impl ResourceEntry {
-    /// Construct a resource entry from resource metadata and an async handler.
-    pub fn new<F, Fut>(resource: Resource, handler: F) -> Self
-    where
-        F: Fn(ReadResourceRequestParams) -> Fut + Send + Sync + 'static,
-        Fut: Future<Output = Result<ReadResourceResult, rmcp::ErrorData>> + Send + 'static,
-    {
-        Self {
-            resource,
-            handler: Arc::new(move |request| Box::pin(handler(request))),
-        }
-    }
-}
-
-impl Clone for ResourceEntry {
-    fn clone(&self) -> Self {
-        Self {
-            resource: self.resource.clone(),
-            handler: Arc::clone(&self.handler),
-        }
-    }
-}
-
-/// Static MCP resource-template registration.
-pub struct ResourceTemplateEntry {
-    /// Resource-template metadata exposed to clients.
-    pub resource_template: ResourceTemplate,
-    handler: Arc<dyn Fn(ReadResourceRequestParams) -> ResourceFuture + Send + Sync>,
-}
-
-impl ResourceTemplateEntry {
-    /// Construct a resource-template entry from metadata and an async handler.
-    pub fn new<F, Fut>(resource_template: ResourceTemplate, handler: F) -> Self
-    where
-        F: Fn(ReadResourceRequestParams) -> Fut + Send + Sync + 'static,
-        Fut: Future<Output = Result<ReadResourceResult, rmcp::ErrorData>> + Send + 'static,
-    {
-        Self {
-            resource_template,
-            handler: Arc::new(move |request| Box::pin(handler(request))),
-        }
-    }
-}
-
-impl Clone for ResourceTemplateEntry {
-    fn clone(&self) -> Self {
-        Self {
-            resource_template: self.resource_template.clone(),
-            handler: Arc::clone(&self.handler),
-        }
-    }
-}
-
-/// Configuration for the MCP server.
-#[derive(Clone, Default)]
-pub struct ServerConfig {
-    /// Optional prefix prepended to all tool names exposed via MCP.
-    pub prefix: String,
-    /// Optional registry tool-name allow-list. Empty means expose all registered tools.
-    pub allowed_tools: Vec<String>,
-    /// Optional per-call authorization hook.
-    pub tool_authorizer: Option<Arc<dyn ToolAuthorizer>>,
-    /// Optional audit sink for all tool invocation outcomes.
-    pub tool_audit_sink: Option<Arc<dyn ToolAuditSink>>,
-    /// Reject JSON argument payloads larger than this many bytes. Zero disables the limit.
-    pub max_input_bytes: usize,
-    /// Reject serialized tool results larger than this many bytes. Zero disables the limit.
-    pub max_result_bytes: usize,
-    /// Static MCP prompts exposed by this server.
-    pub prompts: Vec<PromptEntry>,
-    /// Static MCP resources exposed by this server.
-    pub resources: Vec<ResourceEntry>,
-    /// Static MCP resource templates exposed by this server.
-    pub resource_templates: Vec<ResourceTemplateEntry>,
-}
+use crate::prompts::{invalid_params_error, prompt_name};
+use crate::resources::{resource_template_matches, resource_template_uri, resource_uri};
 
 /// An MCP server handler backed by an rskit [`Registry`].
 ///
@@ -201,8 +30,8 @@ pub struct ServerConfig {
 pub struct RegistryHandler {
     name: String,
     version: String,
-    registry: Arc<Registry>,
-    config: ServerConfig,
+    pub(crate) registry: Arc<Registry>,
+    pub(crate) config: ServerConfig,
 }
 
 impl RegistryHandler {
@@ -273,184 +102,6 @@ impl RegistryHandler {
             return (entry.handler)(request).await;
         }
         Err(invalid_params_error(format!("resource not found: {uri}")))
-    }
-
-    /// Strip the configured prefix from a tool name to recover the registry key.
-    fn strip_prefix<'a>(&self, name: &'a str) -> &'a str {
-        if !self.config.prefix.is_empty() && name.starts_with(&self.config.prefix) {
-            &name[self.config.prefix.len()..]
-        } else {
-            name
-        }
-    }
-
-    fn allows_tool(&self, name: &str) -> bool {
-        self.config.allowed_tools.is_empty()
-            || self
-                .config
-                .allowed_tools
-                .iter()
-                .any(|allowed| allowed == name)
-    }
-
-    pub(crate) async fn handle_call_tool(&self, request: CallToolRequestParams) -> CallToolResult {
-        let tool_name = self.strip_prefix(&request.name);
-        let span = tracing::info_span!(
-            "mcp.request",
-            "gen_ai.operation.name" = semconv::Operation::McpRequest.as_str(),
-            "gen_ai.tool.name" = tool_name,
-            "mcp.method" = "tools/call",
-            "mcp.tool_name" = %request.name,
-        );
-        async {
-            tracing::debug!(tool = tool_name, "MCP tools/call");
-
-            let mut event = ToolAuditEvent {
-                tool_name: tool_name.to_string(),
-                mcp_name: request.name.to_string(),
-                outcome: String::new(),
-                reason: String::new(),
-                error: String::new(),
-            };
-
-            if !self.allows_tool(tool_name) {
-                event.outcome = String::from("denied");
-                event.reason = String::from("not in allow-list");
-                self.audit_tool_call(event).await;
-                tracing::warn!(tool = tool_name, "MCP tool call rejected by allow-list");
-                return CallToolResult::error(vec![rmcp::model::Content::text(
-                    "tool is not allowed",
-                )]);
-            }
-
-            let input = ToolInput::from_object(request.arguments.unwrap_or_default());
-
-            if self.config.max_input_bytes > 0
-                && json_size_bytes(input.as_json()) > self.config.max_input_bytes
-            {
-                event.outcome = String::from("input_too_large");
-                event.error = format!("input size exceeds {} bytes", self.config.max_input_bytes);
-                self.audit_tool_call(event).await;
-                return CallToolResult::error(vec![rmcp::model::Content::text(format!(
-                    "input too large: exceeds {} bytes",
-                    self.config.max_input_bytes
-                ))]);
-            }
-
-            let tool = match self.registry.get(tool_name) {
-                Some(tool) => tool,
-                None => {
-                    event.outcome = String::from("not_found");
-                    event.error = format!("tool not found: {tool_name}");
-                    self.audit_tool_call(event).await;
-                    return CallToolResult::error(vec![rmcp::model::Content::text(format!(
-                        "tool not found: {tool_name}"
-                    ))]);
-                }
-            };
-
-            let validation = tool.validate(&input);
-            if !validation.valid {
-                let details = validation_error_details(&validation);
-                event.outcome = String::from("invalid_input");
-                event.error = details.clone();
-                self.audit_tool_call(event).await;
-                return CallToolResult::error(vec![rmcp::model::Content::text(format!(
-                    "invalid tool input: {details}"
-                ))]);
-            }
-
-            let tool_def = tool.definition().clone();
-
-            match self
-                .authorize_tool_call(ToolAuthorizationRequest {
-                    tool_name: tool_name.to_string(),
-                    mcp_name: request.name.to_string(),
-                    arguments: input.clone(),
-                })
-                .await
-            {
-                Ok(decision) => {
-                    event.reason = decision.reason.clone();
-                    if !decision.allowed {
-                        event.outcome = String::from("denied");
-                        self.audit_tool_call(event).await;
-                        return CallToolResult::error(vec![rmcp::model::Content::text(
-                            denied_message(&decision.reason),
-                        )]);
-                    }
-                }
-                Err(err) => {
-                    event.outcome = String::from("authorization_error");
-                    event.error = err.clone();
-                    self.audit_tool_call(event).await;
-                    return CallToolResult::error(vec![rmcp::model::Content::text(
-                        "authorization error",
-                    )]);
-                }
-            }
-
-            let ctx = Context::new();
-
-            let result = match self.registry.call_validated(tool_name, &ctx, input).await {
-                Ok(result) => {
-                    if result.is_error {
-                        event.outcome = String::from("tool_error");
-                        event.error = result.text().to_string();
-                    } else {
-                        let limit = self.config.max_result_bytes;
-                        if limit > 0 && result_size_bytes(&result) > limit {
-                            event.outcome = String::from("result_too_large");
-                            event.error = format!("result size exceeds {limit} bytes");
-                            self.audit_tool_call(event).await;
-                            return CallToolResult::error(vec![rmcp::model::Content::text(
-                                format!("result too large: exceeds {limit} bytes"),
-                            )]);
-                        }
-                        if let Some(message) = validate_tool_output(&tool_def, &result) {
-                            event.outcome = String::from("output_validation_error");
-                            event.error = message.clone();
-                            self.audit_tool_call(event).await;
-                            return CallToolResult::error(vec![rmcp::model::Content::text(
-                                format!("output validation error: {message}"),
-                            )]);
-                        }
-                        event.outcome = String::from("success");
-                    }
-                    convert::tool_result_to_call_result(&result)
-                }
-                Err(err) => {
-                    event.outcome = String::from("tool_error");
-                    event.error = err.message.clone();
-                    tracing::warn!(tool = tool_name, error = %err, "tool call failed");
-                    CallToolResult::error(vec![rmcp::model::Content::text(err.message.clone())])
-                }
-            };
-
-            self.audit_tool_call(event).await;
-            result
-        }
-        .instrument(span)
-        .await
-    }
-
-    async fn authorize_tool_call(
-        &self,
-        request: ToolAuthorizationRequest,
-    ) -> Result<ToolAuthorizationDecision, String> {
-        match &self.config.tool_authorizer {
-            Some(authorizer) => authorizer.authorize_tool(&request).await,
-            None => Ok(ToolAuthorizationDecision {
-                allowed: true,
-                reason: String::from("no_authorizer"),
-            }),
-        }
-    }
-
-    async fn audit_tool_call(&self, event: ToolAuditEvent) {
-        if let Some(sink) = &self.config.tool_audit_sink {
-            sink.record_tool_call(event).await;
-        }
     }
 }
 
@@ -577,125 +228,6 @@ pub fn create_server(
     }
 }
 
-fn denied_message(reason: &str) -> String {
-    if reason.is_empty() {
-        String::from("tool call denied")
-    } else {
-        format!("tool call denied: {reason}")
-    }
-}
-
-fn json_size_bytes(value: &serde_json::Value) -> usize {
-    serde_json::to_vec(value).map_or(0, |bytes| bytes.len())
-}
-
-fn validation_error_details(validation: &rskit_schema::ValidationResult) -> String {
-    let details = validation
-        .errors
-        .iter()
-        .map(ToString::to_string)
-        .collect::<Vec<_>>()
-        .join("; ");
-    if details.is_empty() {
-        String::from("schema validation failed")
-    } else {
-        details
-    }
-}
-
-fn result_size_bytes(result: &rskit_tool::result::ToolResult) -> usize {
-    if let Some(output) = &result.output {
-        return json_size_bytes(output.as_json());
-    }
-    result.content.len()
-}
-
-fn validate_tool_output(
-    definition: &rskit_tool::Definition,
-    result: &rskit_tool::result::ToolResult,
-) -> Option<String> {
-    let schema = definition.output_schema.as_ref()?;
-    if result.is_error {
-        return None;
-    }
-    let candidate = result
-        .output
-        .clone()
-        .map(rskit_tool::ToolOutput::into_json)
-        .unwrap_or_else(|| serde_json::Value::String(result.content.clone()));
-    let validation = rskit_schema::validate(schema.as_json(), &candidate);
-    if validation.valid {
-        return None;
-    }
-    validation
-        .errors
-        .first()
-        .map(std::string::ToString::to_string)
-}
-
-fn prompt_name(prompt: &Prompt) -> Option<String> {
-    serde_json::to_value(prompt).ok().and_then(|value| {
-        value
-            .get("name")
-            .and_then(|name| name.as_str())
-            .map(str::to_string)
-    })
-}
-
-fn resource_uri(resource: &Resource) -> Option<String> {
-    serde_json::to_value(resource).ok().and_then(|value| {
-        value
-            .get("uri")
-            .and_then(|uri| uri.as_str())
-            .map(str::to_string)
-    })
-}
-
-fn resource_template_uri(resource_template: &ResourceTemplate) -> Option<String> {
-    serde_json::to_value(resource_template)
-        .ok()
-        .and_then(|value| {
-            value
-                .get("uriTemplate")
-                .and_then(|uri| uri.as_str())
-                .map(str::to_string)
-        })
-}
-
-fn invalid_params_error(message: String) -> rmcp::ErrorData {
-    rmcp::ErrorData::new(rmcp::model::ErrorCode::INVALID_PARAMS, message, None)
-}
-
-fn resource_template_matches(template: &str, uri: &str) -> bool {
-    let literals = template_literals(template);
-    if literals.is_empty() {
-        return template == uri;
-    }
-    let Some(first) = literals.first() else {
-        return false;
-    };
-    if !uri.starts_with(first) {
-        return false;
-    }
-    let mut index = first.len();
-    for literal in literals.iter().skip(1) {
-        if literal.is_empty() {
-            continue;
-        }
-        let Some(found) = uri[index..].find(literal) else {
-            return false;
-        };
-        index += found + literal.len();
-    }
-    if !template.ends_with('}')
-        && let Some(last) = literals.last()
-        && !last.is_empty()
-    {
-        return uri.ends_with(last);
-    }
-    true
-}
-
 #[async_trait]
 impl Component for RegistryHandler {
     fn name(&self) -> &str {
@@ -715,33 +247,18 @@ impl Component for RegistryHandler {
     }
 }
 
-fn template_literals(template: &str) -> Vec<String> {
-    let mut literals = Vec::new();
-    let mut current = String::new();
-    let mut depth = 0;
-    for ch in template.chars() {
-        match ch {
-            '{' if depth == 0 => {
-                literals.push(std::mem::take(&mut current));
-                depth += 1;
-            }
-            '{' => depth += 1,
-            '}' if depth > 0 => depth -= 1,
-            _ if depth == 0 => current.push(ch),
-            _ => {}
-        }
-    }
-    literals.push(current);
-    literals
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::audit::{ToolAuditEvent, ToolAuditSink};
+    use crate::authz::{ToolAuthorizationDecision, ToolAuthorizationRequest, ToolAuthorizer};
+    use crate::prompts::PromptEntry;
+    use crate::resources::{ResourceEntry, ResourceTemplateEntry};
     use parking_lot::Mutex;
 
     use rskit_schema::ValidationResult;
-    use rskit_tool::{Callable, Definition, ToolResult, from_fn, text_result};
+    use rskit_tool::context::Context;
+    use rskit_tool::{Callable, Definition, ToolInput, ToolResult, from_fn, text_result};
     use schemars::JsonSchema;
     use serde::Deserialize;
     use serde_json::json;

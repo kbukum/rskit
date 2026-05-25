@@ -6,12 +6,18 @@
 
 pub mod agent;
 pub mod command;
+pub mod config;
+pub mod context;
 pub mod hooks;
 pub mod memory;
+pub(crate) mod runner;
+pub(crate) mod stop;
+pub(crate) mod tool_exec;
 pub mod types;
 
-pub use agent::{Agent, AgentConfig};
+pub use agent::Agent;
 pub use command::{Command, CommandHandler, CommandRegistry, register_builtins};
+pub use config::AgentConfig;
 pub use hooks::{
     OnError, OnEvent, OnMCPCall, OnMCPResult, PostLLMCall, PostToolCall, PreLLMCall, PreToolCall,
     TurnEnd, TurnStart, on_error_type, on_event_type, on_llm_call_type, on_llm_response_type,

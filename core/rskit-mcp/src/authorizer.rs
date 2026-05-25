@@ -15,7 +15,7 @@ use async_trait::async_trait;
 use rskit_authz::{AuthzDecision, AuthzRequest, Decider};
 use serde_json::json;
 
-use crate::server::{ToolAuthorizationDecision, ToolAuthorizationRequest, ToolAuthorizer};
+use crate::authz::{ToolAuthorizationDecision, ToolAuthorizationRequest, ToolAuthorizer};
 
 /// Default tool authorizer that delegates to a canonical `Decider`.
 pub struct DeciderToolAuthorizer {

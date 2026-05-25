@@ -6,6 +6,7 @@
 pub mod app;
 /// Lifecycle hook events.
 pub mod hooks;
+mod lifecycle;
 mod summary;
 
 pub use app::{App, AppBuilder, Built, Started, Stopped, Unconfigured};

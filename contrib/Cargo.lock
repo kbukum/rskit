@@ -4996,9 +4996,13 @@ version = "0.1.0"
 dependencies = [
  "rskit-ai",
  "rskit-errors",
+ "rskit-httpclient",
  "rskit-llm",
+ "rskit-resilience",
  "serde",
  "serde_json",
+ "tracing",
+ "tracing-opentelemetry",
 ]
 
 [[package]]

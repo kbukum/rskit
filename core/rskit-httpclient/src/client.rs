@@ -15,6 +15,7 @@ use serde::de::DeserializeOwned;
 /// SECURITY(#72): TLS certificate verification must never be disabled in production.
 /// `danger_accept_invalid_certs` is only available behind the `danger-tls` feature flag
 /// and must not be enabled in release builds.
+#[derive(Clone)]
 pub struct HttpClient {
     client: Client,
     config: HttpClientConfig,
