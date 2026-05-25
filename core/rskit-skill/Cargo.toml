@@ -30,4 +30,4 @@ rskit-errors = { path = "../rskit-errors" }
 rskit-validation = { path = "../rskit-validation" }
 
 [target.'cfg(unix)'.dependencies]
-libc = "0.2"
+libc = { workspace = true }

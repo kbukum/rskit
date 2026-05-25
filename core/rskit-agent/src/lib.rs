@@ -12,7 +12,7 @@ pub mod hooks;
 pub mod memory;
 pub(crate) mod runner;
 pub(crate) mod stop;
-pub mod tool_exec;
+pub(crate) mod tool_exec;
 pub mod types;
 
 pub use agent::Agent;

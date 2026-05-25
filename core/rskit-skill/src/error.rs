@@ -26,6 +26,18 @@ pub enum SkillError {
         /// Maximum accepted size in bytes.
         limit_bytes: u64,
     },
+    /// Aggregate skill-pack assets exceeded the configured size limit.
+    #[error(
+        "skill assets exceed total size limit of {limit_bytes} bytes while reading {path} ({total_bytes} bytes)"
+    )]
+    AssetsTooLarge {
+        /// Asset path being read when the aggregate limit was exceeded.
+        path: PathBuf,
+        /// Bytes read across all assets.
+        total_bytes: u64,
+        /// Maximum accepted aggregate asset size in bytes.
+        limit_bytes: u64,
+    },
     /// A skill-pack text file is not valid UTF-8.
     #[error("skill file {path} is not valid UTF-8: {source}")]
     InvalidUtf8 {
@@ -86,6 +98,17 @@ impl From<SkillError> for AppError {
                     path.display()
                 ),
             ),
+            SkillError::AssetsTooLarge {
+                path,
+                total_bytes,
+                limit_bytes,
+            } => AppError::invalid_input(
+                "skill",
+                format!(
+                    "assets exceed total size limit of {limit_bytes} bytes while reading {} ({total_bytes} bytes)",
+                    path.display()
+                ),
+            ),
             SkillError::InvalidUtf8 { path, source } => AppError::invalid_input(
                 "skill",
                 format!("file {} is not valid UTF-8: {source}", path.display()),
@@ -108,5 +131,35 @@ impl From<SkillError> for AppError {
             )
             .with_cause(source),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use rskit_errors::{AppError, ErrorCode};
+
+    use super::SkillError;
+
+    #[test]
+    fn aggregate_asset_limit_has_distinct_message_and_app_error() {
+        let error = SkillError::AssetsTooLarge {
+            path: PathBuf::from("references/large.bin"),
+            total_bytes: 65,
+            limit_bytes: 64,
+        };
+
+        assert_eq!(
+            error.to_string(),
+            "skill assets exceed total size limit of 64 bytes while reading references/large.bin (65 bytes)"
+        );
+
+        let app_error = AppError::from(error);
+        assert_eq!(app_error.code(), ErrorCode::InvalidInput);
+        assert_eq!(
+            app_error.message(),
+            "invalid skill: assets exceed total size limit of 64 bytes while reading references/large.bin (65 bytes)"
+        );
     }
 }

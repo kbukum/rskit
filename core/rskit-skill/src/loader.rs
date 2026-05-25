@@ -310,8 +310,9 @@ fn hash_file_bounded(
         }
         *total_asset_bytes += read as u64;
         if *total_asset_bytes > MAX_ASSET_TOTAL_BYTES {
-            return Err(SkillError::FileTooLarge {
+            return Err(SkillError::AssetsTooLarge {
                 path: path.to_path_buf(),
+                total_bytes: *total_asset_bytes,
                 limit_bytes: MAX_ASSET_TOTAL_BYTES,
             });
         }
