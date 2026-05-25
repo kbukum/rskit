@@ -68,6 +68,12 @@ pub struct ConsulDiscovery {
     client: HttpClient,
 }
 
+const CONSUL_BLOCKING_WAIT_SECS: u64 = 30;
+const CONSUL_REQUEST_TIMEOUT_GRACE_SECS: u64 = 5;
+const CONSUL_BLOCKING_WAIT: Duration = Duration::from_secs(CONSUL_BLOCKING_WAIT_SECS);
+const CONSUL_REQUEST_TIMEOUT: Duration =
+    Duration::from_secs(CONSUL_BLOCKING_WAIT_SECS + CONSUL_REQUEST_TIMEOUT_GRACE_SECS);
+
 impl ConsulDiscovery {
     /// Create a new Consul discovery client.
     ///
@@ -78,7 +84,7 @@ impl ConsulDiscovery {
     ///
     /// Returns an error if the underlying HTTP client cannot be constructed.
     pub fn new(address: &str, token: Option<String>) -> AppResult<Self> {
-        let mut config = HttpClientConfig::new().with_base_url(format!("http://{address}"));
+        let mut config = consul_http_config(address);
         if let Some(token) = token {
             config = config.with_header("X-Consul-Token", token);
         }
@@ -87,6 +93,12 @@ impl ConsulDiscovery {
             client: HttpClient::new(config)?,
         })
     }
+}
+
+fn consul_http_config(address: &str) -> HttpClientConfig {
+    HttpClientConfig::new()
+        .with_base_url(format!("http://{address}"))
+        .with_timeout(CONSUL_REQUEST_TIMEOUT)
 }
 
 #[async_trait]
@@ -189,7 +201,7 @@ impl Watcher for ConsulDiscovery {
                 let request = Request::get(format!("/v1/health/service/{service}"))
                     .query_param("passing", "true")
                     .query_param("index", last_index.to_string())
-                    .query_param("wait", "30s");
+                    .query_param("wait", consul_blocking_wait_query());
 
                 match client.send(request).await {
                     Ok(resp) if resp.is_success() => {
@@ -254,6 +266,10 @@ impl Watcher for ConsulDiscovery {
     }
 }
 
+fn consul_blocking_wait_query() -> String {
+    format!("{}s", CONSUL_BLOCKING_WAIT.as_secs())
+}
+
 fn consul_context(error: AppError, context: &'static str) -> AppError {
     error.context(context).with_detail("service", "consul")
 }
@@ -289,4 +305,31 @@ fn consul_status_error(response: ErrorResponse) -> AppError {
     )
     .with_detail("status", response.status.as_u16().to_string())
     .with_detail("body", response.body)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn consul_http_timeout_exceeds_blocking_watch_wait() {
+        let config = consul_http_config("localhost:8500");
+
+        assert!(config.timeout > CONSUL_BLOCKING_WAIT);
+        assert_eq!(config.timeout, CONSUL_REQUEST_TIMEOUT);
+        assert_eq!(consul_blocking_wait_query(), "30s");
+    }
+
+    #[test]
+    fn consul_constructor_applies_token_and_timeout() {
+        let consul = ConsulDiscovery::new("localhost:8500", Some("secret".to_owned()))
+            .expect("consul discovery client should build");
+        let config = consul.client.config();
+
+        assert_eq!(
+            config.default_headers.get("X-Consul-Token"),
+            Some(&"secret".to_owned())
+        );
+        assert!(config.timeout > CONSUL_BLOCKING_WAIT);
+    }
 }
