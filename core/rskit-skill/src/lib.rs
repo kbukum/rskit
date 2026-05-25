@@ -353,6 +353,59 @@ safety: read-only
         fs::remove_dir_all(body_root).expect("cleanup body root");
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn loader_rejects_pack_symlinks() {
+        use std::os::unix::fs::symlink;
+
+        let manifest_root = test_root("manifest-symlink");
+        let manifest_target = manifest_root.with_extension("manifest.yml");
+        fs::write(
+            &manifest_target,
+            serde_norway::to_string(&manifest("manifest-link")).expect("serialize manifest"),
+        )
+        .expect("write manifest target");
+        symlink(&manifest_target, manifest_root.join(MANIFEST_FILE_NAME)).expect("link manifest");
+        let error = Loader::default()
+            .load_metadata(&manifest_root)
+            .expect_err("manifest symlink rejected");
+        assert!(matches!(error, SkillError::InvalidPackFile { .. }));
+        fs::remove_dir_all(manifest_root).expect("cleanup manifest root");
+        fs::remove_file(manifest_target).expect("cleanup manifest target");
+
+        let body_root = test_root("body-symlink");
+        write_pack(&body_root, &manifest("body-link"));
+        let body_target = body_root.with_extension("skill.md");
+        fs::write(&body_target, "# Linked body").expect("write body target");
+        fs::remove_file(body_root.join(SKILL_MD_FILE_NAME)).expect("remove body");
+        symlink(&body_target, body_root.join(SKILL_MD_FILE_NAME)).expect("link body");
+        let error = Loader::default()
+            .activate(&body_root)
+            .expect_err("body symlink rejected");
+        assert!(matches!(error, SkillError::InvalidPackFile { .. }));
+        fs::remove_dir_all(body_root).expect("cleanup body root");
+        fs::remove_file(body_target).expect("cleanup body target");
+
+        let asset_root = test_root("asset-symlink");
+        write_pack(&asset_root, &manifest("asset-link"));
+        let asset_target = asset_root.with_extension("asset.txt");
+        fs::write(&asset_target, "external").expect("write asset target");
+        symlink(
+            &asset_target,
+            asset_root
+                .join("references")
+                .join("nested")
+                .join("linked.txt"),
+        )
+        .expect("link asset");
+        let error = Loader::default()
+            .activate(&asset_root)
+            .expect_err("asset symlink rejected");
+        assert!(matches!(error, SkillError::InvalidPackFile { .. }));
+        fs::remove_dir_all(asset_root).expect("cleanup asset root");
+        fs::remove_file(asset_target).expect("cleanup asset target");
+    }
+
     #[test]
     fn loader_rejects_oversized_manifest_and_body() {
         let manifest_limit = 1024 * 1024;

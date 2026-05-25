@@ -11,10 +11,20 @@ use std::collections::HashMap;
 pub struct ErrorResponse {
     /// Response status code.
     pub status: StatusCode,
-    /// Response headers.
+    /// Raw response headers.
+    ///
+    /// Header names are case-insensitive; use [`ErrorResponse::header`] for lookups.
     pub headers: HashMap<String, String>,
     /// Response body as UTF-8 text, or a diagnostic marker for non-UTF-8 bodies.
     pub body: String,
+}
+
+impl ErrorResponse {
+    /// Gets a response header value by name (case-insensitive).
+    #[must_use]
+    pub fn header(&self, name: &str) -> Option<&String> {
+        header_value(&self.headers, name)
+    }
 }
 
 /// Wrapped HTTP response with convenience methods.
@@ -66,11 +76,7 @@ impl Response {
     /// Gets a header value by name (case-insensitive).
     #[must_use]
     pub fn header(&self, name: &str) -> Option<&String> {
-        let lower_name = name.to_lowercase();
-        self.headers
-            .iter()
-            .find(|(k, _)| k.to_lowercase() == lower_name)
-            .map(|(_, v)| v)
+        header_value(&self.headers, name)
     }
 
     /// Gets the response body as a byte slice.
@@ -158,6 +164,13 @@ impl Response {
             }))
         }
     }
+}
+
+fn header_value<'a>(headers: &'a HashMap<String, String>, name: &str) -> Option<&'a String> {
+    headers
+        .iter()
+        .find(|(key, _)| key.eq_ignore_ascii_case(name))
+        .map(|(_, value)| value)
 }
 
 fn default_error_mapper(response: ErrorResponse) -> AppError {
@@ -266,7 +279,7 @@ mod tests {
     #[test]
     fn custom_status_mapper_receives_status_headers_and_body() {
         let mut headers = HashMap::new();
-        headers.insert("X-Request-Id".to_string(), "abc".to_string());
+        headers.insert("x-request-id".to_string(), "abc".to_string());
         let resp = Response::new(
             StatusCode::BAD_GATEWAY,
             headers,
@@ -279,11 +292,7 @@ mod tests {
                     .with_detail("status", response.status.as_u16().to_string())
                     .with_detail(
                         "request_id",
-                        response
-                            .headers
-                            .get("X-Request-Id")
-                            .cloned()
-                            .unwrap_or_default(),
+                        response.header("X-Request-Id").cloned().unwrap_or_default(),
                     )
                     .with_detail("body", response.body)
             })

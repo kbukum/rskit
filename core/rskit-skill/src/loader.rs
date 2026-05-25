@@ -154,10 +154,21 @@ impl<V: Verifier> Loader<V> {
         }
         let body_path = root.join(SKILL_MD_FILE_NAME);
         let body = read_utf8_bounded(&body_path, MAX_BODY_BYTES)?;
+        let pack_root = canonicalize_path(root)?;
         let mut assets = Vec::new();
         let mut total_asset_bytes = 0;
-        collect_assets(root.join("references"), &mut assets, &mut total_asset_bytes)?;
-        collect_assets(root.join("scripts"), &mut assets, &mut total_asset_bytes)?;
+        collect_assets(
+            &pack_root,
+            root.join("references"),
+            &mut assets,
+            &mut total_asset_bytes,
+        )?;
+        collect_assets(
+            &pack_root,
+            root.join("scripts"),
+            &mut assets,
+            &mut total_asset_bytes,
+        )?;
         assets.sort_by(|left, right| left.path.cmp(&right.path));
         Ok(Pack::new(root, manifest)
             .with_body(body)
@@ -195,13 +206,22 @@ impl<V: Verifier> Loader<V> {
 }
 
 fn collect_assets(
+    pack_root: &Path,
     dir: PathBuf,
     assets: &mut Vec<Asset>,
     total_asset_bytes: &mut u64,
 ) -> Result<(), SkillError> {
-    if !dir.exists() {
-        return Ok(());
+    let metadata = match fs::symlink_metadata(&dir) {
+        Ok(metadata) => metadata,
+        Err(source) if source.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(source) => return Err(SkillError::Io { path: dir, source }),
+    };
+    reject_symlink(&dir, &metadata)?;
+    if !metadata.is_dir() {
+        return Err(invalid_pack_file(&dir, "expected directory"));
     }
+    ensure_under_root(pack_root, &dir)?;
+
     let entries = fs::read_dir(&dir).map_err(|source| SkillError::Io {
         path: dir.clone(),
         source,
@@ -212,20 +232,35 @@ fn collect_assets(
             source,
         })?;
         let path = entry.path();
-        if path.is_dir() {
-            collect_assets(path, assets, total_asset_bytes)?;
-        } else if path.is_file() {
+        let file_type = entry.file_type().map_err(|source| SkillError::Io {
+            path: path.clone(),
+            source,
+        })?;
+        if file_type.is_symlink() {
+            return Err(invalid_pack_file(&path, "symlinks are not allowed"));
+        }
+        if file_type.is_dir() {
+            ensure_under_root(pack_root, &path)?;
+            collect_assets(pack_root, path, assets, total_asset_bytes)?;
+        } else if file_type.is_file() {
+            ensure_under_root(pack_root, &path)?;
             let digest = hash_file_bounded(&path, total_asset_bytes)?;
             assets.push(Asset {
                 path,
                 sha256: hex_lower(&digest),
             });
+        } else {
+            return Err(invalid_pack_file(
+                &path,
+                "expected regular file or directory",
+            ));
         }
     }
     Ok(())
 }
 
 fn read_utf8_bounded(path: &Path, max_bytes: u64) -> Result<String, SkillError> {
+    ensure_regular_file(path)?;
     let file = File::open(path).map_err(|source| SkillError::Io {
         path: path.to_path_buf(),
         source,
@@ -254,6 +289,7 @@ fn hash_file_bounded(
     path: &Path,
     total_asset_bytes: &mut u64,
 ) -> Result<sha2::digest::Output<Sha256>, SkillError> {
+    ensure_regular_file(path)?;
     let file = File::open(path).map_err(|source| SkillError::Io {
         path: path.to_path_buf(),
         source,
@@ -289,6 +325,50 @@ fn hash_file_bounded(
     }
 
     Ok(hasher.finalize())
+}
+
+fn ensure_regular_file(path: &Path) -> Result<(), SkillError> {
+    let metadata = fs::symlink_metadata(path).map_err(|source| SkillError::Io {
+        path: path.to_path_buf(),
+        source,
+    })?;
+    reject_symlink(path, &metadata)?;
+    if metadata.is_file() {
+        Ok(())
+    } else {
+        Err(invalid_pack_file(path, "expected regular file"))
+    }
+}
+
+fn reject_symlink(path: &Path, metadata: &fs::Metadata) -> Result<(), SkillError> {
+    if metadata.file_type().is_symlink() {
+        Err(invalid_pack_file(path, "symlinks are not allowed"))
+    } else {
+        Ok(())
+    }
+}
+
+fn ensure_under_root(pack_root: &Path, path: &Path) -> Result<(), SkillError> {
+    let canonical = canonicalize_path(path)?;
+    if canonical.starts_with(pack_root) {
+        Ok(())
+    } else {
+        Err(invalid_pack_file(path, "path escapes skill pack root"))
+    }
+}
+
+fn canonicalize_path(path: &Path) -> Result<PathBuf, SkillError> {
+    path.canonicalize().map_err(|source| SkillError::Io {
+        path: path.to_path_buf(),
+        source,
+    })
+}
+
+fn invalid_pack_file(path: &Path, reason: impl Into<String>) -> SkillError {
+    SkillError::InvalidPackFile {
+        path: path.to_path_buf(),
+        reason: reason.into(),
+    }
 }
 
 fn hex_lower(bytes: &[u8]) -> String {

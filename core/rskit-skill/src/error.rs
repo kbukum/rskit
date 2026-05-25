@@ -35,6 +35,14 @@ pub enum SkillError {
         #[source]
         source: std::string::FromUtf8Error,
     },
+    /// A skill-pack path is not an accepted regular pack file or directory.
+    #[error("invalid skill pack file {path}: {reason}")]
+    InvalidPackFile {
+        /// File path.
+        path: PathBuf,
+        /// Rejection reason.
+        reason: String,
+    },
     /// YAML parsing failed.
     #[error("manifest parse failed for {path}: {source}")]
     ParseManifest {
@@ -83,6 +91,9 @@ impl From<SkillError> for AppError {
                 format!("file {} is not valid UTF-8: {source}", path.display()),
             )
             .with_cause(source),
+            SkillError::InvalidPackFile { path, reason } => {
+                AppError::invalid_input("skill", format!("{}: {reason}", path.display()))
+            }
             SkillError::Io { path, source } => AppError::new(
                 rskit_errors::ErrorCode::Internal,
                 format!("skill I/O failed for {}: {source}", path.display()),

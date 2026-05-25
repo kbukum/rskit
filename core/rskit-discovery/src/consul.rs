@@ -101,11 +101,11 @@ impl Discovery for ConsulDiscovery {
                     .query_param("passing", "true"),
             )
             .await
-            .map_err(|e| AppError::external_service("consul", e))?
+            .map_err(|error| consul_context(error, "consul resolve request failed"))?
             .error_for_status_with(consul_status_error)?;
         let entries = resp
             .json()
-            .map_err(|e| AppError::external_service("consul", e))?;
+            .map_err(|error| consul_context(error, "failed to parse consul response"))?;
 
         Ok(entries_to_instances(entries))
     }
@@ -145,7 +145,7 @@ impl Registry for ConsulDiscovery {
                     })?,
             )
             .await
-            .map_err(|e| AppError::external_service("consul", e))?
+            .map_err(|error| consul_context(error, "consul register request failed"))?
             .error_for_status_with(consul_status_error)?;
 
         Ok(())
@@ -157,7 +157,7 @@ impl Registry for ConsulDiscovery {
         self.client
             .send(Request::put(format!("/v1/agent/service/deregister/{id}")))
             .await
-            .map_err(|e| AppError::external_service("consul", e))?
+            .map_err(|error| consul_context(error, "consul deregister request failed"))?
             .error_for_status_with(consul_status_error)?;
 
         Ok(())
@@ -252,6 +252,10 @@ impl Watcher for ConsulDiscovery {
 
         Ok(rx)
     }
+}
+
+fn consul_context(error: AppError, context: &'static str) -> AppError {
+    error.context(context).with_detail("service", "consul")
 }
 
 fn entries_to_instances(entries: Vec<HealthEntry>) -> Vec<ServiceInstance> {
