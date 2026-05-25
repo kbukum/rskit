@@ -346,6 +346,12 @@ fn open_no_follow(path: &Path) -> Result<File, SkillError> {
 
 #[cfg(not(unix))]
 fn open_no_follow(path: &Path) -> Result<File, SkillError> {
+    let metadata = fs::symlink_metadata(path).map_err(|source| SkillError::Io {
+        path: path.to_path_buf(),
+        source,
+    })?;
+    reject_symlink(path, &metadata)?;
+
     OpenOptions::new()
         .read(true)
         .open(path)
