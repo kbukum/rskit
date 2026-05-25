@@ -243,16 +243,14 @@ safety: read-only
 
     #[test]
     fn manifest_defaults_missing_human_approval_to_empty() {
-        let manifest: Manifest = serde_norway::from_str(
-            r#"
-schema_version: "1"
-name: demo
-version: 0.1.0
-description: Demo skill
-references: {}
-safety: read-only
-"#,
-        )
+        let manifest: Manifest = serde_norway::from_str(concat!(
+            "schema_version: \"1\"\n",
+            "name: demo\n",
+            "version: 0.1.0\n",
+            "description: Demo skill\n",
+            "references: {}\n",
+            "safety: read-only\n",
+        ))
         .expect("manifest parses without human approval");
 
         assert!(manifest.human_approval.is_empty());
