@@ -26,6 +26,15 @@ pub enum SkillError {
         /// Maximum accepted size in bytes.
         limit_bytes: u64,
     },
+    /// A skill-pack text file is not valid UTF-8.
+    #[error("skill file {path} is not valid UTF-8: {source}")]
+    InvalidUtf8 {
+        /// File path.
+        path: PathBuf,
+        /// Source error.
+        #[source]
+        source: std::string::FromUtf8Error,
+    },
     /// YAML parsing failed.
     #[error("manifest parse failed for {path}: {source}")]
     ParseManifest {
@@ -69,6 +78,11 @@ impl From<SkillError> for AppError {
                     path.display()
                 ),
             ),
+            SkillError::InvalidUtf8 { path, source } => AppError::invalid_input(
+                "skill",
+                format!("file {} is not valid UTF-8: {source}", path.display()),
+            )
+            .with_cause(source),
             SkillError::Io { path, source } => AppError::new(
                 rskit_errors::ErrorCode::Internal,
                 format!("skill I/O failed for {}: {source}", path.display()),

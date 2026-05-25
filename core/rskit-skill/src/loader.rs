@@ -59,6 +59,7 @@ impl AppConfig for SkillLoaderConfig {
 
 /// Loaded skill pack.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct Pack {
     /// Pack root directory.
     pub root: PathBuf,
@@ -70,6 +71,41 @@ pub struct Pack {
     pub assets: Vec<Asset>,
     /// Non-fatal verification warnings observed while loading the pack.
     pub verification_warnings: Vec<String>,
+}
+
+impl Pack {
+    /// Create a pack from its root and manifest with no loaded body, assets, or warnings.
+    #[must_use]
+    pub fn new(root: impl Into<PathBuf>, manifest: Manifest) -> Self {
+        Self {
+            root: root.into(),
+            manifest,
+            body: None,
+            assets: Vec::new(),
+            verification_warnings: Vec::new(),
+        }
+    }
+
+    /// Attach loaded skill body content.
+    #[must_use]
+    pub fn with_body(mut self, body: impl Into<String>) -> Self {
+        self.body = Some(body.into());
+        self
+    }
+
+    /// Attach collected inert assets.
+    #[must_use]
+    pub fn with_assets(mut self, assets: Vec<Asset>) -> Self {
+        self.assets = assets;
+        self
+    }
+
+    /// Attach non-fatal verification warnings.
+    #[must_use]
+    pub fn with_verification_warnings(mut self, warnings: Vec<String>) -> Self {
+        self.verification_warnings = warnings;
+        self
+    }
 }
 
 /// Inert asset recorded during activation.
@@ -122,13 +158,11 @@ impl<V: Verifier> Loader<V> {
         let mut total_asset_bytes = 0;
         collect_assets(root.join("references"), &mut assets, &mut total_asset_bytes)?;
         collect_assets(root.join("scripts"), &mut assets, &mut total_asset_bytes)?;
-        Ok(Pack {
-            root: root.to_path_buf(),
-            manifest,
-            body: Some(body),
-            assets,
-            verification_warnings,
-        })
+        assets.sort_by(|left, right| left.path.cmp(&right.path));
+        Ok(Pack::new(root, manifest)
+            .with_body(body)
+            .with_assets(assets)
+            .with_verification_warnings(verification_warnings))
     }
 
     /// Activate a skill using canonical `rskit-config` source resolution.
@@ -188,7 +222,6 @@ fn collect_assets(
             });
         }
     }
-    assets.sort_by(|left, right| left.path.cmp(&right.path));
     Ok(())
 }
 
@@ -211,8 +244,9 @@ fn read_utf8_bounded(path: &Path, max_bytes: u64) -> Result<String, SkillError> 
             limit_bytes: max_bytes,
         });
     }
-    String::from_utf8(bytes).map_err(|source| {
-        SkillError::InvalidManifest(format!("{} is not valid UTF-8: {source}", path.display()))
+    String::from_utf8(bytes).map_err(|source| SkillError::InvalidUtf8 {
+        path: path.to_path_buf(),
+        source,
     })
 }
 

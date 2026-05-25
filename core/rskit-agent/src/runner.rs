@@ -51,6 +51,8 @@ impl RunState {
     pub(crate) fn record_response(&mut self, response: CompletionResponse) {
         self.total_usage.input_tokens += response.usage.input_tokens;
         self.total_usage.output_tokens += response.usage.output_tokens;
+        self.total_usage.cached_tokens += response.usage.cached_tokens;
+        self.total_usage.reasoning_tokens += response.usage.reasoning_tokens;
         self.last_assistant = response.message.clone();
         self.messages.push(Message::Assistant(response.message));
     }
@@ -77,5 +79,49 @@ impl RunState {
             turn_count,
             stop_reason,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rskit_llm::types::{AssistantMessage, CompletionResponse, FinishReason, Usage};
+
+    use super::RunState;
+
+    #[test]
+    fn record_response_accumulates_all_usage_fields() {
+        let mut state = RunState::new("system", Vec::new());
+
+        for usage in [
+            Usage {
+                input_tokens: 10,
+                output_tokens: 5,
+                cached_tokens: 3,
+                reasoning_tokens: 2,
+            },
+            Usage {
+                input_tokens: 7,
+                output_tokens: 4,
+                cached_tokens: 1,
+                reasoning_tokens: 6,
+            },
+        ] {
+            state.record_response(CompletionResponse {
+                message: AssistantMessage {
+                    content: Vec::new(),
+                    tool_calls: Vec::new(),
+                    usage: None,
+                },
+                model: "mock".to_string(),
+                usage,
+                stop_reason: Some(FinishReason::Stop),
+            });
+        }
+
+        assert_eq!(state.total_usage.input_tokens, 17);
+        assert_eq!(state.total_usage.output_tokens, 9);
+        assert_eq!(state.total_usage.cached_tokens, 4);
+        assert_eq!(state.total_usage.reasoning_tokens, 8);
+        assert_eq!(state.total_tokens(), 26);
     }
 }

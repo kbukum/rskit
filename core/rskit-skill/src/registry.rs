@@ -67,13 +67,7 @@ pub fn register_provider(
     registry: &dyn Registry,
 ) -> Result<(), SkillError> {
     for manifest in provider.manifests()? {
-        let pack = Pack {
-            root: PathBuf::new(),
-            manifest,
-            body: None,
-            assets: Vec::new(),
-            verification_warnings: Vec::new(),
-        };
+        let pack = Pack::new(PathBuf::new(), manifest);
         registry.register(pack)?;
     }
     Ok(())

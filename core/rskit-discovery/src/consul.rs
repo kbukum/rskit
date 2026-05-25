@@ -73,6 +73,10 @@ impl ConsulDiscovery {
     ///
     /// `address` should be in the form `"host:port"` (e.g. `"localhost:8500"`).
     /// An optional ACL token is sent as `X-Consul-Token` on every request.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the underlying HTTP client cannot be constructed.
     pub fn new(address: &str, token: Option<String>) -> AppResult<Self> {
         let mut config = HttpClientConfig::new().with_base_url(format!("http://{address}"));
         if let Some(token) = token {

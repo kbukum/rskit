@@ -24,7 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   repeated adapter boilerplate.
 - **Maintainability refactor**: split large skill, MCP, agent, lifecycle, and
   AI-vocabulary modules around ownership boundaries; centralized Consul and LLM
-  outbound HTTP/retry/telemetry mechanics on shared infrastructure.
+  outbound HTTP/retry/telemetry mechanics on shared infrastructure. As part of
+  the Consul migration, `ConsulDiscovery::new` now returns `AppResult<Self>` so
+  HTTP client construction failures are surfaced at initialization.
 - **Media/dataset**: redesigned dataset items around bounded byte/file
   payloads, streaming source contracts, explicit transform errors, schema
   validation via `rskit-schema`, and `rskit-pipeline` stream adapters.

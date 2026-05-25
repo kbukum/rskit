@@ -287,6 +287,11 @@ safety: read-only
         assert_eq!(pack.root, root);
         assert_eq!(pack.body.as_deref(), Some("# Demo\nUse this skill."));
         assert_eq!(pack.assets.len(), 2);
+        assert!(
+            pack.assets
+                .windows(2)
+                .all(|assets| assets[0].path <= assets[1].path)
+        );
         assert!(pack.assets.iter().all(|asset| asset.sha256.len() == 64));
         fs::remove_dir_all(&pack.root).expect("cleanup");
     }
@@ -320,6 +325,32 @@ safety: read-only
 
         assert_eq!(pack.verification_warnings, vec!["static warning"]);
         fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn loader_reports_invalid_utf8_by_file() {
+        let manifest_root = test_root("invalid-manifest-utf8");
+        fs::write(manifest_root.join(MANIFEST_FILE_NAME), [0xff, 0xfe])
+            .expect("write invalid manifest bytes");
+        let error = Loader::default()
+            .load_metadata(&manifest_root)
+            .expect_err("invalid manifest utf8 rejected");
+        assert!(
+            matches!(error, SkillError::InvalidUtf8 { path, .. } if path.ends_with(MANIFEST_FILE_NAME))
+        );
+        fs::remove_dir_all(manifest_root).expect("cleanup manifest root");
+
+        let body_root = test_root("invalid-body-utf8");
+        write_pack(&body_root, &manifest("body-utf8"));
+        fs::write(body_root.join(SKILL_MD_FILE_NAME), [0xff, 0xfe])
+            .expect("write invalid body bytes");
+        let error = Loader::default()
+            .activate(&body_root)
+            .expect_err("invalid body utf8 rejected");
+        assert!(
+            matches!(error, SkillError::InvalidUtf8 { path, .. } if path.ends_with(SKILL_MD_FILE_NAME))
+        );
+        fs::remove_dir_all(body_root).expect("cleanup body root");
     }
 
     #[test]
@@ -391,13 +422,7 @@ safety: read-only
     #[test]
     fn registry_registers_lists_and_rejects_duplicates() {
         let registry = InMemoryRegistry::new();
-        let pack = Pack {
-            root: PathBuf::from("demo"),
-            manifest: manifest("demo"),
-            body: None,
-            assets: Vec::new(),
-            verification_warnings: Vec::new(),
-        };
+        let pack = Pack::new(PathBuf::from("demo"), manifest("demo"));
         registry.register(pack.clone()).expect("register pack");
         assert_eq!(
             registry.get("demo").expect("get pack").manifest.name,
