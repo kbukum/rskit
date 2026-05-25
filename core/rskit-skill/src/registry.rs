@@ -72,6 +72,7 @@ pub fn register_provider(
             manifest,
             body: None,
             assets: Vec::new(),
+            verification_warnings: Vec::new(),
         };
         registry.register(pack)?;
     }

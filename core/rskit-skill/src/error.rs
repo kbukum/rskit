@@ -18,6 +18,14 @@ pub enum SkillError {
         #[source]
         source: std::io::Error,
     },
+    /// File exceeded the configured skill-pack size limit.
+    #[error("skill file {path} exceeds size limit of {limit_bytes} bytes")]
+    FileTooLarge {
+        /// File path.
+        path: PathBuf,
+        /// Maximum accepted size in bytes.
+        limit_bytes: u64,
+    },
     /// YAML parsing failed.
     #[error("manifest parse failed for {path}: {source}")]
     ParseManifest {
@@ -54,6 +62,13 @@ impl From<SkillError> for AppError {
             SkillError::InvalidManifest(message)
             | SkillError::Config(message)
             | SkillError::Verification(message) => AppError::invalid_input("skill", message),
+            SkillError::FileTooLarge { path, limit_bytes } => AppError::invalid_input(
+                "skill",
+                format!(
+                    "file {} exceeds size limit of {limit_bytes} bytes",
+                    path.display()
+                ),
+            ),
             SkillError::Io { path, source } => AppError::new(
                 rskit_errors::ErrorCode::Internal,
                 format!("skill I/O failed for {}: {source}", path.display()),

@@ -56,6 +56,20 @@ mod tests {
         }
     }
 
+    struct StaticWarningVerifier;
+
+    impl Verifier for StaticWarningVerifier {
+        fn verify(
+            &self,
+            _manifest: &Manifest,
+            _root: &Path,
+        ) -> Result<VerificationOutcome, SkillError> {
+            Ok(VerificationOutcome::Warning(vec![
+                "static warning".to_string(),
+            ]))
+        }
+    }
+
     fn manifest(name: &str) -> Manifest {
         Manifest {
             schema_version: "1".to_string(),
@@ -228,6 +242,23 @@ safety: read-only
     }
 
     #[test]
+    fn manifest_defaults_missing_human_approval_to_empty() {
+        let manifest: Manifest = serde_norway::from_str(
+            r#"
+schema_version: "1"
+name: demo
+version: 0.1.0
+description: Demo skill
+references: {}
+safety: read-only
+"#,
+        )
+        .expect("manifest parses without human approval");
+
+        assert!(manifest.human_approval.is_empty());
+    }
+
+    #[test]
     fn rejects_invalid_manifests() {
         let mut manifest = manifest("demo");
         manifest.name.clear();
@@ -280,6 +311,51 @@ safety: read-only
     }
 
     #[test]
+    fn loader_exposes_non_fatal_verification_warnings() {
+        let root = test_root("warnings");
+        let manifest = manifest("warned");
+        write_pack(&root, &manifest);
+
+        let pack = Loader::new(StaticWarningVerifier)
+            .activate(&root)
+            .expect("warning pack activates");
+
+        assert_eq!(pack.verification_warnings, vec!["static warning"]);
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn loader_rejects_oversized_manifest_and_body() {
+        let manifest_limit = 1024 * 1024;
+        let body_limit = 4 * 1024 * 1024;
+
+        let manifest_root = test_root("oversized-manifest");
+        fs::write(
+            manifest_root.join(MANIFEST_FILE_NAME),
+            vec![b'a'; manifest_limit + 1],
+        )
+        .expect("write oversized manifest");
+        let error = Loader::default()
+            .load_metadata(&manifest_root)
+            .expect_err("oversized manifest rejected");
+        assert!(matches!(error, SkillError::FileTooLarge { .. }));
+        fs::remove_dir_all(manifest_root).expect("cleanup manifest root");
+
+        let body_root = test_root("oversized-body");
+        write_pack(&body_root, &manifest("body"));
+        fs::write(
+            body_root.join(SKILL_MD_FILE_NAME),
+            vec![b'a'; body_limit + 1],
+        )
+        .expect("write oversized body");
+        let error = Loader::default()
+            .activate(&body_root)
+            .expect_err("oversized body rejected");
+        assert!(matches!(error, SkillError::FileTooLarge { .. }));
+        fs::remove_dir_all(body_root).expect("cleanup body root");
+    }
+
+    #[test]
     fn loader_reports_config_failures_separately() {
         let error = Loader::default()
             .activate_from_config(&ConfigLoader::new())
@@ -322,6 +398,7 @@ safety: read-only
             manifest: manifest("demo"),
             body: None,
             assets: Vec::new(),
+            verification_warnings: Vec::new(),
         };
         registry.register(pack.clone()).expect("register pack");
         assert_eq!(

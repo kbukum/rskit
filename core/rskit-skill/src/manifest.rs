@@ -44,7 +44,11 @@ pub struct Manifest {
     #[serde(default)]
     pub requires: Requires,
     /// Human approval checkpoints independent from tool sensitive invocations.
-    #[serde(rename = "human_approval")]
+    #[serde(
+        default,
+        rename = "human_approval",
+        skip_serializing_if = "Vec::is_empty"
+    )]
     pub human_approval: Vec<HumanApprovalStep>,
     /// Optional budgets requested by the skill.
     #[serde(default, skip_serializing_if = "Option::is_none")]
