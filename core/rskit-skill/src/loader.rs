@@ -1,7 +1,9 @@
 //! Filesystem loading and activation for skill packs.
 
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, Read};
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 
 use rskit_config::{AppConfig, ConfigLoader, ServiceConfig};
@@ -260,11 +262,7 @@ fn collect_assets(
 }
 
 fn read_utf8_bounded(path: &Path, max_bytes: u64) -> Result<String, SkillError> {
-    ensure_regular_file(path)?;
-    let file = File::open(path).map_err(|source| SkillError::Io {
-        path: path.to_path_buf(),
-        source,
-    })?;
+    let file = open_regular_file(path)?;
     let mut limited = file.take(max_bytes + 1);
     let mut bytes = Vec::new();
     limited
@@ -289,11 +287,7 @@ fn hash_file_bounded(
     path: &Path,
     total_asset_bytes: &mut u64,
 ) -> Result<sha2::digest::Output<Sha256>, SkillError> {
-    ensure_regular_file(path)?;
-    let file = File::open(path).map_err(|source| SkillError::Io {
-        path: path.to_path_buf(),
-        source,
-    })?;
+    let file = open_regular_file(path)?;
     let mut reader = BufReader::new(file);
     let mut buffer = [0_u8; 16 * 1024];
     let mut hasher = Sha256::new();
@@ -327,17 +321,56 @@ fn hash_file_bounded(
     Ok(hasher.finalize())
 }
 
-fn ensure_regular_file(path: &Path) -> Result<(), SkillError> {
-    let metadata = fs::symlink_metadata(path).map_err(|source| SkillError::Io {
+fn open_regular_file(path: &Path) -> Result<File, SkillError> {
+    let file = open_no_follow(path)?;
+    let metadata = file.metadata().map_err(|source| SkillError::Io {
         path: path.to_path_buf(),
         source,
     })?;
-    reject_symlink(path, &metadata)?;
-    if metadata.is_file() {
-        Ok(())
-    } else {
-        Err(invalid_pack_file(path, "expected regular file"))
+
+    if !metadata.is_file() {
+        return Err(invalid_pack_file(path, "expected regular file"));
     }
+
+    Ok(file)
+}
+
+#[cfg(unix)]
+fn open_no_follow(path: &Path) -> Result<File, SkillError> {
+    OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(path)
+        .map_err(|source| open_file_error(path, source))
+}
+
+#[cfg(not(unix))]
+fn open_no_follow(path: &Path) -> Result<File, SkillError> {
+    OpenOptions::new()
+        .read(true)
+        .open(path)
+        .map_err(|source| open_file_error(path, source))
+}
+
+fn open_file_error(path: &Path, source: std::io::Error) -> SkillError {
+    if is_symlink_open_error(&source) {
+        invalid_pack_file(path, "symlinks are not allowed")
+    } else {
+        SkillError::Io {
+            path: path.to_path_buf(),
+            source,
+        }
+    }
+}
+
+#[cfg(unix)]
+fn is_symlink_open_error(source: &std::io::Error) -> bool {
+    source.raw_os_error() == Some(libc::ELOOP)
+}
+
+#[cfg(not(unix))]
+fn is_symlink_open_error(_source: &std::io::Error) -> bool {
+    false
 }
 
 fn reject_symlink(path: &Path, metadata: &fs::Metadata) -> Result<(), SkillError> {

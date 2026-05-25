@@ -6266,6 +6266,7 @@ dependencies = [
 name = "rskit-skill"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "parking_lot",
  "rskit-config",
  "rskit-errors",
