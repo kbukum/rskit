@@ -2,87 +2,24 @@
 
 use std::pin::Pin;
 use std::sync::Arc;
-use std::time::Duration;
 
 use async_stream::stream;
 use futures::Stream;
-use rskit_ai::chat::count_tokens_approx;
 use rskit_ai::semconv;
 use rskit_component::{Component, Health};
 use rskit_errors::AppResult;
 use rskit_hook::{CancellationToken, Event, HookRegistry};
 use rskit_llm::provider::Provider;
-use rskit_llm::types::{
-    AssistantMessage, CompletionRequest, CompletionResponse, Message, ToolDefinition, Usage,
-};
-use rskit_resilience::Policy;
-use rskit_tool::{Context, Registry, ToolInput, ToolResult};
+use rskit_llm::types::{CompletionRequest, CompletionResponse, Message, ToolDefinition};
+use rskit_tool::{Registry, ToolInput, ToolResult};
 use tracing::Instrument;
 
+use crate::config::AgentConfig;
 use crate::hooks;
-use crate::types::{AgentEvent, AgentResult, ContextStrategy, FailStrategy, StopReason};
-
-// ── AgentConfig ─────────────────────────────────────────────────────────────
-
-/// Configuration for an [`Agent`].
-pub struct AgentConfig {
-    /// Optional tool registry.
-    pub tools: Option<Arc<Registry>>,
-    /// Optional hook registry for lifecycle events.
-    pub hooks: Option<Arc<HookRegistry>>,
-    /// System prompt prepended to every completion request.
-    pub system_prompt: String,
-    /// Maximum number of turns before the agent stops.
-    pub max_turns: u32,
-    /// Maximum cumulative token budget (input + output) across all turns.
-    pub max_tokens: usize,
-    /// Maximum wall-clock time for a run.
-    pub wall_clock: Duration,
-    /// Maximum logical tool calls. Retries count as one logical call.
-    pub max_tool_calls: u32,
-    /// Maximum concurrently scheduled tool calls.
-    pub tool_concurrency: usize,
-    /// Per-tool call timeout.
-    pub tool_timeout: Duration,
-    /// Optional resilience policy applied to tool executions.
-    pub policy: Option<Policy>,
-    /// Strategy for compacting context when it exceeds the provider's limit.
-    pub context_strategy: Option<Box<dyn ContextStrategy>>,
-    /// Model identifier to send with each completion request.
-    pub model: String,
-}
-
-impl AgentConfig {
-    /// Return this configuration as shared GenAI budget vocabulary.
-    #[must_use]
-    pub fn budget(&self) -> rskit_ai::Budget {
-        rskit_ai::Budget {
-            max_tokens: Some(self.max_tokens as u64),
-            max_calls: Some(u64::from(self.max_tool_calls)),
-            max_cost: None,
-            wall_clock: Some(self.wall_clock.as_secs()),
-        }
-    }
-}
-
-impl Default for AgentConfig {
-    fn default() -> Self {
-        Self {
-            tools: None,
-            hooks: None,
-            system_prompt: String::new(),
-            max_turns: 10,
-            max_tokens: 100_000,
-            wall_clock: Duration::from_secs(60),
-            max_tool_calls: 50,
-            tool_concurrency: 4,
-            tool_timeout: Duration::from_secs(30),
-            policy: None,
-            context_strategy: None,
-            model: String::new(),
-        }
-    }
-}
+use crate::runner::RunState;
+use crate::stop;
+use crate::tool_exec;
+use crate::types::{AgentEvent, AgentResult, StopReason};
 
 // ── Agent ───────────────────────────────────────────────────────────────────
 
@@ -130,33 +67,12 @@ impl Agent {
             "gen_ai.request.model" = %self.config.model,
         );
         async move {
-            let mut all_messages = vec![rskit_llm::system(&self.config.system_prompt)];
-            all_messages.extend(messages);
+            let mut state = RunState::new(&self.config.system_prompt, messages);
 
-            let mut total_usage = Usage {
-                input_tokens: 0,
-                output_tokens: 0,
-                cached_tokens: 0,
-                reasoning_tokens: 0,
-            };
-            let mut last_assistant = AssistantMessage {
-                content: vec![],
-                tool_calls: vec![],
-                usage: None,
-            };
-
-            if self.config.max_tokens == 0 {
-                return Ok(AgentResult {
-                    messages: all_messages,
-                    final_message: last_assistant,
-                    total_usage,
-                    turn_count: 0,
-                    stop_reason: StopReason::MaxTokens,
-                });
+            if let Some(stop_reason) = stop::initial_stop(&self.config) {
+                return Ok(state.finish(0, stop_reason));
             }
 
-            let started_at = tokio::time::Instant::now();
-            let mut tool_calls_used = 0_u32;
             let hook_token = CancellationToken::new();
 
             for turn in 0..self.config.max_turns {
@@ -166,25 +82,13 @@ impl Agent {
                     "agent.turn" = turn,
                 );
 
-                if started_at.elapsed() >= self.config.wall_clock {
-                    return Ok(AgentResult {
-                        messages: all_messages,
-                        final_message: last_assistant,
-                        total_usage,
-                        turn_count: turn,
-                        stop_reason: StopReason::WallClockExceeded,
-                    });
+                if let Some(stop_reason) = stop::wall_clock_stop(&state, &self.config) {
+                    return Ok(state.finish(turn, stop_reason));
                 }
                 if let Some(ref hooks) = self.config.hooks
                     && emit_hook(hooks, &hooks::TurnStart { turn }, hook_token.clone())
                 {
-                    return Ok(AgentResult {
-                        messages: all_messages,
-                        final_message: last_assistant,
-                        total_usage,
-                        turn_count: turn,
-                        stop_reason: StopReason::Aborted,
-                    });
+                    return Ok(state.finish(turn, StopReason::Aborted));
                 }
 
                 let tool_defs = self.config.tools.as_ref().map(|registry| {
@@ -201,7 +105,7 @@ impl Agent {
                 });
                 let request = CompletionRequest {
                     model: self.config.model.clone(),
-                    messages: all_messages.clone(),
+                    messages: state.messages.clone(),
                     max_tokens: None,
                     temperature: None,
                     stream: false,
@@ -218,27 +122,16 @@ impl Agent {
                         hook_token.clone(),
                     )
                 {
-                    return Ok(AgentResult {
-                        messages: all_messages,
-                        final_message: last_assistant,
-                        total_usage,
-                        turn_count: turn,
-                        stop_reason: StopReason::Aborted,
-                    });
+                    return Ok(state.finish(turn, StopReason::Aborted));
                 }
 
                 let response: CompletionResponse = tokio::time::timeout(
-                    self.config.wall_clock.saturating_sub(started_at.elapsed()),
+                    state.remaining_wall_clock(self.config.wall_clock),
                     self.provider.complete(request),
                 )
                 .instrument(turn_span.clone())
                 .await
-                .map_err(|_| {
-                    rskit_errors::AppError::new(
-                        rskit_errors::ErrorCode::Timeout,
-                        "agent wall-clock budget exceeded",
-                    )
-                })??;
+                .map_err(|_| stop::wall_clock_error())??;
 
                 if let Some(ref hooks) = self.config.hooks
                     && emit_hook(
@@ -250,47 +143,27 @@ impl Agent {
                         hook_token.clone(),
                     )
                 {
-                    return Ok(AgentResult {
-                        messages: all_messages,
-                        final_message: response.message,
-                        total_usage,
-                        turn_count: turn + 1,
-                        stop_reason: StopReason::Aborted,
-                    });
+                    state.last_assistant = response.message;
+                    return Ok(state.finish(turn + 1, StopReason::Aborted));
                 }
 
-                total_usage.input_tokens += response.usage.input_tokens;
-                total_usage.output_tokens += response.usage.output_tokens;
+                let response_stop_reason = response
+                    .stop_reason
+                    .unwrap_or(rskit_llm::FinishReason::Stop);
+                let has_tool_calls = response.has_tool_calls();
+                state.record_response(response);
 
-                last_assistant = response.message.clone();
-                all_messages.push(Message::Assistant(response.message.clone()));
-
-                if !response.has_tool_calls() {
-                    return Ok(AgentResult {
-                        messages: all_messages,
-                        final_message: last_assistant,
-                        total_usage,
-                        turn_count: turn + 1,
-                        stop_reason: StopReason::from(
-                            response
-                                .stop_reason
-                                .unwrap_or(rskit_llm::FinishReason::Stop),
-                        ),
-                    });
+                if !has_tool_calls {
+                    return Ok(state.finish(turn + 1, StopReason::from(response_stop_reason)));
                 }
 
                 if let Some(ref tools) = self.config.tools {
-                    for tc in &response.message.tool_calls {
-                        if tool_calls_used >= self.config.max_tool_calls {
-                            return Ok(AgentResult {
-                                messages: all_messages,
-                                final_message: last_assistant,
-                                total_usage,
-                                turn_count: turn + 1,
-                                stop_reason: StopReason::MaxToolCallsExceeded,
-                            });
+                    let tool_calls = state.last_assistant.tool_calls.clone();
+                    for tc in &tool_calls {
+                        if let Some(stop_reason) = stop::tool_budget_stop(&state, &self.config) {
+                            return Ok(state.finish(turn + 1, stop_reason));
                         }
-                        tool_calls_used += 1;
+                        state.tool_calls_used += 1;
                         let input = ToolInput::new(serde_json::Value::Object(tc.input.clone()))?;
 
                         if let Some(ref hooks) = self.config.hooks
@@ -303,13 +176,7 @@ impl Agent {
                                 hook_token.clone(),
                             )
                         {
-                            return Ok(AgentResult {
-                                messages: all_messages,
-                                final_message: last_assistant,
-                                total_usage,
-                                turn_count: turn + 1,
-                                stop_reason: StopReason::Aborted,
-                            });
+                            return Ok(state.finish(turn + 1, StopReason::Aborted));
                         }
 
                         let tool_result = self
@@ -341,64 +208,38 @@ impl Agent {
                             Err(e) => (e.to_string(), true),
                         };
 
-                        all_messages.push(rskit_llm::tool_result_msg(&tc.id, &content, is_error));
+                        state
+                            .messages
+                            .push(rskit_llm::tool_result_msg(&tc.id, &content, is_error));
                     }
                 }
 
-                let total_tokens = (total_usage.input_tokens + total_usage.output_tokens) as usize;
-                if total_tokens >= self.config.max_tokens {
-                    return Ok(AgentResult {
-                        messages: all_messages,
-                        final_message: last_assistant,
-                        total_usage,
-                        turn_count: turn + 1,
-                        stop_reason: StopReason::MaxTokens,
-                    });
+                if let Some(stop_reason) = stop::token_budget_stop(&state, &self.config) {
+                    return Ok(state.finish(turn + 1, stop_reason));
                 }
 
                 let caps = self.provider.capabilities();
-                let context_tokens = count_tokens_approx(&all_messages);
-                if let Some(max_input_tokens) = caps.max_input_tokens
-                    && context_tokens > max_input_tokens as usize
-                {
-                    let strategy = self
-                        .config
-                        .context_strategy
-                        .as_ref()
-                        .map(|s| s.as_ref())
-                        .unwrap_or(&FailStrategy as &dyn ContextStrategy);
-
-                    all_messages = strategy.compact(all_messages, max_input_tokens as usize)?;
-                }
+                state.compact_context(
+                    caps.max_input_tokens,
+                    self.config.context_strategy.as_deref(),
+                )?;
 
                 if let Some(ref hooks) = self.config.hooks
                     && emit_hook(
                         hooks,
                         &hooks::TurnEnd {
                             turn,
-                            message: last_assistant.clone(),
+                            message: state.last_assistant.clone(),
                         },
                         hook_token.clone(),
                     )
                 {
-                    return Ok(AgentResult {
-                        messages: all_messages,
-                        final_message: last_assistant,
-                        total_usage,
-                        turn_count: turn + 1,
-                        stop_reason: StopReason::Aborted,
-                    });
+                    return Ok(state.finish(turn + 1, StopReason::Aborted));
                 }
             }
 
             // Exhausted max_turns
-            Ok(AgentResult {
-                messages: all_messages,
-                final_message: last_assistant,
-                total_usage,
-                turn_count: self.config.max_turns,
-                stop_reason: StopReason::MaxTurns,
-            })
+            Ok(state.finish(self.config.max_turns, StopReason::MaxTurns))
         }
         .instrument(run_span)
         .await
@@ -436,34 +277,15 @@ impl Agent {
         name: &str,
         input: ToolInput,
     ) -> AppResult<ToolResult> {
-        let timeout = self.config.tool_timeout;
-        let policy = self.config.policy.clone();
-        let tool_name = name.to_string();
-        let tool_use_id = tool_use_id.to_string();
-
-        let execute = || {
-            let tool_name = tool_name.clone();
-            let tool_use_id = tool_use_id.clone();
-            let input = input.clone();
-            async move {
-                let mut ctx = Context::new();
-                ctx.tool_use_id = tool_use_id;
-                tokio::time::timeout(timeout, tools.call(&tool_name, &ctx, input))
-                    .await
-                    .unwrap_or_else(|_| {
-                        Err(rskit_errors::AppError::new(
-                            rskit_errors::ErrorCode::Timeout,
-                            "tool call timed out",
-                        ))
-                    })
-            }
-        };
-
-        if let Some(policy) = policy {
-            policy.execute(execute).await
-        } else {
-            execute().await
-        }
+        tool_exec::execute_tool_call(
+            tools,
+            self.config.policy.clone(),
+            self.config.tool_timeout,
+            tool_use_id,
+            name,
+            input,
+        )
+        .await
     }
 }
 
@@ -493,11 +315,14 @@ mod tests {
     use futures::StreamExt;
     use rskit_ai::Capabilities;
     use rskit_ai::StreamEventRef;
+    use rskit_ai::chat::count_tokens_approx;
     use rskit_errors::AppError;
     use rskit_hook::HookError;
-    use rskit_llm::types;
-    use rskit_resilience::{ConstantBackoff, RetryPolicy};
+    use rskit_llm::types::{self, AssistantMessage, CompletionRequest, CompletionResponse, Usage};
+    use rskit_resilience::{ConstantBackoff, Policy, RetryPolicy};
+    use rskit_tool::Context;
     use std::sync::atomic::{AtomicU32, Ordering};
+    use std::time::Duration;
 
     // ── Mock provider ───────────────────────────────────────────────────
 

@@ -32,6 +32,7 @@ rskit-errors    = { path = "../rskit-errors" }
 rskit-security  = { path = "../rskit-security" }
 
 [dev-dependencies]
+axum      = { workspace = true }
 criterion = { workspace = true }
 
 [[bench]]

@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Shared primitives**: added retry presets, checked HTTP response helpers,
   and storage metadata/key helpers with safe local path resolution to reduce
   repeated adapter boilerplate.
+- **Maintainability refactor**: split large skill, MCP, agent, lifecycle, and
+  AI-vocabulary modules around ownership boundaries; centralized Consul and LLM
+  outbound HTTP/retry/telemetry mechanics on shared infrastructure.
 - **Media/dataset**: redesigned dataset items around bounded byte/file
   payloads, streaming source contracts, explicit transform errors, schema
   validation via `rskit-schema`, and `rskit-pipeline` stream adapters.

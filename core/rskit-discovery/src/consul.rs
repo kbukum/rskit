@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use reqwest::Client;
+use rskit_httpclient::{ErrorResponse, HttpClient, HttpClientConfig, Request};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use tracing::{debug, warn};
@@ -65,9 +65,7 @@ struct ConsulService {
 /// Uses the Consul HTTP API v1 for service registration and health-based
 /// discovery.
 pub struct ConsulDiscovery {
-    base_url: String,
-    client: Client,
-    token: Option<String>,
+    client: HttpClient,
 }
 
 impl ConsulDiscovery {
@@ -75,21 +73,15 @@ impl ConsulDiscovery {
     ///
     /// `address` should be in the form `"host:port"` (e.g. `"localhost:8500"`).
     /// An optional ACL token is sent as `X-Consul-Token` on every request.
-    pub fn new(address: &str, token: Option<String>) -> Self {
-        Self {
-            base_url: format!("http://{address}"),
-            client: Client::new(),
-            token,
+    pub fn new(address: &str, token: Option<String>) -> AppResult<Self> {
+        let mut config = HttpClientConfig::new().with_base_url(format!("http://{address}"));
+        if let Some(token) = token {
+            config = config.with_header("X-Consul-Token", token);
         }
-    }
 
-    fn request(&self, method: reqwest::Method, path: &str) -> reqwest::RequestBuilder {
-        let url = format!("{}{}", self.base_url, path);
-        let mut req = self.client.request(method, &url);
-        if let Some(tok) = &self.token {
-            req = req.header("X-Consul-Token", tok);
-        }
-        req
+        Ok(Self {
+            client: HttpClient::new(config)?,
+        })
     }
 }
 
@@ -99,49 +91,19 @@ impl Discovery for ConsulDiscovery {
         debug!(service, "resolving service instances from consul");
 
         let resp = self
-            .request(
-                reqwest::Method::GET,
-                &format!("/v1/health/service/{service}?passing=true"),
+            .client
+            .send(
+                Request::get(format!("/v1/health/service/{service}"))
+                    .query_param("passing", "true"),
             )
-            .send()
             .await
-            .map_err(|e| AppError::external_service("consul", e))?;
-
-        if !resp.status().is_success() {
-            warn!(
-                service,
-                status = %resp.status(),
-                "consul resolve returned non-success status"
-            );
-            return Err(AppError::external_service(
-                "consul",
-                std::io::Error::other(format!("consul returned status {}", resp.status())),
-            ));
-        }
-
-        let entries: Vec<HealthEntry> = resp
+            .map_err(|e| AppError::external_service("consul", e))?
+            .error_for_status_with(consul_status_error)?;
+        let entries = resp
             .json()
-            .await
             .map_err(|e| AppError::external_service("consul", e))?;
 
-        let instances = entries
-            .into_iter()
-            .map(|entry| {
-                let svc = entry.service;
-                ServiceInstance {
-                    id: svc.id,
-                    name: svc.service,
-                    address: svc.address,
-                    port: svc.port,
-                    healthy: true, // only passing services are returned
-                    weight: 1,
-                    tags: svc.tags,
-                    metadata: svc.meta,
-                }
-            })
-            .collect();
-
-        Ok(instances)
+        Ok(entries_to_instances(entries))
     }
 }
 
@@ -167,24 +129,20 @@ impl Registry for ConsulDiscovery {
             check,
         };
 
-        let resp = self
-            .request(reqwest::Method::PUT, "/v1/agent/service/register")
-            .json(&payload)
-            .send()
+        self.client
+            .send(
+                Request::put("/v1/agent/service/register")
+                    .json_body(&payload)
+                    .map_err(|e| {
+                        AppError::new(
+                            rskit_errors::ErrorCode::InvalidInput,
+                            format!("failed to serialize consul register payload: {e}"),
+                        )
+                    })?,
+            )
             .await
-            .map_err(|e| AppError::external_service("consul", e))?;
-
-        if !resp.status().is_success() {
-            warn!(
-                id = %instance.id,
-                status = %resp.status(),
-                "consul register returned non-success status"
-            );
-            return Err(AppError::external_service(
-                "consul",
-                std::io::Error::other(format!("consul returned status {}", resp.status())),
-            ));
-        }
+            .map_err(|e| AppError::external_service("consul", e))?
+            .error_for_status_with(consul_status_error)?;
 
         Ok(())
     }
@@ -192,26 +150,11 @@ impl Registry for ConsulDiscovery {
     async fn deregister(&self, id: &str) -> AppResult<()> {
         debug!(id, "deregistering instance from consul");
 
-        let resp = self
-            .request(
-                reqwest::Method::PUT,
-                &format!("/v1/agent/service/deregister/{id}"),
-            )
-            .send()
+        self.client
+            .send(Request::put(format!("/v1/agent/service/deregister/{id}")))
             .await
-            .map_err(|e| AppError::external_service("consul", e))?;
-
-        if !resp.status().is_success() {
-            warn!(
-                id,
-                status = %resp.status(),
-                "consul deregister returned non-success status"
-            );
-            return Err(AppError::external_service(
-                "consul",
-                std::io::Error::other(format!("consul returned status {}", resp.status())),
-            ));
-        }
+            .map_err(|e| AppError::external_service("consul", e))?
+            .error_for_status_with(consul_status_error)?;
 
         Ok(())
     }
@@ -231,8 +174,6 @@ const DEFAULT_POLL_INTERVAL: Duration = Duration::from_secs(5);
 impl Watcher for ConsulDiscovery {
     async fn watch(&self, service: &str) -> AppResult<mpsc::Receiver<Vec<ServiceInstance>>> {
         let (tx, rx) = mpsc::channel(16);
-        let base_url = self.base_url.clone();
-        let token = self.token.clone();
         let client = self.client.clone();
         let service = service.to_owned();
 
@@ -241,43 +182,22 @@ impl Watcher for ConsulDiscovery {
             let mut last_endpoints: Vec<String> = Vec::new();
 
             loop {
-                let url = format!(
-                    "{}/v1/health/service/{}?passing=true&index={}&wait=30s",
-                    base_url, service, last_index,
-                );
-                let mut req = client.request(reqwest::Method::GET, &url);
-                if let Some(tok) = &token {
-                    req = req.header("X-Consul-Token", tok);
-                }
+                let request = Request::get(format!("/v1/health/service/{service}"))
+                    .query_param("passing", "true")
+                    .query_param("index", last_index.to_string())
+                    .query_param("wait", "30s");
 
-                match req.send().await {
-                    Ok(resp) if resp.status().is_success() => {
+                match client.send(request).await {
+                    Ok(resp) if resp.is_success() => {
                         // Extract the X-Consul-Index header for long-polling
                         let new_index = resp
-                            .headers()
-                            .get("X-Consul-Index")
-                            .and_then(|v| v.to_str().ok())
+                            .header("X-Consul-Index")
                             .and_then(|v| v.parse::<u64>().ok())
                             .unwrap_or(0);
 
-                        match resp.json::<Vec<HealthEntry>>().await {
+                        match resp.json::<Vec<HealthEntry>>() {
                             Ok(entries) => {
-                                let instances: Vec<ServiceInstance> = entries
-                                    .into_iter()
-                                    .map(|entry| {
-                                        let svc = entry.service;
-                                        ServiceInstance {
-                                            id: svc.id,
-                                            name: svc.service,
-                                            address: svc.address,
-                                            port: svc.port,
-                                            healthy: true,
-                                            weight: 1,
-                                            tags: svc.tags,
-                                            metadata: svc.meta,
-                                        }
-                                    })
-                                    .collect();
+                                let instances = entries_to_instances(entries);
 
                                 // Emit only when the set actually changed
                                 let endpoints: Vec<String> =
@@ -328,4 +248,37 @@ impl Watcher for ConsulDiscovery {
 
         Ok(rx)
     }
+}
+
+fn entries_to_instances(entries: Vec<HealthEntry>) -> Vec<ServiceInstance> {
+    entries
+        .into_iter()
+        .map(|entry| {
+            let svc = entry.service;
+            ServiceInstance {
+                id: svc.id,
+                name: svc.service,
+                address: svc.address,
+                port: svc.port,
+                healthy: true,
+                weight: 1,
+                tags: svc.tags,
+                metadata: svc.meta,
+            }
+        })
+        .collect()
+}
+
+fn consul_status_error(response: ErrorResponse) -> AppError {
+    warn!(
+        status = %response.status,
+        "consul returned non-success status"
+    );
+
+    AppError::new(
+        rskit_errors::ErrorCode::ExternalService,
+        format!("consul returned status {}", response.status),
+    )
+    .with_detail("status", response.status.as_u16().to_string())
+    .with_detail("body", response.body)
 }

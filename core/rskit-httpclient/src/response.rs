@@ -6,6 +6,17 @@ use rskit_errors::{AppError, ErrorCode};
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 
+/// Non-success HTTP response details for service-specific error mapping.
+#[derive(Debug, Clone)]
+pub struct ErrorResponse {
+    /// Response status code.
+    pub status: StatusCode,
+    /// Response headers.
+    pub headers: HashMap<String, String>,
+    /// Response body as UTF-8 text, or a diagnostic marker for non-UTF-8 bodies.
+    pub body: String,
+}
+
 /// Wrapped HTTP response with convenience methods.
 pub struct Response {
     /// Response status code
@@ -100,42 +111,78 @@ impl Response {
         self.error_for_status()?.text()
     }
 
+    /// Returns the body text after applying custom non-2xx response mapping.
+    pub fn checked_text_with<F>(self, mapper: F) -> rskit_errors::AppResult<String>
+    where
+        F: FnOnce(ErrorResponse) -> AppError,
+    {
+        self.error_for_status_with(mapper)?.text()
+    }
+
     /// Returns the parsed JSON body after converting non-2xx responses into an [`AppError`].
     pub fn checked_json<T: DeserializeOwned>(self) -> rskit_errors::AppResult<T> {
         self.error_for_status()?.json()
     }
 
+    /// Returns the parsed JSON body after applying custom non-2xx response mapping.
+    pub fn checked_json_with<T, F>(self, mapper: F) -> rskit_errors::AppResult<T>
+    where
+        T: DeserializeOwned,
+        F: FnOnce(ErrorResponse) -> AppError,
+    {
+        self.error_for_status_with(mapper)?.json()
+    }
+
     /// Returns an error if the status is not 2xx.
     pub fn error_for_status(self) -> rskit_errors::AppResult<Self> {
+        self.error_for_status_with(default_error_mapper)
+    }
+
+    /// Returns an error if the status is not 2xx, using the supplied response mapper.
+    pub fn error_for_status_with<F>(self, mapper: F) -> rskit_errors::AppResult<Self>
+    where
+        F: FnOnce(ErrorResponse) -> AppError,
+    {
         if self.status.is_success() {
             Ok(self)
         } else {
             let status = self.status;
-            let code = match status.as_u16() {
-                400 => ErrorCode::InvalidInput,
-                401 => ErrorCode::Unauthorized,
-                403 => ErrorCode::Forbidden,
-                404 => ErrorCode::NotFound,
-                409 => ErrorCode::Conflict,
-                429 => ErrorCode::RateLimited,
-                500 | 502 | 503 | 504 => ErrorCode::Internal,
-                _ => ErrorCode::ExternalService,
-            };
+            let headers = self.headers;
+            let body = String::from_utf8(self.body.to_vec())
+                .unwrap_or_else(|_| "<non-utf8 body>".to_string());
 
-            let body_str = self.text_or_diagnostic();
-
-            Err(AppError::new(
-                code,
-                format!(
-                    "http error: {} {}",
-                    status.as_u16(),
-                    status.canonical_reason().unwrap_or("Unknown")
-                ),
-            )
-            .with_detail("status", status.as_u16().to_string())
-            .with_detail("body", body_str))
+            Err(mapper(ErrorResponse {
+                status,
+                headers,
+                body,
+            }))
         }
     }
+}
+
+fn default_error_mapper(response: ErrorResponse) -> AppError {
+    let status = response.status;
+    let code = match status.as_u16() {
+        400 => ErrorCode::InvalidInput,
+        401 => ErrorCode::Unauthorized,
+        403 => ErrorCode::Forbidden,
+        404 => ErrorCode::NotFound,
+        409 => ErrorCode::Conflict,
+        429 => ErrorCode::RateLimited,
+        500 | 502 | 503 | 504 => ErrorCode::Internal,
+        _ => ErrorCode::ExternalService,
+    };
+
+    AppError::new(
+        code,
+        format!(
+            "http error: {} {}",
+            status.as_u16(),
+            status.canonical_reason().unwrap_or("Unknown")
+        ),
+    )
+    .with_detail("status", status.as_u16().to_string())
+    .with_detail("body", response.body)
 }
 
 impl std::fmt::Debug for Response {
@@ -214,5 +261,47 @@ mod tests {
         );
 
         assert_eq!(resp.text_or_diagnostic(), "<non-utf8 body>");
+    }
+
+    #[test]
+    fn custom_status_mapper_receives_status_headers_and_body() {
+        let mut headers = HashMap::new();
+        headers.insert("X-Request-Id".to_string(), "abc".to_string());
+        let resp = Response::new(
+            StatusCode::BAD_GATEWAY,
+            headers,
+            Bytes::from("upstream unavailable"),
+        );
+
+        let error = resp
+            .error_for_status_with(|response| {
+                AppError::new(ErrorCode::ExternalService, "mapped")
+                    .with_detail("status", response.status.as_u16().to_string())
+                    .with_detail(
+                        "request_id",
+                        response
+                            .headers
+                            .get("X-Request-Id")
+                            .cloned()
+                            .unwrap_or_default(),
+                    )
+                    .with_detail("body", response.body)
+            })
+            .unwrap_err();
+
+        assert_eq!(
+            error
+                .details()
+                .get("request_id")
+                .and_then(serde_json::Value::as_str),
+            Some("abc")
+        );
+        assert_eq!(
+            error
+                .details()
+                .get("body")
+                .and_then(serde_json::Value::as_str),
+            Some("upstream unavailable")
+        );
     }
 }

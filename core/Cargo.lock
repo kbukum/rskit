@@ -5612,9 +5612,9 @@ dependencies = [
  "dashmap",
  "parking_lot",
  "rand 0.10.1",
- "reqwest 0.13.3",
  "rskit-bootstrap",
  "rskit-errors",
+ "rskit-httpclient",
  "rskit-resilience",
  "serde",
  "serde_json",
@@ -5711,6 +5711,7 @@ dependencies = [
 name = "rskit-http"
 version = "0.1.0"
 dependencies = [
+ "axum 0.8.9",
  "criterion",
  "http 1.4.0",
  "rskit-errors",
@@ -5872,9 +5873,13 @@ version = "0.1.0"
 dependencies = [
  "rskit-ai",
  "rskit-errors",
+ "rskit-httpclient",
  "rskit-llm",
+ "rskit-resilience",
  "serde",
  "serde_json",
+ "tracing",
+ "tracing-opentelemetry",
 ]
 
 [[package]]

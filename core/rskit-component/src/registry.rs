@@ -7,38 +7,7 @@ use rskit_errors::{AppError, AppResult, ErrorCode};
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 
-use crate::{Component, Health, State};
-
-/// Configuration for the component registry.
-#[derive(Debug, Clone)]
-pub struct RegistryConfig {
-    /// Maximum number of components to start in parallel.
-    /// `0` means start all concurrently without any limit.
-    pub concurrency: usize,
-    /// Timeout applied to each component's `start()` call.
-    pub start_timeout: Duration,
-    /// Timeout applied to each component's `stop()` call.
-    pub stop_timeout: Duration,
-}
-
-impl Default for RegistryConfig {
-    fn default() -> Self {
-        Self {
-            concurrency: 1,
-            start_timeout: Duration::from_secs(30),
-            stop_timeout: Duration::from_secs(30),
-        }
-    }
-}
-
-/// Detailed result for an attempted component stop.
-#[derive(Debug)]
-pub struct StopResult {
-    /// Component name.
-    pub name: String,
-    /// Stop error, if one occurred.
-    pub error: Option<AppError>,
-}
+use crate::{Component, Health, RegistryConfig, State, StopResult};
 
 #[derive(Clone)]
 struct ComponentSnapshot {
