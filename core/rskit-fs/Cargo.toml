@@ -1,0 +1,27 @@
+[package]
+name        = "rskit-fs"
+description = "Local filesystem primitives for paths, files, directories, temp files, and atomic writes"
+version.workspace      = true
+edition.workspace      = true
+license.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+documentation = "https://docs.rs/rskit-fs"
+readme = "README.md"
+categories = ["filesystem"]
+keywords   = ["filesystem", "paths", "files", "directories"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+tokio = { workspace = true, features = ["fs"] }
+tempfile = { workspace = true }
+
+rskit-errors = { path = "../rskit-errors" }
+
+[lints]
+workspace = true

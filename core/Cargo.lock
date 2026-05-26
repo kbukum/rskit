@@ -5286,6 +5286,7 @@ dependencies = [
  "rskit-embedding",
  "rskit-encryption",
  "rskit-errors",
+ "rskit-fs",
  "rskit-git",
  "rskit-grpc",
  "rskit-http",
@@ -5663,6 +5664,15 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "tonic 0.14.6",
+]
+
+[[package]]
+name = "rskit-fs"
+version = "0.1.0"
+dependencies = [
+ "rskit-errors",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]

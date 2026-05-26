@@ -9,6 +9,7 @@
 //! | `server` | `rskit-server` (service-facing HTTP + lifecycle) |
 //! | `grpc`   | `rskit-grpc` (aligned gRPC client/server transport) |
 //! | `encryption` | `rskit-encryption` (encryption helpers) |
+//! | always-on | `rskit-fs` (local filesystem primitives) |
 //! | `http`   | `rskit-http` (axum transport details) |
 //! | `auth`   | `rskit-auth` (JWT, OIDC, password) |
 //! | `di`     | `rskit-di` (dependency injection) |
@@ -71,6 +72,9 @@
 
 /// Error types, `ErrorCode`, `AppError`, `AppResult`.
 pub use rskit_errors as errors;
+
+/// Local filesystem primitives.
+pub use rskit_fs as fs;
 
 /// Config loading (TOML + env).
 pub use rskit_config as config;
