@@ -1,4 +1,5 @@
 //! Tree listing.
+#![allow(clippy::needless_pass_by_value)]
 
 use std::path::Path;
 
@@ -28,27 +29,12 @@ fn list_tree_recursive(
     visited: &mut VisitedDirs,
     entries: &mut Vec<TreeEntry>,
 ) -> AppResult<()> {
-    for entry in std::fs::read_dir(current).map_err(|error| {
-        AppError::new(
-            ErrorCode::Internal,
-            format!("failed to read directory '{}': {error}", current.display()),
-        )
-    })? {
-        let entry = entry.map_err(|error| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!("failed to read directory entry: {error}"),
-            )
-        })?;
+    for entry in std::fs::read_dir(current).map_err(|error| read_list_dir_error(current, error))? {
+        let entry = entry.map_err(read_list_dir_entry_error)?;
         let path = entry.path();
         let metadata = metadata_for(&path, follow_symlinks)?;
         let file_type = metadata.file_type();
-        let relative_path = path.strip_prefix(root).map_err(|error| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!("failed to strip prefix: {error}"),
-            )
-        })?;
+        let relative_path = path.strip_prefix(root).map_err(strip_list_prefix_error)?;
 
         entries.push(TreeEntry {
             path: path.clone(),
@@ -67,9 +53,33 @@ fn list_tree_recursive(
     Ok(())
 }
 
+fn read_list_dir_error(path: &Path, error: std::io::Error) -> AppError {
+    AppError::new(
+        ErrorCode::Internal,
+        format!("failed to read directory '{}': {error}", path.display()),
+    )
+}
+
+fn read_list_dir_entry_error(error: std::io::Error) -> AppError {
+    AppError::new(
+        ErrorCode::Internal,
+        format!("failed to read directory entry: {error}"),
+    )
+}
+
+fn strip_list_prefix_error(error: std::path::StripPrefixError) -> AppError {
+    AppError::new(
+        ErrorCode::Internal,
+        format!("failed to strip prefix: {error}"),
+    )
+}
+
 #[cfg(test)]
 mod tests {
-    use super::list_tree;
+    use super::{
+        list_tree, list_tree_recursive, read_list_dir_entry_error, read_list_dir_error,
+        strip_list_prefix_error,
+    };
     use crate::TempDir;
 
     #[test]
@@ -103,5 +113,61 @@ mod tests {
         std::os::unix::fs::symlink(source.path(), source.child("nested/back").unwrap()).unwrap();
 
         assert!(list_tree(source.path(), true).is_err());
+    }
+
+    #[test]
+    fn list_tree_reports_read_dir_errors() {
+        let source = TempDir::new().unwrap();
+        let file = source.write_file("file.txt", b"hello").unwrap();
+        let mut visited = super::super::init_visited_dirs(source.path()).unwrap();
+        let mut entries = Vec::new();
+
+        assert!(
+            list_tree_recursive(source.path(), &file, false, &mut visited, &mut entries).is_err()
+        );
+    }
+
+    #[test]
+    fn list_tree_reports_strip_prefix_errors() {
+        let root = TempDir::new().unwrap();
+        let outside = TempDir::new().unwrap();
+        outside.write_file("file.txt", b"hello").unwrap();
+        let mut visited = super::super::init_visited_dirs(root.path()).unwrap();
+        let mut entries = Vec::new();
+
+        assert!(
+            list_tree_recursive(
+                root.path(),
+                outside.path(),
+                false,
+                &mut visited,
+                &mut entries
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn list_tree_error_builders_include_context() {
+        let path = std::path::Path::new("dir");
+        let err = || std::io::Error::other("boom");
+
+        assert!(
+            read_list_dir_error(path, err())
+                .to_string()
+                .contains("read directory")
+        );
+        assert!(
+            read_list_dir_entry_error(err())
+                .to_string()
+                .contains("directory entry")
+        );
+
+        let strip_error = std::path::Path::new("a").strip_prefix("b").unwrap_err();
+        assert!(
+            strip_list_prefix_error(strip_error)
+                .to_string()
+                .contains("strip prefix")
+        );
     }
 }

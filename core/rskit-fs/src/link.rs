@@ -75,6 +75,16 @@ mod tests {
         assert_eq!(file::read_string(&link).await.unwrap(), "hello");
     }
 
+    #[tokio::test]
+    async fn link_errors_are_reported() {
+        let dir = TempDir::new().unwrap();
+        let missing = dir.child("missing.txt").unwrap();
+        let link = dir.child("link.txt").unwrap();
+
+        assert!(hard_link(&missing, &link).await.is_err());
+        assert!(read_link(&missing).await.is_err());
+    }
+
     #[cfg(unix)]
     #[tokio::test]
     async fn creates_and_reads_symlink() {
@@ -86,5 +96,30 @@ mod tests {
         super::symlink_file(&original, &link).await.unwrap();
 
         assert_eq!(read_link(&link).await.unwrap(), original);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn creates_directory_symlink() {
+        let dir = TempDir::new().unwrap();
+        let original = dir.child("original").unwrap();
+        let link = dir.child("link").unwrap();
+        crate::dir::create_dir_all(&original).await.unwrap();
+
+        super::symlink_dir(&original, &link).await.unwrap();
+
+        assert_eq!(read_link(&link).await.unwrap(), original);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn symlink_errors_are_reported() {
+        let dir = TempDir::new().unwrap();
+        let original = dir.child("original.txt").unwrap();
+        let link = dir.child("link.txt").unwrap();
+        file::write(&original, b"hello").await.unwrap();
+        file::write(&link, b"exists").await.unwrap();
+
+        assert!(super::symlink_file(&original, &link).await.is_err());
     }
 }

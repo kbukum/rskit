@@ -1,4 +1,5 @@
 //! Temporary file and path helpers.
+#![allow(clippy::needless_pass_by_value)]
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -19,12 +20,7 @@ pub struct TempFile {
 impl TempFile {
     /// Create a new temporary file in the system temp directory.
     pub fn new() -> AppResult<Self> {
-        let inner = tempfile::NamedTempFile::new().map_err(|error| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!("failed to create temp file: {error}"),
-            )
-        })?;
+        let inner = tempfile::NamedTempFile::new().map_err(create_temp_file_error)?;
         Ok(Self { inner })
     }
 
@@ -33,23 +29,14 @@ impl TempFile {
         let inner = tempfile::Builder::new()
             .suffix(&format!(".{ext}"))
             .tempfile()
-            .map_err(|error| {
-                AppError::new(
-                    ErrorCode::Internal,
-                    format!("failed to create temp file with extension .{ext}: {error}"),
-                )
-            })?;
+            .map_err(|error| create_temp_file_with_extension_error(ext, error))?;
         Ok(Self { inner })
     }
 
     /// Create a temporary file in the given directory.
     pub fn in_dir(dir: &Path) -> AppResult<Self> {
-        let inner = tempfile::NamedTempFile::new_in(dir).map_err(|error| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!("failed to create temp file in {}: {error}", dir.display()),
-            )
-        })?;
+        let inner = tempfile::NamedTempFile::new_in(dir)
+            .map_err(|error| create_temp_file_in_dir_error(dir, error))?;
         Ok(Self { inner })
     }
 
@@ -58,15 +45,7 @@ impl TempFile {
         let inner = tempfile::Builder::new()
             .suffix(&format!(".{ext}"))
             .tempfile_in(dir)
-            .map_err(|error| {
-                AppError::new(
-                    ErrorCode::Internal,
-                    format!(
-                        "failed to create temp file in {} with extension .{ext}: {error}",
-                        dir.display()
-                    ),
-                )
-            })?;
+            .map_err(|error| create_temp_file_in_dir_with_extension_error(dir, ext, error))?;
         Ok(Self { inner })
     }
 
@@ -110,12 +89,7 @@ pub struct TempDir {
 impl TempDir {
     /// Create a new temporary directory.
     pub fn new() -> AppResult<Self> {
-        let inner = tempfile::TempDir::new().map_err(|error| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!("failed to create temp dir: {error}"),
-            )
-        })?;
+        let inner = tempfile::TempDir::new().map_err(create_temp_dir_error)?;
         Ok(Self { inner })
     }
 
@@ -134,20 +108,9 @@ impl TempDir {
     /// Write a file at a relative path within this temp directory.
     pub fn write_file(&self, rel_path: impl AsRef<Path>, content: &[u8]) -> AppResult<PathBuf> {
         let path = self.child(rel_path)?;
-        if let Some(parent) = parent_dir(&path) {
-            std::fs::create_dir_all(parent).map_err(|error| {
-                AppError::new(
-                    ErrorCode::Internal,
-                    format!("failed to create parent dirs: {error}"),
-                )
-            })?;
-        }
-        std::fs::write(&path, content).map_err(|error| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!("failed to write file '{}': {error}", path.display()),
-            )
-        })?;
+        let parent = parent_dir(&path).unwrap_or_else(|| self.path());
+        std::fs::create_dir_all(parent).map_err(create_parent_dirs_error)?;
+        std::fs::write(&path, content).map_err(|error| write_temp_dir_file_error(&path, error))?;
         Ok(path)
     }
 
@@ -156,12 +119,7 @@ impl TempDir {
         let inner = tempfile::Builder::new()
             .prefix(name)
             .tempfile_in(self.path())
-            .map_err(|error| {
-                AppError::new(
-                    ErrorCode::Internal,
-                    format!("failed to create file {name} in temp dir: {error}"),
-                )
-            })?;
+            .map_err(|error| create_named_temp_dir_file_error(name, error))?;
         Ok(TempFile { inner })
     }
 
@@ -169,6 +127,69 @@ impl TempDir {
     pub fn create_file_with_extension(&self, ext: &str) -> AppResult<TempFile> {
         TempFile::in_dir_with_extension(self.path(), ext)
     }
+}
+
+fn create_temp_file_error(error: std::io::Error) -> AppError {
+    AppError::new(
+        ErrorCode::Internal,
+        format!("failed to create temp file: {error}"),
+    )
+}
+
+fn create_temp_file_with_extension_error(ext: &str, error: std::io::Error) -> AppError {
+    AppError::new(
+        ErrorCode::Internal,
+        format!("failed to create temp file with extension .{ext}: {error}"),
+    )
+}
+
+fn create_temp_file_in_dir_error(dir: &Path, error: std::io::Error) -> AppError {
+    AppError::new(
+        ErrorCode::Internal,
+        format!("failed to create temp file in {}: {error}", dir.display()),
+    )
+}
+
+fn create_temp_file_in_dir_with_extension_error(
+    dir: &Path,
+    ext: &str,
+    error: std::io::Error,
+) -> AppError {
+    AppError::new(
+        ErrorCode::Internal,
+        format!(
+            "failed to create temp file in {} with extension .{ext}: {error}",
+            dir.display()
+        ),
+    )
+}
+
+fn create_temp_dir_error(error: std::io::Error) -> AppError {
+    AppError::new(
+        ErrorCode::Internal,
+        format!("failed to create temp dir: {error}"),
+    )
+}
+
+fn create_parent_dirs_error(error: std::io::Error) -> AppError {
+    AppError::new(
+        ErrorCode::Internal,
+        format!("failed to create parent dirs: {error}"),
+    )
+}
+
+fn write_temp_dir_file_error(path: &Path, error: std::io::Error) -> AppError {
+    AppError::new(
+        ErrorCode::Internal,
+        format!("failed to write file '{}': {error}", path.display()),
+    )
+}
+
+fn create_named_temp_dir_file_error(name: &str, error: std::io::Error) -> AppError {
+    AppError::new(
+        ErrorCode::Internal,
+        format!("failed to create file {name} in temp dir: {error}"),
+    )
 }
 
 impl std::fmt::Debug for TempDir {
@@ -230,7 +251,113 @@ fn sanitize_temp_affix(value: &str, allow_dot: bool) -> String {
 mod tests {
     use std::path::Path;
 
-    use super::{TempDir, TempFile, sibling_temp_path};
+    use super::{
+        TempDir, TempFile, create_named_temp_dir_file_error, create_parent_dirs_error,
+        create_temp_dir_error, create_temp_file_error, create_temp_file_in_dir_error,
+        create_temp_file_in_dir_with_extension_error, create_temp_file_with_extension_error,
+        sibling_temp_path, write_temp_dir_file_error,
+    };
+
+    #[test]
+    fn temp_file_constructors_create_files() {
+        let file = TempFile::new().unwrap();
+        assert!(file.path().exists());
+
+        let with_ext = TempFile::with_extension("txt").unwrap();
+        assert!(
+            with_ext
+                .path()
+                .ends_with(with_ext.path().file_name().unwrap())
+        );
+        assert!(with_ext.path().to_string_lossy().ends_with(".txt"));
+
+        let dir = TempDir::new().unwrap();
+        let in_dir = TempFile::in_dir(dir.path()).unwrap();
+        assert_eq!(in_dir.path().parent(), Some(dir.path()));
+
+        let in_dir_with_ext = TempFile::in_dir_with_extension(dir.path(), "log").unwrap();
+        assert_eq!(in_dir_with_ext.path().parent(), Some(dir.path()));
+        assert!(in_dir_with_ext.path().to_string_lossy().ends_with(".log"));
+    }
+
+    #[test]
+    fn temp_file_constructors_report_invalid_directories() {
+        let dir = TempDir::new().unwrap();
+        let file = dir.write_file("file.txt", b"hello").unwrap();
+
+        assert!(TempFile::in_dir(&file).is_err());
+        assert!(TempFile::in_dir_with_extension(&file, "txt").is_err());
+    }
+
+    #[test]
+    fn temp_error_builders_include_context() {
+        let dir = Path::new("dir");
+        let file = Path::new("dir/file.txt");
+        let err = || std::io::Error::other("boom");
+
+        assert!(
+            create_temp_file_error(err())
+                .to_string()
+                .contains("temp file")
+        );
+        assert!(
+            create_temp_file_with_extension_error("txt", err())
+                .to_string()
+                .contains(".txt")
+        );
+        assert!(
+            create_temp_file_in_dir_error(dir, err())
+                .to_string()
+                .contains("in dir")
+        );
+        assert!(
+            create_temp_file_in_dir_with_extension_error(dir, "txt", err())
+                .to_string()
+                .contains(".txt")
+        );
+        assert!(
+            create_temp_dir_error(err())
+                .to_string()
+                .contains("temp dir")
+        );
+        assert!(
+            create_parent_dirs_error(err())
+                .to_string()
+                .contains("parent dirs")
+        );
+        assert!(
+            write_temp_dir_file_error(file, err())
+                .to_string()
+                .contains("write file")
+        );
+        assert!(
+            create_named_temp_dir_file_error("name", err())
+                .to_string()
+                .contains("name")
+        );
+    }
+
+    #[test]
+    fn temp_file_persist_moves_file() {
+        let dir = TempDir::new().unwrap();
+        let file = TempFile::in_dir(dir.path()).unwrap();
+        std::fs::write(file.path(), b"persisted").unwrap();
+        let target = dir.child("persisted.txt").unwrap();
+
+        let persisted = file.persist(&target).unwrap();
+
+        assert_eq!(persisted, target);
+        assert_eq!(std::fs::read_to_string(persisted).unwrap(), "persisted");
+    }
+
+    #[test]
+    fn temp_file_persist_reports_errors() {
+        let dir = TempDir::new().unwrap();
+        let file = TempFile::in_dir(dir.path()).unwrap();
+        let target = dir.child("missing/target.txt").unwrap();
+
+        assert!(file.persist(target).is_err());
+    }
 
     #[test]
     fn sibling_temp_paths_are_unique_and_next_to_destination() {
@@ -272,6 +399,42 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = dir.write_file("a/b.txt", b"hello").unwrap();
         assert_eq!(std::fs::read_to_string(path).unwrap(), "hello");
+    }
+
+    #[test]
+    fn temp_dir_write_file_reports_errors() {
+        let dir = TempDir::new().unwrap();
+        dir.write_file("file.txt", b"hello").unwrap();
+
+        assert!(dir.write_file("file.txt/child.txt", b"nope").is_err());
+    }
+
+    #[test]
+    fn temp_dir_create_file_helpers_create_files() {
+        let dir = TempDir::new().unwrap();
+        let named = dir.create_file("named").unwrap();
+        assert_eq!(named.path().parent(), Some(dir.path()));
+        assert!(
+            named
+                .path()
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("named")
+        );
+
+        let with_extension = dir.create_file_with_extension("txt").unwrap();
+        assert_eq!(with_extension.path().parent(), Some(dir.path()));
+        assert!(with_extension.path().to_string_lossy().ends_with(".txt"));
+    }
+
+    #[test]
+    fn temp_dir_debug_includes_path() {
+        let dir = TempDir::new().unwrap();
+        let debug = format!("{dir:?}");
+
+        assert!(debug.contains("TempDir"));
+        assert!(debug.contains(&dir.path().display().to_string()));
     }
 
     #[test]

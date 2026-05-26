@@ -35,12 +35,13 @@ pub fn validate_relative_path(path: &Path) -> Result<(), SafePathError> {
         match component {
             Component::RootDir => return Err(SafePathError::Absolute),
             Component::ParentDir => return Err(SafePathError::ParentDir),
+            #[cfg(windows)]
             Component::Prefix(_) => return Err(SafePathError::Prefix),
+            #[cfg(not(windows))]
+            Component::Prefix(_) | Component::CurDir | Component::Normal(_) => {}
+            #[cfg(windows)]
             Component::CurDir | Component::Normal(_) => {}
         }
-    }
-    if path.is_absolute() {
-        return Err(SafePathError::Absolute);
     }
     Ok(())
 }
@@ -83,7 +84,7 @@ pub fn parent_dir(path: &Path) -> Option<&Path> {
 mod tests {
     use std::path::Path;
 
-    use super::{SafePathError, absolute, safe_join, validate_relative_path};
+    use super::{SafePathError, absolute, canonicalize, safe_join, validate_relative_path};
 
     #[test]
     fn validates_safe_relative_paths() {
@@ -108,6 +109,22 @@ mod tests {
     }
 
     #[test]
+    fn displays_safe_path_errors() {
+        assert_eq!(
+            SafePathError::Absolute.to_string(),
+            "path must be relative, not absolute"
+        );
+        assert_eq!(
+            SafePathError::ParentDir.to_string(),
+            "path must not contain '..' segments"
+        );
+        assert_eq!(
+            SafePathError::Prefix.to_string(),
+            "path must not contain a platform path prefix"
+        );
+    }
+
+    #[test]
     fn safe_join_keeps_paths_under_root() {
         assert_eq!(
             safe_join(Path::new("/root"), "a/b.txt").unwrap(),
@@ -120,5 +137,27 @@ mod tests {
         let path = absolute(Path::new("a/b.txt")).unwrap();
         assert!(path.is_absolute());
         assert!(path.ends_with("a/b.txt"));
+    }
+
+    #[test]
+    fn absolute_returns_absolute_paths_unchanged() {
+        let path = Path::new("/tmp/a.txt");
+        assert_eq!(absolute(path).unwrap(), path);
+    }
+
+    #[tokio::test]
+    async fn canonicalize_resolves_existing_paths_and_reports_missing() {
+        let dir = crate::TempDir::new().unwrap();
+        let file = dir.write_file("file.txt", b"hello").unwrap();
+
+        assert_eq!(
+            canonicalize(&file).await.unwrap(),
+            std::fs::canonicalize(&file).unwrap()
+        );
+        assert!(
+            canonicalize(&dir.child("missing.txt").unwrap())
+                .await
+                .is_err()
+        );
     }
 }

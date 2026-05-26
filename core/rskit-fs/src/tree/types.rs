@@ -99,3 +99,45 @@ pub enum WalkControl {
     /// Stop walking immediately.
     Stop,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{CopyTreeOptions, WalkEntryFilter, WalkOptions};
+
+    #[test]
+    fn defaults_are_safe() {
+        assert_eq!(
+            CopyTreeOptions::default(),
+            CopyTreeOptions {
+                overwrite: true,
+                follow_symlinks: false,
+            }
+        );
+        assert_eq!(
+            WalkOptions::default(),
+            WalkOptions {
+                follow_symlinks: false,
+                entry_filter: WalkEntryFilter::ALL,
+            }
+        );
+    }
+
+    #[test]
+    fn entry_filters_report_included_kinds() {
+        assert!(WalkEntryFilter::FILES.includes_files());
+        assert!(!WalkEntryFilter::FILES.includes_dirs());
+        assert!(!WalkEntryFilter::FILES.includes_symlinks());
+
+        assert!(!WalkEntryFilter::DIRS.includes_files());
+        assert!(WalkEntryFilter::DIRS.includes_dirs());
+        assert!(!WalkEntryFilter::DIRS.includes_symlinks());
+
+        assert!(!WalkEntryFilter::SYMLINKS.includes_files());
+        assert!(!WalkEntryFilter::SYMLINKS.includes_dirs());
+        assert!(WalkEntryFilter::SYMLINKS.includes_symlinks());
+
+        assert!(WalkEntryFilter::FILES_AND_DIRS.includes_files());
+        assert!(WalkEntryFilter::FILES_AND_DIRS.includes_dirs());
+        assert!(!WalkEntryFilter::FILES_AND_DIRS.includes_symlinks());
+    }
+}

@@ -1,4 +1,5 @@
 //! Tree copying.
+#![allow(clippy::needless_pass_by_value)]
 
 use std::path::{Path, PathBuf};
 
@@ -18,12 +19,7 @@ pub fn copy_tree(source: &Path, dest: &Path, options: CopyTreeOptions) -> AppRes
     ensure_directory(source)?;
     ensure_destination_outside_source(source, dest)?;
 
-    std::fs::create_dir_all(dest).map_err(|error| {
-        AppError::new(
-            ErrorCode::Internal,
-            format!("failed to create destination '{}': {error}", dest.display()),
-        )
-    })?;
+    std::fs::create_dir_all(dest).map_err(|error| create_destination_error(dest, error))?;
 
     let mut visited = init_visited_dirs(source)?;
     copy_tree_recursive(source, source, dest, options, &mut visited)
@@ -47,45 +43,49 @@ fn ensure_destination_outside_source(source: &Path, dest: &Path) -> AppResult<()
 
 fn canonical_target_path(path: &Path) -> AppResult<PathBuf> {
     if path.exists() {
-        return std::fs::canonicalize(path).map_err(|error| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!(
-                    "failed to canonicalize destination '{}': {error}",
-                    path.display()
-                ),
-            )
-        });
+        return canonicalize_destination(path);
     }
 
     let absolute_path = absolute(path)?;
-    let mut missing_components = Vec::new();
-    let mut current = absolute_path.as_path();
-
-    while !current.exists() {
-        let Some(name) = current.file_name() else {
-            return Ok(absolute_path);
-        };
-        missing_components.push(name.to_owned());
-        let Some(parent) = current.parent() else {
-            return Ok(absolute_path);
-        };
-        current = parent;
+    let current = absolute_path
+        .ancestors()
+        .find(|ancestor| ancestor.exists())
+        .unwrap_or(absolute_path.as_path());
+    let current_component_count = current.components().count();
+    let missing_components = absolute_path
+        .components()
+        .skip(current_component_count)
+        .map(|component| component.as_os_str().to_owned())
+        .collect::<Vec<_>>();
+    let mut canonical = canonicalize_destination_parent(current)?;
+    for component in &missing_components {
+        canonical.push(component);
     }
+    Ok(canonical)
+}
 
-    let mut canonical = std::fs::canonicalize(current).map_err(|error| {
+fn canonicalize_destination(path: &Path) -> AppResult<PathBuf> {
+    std::fs::canonicalize(path).map_err(|error| {
+        AppError::new(
+            ErrorCode::Internal,
+            format!(
+                "failed to canonicalize destination '{}': {error}",
+                path.display()
+            ),
+        )
+    })
+}
+
+fn canonicalize_destination_parent(path: &Path) -> AppResult<PathBuf> {
+    std::fs::canonicalize(path).map_err(|error| {
         AppError::new(
             ErrorCode::Internal,
             format!(
                 "failed to canonicalize destination parent '{}': {error}",
-                current.display()
+                path.display()
             ),
         )
-    })?;
-    for component in missing_components.iter().rev() {
-        canonical.push(component);
-    }
-    Ok(canonical)
+    })
 }
 
 fn copy_tree_recursive(
@@ -95,46 +95,23 @@ fn copy_tree_recursive(
     options: CopyTreeOptions,
     visited: &mut VisitedDirs,
 ) -> AppResult<()> {
-    let entries = std::fs::read_dir(current).map_err(|error| {
-        AppError::new(
-            ErrorCode::Internal,
-            format!("failed to read directory '{}': {error}", current.display()),
-        )
-    })?;
+    let entries =
+        std::fs::read_dir(current).map_err(|error| read_copy_dir_error(current, error))?;
 
     for entry in entries {
-        let entry = entry.map_err(|error| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!("failed to read directory entry: {error}"),
-            )
-        })?;
+        let entry = entry.map_err(read_copy_dir_entry_error)?;
         let path = entry.path();
         let metadata = metadata_for(&path, options.follow_symlinks)?;
         let file_type = metadata.file_type();
-        let rel = path.strip_prefix(root).map_err(|error| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!("failed to strip prefix: {error}"),
-            )
-        })?;
-        let target = safe_join(dest, rel).map_err(|error| {
-            AppError::new(
-                ErrorCode::InvalidInput,
-                format!("destination path escaped root: {error}"),
-            )
-        })?;
+        let rel = path.strip_prefix(root).map_err(strip_copy_prefix_error)?;
+        let target = safe_join(dest, rel).map_err(copy_destination_escaped_error)?;
 
         if file_type.is_symlink() && !options.follow_symlinks {
             continue;
         }
         if file_type.is_dir() {
-            std::fs::create_dir_all(&target).map_err(|error| {
-                AppError::new(
-                    ErrorCode::Internal,
-                    format!("failed to create directory '{}': {error}", target.display()),
-                )
-            })?;
+            std::fs::create_dir_all(&target)
+                .map_err(|error| create_copied_directory_error(&target, error))?;
             enter_directory(&path, visited)?;
             copy_tree_recursive(root, &path, dest, options, visited)?;
         } else if file_type.is_file() {
@@ -144,38 +121,90 @@ fn copy_tree_recursive(
                     format!("destination file already exists: {}", target.display()),
                 ));
             }
-            if let Some(parent) = target.parent() {
-                std::fs::create_dir_all(parent).map_err(|error| {
-                    AppError::new(
-                        ErrorCode::Internal,
-                        format!(
-                            "failed to create parent directory '{}': {error}",
-                            parent.display()
-                        ),
-                    )
-                })?;
-            }
-            std::fs::copy(&path, &target).map_err(|error| {
-                AppError::new(
-                    ErrorCode::Internal,
-                    format!(
-                        "failed to copy '{}' to '{}': {error}",
-                        path.display(),
-                        target.display()
-                    ),
-                )
-            })?;
+            let parent = target.parent().unwrap_or(dest);
+            std::fs::create_dir_all(parent)
+                .map_err(|error| create_copied_parent_error(parent, error))?;
+            std::fs::copy(&path, &target)
+                .map_err(|error| copy_tree_file_error(&path, &target, error))?;
         }
     }
 
     Ok(())
 }
 
+fn create_destination_error(dest: &Path, error: std::io::Error) -> AppError {
+    AppError::new(
+        ErrorCode::Internal,
+        format!("failed to create destination '{}': {error}", dest.display()),
+    )
+}
+
+fn read_copy_dir_error(path: &Path, error: std::io::Error) -> AppError {
+    AppError::new(
+        ErrorCode::Internal,
+        format!("failed to read directory '{}': {error}", path.display()),
+    )
+}
+
+fn read_copy_dir_entry_error(error: std::io::Error) -> AppError {
+    AppError::new(
+        ErrorCode::Internal,
+        format!("failed to read directory entry: {error}"),
+    )
+}
+
+fn strip_copy_prefix_error(error: std::path::StripPrefixError) -> AppError {
+    AppError::new(
+        ErrorCode::Internal,
+        format!("failed to strip prefix: {error}"),
+    )
+}
+
+fn copy_destination_escaped_error(error: crate::SafePathError) -> AppError {
+    AppError::new(
+        ErrorCode::InvalidInput,
+        format!("destination path escaped root: {error}"),
+    )
+}
+
+fn create_copied_directory_error(path: &Path, error: std::io::Error) -> AppError {
+    AppError::new(
+        ErrorCode::Internal,
+        format!("failed to create directory '{}': {error}", path.display()),
+    )
+}
+
+fn create_copied_parent_error(path: &Path, error: std::io::Error) -> AppError {
+    AppError::new(
+        ErrorCode::Internal,
+        format!(
+            "failed to create parent directory '{}': {error}",
+            path.display()
+        ),
+    )
+}
+
+fn copy_tree_file_error(from: &Path, to: &Path, error: std::io::Error) -> AppError {
+    AppError::new(
+        ErrorCode::Internal,
+        format!(
+            "failed to copy '{}' to '{}': {error}",
+            from.display(),
+            to.display()
+        ),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use rskit_errors::ErrorCode;
 
-    use super::copy_tree;
+    use super::{
+        canonical_target_path, canonicalize_destination, canonicalize_destination_parent,
+        copy_destination_escaped_error, copy_tree, copy_tree_file_error, copy_tree_recursive,
+        create_copied_directory_error, create_copied_parent_error, create_destination_error,
+        read_copy_dir_entry_error, read_copy_dir_error, strip_copy_prefix_error,
+    };
     use crate::TempDir;
     use crate::tree::CopyTreeOptions;
 
@@ -209,6 +238,59 @@ mod tests {
         .unwrap_err();
 
         assert_eq!(err.code, ErrorCode::NotFound);
+    }
+
+    #[test]
+    fn copy_tree_error_builders_include_context() {
+        let from = std::path::Path::new("from");
+        let to = std::path::Path::new("to");
+        let err = || std::io::Error::other("boom");
+
+        assert!(
+            create_destination_error(to, err())
+                .to_string()
+                .contains("destination")
+        );
+        assert!(
+            read_copy_dir_error(from, err())
+                .to_string()
+                .contains("read directory")
+        );
+        assert!(
+            read_copy_dir_entry_error(err())
+                .to_string()
+                .contains("directory entry")
+        );
+        assert!(
+            create_copied_directory_error(to, err())
+                .to_string()
+                .contains("create directory")
+        );
+        assert!(
+            create_copied_parent_error(to, err())
+                .to_string()
+                .contains("parent directory")
+        );
+        assert!(
+            copy_tree_file_error(from, to, err())
+                .to_string()
+                .contains("copy")
+        );
+        assert!(
+            copy_destination_escaped_error(crate::SafePathError::ParentDir)
+                .to_string()
+                .contains("escaped root")
+        );
+
+        let strip_error = std::path::Path::new("a").strip_prefix("b").unwrap_err();
+        assert!(
+            strip_copy_prefix_error(strip_error)
+                .to_string()
+                .contains("strip prefix")
+        );
+        assert!(canonicalize_destination(std::path::Path::new("missing")).is_err());
+        assert!(canonicalize_destination_parent(std::path::Path::new("missing")).is_err());
+        assert!(canonical_target_path(std::path::Path::new("missing/child")).is_ok());
     }
 
     #[test]
@@ -263,6 +345,134 @@ mod tests {
                     follow_symlinks: true,
                     ..CopyTreeOptions::default()
                 },
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn copy_tree_reports_destination_create_errors() {
+        let source = TempDir::new().unwrap();
+        source.write_file("a.txt", b"alpha").unwrap();
+        let dest_root = TempDir::new().unwrap();
+        let dest = dest_root.write_file("dest.txt", b"exists").unwrap();
+
+        assert!(copy_tree(source.path(), &dest, CopyTreeOptions::default()).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn copy_tree_skips_symlinks_by_default() {
+        let source = TempDir::new().unwrap();
+        let target = source.write_file("target.txt", b"hello").unwrap();
+        let link = source.child("link.txt").unwrap();
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+        let dest = TempDir::new().unwrap();
+
+        copy_tree(source.path(), dest.path(), CopyTreeOptions::default()).unwrap();
+
+        assert!(dest.child("target.txt").unwrap().exists());
+        assert!(!dest.child("link.txt").unwrap().exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn copy_tree_ignores_special_files() {
+        let source = TempDir::new().unwrap();
+        let fifo = source.child("pipe").unwrap();
+        let status = std::process::Command::new("mkfifo")
+            .arg(&fifo)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        let dest = TempDir::new().unwrap();
+
+        copy_tree(source.path(), dest.path(), CopyTreeOptions::default()).unwrap();
+
+        assert!(!dest.child("pipe").unwrap().exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn copy_tree_follows_file_symlinks_when_requested() {
+        let source = TempDir::new().unwrap();
+        let target = source.write_file("target.txt", b"hello").unwrap();
+        let link = source.child("link.txt").unwrap();
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+        let dest = TempDir::new().unwrap();
+
+        copy_tree(
+            source.path(),
+            dest.path(),
+            CopyTreeOptions {
+                follow_symlinks: true,
+                ..CopyTreeOptions::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(dest.child("link.txt").unwrap()).unwrap(),
+            "hello"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn copy_tree_reports_broken_symlink_when_following() {
+        let source = TempDir::new().unwrap();
+        let missing = source.child("missing.txt").unwrap();
+        let link = source.child("link.txt").unwrap();
+        std::os::unix::fs::symlink(&missing, &link).unwrap();
+        let dest = TempDir::new().unwrap();
+
+        assert!(
+            copy_tree(
+                source.path(),
+                dest.path(),
+                CopyTreeOptions {
+                    follow_symlinks: true,
+                    ..CopyTreeOptions::default()
+                },
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn copy_tree_recursive_reports_read_dir_errors() {
+        let source = TempDir::new().unwrap();
+        let file = source.write_file("file.txt", b"hello").unwrap();
+        let dest = TempDir::new().unwrap();
+        let mut visited = super::init_visited_dirs(source.path()).unwrap();
+
+        assert!(
+            copy_tree_recursive(
+                source.path(),
+                &file,
+                dest.path(),
+                CopyTreeOptions::default(),
+                &mut visited,
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn copy_tree_recursive_reports_strip_prefix_errors() {
+        let root = TempDir::new().unwrap();
+        let outside = TempDir::new().unwrap();
+        outside.write_file("file.txt", b"hello").unwrap();
+        let dest = TempDir::new().unwrap();
+        let mut visited = super::init_visited_dirs(root.path()).unwrap();
+
+        assert!(
+            copy_tree_recursive(
+                root.path(),
+                outside.path(),
+                dest.path(),
+                CopyTreeOptions::default(),
+                &mut visited,
             )
             .is_err()
         );
