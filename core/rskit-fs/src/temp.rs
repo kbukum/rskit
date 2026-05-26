@@ -1,4 +1,9 @@
 //! Temporary file and path helpers.
+//!
+//! Temp file and directory creation, cloning, persistence, and file-writing
+//! helpers use blocking filesystem I/O. When calling them from async contexts,
+//! run them through `tokio::task::spawn_blocking` or an equivalent blocking
+//! executor boundary.
 #![allow(clippy::needless_pass_by_value)]
 
 use std::path::{Path, PathBuf};

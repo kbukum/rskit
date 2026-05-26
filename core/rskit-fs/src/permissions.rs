@@ -91,7 +91,7 @@ async fn can_write_dir_from_open(
             let _ = tokio::fs::remove_file(&probe).await;
             Ok(true)
         }
-        Err(error) if is_permission_denied(&error) => Ok(false),
+        Err(error) if is_permission_denied(&error) || is_not_found(&error) => Ok(false),
         Err(error) => Err(check_dir_write_access_error(path, error)),
     }
 }
@@ -297,6 +297,15 @@ mod tests {
                     std::io::ErrorKind::PermissionDenied,
                     "denied"
                 )),
+            )
+            .await
+            .unwrap()
+        );
+        assert!(
+            !can_write_dir_from_open(
+                dir.path(),
+                &probe,
+                Err(std::io::Error::new(std::io::ErrorKind::NotFound, "missing")),
             )
             .await
             .unwrap()
