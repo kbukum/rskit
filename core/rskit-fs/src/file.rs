@@ -89,6 +89,10 @@ pub async fn write(path: &Path, bytes: impl AsRef<[u8]>) -> AppResult<()> {
 }
 
 /// Persist a temp file to `dest` using the platform rename operation.
+///
+/// Replacing an existing destination is atomic on Unix-like platforms. On
+/// Windows, replacing an existing destination is not supported by this helper
+/// because `rename` fails when `dest` already exists.
 pub async fn persist_temp_file(temp_path: &Path, dest: &Path) -> AppResult<()> {
     tokio::fs::rename(temp_path, dest).await.map_err(|error| {
         AppError::new(
@@ -189,6 +193,10 @@ pub async fn remove_file_if_exists(path: &Path) -> AppResult<bool> {
 }
 
 /// Atomically write bytes by writing a sibling temp file and renaming it.
+///
+/// Replacing an existing destination is atomic on Unix-like platforms. On
+/// Windows, this helper succeeds for new destinations and returns an error when
+/// replacing an existing destination.
 pub async fn write_atomic(
     dest: &Path,
     bytes: impl AsRef<[u8]>,

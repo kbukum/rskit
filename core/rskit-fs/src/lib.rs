@@ -9,7 +9,9 @@
 //! Security defaults:
 //! - use [`path::safe_join`] for user-provided relative paths before touching disk;
 //! - tree copy/list operations do not follow symlinks unless explicitly requested;
-//! - use [`file::write_atomic`] for replacing file contents without exposing partial writes;
+//! - use [`file::write_atomic`] for same-filesystem writes without exposing partial files
+//!   (existing-file replacement is atomic on Unix-like platforms; Windows replacement returns
+//!   an error instead of silently degrading);
 //! - use [`permissions`] capability checks before performing optional user-facing operations.
 
 #![warn(missing_docs)]

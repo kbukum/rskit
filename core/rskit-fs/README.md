@@ -20,7 +20,7 @@ Local filesystem primitives for rskit.
 
 - Use `path::safe_join` for user-provided relative paths before touching disk.
 - Tree copy/list operations do not follow symlinks unless explicitly requested.
-- Use `file::write_atomic` for replacing file contents without exposing partial writes.
+- Use `file::write_atomic` for same-filesystem writes without exposing partial files. Replacing an existing file is atomic on Unix-like platforms; Windows replacement returns an error instead of silently degrading.
 - Use `permissions::can_read` / `permissions::can_write` before optional user-facing operations.
 
 ## Scope
