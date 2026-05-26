@@ -21,7 +21,7 @@ pub fn walk_tree(
 ) -> AppResult<()> {
     ensure_directory(root)?;
     let mut visited = init_visited_dirs(root)?;
-    walk_tree_recursive(root, root, options, &mut visited, &mut visitor)
+    walk_tree_recursive(root, root, options, &mut visited, &mut visitor).map(drop)
 }
 
 fn walk_tree_recursive(
@@ -30,7 +30,7 @@ fn walk_tree_recursive(
     options: WalkOptions,
     visited: &mut VisitedDirs,
     visitor: &mut impl FnMut(&TreeEntry) -> AppResult<WalkControl>,
-) -> AppResult<()> {
+) -> AppResult<bool> {
     for entry in std::fs::read_dir(current).map_err(|error| read_walk_dir_error(current, error))? {
         let entry = entry.map_err(read_walk_dir_entry_error)?;
         let path = entry.path();
@@ -51,17 +51,19 @@ fn walk_tree_recursive(
             match visitor(&tree_entry)? {
                 WalkControl::Continue => {}
                 WalkControl::SkipSubtree => should_descend = false,
-                WalkControl::Stop => return Ok(()),
+                WalkControl::Stop => return Ok(true),
             }
         }
 
         if should_descend {
             enter_directory(&path, visited)?;
-            walk_tree_recursive(root, &path, options, visited, visitor)?;
+            if walk_tree_recursive(root, &path, options, visited, visitor)? {
+                return Ok(true);
+            }
         }
     }
 
-    Ok(())
+    Ok(false)
 }
 
 const fn should_visit(entry: &TreeEntry, options: WalkOptions) -> bool {
@@ -231,6 +233,31 @@ mod tests {
         .unwrap();
 
         assert_eq!(visits, 1);
+    }
+
+    #[test]
+    fn walk_tree_stop_propagates_from_nested_directory() {
+        let source = TempDir::new().unwrap();
+        source.write_file("nested/stop.txt", b"stop").unwrap();
+        let mut visited = super::super::init_visited_dirs(source.path()).unwrap();
+        let mut visitor = |entry: &TreeEntry| {
+            if entry.relative_path == std::path::Path::new("nested/stop.txt") {
+                return Ok(WalkControl::Stop);
+            }
+
+            Ok(WalkControl::Continue)
+        };
+
+        assert!(
+            walk_tree_recursive(
+                source.path(),
+                source.path(),
+                WalkOptions::default(),
+                &mut visited,
+                &mut visitor,
+            )
+            .unwrap()
+        );
     }
 
     #[test]
