@@ -4,7 +4,10 @@ use std::path::Path;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
 
-use super::{TreeEntry, WalkControl, WalkOptions, ensure_directory, metadata_for};
+use super::{
+    TreeEntry, VisitedDirs, WalkControl, WalkOptions, ensure_directory, enter_directory,
+    init_visited_dirs, metadata_for,
+};
 
 /// Walk a directory tree without allocating a full tree listing.
 ///
@@ -16,13 +19,15 @@ pub fn walk_tree(
     mut visitor: impl FnMut(&TreeEntry) -> AppResult<WalkControl>,
 ) -> AppResult<()> {
     ensure_directory(root)?;
-    walk_tree_recursive(root, root, options, &mut visitor)
+    let mut visited = init_visited_dirs(root)?;
+    walk_tree_recursive(root, root, options, &mut visited, &mut visitor)
 }
 
 fn walk_tree_recursive(
     root: &Path,
     current: &Path,
     options: WalkOptions,
+    visited: &mut VisitedDirs,
     visitor: &mut impl FnMut(&TreeEntry) -> AppResult<WalkControl>,
 ) -> AppResult<()> {
     for entry in std::fs::read_dir(current).map_err(|error| {
@@ -65,7 +70,8 @@ fn walk_tree_recursive(
         }
 
         if should_descend {
-            walk_tree_recursive(root, &path, options, visitor)?;
+            enter_directory(&path, visited)?;
+            walk_tree_recursive(root, &path, options, visited, visitor)?;
         }
     }
 
@@ -130,5 +136,25 @@ mod tests {
         .unwrap();
 
         assert_eq!(visited, vec![std::path::PathBuf::from("nested")]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn walk_tree_rejects_symlink_cycles_when_following() {
+        let source = TempDir::new().unwrap();
+        std::fs::create_dir_all(source.child("nested").unwrap()).unwrap();
+        std::os::unix::fs::symlink(source.path(), source.child("nested/back").unwrap()).unwrap();
+
+        assert!(
+            walk_tree(
+                source.path(),
+                WalkOptions {
+                    follow_symlinks: true,
+                    ..WalkOptions::default()
+                },
+                |_| Ok(WalkControl::Continue),
+            )
+            .is_err()
+        );
     }
 }

@@ -5670,6 +5670,7 @@ dependencies = [
 name = "rskit-fs"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "rskit-errors",
  "tempfile",
  "tokio",

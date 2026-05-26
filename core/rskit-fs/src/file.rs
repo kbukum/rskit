@@ -168,17 +168,12 @@ pub async fn remove(path: &Path) -> AppResult<()> {
 fn is_cross_device_error(error: &std::io::Error) -> bool {
     #[cfg(unix)]
     {
-        error.raw_os_error() == Some(libc_exdev())
+        error.raw_os_error() == Some(libc::EXDEV)
     }
     #[cfg(not(unix))]
     {
         error.kind() == std::io::ErrorKind::CrossesDevices
     }
-}
-
-#[cfg(unix)]
-const fn libc_exdev() -> i32 {
-    18
 }
 
 /// Remove a file and ignore `NotFound`.

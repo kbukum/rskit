@@ -90,6 +90,7 @@ impl WalkEntryFilter {
 
 /// Control returned by a tree-walk callback.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum WalkControl {
     /// Continue walking normally.
     Continue,
