@@ -12,6 +12,9 @@ use super::{
 
 /// Walk a directory tree without allocating a full tree listing.
 ///
+/// This helper uses blocking `std::fs` I/O. Use `tokio::task::spawn_blocking`
+/// or an equivalent blocking executor boundary when calling it from async code.
+///
 /// The callback receives entries in pre-order. Symlinks are not followed unless
 /// [`WalkOptions::follow_symlinks`] is enabled.
 pub fn walk_tree(
@@ -20,7 +23,7 @@ pub fn walk_tree(
     mut visitor: impl FnMut(&TreeEntry) -> AppResult<WalkControl>,
 ) -> AppResult<()> {
     ensure_directory(root)?;
-    let mut visited = init_visited_dirs(root)?;
+    let mut visited = init_visited_dirs(root, options.follow_symlinks)?;
     walk_tree_recursive(root, root, options, &mut visited, &mut visitor).map(drop)
 }
 
@@ -239,7 +242,7 @@ mod tests {
     fn walk_tree_stop_propagates_from_nested_directory() {
         let source = TempDir::new().unwrap();
         source.write_file("nested/stop.txt", b"stop").unwrap();
-        let mut visited = super::super::init_visited_dirs(source.path()).unwrap();
+        let mut visited = super::super::init_visited_dirs(source.path(), false).unwrap();
         let mut visitor = |entry: &TreeEntry| {
             if entry.relative_path == std::path::Path::new("nested/stop.txt") {
                 return Ok(WalkControl::Stop);
@@ -311,7 +314,7 @@ mod tests {
     fn walk_tree_reports_read_dir_errors() {
         let source = TempDir::new().unwrap();
         let file = source.write_file("file.txt", b"hello").unwrap();
-        let mut visited = super::super::init_visited_dirs(source.path()).unwrap();
+        let mut visited = super::super::init_visited_dirs(source.path(), false).unwrap();
         let mut visitor = continue_walk;
 
         assert!(
@@ -331,7 +334,7 @@ mod tests {
         let root = TempDir::new().unwrap();
         let outside = TempDir::new().unwrap();
         outside.write_file("file.txt", b"hello").unwrap();
-        let mut visited = super::super::init_visited_dirs(root.path()).unwrap();
+        let mut visited = super::super::init_visited_dirs(root.path(), false).unwrap();
         let mut visitor = continue_walk;
 
         assert!(

@@ -37,5 +37,5 @@ pub use path::{
 pub use temp::{TempDir, TempFile, sibling_temp_path};
 pub use tree::{
     CopyTreeOptions, TreeEntry, WalkControl, WalkEntryFilter, WalkOptions, copy_tree, list_tree,
-    walk_tree,
+    remove_tree, remove_tree_if_exists, walk_tree,
 };

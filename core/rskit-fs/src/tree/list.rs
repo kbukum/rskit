@@ -11,13 +11,16 @@ use super::{
 
 /// List every entry in a directory tree.
 ///
+/// This helper uses blocking `std::fs` I/O. Use `tokio::task::spawn_blocking`
+/// or an equivalent blocking executor boundary when calling it from async code.
+///
 /// Set `follow_symlinks` only when the caller intentionally trusts symlink
 /// targets. Leaving it `false` prevents traversal outside the requested tree.
 pub fn list_tree(root: &Path, follow_symlinks: bool) -> AppResult<Vec<TreeEntry>> {
     ensure_directory(root)?;
 
     let mut entries = Vec::new();
-    let mut visited = init_visited_dirs(root)?;
+    let mut visited = init_visited_dirs(root, follow_symlinks)?;
     list_tree_recursive(root, root, follow_symlinks, &mut visited, &mut entries)?;
     Ok(entries)
 }
@@ -119,7 +122,7 @@ mod tests {
     fn list_tree_reports_read_dir_errors() {
         let source = TempDir::new().unwrap();
         let file = source.write_file("file.txt", b"hello").unwrap();
-        let mut visited = super::super::init_visited_dirs(source.path()).unwrap();
+        let mut visited = super::super::init_visited_dirs(source.path(), false).unwrap();
         let mut entries = Vec::new();
 
         assert!(
@@ -132,7 +135,7 @@ mod tests {
         let root = TempDir::new().unwrap();
         let outside = TempDir::new().unwrap();
         outside.write_file("file.txt", b"hello").unwrap();
-        let mut visited = super::super::init_visited_dirs(root.path()).unwrap();
+        let mut visited = super::super::init_visited_dirs(root.path(), false).unwrap();
         let mut entries = Vec::new();
 
         assert!(

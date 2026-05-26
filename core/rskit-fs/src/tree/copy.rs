@@ -13,6 +13,9 @@ use crate::path::{absolute, safe_join};
 
 /// Copy a directory tree from `source` into `dest`.
 ///
+/// This helper uses blocking `std::fs` I/O. Use `tokio::task::spawn_blocking`
+/// or an equivalent blocking executor boundary when calling it from async code.
+///
 /// Directory structure is preserved. Symlinks are skipped by default to avoid
 /// accidentally copying content outside the requested source tree.
 pub fn copy_tree(source: &Path, dest: &Path, options: CopyTreeOptions) -> AppResult<()> {
@@ -21,7 +24,7 @@ pub fn copy_tree(source: &Path, dest: &Path, options: CopyTreeOptions) -> AppRes
 
     std::fs::create_dir_all(dest).map_err(|error| create_destination_error(dest, error))?;
 
-    let mut visited = init_visited_dirs(source)?;
+    let mut visited = init_visited_dirs(source, options.follow_symlinks)?;
     copy_tree_recursive(source, source, dest, options, &mut visited)
 }
 
@@ -444,7 +447,7 @@ mod tests {
         let source = TempDir::new().unwrap();
         let file = source.write_file("file.txt", b"hello").unwrap();
         let dest = TempDir::new().unwrap();
-        let mut visited = super::init_visited_dirs(source.path()).unwrap();
+        let mut visited = super::init_visited_dirs(source.path(), false).unwrap();
 
         assert!(
             copy_tree_recursive(
@@ -464,7 +467,7 @@ mod tests {
         let outside = TempDir::new().unwrap();
         outside.write_file("file.txt", b"hello").unwrap();
         let dest = TempDir::new().unwrap();
-        let mut visited = super::init_visited_dirs(root.path()).unwrap();
+        let mut visited = super::init_visited_dirs(root.path(), false).unwrap();
 
         assert!(
             copy_tree_recursive(
