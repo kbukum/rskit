@@ -544,10 +544,7 @@ mod tests {
 
         let stream = agent.stream(vec![types::user("hi")]);
         let events: Vec<AgentEvent> = stream.collect().await;
-        assert!(!events.is_empty());
-
-        // Last event should be Complete
-        let last = events.last().unwrap();
-        assert!(matches!(last, AgentEvent::Complete { .. }));
+        assert_eq!(events.len(), 1);
+        assert!(matches!(events.first(), Some(AgentEvent::Complete { .. })));
     }
 }

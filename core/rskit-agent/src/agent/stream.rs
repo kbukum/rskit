@@ -8,7 +8,7 @@ use super::Agent;
 use crate::types::AgentEvent;
 
 impl Agent {
-    /// Stream the agent loop, yielding [`AgentEvent`]s for each lifecycle point.
+    /// Run the agent and yield a completion event when the run finishes.
     pub fn stream(
         &self,
         messages: Vec<Message>,
@@ -16,14 +16,6 @@ impl Agent {
         Box::pin(stream! {
             match self.run(messages).await {
                 Ok(result) => {
-                    for turn in 0..result.turn_count {
-                        yield AgentEvent::TurnStart { turn };
-                        yield AgentEvent::TurnComplete {
-                            turn,
-                            message: result.final_message.clone(),
-                            usage: result.total_usage,
-                        };
-                    }
                     yield AgentEvent::Complete { result };
                 }
                 Err(error) => {
