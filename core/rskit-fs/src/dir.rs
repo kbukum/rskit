@@ -1,6 +1,7 @@
 //! Directory helpers.
 #![allow(clippy::needless_pass_by_value)]
 
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
@@ -11,7 +12,7 @@ pub struct DirEntry {
     /// Entry path.
     pub path: PathBuf,
     /// Entry file name.
-    pub file_name: String,
+    pub file_name: OsString,
     /// Whether the entry is a regular file.
     pub is_file: bool,
     /// Whether the entry is a directory.
@@ -52,7 +53,7 @@ pub async fn list(path: &Path) -> AppResult<Vec<DirEntry>> {
 
     while let Some(entry) = entries.next_entry().await.map_err(read_dir_entry_error)? {
         let path = entry.path();
-        let file_name = entry.file_name().to_string_lossy().into_owned();
+        let file_name = entry.file_name();
         let file_type = entry
             .file_type()
             .await
@@ -183,7 +184,7 @@ mod tests {
         root.write_file("nested/file.txt", b"hello").unwrap();
         let entries = list(&dir).await.unwrap();
         assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].file_name, "file.txt");
+        assert_eq!(entries[0].file_name, std::ffi::OsString::from("file.txt"));
         assert!(entries[0].is_file);
         assert!(!entries[0].is_dir);
         assert!(!entries[0].is_symlink);
@@ -297,10 +298,24 @@ mod tests {
         let entries = list(root.path()).await.unwrap();
         let link_entry = entries
             .iter()
-            .find(|entry| entry.file_name == "link")
+            .find(|entry| entry.file_name == std::ffi::OsStr::new("link"))
             .unwrap();
         assert!(link_entry.is_symlink);
         assert!(!link_entry.is_file);
         assert!(!link_entry.is_dir);
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    #[tokio::test]
+    async fn list_preserves_non_utf8_file_names() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let root = TempDir::new().unwrap();
+        let file_name = std::ffi::OsString::from_vec(vec![b'f', b'o', 0x80, b'o']);
+        std::fs::write(root.path().join(&file_name), b"hello").unwrap();
+
+        let entries = list(root.path()).await.unwrap();
+
+        assert_eq!(entries[0].file_name, file_name);
     }
 }

@@ -218,7 +218,7 @@ async fn write_atomic_with_attempts(
         return result;
     }
 
-    Err(unique_temp_file_error(dest))
+    Err(unique_temp_file_error(dest, attempts))
 }
 
 fn should_retry_temp_open(error: &std::io::Error) -> bool {
@@ -307,11 +307,11 @@ fn sync_temp_file_error(path: &Path, error: std::io::Error) -> AppError {
     )
 }
 
-fn unique_temp_file_error(dest: &Path) -> AppError {
+fn unique_temp_file_error(dest: &Path, attempts: usize) -> AppError {
     AppError::new(
         ErrorCode::Internal,
         format!(
-            "failed to create a unique temp file for '{}' after {WRITE_ATOMIC_TEMP_ATTEMPTS} attempts",
+            "failed to create a unique temp file for '{}' after {attempts} attempts",
             dest.display()
         ),
     )
@@ -320,12 +320,12 @@ fn unique_temp_file_error(dest: &Path) -> AppError {
 #[cfg(test)]
 mod tests {
     use super::{
-        copy, copy_file_error, create_parent_dir, create_temp_file_error, exists,
-        exists_from_metadata, inspect_file_error, metadata, move_file, move_file_after_rename,
-        move_file_error, persist_temp_file, read, read_file_error, read_string, remove,
-        remove_file_error, remove_file_if_exists, rename, rename_file_error,
-        should_retry_temp_open, sync_temp_file_error, unique_temp_file_error, write, write_atomic,
-        write_atomic_with_attempts, write_file_error, write_temp_file_error,
+        WRITE_ATOMIC_TEMP_ATTEMPTS, copy, copy_file_error, create_parent_dir,
+        create_temp_file_error, exists, exists_from_metadata, inspect_file_error, metadata,
+        move_file, move_file_after_rename, move_file_error, persist_temp_file, read,
+        read_file_error, read_string, remove, remove_file_error, remove_file_if_exists, rename,
+        rename_file_error, should_retry_temp_open, sync_temp_file_error, unique_temp_file_error,
+        write, write_atomic, write_atomic_with_attempts, write_file_error, write_temp_file_error,
     };
     use crate::TempDir;
 
@@ -443,7 +443,7 @@ mod tests {
                 .contains("sync temp file")
         );
         assert!(
-            unique_temp_file_error(to)
+            unique_temp_file_error(to, WRITE_ATOMIC_TEMP_ATTEMPTS)
                 .to_string()
                 .contains("unique temp file")
         );
