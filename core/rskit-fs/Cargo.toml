@@ -20,9 +20,11 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 tokio = { workspace = true, features = ["fs", "io-util"] }
 tempfile = { workspace = true }
-libc = { workspace = true }
 
 rskit-errors = { path = "../rskit-errors" }
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }
