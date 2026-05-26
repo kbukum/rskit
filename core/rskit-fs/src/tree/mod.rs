@@ -4,11 +4,13 @@ mod copy;
 mod list;
 mod remove;
 mod types;
+mod walk;
 
 pub use copy::copy_tree;
 pub use list::list_tree;
 pub use remove::{remove_tree, remove_tree_if_exists};
-pub use types::{CopyTreeOptions, TreeEntry};
+pub use types::{CopyTreeOptions, TreeEntry, WalkControl, WalkOptions};
+pub use walk::walk_tree;
 
 use std::path::Path;
 

@@ -65,8 +65,7 @@ pub async fn can_read(path: &Path) -> AppResult<bool> {
 pub async fn can_write(path: &Path) -> AppResult<bool> {
     if tokio::fs::metadata(path)
         .await
-        .map(|metadata| metadata.is_dir())
-        .unwrap_or(false)
+        .is_ok_and(|metadata| metadata.is_dir())
     {
         return can_write_dir(path).await;
     }

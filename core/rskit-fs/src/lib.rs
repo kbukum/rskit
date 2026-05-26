@@ -33,4 +33,6 @@ pub use path::{
     SafePathError, absolute, canonicalize, parent_dir, safe_join, validate_relative_path,
 };
 pub use temp::{TempDir, TempFile, sibling_temp_path};
-pub use tree::{CopyTreeOptions, TreeEntry, copy_tree, list_tree};
+pub use tree::{
+    CopyTreeOptions, TreeEntry, WalkControl, WalkOptions, copy_tree, list_tree, walk_tree,
+};

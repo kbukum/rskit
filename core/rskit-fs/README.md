@@ -11,7 +11,7 @@ Local filesystem primitives for rskit.
 | `path` | Safe relative paths, root joins, absolute/canonical paths, parent-dir helpers |
 | `file` | Read, write, copy, rename, move, delete, metadata, atomic writes |
 | `dir` | Create, list, inspect, remove, and recursively remove directories |
-| `tree` | Recursive tree listing, copying, and removal with symlink policy |
+| `tree` | Recursive tree walking, listing, copying, and removal with symlink policy |
 | `temp` | Managed temp files/dirs and sibling temp path generation |
 | `link` | Hard links and symbolic links |
 | `permissions` | Read-only flags, capability checks, and Unix mode helpers |

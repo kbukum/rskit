@@ -34,3 +34,38 @@ impl Default for CopyTreeOptions {
         }
     }
 }
+
+/// Options for walking a directory tree.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WalkOptions {
+    /// Follow symlinks instead of visiting them as link entries.
+    pub follow_symlinks: bool,
+    /// Include directory entries in callbacks.
+    pub include_dirs: bool,
+    /// Include file entries in callbacks.
+    pub include_files: bool,
+    /// Include symlink entries in callbacks.
+    pub include_symlinks: bool,
+}
+
+impl Default for WalkOptions {
+    fn default() -> Self {
+        Self {
+            follow_symlinks: false,
+            include_dirs: true,
+            include_files: true,
+            include_symlinks: true,
+        }
+    }
+}
+
+/// Control returned by a tree-walk callback.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WalkControl {
+    /// Continue walking normally.
+    Continue,
+    /// Skip the current directory subtree.
+    SkipSubtree,
+    /// Stop walking immediately.
+    Stop,
+}
