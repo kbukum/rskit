@@ -1,6 +1,6 @@
 //! Tree copying.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
 
@@ -8,7 +8,7 @@ use super::{
     CopyTreeOptions, VisitedDirs, canonical_dir, ensure_directory, enter_directory,
     init_visited_dirs, metadata_for,
 };
-use crate::path::safe_join;
+use crate::path::{absolute, safe_join};
 
 /// Copy a directory tree from `source` into `dest`.
 ///
@@ -16,6 +16,7 @@ use crate::path::safe_join;
 /// accidentally copying content outside the requested source tree.
 pub fn copy_tree(source: &Path, dest: &Path, options: CopyTreeOptions) -> AppResult<()> {
     ensure_directory(source)?;
+    ensure_destination_outside_source(source, dest)?;
 
     std::fs::create_dir_all(dest).map_err(|error| {
         AppError::new(
@@ -23,7 +24,6 @@ pub fn copy_tree(source: &Path, dest: &Path, options: CopyTreeOptions) -> AppRes
             format!("failed to create destination '{}': {error}", dest.display()),
         )
     })?;
-    ensure_destination_outside_source(source, dest)?;
 
     let mut visited = init_visited_dirs(source)?;
     copy_tree_recursive(source, source, dest, options, &mut visited)
@@ -31,7 +31,7 @@ pub fn copy_tree(source: &Path, dest: &Path, options: CopyTreeOptions) -> AppRes
 
 fn ensure_destination_outside_source(source: &Path, dest: &Path) -> AppResult<()> {
     let source = canonical_dir(source)?;
-    let dest = canonical_dir(dest)?;
+    let dest = canonical_target_path(dest)?;
     if dest.starts_with(&source) {
         return Err(AppError::new(
             ErrorCode::InvalidInput,
@@ -43,6 +43,49 @@ fn ensure_destination_outside_source(source: &Path, dest: &Path) -> AppResult<()
         ));
     }
     Ok(())
+}
+
+fn canonical_target_path(path: &Path) -> AppResult<PathBuf> {
+    if path.exists() {
+        return std::fs::canonicalize(path).map_err(|error| {
+            AppError::new(
+                ErrorCode::Internal,
+                format!(
+                    "failed to canonicalize destination '{}': {error}",
+                    path.display()
+                ),
+            )
+        });
+    }
+
+    let absolute_path = absolute(path)?;
+    let mut missing_components = Vec::new();
+    let mut current = absolute_path.as_path();
+
+    while !current.exists() {
+        let Some(name) = current.file_name() else {
+            return Ok(absolute_path);
+        };
+        missing_components.push(name.to_owned());
+        let Some(parent) = current.parent() else {
+            return Ok(absolute_path);
+        };
+        current = parent;
+    }
+
+    let mut canonical = std::fs::canonicalize(current).map_err(|error| {
+        AppError::new(
+            ErrorCode::Internal,
+            format!(
+                "failed to canonicalize destination parent '{}': {error}",
+                current.display()
+            ),
+        )
+    })?;
+    for component in missing_components.iter().rev() {
+        canonical.push(component);
+    }
+    Ok(canonical)
 }
 
 fn copy_tree_recursive(
@@ -201,6 +244,7 @@ mod tests {
         let err = copy_tree(source.path(), &dest, CopyTreeOptions::default()).unwrap_err();
 
         assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert!(!dest.exists());
     }
 
     #[cfg(unix)]

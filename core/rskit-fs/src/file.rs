@@ -8,7 +8,7 @@ use crate::dir::create_dir_all;
 use crate::path::parent_dir;
 use crate::temp::sibling_temp_path;
 
-/// Metadata for a regular file.
+/// Metadata for a filesystem entry at a file path.
 #[derive(Debug, Clone)]
 pub struct FileMeta {
     /// File path.
@@ -29,10 +29,10 @@ pub async fn create_parent_dir(path: &Path) -> AppResult<()> {
     Ok(())
 }
 
-/// Return true when `path` exists and is a regular file.
+/// Return true when `path` exists as a regular file, without following symlinks.
 pub async fn exists(path: &Path) -> AppResult<bool> {
-    match tokio::fs::metadata(path).await {
-        Ok(metadata) => Ok(metadata.is_file()),
+    match tokio::fs::symlink_metadata(path).await {
+        Ok(metadata) => Ok(metadata.is_file() && !metadata.file_type().is_symlink()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
         Err(error) => Err(AppError::new(
             ErrorCode::Internal,
@@ -255,5 +255,17 @@ mod tests {
         write_atomic(&path, b"atomic", "test").await.unwrap();
 
         assert_eq!(read_string(&path).await.unwrap(), "atomic");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn exists_rejects_symlinks_to_files() {
+        let root = TempDir::new().unwrap();
+        let path = root.child("file.txt").unwrap();
+        let link = root.child("link.txt").unwrap();
+        write(&path, b"hello").await.unwrap();
+        std::os::unix::fs::symlink(&path, &link).unwrap();
+
+        assert!(!exists(&link).await.unwrap());
     }
 }

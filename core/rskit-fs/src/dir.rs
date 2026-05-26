@@ -29,10 +29,10 @@ pub async fn create_dir_all(path: &Path) -> AppResult<()> {
     })
 }
 
-/// Return true when `path` exists and is a directory.
+/// Return true when `path` exists as a directory, without following symlinks.
 pub async fn exists(path: &Path) -> AppResult<bool> {
-    match tokio::fs::metadata(path).await {
-        Ok(metadata) => Ok(metadata.is_dir()),
+    match tokio::fs::symlink_metadata(path).await {
+        Ok(metadata) => Ok(metadata.is_dir() && !metadata.file_type().is_symlink()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
         Err(error) => Err(AppError::new(
             ErrorCode::Internal,
@@ -163,5 +163,17 @@ mod tests {
         let missing = root.child("missing").unwrap();
         assert!(!remove_if_exists(&missing).await.unwrap());
         assert!(!remove_all_if_exists(&missing).await.unwrap());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn exists_rejects_symlinks_to_directories() {
+        let root = TempDir::new().unwrap();
+        let dir = root.child("dir").unwrap();
+        let link = root.child("link").unwrap();
+        create_dir_all(&dir).await.unwrap();
+        std::os::unix::fs::symlink(&dir, &link).unwrap();
+
+        assert!(!exists(&link).await.unwrap());
     }
 }

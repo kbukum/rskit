@@ -118,7 +118,6 @@ prost = "0.14.3"
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 async-trait = "0.1"
-clap = { version = "4", features = ["derive"] }
 parking_lot = "0.12"
 bytes = "1"
 http = "1"
@@ -163,7 +162,6 @@ mime_guess = "2"
 infer = "0.19"
 futures-core = "0.3"
 sha2 = "0.11"
-blake3 = "1"
 
 # CLI progress bars (rskit-cli)
 indicatif = "0.18"
