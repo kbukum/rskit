@@ -3,10 +3,13 @@
 use std::path::{Path, PathBuf};
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
+use tokio::io::AsyncWriteExt;
 
 use crate::dir::create_dir_all;
 use crate::path::parent_dir;
 use crate::temp::sibling_temp_path;
+
+const WRITE_ATOMIC_TEMP_ATTEMPTS: usize = 16;
 
 /// Metadata for a filesystem entry at a file path.
 #[derive(Debug, Clone)]
@@ -203,25 +206,67 @@ pub async fn write_atomic(
     temp_prefix: &str,
 ) -> AppResult<()> {
     create_parent_dir(dest).await?;
-    let temp_path = sibling_temp_path(dest, temp_prefix, ".tmp");
-    let result = async {
-        tokio::fs::write(&temp_path, bytes).await.map_err(|error| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!(
-                    "failed to write temp file '{}': {error}",
-                    temp_path.display()
-                ),
-            )
-        })?;
-        persist_temp_file(&temp_path, dest).await
-    }
-    .await;
 
-    if result.is_err() {
-        let _ = remove_file_if_exists(&temp_path).await;
+    let bytes = bytes.as_ref();
+    for _ in 0..WRITE_ATOMIC_TEMP_ATTEMPTS {
+        let temp_path = sibling_temp_path(dest, temp_prefix, ".tmp");
+        let mut temp_file = match tokio::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp_path)
+            .await
+        {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => {
+                return Err(AppError::new(
+                    ErrorCode::Internal,
+                    format!(
+                        "failed to create temp file '{}': {error}",
+                        temp_path.display()
+                    ),
+                ));
+            }
+        };
+
+        let result = async {
+            temp_file.write_all(bytes).await.map_err(|error| {
+                AppError::new(
+                    ErrorCode::Internal,
+                    format!(
+                        "failed to write temp file '{}': {error}",
+                        temp_path.display()
+                    ),
+                )
+            })?;
+            temp_file.sync_data().await.map_err(|error| {
+                AppError::new(
+                    ErrorCode::Internal,
+                    format!(
+                        "failed to sync temp file '{}': {error}",
+                        temp_path.display()
+                    ),
+                )
+            })?;
+            drop(temp_file);
+            persist_temp_file(&temp_path, dest).await
+        }
+        .await;
+
+        if result.is_err() {
+            let _ = remove_file_if_exists(&temp_path).await;
+        }
+
+        return result;
     }
-    result
+
+    Err(AppError::new(
+        ErrorCode::Internal,
+        format!(
+            "failed to create a unique temp file for '{}' after {WRITE_ATOMIC_TEMP_ATTEMPTS} attempts",
+            dest.display()
+        ),
+    ))
 }
 
 #[cfg(test)]
@@ -263,6 +308,17 @@ mod tests {
         write_atomic(&path, b"atomic", "test").await.unwrap();
 
         assert_eq!(read_string(&path).await.unwrap(), "atomic");
+    }
+
+    #[tokio::test]
+    async fn atomic_write_sanitizes_temp_prefix() {
+        let root = TempDir::new().unwrap();
+        let path = root.child("nested/file.txt").unwrap();
+
+        write_atomic(&path, b"atomic", "../escape").await.unwrap();
+
+        assert_eq!(read_string(&path).await.unwrap(), "atomic");
+        assert!(!root.child("escape").unwrap().exists());
     }
 
     #[cfg(unix)]

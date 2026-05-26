@@ -18,11 +18,14 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-tokio = { workspace = true, features = ["fs", "macros", "rt"] }
+tokio = { workspace = true, features = ["fs"] }
 tempfile = { workspace = true }
 libc = { workspace = true }
 
 rskit-errors = { path = "../rskit-errors" }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
 
 [lints]
 workspace = true

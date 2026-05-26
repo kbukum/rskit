@@ -181,11 +181,16 @@ impl std::fmt::Debug for TempDir {
 
 /// Build a collision-resistant temp path next to a destination path.
 ///
+/// `prefix` and `suffix` are sanitized before interpolation so the generated
+/// file name remains a single path component under `dest`'s parent directory.
+///
 /// The function only constructs a path; callers still own creation mode,
 /// streaming writes, fsync/flush, and final rename/persist policy.
 #[must_use]
 pub fn sibling_temp_path(dest: &Path, prefix: &str, suffix: &str) -> PathBuf {
     let parent = parent_dir(dest).unwrap_or_else(|| Path::new("."));
+    let prefix = sanitize_temp_prefix(prefix);
+    let suffix = sanitize_temp_suffix(suffix);
     let sequence = NEXT_TEMP_PATH.fetch_add(1, Ordering::Relaxed);
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -194,6 +199,31 @@ pub fn sibling_temp_path(dest: &Path, prefix: &str, suffix: &str) -> PathBuf {
         ".{prefix}-{}-{nanos}-{sequence}{suffix}",
         std::process::id()
     ))
+}
+
+fn sanitize_temp_prefix(value: &str) -> String {
+    sanitize_temp_affix(value, false)
+}
+
+fn sanitize_temp_suffix(value: &str) -> String {
+    sanitize_temp_affix(value, true)
+}
+
+fn sanitize_temp_affix(value: &str, allow_dot: bool) -> String {
+    let mut sanitized = String::with_capacity(value.len());
+    let mut previous_dot = false;
+
+    for character in value.chars() {
+        let replacement = match character {
+            'A'..='Z' | 'a'..='z' | '0'..='9' | '-' | '_' => character,
+            '.' if allow_dot && !previous_dot => '.',
+            _ => '_',
+        };
+        previous_dot = replacement == '.';
+        sanitized.push(replacement);
+    }
+
+    sanitized
 }
 
 #[cfg(test)]
@@ -217,6 +247,18 @@ mod tests {
                 .to_string_lossy()
                 .contains("download")
         );
+    }
+
+    #[test]
+    fn sibling_temp_path_sanitizes_affixes() {
+        let dest = Path::new("/tmp/output.txt");
+        let path = sibling_temp_path(dest, "../escape", "/..\\payload");
+        let file_name = path.file_name().unwrap().to_string_lossy();
+
+        assert_eq!(path.parent(), dest.parent());
+        assert!(!file_name.contains('/'));
+        assert!(!file_name.contains('\\'));
+        assert!(!file_name.contains(".."));
     }
 
     #[test]
