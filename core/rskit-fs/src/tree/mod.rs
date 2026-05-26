@@ -23,14 +23,30 @@ pub use walk::walk_tree;
 
 type VisitedDirs = Option<HashSet<PathBuf>>;
 
-fn ensure_directory(path: &Path) -> AppResult<()> {
-    if !path.exists() {
-        return Err(AppError::new(
-            ErrorCode::NotFound,
-            format!("source directory not found: {}", path.display()),
-        ));
-    }
-    if !path.is_dir() {
+fn ensure_directory(path: &Path, follow_symlinks: bool) -> AppResult<()> {
+    let result = if follow_symlinks {
+        std::fs::metadata(path)
+    } else {
+        std::fs::symlink_metadata(path)
+    };
+    let metadata = result.map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            return AppError::new(
+                ErrorCode::NotFound,
+                format!("source directory not found: {}", path.display()),
+            );
+        }
+
+        AppError::new(
+            ErrorCode::Internal,
+            format!(
+                "failed to inspect source directory '{}': {error}",
+                path.display()
+            ),
+        )
+    })?;
+
+    if !metadata.is_dir() {
         return Err(AppError::new(
             ErrorCode::InvalidInput,
             format!("source path is not a directory: {}", path.display()),
@@ -101,9 +117,24 @@ mod tests {
     fn ensure_directory_rejects_files() {
         let dir = TempDir::new().unwrap();
         let file = dir.write_file("file.txt", b"hello").unwrap();
-        let err = ensure_directory(&file).unwrap_err();
+        let err = ensure_directory(&file, false).unwrap_err();
 
         assert_eq!(err.code, ErrorCode::InvalidInput);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ensure_directory_rejects_symlink_roots_unless_following() {
+        let dir = TempDir::new().unwrap();
+        let target = dir.child("target").unwrap();
+        std::fs::create_dir_all(&target).unwrap();
+        let link = dir.child("link").unwrap();
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+
+        let err = ensure_directory(&link, false).unwrap_err();
+
+        assert_eq!(err.code, ErrorCode::InvalidInput);
+        ensure_directory(&link, true).unwrap();
     }
 
     #[test]

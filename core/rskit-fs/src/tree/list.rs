@@ -17,7 +17,7 @@ use super::{
 /// Set `follow_symlinks` only when the caller intentionally trusts symlink
 /// targets. Leaving it `false` prevents traversal outside the requested tree.
 pub fn list_tree(root: &Path, follow_symlinks: bool) -> AppResult<Vec<TreeEntry>> {
-    ensure_directory(root)?;
+    ensure_directory(root, follow_symlinks)?;
 
     let mut entries = Vec::new();
     let mut visited = init_visited_dirs(root, follow_symlinks)?;

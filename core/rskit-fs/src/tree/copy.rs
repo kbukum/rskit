@@ -1,7 +1,7 @@
 //! Tree copying.
 #![allow(clippy::needless_pass_by_value)]
 
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
 
@@ -19,7 +19,7 @@ use crate::path::{absolute, safe_join};
 /// Directory structure is preserved. Symlinks are skipped by default to avoid
 /// accidentally copying content outside the requested source tree.
 pub fn copy_tree(source: &Path, dest: &Path, options: CopyTreeOptions) -> AppResult<()> {
-    ensure_directory(source)?;
+    ensure_directory(source, options.follow_symlinks)?;
     ensure_destination_outside_source(source, dest)?;
 
     std::fs::create_dir_all(dest).map_err(|error| create_destination_error(dest, error))?;
@@ -54,15 +54,18 @@ fn canonical_target_path(path: &Path) -> AppResult<PathBuf> {
         .ancestors()
         .find(|ancestor| ancestor.exists())
         .unwrap_or(absolute_path.as_path());
-    let current_component_count = current.components().count();
-    let missing_components = absolute_path
-        .components()
-        .skip(current_component_count)
-        .map(|component| component.as_os_str().to_owned())
-        .collect::<Vec<_>>();
     let mut canonical = canonicalize_destination_parent(current)?;
-    for component in &missing_components {
-        canonical.push(component);
+    for component in absolute_path
+        .components()
+        .skip(current.components().count())
+    {
+        match component {
+            Component::Normal(component) => canonical.push(component),
+            Component::CurDir => {}
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
+                return Err(invalid_destination_component_error(path));
+            }
+        }
     }
     Ok(canonical)
 }
@@ -89,6 +92,16 @@ fn canonicalize_destination_parent(path: &Path) -> AppResult<PathBuf> {
             ),
         )
     })
+}
+
+fn invalid_destination_component_error(path: &Path) -> AppError {
+    AppError::new(
+        ErrorCode::InvalidInput,
+        format!(
+            "destination '{}' must not contain unresolved parent, root, or prefix components",
+            path.display()
+        ),
+    )
 }
 
 fn copy_tree_recursive(
@@ -330,6 +343,18 @@ mod tests {
 
         assert_eq!(err.code, ErrorCode::InvalidInput);
         assert!(!dest.exists());
+    }
+
+    #[test]
+    fn copy_tree_rejects_destination_with_unresolved_parent_components() {
+        let source = TempDir::new().unwrap();
+        source.write_file("a.txt", b"alpha").unwrap();
+        let dest = source.path().join("missing/../dest");
+
+        let err = copy_tree(source.path(), &dest, CopyTreeOptions::default()).unwrap_err();
+
+        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert!(!source.child("dest").unwrap().exists());
     }
 
     #[cfg(unix)]

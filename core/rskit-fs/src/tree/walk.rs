@@ -22,7 +22,7 @@ pub fn walk_tree(
     options: WalkOptions,
     mut visitor: impl FnMut(&TreeEntry) -> AppResult<WalkControl>,
 ) -> AppResult<()> {
-    ensure_directory(root)?;
+    ensure_directory(root, options.follow_symlinks)?;
     let mut visited = init_visited_dirs(root, options.follow_symlinks)?;
     walk_tree_recursive(root, root, options, &mut visited, &mut visitor).map(drop)
 }
