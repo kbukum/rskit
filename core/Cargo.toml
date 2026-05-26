@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "rskit-util",
+    "rskit-fs",
     "rskit",
     "rskit-version",
     "rskit-errors",

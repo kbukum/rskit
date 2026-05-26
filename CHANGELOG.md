@@ -56,6 +56,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **L4 composition crates**: aligned bootstrap lifecycle hooks with start/stop boundaries and typed lifecycle events, made pipeline fan-out/windowing bounded, replaced JSON chain operations with typed sequential composition, tightened DAG cycle/parallelism guarantees, removed worker ticker coupling, added typed state machines, and made process execution explicitly cancellable with bounded output by default.
 
 ### Changed — Foundations
+- **rskit-fs**: added a foundation crate for local filesystem primitives covering
+  safe paths, file/directory/tree operations, temporary resources, links,
+  permissions, and security-oriented defaults for reusable filesystem access.
 - **rskit-util**: reduced the L0 utility crate to a minimal domain-free
   dependency surface.
 - **rskit-config**: moved `SecretString` ownership out of `rskit-util`.

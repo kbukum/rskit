@@ -1,8 +1,25 @@
 //! `rskit` — production Rust toolkit.
 //!
 //! This crate is a pure facade that re-exports `rskit-*` sub-crates from a
-//! single namespace. It contains no implementation logic. Feature flags control
-//! optional modules:
+//! single namespace. It contains no implementation logic.
+//!
+//! Always-on foundation crates:
+//!
+//! | Module | Extra crate |
+//! |--------|-------------|
+//! | `errors` | `rskit-errors` (error types and result aliases) |
+//! | `fs` | `rskit-fs` (local filesystem primitives) |
+//! | `config` | `rskit-config` (TOML + environment config loading) |
+//! | `logging` | `rskit-logging` (`tracing` subscriber setup) |
+//! | `resilience` | `rskit-resilience` (retry, timeout, circuit breaker) |
+//! | `provider` | `rskit-provider` (provider traits and tower bridge) |
+//! | `pipeline` | `rskit-pipeline` (stream operators) |
+//! | `bootstrap` | `rskit-bootstrap` (app lifecycle orchestration) |
+//! | `component` | `rskit-component` (component lifecycle primitives) |
+//! | `worker` | `rskit-worker` (worker pools and typed events) |
+//! | `validation` | `rskit-validation` (field-level validation) |
+//!
+//! Feature flags control optional modules:
 //!
 //! | Feature | Extra crate |
 //! |---------|-------------|
@@ -71,6 +88,9 @@
 
 /// Error types, `ErrorCode`, `AppError`, `AppResult`.
 pub use rskit_errors as errors;
+
+/// Local filesystem primitives.
+pub use rskit_fs as fs;
 
 /// Config loading (TOML + env).
 pub use rskit_config as config;
