@@ -72,10 +72,10 @@ fn walk_tree_recursive(
     Ok(())
 }
 
-fn should_visit(entry: &TreeEntry, options: WalkOptions) -> bool {
-    (entry.is_dir && options.include_dirs)
-        || (entry.is_file && options.include_files)
-        || (entry.is_symlink && options.include_symlinks)
+const fn should_visit(entry: &TreeEntry, options: WalkOptions) -> bool {
+    (entry.is_dir && options.entry_filter.includes_dirs())
+        || (entry.is_file && options.entry_filter.includes_files())
+        || (entry.is_symlink && options.entry_filter.includes_symlinks())
 }
 
 #[cfg(test)]

@@ -40,22 +40,51 @@ impl Default for CopyTreeOptions {
 pub struct WalkOptions {
     /// Follow symlinks instead of visiting them as link entries.
     pub follow_symlinks: bool,
-    /// Include directory entries in callbacks.
-    pub include_dirs: bool,
-    /// Include file entries in callbacks.
-    pub include_files: bool,
-    /// Include symlink entries in callbacks.
-    pub include_symlinks: bool,
+    /// Which entry kinds are passed to callbacks.
+    pub entry_filter: WalkEntryFilter,
 }
 
 impl Default for WalkOptions {
     fn default() -> Self {
         Self {
             follow_symlinks: false,
-            include_dirs: true,
-            include_files: true,
-            include_symlinks: true,
+            entry_filter: WalkEntryFilter::ALL,
         }
+    }
+}
+
+/// Entry kinds included during a tree walk.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WalkEntryFilter(u8);
+
+impl WalkEntryFilter {
+    /// Include regular files.
+    pub const FILES: Self = Self(0b001);
+    /// Include directories.
+    pub const DIRS: Self = Self(0b010);
+    /// Include symlinks.
+    pub const SYMLINKS: Self = Self(0b100);
+    /// Include regular files and directories.
+    pub const FILES_AND_DIRS: Self = Self(Self::FILES.0 | Self::DIRS.0);
+    /// Include every entry kind.
+    pub const ALL: Self = Self(Self::FILES.0 | Self::DIRS.0 | Self::SYMLINKS.0);
+
+    /// Return true when regular files are included.
+    #[must_use]
+    pub const fn includes_files(self) -> bool {
+        self.0 & Self::FILES.0 != 0
+    }
+
+    /// Return true when directories are included.
+    #[must_use]
+    pub const fn includes_dirs(self) -> bool {
+        self.0 & Self::DIRS.0 != 0
+    }
+
+    /// Return true when symlinks are included.
+    #[must_use]
+    pub const fn includes_symlinks(self) -> bool {
+        self.0 & Self::SYMLINKS.0 != 0
     }
 }
 
