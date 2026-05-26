@@ -6,7 +6,7 @@ use rskit_errors::AppResult;
 use rskit_llm::types::{AssistantMessage, CompletionResponse, Message, Usage};
 use tokio::time::Instant;
 
-use crate::context::compact_if_needed;
+use crate::runtime::context::compact_if_needed;
 use crate::types::{AgentResult, ContextStrategy, StopReason};
 
 pub(crate) struct RunState {
