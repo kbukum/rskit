@@ -52,6 +52,9 @@ impl Agent {
                     Ok(outcome) => outcome,
                     Err(error) => {
                         tracing::error!(error = %error, "agent.run.failed");
+                        yield AgentEvent::Complete {
+                            result: state.finish(turn, StopReason::Aborted),
+                        };
                         return;
                     }
                 };

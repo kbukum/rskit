@@ -2,7 +2,7 @@
 //!
 //! The [`Memory`] trait defines async operations for loading, saving, and
 //! appending messages.  [`InMemoryStore`] keeps everything in a
-//! `tokio::sync::RwLock<HashMap>`, while [`SlidingWindowMemory`] wraps any
+//! `parking_lot::RwLock<HashMap>`, while [`SlidingWindowMemory`] wraps any
 //! `Memory` and trims to a maximum message count.
 
 mod sliding_window;

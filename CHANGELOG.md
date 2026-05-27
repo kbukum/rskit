@@ -26,7 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   AI-vocabulary modules around ownership boundaries; centralized Consul and LLM
   outbound HTTP/retry/telemetry mechanics on shared infrastructure. As part of
   the Consul migration, `ConsulDiscovery::new` now returns `AppResult<Self>` so
-  HTTP client construction failures are surfaced at initialization.
+  HTTP client construction failures are surfaced at initialization. The
+  `rskit-agent` stream API now drives the real turn loop so lifecycle events are
+  emitted during execution with per-turn usage instead of replayed from the final
+  run result.
 - **Media/dataset**: redesigned dataset items around bounded byte/file
   payloads, streaming source contracts, explicit transform errors, schema
   validation via `rskit-schema`, and `rskit-pipeline` stream adapters.
