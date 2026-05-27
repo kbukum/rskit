@@ -82,6 +82,7 @@ fn create_dir_error(path: &Path, error: std::io::Error) -> AppError {
         ErrorCode::Internal,
         format!("failed to create directory '{}': {error}", path.display()),
     )
+    .with_cause(error)
 }
 
 fn inspect_dir_error(path: &Path, error: std::io::Error) -> AppError {
@@ -89,6 +90,7 @@ fn inspect_dir_error(path: &Path, error: std::io::Error) -> AppError {
         ErrorCode::Internal,
         format!("failed to inspect directory '{}': {error}", path.display()),
     )
+    .with_cause(error)
 }
 
 fn read_dir_error(path: &Path, error: std::io::Error) -> AppError {
@@ -96,6 +98,7 @@ fn read_dir_error(path: &Path, error: std::io::Error) -> AppError {
         ErrorCode::Internal,
         format!("failed to read directory '{}': {error}", path.display()),
     )
+    .with_cause(error)
 }
 
 fn read_dir_entry_error(error: std::io::Error) -> AppError {
@@ -103,6 +106,7 @@ fn read_dir_entry_error(error: std::io::Error) -> AppError {
         ErrorCode::Internal,
         format!("failed to read directory entry: {error}"),
     )
+    .with_cause(error)
 }
 
 fn inspect_dir_entry_error(path: &Path, error: std::io::Error) -> AppError {
@@ -113,6 +117,7 @@ fn inspect_dir_entry_error(path: &Path, error: std::io::Error) -> AppError {
             path.display()
         ),
     )
+    .with_cause(error)
 }
 
 fn remove_dir_error(path: &Path, error: std::io::Error) -> AppError {
@@ -120,6 +125,7 @@ fn remove_dir_error(path: &Path, error: std::io::Error) -> AppError {
         ErrorCode::Internal,
         format!("failed to remove directory '{}': {error}", path.display()),
     )
+    .with_cause(error)
 }
 
 fn remove_tree_error(path: &Path, error: std::io::Error) -> AppError {
@@ -130,4 +136,5 @@ fn remove_tree_error(path: &Path, error: std::io::Error) -> AppError {
             path.display()
         ),
     )
+    .with_cause(error)
 }

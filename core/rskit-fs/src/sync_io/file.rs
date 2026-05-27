@@ -278,6 +278,7 @@ fn create_parent_dirs_error(error: std::io::Error) -> AppError {
         ErrorCode::Internal,
         format!("failed to create parent dirs: {error}"),
     )
+    .with_cause(error)
 }
 
 fn inspect_file_error(path: &Path, error: std::io::Error) -> AppError {
@@ -285,6 +286,7 @@ fn inspect_file_error(path: &Path, error: std::io::Error) -> AppError {
         ErrorCode::Internal,
         format!("failed to inspect file '{}': {error}", path.display()),
     )
+    .with_cause(error)
 }
 
 fn open_file_error(path: &Path, error: std::io::Error) -> AppError {
@@ -292,13 +294,15 @@ fn open_file_error(path: &Path, error: std::io::Error) -> AppError {
         return AppError::new(
             ErrorCode::InvalidInput,
             format!("symlinks are not allowed: {}", path.display()),
-        );
+        )
+        .with_cause(error);
     }
 
     AppError::new(
         ErrorCode::Internal,
         format!("failed to open file '{}': {error}", path.display()),
     )
+    .with_cause(error)
 }
 
 fn is_symlink_open_error(error: &std::io::Error) -> bool {
@@ -317,6 +321,7 @@ fn create_file_error(path: &Path, error: std::io::Error) -> AppError {
         ErrorCode::Internal,
         format!("failed to create file '{}': {error}", path.display()),
     )
+    .with_cause(error)
 }
 
 fn read_file_error(path: &Path, error: std::io::Error) -> AppError {
@@ -324,6 +329,7 @@ fn read_file_error(path: &Path, error: std::io::Error) -> AppError {
         ErrorCode::Internal,
         format!("failed to read file '{}': {error}", path.display()),
     )
+    .with_cause(error)
 }
 
 fn write_file_error(path: &Path, error: std::io::Error) -> AppError {
@@ -331,6 +337,7 @@ fn write_file_error(path: &Path, error: std::io::Error) -> AppError {
         ErrorCode::Internal,
         format!("failed to write file '{}': {error}", path.display()),
     )
+    .with_cause(error)
 }
 
 fn copy_file_error(from: &Path, to: &Path, error: std::io::Error) -> AppError {
@@ -342,6 +349,7 @@ fn copy_file_error(from: &Path, to: &Path, error: std::io::Error) -> AppError {
             to.display()
         ),
     )
+    .with_cause(error)
 }
 
 fn rename_file_error(from: &Path, to: &Path, error: std::io::Error) -> AppError {
@@ -353,6 +361,7 @@ fn rename_file_error(from: &Path, to: &Path, error: std::io::Error) -> AppError 
             to.display()
         ),
     )
+    .with_cause(error)
 }
 
 fn move_file_error(from: &Path, to: &Path, error: std::io::Error) -> AppError {
@@ -364,6 +373,7 @@ fn move_file_error(from: &Path, to: &Path, error: std::io::Error) -> AppError {
             to.display()
         ),
     )
+    .with_cause(error)
 }
 
 fn remove_file_error(path: &Path, error: std::io::Error) -> AppError {
@@ -371,6 +381,7 @@ fn remove_file_error(path: &Path, error: std::io::Error) -> AppError {
         ErrorCode::Internal,
         format!("failed to remove '{}': {error}", path.display()),
     )
+    .with_cause(error)
 }
 
 fn sync_file_error(path: &Path, error: std::io::Error) -> AppError {
@@ -378,6 +389,16 @@ fn sync_file_error(path: &Path, error: std::io::Error) -> AppError {
         ErrorCode::Internal,
         format!("failed to sync file '{}': {error}", path.display()),
     )
+    .with_cause(error)
+}
+
+/// Return true when `error` was created by bounded file-read size enforcement.
+pub fn is_file_too_large_error(error: &AppError) -> bool {
+    error
+        .details
+        .get("rskit_fs_error")
+        .and_then(|value| value.as_str())
+        == Some("file_too_large")
 }
 
 fn file_too_large_error(path: &Path, actual: u64, limit: u64) -> AppError {
@@ -388,4 +409,5 @@ fn file_too_large_error(path: &Path, actual: u64, limit: u64) -> AppError {
             path.display()
         ),
     )
+    .with_detail("rskit_fs_error", "file_too_large")
 }

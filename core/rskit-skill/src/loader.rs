@@ -258,13 +258,6 @@ fn collect_assets(
 }
 
 fn read_utf8_bounded(path: &Path, max_bytes: u64) -> Result<String, SkillError> {
-    let metadata = sync_io::file::metadata(path).map_err(|error| fs_error(path, error))?;
-    if metadata.len > max_bytes {
-        return Err(SkillError::FileTooLarge {
-            path: path.to_path_buf(),
-            limit_bytes: max_bytes,
-        });
-    }
     let bytes = sync_io::file::read_no_follow_regular_bounded(path, max_bytes)
         .map_err(|error| bounded_read_error(path, max_bytes, error))?;
     String::from_utf8(bytes).map_err(|source| SkillError::InvalidUtf8 {
@@ -347,7 +340,7 @@ fn hex_lower(bytes: &[u8]) -> String {
 }
 
 fn bounded_read_error(path: &Path, limit_bytes: u64, error: AppError) -> SkillError {
-    if error.code == ErrorCode::InvalidInput && error.message.contains("exceeds maximum size") {
+    if sync_io::file::is_file_too_large_error(&error) {
         SkillError::FileTooLarge {
             path: path.to_path_buf(),
             limit_bytes,

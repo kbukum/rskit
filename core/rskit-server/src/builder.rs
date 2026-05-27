@@ -143,24 +143,27 @@ impl GrpcServerBuilder {
                     let cert = rskit_fs::async_io::file::read(&tls.cert_path)
                         .await
                         .map_err(|error| {
-                        AppError::new(
-                            ErrorCode::InvalidInput,
-                            format!(
-                                "failed to read TLS certificate '{}': {error}",
-                                tls.cert_path
-                            ),
-                        )
-                        .with_cause(error)
-                    })?;
+                            AppError::new(
+                                ErrorCode::InvalidInput,
+                                format!(
+                                    "failed to read TLS certificate '{}': {error}",
+                                    tls.cert_path
+                                ),
+                            )
+                            .with_cause(error)
+                        })?;
                     let key = rskit_fs::async_io::file::read(&tls.key_path)
                         .await
                         .map_err(|error| {
-                        AppError::new(
-                            ErrorCode::InvalidInput,
-                            format!("failed to read TLS private key '{}': {error}", tls.key_path),
-                        )
-                        .with_cause(error)
-                    })?;
+                            AppError::new(
+                                ErrorCode::InvalidInput,
+                                format!(
+                                    "failed to read TLS private key '{}': {error}",
+                                    tls.key_path
+                                ),
+                            )
+                            .with_cause(error)
+                        })?;
                     let tls_config = ServerTlsConfig::new()
                         .identity(Identity::from_pem(cert, key))
                         .ignore_client_order(true)
