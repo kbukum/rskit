@@ -41,15 +41,15 @@ impl ContextStrategy for TruncateStrategy {
         messages: Vec<Message>,
         _max_tokens: usize,
     ) -> Result<Vec<Message>, AppError> {
-        if messages.len() <= self.keep_last + 1 {
+        let has_system = matches!(messages.first(), Some(Message::System(_)));
+        let max_messages = self.keep_last + usize::from(has_system);
+        if messages.len() <= max_messages {
             return Ok(messages);
         }
 
         let mut result = Vec::with_capacity(self.keep_last + 1);
-        if let Some(first) = messages.first()
-            && matches!(first, Message::System(_))
-        {
-            result.push(first.clone());
+        if has_system {
+            result.push(messages[0].clone());
         }
 
         let start = messages.len().saturating_sub(self.keep_last);
@@ -110,5 +110,17 @@ mod tests {
         ];
         let result = strategy.compact(msgs, 100).unwrap();
         assert_eq!(result.len(), 2);
+    }
+
+    #[test]
+    fn test_truncate_strategy_no_system_drops_keep_last_plus_one() {
+        let strategy = TruncateStrategy { keep_last: 2 };
+        let msgs = vec![types::user("a"), types::assistant("b"), types::user("c")];
+
+        let result = strategy.compact(msgs, 100).unwrap();
+
+        assert_eq!(result.len(), 2);
+        assert!(matches!(&result[0], Message::Assistant(_)));
+        assert!(matches!(&result[1], Message::User(_)));
     }
 }
