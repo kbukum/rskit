@@ -544,7 +544,24 @@ mod tests {
 
         let stream = agent.stream(vec![types::user("hi")]);
         let events: Vec<AgentEvent> = stream.collect().await;
-        assert_eq!(events.len(), 1);
-        assert!(matches!(events.first(), Some(AgentEvent::Complete { .. })));
+        assert_eq!(events.len(), 3);
+        assert!(matches!(
+            events.first(),
+            Some(AgentEvent::TurnStart { turn: 0 })
+        ));
+        assert!(matches!(
+            events.get(1),
+            Some(AgentEvent::TurnComplete {
+                turn: 0,
+                usage: Usage {
+                    input_tokens: 10,
+                    output_tokens: 5,
+                    cached_tokens: 0,
+                    reasoning_tokens: 0,
+                },
+                ..
+            })
+        ));
+        assert!(matches!(events.last(), Some(AgentEvent::Complete { .. })));
     }
 }

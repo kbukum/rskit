@@ -9,7 +9,8 @@ use super::Memory;
 // ── SlidingWindowMemory ─────────────────────────────────────────────────────
 
 /// Wraps any [`Memory`] and limits the stored history to the last
-/// `max_messages` entries (always preserving a leading system message).
+/// `max_messages` non-system entries (always preserving a leading system
+/// message in addition to that limit).
 pub struct SlidingWindowMemory {
     inner: Arc<dyn Memory>,
     max_messages: usize,
@@ -18,7 +19,8 @@ pub struct SlidingWindowMemory {
 impl SlidingWindowMemory {
     /// Create a sliding-window wrapper.
     ///
-    /// `max_messages` must be at least 1.
+    /// `max_messages` is the number of non-system messages to retain and must
+    /// be at least 1.
     pub fn new(inner: Arc<dyn Memory>, max_messages: usize) -> Result<Self, AppError> {
         if max_messages == 0 {
             return Err(AppError::new(
