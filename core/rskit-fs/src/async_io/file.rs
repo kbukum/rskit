@@ -272,6 +272,7 @@ fn inspect_file_error(path: &Path, error: std::io::Error) -> AppError {
         ErrorCode::Internal,
         format!("failed to inspect file '{}': {error}", path.display()),
     )
+    .with_cause(error)
 }
 
 fn read_file_error(path: &Path, error: std::io::Error) -> AppError {
@@ -279,6 +280,7 @@ fn read_file_error(path: &Path, error: std::io::Error) -> AppError {
         ErrorCode::Internal,
         format!("failed to read file '{}': {error}", path.display()),
     )
+    .with_cause(error)
 }
 
 fn open_file_error(path: &Path, error: std::io::Error) -> AppError {
@@ -286,6 +288,7 @@ fn open_file_error(path: &Path, error: std::io::Error) -> AppError {
         ErrorCode::Internal,
         format!("failed to open file '{}': {error}", path.display()),
     )
+    .with_cause(error)
 }
 
 fn create_file_error(path: &Path, error: std::io::Error) -> AppError {
@@ -293,6 +296,7 @@ fn create_file_error(path: &Path, error: std::io::Error) -> AppError {
         ErrorCode::Internal,
         format!("failed to create file '{}': {error}", path.display()),
     )
+    .with_cause(error)
 }
 
 fn write_file_error(path: &Path, error: std::io::Error) -> AppError {
@@ -300,6 +304,7 @@ fn write_file_error(path: &Path, error: std::io::Error) -> AppError {
         ErrorCode::Internal,
         format!("failed to write file '{}': {error}", path.display()),
     )
+    .with_cause(error)
 }
 
 fn copy_file_error(from: &Path, to: &Path, error: std::io::Error) -> AppError {
@@ -311,6 +316,7 @@ fn copy_file_error(from: &Path, to: &Path, error: std::io::Error) -> AppError {
             to.display()
         ),
     )
+    .with_cause(error)
 }
 
 fn rename_file_error(from: &Path, to: &Path, error: std::io::Error) -> AppError {
@@ -322,6 +328,7 @@ fn rename_file_error(from: &Path, to: &Path, error: std::io::Error) -> AppError 
             to.display()
         ),
     )
+    .with_cause(error)
 }
 
 fn move_file_error(from: &Path, to: &Path, error: std::io::Error) -> AppError {
@@ -333,6 +340,7 @@ fn move_file_error(from: &Path, to: &Path, error: std::io::Error) -> AppError {
             to.display()
         ),
     )
+    .with_cause(error)
 }
 
 fn remove_file_error(path: &Path, error: std::io::Error) -> AppError {
@@ -340,6 +348,7 @@ fn remove_file_error(path: &Path, error: std::io::Error) -> AppError {
         ErrorCode::Internal,
         format!("failed to remove '{}': {error}", path.display()),
     )
+    .with_cause(error)
 }
 
 fn create_temp_file_error(path: &Path, error: std::io::Error) -> AppError {
@@ -347,6 +356,7 @@ fn create_temp_file_error(path: &Path, error: std::io::Error) -> AppError {
         ErrorCode::Internal,
         format!("failed to create temp file '{}': {error}", path.display()),
     )
+    .with_cause(error)
 }
 
 fn write_temp_file_error(path: &Path, error: std::io::Error) -> AppError {
@@ -354,6 +364,7 @@ fn write_temp_file_error(path: &Path, error: std::io::Error) -> AppError {
         ErrorCode::Internal,
         format!("failed to write temp file '{}': {error}", path.display()),
     )
+    .with_cause(error)
 }
 
 fn sync_temp_file_error(path: &Path, error: std::io::Error) -> AppError {
@@ -361,6 +372,7 @@ fn sync_temp_file_error(path: &Path, error: std::io::Error) -> AppError {
         ErrorCode::Internal,
         format!("failed to sync temp file '{}': {error}", path.display()),
     )
+    .with_cause(error)
 }
 
 fn unique_temp_file_error(dest: &Path, attempts: usize) -> AppError {
