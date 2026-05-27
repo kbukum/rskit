@@ -84,7 +84,7 @@ pub async fn read_bounded(path: &Path, max_bytes: u64) -> AppResult<Vec<u8>> {
         .len()
         .min(max_bytes)
         .try_into()
-        .unwrap_or(usize::MAX);
+        .unwrap_or(0);
     let mut bytes = Vec::with_capacity(capacity);
     file.take(max_bytes.saturating_add(1))
         .read_to_end(&mut bytes)

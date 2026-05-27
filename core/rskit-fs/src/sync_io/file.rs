@@ -127,7 +127,7 @@ fn read_bounded_from_file(path: &Path, max_bytes: u64, file: &mut File) -> AppRe
         .len()
         .min(max_bytes)
         .try_into()
-        .unwrap_or(usize::MAX);
+        .unwrap_or(0);
     let mut bytes = Vec::with_capacity(capacity);
     file.by_ref()
         .take(max_bytes.saturating_add(1))
