@@ -133,9 +133,11 @@ impl FileStore for LocalStore {
 
     async fn delete(&self, key: &str) -> AppResult<()> {
         let path = self.resolve_path(key)?;
-        async_io::file::remove(&path)
-            .await
-            .map_err(|error| delete_error(key, error))
+        if async_io::file::remove_if_exists(&path).await? {
+            Ok(())
+        } else {
+            Err(file_not_found_error(key))
+        }
     }
 
     async fn exists(&self, key: &str) -> AppResult<bool> {
@@ -146,9 +148,12 @@ impl FileStore for LocalStore {
     async fn head(&self, key: &str) -> AppResult<StoredFile> {
         let key = normalize_local_key(key)?;
         let path = self.resolve_normalized_path(&key)?;
-        let meta = async_io::file::metadata(&path).await.map_err(|e| {
-            AppError::new(ErrorCode::NotFound, format!("file not found {key}: {e}"))
-        })?;
+        let meta = async_io::file::metadata(&path)
+            .await
+            .map_err(|error| file_not_found_error_with_cause(&key, error))?;
+        if !meta.is_file || meta.is_symlink {
+            return Err(file_not_found_error(&key));
+        }
 
         let mime = crate::detect_mime(&FileSource::Path(path)).await?;
 
@@ -248,19 +253,12 @@ impl FileStore for LocalStore {
     }
 }
 
-fn delete_error(key: &str, error: AppError) -> AppError {
-    if app_error_io_kind(&error) == Some(std::io::ErrorKind::NotFound) {
-        AppError::new(ErrorCode::NotFound, format!("file not found: {key}")).with_cause(error)
-    } else {
-        error
-    }
+fn file_not_found_error(key: &str) -> AppError {
+    AppError::new(ErrorCode::NotFound, format!("file not found: {key}"))
 }
 
-fn app_error_io_kind(error: &AppError) -> Option<std::io::ErrorKind> {
-    error
-        .cause()
-        .and_then(|cause| cause.downcast_ref::<std::io::Error>())
-        .map(std::io::Error::kind)
+fn file_not_found_error_with_cause(key: &str, cause: AppError) -> AppError {
+    file_not_found_error(key).with_cause(cause)
 }
 
 #[cfg(test)]

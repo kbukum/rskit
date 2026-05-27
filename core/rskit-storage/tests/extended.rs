@@ -571,6 +571,29 @@ async fn store_head_returns_correct_metadata() {
 }
 
 #[tokio::test]
+async fn store_head_rejects_directory() {
+    let dir = TempDir::new().unwrap();
+    let store = make_store(dir.path());
+    std::fs::create_dir(dir.path().join("nested")).unwrap();
+
+    let error = store.head("nested").await.unwrap_err();
+    assert_eq!(error.code, rskit_errors::ErrorCode::NotFound);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn store_head_rejects_symlink() {
+    let dir = TempDir::new().unwrap();
+    let store = make_store(dir.path());
+    std::fs::write(dir.path().join("target.txt"), b"target").unwrap();
+    std::os::unix::fs::symlink(dir.path().join("target.txt"), dir.path().join("link.txt"))
+        .unwrap();
+
+    let error = store.head("link.txt").await.unwrap_err();
+    assert_eq!(error.code, rskit_errors::ErrorCode::NotFound);
+}
+
+#[tokio::test]
 async fn store_list_with_limit() {
     let dir = TempDir::new().unwrap();
     let store = make_store(dir.path());
