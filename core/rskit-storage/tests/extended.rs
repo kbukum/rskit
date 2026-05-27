@@ -586,8 +586,7 @@ async fn store_head_rejects_symlink() {
     let dir = TempDir::new().unwrap();
     let store = make_store(dir.path());
     std::fs::write(dir.path().join("target.txt"), b"target").unwrap();
-    std::os::unix::fs::symlink(dir.path().join("target.txt"), dir.path().join("link.txt"))
-        .unwrap();
+    std::os::unix::fs::symlink(dir.path().join("target.txt"), dir.path().join("link.txt")).unwrap();
 
     let error = store.head("link.txt").await.unwrap_err();
     assert_eq!(error.code, rskit_errors::ErrorCode::NotFound);
