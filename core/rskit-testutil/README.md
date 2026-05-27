@@ -13,6 +13,7 @@ Test utilities, mock providers, and assertion helpers for rskit services.
 - `MockProvider<I, O>` — generic mock with `will_return` / `will_fail` queues and call recording
 - `assert_ok(result)` — unwrap `AppResult` or panic with context
 - `assert_err_code(result, code)` — assert a specific `ErrorCode`
+- `TestWorkspace` / `test_workspace!` — managed temp workspaces with fixture loading and copying
 - Thread-safe via `parking_lot::Mutex`
 
 ## Usage
@@ -35,6 +36,17 @@ assert_eq!(mock.call_count(), 1);
 
 mock.will_fail(rskit_errors::AppError::new(ErrorCode::NotFound, "gone"));
 assert_err_code(mock.execute("bye".into()), ErrorCode::NotFound);
+```
+
+```rust
+use rskit_testutil::test_workspace;
+
+let workspace = test_workspace!("config");
+let config_path = workspace
+    .copy_fixture("config/example.toml", "app.toml")
+    .unwrap();
+
+assert!(config_path.starts_with(workspace.path()));
 ```
 
 ## See Also

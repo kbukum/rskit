@@ -28,6 +28,7 @@ validator      = { workspace = true }
 
 # Internal
 rskit-errors   = { path = "../rskit-errors" }
+rskit-fs       = { path = "../rskit-fs", default-features = false }
 rskit-provider = { path = "../rskit-provider" }
 rskit-component = { path = "../rskit-component" }
 rskit-hook     = { path = "../rskit-hook" }
