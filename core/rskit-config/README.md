@@ -1,6 +1,6 @@
-# rskit-config — Layered Config Loading
+# rskit-config — Adapter-Oriented Config Loading
 
-Load application config from TOML files, `.env` files, and environment variables with a clear priority order.
+Load application, service, tool, and adapter-backed configuration through one source pipeline.
 
 [![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/rskit-config.svg)](https://crates.io/crates/rskit-config)
@@ -10,12 +10,13 @@ Load application config from TOML files, `.env` files, and environment variables
 
 ## Features
 
-- Layered loading: defaults → TOML file → `.env` → `APP__SECTION__KEY` env vars → explicit overrides
+- Layered app loading: defaults → TOML file → `.env` → adapter sources → `APP__SECTION__KEY` env vars → explicit overrides
 - Serde-based deserialization into any `Deserialize` + `Validate` type
 - Optional `.env` file support via `dotenvy`
 - Configurable env prefix
 - Programmatic defaults and overrides with deterministic precedence
 - Profile-specific env files (`config/profiles/{profile}.env`)
+- Adapter contract for external config sources such as Vault, SSM Parameter Store, Kubernetes secrets, or remote config services
 
 ## Loading Order (lowest → highest priority)
 
@@ -23,8 +24,9 @@ Load application config from TOML files, `.env` files, and environment variables
 2. TOML file (`with_config_file`)
 3. Profile env file (`config/profiles/{profile}.env`, via `with_profile`)
 4. `.env` file
-5. Environment variables (`__` separator, optional prefix via `with_env_prefix`)
-6. Programmatic overrides (`with_override`)
+5. Adapter sources (`with_source`)
+6. Environment variables (`__` separator, optional prefix via `with_env_prefix`)
+7. Programmatic overrides (`with_override`)
 
 Profile files requested through `with_profile` and explicit `.env` files requested
 through `with_env_file` are fail-closed: missing or malformed files return an
@@ -46,7 +48,7 @@ validator = { version = "0.18", features = ["derive"] }
 ```
 
 ```rust
-use rskit_config::{ConfigLoader, AppConfig, ServiceConfig};
+use rskit_config::{AppConfig, ConfigLoader, ConfigSource, ServiceConfig};
 use serde::Deserialize;
 use validator::Validate;
 
@@ -63,12 +65,39 @@ impl AppConfig for Config {
     fn service_config(&self) -> &ServiceConfig { &self.service }
 }
 
-let cfg: Config = ConfigLoader::new()
+let cfg: Config = ConfigLoader::app()
     .with_default("grpc_port", 50051_i64)
     .with_config_file("config/app.toml")
     .with_env_prefix("MYAPP")
     .with_override("name", "api")
-    .load()?;
+    .load_app()?;
+```
+
+Deterministic tool/project config should use an explicit policy that does not
+read dotenv files or process environment variables:
+
+```rust
+let cfg: ToolConfig = ConfigLoader::toml("tool.toml").load()?;
+```
+
+External backends plug in through the adapter contract:
+
+```rust
+#[derive(Debug)]
+struct VaultSource;
+
+impl ConfigSource for VaultSource {
+    fn collect(&self) -> rskit_errors::AppResult<config::Config> {
+        // Fetch and convert backend values into a config::Config.
+        config::Config::builder()
+            .build()
+            .map_err(|e| rskit_errors::AppError::invalid_input("config", e.to_string()))
+    }
+}
+
+let cfg: Config = ConfigLoader::app()
+    .with_source(VaultSource)
+    .load_app()?;
 ```
 
 ## ServiceConfig Fields
@@ -85,7 +114,9 @@ let cfg: Config = ConfigLoader::new()
 
 ## Validation
 
-Structs must implement `validator::Validate`. The loader calls `validate()` after `apply_defaults()` and returns `AppError` on failure.
+Structs loaded with `load()` must implement `Deserialize` and `Validate`.
+Application configs loaded with `load_app()` must implement `AppConfig`; the
+loader calls `AppConfig::apply_defaults()` before validation.
 
 ## See Also
 

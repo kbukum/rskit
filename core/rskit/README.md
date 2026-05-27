@@ -10,8 +10,8 @@ Facade crate that re-exports all `rskit-*` sub-crates. Single dependency to get 
 
 ## Features
 
-- **errors** — structured `AppError` + `ErrorCode` + HTTP/gRPC status mapping
-- **config** — layered TOML / `.env` / env-var configuration loading
+- **errors** — structured `AppError` + `ErrorCode` + RFC 9457 problem details + HTTP status metadata
+- **config** — adapter-oriented configuration loading with app, TOML, and custom source policies
 - **logging** — one-call `tracing` subscriber setup (JSON or console)
 - **resilience** — retry, circuit breaker, bulkhead, rate limiter + Tower layers
 - **provider** — async interaction traits with Tower bridge

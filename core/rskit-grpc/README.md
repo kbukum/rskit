@@ -1,6 +1,10 @@
 # rskit-grpc
 
-Client-side gRPC transport entrypoint for rskit.
+gRPC transport and status mapping entrypoint for rskit.
+
+## Always Available
+
+- Status mapping between `tonic::Status` and `rskit_errors::AppError`
 
 ## Features
 

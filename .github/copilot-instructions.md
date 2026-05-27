@@ -47,7 +47,7 @@ When adding a new foundation crate: create it under `core/rskit-<name>/`, add it
 ## Key Patterns
 
 - **Typestate lifecycle**: `App<S, C>` ensures compile-time lifecycle ordering.
-- **Error handling**: `AppError` with `ErrorCode` enum, HTTP + gRPC status mapping.
+- **Error handling**: `AppError` with `ErrorCode` enum, RFC 9457 problem details, and lightweight HTTP status metadata. gRPC status mapping belongs in `rskit-grpc`, not `rskit-errors`.
 - **Component lifecycle**: `Component` trait with `start/stop/health`, Registry ordering.
 - **Provider**: `RequestResponse`, `Stream`, `Sink`, `Duplex` traits with a tower bridge.
 - **Pipeline**: `futures::Stream` extension operators (map, filter, fan_out, window, batch, parallel).

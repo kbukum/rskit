@@ -9,7 +9,7 @@
 //! |--------|-------------|
 //! | `errors` | `rskit-errors` (error types and result aliases) |
 //! | `fs` | `rskit-fs` (local filesystem primitives) |
-//! | `config` | `rskit-config` (TOML + environment config loading) |
+//! | `config` | `rskit-config` (adapter-oriented config loading) |
 //! | `logging` | `rskit-logging` (`tracing` subscriber setup) |
 //! | `resilience` | `rskit-resilience` (retry, timeout, circuit breaker) |
 //! | `provider` | `rskit-provider` (provider traits and tower bridge) |
@@ -92,7 +92,7 @@ pub use rskit_errors as errors;
 /// Local filesystem primitives.
 pub use rskit_fs as fs;
 
-/// Config loading (TOML + env).
+/// Adapter-oriented config loading.
 pub use rskit_config as config;
 
 /// `tracing` subscriber setup.

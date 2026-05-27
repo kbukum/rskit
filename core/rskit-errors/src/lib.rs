@@ -1,4 +1,4 @@
-//! Structured application error types with HTTP and gRPC status mapping.
+//! Structured application error types with HTTP status mapping.
 //!
 //! # Examples
 //!
@@ -19,7 +19,7 @@
 
 /// Machine-readable error classification codes.
 pub mod code;
-/// Conversions between [`AppError`] and gRPC / HTTP status types.
+/// Conversions between [`AppError`] and HTTP status types.
 pub mod convert;
 /// Structured [`AppError`] type with rich context.
 pub mod error;

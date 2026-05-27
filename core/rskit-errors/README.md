@@ -1,6 +1,6 @@
 # rskit-errors — Structured Error Types
 
-`AppError` + `ErrorCode` enum + `AppResult<T>` with HTTP/gRPC status mapping.
+`AppError` + `ErrorCode` enum + `AppResult<T>` with RFC 9457 problem details and lightweight HTTP status metadata.
 
 [![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/rskit-errors.svg)](https://crates.io/crates/rskit-errors)
@@ -12,9 +12,12 @@
 
 - 18 `ErrorCode` variants covering common application error scenarios
 - Fluent builder with `with_detail` / `with_cause`
-- Automatic HTTP status code mapping via `http_status()`
-- `tonic::Status` conversion for gRPC services
+- Automatic HTTP status metadata via `http_status()`
 - Retryability query via `is_retryable()`
+
+`rskit-errors` intentionally depends only on lightweight shared protocol/data crates such as
+`http`, `serde`, and `serde_json`. Transport-specific conversions live in transport crates;
+for example, `tonic::Status` mapping belongs to `rskit-grpc`.
 
 ## Usage
 

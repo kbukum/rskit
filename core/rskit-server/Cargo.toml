@@ -47,6 +47,7 @@ tokio-rustls     = { workspace = true, optional = true }
 rskit-errors     = { path = "../rskit-errors" }
 rskit-fs         = { path = "../rskit-fs" }
 rskit-bootstrap  = { path = "../rskit-bootstrap" }
+rskit-grpc       = { path = "../rskit-grpc", default-features = false, optional = true }
 rskit-http       = { path = "../rskit-http", optional = true }
 rskit-security   = { path = "../rskit-security", optional = true }
 rskit-validation = { path = "../rskit-validation" }
@@ -74,6 +75,7 @@ grpc = [
     "dep:tonic",
     "dep:tonic-health",
     "dep:tonic-reflection",
+    "dep:rskit-grpc",
     "dep:tower",
     "dep:tower-layer",
     "dep:tower-service",

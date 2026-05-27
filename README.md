@@ -37,7 +37,7 @@ CI still runs the full workspace; on pull requests the `changes` job also publis
 - **Idiomatic Rust** — `tower::Layer` middleware, `futures::Stream` extensions, `parking_lot` non-poisoning mutexes, `CancellationToken` cooperative shutdown, `JoinSet` worker pools.
 - **Compile-time lifecycle safety** — typestate `App<S, C>` makes invalid lifecycle transitions impossible to write.
 - **Production resilience** — `governor` rate limiter, circuit breaker, retry with backoff + jitter, bulkhead — all available as `tower::Layer`.
-- **Typed errors** — `ErrorCode` enum (exhaustive match), HTTP & gRPC status mapping, free `tonic::Status` interop.
+- **Typed errors** — `ErrorCode` enum (exhaustive match), RFC 9457 problem details, and lightweight HTTP status metadata; gRPC mapping lives in `rskit-grpc`.
 - **Sibling parity** — APIs mirror [gokit](https://github.com/kbukum/gokit) (Go) and [pykit](https://github.com/kbukum/pykit) (Python). See [`docs/DESIGN.md`](docs/DESIGN.md) for cross-language design notes.
 
 ## Install

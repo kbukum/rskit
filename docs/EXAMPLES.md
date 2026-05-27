@@ -120,23 +120,39 @@ let svc = ServiceBuilder::new()
 ## Config loading order
 
 ```
-1. TOML file (optional)            ← lowest priority
-2. .env file (optional, dotenvy)
-3. APP__SECTION__KEY env vars       ← highest priority
+1. Programmatic defaults            ← lowest priority
+2. TOML file (optional)
+3. Profile .env file (required when `with_profile` is enabled)
+4. .env file (optional, dotenvy)
+5. Adapter sources
+6. APP__SECTION__KEY env vars
+7. Programmatic overrides           ← highest priority
 ```
 
 ```rust
-#[derive(Deserialize, Validate, AppConfig)]
+#[derive(Deserialize, Validate)]
 struct Config {
     service: ServiceConfig,
     #[validate(range(min = 1, max = 65535))]
     port: u16,
 }
 
-let cfg: Config = ConfigLoader::new()
+impl AppConfig for Config {
+    fn apply_defaults(&mut self) {
+        if self.port == 0 {
+            self.port = 50051;
+        }
+    }
+
+    fn service_config(&self) -> &ServiceConfig {
+        &self.service
+    }
+}
+
+let cfg: Config = ConfigLoader::app()
     .with_config_file("config/app.toml")
     .with_env_prefix("MYAPP")
-    .load()?;
+    .load_app()?;
 ```
 
 ## Pipeline operators

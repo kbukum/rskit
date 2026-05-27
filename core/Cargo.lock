@@ -5666,7 +5666,6 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.18",
- "tonic 0.14.6",
 ]
 
 [[package]]
@@ -5705,6 +5704,7 @@ dependencies = [
  "rskit-resilience",
  "rskit-security",
  "serde",
+ "serde_json",
  "tokio",
  "tokio-util",
  "tonic 0.14.6",
@@ -6260,6 +6260,7 @@ dependencies = [
  "rskit-bootstrap",
  "rskit-errors",
  "rskit-fs",
+ "rskit-grpc",
  "rskit-http",
  "rskit-security",
  "rskit-validation",
