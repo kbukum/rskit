@@ -61,19 +61,25 @@ impl rskit_config::AppConfig for DefaultApplyConfig {
 }
 
 fn set_required_env() {
-    // SAFETY: serialized by ENV_LOCK held by the caller.
-    unsafe {
-        std::env::set_var("ADDRESS", "127.0.0.1");
-        std::env::set_var("PORT", "50051");
-    }
+    set_env("ADDRESS", "127.0.0.1");
+    set_env("PORT", "50051");
 }
 
 fn clear_required_env() {
-    // SAFETY: serialized by ENV_LOCK held by the caller.
-    unsafe {
-        std::env::remove_var("ADDRESS");
-        std::env::remove_var("PORT");
-    }
+    remove_env("ADDRESS");
+    remove_env("PORT");
+}
+
+fn set_env(key: &str, value: impl AsRef<std::ffi::OsStr>) {
+    // SAFETY: all tests that mutate process environment hold ENV_LOCK, which
+    // serializes access to Rust 2024's process-global environment state.
+    unsafe { std::env::set_var(key, value) };
+}
+
+fn remove_env(key: &str) {
+    // SAFETY: all tests that mutate process environment hold ENV_LOCK, which
+    // serializes access to Rust 2024's process-global environment state.
+    unsafe { std::env::remove_var(key) };
 }
 
 // ── Strict typed TOML tests ──────────────────────────────────────────
@@ -112,11 +118,11 @@ fn toml_loader_ignores_environment_variables() {
     let toml_path = dir.path().join("tool.toml");
     std::fs::write(&toml_path, b"name = \"toven\"\nretries = 2\n").unwrap();
 
-    unsafe { std::env::set_var("RETRIES", "9") };
+    set_env("RETRIES", "9");
     let cfg: ToolConfig = ConfigLoader::toml(&toml_path)
         .load()
         .expect("should load tool config");
-    unsafe { std::env::remove_var("RETRIES") };
+    remove_env("RETRIES");
 
     assert_eq!(cfg.retries, 2);
 }
@@ -200,7 +206,7 @@ fn loader_default_trait_creates_valid_loader() {
 fn load_defaults_when_no_file_exists() {
     let _guard = ENV_LOCK.lock();
     set_required_env();
-    unsafe { std::env::remove_var("APP_PORT") };
+    remove_env("APP_PORT");
     let cfg: TestConfig = ConfigLoader::new().load_app().expect("should load");
     assert_eq!(cfg.app_port, 8080);
     assert_eq!(cfg.service.name, "service");
@@ -212,31 +218,27 @@ fn load_defaults_when_no_file_exists() {
 fn load_env_var_overrides_default() {
     let _guard = ENV_LOCK.lock();
     set_required_env();
-    unsafe { std::env::set_var("APP_PORT", "9090") };
+    set_env("APP_PORT", "9090");
     let cfg: TestConfig = ConfigLoader::new().load_app().expect("should load");
     assert_eq!(cfg.app_port, 9090);
-    unsafe { std::env::remove_var("APP_PORT") };
+    remove_env("APP_PORT");
     clear_required_env();
 }
 
 #[test]
 fn load_custom_prefix_env_var() {
     let _guard = ENV_LOCK.lock();
-    unsafe {
-        std::env::set_var("SVC__ADDRESS", "127.0.0.1");
-        std::env::set_var("SVC__PORT", "50051");
-        std::env::set_var("SVC__APP_PORT", "7777");
-    }
+    set_env("SVC__ADDRESS", "127.0.0.1");
+    set_env("SVC__PORT", "50051");
+    set_env("SVC__APP_PORT", "7777");
     let cfg: TestConfig = ConfigLoader::new()
         .with_env_prefix("SVC")
         .load_app()
         .expect("should load");
     assert_eq!(cfg.app_port, 7777);
-    unsafe {
-        std::env::remove_var("SVC__ADDRESS");
-        std::env::remove_var("SVC__PORT");
-        std::env::remove_var("SVC__APP_PORT");
-    }
+    remove_env("SVC__ADDRESS");
+    remove_env("SVC__PORT");
+    remove_env("SVC__APP_PORT");
 }
 
 #[test]
@@ -272,7 +274,7 @@ fn load_from_dotenv_file() {
         .expect("should load from .env");
     assert_eq!(cfg.app_port, 4444);
 
-    unsafe { std::env::remove_var("APP_PORT") };
+    remove_env("APP_PORT");
     clear_required_env();
 }
 
@@ -285,7 +287,7 @@ fn load_precedence_env_var_over_toml() {
     let toml_path = dir.path().join("test.toml");
     std::fs::write(&toml_path, b"app_port = 1111\n").unwrap();
 
-    unsafe { std::env::set_var("APP_PORT", "2222") };
+    set_env("APP_PORT", "2222");
 
     let cfg: TestConfig = ConfigLoader::new()
         .with_config_file(&toml_path)
@@ -293,7 +295,7 @@ fn load_precedence_env_var_over_toml() {
         .expect("should load");
     assert_eq!(cfg.app_port, 2222);
 
-    unsafe { std::env::remove_var("APP_PORT") };
+    remove_env("APP_PORT");
     clear_required_env();
 }
 
@@ -316,7 +318,7 @@ fn load_precedence_dotenv_over_toml() {
         .expect("should load");
     assert_eq!(cfg.app_port, 5555);
 
-    unsafe { std::env::remove_var("APP_PORT") };
+    remove_env("APP_PORT");
     clear_required_env();
 }
 
@@ -329,7 +331,7 @@ fn load_precedence_real_env_over_dotenv() {
     let env_path = dir.path().join(".env");
     std::fs::write(&env_path, b"APP_PORT=5555\n").unwrap();
 
-    unsafe { std::env::set_var("APP_PORT", "6666") };
+    set_env("APP_PORT", "6666");
 
     let cfg: TestConfig = ConfigLoader::new()
         .with_env_file(&env_path)
@@ -337,7 +339,7 @@ fn load_precedence_real_env_over_dotenv() {
         .expect("should load");
     assert_eq!(cfg.app_port, 6666);
 
-    unsafe { std::env::remove_var("APP_PORT") };
+    remove_env("APP_PORT");
     clear_required_env();
 }
 
@@ -368,7 +370,7 @@ fn load_precedence_programmatic_override_wins() {
     let dir = tempfile::tempdir().unwrap();
     let toml_path = dir.path().join("test.toml");
     std::fs::write(&toml_path, b"app_port = 1111\n").unwrap();
-    unsafe { std::env::set_var("APP_PORT", "2222") };
+    set_env("APP_PORT", "2222");
 
     let cfg: TestConfig = ConfigLoader::new()
         .with_config_file(&toml_path)
@@ -377,18 +379,15 @@ fn load_precedence_programmatic_override_wins() {
         .expect("should load");
     assert_eq!(cfg.app_port, 3333);
 
-    unsafe { std::env::remove_var("APP_PORT") };
+    remove_env("APP_PORT");
     clear_required_env();
 }
 
 #[test]
 fn app_adapter_source_loads_between_dotenv_and_environment() {
     let _guard = ENV_LOCK.lock();
-    unsafe {
-        std::env::set_var("ADDRESS", "127.0.0.1");
-        std::env::set_var("PORT", "50051");
-        std::env::set_var("APP_PORT", "4444");
-    }
+    set_required_env();
+    set_env("APP_PORT", "4444");
 
     let source = ConfigMapSource::new().with_value("app_port", 3333_i64);
     let cfg: TestConfig = ConfigLoader::new()
@@ -397,9 +396,7 @@ fn app_adapter_source_loads_between_dotenv_and_environment() {
         .expect("should load with adapter source");
 
     assert_eq!(cfg.app_port, 4444);
-    unsafe {
-        std::env::remove_var("APP_PORT");
-    }
+    remove_env("APP_PORT");
     clear_required_env();
 }
 
@@ -435,7 +432,7 @@ fn load_config_convenience_works() {
 fn app_config_apply_defaults_is_called() {
     let _guard = ENV_LOCK.lock();
     set_required_env();
-    unsafe { std::env::remove_var("GRPC_PORT") };
+    remove_env("GRPC_PORT");
 
     let cfg: DefaultApplyConfig = ConfigLoader::new().load_app().expect("should load");
     assert_eq!(cfg.grpc_port, 50051);
@@ -486,13 +483,13 @@ fn profile_from_environment_requires_environment_value() {
     let _guard = ENV_LOCK.lock();
     set_required_env();
     let previous = std::env::var("ENVIRONMENT").ok();
-    unsafe { std::env::remove_var("ENVIRONMENT") };
+    remove_env("ENVIRONMENT");
 
     let result: Result<TestConfig, _> = ConfigLoader::new().with_profile("").load_app();
     assert!(result.is_err());
 
     if let Some(value) = previous {
-        unsafe { std::env::set_var("ENVIRONMENT", value) };
+        set_env("ENVIRONMENT", value);
     }
     clear_required_env();
 }
@@ -514,12 +511,12 @@ fn explicit_profile_requires_profile_env_file() {
 fn empty_port_env_var_fails() {
     let _guard = ENV_LOCK.lock();
     set_required_env();
-    unsafe { std::env::set_var("APP_PORT", "") };
+    set_env("APP_PORT", "");
 
     let result: Result<TestConfig, _> = ConfigLoader::new().load_app();
     assert!(result.is_err());
 
-    unsafe { std::env::remove_var("APP_PORT") };
+    remove_env("APP_PORT");
     clear_required_env();
 }
 
@@ -527,12 +524,12 @@ fn empty_port_env_var_fails() {
 fn non_numeric_port_env_var_fails() {
     let _guard = ENV_LOCK.lock();
     set_required_env();
-    unsafe { std::env::set_var("APP_PORT", "not_a_number") };
+    set_env("APP_PORT", "not_a_number");
 
     let result: Result<TestConfig, _> = ConfigLoader::new().load_app();
     assert!(result.is_err());
 
-    unsafe { std::env::remove_var("APP_PORT") };
+    remove_env("APP_PORT");
     clear_required_env();
 }
 
@@ -564,7 +561,7 @@ fn very_long_service_name_in_toml() {
 fn toml_sets_environment_production() {
     let _guard = ENV_LOCK.lock();
     set_required_env();
-    unsafe { std::env::remove_var("ENVIRONMENT") };
+    remove_env("ENVIRONMENT");
 
     let dir = tempfile::tempdir().unwrap();
     let toml_path = dir.path().join("prod.toml");
