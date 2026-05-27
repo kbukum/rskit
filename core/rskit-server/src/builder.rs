@@ -140,7 +140,7 @@ impl GrpcServerBuilder {
             Box::pin(async move {
                 let mut builder = Server::builder();
                 if let Some(tls) = &tls {
-                    let cert = rskit_fs::async_io::file::read(&tls.cert_path)
+                    let cert = rskit_fs::async_io::file::read(tls.cert_path.as_ref())
                         .await
                         .map_err(|error| {
                             AppError::new(
@@ -152,7 +152,7 @@ impl GrpcServerBuilder {
                             )
                             .with_cause(error)
                         })?;
-                    let key = rskit_fs::async_io::file::read(&tls.key_path)
+                    let key = rskit_fs::async_io::file::read(tls.key_path.as_ref())
                         .await
                         .map_err(|error| {
                             AppError::new(

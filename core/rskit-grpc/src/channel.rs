@@ -168,7 +168,7 @@ async fn build_tls_config(
         .domain_name(default_tls_domain_name(config, tls));
 
     if let Some(ca_file) = &tls.ca_file {
-        let pem = file::read(ca_file).await.map_err(|error| {
+        let pem = file::read(ca_file.as_ref()).await.map_err(|error| {
             AppError::new(
                 ErrorCode::InvalidInput,
                 format!("failed to read gRPC CA bundle '{}': {}", ca_file, error),
@@ -179,7 +179,7 @@ async fn build_tls_config(
     }
 
     if let (Some(cert_file), Some(key_file)) = (&tls.cert_file, &tls.key_file) {
-        let cert = file::read(cert_file).await.map_err(|error| {
+        let cert = file::read(cert_file.as_ref()).await.map_err(|error| {
             AppError::new(
                 ErrorCode::InvalidInput,
                 format!(
@@ -189,7 +189,7 @@ async fn build_tls_config(
             )
             .with_cause(error)
         })?;
-        let key = file::read(key_file).await.map_err(|error| {
+        let key = file::read(key_file.as_ref()).await.map_err(|error| {
             AppError::new(
                 ErrorCode::InvalidInput,
                 format!("failed to read gRPC client key '{}': {}", key_file, error),
