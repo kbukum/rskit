@@ -123,11 +123,7 @@ fn read_bounded_from_file(path: &Path, max_bytes: u64, file: &mut File) -> AppRe
         return Err(file_too_large_error(path, metadata.len(), max_bytes));
     }
 
-    let capacity = metadata
-        .len()
-        .min(max_bytes)
-        .try_into()
-        .unwrap_or(0);
+    let capacity = metadata.len().min(max_bytes).try_into().unwrap_or(0);
     let mut bytes = Vec::with_capacity(capacity);
     file.by_ref()
         .take(max_bytes.saturating_add(1))

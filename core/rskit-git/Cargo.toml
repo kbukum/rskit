@@ -20,7 +20,7 @@ tempfile = { workspace = true, optional = true }
 
 # Internal
 rskit-errors = { path = "../rskit-errors" }
-rskit-fs = { path = "../rskit-fs" }
+rskit-fs = { path = "../rskit-fs", default-features = false }
 rskit-process = { path = "../rskit-process" }
 
 [dev-dependencies]

@@ -168,16 +168,40 @@ impl FileStore for LocalStore {
             return Ok(results);
         }
 
-        for entry in async_io::dir::list(&dir).await? {
+        let mut entries = tokio::fs::read_dir(&dir).await.map_err(|error| {
+            AppError::new(
+                ErrorCode::Internal,
+                format!("failed to read directory '{}': {error}", dir.display()),
+            )
+            .with_cause(error)
+        })?;
+        while let Some(entry) = entries.next_entry().await.map_err(|error| {
+            AppError::new(
+                ErrorCode::Internal,
+                format!("failed to read directory entry: {error}"),
+            )
+            .with_cause(error)
+        })? {
             if let Some(max) = limit
                 && results.len() >= max
             {
                 break;
             }
 
-            if entry.is_file {
-                let meta = async_io::file::metadata(&entry.path).await?;
-                let filename = entry.file_name;
+            let path = entry.path();
+            let file_type = entry.file_type().await.map_err(|error| {
+                AppError::new(
+                    ErrorCode::Internal,
+                    format!(
+                        "failed to inspect directory entry '{}': {error}",
+                        path.display()
+                    ),
+                )
+                .with_cause(error)
+            })?;
+            if file_type.is_file() {
+                let meta = async_io::file::metadata(&path).await?;
+                let filename = entry.file_name();
                 let key = prefixed_key(Some(prefix), filename.to_string_lossy().as_ref());
                 let stored_at = meta
                     .modified
