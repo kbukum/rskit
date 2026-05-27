@@ -92,13 +92,13 @@ pub fn read_string(path: &Path) -> AppResult<String> {
     std::fs::read_to_string(path).map_err(|error| read_file_error(path, error))
 }
 
-/// Read at most `max_bytes` from a regular file.
+/// Read at most `max_bytes` from a regular file without following a final symlink.
 pub fn read_bounded(path: &Path, max_bytes: u64) -> AppResult<Vec<u8>> {
     let mut file = open_no_follow_regular(path)?;
     read_bounded_from_file(path, max_bytes, &mut file)
 }
 
-/// Read a UTF-8 text file up to `max_bytes`.
+/// Read a UTF-8 text file up to `max_bytes` bytes without following a final symlink.
 pub fn read_string_bounded(path: &Path, max_bytes: u64) -> AppResult<String> {
     let bytes = read_bounded(path, max_bytes)?;
     String::from_utf8(bytes).map_err(|error| {
@@ -107,12 +107,6 @@ pub fn read_string_bounded(path: &Path, max_bytes: u64) -> AppResult<String> {
             format!("file '{}' is not valid UTF-8: {error}", path.display()),
         )
     })
-}
-
-/// Read at most `max_bytes` bytes from a regular file without following a final symlink.
-pub fn read_no_follow_regular_bounded(path: &Path, max_bytes: u64) -> AppResult<Vec<u8>> {
-    let mut file = open_no_follow_regular(path)?;
-    read_bounded_from_file(path, max_bytes, &mut file)
 }
 
 fn read_bounded_from_file(path: &Path, max_bytes: u64, file: &mut File) -> AppResult<Vec<u8>> {

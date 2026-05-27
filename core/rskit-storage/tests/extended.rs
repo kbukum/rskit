@@ -486,8 +486,8 @@ async fn store_download_nonexistent_fails() {
 async fn store_delete_nonexistent_fails() {
     let dir = TempDir::new().unwrap();
     let store = make_store(dir.path());
-    let result = store.delete("missing.txt").await;
-    assert!(result.is_err());
+    let error = store.delete("missing.txt").await.unwrap_err();
+    assert_eq!(error.code, rskit_errors::ErrorCode::NotFound);
 }
 
 #[tokio::test]

@@ -135,7 +135,7 @@ impl FileStore for LocalStore {
         let path = self.resolve_path(key)?;
         async_io::file::remove(&path)
             .await
-            .map_err(|e| AppError::new(ErrorCode::NotFound, format!("failed to delete {key}: {e}")))
+            .map_err(|error| delete_error(key, error))
     }
 
     async fn exists(&self, key: &str) -> AppResult<bool> {
@@ -246,6 +246,21 @@ impl FileStore for LocalStore {
 
         self.head(to_key).await
     }
+}
+
+fn delete_error(key: &str, error: AppError) -> AppError {
+    if app_error_io_kind(&error) == Some(std::io::ErrorKind::NotFound) {
+        AppError::new(ErrorCode::NotFound, format!("file not found: {key}")).with_cause(error)
+    } else {
+        error
+    }
+}
+
+fn app_error_io_kind(error: &AppError) -> Option<std::io::ErrorKind> {
+    error
+        .cause()
+        .and_then(|cause| cause.downcast_ref::<std::io::Error>())
+        .map(std::io::Error::kind)
 }
 
 #[cfg(test)]

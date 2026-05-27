@@ -259,7 +259,7 @@ fn collect_assets(
 }
 
 fn read_utf8_bounded(path: &Path, max_bytes: u64) -> Result<String, SkillError> {
-    let bytes = sync_io::file::read_no_follow_regular_bounded(path, max_bytes)
+    let bytes = sync_io::file::read_bounded(path, max_bytes)
         .map_err(|error| bounded_read_error(path, max_bytes, error))?;
     String::from_utf8(bytes).map_err(|source| SkillError::InvalidUtf8 {
         path: path.to_path_buf(),
