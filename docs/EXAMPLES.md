@@ -122,7 +122,7 @@ let svc = ServiceBuilder::new()
 ```
 1. Programmatic defaults            ← lowest priority
 2. TOML file (optional)
-3. Profile .env file (optional)
+3. Profile .env file (required when `with_profile` is enabled)
 4. .env file (optional, dotenvy)
 5. Adapter sources
 6. APP__SECTION__KEY env vars

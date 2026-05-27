@@ -1,10 +1,12 @@
 #![warn(missing_docs)]
 #![doc = include_str!("../README.md")]
 
-//! gRPC transport entrypoints for rskit.
+//! gRPC transport and status-mapping entrypoints for rskit.
 //!
-//! `rskit-grpc` owns client-side gRPC transport concerns: lazy channels,
-//! TLS-aware dialing, error mapping, and optional discovery integration.
+//! `rskit-grpc` always owns `tonic::Status` ↔ `rskit_errors::AppError`
+//! mapping so client and server crates share one canonical transport boundary.
+//! With the `client` feature enabled, it also owns lazy channels, TLS-aware
+//! dialing, and optional discovery integration.
 //!
 //! Lifecycle-managed gRPC servers are owned by `rskit-server`.
 
