@@ -1,50 +1,20 @@
 //! Agent — the multi-turn agentic execution loop.
 
-use std::pin::Pin;
 use std::sync::Arc;
 
-use async_stream::stream;
-use futures::Stream;
-use rskit_ai::semconv;
-use rskit_component::{Component, Health};
-use rskit_errors::AppResult;
-use rskit_hook::{CancellationToken, Event, HookRegistry};
 use rskit_llm::provider::Provider;
-use rskit_llm::types::{CompletionRequest, CompletionResponse, Message, ToolDefinition};
-use rskit_tool::{Registry, ToolInput, ToolResult};
-use tracing::Instrument;
 
 use crate::config::AgentConfig;
-use crate::hooks;
-use crate::runner::RunState;
-use crate::stop;
-use crate::tool_exec;
-use crate::types::{AgentEvent, AgentResult, StopReason};
 
-// ── Agent ───────────────────────────────────────────────────────────────────
+mod component;
+mod run;
+mod stream;
 
 /// A multi-turn agentic loop that drives an LLM provider, executes tool calls,
 /// and emits hook events at each lifecycle point.
 pub struct Agent {
     provider: Arc<dyn Provider>,
     config: AgentConfig,
-}
-
-fn emit_hook<E: Event>(hooks: &HookRegistry, event: &E, token: CancellationToken) -> bool {
-    match hooks.emit(event, token.clone()) {
-        Ok(()) => false,
-        Err(error) => {
-            let fatal = error.is_fatal();
-            let _ = hooks.emit(
-                &hooks::OnError {
-                    error: error.to_string(),
-                    source: event.event_type().to_string(),
-                },
-                token,
-            );
-            fatal
-        }
-    }
 }
 
 impl Agent {
@@ -57,272 +27,29 @@ impl Agent {
     pub fn with_defaults(provider: Arc<dyn Provider>) -> Self {
         Self::new(provider, AgentConfig::default())
     }
-
-    /// Run the agent loop synchronously (all turns, no streaming).
-    pub async fn run(&self, messages: Vec<Message>) -> AppResult<AgentResult> {
-        let run_span = tracing::info_span!(
-            "agent.run",
-            "gen_ai.system" = "agent",
-            "gen_ai.operation.name" = semconv::Operation::AgentRun.as_str(),
-            "gen_ai.request.model" = %self.config.model,
-        );
-        async move {
-            let mut state = RunState::new(&self.config.system_prompt, messages);
-
-            if let Some(stop_reason) = stop::initial_stop(&self.config) {
-                return Ok(state.finish(0, stop_reason));
-            }
-
-            let hook_token = CancellationToken::new();
-
-            for turn in 0..self.config.max_turns {
-                let turn_span = tracing::info_span!(
-                    "agent.turn",
-                    "gen_ai.operation.name" = semconv::Operation::AgentTurn.as_str(),
-                    "agent.turn" = turn,
-                );
-
-                if let Some(stop_reason) = stop::wall_clock_stop(&state, &self.config) {
-                    return Ok(state.finish(turn, stop_reason));
-                }
-                if let Some(ref hooks) = self.config.hooks
-                    && emit_hook(hooks, &hooks::TurnStart { turn }, hook_token.clone())
-                {
-                    return Ok(state.finish(turn, StopReason::Aborted));
-                }
-
-                let tool_defs = self.config.tools.as_ref().map(|registry| {
-                    registry
-                        .list()
-                        .into_iter()
-                        .map(|tool| ToolDefinition {
-                            name: tool.name,
-                            description: tool.description,
-                            input_schema: tool.input_schema,
-                            output_schema: tool.output_schema,
-                        })
-                        .collect()
-                });
-                let request = CompletionRequest {
-                    model: self.config.model.clone(),
-                    messages: state.messages.clone(),
-                    max_tokens: None,
-                    temperature: None,
-                    stream: false,
-                    tools: tool_defs,
-                    tool_choice: None,
-                };
-
-                if let Some(ref hooks) = self.config.hooks
-                    && emit_hook(
-                        hooks,
-                        &hooks::PreLLMCall {
-                            request: request.clone(),
-                        },
-                        hook_token.clone(),
-                    )
-                {
-                    return Ok(state.finish(turn, StopReason::Aborted));
-                }
-
-                let response: CompletionResponse = tokio::time::timeout(
-                    state.remaining_wall_clock(self.config.wall_clock),
-                    self.provider.complete(request),
-                )
-                .instrument(turn_span.clone())
-                .await
-                .map_err(|_| stop::wall_clock_error())??;
-
-                if let Some(ref hooks) = self.config.hooks
-                    && emit_hook(
-                        hooks,
-                        &hooks::PostLLMCall {
-                            response: response.clone(),
-                            error: None,
-                        },
-                        hook_token.clone(),
-                    )
-                {
-                    state.last_assistant = response.message;
-                    return Ok(state.finish(turn + 1, StopReason::Aborted));
-                }
-
-                let response_stop_reason = response
-                    .stop_reason
-                    .unwrap_or(rskit_llm::FinishReason::Stop);
-                let has_tool_calls = response.has_tool_calls();
-                state.record_response(response);
-
-                if let Some(stop_reason) = stop::token_budget_stop(&state, &self.config) {
-                    return Ok(state.finish(turn + 1, stop_reason));
-                }
-
-                if !has_tool_calls {
-                    return Ok(state.finish(turn + 1, StopReason::from(response_stop_reason)));
-                }
-
-                if let Some(ref tools) = self.config.tools {
-                    let tool_calls = state.last_assistant.tool_calls.clone();
-                    for tc in &tool_calls {
-                        if let Some(stop_reason) = stop::tool_budget_stop(&state, &self.config) {
-                            return Ok(state.finish(turn + 1, stop_reason));
-                        }
-                        state.tool_calls_used += 1;
-                        let input = ToolInput::new(serde_json::Value::Object(tc.input.clone()))?;
-
-                        if let Some(ref hooks) = self.config.hooks
-                            && emit_hook(
-                                hooks,
-                                &hooks::PreToolCall {
-                                    name: tc.name.clone(),
-                                    input: input.clone(),
-                                },
-                                hook_token.clone(),
-                            )
-                        {
-                            return Ok(state.finish(turn + 1, StopReason::Aborted));
-                        }
-
-                        let tool_result = self
-                            .execute_tool_call(tools, &tc.id, &tc.name, input.clone())
-                            .instrument(turn_span.clone())
-                            .await;
-
-                        let (result_opt, error_opt): (Option<ToolResult>, Option<String>) =
-                            match &tool_result {
-                                Ok(r) => (Some(r.clone()), None),
-                                Err(e) => (None, Some(e.to_string())),
-                            };
-
-                        if let Some(ref hooks) = self.config.hooks {
-                            let _ = emit_hook(
-                                hooks,
-                                &hooks::PostToolCall {
-                                    name: tc.name.clone(),
-                                    input: input.clone(),
-                                    result: result_opt.clone(),
-                                    error: error_opt.clone(),
-                                },
-                                hook_token.clone(),
-                            );
-                        }
-
-                        let (content, is_error) = match tool_result {
-                            Ok(r) => (r.content, r.is_error),
-                            Err(e) => (e.to_string(), true),
-                        };
-
-                        state
-                            .messages
-                            .push(rskit_llm::tool_result_msg(&tc.id, &content, is_error));
-                    }
-                }
-
-                let caps = self.provider.capabilities();
-                state.compact_context(
-                    caps.max_input_tokens,
-                    self.config.context_strategy.as_deref(),
-                )?;
-
-                if let Some(ref hooks) = self.config.hooks
-                    && emit_hook(
-                        hooks,
-                        &hooks::TurnEnd {
-                            turn,
-                            message: state.last_assistant.clone(),
-                        },
-                        hook_token.clone(),
-                    )
-                {
-                    return Ok(state.finish(turn + 1, StopReason::Aborted));
-                }
-            }
-
-            // Exhausted max_turns
-            Ok(state.finish(self.config.max_turns, StopReason::MaxTurns))
-        }
-        .instrument(run_span)
-        .await
-    }
-
-    /// Stream the agent loop, yielding [`AgentEvent`]s for each lifecycle point.
-    pub fn stream(
-        &self,
-        messages: Vec<Message>,
-    ) -> Pin<Box<dyn Stream<Item = AgentEvent> + Send + '_>> {
-        Box::pin(stream! {
-            match self.run(messages).await {
-                Ok(result) => {
-                    for turn in 0..result.turn_count {
-                        yield AgentEvent::TurnStart { turn };
-                        yield AgentEvent::TurnComplete {
-                            turn,
-                            message: result.final_message.clone(),
-                            usage: result.total_usage,
-                        };
-                    }
-                    yield AgentEvent::Complete { result };
-                }
-                Err(e) => {
-                    tracing::error!(error = %e, "agent.run.failed");
-                }
-            }
-        })
-    }
-
-    async fn execute_tool_call(
-        &self,
-        tools: &Registry,
-        tool_use_id: &str,
-        name: &str,
-        input: ToolInput,
-    ) -> AppResult<ToolResult> {
-        tool_exec::execute_tool_call(
-            tools,
-            self.config.policy.clone(),
-            self.config.tool_timeout,
-            tool_use_id,
-            name,
-            input,
-        )
-        .await
-    }
-}
-
-#[async_trait::async_trait]
-impl Component for Agent {
-    fn name(&self) -> &str {
-        "rskit-agent"
-    }
-
-    async fn start(&self) -> AppResult<()> {
-        Ok(())
-    }
-
-    async fn stop(&self) -> AppResult<()> {
-        Ok(())
-    }
-
-    fn health(&self) -> Health {
-        Health::healthy(self.name())
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use async_trait::async_trait;
-    use futures::StreamExt;
+    use std::pin::Pin;
+
+    use futures::{Stream, StreamExt};
     use rskit_ai::Capabilities;
     use rskit_ai::StreamEventRef;
     use rskit_ai::chat::count_tokens_approx;
     use rskit_errors::AppError;
-    use rskit_hook::HookError;
-    use rskit_llm::types::{self, AssistantMessage, CompletionRequest, CompletionResponse, Usage};
+    use rskit_hook::{HookError, HookRegistry};
+    use rskit_llm::types::{
+        self, AssistantMessage, CompletionRequest, CompletionResponse, Message, Usage,
+    };
     use rskit_resilience::{ConstantBackoff, Policy, RetryPolicy};
-    use rskit_tool::Context;
+    use rskit_tool::{Context, Registry};
     use std::sync::atomic::{AtomicU32, Ordering};
     use std::time::Duration;
+
+    use crate::types::{AgentEvent, StopReason};
 
     // ── Mock provider ───────────────────────────────────────────────────
 
@@ -817,10 +544,24 @@ mod tests {
 
         let stream = agent.stream(vec![types::user("hi")]);
         let events: Vec<AgentEvent> = stream.collect().await;
-        assert!(!events.is_empty());
-
-        // Last event should be Complete
-        let last = events.last().unwrap();
-        assert!(matches!(last, AgentEvent::Complete { .. }));
+        assert_eq!(events.len(), 3);
+        assert!(matches!(
+            events.first(),
+            Some(AgentEvent::TurnStart { turn: 0 })
+        ));
+        assert!(matches!(
+            events.get(1),
+            Some(AgentEvent::TurnComplete {
+                turn: 0,
+                usage: Usage {
+                    input_tokens: 10,
+                    output_tokens: 5,
+                    cached_tokens: 0,
+                    reasoning_tokens: 0,
+                },
+                ..
+            })
+        ));
+        assert!(matches!(events.last(), Some(AgentEvent::Complete { .. })));
     }
 }

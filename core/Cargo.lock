@@ -5341,6 +5341,7 @@ dependencies = [
  "async-stream",
  "async-trait",
  "futures",
+ "parking_lot",
  "rskit-ai",
  "rskit-component",
  "rskit-errors",

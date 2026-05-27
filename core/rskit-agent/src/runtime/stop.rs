@@ -3,7 +3,7 @@
 use rskit_errors::{AppError, ErrorCode};
 
 use crate::config::AgentConfig;
-use crate::runner::RunState;
+use crate::runtime::state::RunState;
 use crate::types::StopReason;
 
 pub(crate) fn initial_stop(config: &AgentConfig) -> Option<StopReason> {
