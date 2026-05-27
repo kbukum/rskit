@@ -12,7 +12,7 @@ rskit is a **Cargo workspace** with a facade crate (`rskit`), foundation crates 
 |-------|-------------|
 | `rskit` | Facade — re-exports all rskit-* crates |
 | `rskit-errors` | Structured application error types with RFC 9457 problem details and HTTP status metadata |
-| `rskit-config` | TOML + env var configuration loading with validation |
+| `rskit-config` | Adapter-oriented configuration loading with validation |
 | `rskit-logging` | Structured logging with `tracing` — JSON in prod, pretty in dev |
 | `rskit-bootstrap` | Typestate `App<S, C>`, Component registry, hooks |
 | `rskit-provider` | Provider traits (request-response, stream, sink, duplex) |

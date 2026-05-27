@@ -1,4 +1,4 @@
-//! TOML + environment-variable configuration loading with validation.
+//! Adapter-oriented configuration loading with validation.
 
 #![warn(missing_docs)]
 
