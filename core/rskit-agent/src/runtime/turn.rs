@@ -51,7 +51,7 @@ pub(crate) async fn run_turn(
             return Ok(TurnOutcome::stop(turn, StopReason::Aborted));
         }
         LlmCallOutcome::AbortedAfterResponse(response) => {
-            state.last_assistant = response.message;
+            state.record_response(response);
             return Ok(TurnOutcome::stop(turn + 1, StopReason::Aborted));
         }
         LlmCallOutcome::Completed {

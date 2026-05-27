@@ -1,6 +1,5 @@
 //! Private runtime helpers for the agent loop.
 
-pub(crate) mod context;
 pub(crate) mod hook_dispatch;
 pub(crate) mod llm;
 pub(crate) mod request;
