@@ -1,6 +1,6 @@
 [package]
 name        = "rskit-errors"
-description = "Structured application error types with HTTP/gRPC status mapping"
+description = "Structured application error types with HTTP status mapping"
 version.workspace     = true
 edition.workspace     = true
 license.workspace     = true
@@ -22,4 +22,3 @@ thiserror  = { workspace = true }
 serde      = { workspace = true }
 serde_json = { workspace = true }
 http       = { workspace = true }
-tonic      = { workspace = true }

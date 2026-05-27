@@ -41,86 +41,7 @@ fn http_status_all_codes_exhaustive() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 2. ErrorCode → gRPC code mapping (tonic integration)
-// ═══════════════════════════════════════════════════════════════════════════
-
-#[test]
-fn grpc_code_all_error_codes_exhaustive() {
-    let cases: Vec<(ErrorCode, tonic::Code)> = vec![
-        (ErrorCode::ServiceUnavailable, tonic::Code::Unavailable),
-        (ErrorCode::ConnectionFailed, tonic::Code::Unavailable),
-        (ErrorCode::Timeout, tonic::Code::DeadlineExceeded),
-        (ErrorCode::RateLimited, tonic::Code::ResourceExhausted),
-        (ErrorCode::NotFound, tonic::Code::NotFound),
-        (ErrorCode::AlreadyExists, tonic::Code::AlreadyExists),
-        (ErrorCode::Conflict, tonic::Code::Aborted),
-        (ErrorCode::InvalidInput, tonic::Code::InvalidArgument),
-        (ErrorCode::MissingField, tonic::Code::InvalidArgument),
-        (ErrorCode::InvalidFormat, tonic::Code::InvalidArgument),
-        (ErrorCode::Unauthorized, tonic::Code::Unauthenticated),
-        (ErrorCode::Forbidden, tonic::Code::PermissionDenied),
-        (ErrorCode::TokenExpired, tonic::Code::Unauthenticated),
-        (ErrorCode::InvalidToken, tonic::Code::Unauthenticated),
-        (ErrorCode::Internal, tonic::Code::Internal),
-        (ErrorCode::DatabaseError, tonic::Code::Internal),
-        (ErrorCode::ExternalService, tonic::Code::Internal),
-        (ErrorCode::Cancelled, tonic::Code::Cancelled),
-    ];
-    for (code, expected_grpc) in cases {
-        let err = AppError::new(code, "test");
-        let status: tonic::Status = err.into();
-        assert_eq!(
-            status.code(),
-            expected_grpc,
-            "{:?} should map to gRPC {:?}",
-            code,
-            expected_grpc
-        );
-    }
-}
-
-#[test]
-fn grpc_status_preserves_message() {
-    let err = AppError::new(ErrorCode::NotFound, "user 42 not found");
-    let status: tonic::Status = err.into();
-    assert_eq!(status.message(), "user 42 not found");
-}
-
-#[test]
-fn grpc_status_to_app_error_roundtrip() {
-    let cases: Vec<(tonic::Code, ErrorCode)> = vec![
-        (tonic::Code::Unavailable, ErrorCode::ServiceUnavailable),
-        (tonic::Code::DeadlineExceeded, ErrorCode::Timeout),
-        (tonic::Code::ResourceExhausted, ErrorCode::RateLimited),
-        (tonic::Code::NotFound, ErrorCode::NotFound),
-        (tonic::Code::AlreadyExists, ErrorCode::AlreadyExists),
-        (tonic::Code::Aborted, ErrorCode::Conflict),
-        (tonic::Code::InvalidArgument, ErrorCode::InvalidInput),
-        (tonic::Code::Unauthenticated, ErrorCode::Unauthorized),
-        (tonic::Code::PermissionDenied, ErrorCode::Forbidden),
-        (tonic::Code::Cancelled, ErrorCode::Cancelled),
-    ];
-    for (grpc_code, expected_error_code) in cases {
-        let status = tonic::Status::new(grpc_code, "test msg");
-        let err: AppError = status.into();
-        assert_eq!(
-            err.code, expected_error_code,
-            "gRPC {:?} should map to {:?}",
-            grpc_code, expected_error_code
-        );
-        assert_eq!(err.message, "test msg");
-    }
-}
-
-#[test]
-fn grpc_unknown_code_maps_to_external_service() {
-    let status = tonic::Status::new(tonic::Code::DataLoss, "data lost");
-    let err: AppError = status.into();
-    assert_eq!(err.code, ErrorCode::ExternalService);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 3. is_retryable() for ALL codes
+// 2. is_retryable() for ALL codes
 // ═══════════════════════════════════════════════════════════════════════════
 
 #[test]
@@ -716,21 +637,6 @@ fn problem_detail_title_is_title_cased() {
         let pd = ProblemDetail::from(&AppError::new(*code, "test"));
         assert_eq!(pd.title, *expected_title, "title for {:?}", code);
     }
-}
-
-#[test]
-fn problem_detail_grpc_roundtrip() {
-    let err = AppError::new(ErrorCode::NotFound, "user 42 not found").with_detail("id", "42");
-    let status: tonic::Status = err.into();
-    assert!(!status.details().is_empty());
-
-    let recovered: AppError = status.into();
-    assert_eq!(recovered.code, ErrorCode::NotFound);
-    assert_eq!(recovered.message, "user 42 not found");
-    assert_eq!(
-        recovered.details.get("id").and_then(|v| v.as_str()),
-        Some("42")
-    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

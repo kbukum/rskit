@@ -1,9 +1,10 @@
 # rskit-grpc
 
-Client-side gRPC transport entrypoint for rskit.
+gRPC transport and status mapping entrypoint for rskit.
 
 ## Features
 
+- status mapping between `tonic::Status` and `rskit_errors::AppError`
 - `client` (default): lazy tonic channels with TLS-aware dialing and optional discovery
 - `discovery`: enables `DiscoveryChannel`
 

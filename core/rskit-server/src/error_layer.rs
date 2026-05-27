@@ -2,8 +2,8 @@
 //! with structured [`rskit_errors::AppError`] details.
 //!
 //! Applied automatically by [`GrpcServerBuilder`] so service implementations
-//! can simply return `Status::from(AppError)` (or let the `?` operator do it)
-//! and the canonical RFC 9457 JSON error body is always present in the status details.
+//! can use `rskit_grpc::app_error_to_status` and the canonical RFC 9457 JSON
+//! error body is always present in the status details.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -14,6 +14,7 @@ use tonic::body::Body;
 use tower::{Layer, Service};
 
 use rskit_errors::{AppError, ProblemDetail};
+use rskit_grpc::grpc_code_to_error_code;
 
 // ── Layer ────────────────────────────────────────────────────────────────────
 
@@ -93,7 +94,7 @@ fn enrich_error_response(response: Response<Body>) -> Response<Body> {
     }
 
     // If details are already present, leave the response as-is — the service
-    // (or `From<AppError> for tonic::Status`) already attached them.
+    // already attached them through rskit-grpc status mapping.
     if response.headers().contains_key("grpc-status-details-bin") {
         return response;
     }
@@ -106,7 +107,8 @@ fn enrich_error_response(response: Response<Body>) -> Response<Body> {
         .unwrap_or("unknown error")
         .to_string();
 
-    let error_code = grpc_code_to_error_code(status_code);
+    let code = tonic::Code::from_i32(status_code);
+    let error_code = grpc_code_to_error_code(code);
     let app_err = AppError::new(error_code, grpc_message);
     let problem = ProblemDetail::from(&app_err);
 
@@ -122,29 +124,6 @@ fn enrich_error_response(response: Response<Body>) -> Response<Body> {
     }
 }
 
-fn grpc_code_to_error_code(code: i32) -> rskit_errors::ErrorCode {
-    use rskit_errors::ErrorCode;
-    match code {
-        1 => ErrorCode::Internal,     // CANCELLED
-        2 => ErrorCode::Internal,     // UNKNOWN
-        3 => ErrorCode::InvalidInput, // INVALID_ARGUMENT
-        4 => ErrorCode::Timeout,      // DEADLINE_EXCEEDED
-        5 => ErrorCode::NotFound,
-        6 => ErrorCode::AlreadyExists,
-        7 => ErrorCode::Forbidden,           // PERMISSION_DENIED
-        8 => ErrorCode::RateLimited,         // RESOURCE_EXHAUSTED
-        9 => ErrorCode::Conflict,            // FAILED_PRECONDITION
-        10 => ErrorCode::Conflict,           // ABORTED
-        11 => ErrorCode::InvalidInput,       // OUT_OF_RANGE
-        12 => ErrorCode::Internal,           // UNIMPLEMENTED
-        13 => ErrorCode::Internal,           // INTERNAL
-        14 => ErrorCode::ServiceUnavailable, // UNAVAILABLE
-        15 => ErrorCode::Internal,           // DATA_LOSS
-        16 => ErrorCode::Unauthorized,       // UNAUTHENTICATED
-        _ => ErrorCode::Internal,
-    }
-}
-
 /// Base64-encode bytes (standard base64, no padding trimming).
 fn base64_encode(data: &[u8]) -> String {
     use base64::Engine;
@@ -157,18 +136,40 @@ fn base64_encode(data: &[u8]) -> String {
 mod tests {
     use super::*;
     use rskit_errors::ErrorCode;
+    use tonic::Code;
 
     #[test]
     fn grpc_code_mapping_covers_all_codes() {
-        assert_eq!(grpc_code_to_error_code(3), ErrorCode::InvalidInput);
-        assert_eq!(grpc_code_to_error_code(4), ErrorCode::Timeout);
-        assert_eq!(grpc_code_to_error_code(5), ErrorCode::NotFound);
-        assert_eq!(grpc_code_to_error_code(6), ErrorCode::AlreadyExists);
-        assert_eq!(grpc_code_to_error_code(7), ErrorCode::Forbidden);
-        assert_eq!(grpc_code_to_error_code(8), ErrorCode::RateLimited);
-        assert_eq!(grpc_code_to_error_code(14), ErrorCode::ServiceUnavailable);
-        assert_eq!(grpc_code_to_error_code(16), ErrorCode::Unauthorized);
-        assert_eq!(grpc_code_to_error_code(99), ErrorCode::Internal);
+        assert_eq!(
+            grpc_code_to_error_code(Code::InvalidArgument),
+            ErrorCode::InvalidInput
+        );
+        assert_eq!(
+            grpc_code_to_error_code(Code::DeadlineExceeded),
+            ErrorCode::Timeout
+        );
+        assert_eq!(grpc_code_to_error_code(Code::NotFound), ErrorCode::NotFound);
+        assert_eq!(
+            grpc_code_to_error_code(Code::AlreadyExists),
+            ErrorCode::AlreadyExists
+        );
+        assert_eq!(
+            grpc_code_to_error_code(Code::PermissionDenied),
+            ErrorCode::Forbidden
+        );
+        assert_eq!(
+            grpc_code_to_error_code(Code::ResourceExhausted),
+            ErrorCode::RateLimited
+        );
+        assert_eq!(
+            grpc_code_to_error_code(Code::Unavailable),
+            ErrorCode::ServiceUnavailable
+        );
+        assert_eq!(
+            grpc_code_to_error_code(Code::Unauthenticated),
+            ErrorCode::Unauthorized
+        );
+        assert_eq!(grpc_code_to_error_code(Code::Unknown), ErrorCode::Internal);
     }
 
     #[test]

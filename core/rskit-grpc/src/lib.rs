@@ -14,7 +14,6 @@ pub mod channel;
 #[cfg(feature = "client")]
 /// gRPC client configuration.
 pub mod config;
-#[cfg(feature = "client")]
 /// Error mapping between tonic [`Status`](tonic::Status) and [`AppError`](rskit_errors::AppError).
 pub mod errors;
 
@@ -26,8 +25,9 @@ pub mod discovery;
 pub use channel::GrpcChannel;
 #[cfg(feature = "client")]
 pub use config::GrpcClientConfig;
-#[cfg(feature = "client")]
-pub use errors::{app_error_to_status, status_to_app_error};
+pub use errors::{
+    app_error_to_status, error_code_to_grpc_code, grpc_code_to_error_code, status_to_app_error,
+};
 #[cfg(feature = "client")]
 pub use rskit_security::TlsConfig as GrpcClientTlsConfig;
 

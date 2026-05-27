@@ -6,7 +6,10 @@ mod loader;
 mod secret;
 mod service;
 
-pub use loader::{ConfigLoader, load_config};
+pub use loader::{
+    ConfigLoader, ConfigMapSource, ConfigSource, DotenvFileSource, EnvironmentSource, Profile,
+    TomlFileSource, load_config,
+};
 pub use secret::SecretString;
 pub use service::{Environment, LogFormat, LogOutput, LoggingConfig, ServiceConfig};
 
@@ -30,6 +33,8 @@ pub use service::{Environment, LogFormat, LogOutput, LoggingConfig, ServiceConfi
 ///     }
 ///     fn service_config(&self) -> &rskit_config::ServiceConfig { &self.service }
 /// }
+///
+/// let cfg: MyConfig = rskit_config::ConfigLoader::app().load_app()?;
 /// ```
 pub trait AppConfig:
     serde::de::DeserializeOwned + rskit_validation::Validate + Send + Sync + 'static

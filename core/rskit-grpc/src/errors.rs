@@ -1,4 +1,4 @@
-use rskit_errors::AppError;
+use rskit_errors::{AppError, ErrorCode, ProblemDetail};
 use tonic::Status;
 
 /// Convert a tonic [`tonic::Status`] to an [`AppError`].
@@ -6,24 +6,87 @@ use tonic::Status;
 /// Maps gRPC status codes to rskit error codes with appropriate HTTP status
 /// and human-readable messages.
 pub fn status_to_app_error(status: Status) -> AppError {
-    status.into()
+    if !status.details().is_empty()
+        && let Ok(problem) = serde_json::from_slice::<ProblemDetail>(status.details())
+    {
+        return AppError::new(problem.code, problem.detail)
+            .retryable(problem.retryable)
+            .with_details(problem.details);
+    }
+
+    AppError::new(
+        grpc_code_to_error_code(status.code()),
+        status.message().to_string(),
+    )
 }
 
 /// Convert an [`AppError`] to a tonic [`tonic::Status`].
 ///
 /// Maps rskit error codes to appropriate gRPC status codes.
 pub fn app_error_to_status(err: &AppError) -> Status {
-    AppError::new(err.code, err.message.clone())
-        .retryable(err.retryable)
-        .with_details(err.details.clone())
-        .into()
+    let problem = ProblemDetail::from(err);
+    if let Ok(json_bytes) = serde_json::to_vec(&problem) {
+        Status::with_details(
+            error_code_to_grpc_code(err.code),
+            err.message.clone(),
+            json_bytes.into(),
+        )
+    } else {
+        Status::new(error_code_to_grpc_code(err.code), err.message.clone())
+    }
+}
+
+/// Map an rskit [`ErrorCode`] to its canonical gRPC [`tonic::Code`].
+#[must_use]
+pub fn error_code_to_grpc_code(code: ErrorCode) -> tonic::Code {
+    match code {
+        ErrorCode::ServiceUnavailable | ErrorCode::ConnectionFailed => tonic::Code::Unavailable,
+        ErrorCode::Timeout => tonic::Code::DeadlineExceeded,
+        ErrorCode::RateLimited => tonic::Code::ResourceExhausted,
+        ErrorCode::NotFound => tonic::Code::NotFound,
+        ErrorCode::AlreadyExists => tonic::Code::AlreadyExists,
+        ErrorCode::Conflict => tonic::Code::Aborted,
+        ErrorCode::InvalidInput | ErrorCode::MissingField | ErrorCode::InvalidFormat => {
+            tonic::Code::InvalidArgument
+        }
+        ErrorCode::Unauthorized | ErrorCode::TokenExpired | ErrorCode::InvalidToken => {
+            tonic::Code::Unauthenticated
+        }
+        ErrorCode::Forbidden => tonic::Code::PermissionDenied,
+        ErrorCode::Internal | ErrorCode::DatabaseError | ErrorCode::ExternalService => {
+            tonic::Code::Internal
+        }
+        ErrorCode::Cancelled => tonic::Code::Cancelled,
+        #[allow(unreachable_patterns)]
+        _ => tonic::Code::Unknown,
+    }
+}
+
+/// Map a gRPC [`tonic::Code`] to its canonical rskit [`ErrorCode`].
+#[must_use]
+pub fn grpc_code_to_error_code(code: tonic::Code) -> ErrorCode {
+    match code {
+        tonic::Code::Unavailable => ErrorCode::ServiceUnavailable,
+        tonic::Code::DeadlineExceeded => ErrorCode::Timeout,
+        tonic::Code::ResourceExhausted => ErrorCode::RateLimited,
+        tonic::Code::NotFound => ErrorCode::NotFound,
+        tonic::Code::AlreadyExists => ErrorCode::AlreadyExists,
+        tonic::Code::Aborted | tonic::Code::FailedPrecondition => ErrorCode::Conflict,
+        tonic::Code::InvalidArgument | tonic::Code::OutOfRange => ErrorCode::InvalidInput,
+        tonic::Code::Unauthenticated => ErrorCode::Unauthorized,
+        tonic::Code::PermissionDenied => ErrorCode::Forbidden,
+        tonic::Code::Cancelled => ErrorCode::Cancelled,
+        tonic::Code::Internal | tonic::Code::Unknown | tonic::Code::Unimplemented => {
+            ErrorCode::Internal
+        }
+        tonic::Code::DataLoss => ErrorCode::ExternalService,
+        _ => ErrorCode::ExternalService,
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rskit_errors::ErrorCode;
-
     #[test]
     fn test_status_to_error_not_found() {
         let status = tonic::Status::not_found("user not found");
@@ -77,5 +140,20 @@ mod tests {
     fn test_status_to_error_cancelled_uses_canonical_errors_mapping() {
         let err = status_to_app_error(tonic::Status::cancelled("client cancelled"));
         assert_eq!(err.code, ErrorCode::Cancelled);
+    }
+
+    #[test]
+    fn app_error_to_status_preserves_problem_details() {
+        let err = AppError::new(ErrorCode::NotFound, "user 42 not found").with_detail("id", "42");
+
+        let status = app_error_to_status(&err);
+        let recovered = status_to_app_error(status);
+
+        assert_eq!(recovered.code, ErrorCode::NotFound);
+        assert_eq!(recovered.message, "user 42 not found");
+        assert_eq!(
+            recovered.details.get("id").and_then(|value| value.as_str()),
+            Some("42")
+        );
     }
 }
