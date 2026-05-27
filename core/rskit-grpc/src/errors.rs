@@ -57,7 +57,6 @@ pub fn error_code_to_grpc_code(code: ErrorCode) -> tonic::Code {
             tonic::Code::Internal
         }
         ErrorCode::Cancelled => tonic::Code::Cancelled,
-        #[allow(unreachable_patterns)]
         _ => tonic::Code::Unknown,
     }
 }
@@ -87,6 +86,62 @@ pub fn grpc_code_to_error_code(code: tonic::Code) -> ErrorCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn error_code_to_grpc_code_covers_known_error_codes() {
+        let cases = [
+            (ErrorCode::ServiceUnavailable, tonic::Code::Unavailable),
+            (ErrorCode::ConnectionFailed, tonic::Code::Unavailable),
+            (ErrorCode::Timeout, tonic::Code::DeadlineExceeded),
+            (ErrorCode::RateLimited, tonic::Code::ResourceExhausted),
+            (ErrorCode::NotFound, tonic::Code::NotFound),
+            (ErrorCode::AlreadyExists, tonic::Code::AlreadyExists),
+            (ErrorCode::Conflict, tonic::Code::Aborted),
+            (ErrorCode::InvalidInput, tonic::Code::InvalidArgument),
+            (ErrorCode::MissingField, tonic::Code::InvalidArgument),
+            (ErrorCode::InvalidFormat, tonic::Code::InvalidArgument),
+            (ErrorCode::Unauthorized, tonic::Code::Unauthenticated),
+            (ErrorCode::Forbidden, tonic::Code::PermissionDenied),
+            (ErrorCode::TokenExpired, tonic::Code::Unauthenticated),
+            (ErrorCode::InvalidToken, tonic::Code::Unauthenticated),
+            (ErrorCode::Internal, tonic::Code::Internal),
+            (ErrorCode::DatabaseError, tonic::Code::Internal),
+            (ErrorCode::ExternalService, tonic::Code::Internal),
+            (ErrorCode::Cancelled, tonic::Code::Cancelled),
+        ];
+
+        for (error_code, grpc_code) in cases {
+            assert_eq!(error_code_to_grpc_code(error_code), grpc_code);
+        }
+    }
+
+    #[test]
+    fn grpc_code_to_error_code_covers_all_tonic_codes() {
+        let cases = [
+            (tonic::Code::Ok, ErrorCode::ExternalService),
+            (tonic::Code::Cancelled, ErrorCode::Cancelled),
+            (tonic::Code::Unknown, ErrorCode::Internal),
+            (tonic::Code::InvalidArgument, ErrorCode::InvalidInput),
+            (tonic::Code::DeadlineExceeded, ErrorCode::Timeout),
+            (tonic::Code::NotFound, ErrorCode::NotFound),
+            (tonic::Code::AlreadyExists, ErrorCode::AlreadyExists),
+            (tonic::Code::PermissionDenied, ErrorCode::Forbidden),
+            (tonic::Code::ResourceExhausted, ErrorCode::RateLimited),
+            (tonic::Code::FailedPrecondition, ErrorCode::Conflict),
+            (tonic::Code::Aborted, ErrorCode::Conflict),
+            (tonic::Code::OutOfRange, ErrorCode::InvalidInput),
+            (tonic::Code::Unimplemented, ErrorCode::Internal),
+            (tonic::Code::Internal, ErrorCode::Internal),
+            (tonic::Code::Unavailable, ErrorCode::ServiceUnavailable),
+            (tonic::Code::DataLoss, ErrorCode::ExternalService),
+            (tonic::Code::Unauthenticated, ErrorCode::Unauthorized),
+        ];
+
+        for (grpc_code, error_code) in cases {
+            assert_eq!(grpc_code_to_error_code(grpc_code), error_code);
+        }
+    }
+
     #[test]
     fn test_status_to_error_not_found() {
         let status = tonic::Status::not_found("user not found");

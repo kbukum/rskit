@@ -136,41 +136,6 @@ fn base64_encode(data: &[u8]) -> String {
 mod tests {
     use super::*;
     use rskit_errors::ErrorCode;
-    use tonic::Code;
-
-    #[test]
-    fn grpc_code_mapping_covers_all_codes() {
-        assert_eq!(
-            grpc_code_to_error_code(Code::InvalidArgument),
-            ErrorCode::InvalidInput
-        );
-        assert_eq!(
-            grpc_code_to_error_code(Code::DeadlineExceeded),
-            ErrorCode::Timeout
-        );
-        assert_eq!(grpc_code_to_error_code(Code::NotFound), ErrorCode::NotFound);
-        assert_eq!(
-            grpc_code_to_error_code(Code::AlreadyExists),
-            ErrorCode::AlreadyExists
-        );
-        assert_eq!(
-            grpc_code_to_error_code(Code::PermissionDenied),
-            ErrorCode::Forbidden
-        );
-        assert_eq!(
-            grpc_code_to_error_code(Code::ResourceExhausted),
-            ErrorCode::RateLimited
-        );
-        assert_eq!(
-            grpc_code_to_error_code(Code::Unavailable),
-            ErrorCode::ServiceUnavailable
-        );
-        assert_eq!(
-            grpc_code_to_error_code(Code::Unauthenticated),
-            ErrorCode::Unauthorized
-        );
-        assert_eq!(grpc_code_to_error_code(Code::Unknown), ErrorCode::Internal);
-    }
 
     #[test]
     fn enrich_skips_ok_response() {
