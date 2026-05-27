@@ -222,7 +222,7 @@ mod tests {
         read_copy_dir_entry_error, read_copy_dir_error, strip_copy_prefix_error,
     };
     use crate::TempDir;
-    use crate::tree::CopyTreeOptions;
+    use crate::sync_io::tree::CopyTreeOptions;
 
     #[test]
     fn copy_tree_copies_nested_files() {

@@ -1,28 +1,14 @@
-//! Directory helpers.
+//! Async directory helpers.
 #![allow(clippy::needless_pass_by_value)]
 
-use std::ffi::OsString;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
 
-/// Metadata for an entry directly inside a directory.
-#[derive(Debug, Clone)]
-pub struct DirEntry {
-    /// Entry path.
-    pub path: PathBuf,
-    /// Entry file name.
-    pub file_name: OsString,
-    /// Whether the entry is a regular file.
-    pub is_file: bool,
-    /// Whether the entry is a directory.
-    pub is_dir: bool,
-    /// Whether the entry is a symlink.
-    pub is_symlink: bool,
-}
+use crate::types::DirEntry;
 
 /// Create a directory tree if it does not exist.
-pub async fn create_dir_all(path: &Path) -> AppResult<()> {
+pub async fn create_all(path: &Path) -> AppResult<()> {
     tokio::fs::create_dir_all(path)
         .await
         .map_err(|error| create_dir_error(path, error))
@@ -167,7 +153,7 @@ pub async fn remove_all_if_exists(path: &Path) -> AppResult<bool> {
 #[cfg(test)]
 mod tests {
     use super::{
-        create_dir_all, create_dir_error, exists, exists_from_metadata, inspect_dir_entry_error,
+        create_all, create_dir_error, exists, exists_from_metadata, inspect_dir_entry_error,
         inspect_dir_error, is_empty, list, read_dir_entry_error, read_dir_error, remove,
         remove_all, remove_all_if_exists, remove_if_exists,
     };
@@ -177,7 +163,7 @@ mod tests {
     async fn directory_lifecycle_and_listing() {
         let root = TempDir::new().unwrap();
         let dir = root.child("nested").unwrap();
-        create_dir_all(&dir).await.unwrap();
+        create_all(&dir).await.unwrap();
         assert!(exists(&dir).await.unwrap());
         assert!(is_empty(&dir).await.unwrap());
 
@@ -204,8 +190,8 @@ mod tests {
         let root = TempDir::new().unwrap();
         let empty = root.child("empty").unwrap();
         let tree = root.child("tree").unwrap();
-        create_dir_all(&empty).await.unwrap();
-        create_dir_all(&tree.join("nested")).await.unwrap();
+        create_all(&empty).await.unwrap();
+        create_all(&tree.join("nested")).await.unwrap();
 
         assert!(remove_if_exists(&empty).await.unwrap());
         assert!(remove_all_if_exists(&tree).await.unwrap());
@@ -216,8 +202,8 @@ mod tests {
         let root = TempDir::new().unwrap();
         let empty = root.child("empty").unwrap();
         let tree = root.child("tree").unwrap();
-        create_dir_all(&empty).await.unwrap();
-        create_dir_all(&tree.join("nested")).await.unwrap();
+        create_all(&empty).await.unwrap();
+        create_all(&tree.join("nested")).await.unwrap();
 
         remove(&empty).await.unwrap();
         remove_all(&tree).await.unwrap();
@@ -232,7 +218,7 @@ mod tests {
         let file = root.write_file("file.txt", b"hello").unwrap();
         let nested_under_file = file.join("child");
 
-        assert!(create_dir_all(&nested_under_file).await.is_err());
+        assert!(create_all(&nested_under_file).await.is_err());
         assert!(!exists(&root.child("missing").unwrap()).await.unwrap());
         assert!(list(&file).await.is_err());
         assert!(remove(&file).await.is_err());
@@ -280,7 +266,7 @@ mod tests {
         let root = TempDir::new().unwrap();
         let dir = root.child("dir").unwrap();
         let link = root.child("link").unwrap();
-        create_dir_all(&dir).await.unwrap();
+        create_all(&dir).await.unwrap();
         std::os::unix::fs::symlink(&dir, &link).unwrap();
 
         assert!(!exists(&link).await.unwrap());
@@ -292,7 +278,7 @@ mod tests {
         let root = TempDir::new().unwrap();
         let dir = root.child("dir").unwrap();
         let link = root.child("link").unwrap();
-        create_dir_all(&dir).await.unwrap();
+        create_all(&dir).await.unwrap();
         std::os::unix::fs::symlink(&dir, &link).unwrap();
 
         let entries = list(root.path()).await.unwrap();

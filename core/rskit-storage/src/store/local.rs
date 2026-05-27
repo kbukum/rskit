@@ -1,11 +1,12 @@
 //! Local filesystem storage backend.
 
 use std::collections::HashMap;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
+use rskit_fs::{async_io, sync_io};
 use serde::{Deserialize, Serialize};
 
 use crate::FileSource;
@@ -45,17 +46,12 @@ fn default_local_root_dir() -> PathBuf {
 
 fn normalize_local_key(key: &str) -> AppResult<String> {
     let key = prefixed_key(None, key);
-    if Path::new(&key).components().any(|component| {
-        matches!(
-            component,
-            Component::ParentDir | Component::RootDir | Component::Prefix(_)
-        )
-    }) {
-        return Err(AppError::new(
+    rskit_fs::validate_relative_path(Path::new(&key)).map_err(|error| {
+        AppError::new(
             ErrorCode::InvalidInput,
-            format!("storage key must stay within the configured root: {key}"),
-        ));
-    }
+            format!("storage key must stay within the configured root ({key}): {error}"),
+        )
+    })?;
     Ok(key)
 }
 
@@ -68,16 +64,8 @@ impl LocalStore {
     /// Create a new local store.
     pub fn new(config: LocalStoreConfig) -> AppResult<Self> {
         if config.auto_create {
-            std::fs::create_dir_all(&config.root_dir).map_err(|e| {
-                AppError::new(
-                    ErrorCode::Internal,
-                    format!(
-                        "failed to create store root {}: {e}",
-                        config.root_dir.display()
-                    ),
-                )
-            })?;
-        } else if !config.root_dir.exists() {
+            sync_io::dir::create_all(&config.root_dir)?;
+        } else if !sync_io::dir::exists(&config.root_dir)? {
             return Err(AppError::new(
                 ErrorCode::NotFound,
                 format!("store root {} does not exist", config.root_dir.display()),
@@ -87,7 +75,13 @@ impl LocalStore {
     }
 
     fn resolve_path(&self, key: &str) -> AppResult<PathBuf> {
-        Ok(self.config.root_dir.join(normalize_local_key(key)?))
+        let key = normalize_local_key(key)?;
+        self.resolve_normalized_path(&key)
+    }
+
+    fn resolve_normalized_path(&self, key: &str) -> AppResult<PathBuf> {
+        rskit_fs::safe_join(&self.config.root_dir, Path::new(key))
+            .map_err(|error| AppError::new(ErrorCode::InvalidInput, error.to_string()))
     }
 }
 
@@ -101,20 +95,10 @@ impl FileStore for LocalStore {
         metadata: Option<HashMap<String, String>>,
     ) -> AppResult<StoredFile> {
         let key = normalize_local_key(key)?;
-        let target = self.config.root_dir.join(&key);
-        if let Some(parent) = target.parent() {
-            tokio::fs::create_dir_all(parent).await.map_err(|e| {
-                AppError::new(ErrorCode::Internal, format!("failed to create dirs: {e}"))
-            })?;
-        }
+        let target = self.resolve_normalized_path(&key)?;
 
         let mut reader = source.reader().await?;
-        let mut file = tokio::fs::File::create(&target).await.map_err(|e| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!("failed to create {}: {e}", target.display()),
-            )
-        })?;
+        let mut file = async_io::file::create(&target).await?;
         let size = tokio::io::copy(&mut reader, &mut file).await.map_err(|e| {
             AppError::new(
                 ErrorCode::Internal,
@@ -138,7 +122,7 @@ impl FileStore for LocalStore {
 
     async fn download(&self, key: &str) -> AppResult<FileSource> {
         let path = self.resolve_path(key)?;
-        if !path.exists() {
+        if !async_io::file::exists(&path).await? {
             return Err(AppError::new(
                 ErrorCode::NotFound,
                 format!("file not found: {key}"),
@@ -149,53 +133,59 @@ impl FileStore for LocalStore {
 
     async fn delete(&self, key: &str) -> AppResult<()> {
         let path = self.resolve_path(key)?;
-        tokio::fs::remove_file(&path)
-            .await
-            .map_err(|e| AppError::new(ErrorCode::NotFound, format!("failed to delete {key}: {e}")))
+        if async_io::file::remove_if_exists(&path).await? {
+            Ok(())
+        } else {
+            Err(file_not_found_error(key))
+        }
     }
 
     async fn exists(&self, key: &str) -> AppResult<bool> {
         let path = self.resolve_path(key)?;
-        Ok(path.exists())
+        async_io::file::exists(&path).await
     }
 
     async fn head(&self, key: &str) -> AppResult<StoredFile> {
         let key = normalize_local_key(key)?;
-        let path = self.config.root_dir.join(&key);
-        let meta = tokio::fs::metadata(&path).await.map_err(|e| {
-            AppError::new(ErrorCode::NotFound, format!("file not found {key}: {e}"))
-        })?;
+        let path = self.resolve_normalized_path(&key)?;
+        let meta = async_io::file::metadata(&path)
+            .await
+            .map_err(|error| file_not_found_error_with_cause(&key, error))?;
+        if !meta.is_file || meta.is_symlink {
+            return Err(file_not_found_error(&key));
+        }
 
         let mime = crate::detect_mime(&FileSource::Path(path)).await?;
 
         let stored_at = meta
-            .modified()
+            .modified
             .map(chrono::DateTime::<chrono::Utc>::from)
-            .unwrap_or_else(|_| chrono::Utc::now());
+            .unwrap_or_else(chrono::Utc::now);
 
-        Ok(StoredFile::new(key, meta.len(), Some(&mime)).with_stored_at(stored_at))
+        Ok(StoredFile::new(key, meta.len, Some(&mime)).with_stored_at(stored_at))
     }
 
     async fn list(&self, prefix: &str, limit: Option<usize>) -> AppResult<Vec<StoredFile>> {
         let dir = self.resolve_path(prefix)?;
         let mut results = Vec::new();
 
-        if !dir.exists() {
+        if !async_io::dir::exists(&dir).await? {
             return Ok(results);
         }
 
-        let mut entries = tokio::fs::read_dir(&dir).await.map_err(|e| {
+        let mut entries = tokio::fs::read_dir(&dir).await.map_err(|error| {
             AppError::new(
                 ErrorCode::Internal,
-                format!("failed to list {}: {e}", dir.display()),
+                format!("failed to read directory '{}': {error}", dir.display()),
             )
+            .with_cause(error)
         })?;
-
-        while let Some(entry) = entries.next_entry().await.map_err(|e| {
+        while let Some(entry) = entries.next_entry().await.map_err(|error| {
             AppError::new(
                 ErrorCode::Internal,
-                format!("failed to read dir entry: {e}"),
+                format!("failed to read directory entry: {error}"),
             )
+            .with_cause(error)
         })? {
             if let Some(max) = limit
                 && results.len() >= max
@@ -203,18 +193,26 @@ impl FileStore for LocalStore {
                 break;
             }
 
-            let meta = entry.metadata().await.map_err(|e| {
-                AppError::new(ErrorCode::Internal, format!("failed to read metadata: {e}"))
+            let path = entry.path();
+            let file_type = entry.file_type().await.map_err(|error| {
+                AppError::new(
+                    ErrorCode::Internal,
+                    format!(
+                        "failed to inspect directory entry '{}': {error}",
+                        path.display()
+                    ),
+                )
+                .with_cause(error)
             })?;
-
-            if meta.is_file() {
+            if file_type.is_file() {
+                let meta = async_io::file::metadata(&path).await?;
                 let filename = entry.file_name();
                 let key = prefixed_key(Some(prefix), filename.to_string_lossy().as_ref());
                 let stored_at = meta
-                    .modified()
+                    .modified
                     .map(chrono::DateTime::<chrono::Utc>::from)
-                    .unwrap_or_else(|_| chrono::Utc::now());
-                results.push(StoredFile::new(key, meta.len(), None).with_stored_at(stored_at));
+                    .unwrap_or_else(chrono::Utc::now);
+                results.push(StoredFile::new(key, meta.len, None).with_stored_at(stored_at));
             }
         }
 
@@ -230,13 +228,7 @@ impl FileStore for LocalStore {
         let from = self.resolve_path(from_key)?;
         let to = self.resolve_path(to_key)?;
 
-        if let Some(parent) = to.parent() {
-            tokio::fs::create_dir_all(parent).await.map_err(|e| {
-                AppError::new(ErrorCode::Internal, format!("failed to create dirs: {e}"))
-            })?;
-        }
-
-        tokio::fs::copy(&from, &to).await.map_err(|e| {
+        async_io::file::copy(&from, &to).await.map_err(|e| {
             AppError::new(
                 ErrorCode::Internal,
                 format!("failed to copy {from_key} to {to_key}: {e}"),
@@ -250,13 +242,7 @@ impl FileStore for LocalStore {
         let from = self.resolve_path(from_key)?;
         let to = self.resolve_path(to_key)?;
 
-        if let Some(parent) = to.parent() {
-            tokio::fs::create_dir_all(parent).await.map_err(|e| {
-                AppError::new(ErrorCode::Internal, format!("failed to create dirs: {e}"))
-            })?;
-        }
-
-        tokio::fs::rename(&from, &to).await.map_err(|e| {
+        async_io::file::rename(&from, &to).await.map_err(|e| {
             AppError::new(
                 ErrorCode::Internal,
                 format!("failed to rename {from_key} to {to_key}: {e}"),
@@ -265,6 +251,14 @@ impl FileStore for LocalStore {
 
         self.head(to_key).await
     }
+}
+
+fn file_not_found_error(key: &str) -> AppError {
+    AppError::new(ErrorCode::NotFound, format!("file not found: {key}"))
+}
+
+fn file_not_found_error_with_cause(key: &str, cause: AppError) -> AppError {
+    file_not_found_error(key).with_cause(cause)
 }
 
 #[cfg(test)]

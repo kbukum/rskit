@@ -47,6 +47,7 @@ rskit-testutil = { path = "../core/rskit-testutil", version = "0.1.0" }
 rskit-server = { path = "../core/rskit-server", version = "0.1.0" }
 rskit-authz = { path = "../core/rskit-authz", version = "0.1.0" }
 rskit-tool = { path = "../core/rskit-tool", version = "0.1.0" }
+rskit-fs = { path = "../core/rskit-fs", version = "0.1.0" }
 rskit-llm-common = { path = "./llm/common", version = "0.1.0" }
 
 # Shared external deps used by contrib crates

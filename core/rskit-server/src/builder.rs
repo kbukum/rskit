@@ -1,4 +1,5 @@
 use std::net::SocketAddr;
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -140,23 +141,30 @@ impl GrpcServerBuilder {
             Box::pin(async move {
                 let mut builder = Server::builder();
                 if let Some(tls) = &tls {
-                    let cert = tokio::fs::read(&tls.cert_path).await.map_err(|error| {
-                        AppError::new(
-                            ErrorCode::InvalidInput,
-                            format!(
-                                "failed to read TLS certificate '{}': {error}",
-                                tls.cert_path
-                            ),
-                        )
-                        .with_cause(error)
-                    })?;
-                    let key = tokio::fs::read(&tls.key_path).await.map_err(|error| {
-                        AppError::new(
-                            ErrorCode::InvalidInput,
-                            format!("failed to read TLS private key '{}': {error}", tls.key_path),
-                        )
-                        .with_cause(error)
-                    })?;
+                    let cert = rskit_fs::async_io::file::read(Path::new(&tls.cert_path))
+                        .await
+                        .map_err(|error| {
+                            AppError::new(
+                                ErrorCode::InvalidInput,
+                                format!(
+                                    "failed to read TLS certificate '{}': {error}",
+                                    tls.cert_path
+                                ),
+                            )
+                            .with_cause(error)
+                        })?;
+                    let key = rskit_fs::async_io::file::read(Path::new(&tls.key_path))
+                        .await
+                        .map_err(|error| {
+                            AppError::new(
+                                ErrorCode::InvalidInput,
+                                format!(
+                                    "failed to read TLS private key '{}': {error}",
+                                    tls.key_path
+                                ),
+                            )
+                            .with_cause(error)
+                        })?;
                     let tls_config = ServerTlsConfig::new()
                         .identity(Identity::from_pem(cert, key))
                         .ignore_client_order(true)

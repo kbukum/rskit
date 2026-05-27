@@ -45,6 +45,7 @@ tokio-rustls     = { workspace = true, optional = true }
 
 # Internal
 rskit-errors     = { path = "../rskit-errors" }
+rskit-fs         = { path = "../rskit-fs" }
 rskit-bootstrap  = { path = "../rskit-bootstrap" }
 rskit-http       = { path = "../rskit-http", optional = true }
 rskit-security   = { path = "../rskit-security", optional = true }

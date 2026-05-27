@@ -353,6 +353,19 @@ safety: read-only
         fs::remove_dir_all(body_root).expect("cleanup body root");
     }
 
+    #[test]
+    fn loader_reports_manifest_directory_as_invalid_pack_file() {
+        let root = test_root("manifest-directory");
+        fs::create_dir(root.join(MANIFEST_FILE_NAME)).expect("create manifest directory");
+
+        let error = Loader::default()
+            .load_metadata(&root)
+            .expect_err("manifest directory rejected");
+
+        assert!(matches!(error, SkillError::InvalidPackFile { .. }));
+        fs::remove_dir_all(root).expect("cleanup manifest root");
+    }
+
     #[cfg(unix)]
     #[test]
     fn loader_rejects_pack_symlinks() {

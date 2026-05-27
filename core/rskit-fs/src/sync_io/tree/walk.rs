@@ -105,7 +105,7 @@ mod tests {
         walk_tree_recursive,
     };
     use crate::TempDir;
-    use crate::tree::{TreeEntry, WalkControl, WalkOptions};
+    use crate::sync_io::tree::{TreeEntry, WalkControl, WalkOptions};
 
     #[allow(clippy::unnecessary_wraps)]
     fn continue_walk(_: &TreeEntry) -> AppResult<WalkControl> {
@@ -272,7 +272,7 @@ mod tests {
         walk_tree(
             source.path(),
             WalkOptions {
-                entry_filter: crate::tree::WalkEntryFilter::FILES,
+                entry_filter: crate::sync_io::tree::WalkEntryFilter::FILES,
                 ..WalkOptions::default()
             },
             |entry| {
@@ -297,7 +297,7 @@ mod tests {
         walk_tree(
             source.path(),
             WalkOptions {
-                entry_filter: crate::tree::WalkEntryFilter::SYMLINKS,
+                entry_filter: crate::sync_io::tree::WalkEntryFilter::SYMLINKS,
                 ..WalkOptions::default()
             },
             |entry| {

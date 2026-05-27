@@ -4840,6 +4840,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "rskit-fs"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "rskit-errors",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "rskit-hook"
 version = "0.1.0"
 dependencies = [
@@ -4859,6 +4869,7 @@ dependencies = [
  "http 1.4.0",
  "reqwest 0.13.3",
  "rskit-errors",
+ "rskit-fs",
  "rskit-resilience",
  "rskit-security",
  "serde",
@@ -5123,6 +5134,7 @@ dependencies = [
  "libc",
  "parking_lot",
  "rskit-errors",
+ "rskit-fs",
  "rskit-media",
  "rskit-process",
  "rskit-storage",
@@ -5144,6 +5156,7 @@ dependencies = [
  "image",
  "insta",
  "rskit-errors",
+ "rskit-fs",
  "rskit-media",
  "rskit-storage",
  "serde_json",
@@ -5321,6 +5334,7 @@ dependencies = [
  "mime_guess",
  "pin-project-lite",
  "rskit-errors",
+ "rskit-fs",
  "serde",
  "serde_json",
  "tempfile",

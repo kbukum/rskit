@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use bytes::Bytes;
 use futures::Stream;
 use rskit_errors::{AppError, AppResult, ErrorCode};
+use rskit_fs::async_io::file;
 use tokio::io::AsyncRead;
 
 use crate::TempFile;
@@ -106,7 +107,7 @@ impl FileSource {
     pub async fn reader(&self) -> AppResult<Box<dyn AsyncRead + Send + Unpin>> {
         match self {
             Self::Path(p) => {
-                let file = tokio::fs::File::open(p).await.map_err(|e| {
+                let file = file::open(p).await.map_err(|e| {
                     AppError::new(
                         ErrorCode::NotFound,
                         format!("failed to open {}: {e}", p.display()),
@@ -116,7 +117,7 @@ impl FileSource {
             }
             Self::Bytes(b) => Ok(Box::new(std::io::Cursor::new(b.clone()))),
             Self::Temp(t) => {
-                let file = tokio::fs::File::open(t.path()).await.map_err(|e| {
+                let file = file::open(t.path()).await.map_err(|e| {
                     AppError::new(
                         ErrorCode::Internal,
                         format!("failed to open temp file {}: {e}", t.path().display()),
@@ -191,23 +192,23 @@ impl FileSource {
     pub async fn size(&self) -> AppResult<Option<u64>> {
         match self {
             Self::Path(p) => {
-                let meta = tokio::fs::metadata(p).await.map_err(|e| {
+                let meta = file::metadata(p).await.map_err(|e| {
                     AppError::new(
                         ErrorCode::NotFound,
                         format!("failed to stat {}: {e}", p.display()),
                     )
                 })?;
-                Ok(Some(meta.len()))
+                Ok(Some(meta.len))
             }
             Self::Bytes(b) => Ok(Some(b.len() as u64)),
             Self::Temp(t) => {
-                let meta = tokio::fs::metadata(t.path()).await.map_err(|e| {
+                let meta = file::metadata(t.path()).await.map_err(|e| {
                     AppError::new(
                         ErrorCode::Internal,
                         format!("failed to stat temp file: {e}"),
                     )
                 })?;
-                Ok(Some(meta.len()))
+                Ok(Some(meta.len))
             }
             Self::Url(_) => Ok(None),
         }
@@ -226,7 +227,7 @@ impl FileSource {
             }),
             Self::Bytes(b) => {
                 let tmp = TempFile::new()?;
-                tokio::fs::write(tmp.path(), b).await.map_err(|e| {
+                file::write(tmp.path(), b).await.map_err(|e| {
                     AppError::new(
                         ErrorCode::Internal,
                         format!("failed to write bytes to temp file: {e}"),

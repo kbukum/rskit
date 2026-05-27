@@ -195,7 +195,7 @@ mod tests {
         check_dir_write_access_error, check_read_access_error, check_write_access_error,
         is_readonly, read_permissions_error, set_permissions_error, set_readonly,
     };
-    use crate::{TempDir, file};
+    use crate::{TempDir, async_io::file};
 
     #[tokio::test]
     async fn checks_read_and_write_access() {
