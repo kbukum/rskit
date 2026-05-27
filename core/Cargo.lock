@@ -6388,6 +6388,7 @@ dependencies = [
  "rskit-component",
  "rskit-config",
  "rskit-errors",
+ "rskit-fs",
  "rskit-hook",
  "rskit-provider",
  "rskit-validation",

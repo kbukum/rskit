@@ -15,12 +15,15 @@ pub mod config;
 pub mod hook;
 /// Generic mock provider for testing.
 pub mod mock_provider;
+/// Temporary workspace and fixture helpers.
+pub mod workspace;
 
 pub use assertions::{assert_err_code, assert_ok};
 pub use component::FakeComponent;
 pub use config::TestAppConfig;
 pub use hook::TestEvent;
 pub use mock_provider::MockProvider;
+pub use workspace::TestWorkspace;
 
 /// Use `#[tokio::test(flavor = "multi_thread", worker_threads = 2)]` for
 /// tests that exercise concurrent code paths. Plain `#[tokio::test]` uses
