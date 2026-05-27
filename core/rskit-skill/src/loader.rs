@@ -219,7 +219,8 @@ fn collect_assets(
                 Err(invalid_pack_file(&dir, "symlinks are not allowed"))
             }
             Ok(_) => Err(invalid_pack_file(&dir, "expected directory")),
-            Err(_) => Ok(()),
+            Err(error) if is_not_found_error(&error) => Ok(()),
+            Err(error) => Err(fs_error(&dir, error)),
         };
     }
 
@@ -352,9 +353,9 @@ fn bounded_read_error(path: &Path, limit_bytes: u64, error: AppError) -> SkillEr
 
 fn fs_error(path: &Path, error: AppError) -> SkillError {
     if error.code == ErrorCode::InvalidInput {
-        if error.message.contains("symlinks are not allowed") {
+        if sync_io::file::is_symlink_not_allowed_error(&error) {
             invalid_pack_file(path, "symlinks are not allowed")
-        } else if error.message.contains("not a regular file") {
+        } else if sync_io::file::is_not_regular_file_error(&error) {
             invalid_pack_file(path, "expected regular file")
         } else {
             invalid_pack_file(path, error.message)
@@ -365,4 +366,11 @@ fn fs_error(path: &Path, error: AppError) -> SkillError {
             source: std::io::Error::other(error),
         }
     }
+}
+
+fn is_not_found_error(error: &AppError) -> bool {
+    error
+        .cause()
+        .and_then(|cause| cause.downcast_ref::<std::io::Error>())
+        .is_some_and(|cause| cause.kind() == std::io::ErrorKind::NotFound)
 }

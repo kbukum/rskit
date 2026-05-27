@@ -15,6 +15,10 @@ use crate::types::FileMeta;
 use crate::path::parent_dir;
 use crate::temp::sibling_temp_path;
 
+const RSKIT_FS_ERROR: &str = "rskit_fs_error";
+const FILE_TOO_LARGE: &str = "file_too_large";
+const NOT_REGULAR_FILE: &str = "not_regular_file";
+const SYMLINK_NOT_ALLOWED: &str = "symlink_not_allowed";
 const WRITE_ATOMIC_TEMP_ATTEMPTS: usize = 16;
 
 /// Create the parent directory for a file path if it has one.
@@ -52,10 +56,7 @@ pub fn open_no_follow_regular(path: &Path) -> AppResult<File> {
         .metadata()
         .map_err(|error| inspect_file_error(path, error))?;
     if !metadata.is_file() {
-        return Err(AppError::new(
-            ErrorCode::InvalidInput,
-            format!("path is not a regular file: {}", path.display()),
-        ));
+        return Err(not_regular_file_error(path));
     }
     Ok(file)
 }
@@ -74,10 +75,9 @@ fn open_no_follow(path: &Path) -> AppResult<File> {
     let metadata =
         std::fs::symlink_metadata(path).map_err(|error| inspect_file_error(path, error))?;
     if metadata.file_type().is_symlink() {
-        return Err(AppError::new(
-            ErrorCode::InvalidInput,
-            format!("symlinks are not allowed: {}", path.display()),
-        ));
+        return Err(
+            symlink_not_allowed_error(path).with_cause(std::io::Error::other("path is a symlink"))
+        );
     }
     open(path)
 }
@@ -94,7 +94,7 @@ pub fn read_string(path: &Path) -> AppResult<String> {
 
 /// Read at most `max_bytes` from a regular file.
 pub fn read_bounded(path: &Path, max_bytes: u64) -> AppResult<Vec<u8>> {
-    let mut file = open(path)?;
+    let mut file = open_no_follow_regular(path)?;
     read_bounded_from_file(path, max_bytes, &mut file)
 }
 
@@ -291,11 +291,7 @@ fn inspect_file_error(path: &Path, error: std::io::Error) -> AppError {
 
 fn open_file_error(path: &Path, error: std::io::Error) -> AppError {
     if is_symlink_open_error(&error) {
-        return AppError::new(
-            ErrorCode::InvalidInput,
-            format!("symlinks are not allowed: {}", path.display()),
-        )
-        .with_cause(error);
+        return symlink_not_allowed_error(path).with_cause(error);
     }
 
     AppError::new(
@@ -394,11 +390,25 @@ fn sync_file_error(path: &Path, error: std::io::Error) -> AppError {
 
 /// Return true when `error` was created by bounded file-read size enforcement.
 pub fn is_file_too_large_error(error: &AppError) -> bool {
+    has_fs_error(error, FILE_TOO_LARGE)
+}
+
+/// Return true when `error` was created by no-follow symlink rejection.
+pub fn is_symlink_not_allowed_error(error: &AppError) -> bool {
+    has_fs_error(error, SYMLINK_NOT_ALLOWED)
+}
+
+/// Return true when `error` was created by regular-file validation.
+pub fn is_not_regular_file_error(error: &AppError) -> bool {
+    has_fs_error(error, NOT_REGULAR_FILE)
+}
+
+fn has_fs_error(error: &AppError, kind: &str) -> bool {
     error
         .details
-        .get("rskit_fs_error")
+        .get(RSKIT_FS_ERROR)
         .and_then(|value| value.as_str())
-        == Some("file_too_large")
+        == Some(kind)
 }
 
 fn file_too_large_error(path: &Path, actual: u64, limit: u64) -> AppError {
@@ -409,5 +419,21 @@ fn file_too_large_error(path: &Path, actual: u64, limit: u64) -> AppError {
             path.display()
         ),
     )
-    .with_detail("rskit_fs_error", "file_too_large")
+    .with_detail(RSKIT_FS_ERROR, FILE_TOO_LARGE)
+}
+
+fn not_regular_file_error(path: &Path) -> AppError {
+    AppError::new(
+        ErrorCode::InvalidInput,
+        format!("path is not a regular file: {}", path.display()),
+    )
+    .with_detail(RSKIT_FS_ERROR, NOT_REGULAR_FILE)
+}
+
+fn symlink_not_allowed_error(path: &Path) -> AppError {
+    AppError::new(
+        ErrorCode::InvalidInput,
+        format!("symlinks are not allowed: {}", path.display()),
+    )
+    .with_detail(RSKIT_FS_ERROR, SYMLINK_NOT_ALLOWED)
 }

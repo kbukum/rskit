@@ -75,7 +75,12 @@ impl LocalStore {
     }
 
     fn resolve_path(&self, key: &str) -> AppResult<PathBuf> {
-        rskit_fs::safe_join(&self.config.root_dir, Path::new(&normalize_local_key(key)?))
+        let key = normalize_local_key(key)?;
+        self.resolve_normalized_path(&key)
+    }
+
+    fn resolve_normalized_path(&self, key: &str) -> AppResult<PathBuf> {
+        rskit_fs::safe_join(&self.config.root_dir, Path::new(key))
             .map_err(|error| AppError::new(ErrorCode::InvalidInput, error.to_string()))
     }
 }
@@ -90,7 +95,7 @@ impl FileStore for LocalStore {
         metadata: Option<HashMap<String, String>>,
     ) -> AppResult<StoredFile> {
         let key = normalize_local_key(key)?;
-        let target = self.resolve_path(&key)?;
+        let target = self.resolve_normalized_path(&key)?;
 
         let mut reader = source.reader().await?;
         let mut file = async_io::file::create(&target).await?;
@@ -140,7 +145,7 @@ impl FileStore for LocalStore {
 
     async fn head(&self, key: &str) -> AppResult<StoredFile> {
         let key = normalize_local_key(key)?;
-        let path = self.resolve_path(&key)?;
+        let path = self.resolve_normalized_path(&key)?;
         let meta = async_io::file::metadata(&path).await.map_err(|e| {
             AppError::new(ErrorCode::NotFound, format!("file not found {key}: {e}"))
         })?;
