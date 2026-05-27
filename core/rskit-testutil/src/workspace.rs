@@ -62,7 +62,7 @@ impl TestWorkspace {
             ));
         };
         safe_join(fixture_dir, rel_path.as_ref())
-            .map_err(|error| AppError::invalid_input("fixture path", error.to_string()))
+            .map_err(|error| AppError::invalid_input("fixture_path", error.to_string()))
     }
 
     /// Read fixture bytes from the configured fixture root.
