@@ -1,34 +1,24 @@
-//! File helpers.
+//! Async file helpers.
 #![allow(clippy::needless_pass_by_value)]
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use crate::dir::create_dir_all;
 use crate::path::parent_dir;
 use crate::temp::sibling_temp_path;
+use crate::types::FileMeta;
 
 const WRITE_ATOMIC_TEMP_ATTEMPTS: usize = 16;
 
-/// Metadata for a filesystem entry at a file path.
-#[derive(Debug, Clone)]
-pub struct FileMeta {
-    /// File path.
-    pub path: PathBuf,
-    /// File size in bytes.
-    pub len: u64,
-    /// Last modification time, when available.
-    pub modified: Option<std::time::SystemTime>,
-    /// Whether this path is a symlink.
-    pub is_symlink: bool,
-}
+/// Async file handle opened through this crate.
+pub type AsyncFile = tokio::fs::File;
 
 /// Create the parent directory for a file path if it has one.
 pub async fn create_parent_dir(path: &Path) -> AppResult<()> {
     if let Some(parent) = parent_dir(path) {
-        create_dir_all(parent).await?;
+        super::dir::create_all(parent).await?;
     }
     Ok(())
 }
@@ -57,7 +47,10 @@ pub async fn metadata(path: &Path) -> AppResult<FileMeta> {
     Ok(FileMeta {
         path: path.to_path_buf(),
         len: metadata.len(),
+        created: metadata.created().ok(),
         modified: metadata.modified().ok(),
+        is_file: metadata.is_file(),
+        is_dir: metadata.is_dir(),
         is_symlink: metadata.file_type().is_symlink(),
     })
 }
@@ -76,12 +69,65 @@ pub async fn read_string(path: &Path) -> AppResult<String> {
         .map_err(|error| read_file_error(path, error))
 }
 
+/// Read at most `max_bytes` bytes from a file.
+pub async fn read_bounded(path: &Path, max_bytes: u64) -> AppResult<Vec<u8>> {
+    let file = open(path).await?;
+    let metadata = file
+        .metadata()
+        .await
+        .map_err(|error| inspect_file_error(path, error))?;
+    if metadata.is_file() && metadata.len() > max_bytes {
+        return Err(file_too_large_error(path, metadata.len(), max_bytes));
+    }
+
+    let capacity = metadata
+        .len()
+        .min(max_bytes)
+        .try_into()
+        .unwrap_or(usize::MAX);
+    let mut bytes = Vec::with_capacity(capacity);
+    file.take(max_bytes.saturating_add(1))
+        .read_to_end(&mut bytes)
+        .await
+        .map_err(|error| read_file_error(path, error))?;
+    if bytes.len() as u64 > max_bytes {
+        return Err(file_too_large_error(path, bytes.len() as u64, max_bytes));
+    }
+    Ok(bytes)
+}
+
+/// Read a UTF-8 text file up to `max_bytes` bytes.
+pub async fn read_string_bounded(path: &Path, max_bytes: u64) -> AppResult<String> {
+    let bytes = read_bounded(path, max_bytes).await?;
+    String::from_utf8(bytes).map_err(|error| {
+        AppError::new(
+            ErrorCode::InvalidInput,
+            format!("file '{}' is not valid UTF-8: {error}", path.display()),
+        )
+    })
+}
+
 /// Write bytes to a file, creating parent directories as needed.
 pub async fn write(path: &Path, bytes: impl AsRef<[u8]>) -> AppResult<()> {
     create_parent_dir(path).await?;
     tokio::fs::write(path, bytes)
         .await
         .map_err(|error| write_file_error(path, error))
+}
+
+/// Open a file for async reading.
+pub async fn open(path: &Path) -> AppResult<AsyncFile> {
+    tokio::fs::File::open(path)
+        .await
+        .map_err(|error| open_file_error(path, error))
+}
+
+/// Create a file for async writing, creating parent directories as needed.
+pub async fn create(path: &Path) -> AppResult<AsyncFile> {
+    create_parent_dir(path).await?;
+    tokio::fs::File::create(path)
+        .await
+        .map_err(|error| create_file_error(path, error))
 }
 
 /// Persist a temp file to `dest` using the platform rename operation.
@@ -154,7 +200,7 @@ fn is_cross_device_error(error: &std::io::Error) -> bool {
 }
 
 /// Remove a file and ignore `NotFound`.
-pub async fn remove_file_if_exists(path: &Path) -> AppResult<bool> {
+pub async fn remove_if_exists(path: &Path) -> AppResult<bool> {
     match tokio::fs::remove_file(path).await {
         Ok(()) => Ok(true),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
@@ -212,7 +258,7 @@ async fn write_atomic_with_attempts(
         .await;
 
         if result.is_err() {
-            let _ = remove_file_if_exists(&temp_path).await;
+            let _ = remove_if_exists(&temp_path).await;
         }
 
         return result;
@@ -236,6 +282,20 @@ fn read_file_error(path: &Path, error: std::io::Error) -> AppError {
     AppError::new(
         ErrorCode::Internal,
         format!("failed to read file '{}': {error}", path.display()),
+    )
+}
+
+fn open_file_error(path: &Path, error: std::io::Error) -> AppError {
+    AppError::new(
+        ErrorCode::Internal,
+        format!("failed to open file '{}': {error}", path.display()),
+    )
+}
+
+fn create_file_error(path: &Path, error: std::io::Error) -> AppError {
+    AppError::new(
+        ErrorCode::Internal,
+        format!("failed to create file '{}': {error}", path.display()),
     )
 }
 
@@ -323,7 +383,7 @@ mod tests {
         WRITE_ATOMIC_TEMP_ATTEMPTS, copy, copy_file_error, create_parent_dir,
         create_temp_file_error, exists, exists_from_metadata, inspect_file_error, metadata,
         move_file, move_file_after_rename, move_file_error, persist_temp_file, read,
-        read_file_error, read_string, remove, remove_file_error, remove_file_if_exists, rename,
+        read_file_error, read_string, remove, remove_file_error, remove_if_exists, rename,
         rename_file_error, should_retry_temp_open, sync_temp_file_error, unique_temp_file_error,
         write, write_atomic, write_atomic_with_attempts, write_file_error, write_temp_file_error,
     };
@@ -348,8 +408,8 @@ mod tests {
         rename(&copy_path, &renamed).await.unwrap();
         assert!(!exists(&copy_path).await.unwrap());
         assert!(exists(&renamed).await.unwrap());
-        assert!(remove_file_if_exists(&renamed).await.unwrap());
-        assert!(!remove_file_if_exists(&renamed).await.unwrap());
+        assert!(remove_if_exists(&renamed).await.unwrap());
+        assert!(!remove_if_exists(&renamed).await.unwrap());
     }
 
     #[tokio::test]
@@ -364,7 +424,7 @@ mod tests {
         let root = TempDir::new().unwrap();
         let missing = root.child("missing.txt").unwrap();
         let dir = root.child("dir").unwrap();
-        crate::dir::create_dir_all(&dir).await.unwrap();
+        crate::async_io::dir::create_all(&dir).await.unwrap();
         let nested_under_file = root.child("file.txt/child.txt").unwrap();
         root.write_file("file.txt", b"hello").unwrap();
 
@@ -383,7 +443,7 @@ mod tests {
                 .is_err()
         );
         assert!(remove(&missing).await.is_err());
-        assert!(remove_file_if_exists(&dir).await.is_err());
+        assert!(remove_if_exists(&dir).await.is_err());
     }
 
     #[test]
@@ -547,7 +607,7 @@ mod tests {
     async fn atomic_write_reports_persist_and_attempt_errors() {
         let root = TempDir::new().unwrap();
         let dest_dir = root.child("dest").unwrap();
-        crate::dir::create_dir_all(&dest_dir).await.unwrap();
+        crate::async_io::dir::create_all(&dest_dir).await.unwrap();
 
         assert!(write_atomic(&dest_dir, b"atomic", "test").await.is_err());
         assert!(
@@ -577,4 +637,14 @@ mod tests {
 
         assert!(!exists(&link).await.unwrap());
     }
+}
+
+fn file_too_large_error(path: &Path, actual: u64, limit: u64) -> AppError {
+    AppError::new(
+        ErrorCode::InvalidInput,
+        format!(
+            "file '{}' is {actual} bytes, exceeding limit {limit} bytes",
+            path.display()
+        ),
+    )
 }

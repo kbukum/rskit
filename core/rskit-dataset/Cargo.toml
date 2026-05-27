@@ -28,6 +28,7 @@ futures-util = { workspace = true }
 
 # Internal
 rskit-errors     = { path = "../rskit-errors" }
+rskit-fs         = { path = "../rskit-fs" }
 rskit-pipeline   = { path = "../rskit-pipeline" }
 rskit-schema     = { path = "../rskit-schema" }
 rskit-validation = { path = "../rskit-validation" }

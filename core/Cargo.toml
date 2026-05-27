@@ -173,6 +173,7 @@ insta = { version = "1.47", features = ["json", "yaml", "redactions"] }
 
 # Internal path crates
 rskit-ai = { path = "rskit-ai" }
+rskit-fs = { path = "rskit-fs" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

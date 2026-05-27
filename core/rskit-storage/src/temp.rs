@@ -3,6 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
+use rskit_fs::sync_io::file;
 
 /// Managed temporary file. Deleted when the inner handle is dropped.
 #[derive(Debug)]
@@ -77,8 +78,7 @@ impl TempFile {
     /// Create an independent copy of this temporary file.
     pub fn try_clone(&self) -> AppResult<Self> {
         let new = TempFile::new()?;
-        std::fs::copy(self.path(), new.path())
-            .map_err(|e| AppError::internal(e).context("clone temp file"))?;
+        file::copy(self.path(), new.path()).map_err(|error| error.context("clone temp file"))?;
         Ok(new)
     }
 

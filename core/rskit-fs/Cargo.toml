@@ -17,8 +17,12 @@ keywords   = ["filesystem", "paths", "files", "directories"]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[features]
+default = ["async"]
+async = ["dep:tokio"]
+
 [dependencies]
-tokio = { workspace = true, features = ["fs", "io-util"] }
+tokio = { workspace = true, features = ["fs", "io-util"], optional = true }
 tempfile = { workspace = true }
 
 rskit-errors = { path = "../rskit-errors" }

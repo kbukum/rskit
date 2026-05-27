@@ -27,6 +27,7 @@ thiserror    = { workspace = true }
 tracing      = { workspace = true }
 rskit-config = { path = "../rskit-config" }
 rskit-errors = { path = "../rskit-errors" }
+rskit-fs = { path = "../rskit-fs" }
 rskit-validation = { path = "../rskit-validation" }
 
 [target.'cfg(unix)'.dependencies]

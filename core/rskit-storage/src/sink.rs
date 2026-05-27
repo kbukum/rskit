@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use bytes::Bytes;
 use rskit_errors::{AppError, AppResult, ErrorCode};
+use rskit_fs::async_io::file;
 
 use crate::{FileSource, TempFile};
 
@@ -22,14 +23,7 @@ impl FileSink {
     pub async fn writer(&self) -> AppResult<FileWriter> {
         match self {
             Self::Path(p) => {
-                if let Some(parent) = p.parent() {
-                    tokio::fs::create_dir_all(parent).await.map_err(|e| {
-                        AppError::new(
-                            ErrorCode::Internal,
-                            format!("failed to create parent dirs for {}: {e}", p.display()),
-                        )
-                    })?;
-                }
+                file::create_parent_dir(p).await?;
                 Ok(FileWriter {
                     inner: WriterInner::Path(p.clone()),
                     buffer: Vec::new(),
@@ -93,7 +87,7 @@ impl FileWriter {
     pub async fn finalize(self) -> AppResult<FileSource> {
         match self.inner {
             WriterInner::Path(p) => {
-                tokio::fs::write(&p, &self.buffer).await.map_err(|e| {
+                file::write(&p, &self.buffer).await.map_err(|e| {
                     AppError::new(
                         ErrorCode::Internal,
                         format!("failed to write {}: {e}", p.display()),
@@ -103,14 +97,12 @@ impl FileWriter {
             }
             WriterInner::Temp => {
                 let tmp = TempFile::new()?;
-                tokio::fs::write(tmp.path(), &self.buffer)
-                    .await
-                    .map_err(|e| {
-                        AppError::new(
-                            ErrorCode::Internal,
-                            format!("failed to write temp file: {e}"),
-                        )
-                    })?;
+                file::write(tmp.path(), &self.buffer).await.map_err(|e| {
+                    AppError::new(
+                        ErrorCode::Internal,
+                        format!("failed to write temp file: {e}"),
+                    )
+                })?;
                 Ok(FileSource::Temp(tmp))
             }
             WriterInner::Memory => Ok(FileSource::Bytes(Bytes::from(self.buffer))),

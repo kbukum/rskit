@@ -8,34 +8,35 @@
 //!
 //! Security defaults:
 //! - use [`path::safe_join`] for user-provided relative paths before touching disk;
-//! - tree copy/list operations do not follow symlinks unless explicitly requested;
-//! - use [`file::write_atomic`] for same-filesystem writes without exposing partial files
+//! - sync tree copy/list operations do not follow symlinks unless explicitly requested;
+//! - use `async_io::file::write_atomic` or `sync_io::file::write_atomic` for same-filesystem writes
+//!   without exposing partial files
 //!   (existing-file replacement is atomic on Unix-like platforms; Windows replacement returns
 //!   an error instead of silently degrading);
-//! - use [`permissions`] capability checks before performing optional user-facing operations.
+//! - use [`permissions`] capability checks before performing optional user-facing operations when
+//!   the `async` feature is enabled.
 
 #![warn(missing_docs)]
 
-/// Directory helpers.
-pub mod dir;
-/// File helpers.
-pub mod file;
-/// Link helpers.
+/// Async filesystem operations.
+#[cfg(feature = "async")]
+pub mod async_io;
+/// Async hard-link and symbolic-link helpers.
+#[cfg(feature = "async")]
 pub mod link;
 /// Safe path helpers.
 pub mod path;
 /// Permission and capability helpers.
+#[cfg(feature = "async")]
 pub mod permissions;
+/// Synchronous filesystem operations.
+pub mod sync_io;
 /// Temporary file and path helpers.
 pub mod temp;
-/// File tree helpers.
-pub mod tree;
+mod types;
 
 pub use path::{
     SafePathError, absolute, canonicalize, parent_dir, safe_join, validate_relative_path,
 };
 pub use temp::{TempDir, TempFile, sibling_temp_path};
-pub use tree::{
-    CopyTreeOptions, TreeEntry, WalkControl, WalkEntryFilter, WalkOptions, copy_tree, list_tree,
-    remove_tree, remove_tree_if_exists, walk_tree,
-};
+pub use types::{DirEntry, FileMeta};

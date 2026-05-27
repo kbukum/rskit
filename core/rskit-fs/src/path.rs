@@ -64,8 +64,8 @@ pub fn absolute(path: &Path) -> AppResult<PathBuf> {
 }
 
 /// Canonicalize a path by resolving symlinks and normalizing components.
-pub async fn canonicalize(path: &Path) -> AppResult<PathBuf> {
-    tokio::fs::canonicalize(path).await.map_err(|error| {
+pub fn canonicalize(path: &Path) -> AppResult<PathBuf> {
+    std::fs::canonicalize(path).map_err(|error| {
         AppError::new(
             ErrorCode::Internal,
             format!("failed to canonicalize '{}': {error}", path.display()),
@@ -145,19 +145,15 @@ mod tests {
         assert_eq!(absolute(path).unwrap(), path);
     }
 
-    #[tokio::test]
-    async fn canonicalize_resolves_existing_paths_and_reports_missing() {
+    #[test]
+    fn canonicalize_resolves_existing_paths_and_reports_missing() {
         let dir = crate::TempDir::new().unwrap();
         let file = dir.write_file("file.txt", b"hello").unwrap();
 
         assert_eq!(
-            canonicalize(&file).await.unwrap(),
+            canonicalize(&file).unwrap(),
             std::fs::canonicalize(&file).unwrap()
         );
-        assert!(
-            canonicalize(&dir.child("missing.txt").unwrap())
-                .await
-                .is_err()
-        );
+        assert!(canonicalize(&dir.child("missing.txt").unwrap()).is_err());
     }
 }

@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
+use rskit_fs::async_io::file;
 use rskit_security::TlsConfig;
-use tokio::fs;
 use tokio::sync::RwLock;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig, Endpoint, Identity};
 use tracing::{debug, warn};
@@ -168,7 +168,7 @@ async fn build_tls_config(
         .domain_name(default_tls_domain_name(config, tls));
 
     if let Some(ca_file) = &tls.ca_file {
-        let pem = fs::read(ca_file).await.map_err(|error| {
+        let pem = file::read(ca_file).await.map_err(|error| {
             AppError::new(
                 ErrorCode::InvalidInput,
                 format!("failed to read gRPC CA bundle '{}': {}", ca_file, error),
@@ -179,7 +179,7 @@ async fn build_tls_config(
     }
 
     if let (Some(cert_file), Some(key_file)) = (&tls.cert_file, &tls.key_file) {
-        let cert = fs::read(cert_file).await.map_err(|error| {
+        let cert = file::read(cert_file).await.map_err(|error| {
             AppError::new(
                 ErrorCode::InvalidInput,
                 format!(
@@ -189,7 +189,7 @@ async fn build_tls_config(
             )
             .with_cause(error)
         })?;
-        let key = fs::read(key_file).await.map_err(|error| {
+        let key = file::read(key_file).await.map_err(|error| {
             AppError::new(
                 ErrorCode::InvalidInput,
                 format!("failed to read gRPC client key '{}': {}", key_file, error),

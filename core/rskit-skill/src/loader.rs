@@ -1,12 +1,12 @@
 //! Filesystem loading and activation for skill packs.
 
-use std::fs::{self, File, OpenOptions};
+use std::fs::File;
 use std::io::{BufReader, Read};
-#[cfg(unix)]
-use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 
 use rskit_config::{AppConfig, ConfigLoader, ServiceConfig};
+use rskit_errors::{AppError, ErrorCode};
+use rskit_fs::{path as fs_path, sync_io};
 use rskit_validation::Validate;
 use rskit_validation::validator::{ValidationError, ValidationErrors};
 use serde::Deserialize;
@@ -213,38 +213,34 @@ fn collect_assets(
     assets: &mut Vec<Asset>,
     total_asset_bytes: &mut u64,
 ) -> Result<(), SkillError> {
-    let metadata = match fs::symlink_metadata(&dir) {
-        Ok(metadata) => metadata,
-        Err(source) if source.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        Err(source) => return Err(SkillError::Io { path: dir, source }),
-    };
-    reject_symlink(&dir, &metadata)?;
-    if !metadata.is_dir() {
+    if !sync_io::dir::exists(&dir).map_err(|error| fs_error(&dir, error))? {
+        return match sync_io::file::metadata(&dir) {
+            Ok(metadata) if metadata.is_symlink => {
+                Err(invalid_pack_file(&dir, "symlinks are not allowed"))
+            }
+            Ok(_) => Err(invalid_pack_file(&dir, "expected directory")),
+            Err(_) => Ok(()),
+        };
+    }
+
+    let metadata = sync_io::file::metadata(&dir).map_err(|error| fs_error(&dir, error))?;
+    if metadata.is_symlink {
+        return Err(invalid_pack_file(&dir, "symlinks are not allowed"));
+    }
+    if !metadata.is_dir {
         return Err(invalid_pack_file(&dir, "expected directory"));
     }
     ensure_under_root(pack_root, &dir)?;
 
-    let entries = fs::read_dir(&dir).map_err(|source| SkillError::Io {
-        path: dir.clone(),
-        source,
-    })?;
-    for entry in entries {
-        let entry = entry.map_err(|source| SkillError::Io {
-            path: dir.clone(),
-            source,
-        })?;
-        let path = entry.path();
-        let file_type = entry.file_type().map_err(|source| SkillError::Io {
-            path: path.clone(),
-            source,
-        })?;
-        if file_type.is_symlink() {
+    for entry in sync_io::dir::list(&dir).map_err(|error| fs_error(&dir, error))? {
+        let path = entry.path;
+        if entry.is_symlink {
             return Err(invalid_pack_file(&path, "symlinks are not allowed"));
         }
-        if file_type.is_dir() {
+        if entry.is_dir {
             ensure_under_root(pack_root, &path)?;
             collect_assets(pack_root, path, assets, total_asset_bytes)?;
-        } else if file_type.is_file() {
+        } else if entry.is_file {
             ensure_under_root(pack_root, &path)?;
             let digest = hash_file_bounded(&path, total_asset_bytes)?;
             assets.push(Asset {
@@ -262,21 +258,15 @@ fn collect_assets(
 }
 
 fn read_utf8_bounded(path: &Path, max_bytes: u64) -> Result<String, SkillError> {
-    let file = open_regular_file(path)?;
-    let mut limited = file.take(max_bytes + 1);
-    let mut bytes = Vec::new();
-    limited
-        .read_to_end(&mut bytes)
-        .map_err(|source| SkillError::Io {
-            path: path.to_path_buf(),
-            source,
-        })?;
-    if bytes.len() as u64 > max_bytes {
+    let metadata = sync_io::file::metadata(path).map_err(|error| fs_error(path, error))?;
+    if metadata.len > max_bytes {
         return Err(SkillError::FileTooLarge {
             path: path.to_path_buf(),
             limit_bytes: max_bytes,
         });
     }
+    let bytes = sync_io::file::read_no_follow_regular_bounded(path, max_bytes)
+        .map_err(|error| bounded_read_error(path, max_bytes, error))?;
     String::from_utf8(bytes).map_err(|source| SkillError::InvalidUtf8 {
         path: path.to_path_buf(),
         source,
@@ -323,69 +313,7 @@ fn hash_file_bounded(
 }
 
 fn open_regular_file(path: &Path) -> Result<File, SkillError> {
-    let file = open_no_follow(path)?;
-    let metadata = file.metadata().map_err(|source| SkillError::Io {
-        path: path.to_path_buf(),
-        source,
-    })?;
-
-    if !metadata.is_file() {
-        return Err(invalid_pack_file(path, "expected regular file"));
-    }
-
-    Ok(file)
-}
-
-#[cfg(unix)]
-fn open_no_follow(path: &Path) -> Result<File, SkillError> {
-    OpenOptions::new()
-        .read(true)
-        .custom_flags(libc::O_NOFOLLOW)
-        .open(path)
-        .map_err(|source| open_file_error(path, source))
-}
-
-#[cfg(not(unix))]
-fn open_no_follow(path: &Path) -> Result<File, SkillError> {
-    let metadata = fs::symlink_metadata(path).map_err(|source| SkillError::Io {
-        path: path.to_path_buf(),
-        source,
-    })?;
-    reject_symlink(path, &metadata)?;
-
-    OpenOptions::new()
-        .read(true)
-        .open(path)
-        .map_err(|source| open_file_error(path, source))
-}
-
-fn open_file_error(path: &Path, source: std::io::Error) -> SkillError {
-    if is_symlink_open_error(&source) {
-        invalid_pack_file(path, "symlinks are not allowed")
-    } else {
-        SkillError::Io {
-            path: path.to_path_buf(),
-            source,
-        }
-    }
-}
-
-#[cfg(unix)]
-fn is_symlink_open_error(source: &std::io::Error) -> bool {
-    source.raw_os_error() == Some(libc::ELOOP)
-}
-
-#[cfg(not(unix))]
-fn is_symlink_open_error(_source: &std::io::Error) -> bool {
-    false
-}
-
-fn reject_symlink(path: &Path, metadata: &fs::Metadata) -> Result<(), SkillError> {
-    if metadata.file_type().is_symlink() {
-        Err(invalid_pack_file(path, "symlinks are not allowed"))
-    } else {
-        Ok(())
-    }
+    sync_io::file::open_no_follow_regular(path).map_err(|error| fs_error(path, error))
 }
 
 fn ensure_under_root(pack_root: &Path, path: &Path) -> Result<(), SkillError> {
@@ -398,10 +326,7 @@ fn ensure_under_root(pack_root: &Path, path: &Path) -> Result<(), SkillError> {
 }
 
 fn canonicalize_path(path: &Path) -> Result<PathBuf, SkillError> {
-    path.canonicalize().map_err(|source| SkillError::Io {
-        path: path.to_path_buf(),
-        source,
-    })
+    fs_path::canonicalize(path).map_err(|error| fs_error(path, error))
 }
 
 fn invalid_pack_file(path: &Path, reason: impl Into<String>) -> SkillError {
@@ -419,4 +344,32 @@ fn hex_lower(bytes: &[u8]) -> String {
         out.push(HEX[(byte & 0x0f) as usize] as char);
     }
     out
+}
+
+fn bounded_read_error(path: &Path, limit_bytes: u64, error: AppError) -> SkillError {
+    if error.code == ErrorCode::InvalidInput && error.message.contains("exceeds maximum size") {
+        SkillError::FileTooLarge {
+            path: path.to_path_buf(),
+            limit_bytes,
+        }
+    } else {
+        fs_error(path, error)
+    }
+}
+
+fn fs_error(path: &Path, error: AppError) -> SkillError {
+    if error.code == ErrorCode::InvalidInput {
+        if error.message.contains("symlinks are not allowed") {
+            invalid_pack_file(path, "symlinks are not allowed")
+        } else if error.message.contains("not a regular file") {
+            invalid_pack_file(path, "expected regular file")
+        } else {
+            invalid_pack_file(path, error.message)
+        }
+    } else {
+        SkillError::Io {
+            path: path.to_path_buf(),
+            source: std::io::Error::other(error),
+        }
+    }
 }

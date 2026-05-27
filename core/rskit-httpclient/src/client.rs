@@ -5,6 +5,7 @@ use crate::request::{Request, RequestBody};
 use crate::response::Response;
 use reqwest::Client;
 use rskit_errors::{AppError, AppResult, ErrorCode};
+use rskit_fs::sync_io::file;
 use rskit_security::{TlsConfig, TlsVersion};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -291,7 +292,7 @@ fn apply_tls(
     builder = apply_skip_verify(builder, tls.skip_verify)?;
 
     if let Some(ca_file) = &tls.ca_file {
-        let pem = std::fs::read(ca_file).map_err(|error| {
+        let pem = file::read(ca_file.as_ref()).map_err(|error| {
             AppError::new(
                 ErrorCode::InvalidInput,
                 format!("failed to read HTTP CA bundle '{ca_file}': {error}"),
@@ -309,14 +310,14 @@ fn apply_tls(
     }
 
     if let (Some(cert_file), Some(key_file)) = (&tls.cert_file, &tls.key_file) {
-        let mut pem = std::fs::read(cert_file).map_err(|error| {
+        let mut pem = file::read(cert_file.as_ref()).map_err(|error| {
             AppError::new(
                 ErrorCode::InvalidInput,
                 format!("failed to read HTTP client certificate '{cert_file}': {error}"),
             )
             .with_cause(error)
         })?;
-        let mut key = std::fs::read(key_file).map_err(|error| {
+        let mut key = file::read(key_file.as_ref()).map_err(|error| {
             AppError::new(
                 ErrorCode::InvalidInput,
                 format!("failed to read HTTP client key '{key_file}': {error}"),

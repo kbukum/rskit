@@ -31,6 +31,7 @@ infer           = "0.19"
 
 # Internal
 rskit-errors    = { path = "../rskit-errors" }
+rskit-fs        = { path = "../rskit-fs" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "full"] }

@@ -2,6 +2,7 @@
 
 use chrono::{DateTime, Utc};
 use rskit_errors::AppResult;
+use rskit_fs::async_io::file;
 use serde::{Deserialize, Serialize};
 
 use crate::FileSource;
@@ -129,10 +130,10 @@ pub async fn file_meta(source: &FileSource) -> AppResult<FileMeta> {
         FileSource::Path(p) => {
             let name = p.file_name().map(|n| n.to_string_lossy().to_string());
             let ext = p.extension().map(|e| e.to_string_lossy().to_string());
-            let (created, modified) = match tokio::fs::metadata(p).await {
+            let (created, modified) = match file::metadata(p).await {
                 Ok(meta) => {
-                    let created = meta.created().ok().map(DateTime::<Utc>::from);
-                    let modified = meta.modified().ok().map(DateTime::<Utc>::from);
+                    let created = meta.created.map(DateTime::<Utc>::from);
+                    let modified = meta.modified.map(DateTime::<Utc>::from);
                     (created, modified)
                 }
                 Err(_) => (None, None),

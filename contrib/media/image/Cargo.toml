@@ -15,6 +15,7 @@ keywords               = ["image", "resize", "crop", "processing"]
 
 [dependencies]
 rskit-errors.workspace = true
+rskit-fs.workspace = true
 rskit-storage.workspace = true
 rskit-media.workspace = true
 image        = "0.25"

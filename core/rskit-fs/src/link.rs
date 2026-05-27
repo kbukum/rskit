@@ -61,7 +61,7 @@ pub async fn symlink_dir(original: &Path, link: &Path) -> AppResult<()> {
 #[cfg(test)]
 mod tests {
     use super::{hard_link, read_link};
-    use crate::{TempDir, file};
+    use crate::{TempDir, async_io::file};
 
     #[tokio::test]
     async fn creates_hard_link() {
@@ -104,7 +104,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let original = dir.child("original").unwrap();
         let link = dir.child("link").unwrap();
-        crate::dir::create_dir_all(&original).await.unwrap();
+        crate::async_io::dir::create_all(&original).await.unwrap();
 
         super::symlink_dir(&original, &link).await.unwrap();
 
