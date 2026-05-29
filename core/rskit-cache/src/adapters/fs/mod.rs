@@ -273,6 +273,74 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn registry_build_inherits_global_key_prefix() {
+        let root = temp_root();
+        let mut registry = CacheRegistry::new();
+        register_file_cache(&mut registry, FileCacheConfig::new(&root)).unwrap();
+        let cache = registry
+            .build(&cache_config_with_prefix("global"))
+            .await
+            .unwrap();
+
+        cache.set("key", "value", None).await.unwrap();
+
+        let mut global_config = FileCacheConfig::new(&root);
+        global_config.key_prefix = Some("global".to_owned());
+        assert_eq!(
+            FileCache::new(global_config)
+                .get("key")
+                .await
+                .unwrap()
+                .as_deref(),
+            Some("value")
+        );
+        assert_eq!(
+            FileCache::new(FileCacheConfig::new(&root))
+                .get("key")
+                .await
+                .unwrap(),
+            None
+        );
+        let _ = tokio::fs::remove_dir_all(root).await;
+    }
+
+    #[tokio::test]
+    async fn registry_build_preserves_adapter_key_prefix_override() {
+        let root = temp_root();
+        let mut registry = CacheRegistry::new();
+        let mut adapter_config = FileCacheConfig::new(&root);
+        adapter_config.key_prefix = Some("adapter".to_owned());
+        register_file_cache(&mut registry, adapter_config).unwrap();
+        let cache = registry
+            .build(&cache_config_with_prefix("global"))
+            .await
+            .unwrap();
+
+        cache.set("key", "value", None).await.unwrap();
+
+        let mut adapter_reader_config = FileCacheConfig::new(&root);
+        adapter_reader_config.key_prefix = Some("adapter".to_owned());
+        let mut global_reader_config = FileCacheConfig::new(&root);
+        global_reader_config.key_prefix = Some("global".to_owned());
+        assert_eq!(
+            FileCache::new(adapter_reader_config)
+                .get("key")
+                .await
+                .unwrap()
+                .as_deref(),
+            Some("value")
+        );
+        assert_eq!(
+            FileCache::new(global_reader_config)
+                .get("key")
+                .await
+                .unwrap(),
+            None
+        );
+        let _ = tokio::fs::remove_dir_all(root).await;
+    }
+
+    #[tokio::test]
     async fn rejects_entries_exceeding_configured_size() {
         let root = temp_root();
         let mut config = FileCacheConfig::new(&root);
@@ -361,6 +429,14 @@ mod tests {
             FileCacheConfig::new("cache").max_entry_bytes,
             DEFAULT_MAX_ENTRY_BYTES
         );
+    }
+
+    fn cache_config_with_prefix(prefix: &str) -> CacheConfig {
+        CacheConfig {
+            backend: "fs".to_owned(),
+            key_prefix: Some(prefix.to_owned()),
+            ..CacheConfig::default()
+        }
     }
 
     fn temp_root() -> PathBuf {
