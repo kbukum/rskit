@@ -85,7 +85,6 @@ impl FileCache {
             ));
         }
         if entry.is_expired()? {
-            let _ = tokio::fs::remove_file(path).await;
             return Ok(None);
         }
         Ok(Some(entry))
@@ -256,7 +255,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn expires_entries_on_read() {
+    async fn expired_entries_miss_without_deleting_from_read_path() {
         let root = temp_root();
         let cache = FileCache::new(FileCacheConfig::new(&root));
         let key = cache.prefixed_key("key");
@@ -277,6 +276,7 @@ mod tests {
 
         assert_eq!(cache.get("key").await.unwrap(), None);
         assert!(!cache.exists("key").await.unwrap());
+        assert!(tokio::fs::metadata(path).await.is_ok());
         let _ = tokio::fs::remove_dir_all(root).await;
     }
 
