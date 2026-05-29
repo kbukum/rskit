@@ -7,7 +7,8 @@ use std::time::Duration;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 
 use crate::config::CacheConfig;
-use crate::memory::MemoryCache;
+
+pub use crate::adapters::memory::register_memory;
 
 /// Minimal async cache operations shared by all backends.
 #[async_trait::async_trait]
@@ -103,21 +104,4 @@ impl CacheRegistry {
         })?;
         factory.create(config).await
     }
-}
-
-struct MemoryFactory;
-
-#[async_trait::async_trait]
-impl CacheFactory for MemoryFactory {
-    async fn create(&self, config: &CacheConfig) -> AppResult<Arc<dyn CacheBackend>> {
-        Ok(Arc::new(MemoryCache::new(
-            config.key_prefix.clone(),
-            config.memory.max_entries,
-        )))
-    }
-}
-
-/// Explicitly register the in-memory backend.
-pub fn register_memory(registry: &mut CacheRegistry) -> AppResult<()> {
-    registry.register("memory", Arc::new(MemoryFactory))
 }

@@ -191,7 +191,20 @@ pub fn metadata(path: &Path) -> AppResult<FileMeta> {
 
 /// Atomically write bytes by writing a sibling temp file and renaming it.
 pub fn write_atomic(dest: &Path, bytes: impl AsRef<[u8]>, temp_prefix: &str) -> AppResult<()> {
-    write_atomic_with_attempts(dest, bytes, temp_prefix, WRITE_ATOMIC_TEMP_ATTEMPTS)
+    write_atomic_with_attempts(dest, bytes, temp_prefix, WRITE_ATOMIC_TEMP_ATTEMPTS, false)
+}
+
+/// Atomically write bytes and replace an existing destination when supported.
+///
+/// Replacing an existing destination is atomic on Unix-like platforms. On
+/// Windows, this helper removes the existing file before persisting the temp
+/// file because the platform rename operation cannot replace an existing file.
+pub fn write_atomic_replace(
+    dest: &Path,
+    bytes: impl AsRef<[u8]>,
+    temp_prefix: &str,
+) -> AppResult<()> {
+    write_atomic_with_attempts(dest, bytes, temp_prefix, WRITE_ATOMIC_TEMP_ATTEMPTS, true)
 }
 
 fn write_atomic_with_attempts(
@@ -199,6 +212,7 @@ fn write_atomic_with_attempts(
     bytes: impl AsRef<[u8]>,
     temp_prefix: &str,
     attempts: usize,
+    replace_existing: bool,
 ) -> AppResult<()> {
     create_parent_dir(dest)?;
     let bytes = bytes.as_ref();
@@ -224,7 +238,7 @@ fn write_atomic_with_attempts(
                 .sync_data()
                 .map_err(|error| sync_file_error(&temp_path, error))?;
             drop(temp_file);
-            rename(&temp_path, dest)
+            persist_temp_file_with_replace(&temp_path, dest, replace_existing)
         })();
 
         if result.is_err() {
@@ -240,6 +254,20 @@ fn write_atomic_with_attempts(
             dest.display()
         ),
     ))
+}
+
+fn persist_temp_file_with_replace(
+    temp_path: &Path,
+    dest: &Path,
+    replace_existing: bool,
+) -> AppResult<()> {
+    #[cfg(windows)]
+    if replace_existing {
+        remove_if_exists(dest)?;
+    }
+
+    let _ = replace_existing;
+    rename(temp_path, dest)
 }
 
 /// Canonicalize a path by resolving symlinks and normalizing components.
@@ -426,4 +454,31 @@ fn symlink_not_allowed_error(path: &Path) -> AppError {
         format!("symlinks are not allowed: {}", path.display()),
     )
     .with_detail(RSKIT_FS_ERROR, SYMLINK_NOT_ALLOWED)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{persist_temp_file_with_replace, read_string, write_atomic_replace};
+
+    use crate::TempDir;
+
+    #[test]
+    fn atomic_replace_overwrites_existing_files() {
+        let root = TempDir::new().unwrap();
+        let path = root.write_file("file.txt", b"old").unwrap();
+
+        write_atomic_replace(&path, b"new", "test").unwrap();
+
+        assert_eq!(read_string(&path).unwrap(), "new");
+    }
+
+    #[test]
+    fn replace_policy_still_rejects_destination_directories() {
+        let root = TempDir::new().unwrap();
+        let temp = root.write_file("temp.txt", b"temp").unwrap();
+        let dest = root.child("dest").unwrap();
+        std::fs::create_dir_all(&dest).unwrap();
+
+        assert!(persist_temp_file_with_replace(&temp, &dest, true).is_err());
+    }
 }

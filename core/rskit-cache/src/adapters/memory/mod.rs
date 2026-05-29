@@ -1,4 +1,4 @@
-//! In-memory cache backend.
+//! In-memory cache adapter.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -7,7 +7,8 @@ use std::time::{Duration, Instant};
 use parking_lot::Mutex;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 
-use crate::registry::CacheBackend;
+use crate::config::CacheConfig;
+use crate::registry::{CacheBackend, CacheFactory, CacheRegistry};
 
 #[derive(Clone)]
 struct Entry {
@@ -21,7 +22,7 @@ impl Entry {
     }
 }
 
-/// Lean in-process cache backend used as the default core implementation.
+/// Lean in-process cache adapter used as the default core implementation.
 pub struct MemoryCache {
     prefix: Option<String>,
     max_entries: Option<usize>,
@@ -138,6 +139,23 @@ impl Default for MemoryCache {
     fn default() -> Self {
         Self::new(None, None)
     }
+}
+
+struct MemoryFactory;
+
+#[async_trait::async_trait]
+impl CacheFactory for MemoryFactory {
+    async fn create(&self, config: &CacheConfig) -> AppResult<Arc<dyn CacheBackend>> {
+        Ok(Arc::new(MemoryCache::new(
+            config.key_prefix.clone(),
+            config.memory.max_entries,
+        )))
+    }
+}
+
+/// Explicitly register the in-memory adapter.
+pub fn register_memory(registry: &mut CacheRegistry) -> AppResult<()> {
+    registry.register("memory", Arc::new(MemoryFactory))
 }
 
 #[cfg(test)]

@@ -1,7 +1,7 @@
 # rskit-cache
 
-Cache abstraction with an in-memory default, explicit backend registry, and
-typed JSON store. External backends live in `contrib/` adapter crates.
+Cache abstraction with built-in local adapters, explicit backend registry, and
+typed JSON store. Remote infrastructure adapters live in `contrib/` crates.
 
 ```rust,no_run
 use rskit_cache::{CacheConfig, CacheRegistry, MemoryConfig, TypedStore, register_memory};

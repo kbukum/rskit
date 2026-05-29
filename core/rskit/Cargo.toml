@@ -108,6 +108,7 @@ auth          = ["dep:rskit-auth"]
 di            = ["dep:rskit-di"]
 database      = ["dep:rskit-database"]
 cache         = ["dep:rskit-cache"]
+cache-fs      = ["cache", "rskit-cache/fs"]
 cache-redis   = ["cache", "dep:rskit-cache-redis"]
 messaging     = ["dep:rskit-messaging"]
 messaging-kafka = ["messaging", "dep:rskit-messaging-kafka"]
@@ -154,7 +155,7 @@ process       = ["dep:rskit-process"]
 stateful      = ["dep:rskit-stateful"]
 full          = [
     "server", "grpc", "encryption", "http", "httpclient", "auth", "di", "database", "cache", "messaging",
-    "cache-redis", "messaging-kafka", "messaging-nats", "messaging-rabbitmq",
+    "cache-fs", "cache-redis", "messaging-kafka", "messaging-nats", "messaging-rabbitmq",
     "observability", "authz", "security", "discovery", "sse", "dag", "genai", "llm",
     "llm-openai", "llm-anthropic", "llm-ollama", "llm-gemini", "embedding",
     "inference", "inference-triton", "inference-vllm", "inference-tgi",

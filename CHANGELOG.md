@@ -43,6 +43,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   operation naming with current OpenTelemetry conventions.
 - **Contrib adapters**: standardized storage, messaging, LLM, inference, and media adapters around explicit `Config` plus `register(&mut Registry, Config)` entry points with hidden vendor/concrete implementation surfaces.
 - **L6 data backends**: aligned database, cache, storage, messaging, and vectorstore around explicit registries, config-key backend selection, and core-only in-memory/local defaults; moved Redis and Qdrant integrations to contrib adapters.
+- **rskit-cache**: added a built-in filesystem cache adapter with a facade
+  feature for filesystem-backed cache usage.
 - **L6 auth/authz**: made request authentication fail closed by default with typed optional-auth outcomes, masked credential-bearing formatting paths, aligned OIDC HTTP usage with the canonical HTTP client, and added Tower authorization middleware.
 - **L5 transport**: aligned HTTP/server/client/gRPC/SSE/discovery boundaries with explicit security ownership, direct HTTPS serving, baseline server middleware, toolkit-native SSE events, and explicit discovery registries.
 - **rskit-observability**: replaced process-global tracer initialization with injectable OpenTelemetry providers for traces, metrics, and logs, with OTLP gRPC/HTTP support.
