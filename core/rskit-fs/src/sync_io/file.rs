@@ -455,3 +455,30 @@ fn symlink_not_allowed_error(path: &Path) -> AppError {
     )
     .with_detail(RSKIT_FS_ERROR, SYMLINK_NOT_ALLOWED)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{persist_temp_file_with_replace, read_string, write_atomic_replace};
+
+    use crate::TempDir;
+
+    #[test]
+    fn atomic_replace_overwrites_existing_files() {
+        let root = TempDir::new().unwrap();
+        let path = root.write_file("file.txt", b"old").unwrap();
+
+        write_atomic_replace(&path, b"new", "test").unwrap();
+
+        assert_eq!(read_string(&path).unwrap(), "new");
+    }
+
+    #[test]
+    fn replace_policy_still_rejects_destination_directories() {
+        let root = TempDir::new().unwrap();
+        let temp = root.write_file("temp.txt", b"temp").unwrap();
+        let dest = root.child("dest").unwrap();
+        std::fs::create_dir_all(&dest).unwrap();
+
+        assert!(persist_temp_file_with_replace(&temp, &dest, true).is_err());
+    }
+}
