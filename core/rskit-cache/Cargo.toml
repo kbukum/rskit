@@ -17,6 +17,10 @@ keywords   = ["cache", "memory", "store"]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[features]
+default = []
+fs = ["dep:blake3"]
+
 [dependencies]
 # External
 serde           = { workspace = true }
@@ -25,6 +29,7 @@ async-trait     = { workspace = true }
 tokio           = { workspace = true }
 tracing         = { workspace = true }
 parking_lot     = { workspace = true }
+blake3          = { version = "1", optional = true }
 
 # Internal
 rskit-errors    = { path = "../rskit-errors" }
