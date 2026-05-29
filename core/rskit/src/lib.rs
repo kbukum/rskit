@@ -30,7 +30,8 @@
 //! | `auth`   | `rskit-auth` (JWT, OIDC, password) |
 //! | `di`     | `rskit-di` (dependency injection) |
 //! | `database` | `rskit-database` (core + memory backend) |
-//! | `cache`  | `rskit-cache` (core + memory backend) |
+//! | `cache`  | `rskit-cache` (core + memory adapter) |
+//! | `cache-fs` | Filesystem cache adapter |
 //! | `cache-redis` | Redis cache adapter |
 //! | `messaging` | `rskit-messaging` (core abstractions + in-memory backend) |
 //! | `messaging-kafka` | `Kafka` messaging adapter |

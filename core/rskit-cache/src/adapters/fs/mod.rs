@@ -3,13 +3,11 @@
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
-    sync::atomic::{AtomicU64, Ordering},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use serde::{Deserialize, Serialize};
-use tokio::io::AsyncWriteExt as _;
 
 use crate::{CacheBackend, CacheConfig, CacheFactory, CacheRegistry};
 
@@ -111,20 +109,6 @@ impl CacheBackend for FileCache {
         }
         let key = self.prefixed_key(key);
         let path = self.entry_path(&key);
-        let parent = path.parent().ok_or_else(|| {
-            AppError::new(
-                ErrorCode::InvalidInput,
-                format!("invalid cache path '{}'", path.display()),
-            )
-        })?;
-        tokio::fs::create_dir_all(parent).await.map_err(|error| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!("failed to create cache directory '{}'", parent.display()),
-            )
-            .with_cause(error)
-        })?;
-
         let entry = Entry {
             key,
             value: val.to_owned(),
@@ -133,40 +117,7 @@ impl CacheBackend for FileCache {
         let json = serde_json::to_vec(&entry).map_err(|error| {
             AppError::new(ErrorCode::Internal, "failed to encode cache entry").with_cause(error)
         })?;
-        let tmp = temp_path(&path)?;
-        let mut file = tokio::fs::File::create_new(&tmp).await.map_err(|error| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!("failed to create cache temp file '{}'", tmp.display()),
-            )
-            .with_cause(error)
-        })?;
-        file.write_all(&json).await.map_err(|error| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!("failed to write cache temp file '{}'", tmp.display()),
-            )
-            .with_cause(error)
-        })?;
-        file.sync_all().await.map_err(|error| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!("failed to sync cache temp file '{}'", tmp.display()),
-            )
-            .with_cause(error)
-        })?;
-        drop(file);
-        tokio::fs::rename(&tmp, &path).await.map_err(|error| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!(
-                    "failed to atomically store cache entry '{}' from '{}'",
-                    path.display(),
-                    tmp.display()
-                ),
-            )
-            .with_cause(error)
-        })
+        rskit_fs::async_io::file::write_atomic(&path, json, "rskit-cache").await
     }
 
     async fn delete(&self, key: &str) -> AppResult<bool> {
@@ -241,16 +192,6 @@ fn now_millis() -> AppResult<u128> {
         })
 }
 
-fn temp_path(path: &Path) -> AppResult<PathBuf> {
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-    Ok(path.with_extension(format!(
-        "tmp-{}-{}-{}",
-        std::process::id(),
-        now_millis()?,
-        COUNTER.fetch_add(1, Ordering::Relaxed)
-    )))
-}
-
 fn ttl_error() -> AppError {
     AppError::new(
         ErrorCode::InvalidInput,
@@ -260,11 +201,13 @@ fn ttl_error() -> AppError {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicU64, Ordering};
+
     use super::*;
 
     #[tokio::test]
     async fn stores_and_reads_values() {
-        let root = std::env::temp_dir().join(format!("rskit-cache-fs-{}", now_millis().unwrap()));
+        let root = temp_root();
         let cache = FileCache::new(FileCacheConfig::new(&root));
 
         cache.set("key", "value", None).await.unwrap();
@@ -274,5 +217,45 @@ mod tests {
         assert!(cache.delete("key").await.unwrap());
         assert!(!cache.exists("key").await.unwrap());
         let _ = tokio::fs::remove_dir_all(root).await;
+    }
+
+    #[tokio::test]
+    async fn rejects_zero_ttl() {
+        let root = temp_root();
+        let cache = FileCache::new(FileCacheConfig::new(&root));
+
+        let err = cache
+            .set("key", "value", Some(Duration::ZERO))
+            .await
+            .expect_err("zero TTL must be rejected");
+
+        assert_eq!(err.code, ErrorCode::InvalidInput);
+        let _ = tokio::fs::remove_dir_all(root).await;
+    }
+
+    #[tokio::test]
+    async fn expires_entries_on_read() {
+        let root = temp_root();
+        let cache = FileCache::new(FileCacheConfig::new(&root));
+
+        cache
+            .set("key", "value", Some(Duration::from_millis(1)))
+            .await
+            .unwrap();
+        tokio::time::sleep(Duration::from_millis(5)).await;
+
+        assert_eq!(cache.get("key").await.unwrap(), None);
+        assert!(!cache.exists("key").await.unwrap());
+        let _ = tokio::fs::remove_dir_all(root).await;
+    }
+
+    fn temp_root() -> PathBuf {
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        std::env::temp_dir().join(format!(
+            "rskit-cache-fs-{}-{}-{}",
+            std::process::id(),
+            now_millis().unwrap(),
+            COUNTER.fetch_add(1, Ordering::Relaxed)
+        ))
     }
 }

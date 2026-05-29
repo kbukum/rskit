@@ -5490,6 +5490,7 @@ dependencies = [
  "blake3",
  "parking_lot",
  "rskit-errors",
+ "rskit-fs",
  "serde",
  "serde_json",
  "tokio",

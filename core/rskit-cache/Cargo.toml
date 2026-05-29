@@ -19,7 +19,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 default = []
-fs = ["dep:blake3"]
+fs = ["dep:blake3", "dep:rskit-fs"]
 
 [dependencies]
 # External
@@ -33,6 +33,7 @@ blake3          = { version = "1", optional = true }
 
 # Internal
 rskit-errors    = { path = "../rskit-errors" }
+rskit-fs        = { path = "../rskit-fs", optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
