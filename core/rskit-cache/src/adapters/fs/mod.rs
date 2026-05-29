@@ -8,6 +8,7 @@ use std::{
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use serde::{Deserialize, Serialize};
+use tokio::sync::Mutex;
 
 use crate::{CacheBackend, CacheConfig, CacheFactory, CacheRegistry};
 
@@ -44,13 +45,17 @@ impl FileCacheConfig {
 /// Persistent filesystem cache adapter.
 pub struct FileCache {
     config: FileCacheConfig,
+    mutation_lock: Arc<Mutex<()>>,
 }
 
 impl FileCache {
     /// Create a filesystem cache adapter.
     #[must_use]
     pub fn new(config: FileCacheConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+            mutation_lock: Arc::new(Mutex::new(())),
+        }
     }
 
     fn prefixed_key(&self, key: &str) -> String {
@@ -66,6 +71,22 @@ impl FileCache {
     }
 
     async fn read_entry(&self, path: &Path, expected_key: &str) -> AppResult<Option<Entry>> {
+        let Some(entry) = self.read_entry_file(path).await? else {
+            return Ok(None);
+        };
+        if entry.key != expected_key {
+            return Err(AppError::new(
+                ErrorCode::Conflict,
+                format!("cache key collision for '{}'", path.display()),
+            ));
+        }
+        if entry.is_expired()? {
+            return Ok(None);
+        }
+        Ok(Some(entry))
+    }
+
+    async fn read_entry_file(&self, path: &Path) -> AppResult<Option<Entry>> {
         let bytes =
             match rskit_fs::async_io::file::read_bounded(path, self.config.max_entry_bytes).await {
                 Ok(bytes) => bytes,
@@ -79,16 +100,61 @@ impl FileCache {
             )
             .with_cause(error)
         })?;
-        if entry.key != expected_key {
-            return Err(AppError::new(
-                ErrorCode::Conflict,
-                format!("cache key collision for '{}'", path.display()),
-            ));
-        }
-        if entry.is_expired()? {
-            return Ok(None);
-        }
         Ok(Some(entry))
+    }
+
+    /// Remove expired cache entries, checking at most `max_entries` files.
+    ///
+    /// Reads stay non-destructive to avoid unlinking a concurrent fresh write.
+    /// Call this method from application-owned maintenance code when filesystem
+    /// cache entries use TTLs and the cache directory needs bounded cleanup.
+    pub async fn cleanup_expired(&self, max_entries: usize) -> AppResult<usize> {
+        if max_entries == 0 {
+            return Ok(0);
+        }
+
+        let _guard = self.mutation_lock.lock().await;
+        let mut checked = 0;
+        let mut removed = 0;
+        if !rskit_fs::async_io::dir::exists(&self.config.root).await? {
+            return Ok(0);
+        }
+        let shard_dirs = rskit_fs::async_io::dir::list(&self.config.root).await?;
+
+        for shard in shard_dirs.into_iter().filter(|entry| entry.is_dir) {
+            let entries = match rskit_fs::async_io::dir::list(&shard.path).await {
+                Ok(entries) => entries,
+                Err(error) if is_not_found_error(&error) => continue,
+                Err(error) => return Err(error),
+            };
+            for entry in entries.into_iter().filter(|entry| entry.is_file) {
+                if checked == max_entries {
+                    return Ok(removed);
+                }
+                checked += 1;
+                let Some(cache_entry) = self.read_entry_file(&entry.path).await? else {
+                    continue;
+                };
+                if cache_entry.is_expired()? {
+                    match tokio::fs::remove_file(&entry.path).await {
+                        Ok(()) => removed += 1,
+                        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                        Err(error) => {
+                            return Err(AppError::new(
+                                ErrorCode::Internal,
+                                format!(
+                                    "failed to delete expired cache entry '{}'",
+                                    entry.path.display()
+                                ),
+                            )
+                            .with_cause(error));
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(removed)
     }
 }
 
@@ -124,12 +190,14 @@ impl CacheBackend for FileCache {
                 self.config.max_entry_bytes,
             ));
         }
+        let _guard = self.mutation_lock.lock().await;
         rskit_fs::async_io::file::write_atomic_replace(&path, json, "rskit-cache").await
     }
 
     async fn delete(&self, key: &str) -> AppResult<bool> {
         let key = self.prefixed_key(key);
         let path = self.entry_path(&key);
+        let _guard = self.mutation_lock.lock().await;
         match tokio::fs::remove_file(&path).await {
             Ok(()) => Ok(true),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
@@ -398,24 +466,70 @@ mod tests {
         let cache = FileCache::new(FileCacheConfig::new(&root));
         let key = cache.prefixed_key("key");
         let path = cache.entry_path(&key);
-        let entry = Entry {
-            key,
-            value: "value".to_owned(),
-            expires_at_millis: Some(now_millis().unwrap().saturating_sub(1)),
-        };
+        let entry = expired_entry(key, "value");
 
-        rskit_fs::async_io::file::write_atomic_replace(
-            &path,
-            serde_json::to_vec(&entry).unwrap(),
-            "rskit-cache-test",
-        )
-        .await
-        .unwrap();
+        write_entry(&path, &entry).await;
 
         assert_eq!(cache.get("key").await.unwrap(), None);
         assert!(!cache.exists("key").await.unwrap());
         assert!(tokio::fs::metadata(path).await.is_ok());
         let _ = tokio::fs::remove_dir_all(root).await;
+    }
+
+    #[tokio::test]
+    async fn cleanup_expired_removes_expired_entries_without_deleting_live_entries() {
+        let root = temp_root();
+        let cache = FileCache::new(FileCacheConfig::new(&root));
+        let expired_key = cache.prefixed_key("expired");
+        let expired_path = cache.entry_path(&expired_key);
+        let live_key = cache.prefixed_key("live");
+        let live_path = cache.entry_path(&live_key);
+
+        write_entry(&expired_path, &expired_entry(expired_key, "expired")).await;
+        write_entry(
+            &live_path,
+            &Entry {
+                key: live_key,
+                value: "live".to_owned(),
+                expires_at_millis: Some(now_millis().unwrap() + 60_000),
+            },
+        )
+        .await;
+
+        assert_eq!(cache.cleanup_expired(16).await.unwrap(), 1);
+        assert!(tokio::fs::metadata(expired_path).await.is_err());
+        assert!(tokio::fs::metadata(live_path).await.is_ok());
+        assert_eq!(cache.get("live").await.unwrap().as_deref(), Some("live"));
+        let _ = tokio::fs::remove_dir_all(root).await;
+    }
+
+    #[tokio::test]
+    async fn cleanup_expired_checks_at_most_requested_entries() {
+        let root = temp_root();
+        let cache = FileCache::new(FileCacheConfig::new(&root));
+        let first_key = cache.prefixed_key("first");
+        let first_path = cache.entry_path(&first_key);
+        let second_key = cache.prefixed_key("second");
+        let second_path = cache.entry_path(&second_key);
+
+        write_entry(&first_path, &expired_entry(first_key, "first")).await;
+        write_entry(&second_path, &expired_entry(second_key, "second")).await;
+
+        assert_eq!(cache.cleanup_expired(1).await.unwrap(), 1);
+        let remaining = [first_path, second_path]
+            .into_iter()
+            .filter(|path| path.exists())
+            .count();
+        assert_eq!(remaining, 1);
+        let _ = tokio::fs::remove_dir_all(root).await;
+    }
+
+    #[tokio::test]
+    async fn cleanup_expired_returns_zero_when_cache_root_is_missing() {
+        let root = temp_root();
+        let cache = FileCache::new(FileCacheConfig::new(&root));
+
+        assert_eq!(cache.cleanup_expired(16).await.unwrap(), 0);
     }
 
     #[test]
@@ -437,6 +551,24 @@ mod tests {
             key_prefix: Some(prefix.to_owned()),
             ..CacheConfig::default()
         }
+    }
+
+    fn expired_entry(key: String, value: &str) -> Entry {
+        Entry {
+            key,
+            value: value.to_owned(),
+            expires_at_millis: Some(now_millis().unwrap().saturating_sub(1)),
+        }
+    }
+
+    async fn write_entry(path: &Path, entry: &Entry) {
+        rskit_fs::async_io::file::write_atomic_replace(
+            path,
+            serde_json::to_vec(entry).unwrap(),
+            "rskit-cache-test",
+        )
+        .await
+        .unwrap();
     }
 
     fn temp_root() -> PathBuf {
