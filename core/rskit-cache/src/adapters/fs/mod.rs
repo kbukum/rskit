@@ -11,6 +11,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{CacheBackend, CacheConfig, CacheFactory, CacheRegistry};
 
+const DEFAULT_MAX_ENTRY_BYTES: u64 = 16 * 1024 * 1024;
+
 /// Filesystem cache configuration.
 ///
 /// The root path is supplied when registering the adapter because it is a
@@ -22,6 +24,9 @@ pub struct FileCacheConfig {
     pub root: PathBuf,
     /// Optional prefix prepended to every key.
     pub key_prefix: Option<String>,
+    /// Maximum serialized cache-entry size accepted by reads and writes.
+    #[serde(default = "default_max_entry_bytes")]
+    pub max_entry_bytes: u64,
 }
 
 impl FileCacheConfig {
@@ -31,6 +36,7 @@ impl FileCacheConfig {
         Self {
             root: root.into(),
             key_prefix: None,
+            max_entry_bytes: DEFAULT_MAX_ENTRY_BYTES,
         }
     }
 }
@@ -60,17 +66,12 @@ impl FileCache {
     }
 
     async fn read_entry(&self, path: &Path, expected_key: &str) -> AppResult<Option<Entry>> {
-        let bytes = match tokio::fs::read(path).await {
-            Ok(bytes) => bytes,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(error) => {
-                return Err(AppError::new(
-                    ErrorCode::Internal,
-                    format!("failed to read cache entry '{}'", path.display()),
-                )
-                .with_cause(error));
-            }
-        };
+        let bytes =
+            match rskit_fs::async_io::file::read_bounded(path, self.config.max_entry_bytes).await {
+                Ok(bytes) => bytes,
+                Err(error) if is_not_found_error(&error) => return Ok(None),
+                Err(error) => return Err(error),
+            };
         let entry: Entry = serde_json::from_slice(&bytes).map_err(|error| {
             AppError::new(
                 ErrorCode::Internal,
@@ -116,6 +117,13 @@ impl CacheBackend for FileCache {
         let json = serde_json::to_vec(&entry).map_err(|error| {
             AppError::new(ErrorCode::Internal, "failed to encode cache entry").with_cause(error)
         })?;
+        if json.len() as u64 > self.config.max_entry_bytes {
+            return Err(cache_entry_too_large_error(
+                &path,
+                json.len() as u64,
+                self.config.max_entry_bytes,
+            ));
+        }
         rskit_fs::async_io::file::write_atomic_replace(&path, json, "rskit-cache").await
     }
 
@@ -208,6 +216,30 @@ fn ttl_error() -> AppError {
     )
 }
 
+const fn default_max_entry_bytes() -> u64 {
+    DEFAULT_MAX_ENTRY_BYTES
+}
+
+fn is_not_found_error(error: &AppError) -> bool {
+    error
+        .cause()
+        .and_then(|cause| cause.downcast_ref::<std::io::Error>())
+        .is_some_and(|cause| cause.kind() == std::io::ErrorKind::NotFound)
+}
+
+fn cache_entry_too_large_error(path: &Path, actual: u64, limit: u64) -> AppError {
+    AppError::new(
+        ErrorCode::InvalidInput,
+        format!(
+            "cache entry '{}' is {actual} bytes, exceeding limit {limit} bytes",
+            path.display()
+        ),
+    )
+    .with_detail("rskit_cache_error", "entry_too_large")
+    .with_detail("actual_bytes", actual)
+    .with_detail("limit_bytes", limit)
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
@@ -237,6 +269,44 @@ mod tests {
         cache.set("key", "new", None).await.unwrap();
 
         assert_eq!(cache.get("key").await.unwrap().as_deref(), Some("new"));
+        let _ = tokio::fs::remove_dir_all(root).await;
+    }
+
+    #[tokio::test]
+    async fn rejects_entries_exceeding_configured_size() {
+        let root = temp_root();
+        let mut config = FileCacheConfig::new(&root);
+        config.max_entry_bytes = 8;
+        let cache = FileCache::new(config);
+
+        let err = cache
+            .set("key", "value larger than limit", None)
+            .await
+            .expect_err("oversized entries must be rejected");
+
+        assert_eq!(err.code, ErrorCode::InvalidInput);
+        let _ = tokio::fs::remove_dir_all(root).await;
+    }
+
+    #[tokio::test]
+    async fn rejects_oversized_entry_files_before_decoding() {
+        let root = temp_root();
+        let mut config = FileCacheConfig::new(&root);
+        config.max_entry_bytes = 8;
+        let cache = FileCache::new(config);
+        let key = cache.prefixed_key("key");
+        let path = cache.entry_path(&key);
+
+        rskit_fs::async_io::file::write_atomic_replace(&path, b"012345678", "rskit-cache-test")
+            .await
+            .unwrap();
+
+        let err = cache
+            .get("key")
+            .await
+            .expect_err("oversized entry files must be rejected");
+
+        assert_eq!(err.code, ErrorCode::InvalidInput);
         let _ = tokio::fs::remove_dir_all(root).await;
     }
 
@@ -283,6 +353,14 @@ mod tests {
     #[test]
     fn positive_sub_millisecond_ttl_rounds_up() {
         assert_eq!(ttl_millis(Duration::from_nanos(1)).unwrap(), 1);
+    }
+
+    #[test]
+    fn new_config_uses_default_entry_size_limit() {
+        assert_eq!(
+            FileCacheConfig::new("cache").max_entry_bytes,
+            DEFAULT_MAX_ENTRY_BYTES
+        );
     }
 
     fn temp_root() -> PathBuf {
