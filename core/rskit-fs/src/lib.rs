@@ -11,7 +11,9 @@
 //! - sync tree copy/list operations do not follow symlinks unless explicitly requested;
 //! - use `async_io::file::write_atomic` or `sync_io::file::write_atomic` for same-filesystem writes
 //!   without exposing partial files, and `write_atomic_replace` when existing files should be
-//!   replaced;
+//!   replaced (existing-file replacement is atomic on Unix-like platforms; Windows replacement
+//!   removes the destination before renaming because the platform rename operation cannot replace
+//!   an existing file);
 //! - use [`permissions`] capability checks before performing optional user-facing operations when
 //!   the `async` feature is enabled.
 

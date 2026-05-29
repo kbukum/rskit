@@ -8,6 +8,8 @@ use rskit_errors::{AppError, AppResult, ErrorCode};
 
 use crate::config::CacheConfig;
 
+pub use crate::adapters::memory::register_memory;
+
 /// Minimal async cache operations shared by all backends.
 #[async_trait::async_trait]
 pub trait CacheBackend: Send + Sync {
