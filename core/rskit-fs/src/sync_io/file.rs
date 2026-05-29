@@ -191,7 +191,20 @@ pub fn metadata(path: &Path) -> AppResult<FileMeta> {
 
 /// Atomically write bytes by writing a sibling temp file and renaming it.
 pub fn write_atomic(dest: &Path, bytes: impl AsRef<[u8]>, temp_prefix: &str) -> AppResult<()> {
-    write_atomic_with_attempts(dest, bytes, temp_prefix, WRITE_ATOMIC_TEMP_ATTEMPTS)
+    write_atomic_with_attempts(dest, bytes, temp_prefix, WRITE_ATOMIC_TEMP_ATTEMPTS, false)
+}
+
+/// Atomically write bytes and replace an existing destination when supported.
+///
+/// Replacing an existing destination is atomic on Unix-like platforms. On
+/// Windows, this helper removes the existing file before persisting the temp
+/// file because the platform rename operation cannot replace an existing file.
+pub fn write_atomic_replace(
+    dest: &Path,
+    bytes: impl AsRef<[u8]>,
+    temp_prefix: &str,
+) -> AppResult<()> {
+    write_atomic_with_attempts(dest, bytes, temp_prefix, WRITE_ATOMIC_TEMP_ATTEMPTS, true)
 }
 
 fn write_atomic_with_attempts(
@@ -199,6 +212,7 @@ fn write_atomic_with_attempts(
     bytes: impl AsRef<[u8]>,
     temp_prefix: &str,
     attempts: usize,
+    replace_existing: bool,
 ) -> AppResult<()> {
     create_parent_dir(dest)?;
     let bytes = bytes.as_ref();
@@ -224,7 +238,7 @@ fn write_atomic_with_attempts(
                 .sync_data()
                 .map_err(|error| sync_file_error(&temp_path, error))?;
             drop(temp_file);
-            rename(&temp_path, dest)
+            persist_temp_file_with_replace(&temp_path, dest, replace_existing)
         })();
 
         if result.is_err() {
@@ -240,6 +254,20 @@ fn write_atomic_with_attempts(
             dest.display()
         ),
     ))
+}
+
+fn persist_temp_file_with_replace(
+    temp_path: &Path,
+    dest: &Path,
+    replace_existing: bool,
+) -> AppResult<()> {
+    #[cfg(windows)]
+    if replace_existing {
+        remove_if_exists(dest)?;
+    }
+
+    let _ = replace_existing;
+    rename(temp_path, dest)
 }
 
 /// Canonicalize a path by resolving symlinks and normalizing components.

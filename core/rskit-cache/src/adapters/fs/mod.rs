@@ -117,7 +117,7 @@ impl CacheBackend for FileCache {
         let json = serde_json::to_vec(&entry).map_err(|error| {
             AppError::new(ErrorCode::Internal, "failed to encode cache entry").with_cause(error)
         })?;
-        rskit_fs::async_io::file::write_atomic(&path, json, "rskit-cache").await
+        rskit_fs::async_io::file::write_atomic_replace(&path, json, "rskit-cache").await
     }
 
     async fn delete(&self, key: &str) -> AppResult<bool> {
@@ -176,10 +176,20 @@ impl Entry {
 }
 
 fn expires_at_millis(ttl: Option<Duration>) -> AppResult<Option<u128>> {
-    ttl.map(|ttl| {
-        now_millis().and_then(|now| now.checked_add(ttl.as_millis()).ok_or_else(ttl_error))
-    })
-    .transpose()
+    ttl.map(ttl_millis)
+        .transpose()?
+        .map(|ttl| now_millis().and_then(|now| now.checked_add(ttl).ok_or_else(ttl_error)))
+        .transpose()
+}
+
+fn ttl_millis(ttl: Duration) -> AppResult<u128> {
+    if ttl.is_zero() {
+        return Err(AppError::new(
+            ErrorCode::InvalidInput,
+            "cache TTL must be greater than zero",
+        ));
+    }
+    Ok(ttl.as_millis().max(1))
 }
 
 fn now_millis() -> AppResult<u128> {
@@ -220,6 +230,18 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn updates_existing_values() {
+        let root = temp_root();
+        let cache = FileCache::new(FileCacheConfig::new(&root));
+
+        cache.set("key", "old", None).await.unwrap();
+        cache.set("key", "new", None).await.unwrap();
+
+        assert_eq!(cache.get("key").await.unwrap().as_deref(), Some("new"));
+        let _ = tokio::fs::remove_dir_all(root).await;
+    }
+
+    #[tokio::test]
     async fn rejects_zero_ttl() {
         let root = temp_root();
         let cache = FileCache::new(FileCacheConfig::new(&root));
@@ -237,16 +259,30 @@ mod tests {
     async fn expires_entries_on_read() {
         let root = temp_root();
         let cache = FileCache::new(FileCacheConfig::new(&root));
+        let key = cache.prefixed_key("key");
+        let path = cache.entry_path(&key);
+        let entry = Entry {
+            key,
+            value: "value".to_owned(),
+            expires_at_millis: Some(now_millis().unwrap().saturating_sub(1)),
+        };
 
-        cache
-            .set("key", "value", Some(Duration::from_millis(1)))
-            .await
-            .unwrap();
-        tokio::time::sleep(Duration::from_millis(5)).await;
+        rskit_fs::async_io::file::write_atomic_replace(
+            &path,
+            serde_json::to_vec(&entry).unwrap(),
+            "rskit-cache-test",
+        )
+        .await
+        .unwrap();
 
         assert_eq!(cache.get("key").await.unwrap(), None);
         assert!(!cache.exists("key").await.unwrap());
         let _ = tokio::fs::remove_dir_all(root).await;
+    }
+
+    #[test]
+    fn positive_sub_millisecond_ttl_rounds_up() {
+        assert_eq!(ttl_millis(Duration::from_nanos(1)).unwrap(), 1);
     }
 
     fn temp_root() -> PathBuf {

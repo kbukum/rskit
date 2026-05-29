@@ -214,7 +214,20 @@ pub async fn write_atomic(
     bytes: impl AsRef<[u8]>,
     temp_prefix: &str,
 ) -> AppResult<()> {
-    write_atomic_with_attempts(dest, bytes, temp_prefix, WRITE_ATOMIC_TEMP_ATTEMPTS).await
+    write_atomic_with_attempts(dest, bytes, temp_prefix, WRITE_ATOMIC_TEMP_ATTEMPTS, false).await
+}
+
+/// Atomically write bytes and replace an existing destination when supported.
+///
+/// Replacing an existing destination is atomic on Unix-like platforms. On
+/// Windows, this helper removes the existing file before persisting the temp
+/// file because the platform rename operation cannot replace an existing file.
+pub async fn write_atomic_replace(
+    dest: &Path,
+    bytes: impl AsRef<[u8]>,
+    temp_prefix: &str,
+) -> AppResult<()> {
+    write_atomic_with_attempts(dest, bytes, temp_prefix, WRITE_ATOMIC_TEMP_ATTEMPTS, true).await
 }
 
 async fn write_atomic_with_attempts(
@@ -222,6 +235,7 @@ async fn write_atomic_with_attempts(
     bytes: impl AsRef<[u8]>,
     temp_prefix: &str,
     attempts: usize,
+    replace_existing: bool,
 ) -> AppResult<()> {
     create_parent_dir(dest).await?;
 
@@ -249,7 +263,7 @@ async fn write_atomic_with_attempts(
                 .await
                 .map_err(|error| sync_temp_file_error(&temp_path, error))?;
             drop(temp_file);
-            persist_temp_file(&temp_path, dest).await
+            persist_temp_file_with_replace(&temp_path, dest, replace_existing).await
         }
         .await;
 
@@ -261,6 +275,20 @@ async fn write_atomic_with_attempts(
     }
 
     Err(unique_temp_file_error(dest, attempts))
+}
+
+async fn persist_temp_file_with_replace(
+    temp_path: &Path,
+    dest: &Path,
+    replace_existing: bool,
+) -> AppResult<()> {
+    #[cfg(windows)]
+    if replace_existing {
+        remove_if_exists(dest).await?;
+    }
+
+    let _ = replace_existing;
+    persist_temp_file(temp_path, dest).await
 }
 
 fn should_retry_temp_open(error: &std::io::Error) -> bool {
@@ -390,10 +418,11 @@ mod tests {
     use super::{
         WRITE_ATOMIC_TEMP_ATTEMPTS, copy, copy_file_error, create_parent_dir,
         create_temp_file_error, exists, exists_from_metadata, inspect_file_error, metadata,
-        move_file, move_file_after_rename, move_file_error, persist_temp_file, read,
-        read_file_error, read_string, remove, remove_file_error, remove_if_exists, rename,
-        rename_file_error, should_retry_temp_open, sync_temp_file_error, unique_temp_file_error,
-        write, write_atomic, write_atomic_with_attempts, write_file_error, write_temp_file_error,
+        move_file, move_file_after_rename, move_file_error, persist_temp_file,
+        persist_temp_file_with_replace, read, read_file_error, read_string, remove,
+        remove_file_error, remove_if_exists, rename, rename_file_error, should_retry_temp_open,
+        sync_temp_file_error, unique_temp_file_error, write, write_atomic, write_atomic_replace,
+        write_atomic_with_attempts, write_file_error, write_temp_file_error,
     };
     use crate::TempDir;
 
@@ -592,6 +621,16 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn atomic_replace_overwrites_existing_files() {
+        let root = TempDir::new().unwrap();
+        let path = root.write_file("file.txt", b"old").unwrap();
+
+        write_atomic_replace(&path, b"new", "test").await.unwrap();
+
+        assert_eq!(read_string(&path).await.unwrap(), "new");
+    }
+
+    #[tokio::test]
     async fn atomic_write_sanitizes_temp_prefix() {
         let root = TempDir::new().unwrap();
         let path = root.child("nested/file.txt").unwrap();
@@ -619,9 +658,15 @@ mod tests {
 
         assert!(write_atomic(&dest_dir, b"atomic", "test").await.is_err());
         assert!(
-            write_atomic_with_attempts(&root.child("file.txt").unwrap(), b"atomic", "test", 0)
-                .await
-                .is_err()
+            write_atomic_with_attempts(
+                &root.child("file.txt").unwrap(),
+                b"atomic",
+                "test",
+                0,
+                false
+            )
+            .await
+            .is_err()
         );
         assert!(
             write_atomic(
@@ -631,6 +676,20 @@ mod tests {
             )
             .await
             .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn replace_policy_still_rejects_destination_directories() {
+        let root = TempDir::new().unwrap();
+        let temp = root.write_file("temp.txt", b"temp").unwrap();
+        let dest = root.child("dest").unwrap();
+        crate::async_io::dir::create_all(&dest).await.unwrap();
+
+        assert!(
+            persist_temp_file_with_replace(&temp, &dest, true)
+                .await
+                .is_err()
         );
     }
 
