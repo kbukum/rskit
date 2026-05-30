@@ -42,7 +42,7 @@ pub use core::{Executor, Repository};
 pub use error::GitError;
 pub use manage::{ConfigReader, Maintainer, RefManager, RemoteManager};
 pub use options::*;
-pub use read::{Blamer, Differ, Inspector, LogReader, TreeReader};
+pub use read::{Blamer, Differ, IndexReader, Inspector, LogReader, TreeReader};
 pub use repo::{Repo, clone, discover, init, init_bare, open};
 pub use rskit_errors::{AppError, AppResult};
 pub use types::*;

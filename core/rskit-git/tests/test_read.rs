@@ -4,7 +4,7 @@ use std::time::{Duration, SystemTime};
 
 use rskit_git::{
     BlameOptions, Blamer, DescribeOptions, Differ, EntryKind, EntryState, FileStatus, GrepOptions,
-    Inspector, LogOptions, LogReader, Repository, TreeReader, open,
+    IndexManager, IndexReader, Inspector, LogOptions, LogReader, Repository, TreeReader, open,
 };
 
 #[test]
@@ -73,6 +73,25 @@ fn test_status_dirty() {
             .iter()
             .any(|e| e.path == "untracked.txt" && e.state == EntryState::Untracked)
     );
+}
+
+#[test]
+fn test_index_entry_reads_staged_blob_identity() {
+    let repo = helpers::TestRepo::init();
+    std::fs::write(repo.path().join("README.md"), "staged\n").unwrap();
+    let r = open(repo.path()).unwrap();
+
+    r.stage(&["README.md"]).unwrap();
+    std::fs::write(repo.path().join("README.md"), "# test repo").unwrap();
+
+    let entry = r
+        .index_entry("README.md")
+        .unwrap()
+        .expect("README.md is present in the index");
+
+    assert_eq!(entry.path, "README.md");
+    assert_eq!(entry.kind, EntryKind::Blob);
+    assert_eq!(r.show(&entry.oid.to_string()).unwrap(), b"staged\n");
 }
 
 #[test]

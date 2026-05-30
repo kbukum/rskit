@@ -12,10 +12,11 @@ use crate::options::{
     BlameOptions, CheckoutOptions, CleanOptions, CommitOptions, DescribeOptions, FetchOptions,
     GrepOptions, LogOptions, MergeOptions, PushOptions, RebaseOptions,
 };
-use crate::read::{Blamer, Differ, Inspector, LogReader, TreeReader};
+use crate::read::{Blamer, Differ, IndexReader, Inspector, LogReader, TreeReader};
 use crate::types::{
-    BlameLine, Branch, BranchFilter, Commit, DiffEntry, DiffStats, GrepMatch, MergeResult, Oid,
-    RebaseResult, Reference, Remote, ResetMode, StashEntry, StatusEntry, Tag, TreeEntry, TreeHash,
+    BlameLine, Branch, BranchFilter, Commit, DiffEntry, DiffStats, GrepMatch, IndexEntry,
+    MergeResult, Oid, RebaseResult, Reference, Remote, ResetMode, StashEntry, StatusEntry, Tag,
+    TreeEntry, TreeHash,
 };
 use crate::write::{
     CheckoutManager, CherryPicker, Committer, IndexManager, Merger, Rebaser, Resetter, Stasher,
@@ -108,6 +109,12 @@ impl TreeReader for Repo {
 
     fn list_entries(&self, revision: &str, path: &str) -> AppResult<Vec<TreeEntry>> {
         self.embedded.list_entries(revision, path)
+    }
+}
+
+impl IndexReader for Repo {
+    fn index_entry(&self, path: &str) -> AppResult<Option<IndexEntry>> {
+        self.embedded.index_entry(path)
     }
 }
 
