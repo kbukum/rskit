@@ -72,14 +72,14 @@ pub(in crate::persistent) fn run_readiness_command(
     })
     .join()
     .map_err(|_| AppError::new(ErrorCode::Internal, "readiness command runner panicked"))??;
-    if result.success() {
-        return Ok(());
-    }
     if result.timed_out {
         return Err(AppError::new(
             ErrorCode::Timeout,
             "persistent process readiness command timed out",
         ));
+    }
+    if result.success() {
+        return Ok(());
     }
     Err(AppError::new(
         ErrorCode::Internal,

@@ -43,6 +43,10 @@ pub fn kill(pid: u32) -> bool {
 }
 
 fn signal(pid: u32, signal: ProcessSignal) -> bool {
+    if pid == 0 {
+        return false;
+    }
+
     #[cfg(unix)]
     {
         // SAFETY: `kill` targets the negated process-group id created by

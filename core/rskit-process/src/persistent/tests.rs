@@ -259,6 +259,28 @@ fn command_readiness_can_start_inside_tokio_runtime() {
 }
 
 #[test]
+fn timed_out_readiness_command_is_not_accepted_after_successful_sigterm() {
+    let command = Command::new("sh").arg("-c").arg("sleep 10");
+    let readiness = Command::new("sh")
+        .arg("-c")
+        .arg("trap 'exit 0' TERM; sleep 10");
+    let config = PersistentConfig::default()
+        .with_readiness(PersistentReadiness::Command(readiness))
+        .with_readiness_timeout(Duration::from_millis(20))
+        .with_shutdown_grace_period(Duration::from_millis(50));
+
+    let error = start_persistent_with_cancel(
+        &command,
+        &ProcessConfig::default(),
+        &config,
+        CancellationToken::new(),
+    )
+    .expect_err("timed out readiness command should not be accepted");
+
+    assert_eq!(error.code, ErrorCode::Timeout);
+}
+
+#[test]
 fn empty_output_matcher_is_invalid() {
     let command = Command::new("sh").arg("-c").arg("sleep 10");
     let config = PersistentConfig::default()
