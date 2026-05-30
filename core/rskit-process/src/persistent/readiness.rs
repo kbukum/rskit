@@ -9,7 +9,10 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{AppError, AppResult, Command, ErrorCode, ProcessConfig, runner};
 
-use super::config::PersistentReadiness;
+use super::{
+    config::PersistentReadiness,
+    error::{PersistentStartErrorKind, persistent_start_error},
+};
 
 pub(in crate::persistent) fn validate_readiness(readiness: &PersistentReadiness) -> AppResult<()> {
     if let PersistentReadiness::OutputContains(value) = readiness
@@ -38,11 +41,13 @@ pub(in crate::persistent) fn readiness_wait_error(
         return Ok(AppError::cancelled("persistent process startup"));
     }
     match error {
-        mpsc::RecvTimeoutError::Timeout => Ok(AppError::new(
+        mpsc::RecvTimeoutError::Timeout => Ok(persistent_start_error(
+            PersistentStartErrorKind::ReadinessTimedOut,
             ErrorCode::Timeout,
             "persistent process did not become ready",
         )),
-        mpsc::RecvTimeoutError::Disconnected => Ok(AppError::new(
+        mpsc::RecvTimeoutError::Disconnected => Ok(persistent_start_error(
+            PersistentStartErrorKind::OutputEndedBeforeReadiness,
             ErrorCode::Internal,
             "persistent process output ended before readiness was observed",
         )),
@@ -111,7 +116,8 @@ pub(in crate::persistent) fn run_readiness_command(
     .join()
     .map_err(|_| AppError::new(ErrorCode::Internal, "readiness command runner panicked"))??;
     if result.timed_out {
-        return Err(AppError::new(
+        return Err(persistent_start_error(
+            PersistentStartErrorKind::ReadinessCommandTimedOut,
             ErrorCode::Timeout,
             "persistent process readiness command timed out",
         ));
@@ -119,14 +125,16 @@ pub(in crate::persistent) fn run_readiness_command(
     if result.success() {
         return Ok(());
     }
-    Err(AppError::new(
+    Err(persistent_start_error(
+        PersistentStartErrorKind::ReadinessCommandFailed,
         ErrorCode::Internal,
         "persistent process readiness command failed",
     ))
 }
 
 fn unexpected_exit_error(status: ExitStatus) -> AppError {
-    AppError::new(
+    persistent_start_error(
+        PersistentStartErrorKind::ExitedBeforeReadiness,
         ErrorCode::Internal,
         format!("persistent process exited unexpectedly with status {status}"),
     )

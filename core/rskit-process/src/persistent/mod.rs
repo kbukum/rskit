@@ -13,6 +13,7 @@ use crate::{AppError, AppResult, Command, ErrorCode, ProcessConfig, process_grou
 
 mod cancel;
 mod config;
+mod error;
 mod io;
 mod process;
 mod readiness;
@@ -21,10 +22,12 @@ mod readiness;
 mod tests;
 
 pub use config::{PersistentConfig, PersistentOutput, PersistentOutputStream, PersistentReadiness};
+pub use error::{PersistentStartErrorKind, persistent_start_error_kind};
 pub use process::{PersistentProcess, ShutdownOutcome};
 
 use cancel::spawn_cancel_thread;
 use config::PersistentReadiness::{Command as CommandReadiness, OutputContains, Started};
+use error::persistent_start_error;
 use io::{
     CapturedOutput, ReaderThread, StdinThread, spawn_output_readers, spawn_stdin_writer,
     take_capture,
@@ -216,10 +219,12 @@ fn spawn_child(command: &Command, config: &ProcessConfig) -> AppResult<Child> {
     isolate(&mut cmd);
 
     cmd.spawn().map_err(|error| {
-        AppError::new(
+        persistent_start_error(
+            PersistentStartErrorKind::SpawnFailed,
             ErrorCode::Internal,
             format!("failed to spawn persistent process: {error}"),
         )
+        .with_cause(error)
     })
 }
 
