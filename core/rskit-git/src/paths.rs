@@ -36,13 +36,24 @@ pub fn repo_relative_path(repo_root: &Path, path: &Path) -> AppResult<PathBuf> {
 }
 
 /// Join a repository-relative prefix and path, preserving empty prefixes.
-#[must_use]
-pub fn join_repo_path(prefix: &Path, relative: &Path) -> PathBuf {
+pub fn join_repo_path(prefix: &Path, relative: &Path) -> AppResult<PathBuf> {
+    validate_repo_relative("prefix", prefix)?;
+    validate_repo_relative("path", relative)?;
     if prefix.as_os_str().is_empty() {
-        relative.to_path_buf()
+        Ok(normalize_path(relative))
     } else {
-        prefix.join(relative)
+        Ok(normalize_path(&prefix.join(relative)))
     }
+}
+
+fn validate_repo_relative(field: &'static str, path: &Path) -> AppResult<()> {
+    rskit_fs::validate_relative_path(path).map_err(|error| {
+        AppError::invalid_input(
+            field,
+            format!("repository path {}: {error}", path.display()),
+        )
+        .with_cause(error)
+    })
 }
 
 fn normalize_path(path: &Path) -> PathBuf {
@@ -79,8 +90,33 @@ mod tests {
     #[test]
     fn joins_empty_prefix_as_relative_path() {
         assert_eq!(
-            join_repo_path(std::path::Path::new(""), std::path::Path::new("src/lib.rs")),
+            join_repo_path(std::path::Path::new(""), std::path::Path::new("src/lib.rs"))
+                .expect("path is safe"),
             std::path::Path::new("src/lib.rs")
         );
+    }
+
+    #[test]
+    fn rejects_absolute_relative_path() {
+        let error = join_repo_path(std::path::Path::new("repo"), std::path::Path::new("/tmp/x"))
+            .expect_err("absolute paths escape the repository prefix");
+
+        assert!(error.message.contains("path must be relative"));
+    }
+
+    #[test]
+    fn rejects_parent_traversal_path() {
+        let error = join_repo_path(std::path::Path::new("repo"), std::path::Path::new("../x"))
+            .expect_err("parent traversal escapes the repository prefix");
+
+        assert!(error.message.contains("must not contain '..'"));
+    }
+
+    #[test]
+    fn rejects_escaping_prefix() {
+        let error = join_repo_path(std::path::Path::new("../repo"), std::path::Path::new("x"))
+            .expect_err("prefix must also be repository relative");
+
+        assert!(error.message.contains("must not contain '..'"));
     }
 }

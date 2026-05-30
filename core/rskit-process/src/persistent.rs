@@ -242,8 +242,9 @@ impl PersistentProcess {
         if let Some(status) = self.child.try_wait().map_err(AppError::internal)? {
             self.stopped = true;
             self.stop_cancel_thread()?;
+            let cancelled = self.cancelled.load(Ordering::SeqCst);
             return self
-                .completed_result(status, false, false)
+                .completed_result(status, false, cancelled)
                 .map(ShutdownOutcome::AlreadyExited);
         }
 
