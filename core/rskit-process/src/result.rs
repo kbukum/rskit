@@ -4,6 +4,7 @@ use std::time::Duration;
 
 /// Result of a completed subprocess execution.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct ProcessResult {
     /// Process exit code. None if the process was killed.
     pub exit_code: Option<i32>,
@@ -23,9 +24,38 @@ pub struct ProcessResult {
     pub duration: Duration,
     /// Whether the process was killed due to timeout.
     pub timed_out: bool,
+    /// Whether the process was cancelled by the caller.
+    pub cancelled: bool,
 }
 
 impl ProcessResult {
+    /// Build a process result from captured output bytes.
+    #[must_use]
+    #[allow(clippy::too_many_arguments)]
+    pub fn completed(
+        exit_code: Option<i32>,
+        stdout_bytes: Vec<u8>,
+        stderr_bytes: Vec<u8>,
+        stdout_truncated: bool,
+        stderr_truncated: bool,
+        duration: Duration,
+        timed_out: bool,
+        cancelled: bool,
+    ) -> Self {
+        Self {
+            exit_code,
+            stdout: String::from_utf8_lossy(&stdout_bytes).into_owned(),
+            stdout_bytes,
+            stderr: String::from_utf8_lossy(&stderr_bytes).into_owned(),
+            stderr_bytes,
+            stdout_truncated,
+            stderr_truncated,
+            duration,
+            timed_out,
+            cancelled,
+        }
+    }
+
     /// Check if the process exited successfully (exit code 0).
     ///
     /// # Example
@@ -34,17 +64,16 @@ impl ProcessResult {
     /// use rskit_process::ProcessResult;
     /// use std::time::Duration;
     ///
-    /// let result = ProcessResult {
-    ///     exit_code: Some(0),
-    ///     stdout: "output".to_string(),
-    ///     stdout_bytes: b"output".to_vec(),
-    ///     stderr: "".to_string(),
-    ///     stderr_bytes: Vec::new(),
-    ///     stdout_truncated: false,
-    ///     stderr_truncated: false,
-    ///     duration: Duration::from_secs(1),
-    ///     timed_out: false,
-    /// };
+    /// let result = ProcessResult::completed(
+    ///     Some(0),
+    ///     b"output".to_vec(),
+    ///     Vec::new(),
+    ///     false,
+    ///     false,
+    ///     Duration::from_secs(1),
+    ///     false,
+    ///     false,
+    /// );
     ///
     /// assert!(result.success());
     /// ```
@@ -68,6 +97,12 @@ impl ProcessResult {
     /// # }
     /// ```
     pub fn check(&self) -> crate::AppResult<&Self> {
+        if self.cancelled {
+            return Err(
+                crate::AppError::new(crate::ErrorCode::Cancelled, "process cancelled")
+                    .with_detail("cancelled", true),
+            );
+        }
         if self.timed_out {
             return Err(
                 crate::AppError::new(crate::ErrorCode::Timeout, "process timed out")

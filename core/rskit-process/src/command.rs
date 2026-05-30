@@ -9,7 +9,7 @@ use std::time::Duration;
 pub const DEFAULT_MAX_OUTPUT_BYTES: usize = 1024 * 1024;
 
 /// Configuration for subprocess execution behavior.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ProcessConfig {
     /// Overall timeout for the process. None means no timeout.
     pub timeout: Option<Duration>,
@@ -54,7 +54,7 @@ impl ProcessConfig {
 }
 
 /// Command to execute as a subprocess.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Command {
     /// Program name or path to execute.
     pub program: PathBuf,

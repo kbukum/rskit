@@ -31,6 +31,7 @@ zeroize      = { workspace = true }
 # Internal
 rskit-errors = { path = "../rskit-errors" }
 rskit-version = { path = "../rskit-version" }
+rskit-fs = { path = "../rskit-fs", default-features = false }
 rskit-validation = { path = "../rskit-validation" }
 
 [dev-dependencies]

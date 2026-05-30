@@ -26,6 +26,46 @@ use rskit_errors::{AppError, AppResult, ErrorCode};
 pub mod input {
     use rskit_errors::{AppError, AppResult};
 
+    /// Validate a required string that must not contain leading or trailing whitespace.
+    pub fn validate_required_trimmed(field: &str, value: &str) -> AppResult<()> {
+        reject_unicode_controls(field, value)?;
+        if value.trim().is_empty() {
+            return Err(AppError::invalid_input(field, "is required"));
+        }
+        if value != value.trim() {
+            return Err(AppError::invalid_input(
+                field,
+                "cannot contain leading or trailing whitespace",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Validate a required identifier that is safe to use as a path segment.
+    pub fn validate_path_safe_identifier(field: &str, value: &str) -> AppResult<()> {
+        validate_required_trimmed(field, value)?;
+        if value.contains(['/', '\\', ':']) || value == "." || value == ".." {
+            return Err(AppError::invalid_input(
+                field,
+                "cannot contain path separators or traversal markers",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Validate an optional string when present and return `None` for absent values.
+    pub fn validate_optional_trimmed(
+        field: &str,
+        value: Option<String>,
+    ) -> AppResult<Option<String>> {
+        value
+            .map(|value| {
+                validate_required_trimmed(field, &value)?;
+                Ok(value)
+            })
+            .transpose()
+    }
+
     /// Validate that a path-like input cannot traverse outside its base.
     pub fn validate_safe_path(path: &str) -> AppResult<()> {
         reject_unicode_controls("path", path)?;
@@ -408,5 +448,51 @@ mod tests {
         assert!(input::reject_unicode_controls("identifier", "safe-id").is_ok());
         assert!(input::reject_unicode_controls("identifier", "safe\u{202e}txt").is_err());
         assert!(input::reject_unicode_controls("identifier", "павел").is_ok());
+    }
+
+    #[test]
+    fn required_trimmed_rejects_whitespace_only_and_untrimmed_values() {
+        assert!(input::validate_required_trimmed("name", "value").is_ok());
+        assert!(input::validate_required_trimmed("name", "   ").is_err());
+        assert!(input::validate_required_trimmed("name", "\t").is_err());
+        assert!(input::validate_required_trimmed("name", " value").is_err());
+        assert!(input::validate_required_trimmed("name", "value ").is_err());
+    }
+
+    #[test]
+    fn optional_trimmed_accepts_absent_and_rejects_invalid_present_values() {
+        assert_eq!(
+            input::validate_optional_trimmed("name", None).unwrap(),
+            None
+        );
+        assert_eq!(
+            input::validate_optional_trimmed("name", Some("value".to_string())).unwrap(),
+            Some("value".to_string())
+        );
+        assert!(input::validate_optional_trimmed("name", Some(" value".to_string())).is_err());
+        assert!(input::validate_optional_trimmed("name", Some("\n".to_string())).is_err());
+    }
+
+    #[test]
+    fn path_safe_identifier_rejects_controls_traversal_and_separators() {
+        assert!(input::validate_path_safe_identifier("id", "tenant_01").is_ok());
+        assert!(input::validate_path_safe_identifier("id", ".").is_err());
+        assert!(input::validate_path_safe_identifier("id", "..").is_err());
+        assert!(input::validate_path_safe_identifier("id", "tenant/name").is_err());
+        assert!(input::validate_path_safe_identifier("id", "tenant\\name").is_err());
+        assert!(input::validate_path_safe_identifier("id", "tenant:name").is_err());
+        assert!(input::validate_path_safe_identifier("id", "tenant\u{202e}name").is_err());
+    }
+
+    #[test]
+    fn safe_path_rejects_empty_absolute_controls_traversal_and_separators() {
+        assert!(input::validate_safe_path("tenant/report.json").is_ok());
+        assert!(input::validate_safe_path("").is_err());
+        assert!(input::validate_safe_path("/tenant/report.json").is_err());
+        assert!(input::validate_safe_path("\\tenant\\report.json").is_err());
+        assert!(input::validate_safe_path("./tenant").is_err());
+        assert!(input::validate_safe_path("tenant//report.json").is_err());
+        assert!(input::validate_safe_path("tenant/report:name").is_err());
+        assert!(input::validate_safe_path("tenant/re\u{202e}port").is_err());
     }
 }

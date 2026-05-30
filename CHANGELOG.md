@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking
+- **rskit-process**: `ProcessResult` is now non-exhaustive and includes
+  cancellation metadata; downstream crates should construct values with
+  `ProcessResult::completed`.
+
 ### Changed — Cross-Cutting
 - **L9 infrastructure**: made the `rskit` facade a pure re-export layer,
   aligned facade feature flags with available crates, routed CLI-backed Git
@@ -61,6 +66,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **L4 composition crates**: aligned bootstrap lifecycle hooks with start/stop boundaries and typed lifecycle events, made pipeline fan-out/windowing bounded, replaced JSON chain operations with typed sequential composition, tightened DAG cycle/parallelism guarantees, removed worker ticker coupling, added typed state machines, and made process execution explicitly cancellable with bounded output by default.
 
 ### Changed — Foundations
+- **rskit-process/config/validation/git**: added persistent process lifecycle
+  primitives, typed config-template helpers, shared path-safe validation, and
+  repository-relative path normalization utilities for reusable application
+  infrastructure. `ProcessResult` now carries cancellation metadata and is
+  non-exhaustive; construct results through `ProcessResult::completed`.
 - **rskit-git**: added index entry reading so consumers can inspect staged file
   identities through the repository read API.
 - **rskit-testutil**: added a managed `TestWorkspace` and `test_workspace!`

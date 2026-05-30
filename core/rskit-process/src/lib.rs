@@ -38,11 +38,23 @@
 #![warn(missing_docs)]
 
 mod command;
+mod persistent;
+mod process_group;
 mod result;
 mod runner;
+mod signal;
 mod sync;
 
 pub use command::{Command, DEFAULT_MAX_OUTPUT_BYTES, ProcessConfig, command};
+pub use persistent::{
+    PersistentConfig, PersistentOutput, PersistentOutputStream, PersistentProcess,
+    PersistentReadiness, PersistentRun, PersistentStartup, ShutdownOutcome,
+    start_persistent_with_cancel,
+};
+pub use process_group::{
+    interrupt as interrupt_process_group, isolate as isolate_process_group,
+    kill as kill_process_group, terminate as terminate_process_group,
+};
 pub use result::ProcessResult;
 pub use runner::{OutputObserver, run_with_cancel, run_with_observer};
 pub use sync::run;

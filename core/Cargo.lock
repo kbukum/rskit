@@ -5557,6 +5557,7 @@ dependencies = [
  "dotenvy",
  "parking_lot",
  "rskit-errors",
+ "rskit-fs",
  "rskit-validation",
  "rskit-version",
  "serde",
@@ -5714,6 +5715,7 @@ dependencies = [
  "rskit-errors",
  "rskit-fs",
  "rskit-process",
+ "rskit-testutil",
  "tempfile",
  "thiserror 2.0.18",
 ]
