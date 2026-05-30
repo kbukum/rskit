@@ -30,7 +30,9 @@ use io::{
     take_capture,
 };
 use process::{cleanup_spawned_child, new_process};
-use readiness::{readiness_wait_error, run_readiness_command, validate_readiness};
+use readiness::{
+    readiness_wait_error, run_readiness_command, validate_readiness, wait_for_readiness,
+};
 
 /// Captured output retained while waiting for persistent readiness.
 #[derive(Debug, Clone)]
@@ -138,7 +140,12 @@ pub fn start_persistent_with_cancel(
     }
     drop(ready_tx);
 
-    if let Err(error) = ready_rx.recv_timeout(persistent_config.readiness_timeout) {
+    if let Err(error) = wait_for_readiness(
+        &ready_rx,
+        persistent_config.readiness_timeout,
+        &cancel,
+        &cancelled,
+    ) {
         let readiness_error = readiness_wait_error(&mut child, error, &cancelled)?;
         let mut process = persistent_process(
             child,

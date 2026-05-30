@@ -2,7 +2,7 @@ use std::{
     process::{Child, ExitStatus},
     sync::{atomic::AtomicBool, atomic::Ordering, mpsc},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use tokio_util::sync::CancellationToken;
@@ -49,6 +49,44 @@ pub(in crate::persistent) fn readiness_wait_error(
     }
 }
 
+pub(in crate::persistent) fn wait_for_readiness(
+    ready_rx: &mpsc::Receiver<()>,
+    timeout: Duration,
+    cancel: &CancellationToken,
+    cancelled: &AtomicBool,
+) -> Result<(), mpsc::RecvTimeoutError> {
+    const CANCEL_POLL_INTERVAL: Duration = Duration::from_millis(10);
+    let deadline = Instant::now() + timeout;
+
+    loop {
+        match ready_rx.try_recv() {
+            Ok(()) => return Ok(()),
+            Err(mpsc::TryRecvError::Disconnected) => {
+                return Err(mpsc::RecvTimeoutError::Disconnected);
+            }
+            Err(mpsc::TryRecvError::Empty) => {}
+        }
+
+        if cancel.is_cancelled() {
+            cancelled.store(true, Ordering::SeqCst);
+            return Err(mpsc::RecvTimeoutError::Timeout);
+        }
+
+        let now = Instant::now();
+        if now >= deadline {
+            return Err(mpsc::RecvTimeoutError::Timeout);
+        }
+        let wait = (deadline - now).min(CANCEL_POLL_INTERVAL);
+        match ready_rx.recv_timeout(wait) {
+            Ok(()) => return Ok(()),
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                return Err(mpsc::RecvTimeoutError::Disconnected);
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+        }
+    }
+}
+
 pub(in crate::persistent) fn run_readiness_command(
     command: &Command,
     process_config: &ProcessConfig,
@@ -92,4 +130,30 @@ fn unexpected_exit_error(status: ExitStatus) -> AppError {
         ErrorCode::Internal,
         format!("persistent process exited unexpectedly with status {status}"),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        sync::{atomic::Ordering, mpsc},
+        time::{Duration, Instant},
+    };
+
+    use super::*;
+
+    #[test]
+    fn wait_for_readiness_returns_promptly_when_cancelled() {
+        let (_ready_tx, ready_rx) = mpsc::channel();
+        let cancel = CancellationToken::new();
+        let cancelled = AtomicBool::new(false);
+        cancel.cancel();
+        let start = Instant::now();
+
+        let error = wait_for_readiness(&ready_rx, Duration::from_secs(10), &cancel, &cancelled)
+            .expect_err("cancelled readiness wait should fail");
+
+        assert_eq!(error, mpsc::RecvTimeoutError::Timeout);
+        assert!(cancelled.load(Ordering::SeqCst));
+        assert!(start.elapsed() < Duration::from_secs(1));
+    }
 }
