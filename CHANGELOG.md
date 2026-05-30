@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking
+- **rskit-process**: `ProcessResult` is now non-exhaustive and includes
+  cancellation metadata; downstream crates should construct values with
+  `ProcessResult::completed`.
+
 ### Changed — Cross-Cutting
 - **L9 infrastructure**: made the `rskit` facade a pure re-export layer,
   aligned facade feature flags with available crates, routed CLI-backed Git

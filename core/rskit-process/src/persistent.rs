@@ -19,7 +19,7 @@ use crate::{
     AppError, AppResult, Command, ErrorCode, ProcessConfig, ProcessResult,
     command::DEFAULT_MAX_OUTPUT_BYTES,
     process_group::{isolate, kill, terminate},
-    sync,
+    runner,
 };
 
 type Capture = Arc<Mutex<CapturedOutput>>;
@@ -329,7 +329,7 @@ pub fn start_persistent_with_cancel(
     let cancelled = Arc::new(AtomicBool::new(false));
     let cancel_thread = match spawn_cancel_thread(
         child.id(),
-        cancel,
+        cancel.clone(),
         Arc::clone(&cancelled),
         persistent_config.shutdown_grace_period,
     ) {
@@ -356,9 +356,12 @@ pub fn start_persistent_with_cancel(
             let _ = ready_tx.send(());
         }
         PersistentReadiness::Command(command) => {
-            if let Err(error) =
-                run_readiness_command(command, process_config, persistent_config.readiness_timeout)
-            {
+            if let Err(error) = run_readiness_command(
+                command,
+                process_config,
+                persistent_config.readiness_timeout,
+                cancel.clone(),
+            ) {
                 let mut process = persistent_process(
                     child,
                     stdin_thread,
@@ -683,10 +686,20 @@ fn run_readiness_command(
     command: &Command,
     process_config: &ProcessConfig,
     timeout: Duration,
+    cancel: CancellationToken,
 ) -> AppResult<()> {
     let mut config = process_config.clone();
     config.timeout = Some(timeout);
-    let result = sync::run(command, &config)?;
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|error| {
+            AppError::new(
+                ErrorCode::Internal,
+                format!("failed to create readiness command runtime: {error}"),
+            )
+        })?;
+    let result = runtime.block_on(runner::run_with_cancel(command, &config, cancel))?;
     if result.success() {
         return Ok(());
     }
@@ -994,6 +1007,31 @@ mod tests {
         cancel_thread.join().expect("cancel thread joins");
 
         assert_eq!(error.code, ErrorCode::Cancelled);
+    }
+
+    #[test]
+    fn cancellation_during_command_readiness_returns_promptly() {
+        let command = Command::new("sh").arg("-c").arg("sleep 10");
+        let readiness = Command::new("sh").arg("-c").arg("sleep 10");
+        let config = PersistentConfig::default()
+            .with_readiness(PersistentReadiness::Command(readiness))
+            .with_readiness_timeout(Duration::from_secs(10))
+            .with_shutdown_grace_period(Duration::from_millis(50));
+        let cancel = CancellationToken::new();
+        let cancel_for_thread = cancel.clone();
+        let cancel_thread = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(50));
+            cancel_for_thread.cancel();
+        });
+        let start = std::time::Instant::now();
+
+        let error =
+            start_persistent_with_cancel(&command, &ProcessConfig::default(), &config, cancel)
+                .expect_err("command readiness cancellation should fail promptly");
+        cancel_thread.join().expect("cancel thread joins");
+
+        assert_eq!(error.code, ErrorCode::Cancelled);
+        assert!(start.elapsed() < Duration::from_secs(2));
     }
 
     #[test]
