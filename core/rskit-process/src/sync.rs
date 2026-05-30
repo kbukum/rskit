@@ -94,18 +94,16 @@ pub fn run(command: &Command, config: &ProcessConfig) -> AppResult<ProcessResult
         );
     }
 
-    Ok(ProcessResult {
+    Ok(ProcessResult::completed(
         exit_code,
-        stdout: String::from_utf8_lossy(&stdout_output.bytes).into_owned(),
-        stdout_bytes: stdout_output.bytes,
-        stderr: String::from_utf8_lossy(&stderr_output.bytes).into_owned(),
-        stderr_bytes: stderr_output.bytes,
-        stdout_truncated: stdout_output.truncated,
-        stderr_truncated: stderr_output.truncated,
-        duration: start.elapsed(),
+        stdout_output.bytes,
+        stderr_output.bytes,
+        stdout_output.truncated,
+        stderr_output.truncated,
+        start.elapsed(),
         timed_out,
-        cancelled: false,
-    })
+        false,
+    ))
 }
 
 fn wait_with_timeout(
