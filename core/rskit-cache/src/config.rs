@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CacheConfig {
     /// Store name looked up in an injected [`crate::CacheRegistry`].
-    #[serde(default = "default_store")]
+    #[serde(default = "default_store", alias = "backend")]
     pub store: String,
     /// Optional prefix prepended to every key by stores that support it.
     pub key_prefix: Option<String>,
@@ -49,6 +49,14 @@ mod tests {
     #[test]
     fn deserialise_from_json() {
         let json = r#"{"store":"memory","memory":{"max_entries":2}}"#;
+        let cfg: CacheConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(cfg.store, "memory");
+        assert_eq!(cfg.memory.max_entries, Some(2));
+    }
+
+    #[test]
+    fn deserialise_legacy_backend_field_from_json() {
+        let json = r#"{"backend":"memory","memory":{"max_entries":2}}"#;
         let cfg: CacheConfig = serde_json::from_str(json).unwrap();
         assert_eq!(cfg.store, "memory");
         assert_eq!(cfg.memory.max_entries, Some(2));
