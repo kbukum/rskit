@@ -1,6 +1,6 @@
 [package]
 name        = "rskit-cache"
-description = "Cache abstraction with in-memory default and opt-in adapter backends"
+description = "Cache abstraction with explicit store registration and local adapters"
 version.workspace     = true
 edition.workspace     = true
 license.workspace     = true

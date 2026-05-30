@@ -1,6 +1,6 @@
 # rskit-cache
 
-Cache abstraction with built-in local adapters, explicit backend registry, and
+Cache abstraction with built-in local stores, explicit store registry, and
 typed JSON store. Remote infrastructure adapters live in `contrib/` crates.
 
 ```rust,no_run
@@ -12,7 +12,7 @@ register_memory(&mut registry)?;
 
 let cache = registry
     .build(&CacheConfig {
-        backend: "memory".into(),
+        store: "memory".into(),
         key_prefix: None,
         memory: MemoryConfig::default(),
     })

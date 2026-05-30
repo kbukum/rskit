@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use redis::AsyncCommands;
-use rskit_cache::{CacheBackend, CacheConfig, CacheFactory, CacheRegistry};
+use rskit_cache::{CacheConfig, CacheRegistry, CacheStore, CacheStoreFactory};
 use rskit_config::SecretString;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use serde::{Deserialize, Serialize};
@@ -87,14 +87,14 @@ fn default_connect_timeout() -> Duration {
     Duration::from_secs(5)
 }
 
-/// Async Redis cache backend.
+/// Async Redis cache store.
 pub struct RedisClient {
     manager: redis::aio::ConnectionManager,
     config: RedisConfig,
 }
 
 impl RedisClient {
-    /// Create a Redis cache backend.
+    /// Create a Redis cache store.
     pub async fn new(config: RedisConfig) -> AppResult<Self> {
         if config.connect_timeout.is_zero() {
             return Err(AppError::new(
@@ -133,7 +133,7 @@ impl RedisClient {
 }
 
 #[async_trait::async_trait]
-impl CacheBackend for RedisClient {
+impl CacheStore for RedisClient {
     async fn get(&self, key: &str) -> AppResult<Option<String>> {
         self.conn()
             .get(self.prefixed_key(key))
@@ -182,8 +182,8 @@ struct RedisFactory {
 }
 
 #[async_trait::async_trait]
-impl CacheFactory for RedisFactory {
-    async fn create(&self, config: &CacheConfig) -> AppResult<Arc<dyn CacheBackend>> {
+impl CacheStoreFactory for RedisFactory {
+    async fn create(&self, config: &CacheConfig) -> AppResult<Arc<dyn CacheStore>> {
         let mut redis = self.config.clone();
         if redis.key_prefix.is_none() {
             redis.key_prefix.clone_from(&config.key_prefix);
@@ -192,7 +192,7 @@ impl CacheFactory for RedisFactory {
     }
 }
 
-/// Explicitly register the Redis backend.
+/// Explicitly register the Redis cache store.
 pub fn register_redis(registry: &mut CacheRegistry, config: RedisConfig) -> AppResult<()> {
     registry.register("redis", Arc::new(RedisFactory { config }))
 }
