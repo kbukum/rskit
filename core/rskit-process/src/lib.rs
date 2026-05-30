@@ -42,6 +42,7 @@ mod persistent;
 mod process_group;
 mod result;
 mod runner;
+mod signal;
 mod sync;
 
 pub use command::{Command, DEFAULT_MAX_OUTPUT_BYTES, ProcessConfig, command};

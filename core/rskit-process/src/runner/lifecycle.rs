@@ -1,10 +1,8 @@
-use std::io;
-
 use tokio::{process::Child, time::timeout};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
 
-use crate::{AppError, AppResult, Command, ErrorCode, ProcessConfig};
+use crate::{AppError, AppResult, Command, ErrorCode, ProcessConfig, signal::ProcessSignal};
 
 pub(in crate::runner) struct Completion {
     pub(in crate::runner) exit_code: Option<i32>,
@@ -81,14 +79,17 @@ async fn terminate_and_wait(
     grace_period: std::time::Duration,
     reason: &str,
 ) -> (Option<i32>, Option<String>) {
-    if !terminate_process_group(pid, libc::SIGTERM) {
+    if !terminate_process_group(pid, ProcessSignal::Terminate) {
         let _ = child.start_kill();
     }
     match timeout(grace_period, child.wait()).await {
         Ok(Ok(status)) => (status.code(), None),
         Ok(Err(error)) => {
-            warn!("error waiting for process after SIGTERM: {error}");
-            if !terminate_process_group(pid, libc::SIGKILL) {
+            warn!(
+                signal = ProcessSignal::Terminate.name(),
+                "error waiting for process after signal: {error}"
+            );
+            if !terminate_process_group(pid, ProcessSignal::Kill) {
                 let _ = child.start_kill();
             }
             (
@@ -99,8 +100,11 @@ async fn terminate_and_wait(
             )
         }
         Err(_) => {
-            debug!("grace period expired, sending SIGKILL");
-            if !terminate_process_group(pid, libc::SIGKILL) {
+            debug!(
+                signal = ProcessSignal::Kill.name(),
+                "grace period expired, sending signal"
+            );
+            if !terminate_process_group(pid, ProcessSignal::Kill) {
                 let _ = child.start_kill();
             }
             let _ = child.wait().await;
@@ -112,18 +116,18 @@ async fn terminate_and_wait(
     }
 }
 
-fn terminate_process_group(pid: Option<u32>, signal: i32) -> bool {
+fn terminate_process_group(pid: Option<u32>, signal: ProcessSignal) -> bool {
     if let Some(pid) = pid {
         #[cfg(unix)]
         // SAFETY: `kill` is invoked with the negated process-group id created by
         // the `pre_exec` hook so signals fan out to the subprocess tree.
         // Errors are handled explicitly and ignored only for `ESRCH`.
         unsafe {
-            let result = libc::kill(-(pid as i32), signal);
+            let result = libc::kill(-(pid as i32), signal.as_raw());
             if result != 0 {
-                let error = io::Error::last_os_error();
+                let error = std::io::Error::last_os_error();
                 if error.raw_os_error() != Some(libc::ESRCH) {
-                    warn!(signal, "failed to send signal: {error}");
+                    warn!(signal = signal.name(), "failed to send signal: {error}");
                     return false;
                 }
             }
