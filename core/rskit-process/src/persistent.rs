@@ -312,6 +312,10 @@ pub fn start_persistent_with_cancel(
     if command.program.as_os_str().is_empty() {
         return Err(AppError::invalid_input("program", "must not be empty"));
     }
+    if cancel.is_cancelled() {
+        return Err(AppError::cancelled("persistent process startup"));
+    }
+    validate_readiness(&persistent_config.readiness)?;
 
     let start = Instant::now();
     let mut child = spawn_child(command, process_config)?;
@@ -416,6 +420,18 @@ pub fn start_persistent_with_cancel(
         },
         process,
     })
+}
+
+fn validate_readiness(readiness: &PersistentReadiness) -> AppResult<()> {
+    if let PersistentReadiness::OutputContains(value) = readiness
+        && value.is_empty()
+    {
+        return Err(AppError::invalid_input(
+            "readiness.output",
+            "output readiness marker must not be empty",
+        ));
+    }
+    Ok(())
 }
 
 fn spawn_child(command: &Command, config: &ProcessConfig) -> AppResult<Child> {
@@ -720,11 +736,16 @@ fn wait_for_shutdown(child: &mut Child, pid: u32, grace_period: Duration) -> App
 #[derive(Debug)]
 struct CancelThread {
     stop: CancellationToken,
+    cancel: CancellationToken,
+    cancelled: Arc<AtomicBool>,
     thread: thread::JoinHandle<AppResult<()>>,
 }
 
 impl CancelThread {
     fn stop(self) -> AppResult<()> {
+        if self.cancel.is_cancelled() {
+            self.cancelled.store(true, Ordering::SeqCst);
+        }
         self.stop.cancel();
         self.thread
             .join()
@@ -740,6 +761,8 @@ fn spawn_cancel_thread(
 ) -> AppResult<CancelThread> {
     let stop = CancellationToken::new();
     let wait_stop = stop.clone();
+    let wait_cancel = cancel.clone();
+    let wait_cancelled = Arc::clone(&cancelled);
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -753,8 +776,9 @@ fn spawn_cancel_thread(
     let thread = thread::spawn(move || {
         runtime.block_on(async move {
             tokio::select! {
-                () = cancel.cancelled() => {
-                    cancelled.store(true, Ordering::SeqCst);
+                biased;
+                () = wait_cancel.cancelled() => {
+                    wait_cancelled.store(true, Ordering::SeqCst);
                     let _ = terminate(pid);
                     tokio::select! {
                         () = wait_stop.cancelled() => Ok(()),
@@ -768,7 +792,12 @@ fn spawn_cancel_thread(
             }
         })
     });
-    Ok(CancelThread { stop, thread })
+    Ok(CancelThread {
+        stop,
+        cancel,
+        cancelled,
+        thread,
+    })
 }
 
 #[cfg(test)]
@@ -891,13 +920,26 @@ mod tests {
         )
         .expect("process starts");
         cancel.cancel();
-        std::thread::sleep(Duration::from_millis(50));
 
         let outcome = run.process.shutdown().expect("shutdown succeeds");
         let ShutdownOutcome::Stopped(result) = outcome else {
             panic!("shutdown should stop the still-running cancelled process");
         };
         assert!(result.cancelled);
+    }
+
+    #[test]
+    fn already_cancelled_token_does_not_spawn() {
+        let command = Command::new("sh").arg("-c").arg("sleep 10");
+        let config = PersistentConfig::default();
+        let cancel = CancellationToken::new();
+        cancel.cancel();
+
+        let error =
+            start_persistent_with_cancel(&command, &ProcessConfig::default(), &config, cancel)
+                .expect_err("pre-cancelled startup should fail before spawn");
+
+        assert_eq!(error.code, ErrorCode::Cancelled);
     }
 
     #[test]
@@ -920,6 +962,23 @@ mod tests {
         cancel_thread.join().expect("cancel thread joins");
 
         assert_eq!(error.code, ErrorCode::Cancelled);
+    }
+
+    #[test]
+    fn empty_output_matcher_is_invalid() {
+        let command = Command::new("sh").arg("-c").arg("sleep 10");
+        let config = PersistentConfig::default()
+            .with_readiness(PersistentReadiness::OutputContains(String::new()));
+
+        let error = start_persistent_with_cancel(
+            &command,
+            &ProcessConfig::default(),
+            &config,
+            CancellationToken::new(),
+        )
+        .expect_err("empty output matcher should be rejected before spawn");
+
+        assert_eq!(error.code, ErrorCode::InvalidInput);
     }
 
     #[test]

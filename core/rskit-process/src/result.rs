@@ -4,6 +4,7 @@ use std::time::Duration;
 
 /// Result of a completed subprocess execution.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct ProcessResult {
     /// Process exit code. None if the process was killed.
     pub exit_code: Option<i32>,
@@ -28,6 +29,33 @@ pub struct ProcessResult {
 }
 
 impl ProcessResult {
+    /// Build a process result from captured output bytes.
+    #[must_use]
+    #[allow(clippy::too_many_arguments)]
+    pub fn completed(
+        exit_code: Option<i32>,
+        stdout_bytes: Vec<u8>,
+        stderr_bytes: Vec<u8>,
+        stdout_truncated: bool,
+        stderr_truncated: bool,
+        duration: Duration,
+        timed_out: bool,
+        cancelled: bool,
+    ) -> Self {
+        Self {
+            exit_code,
+            stdout: String::from_utf8_lossy(&stdout_bytes).into_owned(),
+            stdout_bytes,
+            stderr: String::from_utf8_lossy(&stderr_bytes).into_owned(),
+            stderr_bytes,
+            stdout_truncated,
+            stderr_truncated,
+            duration,
+            timed_out,
+            cancelled,
+        }
+    }
+
     /// Check if the process exited successfully (exit code 0).
     ///
     /// # Example
@@ -36,18 +64,16 @@ impl ProcessResult {
     /// use rskit_process::ProcessResult;
     /// use std::time::Duration;
     ///
-    /// let result = ProcessResult {
-    ///     exit_code: Some(0),
-    ///     stdout: "output".to_string(),
-    ///     stdout_bytes: b"output".to_vec(),
-    ///     stderr: "".to_string(),
-    ///     stderr_bytes: Vec::new(),
-    ///     stdout_truncated: false,
-    ///     stderr_truncated: false,
-    ///     duration: Duration::from_secs(1),
-    ///     timed_out: false,
-    ///     cancelled: false,
-    /// };
+    /// let result = ProcessResult::completed(
+    ///     Some(0),
+    ///     b"output".to_vec(),
+    ///     Vec::new(),
+    ///     false,
+    ///     false,
+    ///     Duration::from_secs(1),
+    ///     false,
+    ///     false,
+    /// );
     ///
     /// assert!(result.success());
     /// ```
