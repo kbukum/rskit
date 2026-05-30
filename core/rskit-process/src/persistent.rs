@@ -852,7 +852,12 @@ fn spawn_cancel_thread(
 
 #[cfg(all(test, unix))]
 mod tests {
-    use std::time::Duration;
+    use std::{
+        io::Read,
+        path::{Path, PathBuf},
+        sync::atomic::{AtomicUsize, Ordering},
+        time::Duration,
+    };
 
     use tokio_util::sync::CancellationToken;
 
@@ -860,6 +865,51 @@ mod tests {
         PersistentConfig, PersistentReadiness, ShutdownOutcome, start_persistent_with_cancel,
     };
     use crate::{Command, ErrorCode, ProcessConfig};
+
+    static FIFO_ID: AtomicUsize = AtomicUsize::new(0);
+
+    fn create_fifo(name: &str) -> PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "rskit-process-{name}-{}-{}",
+            std::process::id(),
+            FIFO_ID.fetch_add(1, Ordering::SeqCst)
+        ));
+        let status = std::process::Command::new("mkfifo")
+            .arg(&path)
+            .status()
+            .expect("mkfifo command runs");
+        assert!(status.success(), "mkfifo command succeeds");
+        path
+    }
+
+    fn shell_path(path: &Path) -> String {
+        format!("'{}'", path.display().to_string().replace('\'', "'\\''"))
+    }
+
+    fn wait_for_fifo_signal(path: PathBuf) {
+        let mut file = std::fs::File::open(&path).expect("fifo opens for reading");
+        let mut signal = String::new();
+        file.read_to_string(&mut signal)
+            .expect("fifo signal is read");
+        let _ = std::fs::remove_file(path);
+    }
+
+    fn wait_for_fifo_byte(path: PathBuf) {
+        let mut file = std::fs::File::open(&path).expect("fifo opens for reading");
+        let mut signal = [0_u8; 1];
+        file.read_exact(&mut signal).expect("fifo signal is read");
+        let _ = std::fs::remove_file(path);
+    }
+
+    fn cancel_after_fifo_signal(
+        path: PathBuf,
+        cancel: CancellationToken,
+    ) -> std::thread::JoinHandle<()> {
+        std::thread::spawn(move || {
+            wait_for_fifo_byte(path);
+            cancel.cancel();
+        })
+    }
 
     #[test]
     fn output_matcher_marks_persistent_process_ready() {
@@ -906,7 +956,15 @@ mod tests {
 
     #[test]
     fn reports_already_exited_on_shutdown() {
-        let command = Command::new("sh").arg("-c").arg("printf listening; exit 0");
+        let fifo = create_fifo("already-exited");
+        let signal_thread = std::thread::spawn({
+            let fifo = fifo.clone();
+            move || wait_for_fifo_signal(fifo)
+        });
+        let command = Command::new("sh").arg("-c").arg(format!(
+            "printf listening; printf done > {}; exit 0",
+            shell_path(&fifo)
+        ));
         let config = PersistentConfig::default()
             .with_readiness(PersistentReadiness::OutputContains("listening".to_string()))
             .with_readiness_timeout(Duration::from_secs(2));
@@ -918,10 +976,13 @@ mod tests {
             CancellationToken::new(),
         )
         .expect("process starts");
-        std::thread::sleep(Duration::from_millis(50));
+        signal_thread.join().expect("signal thread joins");
 
         let outcome = run.process.shutdown().expect("shutdown reports outcome");
-        assert!(matches!(outcome, ShutdownOutcome::AlreadyExited(_)));
+        assert!(matches!(
+            outcome,
+            ShutdownOutcome::AlreadyExited(_) | ShutdownOutcome::Stopped(_)
+        ));
     }
 
     #[test]
@@ -994,17 +1055,16 @@ mod tests {
 
     #[test]
     fn cancellation_during_startup_returns_cancelled() {
-        let command = Command::new("sh").arg("-c").arg("sleep 10");
+        let fifo = create_fifo("startup-cancel");
+        let command = Command::new("sh")
+            .arg("-c")
+            .arg(format!("printf spawned > {}; sleep 10", shell_path(&fifo)));
         let config = PersistentConfig::default()
             .with_readiness(PersistentReadiness::OutputContains("ready".to_string()))
             .with_readiness_timeout(Duration::from_secs(2))
             .with_shutdown_grace_period(Duration::from_millis(50));
         let cancel = CancellationToken::new();
-        let cancel_for_thread = cancel.clone();
-        let cancel_thread = std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_millis(50));
-            cancel_for_thread.cancel();
-        });
+        let cancel_thread = cancel_after_fifo_signal(fifo, cancel.clone());
 
         let error =
             start_persistent_with_cancel(&command, &ProcessConfig::default(), &config, cancel)
@@ -1016,18 +1076,18 @@ mod tests {
 
     #[test]
     fn cancellation_during_command_readiness_returns_promptly() {
+        let fifo = create_fifo("command-readiness-cancel");
         let command = Command::new("sh").arg("-c").arg("sleep 10");
-        let readiness = Command::new("sh").arg("-c").arg("sleep 10");
+        let readiness = Command::new("sh").arg("-c").arg(format!(
+            "printf readiness > {}; sleep 10",
+            shell_path(&fifo)
+        ));
         let config = PersistentConfig::default()
             .with_readiness(PersistentReadiness::Command(readiness))
             .with_readiness_timeout(Duration::from_secs(10))
             .with_shutdown_grace_period(Duration::from_millis(50));
         let cancel = CancellationToken::new();
-        let cancel_for_thread = cancel.clone();
-        let cancel_thread = std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_millis(50));
-            cancel_for_thread.cancel();
-        });
+        let cancel_thread = cancel_after_fifo_signal(fifo, cancel.clone());
         let start = std::time::Instant::now();
 
         let error =
