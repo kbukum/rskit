@@ -181,6 +181,19 @@ pub struct StatusEntry {
     pub state: EntryState,
 }
 
+/// A file entry in the git index.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IndexEntry {
+    /// Repository-relative file path.
+    pub path: String,
+    /// Object ID stored in the index.
+    pub oid: Oid,
+    /// Entry kind.
+    pub kind: EntryKind,
+    /// Raw git file mode.
+    pub filemode: u32,
+}
+
 /// Type of a tree entry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]

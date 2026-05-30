@@ -4,7 +4,8 @@ use rskit_errors::AppResult;
 
 use crate::options::{BlameOptions, DescribeOptions, GrepOptions, LogOptions};
 use crate::types::{
-    BlameLine, Commit, DiffEntry, DiffStats, GrepMatch, Oid, StatusEntry, TreeEntry, TreeHash,
+    BlameLine, Commit, DiffEntry, DiffStats, GrepMatch, IndexEntry, Oid, StatusEntry, TreeEntry,
+    TreeHash,
 };
 
 /// Diff and working tree status operations.
@@ -17,6 +18,12 @@ pub trait Differ {
 
     /// Returns the working tree status.
     fn status(&self) -> AppResult<Vec<StatusEntry>>;
+}
+
+/// Read access to git index entries.
+pub trait IndexReader {
+    /// Returns the index entry for `path`, if the path is present in the index.
+    fn index_entry(&self, path: &str) -> AppResult<Option<IndexEntry>>;
 }
 
 /// Read access to git tree objects.

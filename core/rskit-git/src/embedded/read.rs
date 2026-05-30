@@ -7,10 +7,10 @@ use rskit_errors::{AppError, AppResult};
 
 use crate::error::GitError;
 use crate::options::{BlameOptions, LogOptions};
-use crate::read::{Blamer, Differ, LogReader, TreeReader};
+use crate::read::{Blamer, Differ, IndexReader, LogReader, TreeReader};
 use crate::types::{
-    BlameLine, Commit, DiffEntry, DiffStats, EntryKind, EntryState, FileStatus, Oid, StatusEntry,
-    TreeEntry, TreeHash,
+    BlameLine, Commit, DiffEntry, DiffStats, EntryKind, EntryState, FileStatus, IndexEntry, Oid,
+    StatusEntry, TreeEntry, TreeHash,
 };
 
 use super::{Backend, commit_from_git2, oid_from_git2, signature_from_git2};
@@ -111,6 +111,18 @@ impl TreeReader for Backend {
                 filemode: entry.filemode() as u32,
             })
             .collect())
+    }
+}
+
+impl IndexReader for Backend {
+    fn index_entry(&self, path: &str) -> AppResult<Option<IndexEntry>> {
+        let index = self.repo.index().map_err(GitError::Internal)?;
+        Ok(index.get_path(Path::new(path), 0).map(|entry| IndexEntry {
+            path: path.to_string(),
+            oid: oid_from_git2(entry.id),
+            kind: entry_kind_from_filemode(entry.mode as i32),
+            filemode: entry.mode,
+        }))
     }
 }
 
