@@ -690,16 +690,21 @@ fn run_readiness_command(
 ) -> AppResult<()> {
     let mut config = process_config.clone();
     config.timeout = Some(timeout);
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .map_err(|error| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!("failed to create readiness command runtime: {error}"),
-            )
-        })?;
-    let result = runtime.block_on(runner::run_with_cancel(command, &config, cancel))?;
+    let command = command.clone();
+    let result = thread::spawn(move || {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|error| {
+                AppError::new(
+                    ErrorCode::Internal,
+                    format!("failed to create readiness command runtime: {error}"),
+                )
+            })?;
+        runtime.block_on(runner::run_with_cancel(&command, &config, cancel))
+    })
+    .join()
+    .map_err(|_| AppError::new(ErrorCode::Internal, "readiness command runner panicked"))??;
     if result.success() {
         return Ok(());
     }
@@ -1032,6 +1037,32 @@ mod tests {
 
         assert_eq!(error.code, ErrorCode::Cancelled);
         assert!(start.elapsed() < Duration::from_secs(2));
+    }
+
+    #[test]
+    fn command_readiness_can_start_inside_tokio_runtime() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime starts");
+
+        runtime.block_on(async {
+            let command = Command::new("sh").arg("-c").arg("sleep 1");
+            let readiness = Command::new("sh").arg("-c").arg("true");
+            let config = PersistentConfig::default()
+                .with_readiness(PersistentReadiness::Command(readiness))
+                .with_readiness_timeout(Duration::from_secs(2));
+
+            let run = start_persistent_with_cancel(
+                &command,
+                &ProcessConfig::default(),
+                &config,
+                CancellationToken::new(),
+            )
+            .expect("persistent startup should not nest runtimes");
+
+            let _ = run.process.shutdown();
+        });
     }
 
     #[test]
