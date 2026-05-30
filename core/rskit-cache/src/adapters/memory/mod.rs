@@ -22,7 +22,7 @@ impl Entry {
     }
 }
 
-/// Lean in-process cache adapter used as the default core implementation.
+/// Lean in-process cache store adapter for local development and tests.
 pub struct MemoryCache {
     prefix: Option<String>,
     max_entries: Option<usize>,
