@@ -255,7 +255,8 @@ impl PersistentProcess {
         }
         let status = wait_for_shutdown(&mut self.child, pid, self.shutdown_grace_period)?;
         self.stopped = true;
-        self.completed_result(status, false, false)
+        let cancelled = self.cancelled.load(Ordering::SeqCst);
+        self.completed_result(status, false, cancelled)
             .map(ShutdownOutcome::Stopped)
     }
 
@@ -317,12 +318,18 @@ pub fn start_persistent_with_cancel(
     let stdout = Arc::new(Mutex::new(CapturedOutput::default()));
     let stderr = Arc::new(Mutex::new(CapturedOutput::default()));
     let cancelled = Arc::new(AtomicBool::new(false));
-    let cancel_thread = Some(spawn_cancel_thread(
+    let cancel_thread = match spawn_cancel_thread(
         child.id(),
         cancel,
         Arc::clone(&cancelled),
         persistent_config.shutdown_grace_period,
-    )?);
+    ) {
+        Ok(thread) => Some(thread),
+        Err(error) => {
+            let _ = cleanup_spawned_child(&mut child, persistent_config.shutdown_grace_period);
+            return Err(error);
+        }
+    };
     let (ready_tx, ready_rx) = mpsc::channel();
     let (stdout_thread, stderr_thread) = spawn_output_readers(
         &mut child,
@@ -365,7 +372,7 @@ pub fn start_persistent_with_cancel(
     drop(ready_tx);
 
     if let Err(error) = ready_rx.recv_timeout(persistent_config.readiness_timeout) {
-        let readiness_error = readiness_wait_error(&mut child, error)?;
+        let readiness_error = readiness_wait_error(&mut child, error, &cancelled)?;
         let mut process = persistent_process(
             child,
             stdin_thread,
@@ -610,9 +617,19 @@ fn update_match_buffer(match_buffer: &mut Vec<u8>, bytes: &[u8], matcher: &str) 
     ready_found
 }
 
-fn readiness_wait_error(child: &mut Child, error: mpsc::RecvTimeoutError) -> AppResult<AppError> {
+fn readiness_wait_error(
+    child: &mut Child,
+    error: mpsc::RecvTimeoutError,
+    cancelled: &AtomicBool,
+) -> AppResult<AppError> {
     if let Some(status) = child.try_wait().map_err(AppError::internal)? {
+        if cancelled.load(Ordering::SeqCst) {
+            return Ok(AppError::cancelled("persistent process startup"));
+        }
         return Ok(unexpected_exit_error(status));
+    }
+    if cancelled.load(Ordering::SeqCst) {
+        return Ok(AppError::cancelled("persistent process startup"));
     }
     match error {
         mpsc::RecvTimeoutError::Timeout => Ok(AppError::new(
@@ -624,6 +641,14 @@ fn readiness_wait_error(child: &mut Child, error: mpsc::RecvTimeoutError) -> App
             "persistent process output ended before readiness was observed",
         )),
     }
+}
+
+fn cleanup_spawned_child(child: &mut Child, grace_period: Duration) -> AppResult<()> {
+    let pid = child.id();
+    if !terminate(pid) {
+        let _ = child.kill();
+    }
+    wait_for_shutdown(child, pid, grace_period).map(|_| ())
 }
 
 fn unexpected_exit_error(status: ExitStatus) -> AppError {
@@ -755,7 +780,7 @@ mod tests {
     use super::{
         PersistentConfig, PersistentReadiness, ShutdownOutcome, start_persistent_with_cancel,
     };
-    use crate::{Command, ProcessConfig};
+    use crate::{Command, ErrorCode, ProcessConfig};
 
     #[test]
     fn output_matcher_marks_persistent_process_ready() {
@@ -845,6 +870,56 @@ mod tests {
         assert!(result.cancelled);
         assert_ne!(result.exit_code, Some(0));
         assert!(start.elapsed() < Duration::from_secs(1));
+    }
+
+    #[test]
+    fn shutdown_preserves_cancellation_state() {
+        let command = Command::new("sh")
+            .arg("-c")
+            .arg("trap '' TERM INT; printf ready; while :; do sleep 1; done");
+        let config = PersistentConfig::default()
+            .with_readiness(PersistentReadiness::OutputContains("ready".to_string()))
+            .with_readiness_timeout(Duration::from_secs(2))
+            .with_shutdown_grace_period(Duration::from_secs(5));
+        let cancel = CancellationToken::new();
+
+        let run = start_persistent_with_cancel(
+            &command,
+            &ProcessConfig::default(),
+            &config,
+            cancel.clone(),
+        )
+        .expect("process starts");
+        cancel.cancel();
+        std::thread::sleep(Duration::from_millis(50));
+
+        let outcome = run.process.shutdown().expect("shutdown succeeds");
+        let ShutdownOutcome::Stopped(result) = outcome else {
+            panic!("shutdown should stop the still-running cancelled process");
+        };
+        assert!(result.cancelled);
+    }
+
+    #[test]
+    fn cancellation_during_startup_returns_cancelled() {
+        let command = Command::new("sh").arg("-c").arg("sleep 10");
+        let config = PersistentConfig::default()
+            .with_readiness(PersistentReadiness::OutputContains("ready".to_string()))
+            .with_readiness_timeout(Duration::from_secs(2))
+            .with_shutdown_grace_period(Duration::from_millis(50));
+        let cancel = CancellationToken::new();
+        let cancel_for_thread = cancel.clone();
+        let cancel_thread = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(50));
+            cancel_for_thread.cancel();
+        });
+
+        let error =
+            start_persistent_with_cancel(&command, &ProcessConfig::default(), &config, cancel)
+                .expect_err("startup cancellation should fail with cancelled semantics");
+        cancel_thread.join().expect("cancel thread joins");
+
+        assert_eq!(error.code, ErrorCode::Cancelled);
     }
 
     #[test]
