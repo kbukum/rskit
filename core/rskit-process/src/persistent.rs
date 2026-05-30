@@ -226,10 +226,15 @@ impl PersistentProcess {
                 "persistent process already stopped",
             ));
         }
-        let status = self.child.wait().map_err(AppError::internal)?;
+        let status = wait_for_exit(
+            &mut self.child,
+            &self.cancel_thread,
+            self.shutdown_grace_period,
+        )?;
         self.stopped = true;
+        let cancelled = self.cancelled.load(Ordering::SeqCst);
         self.stop_cancel_thread()?;
-        self.completed_result(status, false, self.cancelled.load(Ordering::SeqCst))
+        self.completed_result(status, false, cancelled)
     }
 
     fn shutdown_inner(&mut self) -> AppResult<ShutdownOutcome> {
@@ -733,6 +738,29 @@ fn wait_for_shutdown(child: &mut Child, pid: u32, grace_period: Duration) -> App
     }
 }
 
+fn wait_for_exit(
+    child: &mut Child,
+    cancel_thread: &Option<CancelThread>,
+    grace_period: Duration,
+) -> AppResult<ExitStatus> {
+    loop {
+        if let Some(status) = child.try_wait().map_err(AppError::internal)? {
+            return Ok(status);
+        }
+        if cancel_thread
+            .as_ref()
+            .is_some_and(CancelThread::is_cancel_requested)
+        {
+            let pid = child.id();
+            if !terminate(pid) {
+                let _ = child.kill();
+            }
+            return wait_for_shutdown(child, pid, grace_period);
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+}
+
 #[derive(Debug)]
 struct CancelThread {
     stop: CancellationToken,
@@ -742,8 +770,12 @@ struct CancelThread {
 }
 
 impl CancelThread {
+    fn is_cancel_requested(&self) -> bool {
+        self.cancel.is_cancelled() || self.cancelled.load(Ordering::SeqCst)
+    }
+
     fn stop(self) -> AppResult<()> {
-        if self.cancel.is_cancelled() {
+        if self.is_cancel_requested() {
             self.cancelled.store(true, Ordering::SeqCst);
         }
         self.stop.cancel();
