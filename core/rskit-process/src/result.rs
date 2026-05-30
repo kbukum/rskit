@@ -23,6 +23,8 @@ pub struct ProcessResult {
     pub duration: Duration,
     /// Whether the process was killed due to timeout.
     pub timed_out: bool,
+    /// Whether the process was cancelled by the caller.
+    pub cancelled: bool,
 }
 
 impl ProcessResult {
@@ -44,6 +46,7 @@ impl ProcessResult {
     ///     stderr_truncated: false,
     ///     duration: Duration::from_secs(1),
     ///     timed_out: false,
+    ///     cancelled: false,
     /// };
     ///
     /// assert!(result.success());
@@ -68,6 +71,12 @@ impl ProcessResult {
     /// # }
     /// ```
     pub fn check(&self) -> crate::AppResult<&Self> {
+        if self.cancelled {
+            return Err(
+                crate::AppError::new(crate::ErrorCode::Cancelled, "process cancelled")
+                    .with_detail("cancelled", true),
+            );
+        }
         if self.timed_out {
             return Err(
                 crate::AppError::new(crate::ErrorCode::Timeout, "process timed out")

@@ -24,4 +24,5 @@ rskit-fs = { path = "../rskit-fs", default-features = false }
 rskit-process = { path = "../rskit-process" }
 
 [dev-dependencies]
+rskit-testutil = { path = "../rskit-testutil" }
 tempfile = { workspace = true }

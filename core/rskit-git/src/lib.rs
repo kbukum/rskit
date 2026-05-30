@@ -31,6 +31,7 @@ pub mod embedded;
 pub mod error;
 pub mod manage;
 pub mod options;
+pub mod paths;
 pub mod read;
 pub mod repo;
 #[cfg(feature = "testutil")]
@@ -42,6 +43,7 @@ pub use core::{Executor, Repository};
 pub use error::GitError;
 pub use manage::{ConfigReader, Maintainer, RefManager, RemoteManager};
 pub use options::*;
+pub use paths::{join_repo_path, repo_relative_path};
 pub use read::{Blamer, Differ, IndexReader, Inspector, LogReader, TreeReader};
 pub use repo::{Repo, clone, discover, init, init_bare, open};
 pub use rskit_errors::{AppError, AppResult};

@@ -26,6 +26,46 @@ use rskit_errors::{AppError, AppResult, ErrorCode};
 pub mod input {
     use rskit_errors::{AppError, AppResult};
 
+    /// Validate a required string that must not contain leading or trailing whitespace.
+    pub fn validate_required_trimmed(field: &str, value: &str) -> AppResult<()> {
+        reject_unicode_controls(field, value)?;
+        if value.trim().is_empty() {
+            return Err(AppError::invalid_input(field, "is required"));
+        }
+        if value != value.trim() {
+            return Err(AppError::invalid_input(
+                field,
+                "cannot contain leading or trailing whitespace",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Validate a required identifier that is safe to use as a path segment.
+    pub fn validate_path_safe_identifier(field: &str, value: &str) -> AppResult<()> {
+        validate_required_trimmed(field, value)?;
+        if value.contains(['/', '\\', ':']) || value == "." || value == ".." {
+            return Err(AppError::invalid_input(
+                field,
+                "cannot contain path separators or traversal markers",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Validate an optional string when present and return `None` for absent values.
+    pub fn validate_optional_trimmed(
+        field: &str,
+        value: Option<String>,
+    ) -> AppResult<Option<String>> {
+        value
+            .map(|value| {
+                validate_required_trimmed(field, &value)?;
+                Ok(value)
+            })
+            .transpose()
+    }
+
     /// Validate that a path-like input cannot traverse outside its base.
     pub fn validate_safe_path(path: &str) -> AppResult<()> {
         reject_unicode_controls("path", path)?;

@@ -232,6 +232,7 @@ async fn run_process(
         stderr_truncated,
         duration: start.elapsed(),
         timed_out,
+        cancelled,
     };
 
     debug!(

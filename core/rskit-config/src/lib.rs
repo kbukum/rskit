@@ -3,15 +3,19 @@
 #![warn(missing_docs)]
 
 mod loader;
+mod normalize;
 mod secret;
 mod service;
+mod template;
 
 pub use loader::{
     ConfigLoader, ConfigMapSource, ConfigSource, DotenvFileSource, EnvironmentSource, Profile,
     TomlFileSource, load_config,
 };
+pub use normalize::{canonicalize_root_relative_to, supported_schema};
 pub use secret::SecretString;
 pub use service::{Environment, LogFormat, LogOutput, LoggingConfig, ServiceConfig};
+pub use template::{Placeholder as TemplatePlaceholder, Template, TemplatePart};
 
 /// Trait that every application config struct must implement.
 ///

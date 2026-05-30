@@ -104,6 +104,7 @@ pub fn run(command: &Command, config: &ProcessConfig) -> AppResult<ProcessResult
         stderr_truncated: stderr_output.truncated,
         duration: start.elapsed(),
         timed_out,
+        cancelled: false,
     })
 }
 
