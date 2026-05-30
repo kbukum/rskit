@@ -56,7 +56,15 @@ impl Differ for Backend {
     }
 
     fn status(&self) -> AppResult<Vec<StatusEntry>> {
-        let statuses = self.repo.statuses(None).map_err(GitError::Internal)?;
+        let mut options = git2::StatusOptions::new();
+        options
+            .include_ignored(false)
+            .include_untracked(true)
+            .recurse_untracked_dirs(true);
+        let statuses = self
+            .repo
+            .statuses(Some(&mut options))
+            .map_err(GitError::Internal)?;
         let mut entries = Vec::new();
 
         for entry in statuses.iter() {

@@ -3,8 +3,7 @@ use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
 use rskit_cache::{
-    CacheBackend, CacheConfig, CacheRegistry, MemoryCache, MemoryConfig, TypedStore,
-    register_memory,
+    CacheConfig, CacheRegistry, CacheStore, MemoryCache, MemoryConfig, TypedStore, register_memory,
 };
 
 #[test]
@@ -16,7 +15,7 @@ fn registry_is_empty_without_explicit_registration() {
 }
 
 #[tokio::test]
-async fn explicit_memory_registration_builds_backend() {
+async fn explicit_memory_registration_builds_store() {
     let mut registry = CacheRegistry::new();
     register_memory(&mut registry).unwrap();
 
@@ -27,7 +26,7 @@ async fn explicit_memory_registration_builds_backend() {
 }
 
 #[tokio::test]
-async fn unregistered_backend_returns_error() {
+async fn unregistered_store_returns_error() {
     let registry = CacheRegistry::new();
     let err = registry.build(&CacheConfig::default()).await.err().unwrap();
     assert!(err.to_string().contains("not registered"));
@@ -76,7 +75,7 @@ async fn typed_store_round_trips_json_via_cache_trait() {
         roles: Vec<String>,
     }
 
-    let cache: Arc<dyn CacheBackend> = Arc::new(MemoryCache::default());
+    let cache: Arc<dyn CacheStore> = Arc::new(MemoryCache::default());
     let store = TypedStore::<Session>::new(cache, "sessions");
 
     let expected = Session {
@@ -92,9 +91,9 @@ async fn typed_store_round_trips_json_via_cache_trait() {
 }
 
 #[test]
-fn config_defaults_to_memory_backend() {
+fn config_defaults_to_memory_store() {
     let cfg = CacheConfig::default();
-    assert_eq!(cfg.backend, "memory");
+    assert_eq!(cfg.store, "memory");
     assert!(cfg.key_prefix.is_none());
     assert!(cfg.memory.max_entries.is_none());
 }
@@ -102,11 +101,11 @@ fn config_defaults_to_memory_backend() {
 #[test]
 fn deserialise_cache_config_with_memory_options() {
     let cfg: CacheConfig = serde_json::from_str(
-        r#"{"backend":"memory","key_prefix":"app","memory":{"max_entries":32}}"#,
+        r#"{"store":"memory","key_prefix":"app","memory":{"max_entries":32}}"#,
     )
     .unwrap();
 
-    assert_eq!(cfg.backend, "memory");
+    assert_eq!(cfg.store, "memory");
     assert_eq!(cfg.key_prefix.as_deref(), Some("app"));
     assert_eq!(cfg.memory.max_entries, Some(32));
 }

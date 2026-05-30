@@ -10,7 +10,7 @@ use rskit_errors::{AppError, AppResult, ErrorCode};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
-use crate::{CacheBackend, CacheConfig, CacheFactory, CacheRegistry};
+use crate::{CacheConfig, CacheRegistry, CacheStore, CacheStoreFactory};
 
 const DEFAULT_MAX_ENTRY_BYTES: u64 = 16 * 1024 * 1024;
 
@@ -159,7 +159,7 @@ impl FileCache {
 }
 
 #[async_trait::async_trait]
-impl CacheBackend for FileCache {
+impl CacheStore for FileCache {
     async fn get(&self, key: &str) -> AppResult<Option<String>> {
         let key = self.prefixed_key(key);
         let path = self.entry_path(&key);
@@ -219,8 +219,8 @@ struct FileFactory {
 }
 
 #[async_trait::async_trait]
-impl CacheFactory for FileFactory {
-    async fn create(&self, config: &CacheConfig) -> AppResult<Arc<dyn CacheBackend>> {
+impl CacheStoreFactory for FileFactory {
+    async fn create(&self, config: &CacheConfig) -> AppResult<Arc<dyn CacheStore>> {
         let mut fs = self.config.clone();
         if fs.key_prefix.is_none() {
             fs.key_prefix.clone_from(&config.key_prefix);
@@ -547,7 +547,7 @@ mod tests {
 
     fn cache_config_with_prefix(prefix: &str) -> CacheConfig {
         CacheConfig {
-            backend: "fs".to_owned(),
+            store: "fs".to_owned(),
             key_prefix: Some(prefix.to_owned()),
             ..CacheConfig::default()
         }

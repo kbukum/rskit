@@ -8,7 +8,7 @@ use parking_lot::Mutex;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 
 use crate::config::CacheConfig;
-use crate::registry::{CacheBackend, CacheFactory, CacheRegistry};
+use crate::registry::{CacheRegistry, CacheStore, CacheStoreFactory};
 
 #[derive(Clone)]
 struct Entry {
@@ -83,7 +83,7 @@ impl MemoryCache {
 }
 
 #[async_trait::async_trait]
-impl CacheBackend for MemoryCache {
+impl CacheStore for MemoryCache {
     async fn get(&self, key: &str) -> AppResult<Option<String>> {
         let mut entries = self.entries.lock();
         Self::prune_expired(&mut entries, self.now());
@@ -144,8 +144,8 @@ impl Default for MemoryCache {
 struct MemoryFactory;
 
 #[async_trait::async_trait]
-impl CacheFactory for MemoryFactory {
-    async fn create(&self, config: &CacheConfig) -> AppResult<Arc<dyn CacheBackend>> {
+impl CacheStoreFactory for MemoryFactory {
+    async fn create(&self, config: &CacheConfig) -> AppResult<Arc<dyn CacheStore>> {
         Ok(Arc::new(MemoryCache::new(
             config.key_prefix.clone(),
             config.memory.max_entries,

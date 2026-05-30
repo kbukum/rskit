@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use parking_lot::Mutex;
-use rskit_cache::{CacheBackend, MemoryCache};
+use rskit_cache::{CacheStore, MemoryCache};
 
 #[tokio::test]
 async fn memory_cache_delete_reports_existence() {
