@@ -66,8 +66,8 @@ impl PersistentProcess {
             self.shutdown_grace_period,
         )?;
         self.stopped = true;
-        let cancelled = self.cancelled.load(Ordering::SeqCst);
         self.stop_cancel_thread()?;
+        let cancelled = self.cancelled.load(Ordering::SeqCst);
         self.completed_result(status, false, cancelled)
     }
 
