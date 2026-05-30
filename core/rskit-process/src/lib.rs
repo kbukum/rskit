@@ -48,7 +48,7 @@ mod sync;
 pub use command::{Command, DEFAULT_MAX_OUTPUT_BYTES, ProcessConfig, command};
 pub use persistent::{
     PersistentConfig, PersistentOutput, PersistentOutputStream, PersistentProcess,
-    PersistentReadiness, PersistentRun, PersistentStartup, PersistentStartErrorKind,
+    PersistentReadiness, PersistentRun, PersistentStartErrorKind, PersistentStartup,
     ShutdownOutcome, persistent_start_error_kind, start_persistent_with_cancel,
 };
 pub use process_group::{

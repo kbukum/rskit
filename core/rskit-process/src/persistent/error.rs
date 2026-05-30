@@ -59,8 +59,5 @@ pub(in crate::persistent) fn persistent_start_error(
     code: ErrorCode,
     message: impl Into<String>,
 ) -> AppError {
-    AppError::new(code, message).with_detail(
-        PERSISTENT_START_ERROR_KIND_DETAIL,
-        kind.as_str(),
-    )
+    AppError::new(code, message).with_detail(PERSISTENT_START_ERROR_KIND_DETAIL, kind.as_str())
 }
