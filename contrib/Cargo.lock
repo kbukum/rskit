@@ -4745,6 +4745,7 @@ dependencies = [
  "config",
  "dotenvy",
  "rskit-errors",
+ "rskit-fs",
  "rskit-validation",
  "rskit-version",
  "serde",
@@ -5208,6 +5209,7 @@ name = "rskit-process"
 version = "0.1.0"
 dependencies = [
  "libc",
+ "parking_lot",
  "rskit-errors",
  "thiserror 2.0.18",
  "tokio",

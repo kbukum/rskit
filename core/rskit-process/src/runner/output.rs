@@ -7,7 +7,7 @@ use tokio::{
 
 use crate::{AppError, AppResult, command::DEFAULT_MAX_OUTPUT_BYTES};
 
-use super::observer::OutputLineCallback;
+use super::observer::{OutputBytesCallback, OutputLineCallback};
 
 #[derive(Debug)]
 pub(in crate::runner) struct CapturedOutput {
@@ -19,19 +19,21 @@ pub(in crate::runner) fn spawn_reader<R>(
     reader: Option<R>,
     max_output_bytes: Option<usize>,
     line_callback: Option<OutputLineCallback>,
+    bytes_callback: Option<OutputBytesCallback>,
     retain_output: bool,
 ) -> Option<JoinHandle<io::Result<CapturedOutput>>>
 where
     R: AsyncRead + Unpin + Send + 'static,
 {
-    reader.map(|reader| match line_callback {
-        Some(callback) => tokio::spawn(read_observed_lines(
+    reader.map(|reader| match (line_callback, bytes_callback) {
+        (None, None) => tokio::spawn(read_output(reader, max_output_bytes, retain_output)),
+        (line_callback, bytes_callback) => tokio::spawn(read_observed_output(
             reader,
             max_output_bytes,
-            callback,
+            line_callback,
+            bytes_callback,
             retain_output,
         )),
-        None => tokio::spawn(read_output(reader, max_output_bytes, retain_output)),
     })
 }
 
@@ -86,10 +88,11 @@ where
     })
 }
 
-async fn read_observed_lines<R>(
+async fn read_observed_output<R>(
     reader: R,
     max_output_bytes: Option<usize>,
-    line_callback: OutputLineCallback,
+    line_callback: Option<OutputLineCallback>,
+    bytes_callback: Option<OutputBytesCallback>,
     retain_output: bool,
 ) -> io::Result<CapturedOutput>
 where
@@ -108,10 +111,17 @@ where
     loop {
         let read = reader.read(&mut buffer).await?;
         if read == 0 {
-            if !line.is_empty() && !line_truncated {
-                emit_observed_line(&line, &line_callback);
+            if !line.is_empty()
+                && !line_truncated
+                && let Some(callback) = line_callback.as_ref()
+            {
+                emit_observed_line(&line, callback);
             }
             break;
+        }
+
+        if let Some(callback) = &bytes_callback {
+            callback(&buffer[..read]);
         }
 
         if retain_output && remaining > 0 {
@@ -125,6 +135,10 @@ where
             capture_truncated = true;
         }
 
+        let Some(line_callback) = line_callback.as_ref() else {
+            continue;
+        };
+
         for byte in &buffer[..read] {
             if *byte == b'\n' && skip_lf_after_cr {
                 skip_lf_after_cr = false;
@@ -135,7 +149,7 @@ where
             if *byte == b'\n' || *byte == b'\r' {
                 if !line_truncated {
                     line.push(*byte);
-                    emit_observed_line(&line, &line_callback);
+                    emit_observed_line(&line, line_callback);
                 }
                 line.clear();
                 line_truncated = false;
@@ -150,7 +164,7 @@ where
             if line.len() < max_line_bytes {
                 line.push(*byte);
             } else {
-                emit_observed_line(&line, &line_callback);
+                emit_observed_line(&line, line_callback);
                 line.clear();
                 line_truncated = true;
             }

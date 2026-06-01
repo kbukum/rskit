@@ -2,7 +2,7 @@ use tokio::{process::Child, time::timeout};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
 
-use crate::{AppError, AppResult, Command, ErrorCode, ProcessConfig, signal::ProcessSignal};
+use crate::{AppError, AppResult, ErrorCode, ProcessConfig, ProcessSpec, signal::ProcessSignal};
 
 pub(in crate::runner) struct Completion {
     pub(in crate::runner) exit_code: Option<i32>,
@@ -13,7 +13,7 @@ pub(in crate::runner) struct Completion {
 
 pub(in crate::runner) async fn wait_for_completion(
     child: &mut Child,
-    command: &Command,
+    spec: &ProcessSpec,
     config: &ProcessConfig,
     cancel: CancellationToken,
 ) -> AppResult<Completion> {
@@ -23,8 +23,8 @@ pub(in crate::runner) async fn wait_for_completion(
     {
         tokio::select! {
             _ = cancel.cancelled() => {
-                debug!(program = %command.program.display(), "process cancelled, sending SIGTERM");
-                let (exit_code, stderr) = terminate_and_wait(child, pid, config.grace_period, "cancellation").await;
+                debug!(program = %spec.program.display(), "process cancelled, sending SIGTERM");
+                let (exit_code, stderr) = terminate_and_wait(child, pid, config, "cancellation").await;
                 (exit_code, false, true, stderr)
             }
             wait_result = timeout(timeout_duration, child.wait()) => {
@@ -37,8 +37,8 @@ pub(in crate::runner) async fn wait_for_completion(
                         ));
                     }
                     Err(_) => {
-                        debug!(program = %command.program.display(), timeout = ?timeout_duration, "process timeout, sending SIGTERM");
-                        let (exit_code, stderr) = terminate_and_wait(child, pid, config.grace_period, "timeout").await;
+                        debug!(program = %spec.program.display(), timeout = ?timeout_duration, "process timeout, sending SIGTERM");
+                        let (exit_code, stderr) = terminate_and_wait(child, pid, config, "timeout").await;
                         (exit_code, true, false, stderr)
                     }
                 }
@@ -47,8 +47,8 @@ pub(in crate::runner) async fn wait_for_completion(
     } else {
         tokio::select! {
             _ = cancel.cancelled() => {
-                debug!(program = %command.program.display(), "process cancelled, sending SIGTERM");
-                let (exit_code, stderr) = terminate_and_wait(child, pid, config.grace_period, "cancellation").await;
+                debug!(program = %spec.program.display(), "process cancelled, sending SIGTERM");
+                let (exit_code, stderr) = terminate_and_wait(child, pid, config, "cancellation").await;
                 (exit_code, false, true, stderr)
             }
             wait_result = child.wait() => {
@@ -76,20 +76,20 @@ pub(in crate::runner) async fn wait_for_completion(
 async fn terminate_and_wait(
     child: &mut Child,
     pid: Option<u32>,
-    grace_period: std::time::Duration,
+    config: &ProcessConfig,
     reason: &str,
 ) -> (Option<i32>, Option<String>) {
-    if !terminate_process_group(pid, ProcessSignal::Terminate) {
+    if !terminate_process(pid, config, ProcessSignal::Terminate) {
         let _ = child.start_kill();
     }
-    match timeout(grace_period, child.wait()).await {
+    match timeout(config.signal.grace_period, child.wait()).await {
         Ok(Ok(status)) => (status.code(), None),
         Ok(Err(error)) => {
             warn!(
                 signal = ProcessSignal::Terminate.name(),
                 "error waiting for process after signal: {error}"
             );
-            if !terminate_process_group(pid, ProcessSignal::Kill) {
+            if !terminate_process(pid, config, ProcessSignal::Kill) {
                 let _ = child.start_kill();
             }
             (
@@ -104,7 +104,7 @@ async fn terminate_and_wait(
                 signal = ProcessSignal::Kill.name(),
                 "grace period expired, sending signal"
             );
-            if !terminate_process_group(pid, ProcessSignal::Kill) {
+            if !terminate_process(pid, config, ProcessSignal::Kill) {
                 let _ = child.start_kill();
             }
             let _ = child.wait().await;
@@ -116,14 +116,20 @@ async fn terminate_and_wait(
     }
 }
 
-fn terminate_process_group(pid: Option<u32>, signal: ProcessSignal) -> bool {
+fn terminate_process(pid: Option<u32>, config: &ProcessConfig, signal: ProcessSignal) -> bool {
     if let Some(pid) = pid {
         #[cfg(unix)]
-        // SAFETY: `kill` is invoked with the negated process-group id created by
-        // the `pre_exec` hook so signals fan out to the subprocess tree.
-        // Errors are handled explicitly and ignored only for `ESRCH`.
         unsafe {
-            let result = libc::kill(-(pid as i32), signal.as_raw());
+            let target =
+                if config.signal.create_process_group && config.signal.terminate_descendants {
+                    -(pid as i32)
+                } else {
+                    pid as i32
+                };
+            // SAFETY: `kill` targets either the child pid or the negated
+            // process-group id created by the `pre_exec` hook. ESRCH means the
+            // process already exited.
+            let result = libc::kill(target, signal.as_raw());
             if result != 0 {
                 let error = std::io::Error::last_os_error();
                 if error.raw_os_error() != Some(libc::ESRCH) {

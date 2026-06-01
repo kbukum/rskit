@@ -42,17 +42,35 @@ pub fn kill(pid: u32) -> bool {
     signal(pid, ProcessSignal::Kill)
 }
 
+pub(crate) fn terminate_target(pid: u32, process_group: bool) -> bool {
+    signal_target(pid, ProcessSignal::Terminate, process_group)
+}
+
+pub(crate) fn kill_target(pid: u32, process_group: bool) -> bool {
+    signal_target(pid, ProcessSignal::Kill, process_group)
+}
+
 fn signal(pid: u32, signal: ProcessSignal) -> bool {
+    signal_target(pid, signal, true)
+}
+
+fn signal_target(pid: u32, signal: ProcessSignal, process_group: bool) -> bool {
     if pid == 0 {
         return false;
     }
 
     #[cfg(unix)]
     {
-        // SAFETY: `kill` targets the negated process-group id created by
-        // [`isolate`]. ESRCH means the process group has already exited.
+        let target = if process_group {
+            -(pid as i32)
+        } else {
+            pid as i32
+        };
+        // SAFETY: `kill` targets either the child pid or the negated
+        // process-group id created by [`isolate`]. ESRCH means the target has
+        // already exited.
         unsafe {
-            let result = libc::kill(-(pid as i32), signal.as_raw());
+            let result = libc::kill(target, signal.as_raw());
             if result != 0 {
                 let error = std::io::Error::last_os_error();
                 if error.raw_os_error() != Some(libc::ESRCH) {
@@ -66,6 +84,7 @@ fn signal(pid: u32, signal: ProcessSignal) -> bool {
     {
         let _ = pid;
         let _ = signal;
+        let _ = process_group;
         false
     }
 }

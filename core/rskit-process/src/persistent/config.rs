@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use crate::{Command, command::DEFAULT_MAX_OUTPUT_BYTES};
+use crate::{ProcessSpec, command::DEFAULT_MAX_OUTPUT_BYTES};
 
 /// Persistent process readiness policy.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -11,7 +11,7 @@ pub enum PersistentReadiness {
     /// The process is ready when either output stream contains the text.
     OutputContains(String),
     /// The process is ready when a command exits successfully.
-    Command(Command),
+    Command(ProcessSpec),
 }
 
 /// Configuration for a persistent process.

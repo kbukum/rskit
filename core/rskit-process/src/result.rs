@@ -86,12 +86,12 @@ impl ProcessResult {
     /// # Example
     ///
     /// ```no_run
-    /// use rskit_process::{Command, ProcessConfig, run_with_cancel};
+    /// use rskit_process::{ProcessConfig, ProcessSpec, run_with_cancel};
     /// use tokio_util::sync::CancellationToken;
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let cmd = Command::new("echo").arg("hello");
-    /// let result = run_with_cancel(&cmd, &ProcessConfig::default(), CancellationToken::new()).await?;
+    /// let spec = ProcessSpec::new("echo").arg("hello");
+    /// let result = run_with_cancel(&spec, &ProcessConfig::default(), CancellationToken::new()).await?;
     /// result.check()?;
     /// # Ok(())
     /// # }

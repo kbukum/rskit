@@ -5,7 +5,9 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
-use rskit_process::{OutputObserver, ProcessConfig, ProcessResult, command as process_command};
+use rskit_process::{
+    ObservedIo, OutputObserver, ProcessConfig, ProcessIo, ProcessResult, ProcessSpec,
+};
 use tokio_util::sync::CancellationToken;
 
 const MAX_CAPTURE_BYTES: usize = 64 * 1024 * 1024;
@@ -24,13 +26,14 @@ pub(crate) async fn run_capture_with_cancel(
     timeout: Option<Duration>,
     cancel: CancellationToken,
 ) -> AppResult<ProcessResult> {
-    let command = process_command(program).args(args);
-    let config = ProcessConfig {
-        timeout,
-        max_output_bytes: Some(MAX_CAPTURE_BYTES),
-        ..ProcessConfig::default()
-    };
+    let command = ProcessSpec::new(program).args(args);
+    let config = ProcessConfig::default()
+        .with_timeout(timeout)
+        .with_max_output_bytes(MAX_CAPTURE_BYTES);
     let result = rskit_process::run_with_cancel(&command, &config, cancel).await?;
+    if result.cancelled {
+        return Err(AppError::new(ErrorCode::Cancelled, "process cancelled"));
+    }
     if result.timed_out {
         return Ok(result);
     }
@@ -65,18 +68,13 @@ pub(crate) async fn run_ffmpeg_observed(
     cancel: CancellationToken,
     stderr_line: impl Fn(&str) + Send + Sync + 'static,
 ) -> AppResult<ProcessResult> {
-    let command = process_command(program).args(args);
-    let config = ProcessConfig {
-        timeout,
-        ..ProcessConfig::default()
-    };
-    rskit_process::run_with_observer(
-        &command,
-        &config,
-        cancel,
-        OutputObserver::new().with_stderr_line(stderr_line),
-    )
-    .await
+    let command = ProcessSpec::new(program).args(args);
+    let config = ProcessConfig::default()
+        .with_timeout(timeout)
+        .with_io(ProcessIo::observed(ObservedIo::new(
+            OutputObserver::new().with_stderr_line(stderr_line),
+        )));
+    rskit_process::run_with_cancel(&command, &config, cancel).await
 }
 
 pub(crate) fn with_context(error: AppError, context: impl std::fmt::Display) -> AppError {
@@ -84,6 +82,12 @@ pub(crate) fn with_context(error: AppError, context: impl std::fmt::Display) -> 
 }
 
 pub(crate) fn ensure_success(result: &ProcessResult, context: &str) -> AppResult<()> {
+    if result.cancelled {
+        return Err(AppError::new(
+            ErrorCode::Cancelled,
+            format!("{context} cancelled"),
+        ));
+    }
     if result.timed_out {
         return Err(AppError::new(
             ErrorCode::Timeout,
@@ -97,4 +101,31 @@ pub(crate) fn ensure_success(result: &ProcessResult, context: &str) -> AppResult
         ErrorCode::Internal,
         format!("{context} failed: {}", result.stderr),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use rskit_process::ProcessResult;
+
+    use super::*;
+
+    #[test]
+    fn ensure_success_preserves_cancelled_result() {
+        let result = ProcessResult::completed(
+            None,
+            Vec::new(),
+            Vec::new(),
+            false,
+            false,
+            Duration::from_millis(1),
+            false,
+            true,
+        );
+
+        let error = ensure_success(&result, "ffmpeg").expect_err("cancelled result fails");
+
+        assert_eq!(error.code, ErrorCode::Cancelled);
+    }
 }

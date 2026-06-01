@@ -6,8 +6,8 @@ use std::{
 };
 
 use crate::{
-    AppError, AppResult, ErrorCode, ProcessResult,
-    process_group::{kill, terminate},
+    AppError, AppResult, ErrorCode, ProcessResult, SignalPolicy,
+    process_group::{kill_target, terminate_target},
 };
 
 use super::{
@@ -38,6 +38,7 @@ pub struct PersistentProcess {
     stdout: Capture,
     stderr: Capture,
     start: Instant,
+    signal: SignalPolicy,
     shutdown_grace_period: Duration,
     stopped: bool,
 }
@@ -63,6 +64,7 @@ impl PersistentProcess {
         let status = wait_for_exit(
             &mut self.child,
             &self.cancel_thread,
+            self.signal,
             self.shutdown_grace_period,
         )?;
         self.stopped = true;
@@ -89,10 +91,15 @@ impl PersistentProcess {
 
         self.stop_cancel_thread()?;
         let pid = self.child.id();
-        if !terminate(pid) {
+        if !terminate_target(pid, terminate_group(self.signal)) {
             let _ = self.child.kill();
         }
-        let status = wait_for_shutdown(&mut self.child, pid, self.shutdown_grace_period)?;
+        let status = wait_for_shutdown(
+            &mut self.child,
+            pid,
+            self.signal,
+            self.shutdown_grace_period,
+        )?;
         self.stopped = true;
         let cancelled = self.cancelled.load(Ordering::SeqCst);
         self.completed_result(status, false, cancelled)
@@ -150,6 +157,7 @@ pub(in crate::persistent) fn new_process(
     stdout: Capture,
     stderr: Capture,
     start: Instant,
+    signal: SignalPolicy,
     shutdown_grace_period: Duration,
 ) -> PersistentProcess {
     PersistentProcess {
@@ -162,6 +170,7 @@ pub(in crate::persistent) fn new_process(
         stdout,
         stderr,
         start,
+        signal,
         shutdown_grace_period,
         stopped: false,
     }
@@ -169,23 +178,29 @@ pub(in crate::persistent) fn new_process(
 
 pub(in crate::persistent) fn cleanup_spawned_child(
     child: &mut Child,
+    signal: SignalPolicy,
     grace_period: Duration,
 ) -> AppResult<()> {
     let pid = child.id();
-    if !terminate(pid) {
+    if !terminate_target(pid, terminate_group(signal)) {
         let _ = child.kill();
     }
-    wait_for_shutdown(child, pid, grace_period).map(|_| ())
+    wait_for_shutdown(child, pid, signal, grace_period).map(|_| ())
 }
 
-fn wait_for_shutdown(child: &mut Child, pid: u32, grace_period: Duration) -> AppResult<ExitStatus> {
+fn wait_for_shutdown(
+    child: &mut Child,
+    pid: u32,
+    signal: SignalPolicy,
+    grace_period: Duration,
+) -> AppResult<ExitStatus> {
     let deadline = Instant::now() + grace_period;
     loop {
         if let Some(status) = child.try_wait().map_err(AppError::internal)? {
             return Ok(status);
         }
         if Instant::now() >= deadline {
-            if !kill(pid) {
+            if !kill_target(pid, terminate_group(signal)) {
                 let _ = child.kill();
             }
             return child.wait().map_err(AppError::internal);
@@ -197,6 +212,7 @@ fn wait_for_shutdown(child: &mut Child, pid: u32, grace_period: Duration) -> App
 fn wait_for_exit(
     child: &mut Child,
     cancel_thread: &Option<CancelThread>,
+    signal: SignalPolicy,
     grace_period: Duration,
 ) -> AppResult<ExitStatus> {
     loop {
@@ -208,11 +224,15 @@ fn wait_for_exit(
             .is_some_and(CancelThread::is_cancel_requested)
         {
             let pid = child.id();
-            if !terminate(pid) {
+            if !terminate_target(pid, terminate_group(signal)) {
                 let _ = child.kill();
             }
-            return wait_for_shutdown(child, pid, grace_period);
+            return wait_for_shutdown(child, pid, signal, grace_period);
         }
         thread::sleep(Duration::from_millis(10));
     }
+}
+
+fn terminate_group(signal: SignalPolicy) -> bool {
+    signal.create_process_group && signal.terminate_descendants
 }

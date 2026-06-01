@@ -1,136 +1,95 @@
 # rskit-process
 
-Process and subprocess execution with timeout and signal handling.
+Process and subprocess execution with explicit I/O modes, timeout handling, and process-tree termination.
 
-This crate provides functionality to execute external processes with:
+## Mode selection
 
-- **Timeout support** with configurable grace period
-- **SIGTERM → SIGKILL escalation** for graceful shutdown
-- **Process group isolation** to ensure child processes are properly terminated
-- **Stdout/stderr capture**
-- **Environment variable control**
-- **Working directory configuration**
-- **Stdin piping**
+| Mode | Intended use | Guarantees | Non-guarantees |
+| --- | --- | --- | --- |
+| `ProcessIo::Captured` | Deterministic non-interactive execution | Captures stdout/stderr separately with bounded retention, timeout, cancellation, and predefined stdin | No terminal behavior and no exact cross-stream ordering |
+| `ProcessIo::Observed` | Live output observation with optional capture | Raw-byte and line callbacks for stdout/stderr; optional bounded capture | Not a TTY and no exact cross-stream ordering |
+| `ProcessIo::Inherited` | Normal terminal commands | Child inherits parent stdout/stderr and, by default, stdin; process-group isolation is disabled so terminal job-control behavior follows OS defaults | No structured output capture or descendant termination |
 
-## Features
+PTY-backed terminal fidelity and live parent-stdin forwarding are intentionally not exposed until those modes are implemented with documented platform guarantees.
 
-- Async/await interface powered by Tokio
-- Process group management for reliable process termination
-- Graceful shutdown: SIGTERM → wait → SIGKILL
-- Comprehensive error handling via `rskit-errors`
-- Full logging support with `tracing`
+Line observers split deterministically on `\n`, `\r`, and `\r\n`. Invalid UTF-8 is passed to line observers lossily; use raw-byte observers for binary output.
 
-## Usage
+## Capturing output
 
 ```rust
-use rskit_process::{Command, ProcessConfig, run_with_cancel};
-use std::time::Duration;
+use rskit_process::{ProcessConfig, ProcessSpec, run_with_cancel};
 use tokio_util::sync::CancellationToken;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let cmd = Command::new("echo")
-        .arg("hello")
-        .arg("world");
+# async fn example() -> Result<(), Box<dyn std::error::Error>> {
+let spec = ProcessSpec::new("echo").arg("hello");
+let config = ProcessConfig::default().with_max_output_bytes(1024 * 1024);
 
-    let config = ProcessConfig {
-        timeout: Some(Duration::from_secs(30)),
-        grace_period: Duration::from_secs(5),
-        capture_output: true,
-        inherit_env: true,
-        max_output_bytes: Some(rskit_process::DEFAULT_MAX_OUTPUT_BYTES),
-    };
-
-    let result = run_with_cancel(&cmd, &config, CancellationToken::new()).await?;
-    println!("Output: {}", result.stdout);
-    println!("Exit code: {:?}", result.exit_code);
-    println!("Timed out: {}", result.timed_out);
-    
-    result.check()?;  // Verify exit code is 0
-    Ok(())
-}
-```
-
-## Examples
-
-### Simple command execution
-
-```rust
-let cmd = Command::new("ls").arg("-la").arg("/tmp");
-let result = run_with_cancel(&cmd, &ProcessConfig::default(), CancellationToken::new()).await?;
+let result = run_with_cancel(&spec, &config, CancellationToken::new()).await?;
+result.check()?;
 println!("{}", result.stdout);
+# Ok(())
+# }
 ```
 
-### With custom working directory
+## Observing output
 
 ```rust
-let cmd = Command::new("cargo")
-    .args(vec!["build", "--release"])
-    .dir("/path/to/project");
-    
-let result = run_with_cancel(&cmd, &ProcessConfig::default(), CancellationToken::new()).await?;
-```
-
-### With environment variables
-
-```rust
-let cmd = Command::new("sh")
-    .arg("-c")
-    .arg("echo $MY_VAR")
-    .env("MY_VAR", "my_value");
-    
-let result = run_with_cancel(&cmd, &ProcessConfig::default(), CancellationToken::new()).await?;
-```
-
-### With stdin
-
-```rust
-let cmd = Command::new("cat")
-    .stdin(b"hello world".to_vec());
-    
-let result = run_with_cancel(&cmd, &ProcessConfig::default(), CancellationToken::new()).await?;
-println!("{}", result.stdout);  // "hello world"
-```
-
-### With timeout
-
-```rust
-let config = ProcessConfig {
-    timeout: Some(Duration::from_secs(10)),
-    grace_period: Duration::from_secs(2),
-    capture_output: true,
-    inherit_env: true,
-    max_output_bytes: Some(rskit_process::DEFAULT_MAX_OUTPUT_BYTES),
+use rskit_process::{
+    ObservedIo, OutputObserver, OutputPolicy, ProcessConfig, ProcessIo, ProcessSpec,
+    run_with_cancel,
 };
+use tokio_util::sync::CancellationToken;
 
-let cmd = Command::new("sleep").arg("5");
-let result = run_with_cancel(&cmd, &config, CancellationToken::new()).await?;
+# async fn example() -> Result<(), Box<dyn std::error::Error>> {
+let spec = ProcessSpec::new("printf").arg("hello\n");
+let observer = OutputObserver::new().with_stdout_line(|line| {
+    eprintln!("child stdout: {line}");
+});
+let config = ProcessConfig::default().with_io(ProcessIo::observed(
+    ObservedIo::new(observer).with_output(OutputPolicy::observe_only()),
+));
 
-if result.timed_out {
-    eprintln!("Process was killed due to timeout");
-}
+let result = run_with_cancel(&spec, &config, CancellationToken::new()).await?;
+result.check()?;
+# Ok(())
+# }
 ```
 
-## Implementation Details
+## Predefined stdin
 
-### Process Group Management
+```rust
+use rskit_process::{InputPolicy, ProcessConfig, ProcessSpec, run_with_cancel};
+use tokio_util::sync::CancellationToken;
 
-The crate uses Unix process groups to ensure reliable process termination:
+# async fn example() -> Result<(), Box<dyn std::error::Error>> {
+let spec = ProcessSpec::new("cat");
+let config = ProcessConfig::default().with_input(InputPolicy::Bytes(b"hello".to_vec()));
 
-- Spawns processes in their own process group using `setpgid(0, 0)`
-- Sends signals to the entire process group using negative PID: `-pid`
-- Ensures all child processes are terminated even if they fork
+let result = run_with_cancel(&spec, &config, CancellationToken::new()).await?;
+assert_eq!(result.stdout, "hello");
+# Ok(())
+# }
+```
 
-### Timeout Handling
+## Inherited terminal stdio
 
-When a timeout occurs:
+```rust
+use rskit_process::{InheritedIo, ProcessConfig, ProcessIo, ProcessSpec, run_with_cancel};
+use tokio_util::sync::CancellationToken;
 
-1. SIGTERM is sent to the process group
-2. Wait for the grace period (default 5 seconds)
-3. If still running, send SIGKILL to the process group
-4. Return result with `timed_out: true`
+# async fn example() -> Result<(), Box<dyn std::error::Error>> {
+let spec = ProcessSpec::new("sh").args(["-c", "echo terminal output"]);
+let config = ProcessConfig::default().with_io(ProcessIo::inherited(InheritedIo::new()));
 
-## Related
+let result = run_with_cancel(&spec, &config, CancellationToken::new()).await?;
+result.check()?;
+assert!(result.stdout.is_empty());
+# Ok(())
+# }
+```
 
-- [gokit/process](https://github.com/skillsenselab/gokit) - Go implementation
-- [pykit-process](https://github.com/skillsenselab/pykit) - Python implementation
+## Timeout and process groups
+
+By default, rskit-process creates an isolated process group where the platform supports it. On timeout or cancellation, it sends a graceful termination signal, waits for `SignalPolicy::grace_period`, then escalates to kill. `Inherited` mode is the exception: it does not create a new process group, because terminal-native commands should remain in the parent's foreground terminal context unless a future terminal-control mode provides stronger guarantees.
+
+Separate stdout and stderr pipes are read concurrently, so each stream is ordered internally, but exact ordering across streams is not guaranteed.
