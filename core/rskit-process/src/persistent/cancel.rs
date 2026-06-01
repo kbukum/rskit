@@ -7,8 +7,8 @@ use std::{
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    AppError, AppResult, ErrorCode,
-    process_group::{kill, terminate},
+    AppError, AppResult, ErrorCode, SignalPolicy,
+    process_group::{kill_target, terminate_target},
 };
 
 #[derive(Debug)]
@@ -39,6 +39,7 @@ pub(in crate::persistent) fn spawn_cancel_thread(
     pid: u32,
     cancel: CancellationToken,
     cancelled: Arc<AtomicBool>,
+    signal: SignalPolicy,
     grace_period: Duration,
 ) -> AppResult<CancelThread> {
     let stop = CancellationToken::new();
@@ -61,11 +62,12 @@ pub(in crate::persistent) fn spawn_cancel_thread(
                 biased;
                 () = wait_cancel.cancelled() => {
                     wait_cancelled.store(true, Ordering::SeqCst);
-                    let _ = terminate(pid);
+                    let terminate_group = signal.create_process_group && signal.terminate_descendants;
+                    let _ = terminate_target(pid, terminate_group);
                     tokio::select! {
                         () = wait_stop.cancelled() => Ok(()),
                         () = tokio::time::sleep(grace_period) => {
-                            let _ = kill(pid);
+                            let _ = kill_target(pid, terminate_group);
                             Ok(())
                         }
                     }

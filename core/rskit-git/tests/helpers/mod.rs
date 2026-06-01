@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use rskit_process::{ProcessConfig, command, run};
+use rskit_process::{ProcessConfig, ProcessSpec, run};
 use tempfile::TempDir;
 
 pub struct TestRepo {
@@ -99,15 +99,8 @@ fn write_file(dir: &Path, path: &str, content: &str) {
 }
 
 fn run_git(dir: &Path, args: &[&str]) -> String {
-    let cmd = command("git").args(args.iter().copied()).dir(dir);
-    let out = run(
-        &cmd,
-        &ProcessConfig {
-            timeout: None,
-            ..ProcessConfig::default()
-        },
-    )
-    .expect("failed to run git");
+    let cmd = ProcessSpec::new("git").args(args.iter().copied()).dir(dir);
+    let out = run(&cmd, &ProcessConfig::default().with_timeout(None)).expect("failed to run git");
     if !out.success() {
         panic!("git {:?} failed: {}", args, out.stderr);
     }

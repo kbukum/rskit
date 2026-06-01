@@ -7,7 +7,7 @@ use std::{
 
 use tokio_util::sync::CancellationToken;
 
-use crate::{AppError, AppResult, Command, ErrorCode, ProcessConfig, runner};
+use crate::{AppError, AppResult, ErrorCode, ProcessConfig, ProcessSpec, runner};
 
 use super::{
     config::PersistentReadiness,
@@ -93,14 +93,14 @@ pub(in crate::persistent) fn wait_for_readiness(
 }
 
 pub(in crate::persistent) fn run_readiness_command(
-    command: &Command,
+    spec: &ProcessSpec,
     process_config: &ProcessConfig,
     timeout: Duration,
     cancel: CancellationToken,
 ) -> AppResult<()> {
     let mut config = process_config.clone();
     config.timeout = Some(timeout);
-    let command = command.clone();
+    let spec = spec.clone();
     let result = thread::spawn(move || {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -111,7 +111,7 @@ pub(in crate::persistent) fn run_readiness_command(
                     format!("failed to create readiness command runtime: {error}"),
                 )
             })?;
-        runtime.block_on(runner::run_with_cancel(&command, &config, cancel))
+        runtime.block_on(runner::run_with_cancel(&spec, &config, cancel))
     })
     .join()
     .map_err(|_| AppError::new(ErrorCode::Internal, "readiness command runner panicked"))??;
@@ -121,6 +121,9 @@ pub(in crate::persistent) fn run_readiness_command(
             ErrorCode::Timeout,
             "persistent process readiness command timed out",
         ));
+    }
+    if result.cancelled {
+        return Err(AppError::cancelled("persistent process readiness command"));
     }
     if result.success() {
         return Ok(());

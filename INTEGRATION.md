@@ -349,7 +349,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 **Code example**:
 
 ```rust
-use rskit_process::{Command, ProcessConfig, run_with_cancel};
+use rskit_process::{ProcessConfig, ProcessSpec, run_with_cancel};
 use rskit_errors::{AppError, ErrorCode};
 use rskit_logging::Logger;
 use std::time::Duration;
@@ -360,13 +360,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let log = Logger::new();
     
     // Configure subprocess execution
-    let config = ProcessConfig {
-        timeout: Some(Duration::from_secs(30)),
-        ..Default::default()
-    };
+    let config = ProcessConfig::default().with_timeout(Some(Duration::from_secs(30)));
     
     // Execute FFmpeg command for video processing
-    let cmd = Command::new("ffmpeg")
+    let spec = ProcessSpec::new("ffmpeg")
         .args(&[
             "-i", "input.mp4",
             "-vf", "scale=1280:720",
@@ -375,7 +372,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "output.mp4",
         ]);
     
-    match run_with_cancel(&cmd, &config, CancellationToken::new()).await {
+    match run_with_cancel(&spec, &config, CancellationToken::new()).await {
         Ok(result) => {
             println!("Process succeeded");
             println!("Exit code: {:?}", result.exit_code);
@@ -397,7 +394,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 **Modules involved**:
-- `rskit-process` — `Command`, `ProcessConfig`, `run_with_cancel`
+- `rskit-process` — `ProcessSpec`, `ProcessConfig`, `run_with_cancel`
 - `rskit-errors` — `AppError`, `ErrorCode`
 - `rskit-logging` — `Logger`
 - `tokio` — async runtime

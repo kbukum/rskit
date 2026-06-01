@@ -1,34 +1,42 @@
-//! Subprocess execution with process-group isolation and timeout/signal handling.
+//! Subprocess execution with explicit I/O modes, process-group isolation, and timeouts.
 //!
 //! This crate provides functionality to execute external processes with:
 //! - Timeout support with configurable grace period
 //! - SIGTERM → SIGKILL escalation for graceful shutdown
 //! - Process group isolation to ensure child processes are properly terminated
-//! - Stdout/stderr capture
+//! - Explicit captured, observed, and inherited stdio modes
 //! - Environment variable control
 //! - Working directory configuration
+//!
+//! # I/O modes
+//!
+//! `ProcessIo::Captured` captures stdout and stderr separately through pipes.
+//! It is deterministic for non-interactive commands, but it is not a terminal
+//! and cannot guarantee exact ordering between stdout and stderr.
+//!
+//! `ProcessIo::Observed` also uses separate pipes and supports live raw-byte or
+//! line callbacks with optional capture. Line observers split deterministically
+//! on `\n`, `\r`, and `\r\n`; invalid UTF-8 is reported lossily.
+//!
+//! `ProcessIo::Inherited` gives the child the parent stdio handles. This is the
+//! right mode for normal terminal commands, but it does not provide structured
+//! output capture.
 //!
 //! # Example
 //!
 //! ```no_run
-//! use rskit_process::{Command, ProcessConfig, run_with_cancel};
+//! use rskit_process::{ProcessConfig, ProcessSpec, run_with_cancel};
 //! use std::time::Duration;
 //! use tokio_util::sync::CancellationToken;
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! let cmd = Command::new("echo")
+//! let spec = ProcessSpec::new("echo")
 //!     .arg("hello")
 //!     .arg("world");
 //!
-//! let config = ProcessConfig {
-//!     timeout: Some(Duration::from_secs(30)),
-//!     grace_period: Duration::from_secs(5),
-//!     capture_output: true,
-//!     inherit_env: true,
-//!     max_output_bytes: Some(rskit_process::DEFAULT_MAX_OUTPUT_BYTES),
-//! };
+//! let config = ProcessConfig::default().with_timeout(Some(Duration::from_secs(30)));
 //!
-//! let result = run_with_cancel(&cmd, &config, CancellationToken::new()).await?;
+//! let result = run_with_cancel(&spec, &config, CancellationToken::new()).await?;
 //! println!("stdout: {}", result.stdout);
 //! println!("exit code: {:?}", result.exit_code);
 //! # Ok(())
@@ -45,7 +53,10 @@ mod runner;
 mod signal;
 mod sync;
 
-pub use command::{Command, DEFAULT_MAX_OUTPUT_BYTES, ProcessConfig, command};
+pub use command::{
+    CapturedIo, DEFAULT_MAX_OUTPUT_BYTES, EnvPolicy, InheritedIo, InputPolicy, ObservedIo,
+    OutputPolicy, ProcessConfig, ProcessIo, ProcessSpec, SignalPolicy, command,
+};
 pub use persistent::{
     PersistentConfig, PersistentOutput, PersistentOutputStream, PersistentProcess,
     PersistentReadiness, PersistentRun, PersistentStartErrorKind, PersistentStartup,
@@ -56,7 +67,7 @@ pub use process_group::{
     kill as kill_process_group, terminate as terminate_process_group,
 };
 pub use result::ProcessResult;
-pub use runner::{OutputObserver, run_with_cancel, run_with_observer};
+pub use runner::{OutputObserver, run_with_cancel};
 pub use sync::run;
 
 /// Re-export error types

@@ -1,57 +1,70 @@
 //! Blocking subprocess execution.
 
-use std::io::{Read, Write};
-use std::process::{Command as StdCommand, Stdio};
+use std::io::{ErrorKind, Read, Write};
+use std::process::{ChildStdin, Command as StdCommand, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::{AppError, AppResult, Command, ErrorCode, ProcessConfig, ProcessResult};
+use crate::{
+    AppError, AppResult, EnvPolicy, ErrorCode, InputPolicy, OutputPolicy, ProcessConfig, ProcessIo,
+    ProcessResult, ProcessSpec,
+};
 
-/// Execute a subprocess on the current thread using the shared rskit process policy.
-pub fn run(command: &Command, config: &ProcessConfig) -> AppResult<ProcessResult> {
-    if command.program.as_os_str().is_empty() {
+/// Execute a subprocess on the current thread using captured or inherited I/O mode.
+pub fn run(spec: &ProcessSpec, config: &ProcessConfig) -> AppResult<ProcessResult> {
+    if spec.program.as_os_str().is_empty() {
         return Err(AppError::invalid_input("program", "must not be empty"));
     }
 
-    let start = Instant::now();
-    let mut cmd = StdCommand::new(&command.program);
-    cmd.args(&command.args);
+    match &config.io {
+        ProcessIo::Captured(io) => run_blocking(
+            spec,
+            config,
+            &io.input,
+            Some(&io.output),
+            pipe_stdin_stdio(&io.input)?,
+        ),
+        ProcessIo::Inherited(io) => run_blocking(
+            spec,
+            &inherited_config(config),
+            &io.input,
+            None,
+            stdin_stdio(&io.input),
+        ),
+        ProcessIo::Observed(_) => Err(AppError::invalid_input(
+            "process.io",
+            "observed mode requires async run_with_cancel",
+        )),
+    }
+}
 
-    if let Some(dir) = &command.dir {
+fn run_blocking(
+    spec: &ProcessSpec,
+    config: &ProcessConfig,
+    input: &InputPolicy,
+    output: Option<&OutputPolicy>,
+    stdin: Stdio,
+) -> AppResult<ProcessResult> {
+    let start = Instant::now();
+    let mut cmd = StdCommand::new(&spec.program);
+    cmd.args(&spec.args)
+        .stdin(stdin)
+        .stdout(stdout_stdio(output))
+        .stderr(stderr_stdio(output));
+
+    if let Some(dir) = &spec.dir {
         cmd.current_dir(dir);
     }
 
-    if command.scrub_env || !config.inherit_env {
+    if matches!(spec.env_policy, EnvPolicy::Empty) {
         cmd.env_clear();
     }
-    for (key, value) in &command.env {
+    for (key, value) in &spec.env {
         cmd.env(key, value);
     }
 
-    if config.capture_output {
-        cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
-    }
-    if command.stdin.is_some() {
-        cmd.stdin(Stdio::piped());
-    } else {
-        cmd.stdin(Stdio::null());
-    }
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-
-        // SAFETY: `pre_exec` runs in the child process after fork and before exec.
-        // The closure only calls async-signal-safe `setpgid` and returns an
-        // `io::Error` on failure, matching the async runner's process-group policy.
-        unsafe {
-            cmd.pre_exec(|| {
-                if libc::setpgid(0, 0) != 0 {
-                    return Err(std::io::Error::last_os_error());
-                }
-                Ok(())
-            });
-        }
+    if config.signal.create_process_group {
+        crate::process_group::isolate(&mut cmd);
     }
 
     let mut child = cmd.spawn().map_err(|error| {
@@ -62,36 +75,47 @@ pub fn run(command: &Command, config: &ProcessConfig) -> AppResult<ProcessResult
     })?;
     let pid = Some(child.id());
 
-    if let Some(stdin_data) = &command.stdin
-        && let Some(mut stdin) = child.stdin.take()
-    {
-        stdin.write_all(stdin_data).map_err(|error| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!("failed to write to stdin: {error}"),
-            )
-        })?;
-    }
-
+    let max_output_bytes = output.and_then(|output| output.max_output_bytes);
     let stdout = child
         .stdout
         .take()
-        .map(|stream| spawn_reader(stream, config.max_output_bytes));
+        .map(|stream| spawn_reader(stream, max_output_bytes));
     let stderr = child
         .stderr
         .take()
-        .map(|stream| spawn_reader(stream, config.max_output_bytes));
+        .map(|stream| spawn_reader(stream, max_output_bytes));
+    let stdin = spawn_stdin_writer(child.stdin.take(), input);
 
     let (exit_code, timed_out, synthetic_stderr) =
-        wait_with_timeout(&mut child, pid, config.timeout, config.grace_period)?;
+        wait_with_timeout(&mut child, pid, config.timeout, config)?;
+    join_stdin(stdin)?;
     let stdout_output = join_reader(stdout)?;
     let mut stderr_output = join_reader(stderr)?;
     if let Some(extra_stderr) = synthetic_stderr {
         stderr_output.truncated |= append_bounded(
             &mut stderr_output.bytes,
             extra_stderr.as_bytes(),
-            config.max_output_bytes,
+            max_output_bytes,
         );
+    }
+
+    fn spawn_stdin_writer(
+        stdin: Option<ChildStdin>,
+        input: &InputPolicy,
+    ) -> Option<thread::JoinHandle<AppResult<()>>> {
+        let InputPolicy::Bytes(bytes) = input else {
+            return None;
+        };
+        let mut stdin = stdin?;
+        let bytes = bytes.clone();
+        Some(thread::spawn(move || match stdin.write_all(&bytes) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == ErrorKind::BrokenPipe => Ok(()),
+            Err(error) => Err(AppError::new(
+                ErrorCode::Internal,
+                format!("failed to write to stdin: {error}"),
+            )),
+        }))
     }
 
     Ok(ProcessResult::completed(
@@ -106,11 +130,55 @@ pub fn run(command: &Command, config: &ProcessConfig) -> AppResult<ProcessResult
     ))
 }
 
+fn stdin_stdio(input: &InputPolicy) -> Stdio {
+    match input {
+        InputPolicy::Closed => Stdio::null(),
+        InputPolicy::Bytes(_) => Stdio::piped(),
+        InputPolicy::Inherit => Stdio::inherit(),
+    }
+}
+
+fn pipe_stdin_stdio(input: &InputPolicy) -> AppResult<Stdio> {
+    match input {
+        InputPolicy::Closed => Ok(Stdio::null()),
+        InputPolicy::Bytes(_) => Ok(Stdio::piped()),
+        InputPolicy::Inherit => Err(AppError::invalid_input(
+            "process.io.input",
+            "inherited stdin requires inherited I/O mode; pipe-backed interactive stdin is not supported",
+        )),
+    }
+}
+
+fn inherited_config(config: &ProcessConfig) -> ProcessConfig {
+    let mut config = config.clone();
+    config.signal = config
+        .signal
+        .with_create_process_group(false)
+        .with_terminate_descendants(false);
+    config
+}
+
+fn stdout_stdio(output: Option<&OutputPolicy>) -> Stdio {
+    match output {
+        Some(output) if output.capture_stdout => Stdio::piped(),
+        Some(_) => Stdio::null(),
+        None => Stdio::inherit(),
+    }
+}
+
+fn stderr_stdio(output: Option<&OutputPolicy>) -> Stdio {
+    match output {
+        Some(output) if output.capture_stderr => Stdio::piped(),
+        Some(_) => Stdio::null(),
+        None => Stdio::inherit(),
+    }
+}
+
 fn wait_with_timeout(
     child: &mut std::process::Child,
     pid: Option<u32>,
     timeout: Option<Duration>,
-    grace_period: Duration,
+    config: &ProcessConfig,
 ) -> AppResult<(Option<i32>, bool, Option<String>)> {
     let Some(timeout) = timeout else {
         let status = child.wait().map_err(|error| {
@@ -133,7 +201,7 @@ fn wait_with_timeout(
             return Ok((status.code(), false, None));
         }
         if Instant::now() >= deadline {
-            return terminate_and_wait(child, pid, grace_period);
+            return terminate_and_wait(child, pid, config);
         }
         thread::sleep(Duration::from_millis(10));
     }
@@ -142,9 +210,9 @@ fn wait_with_timeout(
 fn terminate_and_wait(
     child: &mut std::process::Child,
     pid: Option<u32>,
-    grace_period: Duration,
+    config: &ProcessConfig,
 ) -> AppResult<(Option<i32>, bool, Option<String>)> {
-    if !terminate_process_group(pid, libc::SIGTERM) && !terminate_process(pid, libc::SIGTERM) {
+    if !terminate_process(pid, config, libc::SIGTERM) {
         child.kill().map_err(|error| {
             AppError::new(
                 ErrorCode::Internal,
@@ -153,7 +221,7 @@ fn terminate_and_wait(
         })?;
     }
 
-    let deadline = Instant::now() + grace_period;
+    let deadline = Instant::now() + config.signal.grace_period;
     loop {
         if let Some(status) = child.try_wait().map_err(|error| {
             AppError::new(
@@ -164,9 +232,7 @@ fn terminate_and_wait(
             return Ok((status.code(), true, None));
         }
         if Instant::now() >= deadline {
-            if !terminate_process_group(pid, libc::SIGKILL)
-                && !terminate_process(pid, libc::SIGKILL)
-            {
+            if !terminate_process(pid, config, libc::SIGKILL) {
                 child.kill().map_err(|error| {
                     AppError::new(
                         ErrorCode::Internal,
@@ -244,6 +310,15 @@ fn join_reader(
     }
 }
 
+fn join_stdin(handle: Option<thread::JoinHandle<AppResult<()>>>) -> AppResult<()> {
+    match handle {
+        Some(handle) => handle
+            .join()
+            .map_err(|_| AppError::new(ErrorCode::Internal, "process stdin writer panicked"))?,
+        None => Ok(()),
+    }
+}
+
 fn append_bounded(target: &mut Vec<u8>, extra: &[u8], max_bytes: Option<usize>) -> bool {
     let Some(limit) = max_bytes else {
         if !target.is_empty() {
@@ -268,32 +343,20 @@ fn append_bounded(target: &mut Vec<u8>, extra: &[u8], max_bytes: Option<usize>) 
     }
 }
 
-fn terminate_process_group(pid: Option<u32>, signal: i32) -> bool {
+fn terminate_process(pid: Option<u32>, config: &ProcessConfig, signal: i32) -> bool {
     if let Some(pid) = pid {
         #[cfg(unix)]
-        // SAFETY: `kill` targets the negated process-group id created by the
-        // `pre_exec` hook above. ESRCH means the group already exited.
+        // SAFETY: `kill` targets either the child pid or the negated
+        // process-group id created by the `pre_exec` hook. ESRCH means it
+        // already exited.
         unsafe {
-            let result = libc::kill(-(pid as i32), signal);
-            if result != 0 {
-                let error = std::io::Error::last_os_error();
-                if error.raw_os_error() != Some(libc::ESRCH) {
-                    return false;
-                }
-            }
-            return true;
-        }
-    }
-    false
-}
-
-fn terminate_process(pid: Option<u32>, signal: i32) -> bool {
-    if let Some(pid) = pid {
-        #[cfg(unix)]
-        // SAFETY: `kill` targets a single child process id as a fallback when
-        // process-group signalling is unavailable. ESRCH means it already exited.
-        unsafe {
-            let result = libc::kill(pid as i32, signal);
+            let target =
+                if config.signal.create_process_group && config.signal.terminate_descendants {
+                    -(pid as i32)
+                } else {
+                    pid as i32
+                };
+            let result = libc::kill(target, signal);
             if result != 0 {
                 let error = std::io::Error::last_os_error();
                 if error.raw_os_error() != Some(libc::ESRCH) {

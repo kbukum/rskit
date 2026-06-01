@@ -1,42 +1,37 @@
 use std::io;
+use std::process::Stdio;
 
 use tokio::process::Command as TokioCommand;
 
-use crate::{Command, ProcessConfig};
+use crate::{EnvPolicy, ProcessConfig, ProcessSpec};
 
 pub(in crate::runner) fn configure_command(
     cmd: &mut TokioCommand,
-    command: &Command,
+    spec: &ProcessSpec,
     config: &ProcessConfig,
-    observe_stdout: bool,
-    observe_stderr: bool,
+    stdin: Stdio,
+    stdout: Stdio,
+    stderr: Stdio,
 ) {
-    cmd.args(&command.args);
+    cmd.args(&spec.args)
+        .stdin(stdin)
+        .stdout(stdout)
+        .stderr(stderr);
 
-    if let Some(dir) = &command.dir {
+    if let Some(dir) = &spec.dir {
         cmd.current_dir(dir);
     }
 
-    if command.scrub_env || !config.inherit_env {
+    if matches!(spec.env_policy, EnvPolicy::Empty) {
         cmd.env_clear();
     }
-    for (key, value) in &command.env {
+    for (key, value) in &spec.env {
         cmd.env(key, value);
     }
 
-    if config.capture_output || observe_stdout {
-        cmd.stdout(std::process::Stdio::piped());
+    if config.signal.create_process_group {
+        isolate(cmd);
     }
-    if config.capture_output || observe_stderr {
-        cmd.stderr(std::process::Stdio::piped());
-    }
-    if command.stdin.is_some() {
-        cmd.stdin(std::process::Stdio::piped());
-    } else {
-        cmd.stdin(std::process::Stdio::null());
-    }
-
-    isolate(cmd);
 }
 
 fn isolate(cmd: &mut TokioCommand) {

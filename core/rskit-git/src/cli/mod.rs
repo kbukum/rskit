@@ -8,7 +8,7 @@ mod write;
 use std::path::{Path, PathBuf};
 
 use rskit_errors::AppResult;
-use rskit_process::{ProcessConfig, ProcessResult, command};
+use rskit_process::{ProcessConfig, ProcessResult, ProcessSpec};
 
 use crate::core::Executor;
 use crate::error::GitError;
@@ -40,14 +40,11 @@ impl Backend {
     }
 
     pub(crate) fn run_result(&self, args: &[&str]) -> AppResult<ProcessResult> {
-        let command = command("git")
+        let command = ProcessSpec::new("git")
             .args(args.iter().copied())
             .dir(&self.root)
             .env("GIT_TERMINAL_PROMPT", "0");
-        let config = ProcessConfig {
-            timeout: None,
-            ..ProcessConfig::default()
-        };
+        let config = ProcessConfig::default().with_timeout(None);
         rskit_process::run(&command, &config)
     }
 

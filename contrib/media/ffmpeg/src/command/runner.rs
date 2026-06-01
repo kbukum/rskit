@@ -64,6 +64,15 @@ impl FfmpegCommand {
             .collect::<Vec<_>>()
             .join("\n");
 
+        if result.cancelled {
+            return Err(crate::error::FfmpegError {
+                kind: crate::error::FfmpegErrorKind::Cancelled,
+                exit_code: result.exit_code,
+                stderr: crate::error::truncate_stderr(&stderr_output, config.max_stderr_lines),
+                message: "ffmpeg execution cancelled".to_string(),
+            });
+        }
+
         if result.timed_out {
             let timeout = config
                 .timeout

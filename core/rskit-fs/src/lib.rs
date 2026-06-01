@@ -19,6 +19,8 @@
 
 #![warn(missing_docs)]
 
+/// Platform application directory helpers.
+pub mod app_dirs;
 /// Async filesystem operations.
 #[cfg(feature = "async")]
 pub mod async_io;
@@ -36,6 +38,7 @@ pub mod sync_io;
 pub mod temp;
 mod types;
 
+pub use app_dirs::app_cache_dir;
 pub use path::{
     SafePathError, absolute, canonicalize, parent_dir, safe_join, validate_relative_path,
 };

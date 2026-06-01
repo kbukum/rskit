@@ -56,7 +56,17 @@ impl Differ for Backend {
     }
 
     fn status(&self) -> AppResult<Vec<StatusEntry>> {
-        let statuses = self.repo.statuses(None).map_err(GitError::Internal)?;
+        let mut opts = git2::StatusOptions::new();
+        opts.include_untracked(true)
+            .include_ignored(false)
+            .recurse_untracked_dirs(true)
+            .renames_head_to_index(true)
+            .renames_index_to_workdir(true);
+
+        let statuses = self
+            .repo
+            .statuses(Some(&mut opts))
+            .map_err(GitError::Internal)?;
         let mut entries = Vec::new();
 
         for entry in statuses.iter() {
@@ -438,5 +448,32 @@ fn git2_time_to_system_time(time: git2::Time) -> SystemTime {
         SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(seconds as u64)
     } else {
         SystemTime::UNIX_EPOCH - std::time::Duration::from_secs(seconds.unsigned_abs())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use crate::read::Differ;
+
+    #[test]
+    fn status_includes_untracked_files_but_excludes_ignored_paths() {
+        let root = rskit_fs::TempDir::new().expect("temp dir");
+        let repo = super::super::init(root.path()).expect("init repo");
+        fs::write(root.path().join(".gitignore"), "target/\n").expect("write ignore");
+        fs::write(root.path().join("visible.rs"), "fn main() {}\n").expect("write source");
+        fs::create_dir_all(root.path().join("target/debug")).expect("create target");
+        fs::write(root.path().join("target/debug/app"), "binary\n").expect("write ignored file");
+
+        let paths = repo
+            .status()
+            .expect("read status")
+            .into_iter()
+            .map(|entry| entry.path)
+            .collect::<Vec<_>>();
+
+        assert!(paths.iter().any(|path| path == "visible.rs"));
+        assert!(!paths.iter().any(|path| path.starts_with("target/")));
     }
 }

@@ -9,7 +9,10 @@ use std::{
 use parking_lot::Mutex;
 use tokio_util::sync::CancellationToken;
 
-use crate::{AppError, AppResult, Command, ErrorCode, ProcessConfig, process_group::isolate};
+use crate::{
+    AppError, AppResult, EnvPolicy, ErrorCode, InputPolicy, ProcessConfig, ProcessIo, ProcessSpec,
+    SignalPolicy, process_group::isolate,
+};
 
 mod cancel;
 mod config;
@@ -67,12 +70,12 @@ pub struct PersistentRun {
 
 /// Start a persistent process and wait for its readiness policy.
 pub fn start_persistent_with_cancel(
-    command: &Command,
+    spec: &ProcessSpec,
     process_config: &ProcessConfig,
     persistent_config: &PersistentConfig,
     cancel: CancellationToken,
 ) -> AppResult<PersistentRun> {
-    if command.program.as_os_str().is_empty() {
+    if spec.program.as_os_str().is_empty() {
         return Err(AppError::invalid_input("program", "must not be empty"));
     }
     if cancel.is_cancelled() {
@@ -81,7 +84,8 @@ pub fn start_persistent_with_cancel(
     validate_readiness(&persistent_config.readiness)?;
 
     let start = Instant::now();
-    let mut child = spawn_child(command, process_config)?;
+    let input = process_input(process_config)?;
+    let mut child = spawn_child(spec, process_config, input)?;
     let stdout = Arc::new(Mutex::new(CapturedOutput::default()));
     let stderr = Arc::new(Mutex::new(CapturedOutput::default()));
     let cancelled = Arc::new(AtomicBool::new(false));
@@ -89,11 +93,16 @@ pub fn start_persistent_with_cancel(
         child.id(),
         cancel.clone(),
         Arc::clone(&cancelled),
+        process_config.signal,
         persistent_config.shutdown_grace_period,
     ) {
         Ok(thread) => Some(thread),
         Err(error) => {
-            let _ = cleanup_spawned_child(&mut child, persistent_config.shutdown_grace_period);
+            let _ = cleanup_spawned_child(
+                &mut child,
+                process_config.signal,
+                persistent_config.shutdown_grace_period,
+            );
             return Err(error);
         }
     };
@@ -107,7 +116,7 @@ pub fn start_persistent_with_cancel(
         persistent_config.output,
         persistent_config.max_capture_bytes,
     );
-    let stdin_thread = spawn_stdin_writer(&mut child, command.stdin.clone());
+    let stdin_thread = spawn_stdin_writer(&mut child, predefined_stdin(input));
 
     match &persistent_config.readiness {
         Started => {
@@ -130,6 +139,7 @@ pub fn start_persistent_with_cancel(
                     stdout,
                     stderr,
                     start,
+                    process_config.signal,
                     persistent_config,
                 );
                 // Reuse the normal lifecycle cleanup so partially-started processes
@@ -160,6 +170,7 @@ pub fn start_persistent_with_cancel(
             stdout,
             stderr,
             start,
+            process_config.signal,
             persistent_config,
         );
         // Reuse the normal lifecycle cleanup so readiness failures do not leak the child.
@@ -179,6 +190,7 @@ pub fn start_persistent_with_cancel(
         stdout,
         stderr,
         start,
+        process_config.signal,
         persistent_config,
     );
 
@@ -196,27 +208,64 @@ pub fn start_persistent_with_cancel(
     })
 }
 
-fn spawn_child(command: &Command, config: &ProcessConfig) -> AppResult<Child> {
-    let mut cmd = StdCommand::new(&command.program);
-    cmd.args(&command.args)
-        .stdin(if command.stdin.is_some() {
+fn process_input(config: &ProcessConfig) -> AppResult<&InputPolicy> {
+    match &config.io {
+        ProcessIo::Captured(io)
+            if matches!(io.input, InputPolicy::Closed | InputPolicy::Bytes(_)) =>
+        {
+            Ok(&io.input)
+        }
+        ProcessIo::Captured(_) => Err(AppError::invalid_input(
+            "process.io.input",
+            "persistent processes support only closed stdin or predefined stdin bytes",
+        )),
+        ProcessIo::Inherited(_) => Err(AppError::invalid_input(
+            "process.io",
+            "persistent processes use PersistentOutput for output handling; inherited mode is not supported",
+        )),
+        ProcessIo::Observed(_) => Err(AppError::invalid_input(
+            "process.io",
+            "persistent processes use PersistentOutput for observation; observed mode is not supported",
+        )),
+    }
+}
+
+fn predefined_stdin(input: &InputPolicy) -> Option<Vec<u8>> {
+    match input {
+        InputPolicy::Bytes(bytes) => Some(bytes.clone()),
+        InputPolicy::Closed | InputPolicy::Inherit => None,
+    }
+}
+
+fn spawn_child(
+    spec: &ProcessSpec,
+    config: &ProcessConfig,
+    input: &InputPolicy,
+) -> AppResult<Child> {
+    let mut cmd = StdCommand::new(&spec.program);
+    cmd.args(&spec.args)
+        .stdin(if matches!(input, InputPolicy::Bytes(_)) {
             Stdio::piped()
+        } else if matches!(input, InputPolicy::Inherit) {
+            Stdio::inherit()
         } else {
             Stdio::null()
         })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    if let Some(dir) = &command.dir {
+    if let Some(dir) = &spec.dir {
         cmd.current_dir(dir);
     }
-    if command.scrub_env || !config.inherit_env {
+    if matches!(spec.env_policy, EnvPolicy::Empty) {
         cmd.env_clear();
     }
-    for (key, value) in &command.env {
+    for (key, value) in &spec.env {
         cmd.env(key, value);
     }
-    isolate(&mut cmd);
+    if config.signal.create_process_group {
+        isolate(&mut cmd);
+    }
 
     cmd.spawn().map_err(|error| {
         persistent_start_error(
@@ -239,6 +288,7 @@ fn persistent_process(
     stdout: io::Capture,
     stderr: io::Capture,
     start: Instant,
+    signal: SignalPolicy,
     config: &PersistentConfig,
 ) -> PersistentProcess {
     new_process(
@@ -251,6 +301,7 @@ fn persistent_process(
         stdout,
         stderr,
         start,
+        signal,
         config.shutdown_grace_period,
     )
 }
