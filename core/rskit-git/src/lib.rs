@@ -2,7 +2,7 @@
 //!
 //! This crate provides capability-based traits for git operations:
 //! - [`Repository`] and [`Executor`] for core repository access and raw CLI execution
-//! - [`Differ`], [`TreeReader`], [`LogReader`], [`Blamer`], and [`Inspector`] for read flows
+//! - [`Differ`], [`IgnoreReader`], [`TreeReader`], [`LogReader`], [`Blamer`], and [`Inspector`] for read flows
 //! - [`IndexManager`], [`Committer`], and related write traits for mutating operations
 //! - [`RefManager`], [`RemoteManager`], [`ConfigReader`], and [`Maintainer`] for management
 //!
@@ -44,7 +44,7 @@ pub use error::GitError;
 pub use manage::{ConfigReader, Maintainer, RefManager, RemoteManager};
 pub use options::*;
 pub use paths::{join_repo_path, repo_relative_path};
-pub use read::{Blamer, Differ, IndexReader, Inspector, LogReader, TreeReader};
+pub use read::{Blamer, Differ, IgnoreReader, IndexReader, Inspector, LogReader, TreeReader};
 pub use repo::{Repo, clone, discover, init, init_bare, open};
 pub use rskit_errors::{AppError, AppResult};
 pub use types::*;

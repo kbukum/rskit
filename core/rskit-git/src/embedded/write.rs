@@ -1,4 +1,4 @@
-//! Write trait implementations for the embedded backend.
+//! Write trait implementations for the libgit2 repository.
 
 use std::path::Path;
 use std::time::{Duration, SystemTime};
@@ -10,9 +10,9 @@ use crate::options::CommitOptions;
 use crate::types::{EntryState, Oid, Signature, StatusEntry};
 use crate::write::{Committer, IndexManager};
 
-use super::{Backend, oid_from_git2};
+use super::{Git2Repository, oid_from_git2};
 
-impl IndexManager for Backend {
+impl IndexManager for Git2Repository {
     fn stage(&self, paths: &[&str]) -> AppResult<()> {
         if self.repo.is_bare() {
             return Err(GitError::NotImplemented {
@@ -86,7 +86,7 @@ impl IndexManager for Backend {
     }
 }
 
-impl Committer for Backend {
+impl Committer for Git2Repository {
     fn commit(&self, message: &str, opts: Option<&CommitOptions>) -> AppResult<Oid> {
         let opts = opts.cloned().unwrap_or_default();
         if opts.sign {

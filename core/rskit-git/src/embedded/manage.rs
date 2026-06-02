@@ -1,4 +1,4 @@
-//! Management trait implementations for the embedded backend.
+//! Management trait implementations for the libgit2 repository.
 
 use git2::{BranchType, FetchPrune};
 use rskit_errors::{AppError, AppResult};
@@ -8,9 +8,9 @@ use crate::manage::{ConfigReader, RefManager, RemoteManager};
 use crate::options::{FetchOptions, PushOptions};
 use crate::types::{Branch, BranchFilter, Remote, Tag};
 
-use super::{Backend, map_remote_error, oid_from_git2, signature_from_git2};
+use super::{Git2Repository, map_remote_error, oid_from_git2, signature_from_git2};
 
-impl RefManager for Backend {
+impl RefManager for Git2Repository {
     fn list_branches(&self, filter: BranchFilter) -> AppResult<Vec<Branch>> {
         let branch_filter = match filter {
             BranchFilter::Local => Some(BranchType::Local),
@@ -152,7 +152,7 @@ impl RefManager for Backend {
     }
 }
 
-impl RemoteManager for Backend {
+impl RemoteManager for Git2Repository {
     fn list_remotes(&self) -> AppResult<Vec<Remote>> {
         let remotes = self.repo.remotes().map_err(GitError::Internal)?;
         let mut items = Vec::new();
@@ -231,7 +231,7 @@ impl RemoteManager for Backend {
     }
 }
 
-impl ConfigReader for Backend {
+impl ConfigReader for Git2Repository {
     fn config_get(&self, key: &str) -> AppResult<String> {
         let config = self.repo.config().map_err(GitError::Internal)?;
         config

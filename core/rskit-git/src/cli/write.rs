@@ -1,4 +1,4 @@
-//! Write operations for the CLI backend.
+//! Write operations for the Git CLI runner.
 
 use rskit_errors::{AppError, AppResult};
 
@@ -7,9 +7,9 @@ use crate::read::Inspector;
 use crate::types::{MergeResult, Oid, RebaseResult, ResetMode, StashEntry};
 use crate::write::{CheckoutManager, CherryPicker, Merger, Rebaser, Resetter, Stasher};
 
-use super::Backend;
+use super::GitCli;
 
-impl Merger for Backend {
+impl Merger for GitCli {
     fn merge(&self, branch: &str, opts: Option<&MergeOptions>) -> AppResult<MergeResult> {
         let opts = opts.cloned().unwrap_or_default();
         let mut args = vec!["merge".to_string()];
@@ -56,7 +56,7 @@ impl Merger for Backend {
     }
 }
 
-impl Rebaser for Backend {
+impl Rebaser for GitCli {
     fn rebase(&self, onto: &str, opts: Option<&RebaseOptions>) -> AppResult<RebaseResult> {
         let opts = opts.cloned().unwrap_or_default();
         let mut args = vec!["rebase".to_string()];
@@ -137,7 +137,7 @@ impl Rebaser for Backend {
     }
 }
 
-impl CherryPicker for Backend {
+impl CherryPicker for GitCli {
     fn cherry_pick(&self, commit: &str, opts: Option<&CherryPickOptions>) -> AppResult<Oid> {
         let opts = opts.cloned().unwrap_or_default();
         let mut args = vec!["cherry-pick".to_string()];
@@ -167,7 +167,7 @@ impl CherryPicker for Backend {
     }
 }
 
-impl Resetter for Backend {
+impl Resetter for GitCli {
     fn reset(&self, target: &str, mode: ResetMode) -> AppResult<()> {
         let mode = match mode {
             ResetMode::Mixed => "--mixed",
@@ -179,7 +179,7 @@ impl Resetter for Backend {
     }
 }
 
-impl CheckoutManager for Backend {
+impl CheckoutManager for GitCli {
     fn checkout(&self, ref_name: &str, opts: Option<&CheckoutOptions>) -> AppResult<()> {
         let opts = opts.cloned().unwrap_or_default();
         let mut args = vec!["checkout".to_string()];
@@ -214,7 +214,7 @@ impl CheckoutManager for Backend {
     }
 }
 
-impl Stasher for Backend {
+impl Stasher for GitCli {
     fn stash(&self, message: &str) -> AppResult<Oid> {
         self.run(&["stash", "push", "-m", message])?;
         self.rev_parse("stash@{0}")
@@ -241,7 +241,7 @@ impl Stasher for Backend {
     }
 }
 
-fn parse_stash_entry(backend: &Backend, line: &str) -> AppResult<StashEntry> {
+fn parse_stash_entry(backend: &GitCli, line: &str) -> AppResult<StashEntry> {
     let (reference, message) = line
         .split_once(": ")
         .ok_or_else(|| AppError::invalid_format("stash entry", line))?;
@@ -271,7 +271,7 @@ fn conflict_stderr(error: &AppError) -> Option<String> {
         .or_else(|| Some(error.message.clone()))
 }
 
-fn parse_conflict_paths(backend: &Backend) -> Vec<String> {
+fn parse_conflict_paths(backend: &GitCli) -> Vec<String> {
     // Query git directly for conflicted paths rather than parsing human-readable messages.
     match backend.run(&["diff", "--name-only", "--diff-filter=U"]) {
         Ok(output) => {

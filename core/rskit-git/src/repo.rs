@@ -1,4 +1,4 @@
-//! Repository orchestrator that delegates to embedded and CLI backends.
+//! Repository orchestrator that delegates to libgit2 and Git CLI implementations.
 
 use std::path::Path;
 
@@ -12,7 +12,7 @@ use crate::options::{
     BlameOptions, CheckoutOptions, CleanOptions, CommitOptions, DescribeOptions, FetchOptions,
     GrepOptions, LogOptions, MergeOptions, PushOptions, RebaseOptions,
 };
-use crate::read::{Blamer, Differ, IndexReader, Inspector, LogReader, TreeReader};
+use crate::read::{Blamer, Differ, IgnoreReader, IndexReader, Inspector, LogReader, TreeReader};
 use crate::types::{
     BlameLine, Branch, BranchFilter, Commit, DiffEntry, DiffStats, GrepMatch, IndexEntry,
     MergeResult, Oid, RebaseResult, Reference, Remote, ResetMode, StashEntry, StatusEntry, Tag,
@@ -24,13 +24,13 @@ use crate::write::{
 
 /// Repository facade that combines embedded and CLI capabilities.
 pub struct Repo {
-    embedded: embedded::Backend,
-    cli: cli::Backend,
+    embedded: embedded::Git2Repository,
+    cli: cli::GitCli,
 }
 
 impl Repo {
-    fn new(embedded: embedded::Backend) -> Self {
-        let cli = cli::Backend::new(embedded.root().to_path_buf());
+    fn new(embedded: embedded::Git2Repository) -> Self {
+        let cli = cli::GitCli::new(embedded.root().to_path_buf());
         Self { embedded, cli }
     }
 }
@@ -95,6 +95,12 @@ impl Differ for Repo {
 
     fn status(&self) -> AppResult<Vec<StatusEntry>> {
         self.embedded.status()
+    }
+}
+
+impl IgnoreReader for Repo {
+    fn is_ignored(&self, path: &str) -> AppResult<bool> {
+        self.embedded.is_ignored(path)
     }
 }
 

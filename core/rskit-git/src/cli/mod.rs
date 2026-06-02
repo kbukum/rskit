@@ -1,4 +1,4 @@
-//! CLI backend for command-oriented git workflows.
+//! Git CLI implementation for command-oriented workflows.
 
 pub mod auth;
 mod manage;
@@ -14,13 +14,13 @@ use crate::core::Executor;
 use crate::error::GitError;
 use crate::types::Oid;
 
-/// CLI-backed repository helper.
-pub struct Backend {
+/// Git CLI command runner rooted at a repository.
+pub struct GitCli {
     root: PathBuf,
 }
 
-impl Backend {
-    /// Creates a CLI backend rooted at the repository path.
+impl GitCli {
+    /// Creates a Git CLI runner rooted at the repository path.
     pub fn new(root: PathBuf) -> Self {
         Self { root }
     }
@@ -86,7 +86,7 @@ pub(crate) fn parse_oid(hex: &str) -> AppResult<Oid> {
     Ok(Oid::from_bytes(bytes))
 }
 
-impl Executor for Backend {
+impl Executor for GitCli {
     fn exec(&self, args: &[&str]) -> AppResult<Vec<u8>> {
         self.run(args)
     }

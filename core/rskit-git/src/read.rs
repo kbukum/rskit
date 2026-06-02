@@ -20,6 +20,14 @@ pub trait Differ {
     fn status(&self) -> AppResult<Vec<StatusEntry>>;
 }
 
+/// Read access to Git ignore rules.
+pub trait IgnoreReader {
+    /// Reports whether a repository-relative path is ignored by Git.
+    ///
+    /// The path does not need to exist in the working tree.
+    fn is_ignored(&self, path: &str) -> AppResult<bool>;
+}
+
 /// Read access to git index entries.
 pub trait IndexReader {
     /// Returns the index entry for `path`, if the path is present in the index.

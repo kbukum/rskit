@@ -118,7 +118,7 @@ pub enum GitError {
     #[error("network error: {0}")]
     Network(String),
 
-    /// CLI backend command failure.
+    /// Git CLI command failure.
     #[error("git CLI command failed: git {args:?}: {stderr}")]
     CommandFailed {
         /// CLI arguments that were attempted.

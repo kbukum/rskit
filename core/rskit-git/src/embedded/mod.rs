@@ -1,4 +1,4 @@
-//! Embedded `git2` backend.
+//! Embedded libgit2 repository implementation.
 
 pub mod auth;
 mod manage;
@@ -10,17 +10,17 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use rskit_errors::AppResult;
 
-use crate::core::Repository;
+use crate::core::Repository as RepositoryTrait;
 use crate::error::GitError;
 use crate::types::{Commit, Oid, Reference, Signature};
 
-/// Embedded repository backend backed by `git2`.
-pub struct Backend {
+/// Repository implementation backed by libgit2.
+pub struct Git2Repository {
     pub(crate) repo: git2::Repository,
     root: PathBuf,
 }
 
-impl Backend {
+impl Git2Repository {
     /// Returns the repository root path.
     pub fn root(&self) -> &Path {
         &self.root
@@ -28,7 +28,7 @@ impl Backend {
 }
 
 /// Opens a git repository at the given path (canonicalized).
-pub fn open(path: impl AsRef<Path>) -> AppResult<Backend> {
+pub fn open(path: impl AsRef<Path>) -> AppResult<Git2Repository> {
     let path = path.as_ref();
     let abs = std::fs::canonicalize(path).map_err(|err| match err.kind() {
         std::io::ErrorKind::NotFound => GitError::NotFound {
@@ -45,11 +45,11 @@ pub fn open(path: impl AsRef<Path>) -> AppResult<Backend> {
     })?;
     // workdir() is None for bare repos; fall back to the .git dir path
     let root = repo.workdir().unwrap_or_else(|| repo.path()).to_path_buf();
-    Ok(Backend { repo, root })
+    Ok(Git2Repository { repo, root })
 }
 
 /// Discovers a git repository by walking up from the given path.
-pub fn discover(path: impl AsRef<Path>) -> AppResult<Backend> {
+pub fn discover(path: impl AsRef<Path>) -> AppResult<Git2Repository> {
     let path = path.as_ref();
     let repo = git2::Repository::discover(path).map_err(|err| {
         if err.code() == git2::ErrorCode::NotFound {
@@ -62,42 +62,42 @@ pub fn discover(path: impl AsRef<Path>) -> AppResult<Backend> {
     })?;
     // workdir() is None for bare repos; fall back to the .git dir path
     let root = repo.workdir().unwrap_or_else(|| repo.path()).to_path_buf();
-    Ok(Backend { repo, root })
+    Ok(Git2Repository { repo, root })
 }
 
 /// Clones a git repository into the given path.
-pub fn clone(url: &str, path: impl AsRef<Path>) -> AppResult<Backend> {
+pub fn clone(url: &str, path: impl AsRef<Path>) -> AppResult<Git2Repository> {
     let path = path.as_ref();
     let repo = git2::Repository::clone(url, path).map_err(GitError::Internal)?;
     let root = repo
         .workdir()
         .map(Path::to_path_buf)
         .unwrap_or_else(|| path.to_path_buf());
-    Ok(Backend { repo, root })
+    Ok(Git2Repository { repo, root })
 }
 
 /// Creates a new git repository at the given path.
-pub fn init(path: impl AsRef<Path>) -> AppResult<Backend> {
+pub fn init(path: impl AsRef<Path>) -> AppResult<Git2Repository> {
     let path = path.as_ref();
     let repo = git2::Repository::init(path).map_err(GitError::Internal)?;
     let root = repo
         .workdir()
         .map(Path::to_path_buf)
         .unwrap_or_else(|| path.to_path_buf());
-    Ok(Backend { repo, root })
+    Ok(Git2Repository { repo, root })
 }
 
 /// Creates a new bare git repository at the given path.
-pub fn init_bare(path: impl AsRef<Path>) -> AppResult<Backend> {
+pub fn init_bare(path: impl AsRef<Path>) -> AppResult<Git2Repository> {
     let path = path.as_ref();
     let repo = git2::Repository::init_bare(path).map_err(GitError::Internal)?;
-    Ok(Backend {
+    Ok(Git2Repository {
         repo,
         root: path.to_path_buf(),
     })
 }
 
-impl Repository for Backend {
+impl RepositoryTrait for Git2Repository {
     fn root(&self) -> &Path {
         &self.root
     }

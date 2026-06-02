@@ -1,4 +1,4 @@
-//! Management operations for the CLI backend.
+//! Management operations for the Git CLI runner.
 
 use std::time::{Duration, UNIX_EPOCH};
 
@@ -9,9 +9,9 @@ use crate::manage::{ConfigReader, Maintainer, RefManager, RemoteManager};
 use crate::options::{CleanOptions, FetchOptions, PushOptions};
 use crate::types::{Branch, BranchFilter, Remote, Signature, Tag};
 
-use super::Backend;
+use super::GitCli;
 
-impl RefManager for Backend {
+impl RefManager for GitCli {
     fn list_branches(&self, filter: BranchFilter) -> AppResult<Vec<Branch>> {
         let mut args = vec![
             "for-each-ref".to_string(),
@@ -96,7 +96,7 @@ impl RefManager for Backend {
     }
 }
 
-impl RemoteManager for Backend {
+impl RemoteManager for GitCli {
     fn list_remotes(&self) -> AppResult<Vec<Remote>> {
         let output = self.run(&["remote", "-v"])?;
         let text = String::from_utf8_lossy(&output);
@@ -164,7 +164,7 @@ impl RemoteManager for Backend {
     }
 }
 
-impl ConfigReader for Backend {
+impl ConfigReader for GitCli {
     fn config_get(&self, key: &str) -> AppResult<String> {
         let args = ["config", "--get", "--", key];
         let output = self.run_result(&args)?;
@@ -177,7 +177,7 @@ impl ConfigReader for Backend {
             }
             .into())
         } else {
-            Err(Backend::command_failed(&args, output))
+            Err(GitCli::command_failed(&args, output))
         }
     }
 
@@ -196,7 +196,7 @@ impl ConfigReader for Backend {
     }
 }
 
-impl Maintainer for Backend {
+impl Maintainer for GitCli {
     fn gc(&self) -> AppResult<()> {
         self.run(&["gc"])?;
         Ok(())
@@ -242,7 +242,7 @@ impl Maintainer for Backend {
     }
 }
 
-fn run_allow_empty(backend: &Backend, args: &[&str]) -> AppResult<Vec<u8>> {
+fn run_allow_empty(backend: &GitCli, args: &[&str]) -> AppResult<Vec<u8>> {
     let output = backend.run_result(args)?;
     if (output.success() || output.exit_code == Some(1))
         && !output.stdout_truncated
@@ -250,7 +250,7 @@ fn run_allow_empty(backend: &Backend, args: &[&str]) -> AppResult<Vec<u8>> {
     {
         Ok(output.stdout_bytes)
     } else {
-        Err(Backend::command_failed(args, output))
+        Err(GitCli::command_failed(args, output))
     }
 }
 
