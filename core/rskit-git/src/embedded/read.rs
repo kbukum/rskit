@@ -85,6 +85,12 @@ impl Differ for Git2Repository {
 impl IgnoreReader for Git2Repository {
     fn is_ignored(&self, path: &str) -> AppResult<bool> {
         validate_repo_relative_path(path)?;
+        if self.repo.is_bare() {
+            return Err(GitError::NotImplemented {
+                operation: "is_ignored on bare repository",
+            }
+            .into());
+        }
         self.repo
             .status_should_ignore(Path::new(path))
             .map_err(GitError::Internal)
@@ -525,6 +531,22 @@ mod tests {
                 .expect("preserve path validation cause")
                 .to_string(),
             "path must not contain '..' segments"
+        );
+    }
+
+    #[test]
+    fn ignore_reader_rejects_bare_repositories() {
+        let root = rskit_fs::TempDir::new().expect("temp dir");
+        let repo = super::super::init_bare(root.path()).expect("init bare repo");
+
+        let err = repo
+            .is_ignored("target/debug/app")
+            .expect_err("reject bare repository");
+
+        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert_eq!(
+            err.message,
+            "git operation not supported: is_ignored on bare repository"
         );
     }
 }
