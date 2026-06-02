@@ -1,14 +1,28 @@
-//! Read operations for the CLI backend.
+//! Read operations for the Git CLI runner.
 
 use rskit_errors::{AppError, AppResult};
 
 use crate::options::{DescribeOptions, GrepOptions};
-use crate::read::Inspector;
+use crate::paths::validate_repo_relative_path;
+use crate::read::{IgnoreReader, Inspector};
 use crate::types::{GrepMatch, Oid};
 
-use super::{Backend, parse_oid};
+use super::{GitCli, parse_oid};
 
-impl Inspector for Backend {
+impl IgnoreReader for GitCli {
+    fn is_ignored(&self, path: &str) -> AppResult<bool> {
+        validate_repo_relative_path(path)?;
+        let args = ["check-ignore", "--quiet", "--", path];
+        let output = self.run_result(&args)?;
+        match output.exit_code {
+            Some(0) => Ok(true),
+            Some(1) => Ok(false),
+            _ => Err(GitCli::command_failed(&args, output)),
+        }
+    }
+}
+
+impl Inspector for GitCli {
     fn describe(&self, opts: Option<&DescribeOptions>) -> AppResult<String> {
         let opts = opts.cloned().unwrap_or_default();
         let mut args = vec!["describe".to_string()];
@@ -107,9 +121,52 @@ fn parse_grep_match(line: &str, revision: &str, line_numbers: bool) -> AppResult
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use rskit_errors::ErrorCode;
 
-    use super::parse_grep_match;
+    use crate::read::IgnoreReader;
+
+    use super::{GitCli, parse_grep_match};
+
+    #[test]
+    fn ignore_reader_reports_gitignored_paths() {
+        let root = rskit_fs::TempDir::new().expect("temp dir");
+        crate::init(root.path()).expect("init repo");
+        fs::write(root.path().join(".gitignore"), "target/\n").expect("write ignore");
+        let backend = GitCli::new(root.path().to_path_buf());
+
+        assert!(
+            backend
+                .is_ignored("target/debug/app")
+                .expect("check ignored path")
+        );
+        assert!(
+            !backend
+                .is_ignored("src/lib.rs")
+                .expect("check visible path")
+        );
+    }
+
+    #[test]
+    fn ignore_reader_rejects_invalid_repository_paths() {
+        let root = rskit_fs::TempDir::new().expect("temp dir");
+        crate::init(root.path()).expect("init repo");
+        let backend = GitCli::new(root.path().to_path_buf());
+
+        let err = backend
+            .is_ignored("../target/debug/app")
+            .expect_err("reject parent traversal");
+
+        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert!(err.message.contains("../target/debug/app"));
+        assert_eq!(
+            err.cause()
+                .expect("preserve path validation cause")
+                .to_string(),
+            "path must not contain '..' segments"
+        );
+    }
 
     #[test]
     fn parse_grep_match_reports_invalid_format() {

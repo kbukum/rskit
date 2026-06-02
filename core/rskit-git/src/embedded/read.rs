@@ -1,4 +1,4 @@
-//! Read trait implementations for the embedded backend.
+//! Read trait implementations for the libgit2 repository.
 
 use std::path::Path;
 use std::time::SystemTime;
@@ -7,15 +7,16 @@ use rskit_errors::{AppError, AppResult};
 
 use crate::error::GitError;
 use crate::options::{BlameOptions, LogOptions};
-use crate::read::{Blamer, Differ, IndexReader, LogReader, TreeReader};
+use crate::paths::validate_repo_relative_path;
+use crate::read::{Blamer, Differ, IgnoreReader, IndexReader, LogReader, TreeReader};
 use crate::types::{
     BlameLine, Commit, DiffEntry, DiffStats, EntryKind, EntryState, FileStatus, IndexEntry, Oid,
     StatusEntry, TreeEntry, TreeHash,
 };
 
-use super::{Backend, commit_from_git2, oid_from_git2, signature_from_git2};
+use super::{Git2Repository, commit_from_git2, oid_from_git2, signature_from_git2};
 
-impl Differ for Backend {
+impl Differ for Git2Repository {
     fn diff(&self, from: &str, to: &str) -> AppResult<Vec<DiffEntry>> {
         let from_tree = self.tree_for_ref(from)?;
         let to_tree = self.tree_for_ref(to)?;
@@ -81,7 +82,23 @@ impl Differ for Backend {
     }
 }
 
-impl TreeReader for Backend {
+impl IgnoreReader for Git2Repository {
+    fn is_ignored(&self, path: &str) -> AppResult<bool> {
+        validate_repo_relative_path(path)?;
+        if self.repo.is_bare() {
+            return Err(GitError::NotImplemented {
+                operation: "is_ignored on bare repository",
+            }
+            .into());
+        }
+        self.repo
+            .status_should_ignore(Path::new(path))
+            .map_err(GitError::Internal)
+            .map_err(Into::into)
+    }
+}
+
+impl TreeReader for Git2Repository {
     fn tree_hash(&self, revision: &str, path: &str) -> AppResult<TreeHash> {
         let tree = self.resolve_tree(revision, path)?;
         Ok(oid_from_git2(tree.id()))
@@ -124,7 +141,7 @@ impl TreeReader for Backend {
     }
 }
 
-impl IndexReader for Backend {
+impl IndexReader for Git2Repository {
     fn index_entry(&self, path: &str) -> AppResult<Option<IndexEntry>> {
         let index = self.repo.index().map_err(GitError::Internal)?;
         Ok(index.get_path(Path::new(path), 0).map(|entry| IndexEntry {
@@ -136,7 +153,7 @@ impl IndexReader for Backend {
     }
 }
 
-impl LogReader for Backend {
+impl LogReader for Git2Repository {
     fn log(&self, opts: Option<&LogOptions>) -> AppResult<Vec<Commit>> {
         let opts = opts.cloned().unwrap_or_default();
         let mut walk = self.repo.revwalk().map_err(GitError::Internal)?;
@@ -187,7 +204,7 @@ impl LogReader for Backend {
     }
 }
 
-impl Blamer for Backend {
+impl Blamer for Git2Repository {
     fn blame(
         &self,
         revision: &str,
@@ -245,7 +262,7 @@ impl Blamer for Backend {
     }
 }
 
-impl Backend {
+impl Git2Repository {
     pub(crate) fn tree_for_ref(&self, refname: &str) -> AppResult<git2::Tree<'_>> {
         let obj = self
             .repo
@@ -455,7 +472,9 @@ fn git2_time_to_system_time(time: git2::Time) -> SystemTime {
 mod tests {
     use std::fs;
 
-    use crate::read::Differ;
+    use rskit_errors::ErrorCode;
+
+    use crate::read::{Differ, IgnoreReader};
 
     #[test]
     fn status_includes_untracked_files_but_excludes_ignored_paths() {
@@ -475,5 +494,59 @@ mod tests {
 
         assert!(paths.iter().any(|path| path == "visible.rs"));
         assert!(!paths.iter().any(|path| path.starts_with("target/")));
+    }
+
+    #[test]
+    fn ignore_reader_reports_gitignored_paths_without_requiring_files() {
+        let root = rskit_fs::TempDir::new().expect("temp dir");
+        let repo = super::super::init(root.path()).expect("init repo");
+        fs::write(root.path().join(".gitignore"), "target/\n").expect("write ignore");
+        fs::create_dir_all(root.path().join("target/debug")).expect("create target");
+        fs::write(root.path().join("visible.rs"), "fn main() {}\n").expect("write source");
+
+        assert!(
+            repo.is_ignored("target/debug/app")
+                .expect("check ignored nested path")
+        );
+        assert!(
+            repo.is_ignored("target/missing.txt")
+                .expect("check ignored missing path")
+        );
+        assert!(!repo.is_ignored("visible.rs").expect("check visible path"));
+    }
+
+    #[test]
+    fn ignore_reader_rejects_invalid_repository_paths() {
+        let root = rskit_fs::TempDir::new().expect("temp dir");
+        let repo = super::super::init(root.path()).expect("init repo");
+
+        let err = repo
+            .is_ignored("../target/debug/app")
+            .expect_err("reject parent traversal");
+
+        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert!(err.message.contains("../target/debug/app"));
+        assert_eq!(
+            err.cause()
+                .expect("preserve path validation cause")
+                .to_string(),
+            "path must not contain '..' segments"
+        );
+    }
+
+    #[test]
+    fn ignore_reader_rejects_bare_repositories() {
+        let root = rskit_fs::TempDir::new().expect("temp dir");
+        let repo = super::super::init_bare(root.path()).expect("init bare repo");
+
+        let err = repo
+            .is_ignored("target/debug/app")
+            .expect_err("reject bare repository");
+
+        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert_eq!(
+            err.message,
+            "git operation not supported: is_ignored on bare repository"
+        );
     }
 }

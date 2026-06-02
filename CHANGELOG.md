@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **rskit-process**: `ProcessResult` is now non-exhaustive and includes
   cancellation metadata; downstream crates should construct values with
   `ProcessResult::completed`.
+- **rskit-git**: renamed the public concrete repository implementation types
+  from `embedded::Backend` to `embedded::Git2Repository` and from `cli::Backend`
+  to `cli::GitCli`; use the clearer names when constructing implementation
+  layers directly.
 
 ### Changed — Cross-Cutting
 - **L9 infrastructure**: made the `rskit` facade a pure re-export layer,
@@ -73,6 +77,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   non-exhaustive; construct results through `ProcessResult::completed`.
 - **rskit-git**: added index entry reading so consumers can inspect staged file
   identities through the repository read API.
+- **rskit-git**: added `IgnoreReader::is_ignored` so consumers can query Git
+  ignore rules for repository-relative paths that may not exist yet.
 - **rskit-testutil**: added a managed `TestWorkspace` and `test_workspace!`
   macro for fixture-backed temporary test workspaces with safe path handling.
 - **rskit-fs**: added a foundation crate for local filesystem primitives covering

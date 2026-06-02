@@ -4,7 +4,7 @@ use std::time::SystemTime;
 
 use crate::types::Signature;
 
-/// Raw extra CLI-style arguments preserved for backend-specific usage.
+/// Raw extra CLI-style arguments preserved for implementation-specific usage.
 pub type ExtraArgs = Vec<String>;
 
 /// Controls log traversal.
@@ -20,7 +20,7 @@ pub struct LogOptions {
     pub since: Option<SystemTime>,
     /// Upper inclusive time bound.
     pub until: Option<SystemTime>,
-    /// Backend-specific passthrough arguments.
+    /// Implementation-specific passthrough arguments.
     pub extra_args: ExtraArgs,
 }
 
@@ -33,7 +33,7 @@ pub struct BlameOptions {
     pub end_line: Option<usize>,
     /// Whether to ignore whitespace-only changes.
     pub ignore_whitespace: bool,
-    /// Backend-specific passthrough arguments.
+    /// Implementation-specific passthrough arguments.
     pub extra_args: ExtraArgs,
 }
 
@@ -44,7 +44,7 @@ pub struct DescribeOptions {
     pub annotated_tags_only: bool,
     /// Include long format output even when on an exact tag.
     pub long: bool,
-    /// Backend-specific passthrough arguments.
+    /// Implementation-specific passthrough arguments.
     pub extra_args: ExtraArgs,
 }
 
@@ -57,7 +57,7 @@ pub struct GrepOptions {
     pub ignore_case: bool,
     /// Whether to include line numbers in backend command composition.
     pub line_numbers: bool,
-    /// Backend-specific passthrough arguments.
+    /// Implementation-specific passthrough arguments.
     pub extra_args: ExtraArgs,
 }
 
@@ -72,7 +72,7 @@ pub struct CommitOptions {
     pub sign: bool,
     /// Whether to amend the current commit.
     pub amend: bool,
-    /// Backend-specific passthrough arguments.
+    /// Implementation-specific passthrough arguments.
     pub extra_args: ExtraArgs,
 }
 
@@ -85,7 +85,7 @@ pub struct MergeOptions {
     pub squash: bool,
     /// Optional merge commit message.
     pub message: Option<String>,
-    /// Backend-specific passthrough arguments.
+    /// Implementation-specific passthrough arguments.
     pub extra_args: ExtraArgs,
 }
 
@@ -96,7 +96,7 @@ pub struct RebaseOptions {
     pub interactive: bool,
     /// Whether to enable autosquash semantics.
     pub autosquash: bool,
-    /// Backend-specific passthrough arguments.
+    /// Implementation-specific passthrough arguments.
     pub extra_args: ExtraArgs,
 }
 
@@ -107,7 +107,7 @@ pub struct CherryPickOptions {
     pub mainline: Option<usize>,
     /// Apply changes without committing.
     pub no_commit: bool,
-    /// Backend-specific passthrough arguments.
+    /// Implementation-specific passthrough arguments.
     pub extra_args: ExtraArgs,
 }
 
@@ -120,7 +120,7 @@ pub struct CheckoutOptions {
     pub create_branch: Option<String>,
     /// Detach HEAD at the target ref.
     pub detach: bool,
-    /// Backend-specific passthrough arguments.
+    /// Implementation-specific passthrough arguments.
     pub extra_args: ExtraArgs,
 }
 
@@ -133,7 +133,7 @@ pub struct FetchOptions {
     pub depth: Option<usize>,
     /// Refspec overrides.
     pub refspecs: Vec<String>,
-    /// Backend-specific passthrough arguments.
+    /// Implementation-specific passthrough arguments.
     pub extra_args: ExtraArgs,
 }
 
@@ -144,7 +144,7 @@ pub struct PushOptions {
     pub force: bool,
     /// Refspec overrides.
     pub refspecs: Vec<String>,
-    /// Backend-specific passthrough arguments.
+    /// Implementation-specific passthrough arguments.
     pub extra_args: ExtraArgs,
 }
 
@@ -157,6 +157,6 @@ pub struct CleanOptions {
     pub ignored: bool,
     /// Require force semantics for destructive cleanup.
     pub force: bool,
-    /// Backend-specific passthrough arguments.
+    /// Implementation-specific passthrough arguments.
     pub extra_args: ExtraArgs,
 }
