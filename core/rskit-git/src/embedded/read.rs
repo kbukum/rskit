@@ -7,6 +7,7 @@ use rskit_errors::{AppError, AppResult};
 
 use crate::error::GitError;
 use crate::options::{BlameOptions, LogOptions};
+use crate::paths::validate_repo_relative_path;
 use crate::read::{Blamer, Differ, IgnoreReader, IndexReader, LogReader, TreeReader};
 use crate::types::{
     BlameLine, Commit, DiffEntry, DiffStats, EntryKind, EntryState, FileStatus, IndexEntry, Oid,
@@ -83,6 +84,7 @@ impl Differ for Git2Repository {
 
 impl IgnoreReader for Git2Repository {
     fn is_ignored(&self, path: &str) -> AppResult<bool> {
+        validate_repo_relative_path(path)?;
         self.repo
             .status_should_ignore(Path::new(path))
             .map_err(GitError::Internal)
@@ -464,6 +466,8 @@ fn git2_time_to_system_time(time: git2::Time) -> SystemTime {
 mod tests {
     use std::fs;
 
+    use rskit_errors::ErrorCode;
+
     use crate::read::{Differ, IgnoreReader};
 
     #[test]
@@ -503,5 +507,18 @@ mod tests {
                 .expect("check ignored missing path")
         );
         assert!(!repo.is_ignored("visible.rs").expect("check visible path"));
+    }
+
+    #[test]
+    fn ignore_reader_rejects_invalid_repository_paths() {
+        let root = rskit_fs::TempDir::new().expect("temp dir");
+        let repo = super::super::init(root.path()).expect("init repo");
+
+        let err = repo
+            .is_ignored("../target/debug/app")
+            .expect_err("reject parent traversal");
+
+        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert!(err.message.contains("../target/debug/app"));
     }
 }

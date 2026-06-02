@@ -4,6 +4,8 @@ use std::path::{Component, Path, PathBuf};
 
 use rskit_errors::{AppError, AppResult};
 
+use crate::error::GitError;
+
 /// Return `path` relative to `repo_root` after canonicalizing both paths.
 pub fn repo_relative_path(repo_root: &Path, path: &Path) -> AppResult<PathBuf> {
     let repo_root = repo_root.canonicalize().map_err(|error| {
@@ -44,6 +46,15 @@ pub fn join_repo_path(prefix: &Path, relative: &Path) -> AppResult<PathBuf> {
     } else {
         Ok(normalize_path(&prefix.join(relative)))
     }
+}
+
+pub(crate) fn validate_repo_relative_path(path: &str) -> AppResult<()> {
+    rskit_fs::validate_relative_path(Path::new(path)).map_err(|_| {
+        GitError::InvalidPath {
+            path: path.to_string(),
+        }
+        .into()
+    })
 }
 
 fn validate_repo_relative(field: &'static str, path: &Path) -> AppResult<()> {

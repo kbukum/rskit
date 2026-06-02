@@ -3,6 +3,7 @@
 use rskit_errors::{AppError, AppResult};
 
 use crate::options::{DescribeOptions, GrepOptions};
+use crate::paths::validate_repo_relative_path;
 use crate::read::{IgnoreReader, Inspector};
 use crate::types::{GrepMatch, Oid};
 
@@ -10,6 +11,7 @@ use super::{GitCli, parse_oid};
 
 impl IgnoreReader for GitCli {
     fn is_ignored(&self, path: &str) -> AppResult<bool> {
+        validate_repo_relative_path(path)?;
         let args = ["check-ignore", "--quiet", "--", path];
         let output = self.run_result(&args)?;
         match output.exit_code {
@@ -144,6 +146,20 @@ mod tests {
                 .is_ignored("src/lib.rs")
                 .expect("check visible path")
         );
+    }
+
+    #[test]
+    fn ignore_reader_rejects_invalid_repository_paths() {
+        let root = rskit_fs::TempDir::new().expect("temp dir");
+        crate::init(root.path()).expect("init repo");
+        let backend = GitCli::new(root.path().to_path_buf());
+
+        let err = backend
+            .is_ignored("../target/debug/app")
+            .expect_err("reject parent traversal");
+
+        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert!(err.message.contains("../target/debug/app"));
     }
 
     #[test]
