@@ -49,11 +49,11 @@ pub fn join_repo_path(prefix: &Path, relative: &Path) -> AppResult<PathBuf> {
 }
 
 pub(crate) fn validate_repo_relative_path(path: &str) -> AppResult<()> {
-    rskit_fs::validate_relative_path(Path::new(path)).map_err(|_| {
-        GitError::InvalidPath {
+    rskit_fs::validate_relative_path(Path::new(path)).map_err(|error| {
+        AppError::from(GitError::InvalidPath {
             path: path.to_string(),
-        }
-        .into()
+        })
+        .with_cause(error)
     })
 }
 

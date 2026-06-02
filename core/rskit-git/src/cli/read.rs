@@ -160,6 +160,12 @@ mod tests {
 
         assert_eq!(err.code, ErrorCode::InvalidInput);
         assert!(err.message.contains("../target/debug/app"));
+        assert_eq!(
+            err.cause()
+                .expect("preserve path validation cause")
+                .to_string(),
+            "path must not contain '..' segments"
+        );
     }
 
     #[test]
