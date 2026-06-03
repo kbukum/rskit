@@ -30,7 +30,7 @@ owning crates:
 | `secret` | Secret string masking for logs, debug output, and serialization |
 | `strings` | Case conversion and UTF-8-safe truncation |
 | `template` | Typed `{placeholder}` template parsing and rendering |
-| `time` | Duration formatting/parsing and synchronous timing helpers |
+| `time` | Duration formatting/parsing, UTC civil date/time conversion, RFC 3339 helpers, and synchronous timing helpers |
 
 ## Usage
 
@@ -57,6 +57,15 @@ use std::time::Duration;
 
 assert_eq!(rskit_util::bytes::parse_bytes("1.5 MB"), Some(1_572_864));
 assert_eq!(rskit_util::time::parse_duration("2m"), Some(Duration::from_secs(120)));
+```
+
+### UTC date/time helpers
+
+```rust
+use rskit_util::time::{format_rfc3339, parse_rfc3339_utc};
+
+assert_eq!(format_rfc3339(0), Some("1970-01-01T00:00:00Z".to_owned()));
+assert_eq!(parse_rfc3339_utc("1970-01-01T00:00:00Z"), Some(0));
 ```
 
 ### Typed templates

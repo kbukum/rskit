@@ -13,7 +13,7 @@
 //! - [`secret`]: Prevent accidental credential leaks in logs/debug outputs.
 //! - [`strings`]: Zero-alloc/low-alloc casing and safe truncation.
 //! - [`template`]: Lightweight template engine (`{name}` interpolation).
-//! - [`time`]: Duration string parsing, formatting, and `time_it` timing wrappers.
+//! - [`time`]: Duration parsing, UTC date/time conversion, RFC 3339 helpers, and timing wrappers.
 
 #![warn(missing_docs)]
 
