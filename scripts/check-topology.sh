@@ -77,6 +77,34 @@ def package_name(dep_name: str, dep: object) -> str:
     return dep_name
 
 
+def is_workspace_dependency(dep: object) -> bool:
+    return isinstance(dep, dict) and dep.get("workspace") is True
+
+
+def internal_dependency_target(
+    manifest_dir: Path,
+    workspace_deps: dict,
+    dep_name: str,
+    dep: object,
+) -> str | None:
+    dep_path = path_value(dep)
+    if dep_path is None and is_workspace_dependency(dep):
+        workspace_dep = workspace_deps.get(dep_name) or workspace_deps.get(package_name(dep_name, dep))
+        dep_path = path_value(workspace_dep)
+        manifest_dir = root / "core"
+    if dep_path is None:
+        return None
+
+    resolved = (manifest_dir / dep_path).resolve()
+    try:
+        target = resolved.relative_to(root).as_posix()
+    except ValueError:
+        return None
+    if target.startswith("core/") or target.startswith("contrib/"):
+        return target
+    return None
+
+
 def dependency_entries(manifest: dict, name: str) -> list[tuple[str, object]]:
     entries: list[tuple[str, object]] = []
     for table_name, deps in dependency_tables(manifest):
@@ -88,6 +116,12 @@ def dependency_entries(manifest: dict, name: str) -> list[tuple[str, object]]:
 def features(manifest: dict) -> dict:
     table = manifest.get("features", {})
     return table if isinstance(table, dict) else {}
+
+
+core_workspace = load(root / "core" / "Cargo.toml")
+core_workspace_deps = core_workspace.get("workspace", {}).get("dependencies", {})
+if not isinstance(core_workspace_deps, dict):
+    core_workspace_deps = {}
 
 
 for cargo_toml in sorted((root / "core").glob("*/Cargo.toml")):
@@ -117,9 +151,15 @@ for cargo_toml in sorted((root / "core").glob("*/Cargo.toml")):
         for table_name, deps in dependency_tables(manifest):
             for dep_name, dep in deps.items():
                 effective_name = package_name(dep_name, dep)
-                if effective_name.startswith("rskit-"):
+                internal_target = internal_dependency_target(
+                    cargo_toml.parent,
+                    core_workspace_deps,
+                    dep_name,
+                    dep,
+                )
+                if effective_name.startswith("rskit-") and internal_target is not None:
                     errors.append(
-                        f"{rel}: L0 utility crate must not depend on internal {table_name}.{dep_name} ({effective_name})"
+                        f"{rel}: L0 utility crate must not depend on internal {table_name}.{dep_name} ({effective_name}) pointing to {internal_target}"
                     )
 
     if crate in {"rskit-http", "rskit-discovery"}:
