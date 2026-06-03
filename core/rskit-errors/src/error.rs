@@ -14,7 +14,7 @@ use crate::code::ErrorCode;
 /// fully determined by `code` and can never drift from it. `retryable` is
 /// seeded from `code`'s default but may be intentionally overridden via the
 /// [`AppError::retryable`] builder; read access is via the getter methods and
-/// mutation via the `with_*` builders.
+/// mutation via the builder methods (`with_*`, `retryable`, `context`).
 ///
 /// `details` deliberately uses [`serde_json::Value`]: it models RFC 9457
 /// problem-detail *extension members*, which are by definition arbitrary JSON

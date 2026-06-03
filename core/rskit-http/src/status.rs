@@ -24,7 +24,10 @@ pub fn status_to_error_code(status: StatusCode) -> ErrorCode {
         409 => ErrorCode::Conflict,
         429 => ErrorCode::RateLimited,
         408 => ErrorCode::Cancelled,
-        500 | 502 | 503 | 504 => ErrorCode::Internal,
+        500 => ErrorCode::Internal,
+        502 => ErrorCode::ExternalService,
+        503 => ErrorCode::ServiceUnavailable,
+        504 => ErrorCode::Timeout,
         _ if status.is_client_error() || status.is_server_error() => ErrorCode::ExternalService,
         _ => ErrorCode::Internal,
     }
@@ -62,8 +65,32 @@ mod tests {
         );
         assert_eq!(
             status_to_error_code(StatusCode::BAD_GATEWAY),
+            ErrorCode::ExternalService
+        );
+        assert_eq!(
+            status_to_error_code(StatusCode::SERVICE_UNAVAILABLE),
+            ErrorCode::ServiceUnavailable
+        );
+        assert_eq!(
+            status_to_error_code(StatusCode::GATEWAY_TIMEOUT),
+            ErrorCode::Timeout
+        );
+        assert_eq!(
+            status_to_error_code(StatusCode::INTERNAL_SERVER_ERROR),
             ErrorCode::Internal
         );
+    }
+
+    #[test]
+    fn canonical_server_statuses_round_trip_through_error_code() {
+        for code in [
+            ErrorCode::ServiceUnavailable,
+            ErrorCode::Timeout,
+            ErrorCode::ExternalService,
+            ErrorCode::Internal,
+        ] {
+            assert_eq!(status_to_error_code(code.http_status()), code);
+        }
     }
 
     #[test]

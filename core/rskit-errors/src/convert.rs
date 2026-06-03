@@ -6,7 +6,10 @@ impl From<std::io::Error> for AppError {
     fn from(e: std::io::Error) -> Self {
         use std::io::ErrorKind;
         // Map common kinds to their semantic code so HTTP status and retry
-        // hints stay meaningful (e.g. a missing file is 404, not 500).
+        // hints stay meaningful (e.g. a missing file is 404, not 500). The
+        // `io::Error` message is safe to surface for these classified kinds,
+        // but unclassified errors fall through to `internal` so their detail
+        // is preserved only as a (non-serialized) cause.
         let code = match e.kind() {
             ErrorKind::NotFound => ErrorCode::NotFound,
             ErrorKind::PermissionDenied => ErrorCode::Forbidden,
@@ -18,7 +21,7 @@ impl From<std::io::Error> for AppError {
             | ErrorKind::NotConnected
             | ErrorKind::BrokenPipe => ErrorCode::ConnectionFailed,
             ErrorKind::InvalidInput | ErrorKind::InvalidData => ErrorCode::InvalidInput,
-            _ => ErrorCode::Internal,
+            _ => return AppError::internal(e),
         };
         let message = e.to_string();
         AppError::new(code, message).with_cause(e)
@@ -38,7 +41,7 @@ impl From<serde_json::Error> for AppError {
 
 impl From<std::fmt::Error> for AppError {
     fn from(e: std::fmt::Error) -> Self {
-        AppError::new(ErrorCode::Internal, e.to_string()).with_cause(e)
+        AppError::internal(e)
     }
 }
 
@@ -95,10 +98,12 @@ mod tests {
     }
 
     #[test]
-    fn io_other_maps_to_internal() {
-        let io = std::io::Error::other("weird");
+    fn io_other_maps_to_internal_with_generic_message() {
+        let io = std::io::Error::other("weird secret detail");
         let err = AppError::from(io);
         assert_eq!(err.code(), ErrorCode::Internal);
+        assert_eq!(err.message(), "internal server error");
+        assert!(err.cause().is_some());
     }
 
     #[test]
