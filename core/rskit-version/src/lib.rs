@@ -2,7 +2,8 @@
 //!
 //! Version, git commit, branch, and build time are captured at compile time
 //! via a `build.rs` script that runs `git` commands and emits `cargo:rustc-env`
-//! variables.
+//! variables. The build timestamp is captured as a Unix epoch and formatted to
+//! RFC 3339 by the library, avoiding any external `date` command.
 //!
 //! # Quick Start
 //!
@@ -17,6 +18,8 @@
 //! ```
 
 #![warn(missing_docs)]
+
+pub mod semver;
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -52,6 +55,18 @@ impl VersionInfo {
     /// Return the package version without build metadata.
     pub fn package_version(&self) -> &str {
         &self.version
+    }
+
+    /// Return the package version parsed as a semantic version, if valid.
+    pub fn semver(&self) -> Option<semver::Version> {
+        semver::parse_version(&self.version)
+    }
+
+    /// Return whether this package version matches a semantic version requirement.
+    ///
+    /// Returns `None` if either the version or requirement string is invalid.
+    pub fn matches_requirement(&self, requirement: &str) -> Option<bool> {
+        semver::matches_requirement(&self.version, requirement)
     }
 
     /// Return the short git commit hash, if available.
@@ -109,12 +124,21 @@ pub const fn package_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
 
+/// Return the Cargo package version parsed as a semantic version, if valid.
+pub fn package_semver() -> Option<semver::Version> {
+    semver::parse_version(package_version())
+}
+
 /// Returns comprehensive version information collected at compile time.
 pub fn get_version_info() -> VersionInfo {
     let version = package_version().to_owned();
     let git_commit = env!("GIT_COMMIT").to_owned();
     let git_branch = env!("GIT_BRANCH").to_owned();
-    let build_time = env!("BUILD_TIME").to_owned();
+    let build_time = env!("BUILD_EPOCH")
+        .parse::<i64>()
+        .ok()
+        .and_then(rskit_util::time::format_rfc3339)
+        .unwrap_or_default();
     let rust_version = env!("RUST_VERSION_STR").to_owned();
 
     let is_release = version != "dev" && !version.contains("dirty");
@@ -206,5 +230,19 @@ mod tests {
     fn display_matches_full_version() {
         let info = get_version_info();
         assert_eq!(info.to_string(), get_full_version());
+    }
+
+    #[test]
+    fn package_version_parses_as_semver() {
+        let version = package_semver().expect("workspace package version should be semver");
+        assert_eq!(version.major, 0);
+        assert!(get_version_info().semver().is_some());
+    }
+
+    #[test]
+    fn version_info_matches_semver_requirement() {
+        let info = get_version_info();
+        assert_eq!(info.matches_requirement(">=0.1.0"), Some(true));
+        assert_eq!(info.matches_requirement("not a requirement"), None);
     }
 }
