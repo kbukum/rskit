@@ -1,8 +1,12 @@
-//! Typed placeholder-template parsing and rendering primitives.
+//! Lightweight template engine featuring brace-delimited placeholders.
 
 use std::fmt;
 
-use rskit_errors::{AppError, AppResult};
+mod error;
+mod parser;
+mod renderer;
+
+pub use error::TemplateError;
 
 /// A placeholder token that can be parsed from a template.
 pub trait Placeholder: Copy + Eq + fmt::Display {
@@ -30,34 +34,8 @@ where
     P: Placeholder,
 {
     /// Parse a template string and reject unknown placeholders.
-    pub fn parse(value: &str, placeholders: &[P]) -> AppResult<Self> {
-        let mut parts = Vec::new();
-        let mut remaining = value;
-
-        while let Some(start) = remaining.find('{') {
-            if start > 0 {
-                push_literal(&mut parts, value, &remaining[..start])?;
-            }
-            let after_open = &remaining[start + 1..];
-            let Some(end) = after_open.find('}') else {
-                return Err(AppError::invalid_input(
-                    "template",
-                    format!("unclosed placeholder in '{value}'"),
-                ));
-            };
-            let token = &after_open[..end];
-            parts.push(TemplatePart::Placeholder(parse_placeholder(
-                token,
-                placeholders,
-            )?));
-            remaining = &after_open[end + 1..];
-        }
-
-        if !remaining.is_empty() {
-            push_literal(&mut parts, value, remaining)?;
-        }
-
-        Ok(Self { parts })
+    pub fn parse(value: &str, placeholders: &[P]) -> Result<Self, TemplateError> {
+        parser::parse_template(value, placeholders)
     }
 
     /// Return parsed template parts.
@@ -73,60 +51,11 @@ where
             .iter()
             .any(|part| matches!(part, TemplatePart::Placeholder(found) if *found == placeholder))
     }
-
-    /// Render the template using a placeholder renderer callback.
-    pub fn render_with<F>(&self, mut render: F) -> AppResult<String>
-    where
-        F: FnMut(P) -> AppResult<String>,
-    {
-        let mut rendered = String::new();
-        for part in &self.parts {
-            match part {
-                TemplatePart::Literal(value) => rendered.push_str(value),
-                TemplatePart::Placeholder(placeholder) => {
-                    rendered.push_str(&render(*placeholder)?);
-                }
-            }
-        }
-        Ok(rendered)
-    }
-}
-
-fn push_literal<P>(parts: &mut Vec<TemplatePart<P>>, source: &str, literal: &str) -> AppResult<()> {
-    if literal.contains('}') {
-        return Err(AppError::invalid_input(
-            "template",
-            format!("unmatched closing placeholder brace in '{source}'"),
-        ));
-    }
-    parts.push(TemplatePart::Literal(literal.to_string()));
-    Ok(())
-}
-
-fn parse_placeholder<P>(token: &str, placeholders: &[P]) -> AppResult<P>
-where
-    P: Placeholder,
-{
-    if token.is_empty() {
-        return Err(AppError::invalid_input(
-            "template",
-            "placeholder cannot be empty",
-        ));
-    }
-    placeholders
-        .iter()
-        .copied()
-        .find(|placeholder| placeholder.token() == token)
-        .ok_or_else(|| {
-            AppError::invalid_input("template", format!("unknown placeholder '{token}'"))
-        })
 }
 
 #[cfg(test)]
 mod tests {
-    use std::fmt;
-
-    use super::{Placeholder, Template, TemplatePart};
+    use super::*;
 
     #[derive(Debug, Clone, Copy, Eq, PartialEq)]
     enum Token {
@@ -171,30 +100,35 @@ mod tests {
     #[test]
     fn rejects_unknown_placeholders() {
         let error = Template::parse("{project.root}", TOKENS).expect_err("unknown fails");
-
-        assert!(error.message().contains("unknown placeholder"));
+        assert_eq!(
+            error,
+            TemplateError::UnknownPlaceholder("project.root".to_string())
+        );
     }
 
     #[test]
     fn rejects_unclosed_placeholders() {
         let error = Template::parse("cargo {name", TOKENS).expect_err("unclosed fails");
-
-        assert!(error.message().contains("unclosed placeholder"));
+        assert_eq!(
+            error,
+            TemplateError::UnclosedPlaceholder("cargo {name".to_string())
+        );
     }
 
     #[test]
     fn rejects_empty_placeholders() {
         let error = Template::parse("{}", TOKENS).expect_err("empty fails");
-
-        assert!(error.message().contains("placeholder cannot be empty"));
+        assert_eq!(error, TemplateError::EmptyPlaceholder);
     }
 
     #[test]
     fn rejects_unmatched_closing_braces() {
         let error =
             Template::parse("cargo } {name}", TOKENS).expect_err("closing brace should fail");
-
-        assert!(error.message().contains("unmatched closing"));
+        assert_eq!(
+            error,
+            TemplateError::UnmatchedClosingBrace("cargo } {name}".to_string())
+        );
     }
 
     #[test]
@@ -203,8 +137,8 @@ mod tests {
 
         let rendered = template
             .render_with(|placeholder| match placeholder {
-                Token::Name => Ok("build".to_string()),
-                Token::Args => Ok("--all".to_string()),
+                Token::Name => Ok::<_, &'static str>("build".to_string()),
+                Token::Args => Ok::<_, &'static str>("--all".to_string()),
             })
             .expect("template renders");
 

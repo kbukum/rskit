@@ -12,6 +12,7 @@ jsonwebtoken = { version = "10", features = ["rust_crypto"] }
 libfuzzer-sys = "0.4"
 rskit-auth = { path = "../core/rskit-auth" }
 rskit-errors = { path = "../core/rskit-errors" }
+rskit-util = { path = "../core/rskit-util" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 http = "1.0"
@@ -37,5 +38,11 @@ doc = false
 [[bin]]
 name = "errors_problem_detail"
 path = "fuzz_targets/errors_problem_detail.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "util_parsers"
+path = "fuzz_targets/util_parsers.rs"
 test = false
 doc = false

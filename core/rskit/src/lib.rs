@@ -7,6 +7,7 @@
 //!
 //! | Module | Extra crate |
 //! |--------|-------------|
+//! | `util` | `rskit-util` (domain-free foundation utilities) |
 //! | `errors` | `rskit-errors` (error types and result aliases) |
 //! | `fs` | `rskit-fs` (local filesystem primitives) |
 //! | `config` | `rskit-config` (adapter-oriented config loading) |
@@ -86,6 +87,9 @@
 #![warn(missing_docs)]
 
 // ── Always-on sub-crate facades ──────────────────────────────────────────────
+
+/// Decoupled, domain-free utilities (strings, collections, env, etc).
+pub use rskit_util as util;
 
 /// Error types, `ErrorCode`, `AppError`, `AppResult`.
 pub use rskit_errors as errors;
@@ -186,7 +190,7 @@ pub use rskit_messaging_kafka as messaging_kafka;
 #[cfg(feature = "messaging-nats")]
 pub use rskit_messaging_nats as messaging_nats;
 
-/// RabbitMQ messaging adapter.
+/// `RabbitMQ` messaging adapter.
 #[cfg(feature = "messaging-rabbitmq")]
 pub use rskit_messaging_rabbitmq as messaging_rabbitmq;
 
@@ -214,15 +218,15 @@ pub use rskit_sse as sse;
 #[cfg(feature = "dag")]
 pub use rskit_dag as dag;
 
-/// Shared GenAI vocabulary.
+/// Shared `GenAI` vocabulary.
 #[cfg(feature = "genai")]
 pub use rskit_ai as genai;
 
-/// LLM provider abstractions for OpenAI and Anthropic.
+/// LLM provider abstractions for `OpenAI` and `Anthropic`.
 #[cfg(feature = "llm")]
 pub use rskit_llm as llm;
 
-/// OpenAI LLM adapter.
+/// `OpenAI` LLM adapter.
 #[cfg(feature = "llm-openai")]
 pub use rskit_llm_openai as llm_openai;
 
@@ -246,7 +250,7 @@ pub use rskit_embedding as embedding;
 #[cfg(feature = "inference")]
 pub use rskit_inference as inference;
 
-/// Triton KServe v2 HTTP inference adapter.
+/// Triton `KServe` v2 HTTP inference adapter.
 #[cfg(feature = "inference-triton")]
 pub use rskit_inference_triton as inference_triton;
 
@@ -282,7 +286,7 @@ pub use rskit_mcp as mcp;
 #[cfg(feature = "storage")]
 pub use rskit_storage as storage;
 
-/// Amazon S3 and S3-compatible (MinIO, LocalStack) storage backend.
+/// Amazon S3 and S3-compatible (`MinIO`, `LocalStack`) storage backend.
 #[cfg(feature = "storage-s3")]
 pub use rskit_storage_s3 as storage_s3;
 
@@ -302,7 +306,7 @@ pub use rskit_vectorstore_qdrant as vectorstore_qdrant;
 #[cfg(feature = "media")]
 pub use rskit_media as media;
 
-/// FFmpeg CLI backend for video/audio processing.
+/// `FFmpeg` CLI backend for video/audio processing.
 #[cfg(feature = "media-ffmpeg")]
 pub use rskit_media_ffmpeg as media_ffmpeg;
 

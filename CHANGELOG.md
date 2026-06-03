@@ -97,9 +97,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **rskit-fs**: added a foundation crate for local filesystem primitives covering
   safe paths, file/directory/tree operations, temporary resources, links,
   permissions, and security-oriented defaults for reusable filesystem access.
-- **rskit-util**: reduced the L0 utility crate to a minimal domain-free
-  dependency surface.
-- **rskit-config**: moved `SecretString` ownership out of `rskit-util`.
+- **rskit-util**: redesigned as a domain-free foundation utility crate with no
+  internal crate dependencies, covering string casing, safe truncation,
+  collection helpers (`chunk`, `group_by`, `index_by`, `partition`), safe
+  environment variable parsing, duration/byte size parsing, and stateless
+  mathematical exponential backoff.
+- **rskit-config**: moved `SecretString` and the typed template engine to
+  `rskit-util` to clean up layering complexity; downstream users should import
+  the canonical `rskit_util` primitives directly.
 - **rskit-config**: made config loading precedence explicit with programmatic
   defaults and overrides; dotenv files now feed typed config loading without
   mutating the process environment.

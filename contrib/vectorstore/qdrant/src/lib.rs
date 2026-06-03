@@ -12,8 +12,8 @@ use qdrant_client::qdrant::{
     Condition, CreateCollectionBuilder, DeletePointsBuilder, Distance, Filter, PointStruct, Range,
     SearchPointsBuilder, UpsertPointsBuilder, VectorParamsBuilder,
 };
-use rskit_config::SecretString;
 use rskit_errors::{AppError, AppResult, ErrorCode};
+use rskit_util::SecretString;
 use rskit_vectorstore::{
     PointPayload, SearchFilter, SearchResult, SimilarityMetric, VectorFactory, VectorStore,
     VectorStoreConfig, VectorStoreRegistry,

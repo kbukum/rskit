@@ -32,7 +32,7 @@ struct TrackingComponent {
 }
 
 impl TrackingComponent {
-    fn new(name: &'static str) -> Self {
+    const fn new(name: &'static str) -> Self {
         Self {
             name,
             started: AtomicBool::new(false),
@@ -282,7 +282,7 @@ async fn provider_pipeline_map_filter_collect() {
 
     let stream = from_slice(vec!["alice", "bob", "charlie"]);
     let results: Vec<AppResult<String>> = stream
-        .rmap(|name| async move { Ok(format!("user:{}", name)) })
+        .rmap(|name| async move { Ok(format!("user:{name}")) })
         .rfilter(|r| r.as_ref().is_ok_and(|s| s != "user:bob"))
         .collect()
         .await;
@@ -515,7 +515,7 @@ async fn auth_authz_jwt_claims_feed_rbac() {
     let write_request = Request {
         subject: Subject {
             id: decoded.sub.clone(),
-            roles: vec![decoded.role.clone()],
+            roles: vec![decoded.role],
             attributes: HashMap::new(),
         },
         resource: Resource {
@@ -583,7 +583,7 @@ async fn auth_authz_restricted_role() {
     let write_request = Request {
         subject: Subject {
             id: decoded.sub.clone(),
-            roles: vec![decoded.role.clone()],
+            roles: vec![decoded.role],
             attributes: HashMap::new(),
         },
         resource: Resource {
@@ -643,7 +643,7 @@ async fn auth_authz_deny_overrides_allow() {
     let mut request = Request {
         subject: Subject {
             id: decoded.sub.clone(),
-            roles: vec![decoded.role.clone()],
+            roles: vec![decoded.role],
             attributes: HashMap::new(),
         },
         resource: Resource {
@@ -681,7 +681,7 @@ async fn errors_validation_pipeline_integration() {
                 .required("name", name)
                 .email("email", email)
                 .validate()?;
-            Ok(format!("{} <{}>", name, email))
+            Ok(format!("{name} <{email}>"))
         })
         .collect()
         .await;
@@ -761,7 +761,7 @@ fn error_retryability_across_codes() {
         ErrorCode::RateLimited,
     ];
     for code in &retryable {
-        assert!(code.is_retryable(), "{:?} should be retryable", code);
+        assert!(code.is_retryable(), "{code:?} should be retryable");
     }
 
     let non_retryable = [
@@ -771,6 +771,6 @@ fn error_retryability_across_codes() {
         ErrorCode::InvalidInput,
     ];
     for code in &non_retryable {
-        assert!(!code.is_retryable(), "{:?} should NOT be retryable", code);
+        assert!(!code.is_retryable(), "{code:?} should NOT be retryable");
     }
 }
