@@ -27,6 +27,7 @@ use std::fmt;
 const MAIN_BRANCH: &str = "main";
 const MASTER_BRANCH: &str = "master";
 const SHORT_COMMIT_LEN: usize = 7;
+const GIT_BRANCH: &str = env!("GIT_BRANCH");
 
 /// Immutable snapshot of build/version metadata. Compatible with gokit and pykit `VersionInfo`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -133,7 +134,11 @@ pub fn package_semver() -> Option<semver::Version> {
 pub fn get_version_info() -> VersionInfo {
     let version = package_version().to_owned();
     let git_commit = env!("GIT_COMMIT").to_owned();
-    let git_branch = env!("GIT_BRANCH").to_owned();
+    let git_branch = if GIT_BRANCH.is_empty() {
+        String::new()
+    } else {
+        GIT_BRANCH.to_owned()
+    };
     let build_time = env!("BUILD_EPOCH")
         .parse::<i64>()
         .ok()

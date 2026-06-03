@@ -4,7 +4,7 @@ pub use ::semver::{Version, VersionReq};
 
 /// Parses a semantic version string.
 ///
-/// Returns `None` when `value` is not valid SemVer.
+/// Returns `None` when `value` is not valid `SemVer`.
 ///
 /// # Examples
 ///
@@ -19,7 +19,7 @@ pub fn parse_version(value: &str) -> Option<Version> {
 
 /// Parses a semantic version requirement.
 ///
-/// Returns `None` when `requirement` is not a valid SemVer requirement.
+/// Returns `None` when `requirement` is not a valid `SemVer` requirement.
 ///
 /// # Examples
 ///
