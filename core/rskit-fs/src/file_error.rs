@@ -1,4 +1,5 @@
 //! Shared file error classification helpers.
+#![allow(clippy::redundant_pub_crate)]
 
 use std::path::Path;
 
