@@ -1,6 +1,9 @@
-/// Safely truncates a string to a max byte-length, appending ellipses (`...`)
-/// without splitting UTF-8 code points.
+/// Safely truncates a string to a UTF-8-safe prefix sized for [`truncate_owned`].
 ///
+/// The returned prefix is at most `max_bytes - 3` bytes when truncation is needed, reserving
+/// space for the ellipsis that [`truncate_owned`] appends.
+///
+/// Use [`truncate_owned`] if you need the truncated string with an appended ellipsis (`...`).
 /// # Examples
 ///
 /// ```
@@ -14,9 +17,9 @@ pub fn truncate(s: &str, max_bytes: usize) -> &str {
         return s;
     }
 
-    // Since we append "..." which takes 3 bytes, the cut-off point must be max_bytes - 3
+    // `truncate_owned` appends "..." (3 bytes), so `truncate` returns at most max_bytes - 3 bytes.
     if max_bytes <= 3 {
-        return &s[..0]; // too short to even contain the ellipsis
+        return &s[..0]; // too short to include any prefix before the ellipsis
     }
 
     let limit = max_bytes - 3;

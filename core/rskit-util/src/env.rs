@@ -78,8 +78,12 @@ mod tests {
             get_parsed::<u16>("RSKIT_UTIL_TEST_NON_EXISTENT_VAR_12345"),
             None
         );
-        // CARGO_PKG_VERSION_MAJOR is set by Cargo to a valid integer (usually "0").
-        assert_eq!(get_parsed::<u16>("CARGO_PKG_VERSION_MAJOR"), Some(0));
+        // CARGO_PKG_VERSION_MAJOR is set by Cargo to a valid integer.
+        let expected: u16 = std::env::var("CARGO_PKG_VERSION_MAJOR")
+            .expect("CARGO_PKG_VERSION_MAJOR set by Cargo")
+            .parse()
+            .expect("CARGO_PKG_VERSION_MAJOR parses as u16");
+        assert_eq!(get_parsed::<u16>("CARGO_PKG_VERSION_MAJOR"), Some(expected));
     }
 
     #[test]

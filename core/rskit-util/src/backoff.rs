@@ -23,7 +23,7 @@ pub fn calculate_backoff(attempt: u32, min_delay: Duration, max_delay: Duration)
     if max_delay <= min_delay {
         return min_delay;
     }
-    if attempt == 0 {
+    if attempt <= 1 {
         return min_delay;
     }
     if min_delay.is_zero() {
@@ -31,7 +31,7 @@ pub fn calculate_backoff(attempt: u32, min_delay: Duration, max_delay: Duration)
     }
 
     let mut delay = min_delay;
-    for _ in 0..attempt {
+    for _ in 1..attempt {
         let Some(next) = delay.checked_mul(2) else {
             return max_delay;
         };
