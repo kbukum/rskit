@@ -63,9 +63,9 @@ logging:
 |----------|-------------|
 | `init_logging(cfg)` | Basic init from `LoggingConfig` |
 | `init_logging_env()` | Init from `RUST_LOG` only (no config needed) |
-| `init_logging_with_masking(cfg, masking_cfg)` | Init with sensitive data masking |
-| `init_logging_with_options(cfg, sampling, module_levels, masking)` | Init with sampling + module overrides |
-| `init_logging_full(cfg, sampling, module_levels, masking, otlp, name, env, ver)` | Full init with all features (requires `otlp` feature) |
+| `init_logging_with_masking(cfg, masking_cfg)` | Fallible init with sensitive data masking |
+| `init_logging_with_options(cfg, sampling, module_levels, masking)` | Fallible init with sampling + module overrides |
+| `init_logging_full(setup)` | Full init with all features (requires `otlp` feature) |
 
 ### Full Configuration Example
 
@@ -73,12 +73,12 @@ logging:
 use std::collections::HashMap;
 use rskit_logging::{
     init_logging_full,
-    MaskingConfig, SamplingConfig,
+    LoggingSetup, MaskingConfig, SamplingConfig,
 };
 use rskit_logging::otlp::OtlpConfig;  // requires "otlp" feature
 use rskit_config::LoggingConfig;
 
-fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+fn main() -> rskit_logging::LoggingResult<()> {
     let cfg = LoggingConfig {
         level: "info".into(),
         format: rskit_config::LogFormat::Json,
@@ -107,16 +107,12 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         ..Default::default()
     };
 
-    let _guard = init_logging_full(
-        &cfg,
-        Some(&sampling),
-        Some(&module_levels),
-        Some(&masking),
-        Some(&otlp),
-        "my-service",
-        "production",
-        "1.0.0",
-    )?;
+    let setup = LoggingSetup::new(&cfg, "my-service", "production", "1.0.0")
+        .with_sampling(&sampling)
+        .with_module_levels(&module_levels)
+        .with_masking(&masking)
+        .with_otlp(&otlp);
+    let _guard = init_logging_full(setup)?;
 
     tracing::info!(service = "my-service", "started");
     Ok(())
@@ -271,7 +267,6 @@ let otlp = OtlpConfig {
     enabled: true,
     endpoint: "http://otel-collector:4317".to_string(),
     protocol: "grpc".to_string(),    // "grpc" | "http"
-    insecure: false,
     headers: HashMap::new(),
 };
 ```
@@ -279,16 +274,11 @@ let otlp = OtlpConfig {
 ### Full Init with OTLP
 
 ```rust
-let _guard = rskit_logging::init_logging_full(
-    &cfg,
-    Some(&sampling),       // optional sampling
-    Some(&module_levels),  // optional module overrides
-    None,                  // optional masking config
-    Some(&otlp),           // OTLP config
-    "my-service",          // service name
-    "production",          // environment
-    "1.0.0",               // version
-)?;
+let setup = rskit_logging::LoggingSetup::new(&cfg, "my-service", "production", "1.0.0")
+    .with_sampling(&sampling)
+    .with_module_levels(&module_levels)
+    .with_otlp(&otlp);
+let _guard = rskit_logging::init_logging_full(setup)?;
 ```
 
 ### Subscriber Stack
@@ -305,8 +295,10 @@ When using `init_logging_full`, the subscriber layers are composed as:
 The `LoggingGuard` must be held for the lifetime of your service. When dropped, it restores the previous subscriber. When OTLP is enabled, the `OtlpProvider::shutdown()` method flushes pending records:
 
 ```rust
-fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let _guard = rskit_logging::init_logging_full(...)?;
+fn main() -> rskit_logging::LoggingResult<()> {
+    let setup = rskit_logging::LoggingSetup::new(&cfg, "my-service", "production", "1.0.0")
+        .with_otlp(&otlp);
+    let _guard = rskit_logging::init_logging_full(setup)?;
 
     // ... application runs ...
 
@@ -401,14 +393,10 @@ fn process_order(id: &str) {
 |----------------|-------------|
 | `init_logging(cfg)` | Basic subscriber init |
 | `init_logging_env()` | Init from `RUST_LOG` only |
-| `init_logging_with_masking(cfg, masking)` | Init with output masking |
-| `init_logging_with_options(cfg, sampling, modules, masking)` | Init with sampling + module levels |
-| `init_logging_full(...)` | Full init with OTLP (`otlp` feature) |
-| `init_global(cfg)` | Set global subscriber |
-| `init_global_with_masking(cfg, masking)` | Global subscriber with masking |
-| `init_global_with_options(...)` | Global subscriber with all options |
+| `init_logging_with_masking(cfg, masking)` | Fallible init with output masking |
+| `init_logging_with_options(cfg, sampling, modules, masking)` | Fallible init with sampling + module levels |
+| `init_logging_full(setup)` | Full init with OTLP (`otlp` feature) |
 | `LoggingGuard` | Drop guard — hold for program lifetime |
-| `GlobalLoggingGuard` | Drop guard for global subscriber |
 | `MaskingConfig` | Masking configuration |
 | `DefaultMasker` | Built-in masker with PII/secret patterns |
 | `Masker` (trait) | Interface for custom maskers |

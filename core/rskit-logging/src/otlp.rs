@@ -21,11 +21,14 @@ use std::collections::HashMap;
 
 use opentelemetry::KeyValue;
 use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
-use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_otlp::{WithExportConfig, WithHttpConfig};
 use opentelemetry_sdk::Resource;
 use opentelemetry_sdk::logs::{SdkLogger, SdkLoggerProvider};
+use rskit_errors::AppResult;
 use tracing::Subscriber;
 use tracing_subscriber::registry::LookupSpan;
+
+use crate::error;
 
 // ── Config ──────────────────────────────────────────────────────────────────
 
@@ -38,9 +41,10 @@ pub struct OtlpConfig {
     pub endpoint: String,
     /// Protocol: `"grpc"` or `"http"` (default: `"grpc"`).
     pub protocol: String,
-    /// Skip TLS verification (for development).
-    pub insecure: bool,
-    /// Additional headers (e.g. auth tokens).
+    /// Additional HTTP headers (e.g. auth tokens).
+    ///
+    /// Supported only when [`OtlpConfig::protocol`] is `"http"` because the
+    /// underlying HTTP and gRPC OTLP exporters expose different header types.
     pub headers: HashMap<String, String>,
 }
 
@@ -50,7 +54,6 @@ impl Default for OtlpConfig {
             enabled: false,
             endpoint: "http://localhost:4317".to_string(),
             protocol: "grpc".to_string(),
-            insecure: false,
             headers: HashMap::new(),
         }
     }
@@ -79,7 +82,7 @@ impl OtlpProvider {
         service_name: &str,
         environment: &str,
         version: &str,
-    ) -> Result<Option<Self>, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> AppResult<Option<Self>> {
         if !cfg.enabled {
             return Ok(None);
         }
@@ -115,36 +118,37 @@ impl OtlpProvider {
     }
 
     /// Gracefully shut down the provider, flushing all pending log records.
-    pub fn shutdown(self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.provider.shutdown().map_err(|e| {
-            let boxed: Box<dyn std::error::Error + Send + Sync> = Box::new(e);
-            boxed
-        })
+    pub fn shutdown(self) -> AppResult<()> {
+        self.provider.shutdown().map_err(error::otlp_shutdown)
     }
 }
 
 // ── Internal helpers ────────────────────────────────────────────────────────
 
 /// Build an OTLP [`LogExporter`](opentelemetry_otlp::LogExporter) from config.
-fn build_exporter(
-    cfg: &OtlpConfig,
-) -> Result<opentelemetry_otlp::LogExporter, Box<dyn std::error::Error + Send + Sync>> {
+fn build_exporter(cfg: &OtlpConfig) -> AppResult<opentelemetry_otlp::LogExporter> {
     match cfg.protocol.as_str() {
         "http" => {
             let exporter = opentelemetry_otlp::LogExporter::builder()
                 .with_http()
                 .with_endpoint(&cfg.endpoint)
-                .build()?;
+                .with_headers(cfg.headers.clone())
+                .build()
+                .map_err(error::otlp_exporter)?;
             Ok(exporter)
         }
-        // Default to gRPC.
-        _ => {
+        "grpc" => {
+            if !cfg.headers.is_empty() {
+                return Err(error::grpc_headers_not_supported());
+            }
             let exporter = opentelemetry_otlp::LogExporter::builder()
                 .with_tonic()
                 .with_endpoint(&cfg.endpoint)
-                .build()?;
+                .build()
+                .map_err(error::otlp_exporter)?;
             Ok(exporter)
         }
+        other => Err(error::invalid_protocol(other)),
     }
 }
 
@@ -160,7 +164,6 @@ mod tests {
         assert!(!cfg.enabled);
         assert_eq!(cfg.endpoint, "http://localhost:4317");
         assert_eq!(cfg.protocol, "grpc");
-        assert!(!cfg.insecure);
         assert!(cfg.headers.is_empty());
     }
 
@@ -174,9 +177,11 @@ mod tests {
 
     #[test]
     fn config_clone_preserves_values() {
-        let mut cfg = OtlpConfig::default();
-        cfg.enabled = true;
-        cfg.endpoint = "http://collector:4317".to_string();
+        let mut cfg = OtlpConfig {
+            enabled: true,
+            endpoint: "http://collector:4317".to_string(),
+            ..Default::default()
+        };
         cfg.headers
             .insert("x-api-key".to_string(), "secret".to_string());
 
@@ -192,5 +197,34 @@ mod tests {
         let debug = format!("{cfg:?}");
         assert!(debug.contains("OtlpConfig"));
         assert!(debug.contains("enabled"));
+    }
+
+    #[test]
+    fn invalid_protocol_returns_typed_error() {
+        let cfg = OtlpConfig {
+            enabled: true,
+            protocol: "udp".to_string(),
+            ..Default::default()
+        };
+        let err = match OtlpProvider::new(&cfg, "test-svc", "test", "0.1.0") {
+            Ok(_) => panic!("unsupported protocol must fail"),
+            Err(err) => err,
+        };
+        assert_eq!(err.code(), rskit_errors::ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn grpc_headers_return_typed_error() {
+        let mut cfg = OtlpConfig {
+            enabled: true,
+            ..Default::default()
+        };
+        cfg.headers
+            .insert("x-api-key".to_string(), "secret".to_string());
+        let err = match OtlpProvider::new(&cfg, "test-svc", "test", "0.1.0") {
+            Ok(_) => panic!("grpc headers are unsupported"),
+            Err(err) => err,
+        };
+        assert_eq!(err.code(), rskit_errors::ErrorCode::InvalidInput);
     }
 }

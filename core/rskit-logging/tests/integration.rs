@@ -665,26 +665,7 @@ fn reexported_macros_compile_and_run() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 8. Global init (is_global_init, init_global)
-// ═══════════════════════════════════════════════════════════════════════════════
-// Note: init_global uses a process-level AtomicBool so we can only test the
-// API surface, not idempotency, within a single test binary. We verify that
-// the function exists and has the correct return type.
-
-#[test]
-fn is_global_init_returns_bool() {
-    // This may be true if another test already called init_global.
-    let _val: bool = rskit_logging::is_global_init();
-}
-
-#[test]
-fn global_logging_guard_type_exists() {
-    // Ensure the type is publicly accessible (compile-time check).
-    fn _assert_type(_g: rskit_logging::GlobalLoggingGuard) {}
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// 9. LoggingConfig via serde deserialization
+// 8. LoggingConfig via serde deserialization
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[test]

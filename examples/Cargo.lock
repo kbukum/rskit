@@ -1627,14 +1627,12 @@ dependencies = [
  "dotenvy",
  "rskit-errors",
  "rskit-fs",
+ "rskit-util",
  "rskit-validation",
  "rskit-version",
  "serde",
- "serde_json",
- "subtle",
  "tracing",
  "validator",
- "zeroize",
 ]
 
 [[package]]
@@ -1684,6 +1682,7 @@ dependencies = [
  "parking_lot",
  "regex",
  "rskit-config",
+ "rskit-errors",
  "serde",
  "tracing",
  "tracing-subscriber",

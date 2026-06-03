@@ -6007,6 +6007,7 @@ dependencies = [
  "parking_lot",
  "regex",
  "rskit-config",
+ "rskit-errors",
  "serde",
  "serde_json",
  "tracing",

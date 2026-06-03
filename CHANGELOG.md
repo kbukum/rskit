@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Breaking
+- **rskit-logging**: removed process-global logging initialization helpers and
+  changed advanced masking/OTLP setup APIs to return typed `LoggingResult`
+  errors. `init_logging_full` now accepts a `LoggingSetup` options value instead
+  of a long positional argument list.
 - **rskit-errors**: `AppError` fields (`code`, `message`, `retryable`,
   `http_status`, `details`, `cause`) are now private to guarantee that the
   HTTP status and retry hint stay consistent with the error code. Use the
@@ -25,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   layers directly.
 
 ### Changed — Cross-Cutting
+- **rskit-logging**: aligned Phase 1 logging setup with scoped subscriber guards,
+  explicit masking regex validation, and typed OTLP exporter errors.
 - **rskit-config**: refined typed config loading for Phase 1 foundations with
   explicit secret-field redaction, growable config enums, and documented
   dotenv/env precedence without mutating process environment.
