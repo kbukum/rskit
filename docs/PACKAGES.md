@@ -11,6 +11,7 @@ rskit is a **Cargo workspace** with a facade crate (`rskit`), foundation crates 
 | Crate | Description |
 |-------|-------------|
 | `rskit` | Facade — re-exports all rskit-* crates |
+| `rskit-util` | L0 domain-free utility primitives: secrets, templates, strings, collections, env, bytes, duration, and backoff helpers |
 | `rskit-errors` | Structured application error types with RFC 9457 problem details and HTTP status metadata |
 | `rskit-config` | Adapter-oriented configuration loading with validation |
 | `rskit-logging` | Structured logging with `tracing` — JSON in prod, pretty in dev |
@@ -100,6 +101,7 @@ rskit is a **Cargo workspace** with a facade crate (`rskit`), foundation crates 
 ## Dependency Graph (core)
 
 ```
+rskit-util
 rskit-errors
 rskit-config       → rskit-errors
 rskit-logging      → rskit-config

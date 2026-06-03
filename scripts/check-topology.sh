@@ -105,6 +105,14 @@ for cargo_toml in sorted((root / "core").glob("*/Cargo.toml")):
             if target.startswith("core/rskit-server") and crate == "rskit-grpc":
                 errors.append(f"{rel}: rskit-grpc must not depend on rskit-server")
 
+    if crate == "rskit-util":
+        for table_name, deps in dependency_tables(manifest):
+            for dep_name in deps:
+                if dep_name.startswith("rskit-"):
+                    errors.append(
+                        f"{rel}: L0 utility crate must not depend on internal {table_name}.{dep_name}"
+                    )
+
     if crate in {"rskit-http", "rskit-discovery"}:
         for table_name, bootstrap in dependency_entries(manifest, "rskit-bootstrap"):
             if not is_optional(bootstrap):

@@ -23,8 +23,8 @@ debate, enforced automatically.
 We will organize rskit crates into the following layers (lowest depends
 on nothing higher):
 
-1. **Foundation** — `rskit-errors`, `rskit-config`, `rskit-logging`,
-   `rskit-validation`
+1. **Foundation** — `rskit-util`, `rskit-errors`, `rskit-config`,
+   `rskit-logging`, `rskit-validation`
 2. **Utilities** — `rskit-encryption`, `rskit-schema`, `rskit-storage`,
     `rskit-media`, `rskit-media-image`, `rskit-media-audio`,
    `rskit-media-ffmpeg`, `rskit-process`
@@ -60,6 +60,8 @@ The layer contract is enforced via:
 
 - New crates must be placed in the correct layer; the lint rule fails CI
   if violated.
+- Domain-free primitives shared across layers belong in `rskit-util`, which
+  remains the L0 utility crate and must not depend on internal `rskit-*` crates.
 - Cross-layer wiring lives in `rskit-bootstrap` and `rskit-di`; foundation
   crates remain independently testable and reusable.
 - A small upfront cost: foundation crates duplicate single-method traits
