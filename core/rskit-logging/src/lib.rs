@@ -142,7 +142,7 @@ pub fn init_logging_with_options(
                     .into();
                 tracing::dispatcher::set_default(&dispatcher)
             }
-            LogFormat::Console => {
+            _ => {
                 let layer = fmt::layer().pretty().with_writer(writer);
                 let dispatcher = tracing_subscriber::registry()
                     .with(filter)
@@ -168,7 +168,7 @@ pub fn init_logging_with_options(
                 .into();
             tracing::dispatcher::set_default(&dispatcher)
         }
-        LogFormat::Console => {
+        _ => {
             let layer = fmt::layer().pretty();
             let dispatcher = tracing_subscriber::registry()
                 .with(filter)
@@ -249,7 +249,7 @@ pub fn init_logging_full(
                     .into();
                 tracing::dispatcher::set_default(&dispatcher)
             }
-            LogFormat::Console => {
+            _ => {
                 let layer = fmt::layer().pretty().with_writer(writer);
                 let dispatcher = tracing_subscriber::registry()
                     .with(filter)
@@ -277,7 +277,7 @@ pub fn init_logging_full(
                 .into();
             tracing::dispatcher::set_default(&dispatcher)
         }
-        LogFormat::Console => {
+        _ => {
             let layer = fmt::layer().pretty();
             let dispatcher = tracing_subscriber::registry()
                 .with(filter)

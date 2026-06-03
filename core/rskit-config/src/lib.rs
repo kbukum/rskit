@@ -1,4 +1,43 @@
 //! Adapter-oriented configuration loading with validation.
+//!
+//! # Example
+//!
+//! ```no_run
+//! use rskit_config::{AppConfig, ConfigLoader, SecretString, ServiceConfig};
+//! use rskit_validation::Validate;
+//! use serde::Deserialize;
+//!
+//! #[derive(Debug, Deserialize, Validate)]
+//! struct MyConfig {
+//!     #[serde(flatten)]
+//!     #[validate(nested)]
+//!     service: ServiceConfig,
+//!     #[validate(range(min = 1, max = 65535))]
+//!     grpc_port: u16,
+//!     api_token: SecretString,
+//! }
+//!
+//! impl AppConfig for MyConfig {
+//!     fn apply_defaults(&mut self) {
+//!         if self.grpc_port == 0 {
+//!             self.grpc_port = 50051;
+//!         }
+//!     }
+//!
+//!     fn service_config(&self) -> &ServiceConfig {
+//!         &self.service
+//!     }
+//! }
+//!
+//! # fn main() -> rskit_errors::AppResult<()> {
+//! let cfg: MyConfig = ConfigLoader::app()
+//!     .with_default("grpc_port", 50051_i64)
+//!     .with_env_prefix("MYAPP")
+//!     .load_app()?;
+//! assert_eq!(cfg.api_token.to_string(), "***");
+//! # Ok(())
+//! # }
+//! ```
 
 #![warn(missing_docs)]
 
@@ -11,6 +50,7 @@ pub use loader::{
     TomlFileSource, load_config,
 };
 pub use normalize::{canonicalize_root_relative_to, supported_schema};
+pub use rskit_util::SecretString;
 pub use service::{Environment, LogFormat, LogOutput, LoggingConfig, ServiceConfig};
 
 /// Trait that every application config struct must implement.
@@ -18,23 +58,32 @@ pub use service::{Environment, LogFormat, LogOutput, LoggingConfig, ServiceConfi
 /// Typically implemented by a struct that embeds [`ServiceConfig`] and adds
 /// service-specific fields.
 ///
-/// ```ignore
-/// #[derive(serde::Deserialize, rskit_validation::Validate)]
+/// ```no_run
+/// use rskit_config::{AppConfig, ConfigLoader, SecretString, ServiceConfig};
+/// use rskit_validation::Validate;
+///
+/// #[derive(serde::Deserialize, Validate)]
 /// struct MyConfig {
 ///     #[serde(flatten)]
-///     service: rskit_config::ServiceConfig,
+///     #[validate(nested)]
+///     service: ServiceConfig,
 ///     #[validate(range(min = 1, max = 65535))]
 ///     grpc_port: u16,
+///     api_token: SecretString,
 /// }
 ///
-/// impl rskit_config::AppConfig for MyConfig {
+/// impl AppConfig for MyConfig {
 ///     fn apply_defaults(&mut self) {
 ///         if self.grpc_port == 0 { self.grpc_port = 50051; }
 ///     }
-///     fn service_config(&self) -> &rskit_config::ServiceConfig { &self.service }
+///     fn service_config(&self) -> &ServiceConfig { &self.service }
 /// }
 ///
-/// let cfg: MyConfig = rskit_config::ConfigLoader::app().load_app()?;
+/// # fn main() -> rskit_errors::AppResult<()> {
+/// let cfg: MyConfig = ConfigLoader::app().load_app()?;
+/// assert_eq!(cfg.api_token.to_string(), "***");
+/// # Ok(())
+/// # }
 /// ```
 pub trait AppConfig:
     serde::de::DeserializeOwned + rskit_validation::Validate + Send + Sync + 'static

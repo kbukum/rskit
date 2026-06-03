@@ -108,7 +108,7 @@ pub fn init_global_with_options(
                     tracing::warn!("global subscriber already installed, skipping: {e}");
                 }
             }
-            LogFormat::Console => {
+            _ => {
                 let layer = fmt::layer().pretty().with_writer(writer);
                 let subscriber = tracing_subscriber::registry()
                     .with(filter)
@@ -135,7 +135,7 @@ pub fn init_global_with_options(
                     tracing::warn!("global subscriber already installed, skipping: {e}");
                 }
             }
-            LogFormat::Console => {
+            _ => {
                 let layer = fmt::layer().pretty().with_writer(base_writer);
                 let subscriber = tracing_subscriber::registry()
                     .with(filter)

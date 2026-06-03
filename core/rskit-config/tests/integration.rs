@@ -1,6 +1,7 @@
 use parking_lot::Mutex;
 use rskit_config::{
-    AppConfig, ConfigLoader, ConfigMapSource, Environment, LogFormat, ServiceConfig, load_config,
+    AppConfig, ConfigLoader, ConfigMapSource, DotenvFileSource, Environment, LogFormat,
+    SecretString, ServiceConfig, load_config,
 };
 use rskit_validation::Validate;
 use serde::Deserialize;
@@ -47,6 +48,11 @@ struct ToolConfig {
     name: String,
     #[serde(default)]
     retries: u16,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+struct SecretConfig {
+    api_token: SecretString,
 }
 
 impl rskit_config::AppConfig for DefaultApplyConfig {
@@ -138,6 +144,42 @@ fn toml_loader_load_with_applies_defaults_before_validation() {
         .expect("should apply defaults");
 
     assert_eq!(cfg.retries, 3);
+}
+
+#[test]
+fn toml_loader_deserializes_secret_string_with_redacted_formatting() {
+    let dir = tempfile::tempdir().unwrap();
+    let toml_path = dir.path().join("secret.toml");
+    std::fs::write(&toml_path, b"api_token = \"super-secret-token\"\n").unwrap();
+
+    let cfg: SecretConfig = ConfigLoader::toml(&toml_path)
+        .load()
+        .expect("should load secret config");
+
+    assert_eq!(cfg.api_token.expose(), "super-secret-token");
+    assert_eq!(cfg.api_token.to_string(), "***");
+
+    let debug = format!("{cfg:?}");
+    assert!(debug.contains("SecretString(***)"));
+    assert!(!debug.contains("super-secret-token"));
+}
+
+#[test]
+fn dotenv_source_deserializes_secret_string_without_mutating_environment() {
+    let _guard = ENV_LOCK.lock();
+    remove_env("API_TOKEN");
+
+    let dir = tempfile::tempdir().unwrap();
+    let env_path = dir.path().join(".env");
+    std::fs::write(&env_path, b"API_TOKEN=dotenv-secret\n").unwrap();
+
+    let cfg: SecretConfig = ConfigLoader::custom()
+        .with_source(DotenvFileSource::required(&env_path, ""))
+        .load()
+        .expect("should load secret from dotenv source");
+
+    assert_eq!(cfg.api_token.expose(), "dotenv-secret");
+    assert!(std::env::var("API_TOKEN").is_err());
 }
 
 // ── ConfigLoader builder tests ──────────────────────────────────────
