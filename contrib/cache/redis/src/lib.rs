@@ -8,8 +8,8 @@ use std::time::Duration;
 
 use redis::AsyncCommands;
 use rskit_cache::{CacheConfig, CacheRegistry, CacheStore, CacheStoreFactory};
-use rskit_config::SecretString;
 use rskit_errors::{AppError, AppResult, ErrorCode};
+use rskit_util::SecretString;
 use serde::{Deserialize, Serialize};
 use tokio::time::timeout;
 

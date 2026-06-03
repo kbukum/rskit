@@ -4718,8 +4718,8 @@ dependencies = [
  "async-trait",
  "redis",
  "rskit-cache",
- "rskit-config",
  "rskit-errors",
+ "rskit-util",
  "serde",
  "tokio",
  "tracing",
@@ -5344,6 +5344,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rskit-util"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
 name = "rskit-validation"
 version = "0.1.0"
 dependencies = [
@@ -5375,8 +5384,8 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "qdrant-client",
- "rskit-config",
  "rskit-errors",
+ "rskit-util",
  "rskit-vectorstore",
  "serde",
  "serde_json",

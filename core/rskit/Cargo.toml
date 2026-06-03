@@ -22,6 +22,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 # Always-on core crates
+rskit-util       = { version = "0.1.0", path = "../rskit-util" }
 rskit-errors     = { version = "0.1.0", path = "../rskit-errors" }
 rskit-fs         = { version = "0.1.0", path = "../rskit-fs" }
 rskit-config     = { version = "0.1.0", path = "../rskit-config" }

@@ -2,11 +2,14 @@
 
 Minimal L0 utility crate for the rskit ecosystem.
 
-`rskit-util` intentionally has no external dependency surface so higher layers
-can depend on it cheaply. Domain-owned helpers live in their owning crates
-instead:
+`rskit-util` owns low-level, domain-free primitives that are useful across
+foundation and higher-level crates. It has no internal workspace crate
+dependencies; small external dependencies are limited to capabilities that must
+live at L0, such as serde support and zeroizing secret storage.
 
-- Secret masking: `rskit_config::SecretString`
+Domain-owned helpers stay in their owning crates:
+
+- Secret masking primitive: `rskit_util::SecretString`
 - Validation: `rskit_validation`
 - Schema generation: `rskit_schema`
 - Test clocks and runtime time control: use the owning crate's abstractions

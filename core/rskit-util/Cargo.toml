@@ -17,5 +17,14 @@ keywords   = ["utilities", "helpers", "async"]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[dependencies]
+# External
+serde   = { workspace = true }
+subtle  = "2.6"
+zeroize = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
 [lints]
 workspace = true
