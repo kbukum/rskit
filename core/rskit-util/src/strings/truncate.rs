@@ -31,7 +31,10 @@ pub fn truncate(s: &str, max_bytes: usize) -> &str {
     &s[..index]
 }
 
-/// Safely truncates an owned string to a max byte-length, appending ellipses (`...`).
+/// Safely truncates an owned string to a max byte-length.
+///
+/// Truncated values include an ellipsis (`...`) when `max_bytes > 3`. For smaller limits, the
+/// result is `max_bytes` dots because there is not enough space for the full ellipsis.
 pub fn truncate_owned(s: &str, max_bytes: usize) -> String {
     if s.len() <= max_bytes {
         return s.to_string();

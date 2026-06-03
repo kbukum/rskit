@@ -1,5 +1,6 @@
 //! Duration string parsing, formatting, and timing execution wrappers.
 
+use crate::parse_decimal_scaled;
 use std::time::{Duration, Instant};
 
 /// Runs a synchronous function and returns a tuple containing its return value
@@ -52,13 +53,14 @@ pub fn format_duration(d: Duration) -> String {
 }
 
 /// Parses simple duration strings like `"5s"`, `"10m"`, `"1h"` into a `Duration`.
-/// Case-insensitive, supports optional space.
+/// Case-insensitive, supports optional space, and treats unit-less values as seconds.
 ///
 /// # Examples
 ///
 /// ```
 /// use std::time::Duration;
 /// use rskit_util::time::parse_duration;
+/// assert_eq!(parse_duration("5"), Some(Duration::from_secs(5)));
 /// assert_eq!(parse_duration("5s"), Some(Duration::from_secs(5)));
 /// assert_eq!(parse_duration("10m"), Some(Duration::from_secs(600)));
 /// ```
@@ -90,38 +92,6 @@ pub fn parse_duration(s: &str) -> Option<Duration> {
     ))
 }
 
-fn parse_decimal_scaled(value: &str, multiplier: u128) -> Option<u128> {
-    if value.is_empty() || value.starts_with('-') || value.starts_with('+') {
-        return None;
-    }
-
-    let (whole, fraction) = value.split_once('.').unwrap_or((value, ""));
-    if whole.is_empty() && fraction.is_empty() {
-        return None;
-    }
-    if !whole.bytes().all(|byte| byte.is_ascii_digit())
-        || !fraction.bytes().all(|byte| byte.is_ascii_digit())
-    {
-        return None;
-    }
-
-    let whole = if whole.is_empty() {
-        0
-    } else {
-        whole.parse::<u128>().ok()?
-    };
-    let whole_nanos = whole.checked_mul(multiplier)?;
-
-    if fraction.is_empty() {
-        return Some(whole_nanos);
-    }
-
-    let scale = 10_u128.checked_pow(u32::try_from(fraction.len()).ok()?)?;
-    let fraction = fraction.parse::<u128>().ok()?;
-    let fraction_nanos = fraction.checked_mul(multiplier)?.checked_div(scale)?;
-    whole_nanos.checked_add(fraction_nanos)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -143,6 +113,7 @@ mod tests {
 
     #[test]
     fn test_parse_duration() {
+        assert_eq!(parse_duration("5"), Some(Duration::from_secs(5)));
         assert_eq!(parse_duration("5s"), Some(Duration::from_secs(5)));
         assert_eq!(parse_duration("10m"), Some(Duration::from_mins(10)));
         assert_eq!(parse_duration("1.5h"), Some(Duration::from_mins(90)));

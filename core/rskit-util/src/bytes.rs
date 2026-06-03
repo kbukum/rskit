@@ -1,5 +1,7 @@
 //! Formatting and parsing human-readable data sizes.
 
+use crate::parse_decimal_scaled;
+
 /// Formats a raw byte count into a human-readable string (e.g. `1048576` -> `"1.00 MB"`).
 /// Supported units: B, KB, MB, GB, TB, PB.
 ///
@@ -38,12 +40,13 @@ pub fn format_bytes(bytes: u64) -> String {
 }
 
 /// Parses human-readable sizes (e.g. `"5MB"`, `"10KB"`, `"2GB"`) into a raw byte count (`u64`).
-/// Case-insensitive, supports optional space.
+/// Case-insensitive, supports optional space, and treats unit-less values as bytes.
 ///
 /// # Examples
 ///
 /// ```
 /// use rskit_util::bytes::parse_bytes;
+/// assert_eq!(parse_bytes("512"), Some(512));
 /// assert_eq!(parse_bytes("1 KB"), Some(1024));
 /// assert_eq!(parse_bytes("5mb"), Some(5242880));
 /// ```
@@ -63,38 +66,6 @@ pub fn parse_bytes(s: &str) -> Option<u64> {
     };
 
     parse_decimal_scaled(num_part.trim(), multiplier).and_then(|bytes| u64::try_from(bytes).ok())
-}
-
-fn parse_decimal_scaled(value: &str, multiplier: u128) -> Option<u128> {
-    if value.is_empty() || value.starts_with('-') || value.starts_with('+') {
-        return None;
-    }
-
-    let (whole, fraction) = value.split_once('.').unwrap_or((value, ""));
-    if whole.is_empty() && fraction.is_empty() {
-        return None;
-    }
-    if !whole.bytes().all(|byte| byte.is_ascii_digit())
-        || !fraction.bytes().all(|byte| byte.is_ascii_digit())
-    {
-        return None;
-    }
-
-    let whole = if whole.is_empty() {
-        0
-    } else {
-        whole.parse::<u128>().ok()?
-    };
-    let whole_bytes = whole.checked_mul(multiplier)?;
-
-    if fraction.is_empty() {
-        return Some(whole_bytes);
-    }
-
-    let scale = 10_u128.checked_pow(u32::try_from(fraction.len()).ok()?)?;
-    let fraction = fraction.parse::<u128>().ok()?;
-    let fraction_bytes = fraction.checked_mul(multiplier)?.checked_div(scale)?;
-    whole_bytes.checked_add(fraction_bytes)
 }
 
 #[cfg(test)]
