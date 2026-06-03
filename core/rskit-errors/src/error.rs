@@ -10,9 +10,11 @@ use crate::code::ErrorCode;
 /// optional key→value details for rich error responses, and an optional
 /// cause chain compatible with `std::error::Error`.
 ///
-/// Fields are private to preserve the invariant that `http_status` and
-/// `retryable` stay consistent with `code`; read access is via the getter
-/// methods and mutation via the `with_*` builders.
+/// Fields are private to preserve the error's invariants. `http_status` is
+/// fully determined by `code` and can never drift from it. `retryable` is
+/// seeded from `code`'s default but may be intentionally overridden via the
+/// [`AppError::retryable`] builder; read access is via the getter methods and
+/// mutation via the `with_*` builders.
 ///
 /// `details` deliberately uses [`serde_json::Value`]: it models RFC 9457
 /// problem-detail *extension members*, which are by definition arbitrary JSON
