@@ -20,21 +20,20 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 # External
 serde        = { workspace = true }
-serde_json   = { workspace = true }
 config       = { workspace = true }
 dotenvy      = { workspace = true }
 validator = { workspace = true }
 tracing      = { workspace = true }
-subtle       = "2.6"
-zeroize      = { workspace = true }
 
 # Internal
 rskit-errors = { path = "../rskit-errors" }
 rskit-version = { path = "../rskit-version" }
 rskit-fs = { path = "../rskit-fs", default-features = false }
+rskit-util = { path = "../rskit-util" }
 rskit-validation = { path = "../rskit-validation" }
 
 [dev-dependencies]
 parking_lot = { workspace = true }
+serde_json   = { workspace = true }
 tempfile    = "3"
 tokio       = { workspace = true }

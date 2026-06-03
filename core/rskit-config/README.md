@@ -16,6 +16,7 @@ Load application, service, tool, and adapter-backed configuration through one so
 - Configurable env prefix
 - Programmatic defaults and overrides with deterministic precedence
 - Profile-specific env files (`config/profiles/{profile}.env`)
+- Secret config fields via `SecretString`, which redacts `Debug`/`Display` output
 - Adapter contract for external config sources such as Vault, SSM Parameter Store, Kubernetes secrets, or remote config services
 
 ## Loading Order (lowest → highest priority)
@@ -48,7 +49,7 @@ validator = { version = "0.18", features = ["derive"] }
 ```
 
 ```rust
-use rskit_config::{AppConfig, ConfigLoader, ConfigSource, ServiceConfig};
+use rskit_config::{AppConfig, ConfigLoader, ConfigSource, SecretString, ServiceConfig};
 use serde::Deserialize;
 use validator::Validate;
 
@@ -58,6 +59,7 @@ struct Config {
     service: ServiceConfig,
     #[validate(range(min = 1))]
     grpc_port: u16,
+    api_token: SecretString,
 }
 
 impl AppConfig for Config {
@@ -72,6 +74,11 @@ let cfg: Config = ConfigLoader::app()
     .with_override("name", "api")
     .load_app()?;
 ```
+
+Use [`SecretString`](https://docs.rs/rskit-config/latest/rskit_config/struct.SecretString.html)
+for credentials, tokens, private keys, and other secret fields. It deserializes
+from config sources but masks `Debug`, `Display`, and serialization output; call
+`expose()` only at the boundary that needs the plaintext.
 
 Deterministic tool/project config should use an explicit policy that does not
 read dotenv files or process environment variables:
@@ -106,7 +113,7 @@ let cfg: Config = ConfigLoader::app()
 |-------|------|---------|-------------|
 | `name` | `String` | `"service"` | Service name |
 | `environment` | `Environment` | `Development` | Deployment environment |
-| `version` | `String` | `CARGO_PKG_VERSION` | Service version |
+| `version` | `String` | package version | Service version |
 | `address` | `String` | `"0.0.0.0"` | Service bind address |
 | `port` | `u16` | `50051` | Service port |
 | `debug` | `bool` | `false` | Debug mode |

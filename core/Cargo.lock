@@ -5560,16 +5560,15 @@ dependencies = [
  "parking_lot",
  "rskit-errors",
  "rskit-fs",
+ "rskit-util",
  "rskit-validation",
  "rskit-version",
  "serde",
  "serde_json",
- "subtle",
  "tempfile",
  "tokio",
  "tracing",
  "validator",
- "zeroize",
 ]
 
 [[package]]

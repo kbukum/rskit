@@ -65,6 +65,7 @@ impl Default for ServiceConfig {
 
 /// Deployment environment.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[non_exhaustive]
 #[serde(rename_all = "lowercase")]
 pub enum Environment {
     /// Local development environment (default).
@@ -136,6 +137,7 @@ impl LoggingConfig {
 
 /// Log output format.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Default)]
+#[non_exhaustive]
 #[serde(rename_all = "lowercase")]
 pub enum LogFormat {
     /// Machine-readable JSON (use in production).
@@ -147,6 +149,7 @@ pub enum LogFormat {
 
 /// Where log output is written.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Default)]
+#[non_exhaustive]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum LogOutput {
     /// Write to standard output (default).
