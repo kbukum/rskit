@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `http_status()`, `details()`, `cause()`) for read access and the `with_*`
   builders for construction.
 - **rskit-errors**: removed the redundant `AppError::wrap()` alias; use
-  `AppError::internal(msg).with_cause(err)` (or the `From` conversions) instead.
+  `AppError::internal(err)` (or the relevant `From` conversion) instead.
 - **rskit-process**: `ProcessResult` is now non-exhaustive and includes
   cancellation metadata; downstream crates should construct values with
   `ProcessResult::completed`.
