@@ -124,8 +124,44 @@ impl<'a> LoggingSetup<'a> {
 /// Opaque guard — drop to restore the previous tracing subscriber.
 ///
 /// Keep this alive for the lifetime of your service (e.g. bind it to a
-/// variable in `main`).
-pub struct LoggingGuard(#[allow(dead_code)] DefaultGuard);
+/// variable in `main`). When OTLP export is enabled through `init_logging_full`,
+/// the guard also owns the OTLP provider and shuts it
+/// down on drop to flush pending records.
+pub struct LoggingGuard {
+    #[allow(dead_code)]
+    guard: DefaultGuard,
+    #[cfg(feature = "otlp")]
+    otlp_provider: Option<otlp::OtlpProvider>,
+}
+
+impl LoggingGuard {
+    fn new(guard: DefaultGuard) -> Self {
+        Self {
+            guard,
+            #[cfg(feature = "otlp")]
+            otlp_provider: None,
+        }
+    }
+
+    #[cfg(feature = "otlp")]
+    fn with_otlp_provider(guard: DefaultGuard, otlp_provider: Option<otlp::OtlpProvider>) -> Self {
+        Self {
+            guard,
+            otlp_provider,
+        }
+    }
+}
+
+#[cfg(feature = "otlp")]
+impl Drop for LoggingGuard {
+    fn drop(&mut self) {
+        if let Some(provider) = self.otlp_provider.take()
+            && let Err(error) = provider.shutdown()
+        {
+            tracing::warn!(%error, "failed to shut down OTLP logging provider");
+        }
+    }
+}
 
 /// Initialize structured logging from a [`LoggingConfig`] with default masking.
 ///
@@ -149,7 +185,7 @@ pub fn init_logging_env() -> LoggingGuard {
         .with(filter)
         .with(layer)
         .into();
-    LoggingGuard(tracing::dispatcher::set_default(&dispatcher))
+    LoggingGuard::new(tracing::dispatcher::set_default(&dispatcher))
 }
 
 fn init_logging_with_default_masking(cfg: &LoggingConfig) -> LoggingGuard {
@@ -180,7 +216,7 @@ fn init_logging_with_default_masking(cfg: &LoggingConfig) -> LoggingGuard {
         }
     };
 
-    LoggingGuard(guard)
+    LoggingGuard::new(guard)
 }
 
 /// Initialize logging with explicit masking configuration.
@@ -255,7 +291,7 @@ pub fn init_logging_with_options(
                 tracing::dispatcher::set_default(&dispatcher)
             }
         };
-        return Ok(LoggingGuard(guard));
+        return Ok(LoggingGuard::new(guard));
     }
 
     let guard = match cfg.format {
@@ -282,7 +318,7 @@ pub fn init_logging_with_options(
         }
     };
 
-    Ok(LoggingGuard(guard))
+    Ok(LoggingGuard::new(guard))
 }
 
 /// Build an [`EnvFilter`] from the configured level and optional module overrides.
@@ -320,13 +356,15 @@ pub fn init_logging_full(setup: LoggingSetup<'_>) -> LoggingResult<LoggingGuard>
         .filter(|s| s.enabled)
         .map(sampling::SamplingLayer::new);
 
-    let otlp_layer = match setup.otlp {
+    let otlp_provider = match setup.otlp {
         Some(oc) => {
             otlp::OtlpProvider::new(oc, setup.service_name, setup.environment, setup.version)?
-                .map(|p| p.layer::<tracing_subscriber::Registry>())
         }
         None => None,
     };
+    let otlp_layer = otlp_provider
+        .as_ref()
+        .map(|p| p.layer::<tracing_subscriber::Registry>());
 
     if let Some(m) = setup.masking.filter(|m| m.enabled) {
         let masker: Arc<dyn masking::Masker> = Arc::new(masking::DefaultMasker::new(m)?);
@@ -358,7 +396,7 @@ pub fn init_logging_full(setup: LoggingSetup<'_>) -> LoggingResult<LoggingGuard>
                 tracing::dispatcher::set_default(&dispatcher)
             }
         };
-        return Ok(LoggingGuard(guard));
+        return Ok(LoggingGuard::with_otlp_provider(guard, otlp_provider));
     }
 
     let guard = match setup.config.format {
@@ -387,7 +425,7 @@ pub fn init_logging_full(setup: LoggingSetup<'_>) -> LoggingResult<LoggingGuard>
         }
     };
 
-    Ok(LoggingGuard(guard))
+    Ok(LoggingGuard::with_otlp_provider(guard, otlp_provider))
 }
 
 // Logging macros exposed by this crate.
