@@ -257,7 +257,9 @@ pub fn init_logging_with_masking(
 ///
 /// # Errors
 ///
-/// Returns an error when a custom masking regex pattern is invalid.
+/// Returns an error when a custom masking regex pattern is invalid, when the
+/// configured file output cannot be opened, or when the configured output
+/// variant is unsupported by this crate version.
 pub fn init_logging_with_options(
     cfg: &LoggingConfig,
     sampling_cfg: Option<&SamplingConfig>,

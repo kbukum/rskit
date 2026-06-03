@@ -24,11 +24,10 @@ use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
 use opentelemetry_otlp::{WithExportConfig, WithHttpConfig};
 use opentelemetry_sdk::Resource;
 use opentelemetry_sdk::logs::{SdkLogger, SdkLoggerProvider};
-use rskit_errors::AppResult;
 use tracing::Subscriber;
 use tracing_subscriber::registry::LookupSpan;
 
-use crate::error;
+use crate::error::{self, LoggingResult};
 
 // ── Config ──────────────────────────────────────────────────────────────────
 
@@ -82,7 +81,7 @@ impl OtlpProvider {
         service_name: &str,
         environment: &str,
         version: &str,
-    ) -> AppResult<Option<Self>> {
+    ) -> LoggingResult<Option<Self>> {
         if !cfg.enabled {
             return Ok(None);
         }
@@ -118,7 +117,7 @@ impl OtlpProvider {
     }
 
     /// Gracefully shut down the provider, flushing all pending log records.
-    pub fn shutdown(self) -> AppResult<()> {
+    pub fn shutdown(self) -> LoggingResult<()> {
         self.provider.shutdown().map_err(error::otlp_shutdown)
     }
 }
@@ -126,7 +125,7 @@ impl OtlpProvider {
 // ── Internal helpers ────────────────────────────────────────────────────────
 
 /// Build an OTLP [`LogExporter`](opentelemetry_otlp::LogExporter) from config.
-fn build_exporter(cfg: &OtlpConfig) -> AppResult<opentelemetry_otlp::LogExporter> {
+fn build_exporter(cfg: &OtlpConfig) -> LoggingResult<opentelemetry_otlp::LogExporter> {
     match cfg.protocol.as_str() {
         "http" => {
             let exporter = opentelemetry_otlp::LogExporter::builder()

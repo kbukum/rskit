@@ -209,8 +209,8 @@ fn init_logging_stderr_output() {
 
 #[test]
 fn init_logging_file_output_writes_to_configured_file() {
-    let file = tempfile::NamedTempFile::new().unwrap();
-    let path = file.path().to_path_buf();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("app.log");
     let cfg = LoggingConfig {
         output: LogOutput::File {
             path: path.to_string_lossy().into_owned(),
