@@ -6,6 +6,10 @@ use std::path::Path;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+use crate::file_error::file_too_large_error;
+pub use crate::file_error::{
+    is_file_too_large_error, is_not_regular_file_error, is_symlink_not_allowed_error,
+};
 use crate::path::parent_dir;
 use crate::temp::sibling_temp_path;
 use crate::types::FileMeta;
@@ -69,9 +73,9 @@ pub async fn read_string(path: &Path) -> AppResult<String> {
         .map_err(|error| read_file_error(path, error))
 }
 
-/// Read at most `max_bytes` bytes from a file.
+/// Read at most `max_bytes` from a regular file without following a final symlink.
 pub async fn read_bounded(path: &Path, max_bytes: u64) -> AppResult<Vec<u8>> {
-    let file = open(path).await?;
+    let file = open_no_follow_regular(path).await?;
     let metadata = file
         .metadata()
         .await
@@ -92,7 +96,7 @@ pub async fn read_bounded(path: &Path, max_bytes: u64) -> AppResult<Vec<u8>> {
     Ok(bytes)
 }
 
-/// Read a UTF-8 text file up to `max_bytes` bytes.
+/// Read a UTF-8 text file up to `max_bytes` bytes without following a final symlink.
 pub async fn read_string_bounded(path: &Path, max_bytes: u64) -> AppResult<String> {
     let bytes = read_bounded(path, max_bytes).await?;
     String::from_utf8(bytes).map_err(|error| {
@@ -116,6 +120,28 @@ pub async fn open(path: &Path) -> AppResult<AsyncFile> {
     tokio::fs::File::open(path)
         .await
         .map_err(|error| open_file_error(path, error))
+}
+
+/// Open a regular file for async reads without following a final symlink.
+pub async fn open_no_follow_regular(path: &Path) -> AppResult<AsyncFile> {
+    let path = path.to_path_buf();
+    let file = tokio::task::spawn_blocking({
+        let path = path.clone();
+        move || crate::sync_io::file::open_no_follow_regular(&path)
+    })
+    .await
+    .map_err(|error| {
+        AppError::new(
+            ErrorCode::Internal,
+            format!(
+                "failed to join no-follow file open task for '{}': {error}",
+                path.display()
+            ),
+        )
+        .with_cause(error)
+    })??;
+
+    Ok(AsyncFile::from_std(file))
 }
 
 /// Create a file for async writing, creating parent directories as needed.
@@ -413,36 +439,18 @@ fn unique_temp_file_error(dest: &Path, attempts: usize) -> AppError {
     )
 }
 
-/// Return true when `error` was created by bounded file-read size enforcement.
-pub fn is_file_too_large_error(error: &AppError) -> bool {
-    error
-        .details()
-        .get("rskit_fs_error")
-        .and_then(|value| value.as_str())
-        == Some("file_too_large")
-}
-
-fn file_too_large_error(path: &Path, actual: u64, limit: u64) -> AppError {
-    AppError::new(
-        ErrorCode::InvalidInput,
-        format!(
-            "file '{}' is {actual} bytes, exceeding limit {limit} bytes",
-            path.display()
-        ),
-    )
-    .with_detail("rskit_fs_error", "file_too_large")
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
         WRITE_ATOMIC_TEMP_ATTEMPTS, copy, copy_file_error, create_parent_dir,
-        create_temp_file_error, exists, exists_from_metadata, inspect_file_error, metadata,
-        move_file, move_file_after_rename, move_file_error, persist_temp_file,
-        persist_temp_file_with_replace, read, read_file_error, read_string, remove,
-        remove_file_error, remove_if_exists, rename, rename_file_error, should_retry_temp_open,
-        sync_temp_file_error, unique_temp_file_error, write, write_atomic, write_atomic_replace,
-        write_atomic_with_attempts, write_file_error, write_temp_file_error,
+        create_temp_file_error, exists, exists_from_metadata, inspect_file_error,
+        is_file_too_large_error, is_not_regular_file_error, is_symlink_not_allowed_error, metadata,
+        move_file, move_file_after_rename, move_file_error, open_no_follow_regular,
+        persist_temp_file, persist_temp_file_with_replace, read, read_bounded, read_file_error,
+        read_string, read_string_bounded, remove, remove_file_error, remove_if_exists, rename,
+        rename_file_error, should_retry_temp_open, sync_temp_file_error, unique_temp_file_error,
+        write, write_atomic, write_atomic_replace, write_atomic_with_attempts, write_file_error,
+        write_temp_file_error,
     };
     use crate::TempDir;
 
@@ -501,6 +509,57 @@ mod tests {
         );
         assert!(remove(&missing).await.is_err());
         assert!(remove_if_exists(&dir).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn bounded_read_accepts_regular_files_within_limit() {
+        let root = TempDir::new().unwrap();
+        let path = root.write_file("file.txt", b"hello").unwrap();
+
+        assert_eq!(read_bounded(&path, 5).await.unwrap(), b"hello");
+        assert_eq!(read_string_bounded(&path, 5).await.unwrap(), "hello");
+    }
+
+    #[tokio::test]
+    async fn bounded_read_rejects_oversized_files() {
+        let root = TempDir::new().unwrap();
+        let path = root.write_file("file.txt", b"hello").unwrap();
+
+        let error = read_bounded(&path, 4).await.unwrap_err();
+
+        assert!(is_file_too_large_error(&error));
+    }
+
+    #[tokio::test]
+    async fn bounded_read_rejects_directories() {
+        let root = TempDir::new().unwrap();
+
+        let error = read_bounded(root.path(), 1024).await.unwrap_err();
+
+        assert!(is_not_regular_file_error(&error));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn bounded_read_rejects_final_symlinks() {
+        let root = TempDir::new().unwrap();
+        let target = root.write_file("target.txt", b"hello").unwrap();
+        let link = root.child("link.txt").unwrap();
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+
+        let error = read_bounded(&link, 1024).await.unwrap_err();
+
+        assert!(is_symlink_not_allowed_error(&error));
+    }
+
+    #[tokio::test]
+    async fn no_follow_regular_open_accepts_regular_files() {
+        let root = TempDir::new().unwrap();
+        let path = root.write_file("file.txt", b"hello").unwrap();
+
+        let file = open_no_follow_regular(&path).await.unwrap();
+
+        assert!(file.metadata().await.unwrap().is_file());
     }
 
     #[test]

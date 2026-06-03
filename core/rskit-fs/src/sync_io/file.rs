@@ -12,13 +12,13 @@ use rskit_errors::{AppError, AppResult, ErrorCode};
 
 use crate::types::FileMeta;
 
+use crate::file_error::{file_too_large_error, not_regular_file_error, symlink_not_allowed_error};
+pub use crate::file_error::{
+    is_file_too_large_error, is_not_regular_file_error, is_symlink_not_allowed_error,
+};
 use crate::path::parent_dir;
 use crate::temp::sibling_temp_path;
 
-const RSKIT_FS_ERROR: &str = "rskit_fs_error";
-const FILE_TOO_LARGE: &str = "file_too_large";
-const NOT_REGULAR_FILE: &str = "not_regular_file";
-const SYMLINK_NOT_ALLOWED: &str = "symlink_not_allowed";
 const WRITE_ATOMIC_TEMP_ATTEMPTS: usize = 16;
 
 /// Create the parent directory for a file path if it has one.
@@ -406,61 +406,56 @@ fn sync_file_error(path: &Path, error: std::io::Error) -> AppError {
     .with_cause(error)
 }
 
-/// Return true when `error` was created by bounded file-read size enforcement.
-pub fn is_file_too_large_error(error: &AppError) -> bool {
-    has_fs_error(error, FILE_TOO_LARGE)
-}
-
-/// Return true when `error` was created by no-follow symlink rejection.
-pub fn is_symlink_not_allowed_error(error: &AppError) -> bool {
-    has_fs_error(error, SYMLINK_NOT_ALLOWED)
-}
-
-/// Return true when `error` was created by regular-file validation.
-pub fn is_not_regular_file_error(error: &AppError) -> bool {
-    has_fs_error(error, NOT_REGULAR_FILE)
-}
-
-fn has_fs_error(error: &AppError, kind: &str) -> bool {
-    error
-        .details()
-        .get(RSKIT_FS_ERROR)
-        .and_then(|value| value.as_str())
-        == Some(kind)
-}
-
-fn file_too_large_error(path: &Path, actual: u64, limit: u64) -> AppError {
-    AppError::new(
-        ErrorCode::InvalidInput,
-        format!(
-            "file '{}' is {actual} bytes, exceeding limit {limit} bytes",
-            path.display()
-        ),
-    )
-    .with_detail(RSKIT_FS_ERROR, FILE_TOO_LARGE)
-}
-
-fn not_regular_file_error(path: &Path) -> AppError {
-    AppError::new(
-        ErrorCode::InvalidInput,
-        format!("path is not a regular file: {}", path.display()),
-    )
-    .with_detail(RSKIT_FS_ERROR, NOT_REGULAR_FILE)
-}
-
-fn symlink_not_allowed_error(path: &Path) -> AppError {
-    AppError::new(
-        ErrorCode::InvalidInput,
-        format!("symlinks are not allowed: {}", path.display()),
-    )
-    .with_detail(RSKIT_FS_ERROR, SYMLINK_NOT_ALLOWED)
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{persist_temp_file_with_replace, read_string, write_atomic_replace};
+    use super::{
+        is_file_too_large_error, is_not_regular_file_error, is_symlink_not_allowed_error,
+        persist_temp_file_with_replace, read_bounded, read_string, read_string_bounded,
+        write_atomic_replace,
+    };
 
     use crate::TempDir;
+
+    #[test]
+    fn bounded_read_accepts_regular_files_within_limit() {
+        let root = TempDir::new().unwrap();
+        let path = root.write_file("file.txt", b"hello").unwrap();
+
+        assert_eq!(read_bounded(&path, 5).unwrap(), b"hello");
+        assert_eq!(read_string_bounded(&path, 5).unwrap(), "hello");
+    }
+
+    #[test]
+    fn bounded_read_rejects_oversized_files() {
+        let root = TempDir::new().unwrap();
+        let path = root.write_file("file.txt", b"hello").unwrap();
+
+        let error = read_bounded(&path, 4).unwrap_err();
+
+        assert!(is_file_too_large_error(&error));
+    }
+
+    #[test]
+    fn bounded_read_rejects_directories() {
+        let root = TempDir::new().unwrap();
+
+        let error = read_bounded(root.path(), 1024).unwrap_err();
+
+        assert!(is_not_regular_file_error(&error));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn bounded_read_rejects_final_symlinks() {
+        let root = TempDir::new().unwrap();
+        let target = root.write_file("target.txt", b"hello").unwrap();
+        let link = root.child("link.txt").unwrap();
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+
+        let error = read_bounded(&link, 1024).unwrap_err();
+
+        assert!(is_symlink_not_allowed_error(&error));
+    }
 
     #[test]
     fn atomic_replace_overwrites_existing_files() {
