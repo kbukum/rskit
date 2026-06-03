@@ -26,6 +26,8 @@ use regex::Regex;
 use serde::Deserialize;
 use tracing_subscriber::fmt::MakeWriter;
 
+use crate::error::{self, LoggingResult};
+
 // ── Masker trait ─────────────────────────────────────────────────────────────
 
 /// Trait for masking sensitive values in log output.
@@ -206,9 +208,12 @@ pub struct DefaultMasker {
 impl DefaultMasker {
     /// Create a new masker from the given configuration.
     ///
-    /// Compiles all default and custom regex patterns.  Invalid custom
-    /// patterns are silently skipped.
-    pub fn new(cfg: &MaskingConfig) -> Self {
+    /// Compiles all default and custom regex patterns.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when any custom value pattern is not a valid regex.
+    pub fn new(cfg: &MaskingConfig) -> LoggingResult<Self> {
         let mut field_names: HashSet<String> = DEFAULT_FIELD_NAMES
             .iter()
             .map(|s| (*s).to_lowercase())
@@ -219,15 +224,16 @@ impl DefaultMasker {
 
         let value_patterns = Self::default_value_patterns();
 
-        let extra_patterns: Vec<Regex> = cfg
-            .value_patterns
-            .iter()
-            .filter_map(|p| Regex::new(p).ok())
-            .collect();
+        let mut extra_patterns = Vec::with_capacity(cfg.value_patterns.len());
+        for pattern in &cfg.value_patterns {
+            let regex =
+                Regex::new(pattern).map_err(|err| error::invalid_regex(pattern.clone(), err))?;
+            extra_patterns.push(regex);
+        }
 
         let (json_field_regex, text_field_regex) = Self::build_field_regexes(&field_names);
 
-        Self {
+        Ok(Self {
             enabled: cfg.enabled,
             field_names,
             value_patterns,
@@ -235,7 +241,7 @@ impl DefaultMasker {
             json_field_regex,
             text_field_regex,
             replacement: cfg.replacement.clone(),
-        }
+        })
     }
 
     /// Compile the hardcoded default value patterns (skipping any that
@@ -314,7 +320,24 @@ impl DefaultMasker {
 
 impl Default for DefaultMasker {
     fn default() -> Self {
-        Self::new(&MaskingConfig::default())
+        let cfg = MaskingConfig::default();
+        let mut field_names: HashSet<String> = DEFAULT_FIELD_NAMES
+            .iter()
+            .map(|s| (*s).to_lowercase())
+            .collect();
+        for name in &cfg.field_names {
+            field_names.insert(name.to_lowercase());
+        }
+        let (json_field_regex, text_field_regex) = Self::build_field_regexes(&field_names);
+        Self {
+            enabled: cfg.enabled,
+            field_names,
+            value_patterns: Self::default_value_patterns(),
+            extra_patterns: Vec::new(),
+            json_field_regex,
+            text_field_regex,
+            replacement: cfg.replacement,
+        }
     }
 }
 
@@ -700,7 +723,7 @@ mod tests {
             field_names: vec!["custom_secret".to_string()],
             ..Default::default()
         };
-        let m = DefaultMasker::new(&cfg);
+        let m = DefaultMasker::new(&cfg).expect("valid custom field config");
         assert_eq!(
             m.mask_value("custom_secret", "hidden").as_ref(),
             "[REDACTED]"
@@ -713,7 +736,7 @@ mod tests {
             replacement: "***".to_string(),
             ..Default::default()
         };
-        let m = DefaultMasker::new(&cfg);
+        let m = DefaultMasker::new(&cfg).expect("valid replacement config");
         assert_eq!(m.mask_value("password", "secret").as_ref(), "***");
     }
 
@@ -723,22 +746,22 @@ mod tests {
             value_patterns: vec![r"secret_\w+".to_string()],
             ..Default::default()
         };
-        let m = DefaultMasker::new(&cfg);
+        let m = DefaultMasker::new(&cfg).expect("valid custom value pattern");
         let result = m.mask_value("msg", "found secret_abc123 in log");
         assert_eq!(result.as_ref(), "found [REDACTED] in log");
     }
 
     #[test]
-    fn invalid_custom_pattern_is_skipped() {
+    fn invalid_custom_pattern_returns_error() {
         let cfg = MaskingConfig {
             value_patterns: vec!["[invalid".to_string()],
             ..Default::default()
         };
-        // Should not panic; the invalid pattern is silently ignored.
-        let m = DefaultMasker::new(&cfg);
-        // Default patterns still work.
-        let result = m.mask_value("msg", "user@example.com");
-        assert!(result.contains("***@***.***"));
+        let err = match DefaultMasker::new(&cfg) {
+            Ok(_) => panic!("invalid regex should fail setup"),
+            Err(err) => err,
+        };
+        assert_eq!(err.code(), rskit_errors::ErrorCode::InvalidFormat);
     }
 
     // ── Disabled masking ────────────────────────────────────────────
@@ -749,7 +772,7 @@ mod tests {
             enabled: false,
             ..Default::default()
         };
-        let m = DefaultMasker::new(&cfg);
+        let m = DefaultMasker::new(&cfg).expect("valid disabled config");
         assert_eq!(m.mask_value("password", "hunter2").as_ref(), "hunter2");
     }
 
@@ -759,7 +782,7 @@ mod tests {
             enabled: false,
             ..Default::default()
         };
-        let m = DefaultMasker::new(&cfg);
+        let m = DefaultMasker::new(&cfg).expect("valid disabled config");
         let line = "{\"password\":\"secret\"}";
         assert_eq!(m.mask_output(line).as_ref(), line);
     }
