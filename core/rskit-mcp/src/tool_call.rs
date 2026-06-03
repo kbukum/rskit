@@ -161,9 +161,11 @@ impl RegistryHandler {
                 }
                 Err(err) => {
                     event.outcome = String::from("tool_error");
-                    event.error = err.message.clone();
+                    event.error = err.message().to_string();
                     tracing::warn!(tool = tool_name, error = %err, "tool call failed");
-                    CallToolResult::error(vec![rmcp::model::Content::text(err.message.clone())])
+                    CallToolResult::error(vec![rmcp::model::Content::text(
+                        err.message().to_string(),
+                    )])
                 }
             };
 

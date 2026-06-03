@@ -92,5 +92,5 @@ fn serving_protocol_and_error_conversions_round_trip() {
         Some(source) if source.contains("connection failed: runtime")
     ));
     let app_error: rskit_errors::AppError = rskit_inference::InferenceError::Cancelled.into();
-    assert_eq!(app_error.code, rskit_errors::ErrorCode::Cancelled);
+    assert_eq!(app_error.code(), rskit_errors::ErrorCode::Cancelled);
 }

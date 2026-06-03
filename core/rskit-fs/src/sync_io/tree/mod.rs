@@ -119,7 +119,7 @@ mod tests {
         let file = dir.write_file("file.txt", b"hello").unwrap();
         let err = ensure_directory(&file, false).unwrap_err();
 
-        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
     }
 
     #[cfg(unix)]
@@ -133,7 +133,7 @@ mod tests {
 
         let err = ensure_directory(&link, false).unwrap_err();
 
-        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
         ensure_directory(&link, true).unwrap();
     }
 
@@ -172,7 +172,7 @@ mod tests {
         enter_directory(dir.path(), &mut visited).unwrap();
         let err = enter_directory(dir.path(), &mut visited).unwrap_err();
 
-        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
     }
 
     #[test]

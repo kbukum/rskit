@@ -18,9 +18,10 @@ pub fn assert_err_code(result: AppResult<impl std::fmt::Debug>, code: ErrorCode)
         Ok(v) => panic!("expected Err({code:?}), got Ok({v:?})"),
         Err(e) => {
             assert_eq!(
-                e.code, code,
+                e.code(),
+                code,
                 "expected error code {code:?}, got {:?}: {e}",
-                e.code,
+                e.code(),
             );
         }
     }

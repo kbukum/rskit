@@ -123,7 +123,7 @@ mod tests {
 
         let err = register_memory(&mut registry).expect_err("duplicate backend must fail");
 
-        assert_eq!(err.code, ErrorCode::AlreadyExists);
+        assert_eq!(err.code(), ErrorCode::AlreadyExists);
     }
 
     #[test]
@@ -135,7 +135,7 @@ mod tests {
             .err()
             .unwrap();
 
-        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
     }
 
     #[test]
@@ -154,7 +154,7 @@ mod tests {
 
         let err = registry.build(&VectorStoreConfig::default()).err().unwrap();
 
-        assert_eq!(err.code, ErrorCode::NotFound);
+        assert_eq!(err.code(), ErrorCode::NotFound);
     }
 
     #[test]
@@ -167,7 +167,7 @@ mod tests {
 
         let err = registry.build(&config).err().unwrap();
 
-        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
     }
 
     #[test]

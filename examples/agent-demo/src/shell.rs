@@ -450,7 +450,7 @@ async fn submit_task(
         // Wait for final result
         let result = match handle.result().await {
             Ok(output) => Ok(output),
-            Err(e) => Err(e.message),
+            Err(e) => Err(e.message().to_string()),
         };
 
         event_loop.abort();

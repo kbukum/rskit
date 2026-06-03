@@ -487,7 +487,7 @@ async fn store_delete_nonexistent_fails() {
     let dir = TempDir::new().unwrap();
     let store = make_store(dir.path());
     let error = store.delete("missing.txt").await.unwrap_err();
-    assert_eq!(error.code, rskit_errors::ErrorCode::NotFound);
+    assert_eq!(error.code(), rskit_errors::ErrorCode::NotFound);
 }
 
 #[tokio::test]
@@ -577,7 +577,7 @@ async fn store_head_rejects_directory() {
     std::fs::create_dir(dir.path().join("nested")).unwrap();
 
     let error = store.head("nested").await.unwrap_err();
-    assert_eq!(error.code, rskit_errors::ErrorCode::NotFound);
+    assert_eq!(error.code(), rskit_errors::ErrorCode::NotFound);
 }
 
 #[cfg(unix)]
@@ -589,7 +589,7 @@ async fn store_head_rejects_symlink() {
     std::os::unix::fs::symlink(dir.path().join("target.txt"), dir.path().join("link.txt")).unwrap();
 
     let error = store.head("link.txt").await.unwrap_err();
-    assert_eq!(error.code, rskit_errors::ErrorCode::NotFound);
+    assert_eq!(error.code(), rskit_errors::ErrorCode::NotFound);
 }
 
 #[tokio::test]

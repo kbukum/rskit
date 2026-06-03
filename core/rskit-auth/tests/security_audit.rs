@@ -114,7 +114,7 @@ async fn jwt_expired_token_rejected() {
     assert!(result.is_err(), "Expired token should be rejected");
 
     let err = result.unwrap_err();
-    assert_eq!(err.code, ErrorCode::TokenExpired);
+    assert_eq!(err.code(), ErrorCode::TokenExpired);
 }
 
 #[tokio::test]
@@ -318,9 +318,11 @@ fn problem_detail_from_app_error_has_correct_status() {
     for (err, expected_status) in cases {
         let pd = ProblemDetail::from(&err);
         assert_eq!(
-            pd.status, expected_status,
+            pd.status,
+            expected_status,
             "Wrong status for {:?}: got {}",
-            err.code, pd.status
+            err.code(),
+            pd.status
         );
     }
 }

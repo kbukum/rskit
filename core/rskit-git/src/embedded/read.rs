@@ -524,8 +524,8 @@ mod tests {
             .is_ignored("../target/debug/app")
             .expect_err("reject parent traversal");
 
-        assert_eq!(err.code, ErrorCode::InvalidInput);
-        assert!(err.message.contains("../target/debug/app"));
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+        assert!(err.message().contains("../target/debug/app"));
         assert_eq!(
             err.cause()
                 .expect("preserve path validation cause")
@@ -543,9 +543,9 @@ mod tests {
             .is_ignored("target/debug/app")
             .expect_err("reject bare repository");
 
-        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
         assert_eq!(
-            err.message,
+            err.message(),
             "git operation not supported: is_ignored on bare repository"
         );
     }

@@ -278,7 +278,7 @@ pub enum InferenceError {
 
 impl From<AppError> for InferenceError {
     fn from(value: AppError) -> Self {
-        match value.code {
+        match value.code() {
             ErrorCode::Timeout => Self::Timeout,
             ErrorCode::Cancelled => Self::Cancelled,
             ErrorCode::ExternalService

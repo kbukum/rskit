@@ -48,7 +48,7 @@ impl PersistentStartErrorKind {
 /// Return the structured persistent startup error kind attached to an [`AppError`].
 pub fn persistent_start_error_kind(error: &AppError) -> Option<PersistentStartErrorKind> {
     error
-        .details
+        .details()
         .get(PERSISTENT_START_ERROR_KIND_DETAIL)
         .and_then(|value| value.as_str())
         .and_then(PersistentStartErrorKind::from_str)

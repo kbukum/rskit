@@ -446,7 +446,7 @@ where
     let _ = envelope.events_bcast.send(Event::error(
         envelope.id,
         format!("{pool_name}/queue"),
-        error.message.clone(),
+        error.message().to_string(),
     ));
     let _ = envelope.result_tx.send(Err(error));
 }
@@ -467,7 +467,7 @@ where
     let _ = envelope.events_bcast.send(Event::error(
         envelope.id,
         format!("{pool_name}/shutdown"),
-        error.message.clone(),
+        error.message().to_string(),
     ));
     let _ = envelope.result_tx.send(Err(error));
 }

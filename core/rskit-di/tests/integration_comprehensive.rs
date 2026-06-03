@@ -72,8 +72,8 @@ fn factory_error_propagates() {
     let result = c.resolve::<FailSvc>();
     assert!(result.is_err());
     let err = result.unwrap_err();
-    assert_eq!(err.code, ErrorCode::Internal);
-    assert!(err.message.contains("factory boom"));
+    assert_eq!(err.code(), ErrorCode::Internal);
+    assert!(err.message().contains("factory boom"));
 }
 
 #[test]
@@ -218,12 +218,12 @@ fn resolve_unregistered_error_contains_type_name() {
 
     let c = Container::new();
     let err = c.resolve::<UnknownSvc>().unwrap_err();
-    assert_eq!(err.code, ErrorCode::NotFound);
+    assert_eq!(err.code(), ErrorCode::NotFound);
     // Error message should contain the type name
     assert!(
-        err.message.contains("UnknownSvc"),
+        err.message().contains("UnknownSvc"),
         "error should mention type name, got: {}",
-        err.message
+        err.message()
     );
 }
 
@@ -672,7 +672,7 @@ fn empty_container_resolve_returns_not_found() {
     struct Anything;
     let c = Container::new();
     let err = c.resolve::<Anything>().unwrap_err();
-    assert_eq!(err.code, ErrorCode::NotFound);
+    assert_eq!(err.code(), ErrorCode::NotFound);
 }
 
 #[test]

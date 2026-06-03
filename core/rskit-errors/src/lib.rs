@@ -11,8 +11,8 @@
 //! }
 //!
 //! let err = find_user("abc").unwrap_err();
-//! assert_eq!(err.code, ErrorCode::NotFound);
-//! assert!(err.message.contains("find_user"));
+//! assert_eq!(err.code(), ErrorCode::NotFound);
+//! assert!(err.message().contains("find_user"));
 //! ```
 
 #![warn(missing_docs)]

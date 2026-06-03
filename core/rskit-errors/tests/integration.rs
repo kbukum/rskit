@@ -83,191 +83,191 @@ fn is_retryable_all_codes_exhaustive() {
 #[test]
 fn not_found_has_correct_code_and_status() {
     let err = AppError::not_found("user", Some("42"));
-    assert_eq!(err.code, ErrorCode::NotFound);
-    assert_eq!(err.http_status.as_u16(), 404);
+    assert_eq!(err.code(), ErrorCode::NotFound);
+    assert_eq!(err.http_status().as_u16(), 404);
     assert!(!err.is_retryable());
-    assert!(err.message.contains("user"));
-    assert!(err.message.contains("42"));
+    assert!(err.message().contains("user"));
+    assert!(err.message().contains("42"));
 }
 
 #[test]
 fn not_found_without_id() {
     let err = AppError::not_found("Order", None);
-    assert_eq!(err.code, ErrorCode::NotFound);
-    assert!(err.message.contains("Order"));
-    assert!(!err.message.contains("'"));
+    assert_eq!(err.code(), ErrorCode::NotFound);
+    assert!(err.message().contains("Order"));
+    assert!(!err.message().contains("'"));
 }
 
 #[test]
 fn service_unavailable_constructor() {
     let err = AppError::service_unavailable("payment-api");
-    assert_eq!(err.code, ErrorCode::ServiceUnavailable);
-    assert!(err.retryable);
-    assert_eq!(err.http_status.as_u16(), 503);
-    assert!(err.message.contains("payment-api"));
+    assert_eq!(err.code(), ErrorCode::ServiceUnavailable);
+    assert!(err.is_retryable());
+    assert_eq!(err.http_status().as_u16(), 503);
+    assert!(err.message().contains("payment-api"));
 }
 
 #[test]
 fn connection_failed_constructor() {
     let err = AppError::connection_failed("redis");
-    assert_eq!(err.code, ErrorCode::ConnectionFailed);
-    assert!(err.retryable);
-    assert_eq!(err.http_status.as_u16(), 502);
-    assert!(err.message.contains("redis"));
+    assert_eq!(err.code(), ErrorCode::ConnectionFailed);
+    assert!(err.is_retryable());
+    assert_eq!(err.http_status().as_u16(), 502);
+    assert!(err.message().contains("redis"));
 }
 
 #[test]
 fn timeout_constructor() {
     let err = AppError::timeout("db query");
-    assert_eq!(err.code, ErrorCode::Timeout);
-    assert!(err.retryable);
-    assert_eq!(err.http_status.as_u16(), 504);
-    assert!(err.message.contains("db query"));
+    assert_eq!(err.code(), ErrorCode::Timeout);
+    assert!(err.is_retryable());
+    assert_eq!(err.http_status().as_u16(), 504);
+    assert!(err.message().contains("db query"));
 }
 
 #[test]
 fn rate_limited_constructor() {
     let err = AppError::rate_limited();
-    assert_eq!(err.code, ErrorCode::RateLimited);
-    assert!(err.retryable);
-    assert_eq!(err.http_status.as_u16(), 429);
+    assert_eq!(err.code(), ErrorCode::RateLimited);
+    assert!(err.is_retryable());
+    assert_eq!(err.http_status().as_u16(), 429);
 }
 
 #[test]
 fn already_exists_constructor() {
     let err = AppError::already_exists("email");
-    assert_eq!(err.code, ErrorCode::AlreadyExists);
-    assert!(!err.retryable);
-    assert_eq!(err.http_status.as_u16(), 409);
-    assert!(err.message.contains("email"));
+    assert_eq!(err.code(), ErrorCode::AlreadyExists);
+    assert!(!err.is_retryable());
+    assert_eq!(err.http_status().as_u16(), 409);
+    assert!(err.message().contains("email"));
 }
 
 #[test]
 fn conflict_constructor() {
     let err = AppError::conflict("version mismatch");
-    assert_eq!(err.code, ErrorCode::Conflict);
-    assert!(!err.retryable);
-    assert_eq!(err.http_status.as_u16(), 409);
-    assert!(err.message.contains("version mismatch"));
+    assert_eq!(err.code(), ErrorCode::Conflict);
+    assert!(!err.is_retryable());
+    assert_eq!(err.http_status().as_u16(), 409);
+    assert!(err.message().contains("version mismatch"));
 }
 
 #[test]
 fn invalid_input_constructor() {
     let err = AppError::invalid_input("email", "must contain @");
-    assert_eq!(err.code, ErrorCode::InvalidInput);
-    assert!(!err.retryable);
-    assert_eq!(err.http_status.as_u16(), 422);
-    assert!(err.message.contains("email"));
-    assert!(err.message.contains("must contain @"));
+    assert_eq!(err.code(), ErrorCode::InvalidInput);
+    assert!(!err.is_retryable());
+    assert_eq!(err.http_status().as_u16(), 422);
+    assert!(err.message().contains("email"));
+    assert!(err.message().contains("must contain @"));
 }
 
 #[test]
 fn missing_field_constructor() {
     let err = AppError::missing_field("username");
-    assert_eq!(err.code, ErrorCode::MissingField);
-    assert!(!err.retryable);
-    assert_eq!(err.http_status.as_u16(), 422);
-    assert!(err.message.contains("username"));
+    assert_eq!(err.code(), ErrorCode::MissingField);
+    assert!(!err.is_retryable());
+    assert_eq!(err.http_status().as_u16(), 422);
+    assert!(err.message().contains("username"));
 }
 
 #[test]
 fn invalid_format_constructor() {
     let err = AppError::invalid_format("date", "ISO 8601");
-    assert_eq!(err.code, ErrorCode::InvalidFormat);
-    assert!(!err.retryable);
-    assert_eq!(err.http_status.as_u16(), 422);
-    assert!(err.message.contains("date"));
-    assert!(err.message.contains("ISO 8601"));
+    assert_eq!(err.code(), ErrorCode::InvalidFormat);
+    assert!(!err.is_retryable());
+    assert_eq!(err.http_status().as_u16(), 422);
+    assert!(err.message().contains("date"));
+    assert!(err.message().contains("ISO 8601"));
 }
 
 #[test]
 fn unauthorized_constructor() {
     let err = AppError::unauthorized("missing bearer token");
-    assert_eq!(err.code, ErrorCode::Unauthorized);
-    assert!(!err.retryable);
-    assert_eq!(err.http_status.as_u16(), 401);
-    assert!(err.message.contains("missing bearer token"));
+    assert_eq!(err.code(), ErrorCode::Unauthorized);
+    assert!(!err.is_retryable());
+    assert_eq!(err.http_status().as_u16(), 401);
+    assert!(err.message().contains("missing bearer token"));
 }
 
 #[test]
 fn forbidden_constructor() {
     let err = AppError::forbidden("admin only");
-    assert_eq!(err.code, ErrorCode::Forbidden);
-    assert!(!err.retryable);
-    assert_eq!(err.http_status.as_u16(), 403);
-    assert!(err.message.contains("admin only"));
+    assert_eq!(err.code(), ErrorCode::Forbidden);
+    assert!(!err.is_retryable());
+    assert_eq!(err.http_status().as_u16(), 403);
+    assert!(err.message().contains("admin only"));
 }
 
 #[test]
 fn token_expired_constructor() {
     let err = AppError::token_expired();
-    assert_eq!(err.code, ErrorCode::TokenExpired);
-    assert!(!err.retryable);
-    assert_eq!(err.http_status.as_u16(), 401);
-    assert!(err.message.contains("expired"));
+    assert_eq!(err.code(), ErrorCode::TokenExpired);
+    assert!(!err.is_retryable());
+    assert_eq!(err.http_status().as_u16(), 401);
+    assert!(err.message().contains("expired"));
 }
 
 #[test]
 fn invalid_token_constructor() {
     let err = AppError::invalid_token();
-    assert_eq!(err.code, ErrorCode::InvalidToken);
-    assert!(!err.retryable);
-    assert_eq!(err.http_status.as_u16(), 401);
-    assert!(err.message.contains("invalid"));
+    assert_eq!(err.code(), ErrorCode::InvalidToken);
+    assert!(!err.is_retryable());
+    assert_eq!(err.http_status().as_u16(), 401);
+    assert!(err.message().contains("invalid"));
 }
 
 #[test]
 fn internal_constructor_wraps_cause() {
     let cause = std::io::Error::other("disk full");
     let err = AppError::internal(cause);
-    assert_eq!(err.code, ErrorCode::Internal);
-    assert!(!err.retryable);
-    assert_eq!(err.http_status.as_u16(), 500);
+    assert_eq!(err.code(), ErrorCode::Internal);
+    assert!(!err.is_retryable());
+    assert_eq!(err.http_status().as_u16(), 500);
     // message must be generic — must NOT expose the cause to callers
-    assert_eq!(err.message, "internal server error");
+    assert_eq!(err.message(), "internal server error");
     assert!(
-        !err.message.contains("disk full"),
+        !err.message().contains("disk full"),
         "cause leaked into message"
     );
-    assert!(err.cause.is_some());
+    assert!(err.cause().is_some());
 }
 
 #[test]
 fn database_error_constructor_wraps_cause() {
     let cause = std::io::Error::other("connection reset");
     let err = AppError::database_error(cause);
-    assert_eq!(err.code, ErrorCode::DatabaseError);
-    assert!(!err.retryable);
-    assert_eq!(err.http_status.as_u16(), 500);
+    assert_eq!(err.code(), ErrorCode::DatabaseError);
+    assert!(!err.is_retryable());
+    assert_eq!(err.http_status().as_u16(), 500);
     // message must be generic — must NOT expose the cause to callers
-    assert_eq!(err.message, "database error");
+    assert_eq!(err.message(), "database error");
     assert!(
-        !err.message.contains("connection reset"),
+        !err.message().contains("connection reset"),
         "cause leaked into message"
     );
-    assert!(err.cause.is_some());
+    assert!(err.cause().is_some());
 }
 
 #[test]
 fn external_service_constructor() {
     let cause = std::io::Error::other("500 Internal Server Error");
     let err = AppError::external_service("stripe", cause);
-    assert_eq!(err.code, ErrorCode::ExternalService);
-    assert!(err.retryable);
-    assert_eq!(err.http_status.as_u16(), 502);
-    assert!(err.cause.is_some());
+    assert_eq!(err.code(), ErrorCode::ExternalService);
+    assert!(err.is_retryable());
+    assert_eq!(err.http_status().as_u16(), 502);
+    assert!(err.cause().is_some());
     assert_eq!(
-        err.details.get("service").and_then(|v| v.as_str()),
+        err.details().get("service").and_then(|v| v.as_str()),
         Some("stripe")
     );
 }
 
 #[test]
-fn wrap_delegates_to_internal() {
+fn internal_wraps_arbitrary_error() {
     let cause = std::io::Error::other("oops");
-    let err = AppError::wrap(cause);
-    assert_eq!(err.code, ErrorCode::Internal);
-    assert!(err.cause.is_some());
+    let err = AppError::internal(cause);
+    assert_eq!(err.code(), ErrorCode::Internal);
+    assert!(err.cause().is_some());
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -278,7 +278,7 @@ fn wrap_delegates_to_internal() {
 fn with_cause_preserves_cause() {
     let cause = std::io::Error::new(std::io::ErrorKind::TimedOut, "timed out");
     let err = AppError::new(ErrorCode::Timeout, "timeout").with_cause(cause);
-    assert!(err.cause.is_some());
+    assert!(err.cause().is_some());
     let source = err.source().unwrap();
     assert!(source.to_string().contains("timed out"));
 }
@@ -287,7 +287,7 @@ fn with_cause_preserves_cause() {
 fn with_detail_adds_entry() {
     let err = AppError::new(ErrorCode::InvalidInput, "bad").with_detail("field", "name");
     assert_eq!(
-        err.details.get("field").and_then(|v| v.as_str()),
+        err.details().get("field").and_then(|v| v.as_str()),
         Some("name")
     );
 }
@@ -299,9 +299,9 @@ fn with_details_merges_map() {
     details.insert("b".to_string(), serde_json::json!(2));
 
     let err = AppError::new(ErrorCode::Internal, "err").with_details(details);
-    assert_eq!(err.details.len(), 2);
-    assert_eq!(err.details.get("a").and_then(|v| v.as_str()), Some("one"));
-    assert_eq!(err.details.get("b").and_then(|v| v.as_i64()), Some(2));
+    assert_eq!(err.details().len(), 2);
+    assert_eq!(err.details().get("a").and_then(|v| v.as_str()), Some("one"));
+    assert_eq!(err.details().get("b").and_then(|v| v.as_i64()), Some(2));
 }
 
 #[test]
@@ -312,9 +312,9 @@ fn with_details_merges_with_existing() {
     let err = AppError::new(ErrorCode::Internal, "err")
         .with_detail("x", "existing")
         .with_details(extra);
-    assert_eq!(err.details.len(), 2);
-    assert!(err.details.contains_key("x"));
-    assert!(err.details.contains_key("y"));
+    assert_eq!(err.details().len(), 2);
+    assert!(err.details().contains_key("x"));
+    assert!(err.details().contains_key("y"));
 }
 
 #[test]
@@ -338,16 +338,16 @@ fn chained_builders() {
         .with_detail("endpoint", "/health")
         .retryable(false);
 
-    assert_eq!(err.code, ErrorCode::ExternalService);
+    assert_eq!(err.code(), ErrorCode::ExternalService);
     assert!(!err.is_retryable());
-    assert!(err.cause.is_some());
-    assert_eq!(err.details.len(), 2);
+    assert!(err.cause().is_some());
+    assert_eq!(err.details().len(), 2);
     assert_eq!(
-        err.details.get("service").and_then(|v| v.as_str()),
+        err.details().get("service").and_then(|v| v.as_str()),
         Some("api-x")
     );
     assert_eq!(
-        err.details.get("endpoint").and_then(|v| v.as_str()),
+        err.details().get("endpoint").and_then(|v| v.as_str()),
         Some("/health")
     );
 }
@@ -402,26 +402,26 @@ fn error_trait_object_usable() {
 // ═══════════════════════════════════════════════════════════════════════════
 
 #[test]
-fn from_io_error_maps_to_internal() {
+fn from_io_error_maps_kind_to_code() {
     let io_err = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "no access");
     let err: AppError = io_err.into();
-    assert_eq!(err.code, ErrorCode::Internal);
-    assert!(err.message.contains("no access"));
+    assert_eq!(err.code(), ErrorCode::Forbidden);
+    assert!(err.message().contains("no access"));
 }
 
 #[test]
 fn from_serde_json_error_maps_to_invalid_format() {
     let json_err = serde_json::from_str::<serde_json::Value>("not json {{{").unwrap_err();
     let err: AppError = json_err.into();
-    assert_eq!(err.code, ErrorCode::InvalidFormat);
-    assert!(!err.message.is_empty());
+    assert_eq!(err.code(), ErrorCode::InvalidFormat);
+    assert!(!err.message().is_empty());
 }
 
 #[test]
 fn from_fmt_error_maps_to_internal() {
     let fmt_err = std::fmt::Error;
     let err: AppError = fmt_err.into();
-    assert_eq!(err.code, ErrorCode::Internal);
+    assert_eq!(err.code(), ErrorCode::Internal);
 }
 
 #[test]
@@ -470,7 +470,7 @@ fn app_result_err_propagates_with_question_mark() {
     }
     let result = caller();
     assert!(result.is_err());
-    assert_eq!(result.unwrap_err().code, ErrorCode::NotFound);
+    assert_eq!(result.unwrap_err().code(), ErrorCode::NotFound);
 }
 
 #[test]
@@ -482,7 +482,7 @@ fn app_result_question_mark_with_io_error() {
     }
     let result = may_fail();
     assert!(result.is_err());
-    assert_eq!(result.unwrap_err().code, ErrorCode::Internal);
+    assert_eq!(result.unwrap_err().code(), ErrorCode::NotFound);
 }
 
 #[test]
@@ -491,8 +491,8 @@ fn app_result_map_err() {
     let app_result: AppResult<i32> = result.map_err(|msg| AppError::invalid_input("field", msg));
     assert!(app_result.is_err());
     let err = app_result.unwrap_err();
-    assert_eq!(err.code, ErrorCode::InvalidInput);
-    assert!(err.message.contains("bad input"));
+    assert_eq!(err.code(), ErrorCode::InvalidInput);
+    assert!(err.message().contains("bad input"));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -549,6 +549,28 @@ fn problem_detail_from_owned_app_error() {
     assert_eq!(pd.status, 401);
     assert_eq!(pd.detail, "no token");
     assert_eq!(pd.code, ErrorCode::Unauthorized);
+}
+
+#[test]
+fn app_error_serialization_never_leaks_cause() {
+    // S1: the underlying cause is for internal logging only and must never be
+    // serialized into a wire response (neither directly nor via ProblemDetail).
+    let cause = std::io::Error::other("secret connection string postgres://u:p@host");
+    let err = AppError::internal(cause);
+
+    let direct = serde_json::to_string(&err).unwrap();
+    assert!(!direct.contains("postgres://"), "cause leaked: {direct}");
+    assert!(
+        !direct.contains("cause"),
+        "cause field serialized: {direct}"
+    );
+
+    let pd = serde_json::to_string(&ProblemDetail::from(&err)).unwrap();
+    assert!(
+        !pd.contains("postgres://"),
+        "cause leaked via problem detail: {pd}"
+    );
+    assert_eq!(err.message(), "internal server error");
 }
 
 #[test]
@@ -646,7 +668,7 @@ fn problem_detail_title_is_title_cased() {
 #[test]
 fn empty_string_message() {
     let err = AppError::new(ErrorCode::Internal, "");
-    assert_eq!(err.message, "");
+    assert_eq!(err.message(), "");
     assert_eq!(format!("{err}"), "INTERNAL_ERROR: ");
 }
 
@@ -654,14 +676,14 @@ fn empty_string_message() {
 fn very_long_message() {
     let long_msg = "x".repeat(10_000);
     let err = AppError::new(ErrorCode::Internal, long_msg.clone());
-    assert_eq!(err.message, long_msg);
-    assert_eq!(err.message.len(), 10_000);
+    assert_eq!(err.message(), long_msg);
+    assert_eq!(err.message().len(), 10_000);
 }
 
 #[test]
 fn unicode_in_message() {
     let err = AppError::new(ErrorCode::InvalidInput, "名前が無効です 🚀");
-    assert_eq!(err.message, "名前が無効です 🚀");
+    assert_eq!(err.message(), "名前が無効です 🚀");
     assert!(format!("{err}").contains("🚀"));
 }
 
@@ -671,11 +693,11 @@ fn unicode_in_details() {
         .with_detail("field", "名前")
         .with_detail("emoji", "🎉");
     assert_eq!(
-        err.details.get("field").and_then(|v| v.as_str()),
+        err.details().get("field").and_then(|v| v.as_str()),
         Some("名前")
     );
     assert_eq!(
-        err.details.get("emoji").and_then(|v| v.as_str()),
+        err.details().get("emoji").and_then(|v| v.as_str()),
         Some("🎉")
     );
 }
@@ -689,12 +711,12 @@ fn details_with_complex_json_values() {
         .with_detail("bool_val", serde_json::json!(true))
         .with_detail("number", serde_json::json!(42.5));
 
-    assert_eq!(err.details.len(), 5);
-    assert!(err.details["array"].is_array());
-    assert!(err.details["nested"].is_object());
-    assert!(err.details["null_val"].is_null());
-    assert_eq!(err.details["bool_val"].as_bool(), Some(true));
-    assert_eq!(err.details["number"].as_f64(), Some(42.5));
+    assert_eq!(err.details().len(), 5);
+    assert!(err.details()["array"].is_array());
+    assert!(err.details()["nested"].is_object());
+    assert!(err.details()["null_val"].is_null());
+    assert_eq!(err.details()["bool_val"].as_bool(), Some(true));
+    assert_eq!(err.details()["number"].as_f64(), Some(42.5));
 }
 
 #[test]

@@ -230,7 +230,7 @@ fn already_cancelled_token_does_not_spawn() {
     let error = start_persistent_with_cancel(&command, &ProcessConfig::default(), &config, cancel)
         .expect_err("pre-cancelled startup should fail before spawn");
 
-    assert_eq!(error.code, ErrorCode::Cancelled);
+    assert_eq!(error.code(), ErrorCode::Cancelled);
 }
 
 #[test]
@@ -250,7 +250,7 @@ fn cancellation_during_startup_returns_cancelled() {
         .expect_err("startup cancellation should fail with cancelled semantics");
     cancel_thread.join().expect("cancel thread joins");
 
-    assert_eq!(error.code, ErrorCode::Cancelled);
+    assert_eq!(error.code(), ErrorCode::Cancelled);
 }
 
 #[test]
@@ -273,7 +273,7 @@ fn cancellation_during_command_readiness_returns_promptly() {
         .expect_err("command readiness cancellation should fail promptly");
     cancel_thread.join().expect("cancel thread joins");
 
-    assert_eq!(error.code, ErrorCode::Cancelled);
+    assert_eq!(error.code(), ErrorCode::Cancelled);
     assert!(start.elapsed() < Duration::from_secs(2));
 }
 
@@ -322,7 +322,7 @@ fn timed_out_readiness_command_is_not_accepted_after_successful_sigterm() {
     )
     .expect_err("timed out readiness command should not be accepted");
 
-    assert_eq!(error.code, ErrorCode::Timeout);
+    assert_eq!(error.code(), ErrorCode::Timeout);
 }
 
 #[test]
@@ -339,7 +339,7 @@ fn empty_output_matcher_is_invalid() {
     )
     .expect_err("empty output matcher should be rejected before spawn");
 
-    assert_eq!(error.code, ErrorCode::InvalidInput);
+    assert_eq!(error.code(), ErrorCode::InvalidInput);
 }
 
 #[test]
@@ -355,7 +355,7 @@ fn persistent_rejects_inherited_io_mode() {
     )
     .expect_err("persistent startup should reject inherited mode");
 
-    assert_eq!(error.code, ErrorCode::InvalidInput);
+    assert_eq!(error.code(), ErrorCode::InvalidInput);
 }
 
 #[test]
@@ -372,7 +372,7 @@ fn persistent_rejects_observed_io_mode() {
     )
     .expect_err("persistent startup should reject observed mode");
 
-    assert_eq!(error.code, ErrorCode::InvalidInput);
+    assert_eq!(error.code(), ErrorCode::InvalidInput);
 }
 
 #[test]
@@ -388,7 +388,7 @@ fn persistent_rejects_inherited_stdin_for_captured_mode() {
     )
     .expect_err("persistent startup should reject live stdin");
 
-    assert_eq!(error.code, ErrorCode::InvalidInput);
+    assert_eq!(error.code(), ErrorCode::InvalidInput);
 }
 
 #[test]
@@ -469,7 +469,7 @@ fn persistent_start_cleanup_can_leave_descendants_running_when_configured() {
             .expect_err("startup should fail readiness");
     let descendant_pid = read_descendant_pid(&pid_file);
 
-    assert_eq!(error.code, ErrorCode::Timeout);
+    assert_eq!(error.code(), ErrorCode::Timeout);
     assert_descendant_survived_shutdown(descendant_pid, pid_file);
 }
 

@@ -413,6 +413,26 @@ fn unique_temp_file_error(dest: &Path, attempts: usize) -> AppError {
     )
 }
 
+/// Return true when `error` was created by bounded file-read size enforcement.
+pub fn is_file_too_large_error(error: &AppError) -> bool {
+    error
+        .details()
+        .get("rskit_fs_error")
+        .and_then(|value| value.as_str())
+        == Some("file_too_large")
+}
+
+fn file_too_large_error(path: &Path, actual: u64, limit: u64) -> AppError {
+    AppError::new(
+        ErrorCode::InvalidInput,
+        format!(
+            "file '{}' is {actual} bytes, exceeding limit {limit} bytes",
+            path.display()
+        ),
+    )
+    .with_detail("rskit_fs_error", "file_too_large")
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -704,24 +724,4 @@ mod tests {
 
         assert!(!exists(&link).await.unwrap());
     }
-}
-
-/// Return true when `error` was created by bounded file-read size enforcement.
-pub fn is_file_too_large_error(error: &AppError) -> bool {
-    error
-        .details
-        .get("rskit_fs_error")
-        .and_then(|value| value.as_str())
-        == Some("file_too_large")
-}
-
-fn file_too_large_error(path: &Path, actual: u64, limit: u64) -> AppError {
-    AppError::new(
-        ErrorCode::InvalidInput,
-        format!(
-            "file '{}' is {actual} bytes, exceeding limit {limit} bytes",
-            path.display()
-        ),
-    )
-    .with_detail("rskit_fs_error", "file_too_large")
 }

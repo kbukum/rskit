@@ -90,6 +90,6 @@ mod tests {
             .service(service);
 
         let error = service.ready().await.unwrap().call(0).await.unwrap_err();
-        assert_eq!(error.code, ErrorCode::Timeout);
+        assert_eq!(error.code(), ErrorCode::Timeout);
     }
 }

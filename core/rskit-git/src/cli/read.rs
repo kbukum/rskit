@@ -158,8 +158,8 @@ mod tests {
             .is_ignored("../target/debug/app")
             .expect_err("reject parent traversal");
 
-        assert_eq!(err.code, ErrorCode::InvalidInput);
-        assert!(err.message.contains("../target/debug/app"));
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+        assert!(err.message().contains("../target/debug/app"));
         assert_eq!(
             err.cause()
                 .expect("preserve path validation cause")
@@ -171,9 +171,9 @@ mod tests {
     #[test]
     fn parse_grep_match_reports_invalid_format() {
         let err = parse_grep_match("README.md:not-a-line", "HEAD", true).unwrap_err();
-        assert_eq!(err.code, ErrorCode::InvalidFormat);
+        assert_eq!(err.code(), ErrorCode::InvalidFormat);
         assert_eq!(
-            err.message,
+            err.message(),
             "invalid format for grep match: expected <path>:<line>:<content>"
         );
     }

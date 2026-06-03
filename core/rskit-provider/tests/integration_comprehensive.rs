@@ -124,7 +124,7 @@ async fn sink_sends_or_returns_typed_error() {
     let sink = CollectSink;
     assert!(sink.send("value".to_string()).await.is_ok());
     let error = sink.send(String::new()).await.unwrap_err();
-    assert_eq!(error.code, ErrorCode::InvalidInput);
+    assert_eq!(error.code(), ErrorCode::InvalidInput);
 }
 
 #[tokio::test]

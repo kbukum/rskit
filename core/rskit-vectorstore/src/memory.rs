@@ -391,7 +391,7 @@ mod tests {
             .await
             .expect_err("dimension mismatch must fail");
 
-        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
     }
 
     #[tokio::test]

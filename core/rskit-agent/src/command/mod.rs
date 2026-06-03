@@ -91,7 +91,7 @@ mod tests {
     fn test_execute_unknown_command() {
         let reg = CommandRegistry::new();
         let err = reg.execute("/nope").unwrap_err();
-        assert!(err.message.contains("unknown command"));
+        assert!(err.message().contains("unknown command"));
     }
 
     #[test]

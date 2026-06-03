@@ -27,12 +27,15 @@ pub fn app_error_to_status(err: &AppError) -> Status {
     let problem = ProblemDetail::from(err);
     if let Ok(json_bytes) = serde_json::to_vec(&problem) {
         Status::with_details(
-            error_code_to_grpc_code(err.code),
-            err.message.clone(),
+            error_code_to_grpc_code(err.code()),
+            err.message().to_string(),
             json_bytes.into(),
         )
     } else {
-        Status::new(error_code_to_grpc_code(err.code), err.message.clone())
+        Status::new(
+            error_code_to_grpc_code(err.code()),
+            err.message().to_string(),
+        )
     }
 }
 
@@ -146,28 +149,28 @@ mod tests {
     fn test_status_to_error_not_found() {
         let status = tonic::Status::not_found("user not found");
         let err = status_to_app_error(status);
-        assert_eq!(err.code, ErrorCode::NotFound);
+        assert_eq!(err.code(), ErrorCode::NotFound);
     }
 
     #[test]
     fn test_status_to_error_invalid_argument() {
         let status = tonic::Status::invalid_argument("invalid request");
         let err = status_to_app_error(status);
-        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
     }
 
     #[test]
     fn test_status_to_error_unavailable() {
         let status = tonic::Status::unavailable("service down");
         let err = status_to_app_error(status);
-        assert_eq!(err.code, ErrorCode::ServiceUnavailable);
+        assert_eq!(err.code(), ErrorCode::ServiceUnavailable);
     }
 
     #[test]
     fn test_status_to_error_unauthenticated() {
         let status = tonic::Status::unauthenticated("invalid token");
         let err = status_to_app_error(status);
-        assert_eq!(err.code, ErrorCode::Unauthorized);
+        assert_eq!(err.code(), ErrorCode::Unauthorized);
     }
 
     #[test]
@@ -194,7 +197,7 @@ mod tests {
     #[test]
     fn test_status_to_error_cancelled_uses_canonical_errors_mapping() {
         let err = status_to_app_error(tonic::Status::cancelled("client cancelled"));
-        assert_eq!(err.code, ErrorCode::Cancelled);
+        assert_eq!(err.code(), ErrorCode::Cancelled);
     }
 
     #[test]
@@ -204,10 +207,13 @@ mod tests {
         let status = app_error_to_status(&err);
         let recovered = status_to_app_error(status);
 
-        assert_eq!(recovered.code, ErrorCode::NotFound);
-        assert_eq!(recovered.message, "user 42 not found");
+        assert_eq!(recovered.code(), ErrorCode::NotFound);
+        assert_eq!(recovered.message(), "user 42 not found");
         assert_eq!(
-            recovered.details.get("id").and_then(|value| value.as_str()),
+            recovered
+                .details()
+                .get("id")
+                .and_then(|value| value.as_str()),
             Some("42")
         );
     }

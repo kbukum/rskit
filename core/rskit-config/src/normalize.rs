@@ -67,8 +67,8 @@ mod tests {
     fn supported_schema_rejects_unsupported_value() {
         let error = supported_schema("schema", Some(2), 1).unwrap_err();
 
-        assert_eq!(error.code, ErrorCode::InvalidInput);
-        assert!(error.message.contains("unsupported schema 2"));
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
+        assert!(error.message().contains("unsupported schema 2"));
     }
 
     #[test]
@@ -110,7 +110,7 @@ mod tests {
         let error = canonicalize_root_relative_to("root", dir.path(), Some(Path::new("missing")))
             .unwrap_err();
 
-        assert_eq!(error.code, ErrorCode::InvalidInput);
-        assert!(error.message.contains("failed to resolve root"));
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
+        assert!(error.message().contains("failed to resolve root"));
     }
 }

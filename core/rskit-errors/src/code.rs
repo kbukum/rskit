@@ -55,7 +55,6 @@ pub enum ErrorCode {
     // ── Lifecycle ─────────────────────────────────────────────────────
     /// The operation was cancelled by the caller or system before completion
     /// (e.g., context cancellation, client disconnect).
-    #[serde(rename = "CANCELLED")]
     Cancelled,
 }
 
@@ -282,5 +281,41 @@ mod tests {
     #[test]
     fn display_uses_as_str() {
         assert_eq!(format!("{}", ErrorCode::Timeout), "TIMEOUT");
+    }
+
+    // ── serde ↔ as_str parity ──────────────────────────────────────────────
+    //
+    // `as_str()` is hand-maintained alongside serde's wire encoding; this guards
+    // against the two drifting. Every variant must appear here so a newly added
+    // code fails the test until its string mapping is verified.
+    #[test]
+    fn serde_repr_matches_as_str_for_all_variants() {
+        const ALL: &[ErrorCode] = &[
+            ErrorCode::ServiceUnavailable,
+            ErrorCode::ConnectionFailed,
+            ErrorCode::Timeout,
+            ErrorCode::RateLimited,
+            ErrorCode::NotFound,
+            ErrorCode::AlreadyExists,
+            ErrorCode::Conflict,
+            ErrorCode::InvalidInput,
+            ErrorCode::MissingField,
+            ErrorCode::InvalidFormat,
+            ErrorCode::Unauthorized,
+            ErrorCode::Forbidden,
+            ErrorCode::TokenExpired,
+            ErrorCode::InvalidToken,
+            ErrorCode::Internal,
+            ErrorCode::DatabaseError,
+            ErrorCode::ExternalService,
+            ErrorCode::Cancelled,
+        ];
+        for code in ALL {
+            let json = serde_json::to_string(code).expect("serialize");
+            let wire = json.trim_matches('"');
+            assert_eq!(wire, code.as_str(), "serde/as_str drift for {code:?}");
+            let back: ErrorCode = serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(back, *code, "roundtrip drift for {code:?}");
+        }
     }
 }

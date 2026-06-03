@@ -202,9 +202,9 @@ async fn cancel_stops_task() -> AppResult<()> {
     assert!(result.is_err(), "cancelled task should return error");
     let err = result.unwrap_err();
     assert!(
-        err.message.contains("cancelled") || err.message.contains("cancel"),
+        err.message().contains("cancelled") || err.message().contains("cancel"),
         "error should mention cancel, got: {}",
-        err.message
+        err.message()
     );
 
     pool.shutdown().await.ok();

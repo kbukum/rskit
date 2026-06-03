@@ -290,7 +290,7 @@ mod tests {
         let err = redis_ttl_millis(Duration::from_secs(u64::MAX))
             .expect_err("huge TTL should overflow Redis milliseconds");
 
-        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
     }
 
     #[test]
@@ -308,6 +308,6 @@ mod tests {
 
         let err = RedisClient::new(config).await.err().unwrap();
 
-        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
     }
 }

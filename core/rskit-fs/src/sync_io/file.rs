@@ -423,7 +423,7 @@ pub fn is_not_regular_file_error(error: &AppError) -> bool {
 
 fn has_fs_error(error: &AppError, kind: &str) -> bool {
     error
-        .details
+        .details()
         .get(RSKIT_FS_ERROR)
         .and_then(|value| value.as_str())
         == Some(kind)

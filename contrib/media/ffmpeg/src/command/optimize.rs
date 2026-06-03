@@ -145,14 +145,14 @@ mod tests {
     fn validate_rejects_audio_strip_before_dual_track_speed() {
         let err = FfmpegCommand::validate_ops(&[MediaOp::StripAudio, MediaOp::Speed(2.0)])
             .expect_err("speed compiles audio filters and must not follow StripAudio");
-        assert_eq!(err.code, rskit_errors::ErrorCode::InvalidInput);
+        assert_eq!(err.code(), rskit_errors::ErrorCode::InvalidInput);
     }
 
     #[test]
     fn validate_rejects_video_strip_before_dual_track_reverse() {
         let err = FfmpegCommand::validate_ops(&[MediaOp::StripVideo, MediaOp::Reverse])
             .expect_err("reverse compiles video filters and must not follow StripVideo");
-        assert_eq!(err.code, rskit_errors::ErrorCode::InvalidInput);
+        assert_eq!(err.code(), rskit_errors::ErrorCode::InvalidInput);
     }
 
     #[test]
@@ -166,7 +166,7 @@ mod tests {
         .expect_err(
             "multi-segment extract compiles video concat pads and must not follow StripVideo",
         );
-        assert_eq!(err.code, rskit_errors::ErrorCode::InvalidInput);
+        assert_eq!(err.code(), rskit_errors::ErrorCode::InvalidInput);
     }
 
     #[test]
@@ -179,7 +179,7 @@ mod tests {
             }),
         ])
         .expect_err("concat compiles video pads and must not follow StripVideo");
-        assert_eq!(err.code, rskit_errors::ErrorCode::InvalidInput);
+        assert_eq!(err.code(), rskit_errors::ErrorCode::InvalidInput);
     }
 
     #[test]
@@ -192,6 +192,6 @@ mod tests {
             }),
         ])
         .expect_err("replace-audio maps the primary video stream and must not follow StripVideo");
-        assert_eq!(err.code, rskit_errors::ErrorCode::InvalidInput);
+        assert_eq!(err.code(), rskit_errors::ErrorCode::InvalidInput);
     }
 }

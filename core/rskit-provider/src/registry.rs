@@ -141,7 +141,7 @@ mod tests {
     fn resolve_unknown_operation_returns_not_found() {
         let reg = Registry::<&str>::new();
         let err = reg.resolve("nonexistent", "free").unwrap_err();
-        assert_eq!(err.code, ErrorCode::NotFound);
+        assert_eq!(err.code(), ErrorCode::NotFound);
     }
 
     #[test]
@@ -155,7 +155,7 @@ mod tests {
         });
 
         let err = reg.resolve("export", "free").unwrap_err();
-        assert_eq!(err.code, ErrorCode::NotFound);
+        assert_eq!(err.code(), ErrorCode::NotFound);
     }
 
     #[test]

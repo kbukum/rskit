@@ -160,10 +160,10 @@ mod tests {
 
         let error = workspace.fixture_path("message.txt").unwrap_err();
 
-        assert_eq!(error.code, ErrorCode::InvalidInput);
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
         assert!(
             error
-                .message
+                .message()
                 .contains("fixture directory is not configured")
         );
     }
@@ -177,6 +177,6 @@ mod tests {
             .fixture_path(Path::new("../escape.txt"))
             .unwrap_err();
 
-        assert_eq!(error.code, ErrorCode::InvalidInput);
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
     }
 }

@@ -91,9 +91,9 @@ impl ErrorRenderer {
     /// Render an error and return the matching CLI exit code.
     #[must_use]
     pub fn render(&self, error: &AppError) -> (String, ExitCode) {
-        let exit_code = ExitCode::from(error.code);
+        let exit_code = ExitCode::from(error.code());
         let rendered = match self.format {
-            OutputFormat::Text => format!("error[{}]: {}", error.code, error.message),
+            OutputFormat::Text => format!("error[{}]: {}", error.code(), error.message()),
             OutputFormat::Json => serde_json::to_string(&ErrorEnvelope::new(error, exit_code))
                 .unwrap_or_else(|_| fallback_json(error, exit_code)),
             OutputFormat::Yaml => serde_norway::to_string(&ErrorEnvelope::new(error, exit_code))
@@ -123,12 +123,12 @@ struct ErrorEnvelope<'a> {
 impl<'a> ErrorEnvelope<'a> {
     fn new(error: &'a AppError, exit_code: ExitCode) -> Self {
         Self {
-            code: error.code,
-            message: &error.message,
-            retryable: error.retryable,
-            http_status: error.http_status.as_u16(),
+            code: error.code(),
+            message: error.message(),
+            retryable: error.is_retryable(),
+            http_status: error.http_status().as_u16(),
             exit_code: exit_code.as_i32(),
-            details: error.details.clone().into_iter().collect(),
+            details: error.details().clone().into_iter().collect(),
         }
     }
 }
@@ -136,8 +136,8 @@ impl<'a> ErrorEnvelope<'a> {
 fn fallback_json(error: &AppError, exit_code: ExitCode) -> String {
     format!(
         r#"{{"code":"{}","message":{},"exit_code":{}}}"#,
-        error.code,
-        serde_json::Value::String(error.message.clone()),
+        error.code(),
+        serde_json::Value::String(error.message().to_string()),
         exit_code.as_i32()
     )
 }
@@ -145,8 +145,8 @@ fn fallback_json(error: &AppError, exit_code: ExitCode) -> String {
 fn fallback_yaml(error: &AppError, exit_code: ExitCode) -> String {
     format!(
         "code: {}\nmessage: {}\nexit_code: {}\n",
-        error.code,
-        serde_json::Value::String(error.message.clone()),
+        error.code(),
+        serde_json::Value::String(error.message().to_string()),
         exit_code.as_i32()
     )
 }

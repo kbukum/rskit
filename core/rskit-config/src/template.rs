@@ -172,21 +172,21 @@ mod tests {
     fn rejects_unknown_placeholders() {
         let error = Template::parse("{project.root}", TOKENS).expect_err("unknown fails");
 
-        assert!(error.message.contains("unknown placeholder"));
+        assert!(error.message().contains("unknown placeholder"));
     }
 
     #[test]
     fn rejects_unclosed_placeholders() {
         let error = Template::parse("cargo {name", TOKENS).expect_err("unclosed fails");
 
-        assert!(error.message.contains("unclosed placeholder"));
+        assert!(error.message().contains("unclosed placeholder"));
     }
 
     #[test]
     fn rejects_empty_placeholders() {
         let error = Template::parse("{}", TOKENS).expect_err("empty fails");
 
-        assert!(error.message.contains("placeholder cannot be empty"));
+        assert!(error.message().contains("placeholder cannot be empty"));
     }
 
     #[test]
@@ -194,7 +194,7 @@ mod tests {
         let error =
             Template::parse("cargo } {name}", TOKENS).expect_err("closing brace should fail");
 
-        assert!(error.message.contains("unmatched closing"));
+        assert!(error.message().contains("unmatched closing"));
     }
 
     #[test]

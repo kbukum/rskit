@@ -268,7 +268,7 @@ mod tests {
             .await;
 
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().code, ErrorCode::Timeout);
+        assert_eq!(result.unwrap_err().code(), ErrorCode::Timeout);
         assert!(attempts.load(Ordering::SeqCst) < 5);
     }
 

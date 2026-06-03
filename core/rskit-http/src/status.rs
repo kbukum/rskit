@@ -23,8 +23,11 @@ pub fn status_to_error_code(status: StatusCode) -> ErrorCode {
         404 => ErrorCode::NotFound,
         409 => ErrorCode::Conflict,
         429 => ErrorCode::RateLimited,
-        499 => ErrorCode::Cancelled,
-        500 | 502 | 503 | 504 => ErrorCode::Internal,
+        408 => ErrorCode::Cancelled,
+        500 => ErrorCode::Internal,
+        502 => ErrorCode::ExternalService,
+        503 => ErrorCode::ServiceUnavailable,
+        504 => ErrorCode::Timeout,
         _ if status.is_client_error() || status.is_server_error() => ErrorCode::ExternalService,
         _ => ErrorCode::Internal,
     }
@@ -39,7 +42,7 @@ pub fn is_success_status(status: StatusCode) -> bool {
 /// Return the HTTP status code carried by an [`AppError`].
 #[must_use]
 pub fn app_error_status(error: &AppError) -> StatusCode {
-    StatusCode::from_u16(error.http_status.as_u16()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
+    error.http_status()
 }
 
 #[cfg(test)]
@@ -62,8 +65,38 @@ mod tests {
         );
         assert_eq!(
             status_to_error_code(StatusCode::BAD_GATEWAY),
+            ErrorCode::ExternalService
+        );
+        assert_eq!(
+            status_to_error_code(StatusCode::SERVICE_UNAVAILABLE),
+            ErrorCode::ServiceUnavailable
+        );
+        assert_eq!(
+            status_to_error_code(StatusCode::GATEWAY_TIMEOUT),
+            ErrorCode::Timeout
+        );
+        assert_eq!(
+            status_to_error_code(StatusCode::INTERNAL_SERVER_ERROR),
             ErrorCode::Internal
         );
+    }
+
+    #[test]
+    fn canonical_server_statuses_round_trip_through_error_code() {
+        for code in [
+            ErrorCode::ServiceUnavailable,
+            ErrorCode::Timeout,
+            ErrorCode::ExternalService,
+            ErrorCode::Internal,
+        ] {
+            assert_eq!(status_to_error_code(code.http_status()), code);
+        }
+    }
+
+    #[test]
+    fn cancelled_status_round_trips_through_error_code() {
+        let status = ErrorCode::Cancelled.http_status();
+        assert_eq!(status_to_error_code(status), ErrorCode::Cancelled);
     }
 
     #[test]
