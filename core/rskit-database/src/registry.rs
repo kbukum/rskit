@@ -119,7 +119,7 @@ mod tests {
 
         let err = registry.build(&config).await.err().unwrap();
 
-        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
     }
 
     #[tokio::test]

@@ -443,7 +443,7 @@ mod tests {
         let err = registry
             .register(stub("", Envelope::default()))
             .expect_err("empty name rejected");
-        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
     }
 
     #[tokio::test]
@@ -467,7 +467,7 @@ mod tests {
             )
             .await
             .expect_err("sensitive call denied");
-        assert_eq!(err.code, ErrorCode::Forbidden);
+        assert_eq!(err.code(), ErrorCode::Forbidden);
     }
 
     #[tokio::test]
@@ -509,7 +509,7 @@ mod tests {
             .call("any", &ctx, ToolInput::new(json!({"msg": "x"})).unwrap())
             .await
             .expect_err("denied by human approval default");
-        assert_eq!(err.code, ErrorCode::Forbidden);
+        assert_eq!(err.code(), ErrorCode::Forbidden);
     }
 
     #[tokio::test]

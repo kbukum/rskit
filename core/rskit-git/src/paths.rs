@@ -112,7 +112,7 @@ mod tests {
         let error = join_repo_path(std::path::Path::new("repo"), std::path::Path::new("/tmp/x"))
             .expect_err("absolute paths escape the repository prefix");
 
-        assert!(error.message.contains("path must be relative"));
+        assert!(error.message().contains("path must be relative"));
     }
 
     #[test]
@@ -120,7 +120,7 @@ mod tests {
         let error = join_repo_path(std::path::Path::new("repo"), std::path::Path::new("../x"))
             .expect_err("parent traversal escapes the repository prefix");
 
-        assert!(error.message.contains("must not contain '..'"));
+        assert!(error.message().contains("must not contain '..'"));
     }
 
     #[test]
@@ -128,6 +128,6 @@ mod tests {
         let error = join_repo_path(std::path::Path::new("../repo"), std::path::Path::new("x"))
             .expect_err("prefix must also be repository relative");
 
-        assert!(error.message.contains("must not contain '..'"));
+        assert!(error.message().contains("must not contain '..'"));
     }
 }

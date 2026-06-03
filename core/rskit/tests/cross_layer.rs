@@ -123,8 +123,11 @@ async fn errors_resilience_circuit_breaker_preserves_error_code() {
             .execute(|| async { Err(AppError::service_unavailable("database")) })
             .await;
         let err = result.unwrap_err();
-        assert_eq!(err.code, ErrorCode::ServiceUnavailable);
-        assert!(err.retryable, "SERVICE_UNAVAILABLE should be retryable");
+        assert_eq!(err.code(), ErrorCode::ServiceUnavailable);
+        assert!(
+            err.is_retryable(),
+            "SERVICE_UNAVAILABLE should be retryable"
+        );
     }
 
     assert_eq!(cb.state(), CbState::Open);
@@ -180,7 +183,7 @@ async fn errors_resilience_various_error_codes_through_breaker() {
             .execute(move || async move { Err(AppError::new(c, "test error")) })
             .await;
         let err = result.unwrap_err();
-        assert_eq!(err.code, c, "error code should be preserved through CB");
+        assert_eq!(err.code(), c, "error code should be preserved through CB");
     }
 }
 
@@ -325,8 +328,8 @@ fn validation_errors_produces_correct_app_error() {
         .validate();
 
     let err = result.unwrap_err();
-    assert_eq!(err.code, ErrorCode::InvalidInput);
-    assert_eq!(err.http_status, http::StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(err.code(), ErrorCode::InvalidInput);
+    assert_eq!(err.http_status(), http::StatusCode::UNPROCESSABLE_ENTITY);
 }
 
 #[test]
@@ -339,7 +342,7 @@ fn validation_errors_multiple_fields() {
 
     assert!(result.is_err());
     let err = result.unwrap_err();
-    assert_eq!(err.code, ErrorCode::InvalidInput);
+    assert_eq!(err.code(), ErrorCode::InvalidInput);
 }
 
 #[test]
@@ -688,7 +691,7 @@ async fn errors_validation_pipeline_integration() {
     assert!(validated[2].is_ok());
 
     if let Err(ref err) = validated[1] {
-        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
     }
 }
 
@@ -741,12 +744,12 @@ fn error_fluent_builder_integration() {
         .with_detail("search_field", "email")
         .with_detail("attempted_at", "2024-01-01");
 
-    assert_eq!(err.code, ErrorCode::NotFound);
-    assert_eq!(err.http_status, http::StatusCode::NOT_FOUND);
-    assert!(!err.retryable);
+    assert_eq!(err.code(), ErrorCode::NotFound);
+    assert_eq!(err.http_status(), http::StatusCode::NOT_FOUND);
+    assert!(!err.is_retryable());
 
-    assert_eq!(err.details["search_field"], "email");
-    assert_eq!(err.details["attempted_at"], "2024-01-01");
+    assert_eq!(err.details()["search_field"], "email");
+    assert_eq!(err.details()["attempted_at"], "2024-01-01");
 }
 
 #[test]

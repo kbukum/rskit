@@ -262,7 +262,7 @@ mod tests {
 
         // Task 2 should have been dropped with a RateLimited error.
         let dropped_error = second.result().await.unwrap_err();
-        assert_eq!(dropped_error.code, ErrorCode::RateLimited);
+        assert_eq!(dropped_error.code(), ErrorCode::RateLimited);
 
         // Release task 1 so task 3 can run.
         release.notify_waiters();

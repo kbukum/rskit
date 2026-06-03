@@ -160,7 +160,7 @@ mod tests {
         let rl = RateLimiter::new("test", 1, 1).unwrap();
         let _ = rl.check();
         let err = rl.check().unwrap_err();
-        assert_eq!(err.code, ErrorCode::RateLimited);
+        assert_eq!(err.code(), ErrorCode::RateLimited);
     }
 
     #[tokio::test]

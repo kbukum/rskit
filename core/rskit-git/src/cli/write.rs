@@ -265,10 +265,10 @@ fn parse_stash_entry(backend: &GitCli, line: &str) -> AppResult<StashEntry> {
 
 fn conflict_stderr(error: &AppError) -> Option<String> {
     error
-        .cause
+        .cause()
         .as_ref()
         .map(|cause| cause.to_string())
-        .or_else(|| Some(error.message.clone()))
+        .or_else(|| Some(error.message().to_string()))
 }
 
 fn parse_conflict_paths(backend: &GitCli) -> Vec<String> {

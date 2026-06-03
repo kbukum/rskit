@@ -17,8 +17,8 @@ fn required_fails_for_empty_string() {
         .required("name", "")
         .validate()
         .unwrap_err();
-    assert_eq!(err.code, rskit_errors::ErrorCode::InvalidInput);
-    assert!(err.message.contains("name"));
+    assert_eq!(err.code(), rskit_errors::ErrorCode::InvalidInput);
+    assert!(err.message().contains("name"));
 }
 
 #[test]
@@ -27,7 +27,7 @@ fn required_fails_for_whitespace_only() {
         .required("name", "   ")
         .validate()
         .unwrap_err();
-    assert!(err.message.contains("name"));
+    assert!(err.message().contains("name"));
 }
 
 #[test]
@@ -36,7 +36,7 @@ fn required_fails_for_tab_and_newline() {
         .required("name", "\t\n\r")
         .validate()
         .unwrap_err();
-    assert!(err.message.contains("is required"));
+    assert!(err.message().contains("is required"));
 }
 
 #[test]
@@ -64,8 +64,8 @@ fn min_length_fails_below_boundary() {
         .min_length("pw", "ab", 3)
         .validate()
         .unwrap_err();
-    assert!(err.message.contains("pw"));
-    assert!(err.message.contains("at least 3"));
+    assert!(err.message().contains("pw"));
+    assert!(err.message().contains("at least 3"));
 }
 
 #[test]
@@ -104,8 +104,8 @@ fn max_length_fails_above_boundary() {
         .max_length("bio", "abcd", 3)
         .validate()
         .unwrap_err();
-    assert!(err.message.contains("bio"));
-    assert!(err.message.contains("at most 3"));
+    assert!(err.message().contains("bio"));
+    assert!(err.message().contains("at most 3"));
 }
 
 #[test]
@@ -183,7 +183,7 @@ fn email_fails_for_missing_at() {
         .email("email", "userexample.com")
         .validate()
         .unwrap_err();
-    assert!(err.message.contains("email"));
+    assert!(err.message().contains("email"));
 }
 
 #[test]
@@ -310,8 +310,8 @@ fn pattern_fails_when_value_does_not_match() {
         .pattern("zip", "9021", r"^\d{5}$")
         .validate()
         .unwrap_err();
-    assert!(err.message.contains("zip"));
-    assert!(err.message.contains("must match pattern"));
+    assert!(err.message().contains("zip"));
+    assert!(err.message().contains("must match pattern"));
 }
 
 #[test]
@@ -320,8 +320,8 @@ fn pattern_fails_with_invalid_regex() {
         .pattern("f", "value", "[invalid")
         .validate()
         .unwrap_err();
-    assert!(err.message.contains("f"));
-    assert!(err.message.contains("invalid pattern:"));
+    assert!(err.message().contains("f"));
+    assert!(err.message().contains("invalid pattern:"));
 }
 
 #[test]
@@ -359,8 +359,8 @@ fn one_of_fails_for_invalid_value() {
         .one_of("role", &"superuser", &["admin", "user", "guest"])
         .validate()
         .unwrap_err();
-    assert!(err.message.contains("role"));
-    assert!(err.message.contains("must be one of"));
+    assert!(err.message().contains("role"));
+    assert!(err.message().contains("must be one of"));
 }
 
 #[test]
@@ -396,9 +396,9 @@ fn one_of_error_message_lists_allowed_values() {
         .one_of("color", &"pink", &["red", "green", "blue"])
         .validate()
         .unwrap_err();
-    assert!(err.message.contains("red"));
-    assert!(err.message.contains("green"));
-    assert!(err.message.contains("blue"));
+    assert!(err.message().contains("red"));
+    assert!(err.message().contains("green"));
+    assert!(err.message().contains("blue"));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -441,8 +441,8 @@ fn in_range_fails_below_min() {
         .in_range("age", 0, 1, 120)
         .validate()
         .unwrap_err();
-    assert!(err.message.contains("age"));
-    assert!(err.message.contains("between 1 and 120"));
+    assert!(err.message().contains("age"));
+    assert!(err.message().contains("between 1 and 120"));
 }
 
 #[test]
@@ -513,8 +513,8 @@ fn required_uuid_fails_for_invalid() {
         .required_uuid("id", "not-a-uuid")
         .validate()
         .unwrap_err();
-    assert!(err.message.contains("id"));
-    assert!(err.message.contains("valid UUID"));
+    assert!(err.message().contains("id"));
+    assert!(err.message().contains("valid UUID"));
 }
 
 #[test]
@@ -548,7 +548,7 @@ fn optional_uuid_fails_for_invalid_some() {
         .optional_uuid("id", Some("garbage"))
         .validate()
         .unwrap_err();
-    assert!(err.message.contains("id"));
+    assert!(err.message().contains("id"));
 }
 
 #[test]
@@ -596,8 +596,8 @@ fn before_fails_when_value_is_after_deadline() {
         .before("start", "2026-01-01T00:00:00Z", "2025-01-01T00:00:00Z")
         .validate()
         .unwrap_err();
-    assert!(err.message.contains("start"));
-    assert!(err.message.contains("must be before"));
+    assert!(err.message().contains("start"));
+    assert!(err.message().contains("must be before"));
 }
 
 #[test]
@@ -606,7 +606,7 @@ fn before_fails_for_invalid_datetime() {
         .before("start", "not-a-date", "2025-01-01T00:00:00Z")
         .validate()
         .unwrap_err();
-    assert!(err.message.contains("valid datetime"));
+    assert!(err.message().contains("valid datetime"));
 }
 
 #[test]
@@ -635,8 +635,8 @@ fn after_fails_when_value_is_before_floor() {
         .after("end", "2024-01-01T00:00:00Z", "2025-01-01T00:00:00Z")
         .validate()
         .unwrap_err();
-    assert!(err.message.contains("end"));
-    assert!(err.message.contains("must be after"));
+    assert!(err.message().contains("end"));
+    assert!(err.message().contains("must be after"));
 }
 
 #[test]
@@ -645,7 +645,7 @@ fn after_fails_for_invalid_datetime() {
         .after("end", "garbage", "2025-01-01T00:00:00Z")
         .validate()
         .unwrap_err();
-    assert!(err.message.contains("valid datetime"));
+    assert!(err.message().contains("valid datetime"));
 }
 
 #[test]
@@ -689,8 +689,8 @@ fn custom_fails_when_check_is_false() {
         .custom(false, "tos", "must accept terms")
         .validate()
         .unwrap_err();
-    assert!(err.message.contains("tos"));
-    assert!(err.message.contains("must accept terms"));
+    assert!(err.message().contains("tos"));
+    assert!(err.message().contains("must accept terms"));
 }
 
 #[test]
@@ -701,7 +701,7 @@ fn custom_enables_arbitrary_domain_logic() {
         .custom(has_digit, "password", "must contain a digit")
         .validate()
         .unwrap_err();
-    assert!(err.message.contains("must contain a digit"));
+    assert!(err.message().contains("must contain a digit"));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -818,10 +818,10 @@ fn validate_collects_multiple_field_errors() {
     assert_eq!(v.errors().len(), 3);
 
     let err = v.validate().unwrap_err();
-    assert_eq!(err.code, rskit_errors::ErrorCode::InvalidInput);
-    assert!(err.message.contains("name"));
-    assert!(err.message.contains("email"));
-    assert!(err.message.contains("pw"));
+    assert_eq!(err.code(), rskit_errors::ErrorCode::InvalidInput);
+    assert!(err.message().contains("name"));
+    assert!(err.message().contains("email"));
+    assert!(err.message().contains("pw"));
 }
 
 #[test]
@@ -832,7 +832,7 @@ fn validate_error_message_joins_with_semicolons() {
         .validate()
         .unwrap_err();
     // The message format is "field: msg; field: msg"
-    assert!(err.message.contains("; "));
+    assert!(err.message().contains("; "));
 }
 
 #[test]
@@ -867,7 +867,7 @@ fn many_errors_all_appear_in_message() {
     }
     let err = v.validate().unwrap_err();
     for i in 0..10 {
-        assert!(err.message.contains(&format!("field_{i}")));
+        assert!(err.message().contains(&format!("field_{i}")));
     }
 }
 
@@ -916,7 +916,7 @@ fn html_injection_in_field_name_is_preserved_literally() {
         .validate()
         .unwrap_err();
     // The field name must pass through literally, not be interpreted
-    assert!(err.message.contains("<script>alert(1)</script>"));
+    assert!(err.message().contains("<script>alert(1)</script>"));
 }
 
 #[test]
@@ -925,7 +925,7 @@ fn sql_injection_in_field_name_is_preserved_literally() {
         .required("'; DROP TABLE users; --", "")
         .validate()
         .unwrap_err();
-    assert!(err.message.contains("'; DROP TABLE users; --"));
+    assert!(err.message().contains("'; DROP TABLE users; --"));
 }
 
 #[test]
@@ -934,7 +934,7 @@ fn custom_message_with_injection_payloads() {
         .custom(false, "f", "<img onerror=alert(1) src=x>")
         .validate()
         .unwrap_err();
-    assert!(err.message.contains("<img onerror=alert(1) src=x>"));
+    assert!(err.message().contains("<img onerror=alert(1) src=x>"));
 }
 
 #[test]
@@ -943,7 +943,7 @@ fn null_bytes_in_field_name() {
         .required("field\0name", "")
         .validate()
         .unwrap_err();
-    assert!(err.message.contains("field\0name"));
+    assert!(err.message().contains("field\0name"));
 }
 
 #[test]
@@ -953,7 +953,7 @@ fn extremely_long_field_name_does_not_panic() {
         .required(&long_name, "")
         .validate()
         .unwrap_err();
-    assert!(err.message.contains(&long_name));
+    assert!(err.message().contains(&long_name));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1055,7 +1055,7 @@ fn unicode_field_names_work() {
         .required("名前", "")
         .validate()
         .unwrap_err();
-    assert!(err.message.contains("名前"));
+    assert!(err.message().contains("名前"));
 }
 
 #[test]
@@ -1206,11 +1206,11 @@ fn realistic_user_registration_validation_fails() {
         .validate()
         .unwrap_err();
 
-    assert_eq!(err.code, rskit_errors::ErrorCode::InvalidInput);
-    assert!(err.message.contains("username"));
-    assert!(err.message.contains("email"));
-    assert!(err.message.contains("password"));
-    assert!(err.message.contains("age"));
+    assert_eq!(err.code(), rskit_errors::ErrorCode::InvalidInput);
+    assert!(err.message().contains("username"));
+    assert!(err.message().contains("email"));
+    assert!(err.message().contains("password"));
+    assert!(err.message().contains("age"));
 }
 
 #[test]
@@ -1219,7 +1219,7 @@ fn validate_error_has_correct_http_status() {
         .required("name", "")
         .validate()
         .unwrap_err();
-    assert_eq!(err.http_status.as_u16(), 422); // UNPROCESSABLE_ENTITY
+    assert_eq!(err.http_status().as_u16(), 422); // UNPROCESSABLE_ENTITY
 }
 
 #[test]
@@ -1228,5 +1228,5 @@ fn validate_error_is_not_retryable() {
         .required("name", "")
         .validate()
         .unwrap_err();
-    assert!(!err.retryable);
+    assert!(!err.is_retryable());
 }

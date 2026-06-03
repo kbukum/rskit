@@ -39,7 +39,7 @@ pub fn is_success_status(status: StatusCode) -> bool {
 /// Return the HTTP status code carried by an [`AppError`].
 #[must_use]
 pub fn app_error_status(error: &AppError) -> StatusCode {
-    StatusCode::from_u16(error.http_status.as_u16()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
+    StatusCode::from_u16(error.http_status().as_u16()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
 }
 
 #[cfg(test)]

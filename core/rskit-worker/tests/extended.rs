@@ -226,7 +226,7 @@ async fn pool_shutdown_fails_dequeued_but_unscheduled_task() {
         .await
         .expect("handle.result() must not hang after shutdown")
         .expect_err("dequeued task must fail with ServiceUnavailable");
-    assert_eq!(err.code, ErrorCode::ServiceUnavailable);
+    assert_eq!(err.code(), ErrorCode::ServiceUnavailable);
 }
 
 // Regression: passing size=0 to the config used to silently install a
@@ -259,7 +259,7 @@ async fn reject_policy_reports_shutdown_as_service_unavailable() {
         Ok(_) => panic!("closed pool must reject as ServiceUnavailable"),
         Err(err) => err,
     };
-    assert_eq!(err.code, ErrorCode::ServiceUnavailable);
+    assert_eq!(err.code(), ErrorCode::ServiceUnavailable);
 }
 
 #[tokio::test]

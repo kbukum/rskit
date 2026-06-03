@@ -182,7 +182,7 @@ pub fn tool_result_to_call_result(result: &ToolResult) -> CallToolResult {
 pub fn app_error_to_mcp_error(err: &rskit_errors::AppError) -> ErrorData {
     ErrorData::new(
         rmcp::model::ErrorCode::INTERNAL_ERROR,
-        err.message.clone(),
+        err.message().to_string(),
         None,
     )
 }

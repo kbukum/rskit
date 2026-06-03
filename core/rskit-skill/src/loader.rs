@@ -352,13 +352,13 @@ fn bounded_read_error(path: &Path, limit_bytes: u64, error: AppError) -> SkillEr
 }
 
 fn fs_error(path: &Path, error: AppError) -> SkillError {
-    if error.code == ErrorCode::InvalidInput {
+    if error.code() == ErrorCode::InvalidInput {
         if sync_io::file::is_symlink_not_allowed_error(&error) {
             invalid_pack_file(path, "symlinks are not allowed")
         } else if sync_io::file::is_not_regular_file_error(&error) {
             invalid_pack_file(path, "expected regular file")
         } else {
-            invalid_pack_file(path, error.message)
+            invalid_pack_file(path, error.message())
         }
     } else {
         SkillError::Io {

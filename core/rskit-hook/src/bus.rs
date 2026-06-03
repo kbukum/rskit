@@ -186,7 +186,7 @@ mod tests {
         let _ = bus.publish(Ping(1)).expect("first");
         let _ = bus.publish(Ping(2)).expect("second");
         let err = subscriber.recv().await.expect_err("lag should be reported");
-        assert_eq!(err.code, rskit_errors::ErrorCode::RateLimited);
+        assert_eq!(err.code(), rskit_errors::ErrorCode::RateLimited);
     }
 
     #[test]

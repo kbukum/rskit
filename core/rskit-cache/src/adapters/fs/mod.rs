@@ -420,7 +420,7 @@ mod tests {
             .await
             .expect_err("oversized entries must be rejected");
 
-        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
         let _ = tokio::fs::remove_dir_all(root).await;
     }
 
@@ -442,7 +442,7 @@ mod tests {
             .await
             .expect_err("oversized entry files must be rejected");
 
-        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
         let _ = tokio::fs::remove_dir_all(root).await;
     }
 
@@ -456,7 +456,7 @@ mod tests {
             .await
             .expect_err("zero TTL must be rejected");
 
-        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
         let _ = tokio::fs::remove_dir_all(root).await;
     }
 

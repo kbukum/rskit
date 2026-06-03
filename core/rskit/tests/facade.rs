@@ -12,7 +12,7 @@ use tokio_util::sync::CancellationToken;
 #[test]
 fn error_code_accessible_from_facade() {
     let error = AppError::new(ErrorCode::NotFound, "not found");
-    assert_eq!(error.code, ErrorCode::NotFound);
+    assert_eq!(error.code(), ErrorCode::NotFound);
     assert!(!error.is_retryable());
 }
 

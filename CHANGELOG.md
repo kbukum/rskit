@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Breaking
+- **rskit-errors**: `AppError` fields (`code`, `message`, `retryable`,
+  `http_status`, `details`, `cause`) are now private to guarantee that the
+  HTTP status and retry hint stay consistent with the error code. Use the
+  existing getter methods (`code()`, `message()`, `is_retryable()`,
+  `http_status()`, `details()`, `cause()`) for read access and the `with_*`
+  builders for construction.
+- **rskit-errors**: removed the redundant `AppError::wrap()` alias; use
+  `AppError::internal(msg).with_cause(err)` (or the `From` conversions) instead.
 - **rskit-process**: `ProcessResult` is now non-exhaustive and includes
   cancellation metadata; downstream crates should construct values with
   `ProcessResult::completed`.
@@ -17,6 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   layers directly.
 
 ### Changed — Cross-Cutting
+- **rskit-errors**: `From<std::io::Error>` now maps common `io::ErrorKind`s to
+  their semantic `ErrorCode` (e.g. `NotFound` → 404, `PermissionDenied` →
+  `Forbidden`, `TimedOut` → `Timeout`) instead of collapsing everything to
+  `Internal`, and the `From` conversions now preserve the source error as the
+  cause. Dropped the unused `thiserror` dependency.
 - **L9 infrastructure**: made the `rskit` facade a pure re-export layer,
   aligned facade feature flags with available crates, routed CLI-backed Git
   commands through `rskit-process`, standardized CLI error/output rendering,

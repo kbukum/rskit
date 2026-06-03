@@ -175,7 +175,7 @@ mod tests {
             .await
             .expect_err("TTL overflow must be rejected");
 
-        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
         assert!(err.to_string().contains("too large"));
     }
 

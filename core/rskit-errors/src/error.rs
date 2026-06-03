@@ -9,20 +9,28 @@ use crate::code::ErrorCode;
 /// Carries a machine-readable [`ErrorCode`], a human-readable message,
 /// optional key→value details for rich error responses, and an optional
 /// cause chain compatible with `std::error::Error`.
+///
+/// Fields are private to preserve the invariant that `http_status` and
+/// `retryable` stay consistent with `code`; read access is via the getter
+/// methods and mutation via the `with_*` builders.
+///
+/// `details` deliberately uses [`serde_json::Value`]: it models RFC 9457
+/// problem-detail *extension members*, which are by definition arbitrary JSON
+/// and cannot be given a closed type without losing that openness.
 #[derive(Debug)]
 pub struct AppError {
     /// Machine-readable error classification.
-    pub code: ErrorCode,
+    code: ErrorCode,
     /// Human-readable description of the error.
-    pub message: String,
+    message: String,
     /// Whether the operation that produced this error is safe to retry.
-    pub retryable: bool,
+    retryable: bool,
     /// Canonical HTTP status code for this error.
-    pub http_status: http::StatusCode,
+    http_status: http::StatusCode,
     /// Arbitrary key-value pairs for rich error responses.
-    pub details: HashMap<String, Value>,
+    details: HashMap<String, Value>,
     /// Optional underlying error that caused this one.
-    pub cause: Option<Box<dyn std::error::Error + Send + Sync + 'static>>,
+    cause: Option<Box<dyn std::error::Error + Send + Sync + 'static>>,
 }
 
 impl std::fmt::Display for AppError {
@@ -216,11 +224,6 @@ impl AppError {
             .with_detail("service", svc)
     }
 
-    /// Wrap any error as an internal AppError.
-    pub fn wrap(err: impl std::error::Error + Send + Sync + 'static) -> Self {
-        Self::internal(err)
-    }
-
     /// Create a `Cancelled` error for the named operation.
     pub fn cancelled(operation: impl Into<String>) -> Self {
         let op = operation.into();
@@ -242,7 +245,7 @@ impl AppError {
     /// # use rskit_errors::{AppError, ErrorCode};
     /// let err = AppError::new(ErrorCode::NotFound, "user not found")
     ///     .context("load profile");
-    /// assert_eq!(err.message, "load profile: user not found");
+    /// assert_eq!(err.message(), "load profile: user not found");
     /// ```
     #[must_use]
     pub fn context(mut self, msg: impl Into<String>) -> Self {

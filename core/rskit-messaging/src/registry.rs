@@ -160,7 +160,7 @@ mod tests {
 
         let err = crate::memory::register(&mut registry, broker).unwrap_err();
 
-        assert_eq!(err.code, ErrorCode::AlreadyExists);
+        assert_eq!(err.code(), ErrorCode::AlreadyExists);
     }
 
     #[test]
@@ -175,7 +175,7 @@ mod tests {
             .register_backend(" ", Arc::new(factory))
             .expect_err("blank adapter must fail");
 
-        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
     }
 
     #[test]

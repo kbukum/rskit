@@ -612,7 +612,7 @@ mod tests {
             .start_all()
             .await
             .expect_err("slow component should time out");
-        assert_eq!(error.code, rskit_errors::ErrorCode::Timeout);
+        assert_eq!(error.code(), rskit_errors::ErrorCode::Timeout);
         assert_eq!(registry.state("slow"), Some(State::Failed));
     }
 
@@ -718,7 +718,7 @@ mod tests {
         let results = registry.stop_all_detailed().await;
         assert_eq!(results.len(), 1);
         assert_eq!(
-            results[0].error.as_ref().map(|error| error.code),
+            results[0].error.as_ref().map(|error| error.code()),
             Some(rskit_errors::ErrorCode::Timeout)
         );
         assert_eq!(registry.state("slow-stop"), Some(State::Failed));

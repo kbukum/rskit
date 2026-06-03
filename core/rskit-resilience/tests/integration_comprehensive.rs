@@ -247,8 +247,8 @@ async fn cb_service_unavailable_error_format() {
         .execute(|| async { Ok::<i32, AppError>(1) })
         .await
         .unwrap_err();
-    assert_eq!(err.code, ErrorCode::ServiceUnavailable);
-    assert!(err.details.contains_key("circuit_breaker_state"));
+    assert_eq!(err.code(), ErrorCode::ServiceUnavailable);
+    assert!(err.details().contains_key("circuit_breaker_state"));
 }
 
 #[tokio::test]
@@ -338,7 +338,7 @@ async fn retry_all_attempts_exhausted() {
 
     let err = r.unwrap_err();
     assert_eq!(err.attempts, 3);
-    assert_eq!(err.last_error.code, ErrorCode::ConnectionFailed);
+    assert_eq!(err.last_error.code(), ErrorCode::ConnectionFailed);
     assert_eq!(counter.load(Ordering::SeqCst), 3);
 }
 
@@ -349,7 +349,7 @@ async fn retry_if_filter_only_retries_specific_errors() {
         .with_max_attempts(5)
         .with_initial_backoff(Duration::from_millis(1))
         .with_jitter(false)
-        .with_retry_if(|e| e.code == ErrorCode::Timeout);
+        .with_retry_if(|e| e.code() == ErrorCode::Timeout);
 
     let c = counter.clone();
     let r = policy
@@ -379,7 +379,7 @@ async fn retry_on_retry_callback() {
         .with_initial_backoff(Duration::from_millis(1))
         .with_jitter(false)
         .with_on_retry(move |attempt, err| {
-            a.lock().push((attempt, err.message.clone()));
+            a.lock().push((attempt, err.message().to_string()));
         });
 
     let _ = policy
@@ -473,7 +473,7 @@ async fn retry_non_retryable_immediate_failure() {
 
     assert!(r.is_err());
     assert_eq!(counter.load(Ordering::SeqCst), 1);
-    assert_eq!(r.unwrap_err().last_error.code, ErrorCode::NotFound);
+    assert_eq!(r.unwrap_err().last_error.code(), ErrorCode::NotFound);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -537,7 +537,7 @@ async fn bh_overflow_rate_limited_after_timeout() {
         .execute(|| async { Ok::<_, AppError>(()) })
         .await
         .unwrap_err();
-    assert_eq!(err.code, ErrorCode::RateLimited);
+    assert_eq!(err.code(), ErrorCode::RateLimited);
 
     barrier.notify_one();
     let _ = holder.await;
@@ -694,7 +694,7 @@ async fn rl_check_fails_when_exhausted() {
         let _ = rl.check();
     }
     let err = rl.check().unwrap_err();
-    assert_eq!(err.code, ErrorCode::RateLimited);
+    assert_eq!(err.code(), ErrorCode::RateLimited);
 }
 
 #[tokio::test]
@@ -724,7 +724,7 @@ async fn rl_cancellation_token_cancels_until_ready() {
 
     let r = handle.await.unwrap();
     assert!(r.is_err());
-    assert_eq!(r.unwrap_err().code, ErrorCode::ServiceUnavailable);
+    assert_eq!(r.unwrap_err().code(), ErrorCode::ServiceUnavailable);
 }
 
 #[tokio::test]
@@ -818,7 +818,7 @@ async fn layer_cb_opens_on_failures() {
     assert_eq!(cb.state(), CbState::Open);
 
     let err = svc.ready().await.unwrap().call(0).await.unwrap_err();
-    assert_eq!(err.code, ErrorCode::ServiceUnavailable);
+    assert_eq!(err.code(), ErrorCode::ServiceUnavailable);
 }
 
 #[tokio::test]
@@ -849,7 +849,7 @@ async fn layer_bulkhead_limits_concurrency() {
 
     let mut svc2 = svc.clone();
     let err = svc2.ready().await.unwrap().call(0).await.unwrap_err();
-    assert_eq!(err.code, ErrorCode::RateLimited);
+    assert_eq!(err.code(), ErrorCode::RateLimited);
 
     barrier.notify_waiters();
     let _ = h.await;
@@ -869,7 +869,7 @@ async fn layer_rate_limit_limits_rate() {
 
     let r = svc.ready().await.unwrap().call(2).await;
     assert!(r.is_err());
-    assert_eq!(r.unwrap_err().code, ErrorCode::RateLimited);
+    assert_eq!(r.unwrap_err().code(), ErrorCode::RateLimited);
 }
 
 #[tokio::test]
@@ -920,7 +920,7 @@ async fn layer_ordering_rate_limit_then_bulkhead_then_cb_then_retry() {
     let _ = svc.ready().await.unwrap().call(1).await;
     // Second call hits rate limit
     let err = svc.ready().await.unwrap().call(2).await.unwrap_err();
-    assert_eq!(err.code, ErrorCode::RateLimited);
+    assert_eq!(err.code(), ErrorCode::RateLimited);
 }
 
 #[tokio::test]
@@ -943,7 +943,7 @@ async fn layer_error_propagation() {
         .service(svc);
 
     let err = svc.ready().await.unwrap().call(1).await.unwrap_err();
-    assert_eq!(err.code, ErrorCode::NotFound);
+    assert_eq!(err.code(), ErrorCode::NotFound);
 }
 
 #[tokio::test]
@@ -1124,7 +1124,7 @@ async fn multi_error_types_from_each_pattern() {
         .execute(|| async { Ok::<i32, AppError>(1) })
         .await
         .unwrap_err();
-    assert_eq!(cb_err.code, ErrorCode::ServiceUnavailable);
+    assert_eq!(cb_err.code(), ErrorCode::ServiceUnavailable);
 
     // Bulkhead timeout error
     let bh =
@@ -1144,7 +1144,7 @@ async fn multi_error_types_from_each_pattern() {
         .execute(|| async { Ok::<_, AppError>(()) })
         .await
         .unwrap_err();
-    assert_eq!(bh_err.code, ErrorCode::RateLimited);
+    assert_eq!(bh_err.code(), ErrorCode::RateLimited);
     barrier.notify_one();
     let _ = h.await;
 
@@ -1152,7 +1152,7 @@ async fn multi_error_types_from_each_pattern() {
     let rl = RateLimiter::new("err-rl", 1, 1).unwrap();
     let _ = rl.check();
     let rl_err = rl.check().unwrap_err();
-    assert_eq!(rl_err.code, ErrorCode::RateLimited);
+    assert_eq!(rl_err.code(), ErrorCode::RateLimited);
 
     // Retry exhausted error (goes through RetryPolicy directly)
     let policy = RetryPolicy::new()
@@ -1164,5 +1164,5 @@ async fn multi_error_types_from_each_pattern() {
         .await
         .unwrap_err();
     assert_eq!(retry_err.attempts, 2);
-    assert_eq!(retry_err.last_error.code, ErrorCode::ConnectionFailed);
+    assert_eq!(retry_err.last_error.code(), ErrorCode::ConnectionFailed);
 }

@@ -253,7 +253,7 @@ mod tests {
         )
         .unwrap_err();
 
-        assert_eq!(err.code, ErrorCode::NotFound);
+        assert_eq!(err.code(), ErrorCode::NotFound);
     }
 
     #[test]
@@ -326,7 +326,7 @@ mod tests {
         )
         .unwrap_err();
 
-        assert_eq!(err.code, ErrorCode::AlreadyExists);
+        assert_eq!(err.code(), ErrorCode::AlreadyExists);
         assert_eq!(
             std::fs::read_to_string(dest.child("a.txt").unwrap()).unwrap(),
             "old"
@@ -341,7 +341,7 @@ mod tests {
 
         let err = copy_tree(source.path(), &dest, CopyTreeOptions::default()).unwrap_err();
 
-        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
         assert!(!dest.exists());
     }
 
@@ -353,7 +353,7 @@ mod tests {
 
         let err = copy_tree(source.path(), &dest, CopyTreeOptions::default()).unwrap_err();
 
-        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
         assert!(!source.child("dest").unwrap().exists());
     }
 

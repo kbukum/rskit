@@ -212,6 +212,6 @@ mod tests {
 
         let result = RequestResponse::execute(&tool, ()).await;
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().code, ErrorCode::Internal);
+        assert_eq!(result.unwrap_err().code(), ErrorCode::Internal);
     }
 }

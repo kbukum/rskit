@@ -360,7 +360,7 @@ mod tests {
         let error = container
             .resolve::<A>()
             .expect_err("circular dependency should fail");
-        assert!(error.message.contains("circular dependency"));
+        assert!(error.message().contains("circular dependency"));
     }
 
     struct MockCloseable {

@@ -278,7 +278,7 @@ async fn pipe_modes_reject_inherited_stdin() {
         .await
         .expect_err("captured mode should reject inherited stdin");
 
-    assert_eq!(error.code, ErrorCode::InvalidInput);
+    assert_eq!(error.code(), ErrorCode::InvalidInput);
 }
 
 #[tokio::test]
@@ -292,7 +292,7 @@ async fn observed_mode_rejects_inherited_stdin() {
         .await
         .expect_err("observed mode should reject inherited stdin");
 
-    assert_eq!(error.code, ErrorCode::InvalidInput);
+    assert_eq!(error.code(), ErrorCode::InvalidInput);
 }
 
 #[test]
@@ -303,7 +303,7 @@ fn blocking_captured_mode_rejects_inherited_stdin() {
     let error =
         run(&command, &config).expect_err("blocking captured mode should reject inherited stdin");
 
-    assert_eq!(error.code, ErrorCode::InvalidInput);
+    assert_eq!(error.code(), ErrorCode::InvalidInput);
 }
 
 #[tokio::test]

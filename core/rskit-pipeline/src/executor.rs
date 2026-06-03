@@ -214,7 +214,7 @@ mod tests {
             .execute(0, |_| {}, CancellationToken::new())
             .await
             .unwrap_err();
-        assert_eq!(err.code, ErrorCode::Internal);
+        assert_eq!(err.code(), ErrorCode::Internal);
     }
 
     #[tokio::test]
@@ -232,7 +232,7 @@ mod tests {
         token_clone.cancel();
 
         let err = executor.execute(0, |_| {}, token).await.unwrap_err();
-        assert_eq!(err.code, ErrorCode::Cancelled);
+        assert_eq!(err.code(), ErrorCode::Cancelled);
     }
 
     #[tokio::test]

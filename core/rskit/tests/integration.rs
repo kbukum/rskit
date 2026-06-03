@@ -9,7 +9,7 @@ use rskit::{Health, HealthStatus};
 #[test]
 fn errors_accessible_via_facade() {
     let e = AppError::not_found("item", Some("1"));
-    assert_eq!(e.code, ErrorCode::NotFound);
+    assert_eq!(e.code(), ErrorCode::NotFound);
 }
 
 #[test]

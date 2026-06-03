@@ -100,6 +100,6 @@ mod tests {
 
         let _ = service.ready().await.unwrap().call(1).await;
         let error = service.ready().await.unwrap().call(2).await.unwrap_err();
-        assert_eq!(error.code, ErrorCode::RateLimited);
+        assert_eq!(error.code(), ErrorCode::RateLimited);
     }
 }

@@ -115,8 +115,8 @@ mod tests {
             .await
             .unwrap_err();
 
-        assert_eq!(error.code, ErrorCode::Internal);
-        assert!(error.message.contains("fail"));
+        assert_eq!(error.code(), ErrorCode::Internal);
+        assert!(error.message().contains("fail"));
         assert!(cleaned.load(Ordering::SeqCst));
     }
 
@@ -141,10 +141,10 @@ mod tests {
             .await
             .unwrap_err();
 
-        assert_eq!(error.code, ErrorCode::InvalidInput);
-        assert!(error.message.contains("chain step `fail` failed"));
-        assert!(error.message.contains("primary failure"));
-        assert!(error.message.contains("cleanup failure"));
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
+        assert!(error.message().contains("chain step `fail` failed"));
+        assert!(error.message().contains("primary failure"));
+        assert!(error.message().contains("cleanup failure"));
     }
 
     #[tokio::test]
@@ -167,7 +167,7 @@ mod tests {
             .build();
 
         let error = chain.execute(1u32, None, cancel).await.unwrap_err();
-        assert_eq!(error.code, ErrorCode::Cancelled);
+        assert_eq!(error.code(), ErrorCode::Cancelled);
     }
 
     #[tokio::test]

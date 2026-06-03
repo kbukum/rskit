@@ -77,14 +77,14 @@ fn code_to_title(code: ErrorCode) -> String {
 impl From<&AppError> for ProblemDetail {
     fn from(err: &AppError) -> Self {
         Self {
-            error_type: format!("{}{}", type_base_uri(), code_to_kebab(err.code)),
-            title: code_to_title(err.code),
-            status: err.http_status.as_u16(),
-            detail: err.message.clone(),
+            error_type: format!("{}{}", type_base_uri(), code_to_kebab(err.code())),
+            title: code_to_title(err.code()),
+            status: err.http_status().as_u16(),
+            detail: err.message().to_owned(),
             instance: None,
-            code: err.code,
-            retryable: err.retryable,
-            details: err.details.clone(),
+            code: err.code(),
+            retryable: err.is_retryable(),
+            details: err.details().clone(),
         }
     }
 }

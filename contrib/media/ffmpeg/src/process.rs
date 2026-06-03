@@ -126,6 +126,6 @@ mod tests {
 
         let error = ensure_success(&result, "ffmpeg").expect_err("cancelled result fails");
 
-        assert_eq!(error.code, ErrorCode::Cancelled);
+        assert_eq!(error.code(), ErrorCode::Cancelled);
     }
 }

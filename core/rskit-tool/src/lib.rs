@@ -190,7 +190,7 @@ mod tests {
             .await
             .unwrap_err();
 
-        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
         assert!(err.message().contains("invalid tool input"));
     }
 
