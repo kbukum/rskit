@@ -24,6 +24,7 @@ pub mod app_dirs;
 /// Async filesystem operations.
 #[cfg(feature = "async")]
 pub mod async_io;
+pub(crate) mod file_error;
 /// Async hard-link and symbolic-link helpers.
 #[cfg(feature = "async")]
 pub mod link;
