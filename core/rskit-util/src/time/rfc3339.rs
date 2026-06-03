@@ -177,6 +177,36 @@ mod tests {
     }
 
     #[test]
+    fn formats_rfc3339_boundary_years() {
+        assert_eq!(
+            format_rfc3339_datetime(CivilDateTime {
+                date: CivilDate {
+                    year: RFC3339_MIN_YEAR,
+                    month: 1,
+                    day: 1,
+                },
+                hour: 0,
+                minute: 0,
+                second: 0,
+            }),
+            Some("0000-01-01T00:00:00Z".to_owned())
+        );
+        assert_eq!(
+            format_rfc3339_datetime(CivilDateTime {
+                date: CivilDate {
+                    year: RFC3339_MAX_YEAR,
+                    month: 12,
+                    day: 31,
+                },
+                hour: 23,
+                minute: 59,
+                second: 59,
+            }),
+            Some("9999-12-31T23:59:59Z".to_owned())
+        );
+    }
+
+    #[test]
     fn rejects_invalid_datetime_formatting() {
         assert_eq!(
             format_rfc3339_datetime(CivilDateTime {
