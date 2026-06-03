@@ -12,7 +12,7 @@ rskit-version = { path = "../rskit-version" }
 ## Quick Start
 
 ```rust
-use rskit_version::{get_version_info, get_short_version, get_full_version, package_semver};
+use rskit_version::{get_version_info, get_short_version, get_full_version};
 
 fn main() {
     let info = get_version_info();
@@ -23,7 +23,6 @@ fn main() {
 
     println!("{}", get_short_version()); // "0.1.0-a1b2c3d"
     println!("{}", get_full_version());  // "0.1.0-a1b2c3d (built 2024-01-15T10:30:00Z)"
-    println!("{:?}", package_semver());   // Some(Version { major: 0, minor: 1, patch: 0 })
 }
 ```
 
@@ -36,7 +35,7 @@ The `build.rs` script runs at compile time to capture:
 | `version` | `CARGO_PKG_VERSION` from `Cargo.toml` |
 | `git_commit` | `git rev-parse HEAD` |
 | `git_branch` | `git rev-parse --abbrev-ref HEAD` |
-| `build_time` | UTC timestamp at build time (captured as Unix epoch, formatted to RFC 3339) |
+| `build_time` | UTC timestamp at build time |
 | `rust_version` | `rustc --version` |
 
 ## Key Types & Functions
@@ -48,8 +47,6 @@ The `build.rs` script runs at compile time to capture:
 | `get_short_version()` | Returns `version-commit` string |
 | `get_full_version()` | Returns detailed version string with branch and build time |
 | `is_release()` | `true` when version is not `"dev"` and does not contain `"dirty"` |
-| `package_semver()` | Returns the package version parsed as SemVer |
-| `semver` | SemVer parsing and requirement helpers backed by the `semver` crate |
 
 ## Cross-Kit Consistency
 

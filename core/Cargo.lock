@@ -6502,8 +6502,6 @@ dependencies = [
 name = "rskit-version"
 version = "0.1.0"
 dependencies = [
- "rskit-util",
- "semver",
  "serde",
 ]
 

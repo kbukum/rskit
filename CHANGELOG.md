@@ -100,8 +100,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **rskit-util**: redesigned as a domain-free foundation utility crate with no
   internal crate dependencies, covering string casing, safe truncation,
   collection helpers (`chunk`, `group_by`, `index_by`, `partition`), safe
-  environment variable parsing, duration/byte size parsing, UTC civil date/time
-  and RFC 3339 helpers, and stateless mathematical exponential backoff.
+  environment variable parsing, duration/byte size parsing, and stateless
+  mathematical exponential backoff.
 - **rskit-config**: moved `SecretString` and the typed template engine to
   `rskit-util` to clean up layering complexity; downstream users should import
   the canonical `rskit_util` primitives directly.
@@ -111,13 +111,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **rskit-errors**: removed mutable global problem-detail URI configuration and
   standardized cancellation HTTP mapping on `408 Request Timeout`.
 - **rskit-version**: added canonical package-version helpers and routed service
-  defaults/health metadata through them, with SemVer parsing and requirement
-  helpers backed by the `semver` crate.
-- **rskit-version**: hardened build metadata capture — the build timestamp is
-  now computed with std-only logic (no external `date` command) for cross-platform
-  portability, git rerun tracking is resolved via `git rev-parse --absolute-git-dir`
-  so branch commits refresh the captured commit, and detached-HEAD checkouts no
-  longer surface a literal `HEAD` branch.
+  defaults/health metadata through them.
 
 ### Changed — Storage Adapter Boundaries
 - **rskit-storage**: removed the feature-gated GCS backend from the core crate

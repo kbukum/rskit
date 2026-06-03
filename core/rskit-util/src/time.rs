@@ -1,7 +1,29 @@
-//! Duration string parsing and formatting.
+//! Duration string parsing, formatting, and timing execution wrappers.
 
 use crate::parse_decimal_scaled;
-use std::time::Duration;
+use std::time::{Duration, Instant};
+
+/// Runs a synchronous function and returns a tuple containing its return value
+/// and the exact execution time.
+///
+/// # Examples
+///
+/// ```
+/// use rskit_util::time::time_it;
+/// let (result, duration) = time_it(|| {
+///     // perform some work
+///     42
+/// });
+/// assert_eq!(result, 42);
+/// ```
+pub fn time_it<F, T>(f: F) -> (T, Duration)
+where
+    F: FnOnce() -> T,
+{
+    let start = Instant::now();
+    let result = f();
+    (result, start.elapsed())
+}
 
 /// Formats a `Duration` into a human-readable string.
 ///
@@ -13,7 +35,6 @@ use std::time::Duration;
 /// assert_eq!(format_duration(Duration::from_secs(5)), "5.00s");
 /// assert_eq!(format_duration(Duration::from_millis(152)), "152ms");
 /// ```
-#[must_use]
 pub fn format_duration(d: Duration) -> String {
     let secs = d.as_secs_f64();
     if secs >= 3600.0 {
@@ -43,7 +64,6 @@ pub fn format_duration(d: Duration) -> String {
 /// assert_eq!(parse_duration("5s"), Some(Duration::from_secs(5)));
 /// assert_eq!(parse_duration("10m"), Some(Duration::from_secs(600)));
 /// ```
-#[must_use]
 pub fn parse_duration(s: &str) -> Option<Duration> {
     let s = s.trim().to_lowercase();
     let (num_part, unit_part) = s.split_at(s.find(|c: char| c.is_alphabetic()).unwrap_or(s.len()));
@@ -75,6 +95,13 @@ pub fn parse_duration(s: &str) -> Option<Duration> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_time_it() {
+        let (res, elapsed) = time_it(|| 42);
+        assert_eq!(res, 42);
+        assert!(elapsed <= Duration::from_secs(1));
+    }
 
     #[test]
     fn test_format_duration() {

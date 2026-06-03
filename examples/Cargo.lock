@@ -1822,15 +1822,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rskit-util"
-version = "0.1.0"
-dependencies = [
- "serde",
- "subtle",
- "zeroize",
-]
-
-[[package]]
 name = "rskit-validation"
 version = "0.1.0"
 dependencies = [
@@ -1848,8 +1839,6 @@ dependencies = [
 name = "rskit-version"
 version = "0.1.0"
 dependencies = [
- "rskit-util",
- "semver",
  "serde",
 ]
 
