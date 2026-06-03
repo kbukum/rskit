@@ -12,6 +12,17 @@ pub(crate) fn invalid_regex(pattern: impl Into<String>, cause: regex::Error) -> 
         .with_cause(cause)
 }
 
+pub(crate) fn log_file_open(path: impl Into<String>, cause: std::io::Error) -> AppError {
+    let path = path.into();
+    AppError::from(cause)
+        .context("open log output file")
+        .with_detail("path", path)
+}
+
+pub(crate) fn unsupported_output() -> AppError {
+    AppError::invalid_input("logging.output", "unsupported log output type")
+}
+
 #[cfg(feature = "otlp")]
 pub(crate) fn invalid_protocol(protocol: impl Into<String>) -> AppError {
     let protocol = protocol.into();

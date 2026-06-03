@@ -32,18 +32,19 @@ rskit-logging = { version = "0.1", features = ["otlp"] }
 ## Quick Start
 
 ```rust
-use rskit_logging::init_logging;
+use rskit_logging::{LoggingResult, init_logging};
 use rskit_config::LoggingConfig;
 
-fn main() {
+fn main() -> LoggingResult<()> {
     let cfg = LoggingConfig::default();
-    let _guard = init_logging(&cfg);
+    let _guard = init_logging(&cfg)?;
     // _guard must stay alive for the duration of the program
 
     tracing::info!(service = "my-svc", "server started");
 
     // Sensitive data is automatically redacted when using masking init
     // (see Masking section below)
+    Ok(())
 }
 ```
 
@@ -61,11 +62,11 @@ logging:
 
 | Function | Description |
 |----------|-------------|
-| `init_logging(cfg)` | Basic init from `LoggingConfig` |
+| `init_logging(cfg) -> LoggingResult<LoggingGuard>` | Basic init from `LoggingConfig` |
 | `init_logging_env()` | Init from `RUST_LOG` only (no config needed) |
-| `init_logging_with_masking(cfg, masking_cfg)` | Fallible init with sensitive data masking |
-| `init_logging_with_options(cfg, sampling, module_levels, masking)` | Fallible init with sampling + module overrides |
-| `init_logging_full(setup)` | Full init with all features (requires `otlp` feature) |
+| `init_logging_with_masking(cfg, masking_cfg) -> LoggingResult<LoggingGuard>` | Sensitive data masking |
+| `init_logging_with_options(cfg, sampling, module_levels, masking) -> LoggingResult<LoggingGuard>` | Sampling + module overrides |
+| `init_logging_full(setup) -> LoggingResult<LoggingGuard>` | Full init with all features (requires `otlp` feature) |
 
 ### Full Configuration Example
 
@@ -131,7 +132,7 @@ use rskit_config::LoggingConfig;
 
 let cfg = LoggingConfig::default();
 let masking = MaskingConfig::default(); // enabled: true
-let _guard = init_logging_with_masking(&cfg, &masking);
+let _guard = init_logging_with_masking(&cfg, &masking)?;
 
 // Sensitive fields are now redacted in output
 tracing::info!(password = "hunter2", "user login");
@@ -182,7 +183,7 @@ let masking = MaskingConfig {
     value_patterns: vec![r"MYSVC_[A-Za-z0-9]{32}".into()],
     replacement: "[REDACTED]".into(),
 };
-let _guard = init_logging_with_masking(&cfg, &masking);
+let _guard = init_logging_with_masking(&cfg, &masking)?;
 ```
 
 ### Output-Level Masking
@@ -234,7 +235,7 @@ module_levels.insert("sqlx".to_string(), "warn".to_string());
 module_levels.insert("rdkafka".to_string(), "off".to_string());
 module_levels.insert("hyper".to_string(), "error".to_string());
 
-let _guard = init_logging_with_options(&cfg, None, Some(&module_levels), None);
+let _guard = init_logging_with_options(&cfg, None, Some(&module_levels), None)?;
 // Generates filter: "info,hyper=error,rdkafka=off,sqlx=warn"
 ```
 
@@ -391,11 +392,11 @@ fn process_order(id: &str) {
 
 | Function / Type | Description |
 |----------------|-------------|
-| `init_logging(cfg)` | Basic subscriber init |
+| `init_logging(cfg) -> LoggingResult<LoggingGuard>` | Basic subscriber init |
 | `init_logging_env()` | Init from `RUST_LOG` only |
-| `init_logging_with_masking(cfg, masking)` | Fallible init with output masking |
-| `init_logging_with_options(cfg, sampling, modules, masking)` | Fallible init with sampling + module levels |
-| `init_logging_full(setup)` | Full init with OTLP (`otlp` feature) |
+| `init_logging_with_masking(cfg, masking) -> LoggingResult<LoggingGuard>` | Output masking |
+| `init_logging_with_options(cfg, sampling, modules, masking) -> LoggingResult<LoggingGuard>` | Sampling + module levels |
+| `init_logging_full(setup) -> LoggingResult<LoggingGuard>` | Full init with OTLP (`otlp` feature) |
 | `LoggingGuard` | Drop guard — hold for program lifetime |
 | `MaskingConfig` | Masking configuration |
 | `DefaultMasker` | Built-in masker with PII/secret patterns |

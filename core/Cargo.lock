@@ -6010,6 +6010,7 @@ dependencies = [
  "rskit-errors",
  "serde",
  "serde_json",
+ "tempfile",
  "tracing",
  "tracing-subscriber",
 ]

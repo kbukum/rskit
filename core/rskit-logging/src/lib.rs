@@ -5,7 +5,7 @@
 //! ```ignore
 //! use rskit_logging::init_logging;
 //!
-//! let _guard = init_logging(&config.service.logging);
+//! let _guard = init_logging(&config.service.logging)?;
 //! // _guard must stay alive for the duration of the program
 //! tracing::info!(service = "my-svc", "started");
 //! ```
@@ -36,11 +36,12 @@ pub mod otlp;
 pub mod sampling;
 
 use std::collections::HashMap;
+use std::fs::OpenOptions;
 use std::sync::Arc;
 
-use rskit_config::{LogFormat, LoggingConfig};
+use rskit_config::{LogFormat, LogOutput, LoggingConfig};
 use tracing::dispatcher::DefaultGuard;
-use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt};
+use tracing_subscriber::{EnvFilter, fmt, fmt::writer::BoxMakeWriter, layer::SubscriberExt};
 
 pub use error::LoggingResult;
 pub use masking::{DefaultMasker, Masker, MaskingConfig, MaskingMakeWriter};
@@ -173,7 +174,11 @@ impl Drop for LoggingGuard {
 /// control over masking, sampling, and per-module levels.
 ///
 /// The `RUST_LOG` env var takes precedence over `cfg.level` when set.
-pub fn init_logging(cfg: &LoggingConfig) -> LoggingGuard {
+///
+/// # Errors
+///
+/// Returns an error when the configured file output cannot be opened.
+pub fn init_logging(cfg: &LoggingConfig) -> LoggingResult<LoggingGuard> {
     init_logging_with_default_masking(cfg)
 }
 
@@ -188,10 +193,10 @@ pub fn init_logging_env() -> LoggingGuard {
     LoggingGuard::new(tracing::dispatcher::set_default(&dispatcher))
 }
 
-fn init_logging_with_default_masking(cfg: &LoggingConfig) -> LoggingGuard {
+fn init_logging_with_default_masking(cfg: &LoggingConfig) -> LoggingResult<LoggingGuard> {
     let filter = build_filter(&cfg.level, None);
     let masker: Arc<dyn masking::Masker> = Arc::new(masking::DefaultMasker::default());
-    let writer = masking::MaskingMakeWriter::new(std::io::stdout, masker);
+    let writer = masking::MaskingMakeWriter::new(build_output_writer(&cfg.output)?, masker);
 
     let guard = match cfg.format {
         LogFormat::Json => {
@@ -216,14 +221,15 @@ fn init_logging_with_default_masking(cfg: &LoggingConfig) -> LoggingGuard {
         }
     };
 
-    LoggingGuard::new(guard)
+    Ok(LoggingGuard::new(guard))
 }
 
 /// Initialize logging with explicit masking configuration.
 ///
 /// When `masking_cfg.enabled` is `true`, all log output passes through a
 /// [`MaskingMakeWriter`] that redacts secrets and PII before they reach the
-/// output sink.  When masking is disabled, logging goes directly to stdout.
+/// output sink.  When masking is disabled, logging goes directly to the
+/// configured output.
 pub fn init_logging_with_masking(
     cfg: &LoggingConfig,
     masking_cfg: &masking::MaskingConfig,
@@ -246,7 +252,8 @@ pub fn init_logging_with_masking(
 /// - **Module levels** — when `module_levels` is `Some`, per-module filter directives
 ///   are merged into the [`EnvFilter`].
 /// - **Masking** — when `masking_cfg` is `Some` and enabled, a [`MaskingMakeWriter`]
-///   wraps stdout to redact secrets.  Pass `None` to disable masking entirely.
+///   wraps the configured output to redact secrets.  Pass `None` to disable
+///   masking entirely.
 ///
 /// # Errors
 ///
@@ -262,10 +269,11 @@ pub fn init_logging_with_options(
     let sampling_layer = sampling_cfg
         .filter(|s| s.enabled)
         .map(sampling::SamplingLayer::new);
+    let writer = build_output_writer(&cfg.output)?;
 
     if let Some(m) = masking_cfg.filter(|m| m.enabled) {
         let masker: Arc<dyn masking::Masker> = Arc::new(masking::DefaultMasker::new(m)?);
-        let writer = masking::MaskingMakeWriter::new(std::io::stdout, masker);
+        let writer = masking::MaskingMakeWriter::new(writer, masker);
 
         let guard = match cfg.format {
             LogFormat::Json => {
@@ -299,7 +307,8 @@ pub fn init_logging_with_options(
             let layer = fmt::layer()
                 .json()
                 .with_current_span(true)
-                .with_span_list(true);
+                .with_span_list(true)
+                .with_writer(writer);
             let dispatcher = tracing_subscriber::registry()
                 .with(filter)
                 .with(sampling_layer)
@@ -308,7 +317,7 @@ pub fn init_logging_with_options(
             tracing::dispatcher::set_default(&dispatcher)
         }
         _ => {
-            let layer = fmt::layer().pretty();
+            let layer = fmt::layer().pretty().with_writer(writer);
             let dispatcher = tracing_subscriber::registry()
                 .with(filter)
                 .with(sampling_layer)
@@ -327,6 +336,24 @@ fn build_filter(level: &str, module_levels: Option<&HashMap<String, String>>) ->
         Some(levels) if !levels.is_empty() => module_levels::build_env_filter(level, levels),
         _ => EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(level)),
     }
+}
+
+fn build_output_writer(output: &LogOutput) -> LoggingResult<BoxMakeWriter> {
+    let writer = match output {
+        LogOutput::Stdout => BoxMakeWriter::new(std::io::stdout),
+        LogOutput::Stderr => BoxMakeWriter::new(std::io::stderr),
+        LogOutput::File { path } => {
+            let file = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)
+                .map_err(|err| error::log_file_open(path.clone(), err))?;
+            BoxMakeWriter::new(Arc::new(file))
+        }
+        _ => return Err(error::unsupported_output()),
+    };
+
+    Ok(writer)
 }
 
 /// Enhanced logging init with all options including OTLP export.
@@ -355,6 +382,7 @@ pub fn init_logging_full(setup: LoggingSetup<'_>) -> LoggingResult<LoggingGuard>
         .sampling
         .filter(|s| s.enabled)
         .map(sampling::SamplingLayer::new);
+    let writer = build_output_writer(&setup.config.output)?;
 
     let otlp_provider = match setup.otlp {
         Some(oc) => {
@@ -368,7 +396,7 @@ pub fn init_logging_full(setup: LoggingSetup<'_>) -> LoggingResult<LoggingGuard>
 
     if let Some(m) = setup.masking.filter(|m| m.enabled) {
         let masker: Arc<dyn masking::Masker> = Arc::new(masking::DefaultMasker::new(m)?);
-        let writer = masking::MaskingMakeWriter::new(std::io::stdout, masker);
+        let writer = masking::MaskingMakeWriter::new(writer, masker);
 
         let guard = match setup.config.format {
             LogFormat::Json => {
@@ -404,7 +432,8 @@ pub fn init_logging_full(setup: LoggingSetup<'_>) -> LoggingResult<LoggingGuard>
             let layer = fmt::layer()
                 .json()
                 .with_current_span(true)
-                .with_span_list(true);
+                .with_span_list(true)
+                .with_writer(writer);
             let dispatcher = tracing_subscriber::registry()
                 .with(filter)
                 .with(sampling_layer)
@@ -414,7 +443,7 @@ pub fn init_logging_full(setup: LoggingSetup<'_>) -> LoggingResult<LoggingGuard>
             tracing::dispatcher::set_default(&dispatcher)
         }
         _ => {
-            let layer = fmt::layer().pretty();
+            let layer = fmt::layer().pretty().with_writer(writer);
             let dispatcher = tracing_subscriber::registry()
                 .with(filter)
                 .with(sampling_layer)
@@ -439,7 +468,7 @@ mod tests {
     #[test]
     fn init_console_does_not_panic() {
         let cfg = LoggingConfig::default();
-        let _guard = init_logging(&cfg);
+        let _guard = init_logging(&cfg).unwrap();
         tracing::info!("test log");
     }
 
@@ -449,7 +478,7 @@ mod tests {
             format: rskit_config::LogFormat::Json,
             ..Default::default()
         };
-        let _guard = init_logging(&cfg);
+        let _guard = init_logging(&cfg).unwrap();
         tracing::info!("test json log");
     }
 }

@@ -133,7 +133,7 @@ fn default_config_has_expected_values() {
 #[test]
 fn init_logging_console_does_not_panic() {
     let cfg = LoggingConfig::default();
-    let _guard = init_logging(&cfg);
+    let _guard = init_logging(&cfg).unwrap();
     tracing::info!("console smoke test");
 }
 
@@ -143,7 +143,7 @@ fn init_logging_json_does_not_panic() {
         format: LogFormat::Json,
         ..Default::default()
     };
-    let _guard = init_logging(&cfg);
+    let _guard = init_logging(&cfg).unwrap();
     tracing::info!("json smoke test");
 }
 
@@ -153,7 +153,7 @@ fn init_logging_with_custom_level() {
         level: "debug".to_string(),
         ..Default::default()
     };
-    let _guard = init_logging(&cfg);
+    let _guard = init_logging(&cfg).unwrap();
     tracing::debug!("debug level test");
 }
 
@@ -163,7 +163,7 @@ fn init_logging_with_trace_level() {
         level: "trace".to_string(),
         ..Default::default()
     };
-    let _guard = init_logging(&cfg);
+    let _guard = init_logging(&cfg).unwrap();
     tracing::trace!("trace level test");
 }
 
@@ -173,7 +173,7 @@ fn init_logging_with_warn_level() {
         level: "warn".to_string(),
         ..Default::default()
     };
-    let _guard = init_logging(&cfg);
+    let _guard = init_logging(&cfg).unwrap();
     tracing::warn!("warn level test");
 }
 
@@ -183,7 +183,7 @@ fn init_logging_with_error_level() {
         level: "error".to_string(),
         ..Default::default()
     };
-    let _guard = init_logging(&cfg);
+    let _guard = init_logging(&cfg).unwrap();
     tracing::error!("error level test");
 }
 
@@ -193,7 +193,7 @@ fn init_logging_with_service_name() {
         service_name: Some("my-service".to_string()),
         ..Default::default()
     };
-    let _guard = init_logging(&cfg);
+    let _guard = init_logging(&cfg).unwrap();
     tracing::info!(service = "my-service", "service name test");
 }
 
@@ -203,8 +203,28 @@ fn init_logging_stderr_output() {
         output: LogOutput::Stderr,
         ..Default::default()
     };
-    let _guard = init_logging(&cfg);
+    let _guard = init_logging(&cfg).unwrap();
     tracing::info!("stderr output test");
+}
+
+#[test]
+fn init_logging_file_output_writes_to_configured_file() {
+    let file = tempfile::NamedTempFile::new().unwrap();
+    let path = file.path().to_path_buf();
+    let cfg = LoggingConfig {
+        output: LogOutput::File {
+            path: path.to_string_lossy().into_owned(),
+        },
+        ..Default::default()
+    };
+
+    {
+        let _guard = init_logging(&cfg).unwrap();
+        tracing::info!("file output test");
+    }
+
+    let output = std::fs::read_to_string(path).unwrap();
+    assert!(output.contains("file output test"), "output: {output}");
 }
 
 #[test]
@@ -219,7 +239,7 @@ fn guard_drop_restores_previous_subscriber() {
     // We verify that creating two guards in sequence doesn't panic.
     let cfg = LoggingConfig::default();
     {
-        let _guard = init_logging(&cfg);
+        let _guard = init_logging(&cfg).unwrap();
         tracing::info!("inside guard scope");
     }
     // After guard is dropped, this uses the previous (or noop) subscriber.
@@ -326,7 +346,7 @@ fn envfilter_parse_invalid_string_handled_by_init_logging() {
         level: "not_a_real_module=trace".to_string(),
         ..Default::default()
     };
-    let _guard = init_logging(&cfg);
+    let _guard = init_logging(&cfg).unwrap();
     tracing::info!("fallback test");
 }
 
@@ -478,7 +498,7 @@ fn json_format_config_round_trip() {
     };
     assert_eq!(cfg.format, LogFormat::Json);
     // Ensure init_logging produces a working subscriber.
-    let _guard = init_logging(&cfg);
+    let _guard = init_logging(&cfg).unwrap();
     tracing::info!(key = "value", "json format round trip");
 }
 
@@ -489,7 +509,7 @@ fn console_format_config_round_trip() {
         ..Default::default()
     };
     assert_eq!(cfg.format, LogFormat::Console);
-    let _guard = init_logging(&cfg);
+    let _guard = init_logging(&cfg).unwrap();
     tracing::info!("console format round trip");
 }
 
@@ -501,7 +521,7 @@ fn switching_formats_between_guards() {
             format: LogFormat::Json,
             ..Default::default()
         };
-        let _g = init_logging(&cfg);
+        let _g = init_logging(&cfg).unwrap();
         tracing::info!("json");
     }
     {
@@ -509,7 +529,7 @@ fn switching_formats_between_guards() {
             format: LogFormat::Console,
             ..Default::default()
         };
-        let _g = init_logging(&cfg);
+        let _g = init_logging(&cfg).unwrap();
         tracing::info!("console");
     }
 }
@@ -525,7 +545,7 @@ fn empty_level_string_uses_envfilter_default() {
         level: String::new(),
         ..Default::default()
     };
-    let _guard = init_logging(&cfg);
+    let _guard = init_logging(&cfg).unwrap();
     tracing::info!("empty level test");
 }
 
@@ -535,7 +555,7 @@ fn empty_service_name() {
         service_name: Some(String::new()),
         ..Default::default()
     };
-    let _guard = init_logging(&cfg);
+    let _guard = init_logging(&cfg).unwrap();
     tracing::info!(service = "", "empty service name test");
 }
 
@@ -592,7 +612,7 @@ fn multiple_init_calls_with_different_configs() {
             format: format.clone(),
             ..Default::default()
         };
-        let _guard = init_logging(&cfg);
+        let _guard = init_logging(&cfg).unwrap();
         tracing::info!("reinit with {:?}", format);
     }
 }
@@ -605,7 +625,7 @@ fn concurrent_logging_does_not_panic() {
         level: "info".to_string(),
         ..Default::default()
     };
-    let _guard = init_logging(&cfg);
+    let _guard = init_logging(&cfg).unwrap();
     let handles: Vec<_> = (0..8)
         .map(|i| {
             std::thread::spawn(move || {
@@ -642,7 +662,7 @@ fn with_caller_config_field_accepted() {
         ..Default::default()
     };
     assert!(cfg.with_caller);
-    let _guard = init_logging(&cfg);
+    let _guard = init_logging(&cfg).unwrap();
     tracing::info!("caller location test");
 }
 

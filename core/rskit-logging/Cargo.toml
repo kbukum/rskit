@@ -45,3 +45,4 @@ rskit-config       = { path = "../rskit-config" }
 
 [dev-dependencies]
 serde_json = { workspace = true }
+tempfile   = { workspace = true }

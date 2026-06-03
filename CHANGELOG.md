@@ -231,7 +231,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `load_config<T>` convenience free function
 
 #### `rskit-logging`
-- `init_logging(cfg)` returning a `LoggingGuard` (dropped on shutdown)
+- `init_logging(cfg)` returning a `LoggingResult<LoggingGuard>` (dropped on shutdown)
 - `init_logging_env()` for `RUST_LOG`-only setup
 - JSON and console format support via `LogFormat`
 

@@ -158,7 +158,6 @@ pub enum LogOutput {
     /// Write to standard error.
     Stderr,
     /// Write to a file at the given path.
-    /// Not yet implemented — falls back to stdout.
     File {
         /// Absolute or relative path to the log file.
         path: String,
