@@ -45,7 +45,7 @@ developer files do not prevent startup.
 [dependencies]
 rskit-config = "0.1"
 serde = { version = "1", features = ["derive"] }
-validator = { version = "0.18", features = ["derive"] }
+validator = { version = "0.20", features = ["derive"] }
 ```
 
 ```rust
@@ -56,6 +56,7 @@ use validator::Validate;
 #[derive(Deserialize, Validate)]
 struct Config {
     #[serde(flatten)]
+    #[validate(nested)]
     service: ServiceConfig,
     #[validate(range(min = 1))]
     grpc_port: u16,

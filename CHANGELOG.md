@@ -25,6 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   layers directly.
 
 ### Changed — Cross-Cutting
+- **rskit-config**: refined typed config loading for Phase 1 foundations with
+  explicit secret-field redaction, growable config enums, and documented
+  dotenv/env precedence without mutating process environment.
 - **rskit-errors**: `From<std::io::Error>` now maps common `io::ErrorKind`s to
   their semantic `ErrorCode` (e.g. `NotFound` → 404, `PermissionDenied` →
   `Forbidden`, `TimedOut` → `Timeout`) instead of collapsing everything to
