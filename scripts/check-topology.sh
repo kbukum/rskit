@@ -69,6 +69,14 @@ def path_value(dep: object) -> str | None:
     return None
 
 
+def package_name(dep_name: str, dep: object) -> str:
+    if isinstance(dep, dict):
+        value = dep.get("package")
+        if isinstance(value, str):
+            return value
+    return dep_name
+
+
 def dependency_entries(manifest: dict, name: str) -> list[tuple[str, object]]:
     entries: list[tuple[str, object]] = []
     for table_name, deps in dependency_tables(manifest):
@@ -107,10 +115,11 @@ for cargo_toml in sorted((root / "core").glob("*/Cargo.toml")):
 
     if crate == "rskit-util":
         for table_name, deps in dependency_tables(manifest):
-            for dep_name in deps:
-                if dep_name.startswith("rskit-"):
+            for dep_name, dep in deps.items():
+                effective_name = package_name(dep_name, dep)
+                if effective_name.startswith("rskit-"):
                     errors.append(
-                        f"{rel}: L0 utility crate must not depend on internal {table_name}.{dep_name}"
+                        f"{rel}: L0 utility crate must not depend on internal {table_name}.{dep_name} ({effective_name})"
                     )
 
     if crate in {"rskit-http", "rskit-discovery"}:
