@@ -1,24 +1,96 @@
 # rskit-util
 
-Minimal L0 utility crate for the rskit ecosystem.
+L0 domain-free utility primitives for the rskit ecosystem.
 
 `rskit-util` owns low-level, domain-free primitives that are useful across
 foundation and higher-level crates. It has no internal workspace crate
 dependencies; small external dependencies are limited to capabilities that must
 live at L0, such as serde support and zeroizing secret storage.
 
-Domain-owned helpers stay in their owning crates:
+## What belongs here
+
+Use `rskit-util` for reusable helpers that have no service, transport, config,
+storage, validation, or AI domain ownership. Domain-owned helpers stay in their
+owning crates:
 
 - Secret masking primitive: `rskit_util::SecretString`
-- Validation: `rskit_validation`
-- Schema generation: `rskit_schema`
+- Validation rules and `AppError` conversion: `rskit-validation`
+- Schema generation and JSON Schema validation: `rskit-schema`
+- Filesystem operations and safe paths: `rskit-fs`
 - Test clocks and runtime time control: use the owning crate's abstractions
+
+## Modules
+
+| Module | Purpose |
+| ------ | ------- |
+| `backoff` | Stateless exponential backoff and deterministic jitter calculations |
+| `bytes` | Human-readable byte size formatting and parsing |
+| `collections` | `chunk`, `group_by`, `index_by`, and `partition` helpers |
+| `env` | Environment variable parsing with defaults |
+| `secret` | Secret string masking for logs, debug output, and serialization |
+| `strings` | Case conversion and UTF-8-safe truncation |
+| `template` | Typed `{placeholder}` template parsing and rendering |
+| `time` | Duration formatting/parsing and synchronous timing helpers |
 
 ## Usage
 
 ```toml
 [dependencies]
-rskit-util = { path = "../rskit-util" }
+rskit-util = "0.1"
+```
+
+### Secret values
+
+```rust
+use rskit_util::SecretString;
+
+let password = SecretString::new("hunter2");
+assert_eq!(password.expose(), "hunter2");
+assert_eq!(password.to_string(), "***");
+assert_eq!(format!("{password:?}"), "SecretString(***)");
+```
+
+### Parsing sizes and durations
+
+```rust
+use std::time::Duration;
+
+assert_eq!(rskit_util::bytes::parse_bytes("1.5 MB"), Some(1_572_864));
+assert_eq!(rskit_util::time::parse_duration("2m"), Some(Duration::from_secs(120)));
+```
+
+### Typed templates
+
+```rust
+use std::fmt;
+use rskit_util::template::{Placeholder, Template};
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum Token {
+    Name,
+}
+
+impl Placeholder for Token {
+    fn token(self) -> &'static str {
+        match self {
+            Self::Name => "name",
+        }
+    }
+}
+
+impl fmt::Display for Token {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.token())
+    }
+}
+
+let template = Template::parse("hello {name}", &[Token::Name])?;
+let rendered = template.render_with(|token| match token {
+    Token::Name => Ok::<_, std::convert::Infallible>("rskit".to_string()),
+})?;
+
+assert_eq!(rendered, "hello rskit");
+# Ok::<(), rskit_util::template::TemplateError>(())
 ```
 
 ## Cross-kit alignment

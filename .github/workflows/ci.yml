@@ -262,14 +262,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: stable
-      - uses: EmbarkStudios/cargo-deny-action@bb137d7af7e4fb67e5f82a49c4fce4fad40782fe  # v2.0.20
+      - uses: taiki-e/install-action@15413b256f995d819248ea62704771a959284285  # v2
         with:
-          command: check licenses advisories sources bans
-          manifest-path: core/Cargo.toml
-      - uses: EmbarkStudios/cargo-deny-action@bb137d7af7e4fb67e5f82a49c4fce4fad40782fe  # v2.0.20
-        with:
-          command: check licenses advisories sources bans
-          manifest-path: contrib/Cargo.toml
+          tool: cargo-deny
+      - run: cargo deny --manifest-path core/Cargo.toml check licenses advisories sources bans
+      - run: cargo deny --manifest-path contrib/Cargo.toml check licenses advisories sources bans
       - run: ./scripts/check-l7-edges.sh
       - uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998  # v2
         with:
