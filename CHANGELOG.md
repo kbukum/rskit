@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Breaking
+- **rskit-encryption**: changed symmetric ciphertexts to a versioned envelope
+  that authenticates the format and algorithm header as AEAD associated data.
+  Existing ciphertexts in the previous raw `salt || nonce || ciphertext` format
+  must be re-encrypted.
 - **rskit-logging**: removed process-global logging initialization helpers and
   changed advanced masking/OTLP setup APIs to return typed `LoggingResult`
   errors. `init_logging_full` now accepts a `LoggingSetup` options value instead
@@ -29,6 +33,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   layers directly.
 
 ### Changed — Cross-Cutting
+- **rskit-validation/schema/encryption**: completed the remaining Phase 1
+  foundation pass by splitting validation and schema into cohesive modules,
+  adding bounded schema validation options, removing an unused validation
+  dependency, and hardening encryption envelope metadata.
 - **rskit-logging**: aligned Phase 1 logging setup with scoped subscriber guards,
   explicit masking regex validation, and typed OTLP exporter errors.
 - **rskit-config**: refined typed config loading for Phase 1 foundations with

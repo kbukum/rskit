@@ -7,6 +7,7 @@ Symmetric encryption utilities with support for AES-256-GCM and ChaCha20-Poly130
 - **AES-256-GCM**: Default algorithm with hardware acceleration on modern CPUs
 - **ChaCha20-Poly1305**: Modern AEAD cipher, fast on CPUs without AES-NI
 - **PBKDF2-SHA256**: Key derivation with 600,000 iterations and random salt
+- **Versioned envelope**: Ciphertexts carry format and algorithm identifiers
 - **Thread-safe**: All encryptors are `Send + Sync` for use across async boundaries
 - **Automatic nonce handling**: Random nonce generated for each encryption
 - **Base64 encoding**: Ciphertext is automatically base64-encoded for safe transmission
@@ -45,15 +46,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ## Key Derivation
 
 Keys are derived from passphrases using **PBKDF2-SHA256** with:
-- **600,000 iterations** (OWASP 2023 recommendation)
+- **600,000 iterations**
 - **Random 16-byte salt** per encryption operation
 - Salt is prepended to the ciphertext for extraction during decryption
 
 ## Ciphertext Format
 
 ```
-base64(salt[16] || nonce[12] || ciphertext)
+base64(version[1] || algorithm[1] || salt[16] || nonce[12] || ciphertext)
 ```
+
+The version and algorithm header is authenticated as AEAD associated data, so
+tampering with envelope metadata fails decryption.
 
 ## Error Handling
 

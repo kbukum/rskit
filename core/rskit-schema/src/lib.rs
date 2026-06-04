@@ -6,152 +6,23 @@
 
 #![warn(missing_docs)]
 
-use rskit_errors::{AppError, AppResult, ErrorCode};
 pub use schemars::JsonSchema;
-use schemars::SchemaGenerator;
-use serde_json::Value;
+
+mod document;
+mod generation;
+mod limits;
+mod validation;
+
+pub use document::SchemaDocument;
+pub use generation::{Options, generate, generate_document, generate_with, generate_with_options};
+pub use limits::ValidationLimits;
+pub use validation::{
+    CompiledSchema, ValidationError, ValidationOptions, ValidationResult, compile,
+    compile_with_options, validate, validate_structured_output, validate_with_options,
+};
 
 /// Standard JSON Schema type alias.
 pub type Json = serde_json::Value;
-
-// ── Schema Generation ───────────────────────────────────────────────────────
-
-/// Generate a JSON Schema from a type implementing `JsonSchema`.
-pub fn generate<T: JsonSchema>() -> AppResult<Json> {
-    let schema = SchemaGenerator::default().into_root_schema_for::<T>();
-    serde_json::to_value(schema).map_err(|err| {
-        AppError::new(
-            ErrorCode::Internal,
-            format!("failed to serialize generated JSON schema: {err}"),
-        )
-        .with_cause(err)
-    })
-}
-
-/// Options for customizing schema generation.
-#[derive(Debug, Clone, Default)]
-pub struct Options {
-    /// Override the schema title.
-    pub title: Option<String>,
-    /// Override the schema description.
-    pub description: Option<String>,
-}
-
-/// Generate a JSON Schema with custom options.
-pub fn generate_with<T: JsonSchema>(opts: Options) -> AppResult<Json> {
-    let schema = SchemaGenerator::default().into_root_schema_for::<T>();
-    let mut value = serde_json::to_value(schema).map_err(|err| {
-        AppError::new(
-            ErrorCode::Internal,
-            format!("failed to serialize generated JSON schema: {err}"),
-        )
-        .with_cause(err)
-    })?;
-
-    if let Some(obj) = value.as_object_mut() {
-        if let Some(title) = opts.title {
-            obj.insert("title".to_string(), Value::String(title));
-        }
-        if let Some(desc) = opts.description {
-            obj.insert("description".to_string(), Value::String(desc));
-        }
-    }
-
-    Ok(value)
-}
-
-// ── Schema Validation ───────────────────────────────────────────────────────
-
-/// A single validation error with a JSON-pointer path.
-#[derive(Debug, Clone)]
-pub struct ValidationError {
-    /// JSON Pointer path to the failing value.
-    pub path: String,
-    /// Human-readable validation failure message.
-    pub message: String,
-}
-
-impl std::fmt::Display for ValidationError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.path.is_empty() {
-            write!(f, "{}", self.message)
-        } else {
-            write!(f, "{}: {}", self.path, self.message)
-        }
-    }
-}
-
-/// Outcome of validating a value against a schema.
-#[derive(Debug, Clone)]
-pub struct ValidationResult {
-    /// Whether the value satisfied the schema.
-    pub valid: bool,
-    /// Validation failures. Empty when `valid` is true.
-    pub errors: Vec<ValidationError>,
-}
-
-/// Reusable compiled JSON Schema validator.
-pub struct CompiledSchema {
-    validator: jsonschema::Validator,
-}
-
-impl CompiledSchema {
-    /// Validate a JSON value against this compiled schema.
-    pub fn validate(&self, value: &Value) -> ValidationResult {
-        validation_result(&self.validator, value)
-    }
-}
-
-/// Compile a JSON Schema once for repeated validation.
-pub fn compile(schema: &Value) -> AppResult<CompiledSchema> {
-    jsonschema::validator_for(schema)
-        .map(|validator| CompiledSchema { validator })
-        .map_err(|err| {
-            AppError::new(
-                ErrorCode::InvalidInput,
-                format!("invalid JSON Schema: {err}"),
-            )
-            .with_cause(err)
-        })
-}
-
-/// Validate a JSON value against a JSON Schema.
-pub fn validate(schema: &Value, value: &Value) -> ValidationResult {
-    let validator = match compile(schema) {
-        Ok(validator) => validator,
-        Err(err) => {
-            return ValidationResult {
-                valid: false,
-                errors: vec![ValidationError {
-                    path: String::new(),
-                    message: err.message().to_owned(),
-                }],
-            };
-        }
-    };
-
-    validator.validate(value)
-}
-
-fn validation_result(validator: &jsonschema::Validator, value: &Value) -> ValidationResult {
-    let errors = validator
-        .iter_errors(value)
-        .map(|err| ValidationError {
-            path: err.instance_path().to_string(),
-            message: err.to_string(),
-        })
-        .collect::<Vec<_>>();
-
-    ValidationResult {
-        valid: errors.is_empty(),
-        errors,
-    }
-}
-
-/// Validate structured model output against a JSON Schema 2020-12-compatible schema subset.
-pub fn validate_structured_output(schema: &Value, value: &Value) -> ValidationResult {
-    validate(schema, value)
-}
 
 #[cfg(test)]
 mod tests {
@@ -465,6 +336,88 @@ mod tests {
 
         assert!(validator.validate(&json!("value")).valid);
         assert!(!validator.validate(&json!(42)).valid);
+    }
+
+    #[test]
+    fn compile_with_default_limits_accepts_generated_schema() {
+        let schema = generate::<Nested>().unwrap();
+        let validator = compile(&schema).unwrap();
+
+        let result = validator.validate(&json!({
+            "user": {"name": "Alice", "age": 30},
+            "tags": ["admin"]
+        }));
+        assert!(result.valid, "errors: {:?}", result.errors);
+    }
+
+    #[test]
+    fn validate_with_options_rejects_excessive_depth() {
+        let schema = json!({"type": "array"});
+        let value = json!([[[["too deep"]]]]);
+        let options = ValidationOptions {
+            limits: ValidationLimits::new(3, 100),
+        };
+
+        let err = validate_with_options(&schema, &value, options).unwrap_err();
+        assert_eq!(err.code(), rskit_errors::ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn validate_with_options_rejects_excessive_string_bytes() {
+        let schema = json!({"type": "string"});
+        let value = json!("abcdef");
+        let options = ValidationOptions {
+            limits: ValidationLimits::new(10, 100).with_max_string_bytes(5),
+        };
+
+        let err = validate_with_options(&schema, &value, options).unwrap_err();
+        assert_eq!(err.code(), rskit_errors::ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn compile_with_options_rejects_excessive_key_bytes() {
+        let schema = json!({
+            "type": "object",
+            "properties": {
+                "too_long": {"type": "string"}
+            }
+        });
+        let options = ValidationOptions {
+            limits: ValidationLimits::new(10, 100).with_max_key_bytes(4),
+        };
+
+        let err = match compile_with_options(&schema, options) {
+            Ok(_) => panic!("schema with excessive key bytes should fail"),
+            Err(err) => err,
+        };
+        assert_eq!(err.code(), rskit_errors::ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn compile_with_options_rejects_total_string_bytes() {
+        let schema = json!({
+            "type": "object",
+            "description": "abcdef",
+            "title": "ghijkl"
+        });
+        let options = ValidationOptions {
+            limits: ValidationLimits::new(10, 100).with_max_total_string_bytes(20),
+        };
+
+        let err = match compile_with_options(&schema, options) {
+            Ok(_) => panic!("schema with excessive total string bytes should fail"),
+            Err(err) => err,
+        };
+        assert_eq!(err.code(), rskit_errors::ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn schema_document_preserves_json_after_limit_check() {
+        let schema = generate::<Simple>().unwrap();
+        let document = SchemaDocument::new(schema.clone()).unwrap();
+
+        assert_eq!(document.as_json(), &schema);
+        assert_eq!(document.into_json(), schema);
     }
 
     #[test]

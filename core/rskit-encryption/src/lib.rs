@@ -8,7 +8,8 @@
 //! Keys are derived from passphrases using PBKDF2-SHA256 with 600,000 iterations
 //! and a random 16-byte salt per encryption operation.
 //!
-//! Ciphertext format: `base64(salt[16] || nonce[12] || ciphertext)`
+//! Ciphertext format:
+//! `base64(version[1] || algorithm[1] || salt[16] || nonce[12] || ciphertext)`.
 //!
 //! # Examples
 //!
@@ -31,6 +32,8 @@
 pub mod aes_gcm;
 pub mod chacha20;
 pub mod traits;
+
+mod envelope;
 
 pub use aes_gcm::AesGcmEncryptor;
 pub use chacha20::ChaCha20Encryptor;
@@ -85,5 +88,29 @@ mod tests {
         let ciphertext = encryptor.encrypt(plaintext).unwrap();
         let decrypted = encryptor.decrypt(&ciphertext).unwrap();
         assert_eq!(decrypted, plaintext);
+    }
+
+    #[test]
+    fn malformed_versioned_envelopes_are_rejected() {
+        use base64::{Engine, engine::general_purpose::STANDARD};
+
+        let encryptor = new_encryptor(b"secret-key", Algorithm::AesGcm);
+        let too_short = STANDARD.encode([1_u8, 1, 2, 3]);
+        let err = encryptor.decrypt(&too_short).unwrap_err();
+        assert_eq!(err.code(), rskit_errors::ErrorCode::InvalidFormat);
+
+        let mut bad_version = vec![0_u8, 1];
+        bad_version.extend_from_slice(&[0_u8; 44]);
+        let err = encryptor
+            .decrypt(&STANDARD.encode(bad_version))
+            .unwrap_err();
+        assert_eq!(err.code(), rskit_errors::ErrorCode::InvalidFormat);
+
+        let mut bad_algorithm = vec![1_u8, 99];
+        bad_algorithm.extend_from_slice(&[0_u8; 44]);
+        let err = encryptor
+            .decrypt(&STANDARD.encode(bad_algorithm))
+            .unwrap_err();
+        assert_eq!(err.code(), rskit_errors::ErrorCode::InvalidFormat);
     }
 }

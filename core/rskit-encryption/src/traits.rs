@@ -3,6 +3,7 @@
 use rskit_errors::AppResult;
 
 /// Supported encryption algorithms.
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Algorithm {
     /// AES-256-GCM (default, widely supported with hardware acceleration)
@@ -17,6 +18,21 @@ impl Algorithm {
         match self {
             Self::AesGcm => "aes-256-gcm",
             Self::ChaCha20Poly1305 => "chacha20-poly1305",
+        }
+    }
+
+    pub(crate) const fn id(self) -> u8 {
+        match self {
+            Self::AesGcm => 1,
+            Self::ChaCha20Poly1305 => 2,
+        }
+    }
+
+    pub(crate) fn from_id(id: u8) -> Option<Self> {
+        match id {
+            1 => Some(Self::AesGcm),
+            2 => Some(Self::ChaCha20Poly1305),
+            _ => None,
         }
     }
 }

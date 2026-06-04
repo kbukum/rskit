@@ -11,8 +11,11 @@ cargo-fuzz = true
 jsonwebtoken = { version = "10", features = ["rust_crypto"] }
 libfuzzer-sys = "0.4"
 rskit-auth = { path = "../core/rskit-auth" }
+rskit-encryption = { path = "../core/rskit-encryption" }
 rskit-errors = { path = "../core/rskit-errors" }
+rskit-schema = { path = "../core/rskit-schema" }
 rskit-util = { path = "../core/rskit-util" }
+rskit-validation = { path = "../core/rskit-validation" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 http = "1.0"
@@ -44,5 +47,23 @@ doc = false
 [[bin]]
 name = "util_parsers"
 path = "fuzz_targets/util_parsers.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "encryption_envelope"
+path = "fuzz_targets/encryption_envelope.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "schema_validation"
+path = "fuzz_targets/schema_validation.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "validation_inputs"
+path = "fuzz_targets/validation_inputs.rs"
 test = false
 doc = false

@@ -1,6 +1,5 @@
 //! ChaCha20-Poly1305 encryption implementation.
 
-use base64::{Engine, engine::general_purpose::STANDARD};
 use chacha20poly1305::{
     ChaCha20Poly1305, Nonce,
     aead::{Aead, KeyInit, Payload},
@@ -10,17 +9,13 @@ use rskit_errors::{AppError, AppResult, ErrorCode};
 use sha2::Sha256;
 use zeroize::Zeroize;
 
+use crate::envelope::{Envelope, KEY_LEN, NONCE_SIZE, PBKDF2_ITERATIONS, SALT_SIZE};
 use crate::traits::{Algorithm, Encryptor};
-
-const SALT_SIZE: usize = 16;
-const NONCE_SIZE: usize = 12;
-const PBKDF2_ITERATIONS: u32 = 600_000;
-const KEY_LEN: usize = 32;
 
 /// ChaCha20-Poly1305 encryptor.
 ///
 /// Uses PBKDF2-SHA256 for key derivation with a random 16-byte salt per encryption.
-/// Output format: `base64(salt[16] || nonce[12] || ciphertext)`.
+/// Output format: `base64(version[1] || algorithm[1] || salt[16] || nonce[12] || ciphertext)`.
 pub struct ChaCha20Encryptor {
     passphrase: Vec<u8>,
 }
@@ -60,55 +55,52 @@ impl Encryptor for ChaCha20Encryptor {
         let mut nonce_bytes = [0u8; NONCE_SIZE];
         rand::rng().fill_bytes(&mut nonce_bytes);
         let nonce = Nonce::from_slice(&nonce_bytes);
+        let aad =
+            crate::envelope::associated_data(Algorithm::ChaCha20Poly1305, &salt, &nonce_bytes);
 
         let ciphertext = cipher
-            .encrypt(nonce, Payload::from(plaintext))
-            .map_err(|e| {
-                AppError::new(
-                    ErrorCode::Internal,
-                    format!("ChaCha20-Poly1305 encryption failed: {e}"),
-                )
-            })?;
+            .encrypt(
+                nonce,
+                Payload {
+                    msg: plaintext,
+                    aad: &aad,
+                },
+            )
+            .map_err(|_| AppError::new(ErrorCode::Internal, "encryption failed"))?;
 
-        let mut result = Vec::with_capacity(SALT_SIZE + NONCE_SIZE + ciphertext.len());
-        result.extend_from_slice(&salt);
-        result.extend_from_slice(&nonce_bytes);
-        result.extend_from_slice(&ciphertext);
-
-        Ok(STANDARD.encode(&result))
+        Ok(Envelope::encode(
+            Algorithm::ChaCha20Poly1305,
+            &salt,
+            &nonce_bytes,
+            &ciphertext,
+        ))
     }
 
     fn decrypt(&self, ciphertext: &str) -> AppResult<Vec<u8>> {
-        let data = STANDARD.decode(ciphertext).map_err(|e| {
-            AppError::new(
-                ErrorCode::InvalidFormat,
-                format!("Invalid base64 ciphertext: {e}"),
-            )
-        })?;
-
-        if data.len() < SALT_SIZE + NONCE_SIZE {
+        let envelope = Envelope::decode(ciphertext)?;
+        if envelope.algorithm()? != Algorithm::ChaCha20Poly1305 {
             return Err(AppError::new(
                 ErrorCode::InvalidFormat,
-                "Ciphertext too short (missing salt or nonce)",
+                "ciphertext algorithm does not match encryptor",
             ));
         }
 
-        let (salt, remaining) = data.split_at(SALT_SIZE);
-        let (nonce_bytes, cipher_bytes) = remaining.split_at(NONCE_SIZE);
-
-        let mut key_bytes = self.derive_key(salt);
+        let mut key_bytes = self.derive_key(envelope.salt());
         let cipher = ChaCha20Poly1305::new((&key_bytes[..]).into());
         key_bytes.zeroize();
 
-        let nonce = Nonce::from_slice(nonce_bytes);
+        let nonce = Nonce::from_slice(envelope.nonce());
 
         cipher
-            .decrypt(nonce, Payload::from(cipher_bytes))
-            .map_err(|e| {
-                AppError::new(
-                    ErrorCode::InvalidFormat,
-                    format!("ChaCha20-Poly1305 decryption failed: {e}"),
-                )
+            .decrypt(
+                nonce,
+                Payload {
+                    msg: envelope.ciphertext(),
+                    aad: envelope.associated_data(),
+                },
+            )
+            .map_err(|_| {
+                AppError::new(ErrorCode::InvalidFormat, "ciphertext authentication failed")
             })
     }
 
@@ -177,6 +169,16 @@ mod tests {
         let encryptor = ChaCha20Encryptor::new(b"my-secret-key");
         let result = encryptor.decrypt("invalid-base64!@#$");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_rejects_ciphertext_for_other_algorithm() {
+        let encryptor = ChaCha20Encryptor::new(b"my-secret-key");
+        let other = crate::AesGcmEncryptor::new(b"my-secret-key");
+        let ciphertext = other.encrypt(b"secret").unwrap();
+
+        let err = encryptor.decrypt(&ciphertext).unwrap_err();
+        assert_eq!(err.code(), ErrorCode::InvalidFormat);
     }
 
     #[test]
