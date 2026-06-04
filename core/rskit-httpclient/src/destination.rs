@@ -26,6 +26,7 @@ const METADATA_HOSTS: [&str; 4] = [
 /// Hostname validation happens before DNS resolution. Use `allowed_hosts` for
 /// high-trust clients that must not follow attacker-controlled DNS names.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct DestinationPolicy {
     /// Allowed URL schemes. Empty means all schemes are rejected.
     pub allowed_schemes: Vec<String>,
@@ -89,7 +90,7 @@ impl DestinationPolicy {
         self.validate_scheme(url.scheme())?;
         let host = url
             .host_str()
-            .ok_or_else(|| AppError::invalid_input("url", "HTTP URL must include a host"))?;
+            .ok_or_else(|| AppError::invalid_input("url", "URL must include a host"))?;
         self.validate_host(host)
     }
 

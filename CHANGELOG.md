@@ -42,6 +42,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   from `embedded::Backend` to `embedded::Git2Repository` and from `cli::Backend`
   to `cli::GitCli`; use the clearer names when constructing implementation
   layers directly.
+- **rskit-httpclient**: `HttpClientConfig` and `DestinationPolicy` are now
+  non-exhaustive; construct them with `new()`/`default()` and `with_*` builders
+  instead of struct literals so transport hardening fields can evolve safely.
 
 ### Changed — Cross-Cutting
 - **L4 composition**: tightened app shutdown error reporting, state-machine

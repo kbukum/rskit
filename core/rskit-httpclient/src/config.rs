@@ -13,6 +13,7 @@ const DEFAULT_MAX_RESPONSE_BODY_BYTES: usize = 10 * 1024 * 1024;
 
 /// Configuration for the HTTP client.
 #[derive(Clone)]
+#[non_exhaustive]
 pub struct HttpClientConfig {
     /// Base URL for requests (e.g., `https://api.example.com/v1`).
     /// Paths are appended to this URL.

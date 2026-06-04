@@ -4,6 +4,7 @@
 mod integration_tests {
     use std::time::Duration;
 
+    use rskit_errors::ErrorCode;
     use rskit_httpclient::{Auth, DestinationPolicy, HttpClient, HttpClientConfig, Request};
     use rskit_resilience::{ConstantBackoff, Policy, RetryPolicy};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -157,7 +158,10 @@ mod integration_tests {
 
         let result = client.get("/large").await;
 
-        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
+        assert!(!error.is_retryable());
+        assert!(error.message().contains("max_response_body_bytes"));
     }
 
     #[tokio::test]
@@ -178,7 +182,14 @@ mod integration_tests {
 
         let result = client.get("/redirect").await;
 
-        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
+        assert!(!error.is_retryable());
+        assert!(
+            error
+                .message()
+                .contains("metadata service destinations are blocked")
+        );
     }
 
     #[tokio::test]
@@ -198,7 +209,10 @@ mod integration_tests {
 
         let result = client.get("/loop").await;
 
-        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
+        assert!(!error.is_retryable());
+        assert!(error.message().contains("max_redirects"));
     }
 
     #[tokio::test]

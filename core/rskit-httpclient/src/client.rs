@@ -3,6 +3,7 @@
 use crate::config::HttpClientConfig;
 use crate::request::{Request, RequestBody};
 use crate::response::Response;
+use std::error::Error;
 use std::path::Path;
 
 use reqwest::Client;
@@ -261,10 +262,13 @@ fn redirect_policy(config: &HttpClientConfig) -> reqwest::redirect::Policy {
     let destination_policy = config.destination_policy.clone();
     reqwest::redirect::Policy::custom(move |attempt| {
         if attempt.previous().len() > max_redirects {
-            return attempt.error(format!("too many HTTP redirects (max {max_redirects})"));
+            return attempt.error(AppError::invalid_input(
+                "max_redirects",
+                format!("too many HTTP redirects (max {max_redirects})"),
+            ));
         }
         if let Err(error) = destination_policy.validate(attempt.url()) {
-            return attempt.error(error.to_string());
+            return attempt.error(error);
         }
         attempt.follow()
     })
@@ -302,13 +306,20 @@ async fn read_response_body(
 }
 
 fn response_body_too_large(max_bytes: usize) -> AppError {
-    AppError::new(
-        ErrorCode::InvalidInput,
+    AppError::invalid_input(
+        "max_response_body_bytes",
         format!("HTTP response body exceeds configured limit of {max_bytes} bytes"),
     )
 }
 
 fn map_transport_error(error: reqwest::Error) -> AppError {
+    if let Some(policy_error) = error
+        .source()
+        .and_then(|source| source.downcast_ref::<AppError>())
+    {
+        return AppError::new(policy_error.code(), policy_error.message()).with_cause(error);
+    }
+
     let code = if error.is_timeout() {
         ErrorCode::Timeout
     } else if error.is_connect() {
