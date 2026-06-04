@@ -16,12 +16,14 @@ use crate::{
 mod lifecycle;
 mod observer;
 mod output;
+mod redaction;
 mod spawn;
 
 pub use observer::OutputObserver;
 
 use lifecycle::wait_for_completion;
 use output::{append_bounded_stderr, collect_reader, spawn_reader};
+use redaction::RedactedArgs;
 use spawn::configure_command;
 
 /// Execute a subprocess with the given configuration and cancellation token.
@@ -182,7 +184,7 @@ async fn run_process(
         stdio.stderr,
     );
 
-    debug!(program = %spec.program.display(), args = ?spec.args, "spawning process");
+    debug!(program = %spec.program.display(), args = ?RedactedArgs::new(&spec.args, &config.arg_redaction), "spawning process");
     let mut child = cmd.spawn().map_err(|error| {
         AppError::new(
             ErrorCode::Internal,

@@ -37,6 +37,11 @@ impl Default for CircuitBreakerConfig {
 /// `rskit-resilience`. When consecutive failures exceed the configured
 /// threshold the breaker opens and subsequent messages are rejected
 /// immediately until the timeout elapses.
+///
+/// # Errors
+///
+/// Returns an error when the derived circuit-breaker configuration is invalid,
+/// such as a zero failure threshold or zero half-open probe limit.
 pub fn circuit_breaker<T: Send + Sync + 'static>(
     config: CircuitBreakerConfig,
 ) -> AppResult<impl HandlerMiddleware<T>> {

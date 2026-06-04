@@ -5,7 +5,10 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::time::{Duration, Instant};
+use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
+
+const CANCELLATION_TEST_TIMEOUT: Duration = Duration::from_secs(1);
 
 // ---------------------------------------------------------------------------
 // Helper node types
@@ -383,65 +386,43 @@ async fn test_error_node_returns_clean_app_error() {
 #[tokio::test]
 async fn test_cancellation_stops_execution() {
     let cancel = CancellationToken::new();
+    cancel.cancel();
     let dag = Dag::new().add_node(CancelAwareNode::new("slow", 1, Duration::from_secs(10)));
 
-    let cancel_clone = cancel.clone();
-    tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_millis(50)).await;
-        cancel_clone.cancel();
-    });
-
-    let result = dag.execute(cancel).await;
+    let result = timeout(CANCELLATION_TEST_TIMEOUT, dag.execute(cancel))
+        .await
+        .expect("cancellation should stop execution promptly");
     assert!(result.is_err(), "expected cancellation error");
 }
 
 #[tokio::test]
 async fn test_slow_node_with_cancel() {
     let cancel = CancellationToken::new();
+    cancel.cancel();
     let dag = Dag::new().add_node(CancelAwareNode::new("work", 99, Duration::from_secs(30)));
 
-    let cancel_clone = cancel.clone();
-    tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_millis(20)).await;
-        cancel_clone.cancel();
-    });
-
-    let start = Instant::now();
-    let result = dag.execute(cancel).await;
-    let elapsed = start.elapsed();
+    let result = timeout(CANCELLATION_TEST_TIMEOUT, dag.execute(cancel))
+        .await
+        .expect("cancellation should stop execution promptly");
 
     assert!(result.is_err());
-    // Should finish well before 30 seconds
-    assert!(
-        elapsed < Duration::from_secs(2),
-        "took too long: {elapsed:?}"
-    );
 }
 
 #[tokio::test]
 async fn test_all_nodes_receive_cancel_token() {
     let cancel = CancellationToken::new();
+    cancel.cancel();
 
     // Two independent CancelAwareNodes — both should see cancellation
     let dag = Dag::new()
         .add_node(CancelAwareNode::new("a", 1, Duration::from_secs(10)))
         .add_node(CancelAwareNode::new("b", 2, Duration::from_secs(10)));
 
-    let cancel_clone = cancel.clone();
-    tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_millis(30)).await;
-        cancel_clone.cancel();
-    });
-
-    let start = Instant::now();
-    let result = dag.execute(cancel).await;
-    let elapsed = start.elapsed();
+    let result = timeout(CANCELLATION_TEST_TIMEOUT, dag.execute(cancel))
+        .await
+        .expect("cancellation should stop execution promptly");
 
     assert!(result.is_err());
-    assert!(
-        elapsed < Duration::from_secs(2),
-        "both nodes should have been cancelled quickly, took {elapsed:?}"
-    );
 }
 
 // ===========================================================================

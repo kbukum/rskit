@@ -11,6 +11,7 @@
 //! - [`collections`]: Vector grouping, chunking, indexing, and partition helpers.
 //! - [`mod@env`]: Safe environment variable parsing with defaults.
 //! - [`secret`]: Prevent accidental credential leaks in logs/debug outputs.
+//! - [`sensitive`]: Matching helpers for names that commonly carry secrets.
 //! - [`strings`]: Zero-alloc/low-alloc casing and safe truncation.
 //! - [`template`]: Lightweight template engine (`{name}` interpolation).
 //! - [`time`]: Duration parsing, UTC date/time conversion, RFC 3339 helpers, and timing wrappers.
@@ -22,11 +23,13 @@ pub mod bytes;
 pub mod collections;
 pub mod env;
 pub mod secret;
+pub mod sensitive;
 pub mod strings;
 pub mod template;
 pub mod time;
 
 pub use secret::SecretString;
+pub use sensitive::SecretKeyMatcher;
 pub use template::{Placeholder, Template, TemplatePart};
 
 pub(crate) fn parse_decimal_scaled(value: &str, multiplier: u128) -> Option<u128> {

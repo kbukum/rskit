@@ -28,6 +28,7 @@ parking_lot = { workspace = true }
 
 # Internal
 rskit-errors = { path = "../rskit-errors" }
+rskit-util   = { path = "../rskit-util" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full", "test-util"] }

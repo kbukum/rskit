@@ -12,7 +12,7 @@ use rskit_bootstrap::{
     AppBuilder, CancellationToken, Health, HealthStatus, LazyComponent, Registry, RegistryConfig,
 };
 use rskit_config::{AppConfig, ServiceConfig};
-use rskit_errors::{AppError, AppResult};
+use rskit_errors::{AppError, AppResult, ErrorCode};
 
 // ── Test config ──────────────────────────────────────────────────────────────
 
@@ -301,6 +301,29 @@ async fn stop_hook_error_propagates() {
 
     let result = app.run_task(|_cfg, _cancel| async move { Ok(()) }).await;
     assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn run_task_preserves_task_error_when_shutdown_also_fails() {
+    let cfg = TestCfg::default();
+    let app = AppBuilder::new(cfg)
+        .build()
+        .unwrap()
+        .before_stop(|_tok| async { Err(AppError::service_unavailable("stop boom")) });
+
+    let error = app
+        .run_task(|_cfg, _cancel| async move { Err(AppError::invalid_input("task", "task boom")) })
+        .await
+        .expect_err("task failure should remain primary");
+
+    assert_eq!(error.code(), ErrorCode::InvalidInput);
+    assert!(error.message().contains("application shutdown also failed"));
+    assert!(
+        error
+            .details()
+            .get("shutdown_error")
+            .is_some_and(|detail| detail.as_str().is_some_and(|msg| msg.contains("stop boom")))
+    );
 }
 
 #[tokio::test]

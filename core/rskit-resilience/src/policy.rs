@@ -32,12 +32,20 @@ impl Policy {
     }
 
     /// Enable circuit breaking.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the circuit-breaker configuration is invalid.
     #[must_use = "builder methods return an updated policy; use the returned value"]
     pub fn with_circuit_breaker(self, config: CbConfig) -> AppResult<Self> {
         self.try_with_circuit_breaker(config)
     }
 
     /// Enable circuit breaking from a validated configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the circuit-breaker configuration is invalid.
     #[must_use = "builder methods return an updated policy; use the returned value"]
     pub fn try_with_circuit_breaker(mut self, config: CbConfig) -> AppResult<Self> {
         self.circuit_breaker = Some(CircuitBreaker::new(config)?);
@@ -45,12 +53,20 @@ impl Policy {
     }
 
     /// Enable bulkhead concurrency limiting.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the bulkhead configuration is invalid.
     #[must_use = "builder methods return an updated policy; use the returned value"]
     pub fn with_bulkhead(self, config: BulkheadConfig) -> AppResult<Self> {
         self.try_with_bulkhead(config)
     }
 
     /// Enable bulkhead concurrency limiting from a validated configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the bulkhead configuration is invalid.
     #[must_use = "builder methods return an updated policy; use the returned value"]
     pub fn try_with_bulkhead(mut self, config: BulkheadConfig) -> AppResult<Self> {
         self.bulkhead = Some(Bulkhead::new(config)?);
@@ -65,6 +81,10 @@ impl Policy {
     }
 
     /// Enable rate limiting from configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the rate-limiter configuration is invalid.
     #[must_use = "builder methods return an updated policy; use the returned value"]
     pub fn try_with_rate_limiter_config(mut self, config: RateLimiterConfig) -> AppResult<Self> {
         self.rate_limiter = Some(RateLimiter::from_config(config)?);

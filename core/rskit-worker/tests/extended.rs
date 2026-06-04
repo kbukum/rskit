@@ -1,11 +1,12 @@
 //! Extended integration tests for rskit-worker: edge cases, concurrency, events.
 
+use std::future::pending;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 
-use tokio::sync::mpsc;
-use tokio::time::{sleep, timeout};
+use tokio::sync::{Notify, mpsc};
+use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
@@ -41,20 +42,21 @@ impl Handler<i32, i32> for ErrorHandler {
     }
 }
 
-struct SlowHandler {
-    delay: Duration,
+struct PendingHandler {
+    started: Arc<Notify>,
 }
 
 #[async_trait::async_trait]
-impl Handler<i32, i32> for SlowHandler {
+impl Handler<i32, i32> for PendingHandler {
     async fn handle(
         &self,
-        task: i32,
+        _task: i32,
         _emit: mpsc::Sender<Event<i32>>,
         cancel: CancellationToken,
     ) -> AppResult<i32> {
+        self.started.notify_one();
         tokio::select! {
-            _ = sleep(self.delay) => Ok(task * 2),
+            () = pending() => unreachable!("pending future never completes"),
             _ = cancel.cancelled() => Err(AppError::new(ErrorCode::Internal, "cancelled")),
         }
     }
@@ -106,12 +108,11 @@ impl Handler<i32, i32> for IdleHandler {
 impl Handler<i32, i32> for StubbornHandler {
     async fn handle(
         &self,
-        task: i32,
+        _task: i32,
         _emit: mpsc::Sender<Event<i32>>,
         _cancel: CancellationToken,
     ) -> AppResult<i32> {
-        sleep(Duration::from_secs(10)).await;
-        Ok(task)
+        pending::<AppResult<i32>>().await
     }
 }
 
@@ -180,22 +181,29 @@ async fn error_task_propagates() {
 
 #[tokio::test]
 async fn pool_shutdown_during_active_tasks() {
+    let started = Arc::new(Notify::new());
     let pool = Pool::new(
-        Arc::new(SlowHandler {
-            delay: Duration::from_secs(10),
+        Arc::new(PendingHandler {
+            started: started.clone(),
         }),
-        PoolConfig::new("shutdown-active").with_size(2),
+        PoolConfig::new("shutdown-active")
+            .with_size(2)
+            .with_grace_period(Duration::from_millis(1)),
     );
 
+    let started_task = started.notified();
     let h1 = pool.submit(1).await.unwrap();
     let cancel_token = h1.cancel_token();
     let _h2 = pool.submit(2).await.unwrap();
 
-    // Give tasks time to start
-    sleep(Duration::from_millis(50)).await;
+    timeout(Duration::from_secs(2), started_task)
+        .await
+        .expect("worker task should start");
 
-    // Shutdown should complete without hanging
-    pool.shutdown().await.unwrap();
+    timeout(Duration::from_secs(2), pool.shutdown())
+        .await
+        .expect("pool shutdown must not hang")
+        .unwrap();
 
     // The cancel token should be usable (handler checks it)
     cancel_token.cancel();
@@ -206,21 +214,37 @@ async fn pool_shutdown_during_active_tasks() {
 // error to the awaiting handle, not silently drop the oneshot sender.
 #[tokio::test]
 async fn pool_shutdown_fails_dequeued_but_unscheduled_task() {
+    let started = Arc::new(Notify::new());
     let pool = Pool::new(
-        Arc::new(SlowHandler {
-            delay: Duration::from_secs(10),
+        Arc::new(PendingHandler {
+            started: started.clone(),
         }),
-        PoolConfig::new("shutdown-dequeued").with_size(1),
+        PoolConfig::new("shutdown-dequeued")
+            .with_size(1)
+            .with_queue_size(1)
+            .with_grace_period(Duration::from_millis(100)),
     );
 
     // First submission occupies the only permit.
+    let started_task = started.notified();
     let _h1 = pool.submit(1).await.unwrap();
+    timeout(Duration::from_secs(2), started_task)
+        .await
+        .expect("first worker task should start");
     // Second is queued and will be dequeued by the runner, but cannot acquire a
     // permit until h1 finishes; we shut down before that ever happens.
     let h2 = pool.submit(2).await.unwrap();
 
-    sleep(Duration::from_millis(50)).await;
-    pool.shutdown().await.unwrap();
+    // With queue capacity one, a third submit can complete only after h2 has
+    // been dequeued by the runner and is waiting for a permit.
+    let _h3 = timeout(Duration::from_secs(2), pool.submit(3))
+        .await
+        .expect("runner should dequeue h2 and free queue capacity")
+        .unwrap();
+    timeout(Duration::from_secs(2), pool.shutdown())
+        .await
+        .expect("pool shutdown must not hang")
+        .unwrap();
 
     let err = timeout(Duration::from_secs(2), h2.result())
         .await
@@ -268,7 +292,7 @@ async fn shutdown_respects_grace_period() {
         Arc::new(StubbornHandler),
         PoolConfig::new("shutdown-grace")
             .with_size(1)
-            .with_grace_period(Duration::from_millis(20)),
+            .with_grace_period(Duration::from_millis(1)),
     );
     let _handle = pool.submit(1).await.unwrap();
 
@@ -282,16 +306,17 @@ async fn shutdown_respects_grace_period() {
 
 #[tokio::test]
 async fn task_cancellation() {
+    let started = Arc::new(Notify::new());
     let pool = Pool::new(
-        Arc::new(SlowHandler {
-            delay: Duration::from_secs(10),
+        Arc::new(PendingHandler {
+            started: started.clone(),
         }),
         PoolConfig::new("cancel").with_size(1),
     );
 
+    let started_task = started.notified();
     let handle = pool.submit(42).await.unwrap();
-    // Give task time to start executing
-    sleep(Duration::from_millis(50)).await;
+    started_task.await;
 
     handle.cancel();
     let result = handle.result().await;
@@ -335,9 +360,10 @@ async fn task_handle_events_collection() {
 
 #[tokio::test]
 async fn pool_stats_accuracy() {
+    let started = Arc::new(Notify::new());
     let pool = Pool::new(
-        Arc::new(SlowHandler {
-            delay: Duration::from_millis(200),
+        Arc::new(PendingHandler {
+            started: started.clone(),
         }),
         PoolConfig::new("stats").with_size(4),
     );
@@ -349,11 +375,11 @@ async fn pool_stats_accuracy() {
     assert_eq!(pool.available_permits(), 4);
 
     // Submit tasks
+    let started_task = started.notified();
     let _h1 = pool.submit(1).await.unwrap();
     let _h2 = pool.submit(2).await.unwrap();
 
-    // Give tasks time to acquire semaphore
-    sleep(Duration::from_millis(50)).await;
+    started_task.await;
 
     let stats = pool.stats();
     assert!(stats.running <= 4, "running should not exceed capacity");

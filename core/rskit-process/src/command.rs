@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use crate::runner::OutputObserver;
+use rskit_util::SecretKeyMatcher;
 
 /// Default maximum retained bytes for each captured output stream.
 pub const DEFAULT_MAX_OUTPUT_BYTES: usize = 1024 * 1024;
@@ -314,6 +315,48 @@ impl ProcessIo {
     }
 }
 
+/// Redaction policy for command-line arguments emitted in process spawn logs.
+#[derive(Debug, Clone, Eq, PartialEq, Default)]
+pub struct ArgRedaction {
+    matcher: SecretKeyMatcher,
+}
+
+impl ArgRedaction {
+    /// Create a policy with the default secret-bearing argument names.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Replace the default secret-bearing names with the provided names.
+    #[must_use]
+    pub fn from_names(names: impl IntoIterator<Item = impl AsRef<str>>) -> Self {
+        Self {
+            matcher: SecretKeyMatcher::new(names),
+        }
+    }
+
+    /// Add a secret-bearing argument name.
+    #[must_use]
+    pub fn with_name(mut self, name: impl AsRef<str>) -> Self {
+        self.matcher = self.matcher.with_name(name);
+        self
+    }
+
+    /// Add multiple secret-bearing argument names.
+    #[must_use]
+    pub fn with_names(mut self, names: impl IntoIterator<Item = impl AsRef<str>>) -> Self {
+        self.matcher = self.matcher.with_names(names);
+        self
+    }
+
+    /// Return true when an argument name should have its value redacted.
+    #[must_use]
+    pub fn is_sensitive_arg_name(&self, name: &str) -> bool {
+        self.matcher.is_secret_key(name)
+    }
+}
+
 /// Signal and process-tree termination policy.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 #[non_exhaustive]
@@ -361,6 +404,7 @@ impl SignalPolicy {
 
 /// Configuration for subprocess execution behavior.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct ProcessConfig {
     /// Overall timeout for the process. None means no timeout.
     pub timeout: Option<Duration>,
@@ -368,6 +412,8 @@ pub struct ProcessConfig {
     pub io: ProcessIo,
     /// Signal and process-tree termination policy.
     pub signal: SignalPolicy,
+    /// Redaction policy for command-line arguments emitted in spawn logs.
+    pub arg_redaction: ArgRedaction,
 }
 
 impl Default for ProcessConfig {
@@ -376,6 +422,7 @@ impl Default for ProcessConfig {
             timeout: Some(Duration::from_secs(30)),
             io: ProcessIo::default(),
             signal: SignalPolicy::default(),
+            arg_redaction: ArgRedaction::default(),
         }
     }
 }
@@ -399,6 +446,20 @@ impl ProcessConfig {
     #[must_use]
     pub fn with_signal_policy(mut self, signal: SignalPolicy) -> Self {
         self.signal = signal;
+        self
+    }
+
+    /// Set the command-line argument redaction policy used for spawn logs.
+    #[must_use]
+    pub fn with_arg_redaction(mut self, arg_redaction: ArgRedaction) -> Self {
+        self.arg_redaction = arg_redaction;
+        self
+    }
+
+    /// Add a custom secret-bearing command-line argument name for spawn-log redaction.
+    #[must_use]
+    pub fn with_sensitive_arg_name(mut self, name: impl AsRef<str>) -> Self {
+        self.arg_redaction = self.arg_redaction.with_name(name);
         self
     }
 
