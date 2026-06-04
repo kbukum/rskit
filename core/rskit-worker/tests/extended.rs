@@ -217,6 +217,7 @@ async fn pool_shutdown_fails_dequeued_but_unscheduled_task() {
         }),
         PoolConfig::new("shutdown-dequeued")
             .with_size(1)
+            .with_queue_size(1)
             .with_grace_period(Duration::from_millis(1)),
     );
 
@@ -228,7 +229,12 @@ async fn pool_shutdown_fails_dequeued_but_unscheduled_task() {
     // permit until h1 finishes; we shut down before that ever happens.
     let h2 = pool.submit(2).await.unwrap();
 
-    tokio::task::yield_now().await;
+    // With queue capacity one, a third submit can complete only after h2 has
+    // been dequeued by the runner and is waiting for a permit.
+    let _h3 = timeout(Duration::from_secs(2), pool.submit(3))
+        .await
+        .expect("runner should dequeue h2 and free queue capacity")
+        .unwrap();
     pool.shutdown().await.unwrap();
 
     let err = timeout(Duration::from_secs(2), h2.result())

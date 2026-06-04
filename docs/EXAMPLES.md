@@ -125,6 +125,7 @@ async fn main() -> AppResult<()> {
 
 ```rust
 use rskit_errors::{AppError, ErrorCode};
+use rskit_grpc::{app_error_to_status, error_code_to_grpc_code};
 
 fn example(err: AppError, db_error: std::io::Error, user_id: &str, tenant_id: &str) {
     match err.code() {
@@ -138,8 +139,8 @@ fn example(err: AppError, db_error: std::io::Error, user_id: &str, tenant_id: &s
         .with_detail("tenant", tenant_id)
         .with_cause(db_error);
 
-    let status: tonic::Status = err.into();
-    assert_eq!(status.code(), tonic::Code::NotFound);
+    let status = app_error_to_status(&err);
+    assert_eq!(status.code(), error_code_to_grpc_code(ErrorCode::NotFound));
 }
 ```
 
