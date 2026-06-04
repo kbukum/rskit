@@ -12,7 +12,7 @@ Lightweight `Arc`-based runtime dependency injection container.
 
 - Three registration modes: eager (`register`), lazy factory (`register_factory`), singleton (`register_singleton`)
 - Type-keyed resolution via `TypeId` — no strings, no macros
-- `Resolve<T>` and `MustResolve<T>` traits for constructor-oriented workflows
+- `Resolve<T>` trait for constructor-oriented workflows
 - Thread-safe with `parking_lot::RwLock`
 - `Closeable` trait for async resource cleanup
 - Returns `AppResult` for idiomatic error handling

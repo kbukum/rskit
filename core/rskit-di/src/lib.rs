@@ -22,6 +22,4 @@ mod container;
 mod typed;
 
 pub use container::{Closeable, Container};
-pub use typed::{
-    MustResolve, Resolve, must_resolve, provide, provide_singleton, provide_transient, resolve,
-};
+pub use typed::{Resolve, provide, provide_singleton, provide_transient, resolve};

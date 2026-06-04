@@ -10,6 +10,44 @@ use crate::Health;
 /// Implement this trait for databases, caches, servers, message brokers, and
 /// other infrastructure that must participate in ordered startup, shutdown, and
 /// health reporting.
+///
+/// # Example
+///
+/// ```rust
+/// use rskit_component::{Component, Health, Registry};
+/// use rskit_errors::AppResult;
+/// use std::sync::Arc;
+///
+/// struct Cache;
+///
+/// #[async_trait::async_trait]
+/// impl Component for Cache {
+///     fn name(&self) -> &str {
+///         "cache"
+///     }
+///
+///     async fn start(&self) -> AppResult<()> {
+///         Ok(())
+///     }
+///
+///     async fn stop(&self) -> AppResult<()> {
+///         Ok(())
+///     }
+///
+///     fn health(&self) -> Health {
+///         Health::healthy(self.name())
+///     }
+/// }
+///
+/// # #[tokio::main]
+/// # async fn main() -> AppResult<()> {
+/// let mut registry = Registry::new();
+/// registry.register(Arc::new(Cache));
+/// registry.start_all().await?;
+/// registry.stop_all().await?;
+/// # Ok(())
+/// # }
+/// ```
 #[async_trait::async_trait]
 pub trait Component: Send + Sync {
     /// Stable identifier used in logs and health responses.

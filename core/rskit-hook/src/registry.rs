@@ -9,7 +9,7 @@ use tokio_util::sync::CancellationToken;
 use crate::types::{Event, EventType, HookError, HookResult};
 
 type ErasedEvent = dyn Any + Send + Sync;
-type ErasedHandler = Box<dyn Fn(CancellationToken, &ErasedEvent) -> HookResult + Send + Sync>;
+type ErasedHandler = Arc<dyn Fn(CancellationToken, &ErasedEvent) -> HookResult + Send + Sync>;
 type HandlerKey = (TypeId, EventType);
 type HandlerMap = Arc<RwLock<HashMap<HandlerKey, Vec<(usize, ErasedHandler)>>>>;
 
@@ -28,8 +28,8 @@ pub struct HookRegistry {
 
 impl std::fmt::Debug for HookRegistry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let handlers = self.handlers.read();
         let event_types = self.event_types.read();
+        let handlers = self.handlers.read();
         let counts = handlers
             .iter()
             .map(|((type_id, registered_type), handlers)| {
@@ -80,7 +80,7 @@ impl HookRegistry {
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
         self.handlers.write().entry(key.clone()).or_default().push((
             id,
-            Box::new(move |cancel, event| {
+            Arc::new(move |cancel, event| {
                 let Some(event) = event.downcast_ref::<E>() else {
                     return Err(HookError::fatal("hook event type mismatch"));
                 };
@@ -96,17 +96,26 @@ impl HookRegistry {
     }
 
     /// Emit an event to all registered handlers for its concrete type.
+    ///
+    /// Dispatch uses snapshot semantics: handlers registered or removed during an
+    /// in-flight emit do not affect that emit, but apply to subsequent emits.
     pub fn emit<E>(&self, event: &E, cancel: CancellationToken) -> HookResult
     where
         E: Event,
     {
         let key = (TypeId::of::<E>(), event.event_type());
-        let handlers = self.handlers.read();
-        let Some(handler_list) = handlers.get(&key) else {
-            return Ok(());
+        let handler_list = {
+            let handlers = self.handlers.read();
+            let Some(handler_list) = handlers.get(&key) else {
+                return Ok(());
+            };
+            handler_list
+                .iter()
+                .map(|(_, handler)| Arc::clone(handler))
+                .collect::<Vec<_>>()
         };
         let mut first_error: Option<HookError> = None;
-        for (_, handler) in handler_list {
+        for handler in handler_list {
             if cancel.is_cancelled() {
                 let err = HookError::fatal("hook dispatch cancelled");
                 return Err(err);
@@ -357,5 +366,30 @@ mod tests {
         }
         let _ = registry.emit(&Pong, CancellationToken::new());
         assert_eq!(counter.load(Ordering::SeqCst), 3);
+    }
+
+    #[test]
+    fn handler_can_mutate_registry_during_emit() {
+        let registry = Arc::new(HookRegistry::new());
+        let counter = Arc::new(AtomicU32::new(0));
+
+        let registry_for_handler = Arc::clone(&registry);
+        let _unsubscribe1 = registry.on::<Ping>(ping_type(), move |_, _| {
+            registry_for_handler.clear::<Ping>(&ping_type());
+            Ok(())
+        });
+
+        let cloned = Arc::clone(&counter);
+        let _unsubscribe2 = registry.on::<Ping>(ping_type(), move |_, _| {
+            cloned.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        });
+
+        registry
+            .emit(&Ping, CancellationToken::new())
+            .expect("emit");
+
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
+        assert!(!registry.has_handlers::<Ping>(&ping_type()));
     }
 }

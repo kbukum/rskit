@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Breaking
+- **rskit-di**: removed the panic-oriented `MustResolve`/`must_resolve` public
+  helpers; use the typed `Resolve<T>` contract or `resolve()` function and
+  handle `AppResult` errors explicitly.
 - **rskit-encryption**: changed symmetric ciphertexts to a versioned envelope
   that authenticates the format and algorithm header as AEAD associated data.
   Existing ciphertexts in the previous raw `salt || nonce || ciphertext` format
@@ -33,6 +36,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   layers directly.
 
 ### Changed — Cross-Cutting
+- **L2 patterns/DI**: tightened contract-crate docs for component/provider
+  trait surfaces, documented provider backpressure expectations, and made hook
+  dispatch use reentrant-safe snapshot semantics.
 - **rskit-validation/schema/encryption**: completed the remaining Phase 1
   foundation pass by splitting validation and schema into cohesive modules,
   adding bounded schema validation options, removing an unused validation
@@ -95,7 +101,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **rskit-hook**: replaced public downcast-based hook payload handling with typed hook registration and added a bounded in-process event bus.
 - **rskit-provider**: narrowed L2 provider contracts to canonical shapes plus `TowerProvider`, removing cross-cutting middleware ownership from the pattern crate.
 - **rskit-component**: enforced registry start/stop timeout configuration in lifecycle state transitions.
-- **rskit-di**: added typed `Resolve<T>` and `MustResolve<T>` resolver traits.
+- **rskit-di**: added a typed `Resolve<T>` resolver trait.
 - **rskit-skill**: replaced the unmaintained YAML parser dependency with a maintained serde-compatible fork.
 - **L4 composition crates**: aligned bootstrap lifecycle hooks with start/stop boundaries and typed lifecycle events, made pipeline fan-out/windowing bounded, replaced JSON chain operations with typed sequential composition, tightened DAG cycle/parallelism guarantees, removed worker ticker coupling, added typed state machines, and made process execution explicitly cancellable with bounded output by default.
 

@@ -1,7 +1,5 @@
 //! Typed convenience helpers for [`crate::Container`].
 
-use std::sync::Arc;
-
 use rskit_errors::AppResult;
 
 use crate::Container;
@@ -12,40 +10,15 @@ where
     T: Send + Sync + 'static,
 {
     /// Resolve `T` from the dependency graph.
-    fn resolve(&self) -> AppResult<Arc<T>>;
-}
-
-/// Typed dependency resolver contract that panics when `T` is unavailable.
-///
-/// This is intended for tests and startup-only wiring where failure should abort
-/// immediately. Runtime paths should prefer [`Resolve`].
-pub trait MustResolve<T>
-where
-    T: Send + Sync + 'static,
-{
-    /// Resolve `T` or panic with a descriptive message.
-    ///
-    /// # Panics
-    ///
-    /// Panics when `T` is not registered or its factory returns an error.
-    fn must_resolve(&self) -> Arc<T>;
+    fn resolve(&self) -> AppResult<std::sync::Arc<T>>;
 }
 
 impl<T> Resolve<T> for Container
 where
     T: Send + Sync + 'static,
 {
-    fn resolve(&self) -> AppResult<Arc<T>> {
+    fn resolve(&self) -> AppResult<std::sync::Arc<T>> {
         Container::resolve::<T>(self)
-    }
-}
-
-impl<T> MustResolve<T> for Container
-where
-    T: Send + Sync + 'static,
-{
-    fn must_resolve(&self) -> Arc<T> {
-        must_resolve::<T>(self)
     }
 }
 
@@ -53,13 +26,13 @@ where
 pub fn provide<T, F>(container: &Container, factory: F)
 where
     T: Send + Sync + 'static,
-    F: Fn() -> AppResult<Arc<T>> + Send + Sync + 'static,
+    F: Fn() -> AppResult<std::sync::Arc<T>> + Send + Sync + 'static,
 {
     container.register_singleton(factory);
 }
 
 /// Register a pre-built singleton instance for `T`.
-pub fn provide_singleton<T>(container: &Container, value: Arc<T>)
+pub fn provide_singleton<T>(container: &Container, value: std::sync::Arc<T>)
 where
     T: Send + Sync + 'static,
 {
@@ -70,26 +43,17 @@ where
 pub fn provide_transient<T, F>(container: &Container, factory: F)
 where
     T: Send + Sync + 'static,
-    F: Fn() -> AppResult<Arc<T>> + Send + Sync + 'static,
+    F: Fn() -> AppResult<std::sync::Arc<T>> + Send + Sync + 'static,
 {
     container.register_factory(factory);
 }
 
 /// Resolve `T` from the container.
-pub fn resolve<T>(container: &Container) -> AppResult<Arc<T>>
+pub fn resolve<T>(container: &Container) -> AppResult<std::sync::Arc<T>>
 where
     T: Send + Sync + 'static,
 {
     container.resolve::<T>()
-}
-
-/// Resolve `T` or panic.
-pub fn must_resolve<T>(container: &Container) -> Arc<T>
-where
-    T: Send + Sync + 'static,
-{
-    resolve::<T>(container)
-        .unwrap_or_else(|error| panic!("failed to resolve {}: {error}", std::any::type_name::<T>()))
 }
 
 #[cfg(test)]
@@ -97,9 +61,7 @@ mod tests {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
-    use super::{
-        MustResolve, Resolve, must_resolve, provide, provide_singleton, provide_transient, resolve,
-    };
+    use super::{Resolve, provide, provide_singleton, provide_transient, resolve};
     use crate::Container;
 
     #[derive(Debug)]
@@ -130,7 +92,7 @@ mod tests {
         let service = Arc::new(Service { value: 42 });
         provide_singleton(&container, Arc::clone(&service));
 
-        let resolved = must_resolve::<Service>(&container);
+        let resolved = resolve::<Service>(&container).expect("service should resolve");
         assert!(Arc::ptr_eq(&service, &resolved));
     }
 
@@ -160,7 +122,7 @@ mod tests {
             .expect("trait resolve should succeed");
         assert_eq!(via_trait.value, 7);
 
-        let via_must = <Container as MustResolve<Service>>::must_resolve(&container);
-        assert_eq!(via_must.value, 7);
+        let via_function = resolve::<Service>(&container).expect("function resolve should succeed");
+        assert_eq!(via_function.value, 7);
     }
 }

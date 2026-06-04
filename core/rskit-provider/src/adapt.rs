@@ -76,7 +76,6 @@ where
     }
 }
 
-#[async_trait::async_trait]
 impl<I, F, Fut> Sink<I> for FnSink<I, F>
 where
     I: Send + 'static,

@@ -125,7 +125,6 @@ impl<P: Provider + 'static> rskit_provider::Provider for LlmStream<P> {
     }
 }
 
-#[async_trait]
 impl<P: Provider + 'static> rskit_provider::Stream<CompletionRequest, StreamEventRef>
     for LlmStream<P>
 {
@@ -135,7 +134,7 @@ impl<P: Provider + 'static> rskit_provider::Stream<CompletionRequest, StreamEven
     ) -> AppResult<ProviderBoxStream<StreamEventRef>> {
         use futures::StreamExt;
         let raw = Provider::stream(&*self.0, input).await?;
-        Ok(Box::pin(raw.map(Ok)))
+        Ok(Box::pin(raw.map(Ok)) as ProviderBoxStream<StreamEventRef>)
     }
 }
 

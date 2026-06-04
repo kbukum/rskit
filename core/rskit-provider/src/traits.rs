@@ -1,3 +1,4 @@
+use std::future::Future;
 use std::pin::Pin;
 
 use futures::Stream as FuturesStream;
@@ -18,6 +19,35 @@ pub trait Provider: Send + Sync {
 // ─── Interaction patterns ─────────────────────────────────────────────────────
 
 /// Unary request → single response (HTTP POST, gRPC unary, DB query).
+///
+/// # Example
+///
+/// ```rust
+/// use rskit_errors::AppResult;
+/// use rskit_provider::{Provider, RequestResponse};
+///
+/// struct Echo;
+///
+/// impl Provider for Echo {
+///     fn name(&self) -> &'static str {
+///         "echo"
+///     }
+/// }
+///
+/// #[async_trait::async_trait]
+/// impl RequestResponse<String, String> for Echo {
+///     async fn execute(&self, input: String) -> AppResult<String> {
+///         Ok(input.to_uppercase())
+///     }
+/// }
+///
+/// # #[tokio::main]
+/// # async fn main() -> AppResult<()> {
+/// let response = Echo.execute("hello".to_string()).await?;
+/// assert_eq!(response, "HELLO");
+/// # Ok(())
+/// # }
+/// ```
 #[async_trait::async_trait]
 pub trait RequestResponse<I, O>: Provider
 where
@@ -28,36 +58,40 @@ where
     async fn execute(&self, input: I) -> AppResult<O>;
 }
 
-/// One input → stream of outputs (gRPC server-stream, SSE, live query).
-#[async_trait::async_trait]
+/// One input → bounded or backpressure-aware stream of outputs (gRPC server-stream, SSE, live query).
+///
+/// Implementations must document their buffering and backpressure behavior.
 pub trait Stream<I, O>: Provider
 where
     I: Send + 'static,
     O: Send + 'static,
 {
     /// Execute the request and return a stream of responses.
-    async fn execute(&self, input: I) -> AppResult<BoxStream<O>>;
+    fn execute(&self, input: I) -> impl Future<Output = AppResult<BoxStream<O>>> + Send + '_;
 }
 
 /// Write-only (Kafka publish, webhook, S3 put, log sink).
-#[async_trait::async_trait]
+///
+/// Implementations must apply downstream backpressure or return a typed error
+/// instead of buffering without a bound.
 pub trait Sink<I>: Provider
 where
     I: Send + 'static,
 {
     /// Send a single item downstream.
-    async fn send(&self, input: I) -> AppResult<()>;
+    fn send(&self, input: I) -> impl Future<Output = AppResult<()>> + Send + '_;
 }
 
 /// Bidirectional channel (WebSocket, gRPC bidi-stream).
-#[async_trait::async_trait]
+///
+/// Implementations must document channel buffering and close semantics.
 pub trait Duplex<I, O>: Provider
 where
     I: Send + 'static,
     O: Send + 'static,
 {
     /// Open a new bidirectional channel.
-    async fn open(&self) -> AppResult<Box<dyn DuplexChannel<I, O>>>;
+    fn open(&self) -> impl Future<Output = AppResult<Box<dyn DuplexChannel<I, O>>>> + Send + '_;
 }
 
 /// Handle to an open bidirectional channel.
