@@ -53,6 +53,7 @@ Operators available on any `futures::Stream` via `RskitStreamExt`:
 ```toml
 [dependencies]
 rskit-pipeline = "0.1"
+rskit-errors = "0.1"
 ```
 
 ```rust
@@ -61,7 +62,7 @@ use rskit_pipeline::{from_slice, RskitStreamExt};
 
 let results = from_slice(vec![1u32, 2, 3, 4, 5])
     .rfilter(|&n| n % 2 == 0)
-    .rmap(|n| async move { Ok(n * 10) })
+    .rmap(|n| async move { Ok::<_, rskit_errors::AppError>(n * 10) })
     .collect::<Vec<_>>()
     .await;
 // [Ok(20), Ok(40)]

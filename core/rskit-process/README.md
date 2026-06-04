@@ -78,7 +78,7 @@ use rskit_process::{InheritedIo, ProcessConfig, ProcessIo, ProcessSpec, run_with
 use tokio_util::sync::CancellationToken;
 
 # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-let spec = ProcessSpec::new("/usr/bin/printf").args(["%s\n", "terminal output"]);
+let spec = ProcessSpec::new("printf").args(["%s\n", "terminal output"]);
 let config = ProcessConfig::default().with_io(ProcessIo::inherited(InheritedIo::new()));
 
 let result = run_with_cancel(&spec, &config, CancellationToken::new()).await?;

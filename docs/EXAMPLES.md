@@ -10,6 +10,7 @@ use rskit_config::{AppConfig, ServiceConfig};
 use rskit_errors::AppResult;
 
 #[derive(Debug, Default, serde::Deserialize, rskit_validation::Validate)]
+#[validate(crate = "rskit_validation::validator")]
 struct MyConfig {
     #[serde(default)]
     service: ServiceConfig,
@@ -78,8 +79,8 @@ use rskit_pipeline::{RskitStreamExt, from_slice};
 #[tokio::main]
 async fn main() {
     let results = from_slice(vec![1u32, 2, 3, 4, 5])
-        .rfilter(|&n| async move { n % 2 == 0 })
-        .rmap(|n| async move { Ok(n * 10) })
+        .rfilter(|&n| n % 2 == 0)
+        .rmap(|n| async move { Ok::<_, rskit_errors::AppError>(n * 10) })
         .collect::<Vec<_>>()
         .await;
 
@@ -172,6 +173,7 @@ use rskit_validation::Validate;
 use serde::Deserialize;
 
 #[derive(Deserialize, Validate)]
+#[validate(crate = "rskit_validation::validator")]
 struct Config {
     #[serde(default)]
     service: ServiceConfig,
