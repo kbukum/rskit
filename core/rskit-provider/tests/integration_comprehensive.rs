@@ -32,10 +32,9 @@ impl Provider for VecStream {
     }
 }
 
-#[async_trait::async_trait]
 impl Stream<(), i32> for VecStream {
     async fn execute(&self, _input: ()) -> AppResult<BoxStream<i32>> {
-        Ok(Box::pin(stream::iter([Ok(1), Ok(2), Ok(3)])))
+        Ok(Box::pin(stream::iter([Ok(1), Ok(2), Ok(3)])) as BoxStream<i32>)
     }
 }
 
@@ -48,7 +47,6 @@ impl Provider for CollectSink {
     }
 }
 
-#[async_trait::async_trait]
 impl Sink<String> for CollectSink {
     async fn send(&self, input: String) -> AppResult<()> {
         if input.is_empty() {
@@ -89,10 +87,9 @@ impl Provider for ChatDuplex {
     }
 }
 
-#[async_trait::async_trait]
 impl Duplex<String, String> for ChatDuplex {
     async fn open(&self) -> AppResult<Box<dyn DuplexChannel<String, String>>> {
-        Ok(Box::new(MemoryChannel { values: Vec::new() }))
+        Ok(Box::new(MemoryChannel { values: Vec::new() }) as Box<_>)
     }
 }
 
