@@ -10,6 +10,11 @@ use serde::{Deserialize, Serialize};
 use crate::{Handler, Pool, PoolConfig};
 
 /// Workload manager configuration.
+///
+/// Workloads are executed through [`Pool`], so submissions use the same bounded
+/// queue and overflow semantics as [`PoolConfig`]. `max_concurrent` maps to the
+/// pool's semaphore capacity and `queue_size` maps to the internal submit queue
+/// capacity. Values below one are clamped to one when the pool config is built.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct WorkloadConfig {
     /// Maximum concurrently executing workload tasks.
@@ -31,6 +36,11 @@ impl Default for WorkloadConfig {
 
 impl WorkloadConfig {
     /// Convert this workload config into the canonical worker pool config.
+    ///
+    /// The resulting pool uses a bounded queue. With the default overflow
+    /// policy, `submit` waits for queue capacity instead of buffering
+    /// indefinitely; alternate policies can be configured on the returned
+    /// [`PoolConfig`] before constructing a pool.
     #[must_use]
     pub fn to_pool_config(&self, name: impl Into<String>) -> PoolConfig {
         PoolConfig::new(name)
@@ -188,6 +198,10 @@ pub trait WorkloadScheduler: Send + Sync {
 }
 
 /// Scheduler backed by a canonical `rskit-worker` pool configuration.
+///
+/// The scheduler is deterministic and does not create background work by
+/// itself. Execution backpressure is enforced by the bounded [`Pool`] produced
+/// by [`WorkerScheduler::pool`].
 #[derive(Debug, Clone)]
 pub struct WorkerScheduler {
     pool_name: String,

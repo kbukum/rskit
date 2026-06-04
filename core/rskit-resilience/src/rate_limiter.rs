@@ -77,12 +77,20 @@ impl std::fmt::Debug for RateLimiter {
 impl RateLimiter {
     /// Create a rate limiter that allows `per_second` requests/second with a
     /// burst capacity of `burst`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when `per_second` or `burst` is zero.
     pub fn new(name: impl Into<String>, per_second: u32, burst: u32) -> AppResult<Self> {
         let config = RateLimiterConfig::new(name, per_second, burst);
         Self::from_config(config)
     }
 
     /// Create a rate limiter from a configuration object.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when `config.per_second` or `config.burst` is zero.
     pub fn from_config(config: RateLimiterConfig) -> AppResult<Self> {
         let per_sec = non_zero(
             "per_second",
@@ -103,6 +111,10 @@ impl RateLimiter {
 
     /// Non-blocking check: returns `Ok(())` if a token was acquired, or
     /// `Err(AppError::rate_limited())` if the bucket is empty.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AppError::rate_limited`] when no token is currently available.
     pub fn check(&self) -> AppResult<()> {
         self.inner
             .check()
@@ -110,6 +122,11 @@ impl RateLimiter {
     }
 
     /// Async wait: blocks until a token is available or `cancel` fires.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the cancellation token fires before a token is
+    /// available.
     pub async fn until_ready(&self, cancel: Option<CancellationToken>) -> AppResult<()> {
         match cancel {
             Some(token) => {

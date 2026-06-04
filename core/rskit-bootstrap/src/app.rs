@@ -333,10 +333,14 @@ impl<C: AppConfig> App<Built, C> {
             }
         };
         let stop_result = started.stop().await.map(|_| ());
-        if task_result.is_ok() {
-            stop_result?;
+        match (task_result, stop_result) {
+            (Ok(()), Ok(())) => Ok(()),
+            (Ok(()), Err(stop_error)) => Err(stop_error),
+            (Err(task_error), Ok(())) => Err(task_error),
+            (Err(task_error), Err(stop_error)) => Err(task_error
+                .context("application shutdown also failed after task error")
+                .with_detail("shutdown_error", stop_error.to_string())),
         }
-        task_result
     }
 
     fn ready_check(&self) -> AppResult<()> {

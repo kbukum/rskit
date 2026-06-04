@@ -78,7 +78,7 @@ use rskit_process::{InheritedIo, ProcessConfig, ProcessIo, ProcessSpec, run_with
 use tokio_util::sync::CancellationToken;
 
 # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-let spec = ProcessSpec::new("sh").args(["-c", "echo terminal output"]);
+let spec = ProcessSpec::new("/usr/bin/printf").args(["%s\n", "terminal output"]);
 let config = ProcessConfig::default().with_io(ProcessIo::inherited(InheritedIo::new()));
 
 let result = run_with_cancel(&spec, &config, CancellationToken::new()).await?;
@@ -93,3 +93,8 @@ assert!(result.stdout.is_empty());
 By default, rskit-process creates an isolated process group where the platform supports it. On timeout or cancellation, it sends a graceful termination signal, waits for `SignalPolicy::grace_period`, then escalates to kill. `Inherited` mode is the exception: it does not create a new process group, because terminal-native commands should remain in the parent's foreground terminal context unless a future terminal-control mode provides stronger guarantees.
 
 Separate stdout and stderr pipes are read concurrently, so each stream is ordered internally, but exact ordering across streams is not guaranteed.
+
+Process start logs redact secret-looking argument values, but argv is still
+visible to operating-system process inspection on many platforms. Prefer stdin,
+files with restricted permissions, or environment-specific secret mechanisms for
+sensitive values instead of command-line arguments.

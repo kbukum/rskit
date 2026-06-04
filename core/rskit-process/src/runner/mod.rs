@@ -1,5 +1,7 @@
 //! Async subprocess execution runtime.
 
+use std::ffi::OsString;
+use std::fmt;
 use std::io::ErrorKind;
 use std::process::Stdio;
 use std::time::Instant;
@@ -182,7 +184,7 @@ async fn run_process(
         stdio.stderr,
     );
 
-    debug!(program = %spec.program.display(), args = ?spec.args, "spawning process");
+    debug!(program = %spec.program.display(), args = ?RedactedArgs(&spec.args), "spawning process");
     let mut child = cmd.spawn().map_err(|error| {
         AppError::new(
             ErrorCode::Internal,
@@ -273,6 +275,58 @@ fn inherited_config(config: &ProcessConfig) -> ProcessConfig {
     config
 }
 
+struct RedactedArgs<'a>(&'a [OsString]);
+
+impl fmt::Debug for RedactedArgs<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut list = f.debug_list();
+        let mut redact_next = false;
+        for arg in self.0 {
+            let arg = arg.to_string_lossy();
+            if redact_next {
+                list.entry(&"<redacted>");
+                redact_next = false;
+                continue;
+            }
+
+            if let Some((key, _value)) = arg.split_once('=')
+                && is_sensitive_arg_name(key)
+            {
+                let redacted = format!("{key}=<redacted>");
+                list.entry(&redacted);
+                continue;
+            }
+
+            if is_sensitive_arg_name(&arg) {
+                list.entry(&arg);
+                redact_next = true;
+            } else {
+                list.entry(&arg);
+            }
+        }
+        list.finish()
+    }
+}
+
+fn is_sensitive_arg_name(arg: &str) -> bool {
+    let normalized = arg
+        .trim_start_matches('-')
+        .replace(['-', '_'], "")
+        .to_ascii_lowercase();
+    [
+        "password",
+        "passwd",
+        "pwd",
+        "token",
+        "secret",
+        "credential",
+        "apikey",
+        "auth",
+    ]
+    .iter()
+    .any(|needle| normalized.contains(needle))
+}
+
 fn spawn_stdin_writer(
     stdin: Option<ChildStdin>,
     input: &InputPolicy,
@@ -300,5 +354,32 @@ async fn collect_stdin(task: Option<JoinHandle<AppResult<()>>>) -> AppResult<()>
     match task {
         Some(task) => task.await.map_err(AppError::internal)?,
         None => Ok(()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::ffi::OsString;
+
+    use super::RedactedArgs;
+
+    #[test]
+    fn redacted_args_masks_secret_values() {
+        let args = vec![
+            OsString::from("--token"),
+            OsString::from("abc123"),
+            OsString::from("--password=hunter2"),
+            OsString::from("--name"),
+            OsString::from("visible"),
+        ];
+
+        let rendered = format!("{:?}", RedactedArgs(&args));
+
+        assert!(rendered.contains("\"--token\""));
+        assert!(rendered.contains("\"<redacted>\""));
+        assert!(rendered.contains("\"--password=<redacted>\""));
+        assert!(rendered.contains("\"visible\""));
+        assert!(!rendered.contains("abc123"));
+        assert!(!rendered.contains("hunter2"));
     }
 }

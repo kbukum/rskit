@@ -41,6 +41,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   layers directly.
 
 ### Changed — Cross-Cutting
+- **L4 composition**: tightened app shutdown error reporting, state-machine
+  transition atomicity, worker backpressure documentation, deterministic
+  cancellation tests, and process argument log redaction.
+- **Documentation**: made cross-crate usage examples self-contained and
+  documented validation error cases for refined resilience and messaging APIs.
 - **rskit-security**: re-exported the shared redacting `SecretString` and added
   a `subtle`-backed constant-time byte comparison helper for security-sensitive
   adapters.

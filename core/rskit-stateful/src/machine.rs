@@ -55,7 +55,9 @@ where
         self
     }
 
-    /// Add an action that runs after the state changes and before persistence hooks.
+    /// Add an action that runs after guard validation and before the transition commits.
+    ///
+    /// Returning an error aborts the transition without changing state or recording audit.
     #[must_use]
     pub fn with_action(
         mut self,
@@ -199,11 +201,10 @@ where
         }
 
         let to = transition.to.clone();
-        state.current = to.clone();
-        state.version += 1;
+        let next_version = state.version + 1;
         let snapshot = StateSnapshot {
             state: to.clone(),
-            version: state.version,
+            version: next_version,
         };
 
         if let Some(action) = &transition.action {
@@ -213,7 +214,7 @@ where
         let audit = AuditEntry {
             transition: transition.name.clone(),
             from,
-            to,
+            to: to.clone(),
             context,
             version: snapshot.version,
             recorded_at: SystemTime::now(),
@@ -222,6 +223,8 @@ where
         for persistence in &self.persistence {
             persistence.persist(&snapshot, &audit)?;
         }
+        state.current = to;
+        state.version = next_version;
         state.audit_log.push(audit);
 
         Ok(snapshot)
@@ -240,6 +243,7 @@ mod tests {
     }
 
     struct CountingPersistence(AtomicUsize);
+    struct FailingPersistence;
 
     impl StatePersistence<OrderState, bool> for CountingPersistence {
         fn persist(
@@ -249,6 +253,16 @@ mod tests {
         ) -> AppResult<()> {
             self.0.fetch_add(1, Ordering::SeqCst);
             Ok(())
+        }
+    }
+
+    impl StatePersistence<OrderState, bool> for FailingPersistence {
+        fn persist(
+            &self,
+            _snapshot: &StateSnapshot<OrderState>,
+            _audit: &AuditEntry<OrderState, bool>,
+        ) -> AppResult<()> {
+            Err(AppError::new(ErrorCode::Internal, "persist failed"))
         }
     }
 
@@ -274,5 +288,37 @@ mod tests {
         assert_eq!(snapshot.version, 1);
         assert_eq!(machine.audit_log().len(), 1);
         assert_eq!(persistence.0.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn action_failure_does_not_change_state_or_audit() {
+        let machine = StateMachine::new(OrderState::Draft).with_transition(
+            Transition::new("submit", OrderState::Submitted)
+                .from(OrderState::Draft)
+                .with_action(|_, _, _| Err(AppError::new(ErrorCode::Internal, "action failed"))),
+        );
+
+        let error = machine.apply("submit", true).unwrap_err();
+
+        assert_eq!(error.code(), ErrorCode::Internal);
+        assert_eq!(machine.state(), OrderState::Draft);
+        assert_eq!(machine.snapshot().version, 0);
+        assert!(machine.audit_log().is_empty());
+    }
+
+    #[test]
+    fn persistence_failure_does_not_change_state_or_audit() {
+        let machine = StateMachine::new(OrderState::Draft)
+            .with_transition(
+                Transition::new("submit", OrderState::Submitted).from(OrderState::Draft),
+            )
+            .with_persistence(Arc::new(FailingPersistence));
+
+        let error = machine.apply("submit", true).unwrap_err();
+
+        assert_eq!(error.code(), ErrorCode::Internal);
+        assert_eq!(machine.state(), OrderState::Draft);
+        assert_eq!(machine.snapshot().version, 0);
+        assert!(machine.audit_log().is_empty());
     }
 }
