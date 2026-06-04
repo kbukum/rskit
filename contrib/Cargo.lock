@@ -5268,7 +5268,9 @@ version = "0.1.0"
 dependencies = [
  "http 1.4.0",
  "rskit-errors",
+ "rskit-util",
  "serde",
+ "subtle",
 ]
 
 [[package]]

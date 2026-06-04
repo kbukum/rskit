@@ -115,7 +115,8 @@ async fn errors_resilience_circuit_breaker_preserves_error_code() {
         CbConfig::new("test-cb")
             .with_max_failures(3)
             .with_timeout(Duration::from_millis(100)),
-    );
+    )
+    .unwrap();
 
     // Trip the breaker with AppErrors
     for _ in 0..3 {
@@ -144,7 +145,8 @@ async fn errors_resilience_circuit_breaker_recovery() {
             .with_max_failures(2)
             .with_timeout(Duration::from_millis(50))
             .with_half_open_max_calls(1),
-    );
+    )
+    .unwrap();
 
     // Trip the breaker
     for _ in 0..2 {
@@ -168,7 +170,8 @@ async fn errors_resilience_various_error_codes_through_breaker() {
         CbConfig::new("codes-cb")
             .with_max_failures(10)
             .with_timeout(Duration::from_secs(1)),
-    );
+    )
+    .unwrap();
 
     // Different error codes pass through the circuit breaker
     let codes = [
@@ -700,11 +703,14 @@ async fn errors_validation_pipeline_integration() {
 #[tokio::test]
 async fn di_resilience_circuit_breaker_in_container() {
     let container = Container::new();
-    let cb = Arc::new(CircuitBreaker::new(
-        CbConfig::new("di-cb")
-            .with_max_failures(3)
-            .with_timeout(Duration::from_millis(100)),
-    ));
+    let cb = Arc::new(
+        CircuitBreaker::new(
+            CbConfig::new("di-cb")
+                .with_max_failures(3)
+                .with_timeout(Duration::from_millis(100)),
+        )
+        .unwrap(),
+    );
 
     container.register::<CircuitBreaker>(cb.clone());
     let resolved: Arc<CircuitBreaker> = container.resolve().unwrap();

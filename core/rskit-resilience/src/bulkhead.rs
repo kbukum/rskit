@@ -61,12 +61,27 @@ impl Default for BulkheadConfig {
 
 impl BulkheadConfig {
     /// Create a bulkhead named `name` with the given concurrency limit.
+    #[must_use]
     pub fn new(name: impl Into<String>, max_concurrent: usize) -> Self {
         Self {
             name: name.into(),
             max_concurrent,
             ..Default::default()
         }
+    }
+
+    /// Validate that the bulkhead has an explicit bounded positive capacity.
+    ///
+    /// # Errors
+    /// Returns an error when the concurrency limit is zero.
+    pub fn validate(&self) -> AppResult<()> {
+        if self.max_concurrent == 0 {
+            return Err(AppError::invalid_input(
+                "max_concurrent",
+                "bulkhead concurrency limit must be greater than zero",
+            ));
+        }
+        Ok(())
     }
 
     /// Set the maximum wait time for a permit before returning [`AppError::rate_limited`].
@@ -108,12 +123,16 @@ pub struct Bulkhead {
 
 impl Bulkhead {
     /// Create a new [`Bulkhead`] from the given configuration.
-    pub fn new(config: BulkheadConfig) -> Self {
+    ///
+    /// # Errors
+    /// Returns an error when the configuration is invalid.
+    pub fn new(config: BulkheadConfig) -> AppResult<Self> {
+        config.validate()?;
         let sem = Arc::new(Semaphore::new(config.max_concurrent));
-        Self {
+        Ok(Self {
             sem,
             config: Arc::new(config),
-        }
+        })
     }
 
     /// Number of free permits (available slots).
@@ -168,14 +187,14 @@ mod tests {
 
     #[tokio::test]
     async fn execute_allows_call_within_limit() {
-        let bh = Bulkhead::new(BulkheadConfig::new("test", 2));
+        let bh = Bulkhead::new(BulkheadConfig::new("test", 2)).unwrap();
         let result = bh.execute(|| async { Ok::<i32, AppError>(1) }).await;
         assert_eq!(result.unwrap(), 1);
     }
 
     #[tokio::test]
     async fn available_decrements_while_executing() {
-        let bh = Bulkhead::new(BulkheadConfig::new("test", 2));
+        let bh = Bulkhead::new(BulkheadConfig::new("test", 2)).unwrap();
         assert_eq!(bh.available(), 2);
         assert_eq!(bh.in_use(), 0);
 
@@ -187,7 +206,8 @@ mod tests {
     #[tokio::test]
     async fn execute_allows_concurrent_calls_up_to_limit() {
         let bh =
-            Bulkhead::new(BulkheadConfig::new("test", 3).with_max_wait(Duration::from_millis(100)));
+            Bulkhead::new(BulkheadConfig::new("test", 3).with_max_wait(Duration::from_millis(100)))
+                .unwrap();
 
         // Spawn 3 concurrent tasks; all should succeed
         let mut handles = Vec::new();
@@ -207,7 +227,8 @@ mod tests {
     async fn execute_rejects_when_all_slots_occupied_and_wait_expires() {
         // max_concurrent=1, very short wait so the blocked call times out
         let bh =
-            Bulkhead::new(BulkheadConfig::new("test", 1).with_max_wait(Duration::from_millis(10)));
+            Bulkhead::new(BulkheadConfig::new("test", 1).with_max_wait(Duration::from_millis(10)))
+                .unwrap();
 
         // Hold the single permit for a long time using a channel
         let (tx, rx) = tokio::sync::oneshot::channel::<()>();
@@ -231,5 +252,11 @@ mod tests {
         // Clean up
         let _ = tx.send(());
         let _ = holder.await;
+    }
+
+    #[test]
+    fn new_rejects_zero_concurrency_limit() {
+        let result = Bulkhead::new(BulkheadConfig::new("closed", 0));
+        assert!(result.is_err());
     }
 }

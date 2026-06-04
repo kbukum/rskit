@@ -20,6 +20,6 @@ fn health_accessible_via_facade() {
 
 #[test]
 fn resilience_accessible_via_facade() {
-    let _cb = CircuitBreaker::new(CbConfig::new("test"));
+    let _cb = CircuitBreaker::new(CbConfig::new("test")).unwrap();
     let _rp = RetryPolicy::new().with_max_attempts(2);
 }

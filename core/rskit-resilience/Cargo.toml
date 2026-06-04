@@ -19,7 +19,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 # External
-tokio         = { workspace = true }
+tokio         = { workspace = true, features = ["test-util"] }
 tokio-util    = { workspace = true }
 governor      = { workspace = true }
 rand          = { workspace = true }

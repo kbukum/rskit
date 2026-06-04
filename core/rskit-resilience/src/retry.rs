@@ -131,6 +131,8 @@ pub struct RetryPolicy {
     /// Arguments: `(attempt_number, error)`.
     #[allow(clippy::type_complexity)]
     pub on_retry: Option<Arc<dyn Fn(u32, &AppError) + Send + Sync>>,
+    /// Seed used to make jitter deterministic across runs.
+    pub jitter_seed: Option<u64>,
 }
 
 impl std::fmt::Debug for RetryPolicy {
@@ -146,6 +148,7 @@ impl std::fmt::Debug for RetryPolicy {
             .field("linear_increment", &self.linear_increment)
             .field("retry_if", &self.retry_if.as_ref().map(|_| "<fn>"))
             .field("on_retry", &self.on_retry.as_ref().map(|_| "<fn>"))
+            .field("jitter_seed", &self.jitter_seed)
             .finish()
     }
 }
@@ -163,6 +166,7 @@ impl Clone for RetryPolicy {
             linear_increment: self.linear_increment,
             retry_if: self.retry_if.clone(),
             on_retry: self.on_retry.clone(),
+            jitter_seed: self.jitter_seed,
         }
     }
 }
@@ -180,6 +184,7 @@ impl Default for RetryPolicy {
             linear_increment: Duration::from_millis(100),
             retry_if: None,
             on_retry: None,
+            jitter_seed: None,
         }
     }
 }
@@ -257,6 +262,13 @@ impl RetryPolicy {
         self
     }
 
+    /// Set a deterministic seed for retry jitter.
+    #[must_use]
+    pub const fn with_jitter_seed(mut self, seed: u64) -> Self {
+        self.jitter_seed = Some(seed);
+        self
+    }
+
     /// Use a fixed delay for every retry attempt.
     #[must_use]
     pub fn with_constant_backoff(mut self, backoff: ConstantBackoff) -> Self {
@@ -299,6 +311,13 @@ impl RetryPolicy {
         F: FnMut() -> Fut,
         Fut: std::future::Future<Output = AppResult<T>>,
     {
+        if let Err(error) = self.validate() {
+            return Err(RetryError {
+                attempts: 0,
+                last_error: error,
+            });
+        }
+
         let mut attempt = 0usize;
         let started = tokio::time::Instant::now();
         loop {
@@ -381,15 +400,48 @@ impl RetryPolicy {
         };
 
         if self.jitter && !base_delay.is_zero() {
-            let factor = 0.5 + rand::random::<f64>();
+            let jitter = self
+                .jitter_seed
+                .map(|seed| Self::deterministic_unit(seed, attempt))
+                .unwrap_or_else(rand::random::<f64>);
+            let factor = 0.5 + jitter;
             Duration::from_millis((base_delay.as_millis() as f64 * factor) as u64)
         } else {
             base_delay
         }
     }
 
+    /// Validate retry policy limits.
+    ///
+    /// # Errors
+    /// Returns an error when attempts or backoff parameters are invalid.
+    pub fn validate(&self) -> AppResult<()> {
+        if self.max_attempts == 0 {
+            return Err(AppError::invalid_input(
+                "max_attempts",
+                "retry attempts must be greater than zero",
+            ));
+        }
+        if !self.backoff_factor.is_finite() || self.backoff_factor <= 0.0 {
+            return Err(AppError::invalid_input(
+                "backoff_factor",
+                "retry backoff factor must be finite and greater than zero",
+            ));
+        }
+        Ok(())
+    }
+
     pub(crate) fn backoff(&self, attempt: usize) -> Duration {
         self.backoff_delay(attempt)
+    }
+
+    fn deterministic_unit(seed: u64, attempt: usize) -> f64 {
+        let mut value = seed ^ ((attempt as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15));
+        value = value.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        value = (value ^ (value >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        value = (value ^ (value >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        value ^= value >> 31;
+        (value >> 11) as f64 / ((1_u64 << 53) as f64)
     }
 }
 
@@ -573,6 +625,32 @@ mod tests {
         let external = RetryPreset::ExternalService.policy();
         assert_eq!(external.max_attempts, 4);
         assert_eq!(external.max_elapsed_time, Duration::from_secs(30));
+    }
+
+    #[test]
+    fn seeded_jitter_is_deterministic() {
+        let policy = RetryPolicy::new()
+            .with_initial_backoff(Duration::from_millis(100))
+            .with_jitter_seed(42);
+
+        assert_eq!(policy.backoff_delay(2), policy.backoff_delay(2));
+    }
+
+    #[test]
+    fn validate_rejects_invalid_retry_limits() {
+        assert!(RetryPolicy::new().with_max_attempts(0).validate().is_err());
+        assert!(
+            RetryPolicy::new()
+                .with_backoff_factor(f64::NAN)
+                .validate()
+                .is_err()
+        );
+        assert!(
+            RetryPolicy::new()
+                .with_backoff_factor(0.0)
+                .validate()
+                .is_err()
+        );
     }
 
     #[tokio::test]

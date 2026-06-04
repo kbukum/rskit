@@ -31,14 +31,13 @@ async fn main() -> AppResult<()> {
 ## Resilient HTTP call
 
 ```rust
-use rskit_resilience::{CircuitBreaker, CbConfig, RetryPolicy};
+use rskit_resilience::{CbConfig, CircuitBreaker, ConstantBackoff, RetryPolicy};
 use std::time::Duration;
 
-let cb = CircuitBreaker::new(CbConfig::default());
-let retry = RetryPolicy::builder()
-    .max_attempts(3)
-    .initial_backoff(Duration::from_millis(100))
-    .build();
+let cb = CircuitBreaker::new(CbConfig::default())?;
+let retry = RetryPolicy::new()
+    .with_max_attempts(3)
+    .with_constant_backoff(ConstantBackoff::new(Duration::from_millis(100)));
 
 let result = retry.execute(|| async {
     cb.execute(|| async { call_external_service().await }).await

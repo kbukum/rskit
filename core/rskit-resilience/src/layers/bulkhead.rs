@@ -77,7 +77,7 @@ mod tests {
 
     #[tokio::test]
     async fn passes_through() {
-        let bulkhead = Bulkhead::new(BulkheadConfig::new("test", 4));
+        let bulkhead = Bulkhead::new(BulkheadConfig::new("test", 4)).unwrap();
         let service = tower::service_fn(|req: i32| async move { Ok::<i32, AppError>(req) });
         let mut service = ServiceBuilder::new()
             .layer(BulkheadLayer::new(bulkhead))

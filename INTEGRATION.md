@@ -243,7 +243,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Compose resilience in rskit-resilience, then inject it into the client
     let policy = Policy::new()
         .with_timeout(Duration::from_secs(10))
-        .with_circuit_breaker(CbConfig::new("external-api").with_max_failures(5))
+        .with_circuit_breaker(CbConfig::new("external-api").with_max_failures(5))?
         .with_retry(
             RetryPolicy::new()
                 .with_max_attempts(3)

@@ -37,7 +37,8 @@ async fn cb_full_state_machine_cycle() {
             .with_max_failures(2)
             .with_timeout(Duration::from_millis(50))
             .with_half_open_max_calls(2),
-    );
+    )
+    .unwrap();
     assert_eq!(cb.state(), CbState::Closed);
 
     // Closed → Open
@@ -66,7 +67,8 @@ async fn cb_half_open_allows_only_max_probe_calls() {
             .with_max_failures(1)
             .with_timeout(Duration::from_millis(20))
             .with_half_open_max_calls(2),
-    );
+    )
+    .unwrap();
 
     // Trip the breaker
     let _ = cb.execute(|| async { Err::<i32, _>(fail_err()) }).await;
@@ -112,7 +114,8 @@ async fn cb_half_open_failure_reopens() {
             .with_max_failures(1)
             .with_timeout(Duration::from_millis(20))
             .with_half_open_max_calls(3),
-    );
+    )
+    .unwrap();
 
     // Trip to Open
     let _ = cb.execute(|| async { Err::<i32, _>(fail_err()) }).await;
@@ -137,7 +140,8 @@ async fn cb_on_state_change_callback() {
             .with_on_state_change(move |from, to| {
                 t.lock().push((from, to));
             }),
-    );
+    )
+    .unwrap();
 
     // Closed → Open
     let _ = cb.execute(|| async { Err::<i32, _>(fail_err()) }).await;
@@ -155,7 +159,7 @@ async fn cb_on_state_change_callback() {
 
 #[tokio::test]
 async fn cb_concurrent_execute_50_tasks() {
-    let cb = CircuitBreaker::new(CbConfig::new("conc").with_max_failures(100));
+    let cb = CircuitBreaker::new(CbConfig::new("conc").with_max_failures(100)).unwrap();
     let counter = Arc::new(AtomicUsize::new(0));
 
     let mut handles = Vec::new();
@@ -188,7 +192,8 @@ async fn cb_reset_during_half_open() {
             .with_max_failures(1)
             .with_timeout(Duration::from_millis(20))
             .with_half_open_max_calls(3),
-    );
+    )
+    .unwrap();
 
     let _ = cb.execute(|| async { Err::<i32, _>(fail_err()) }).await;
     tokio::time::sleep(Duration::from_millis(30)).await;
@@ -209,7 +214,8 @@ async fn cb_very_short_timeout() {
             .with_max_failures(1)
             .with_timeout(Duration::from_millis(10))
             .with_half_open_max_calls(1),
-    );
+    )
+    .unwrap();
 
     let _ = cb.execute(|| async { Err::<i32, _>(fail_err()) }).await;
     assert_eq!(cb.state(), CbState::Open);
@@ -224,7 +230,7 @@ async fn cb_very_short_timeout() {
 
 #[tokio::test]
 async fn cb_execute_after_reset_clean_state() {
-    let cb = CircuitBreaker::new(CbConfig::new("clean").with_max_failures(2));
+    let cb = CircuitBreaker::new(CbConfig::new("clean").with_max_failures(2)).unwrap();
 
     let _ = cb.execute(|| async { Err::<i32, _>(fail_err()) }).await;
     assert_eq!(cb.failures(), 1);
@@ -239,7 +245,7 @@ async fn cb_execute_after_reset_clean_state() {
 
 #[tokio::test]
 async fn cb_service_unavailable_error_format() {
-    let cb = CircuitBreaker::new(CbConfig::new("svc-err").with_max_failures(1));
+    let cb = CircuitBreaker::new(CbConfig::new("svc-err").with_max_failures(1)).unwrap();
 
     let _ = cb.execute(|| async { Err::<i32, _>(fail_err()) }).await;
 
@@ -253,7 +259,7 @@ async fn cb_service_unavailable_error_format() {
 
 #[tokio::test]
 async fn cb_state_check_at_boundary() {
-    let cb = CircuitBreaker::new(CbConfig::new("boundary").with_max_failures(3));
+    let cb = CircuitBreaker::new(CbConfig::new("boundary").with_max_failures(3)).unwrap();
 
     // 2 failures — still closed
     for _ in 0..2 {
@@ -483,7 +489,8 @@ async fn retry_non_retryable_immediate_failure() {
 #[tokio::test]
 async fn bh_exactly_max_concurrent_succeed() {
     let bh =
-        Bulkhead::new(BulkheadConfig::new("exact", 3).with_max_wait(Duration::from_millis(100)));
+        Bulkhead::new(BulkheadConfig::new("exact", 3).with_max_wait(Duration::from_millis(100)))
+            .unwrap();
     let running = Arc::new(AtomicUsize::new(0));
     let max_running = Arc::new(AtomicUsize::new(0));
     let barrier = Arc::new(tokio::sync::Notify::new());
@@ -518,7 +525,8 @@ async fn bh_exactly_max_concurrent_succeed() {
 #[tokio::test]
 async fn bh_overflow_rate_limited_after_timeout() {
     let bh =
-        Bulkhead::new(BulkheadConfig::new("overflow", 1).with_max_wait(Duration::from_millis(20)));
+        Bulkhead::new(BulkheadConfig::new("overflow", 1).with_max_wait(Duration::from_millis(20)))
+            .unwrap();
     let barrier = Arc::new(tokio::sync::Notify::new());
 
     let bh2 = bh.clone();
@@ -547,7 +555,8 @@ async fn bh_overflow_rate_limited_after_timeout() {
 async fn bh_slot_released_after_error() {
     let bh = Bulkhead::new(
         BulkheadConfig::new("err-release", 1).with_max_wait(Duration::from_millis(100)),
-    );
+    )
+    .unwrap();
 
     // Execute fails
     let _ = bh
@@ -562,7 +571,7 @@ async fn bh_slot_released_after_error() {
 
 #[tokio::test]
 async fn bh_available_in_use_accuracy() {
-    let bh = Bulkhead::new(BulkheadConfig::new("counters", 3));
+    let bh = Bulkhead::new(BulkheadConfig::new("counters", 3)).unwrap();
     assert_eq!(bh.available(), 3);
     assert_eq!(bh.in_use(), 0);
 
@@ -600,7 +609,8 @@ async fn bh_callback_ordering() {
             .with_on_acquire(move || e1.lock().push("acquire"))
             .with_on_release(move || e2.lock().push("release"))
             .with_on_reject(move || e3.lock().push("reject")),
-    );
+    )
+    .unwrap();
 
     let _ = bh.execute(|| async { Ok::<i32, AppError>(1) }).await;
 
@@ -619,7 +629,8 @@ async fn bh_on_reject_for_overflow() {
             .with_on_reject(move || {
                 r.fetch_add(1, Ordering::SeqCst);
             }),
-    );
+    )
+    .unwrap();
 
     let barrier = Arc::new(tokio::sync::Notify::new());
     let bh2 = bh.clone();
@@ -643,7 +654,8 @@ async fn bh_on_reject_for_overflow() {
 
 #[tokio::test]
 async fn bh_concurrent_stress_100_tasks_10_slots() {
-    let bh = Bulkhead::new(BulkheadConfig::new("stress", 10).with_max_wait(Duration::from_secs(5)));
+    let bh = Bulkhead::new(BulkheadConfig::new("stress", 10).with_max_wait(Duration::from_secs(5)))
+        .unwrap();
     let completed = Arc::new(AtomicUsize::new(0));
     let peak = Arc::new(AtomicUsize::new(0));
     let running = Arc::new(AtomicUsize::new(0));
@@ -806,7 +818,7 @@ async fn layer_retry_wraps_service() {
 
 #[tokio::test]
 async fn layer_cb_opens_on_failures() {
-    let cb = CircuitBreaker::new(CbConfig::new("layer-cb").with_max_failures(2));
+    let cb = CircuitBreaker::new(CbConfig::new("layer-cb").with_max_failures(2)).unwrap();
     let svc = tower::service_fn(|_req: i32| async { Err::<i32, AppError>(fail_err()) });
     let mut svc = ServiceBuilder::new()
         .layer(CircuitBreakerLayer::new(cb.clone()))
@@ -824,7 +836,8 @@ async fn layer_cb_opens_on_failures() {
 #[tokio::test]
 async fn layer_bulkhead_limits_concurrency() {
     let bh =
-        Bulkhead::new(BulkheadConfig::new("layer-bh", 1).with_max_wait(Duration::from_millis(20)));
+        Bulkhead::new(BulkheadConfig::new("layer-bh", 1).with_max_wait(Duration::from_millis(20)))
+            .unwrap();
     let barrier = Arc::new(tokio::sync::Notify::new());
 
     let svc = {
@@ -875,8 +888,8 @@ async fn layer_rate_limit_limits_rate() {
 #[tokio::test]
 async fn layer_all_four_composed() {
     let rl = RateLimiter::new("composed-rl", 1000, 100).unwrap();
-    let bh = Bulkhead::new(BulkheadConfig::new("composed-bh", 10));
-    let cb = CircuitBreaker::new(CbConfig::new("composed-cb").with_max_failures(5));
+    let bh = Bulkhead::new(BulkheadConfig::new("composed-bh", 10)).unwrap();
+    let cb = CircuitBreaker::new(CbConfig::new("composed-cb").with_max_failures(5)).unwrap();
     let policy = RetryPolicy::new()
         .with_max_attempts(2)
         .with_initial_backoff(Duration::from_millis(1))
@@ -900,8 +913,8 @@ async fn layer_all_four_composed() {
 async fn layer_ordering_rate_limit_then_bulkhead_then_cb_then_retry() {
     // Rate limit exhausted first — should see RateLimited error
     let rl = RateLimiter::new("order-rl", 1, 1).unwrap();
-    let bh = Bulkhead::new(BulkheadConfig::new("order-bh", 10));
-    let cb = CircuitBreaker::new(CbConfig::new("order-cb").with_max_failures(5));
+    let bh = Bulkhead::new(BulkheadConfig::new("order-bh", 10)).unwrap();
+    let cb = CircuitBreaker::new(CbConfig::new("order-cb").with_max_failures(5)).unwrap();
     let policy = RetryPolicy::new()
         .with_max_attempts(2)
         .with_initial_backoff(Duration::from_millis(1))
@@ -926,8 +939,8 @@ async fn layer_ordering_rate_limit_then_bulkhead_then_cb_then_retry() {
 #[tokio::test]
 async fn layer_error_propagation() {
     let rl = RateLimiter::new("prop-rl", 1000, 100).unwrap();
-    let bh = Bulkhead::new(BulkheadConfig::new("prop-bh", 10));
-    let cb = CircuitBreaker::new(CbConfig::new("prop-cb").with_max_failures(100));
+    let bh = Bulkhead::new(BulkheadConfig::new("prop-bh", 10)).unwrap();
+    let cb = CircuitBreaker::new(CbConfig::new("prop-cb").with_max_failures(100)).unwrap();
     let policy = RetryPolicy::new()
         .with_max_attempts(1)
         .with_initial_backoff(Duration::from_millis(1))
@@ -949,8 +962,8 @@ async fn layer_error_propagation() {
 #[tokio::test]
 async fn layer_concurrent_requests_through_composed() {
     let rl = RateLimiter::new("conc-composed", 10_000, 100).unwrap();
-    let bh = Bulkhead::new(BulkheadConfig::new("conc-bh", 20));
-    let cb = CircuitBreaker::new(CbConfig::new("conc-cb").with_max_failures(100));
+    let bh = Bulkhead::new(BulkheadConfig::new("conc-bh", 20)).unwrap();
+    let cb = CircuitBreaker::new(CbConfig::new("conc-cb").with_max_failures(100)).unwrap();
     let policy = RetryPolicy::new()
         .with_max_attempts(1)
         .with_initial_backoff(Duration::from_millis(1));
@@ -989,7 +1002,7 @@ async fn layer_concurrent_requests_through_composed() {
 
 #[tokio::test]
 async fn multi_cb_plus_retry_exhausts_then_fast_fail() {
-    let cb = CircuitBreaker::new(CbConfig::new("multi-cb").with_max_failures(3));
+    let cb = CircuitBreaker::new(CbConfig::new("multi-cb").with_max_failures(3)).unwrap();
     let counter = Arc::new(AtomicUsize::new(0));
 
     let policy = RetryPolicy::new()
@@ -1027,7 +1040,8 @@ async fn multi_cb_plus_retry_exhausts_then_fast_fail() {
 #[tokio::test]
 async fn multi_bulkhead_plus_rate_limiter_both_limits_enforced() {
     let bh =
-        Bulkhead::new(BulkheadConfig::new("bh-rl", 2).with_max_wait(Duration::from_millis(50)));
+        Bulkhead::new(BulkheadConfig::new("bh-rl", 2).with_max_wait(Duration::from_millis(50)))
+            .unwrap();
     let rl = RateLimiter::new("rl-bh", 1, 3).unwrap();
 
     let mut successes = 0;
@@ -1057,7 +1071,8 @@ async fn multi_recovery_scenario() {
             .with_max_failures(2)
             .with_timeout(Duration::from_millis(30))
             .with_half_open_max_calls(1),
-    );
+    )
+    .unwrap();
 
     // Phase 1: system is healthy
     let r = cb.execute(|| async { Ok::<i32, AppError>(1) }).await;
@@ -1080,8 +1095,8 @@ async fn multi_recovery_scenario() {
 
 #[tokio::test]
 async fn multi_load_test_sustained_traffic() {
-    let cb = CircuitBreaker::new(CbConfig::new("load").with_max_failures(1000));
-    let bh = Bulkhead::new(BulkheadConfig::new("load-bh", 20));
+    let cb = CircuitBreaker::new(CbConfig::new("load").with_max_failures(1000)).unwrap();
+    let bh = Bulkhead::new(BulkheadConfig::new("load-bh", 20)).unwrap();
     let rl = RateLimiter::new("load-rl", 10_000, 200).unwrap();
 
     let completed = Arc::new(AtomicUsize::new(0));
@@ -1118,7 +1133,7 @@ async fn multi_load_test_sustained_traffic() {
 #[tokio::test]
 async fn multi_error_types_from_each_pattern() {
     // CB open error
-    let cb = CircuitBreaker::new(CbConfig::new("err-cb").with_max_failures(1));
+    let cb = CircuitBreaker::new(CbConfig::new("err-cb").with_max_failures(1)).unwrap();
     let _ = cb.execute(|| async { Err::<i32, _>(fail_err()) }).await;
     let cb_err = cb
         .execute(|| async { Ok::<i32, AppError>(1) })
@@ -1128,7 +1143,8 @@ async fn multi_error_types_from_each_pattern() {
 
     // Bulkhead timeout error
     let bh =
-        Bulkhead::new(BulkheadConfig::new("err-bh", 1).with_max_wait(Duration::from_millis(10)));
+        Bulkhead::new(BulkheadConfig::new("err-bh", 1).with_max_wait(Duration::from_millis(10)))
+            .unwrap();
     let barrier = Arc::new(tokio::sync::Notify::new());
     let bh2 = bh.clone();
     let b = barrier.clone();

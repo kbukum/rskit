@@ -11,6 +11,7 @@ fuzz/artifacts/
 fuzz/coverage/
 
 # Coverage
+coverage.lcov
 lcov.info
 *.profraw
 *.profdata

@@ -103,4 +103,61 @@ mod tests {
         };
         assert!(config.is_enabled());
     }
+
+    #[test]
+    fn default_config_is_disabled_and_valid() {
+        let config = TlsConfig::default();
+
+        assert!(!config.is_enabled());
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn cert_and_key_pair_is_valid() {
+        let config = TlsConfig {
+            cert_file: Some("client.pem".to_string()),
+            key_file: Some("client.key".to_string()),
+            ..Default::default()
+        };
+
+        assert!(config.validate().is_ok());
+        assert!(config.is_enabled());
+    }
+
+    #[test]
+    fn rejects_empty_optional_values() {
+        for config in [
+            TlsConfig {
+                ca_file: Some(String::new()),
+                ..Default::default()
+            },
+            TlsConfig {
+                cert_file: Some(String::new()),
+                key_file: Some("key.pem".to_string()),
+                ..Default::default()
+            },
+            TlsConfig {
+                key_file: Some(String::new()),
+                cert_file: Some("cert.pem".to_string()),
+                ..Default::default()
+            },
+            TlsConfig {
+                server_name: Some(String::new()),
+                ..Default::default()
+            },
+        ] {
+            assert!(config.validate().is_err());
+        }
+    }
+
+    #[test]
+    fn tls13_minimum_counts_as_enabled() {
+        let config = TlsConfig {
+            min_version: TlsVersion::Tls13,
+            ..Default::default()
+        };
+
+        assert!(config.is_enabled());
+        assert!(config.validate().is_ok());
+    }
 }

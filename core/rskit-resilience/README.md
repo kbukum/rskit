@@ -27,7 +27,7 @@ rskit-resilience = "0.1"
 use rskit_resilience::{RetryPolicy, CircuitBreaker, CbConfig};
 use std::time::Duration;
 
-let cb = CircuitBreaker::new(CbConfig::new("my-service"));
+let cb = CircuitBreaker::new(CbConfig::new("my-service"))?;
 let retry = RetryPolicy::new()
     .with_max_attempts(3)
     .with_initial_backoff(Duration::from_millis(100))

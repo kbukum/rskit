@@ -27,3 +27,5 @@ serde        = { workspace = true }
 
 # Internal
 rskit-errors = { path = "../rskit-errors" }
+rskit-util   = { path = "../rskit-util" }
+subtle       = "2.6"
