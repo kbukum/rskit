@@ -196,9 +196,14 @@ async fn pool_shutdown_during_active_tasks() {
     let cancel_token = h1.cancel_token();
     let _h2 = pool.submit(2).await.unwrap();
 
-    started_task.await;
+    timeout(Duration::from_secs(2), started_task)
+        .await
+        .expect("worker task should start");
 
-    pool.shutdown().await.unwrap();
+    timeout(Duration::from_secs(2), pool.shutdown())
+        .await
+        .expect("pool shutdown must not hang")
+        .unwrap();
 
     // The cancel token should be usable (handler checks it)
     cancel_token.cancel();
@@ -223,7 +228,9 @@ async fn pool_shutdown_fails_dequeued_but_unscheduled_task() {
     // First submission occupies the only permit.
     let started_task = started.notified();
     let _h1 = pool.submit(1).await.unwrap();
-    started_task.await;
+    timeout(Duration::from_secs(2), started_task)
+        .await
+        .expect("first worker task should start");
     // Second is queued and will be dequeued by the runner, but cannot acquire a
     // permit until h1 finishes; we shut down before that ever happens.
     let h2 = pool.submit(2).await.unwrap();
@@ -234,7 +241,10 @@ async fn pool_shutdown_fails_dequeued_but_unscheduled_task() {
         .await
         .expect("runner should dequeue h2 and free queue capacity")
         .unwrap();
-    pool.shutdown().await.unwrap();
+    timeout(Duration::from_secs(2), pool.shutdown())
+        .await
+        .expect("pool shutdown must not hang")
+        .unwrap();
 
     let err = timeout(Duration::from_secs(2), h2.result())
         .await
