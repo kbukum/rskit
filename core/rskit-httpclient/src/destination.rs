@@ -169,14 +169,41 @@ fn is_metadata_host(host: &str) -> bool {
     METADATA_HOSTS
         .into_iter()
         .any(|metadata| host.eq_ignore_ascii_case(metadata))
-        || host == "fd00:ec2::254"
+        || host.parse::<Ipv4Addr>().is_ok_and(is_metadata_ipv4)
+        || host.parse::<Ipv6Addr>().is_ok_and(|ip| {
+            ip == Ipv6Addr::new(0xfd00, 0x0ec2, 0, 0, 0, 0, 0, 0x0254)
+                || ipv6_embedded_ipv4(ip).is_some_and(is_metadata_ipv4)
+        })
 }
 
 fn is_link_local_literal(host: &str) -> bool {
     host.parse::<Ipv4Addr>().is_ok_and(|ip| ip.is_link_local())
-        || host
-            .parse::<Ipv6Addr>()
-            .is_ok_and(|ip| ip.is_unicast_link_local())
+        || host.parse::<Ipv6Addr>().is_ok_and(|ip| {
+            ip.is_unicast_link_local()
+                || ipv6_embedded_ipv4(ip).is_some_and(|ipv4| ipv4.is_link_local())
+        })
+}
+
+fn is_metadata_ipv4(ip: Ipv4Addr) -> bool {
+    METADATA_HOSTS
+        .into_iter()
+        .filter_map(|metadata| metadata.parse::<Ipv4Addr>().ok())
+        .any(|metadata| ip == metadata)
+}
+
+fn ipv6_embedded_ipv4(ip: Ipv6Addr) -> Option<Ipv4Addr> {
+    let octets = ip.octets();
+    let is_mapped =
+        octets[..10].iter().all(|octet| *octet == 0) && octets[10] == 0xff && octets[11] == 0xff;
+    let is_compatible = octets[..12].iter().all(|octet| *octet == 0);
+
+    if is_mapped || is_compatible {
+        Some(Ipv4Addr::new(
+            octets[12], octets[13], octets[14], octets[15],
+        ))
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]
@@ -191,8 +218,36 @@ mod tests {
     }
 
     #[test]
+    fn default_policy_blocks_ipv4_mapped_metadata_literal() {
+        let url = Url::parse("http://[::ffff:169.254.169.254]/latest/meta-data").unwrap();
+
+        assert!(DestinationPolicy::new().validate(&url).is_err());
+    }
+
+    #[test]
+    fn default_policy_blocks_ipv4_compatible_metadata_literal() {
+        let url = Url::parse("http://[::169.254.169.254]/latest/meta-data").unwrap();
+
+        assert!(DestinationPolicy::new().validate(&url).is_err());
+    }
+
+    #[test]
     fn default_policy_blocks_link_local_literal() {
         let url = Url::parse("http://[fe80::1]/").unwrap();
+
+        assert!(DestinationPolicy::new().validate(&url).is_err());
+    }
+
+    #[test]
+    fn default_policy_blocks_ipv4_mapped_link_local_literal() {
+        let url = Url::parse("http://[::ffff:169.254.1.2]/").unwrap();
+
+        assert!(DestinationPolicy::new().validate(&url).is_err());
+    }
+
+    #[test]
+    fn default_policy_blocks_ipv4_compatible_link_local_literal() {
+        let url = Url::parse("http://[::169.254.1.2]/").unwrap();
 
         assert!(DestinationPolicy::new().validate(&url).is_err());
     }
