@@ -63,7 +63,10 @@ async fn main() -> AppResult<()> {
 
     let result = retry.execute(|| async {
         cb.execute(|| async { call_external_service().await }).await
-    }).await?;
+    }).await.map_err(|err| {
+        let attempts = err.attempts as u64;
+        err.last_error.with_detail("retry_attempts", attempts)
+    })?;
 
     assert_eq!(result, "ok");
     Ok(())

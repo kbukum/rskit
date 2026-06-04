@@ -38,7 +38,10 @@ async fn call_with_resilience() -> AppResult<()> {
 
     let _result = retry.execute(|| async {
         cb.execute(|| async { call_downstream().await }).await
-    }).await?;
+    }).await.map_err(|err| {
+        let attempts = err.attempts as u64;
+        err.last_error.with_detail("retry_attempts", attempts)
+    })?;
 
     Ok(())
 }
