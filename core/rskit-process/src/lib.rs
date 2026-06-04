@@ -54,8 +54,8 @@ mod signal;
 mod sync;
 
 pub use command::{
-    CapturedIo, DEFAULT_MAX_OUTPUT_BYTES, EnvPolicy, InheritedIo, InputPolicy, ObservedIo,
-    OutputPolicy, ProcessConfig, ProcessIo, ProcessSpec, SignalPolicy, command,
+    ArgRedaction, CapturedIo, DEFAULT_MAX_OUTPUT_BYTES, EnvPolicy, InheritedIo, InputPolicy,
+    ObservedIo, OutputPolicy, ProcessConfig, ProcessIo, ProcessSpec, SignalPolicy, command,
 };
 pub use persistent::{
     PersistentConfig, PersistentOutput, PersistentOutputStream, PersistentProcess,

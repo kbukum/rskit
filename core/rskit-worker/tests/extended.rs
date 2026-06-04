@@ -54,7 +54,7 @@ impl Handler<i32, i32> for PendingHandler {
         _emit: mpsc::Sender<Event<i32>>,
         cancel: CancellationToken,
     ) -> AppResult<i32> {
-        self.started.notify_waiters();
+        self.started.notify_one();
         tokio::select! {
             () = pending() => unreachable!("pending future never completes"),
             _ = cancel.cancelled() => Err(AppError::new(ErrorCode::Internal, "cancelled")),

@@ -98,3 +98,12 @@ Process start logs redact secret-looking argument values, but argv is still
 visible to operating-system process inspection on many platforms. Prefer stdin,
 files with restricted permissions, or environment-specific secret mechanisms for
 sensitive values instead of command-line arguments.
+
+Custom secret-bearing argument names can be added to the spawn-log redaction policy:
+
+```rust
+use rskit_process::{ArgRedaction, ProcessConfig};
+
+let config = ProcessConfig::default()
+    .with_arg_redaction(ArgRedaction::default().with_name("license-key"));
+```
