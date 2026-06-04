@@ -19,7 +19,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 # External
-tokio         = { workspace = true, features = ["test-util"] }
+tokio         = { workspace = true }
 tokio-util    = { workspace = true }
 governor      = { workspace = true }
 rand          = { workspace = true }
@@ -34,3 +34,6 @@ serde         = { workspace = true, features = ["derive"] }
 
 # Internal
 rskit-errors  = { path = "../rskit-errors" }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
