@@ -108,12 +108,11 @@ impl Handler<i32, i32> for IdleHandler {
 impl Handler<i32, i32> for StubbornHandler {
     async fn handle(
         &self,
-        task: i32,
+        _task: i32,
         _emit: mpsc::Sender<Event<i32>>,
         _cancel: CancellationToken,
     ) -> AppResult<i32> {
-        pending::<()>().await;
-        Ok(task)
+        pending::<AppResult<i32>>().await
     }
 }
 

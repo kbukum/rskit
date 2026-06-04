@@ -21,6 +21,20 @@ impl fmt::Debug for RedactedArgs<'_> {
         for arg in self.args {
             let arg = arg.to_string_lossy();
             if redact_next {
+                if let Some((key, _value)) = arg.split_once('=')
+                    && self.redaction.is_sensitive_arg_name(key)
+                {
+                    let redacted = format!("{key}=<redacted>");
+                    list.entry(&redacted);
+                    redact_next = false;
+                    continue;
+                }
+
+                if self.redaction.is_sensitive_arg_name(&arg) {
+                    list.entry(&arg);
+                    continue;
+                }
+
                 list.entry(&"<redacted>");
                 redact_next = false;
                 continue;
@@ -93,5 +107,21 @@ mod tests {
         assert!(rendered.contains("\"--public-key\""));
         assert!(rendered.contains("\"visible\""));
         assert!(!rendered.contains("licensed"));
+    }
+
+    #[test]
+    fn redacted_args_handles_adjacent_sensitive_flags() {
+        let args = vec![
+            OsString::from("--token"),
+            OsString::from("--password"),
+            OsString::from("hunter2"),
+        ];
+
+        let rendered = format!("{:?}", RedactedArgs::new(&args, &ArgRedaction::default()));
+
+        assert!(rendered.contains("\"--token\""));
+        assert!(rendered.contains("\"--password\""));
+        assert!(rendered.contains("\"<redacted>\""));
+        assert!(!rendered.contains("hunter2"));
     }
 }
