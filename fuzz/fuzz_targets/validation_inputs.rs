@@ -20,6 +20,6 @@ fuzz_target!(|data: &[u8]| {
         .email("email", text)
         .url("url", text)
         .required_uuid("id", text)
-        .pattern("field", text, text)
+        .pattern("field", text, r"^[[:alnum:]_./:-]{0,256}$")
         .validate();
 });

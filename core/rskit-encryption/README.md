@@ -48,7 +48,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 Keys are derived from passphrases using **PBKDF2-SHA256** with:
 - **600,000 iterations**
 - **Random 16-byte salt** per encryption operation
-- Salt is prepended to the ciphertext for extraction during decryption
+- Salt is stored in the versioned ciphertext envelope for extraction during decryption
 
 ## Ciphertext Format
 

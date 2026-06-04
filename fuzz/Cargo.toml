@@ -8,6 +8,7 @@ publish = false
 cargo-fuzz = true
 
 [dependencies]
+base64 = "0.22"
 jsonwebtoken = { version = "10", features = ["rust_crypto"] }
 libfuzzer-sys = "0.4"
 rskit-auth = { path = "../core/rskit-auth" }
