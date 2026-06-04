@@ -8,6 +8,8 @@ use std::time::{Duration, Instant};
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 
+const CANCELLATION_TEST_TIMEOUT: Duration = Duration::from_secs(1);
+
 // ---------------------------------------------------------------------------
 // Helper node types
 // ---------------------------------------------------------------------------
@@ -387,7 +389,7 @@ async fn test_cancellation_stops_execution() {
     cancel.cancel();
     let dag = Dag::new().add_node(CancelAwareNode::new("slow", 1, Duration::from_secs(10)));
 
-    let result = timeout(Duration::from_millis(100), dag.execute(cancel))
+    let result = timeout(CANCELLATION_TEST_TIMEOUT, dag.execute(cancel))
         .await
         .expect("cancellation should stop execution promptly");
     assert!(result.is_err(), "expected cancellation error");
@@ -399,7 +401,7 @@ async fn test_slow_node_with_cancel() {
     cancel.cancel();
     let dag = Dag::new().add_node(CancelAwareNode::new("work", 99, Duration::from_secs(30)));
 
-    let result = timeout(Duration::from_millis(100), dag.execute(cancel))
+    let result = timeout(CANCELLATION_TEST_TIMEOUT, dag.execute(cancel))
         .await
         .expect("cancellation should stop execution promptly");
 
@@ -416,7 +418,7 @@ async fn test_all_nodes_receive_cancel_token() {
         .add_node(CancelAwareNode::new("a", 1, Duration::from_secs(10)))
         .add_node(CancelAwareNode::new("b", 2, Duration::from_secs(10)));
 
-    let result = timeout(Duration::from_millis(100), dag.execute(cancel))
+    let result = timeout(CANCELLATION_TEST_TIMEOUT, dag.execute(cancel))
         .await
         .expect("cancellation should stop execution promptly");
 

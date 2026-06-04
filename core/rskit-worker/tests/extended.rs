@@ -217,7 +217,7 @@ async fn pool_shutdown_fails_dequeued_but_unscheduled_task() {
         PoolConfig::new("shutdown-dequeued")
             .with_size(1)
             .with_queue_size(1)
-            .with_grace_period(Duration::from_millis(1)),
+            .with_grace_period(Duration::from_millis(100)),
     );
 
     // First submission occupies the only permit.
