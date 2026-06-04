@@ -193,7 +193,7 @@ mod integration_tests {
     }
 
     #[tokio::test]
-    async fn redirect_limit_is_enforced_with_custom_policy() {
+    async fn redirect_limit_rejects_more_than_configured_hops() {
         let mock_server = MockServer::start().await;
 
         Mock::given(method("GET"))
@@ -262,7 +262,10 @@ mod integration_tests {
 
         let result = client.get("/api/users").await;
 
-        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
+        assert!(!error.is_retryable());
+        assert!(error.message().contains("not allowed"));
     }
 
     #[test]

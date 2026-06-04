@@ -150,7 +150,8 @@ impl Default for DestinationPolicy {
 }
 
 fn normalize_host(host: &str) -> String {
-    host.trim_matches(['[', ']'])
+    host.trim()
+        .trim_matches(['[', ']'])
         .trim_end_matches('.')
         .to_ascii_lowercase()
 }
@@ -258,6 +259,14 @@ mod tests {
         let url = Url::parse("https://other.example.com/").unwrap();
 
         assert!(policy.validate(&url).is_err());
+    }
+
+    #[test]
+    fn allow_list_trims_configured_hosts() {
+        let policy = DestinationPolicy::new().with_allowed_hosts([" api.example.com. "]);
+        let url = Url::parse("https://api.example.com/").unwrap();
+
+        assert!(policy.validate(&url).is_ok());
     }
 
     #[test]
