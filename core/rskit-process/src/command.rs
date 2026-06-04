@@ -404,6 +404,7 @@ impl SignalPolicy {
 
 /// Configuration for subprocess execution behavior.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct ProcessConfig {
     /// Overall timeout for the process. None means no timeout.
     pub timeout: Option<Duration>,

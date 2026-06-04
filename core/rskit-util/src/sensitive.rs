@@ -76,8 +76,14 @@ impl SecretKeyMatcher {
 
         self.names
             .iter()
-            .any(|secret| normalized == *secret || normalized.ends_with(&format!("_{secret}")))
+            .any(|secret| normalized == secret.as_str() || has_secret_suffix(&normalized, secret))
     }
+}
+
+fn has_secret_suffix(normalized: &str, secret: &str) -> bool {
+    normalized
+        .strip_suffix(secret)
+        .is_some_and(|prefix| prefix.ends_with('_'))
 }
 
 fn normalize_name(name: &str) -> Option<String> {
