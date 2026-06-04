@@ -4,7 +4,8 @@
 mod integration_tests {
     use std::time::Duration;
 
-    use rskit_httpclient::{Auth, HttpClient, HttpClientConfig, Request};
+    use rskit_errors::ErrorCode;
+    use rskit_httpclient::{Auth, DestinationPolicy, HttpClient, HttpClientConfig, Request};
     use rskit_resilience::{ConstantBackoff, Policy, RetryPolicy};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
@@ -138,6 +139,133 @@ mod integration_tests {
         assert_eq!(response.text().unwrap(), "ok");
 
         server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn response_body_limit_rejects_oversized_body() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/large"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("x".repeat(32)))
+            .mount(&mock_server)
+            .await;
+
+        let config = HttpClientConfig::new()
+            .with_base_url(mock_server.uri())
+            .with_max_response_body_bytes(16);
+        let client = HttpClient::new(config).unwrap();
+
+        let result = client.get("/large").await;
+
+        let error = result.unwrap_err();
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
+        assert!(!error.is_retryable());
+        assert!(error.message().contains("max_response_body_bytes"));
+    }
+
+    #[tokio::test]
+    async fn redirect_destination_policy_rejects_metadata_target() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/redirect"))
+            .respond_with(
+                ResponseTemplate::new(302)
+                    .append_header("location", "http://169.254.169.254/latest/meta-data"),
+            )
+            .mount(&mock_server)
+            .await;
+
+        let config = HttpClientConfig::new().with_base_url(mock_server.uri());
+        let client = HttpClient::new(config).unwrap();
+
+        let result = client.get("/redirect").await;
+
+        let error = result.unwrap_err();
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
+        assert!(!error.is_retryable());
+        assert!(
+            error
+                .message()
+                .contains("metadata service destinations are blocked")
+        );
+    }
+
+    #[tokio::test]
+    async fn redirect_limit_rejects_more_than_configured_hops() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/redirect"))
+            .respond_with(ResponseTemplate::new(302).append_header("location", "/middle"))
+            .mount(&mock_server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/middle"))
+            .respond_with(ResponseTemplate::new(302).append_header("location", "/final"))
+            .mount(&mock_server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/final"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("ok"))
+            .mount(&mock_server)
+            .await;
+
+        let config = HttpClientConfig::new()
+            .with_base_url(mock_server.uri())
+            .with_max_redirects(1);
+        let client = HttpClient::new(config).unwrap();
+
+        let result = client.get("/redirect").await;
+
+        let error = result.unwrap_err();
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
+        assert!(!error.is_retryable());
+        assert!(error.message().contains("max_redirects"));
+    }
+
+    #[tokio::test]
+    async fn redirect_limit_allows_exactly_configured_hops() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/redirect"))
+            .respond_with(ResponseTemplate::new(302).append_header("location", "/final"))
+            .mount(&mock_server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/final"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("ok"))
+            .mount(&mock_server)
+            .await;
+
+        let config = HttpClientConfig::new()
+            .with_base_url(mock_server.uri())
+            .with_max_redirects(1);
+        let client = HttpClient::new(config).unwrap();
+
+        let response = client.get("/redirect").await.unwrap();
+
+        assert_eq!(response.text().unwrap(), "ok");
+    }
+
+    #[tokio::test]
+    async fn allow_list_rejects_disallowed_host() {
+        let mock_server = MockServer::start().await;
+        let config = HttpClientConfig::new()
+            .with_base_url(mock_server.uri())
+            .with_destination_policy(
+                DestinationPolicy::new().with_allowed_hosts(["api.example.com"]),
+            );
+        let client = HttpClient::new(config).unwrap();
+
+        let result = client.get("/api/users").await;
+
+        let error = result.unwrap_err();
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
+        assert!(!error.is_retryable());
+        assert!(error.message().contains("not allowed"));
     }
 
     #[test]

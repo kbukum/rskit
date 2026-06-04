@@ -15,7 +15,7 @@ Service discovery with registry and load balancing strategies.
 - `ServiceInstance` with id, address, port, health, tags, and metadata
 - Load balancers: `RoundRobin`, `Random`, `LeastConnections`
 - `InMemoryDiscovery` for testing
-- Optional Consul backend (feature-gated)
+- Optional Consul backend (feature-gated) using the shared hardened HTTP client
 
 ## Usage
 
@@ -47,6 +47,12 @@ async fn example() {
     println!("routed to {:?}", pick.map(|i| i.endpoint()));
 }
 ```
+
+## Consul transport behavior
+
+The optional Consul backend builds on `rskit-httpclient`. Consul requests use a
+bounded timeout that exceeds the blocking-query wait interval, do not follow
+redirects, and allow-list only the configured Consul host.
 
 ## See Also
 

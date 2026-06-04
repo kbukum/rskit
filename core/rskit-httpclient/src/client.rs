@@ -3,6 +3,7 @@
 use crate::config::HttpClientConfig;
 use crate::request::{Request, RequestBody};
 use crate::response::Response;
+use std::error::Error;
 use std::path::Path;
 
 use reqwest::Client;
@@ -30,11 +31,7 @@ impl HttpClient {
         let mut builder = Client::builder()
             .timeout(config.timeout)
             .connect_timeout(config.connect_timeout)
-            .redirect(if config.follow_redirects {
-                reqwest::redirect::Policy::limited(config.max_redirects)
-            } else {
-                reqwest::redirect::Policy::none()
-            });
+            .redirect(redirect_policy(&config));
 
         if let Some(ua) = &config.user_agent {
             builder = builder.user_agent(ua.clone());
@@ -66,7 +63,7 @@ impl HttpClient {
 
     /// Executes an HTTP request.
     pub async fn send(&self, req: Request) -> AppResult<Response> {
-        let response = self.execute_with_resilience(req).await?;
+        let mut response = self.execute_with_resilience(req).await?;
 
         let status = response.status();
         let headers = response
@@ -80,12 +77,7 @@ impl HttpClient {
             })
             .collect();
 
-        let body = response.bytes().await.map_err(|e| {
-            AppError::new(
-                ErrorCode::ExternalService,
-                format!("failed to read response body: {}", e),
-            )
-        })?;
+        let body = read_response_body(&mut response, self.config.max_response_body_bytes).await?;
 
         Ok(Response::new(status, headers, body))
     }
@@ -109,13 +101,14 @@ impl HttpClient {
 
     fn build_request(&self, req: &Request) -> AppResult<reqwest::RequestBuilder> {
         let url = self.build_url(&req.path)?;
+        self.config.destination_policy.validate(&url)?;
         let mut request = match req.method.as_str() {
-            "GET" => self.client.get(&url),
-            "POST" => self.client.post(&url),
-            "PUT" => self.client.put(&url),
-            "PATCH" => self.client.patch(&url),
-            "DELETE" => self.client.delete(&url),
-            "HEAD" => self.client.head(&url),
+            "GET" => self.client.get(url),
+            "POST" => self.client.post(url),
+            "PUT" => self.client.put(url),
+            "PATCH" => self.client.patch(url),
+            "DELETE" => self.client.delete(url),
+            "HEAD" => self.client.head(url),
             method => {
                 return Err(AppError::new(
                     ErrorCode::InvalidInput,
@@ -231,7 +224,7 @@ impl HttpClient {
     }
 
     /// Builds the full URL from a path.
-    fn build_url(&self, path: &str) -> AppResult<String> {
+    fn build_url(&self, path: &str) -> AppResult<reqwest::Url> {
         if let Some(base) = &self.config.base_url {
             // Handle path to ensure correct joining
             let base_ends_slash = base.ends_with('/');
@@ -244,11 +237,9 @@ impl HttpClient {
             };
 
             url.parse::<reqwest::Url>()
-                .map(|u| u.to_string())
                 .map_err(|e| AppError::new(ErrorCode::InvalidInput, format!("invalid url: {}", e)))
         } else {
             path.parse::<reqwest::Url>()
-                .map(|u| u.to_string())
                 .map_err(|e| AppError::new(ErrorCode::InvalidInput, format!("invalid url: {}", e)))
         }
     }
@@ -262,7 +253,73 @@ impl std::fmt::Debug for HttpClient {
     }
 }
 
+fn redirect_policy(config: &HttpClientConfig) -> reqwest::redirect::Policy {
+    if !config.follow_redirects {
+        return reqwest::redirect::Policy::none();
+    }
+
+    let max_redirects = config.max_redirects;
+    let destination_policy = config.destination_policy.clone();
+    reqwest::redirect::Policy::custom(move |attempt| {
+        if attempt.previous().len() > max_redirects {
+            return attempt.error(AppError::invalid_input(
+                "max_redirects",
+                format!("too many HTTP redirects (max {max_redirects})"),
+            ));
+        }
+        if let Err(error) = destination_policy.validate(attempt.url()) {
+            return attempt.error(error);
+        }
+        attempt.follow()
+    })
+}
+
+async fn read_response_body(
+    response: &mut reqwest::Response,
+    max_bytes: usize,
+) -> AppResult<bytes::Bytes> {
+    if response
+        .content_length()
+        .is_some_and(|length| length > max_bytes as u64)
+    {
+        return Err(response_body_too_large(max_bytes));
+    }
+
+    let mut total = 0usize;
+    let mut body = bytes::BytesMut::new();
+    while let Some(chunk) = response.chunk().await.map_err(|error| {
+        AppError::new(
+            ErrorCode::ExternalService,
+            format!("failed to read response body: {error}"),
+        )
+        .with_cause(error)
+    })? {
+        total = total
+            .checked_add(chunk.len())
+            .ok_or_else(|| response_body_too_large(max_bytes))?;
+        if total > max_bytes {
+            return Err(response_body_too_large(max_bytes));
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(body.freeze())
+}
+
+fn response_body_too_large(max_bytes: usize) -> AppError {
+    AppError::invalid_input(
+        "max_response_body_bytes",
+        format!("HTTP response body exceeds configured limit of {max_bytes} bytes"),
+    )
+}
+
 fn map_transport_error(error: reqwest::Error) -> AppError {
+    if let Some(policy_error) = error
+        .source()
+        .and_then(|source| source.downcast_ref::<AppError>())
+    {
+        return AppError::new(policy_error.code(), policy_error.message()).with_cause(error);
+    }
+
     let code = if error.is_timeout() {
         ErrorCode::Timeout
     } else if error.is_connect() {
@@ -394,10 +451,10 @@ mod tests {
         let client = HttpClient::new(config).unwrap();
 
         let url = client.build_url("/users").unwrap();
-        assert_eq!(url, "https://api.example.com/v1/users");
+        assert_eq!(url.as_str(), "https://api.example.com/v1/users");
 
         let url = client.build_url("users").unwrap();
-        assert_eq!(url, "https://api.example.com/v1/users");
+        assert_eq!(url.as_str(), "https://api.example.com/v1/users");
     }
 
     #[test]
@@ -406,7 +463,7 @@ mod tests {
         let client = HttpClient::new(config).unwrap();
 
         let url = client.build_url("https://example.com/users").unwrap();
-        assert_eq!(url, "https://example.com/users");
+        assert_eq!(url.as_str(), "https://example.com/users");
     }
 
     #[test]
@@ -446,5 +503,15 @@ mod tests {
         } else {
             assert!(result.is_err());
         }
+    }
+
+    #[test]
+    fn destination_policy_rejects_initial_url() {
+        let config = HttpClientConfig::new();
+        let client = HttpClient::new(config).unwrap();
+
+        let result = client.build_request(&Request::get("http://169.254.169.254/latest"));
+
+        assert!(result.is_err());
     }
 }
