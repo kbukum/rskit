@@ -108,6 +108,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   feature for filesystem-backed cache usage.
 - **L6 auth/authz**: made request authentication fail closed by default with typed optional-auth outcomes, masked credential-bearing formatting paths, aligned OIDC HTTP usage with the canonical HTTP client, and added Tower authorization middleware.
 - **L5 transport**: aligned HTTP/server/client/gRPC/SSE/discovery boundaries with explicit security ownership, direct HTTPS serving, baseline server middleware, toolkit-native SSE events, and explicit discovery registries.
+- **rskit-httpclient/discovery**: added outbound destination policies, redirect target validation, response body limits, and Consul host allow-listing to harden transport SSRF and resource-boundary behavior.
 - **rskit-observability**: replaced process-global tracer initialization with injectable OpenTelemetry providers for traces, metrics, and logs, with OTLP gRPC/HTTP support.
 - **rskit-resilience**: added elapsed-time retry bounds and a composable Tower timeout layer.
 - **rskit-http**: owns HTTP-specific CORS and response-header security policy; `rskit-server` consumes these HTTP transport capabilities.

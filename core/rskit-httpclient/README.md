@@ -9,7 +9,8 @@ Async HTTP client for rskit with auth, headers, injected resilience policies, an
 - Configurable timeouts, headers, and redirect behavior
 - Explicit TLS trust, identity, and minimum-version configuration via `rskit-security`
 - Optional `rskit-resilience::Policy` integration for retry, timeout, circuit breaker, and rate limiting
-- URL building with base URL support
+- URL building with base URL support and outbound destination validation
+- Bounded response body reads to avoid unbounded memory growth
 - JSON request/response serialization via `serde`
 - Integrated error handling with `rskit-errors`
 - Request builder pattern for fluent API
@@ -74,6 +75,32 @@ let resp = client.send(
         .bearer_token("request-specific-token")
 ).await?;
 ```
+
+## Transport hardening
+
+`HttpClientConfig` applies safe transport defaults:
+
+- redirects are capped by `max_redirects` (default: 5)
+- response bodies are capped by `max_response_body_bytes` (default: 10 MiB)
+- `DestinationPolicy` validates initial request URLs and redirect targets
+- link-local address literals and common cloud metadata endpoints are blocked by default
+
+Use an allow-list for clients that should only call known hosts:
+
+```rust
+use rskit_httpclient::{DestinationPolicy, HttpClientConfig};
+
+let config = HttpClientConfig::new()
+    .with_base_url("https://api.example.com")
+    .with_destination_policy(
+        DestinationPolicy::new().with_allowed_hosts(["api.example.com"])
+    )
+    .with_max_response_body_bytes(2 * 1024 * 1024);
+```
+
+Hostname validation happens before DNS resolution, so host allow-lists are the
+preferred protection for high-trust clients that must not follow arbitrary
+destination names.
 
 ## Error Handling
 

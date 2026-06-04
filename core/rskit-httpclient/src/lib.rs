@@ -7,7 +7,8 @@
 //! - Async HTTP client built on `reqwest`
 //! - Support for Bearer, Basic, and API key authentication
 //! - Configurable timeouts, headers, redirects, and injected resilience policies
-//! - URL building with base URL support
+//! - URL building with base URL support and destination validation
+//! - Bounded response-body reads
 //! - JSON request/response serialization
 //! - Integrated error handling with `rskit-errors`
 //!
@@ -46,11 +47,13 @@
 pub mod auth;
 pub mod client;
 pub mod config;
+pub mod destination;
 pub mod request;
 pub mod response;
 
 pub use auth::Auth;
 pub use client::HttpClient;
 pub use config::HttpClientConfig;
+pub use destination::DestinationPolicy;
 pub use request::{Request, RequestBody};
 pub use response::{ErrorResponse, Response};

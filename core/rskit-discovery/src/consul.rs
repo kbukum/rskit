@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use rskit_httpclient::{ErrorResponse, HttpClient, HttpClientConfig, Request};
+use rskit_httpclient::{DestinationPolicy, ErrorResponse, HttpClient, HttpClientConfig, Request};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use tracing::{debug, warn};
@@ -96,9 +96,28 @@ impl ConsulDiscovery {
 }
 
 fn consul_http_config(address: &str) -> HttpClientConfig {
+    let base_url = format!("http://{address}");
+    let allowed_host = consul_address_host(address);
     HttpClientConfig::new()
-        .with_base_url(format!("http://{address}"))
+        .with_base_url(base_url)
         .with_timeout(CONSUL_REQUEST_TIMEOUT)
+        .with_follow_redirects(false)
+        .with_destination_policy(DestinationPolicy::new().with_allowed_hosts([allowed_host]))
+}
+
+fn consul_address_host(address: &str) -> String {
+    if let Some(rest) = address.strip_prefix('[')
+        && let Some((host, _)) = rest.split_once(']')
+    {
+        return host.to_owned();
+    }
+    if let Ok(addr) = address.parse::<std::net::SocketAddr>() {
+        return addr.ip().to_string();
+    }
+    address
+        .split_once(':')
+        .map_or(address, |(host, _)| host)
+        .to_owned()
 }
 
 #[async_trait]
@@ -318,6 +337,11 @@ mod tests {
         assert!(config.timeout > CONSUL_BLOCKING_WAIT);
         assert_eq!(config.timeout, CONSUL_REQUEST_TIMEOUT);
         assert_eq!(consul_blocking_wait_query(), "30s");
+        assert!(!config.follow_redirects);
+        assert_eq!(
+            config.destination_policy.allowed_hosts,
+            vec!["localhost".to_owned()]
+        );
     }
 
     #[test]
@@ -331,5 +355,15 @@ mod tests {
             Some(&"secret".to_owned())
         );
         assert!(config.timeout > CONSUL_BLOCKING_WAIT);
+    }
+
+    #[test]
+    fn consul_allowed_host_handles_ipv6_socket_addresses() {
+        let config = consul_http_config("[::1]:8500");
+
+        assert_eq!(
+            config.destination_policy.allowed_hosts,
+            vec!["::1".to_owned()]
+        );
     }
 }
