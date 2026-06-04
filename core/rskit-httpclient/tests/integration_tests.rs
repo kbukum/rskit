@@ -197,8 +197,18 @@ mod integration_tests {
         let mock_server = MockServer::start().await;
 
         Mock::given(method("GET"))
-            .and(path("/loop"))
-            .respond_with(ResponseTemplate::new(302).append_header("location", "/loop"))
+            .and(path("/redirect"))
+            .respond_with(ResponseTemplate::new(302).append_header("location", "/middle"))
+            .mount(&mock_server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/middle"))
+            .respond_with(ResponseTemplate::new(302).append_header("location", "/final"))
+            .mount(&mock_server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/final"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("ok"))
             .mount(&mock_server)
             .await;
 
@@ -207,7 +217,7 @@ mod integration_tests {
             .with_max_redirects(1);
         let client = HttpClient::new(config).unwrap();
 
-        let result = client.get("/loop").await;
+        let result = client.get("/redirect").await;
 
         let error = result.unwrap_err();
         assert_eq!(error.code(), ErrorCode::InvalidInput);
