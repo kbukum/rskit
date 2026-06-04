@@ -213,7 +213,7 @@ impl CircuitBreaker {
                         .unwrap_or(false)
                     {
                         transition = self.transition(&mut inner, CbState::HalfOpen);
-                        inner.half_open_calls = 0;
+                        inner.half_open_calls = 1;
                         inner.successes = 0;
                         true
                     } else {
@@ -428,6 +428,45 @@ mod tests {
         let result = cb.execute(|| async { Ok::<_, AppError>(()) }).await;
 
         assert!(result.is_ok());
+        assert_eq!(cb.state(), CbState::Closed);
+    }
+
+    #[tokio::test]
+    async fn open_to_half_open_transition_consumes_probe_slot() {
+        let cb = CircuitBreaker::new(
+            CbConfig::new("probe-limit")
+                .with_max_failures(1)
+                .with_timeout(Duration::ZERO)
+                .with_half_open_max_calls(1),
+        )
+        .unwrap();
+
+        let _ = cb
+            .execute(|| async { Err::<(), AppError>(AppError::new(ErrorCode::Internal, "fail")) })
+            .await;
+        assert_eq!(cb.state(), CbState::Open);
+
+        let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+        let release = Arc::new(tokio::sync::Notify::new());
+        let first_probe = {
+            let cb = cb.clone();
+            let release = Arc::clone(&release);
+            tokio::spawn(async move {
+                cb.execute(|| async move {
+                    started_tx.send(()).unwrap();
+                    release.notified().await;
+                    Ok::<_, AppError>(())
+                })
+                .await
+            })
+        };
+        started_rx.await.unwrap();
+
+        let second_probe = cb.execute(|| async { Ok::<_, AppError>(()) }).await;
+        assert!(second_probe.is_err());
+
+        release.notify_one();
+        assert!(first_probe.await.unwrap().is_ok());
         assert_eq!(cb.state(), CbState::Closed);
     }
 }

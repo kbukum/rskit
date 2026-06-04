@@ -1,22 +1,16 @@
 //! Shared secret handling primitives.
 
 pub use rskit_util::SecretString;
-use subtle::{Choice, ConstantTimeEq};
+use subtle::ConstantTimeEq;
 
-/// Compare byte slices without returning early on content or length mismatch.
+/// Compare equal-length byte slices in constant time.
 ///
-/// The loop runs for the longer input length and includes the length difference
-/// in the result, so callers should still treat secret lengths as externally
-/// observable and prefer fixed-length encodings for sensitive tokens.
+/// Length mismatches return `false`; callers should still treat secret lengths
+/// as externally observable and prefer fixed-length encodings for sensitive
+/// tokens.
 #[must_use]
 pub fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
-    let mut equal = Choice::from(u8::from(left.len() == right.len()));
-    for index in 0..left.len().max(right.len()) {
-        let left_byte = left.get(index).copied().unwrap_or_default();
-        let right_byte = right.get(index).copied().unwrap_or_default();
-        equal &= left_byte.ct_eq(&right_byte);
-    }
-    equal.into()
+    left.ct_eq(right).into()
 }
 
 #[cfg(test)]

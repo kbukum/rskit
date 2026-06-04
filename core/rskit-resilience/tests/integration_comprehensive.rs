@@ -76,12 +76,12 @@ async fn cb_half_open_allows_only_max_probe_calls() {
 
     tokio::time::sleep(Duration::from_millis(30)).await;
 
-    // The first call triggers Open→HalfOpen transition (doesn't consume a slot).
-    // Then half_open_max_calls=2 more probes are allowed. Total = 3 calls.
+    // The first call triggers Open→HalfOpen transition and consumes a probe slot.
+    // half_open_max_calls=2 allows two total concurrent probes.
     let barrier = Arc::new(tokio::sync::Notify::new());
 
     let mut handles = Vec::new();
-    for _ in 0..3 {
+    for _ in 0..2 {
         let cb = cb.clone();
         let b = barrier.clone();
         handles.push(tokio::spawn(async move {
@@ -96,7 +96,7 @@ async fn cb_half_open_allows_only_max_probe_calls() {
     // Give probes time to enter execute
     tokio::time::sleep(Duration::from_millis(10)).await;
 
-    // Fourth call should be rejected (half_open slots exhausted)
+    // Third call should be rejected (half-open slots exhausted)
     let overflow = cb.execute(|| async { Ok::<i32, AppError>(99) }).await;
     assert!(overflow.is_err());
 

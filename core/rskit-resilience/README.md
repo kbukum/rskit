@@ -21,21 +21,27 @@ Production-grade resilience primitives with Tower layer integration.
 ```toml
 [dependencies]
 rskit-resilience = "0.1"
+rskit-errors = "0.1"
 ```
 
 ```rust
+use rskit_errors::AppResult;
 use rskit_resilience::{RetryPolicy, CircuitBreaker, CbConfig};
 use std::time::Duration;
 
-let cb = CircuitBreaker::new(CbConfig::new("my-service"))?;
-let retry = RetryPolicy::new()
-    .with_max_attempts(3)
-    .with_initial_backoff(Duration::from_millis(100))
-    .with_max_elapsed_time(Duration::from_secs(5));
+async fn call_with_resilience() -> AppResult<()> {
+    let cb = CircuitBreaker::new(CbConfig::new("my-service"))?;
+    let retry = RetryPolicy::new()
+        .with_max_attempts(3)
+        .with_initial_backoff(Duration::from_millis(100))
+        .with_max_elapsed_time(Duration::from_secs(5));
 
-let result = retry.execute(|| async {
-    cb.execute(|| async { call_downstream().await }).await
-}).await?;
+    let _result = retry.execute(|| async {
+        cb.execute(|| async { call_downstream().await }).await
+    }).await?;
+
+    Ok(())
+}
 ```
 
 ## See Also
