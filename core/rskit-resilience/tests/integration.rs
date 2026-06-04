@@ -33,7 +33,7 @@ async fn retry_policy_retries_on_failure() {
 
 #[tokio::test]
 async fn circuit_breaker_opens_after_failures() {
-    let cb = CircuitBreaker::new(CbConfig::new("test").with_max_failures(2));
+    let cb = CircuitBreaker::new(CbConfig::new("test").with_max_failures(2)).unwrap();
     assert_eq!(cb.state(), CbState::Closed);
 
     for _ in 0..2 {
@@ -49,7 +49,7 @@ async fn circuit_breaker_opens_after_failures() {
 
 #[tokio::test]
 async fn bulkhead_rejects_over_limit() {
-    let bh = Bulkhead::new(BulkheadConfig::new("test-bh", 1));
+    let bh = Bulkhead::new(BulkheadConfig::new("test-bh", 1)).unwrap();
     let bh2 = bh.clone();
 
     // Hold one permit via a long-running execute

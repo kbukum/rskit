@@ -77,7 +77,8 @@ mod tests {
 
     #[tokio::test]
     async fn passes_through_success() {
-        let breaker = CircuitBreaker::new(CbConfig::new("test-layer-cb").with_max_failures(3));
+        let breaker =
+            CircuitBreaker::new(CbConfig::new("test-layer-cb").with_max_failures(3)).unwrap();
         let service = tower::service_fn(|req: i32| async move { Ok::<i32, AppError>(req + 1) });
         let mut service = ServiceBuilder::new()
             .layer(CircuitBreakerLayer::new(breaker))
@@ -89,7 +90,8 @@ mod tests {
 
     #[tokio::test]
     async fn opens_and_rejects() {
-        let breaker = CircuitBreaker::new(CbConfig::new("test-layer-cb").with_max_failures(2));
+        let breaker =
+            CircuitBreaker::new(CbConfig::new("test-layer-cb").with_max_failures(2)).unwrap();
         let service = tower::service_fn(|_req: i32| async {
             Err::<i32, AppError>(AppError::new(ErrorCode::Internal, "fail"))
         });

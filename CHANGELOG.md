@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Breaking
+- **rskit-resilience**: changed `Bulkhead::new`, `CircuitBreaker::new`, and
+  policy bulkhead/circuit-breaker builders to return `AppResult` so invalid
+  zero-capacity resilience limits fail at construction time.
+- **rskit-messaging**: changed the circuit-breaker middleware constructor to
+  return `AppResult` and propagate invalid resilience configuration errors.
 - **rskit-di**: removed the panic-oriented `MustResolve`/`must_resolve` public
   helpers; use the typed `Resolve<T>` contract or `resolve()` function and
   handle `AppResult` errors explicitly.
@@ -36,6 +41,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   layers directly.
 
 ### Changed — Cross-Cutting
+- **rskit-security**: re-exported the shared redacting `SecretString` and added
+  a `subtle`-backed constant-time byte comparison helper for security-sensitive
+  adapters.
 - **L2 patterns/DI**: tightened contract-crate docs for component/provider
   trait surfaces, documented provider backpressure expectations, and made hook
   dispatch use reentrant-safe snapshot semantics.

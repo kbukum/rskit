@@ -32,17 +32,29 @@ impl Policy {
     }
 
     /// Enable circuit breaking.
-    #[must_use]
-    pub fn with_circuit_breaker(mut self, config: CbConfig) -> Self {
-        self.circuit_breaker = Some(CircuitBreaker::new(config));
-        self
+    #[must_use = "builder methods return an updated policy; use the returned value"]
+    pub fn with_circuit_breaker(self, config: CbConfig) -> AppResult<Self> {
+        self.try_with_circuit_breaker(config)
+    }
+
+    /// Enable circuit breaking from a validated configuration.
+    #[must_use = "builder methods return an updated policy; use the returned value"]
+    pub fn try_with_circuit_breaker(mut self, config: CbConfig) -> AppResult<Self> {
+        self.circuit_breaker = Some(CircuitBreaker::new(config)?);
+        Ok(self)
     }
 
     /// Enable bulkhead concurrency limiting.
-    #[must_use]
-    pub fn with_bulkhead(mut self, config: BulkheadConfig) -> Self {
-        self.bulkhead = Some(Bulkhead::new(config));
-        self
+    #[must_use = "builder methods return an updated policy; use the returned value"]
+    pub fn with_bulkhead(self, config: BulkheadConfig) -> AppResult<Self> {
+        self.try_with_bulkhead(config)
+    }
+
+    /// Enable bulkhead concurrency limiting from a validated configuration.
+    #[must_use = "builder methods return an updated policy; use the returned value"]
+    pub fn try_with_bulkhead(mut self, config: BulkheadConfig) -> AppResult<Self> {
+        self.bulkhead = Some(Bulkhead::new(config)?);
+        Ok(self)
     }
 
     /// Enable rate limiting with a pre-built limiter.
@@ -152,6 +164,7 @@ where
     E: From<AppError> + Into<AppError>,
 {
     if let Some(retry) = retry {
+        retry.validate().map_err(E::from)?;
         let mut attempt = 0usize;
         loop {
             attempt += 1;
@@ -222,8 +235,9 @@ mod tests {
     #[tokio::test]
     async fn policy_circuit_breaker_state_is_shared_across_calls() {
         let attempts = Arc::new(AtomicUsize::new(0));
-        let policy =
-            Policy::new().with_circuit_breaker(CbConfig::new("shared").with_max_failures(1));
+        let policy = Policy::new()
+            .with_circuit_breaker(CbConfig::new("shared").with_max_failures(1))
+            .unwrap();
 
         let first = policy
             .execute(|| async { Err::<(), AppError>(AppError::new(ErrorCode::Internal, "boom")) })
@@ -278,7 +292,9 @@ mod tests {
             .try_with_rate_limiter_config(RateLimiterConfig::new("policy", 10, 2))
             .unwrap()
             .with_bulkhead(BulkheadConfig::new("policy", 1))
+            .unwrap()
             .with_circuit_breaker(CbConfig::new("policy"))
+            .unwrap()
             .with_retry(RetryPolicy::new().with_linear_backoff(LinearBackoff::new(
                 Duration::from_millis(1),
                 Duration::from_millis(1),

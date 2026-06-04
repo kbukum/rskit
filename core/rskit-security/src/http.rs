@@ -166,3 +166,82 @@ fn header_value(header: &HeaderName, value: &str) -> AppResult<HeaderValue> {
         AppError::invalid_input(header.as_str(), format!("invalid header value: {error}"))
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn contains_header(headers: &[(HeaderName, HeaderValue)], name: &HeaderName) -> bool {
+        headers.iter().any(|(header, _)| header == name)
+    }
+
+    #[test]
+    fn default_headers_include_secure_policy_set() {
+        let headers = SecurityHeadersConfig::default().header_pairs().unwrap();
+
+        assert!(contains_header(&headers, &STRICT_TRANSPORT_SECURITY));
+        assert!(contains_header(&headers, &CONTENT_SECURITY_POLICY));
+        assert!(contains_header(&headers, &PERMISSIONS_POLICY));
+        assert!(contains_header(&headers, &REFERRER_POLICY));
+        assert!(contains_header(&headers, &X_FRAME_OPTIONS));
+        assert!(contains_header(&headers, &X_CONTENT_TYPE_OPTIONS));
+    }
+
+    #[test]
+    fn allow_insecure_local_omits_hsts_only() {
+        let headers = SecurityHeadersConfig::default()
+            .with_transport_security(TransportSecurity::AllowInsecureLocal)
+            .header_pairs()
+            .unwrap();
+
+        assert!(!contains_header(&headers, &STRICT_TRANSPORT_SECURITY));
+        assert!(contains_header(&headers, &CONTENT_SECURITY_POLICY));
+    }
+
+    #[test]
+    fn custom_values_are_applied() {
+        let headers = SecurityHeadersConfig::default()
+            .with_content_security_policy(Some("default-src 'none'".to_string()))
+            .with_permissions_policy(Some("camera=()".to_string()))
+            .with_referrer_policy(Some("no-referrer".to_string()))
+            .with_frame_options(Some("SAMEORIGIN".to_string()))
+            .with_content_type_options(Some("nosniff".to_string()))
+            .header_pairs()
+            .unwrap();
+
+        assert!(
+            headers
+                .iter()
+                .any(|(header, value)| *header == CONTENT_SECURITY_POLICY
+                    && value == "default-src 'none'")
+        );
+        assert!(
+            headers
+                .iter()
+                .any(|(header, value)| *header == X_FRAME_OPTIONS && value == "SAMEORIGIN")
+        );
+    }
+
+    #[test]
+    fn rejects_disabling_all_headers_for_insecure_local() {
+        let config = SecurityHeadersConfig::default()
+            .with_transport_security(TransportSecurity::AllowInsecureLocal)
+            .with_content_security_policy(None)
+            .with_permissions_policy(None)
+            .with_referrer_policy(None)
+            .with_frame_options(None)
+            .with_content_type_options(None);
+
+        assert!(config.validate().is_err());
+        assert!(config.header_pairs().is_err());
+    }
+
+    #[test]
+    fn rejects_invalid_header_values() {
+        let result = SecurityHeadersConfig::default()
+            .with_content_security_policy(Some("bad\nvalue".to_string()))
+            .header_pairs();
+
+        assert!(result.is_err());
+    }
+}

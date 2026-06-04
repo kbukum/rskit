@@ -11,7 +11,9 @@ async fn compose_rate_bulkhead_circuit_timeout_retry() {
         .try_with_rate_limiter_config(RateLimiterConfig::new("example-rate", 10, 1))
         .unwrap()
         .with_bulkhead(BulkheadConfig::new("example-bulkhead", 2))
+        .unwrap()
         .with_circuit_breaker(CbConfig::new("example-circuit").with_max_failures(2))
+        .unwrap()
         .with_timeout(Duration::from_secs(1))
         .with_retry(
             RetryPolicy::new()

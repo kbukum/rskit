@@ -34,3 +34,6 @@ serde         = { workspace = true, features = ["derive"] }
 
 # Internal
 rskit-errors  = { path = "../rskit-errors" }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }

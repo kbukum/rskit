@@ -39,15 +39,15 @@ impl Default for CircuitBreakerConfig {
 /// immediately until the timeout elapses.
 pub fn circuit_breaker<T: Send + Sync + 'static>(
     config: CircuitBreakerConfig,
-) -> impl HandlerMiddleware<T> {
+) -> AppResult<impl HandlerMiddleware<T>> {
     let cb_config = CbConfig::new("messaging-cb")
         .with_max_failures(config.threshold as usize)
         .with_timeout(config.timeout)
         .with_half_open_max_calls(config.half_open_max as usize);
-    CircuitBreakerMiddleware {
-        cb: CircuitBreaker::new(cb_config),
+    Ok(CircuitBreakerMiddleware {
+        cb: CircuitBreaker::new(cb_config)?,
         _marker: std::marker::PhantomData,
-    }
+    })
 }
 
 struct CircuitBreakerMiddleware<T> {
@@ -112,7 +112,8 @@ mod tests {
                     .with_max_failures(cb_config.threshold as usize)
                     .with_timeout(cb_config.timeout)
                     .with_half_open_max_calls(cb_config.half_open_max as usize),
-            ),
+            )
+            .unwrap(),
             _marker: std::marker::PhantomData::<String>,
         };
         let handler = chain_handlers(
@@ -138,7 +139,8 @@ mod tests {
             CbConfig::new("test")
                 .with_max_failures(3)
                 .with_timeout(Duration::from_secs(60)),
-        );
+        )
+        .unwrap();
         let cb_mw = CircuitBreakerMiddleware {
             cb: cb.clone(),
             _marker: std::marker::PhantomData::<String>,
