@@ -716,6 +716,21 @@ async fn store_presigned_url_format() {
     assert!(url.contains("test.txt"));
 }
 
+#[tokio::test]
+async fn store_presigned_url_creates_missing_nested_parent() {
+    let dir = TempDir::new().unwrap();
+    let store = make_store(dir.path());
+
+    let url = store
+        .presigned_url("nested/new/test.txt", std::time::Duration::from_secs(60))
+        .await
+        .unwrap();
+
+    assert!(url.starts_with("file://"));
+    assert!(url.contains("nested/new/test.txt"));
+    assert!(dir.path().join("nested/new").is_dir());
+}
+
 // ── Copy operations ────────────────────────────────────────────────────────
 
 #[tokio::test]

@@ -5,6 +5,8 @@
 //! - [`TenantScope`] — a builder for constructing tenant-filtered query
 //!   predicate fragments.
 
+use std::num::NonZeroUsize;
+
 /// Helper for building tenant-scoped SQL `WHERE` clauses.
 ///
 /// Mirrors gokit's `ScopeToTenant` by associating a field name with a tenant
@@ -14,9 +16,13 @@
 ///
 /// ```
 /// use rskit_database::TenantScope;
+/// use std::num::NonZeroUsize;
 ///
 /// let scope = TenantScope::new("workspace_id", "ws-123").unwrap();
-/// assert_eq!(scope.where_clause(1), "workspace_id = $1");
+/// assert_eq!(
+///     scope.where_clause(NonZeroUsize::new(1).unwrap()),
+///     "workspace_id = $1",
+/// );
 /// assert_eq!(scope.value(), "ws-123");
 /// ```
 #[derive(Debug, Clone)]
@@ -51,14 +57,9 @@ impl TenantScope {
     ///
     /// `param_index` is the positional parameter number for the bind
     /// placeholder (1-based for PostgreSQL `$N` syntax).
-    ///
-    /// # Panics
-    ///
-    /// Panics when `param_index` is zero because PostgreSQL parameter indexes
-    /// are 1-based.
     #[must_use]
-    pub fn where_clause(&self, param_index: usize) -> String {
-        assert!(param_index > 0, "SQL parameter indexes are 1-based");
+    pub fn where_clause(&self, param_index: NonZeroUsize) -> String {
+        let param_index = param_index.get();
         format!("{} = ${param_index}", self.column)
     }
 
@@ -78,26 +79,16 @@ impl TenantScope {
     ///
     /// Returns the modified query with ` WHERE column = $N` appended, where
     /// `N` is `param_index`.
-    ///
-    /// # Panics
-    ///
-    /// Panics when `param_index` is zero because PostgreSQL parameter indexes
-    /// are 1-based.
     #[must_use]
-    pub fn apply(&self, query: &str, param_index: usize) -> String {
+    pub fn apply(&self, query: &str, param_index: NonZeroUsize) -> String {
         format!("{query} WHERE {}", self.where_clause(param_index))
     }
 
     /// Append a tenant-scoped `AND` clause to the given SQL query.
     ///
     /// Use this when the query already has a `WHERE` clause.
-    ///
-    /// # Panics
-    ///
-    /// Panics when `param_index` is zero because PostgreSQL parameter indexes
-    /// are 1-based.
     #[must_use]
-    pub fn apply_and(&self, query: &str, param_index: usize) -> String {
+    pub fn apply_and(&self, query: &str, param_index: NonZeroUsize) -> String {
         format!("{query} AND {}", self.where_clause(param_index))
     }
 }
@@ -132,23 +123,25 @@ fn is_valid_identifier_segment(segment: &str) -> bool {
 mod tests {
     use super::*;
 
+    fn param(index: usize) -> NonZeroUsize {
+        NonZeroUsize::new(index).unwrap()
+    }
+
     #[test]
     fn where_clause_basic() {
         let scope = TenantScope::new("workspace_id", "ws-123").unwrap();
-        assert_eq!(scope.where_clause(1), "workspace_id = $1");
+        assert_eq!(scope.where_clause(param(1)), "workspace_id = $1");
     }
 
     #[test]
     fn where_clause_higher_index() {
         let scope = TenantScope::new("tenant_id", "t-456").unwrap();
-        assert_eq!(scope.where_clause(3), "tenant_id = $3");
+        assert_eq!(scope.where_clause(param(3)), "tenant_id = $3");
     }
 
     #[test]
-    #[should_panic(expected = "SQL parameter indexes are 1-based")]
-    fn where_clause_rejects_zero_index() {
-        let scope = TenantScope::new("tenant_id", "t-456").unwrap();
-        let _ = scope.where_clause(0);
+    fn zero_parameter_index_is_not_representable() {
+        assert!(NonZeroUsize::new(0).is_none());
     }
 
     #[test]
@@ -166,14 +159,14 @@ mod tests {
     #[test]
     fn apply_where() {
         let scope = TenantScope::new("workspace_id", "ws-1").unwrap();
-        let sql = scope.apply("SELECT * FROM tasks", 1);
+        let sql = scope.apply("SELECT * FROM tasks", param(1));
         assert_eq!(sql, "SELECT * FROM tasks WHERE workspace_id = $1");
     }
 
     #[test]
     fn apply_and() {
         let scope = TenantScope::new("workspace_id", "ws-1").unwrap();
-        let sql = scope.apply_and("SELECT * FROM tasks WHERE status = $1", 2);
+        let sql = scope.apply_and("SELECT * FROM tasks WHERE status = $1", param(2));
         assert_eq!(
             sql,
             "SELECT * FROM tasks WHERE status = $1 AND workspace_id = $2"
@@ -188,7 +181,7 @@ mod tests {
     #[test]
     fn dotted_identifier_column() {
         let scope = TenantScope::new("my_schema.workspace_id", "ws-1").unwrap();
-        assert_eq!(scope.where_clause(1), "my_schema.workspace_id = $1");
+        assert_eq!(scope.where_clause(param(1)), "my_schema.workspace_id = $1");
     }
 
     #[test]
@@ -211,7 +204,7 @@ mod tests {
     #[test]
     fn tenant_value_is_bound_data_not_identifier() {
         let scope = TenantScope::new("workspace_id", "ws-1' OR '1'='1").unwrap();
-        assert_eq!(scope.where_clause(2), "workspace_id = $2");
+        assert_eq!(scope.where_clause(param(2)), "workspace_id = $2");
         assert_eq!(scope.value(), "ws-1' OR '1'='1");
     }
 

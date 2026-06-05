@@ -147,6 +147,7 @@ impl LocalStore {
                         ),
                     )
                 })?;
+                ensure_target_parent_confined(&self.config.root_dir, &path).await?;
                 let parent = canonicalize_confined(&self.config.root_dir, parent).await?;
                 let filename = path.file_name().ok_or_else(|| {
                     AppError::new(
