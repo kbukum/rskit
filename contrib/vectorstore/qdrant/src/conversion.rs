@@ -23,7 +23,7 @@ pub(crate) fn payload_to_qdrant_value(v: PayloadValue) -> AppResult<qdrant_clien
     let kind = match v {
         PayloadValue::String(s) => Kind::StringValue(s),
         PayloadValue::Integer(n) => Kind::IntegerValue(n),
-        PayloadValue::Float(n) => Kind::DoubleValue(n),
+        PayloadValue::Float(n) => Kind::DoubleValue(finite_qdrant_float(n, "payload")?),
         PayloadValue::Bool(b) => Kind::BoolValue(b),
         _ => {
             return Err(AppError::new(
@@ -43,14 +43,17 @@ pub(crate) fn filter_condition_to_qdrant(
     match value {
         PayloadValue::String(value) => Ok(Condition::matches(field, value)),
         PayloadValue::Integer(value) => Ok(Condition::matches(field, value)),
-        PayloadValue::Float(value) => Ok(Condition::range(
-            field,
-            Range {
-                gte: Some(value),
-                lte: Some(value),
-                ..Default::default()
-            },
-        )),
+        PayloadValue::Float(value) => {
+            let value = finite_qdrant_float(value, "filter")?;
+            Ok(Condition::range(
+                field,
+                Range {
+                    gte: Some(value),
+                    lte: Some(value),
+                    ..Default::default()
+                },
+            ))
+        }
         PayloadValue::Bool(value) => Ok(Condition::matches(field, value)),
         _ => Err(AppError::new(
             ErrorCode::InvalidInput,
@@ -68,12 +71,26 @@ pub(crate) fn qdrant_value_to_payload(
     match v.kind {
         Some(Kind::StringValue(s)) => Ok(PayloadValue::String(s)),
         Some(Kind::IntegerValue(i)) => Ok(PayloadValue::Integer(i)),
-        Some(Kind::DoubleValue(d)) => Ok(PayloadValue::Float(d)),
+        Some(Kind::DoubleValue(d)) => Ok(PayloadValue::Float(finite_qdrant_float(
+            d,
+            "returned payload",
+        )?)),
         Some(Kind::BoolValue(b)) => Ok(PayloadValue::Bool(b)),
         _ => Err(AppError::new(
             ErrorCode::InvalidInput,
             format!("unsupported Qdrant payload value for field '{field}'"),
         )),
+    }
+}
+
+fn finite_qdrant_float(value: f64, context: &str) -> AppResult<f64> {
+    if value.is_finite() {
+        Ok(value)
+    } else {
+        Err(AppError::new(
+            ErrorCode::InvalidInput,
+            format!("Qdrant {context} float values must be finite"),
+        ))
     }
 }
 
@@ -114,5 +131,37 @@ mod tests {
 
         assert_eq!(err.code(), ErrorCode::InvalidInput);
         assert!(err.message().contains("tags"));
+    }
+
+    #[test]
+    fn qdrant_payload_conversion_rejects_non_finite_float() {
+        let err = payload_to_qdrant_value(PayloadValue::Float(f64::NAN)).unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+        assert!(err.message().contains("finite"));
+    }
+
+    #[test]
+    fn qdrant_filter_conversion_rejects_non_finite_float() {
+        let err =
+            filter_condition_to_qdrant("score".to_owned(), PayloadValue::Float(f64::INFINITY))
+                .unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+        assert!(err.message().contains("finite"));
+    }
+
+    #[test]
+    fn qdrant_returned_payload_conversion_rejects_non_finite_float() {
+        let err = qdrant_value_to_payload(
+            "score",
+            Value {
+                kind: Some(Kind::DoubleValue(f64::NEG_INFINITY)),
+            },
+        )
+        .unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+        assert!(err.message().contains("finite"));
     }
 }

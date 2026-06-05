@@ -17,7 +17,10 @@ pub enum PayloadValue {
     String(String),
     /// Signed integer value.
     Integer(i64),
-    /// Finite floating-point value.
+    /// Floating-point value.
+    ///
+    /// Values are validated as finite by store/adaptor request validation before
+    /// they are accepted for storage or filtering.
     Float(f64),
     /// Boolean value.
     Bool(bool),

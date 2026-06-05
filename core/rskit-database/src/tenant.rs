@@ -51,9 +51,14 @@ impl TenantScope {
     ///
     /// `param_index` is the positional parameter number for the bind
     /// placeholder (1-based for PostgreSQL `$N` syntax).
+    ///
+    /// # Panics
+    ///
+    /// Panics when `param_index` is zero because PostgreSQL parameter indexes
+    /// are 1-based.
     #[must_use]
     pub fn where_clause(&self, param_index: usize) -> String {
-        debug_assert!(param_index > 0, "SQL parameter indexes are 1-based");
+        assert!(param_index > 0, "SQL parameter indexes are 1-based");
         format!("{} = ${param_index}", self.column)
     }
 
@@ -73,6 +78,11 @@ impl TenantScope {
     ///
     /// Returns the modified query with ` WHERE column = $N` appended, where
     /// `N` is `param_index`.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `param_index` is zero because PostgreSQL parameter indexes
+    /// are 1-based.
     #[must_use]
     pub fn apply(&self, query: &str, param_index: usize) -> String {
         format!("{query} WHERE {}", self.where_clause(param_index))
@@ -81,6 +91,11 @@ impl TenantScope {
     /// Append a tenant-scoped `AND` clause to the given SQL query.
     ///
     /// Use this when the query already has a `WHERE` clause.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `param_index` is zero because PostgreSQL parameter indexes
+    /// are 1-based.
     #[must_use]
     pub fn apply_and(&self, query: &str, param_index: usize) -> String {
         format!("{query} AND {}", self.where_clause(param_index))
@@ -127,6 +142,13 @@ mod tests {
     fn where_clause_higher_index() {
         let scope = TenantScope::new("tenant_id", "t-456").unwrap();
         assert_eq!(scope.where_clause(3), "tenant_id = $3");
+    }
+
+    #[test]
+    #[should_panic(expected = "SQL parameter indexes are 1-based")]
+    fn where_clause_rejects_zero_index() {
+        let scope = TenantScope::new("tenant_id", "t-456").unwrap();
+        let _ = scope.where_clause(0);
     }
 
     #[test]
