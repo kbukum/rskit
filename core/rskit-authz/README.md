@@ -6,6 +6,7 @@ Canonical RBAC + ABAC authorization engine with role hierarchy, deny override, a
 
 - `Engine` evaluates RBAC roles and ABAC policies together
 - role inheritance with wildcard resource/action permissions
+- object-level role permissions via permission-local attribute conditions
 - explicit deny policies always win
 - unmatched requests resolve to `default deny`
 - `AuthorizationLayer` composes policy checks as Tower middleware and denies missing request context
@@ -25,6 +26,7 @@ let engine = Engine::new(
         permissions: vec![Permission {
             resource: "article".into(),
             action: "write".into(),
+            conditions: vec![],
         }],
     }],
     vec![],
@@ -48,3 +50,7 @@ let allowed = engine.check(&Request {
 assert!(allowed);
 # Ok::<(), rskit_errors::AppError>(())
 ```
+
+Object-level constraints that limit a role grant should be attached to the
+`Permission::conditions` for that grant. Use explicit deny policies for
+constraints that must override every broad role or policy allow.

@@ -1,3 +1,4 @@
+use std::num::NonZeroUsize;
 use std::time::Duration;
 
 use rskit_database::{
@@ -80,11 +81,12 @@ fn find_opts_builder_sets_values() {
 
 #[test]
 fn tenant_scope_builds_predicates() {
-    let scope = TenantScope::new("workspace_id", "ws-1");
+    let scope = TenantScope::new("workspace_id", "ws-1").unwrap();
+    let first_param = NonZeroUsize::new(1).unwrap();
 
-    assert_eq!(scope.where_clause(1), "workspace_id = $1");
+    assert_eq!(scope.where_clause(first_param), "workspace_id = $1");
     assert_eq!(
-        scope.apply("SELECT * FROM tasks", 1),
+        scope.apply("SELECT * FROM tasks", first_param),
         "SELECT * FROM tasks WHERE workspace_id = $1"
     );
     assert_eq!(scope.value(), "ws-1");

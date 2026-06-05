@@ -53,6 +53,7 @@ fn permission_matching_supports_wildcards() {
     let permission = Permission {
         resource: String::from("article"),
         action: String::from("*"),
+        conditions: vec![],
     };
     assert!(permission.matches("article", "read"));
     assert!(!permission.matches("invoice", "read"));

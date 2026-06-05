@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Breaking
+- **rskit-database/rskit-messaging**: changed tenant SQL scope and batch
+  producer constructors to return `AppResult`, rejecting unsafe tenant column
+  identifiers and invalid zero batch bounds at construction time.
+- **rskit-vectorstore**: replaced raw public JSON payload/filter values with a
+  typed scalar `PayloadValue` contract and added configurable bounds for search
+  limits, vector dimensions, payload size, payload field count, and filter
+  complexity. Registry-level `VectorStoreConfig::limits` are now the
+  authoritative limits for both core and contrib vectorstore backends.
+- **rskit-authz**: added object-scoped role permissions through
+  `Permission::conditions` and removed `Eq` from `Permission`/`Role` because
+  conditions can compare JSON values.
+- **rskit-cache-redis/rskit-vectorstore-qdrant**: standardized adapter entry
+  points to public `Config` plus `register(&mut Registry, Config)` and hid
+  concrete vendor implementation types. Qdrant adapter request limits now come
+  from `VectorStoreConfig::limits` instead of adapter-local configuration.
 - **rskit-resilience**: changed `Bulkhead::new`, `CircuitBreaker::new`, and
   policy bulkhead/circuit-breaker builders to return `AppResult` so invalid
   zero-capacity resilience limits fail at construction time.
@@ -106,10 +121,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   from the public inference error surface, and aligned GenAI embedding span
   operation naming with current OpenTelemetry conventions.
 - **Contrib adapters**: standardized storage, messaging, LLM, inference, and media adapters around explicit `Config` plus `register(&mut Registry, Config)` entry points with hidden vendor/concrete implementation surfaces.
-- **L6 data backends**: aligned database, cache, storage, messaging, and vectorstore around explicit registries, config-key backend selection, and core-only in-memory/local defaults; moved Redis and Qdrant integrations to contrib adapters.
+- **L6 data backends**: aligned database, cache, storage, messaging, and vectorstore around explicit registries, config-key backend selection, and core-only in-memory/local defaults; moved Redis and Qdrant integrations to contrib adapters; hardened local storage operations against symlink/root escapes across read, write, delete, list, copy, and rename paths.
 - **rskit-cache**: added a built-in filesystem cache adapter with a facade
   feature for filesystem-backed cache usage.
-- **L6 auth/authz**: made request authentication fail closed by default with typed optional-auth outcomes, masked credential-bearing formatting paths, aligned OIDC HTTP usage with the canonical HTTP client, and added Tower authorization middleware.
+- **L6 auth/authz**: made request authentication fail closed by default with typed optional-auth outcomes, masked credential-bearing formatting paths, aligned OIDC HTTP usage with the canonical HTTP client, added Tower authorization middleware, exposed reusable JWT codec/header primitives, rejected blank JWT audience entries, and added permission-local ABAC conditions for object-scoped role grants.
 - **L5 transport**: aligned HTTP/server/client/gRPC/SSE/discovery boundaries with explicit security ownership, direct HTTPS serving, baseline server middleware, toolkit-native SSE events, and explicit discovery registries.
 - **rskit-httpclient/discovery**: added outbound destination policies, redirect target validation, response body limits, and Consul host allow-listing to harden transport SSRF and resource-boundary behavior.
 - **rskit-observability**: replaced process-global tracer initialization with injectable OpenTelemetry providers for traces, metrics, and logs, with OTLP gRPC/HTTP support.

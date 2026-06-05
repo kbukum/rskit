@@ -92,8 +92,9 @@ struct MemoryFactory;
 
 impl VectorFactory for MemoryFactory {
     fn create(&self, config: &VectorStoreConfig) -> AppResult<Arc<dyn VectorStore>> {
-        Ok(Arc::new(InMemoryVectorStore::with_metric(
+        Ok(Arc::new(InMemoryVectorStore::with_options(
             config.memory.metric,
+            config.limits,
         )))
     }
 }

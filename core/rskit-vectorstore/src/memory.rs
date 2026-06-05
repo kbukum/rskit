@@ -7,6 +7,7 @@ use parking_lot::Mutex as ParkingMutex;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use tracing::debug;
 
+use crate::config::VectorStoreLimits;
 use crate::store::{PointPayload, SearchFilter, SearchResult, SimilarityMetric, VectorStore};
 
 struct StoredPoint {
@@ -26,6 +27,7 @@ struct Collection {
 /// Intended for unit tests and prototyping — not suitable for production workloads.
 pub struct InMemoryVectorStore {
     default_metric: SimilarityMetric,
+    limits: VectorStoreLimits,
     collections: ParkingMutex<HashMap<String, Collection>>,
 }
 
@@ -38,8 +40,15 @@ impl InMemoryVectorStore {
     /// Create a new empty in-memory vector store with the metric used for new collections.
     #[must_use]
     pub fn with_metric(default_metric: SimilarityMetric) -> Self {
+        Self::with_options(default_metric, VectorStoreLimits::default())
+    }
+
+    /// Create a new empty in-memory vector store with explicit safety limits.
+    #[must_use]
+    pub fn with_options(default_metric: SimilarityMetric, limits: VectorStoreLimits) -> Self {
         Self {
             default_metric,
+            limits,
             collections: ParkingMutex::new(HashMap::new()),
         }
     }
@@ -101,6 +110,7 @@ fn compare_score_desc(a: f32, b: f32) -> std::cmp::Ordering {
 #[async_trait]
 impl VectorStore for InMemoryVectorStore {
     async fn ensure_collection(&self, collection: &str, dimensions: usize) -> AppResult<()> {
+        self.limits.validate_dimensions(dimensions)?;
         let mut collections = self.collections.lock();
         collections
             .entry(collection.to_string())
@@ -120,6 +130,9 @@ impl VectorStore for InMemoryVectorStore {
         payload: PointPayload,
     ) -> AppResult<()> {
         debug!(collection, id, "InMemory: upserting vector point");
+
+        self.limits.validate_dimensions(vector.len())?;
+        payload.validate_limits(&self.limits)?;
 
         let mut collections = self.collections.lock();
 
@@ -165,6 +178,9 @@ impl VectorStore for InMemoryVectorStore {
     ) -> AppResult<Vec<SearchResult>> {
         debug!(collection, limit, "InMemory: searching vectors");
 
+        validate_search(limit, filter.as_ref(), &self.limits)?;
+        self.limits.validate_dimensions(vector.len())?;
+
         let collections = self.collections.lock();
 
         let col = collections.get(collection).ok_or_else(|| {
@@ -183,6 +199,18 @@ impl VectorStore for InMemoryVectorStore {
                     vector.len()
                 ),
             ));
+        }
+
+        fn validate_search(
+            limit: usize,
+            filter: Option<&SearchFilter>,
+            limits: &VectorStoreLimits,
+        ) -> AppResult<()> {
+            limits.validate_search_limit(limit)?;
+            if let Some(filter) = filter {
+                filter.validate_limits(limits)?;
+            }
+            Ok(())
         }
 
         let mut scored: Vec<SearchResult> = col
@@ -390,6 +418,74 @@ mod tests {
             .search("test", vec![1.0, 0.0], 10, None)
             .await
             .expect_err("dimension mismatch must fail");
+
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+    }
+
+    #[tokio::test]
+    async fn search_rejects_limit_above_configured_bound() {
+        let store = InMemoryVectorStore::with_options(
+            SimilarityMetric::Cosine,
+            VectorStoreLimits::new().with_max_search_limit(1),
+        );
+        store.ensure_collection("test", 2).await.unwrap();
+
+        let err = store
+            .search("test", vec![1.0, 0.0], 2, None)
+            .await
+            .expect_err("search limit above configured bound must fail");
+
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+    }
+
+    #[tokio::test]
+    async fn upsert_rejects_payload_above_configured_bound() {
+        let store = InMemoryVectorStore::with_options(
+            SimilarityMetric::Cosine,
+            VectorStoreLimits::new().with_max_payload_bytes(4),
+        );
+        store.ensure_collection("test", 2).await.unwrap();
+
+        let err = store
+            .upsert(
+                "test",
+                "1",
+                vec![1.0, 0.0],
+                PointPayload::new().with_field("name", "too-large"),
+            )
+            .await
+            .expect_err("payload above configured bound must fail");
+
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+    }
+
+    #[tokio::test]
+    async fn search_rejects_filter_above_configured_bound() {
+        let store = InMemoryVectorStore::with_options(
+            SimilarityMetric::Cosine,
+            VectorStoreLimits::new().with_max_payload_bytes(4),
+        );
+        store.ensure_collection("test", 2).await.unwrap();
+
+        let filter = SearchFilter::new().must_match("name", "too-large");
+        let err = store
+            .search("test", vec![1.0, 0.0], 1, Some(filter))
+            .await
+            .expect_err("filter above configured bound must fail");
+
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+    }
+
+    #[tokio::test]
+    async fn search_rejects_non_finite_filter_float() {
+        let store = InMemoryVectorStore::new();
+        store.ensure_collection("test", 2).await.unwrap();
+
+        let filter = SearchFilter::new().must_match("score", f64::NAN);
+        let err = store
+            .search("test", vec![1.0, 0.0], 1, Some(filter))
+            .await
+            .expect_err("non-finite filter float must fail");
 
         assert_eq!(err.code(), ErrorCode::InvalidInput);
     }

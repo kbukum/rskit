@@ -3,8 +3,7 @@
 mod common;
 
 use common::{AUDIENCE, ISSUER, StandardClaims, jwt_service, now_epoch, standard_config};
-use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
-use rskit_auth::jwt::{JwtConfig, JwtService};
+use rskit_auth::jwt::{JwtCodec, JwtConfig, JwtService};
 use rskit_auth::password::{HashAlgorithm, PasswordHasher, ResetTokenGenerator};
 use rskit_auth::traits::{TokenGenerator, TokenValidator};
 use rskit_errors::{AppError, ErrorCode, ProblemDetail};
@@ -171,13 +170,13 @@ async fn jwt_algorithm_confusion_attack_is_rejected() {
     .unwrap();
 
     let claims = StandardClaims::new("user-123");
-    let header = Header::new(Algorithm::HS256);
-    let attack_token = encode(
-        &header,
-        &claims,
-        &EncodingKey::from_secret(RSA_PUBLIC_KEY.as_bytes()),
-    )
+    let attack_codec = JwtCodec::new(JwtConfig::hs256_internal(
+        RSA_PUBLIC_KEY,
+        ISSUER,
+        vec![AUDIENCE.into()],
+    ))
     .unwrap();
+    let attack_token = attack_codec.encode(&claims).unwrap();
 
     let result = validator.validate(&attack_token).await;
     assert!(

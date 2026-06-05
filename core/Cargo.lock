@@ -6493,12 +6493,14 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "qdrant-client",
+ "reqwest 0.13.3",
  "rskit-errors",
+ "rskit-httpclient",
  "rskit-util",
  "rskit-vectorstore",
  "serde",
- "serde_json",
  "tracing",
+ "uuid",
 ]
 
 [[package]]

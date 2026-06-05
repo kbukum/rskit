@@ -21,7 +21,10 @@ pub mod traits;
 
 pub use bearer::{BearerAuthLayer, BearerAuthService};
 pub use context::AuthClaims;
-pub use jwt::{AsymmetricAlgorithm, JwtAlgorithm, JwtConfig, JwtKeyMaterial, JwtService, KeyPair};
+pub use jwt::{
+    AsymmetricAlgorithm, JwtAlgorithm, JwtCodec, JwtConfig, JwtHeader, JwtKeyMaterial, JwtService,
+    KeyPair,
+};
 pub use outcome::{AuthOutcome, MissingCredentialPolicy};
 pub use password::{HashAlgorithm, PasswordHasher, ResetTokenGenerator};
 pub use traits::{TokenGenerator, TokenValidator};

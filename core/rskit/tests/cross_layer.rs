@@ -486,6 +486,7 @@ async fn auth_authz_jwt_claims_feed_rbac() {
                 permissions: vec![Permission {
                     resource: "*".into(),
                     action: "*".into(),
+                    conditions: vec![],
                 }],
             },
             Role {
@@ -494,6 +495,7 @@ async fn auth_authz_jwt_claims_feed_rbac() {
                 permissions: vec![Permission {
                     resource: "*".into(),
                     action: "read".into(),
+                    conditions: vec![],
                 }],
             },
         ],
@@ -563,6 +565,7 @@ async fn auth_authz_restricted_role() {
             permissions: vec![Permission {
                 resource: "*".into(),
                 action: "read".into(),
+                conditions: vec![],
             }],
         }],
         vec![],
@@ -631,6 +634,7 @@ async fn auth_authz_deny_overrides_allow() {
             permissions: vec![Permission {
                 resource: "articles".into(),
                 action: "*".into(),
+                conditions: vec![],
             }],
         }],
         vec![Policy {

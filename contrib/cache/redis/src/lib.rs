@@ -15,7 +15,7 @@ use tokio::time::timeout;
 
 /// Redis connection and pool configuration.
 #[derive(Clone, Deserialize, Serialize)]
-pub struct RedisConfig {
+pub struct Config {
     /// Redis server hostname or IP address.
     #[serde(default = "default_host")]
     pub host: String,
@@ -34,9 +34,9 @@ pub struct RedisConfig {
     pub key_prefix: Option<String>,
 }
 
-impl fmt::Debug for RedisConfig {
+impl fmt::Debug for Config {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("RedisConfig")
+        f.debug_struct("Config")
             .field("host", &self.host)
             .field("port", &self.port)
             .field("password", &self.password.as_ref().map(|_| "<redacted>"))
@@ -47,7 +47,7 @@ impl fmt::Debug for RedisConfig {
     }
 }
 
-impl Default for RedisConfig {
+impl Default for Config {
     fn default() -> Self {
         Self {
             host: default_host(),
@@ -60,7 +60,7 @@ impl Default for RedisConfig {
     }
 }
 
-impl RedisConfig {
+impl Config {
     fn connection_url(&self) -> String {
         match &self.password {
             Some(pw) => format!(
@@ -87,15 +87,13 @@ fn default_connect_timeout() -> Duration {
     Duration::from_secs(5)
 }
 
-/// Async Redis cache store.
-pub struct RedisClient {
+struct RedisClient {
     manager: redis::aio::ConnectionManager,
-    config: RedisConfig,
+    config: Config,
 }
 
 impl RedisClient {
-    /// Create a Redis cache store.
-    pub async fn new(config: RedisConfig) -> AppResult<Self> {
+    async fn new(config: Config) -> AppResult<Self> {
         if config.connect_timeout.is_zero() {
             return Err(AppError::new(
                 ErrorCode::InvalidInput,
@@ -178,7 +176,7 @@ impl CacheStore for RedisClient {
 }
 
 struct RedisFactory {
-    config: RedisConfig,
+    config: Config,
 }
 
 #[async_trait::async_trait]
@@ -193,7 +191,7 @@ impl CacheStoreFactory for RedisFactory {
 }
 
 /// Explicitly register the Redis cache store.
-pub fn register_redis(registry: &mut CacheRegistry, config: RedisConfig) -> AppResult<()> {
+pub fn register(registry: &mut CacheRegistry, config: Config) -> AppResult<()> {
     registry.register("redis", Arc::new(RedisFactory { config }))
 }
 
@@ -241,12 +239,12 @@ mod tests {
 
     #[test]
     fn connection_url_uses_auth_when_password_is_set() {
-        let config = RedisConfig {
+        let config = Config {
             host: "redis.example.test".to_owned(),
             port: 6380,
             password: Some(SecretString::new("secret")),
             database: 2,
-            ..RedisConfig::default()
+            ..Config::default()
         };
 
         assert_eq!(
@@ -257,11 +255,11 @@ mod tests {
 
     #[test]
     fn connection_url_omits_auth_without_password() {
-        let config = RedisConfig {
+        let config = Config {
             host: "redis.example.test".to_owned(),
             port: 6380,
             database: 2,
-            ..RedisConfig::default()
+            ..Config::default()
         };
 
         assert_eq!(config.connection_url(), "redis://redis.example.test:6380/2");
@@ -269,9 +267,9 @@ mod tests {
 
     #[test]
     fn debug_masks_password() {
-        let config = RedisConfig {
+        let config = Config {
             password: Some(SecretString::new("secret")),
-            ..RedisConfig::default()
+            ..Config::default()
         };
 
         let debug = format!("{config:?}");
@@ -301,9 +299,9 @@ mod tests {
 
     #[tokio::test]
     async fn zero_connect_timeout_is_rejected_without_network() {
-        let config = RedisConfig {
+        let config = Config {
             connect_timeout: Duration::ZERO,
-            ..RedisConfig::default()
+            ..Config::default()
         };
 
         let err = RedisClient::new(config).await.err().unwrap();
