@@ -196,21 +196,25 @@ impl VectorStore for QdrantVectorStore {
                 format!("vector search failed: {e}"),
             )
         })?;
-        Ok(results
+        results
             .result
             .into_iter()
-            .map(|point| SearchResult {
-                id: point.id.map_or_else(String::new, |id| format!("{id:?}")),
-                score: point.score,
-                payload: PointPayload {
-                    fields: point
-                        .payload
-                        .into_iter()
-                        .filter_map(|(k, v)| qdrant_value_to_payload(v).map(|value| (k, value)))
-                        .collect(),
-                },
+            .map(|point| {
+                let fields = point
+                    .payload
+                    .into_iter()
+                    .map(|(field, value)| {
+                        qdrant_value_to_payload(&field, value).map(|value| (field, value))
+                    })
+                    .collect::<AppResult<_>>()?;
+
+                Ok(SearchResult {
+                    id: point.id.map_or_else(String::new, |id| format!("{id:?}")),
+                    score: point.score,
+                    payload: PointPayload { fields },
+                })
             })
-            .collect())
+            .collect()
     }
 
     async fn delete(&self, collection: &str, id: &str) -> AppResult<()> {
@@ -329,14 +333,20 @@ fn filter_condition_to_qdrant(field: String, value: PayloadValue) -> AppResult<C
     }
 }
 
-fn qdrant_value_to_payload(v: qdrant_client::qdrant::Value) -> Option<PayloadValue> {
+fn qdrant_value_to_payload(
+    field: &str,
+    v: qdrant_client::qdrant::Value,
+) -> AppResult<PayloadValue> {
     use qdrant_client::qdrant::value::Kind;
     match v.kind {
-        Some(Kind::StringValue(s)) => Some(PayloadValue::String(s)),
-        Some(Kind::IntegerValue(i)) => Some(PayloadValue::Integer(i)),
-        Some(Kind::DoubleValue(d)) => Some(PayloadValue::Float(d)),
-        Some(Kind::BoolValue(b)) => Some(PayloadValue::Bool(b)),
-        _ => None,
+        Some(Kind::StringValue(s)) => Ok(PayloadValue::String(s)),
+        Some(Kind::IntegerValue(i)) => Ok(PayloadValue::Integer(i)),
+        Some(Kind::DoubleValue(d)) => Ok(PayloadValue::Float(d)),
+        Some(Kind::BoolValue(b)) => Ok(PayloadValue::Bool(b)),
+        _ => Err(AppError::new(
+            ErrorCode::InvalidInput,
+            format!("unsupported Qdrant payload value for field '{field}'"),
+        )),
     }
 }
 
@@ -383,6 +393,23 @@ mod tests {
             qdrant_distance(SimilarityMetric::L2).unwrap(),
             Distance::Euclid
         );
+    }
+
+    #[test]
+    fn qdrant_value_to_payload_rejects_unsupported_returned_values() {
+        use qdrant_client::qdrant::value::Kind;
+        use qdrant_client::qdrant::{ListValue, Value};
+
+        let err = qdrant_value_to_payload(
+            "tags",
+            Value {
+                kind: Some(Kind::ListValue(ListValue { values: Vec::new() })),
+            },
+        )
+        .unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+        assert!(err.message().contains("tags"));
     }
 
     #[tokio::test]

@@ -189,7 +189,7 @@ impl LocalStore {
         target: &Path,
     ) -> AppResult<u64> {
         self.ensure_target_parent_confined(target).await?;
-        let temp_path = sibling_temp_path(target);
+        let temp_path = storage_temp_path(target);
         let mut temp = tokio::fs::OpenOptions::new()
             .write(true)
             .create_new(true)
@@ -430,16 +430,12 @@ async fn canonicalize_confined(root: &Path, path: &Path) -> AppResult<PathBuf> {
     }
 }
 
-fn sibling_temp_path(target: &Path) -> PathBuf {
-    let sequence = NEXT_DEFAULT_ROOT_ID.fetch_add(1, Ordering::Relaxed);
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |duration| duration.as_nanos());
+fn storage_temp_path(target: &Path) -> PathBuf {
     let filename = target
         .file_name()
         .and_then(|name| name.to_str())
         .unwrap_or("file");
-    target.with_file_name(format!(".{filename}.rskit-tmp-{nanos}-{sequence}"))
+    rskit_fs::sibling_temp_path(target, filename, ".rskit-tmp")
 }
 
 async fn replace_with_temp(temp_path: &Path, target: &Path) -> AppResult<()> {
