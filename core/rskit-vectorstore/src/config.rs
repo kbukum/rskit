@@ -54,7 +54,7 @@ pub struct VectorStoreLimits {
     /// Maximum scalar fields allowed in a point payload.
     #[serde(default = "default_max_payload_fields")]
     pub max_payload_fields: usize,
-    /// Maximum approximate scalar bytes allowed in a point payload.
+    /// Maximum approximate scalar bytes allowed in point payloads and search filters.
     #[serde(default = "default_max_payload_bytes")]
     pub max_payload_bytes: usize,
     /// Maximum exact-match filter conditions accepted by `search`.
