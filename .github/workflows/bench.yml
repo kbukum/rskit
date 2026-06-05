@@ -37,7 +37,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
 
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
@@ -46,7 +46,7 @@ jobs:
       - name: Install mold linker
         run: sudo apt-get install -y mold
 
-      - uses: Swatinem/rust-cache@8ba370a7908a18ecf2b2aa574dbfdf4e4e50514c  # v2.7.8
+      - uses: Swatinem/rust-cache@874b06e0d3f63371f9ddbee43d4c8ebc73021583  # v2.7.8
         with:
           workspaces: |
             core
