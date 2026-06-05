@@ -11,22 +11,15 @@ pub(crate) fn validate_qdrant_url(url: &str) -> AppResult<()> {
             "Qdrant URL is required",
         ));
     }
-    if has_url_credentials(url) || url.contains('?') {
+    let parsed = reqwest::Url::parse(url)
+        .map_err(|error| AppError::invalid_input("url", format!("invalid Qdrant URL: {error}")))?;
+    if !parsed.username().is_empty() || parsed.password().is_some() || parsed.query().is_some() {
         return Err(AppError::new(
             ErrorCode::InvalidInput,
             "Qdrant URL must not contain credentials or query parameters",
         ));
     }
-    let parsed = reqwest::Url::parse(url)
-        .map_err(|error| AppError::invalid_input("url", format!("invalid Qdrant URL: {error}")))?;
     DestinationPolicy::default().validate(&parsed)
-}
-
-fn has_url_credentials(value: &str) -> bool {
-    value
-        .split_once("://")
-        .and_then(|(_, rest)| rest.split('/').next())
-        .is_some_and(|authority| authority.contains('@'))
 }
 
 #[cfg(test)]

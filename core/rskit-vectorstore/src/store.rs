@@ -11,7 +11,7 @@ use crate::VectorStoreLimits;
 /// Typed scalar payload value stored alongside vector points.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[non_exhaustive]
-#[serde(tag = "type", content = "value", rename_all = "snake_case")]
+#[serde(untagged)]
 pub enum PayloadValue {
     /// UTF-8 string value.
     String(String),
@@ -39,7 +39,8 @@ impl PayloadValue {
     pub(crate) fn encoded_len(&self) -> usize {
         match self {
             Self::String(value) => value.len(),
-            Self::Integer(_) | Self::Float(_) => std::mem::size_of::<u64>(),
+            Self::Integer(_) => std::mem::size_of::<i64>(),
+            Self::Float(_) => std::mem::size_of::<f64>(),
             Self::Bool(_) => std::mem::size_of::<bool>(),
         }
     }
@@ -297,4 +298,49 @@ pub trait VectorStore: Send + Sync {
 
     /// Delete a point by ID.
     async fn delete(&self, collection: &str, id: &str) -> AppResult<()>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn payload_value_serializes_as_json_scalar() {
+        assert_eq!(
+            serde_json::to_value(PayloadValue::String("doc".to_owned())).unwrap(),
+            serde_json::json!("doc")
+        );
+        assert_eq!(
+            serde_json::to_value(PayloadValue::Integer(42)).unwrap(),
+            serde_json::json!(42)
+        );
+        assert_eq!(
+            serde_json::to_value(PayloadValue::Float(1.5)).unwrap(),
+            serde_json::json!(1.5)
+        );
+        assert_eq!(
+            serde_json::to_value(PayloadValue::Bool(true)).unwrap(),
+            serde_json::json!(true)
+        );
+    }
+
+    #[test]
+    fn payload_value_deserializes_from_json_scalar() {
+        assert_eq!(
+            serde_json::from_value::<PayloadValue>(serde_json::json!("doc")).unwrap(),
+            PayloadValue::String("doc".to_owned())
+        );
+        assert_eq!(
+            serde_json::from_value::<PayloadValue>(serde_json::json!(42)).unwrap(),
+            PayloadValue::Integer(42)
+        );
+        assert_eq!(
+            serde_json::from_value::<PayloadValue>(serde_json::json!(1.5)).unwrap(),
+            PayloadValue::Float(1.5)
+        );
+        assert_eq!(
+            serde_json::from_value::<PayloadValue>(serde_json::json!(true)).unwrap(),
+            PayloadValue::Bool(true)
+        );
+    }
 }
