@@ -1,0 +1,114 @@
+//! Conversion helpers between rskit vector types and Qdrant API types.
+
+use qdrant_client::qdrant::{Condition, Distance, Range};
+use rskit_errors::{AppError, AppResult, ErrorCode};
+use rskit_vectorstore::{PayloadValue, SimilarityMetric};
+
+pub(crate) fn qdrant_distance(metric: SimilarityMetric) -> AppResult<Distance> {
+    match metric {
+        SimilarityMetric::Cosine => Ok(Distance::Cosine),
+        SimilarityMetric::Dot => Ok(Distance::Dot),
+        SimilarityMetric::L2 => Ok(Distance::Euclid),
+        _ => Err(AppError::new(
+            ErrorCode::InvalidInput,
+            format!("unsupported Qdrant similarity metric: {metric:?}"),
+        )),
+    }
+}
+
+pub(crate) fn payload_to_qdrant_value(v: PayloadValue) -> AppResult<qdrant_client::qdrant::Value> {
+    use qdrant_client::qdrant::value::Kind;
+    let kind = match v {
+        PayloadValue::String(s) => Kind::StringValue(s),
+        PayloadValue::Integer(n) => Kind::IntegerValue(n),
+        PayloadValue::Float(n) => Kind::DoubleValue(n),
+        PayloadValue::Bool(b) => Kind::BoolValue(b),
+        _ => {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                "unsupported vector payload value for Qdrant",
+            ));
+        }
+    };
+    Ok(qdrant_client::qdrant::Value { kind: Some(kind) })
+}
+
+pub(crate) fn filter_condition_to_qdrant(
+    field: String,
+    value: PayloadValue,
+) -> AppResult<Condition> {
+    match value {
+        PayloadValue::String(value) => Ok(Condition::matches(field, value)),
+        PayloadValue::Integer(value) => Ok(Condition::matches(field, value)),
+        PayloadValue::Float(value) => Ok(Condition::range(
+            field,
+            Range {
+                gte: Some(value),
+                lte: Some(value),
+                ..Default::default()
+            },
+        )),
+        PayloadValue::Bool(value) => Ok(Condition::matches(field, value)),
+        _ => Err(AppError::new(
+            ErrorCode::InvalidInput,
+            "unsupported vector filter value for Qdrant",
+        )),
+    }
+}
+
+pub(crate) fn qdrant_value_to_payload(
+    field: &str,
+    v: qdrant_client::qdrant::Value,
+) -> AppResult<PayloadValue> {
+    use qdrant_client::qdrant::value::Kind;
+    match v.kind {
+        Some(Kind::StringValue(s)) => Ok(PayloadValue::String(s)),
+        Some(Kind::IntegerValue(i)) => Ok(PayloadValue::Integer(i)),
+        Some(Kind::DoubleValue(d)) => Ok(PayloadValue::Float(d)),
+        Some(Kind::BoolValue(b)) => Ok(PayloadValue::Bool(b)),
+        _ => Err(AppError::new(
+            ErrorCode::InvalidInput,
+            format!("unsupported Qdrant payload value for field '{field}'"),
+        )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use qdrant_client::qdrant::value::Kind;
+    use qdrant_client::qdrant::{Distance, ListValue, Value};
+    use rskit_errors::ErrorCode;
+    use rskit_vectorstore::SimilarityMetric;
+
+    use super::*;
+
+    #[test]
+    fn qdrant_distance_maps_supported_metrics() {
+        assert_eq!(
+            qdrant_distance(SimilarityMetric::Cosine).unwrap(),
+            Distance::Cosine
+        );
+        assert_eq!(
+            qdrant_distance(SimilarityMetric::Dot).unwrap(),
+            Distance::Dot
+        );
+        assert_eq!(
+            qdrant_distance(SimilarityMetric::L2).unwrap(),
+            Distance::Euclid
+        );
+    }
+
+    #[test]
+    fn qdrant_value_to_payload_rejects_unsupported_returned_values() {
+        let err = qdrant_value_to_payload(
+            "tags",
+            Value {
+                kind: Some(Kind::ListValue(ListValue { values: Vec::new() })),
+            },
+        )
+        .unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+        assert!(err.message().contains("tags"));
+    }
+}

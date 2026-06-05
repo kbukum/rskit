@@ -12,7 +12,7 @@ pub const DEFAULT_MAX_SEARCH_LIMIT: usize = 1_000;
 pub const DEFAULT_MAX_VECTOR_DIMENSIONS: usize = 32_768;
 /// Default maximum number of scalar payload fields per point.
 pub const DEFAULT_MAX_PAYLOAD_FIELDS: usize = 128;
-/// Default maximum approximate scalar payload bytes per point.
+/// Default maximum approximate scalar bytes per point payload or search filter.
 pub const DEFAULT_MAX_PAYLOAD_BYTES: usize = 64 * 1024;
 /// Default maximum exact-match filter conditions per search.
 pub const DEFAULT_MAX_FILTER_CONDITIONS: usize = 32;
@@ -41,7 +41,7 @@ impl Default for VectorStoreConfig {
     }
 }
 
-/// Safety limits for vector operations and untrusted payloads.
+/// Safety limits for vector operations, untrusted payloads, and filters.
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct VectorStoreLimits {
@@ -96,7 +96,7 @@ impl VectorStoreLimits {
         self
     }
 
-    /// Override the maximum approximate payload byte count.
+    /// Override the maximum approximate byte count for payloads and filters.
     #[must_use]
     pub const fn with_max_payload_bytes(mut self, max_payload_bytes: usize) -> Self {
         self.max_payload_bytes = max_payload_bytes;

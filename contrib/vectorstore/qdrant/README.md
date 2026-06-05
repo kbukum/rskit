@@ -5,7 +5,9 @@ Use `rskit_util::SecretString` for API keys; URLs with embedded credentials, que
 parameters, unsafe schemes, metadata endpoints, or link-local address literals are
 rejected before the Qdrant client is built.
 Runtime vector operation limits come from `VectorStoreConfig::limits`, matching
-the core in-memory backend.
+the core in-memory backend. Payload and filter values are converted through the
+typed scalar contract; unsupported values fail closed instead of being silently
+dropped.
 
 ```rust,no_run
 use rskit_vectorstore::VectorStoreRegistry;

@@ -223,7 +223,7 @@ impl SearchFilter {
         self
     }
 
-    /// Validate filter complexity against limits.
+    /// Validate filter condition count and approximate scalar bytes against limits.
     pub fn validate_limits(&self, limits: &VectorStoreLimits) -> AppResult<()> {
         if self.must.len() > limits.max_filter_conditions {
             return Err(AppError::new(

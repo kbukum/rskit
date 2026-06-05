@@ -1,61 +1,22 @@
-//! Local filesystem storage backend.
+//! Local [`FileStore`] implementation.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_fs::{async_io, sync_io};
-use serde::{Deserialize, Serialize};
 
 use crate::FileSource;
 
-use super::{FileStore, ProgressCallback, StoredFile, prefixed_key};
+use super::super::{FileStore, ProgressCallback, StoredFile, prefixed_key};
+use super::config::LocalStoreConfig;
+use super::path::{
+    canonicalize_confined, ensure_target_parent_confined, file_not_found_error,
+    file_not_found_error_with_cause, normalize_local_key, replace_with_temp, storage_temp_path,
+};
 
-static NEXT_DEFAULT_ROOT_ID: AtomicU64 = AtomicU64::new(0);
-
-/// Configuration for the local file store.
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct LocalStoreConfig {
-    /// Root directory for stored files.
-    pub root_dir: PathBuf,
-    /// Whether to auto-create the root directory if it doesn't exist.
-    pub auto_create: bool,
-}
-
-impl Default for LocalStoreConfig {
-    fn default() -> Self {
-        Self {
-            root_dir: default_local_root_dir(),
-            auto_create: true,
-        }
-    }
-}
-
-fn default_local_root_dir() -> PathBuf {
-    let sequence = NEXT_DEFAULT_ROOT_ID.fetch_add(1, Ordering::Relaxed);
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |duration| duration.as_nanos());
-    std::env::temp_dir().join(format!(
-        "rskit-storage-{}-{nanos}-{sequence}",
-        std::process::id()
-    ))
-}
-
-fn normalize_local_key(key: &str) -> AppResult<String> {
-    let key = prefixed_key(None, key);
-    rskit_fs::validate_relative_path(Path::new(&key)).map_err(|error| {
-        AppError::new(
-            ErrorCode::InvalidInput,
-            format!("storage key must stay within the configured root ({key}): {error}"),
-        )
-    })?;
-    Ok(key)
-}
-
-/// Local filesystem storage backend.
+/// Local filesystem storage backend with root-confined keys and write targets.
 pub struct LocalStore {
     config: LocalStoreConfig,
 }
@@ -168,27 +129,12 @@ impl LocalStore {
         }
     }
 
-    async fn ensure_target_parent_confined(&self, target: &Path) -> AppResult<()> {
-        async_io::file::create_parent_dir(target).await?;
-        let parent = target.parent().ok_or_else(|| {
-            AppError::new(
-                ErrorCode::InvalidInput,
-                format!(
-                    "storage target '{}' has no parent directory",
-                    target.display()
-                ),
-            )
-        })?;
-        canonicalize_confined(&self.config.root_dir, parent).await?;
-        Ok(())
-    }
-
     async fn stream_to_target(
         &self,
         reader: &mut (dyn tokio::io::AsyncRead + Unpin + Send),
         target: &Path,
     ) -> AppResult<u64> {
-        self.ensure_target_parent_confined(target).await?;
+        ensure_target_parent_confined(&self.config.root_dir, target).await?;
         let temp_path = storage_temp_path(target);
         let mut temp = tokio::fs::OpenOptions::new()
             .write(true)
@@ -260,7 +206,6 @@ impl FileStore for LocalStore {
         content_type: Option<&str>,
         _on_progress: ProgressCallback,
     ) -> AppResult<StoredFile> {
-        // For local store, just delegate to regular upload
         self.upload(source, key, content_type, None).await
     }
 
@@ -382,7 +327,7 @@ impl FileStore for LocalStore {
     async fn rename(&self, from_key: &str, to_key: &str) -> AppResult<StoredFile> {
         let from = self.confined_existing_file_path(from_key).await?;
         let to = self.resolve_path(to_key)?;
-        self.ensure_target_parent_confined(&to).await?;
+        ensure_target_parent_confined(&self.config.root_dir, &to).await?;
 
         async_io::file::rename(&from, &to).await.map_err(|e| {
             AppError::new(
@@ -392,154 +337,5 @@ impl FileStore for LocalStore {
         })?;
 
         self.head(to_key).await
-    }
-}
-
-async fn canonicalize_confined(root: &Path, path: &Path) -> AppResult<PathBuf> {
-    let root = tokio::fs::canonicalize(root).await.map_err(|error| {
-        AppError::new(
-            ErrorCode::Internal,
-            format!(
-                "failed to canonicalize storage root '{}': {error}",
-                root.display()
-            ),
-        )
-        .with_cause(error)
-    })?;
-    let canonical = tokio::fs::canonicalize(path).await.map_err(|error| {
-        AppError::new(
-            ErrorCode::Internal,
-            format!(
-                "failed to canonicalize storage path '{}': {error}",
-                path.display()
-            ),
-        )
-        .with_cause(error)
-    })?;
-    if canonical.starts_with(&root) {
-        Ok(canonical)
-    } else {
-        Err(AppError::new(
-            ErrorCode::InvalidInput,
-            format!(
-                "storage path '{}' escapes configured root '{}'",
-                canonical.display(),
-                root.display()
-            ),
-        ))
-    }
-}
-
-fn storage_temp_path(target: &Path) -> PathBuf {
-    let filename = target
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("file");
-    rskit_fs::sibling_temp_path(target, filename, ".rskit-tmp")
-}
-
-async fn replace_with_temp(temp_path: &Path, target: &Path) -> AppResult<()> {
-    #[cfg(windows)]
-    {
-        let _ = async_io::file::remove_if_exists(target).await?;
-    }
-    tokio::fs::rename(temp_path, target).await.map_err(|error| {
-        AppError::new(
-            ErrorCode::Internal,
-            format!(
-                "failed to replace '{}' with '{}': {error}",
-                target.display(),
-                temp_path.display()
-            ),
-        )
-        .with_cause(error)
-    })
-}
-
-fn file_not_found_error(key: &str) -> AppError {
-    AppError::new(ErrorCode::NotFound, format!("file not found: {key}"))
-}
-
-fn file_not_found_error_with_cause(key: &str, cause: AppError) -> AppError {
-    file_not_found_error(key).with_cause(cause)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn default_root_dir_is_isolated_per_config() {
-        let first = LocalStoreConfig::default();
-        let second = LocalStoreConfig::default();
-
-        assert!(first.auto_create);
-        assert!(second.auto_create);
-        assert_ne!(first.root_dir, second.root_dir);
-        assert!(first.root_dir.starts_with(std::env::temp_dir()));
-        assert!(second.root_dir.starts_with(std::env::temp_dir()));
-    }
-
-    #[tokio::test]
-    async fn traversal_keys_are_rejected_for_local_store_operations() {
-        let root = tempfile::tempdir().unwrap();
-        let store = LocalStore::new(LocalStoreConfig {
-            root_dir: root.path().to_path_buf(),
-            auto_create: true,
-        })
-        .unwrap();
-        let source = FileSource::from_bytes(bytes::Bytes::from_static(b"secret"));
-
-        assert!(
-            store
-                .upload(&source, "../escape.txt", None, None)
-                .await
-                .is_err()
-        );
-        assert!(store.download("../escape.txt").await.is_err());
-        assert!(store.copy("../escape.txt", "copy.txt").await.is_err());
-        assert!(store.rename("../escape.txt", "renamed.txt").await.is_err());
-        assert!(store.copy("missing.txt", "../copy.txt").await.is_err());
-        assert!(store.rename("missing.txt", "../renamed.txt").await.is_err());
-    }
-
-    #[cfg(unix)]
-    #[tokio::test]
-    async fn local_store_rejects_intermediate_symlink_escape() {
-        let root = tempfile::tempdir().unwrap();
-        let outside = tempfile::tempdir().unwrap();
-        std::os::unix::fs::symlink(outside.path(), root.path().join("linked")).unwrap();
-        let store = LocalStore::new(LocalStoreConfig {
-            root_dir: root.path().to_path_buf(),
-            auto_create: true,
-        })
-        .unwrap();
-        let source = FileSource::from_bytes(bytes::Bytes::from_static(b"secret"));
-
-        assert!(
-            store
-                .upload(&source, "linked/escape.txt", None, None)
-                .await
-                .is_err()
-        );
-        assert!(!outside.path().join("escape.txt").exists());
-
-        std::fs::write(outside.path().join("existing.txt"), b"outside").unwrap();
-        assert!(store.download("linked/existing.txt").await.is_err());
-        assert!(store.head("linked/existing.txt").await.is_err());
-        assert!(store.copy("linked/existing.txt", "copy.txt").await.is_err());
-        assert!(store.exists("linked/existing.txt").await.is_err());
-        assert!(store.delete("linked/existing.txt").await.is_err());
-        assert!(
-            store
-                .presigned_url("linked/existing.txt", Duration::from_secs(60))
-                .await
-                .is_err()
-        );
-        assert_eq!(
-            std::fs::read(outside.path().join("existing.txt")).unwrap(),
-            b"outside"
-        );
-        assert!(store.list("linked", None).await.is_err());
     }
 }
