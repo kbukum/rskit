@@ -130,9 +130,9 @@ impl PointPayload {
             ));
         }
         let mut total_bytes = 0usize;
-        for (key, value) in &self.fields {
-            if let PayloadValue::Float(value) = value
-                && !value.is_finite()
+        for (key, payload_value) in &self.fields {
+            if let PayloadValue::Float(float_value) = payload_value
+                && !float_value.is_finite()
             {
                 return Err(AppError::new(
                     ErrorCode::InvalidInput,
@@ -141,7 +141,7 @@ impl PointPayload {
             }
             total_bytes = total_bytes
                 .checked_add(key.len())
-                .and_then(|bytes| bytes.checked_add(value.encoded_len()))
+                .and_then(|bytes| bytes.checked_add(payload_value.encoded_len()))
                 .ok_or_else(|| {
                     AppError::new(
                         ErrorCode::InvalidInput,
@@ -241,8 +241,8 @@ impl SearchFilter {
         }
         let mut total_bytes = 0usize;
         for condition in &self.must {
-            if let PayloadValue::Float(value) = &condition.equals
-                && !value.is_finite()
+            if let PayloadValue::Float(float_value) = &condition.equals
+                && !float_value.is_finite()
             {
                 return Err(AppError::new(
                     ErrorCode::InvalidInput,
