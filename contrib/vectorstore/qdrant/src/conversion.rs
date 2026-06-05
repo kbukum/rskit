@@ -108,7 +108,14 @@ pub(crate) fn qdrant_point_id_from_string(id: &str) -> AppResult<PointId> {
         })?;
         PointIdOptions::Num(value)
     } else {
-        PointIdOptions::Uuid(id.to_owned())
+        let value = uuid::Uuid::parse_str(id).map_err(|error| {
+            AppError::new(
+                ErrorCode::InvalidInput,
+                format!("Qdrant point ID '{id}' must be numeric or a valid UUID"),
+            )
+            .with_cause(error)
+        })?;
+        PointIdOptions::Uuid(value.to_string())
     };
     Ok(PointId {
         point_id_options: Some(point_id_options),
@@ -234,13 +241,22 @@ mod tests {
     }
 
     #[test]
-    fn qdrant_point_id_from_string_falls_back_to_uuid_strings() {
+    fn qdrant_point_id_from_string_accepts_uuid_strings() {
         assert_eq!(
-            qdrant_point_id_from_string("point-1")
+            qdrant_point_id_from_string("550e8400-e29b-41d4-a716-446655440000")
                 .unwrap()
                 .point_id_options,
-            Some(PointIdOptions::Uuid("point-1".to_owned()))
+            Some(PointIdOptions::Uuid(
+                "550e8400-e29b-41d4-a716-446655440000".to_owned()
+            ))
         );
+    }
+
+    #[test]
+    fn qdrant_point_id_from_string_rejects_non_uuid_strings() {
+        let err = qdrant_point_id_from_string("point-1").unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
     }
 
     #[test]

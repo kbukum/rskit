@@ -1,15 +1,17 @@
 //! Vector store trait definition.
 
 use std::collections::HashMap;
+use std::fmt;
 
 use async_trait::async_trait;
 use rskit_errors::{AppError, AppResult, ErrorCode};
+use serde::de::Visitor;
 use serde::{Deserialize, Serialize};
 
 use crate::VectorStoreLimits;
 
 /// Typed scalar payload value stored alongside vector points.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq)]
 #[non_exhaustive]
 #[serde(untagged)]
 pub enum PayloadValue {
@@ -43,6 +45,56 @@ impl PayloadValue {
             Self::Float(_) => std::mem::size_of::<f64>(),
             Self::Bool(_) => std::mem::size_of::<bool>(),
         }
+    }
+}
+
+impl<'de> Deserialize<'de> for PayloadValue {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_any(PayloadValueVisitor)
+    }
+}
+
+struct PayloadValueVisitor;
+
+impl Visitor<'_> for PayloadValueVisitor {
+    type Value = PayloadValue;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("a string, signed integer, finite float, or boolean payload value")
+    }
+
+    fn visit_bool<E>(self, value: bool) -> Result<Self::Value, E> {
+        Ok(PayloadValue::Bool(value))
+    }
+
+    fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E> {
+        Ok(PayloadValue::Integer(value))
+    }
+
+    fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        i64::try_from(value)
+            .map(PayloadValue::Integer)
+            .map_err(|_| {
+                <E as serde::de::Error>::custom("unsigned payload integers must fit in i64")
+            })
+    }
+
+    fn visit_f64<E>(self, value: f64) -> Result<Self::Value, E> {
+        Ok(PayloadValue::Float(value))
+    }
+
+    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E> {
+        Ok(PayloadValue::String(value.to_owned()))
+    }
+
+    fn visit_string<E>(self, value: String) -> Result<Self::Value, E> {
+        Ok(PayloadValue::String(value))
     }
 }
 
@@ -342,5 +394,12 @@ mod tests {
             serde_json::from_value::<PayloadValue>(serde_json::json!(true)).unwrap(),
             PayloadValue::Bool(true)
         );
+    }
+
+    #[test]
+    fn payload_value_rejects_unsigned_integer_over_i64_max() {
+        let value = serde_json::Value::Number(serde_json::Number::from(u64::MAX));
+
+        assert!(serde_json::from_value::<PayloadValue>(value).is_err());
     }
 }

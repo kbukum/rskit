@@ -19,6 +19,7 @@ reqwest       = { workspace = true }
 serde         = { workspace = true }
 async-trait   = { workspace = true }
 tracing       = { workspace = true }
+uuid          = { workspace = true }
 
 rskit-errors      = { workspace = true }
 rskit-httpclient  = { workspace = true }
