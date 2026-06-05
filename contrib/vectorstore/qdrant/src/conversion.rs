@@ -98,7 +98,7 @@ pub(crate) fn qdrant_point_id_to_string(id: PointId) -> AppResult<String> {
 
 /// Convert an rskit string ID into Qdrant's numeric-or-UUID point ID contract.
 pub(crate) fn qdrant_point_id_from_string(id: &str) -> AppResult<PointId> {
-    let point_id_options = if !id.is_empty() && id.chars().all(|ch| ch.is_ascii_digit()) {
+    let point_id_options = if is_canonical_numeric_id(id) {
         let value = id.parse::<u64>().map_err(|error| {
             AppError::new(
                 ErrorCode::InvalidInput,
@@ -120,6 +120,12 @@ pub(crate) fn qdrant_point_id_from_string(id: &str) -> AppResult<PointId> {
     Ok(PointId {
         point_id_options: Some(point_id_options),
     })
+}
+
+fn is_canonical_numeric_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.chars().all(|ch| ch.is_ascii_digit())
+        && (id == "0" || !id.starts_with('0'))
 }
 
 fn finite_qdrant_float(value: f64, context: &str) -> AppResult<f64> {
@@ -235,6 +241,10 @@ mod tests {
     #[test]
     fn qdrant_point_id_from_string_preserves_numeric_ids() {
         assert_eq!(
+            qdrant_point_id_from_string("0").unwrap().point_id_options,
+            Some(PointIdOptions::Num(0))
+        );
+        assert_eq!(
             qdrant_point_id_from_string("42").unwrap().point_id_options,
             Some(PointIdOptions::Num(42))
         );
@@ -255,6 +265,13 @@ mod tests {
     #[test]
     fn qdrant_point_id_from_string_rejects_non_uuid_strings() {
         let err = qdrant_point_id_from_string("point-1").unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn qdrant_point_id_from_string_rejects_leading_zero_numeric_strings() {
+        let err = qdrant_point_id_from_string("0001").unwrap_err();
 
         assert_eq!(err.code(), ErrorCode::InvalidInput);
     }
