@@ -121,10 +121,12 @@ impl VectorStore for QdrantVectorStore {
             })?;
         if !exists {
             info!(collection, dimensions, "creating Qdrant collection");
+            let distance = qdrant_distance(self.metric)?;
             self.client
-                .create_collection(CreateCollectionBuilder::new(collection).vectors_config(
-                    VectorParamsBuilder::new(dimensions as u64, qdrant_distance(self.metric)),
-                ))
+                .create_collection(
+                    CreateCollectionBuilder::new(collection)
+                        .vectors_config(VectorParamsBuilder::new(dimensions as u64, distance)),
+                )
                 .await
                 .map_err(|e| {
                     AppError::new(
@@ -278,12 +280,15 @@ fn has_url_credentials(value: &str) -> bool {
         .is_some_and(|authority| authority.contains('@'))
 }
 
-fn qdrant_distance(metric: SimilarityMetric) -> Distance {
+fn qdrant_distance(metric: SimilarityMetric) -> AppResult<Distance> {
     match metric {
-        SimilarityMetric::Cosine => Distance::Cosine,
-        SimilarityMetric::Dot => Distance::Dot,
-        SimilarityMetric::L2 => Distance::Euclid,
-        _ => Distance::Cosine,
+        SimilarityMetric::Cosine => Ok(Distance::Cosine),
+        SimilarityMetric::Dot => Ok(Distance::Dot),
+        SimilarityMetric::L2 => Ok(Distance::Euclid),
+        _ => Err(AppError::new(
+            ErrorCode::InvalidInput,
+            format!("unsupported Qdrant similarity metric: {metric:?}"),
+        )),
     }
 }
 
@@ -362,6 +367,22 @@ mod tests {
         assert!(validate_qdrant_url("http://169.254.169.254/latest/meta-data").is_err());
         assert!(validate_qdrant_url("http://[fe80::1]:6334").is_err());
         assert!(validate_qdrant_url("ftp://qdrant.example.test").is_err());
+    }
+
+    #[test]
+    fn qdrant_distance_maps_supported_metrics() {
+        assert_eq!(
+            qdrant_distance(SimilarityMetric::Cosine).unwrap(),
+            Distance::Cosine
+        );
+        assert_eq!(
+            qdrant_distance(SimilarityMetric::Dot).unwrap(),
+            Distance::Dot
+        );
+        assert_eq!(
+            qdrant_distance(SimilarityMetric::L2).unwrap(),
+            Distance::Euclid
+        );
     }
 
     #[tokio::test]

@@ -126,6 +126,48 @@ impl LocalStore {
             .map(Some)
     }
 
+    async fn confined_presigned_path(&self, key: &str) -> AppResult<PathBuf> {
+        let path = self.resolve_path(key)?;
+        match tokio::fs::symlink_metadata(&path).await {
+            Ok(metadata) => {
+                if metadata.file_type().is_symlink() || !metadata.is_file() {
+                    return Err(file_not_found_error(key));
+                }
+                canonicalize_confined(&self.config.root_dir, &path).await
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                let parent = path.parent().ok_or_else(|| {
+                    AppError::new(
+                        ErrorCode::InvalidInput,
+                        format!(
+                            "storage presigned URL target '{}' has no parent directory",
+                            path.display()
+                        ),
+                    )
+                })?;
+                let parent = canonicalize_confined(&self.config.root_dir, parent).await?;
+                let filename = path.file_name().ok_or_else(|| {
+                    AppError::new(
+                        ErrorCode::InvalidInput,
+                        format!(
+                            "storage presigned URL target '{}' has no filename",
+                            path.display()
+                        ),
+                    )
+                })?;
+                Ok(parent.join(filename))
+            }
+            Err(error) => Err(AppError::new(
+                ErrorCode::Internal,
+                format!(
+                    "failed to inspect presigned URL target '{}': {error}",
+                    path.display()
+                ),
+            )
+            .with_cause(error)),
+        }
+    }
+
     async fn ensure_target_parent_confined(&self, target: &Path) -> AppResult<()> {
         async_io::file::create_parent_dir(target).await?;
         let parent = target.parent().ok_or_else(|| {
@@ -317,7 +359,7 @@ impl FileStore for LocalStore {
     }
 
     async fn presigned_url(&self, key: &str, _expires_in: Duration) -> AppResult<String> {
-        let path = self.resolve_path(key)?;
+        let path = self.confined_presigned_path(key).await?;
         Ok(format!("file://{}", path.display()))
     }
 
@@ -492,6 +534,12 @@ mod tests {
         assert!(store.copy("linked/existing.txt", "copy.txt").await.is_err());
         assert!(store.exists("linked/existing.txt").await.is_err());
         assert!(store.delete("linked/existing.txt").await.is_err());
+        assert!(
+            store
+                .presigned_url("linked/existing.txt", Duration::from_secs(60))
+                .await
+                .is_err()
+        );
         assert_eq!(
             std::fs::read(outside.path().join("existing.txt")).unwrap(),
             b"outside"
