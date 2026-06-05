@@ -112,6 +112,12 @@ impl VectorStoreLimits {
 
     /// Validate a vector dimension count against the configured bounds.
     pub fn validate_dimensions(&self, dimensions: usize) -> AppResult<()> {
+        if self.max_vector_dimensions == 0 {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                "max_vector_dimensions must be at least 1",
+            ));
+        }
         if dimensions == 0 || dimensions > self.max_vector_dimensions {
             return Err(AppError::new(
                 ErrorCode::InvalidInput,
@@ -126,6 +132,12 @@ impl VectorStoreLimits {
 
     /// Validate a search result limit against the configured bounds.
     pub fn validate_search_limit(&self, limit: usize) -> AppResult<()> {
+        if self.max_search_limit == 0 {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                "max_search_limit must be at least 1",
+            ));
+        }
         if limit == 0 || limit > self.max_search_limit {
             return Err(AppError::new(
                 ErrorCode::InvalidInput,
@@ -183,4 +195,35 @@ const fn default_max_payload_bytes() -> usize {
 
 const fn default_max_filter_conditions() -> usize {
     DEFAULT_MAX_FILTER_CONDITIONS
+}
+
+#[cfg(test)]
+mod tests {
+    use rskit_errors::ErrorCode;
+
+    use super::*;
+
+    #[test]
+    fn validate_dimensions_rejects_zero_configured_max_with_clear_error() {
+        let err = VectorStoreLimits::new()
+            .with_max_vector_dimensions(0)
+            .validate_dimensions(1)
+            .unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+        assert!(err.message().contains("max_vector_dimensions"));
+        assert!(!err.message().contains("between 1 and 0"));
+    }
+
+    #[test]
+    fn validate_search_limit_rejects_zero_configured_max_with_clear_error() {
+        let err = VectorStoreLimits::new()
+            .with_max_search_limit(0)
+            .validate_search_limit(1)
+            .unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+        assert!(err.message().contains("max_search_limit"));
+        assert!(!err.message().contains("between 1 and 0"));
+    }
 }

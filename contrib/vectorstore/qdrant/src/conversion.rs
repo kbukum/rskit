@@ -96,6 +96,25 @@ pub(crate) fn qdrant_point_id_to_string(id: PointId) -> AppResult<String> {
     }
 }
 
+/// Convert an rskit string ID into Qdrant's numeric-or-UUID point ID contract.
+pub(crate) fn qdrant_point_id_from_string(id: &str) -> AppResult<PointId> {
+    let point_id_options = if !id.is_empty() && id.chars().all(|ch| ch.is_ascii_digit()) {
+        let value = id.parse::<u64>().map_err(|error| {
+            AppError::new(
+                ErrorCode::InvalidInput,
+                format!("numeric Qdrant point ID '{id}' is outside u64 bounds"),
+            )
+            .with_cause(error)
+        })?;
+        PointIdOptions::Num(value)
+    } else {
+        PointIdOptions::Uuid(id.to_owned())
+    };
+    Ok(PointId {
+        point_id_options: Some(point_id_options),
+    })
+}
+
 fn finite_qdrant_float(value: f64, context: &str) -> AppResult<f64> {
     if value.is_finite() {
         Ok(value)
@@ -202,6 +221,31 @@ mod tests {
             point_id_options: None,
         })
         .unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn qdrant_point_id_from_string_preserves_numeric_ids() {
+        assert_eq!(
+            qdrant_point_id_from_string("42").unwrap().point_id_options,
+            Some(PointIdOptions::Num(42))
+        );
+    }
+
+    #[test]
+    fn qdrant_point_id_from_string_falls_back_to_uuid_strings() {
+        assert_eq!(
+            qdrant_point_id_from_string("point-1")
+                .unwrap()
+                .point_id_options,
+            Some(PointIdOptions::Uuid("point-1".to_owned()))
+        );
+    }
+
+    #[test]
+    fn qdrant_point_id_from_string_rejects_numeric_overflow() {
+        let err = qdrant_point_id_from_string("18446744073709551616").unwrap_err();
 
         assert_eq!(err.code(), ErrorCode::InvalidInput);
     }

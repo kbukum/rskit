@@ -19,7 +19,7 @@ use tracing::{debug, info};
 use crate::Config;
 use crate::conversion::{
     filter_condition_to_qdrant, payload_to_qdrant_value, qdrant_distance,
-    qdrant_point_id_to_string, qdrant_value_to_payload,
+    qdrant_point_id_from_string, qdrant_point_id_to_string, qdrant_value_to_payload,
 };
 use crate::url::validate_qdrant_url;
 
@@ -101,7 +101,7 @@ impl VectorStore for QdrantVectorStore {
             .into_iter()
             .map(|(k, v)| payload_to_qdrant_value(v).map(|value| (k, value)))
             .collect::<AppResult<_>>()?;
-        let point = PointStruct::new(id.to_string(), vector, payload);
+        let point = PointStruct::new(qdrant_point_id_from_string(id)?, vector, payload);
         self.client
             .upsert_points(UpsertPointsBuilder::new(collection, vec![point]).wait(true))
             .await
@@ -176,12 +176,7 @@ impl VectorStore for QdrantVectorStore {
     }
 
     async fn delete(&self, collection: &str, id: &str) -> AppResult<()> {
-        use qdrant_client::qdrant::PointId;
-        use qdrant_client::qdrant::point_id::PointIdOptions;
-
-        let point_id = PointId {
-            point_id_options: Some(PointIdOptions::Uuid(id.to_string())),
-        };
+        let point_id = qdrant_point_id_from_string(id)?;
         self.client
             .delete_points(
                 DeletePointsBuilder::new(collection)
