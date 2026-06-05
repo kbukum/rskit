@@ -26,18 +26,44 @@ impl LocalStore {
     pub fn new(config: LocalStoreConfig) -> AppResult<Self> {
         if config.auto_create {
             sync_io::dir::create_all(&config.root_dir)?;
-        } else if !sync_io::dir::exists(&config.root_dir)? {
-            return Err(AppError::new(
-                ErrorCode::NotFound,
-                format!("store root {} does not exist", config.root_dir.display()),
-            ));
         }
+        Self::validate_root_dir(&config.root_dir)?;
         Ok(Self { config })
     }
 
     fn resolve_path(&self, key: &str) -> AppResult<PathBuf> {
         let key = normalize_local_key(key)?;
         self.resolve_normalized_path(&key)
+    }
+
+    fn validate_root_dir(root: &Path) -> AppResult<()> {
+        let metadata = std::fs::symlink_metadata(root).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::NotFound {
+                AppError::new(
+                    ErrorCode::NotFound,
+                    format!("store root {} does not exist", root.display()),
+                )
+            } else {
+                AppError::new(
+                    ErrorCode::Internal,
+                    format!("failed to inspect store root '{}': {error}", root.display()),
+                )
+                .with_cause(error)
+            }
+        })?;
+        if metadata.file_type().is_symlink() {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                format!("store root {} must not be a symlink", root.display()),
+            ));
+        }
+        if !metadata.is_dir() {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                format!("store root {} must be a directory", root.display()),
+            ));
+        }
+        Ok(())
     }
 
     fn resolve_normalized_path(&self, key: &str) -> AppResult<PathBuf> {

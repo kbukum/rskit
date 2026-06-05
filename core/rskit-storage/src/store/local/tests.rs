@@ -3,6 +3,7 @@
 use std::time::Duration;
 
 use bytes::Bytes;
+use rskit_errors::ErrorCode;
 
 use crate::FileSource;
 use crate::store::FileStore;
@@ -19,6 +20,42 @@ fn default_root_dir_is_isolated_per_config() {
     assert_ne!(first.root_dir, second.root_dir);
     assert!(first.root_dir.starts_with(std::env::temp_dir()));
     assert!(second.root_dir.starts_with(std::env::temp_dir()));
+}
+
+#[test]
+fn local_store_rejects_non_directory_root() {
+    let root = tempfile::tempdir().unwrap();
+    let file = root.path().join("root-file");
+    std::fs::write(&file, b"not a directory").unwrap();
+
+    let err = LocalStore::new(LocalStoreConfig {
+        root_dir: file,
+        auto_create: false,
+    })
+    .err()
+    .unwrap();
+
+    assert_eq!(err.code(), ErrorCode::InvalidInput);
+}
+
+#[cfg(unix)]
+#[test]
+fn local_store_rejects_symlink_root() {
+    let root = tempfile::tempdir().unwrap();
+    let target = tempfile::tempdir().unwrap();
+    let link = root.path().join("linked-root");
+    std::os::unix::fs::symlink(target.path(), &link).unwrap();
+
+    for auto_create in [false, true] {
+        let err = LocalStore::new(LocalStoreConfig {
+            root_dir: link.clone(),
+            auto_create,
+        })
+        .err()
+        .unwrap();
+
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+    }
 }
 
 #[tokio::test]

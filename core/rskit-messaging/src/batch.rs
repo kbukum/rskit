@@ -72,6 +72,11 @@ impl<T: Send + Sync + Clone + 'static> BatchProducer<T> {
     ///
     /// Spawns a background task that periodically flushes buffered
     /// messages according to `config.max_wait`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ErrorCode::InvalidInput`] when [`BatchConfig::max_size`] is zero
+    /// or [`BatchConfig::max_wait`] is zero.
     pub fn new(
         producer: Arc<dyn MessageProducer<T>>,
         _topic: String,
