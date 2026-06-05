@@ -48,6 +48,7 @@ pub(super) async fn ensure_target_parent_confined(root: &Path, target: &Path) ->
     })?;
     ensure_existing_parent_prefix_confined(root, parent).await?;
     async_io::dir::create_all(parent).await?;
+    ensure_existing_parent_prefix_confined(root, parent).await?;
     canonicalize_confined(root, parent).await?;
     Ok(())
 }

@@ -1,6 +1,7 @@
 //! Conversion helpers between rskit vector types and Qdrant API types.
 
-use qdrant_client::qdrant::{Condition, Distance, Range};
+use qdrant_client::qdrant::point_id::PointIdOptions;
+use qdrant_client::qdrant::{Condition, Distance, PointId, Range};
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_vectorstore::{PayloadValue, SimilarityMetric};
 
@@ -83,6 +84,18 @@ pub(crate) fn qdrant_value_to_payload(
     }
 }
 
+/// Convert a returned Qdrant point ID into the stable rskit string ID contract.
+pub(crate) fn qdrant_point_id_to_string(id: PointId) -> AppResult<String> {
+    match id.point_id_options {
+        Some(PointIdOptions::Uuid(value)) => Ok(value),
+        Some(PointIdOptions::Num(value)) => Ok(value.to_string()),
+        None => Err(AppError::new(
+            ErrorCode::InvalidInput,
+            "Qdrant search result did not include a point ID",
+        )),
+    }
+}
+
 fn finite_qdrant_float(value: f64, context: &str) -> AppResult<f64> {
     if value.is_finite() {
         Ok(value)
@@ -97,7 +110,7 @@ fn finite_qdrant_float(value: f64, context: &str) -> AppResult<f64> {
 #[cfg(test)]
 mod tests {
     use qdrant_client::qdrant::value::Kind;
-    use qdrant_client::qdrant::{Distance, ListValue, Value};
+    use qdrant_client::qdrant::{Distance, ListValue, PointId, Value};
     use rskit_errors::ErrorCode;
     use rskit_vectorstore::SimilarityMetric;
 
@@ -163,5 +176,33 @@ mod tests {
 
         assert_eq!(err.code(), ErrorCode::InvalidInput);
         assert!(err.message().contains("finite"));
+    }
+
+    #[test]
+    fn qdrant_point_id_to_string_uses_stable_variant_value() {
+        assert_eq!(
+            qdrant_point_id_to_string(PointId {
+                point_id_options: Some(PointIdOptions::Uuid("point-1".to_owned())),
+            })
+            .unwrap(),
+            "point-1"
+        );
+        assert_eq!(
+            qdrant_point_id_to_string(PointId {
+                point_id_options: Some(PointIdOptions::Num(42)),
+            })
+            .unwrap(),
+            "42"
+        );
+    }
+
+    #[test]
+    fn qdrant_point_id_to_string_rejects_missing_id() {
+        let err = qdrant_point_id_to_string(PointId {
+            point_id_options: None,
+        })
+        .unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
     }
 }

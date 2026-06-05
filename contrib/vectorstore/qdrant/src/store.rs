@@ -18,7 +18,8 @@ use tracing::{debug, info};
 
 use crate::Config;
 use crate::conversion::{
-    filter_condition_to_qdrant, payload_to_qdrant_value, qdrant_distance, qdrant_value_to_payload,
+    filter_condition_to_qdrant, payload_to_qdrant_value, qdrant_distance,
+    qdrant_point_id_to_string, qdrant_value_to_payload,
 };
 use crate::url::validate_qdrant_url;
 
@@ -63,6 +64,7 @@ impl VectorStore for QdrantVectorStore {
                     ErrorCode::ExternalService,
                     format!("failed to check Qdrant collection: {e}"),
                 )
+                .with_cause(e)
             })?;
         if !exists {
             info!(collection, dimensions, "creating Qdrant collection");
@@ -78,6 +80,7 @@ impl VectorStore for QdrantVectorStore {
                         ErrorCode::ExternalService,
                         format!("failed to create Qdrant collection: {e}"),
                     )
+                    .with_cause(e)
                 })?;
         }
         Ok(())
@@ -107,6 +110,7 @@ impl VectorStore for QdrantVectorStore {
                     ErrorCode::ExternalService,
                     format!("failed to upsert vector point: {e}"),
                 )
+                .with_cause(e)
             })?;
         Ok(())
     }
@@ -140,6 +144,7 @@ impl VectorStore for QdrantVectorStore {
                 ErrorCode::ExternalService,
                 format!("vector search failed: {e}"),
             )
+            .with_cause(e)
         })?;
         results
             .result
@@ -154,7 +159,15 @@ impl VectorStore for QdrantVectorStore {
                     .collect::<AppResult<_>>()?;
 
                 Ok(SearchResult {
-                    id: point.id.map_or_else(String::new, |id| format!("{id:?}")),
+                    id: point
+                        .id
+                        .ok_or_else(|| {
+                            AppError::new(
+                                ErrorCode::InvalidInput,
+                                "Qdrant search result did not include a point ID",
+                            )
+                        })
+                        .and_then(qdrant_point_id_to_string)?,
                     score: point.score,
                     payload: PointPayload { fields },
                 })
@@ -181,6 +194,7 @@ impl VectorStore for QdrantVectorStore {
                     ErrorCode::ExternalService,
                     format!("failed to delete vector point: {e}"),
                 )
+                .with_cause(e)
             })?;
         Ok(())
     }
