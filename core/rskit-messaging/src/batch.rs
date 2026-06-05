@@ -3,7 +3,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use rskit_errors::AppResult;
+use rskit_errors::{AppError, AppResult, ErrorCode};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
@@ -32,6 +32,25 @@ impl Default for BatchConfig {
     }
 }
 
+impl BatchConfig {
+    /// Validate batch bounds before spawning background flush tasks.
+    pub fn validate(&self) -> AppResult<()> {
+        if self.max_size == 0 {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                "batch max_size must be greater than zero",
+            ));
+        }
+        if self.max_wait.is_zero() {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                "batch max_wait must be greater than zero",
+            ));
+        }
+        Ok(())
+    }
+}
+
 /// A producer that buffers messages and flushes them in batches.
 ///
 /// Flushing occurs when:
@@ -53,7 +72,12 @@ impl<T: Send + Sync + Clone + 'static> BatchProducer<T> {
     ///
     /// Spawns a background task that periodically flushes buffered
     /// messages according to `config.max_wait`.
-    pub fn new(producer: Arc<dyn MessageProducer<T>>, _topic: String, config: BatchConfig) -> Self {
+    pub fn new(
+        producer: Arc<dyn MessageProducer<T>>,
+        _topic: String,
+        config: BatchConfig,
+    ) -> AppResult<Self> {
+        config.validate()?;
         let buffer: Arc<tokio::sync::Mutex<Vec<Message<T>>>> =
             Arc::new(tokio::sync::Mutex::new(Vec::new()));
         let cancel = CancellationToken::new();
@@ -84,13 +108,13 @@ impl<T: Send + Sync + Clone + 'static> BatchProducer<T> {
             }
         });
 
-        Self {
+        Ok(Self {
             producer,
             config,
             buffer,
             cancel,
             flush_handle: Arc::new(tokio::sync::Mutex::new(Some(handle))),
-        }
+        })
     }
 
     /// Buffer a message, flushing immediately if `max_size` is reached.
@@ -178,7 +202,8 @@ mod tests {
                 max_wait: Duration::from_secs(60),
                 max_bytes: None,
             },
-        );
+        )
+        .unwrap();
 
         batch
             .send(Message::new("topic", "a".to_string()))
@@ -200,7 +225,7 @@ mod tests {
         batch.close().await.unwrap();
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn batch_flush_on_time() {
         let (producer, sent) = RecordingProducer::<String>::new();
         let config = BatchConfig {
@@ -208,7 +233,8 @@ mod tests {
             max_wait: Duration::from_millis(100),
             max_bytes: None,
         };
-        let batch = BatchProducer::new(Arc::new(producer), "topic".to_string(), config);
+        let batch = BatchProducer::new(Arc::new(producer), "topic".to_string(), config).unwrap();
+        tokio::task::yield_now().await;
 
         batch
             .send(Message::new("topic", "a".to_string()))
@@ -220,8 +246,9 @@ mod tests {
             .unwrap();
         assert_eq!(sent.lock().await.len(), 0);
 
-        // Wait longer than max_wait for the periodic flush to fire.
-        tokio::time::sleep(Duration::from_millis(300)).await;
+        tokio::time::advance(Duration::from_millis(101)).await;
+        tokio::task::yield_now().await;
+        tokio::task::yield_now().await;
 
         assert_eq!(sent.lock().await.len(), 2);
         batch.close().await.unwrap();
@@ -238,7 +265,8 @@ mod tests {
                 max_wait: Duration::from_secs(60),
                 max_bytes: None,
             },
-        );
+        )
+        .unwrap();
 
         batch
             .send(Message::new("topic", "a".to_string()))
@@ -252,5 +280,25 @@ mod tests {
 
         batch.close().await.unwrap();
         assert_eq!(sent.lock().await.len(), 2);
+    }
+
+    #[test]
+    fn batch_config_rejects_unbounded_zero_values() {
+        assert!(
+            BatchConfig {
+                max_size: 0,
+                ..BatchConfig::default()
+            }
+            .validate()
+            .is_err()
+        );
+        assert!(
+            BatchConfig {
+                max_wait: Duration::ZERO,
+                ..BatchConfig::default()
+            }
+            .validate()
+            .is_err()
+        );
     }
 }

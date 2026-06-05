@@ -48,25 +48,36 @@ pub struct Request {
 }
 
 /// RBAC permission with wildcard matching.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Permission {
     /// Resource pattern.
     pub resource: String,
     /// Action pattern.
     pub action: String,
+    /// Attribute conditions that must hold for this permission grant.
+    #[serde(default)]
+    pub conditions: Vec<Condition>,
 }
 
 impl Permission {
-    /// Return `true` when this permission matches the supplied request shape.
+    /// Return `true` when this permission matches the supplied resource/action shape.
     #[must_use]
     pub fn matches(&self, resource: &str, action: &str) -> bool {
         crate::matcher::match_pattern(&self.resource, resource)
             && crate::matcher::match_pattern(&self.action, action)
     }
+
+    fn matches_request(&self, request: &Request) -> bool {
+        self.matches(&request.resource.resource_type, &request.action)
+            && self
+                .conditions
+                .iter()
+                .all(|condition| condition.matches(request))
+    }
 }
 
 /// RBAC role definition with optional inheritance.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct Role {
     /// Role name.
     pub name: String,
@@ -186,6 +197,11 @@ impl Engine {
     }
 
     /// Evaluate a request.
+    ///
+    /// Deny policies are evaluated before role grants and allow policies.
+    /// Object-level constraints that should limit a role should be attached to
+    /// the role [`Permission`]; constraints that must override any broad grant
+    /// should be modeled as deny policies.
     #[must_use]
     pub fn authorize(&self, request: &Request) -> Decision {
         // 1. Deny policies always take precedence.
@@ -235,9 +251,11 @@ impl Engine {
             let Some(role) = self.roles.get(role_name) else {
                 continue;
             };
-            if role.permissions.iter().any(|permission| {
-                permission.matches(&request.resource.resource_type, &request.action)
-            }) {
+            if role
+                .permissions
+                .iter()
+                .any(|permission| permission.matches_request(request))
+            {
                 return true;
             }
             if self.role_allows(request, &role.inherits, visited) {

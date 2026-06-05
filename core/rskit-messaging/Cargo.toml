@@ -42,3 +42,6 @@ rskit-errors      = { path = "../rskit-errors" }
 rskit-bootstrap   = { path = "../rskit-bootstrap" }
 rskit-resilience  = { path = "../rskit-resilience" }
 rskit-provider  = { path = "../rskit-provider", optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }

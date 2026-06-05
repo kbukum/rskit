@@ -83,6 +83,114 @@ impl LocalStore {
         rskit_fs::safe_join(&self.config.root_dir, Path::new(key))
             .map_err(|error| AppError::new(ErrorCode::InvalidInput, error.to_string()))
     }
+
+    async fn confined_existing_file_path(&self, key: &str) -> AppResult<PathBuf> {
+        let path = self.resolve_path(key)?;
+        let metadata = async_io::file::metadata(&path)
+            .await
+            .map_err(|error| file_not_found_error_with_cause(key, error))?;
+        if !metadata.is_file || metadata.is_symlink {
+            return Err(file_not_found_error(key));
+        }
+        let canonical = canonicalize_confined(&self.config.root_dir, &path).await?;
+        Ok(canonical)
+    }
+
+    async fn confined_existing_dir_path(&self, key: &str) -> AppResult<Option<PathBuf>> {
+        let path = self.resolve_path(key)?;
+        let metadata = match tokio::fs::symlink_metadata(&path).await {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => {
+                return Err(AppError::new(
+                    ErrorCode::Internal,
+                    format!("failed to inspect directory '{}': {error}", path.display()),
+                )
+                .with_cause(error));
+            }
+        };
+        if metadata.file_type().is_symlink() {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                format!(
+                    "storage directory '{}' must not be a symlink",
+                    path.display()
+                ),
+            ));
+        }
+        if !metadata.is_dir() {
+            return Ok(None);
+        }
+        canonicalize_confined(&self.config.root_dir, &path)
+            .await
+            .map(Some)
+    }
+
+    async fn ensure_target_parent_confined(&self, target: &Path) -> AppResult<()> {
+        async_io::file::create_parent_dir(target).await?;
+        let parent = target.parent().ok_or_else(|| {
+            AppError::new(
+                ErrorCode::InvalidInput,
+                format!(
+                    "storage target '{}' has no parent directory",
+                    target.display()
+                ),
+            )
+        })?;
+        canonicalize_confined(&self.config.root_dir, parent).await?;
+        Ok(())
+    }
+
+    async fn stream_to_target(
+        &self,
+        reader: &mut (dyn tokio::io::AsyncRead + Unpin + Send),
+        target: &Path,
+    ) -> AppResult<u64> {
+        self.ensure_target_parent_confined(target).await?;
+        let temp_path = sibling_temp_path(target);
+        let mut temp = tokio::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp_path)
+            .await
+            .map_err(|error| {
+                AppError::new(
+                    ErrorCode::Internal,
+                    format!(
+                        "failed to create temporary file '{}': {error}",
+                        temp_path.display()
+                    ),
+                )
+                .with_cause(error)
+            })?;
+        let result = async {
+            let size = tokio::io::copy(reader, &mut temp).await.map_err(|error| {
+                AppError::new(
+                    ErrorCode::Internal,
+                    format!("failed to stream {}: {error}", target.display()),
+                )
+                .with_cause(error)
+            })?;
+            temp.sync_data().await.map_err(|error| {
+                AppError::new(
+                    ErrorCode::Internal,
+                    format!(
+                        "failed to sync temporary file '{}': {error}",
+                        temp_path.display()
+                    ),
+                )
+                .with_cause(error)
+            })?;
+            drop(temp);
+            replace_with_temp(&temp_path, target).await?;
+            Ok(size)
+        }
+        .await;
+        if result.is_err() {
+            let _ = tokio::fs::remove_file(&temp_path).await;
+        }
+        result
+    }
 }
 
 #[async_trait::async_trait]
@@ -98,13 +206,7 @@ impl FileStore for LocalStore {
         let target = self.resolve_normalized_path(&key)?;
 
         let mut reader = source.reader().await?;
-        let mut file = async_io::file::create(&target).await?;
-        let size = tokio::io::copy(&mut reader, &mut file).await.map_err(|e| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!("failed to stream {}: {e}", target.display()),
-            )
-        })?;
+        let size = self.stream_to_target(&mut reader, &target).await?;
 
         Ok(StoredFile::new(key, size, content_type).with_metadata(metadata.unwrap_or_default()))
     }
@@ -121,18 +223,12 @@ impl FileStore for LocalStore {
     }
 
     async fn download(&self, key: &str) -> AppResult<FileSource> {
-        let path = self.resolve_path(key)?;
-        if !async_io::file::exists(&path).await? {
-            return Err(AppError::new(
-                ErrorCode::NotFound,
-                format!("file not found: {key}"),
-            ));
-        }
+        let path = self.confined_existing_file_path(key).await?;
         Ok(FileSource::Path(path))
     }
 
     async fn delete(&self, key: &str) -> AppResult<()> {
-        let path = self.resolve_path(key)?;
+        let path = self.confined_existing_file_path(key).await?;
         if async_io::file::remove_if_exists(&path).await? {
             Ok(())
         } else {
@@ -141,13 +237,16 @@ impl FileStore for LocalStore {
     }
 
     async fn exists(&self, key: &str) -> AppResult<bool> {
-        let path = self.resolve_path(key)?;
-        async_io::file::exists(&path).await
+        match self.confined_existing_file_path(key).await {
+            Ok(_) => Ok(true),
+            Err(error) if error.code() == ErrorCode::NotFound => Ok(false),
+            Err(error) => Err(error),
+        }
     }
 
     async fn head(&self, key: &str) -> AppResult<StoredFile> {
         let key = normalize_local_key(key)?;
-        let path = self.resolve_normalized_path(&key)?;
+        let path = self.confined_existing_file_path(&key).await?;
         let meta = async_io::file::metadata(&path)
             .await
             .map_err(|error| file_not_found_error_with_cause(&key, error))?;
@@ -166,12 +265,10 @@ impl FileStore for LocalStore {
     }
 
     async fn list(&self, prefix: &str, limit: Option<usize>) -> AppResult<Vec<StoredFile>> {
-        let dir = self.resolve_path(prefix)?;
+        let Some(dir) = self.confined_existing_dir_path(prefix).await? else {
+            return Ok(Vec::new());
+        };
         let mut results = Vec::new();
-
-        if !async_io::dir::exists(&dir).await? {
-            return Ok(results);
-        }
 
         let mut entries = tokio::fs::read_dir(&dir).await.map_err(|error| {
             AppError::new(
@@ -225,22 +322,25 @@ impl FileStore for LocalStore {
     }
 
     async fn copy(&self, from_key: &str, to_key: &str) -> AppResult<StoredFile> {
-        let from = self.resolve_path(from_key)?;
+        let from = self.confined_existing_file_path(from_key).await?;
         let to = self.resolve_path(to_key)?;
 
-        async_io::file::copy(&from, &to).await.map_err(|e| {
+        let mut reader = tokio::fs::File::open(&from).await.map_err(|error| {
             AppError::new(
                 ErrorCode::Internal,
-                format!("failed to copy {from_key} to {to_key}: {e}"),
+                format!("failed to open source file '{}': {error}", from.display()),
             )
+            .with_cause(error)
         })?;
+        self.stream_to_target(&mut reader, &to).await?;
 
         self.head(to_key).await
     }
 
     async fn rename(&self, from_key: &str, to_key: &str) -> AppResult<StoredFile> {
-        let from = self.resolve_path(from_key)?;
+        let from = self.confined_existing_file_path(from_key).await?;
         let to = self.resolve_path(to_key)?;
+        self.ensure_target_parent_confined(&to).await?;
 
         async_io::file::rename(&from, &to).await.map_err(|e| {
             AppError::new(
@@ -251,6 +351,71 @@ impl FileStore for LocalStore {
 
         self.head(to_key).await
     }
+}
+
+async fn canonicalize_confined(root: &Path, path: &Path) -> AppResult<PathBuf> {
+    let root = tokio::fs::canonicalize(root).await.map_err(|error| {
+        AppError::new(
+            ErrorCode::Internal,
+            format!(
+                "failed to canonicalize storage root '{}': {error}",
+                root.display()
+            ),
+        )
+        .with_cause(error)
+    })?;
+    let canonical = tokio::fs::canonicalize(path).await.map_err(|error| {
+        AppError::new(
+            ErrorCode::Internal,
+            format!(
+                "failed to canonicalize storage path '{}': {error}",
+                path.display()
+            ),
+        )
+        .with_cause(error)
+    })?;
+    if canonical.starts_with(&root) {
+        Ok(canonical)
+    } else {
+        Err(AppError::new(
+            ErrorCode::InvalidInput,
+            format!(
+                "storage path '{}' escapes configured root '{}'",
+                canonical.display(),
+                root.display()
+            ),
+        ))
+    }
+}
+
+fn sibling_temp_path(target: &Path) -> PathBuf {
+    let sequence = NEXT_DEFAULT_ROOT_ID.fetch_add(1, Ordering::Relaxed);
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_nanos());
+    let filename = target
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("file");
+    target.with_file_name(format!(".{filename}.rskit-tmp-{nanos}-{sequence}"))
+}
+
+async fn replace_with_temp(temp_path: &Path, target: &Path) -> AppResult<()> {
+    #[cfg(windows)]
+    {
+        let _ = async_io::file::remove_if_exists(target).await?;
+    }
+    tokio::fs::rename(temp_path, target).await.map_err(|error| {
+        AppError::new(
+            ErrorCode::Internal,
+            format!(
+                "failed to replace '{}' with '{}': {error}",
+                target.display(),
+                temp_path.display()
+            ),
+        )
+        .with_cause(error)
+    })
 }
 
 fn file_not_found_error(key: &str) -> AppError {
@@ -275,5 +440,62 @@ mod tests {
         assert_ne!(first.root_dir, second.root_dir);
         assert!(first.root_dir.starts_with(std::env::temp_dir()));
         assert!(second.root_dir.starts_with(std::env::temp_dir()));
+    }
+
+    #[tokio::test]
+    async fn traversal_keys_are_rejected_for_local_store_operations() {
+        let root = tempfile::tempdir().unwrap();
+        let store = LocalStore::new(LocalStoreConfig {
+            root_dir: root.path().to_path_buf(),
+            auto_create: true,
+        })
+        .unwrap();
+        let source = FileSource::from_bytes(bytes::Bytes::from_static(b"secret"));
+
+        assert!(
+            store
+                .upload(&source, "../escape.txt", None, None)
+                .await
+                .is_err()
+        );
+        assert!(store.download("../escape.txt").await.is_err());
+        assert!(store.copy("../escape.txt", "copy.txt").await.is_err());
+        assert!(store.rename("../escape.txt", "renamed.txt").await.is_err());
+        assert!(store.copy("missing.txt", "../copy.txt").await.is_err());
+        assert!(store.rename("missing.txt", "../renamed.txt").await.is_err());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn local_store_rejects_intermediate_symlink_escape() {
+        let root = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        std::os::unix::fs::symlink(outside.path(), root.path().join("linked")).unwrap();
+        let store = LocalStore::new(LocalStoreConfig {
+            root_dir: root.path().to_path_buf(),
+            auto_create: true,
+        })
+        .unwrap();
+        let source = FileSource::from_bytes(bytes::Bytes::from_static(b"secret"));
+
+        assert!(
+            store
+                .upload(&source, "linked/escape.txt", None, None)
+                .await
+                .is_err()
+        );
+        assert!(!outside.path().join("escape.txt").exists());
+
+        std::fs::write(outside.path().join("existing.txt"), b"outside").unwrap();
+        assert!(store.download("linked/existing.txt").await.is_err());
+        assert!(store.head("linked/existing.txt").await.is_err());
+        assert!(store.copy("linked/existing.txt", "copy.txt").await.is_err());
+        assert!(store.exists("linked/existing.txt").await.is_err());
+        assert!(store.delete("linked/existing.txt").await.is_err());
+        assert_eq!(
+            std::fs::read(outside.path().join("existing.txt")).unwrap(),
+            b"outside"
+        );
+        assert!(store.list("linked", None).await.is_err());
     }
 }

@@ -369,7 +369,8 @@ async fn batch_manual_flush() {
             max_wait: Duration::from_secs(60),
             max_bytes: None,
         },
-    );
+    )
+    .unwrap();
 
     batch
         .send(Message::new("batch-topic", "a".to_string()))
@@ -404,7 +405,8 @@ async fn batch_multiple_size_flushes() {
             max_wait: Duration::from_secs(60),
             max_bytes: None,
         },
-    );
+    )
+    .unwrap();
 
     // First batch of 2
     batch
@@ -445,7 +447,8 @@ async fn batch_close_is_idempotent() {
             max_wait: Duration::from_secs(60),
             max_bytes: None,
         },
-    );
+    )
+    .unwrap();
 
     batch
         .send(Message::new("batch-topic", "x".to_string()))

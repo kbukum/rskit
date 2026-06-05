@@ -17,6 +17,8 @@ backend registry.
 - `detect_mime` / `detect_kind` — magic-byte + extension fallback
 - `FileStore` trait with a local filesystem backend
 - `StorageRegistry` for explicit, config-driven backend selection
+- local backend keys are confined under the configured root and reject `..`,
+  absolute path escapes, and symlink traversal
 - `TempFile` / `TempDir` — RAII-managed temporaries (auto-deleted on drop)
 - Async streaming reads and file transfers
 

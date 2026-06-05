@@ -1,18 +1,15 @@
 use std::marker::PhantomData;
 
 use async_trait::async_trait;
-use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation};
-use rskit_errors::{AppError, AppResult, ErrorCode};
+use rskit_errors::AppResult;
 use serde::{Serialize, de::DeserializeOwned};
 
-use super::config::{AsymmetricAlgorithm, JwtConfig, JwtKeyMaterial};
+use super::{JwtCodec, JwtConfig};
 use crate::traits::{TokenGenerator, TokenValidator};
 
 /// JWT sign/verify service generic over the claims type `C`.
 pub struct JwtService<C> {
-    config: JwtConfig,
-    encoding_key: EncodingKey,
-    decoding_key: DecodingKey,
+    codec: JwtCodec,
     _claims: PhantomData<C>,
 }
 
@@ -22,151 +19,30 @@ impl<C> JwtService<C> {
     /// # Errors
     /// Returns an error when key material or validation policy is invalid.
     pub fn new(config: JwtConfig) -> AppResult<Self> {
-        validate_config(&config)?;
-        let (encoding_key, decoding_key) = build_keys(&config.key_material)?;
         Ok(Self {
-            config,
-            encoding_key,
-            decoding_key,
+            codec: JwtCodec::new(config)?,
             _claims: PhantomData,
         })
     }
-}
 
-fn validate_config(config: &JwtConfig) -> AppResult<()> {
-    if config.issuer.trim().is_empty() {
-        return Err(AppError::invalid_input(
-            "issuer",
-            "issuer must not be empty",
-        ));
-    }
-    if config.audience.is_empty() {
-        return Err(AppError::invalid_input(
-            "audience",
-            "at least one audience value is required",
-        ));
-    }
-    if config.leeway.as_secs() > 60 {
-        return Err(AppError::invalid_input(
-            "leeway",
-            "clock skew tolerance must be 60 seconds or less",
-        ));
-    }
-    Ok(())
-}
-
-fn build_keys(key_material: &JwtKeyMaterial) -> AppResult<(EncodingKey, DecodingKey)> {
-    match key_material {
-        JwtKeyMaterial::Hs256Internal { secret } => {
-            if secret.is_empty() {
-                return Err(AppError::invalid_input(
-                    "secret",
-                    "HMAC secret must not be empty",
-                ));
-            }
-            if secret.len() < 32 {
-                return Err(AppError::invalid_input(
-                    "secret",
-                    "HMAC secret must be at least 32 bytes",
-                ));
-            }
-            Ok((
-                EncodingKey::from_secret(secret.expose().as_bytes()),
-                DecodingKey::from_secret(secret.expose().as_bytes()),
-            ))
-        }
-        JwtKeyMaterial::Asymmetric { algorithm, keys } => {
-            let priv_pem = keys.private_key_pem.expose().as_bytes();
-            let pub_pem = keys.public_key_pem.expose().as_bytes();
-            let (enc, dec) = match algorithm {
-                AsymmetricAlgorithm::Rs256 => (
-                    EncodingKey::from_rsa_pem(priv_pem),
-                    DecodingKey::from_rsa_pem(pub_pem),
-                ),
-                AsymmetricAlgorithm::Es256 => (
-                    EncodingKey::from_ec_pem(priv_pem),
-                    DecodingKey::from_ec_pem(pub_pem),
-                ),
-                AsymmetricAlgorithm::EdDsa => (
-                    EncodingKey::from_ed_pem(priv_pem),
-                    DecodingKey::from_ed_pem(pub_pem),
-                ),
-            };
-            Ok((
-                enc.map_err(|e| jwt_key_error(&e))?,
-                dec.map_err(|e| jwt_key_error(&e))?,
-            ))
-        }
-    }
-}
-
-fn jwt_key_error(error: &jsonwebtoken::errors::Error) -> AppError {
-    AppError::new(
-        ErrorCode::InvalidInput,
-        format!("invalid JWT key material: {error}"),
-    )
-}
-
-fn validation_for(config: &JwtConfig) -> Validation {
-    let mut validation = Validation::new(config.algorithm().as_jsonwebtoken());
-    validation.leeway = config.leeway.as_secs();
-    validation.validate_nbf = true;
-    validation.set_issuer(&[config.issuer.as_str()]);
-    validation.set_audience(&config.audience);
-    // Include "iat" in required claims to avoid a second decode pass.
-    validation.set_required_spec_claims(&["exp", "nbf", "iss", "aud", "sub", "iat"]);
-    validation.algorithms = vec![config.algorithm().as_jsonwebtoken()];
-    validation
-}
-
-fn map_validation_error(error: &jsonwebtoken::errors::Error) -> AppError {
-    match error.kind() {
-        jsonwebtoken::errors::ErrorKind::ExpiredSignature => AppError::token_expired(),
-        jsonwebtoken::errors::ErrorKind::InvalidAlgorithm
-        | jsonwebtoken::errors::ErrorKind::InvalidSignature
-        | jsonwebtoken::errors::ErrorKind::InvalidToken
-        | jsonwebtoken::errors::ErrorKind::InvalidIssuer
-        | jsonwebtoken::errors::ErrorKind::InvalidAudience
-        | jsonwebtoken::errors::ErrorKind::ImmatureSignature
-        | jsonwebtoken::errors::ErrorKind::MissingRequiredClaim(_) => AppError::invalid_token(),
-        _ => AppError::new(
-            ErrorCode::Unauthorized,
-            format!("JWT validation failed: {error}"),
-        ),
+    /// Return the reusable JWT codec backing this service.
+    #[must_use]
+    pub const fn codec(&self) -> &JwtCodec {
+        &self.codec
     }
 }
 
 #[async_trait]
 impl<C: Serialize + DeserializeOwned + Send + Sync> TokenGenerator<C> for JwtService<C> {
     async fn generate(&self, claims: &C) -> AppResult<String> {
-        let mut header = Header::new(self.config.algorithm().as_jsonwebtoken());
-        header.typ = Some("JWT".to_string());
-        jsonwebtoken::encode(&header, claims, &self.encoding_key).map_err(|error| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!(
-                    "JWT encode error for {:?}: {error}",
-                    self.config.algorithm()
-                ),
-            )
-        })
+        self.codec.encode(claims)
     }
 }
 
 #[async_trait]
 impl<C: Serialize + DeserializeOwned + Send + Sync> TokenValidator<C> for JwtService<C> {
     async fn validate(&self, token: &str) -> AppResult<C> {
-        let header =
-            jsonwebtoken::decode_header(token).map_err(|error| map_validation_error(&error))?;
-        let configured_algorithm = self.config.algorithm().as_jsonwebtoken();
-        if header.alg != configured_algorithm {
-            return Err(AppError::invalid_token().context("JWT algorithm mismatch"));
-        }
-
-        let validation = validation_for(&self.config);
-        let data = jsonwebtoken::decode::<C>(token, &self.decoding_key, &validation)
-            .map_err(|error| map_validation_error(&error))?;
-        Ok(data.claims)
+        self.codec.decode(token)
     }
 }
 

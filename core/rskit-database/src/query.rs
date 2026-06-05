@@ -12,7 +12,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::FindOpts;
+use crate::{FindOpts, tenant::validate_identifier_path};
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -25,9 +25,9 @@ pub struct QueryConfig {
     pub default_page_size: i64,
     /// Maximum allowed page size (default: 100).
     pub max_page_size: i64,
-    /// Allowed sort columns. Empty means all are allowed.
+    /// Allowed sort columns. Empty means every syntactically safe identifier is allowed.
     pub allowed_sorts: Vec<String>,
-    /// Allowed filter columns. Empty means all are allowed.
+    /// Allowed filter columns. Empty means every syntactically safe identifier is allowed.
     pub allowed_filters: Vec<String>,
 }
 
@@ -38,6 +38,19 @@ impl Default for QueryConfig {
             max_page_size: 100,
             allowed_sorts: Vec::new(),
             allowed_filters: Vec::new(),
+        }
+    }
+}
+
+impl QueryConfig {
+    /// Return a sanitized copy safe for parsing.
+    #[must_use]
+    fn sanitized(&self) -> Self {
+        Self {
+            default_page_size: self.default_page_size.max(1),
+            max_page_size: self.max_page_size.max(1),
+            allowed_sorts: self.allowed_sorts.clone(),
+            allowed_filters: self.allowed_filters.clone(),
         }
     }
 }
@@ -196,6 +209,7 @@ const RESERVED_PARAMS: &[&str] = &["page", "page_size", "pageSize", "per_page", 
 /// - All other keys are treated as filters (must be in `allowed_filters` when
 ///   non-empty).
 pub fn parse_query_string(query: &str, config: &QueryConfig) -> QueryParams {
+    let config = config.sanitized();
     let pairs = parse_pairs(query);
 
     let page = pairs
@@ -217,7 +231,7 @@ pub fn parse_query_string(query: &str, config: &QueryConfig) -> QueryParams {
         if v.is_empty() {
             return None;
         }
-        if config.allowed_sorts.is_empty() || config.allowed_sorts.iter().any(|s| s == v) {
+        if is_allowed_identifier(v, &config.allowed_sorts) {
             Some(v.to_owned())
         } else {
             None
@@ -235,9 +249,7 @@ pub fn parse_query_string(query: &str, config: &QueryConfig) -> QueryParams {
     let filters: HashMap<String, String> = pairs
         .into_iter()
         .filter(|(k, _)| !RESERVED_PARAMS.contains(&k.as_str()))
-        .filter(|(k, _)| {
-            config.allowed_filters.is_empty() || config.allowed_filters.iter().any(|f| f == k)
-        })
+        .filter(|(k, _)| is_allowed_identifier(k, &config.allowed_filters))
         .collect();
 
     QueryParams {
@@ -247,6 +259,11 @@ pub fn parse_query_string(query: &str, config: &QueryConfig) -> QueryParams {
         sort_order,
         filters,
     }
+}
+
+fn is_allowed_identifier(value: &str, allow_list: &[String]) -> bool {
+    validate_identifier_path(value).is_ok()
+        && (allow_list.is_empty() || allow_list.iter().any(|allowed| allowed == value))
 }
 
 /// Minimal query-string parser: splits on `&`, then on `=`.
@@ -319,6 +336,17 @@ mod tests {
     }
 
     #[test]
+    fn invalid_max_page_size_does_not_panic() {
+        let config = QueryConfig {
+            default_page_size: 0,
+            max_page_size: 0,
+            ..default_config()
+        };
+        let params = parse_query_string("page_size=10", &config);
+        assert_eq!(params.page_size, 1);
+    }
+
+    #[test]
     fn clamp_page_min_to_one() {
         let params = parse_query_string("page=0", &default_config());
         assert_eq!(params.page, 1);
@@ -376,6 +404,12 @@ mod tests {
     }
 
     #[test]
+    fn unsafe_sort_identifier_rejected_without_allow_list() {
+        let params = parse_query_string("sort=name;DROP TABLE users&order=desc", &default_config());
+        assert!(params.sort_by.is_none());
+    }
+
+    #[test]
     fn sort_accepted_when_in_allowed_sorts() {
         let config = QueryConfig {
             allowed_sorts: vec!["name".into()],
@@ -403,6 +437,16 @@ mod tests {
         let params = parse_query_string("status=active&type=premium", &config);
         assert_eq!(params.filters.get("status").unwrap(), "active");
         assert!(!params.filters.contains_key("type"));
+    }
+
+    #[test]
+    fn unsafe_filter_identifier_rejected_without_allow_list() {
+        let params = parse_query_string("status;DELETE=active&safe_filter=yes", &default_config());
+        assert!(!params.filters.contains_key("status;DELETE"));
+        assert_eq!(
+            params.filters.get("safe_filter").map(String::as_str),
+            Some("yes")
+        );
     }
 
     #[test]

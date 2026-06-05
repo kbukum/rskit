@@ -8,7 +8,8 @@ use common::{
     AUDIENCE, ISSUER, StandardClaims, future_exp, jwt_service, now_epoch, standard_config,
 };
 use rskit_auth::{
-    JwtConfig, JwtService, PasswordHasher, ResetTokenGenerator, TokenGenerator, TokenValidator,
+    JwtCodec, JwtConfig, JwtService, PasswordHasher, ResetTokenGenerator, TokenGenerator,
+    TokenValidator,
 };
 use serde::{Deserialize, Serialize};
 
@@ -175,6 +176,43 @@ async fn jwt_requires_iat_and_nbf_claims() {
     };
     let token = svc.generate(&claims).await.unwrap();
     assert!(svc.validate(&token).await.is_err());
+}
+
+#[tokio::test]
+async fn jwt_requires_security_critical_registered_claims() {
+    let secret = "required-claims-secret-32-bytes!!";
+    let svc = JwtService::<serde_json::Value>::new(JwtConfig::hs256_internal(
+        secret,
+        ISSUER,
+        vec![AUDIENCE.into()],
+    ))
+    .unwrap();
+    let codec = JwtCodec::new(JwtConfig::hs256_internal(
+        secret,
+        ISSUER,
+        vec![AUDIENCE.into()],
+    ))
+    .unwrap();
+    let now = now_epoch();
+    let base = serde_json::json!({
+        "sub": "user-1",
+        "iss": ISSUER,
+        "aud": [AUDIENCE],
+        "exp": future_exp(),
+        "nbf": now.saturating_sub(1),
+        "iat": now,
+    });
+
+    for required in ["sub", "iss", "aud", "exp"] {
+        let mut claims = base.as_object().unwrap().clone();
+        claims.remove(required);
+        let token = codec.encode(&serde_json::Value::Object(claims)).unwrap();
+
+        assert!(
+            svc.validate(&token).await.is_err(),
+            "token missing {required} must be rejected"
+        );
+    }
 }
 
 #[tokio::test]

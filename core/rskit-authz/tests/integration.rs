@@ -33,6 +33,7 @@ fn engine_supports_role_hierarchy_and_default_deny() {
                 permissions: vec![Permission {
                     resource: String::from("article"),
                     action: String::from("read"),
+                    conditions: vec![],
                 }],
             },
             Role {
@@ -41,6 +42,7 @@ fn engine_supports_role_hierarchy_and_default_deny() {
                 permissions: vec![Permission {
                     resource: String::from("article"),
                     action: String::from("write"),
+                    conditions: vec![],
                 }],
             },
         ],
@@ -62,6 +64,7 @@ fn explicit_deny_overrides_role_grants() {
             permissions: vec![Permission {
                 resource: String::from("article"),
                 action: String::from("*"),
+                conditions: vec![],
             }],
         }],
         vec![Policy {
@@ -119,4 +122,93 @@ fn abac_rules_compare_attributes() {
         .attributes
         .insert(String::from("tenant_id"), json!("other"));
     assert!(!engine.check(&request));
+}
+
+#[test]
+fn object_level_deny_policy_prevents_cross_owner_role_access() {
+    let engine = Engine::new(
+        vec![Role {
+            name: String::from("reader"),
+            inherits: vec![],
+            permissions: vec![Permission {
+                resource: String::from("document"),
+                action: String::from("read"),
+                conditions: vec![],
+            }],
+        }],
+        vec![Policy {
+            name: String::from("deny-cross-owner-read"),
+            effect: Effect::Deny,
+            actions: vec![String::from("read")],
+            resources: vec![String::from("document")],
+            conditions: vec![Condition {
+                source: AttributeSource::Resource,
+                key: String::from("owner_id"),
+                operator: Operator::NotEquals,
+                values: vec![],
+                compare_source: Some(AttributeSource::Subject),
+                compare_key: Some(String::from("id")),
+            }],
+        }],
+    )
+    .unwrap();
+
+    let mut own_document = request("reader", "read", "document");
+    own_document.subject.id = String::from("user-1");
+    own_document
+        .resource
+        .attributes
+        .insert(String::from("owner_id"), json!("user-1"));
+    assert!(engine.check(&own_document));
+
+    let mut other_document = own_document.clone();
+    other_document
+        .resource
+        .attributes
+        .insert(String::from("owner_id"), json!("user-2"));
+    let decision = engine.authorize(&other_document);
+    assert!(!decision.allowed);
+    assert_eq!(decision.reason, "denied by policy");
+}
+
+#[test]
+fn object_level_role_permission_conditions_scope_grants() {
+    let engine = Engine::new(
+        vec![Role {
+            name: String::from("reader"),
+            inherits: vec![],
+            permissions: vec![Permission {
+                resource: String::from("document"),
+                action: String::from("read"),
+                conditions: vec![Condition {
+                    source: AttributeSource::Resource,
+                    key: String::from("owner_id"),
+                    operator: Operator::Equals,
+                    values: vec![],
+                    compare_source: Some(AttributeSource::Subject),
+                    compare_key: Some(String::from("id")),
+                }],
+            }],
+        }],
+        vec![],
+    )
+    .unwrap();
+
+    let mut own_document = request("reader", "read", "document");
+    own_document.subject.id = String::from("user-1");
+    own_document
+        .resource
+        .attributes
+        .insert(String::from("owner_id"), json!("user-1"));
+    assert!(engine.check(&own_document));
+
+    let mut other_document = own_document.clone();
+    other_document
+        .resource
+        .attributes
+        .insert(String::from("owner_id"), json!("user-2"));
+
+    let decision = engine.authorize(&other_document);
+    assert!(!decision.allowed);
+    assert_eq!(decision.reason, "default deny");
 }

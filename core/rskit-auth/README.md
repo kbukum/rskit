@@ -10,6 +10,7 @@ JWT signing/verification, OIDC validation, password hashing, API-key helpers, an
 
 ## Features
 
+- `JwtCodec` / `JwtHeader` — rskit-owned JWT encode/decode/header primitives without exposing the underlying JWT library
 - `JwtService` — sign and verify tokens with explicit `HS256` (internal-only), `RS256`, `ES256`, or `EdDSA`
 - `OidcClient` — discovery, PKCE, JWKS-backed ID-token validation, and userinfo lookups
 - `PasswordHasher` — Argon2id hashing and verification
@@ -27,7 +28,7 @@ rskit-auth = "0.1"
 ```
 
 ```rust
-use rskit_auth::{JwtConfig, JwtService, PasswordHasher, TokenGenerator};
+use rskit_auth::{JwtCodec, JwtConfig, JwtService, PasswordHasher, TokenGenerator};
 
 # #[derive(serde::Serialize)]
 # struct Claims {
@@ -48,13 +49,20 @@ let jwt = JwtService::<Claims>::new(JwtConfig::hs256_internal(
     vec!["service-a".into()],
 ))
 .unwrap();
+let codec = JwtCodec::new(JwtConfig::hs256_internal(
+    "internal-secret-key-material-0001",
+    "https://issuer.example",
+    vec!["service-a".into()],
+))
+.unwrap();
+# let _ = (jwt, codec);
 ```
 
 ## JWT / OIDC policy
 
 - Public-key algorithms are preferred: `RS256`, `ES256`, `EdDSA`
 - `HS256` remains available only through the explicit `JwtConfig::hs256_internal(...)` constructor
-- Verifiers require `sub`, `iss`, `aud`, `exp`, `nbf`, and `iat`
+- Verifiers require `sub`, `iss`, `aud`, `exp`, `nbf`, and `iat`; issuer and audience configuration must not be blank
 - OIDC enforces authorization-code flow, exact redirect URIs, state, nonce, and PKCE for public clients
 - Request middleware extracts credentials from headers only, rejects missing credentials by default, and requires explicit `accept_missing()` for optional authentication
 - Credential-bearing Debug output masks bearer/API keys, key digests, PKCE verifiers, authorization codes, and callback secrets

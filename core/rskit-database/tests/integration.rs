@@ -80,7 +80,7 @@ fn find_opts_builder_sets_values() {
 
 #[test]
 fn tenant_scope_builds_predicates() {
-    let scope = TenantScope::new("workspace_id", "ws-1");
+    let scope = TenantScope::new("workspace_id", "ws-1").unwrap();
 
     assert_eq!(scope.where_clause(1), "workspace_id = $1");
     assert_eq!(
