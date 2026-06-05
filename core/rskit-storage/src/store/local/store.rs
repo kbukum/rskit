@@ -329,12 +329,9 @@ impl FileStore for LocalStore {
         let to = self.resolve_path(to_key)?;
         ensure_target_parent_confined(&self.config.root_dir, &to).await?;
 
-        async_io::file::rename(&from, &to).await.map_err(|e| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!("failed to rename {from_key} to {to_key}: {e}"),
-            )
-        })?;
+        async_io::file::rename(&from, &to)
+            .await
+            .map_err(|error| error.context(format!("failed to rename {from_key} to {to_key}")))?;
 
         self.head(to_key).await
     }

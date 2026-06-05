@@ -40,6 +40,7 @@ impl QdrantVectorStore {
                 ErrorCode::ConnectionFailed,
                 format!("failed to connect to Qdrant: {e}"),
             )
+            .with_cause(e)
         })?;
         Ok(Self {
             client,
