@@ -4,6 +4,7 @@ use qdrant_client::qdrant::{Condition, Distance, Range};
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_vectorstore::{PayloadValue, SimilarityMetric};
 
+/// Convert an rskit similarity metric into the equivalent Qdrant distance.
 pub(crate) fn qdrant_distance(metric: SimilarityMetric) -> AppResult<Distance> {
     match metric {
         SimilarityMetric::Cosine => Ok(Distance::Cosine),
@@ -16,6 +17,7 @@ pub(crate) fn qdrant_distance(metric: SimilarityMetric) -> AppResult<Distance> {
     }
 }
 
+/// Convert a typed rskit payload value into a Qdrant payload value.
 pub(crate) fn payload_to_qdrant_value(v: PayloadValue) -> AppResult<qdrant_client::qdrant::Value> {
     use qdrant_client::qdrant::value::Kind;
     let kind = match v {
@@ -33,6 +35,7 @@ pub(crate) fn payload_to_qdrant_value(v: PayloadValue) -> AppResult<qdrant_clien
     Ok(qdrant_client::qdrant::Value { kind: Some(kind) })
 }
 
+/// Convert an rskit exact-match filter condition into a Qdrant condition.
 pub(crate) fn filter_condition_to_qdrant(
     field: String,
     value: PayloadValue,
@@ -56,6 +59,7 @@ pub(crate) fn filter_condition_to_qdrant(
     }
 }
 
+/// Convert a returned Qdrant payload value into the rskit typed payload contract.
 pub(crate) fn qdrant_value_to_payload(
     field: &str,
     v: qdrant_client::qdrant::Value,

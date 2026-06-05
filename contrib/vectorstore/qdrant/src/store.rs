@@ -199,6 +199,7 @@ impl VectorFactory for QdrantFactory {
     }
 }
 
+/// Register the Qdrant vector store factory under the canonical backend name.
 pub(crate) fn register_qdrant(registry: &mut VectorStoreRegistry, config: Config) -> AppResult<()> {
     registry.register("qdrant", Arc::new(QdrantFactory { config }))
 }

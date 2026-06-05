@@ -3,6 +3,7 @@
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_httpclient::DestinationPolicy;
 
+/// Validate a Qdrant endpoint URL before constructing the client.
 pub(crate) fn validate_qdrant_url(url: &str) -> AppResult<()> {
     if url.trim().is_empty() {
         return Err(AppError::new(

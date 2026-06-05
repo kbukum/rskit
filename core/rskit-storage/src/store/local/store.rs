@@ -66,6 +66,21 @@ impl LocalStore {
         Ok(())
     }
 
+    fn inspect_existing_file_error(key: &str, path: &Path, error: std::io::Error) -> AppError {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            file_not_found_error(key).with_cause(error)
+        } else {
+            AppError::new(
+                ErrorCode::Internal,
+                format!(
+                    "failed to inspect storage file '{}': {error}",
+                    path.display()
+                ),
+            )
+            .with_cause(error)
+        }
+    }
+
     fn resolve_normalized_path(&self, key: &str) -> AppResult<PathBuf> {
         rskit_fs::safe_join(&self.config.root_dir, Path::new(key))
             .map_err(|error| AppError::new(ErrorCode::InvalidInput, error.to_string()))
@@ -73,10 +88,10 @@ impl LocalStore {
 
     async fn confined_existing_file_path(&self, key: &str) -> AppResult<PathBuf> {
         let path = self.resolve_path(key)?;
-        let metadata = async_io::file::metadata(&path)
+        let metadata = tokio::fs::symlink_metadata(&path)
             .await
-            .map_err(|error| file_not_found_error_with_cause(key, error))?;
-        if !metadata.is_file || metadata.is_symlink {
+            .map_err(|error| Self::inspect_existing_file_error(key, &path, error))?;
+        if !metadata.is_file() || metadata.file_type().is_symlink() {
             return Err(file_not_found_error(key));
         }
         let canonical = canonicalize_confined(&self.config.root_dir, &path).await?;

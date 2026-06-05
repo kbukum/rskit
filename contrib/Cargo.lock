@@ -5391,7 +5391,6 @@ dependencies = [
  "rskit-util",
  "rskit-vectorstore",
  "serde",
- "serde_json",
  "tokio",
  "tracing",
 ]

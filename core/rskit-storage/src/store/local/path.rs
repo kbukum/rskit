@@ -7,6 +7,7 @@ use rskit_fs::async_io;
 
 use super::super::prefixed_key;
 
+/// Normalize and validate a caller-provided storage key as root-relative.
 pub(super) fn normalize_local_key(key: &str) -> AppResult<String> {
     let key = prefixed_key(None, key);
     rskit_fs::validate_relative_path(Path::new(&key)).map_err(|error| {
@@ -18,6 +19,7 @@ pub(super) fn normalize_local_key(key: &str) -> AppResult<String> {
     Ok(key)
 }
 
+/// Canonicalize an existing path and reject it if it escapes the configured root.
 pub(super) async fn canonicalize_confined(root: &Path, path: &Path) -> AppResult<PathBuf> {
     let root = canonicalize_root(root).await?;
     let canonical = tokio::fs::canonicalize(path).await.map_err(|error| {
@@ -33,6 +35,7 @@ pub(super) async fn canonicalize_confined(root: &Path, path: &Path) -> AppResult
     ensure_canonical_stays_within_root(&root, &canonical)
 }
 
+/// Ensure a write target's parent exists without following symlink escapes.
 pub(super) async fn ensure_target_parent_confined(root: &Path, target: &Path) -> AppResult<()> {
     let parent = target.parent().ok_or_else(|| {
         AppError::new(
@@ -156,6 +159,7 @@ fn ensure_canonical_stays_within_root(root: &Path, canonical: &Path) -> AppResul
     }
 }
 
+/// Build a sanitized temporary path next to a local storage target.
 pub(super) fn storage_temp_path(target: &Path) -> PathBuf {
     let filename = target
         .file_name()
@@ -164,6 +168,7 @@ pub(super) fn storage_temp_path(target: &Path) -> PathBuf {
     rskit_fs::sibling_temp_path(target, filename, ".rskit-tmp")
 }
 
+/// Replace a target path with a completed sibling temporary file.
 pub(super) async fn replace_with_temp(temp_path: &Path, target: &Path) -> AppResult<()> {
     #[cfg(windows)]
     {
@@ -182,10 +187,12 @@ pub(super) async fn replace_with_temp(temp_path: &Path, target: &Path) -> AppRes
     })
 }
 
+/// Build the canonical not-found error for a storage key.
 pub(super) fn file_not_found_error(key: &str) -> AppError {
     AppError::new(ErrorCode::NotFound, format!("file not found: {key}"))
 }
 
+/// Build the canonical not-found error for a storage key with an underlying cause.
 pub(super) fn file_not_found_error_with_cause(key: &str, cause: AppError) -> AppError {
     file_not_found_error(key).with_cause(cause)
 }
