@@ -66,11 +66,17 @@ impl Visitor<'_> for PayloadValueVisitor {
         formatter.write_str("a string, signed integer, finite float, or boolean payload value")
     }
 
-    fn visit_bool<E>(self, value: bool) -> Result<Self::Value, E> {
+    fn visit_bool<E>(self, value: bool) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
         Ok(PayloadValue::Bool(value))
     }
 
-    fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E> {
+    fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
         Ok(PayloadValue::Integer(value))
     }
 
@@ -85,15 +91,24 @@ impl Visitor<'_> for PayloadValueVisitor {
             })
     }
 
-    fn visit_f64<E>(self, value: f64) -> Result<Self::Value, E> {
+    fn visit_f64<E>(self, value: f64) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
         Ok(PayloadValue::Float(value))
     }
 
-    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E> {
+    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
         Ok(PayloadValue::String(value.to_owned()))
     }
 
-    fn visit_string<E>(self, value: String) -> Result<Self::Value, E> {
+    fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
         Ok(PayloadValue::String(value))
     }
 }
