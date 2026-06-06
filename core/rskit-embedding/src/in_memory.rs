@@ -5,6 +5,7 @@ use rskit_ai::Usage;
 use rskit_ai::semconv;
 use rskit_component::{Component, Health};
 use rskit_errors::AppResult;
+use rskit_observability::set_span_attribute;
 
 use crate::{EmbedInput, EmbedRequest, EmbedResponse, Embedding, Provider};
 
@@ -51,14 +52,21 @@ impl Default for InMemoryProvider {
 #[async_trait]
 impl Provider for InMemoryProvider {
     async fn embed(&self, req: EmbedRequest) -> AppResult<EmbedResponse> {
-        let _span = tracing::info_span!(
+        let span = tracing::info_span!(
             "embedding.embed",
             "gen_ai.system" = "in_memory",
             "gen_ai.operation.name" = semconv::Operation::Embedding.as_str(),
             "gen_ai.request.model" = req.model.name.as_str(),
             "embedding.input_count" = req.inputs.len(),
-        )
-        .entered();
+        );
+        set_span_attribute(&span, semconv::SYSTEM, "in_memory");
+        set_span_attribute(
+            &span,
+            semconv::OPERATION_NAME,
+            semconv::Operation::Embedding.as_str(),
+        );
+        set_span_attribute(&span, semconv::REQUEST_MODEL, req.model.name.as_str());
+        let _span = span.entered();
         let embeddings = req
             .inputs
             .iter()

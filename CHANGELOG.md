@@ -62,6 +62,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of struct literals so transport hardening fields can evolve safely.
 
 ### Changed — Cross-Cutting
+- **L7 AI/ML observability**: routed GenAI span attributes through reusable
+  `rskit-observability` helpers while preserving declared tracing fields and
+  keeping `rskit-ai::semconv` as the shared vocabulary.
 - **L4 composition**: tightened app shutdown error reporting, state-machine
   transition atomicity, worker backpressure documentation, deterministic
   cancellation tests, and process argument log redaction.

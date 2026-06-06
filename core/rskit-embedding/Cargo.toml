@@ -27,6 +27,7 @@ tracing      = { workspace = true }
 rskit-ai = { workspace = true }
 rskit-component = { path = "../rskit-component" }
 rskit-errors = { path = "../rskit-errors" }
+rskit-observability = { path = "../rskit-observability" }
 rskit-provider = { path = "../rskit-provider" }
 
 [dev-dependencies]

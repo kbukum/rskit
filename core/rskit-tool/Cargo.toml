@@ -31,5 +31,6 @@ schemars       = { workspace = true }
 # Internal
 rskit-ai = { workspace = true }
 rskit-component = { path = "../rskit-component" }
+rskit-observability = { path = "../rskit-observability" }
 rskit-schema   = { path = "../rskit-schema" }
 rskit-errors   = { path = "../rskit-errors" }

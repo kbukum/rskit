@@ -1775,6 +1775,7 @@ dependencies = [
  "libc",
  "parking_lot",
  "rskit-errors",
+ "rskit-util",
  "thiserror",
  "tokio",
  "tokio-util",

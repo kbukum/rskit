@@ -2,6 +2,7 @@ use rskit_ai::semconv;
 use rskit_errors::AppResult;
 use rskit_hook::CancellationToken;
 use rskit_llm::types::Message;
+use rskit_observability::set_span_attribute;
 use tracing::Instrument;
 
 use super::Agent;
@@ -18,6 +19,17 @@ impl Agent {
             "gen_ai.system" = "agent",
             "gen_ai.operation.name" = semconv::Operation::AgentRun.as_str(),
             "gen_ai.request.model" = %self.config.model,
+        );
+        set_span_attribute(&run_span, semconv::SYSTEM, "agent");
+        set_span_attribute(
+            &run_span,
+            semconv::OPERATION_NAME,
+            semconv::Operation::AgentRun.as_str(),
+        );
+        set_span_attribute(
+            &run_span,
+            semconv::REQUEST_MODEL,
+            self.config.model.as_str(),
         );
 
         async move {

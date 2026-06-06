@@ -5,6 +5,7 @@ use rskit_ai::semconv;
 use rskit_embedding::{EmbedInput, EmbedRequest, EmbedResponse, Embedding, Provider};
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_httpclient::{Auth, HttpClient, HttpClientConfig, Request};
+use rskit_observability::set_span_attribute;
 use rskit_resilience::Policy;
 use serde::{Deserialize, Serialize};
 use tracing::{Instrument, debug};
@@ -80,13 +81,7 @@ impl Provider for EmbeddingProvider {
         }
         let model = response_model.name.clone();
 
-        let span = tracing::info_span!(
-            "embedding.embed",
-            "gen_ai.system" = "openai",
-            "gen_ai.operation.name" = semconv::Operation::Embedding.as_str(),
-            "gen_ai.request.model" = %model,
-            "embedding.input_count" = req.inputs.len(),
-        );
+        let span = embedding_span(&model, req.inputs.len());
         async move {
             let texts = req
                 .inputs
@@ -192,6 +187,24 @@ impl Provider for EmbeddingProvider {
         }
         Ok(responses)
     }
+}
+
+fn embedding_span(model: &str, input_count: usize) -> tracing::Span {
+    let span = tracing::info_span!(
+        "embedding.embed",
+        "gen_ai.system" = "openai",
+        "gen_ai.operation.name" = semconv::Operation::Embedding.as_str(),
+        "gen_ai.request.model" = %model,
+        "embedding.input_count" = input_count,
+    );
+    set_span_attribute(&span, semconv::SYSTEM, "openai");
+    set_span_attribute(
+        &span,
+        semconv::OPERATION_NAME,
+        semconv::Operation::Embedding.as_str(),
+    );
+    set_span_attribute(&span, semconv::REQUEST_MODEL, model);
+    span
 }
 
 impl rskit_provider::Provider for EmbeddingProvider {

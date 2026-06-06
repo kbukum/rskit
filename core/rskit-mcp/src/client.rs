@@ -10,6 +10,7 @@ use rmcp::model::{CallToolRequestParams, Tool};
 use rmcp::service::{Peer, RoleClient, RunningService};
 use rskit_ai::semconv;
 use rskit_errors::{AppError, AppResult, ErrorCode};
+use rskit_observability::set_span_attribute;
 use rskit_schema::{CompiledSchema, ValidationResult};
 use rskit_tool::context::Context;
 use rskit_tool::result::ToolResult;
@@ -56,6 +57,12 @@ impl Callable for RemoteTool {
             "mcp.method" = "tools/call",
             "mcp.tool_name" = self.mcp_name.as_str(),
         );
+        set_span_attribute(
+            &span,
+            semconv::OPERATION_NAME,
+            semconv::Operation::McpRequest.as_str(),
+        );
+        set_span_attribute(&span, semconv::TOOL_NAME, self.definition.name.as_str());
         async {
             let arguments = match input.into_json() {
                 serde_json::Value::Object(map) => Some(map),

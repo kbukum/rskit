@@ -5,6 +5,8 @@
 
 #![warn(missing_docs)]
 
+/// Span attribute helpers.
+pub mod attribute;
 /// Operation context for cross-cutting observability concerns.
 pub mod context;
 /// Service health tracking for aggregate component monitoring.
@@ -18,6 +20,10 @@ pub mod propagation;
 /// OpenTelemetry tracer initialization.
 mod tracer;
 
+pub use attribute::{
+    SpanAttributeValue, record_current_span_attribute, record_span_attribute,
+    set_current_span_attribute, set_span_attribute,
+};
 pub use context::OperationContext;
 pub use health::{ComponentHealth, HealthStatus, ServiceHealth};
 pub use logs::{LogsConfig, LogsHandle, init_logs};
