@@ -7,11 +7,13 @@ use rskit_httpclient::{Auth, HttpClient, HttpClientConfig, Request};
 use rskit_llm::Provider;
 use rskit_llm::types::{CompletionRequest, CompletionResponse};
 
+use super::PROVIDER_ID;
 use super::config::Config;
 use super::dialect::AnthropicDialect;
 use rskit_llm_common::{ChatRunner, send_text};
 
-const SYSTEM: &str = "anthropic";
+const API_KEY_HEADER: &str = "x-api-key";
+const API_VERSION_HEADER: &str = "anthropic-version";
 
 /// A [`Provider`] backed by the Anthropic Messages API.
 struct AnthropicAdapter {
@@ -24,22 +26,22 @@ struct AnthropicAdapter {
 fn new_adapter(cfg: &Config) -> AppResult<AnthropicAdapter> {
     let http_cfg = HttpClientConfig::new()
         .with_base_url(&cfg.base_url)
-        .with_auth(Auth::api_key("x-api-key", &cfg.api_key))
-        .with_header("anthropic-version", &cfg.api_version);
+        .with_auth(Auth::api_key_secret(API_KEY_HEADER, cfg.api_key.clone()))
+        .with_header(API_VERSION_HEADER, &cfg.api_version);
 
     let client = HttpClient::new(http_cfg)?;
 
     Ok(AnthropicAdapter {
         client,
         api_version: cfg.api_version.clone(),
-        runner: ChatRunner::new(SYSTEM, &cfg.model),
+        runner: ChatRunner::new(PROVIDER_ID, &cfg.model),
     })
 }
 
 /// Register the configured `Anthropic` provider in an LLM registry.
 pub fn register(registry: &mut rskit_llm::Registry, config: Config) -> AppResult<()> {
     registry.register(
-        "anthropic",
+        PROVIDER_ID,
         std::sync::Arc::new(move || {
             Ok(std::sync::Arc::new(new_adapter(&config)?)
                 as std::sync::Arc<dyn rskit_llm::Provider>)
@@ -59,7 +61,13 @@ impl AnthropicAdapter {
                 AppError::new(ErrorCode::Internal, format!("failed to build request: {e}"))
             })?;
 
-        let text = send_text(&self.client, request, SYSTEM, AnthropicDialect::parse_error).await?;
+        let text = send_text(
+            &self.client,
+            request,
+            PROVIDER_ID,
+            AnthropicDialect::parse_error,
+        )
+        .await?;
 
         AnthropicDialect::parse_response(&text)
     }
@@ -68,7 +76,7 @@ impl AnthropicAdapter {
 #[async_trait]
 impl rskit_provider::Provider for AnthropicAdapter {
     fn name(&self) -> &'static str {
-        "anthropic"
+        PROVIDER_ID
     }
 }
 
@@ -114,7 +122,7 @@ mod tests {
     #[test]
     fn new_adapter_constructs_successfully() {
         let cfg = Config {
-            api_key: "sk-ant-test".into(),
+            api_key: rskit_util::SecretString::new("sk-ant-test"),
             base_url: "https://api.anthropic.com".into(),
             model: "claude-sonnet-4-20250514".into(),
             api_version: "2023-06-01".into(),
@@ -126,7 +134,7 @@ mod tests {
     #[test]
     fn adapter_is_object_safe() {
         let cfg = Config {
-            api_key: "sk-ant-test".into(),
+            api_key: rskit_util::SecretString::new("sk-ant-test"),
             base_url: "https://api.anthropic.com".into(),
             model: "claude-sonnet-4-20250514".into(),
             api_version: "2023-06-01".into(),
@@ -138,7 +146,7 @@ mod tests {
     #[test]
     fn adapter_implements_component() {
         let cfg = Config {
-            api_key: "sk-ant-test".into(),
+            api_key: rskit_util::SecretString::new("sk-ant-test"),
             base_url: "https://api.anthropic.com".into(),
             model: "claude-sonnet-4-20250514".into(),
             api_version: "2023-06-01".into(),

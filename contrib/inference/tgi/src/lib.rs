@@ -3,6 +3,10 @@
 //! TGI exposes an OpenAI-compatible `/v1/chat/completions` endpoint from v2+.
 //! Older deployments may only expose `/generate`; this adapter targets the
 //! modern OAI-compatible path, which is the recommended production interface.
+//!
+//! Optional bearer credentials are configured through [`Config::api_key`] as a
+//! redacting [`SecretString`] and installed through `rskit-httpclient` auth
+//! rather than raw headers.
 
 #![warn(missing_docs)]
 
@@ -18,13 +22,14 @@ use rskit_inference::{
     PredictStatus, Registry, RegistryError, ServingProtocol, StreamingInference, Value,
 };
 use rskit_tool::Envelope;
+use rskit_util::SecretString;
 use serde::{Deserialize, Serialize};
 use tokio_stream::Stream;
 
 const TGI_KIND: &str = "tgi";
 
 /// Configuration for the TGI OAI-compatible adapter.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Config {
     /// Base URL of the TGI server, for example `http://localhost:8080`.
     pub base_url: String,
@@ -32,26 +37,17 @@ pub struct Config {
     #[serde(default = "default_model")]
     pub model: String,
     /// Optional bearer token for authenticated TGI deployments.
+    ///
+    /// The value is redacted in debug output and serialization.
     #[serde(default)]
-    pub api_key: Option<String>,
+    pub api_key: Option<SecretString>,
     /// Max new tokens for generation.
     #[serde(default = "default_max_tokens")]
     pub max_tokens: u32,
 }
 
-impl std::fmt::Debug for Config {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Config")
-            .field("base_url", &self.base_url)
-            .field("model", &self.model)
-            .field("api_key", &self.api_key.as_ref().map(|_| "<redacted>"))
-            .field("max_tokens", &self.max_tokens)
-            .finish()
-    }
-}
-
 fn default_model() -> String {
-    "tgi".into()
+    TGI_KIND.into()
 }
 
 fn default_max_tokens() -> u32 {
@@ -69,7 +65,7 @@ impl TgiAdapter {
     pub(crate) fn new(config: Config) -> AppResult<Self> {
         let mut http_config = HttpClientConfig::new().with_base_url(&config.base_url);
         if let Some(key) = &config.api_key {
-            http_config = http_config.with_auth(Auth::bearer(key));
+            http_config = http_config.with_auth(Auth::bearer_secret(key.clone()));
         }
         Ok(Self {
             client: HttpClient::new(http_config)?,
@@ -217,7 +213,7 @@ impl Inference for TgiAdapter {
             },
             model: Model {
                 name: oai.model,
-                provider: ModelProvider::Custom("tgi".to_string()),
+                provider: ModelProvider::Custom(TGI_KIND.to_string()),
                 version: request.model_version,
                 capabilities: Capabilities::default(),
             },

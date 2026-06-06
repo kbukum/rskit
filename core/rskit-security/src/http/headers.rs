@@ -1,4 +1,4 @@
-//! HTTP security header policy shared by transport adapters.
+//! Secure-by-default HTTP response header policy.
 
 use http::{
     HeaderName, HeaderValue,

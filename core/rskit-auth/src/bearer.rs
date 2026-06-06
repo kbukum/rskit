@@ -1,13 +1,23 @@
 //! Tower middleware for header-only bearer-token authentication.
+//!
+//! The layer rejects missing credentials unless [`BearerAuthLayer::accept_missing`]
+//! is selected explicitly. Rejections include a neutral `WWW-Authenticate:
+//! Bearer` challenge; this crate does not hard-code an application realm.
 
 use std::{future::Future, marker::PhantomData, pin::Pin, sync::Arc};
 
 use http::{Request, Response, StatusCode, header};
+use rskit_security::BEARER_AUTH_SCHEME;
 use tower::{Layer, Service};
 
 use crate::{AuthClaims, AuthOutcome, MissingCredentialPolicy, traits::TokenValidator};
 
 /// Tower layer that validates `Authorization: Bearer <token>` headers.
+///
+/// The layer stores successful claims in request extensions as
+/// [`AuthClaims<C>`](crate::AuthClaims) and
+/// [`AuthOutcome<C>`](crate::AuthOutcome). Invalid or rejected requests receive
+/// `401 Unauthorized` with `WWW-Authenticate: Bearer`.
 #[derive(Clone)]
 pub struct BearerAuthLayer<V, C> {
     validator: Arc<V>,
@@ -133,7 +143,7 @@ fn extract_bearer_token<B>(req: &Request<B>) -> CredentialExtraction<'_> {
     let Some((scheme, token)) = value.split_once(' ') else {
         return CredentialExtraction::Invalid;
     };
-    if !scheme.eq_ignore_ascii_case("Bearer") {
+    if !scheme.eq_ignore_ascii_case(BEARER_AUTH_SCHEME) {
         return CredentialExtraction::Invalid;
     }
     let token = token.trim_start_matches(' ');
@@ -148,7 +158,7 @@ fn unauthorized_bearer_response<ResBody: Default>() -> Response<ResBody> {
     *response.status_mut() = StatusCode::UNAUTHORIZED;
     response.headers_mut().insert(
         header::WWW_AUTHENTICATE,
-        http::HeaderValue::from_static(r#"Bearer realm="rskit""#),
+        http::HeaderValue::from_static(BEARER_AUTH_SCHEME),
     );
     response
 }
@@ -160,6 +170,7 @@ mod tests {
     use async_trait::async_trait;
     use http::{Request, Response, StatusCode};
     use rskit_errors::{AppError, AppResult};
+    use rskit_security::BEARER_AUTH_SCHEME;
     use serde::{Deserialize, Serialize};
     use tower::{Layer, Service};
 
@@ -284,6 +295,15 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(missing.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            missing
+                .headers()
+                .get(http::header::WWW_AUTHENTICATE)
+                .expect("missing authenticate challenge")
+                .to_str()
+                .expect("challenge should be visible ASCII"),
+            BEARER_AUTH_SCHEME
+        );
 
         let valid = service
             .call(

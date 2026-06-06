@@ -1,16 +1,21 @@
 #![warn(missing_docs)]
 
-//! Async HTTP client with auth, resilience, and error handling.
+//! Async HTTP client with redacting auth, resilience, destination hardening, and error handling.
 //!
 //! # Features
 //!
 //! - Async HTTP client built on `reqwest`
-//! - Support for Bearer, Basic, and API key authentication
+//! - Support for Bearer, Basic, and API key authentication with redacted secret storage
 //! - Configurable timeouts, headers, redirects, and injected resilience policies
 //! - URL building with base URL support and destination validation
 //! - Bounded response-body reads
 //! - JSON request/response serialization
 //! - Integrated error handling with `rskit-errors`
+//!
+//! Authentication secrets are stored in [`rskit_security::SecretString`] inside
+//! [`Auth`], so [`Auth`] and [`HttpClientConfig`] debug output redacts bearer
+//! tokens, basic passwords, and API-key values. Prefer [`HttpClientConfig::with_auth`]
+//! or request auth helpers over raw credential headers.
 //!
 //! # Example
 //!

@@ -1,14 +1,16 @@
 //! Configuration for the Gemini provider.
 
-use std::fmt;
-
+use rskit_util::SecretString;
 use serde::Deserialize;
 
 /// Gemini provider configuration.
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct Config {
     /// Google AI API key.
-    pub api_key: String,
+    ///
+    /// The value is redacted in debug/display output, and adapters pass it to
+    /// `rskit-httpclient` as redacting auth state.
+    pub api_key: SecretString,
 
     /// Base URL (default: `https://generativelanguage.googleapis.com`).
     #[serde(default = "default_base_url")]
@@ -17,16 +19,6 @@ pub struct Config {
     /// Model name (e.g. `gemini-2.5-flash`).
     #[serde(default = "default_model")]
     pub model: String,
-}
-
-impl fmt::Debug for Config {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Config")
-            .field("api_key", &"<redacted>")
-            .field("base_url", &self.base_url)
-            .field("model", &self.model)
-            .finish()
-    }
 }
 
 fn default_base_url() -> String {
@@ -45,7 +37,7 @@ mod tests {
     fn config_deserialize_with_defaults() {
         let json = r#"{"api_key":"AIza-test"}"#;
         let cfg: Config = serde_json::from_str(json).unwrap();
-        assert_eq!(cfg.api_key, "AIza-test");
+        assert_eq!(cfg.api_key.expose(), "AIza-test");
         assert_eq!(cfg.base_url, "https://generativelanguage.googleapis.com");
         assert_eq!(cfg.model, "gemini-2.5-flash");
     }

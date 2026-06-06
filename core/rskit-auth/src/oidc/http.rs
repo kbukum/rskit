@@ -75,7 +75,9 @@ impl OidcHttpClient for ReqwestOidcHttpClient {
 mod tests {
     use std::time::Duration;
 
+    use http::header::AUTHORIZATION;
     use rskit_httpclient::{Auth, HttpClientConfig};
+    use rskit_security::BEARER_AUTH_SCHEME;
 
     use super::ReqwestOidcHttpClient;
 
@@ -106,7 +108,10 @@ mod tests {
     fn oidc_http_client_drops_cross_origin_defaults() {
         let config = HttpClientConfig::new()
             .with_base_url("https://internal.example")
-            .with_header("authorization", "Bearer leaked")
+            .with_header(
+                AUTHORIZATION.as_str(),
+                format!("{BEARER_AUTH_SCHEME} leaked"),
+            )
             .with_header("x-api-key", "leaked")
             .with_auth(Auth::api_key("x-other-key", "leaked"));
 

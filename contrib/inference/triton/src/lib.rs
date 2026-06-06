@@ -29,8 +29,6 @@ use tracing::Instrument;
 
 const TRITON_KIND: &str = "triton";
 
-const SYSTEM: &str = "triton";
-
 /// Configuration for Triton KServe v2 HTTP serving.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -173,7 +171,7 @@ impl TritonInference {
         let model_version = request.model_version.clone().unwrap_or_default();
         let span = tracing::info_span!(
             "inference.predict",
-            gen_ai.system = SYSTEM,
+            gen_ai.system = TRITON_KIND,
             gen_ai.operation.name = operation.as_str(),
             gen_ai.request.model = request.model_name.as_str(),
             gen_ai.request.model.version = model_version.as_str(),
@@ -184,7 +182,7 @@ impl TritonInference {
             gen_ai.response.model = tracing::field::Empty,
             gen_ai.response.finish_reason = tracing::field::Empty,
         );
-        set_span_attribute(&span, semconv::SYSTEM, SYSTEM);
+        set_span_attribute(&span, semconv::SYSTEM, TRITON_KIND);
         set_span_attribute(&span, semconv::OPERATION_NAME, operation.as_str());
         set_span_attribute(&span, semconv::REQUEST_MODEL, request.model_name.as_str());
         set_span_attribute(

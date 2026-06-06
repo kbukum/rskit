@@ -4,6 +4,7 @@
 //! as a [`Callable`] so they can be registered in an rskit [`rskit_tool::Registry`].
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use rmcp::model::{CallToolRequestParams, Tool};
@@ -19,11 +20,37 @@ use tracing::Instrument;
 
 use crate::convert;
 
+/// Default timeout applied to each remote MCP request.
+const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+
 /// Configuration for the MCP client.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct ClientConfig {
     /// Optional prefix to strip from remote tool names.
     pub prefix: String,
+    /// Timeout applied to each remote MCP request (`tools/call`, `tools/list`).
+    ///
+    /// A remote server that never responds must not block the caller
+    /// indefinitely; every remote call is bounded by this deadline.
+    pub request_timeout: Duration,
+}
+
+impl Default for ClientConfig {
+    fn default() -> Self {
+        Self {
+            prefix: String::new(),
+            request_timeout: DEFAULT_REQUEST_TIMEOUT,
+        }
+    }
+}
+
+impl ClientConfig {
+    /// Set the per-request timeout for remote MCP calls.
+    #[must_use]
+    pub fn with_request_timeout(mut self, timeout: Duration) -> Self {
+        self.request_timeout = timeout;
+        self
+    }
 }
 
 /// A remote MCP tool wrapped as an rskit [`Callable`].
@@ -34,6 +61,7 @@ struct RemoteTool {
     input_validator: Result<CompiledSchema, ValidationResult>,
     mcp_name: String,
     peer: Arc<Peer<RoleClient>>,
+    request_timeout: Duration,
 }
 
 #[async_trait]
@@ -74,12 +102,20 @@ impl Callable for RemoteTool {
                 params = params.with_arguments(args);
             }
 
-            let result = self.peer.call_tool(params).await.map_err(|e| {
-                AppError::new(
-                    ErrorCode::ExternalService,
-                    format!("MCP call_tool failed: {e}"),
-                )
-            })?;
+            let result = tokio::time::timeout(self.request_timeout, self.peer.call_tool(params))
+                .await
+                .map_err(|_| {
+                    AppError::new(
+                        ErrorCode::Timeout,
+                        format!("MCP call_tool timed out after {:?}", self.request_timeout),
+                    )
+                })?
+                .map_err(|e| {
+                    AppError::new(
+                        ErrorCode::ExternalService,
+                        format!("MCP call_tool failed: {e}"),
+                    )
+                })?;
 
             Ok(convert::call_result_to_tool_result(&result))
         }
@@ -109,6 +145,7 @@ pub fn wrap_tools(
                 input_validator,
                 mcp_name,
                 peer: peer.clone(),
+                request_timeout: config.request_timeout,
             }) as Box<dyn Callable>)
         })
         .collect()
@@ -144,12 +181,23 @@ pub async fn discover_tools<S>(
 where
     S: rmcp::service::Service<RoleClient>,
 {
-    let result = client.list_tools(None).await.map_err(|e| {
-        AppError::new(
-            ErrorCode::ExternalService,
-            format!("MCP list_tools failed: {e}"),
-        )
-    })?;
+    let result = tokio::time::timeout(config.request_timeout, client.list_tools(None))
+        .await
+        .map_err(|_| {
+            AppError::new(
+                ErrorCode::Timeout,
+                format!(
+                    "MCP list_tools timed out after {:?}",
+                    config.request_timeout
+                ),
+            )
+        })?
+        .map_err(|e| {
+            AppError::new(
+                ErrorCode::ExternalService,
+                format!("MCP list_tools failed: {e}"),
+            )
+        })?;
 
     let peer = Arc::new(client.peer().clone());
     wrap_tools(&result.tools, peer, config)
@@ -163,5 +211,12 @@ mod tests {
     fn test_client_config_default() {
         let config = ClientConfig::default();
         assert!(config.prefix.is_empty());
+        assert_eq!(config.request_timeout, DEFAULT_REQUEST_TIMEOUT);
+    }
+
+    #[test]
+    fn test_client_config_with_request_timeout() {
+        let config = ClientConfig::default().with_request_timeout(Duration::from_secs(5));
+        assert_eq!(config.request_timeout, Duration::from_secs(5));
     }
 }

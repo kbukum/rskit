@@ -1,7 +1,6 @@
 //! Configuration for the Ollama provider.
 
-use std::fmt;
-
+use rskit_util::SecretString;
 use serde::Deserialize;
 
 /// Ollama provider configuration.
@@ -9,7 +8,7 @@ use serde::Deserialize;
 /// Ollama exposes an OpenAI-compatible chat-completions endpoint at
 /// `<base_url>/v1/chat/completions`. No API key is required for a local
 /// instance, but one may be set for remote/proxied deployments.
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct Config {
     /// Base URL of the Ollama server (default: `http://localhost:11434`).
     #[serde(default = "default_base_url")]
@@ -20,18 +19,11 @@ pub struct Config {
     pub model: String,
 
     /// Optional API key for remote/proxied Ollama instances.
+    ///
+    /// The value is redacted in debug/display output, and adapters pass it to
+    /// `rskit-httpclient` as redacting auth state when configured.
     #[serde(default)]
-    pub api_key: Option<String>,
-}
-
-impl fmt::Debug for Config {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Config")
-            .field("base_url", &self.base_url)
-            .field("model", &self.model)
-            .field("api_key", &self.api_key.as_ref().map(|_| "<redacted>"))
-            .finish()
-    }
+    pub api_key: Option<SecretString>,
 }
 
 fn default_base_url() -> String {
@@ -60,6 +52,6 @@ mod tests {
         let cfg: Config = serde_json::from_str(json).unwrap();
         assert_eq!(cfg.base_url, "http://192.168.1.10:11434");
         assert_eq!(cfg.model, "mistral");
-        assert_eq!(cfg.api_key.as_deref(), Some("tok"));
+        assert_eq!(cfg.api_key.as_ref().map(SecretString::expose), Some("tok"));
     }
 }

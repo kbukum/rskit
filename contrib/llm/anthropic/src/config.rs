@@ -1,14 +1,16 @@
 //! Configuration for the Anthropic provider.
 
-use std::fmt;
-
+use rskit_util::SecretString;
 use serde::Deserialize;
 
 /// Anthropic provider configuration.
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct Config {
     /// Anthropic API key.
-    pub api_key: String,
+    ///
+    /// The value is redacted in debug/display output, and adapters pass it to
+    /// `rskit-httpclient` as redacting auth state.
+    pub api_key: SecretString,
 
     /// Base URL (default: `https://api.anthropic.com`).
     #[serde(default = "default_base_url")]
@@ -21,17 +23,6 @@ pub struct Config {
     /// Anthropic API version header value.
     #[serde(default = "default_api_version")]
     pub api_version: String,
-}
-
-impl fmt::Debug for Config {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Config")
-            .field("api_key", &"<redacted>")
-            .field("base_url", &self.base_url)
-            .field("model", &self.model)
-            .field("api_version", &self.api_version)
-            .finish()
-    }
 }
 
 fn default_base_url() -> String {
@@ -54,7 +45,7 @@ mod tests {
     fn config_deserialize_with_defaults() {
         let json = r#"{"api_key":"sk-ant-test"}"#;
         let cfg: Config = serde_json::from_str(json).unwrap();
-        assert_eq!(cfg.api_key, "sk-ant-test");
+        assert_eq!(cfg.api_key.expose(), "sk-ant-test");
         assert_eq!(cfg.base_url, "https://api.anthropic.com");
         assert_eq!(cfg.model, "claude-sonnet-4-20250514");
         assert_eq!(cfg.api_version, "2023-06-01");

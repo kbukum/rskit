@@ -1,14 +1,16 @@
 //! Configuration for the `OpenAI` provider.
 
-use std::fmt;
-
+use rskit_util::SecretString;
 use serde::Deserialize;
 
 /// `OpenAI` provider configuration.
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct Config {
     /// `OpenAI` API key.
-    pub api_key: String,
+    ///
+    /// The value is redacted in debug/display output, and adapters pass it to
+    /// `rskit-httpclient` as redacting auth state.
+    pub api_key: SecretString,
 
     /// Base URL (default: `https://api.openai.com/v1`).
     #[serde(default = "default_base_url")]
@@ -28,18 +30,6 @@ pub struct Config {
     /// or when the model default dimensionality should be used.
     #[serde(default)]
     pub embedding_dimensions: Option<usize>,
-}
-
-impl fmt::Debug for Config {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Config")
-            .field("api_key", &"<redacted>")
-            .field("base_url", &self.base_url)
-            .field("model", &self.model)
-            .field("embedding_model", &self.embedding_model)
-            .field("embedding_dimensions", &self.embedding_dimensions)
-            .finish()
-    }
 }
 
 fn default_base_url() -> String {
@@ -62,7 +52,7 @@ mod tests {
     fn config_deserialize_with_defaults() {
         let json = r#"{"api_key":"sk-test"}"#;
         let cfg: Config = serde_json::from_str(json).unwrap();
-        assert_eq!(cfg.api_key, "sk-test");
+        assert_eq!(cfg.api_key.expose(), "sk-test");
         assert_eq!(cfg.base_url, "https://api.openai.com/v1");
         assert_eq!(cfg.model, "gpt-4o");
         assert_eq!(cfg.embedding_model, "text-embedding-3-small");

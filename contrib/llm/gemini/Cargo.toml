@@ -17,6 +17,7 @@ rskit-ai = { workspace = true }
 rskit-llm.workspace = true
 rskit-httpclient.workspace = true
 rskit-errors.workspace = true
+rskit-util.workspace = true
 rskit-component.workspace = true
 rskit-provider.workspace = true
 rskit-resilience.workspace = true

@@ -60,8 +60,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **rskit-httpclient**: `HttpClientConfig` and `DestinationPolicy` are now
   non-exhaustive; construct them with `new()`/`default()` and `with_*` builders
   instead of struct literals so transport hardening fields can evolve safely.
+- **rskit-httpclient**: authentication secrets are now stored as redacting
+  secret values inside `Auth`, so `Auth` and `HttpClientConfig` debug output no
+  longer prints bearer tokens, basic passwords, or API keys.
+- **rskit-security**: added shared HTTP authentication scheme constants for
+  transport/auth crates that build or parse `Authorization` values.
+- **rskit-auth**: bearer middleware now emits the neutral
+  `WWW-Authenticate: Bearer` challenge instead of hard-coding an `rskit` realm
+  into downstream application responses.
+- **L7 AI/ML providers**: provider `Config` API keys/bearer tokens now use the
+  redacting `SecretString` type (`contrib/llm/{openai,anthropic,gemini,ollama}`,
+  `contrib/inference/{tgi,vllm}`) instead of plain `String`, replacing
+  hand-rolled `Debug` redaction with the canonical secret type that also masks
+  `Display`/serialization and zeroizes on drop. Construct keys via
+  `SecretString::new(...)` and read them with `.expose()`.
+- **rskit-mcp**: `ClientConfig` gained a `request_timeout` field (default 30s)
+  and is no longer constructed via exhaustive struct literal defaults; use
+  `ClientConfig::default()` / `with_request_timeout(..)`.
 
 ### Changed — Cross-Cutting
+- **rskit-mcp**: every remote MCP call (`tools/call`, `tools/list`) is now
+  bounded by `ClientConfig::request_timeout` so an unresponsive server can no
+  longer block the caller indefinitely; timeouts surface as retryable
+  `ErrorCode::Timeout`.
 - **L7 AI/ML observability**: routed GenAI span attributes through reusable
   `rskit-observability` helpers while preserving declared tracing fields and
   keeping `rskit-ai::semconv` as the shared vocabulary.

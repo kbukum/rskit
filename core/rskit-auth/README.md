@@ -65,6 +65,7 @@ let codec = JwtCodec::new(JwtConfig::hs256_internal(
 - Verifiers require `sub`, `iss`, `aud`, `exp`, `nbf`, and `iat`; issuer and audience configuration must not be blank
 - OIDC enforces authorization-code flow, exact redirect URIs, state, nonce, and PKCE for public clients
 - Request middleware extracts credentials from headers only, rejects missing credentials by default, and requires explicit `accept_missing()` for optional authentication
+- `BearerAuthLayer` returns a neutral `WWW-Authenticate: Bearer` challenge on rejected requests; downstream applications can add app-specific realm/scope policy at their HTTP boundary if needed
 - Credential-bearing Debug output masks bearer/API keys, key digests, PKCE verifiers, authorization codes, and callback secrets
 
 ## See Also

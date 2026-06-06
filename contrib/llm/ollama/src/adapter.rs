@@ -11,10 +11,9 @@ use rskit_httpclient::{Auth, HttpClient, HttpClientConfig, Request};
 use rskit_llm::Provider;
 use rskit_llm::types::CompletionRequest;
 
+use super::PROVIDER_ID;
 use super::config::Config;
 use rskit_llm_common::{ChatRunner, OpenAiDialect, send_text};
-
-const SYSTEM: &str = "ollama";
 
 /// A [`Provider`] backed by a local or remote Ollama instance.
 ///
@@ -30,21 +29,21 @@ fn new_adapter(cfg: &Config) -> AppResult<OllamaAdapter> {
     let mut http_cfg = HttpClientConfig::new().with_base_url(&cfg.base_url);
 
     if let Some(key) = &cfg.api_key {
-        http_cfg = http_cfg.with_auth(Auth::bearer(key));
+        http_cfg = http_cfg.with_auth(Auth::bearer_secret(key.clone()));
     }
 
     let client = HttpClient::new(http_cfg)?;
 
     Ok(OllamaAdapter {
         client,
-        runner: ChatRunner::new(SYSTEM, &cfg.model),
+        runner: ChatRunner::new(PROVIDER_ID, &cfg.model),
     })
 }
 
 /// Register the configured `Ollama` provider in an LLM registry.
 pub fn register(registry: &mut rskit_llm::Registry, config: Config) -> AppResult<()> {
     registry.register(
-        "ollama",
+        PROVIDER_ID,
         std::sync::Arc::new(move || {
             Ok(std::sync::Arc::new(new_adapter(&config)?)
                 as std::sync::Arc<dyn rskit_llm::Provider>)
@@ -63,7 +62,13 @@ impl OllamaAdapter {
             .json_body(&body)
             .map_err(|e| AppError::internal(e).context("build Ollama request"))?;
 
-        let text = send_text(&self.client, request, SYSTEM, OpenAiDialect::parse_error).await?;
+        let text = send_text(
+            &self.client,
+            request,
+            PROVIDER_ID,
+            OpenAiDialect::parse_error,
+        )
+        .await?;
 
         OpenAiDialect::parse_response(&text)
     }
@@ -72,7 +77,7 @@ impl OllamaAdapter {
 #[async_trait]
 impl rskit_provider::Provider for OllamaAdapter {
     fn name(&self) -> &'static str {
-        SYSTEM
+        PROVIDER_ID
     }
 }
 
