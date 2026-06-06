@@ -8,6 +8,8 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
 
+use crate::attribute::set_span_attribute;
+
 /// Stable OTel semantic-convention key for service name.
 pub const SERVICE_NAME: &str = "service.name";
 
@@ -131,9 +133,9 @@ pub fn set_operation_attributes(
     operation_name: &str,
     request_id: &str,
 ) {
-    span.set_attribute(SERVICE_NAME, service_name.to_owned());
-    span.set_attribute("operation.name", operation_name.to_owned());
-    span.set_attribute("request.id", request_id.to_owned());
+    set_span_attribute(span, SERVICE_NAME, service_name);
+    set_span_attribute(span, "operation.name", operation_name);
+    set_span_attribute(span, "request.id", request_id);
 }
 
 /// Inject the current trace context into HTTP headers (W3C Trace-Context).

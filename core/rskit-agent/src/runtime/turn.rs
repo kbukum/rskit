@@ -3,6 +3,7 @@
 use rskit_errors::AppResult;
 use rskit_hook::CancellationToken;
 use rskit_llm::provider::Provider;
+use rskit_observability::set_span_attribute;
 
 use crate::config::AgentConfig;
 use crate::hooks;
@@ -34,6 +35,11 @@ pub(crate) async fn run_turn(
         "agent.turn",
         "gen_ai.operation.name" = rskit_ai::semconv::Operation::AgentTurn.as_str(),
         "agent.turn" = turn,
+    );
+    set_span_attribute(
+        &turn_span,
+        rskit_ai::semconv::OPERATION_NAME,
+        rskit_ai::semconv::Operation::AgentTurn.as_str(),
     );
 
     if let Some(stop_reason) = stop::wall_clock_stop(state, config) {

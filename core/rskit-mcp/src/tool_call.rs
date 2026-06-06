@@ -2,6 +2,7 @@
 
 use rmcp::model::{CallToolRequestParams, CallToolResult};
 use rskit_ai::semconv;
+use rskit_observability::set_span_attribute;
 use rskit_tool::ToolInput;
 use rskit_tool::context::Context;
 use tracing::Instrument;
@@ -42,6 +43,12 @@ impl RegistryHandler {
             "mcp.method" = "tools/call",
             "mcp.tool_name" = %request.name,
         );
+        set_span_attribute(
+            &span,
+            semconv::OPERATION_NAME,
+            semconv::Operation::McpRequest.as_str(),
+        );
+        set_span_attribute(&span, semconv::TOOL_NAME, tool_name);
         async {
             tracing::debug!(tool = tool_name, "MCP tools/call");
 

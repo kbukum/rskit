@@ -27,5 +27,3 @@ serde_json = { workspace = true }
 async-trait = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-opentelemetry = { workspace = true }
-tracing-opentelemetry = { workspace = true }

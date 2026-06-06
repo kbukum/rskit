@@ -9,9 +9,11 @@ use rskit_ai::semconv;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_httpclient::{HttpClient, Request};
 use rskit_llm::types::{CompletionRequest, CompletionResponse};
+use rskit_observability::{
+    record_current_span_attribute, record_span_attribute, set_span_attribute,
+};
 use rskit_resilience::Policy;
 use tracing::Instrument;
-use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 /// Shared runner for provider adapters that differ only by wire dialect.
 #[derive(Clone)]
@@ -55,15 +57,30 @@ impl ChatRunner {
             req.model.clone_from(&self.default_model);
         }
 
-        let span = tracing::info_span!("llm.complete");
-        span.set_attribute(semconv::SYSTEM, self.system);
-        span.set_attribute(semconv::OPERATION_NAME, semconv::Operation::Chat.as_str());
-        span.set_attribute(semconv::REQUEST_MODEL, req.model.clone());
+        let span = tracing::info_span!(
+            "llm.complete",
+            "gen_ai.system" = self.system,
+            "gen_ai.operation.name" = semconv::Operation::Chat.as_str(),
+            "gen_ai.request.model" = req.model.as_str(),
+            "gen_ai.request.max_tokens" = tracing::field::Empty,
+            "gen_ai.request.temperature" = tracing::field::Empty,
+            "gen_ai.usage.input_tokens" = tracing::field::Empty,
+            "gen_ai.usage.output_tokens" = tracing::field::Empty,
+            "gen_ai.response.model" = tracing::field::Empty,
+            "gen_ai.response.finish_reason" = tracing::field::Empty,
+        );
+        set_span_attribute(&span, semconv::SYSTEM, self.system);
+        set_span_attribute(
+            &span,
+            semconv::OPERATION_NAME,
+            semconv::Operation::Chat.as_str(),
+        );
+        set_span_attribute(&span, semconv::REQUEST_MODEL, req.model.clone());
         if let Some(max) = req.max_tokens {
-            span.set_attribute(semconv::REQUEST_MAX_TOKENS, i64::from(max));
+            record_span_attribute(&span, semconv::REQUEST_MAX_TOKENS, i64::from(max));
         }
         if let Some(temp) = req.temperature {
-            span.set_attribute(semconv::REQUEST_TEMPERATURE, f64::from(temp));
+            record_span_attribute(&span, semconv::REQUEST_TEMPERATURE, f64::from(temp));
         }
 
         let policy = self.policy.clone();
@@ -122,17 +139,16 @@ pub async fn send_text(
 }
 
 fn annotate_response(response: &CompletionResponse) {
-    let current = tracing::Span::current();
-    current.set_attribute(
+    record_current_span_attribute(
         semconv::USAGE_INPUT_TOKENS,
         i64::try_from(response.usage.input_tokens).unwrap_or(i64::MAX),
     );
-    current.set_attribute(
+    record_current_span_attribute(
         semconv::USAGE_OUTPUT_TOKENS,
         i64::try_from(response.usage.output_tokens).unwrap_or(i64::MAX),
     );
-    current.set_attribute(semconv::RESPONSE_MODEL, response.model.clone());
+    record_current_span_attribute(semconv::RESPONSE_MODEL, response.model.clone());
     if let Some(reason) = response.stop_reason.as_ref() {
-        current.set_attribute(semconv::RESPONSE_FINISH_REASON, format!("{reason:?}"));
+        record_current_span_attribute(semconv::RESPONSE_FINISH_REASON, format!("{reason:?}"));
     }
 }

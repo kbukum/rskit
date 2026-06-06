@@ -20,6 +20,7 @@ rskit-httpclient.workspace = true
 rskit-errors.workspace = true
 rskit-component.workspace = true
 rskit-provider.workspace = true
+rskit-observability.workspace = true
 rskit-resilience.workspace = true
 rskit-llm-common.workspace = true
 reqwest = { workspace = true }
@@ -28,5 +29,3 @@ serde_json = { workspace = true }
 async-trait = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-opentelemetry = { workspace = true }
-tracing-opentelemetry = { workspace = true }

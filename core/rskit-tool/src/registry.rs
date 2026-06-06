@@ -4,6 +4,7 @@ use parking_lot::RwLock;
 use rskit_ai::semconv;
 use rskit_component::{Component, Health};
 use rskit_errors::{AppError, AppResult, ErrorCode};
+use rskit_observability::set_span_attribute;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::Instrument;
@@ -142,6 +143,12 @@ impl Registry {
             "gen_ai.tool.name" = name,
             "tool.use_id" = %ctx.tool_use_id,
         );
+        set_span_attribute(
+            &span,
+            semconv::OPERATION_NAME,
+            semconv::Operation::ToolCall.as_str(),
+        );
+        set_span_attribute(&span, semconv::TOOL_NAME, name);
         async {
             let tool = self.get(name).ok_or_else(|| {
                 AppError::new(ErrorCode::NotFound, format!("tool not found: {name:?}"))
@@ -248,6 +255,12 @@ impl Registry {
                     "gen_ai.tool.name" = name.as_str(),
                     "tool.use_id" = %ctx.tool_use_id,
                 );
+                set_span_attribute(
+                    &span,
+                    semconv::OPERATION_NAME,
+                    semconv::Operation::ToolCall.as_str(),
+                );
+                set_span_attribute(&span, semconv::TOOL_NAME, name.as_str());
                 handles.push(tokio::spawn(
                     async move {
                         let Some(tool) = tool else {

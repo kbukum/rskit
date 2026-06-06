@@ -20,6 +20,7 @@ use rskit_inference::{
     Factory, Inference, InferenceDescriptor, InferenceError, PredictRequest, PredictResponse,
     PredictStatus, Registry, RegistryError, ServingProtocol, Tensor, TensorData, Usage, Value,
 };
+use rskit_observability::{record_current_span_attribute, set_span_attribute};
 use rskit_resilience::Policy;
 use rskit_tool::{Envelope, NetworkPolicy, NetworkRule};
 use serde::{Deserialize, Serialize};
@@ -183,16 +184,30 @@ impl TritonInference {
             gen_ai.response.model = tracing::field::Empty,
             gen_ai.response.finish_reason = tracing::field::Empty,
         );
+        set_span_attribute(&span, semconv::SYSTEM, SYSTEM);
+        set_span_attribute(&span, semconv::OPERATION_NAME, operation.as_str());
+        set_span_attribute(&span, semconv::REQUEST_MODEL, request.model_name.as_str());
+        set_span_attribute(
+            &span,
+            semconv::REQUEST_MODEL_VERSION,
+            model_version.as_str(),
+        );
+        set_span_attribute(&span, semconv::REQUEST_ID, request_id.as_str());
 
         async move {
             let response = self.predict_once(&request).await?;
-            let current = tracing::Span::current();
-            current.record(semconv::USAGE_INPUT_TOKENS, response.usage.input_tokens);
-            current.record(semconv::USAGE_OUTPUT_TOKENS, response.usage.output_tokens);
-            current.record(semconv::USAGE_CACHED_TOKENS, response.usage.cached_tokens);
-            current.record(semconv::RESPONSE_MODEL, response.model.name.as_str());
+            record_current_span_attribute(semconv::USAGE_INPUT_TOKENS, response.usage.input_tokens);
+            record_current_span_attribute(
+                semconv::USAGE_OUTPUT_TOKENS,
+                response.usage.output_tokens,
+            );
+            record_current_span_attribute(
+                semconv::USAGE_CACHED_TOKENS,
+                response.usage.cached_tokens,
+            );
+            record_current_span_attribute(semconv::RESPONSE_MODEL, response.model.name.as_str());
             if let Some(reason) = response.metadata.get("finish_reason") {
-                current.record(semconv::RESPONSE_FINISH_REASON, reason.as_str());
+                record_current_span_attribute(semconv::RESPONSE_FINISH_REASON, reason.as_str());
             }
             Ok(response)
         }

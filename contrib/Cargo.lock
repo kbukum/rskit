@@ -4772,6 +4772,7 @@ dependencies = [
  "rskit-ai",
  "rskit-component",
  "rskit-errors",
+ "rskit-observability",
  "rskit-provider",
  "serde",
  "serde_json",
@@ -4932,7 +4933,6 @@ name = "rskit-llm-anthropic"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "opentelemetry",
  "reqwest 0.13.3",
  "rskit-ai",
  "rskit-component",
@@ -4946,7 +4946,6 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
- "tracing-opentelemetry",
 ]
 
 [[package]]
@@ -4957,11 +4956,11 @@ dependencies = [
  "rskit-errors",
  "rskit-httpclient",
  "rskit-llm",
+ "rskit-observability",
  "rskit-resilience",
  "serde",
  "serde_json",
  "tracing",
- "tracing-opentelemetry",
 ]
 
 [[package]]
@@ -4969,7 +4968,6 @@ name = "rskit-llm-gemini"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "opentelemetry",
  "reqwest 0.13.3",
  "rskit-ai",
  "rskit-component",
@@ -4983,7 +4981,6 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
- "tracing-opentelemetry",
 ]
 
 [[package]]
@@ -4991,7 +4988,6 @@ name = "rskit-llm-ollama"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "opentelemetry",
  "reqwest 0.13.3",
  "rskit-ai",
  "rskit-component",
@@ -5005,7 +5001,6 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
- "tracing-opentelemetry",
 ]
 
 [[package]]
@@ -5013,7 +5008,6 @@ name = "rskit-llm-openai"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "opentelemetry",
  "reqwest 0.13.3",
  "rskit-ai",
  "rskit-component",
@@ -5022,13 +5016,13 @@ dependencies = [
  "rskit-httpclient",
  "rskit-llm",
  "rskit-llm-common",
+ "rskit-observability",
  "rskit-provider",
  "rskit-resilience",
  "serde",
  "serde_json",
  "tokio",
  "tracing",
- "tracing-opentelemetry",
 ]
 
 [[package]]
@@ -5336,6 +5330,7 @@ dependencies = [
  "rskit-ai",
  "rskit-component",
  "rskit-errors",
+ "rskit-observability",
  "rskit-schema",
  "schemars 1.2.1",
  "serde",

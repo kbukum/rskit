@@ -2,6 +2,22 @@
 
 Rust infrastructure toolkit providing foundational crates for service development. Mirrors gokit (Go) and pykit (Python) in module structure and naming.
 
+## Engineering principles
+
+Shared engineering baseline — apply to all work here:
+
+- **Phases:** discover → decide (Redesign / Align / Enhance / Drop / Leave) → implement completely → validate. Prefer root-cause redesign over symptom patches; no compatibility shims in pre-stable code.
+- **Layering & reuse:** explicit, acyclic dependency direction — lower layers never import higher. Reuse or enhance the canonical owner before writing new code; never duplicate shared concerns (errors, config, logging, auth, retries, observability, HTTP, registries).
+- **APIs:** typed and minimal; no broad `Any` / `interface{}` / unchecked `unknown` in public surfaces; actionable typed errors that preserve cause.
+- **Errors & resilience:** no panics / unwrap or swallowed errors on runtime paths; no success-shaped fallbacks; timeout every remote call; bounded jittered retries for idempotent ops only; circuit-break and degrade gracefully.
+- **Concurrency:** every task has ownership, cancellation, timeout, and shutdown; bound queues / buffers / concurrency with documented backpressure; drain on shutdown.
+- **Security & privacy:** validate at every trust boundary; least-privilege and secure-by-default; parameterized queries and argv-only subprocess; tokens in headers, not query strings; current crypto only; minimize, redact, and retention-bound sensitive data.
+- **Composition:** explicit injected registries and config-driven selection; no import-time side effects, no mutable global registries; inject logger / tracer / policies rather than reaching for globals.
+- **Tests:** behavioral and deterministic; race / shuffle / parallel green; cover failure paths; fixtures over embedded config; regression-test every fix.
+- **AI / model features:** treat model output and retrieved context as untrusted; enforce structured outputs; least-privilege tool calls with a human gate on destructive actions; version prompts / models and gate changes on evals.
+- **Supply chain:** pin CI actions by SHA; scan dependencies (vulnerabilities + licenses); sign release artifacts; attach SBOM and provenance.
+- **Currency:** use current idioms and standards, not folklore — verify the dependency is maintained, the stdlib doesn't already cover it, and no open CVE applies.
+
 ## Build, Test, and Lint
 
 Requires: Rust 1.85+ (enforced via `rust-toolchain.toml`).
