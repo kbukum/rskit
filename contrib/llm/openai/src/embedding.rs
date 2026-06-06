@@ -10,6 +10,7 @@ use rskit_resilience::Policy;
 use serde::{Deserialize, Serialize};
 use tracing::{Instrument, debug};
 
+use super::PROVIDER_ID;
 use super::config::Config;
 
 /// OpenAI-compatible embedding provider backed by rskit-httpclient.
@@ -25,7 +26,7 @@ impl EmbeddingProvider {
     pub fn new(cfg: &Config) -> AppResult<Self> {
         let http_cfg = HttpClientConfig::new()
             .with_base_url(&cfg.base_url)
-            .with_auth(Auth::bearer(&cfg.api_key));
+            .with_auth(Auth::bearer_secret(cfg.api_key.clone()));
 
         let client = HttpClient::new(http_cfg)?;
 
@@ -192,12 +193,12 @@ impl Provider for EmbeddingProvider {
 fn embedding_span(model: &str, input_count: usize) -> tracing::Span {
     let span = tracing::info_span!(
         "embedding.embed",
-        "gen_ai.system" = "openai",
+        "gen_ai.system" = PROVIDER_ID,
         "gen_ai.operation.name" = semconv::Operation::Embedding.as_str(),
         "gen_ai.request.model" = %model,
         "embedding.input_count" = input_count,
     );
-    set_span_attribute(&span, semconv::SYSTEM, "openai");
+    set_span_attribute(&span, semconv::SYSTEM, PROVIDER_ID);
     set_span_attribute(
         &span,
         semconv::OPERATION_NAME,
@@ -233,7 +234,7 @@ mod tests {
     #[test]
     fn provider_constructs_with_config() {
         let cfg = Config {
-            api_key: "sk-test".into(),
+            api_key: rskit_util::SecretString::new("sk-test"),
             base_url: "https://api.openai.com/v1".into(),
             model: "gpt-4o".into(),
             embedding_model: "text-embedding-3-small".into(),
@@ -304,7 +305,7 @@ mod tests {
         });
 
         let cfg = Config {
-            api_key: "sk-test".into(),
+            api_key: rskit_util::SecretString::new("sk-test"),
             base_url: format!("http://{address}"),
             model: "gpt-4o".into(),
             embedding_model: "text-embedding-3-small".into(),

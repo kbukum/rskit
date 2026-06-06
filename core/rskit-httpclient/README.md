@@ -1,11 +1,11 @@
 # rskit-httpclient
 
-Async HTTP client for rskit with auth, headers, injected resilience policies, and error handling.
+Async HTTP client for rskit with redacting auth, headers, injected resilience policies, destination hardening, and error handling.
 
 ## Features
 
 - Async HTTP client built on `reqwest`
-- Support for Bearer, Basic, and API key authentication
+- Support for Bearer, Basic, and API key authentication with redacted secret storage
 - Configurable timeouts, headers, and redirect behavior
 - Explicit TLS trust, identity, and minimum-version configuration via `rskit-security`
 - Optional `rskit-resilience::Policy` integration for retry, timeout, circuit breaker, and rate limiting
@@ -55,10 +55,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-## Authentication
+## Authentication and redaction
 
 ```rust
-use rskit_httpclient::Auth;
+use rskit_httpclient::{Auth, HttpClientConfig};
+use rskit_security::SecretString;
 
 // Bearer token
 let auth = Auth::bearer("token123");
@@ -69,12 +70,25 @@ let auth = Auth::basic("user", "pass");
 // API Key
 let auth = Auth::api_key("X-API-Key", "key123");
 
+// Use *_secret constructors when a secret is already held as a SecretString.
+let token = SecretString::new("token123");
+let auth = Auth::bearer_secret(token);
+
+// Auth and HttpClientConfig debug output redact credential values.
+let config = HttpClientConfig::new().with_auth(auth);
+assert!(!format!("{config:?}").contains("token123"));
+
 // Per-request override
 let resp = client.send(
     Request::get("/api/data")
         .bearer_token("request-specific-token")
 ).await?;
 ```
+
+`Auth::header()` intentionally exposes credential values only at the final
+request-application boundary. Do not use `with_header` for bearer/API-key
+credentials; prefer `with_auth` or per-request auth helpers so debug output keeps
+credential fields redacted.
 
 ## Transport hardening
 

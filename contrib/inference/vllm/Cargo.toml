@@ -25,6 +25,7 @@ rskit-httpclient.workspace = true
 rskit-inference.workspace = true
 rskit-provider.workspace = true
 rskit-tool.workspace = true
+rskit-util.workspace = true
 async-trait     = { workspace = true }
 reqwest         = { workspace = true, features = ["json"] }
 serde           = { workspace = true }

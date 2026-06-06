@@ -189,3 +189,18 @@ impl Default for HttpClientConfig {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn debug_redacts_auth_secret_values() {
+        let config = HttpClientConfig::new().with_auth(Auth::bearer("secret-token"));
+
+        let formatted = format!("{config:?}");
+
+        assert!(formatted.contains("SecretString(***)"));
+        assert!(!formatted.contains("secret-token"));
+    }
+}

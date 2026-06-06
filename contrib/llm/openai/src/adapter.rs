@@ -7,10 +7,9 @@ use rskit_httpclient::{Auth, HttpClient, HttpClientConfig, Request};
 use rskit_llm::Provider;
 use rskit_llm::types::{CompletionRequest, CompletionResponse};
 
+use super::PROVIDER_ID;
 use super::config::Config;
 use rskit_llm_common::{ChatRunner, OpenAiDialect, send_text};
-
-const SYSTEM: &str = "openai";
 
 /// A [`Provider`] backed by the `OpenAI` chat-completions API.
 struct OpenAiAdapter {
@@ -22,20 +21,20 @@ struct OpenAiAdapter {
 fn new_adapter(cfg: &Config) -> AppResult<OpenAiAdapter> {
     let http_cfg = HttpClientConfig::new()
         .with_base_url(&cfg.base_url)
-        .with_auth(Auth::bearer(&cfg.api_key));
+        .with_auth(Auth::bearer_secret(cfg.api_key.clone()));
 
     let client = HttpClient::new(http_cfg)?;
 
     Ok(OpenAiAdapter {
         client,
-        runner: ChatRunner::new(SYSTEM, &cfg.model),
+        runner: ChatRunner::new(PROVIDER_ID, &cfg.model),
     })
 }
 
 /// Register the configured `OpenAI` provider in an LLM registry.
 pub fn register(registry: &mut rskit_llm::Registry, config: Config) -> AppResult<()> {
     registry.register(
-        "openai",
+        PROVIDER_ID,
         std::sync::Arc::new(move || {
             Ok(std::sync::Arc::new(new_adapter(&config)?)
                 as std::sync::Arc<dyn rskit_llm::Provider>)
@@ -53,7 +52,13 @@ impl OpenAiAdapter {
                 AppError::new(ErrorCode::Internal, format!("failed to build request: {e}"))
             })?;
 
-        let text = send_text(&self.client, request, SYSTEM, OpenAiDialect::parse_error).await?;
+        let text = send_text(
+            &self.client,
+            request,
+            PROVIDER_ID,
+            OpenAiDialect::parse_error,
+        )
+        .await?;
 
         OpenAiDialect::parse_response(&text)
     }
@@ -62,7 +67,7 @@ impl OpenAiAdapter {
 #[async_trait]
 impl rskit_provider::Provider for OpenAiAdapter {
     fn name(&self) -> &'static str {
-        "openai"
+        PROVIDER_ID
     }
 }
 
@@ -108,7 +113,7 @@ mod tests {
     #[test]
     fn new_adapter_constructs_successfully() {
         let cfg = Config {
-            api_key: "sk-test".into(),
+            api_key: rskit_util::SecretString::new("sk-test"),
             base_url: "https://api.openai.com/v1".into(),
             model: "gpt-4o".into(),
             embedding_model: "text-embedding-3-small".into(),
@@ -121,7 +126,7 @@ mod tests {
     #[test]
     fn adapter_is_object_safe() {
         let cfg = Config {
-            api_key: "sk-test".into(),
+            api_key: rskit_util::SecretString::new("sk-test"),
             base_url: "https://api.openai.com/v1".into(),
             model: "gpt-4o".into(),
             embedding_model: "text-embedding-3-small".into(),
@@ -134,7 +139,7 @@ mod tests {
     #[test]
     fn adapter_implements_component() {
         let cfg = Config {
-            api_key: "sk-test".into(),
+            api_key: rskit_util::SecretString::new("sk-test"),
             base_url: "https://api.openai.com/v1".into(),
             model: "gpt-4o".into(),
             embedding_model: "text-embedding-3-small".into(),

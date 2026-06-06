@@ -6,6 +6,8 @@ mod adapter;
 mod config;
 mod embedding;
 
+pub(crate) const PROVIDER_ID: &str = "openai";
+
 #[cfg(test)]
 mod fixture_tests;
 
