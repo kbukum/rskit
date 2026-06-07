@@ -171,6 +171,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **rskit-http**: owns HTTP-specific CORS and response-header security policy; `rskit-server` consumes these HTTP transport capabilities.
 - **rskit-security**: narrowed to cross-transport TLS/security configuration instead of HTTP-only behavior.
 
+### Fixed
+- **rskit-git**: CLI branch/tag deletion now treats successful commands as
+  successful even when captured stdout/stderr exceeded process capture limits.
+- **rskit-bench**: file-backed run listing now skips unreadable or partially
+  written JSON result files while preserving explicit `load` failures.
+
 ### Changed — Pattern Contracts
 - **rskit-hook**: replaced public downcast-based hook payload handling with typed hook registration and added a bounded in-process event bus.
 - **rskit-provider**: narrowed L2 provider contracts to canonical shapes plus `TowerProvider`, removing cross-cutting middleware ownership from the pattern crate.

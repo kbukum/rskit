@@ -97,18 +97,14 @@ impl RunStorage for FileRunStorage {
             if !entry.is_file || entry.path.extension().is_none_or(|e| e != "json") {
                 continue;
             }
-            let content = file::read_string(&entry.path).map_err(|e| {
-                AppError::new(
-                    ErrorCode::Internal,
-                    format!("read run result {}: {e}", entry.path.display()),
-                )
-            })?;
-            let result: BenchRunResult = serde_json::from_str(&content).map_err(|e| {
-                AppError::new(
-                    ErrorCode::Internal,
-                    format!("deserialize run result {}: {e}", entry.path.display()),
-                )
-            })?;
+            let Ok(content) = file::read_string(&entry.path) else {
+                tracing::warn!(path = %entry.path.display(), "skipping unreadable bench run result");
+                continue;
+            };
+            let Ok(result) = serde_json::from_str::<BenchRunResult>(&content) else {
+                tracing::warn!(path = %entry.path.display(), "skipping invalid bench run result");
+                continue;
+            };
             if let Some(ref tag) = opts.tag
                 && result.tag != *tag
             {
@@ -137,5 +133,51 @@ impl RunStorage for FileRunStorage {
             summaries.truncate(opts.limit);
         }
         Ok(summaries)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use crate::result::{BenchRunResult, DatasetInfo};
+
+    use super::{FileRunStorage, ListOptions, RunStorage};
+
+    fn result(id: &str) -> BenchRunResult {
+        BenchRunResult {
+            id: id.to_string(),
+            schema: crate::schema::schema_url(),
+            version: crate::schema::version(),
+            timestamp: "2026-01-01T00:00:00Z".to_string(),
+            tag: "main".to_string(),
+            duration_ms: 10,
+            dataset: DatasetInfo {
+                name: "dataset".to_string(),
+                version: "1".to_string(),
+                sample_count: 1,
+                label_distribution: HashMap::new(),
+            },
+            metrics: Vec::new(),
+            branches: HashMap::new(),
+            samples: Vec::new(),
+            curves: HashMap::new(),
+        }
+    }
+
+    #[test]
+    fn list_skips_invalid_run_result_files() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let storage = FileRunStorage::new(dir.path());
+
+        storage.save(&result("valid")).expect("save valid result");
+        std::fs::write(dir.path().join("partial.json"), "{").expect("write invalid json");
+
+        let summaries = storage
+            .list(ListOptions::default())
+            .expect("list should skip invalid files");
+
+        assert_eq!(summaries.len(), 1);
+        assert_eq!(summaries[0].id, "valid");
     }
 }

@@ -54,7 +54,7 @@ impl RefManager for GitCli {
     fn delete_branch(&self, name: &str) -> AppResult<()> {
         let args = ["branch", "-d", "--", name];
         let output = self.run_result(&args)?;
-        if output.success() && !output.stdout_truncated && !output.stderr_truncated {
+        if output.success() {
             return Ok(());
         }
         map_delete_ref_failure(name, &output).map_or_else(
@@ -75,7 +75,7 @@ impl RefManager for GitCli {
     fn delete_tag(&self, name: &str) -> AppResult<()> {
         let args = ["tag", "-d", "--", name];
         let output = self.run_result(&args)?;
-        if output.success() && !output.stdout_truncated && !output.stderr_truncated {
+        if output.success() {
             return Ok(());
         }
         map_delete_ref_failure(name, &output).map_or_else(

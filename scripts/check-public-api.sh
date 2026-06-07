@@ -25,9 +25,11 @@ else
 fi
 
 if [ -z "$PYTHON_BIN" ] || ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
-  echo "Python 3.11+ is required" >&2
+  echo "Python 3 is required" >&2
   exit 1
 fi
+
+"$PYTHON_BIN" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3,) else "Python 3 is required")'
 
 workspace_contains_package() {
   local manifest=$1
