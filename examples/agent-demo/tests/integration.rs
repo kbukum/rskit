@@ -1,14 +1,14 @@
 //! Integration tests for agent-demo.
 //!
-//! Tests real task execution through the rskit-worker pool,
+//! Tests real task execution through the `rskit::worker` pool,
 //! dashboard formatting, cancel mechanism, and helper functions.
 
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use rskit_errors::AppResult;
-use rskit_worker::{EventKind, Pool, PoolConfig};
+use rskit::AppResult;
+use rskit::worker::{EventKind, Pool, PoolConfig};
 
 use agent_demo::dashboard::{self, TaskStatus, TrackedTask};
 use agent_demo::shell;
@@ -326,7 +326,7 @@ fn status_bar_shows_pool_info() {
     let bar = dashboard::format_status_bar(&tasks, 2, 4, Duration::from_secs(10));
     assert!(bar.contains("2 running"));
     assert!(bar.contains("pool: 2/4"));
-    assert!(bar.contains("10.0s"));
+    assert!(bar.contains("10.00s"));
 }
 
 // ── Helper function tests ─────────────────────────────────────────────

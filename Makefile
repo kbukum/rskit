@@ -1,4 +1,4 @@
-.PHONY: all build test test-nextest test-doc test-affected test-coverage test-coverage-html lint fmt fmt-check check check-fast \
+.PHONY: all build test test-nextest test-doc test-affected test-coverage test-coverage-html lint fmt fmt-check check check-fast check-facade-features \
        check-core check-patterns check-crosscutting check-composition check-transport check-auth check-data check-ai \
        check-media check-infra doc deny check-l7-edges check-topology clean help ci ci-test ci-lint ci-fmt ensure-act
 
@@ -162,6 +162,19 @@ check-topology:
 	@./scripts/check-topology.sh
 	@echo "✓ Module topology OK"
 
+## Check facade feature combinations
+check-facade-features:
+	@echo "==> Checking rskit facade feature combinations..."
+	@cargo check --manifest-path $(CORE_MANIFEST) -p rskit
+	@cargo check --manifest-path $(CORE_MANIFEST) -p rskit --all-features
+	@cargo check --manifest-path $(CORE_MANIFEST) -p rskit --features "server grpc http httpclient sse"
+	@cargo check --manifest-path $(CORE_MANIFEST) -p rskit --features "auth authz security encryption di observability discovery"
+	@cargo check --manifest-path $(CORE_MANIFEST) -p rskit --features "database cache cache-fs cache-redis messaging messaging-kafka messaging-nats messaging-rabbitmq storage storage-s3 storage-gcs vectorstore vectorstore-qdrant"
+	@cargo check --manifest-path $(CORE_MANIFEST) -p rskit --features "dag chain process stateful version schema hook"
+	@cargo check --manifest-path $(CORE_MANIFEST) -p rskit --features "genai prompt llm llm-openai llm-anthropic llm-ollama llm-gemini embedding inference inference-triton inference-vllm inference-tgi skill tool agent mcp media-full"
+	@cargo check --manifest-path $(CORE_MANIFEST) -p rskit --features "cli git dataset bench"
+	@echo "✓ Facade feature combinations OK"
+
 ## Run cargo-deny checks (licenses, advisories, sources, bans) and dependency edge checks
 ## Requires: cargo install cargo-deny
 deny: check-l7-edges check-topology
@@ -273,6 +286,7 @@ help:
 	@echo "  make fmt-check          [W=]               Check formatting"
 	@echo "  make doc                [C=] [W=]          Build documentation"
 	@echo "  make check-l7-edges                       Check L7 dependency edges"
+	@echo "  make check-facade-features                Check rskit facade feature combinations"
 	@echo "  make deny               [W=]               Run cargo-deny + L7 edge checks"
 	@echo "  make check-fast                           fmt + lint + build"
 	@echo "  make check              [C=] [W=]          fmt + lint + build + test"

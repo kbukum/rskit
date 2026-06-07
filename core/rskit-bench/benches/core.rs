@@ -29,7 +29,7 @@ fn bench_btree_map_get(c: &mut Criterion) {
 // `rskit-errors` is a hot crate: an `AppError` is constructed on every failure
 // path. These benches make construction and response conversion measurable.
 fn bench_app_error_new(c: &mut Criterion) {
-    use rskit::errors::{AppError, ErrorCode};
+    use rskit_errors::{AppError, ErrorCode};
     c.bench_function("app_error_new", |b| {
         b.iter(|| {
             let err = AppError::new(
@@ -42,7 +42,7 @@ fn bench_app_error_new(c: &mut Criterion) {
 }
 
 fn bench_app_error_to_problem_detail(c: &mut Criterion) {
-    use rskit::errors::{AppError, ErrorCode, ProblemDetail};
+    use rskit_errors::{AppError, ErrorCode, ProblemDetail};
     let err = AppError::new(ErrorCode::InvalidInput, "bad field")
         .with_detail("field", "email")
         .with_detail("reason", "format");

@@ -16,18 +16,7 @@ publish = false
 
 [workspace.dependencies]
 # Core crates
-rskit-errors = { path = "../core/rskit-errors" }
-rskit-bootstrap = { path = "../core/rskit-bootstrap" }
-rskit-worker = { path = "../core/rskit-worker" }
-rskit-cli = { path = "../core/rskit-cli" }
-rskit-pipeline = { path = "../core/rskit-pipeline" }
-rskit-storage = { path = "../core/rskit-storage" }
-rskit-media = { path = "../core/rskit-media" }
-
-# Contrib crates
-rskit-media-image = { path = "../contrib/media/image" }
-rskit-media-ffmpeg = { path = "../contrib/media/ffmpeg" }
-rskit-media-audio = { path = "../contrib/media/audio" }
+rskit = { path = "../core/rskit" }
 
 # External
 tokio = { version = "1", features = ["full"] }

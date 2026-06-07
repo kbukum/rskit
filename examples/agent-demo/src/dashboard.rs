@@ -5,7 +5,8 @@
 //! - **Structured views**: Tables (`/status`) and key-value (`/detail`)
 
 use crate::tasks::TaskOutput;
-use rskit_cli::{OutputKV, OutputTable};
+use rskit::cli::{OutputKV, OutputTable};
+use rskit::util::time::format_duration;
 use std::time::{Duration, Instant};
 
 /// Tracks the state of a submitted task.
@@ -206,22 +207,6 @@ pub fn render_task_details(task: &TrackedTask) -> String {
     out
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────
-
-pub fn format_duration(d: Duration) -> String {
-    if d.as_secs() >= 60 {
-        format!(
-            "{}m {:.1}s",
-            d.as_secs() / 60,
-            (d.as_secs() % 60) as f64 + d.subsec_millis() as f64 / 1000.0
-        )
-    } else if d.as_millis() >= 1000 {
-        format!("{:.1}s", d.as_secs_f64())
-    } else {
-        format!("{}ms", d.as_millis())
-    }
-}
-
 // ── Tests ─────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -324,7 +309,7 @@ mod tests {
         let bar = format_status_bar(&[], 0, 4, Duration::from_secs(5));
         assert!(bar.contains("ready"));
         assert!(bar.contains("pool: 0/4"));
-        assert!(bar.contains("5.0s"));
+        assert!(bar.contains("5.00s"));
     }
 
     #[test]
@@ -373,7 +358,7 @@ mod tests {
     #[test]
     fn format_duration_formats_correctly() {
         assert_eq!(format_duration(Duration::from_millis(50)), "50ms");
-        assert_eq!(format_duration(Duration::from_millis(1500)), "1.5s");
-        assert_eq!(format_duration(Duration::from_secs(65)), "1m 5.0s");
+        assert_eq!(format_duration(Duration::from_millis(1500)), "1.50s");
+        assert_eq!(format_duration(Duration::from_secs(65)), "1.08m");
     }
 }

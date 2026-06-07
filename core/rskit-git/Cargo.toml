@@ -8,6 +8,14 @@ rust-version.workspace = true
 authors.workspace = true
 repository.workspace = true
 homepage.workspace = true
+documentation = "https://docs.rs/rskit-git"
+readme = "README.md"
+categories = ["development-tools"]
+keywords = ["git", "repository", "diff", "version-control"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 testutil = ["dep:tempfile"]

@@ -6,7 +6,7 @@ CLI framework: progress bars, structured output, and signal handling.
 [![crates.io](https://img.shields.io/crates/v/rskit-cli.svg)](https://crates.io/crates/rskit-cli)
 [![docs.rs](https://docs.rs/rskit-cli/badge.svg)](https://docs.rs/rskit-cli)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![MSRV: 1.85](https://img.shields.io/badge/MSRV-1.85-orange.svg)](https://blog.rust-lang.org/2025/02/20/Rust-1.85.0.html)
+[![MSRV: 1.91](https://img.shields.io/badge/MSRV-1.91-orange.svg)](https://www.rust-lang.org/)
 
 ## Features
 
@@ -14,6 +14,8 @@ CLI framework: progress bars, structured output, and signal handling.
 - `CancellationToken` — cooperative Ctrl+C handling for async tasks
 - `OutputTable` — structured table formatting for terminal output
 - `OutputKV` — key-value pair formatting
+- `ErrorRenderer` — render `AppError` as text, JSON, or YAML
+- `ExitCode` — map `ErrorCode` values to stable process exit codes
 - Steady tick, prefix/message, and position tracking
 
 ## Usage
@@ -21,6 +23,16 @@ CLI framework: progress bars, structured output, and signal handling.
 ```toml
 [dependencies]
 rskit-cli = "0.1"
+```
+
+```rust
+use rskit_cli::{ErrorRenderer, ExitCode, OutputFormat};
+use rskit_errors::{AppError, ErrorCode};
+
+let error = AppError::new(ErrorCode::InvalidInput, "bad argument");
+let rendered = ErrorRenderer::new(OutputFormat::Json).render(&error);
+assert!(rendered.contains("\"code\""));
+assert_eq!(ExitCode::from_error_code(error.code()).code(), 2);
 ```
 
 ```rust

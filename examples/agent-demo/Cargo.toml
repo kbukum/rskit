@@ -7,14 +7,7 @@ rust-version.workspace = true
 publish     = false
 
 [dependencies]
-rskit-errors      = { workspace = true }
-rskit-bootstrap   = { workspace = true }
-rskit-worker      = { workspace = true }
-rskit-cli         = { workspace = true }
-rskit-pipeline    = { workspace = true }
-rskit-storage     = { workspace = true }
-rskit-media       = { workspace = true }
-rskit-media-image = { workspace = true }
+rskit = { workspace = true, features = ["cli", "media-image"] }
 
 tokio       = { workspace = true, features = ["full"] }
 tokio-util  = { workspace = true }

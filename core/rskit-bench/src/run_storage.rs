@@ -2,6 +2,7 @@
 
 use crate::result::{BenchRunResult, BenchRunSummary};
 use rskit_errors::{AppError, AppResult, ErrorCode};
+use rskit_fs::sync_io::{dir, file};
 use std::path::PathBuf;
 
 /// Options for listing stored results.
@@ -59,19 +60,17 @@ impl FileRunStorage {
 
 impl RunStorage for FileRunStorage {
     fn save(&self, result: &BenchRunResult) -> AppResult<String> {
-        std::fs::create_dir_all(&self.dir)
-            .map_err(|e| AppError::new(ErrorCode::Internal, format!("create dir: {e}")))?;
+        dir::create_all(&self.dir)?;
         let path = self.dir.join(format!("{}.json", result.id));
         let json = serde_json::to_string_pretty(result)
             .map_err(|e| AppError::new(ErrorCode::Internal, format!("serialize: {e}")))?;
-        std::fs::write(&path, json)
-            .map_err(|e| AppError::new(ErrorCode::Internal, format!("write: {e}")))?;
+        file::write(&path, json)?;
         Ok(result.id.clone())
     }
 
     fn load(&self, run_id: &str) -> AppResult<BenchRunResult> {
         let path = self.dir.join(format!("{run_id}.json"));
-        let content = std::fs::read_to_string(&path).map_err(|e| {
+        let content = file::read_string(&path).map_err(|e| {
             AppError::new(
                 ErrorCode::NotFound,
                 format!("Run not found: {run_id} ({e})"),
@@ -90,26 +89,26 @@ impl RunStorage for FileRunStorage {
     }
 
     fn list(&self, opts: ListOptions) -> AppResult<Vec<BenchRunSummary>> {
-        if !self.dir.exists() {
+        if !dir::exists(&self.dir)? {
             return Ok(Vec::new());
         }
         let mut summaries = Vec::new();
-        let entries = std::fs::read_dir(&self.dir)
-            .map_err(|e| AppError::new(ErrorCode::Internal, format!("read dir: {e}")))?;
-        for entry in entries {
-            let entry = entry
-                .map_err(|e| AppError::new(ErrorCode::Internal, format!("read entry: {e}")))?;
-            if entry.path().extension().is_none_or(|e| e != "json") {
+        for entry in dir::list(&self.dir)? {
+            if !entry.is_file || entry.path.extension().is_none_or(|e| e != "json") {
                 continue;
             }
-            let content = match std::fs::read_to_string(entry.path()) {
-                Ok(c) => c,
-                Err(_) => continue,
-            };
-            let result: BenchRunResult = match serde_json::from_str(&content) {
-                Ok(r) => r,
-                Err(_) => continue,
-            };
+            let content = file::read_string(&entry.path).map_err(|e| {
+                AppError::new(
+                    ErrorCode::Internal,
+                    format!("read run result {}: {e}", entry.path.display()),
+                )
+            })?;
+            let result: BenchRunResult = serde_json::from_str(&content).map_err(|e| {
+                AppError::new(
+                    ErrorCode::Internal,
+                    format!("deserialize run result {}: {e}", entry.path.display()),
+                )
+            })?;
             if let Some(ref tag) = opts.tag
                 && result.tag != *tag
             {

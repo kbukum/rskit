@@ -1,6 +1,7 @@
 //! Dataset loading for accuracy benchmarking.
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
+use rskit_fs::sync_io::file;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
@@ -32,7 +33,7 @@ fn default_version() -> String {
 
 pub fn load_manifest(dir: &Path) -> AppResult<DatasetManifest> {
     let manifest_path = dir.join("manifest.json");
-    let content = std::fs::read_to_string(&manifest_path).map_err(|e| {
+    let content = file::read_string(&manifest_path).map_err(|e| {
         AppError::new(
             ErrorCode::NotFound,
             format!(
@@ -65,7 +66,7 @@ pub fn load_manifest(dir: &Path) -> AppResult<DatasetManifest> {
 
 pub fn load_content(dir: &Path, sample: &Sample) -> AppResult<Vec<u8>> {
     let path = dir.join(&sample.file);
-    std::fs::read(&path).map_err(|e| {
+    file::read(&path).map_err(|e| {
         AppError::new(
             ErrorCode::Internal,
             format!("Failed to read sample {}: {}", path.display(), e),

@@ -82,6 +82,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the former unit-struct value.
 
 ### Changed — Cross-Cutting
+- **Infra/facade refinement**: aligned facade feature wiring and documentation,
+  routed examples through the public `rskit` facade, added facade feature-matrix
+  validation, documented CLI/test fixture/git contracts, promoted reusable clock
+  and UTC formatting helpers into `rskit-util`, added optional non-empty env
+  lookup helpers, and made bench orchestration consume canonical
+  util/CLI/filesystem primitives for deterministic harnesses.
 - **Media/dataset refinement**: added reusable path confinement helpers in
   `rskit-fs`, bounded JSON record structure in `rskit-dataset`, configurable
   image decode/source limits in `rskit-media-image`, and optional FFmpeg
@@ -121,7 +127,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **L9 infrastructure**: made the `rskit` facade a pure re-export layer,
   aligned facade feature flags with available crates, routed CLI-backed Git
   commands through `rskit-process`, standardized CLI error/output rendering,
-  and added concrete testutil and benchmark helpers.
+  reused canonical output tables in benchmark listings, and added concrete
+  testutil and benchmark helpers.
 - **Module boundaries**: folded workload scheduling into `rskit-worker`,
   moved cross-layer integration coverage into the `rskit` facade tests,
   removed gRPC server re-exports from `rskit-grpc`, and feature-gated

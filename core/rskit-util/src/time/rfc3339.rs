@@ -23,6 +23,27 @@ pub fn format_rfc3339(epoch_secs: i64) -> Option<String> {
     format_rfc3339_datetime(datetime_from_epoch_secs(epoch_secs))
 }
 
+/// Formats a Unix timestamp (whole seconds) as compact UTC
+/// `YYYYMMDD-HHMMSS`.
+///
+/// This is intended for filenames and identifiers that need stable UTC ordering
+/// without RFC 3339 punctuation.
+#[must_use]
+pub fn format_compact_utc(epoch_secs: i64) -> Option<String> {
+    let datetime = datetime_from_epoch_secs(epoch_secs);
+    (datetime.is_valid() && is_rfc3339_year(datetime.date.year)).then(|| {
+        format!(
+            "{:04}{:02}{:02}-{:02}{:02}{:02}",
+            datetime.date.year,
+            datetime.date.month,
+            datetime.date.day,
+            datetime.hour,
+            datetime.minute,
+            datetime.second
+        )
+    })
+}
+
 /// Formats a valid UTC civil date/time as `YYYY-MM-DDTHH:MM:SSZ`.
 ///
 /// Returns `None` when the provided date/time fields are invalid or the year is
@@ -155,6 +176,19 @@ mod tests {
             Some("2000-02-29T00:00:00Z".to_owned())
         );
         assert_eq!(format_rfc3339(-1), Some("1969-12-31T23:59:59Z".to_owned()));
+    }
+
+    #[test]
+    fn formats_compact_utc() {
+        assert_eq!(format_compact_utc(0), Some("19700101-000000".to_owned()));
+        assert_eq!(
+            format_compact_utc(86_400),
+            Some("19700102-000000".to_owned())
+        );
+        assert_eq!(
+            format_compact_utc(1_700_000_000),
+            Some("20231114-221320".to_owned())
+        );
     }
 
     #[test]

@@ -6,7 +6,7 @@ ML benchmarking framework: evaluators, metrics, reports, and visualization.
 [![crates.io](https://img.shields.io/crates/v/rskit-bench.svg)](https://crates.io/crates/rskit-bench)
 [![docs.rs](https://docs.rs/rskit-bench/badge.svg)](https://docs.rs/rskit-bench)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![MSRV: 1.85](https://img.shields.io/badge/MSRV-1.85-orange.svg)](https://blog.rust-lang.org/2025/02/20/Rust-1.85.0.html)
+[![MSRV: 1.91](https://img.shields.io/badge/MSRV-1.91-orange.svg)](https://www.rust-lang.org/)
 
 ## Features
 
@@ -17,6 +17,12 @@ ML benchmarking framework: evaluators, metrics, reports, and visualization.
 - Reports: JSON, CSV, Markdown, JUnit, Vega-Lite visualizations
 - `FileRunStorage` for persistent result storage and regression detection
 - ROC curves, confusion matrices, score distribution charts
+- `BenchClock` / `FixedClock` for deterministic timestamps and durations in tests
+
+Benchmark orchestration accepts injected clock and storage implementations.
+Production CLIs can choose `SystemClock` and `FileRunStorage`; tests and
+reproducible harnesses should inject `FixedClock` and an in-memory or tempdir
+storage implementation.
 
 ## Usage
 
@@ -26,8 +32,9 @@ rskit-bench = "0.1"
 ```
 
 ```rust
-use rskit_bench::{EvaluatorFunc, Prediction, BenchRunner, RunOptions};
+use rskit_bench::{BenchRunner, EvaluatorFunc, FixedClock, Prediction, RunOptions};
 use rskit_errors::AppResult;
+use std::sync::Arc;
 
 let eval = EvaluatorFunc::new("heuristic", |input: Vec<u8>| {
     Box::pin(async move {
@@ -42,7 +49,10 @@ let eval = EvaluatorFunc::new("heuristic", |input: Vec<u8>| {
 });
 
 println!("Evaluator: {}", eval.name());
-// Add to BenchRunner, load samples, and run
+let runner = BenchRunner::new()
+    .register("heuristic", Box::new(eval), 0)
+    .with_clock(Arc::new(FixedClock::new(1_700_000_000, 0)));
+// Load samples and run with RunOptions
 ```
 
 ## See Also

@@ -5,15 +5,15 @@
 //!
 //! File paths are confined to the current working directory.
 
-use rskit_media::{
+use rskit::media::{
     Registry, filter::filters, ops::ResizeMode, pipeline::MediaPipeline, presets,
     spatial::Resolution, time::TimeRange,
 };
-use rskit_media_ffmpeg::register as register_ffmpeg;
-use rskit_storage::{FileSink, FileSource};
+use rskit::media_ffmpeg::register as register_ffmpeg;
+use rskit::storage::{FileSink, FileSource};
 
 #[tokio::main]
-async fn main() -> rskit_errors::AppResult<()> {
+async fn main() -> rskit::AppResult<()> {
     let args: Vec<String> = std::env::args().collect();
     let input = args.get(1).map(String::as_str).unwrap_or("input.mp4");
     let output = args.get(2).map(String::as_str).unwrap_or("output.mp4");

@@ -4,19 +4,26 @@ use crate::compare::RunComparator;
 use crate::report_gen::{MarkdownReporter, Reporter};
 use crate::result::BenchRunResult;
 use crate::run_storage::{FileRunStorage, ListOptions, RunStorage};
+use rskit_cli::OutputTable;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use std::io::Write;
 use std::path::PathBuf;
 
 pub struct CliRunner {
-    storage: FileRunStorage,
+    storage: Box<dyn RunStorage>,
 }
 
 impl CliRunner {
+    /// Create a CLI runner backed by file storage under `results_dir`.
     pub fn new(results_dir: impl Into<PathBuf>) -> Self {
         Self {
-            storage: FileRunStorage::new(results_dir),
+            storage: Box::new(FileRunStorage::new(results_dir)),
         }
+    }
+
+    /// Create a CLI runner with injected storage.
+    pub fn with_storage(storage: Box<dyn RunStorage>) -> Self {
+        Self { storage }
     }
 
     pub fn show_latest(&self, writer: &mut dyn Write) -> AppResult<()> {
@@ -67,22 +74,22 @@ impl CliRunner {
                 .map_err(|e| AppError::new(ErrorCode::Internal, format!("write: {e}")))?;
             return Ok(());
         }
-        writeln!(
-            writer,
-            "{:<40} {:<24} {:<15} {:>8}",
-            "ID", "Timestamp", "Tag", "F1"
-        )
-        .map_err(|e| AppError::new(ErrorCode::Internal, format!("write: {e}")))?;
-        writeln!(writer, "{}", "-".repeat(90))
-            .map_err(|e| AppError::new(ErrorCode::Internal, format!("write: {e}")))?;
+        let mut table = OutputTable::new(vec![
+            "ID".to_string(),
+            "Timestamp".to_string(),
+            "Tag".to_string(),
+            "F1".to_string(),
+        ]);
         for r in &runs {
-            writeln!(
-                writer,
-                "{:<40} {:<24} {:<15} {:>8.4}",
-                r.id, r.timestamp, r.tag, r.f1
-            )
-            .map_err(|e| AppError::new(ErrorCode::Internal, format!("write: {e}")))?;
+            table.add_row(vec![
+                r.id.clone(),
+                r.timestamp.clone(),
+                r.tag.clone(),
+                format!("{:.4}", r.f1),
+            ]);
         }
+        writeln!(writer, "{table}")
+            .map_err(|e| AppError::new(ErrorCode::Internal, format!("write: {e}")))?;
         writeln!(writer, "\nTotal: {} run(s)", runs.len())
             .map_err(|e| AppError::new(ErrorCode::Internal, format!("write: {e}")))?;
         Ok(())

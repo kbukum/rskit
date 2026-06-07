@@ -11,6 +11,7 @@ use rskit_storage::store::{
     FileStore, ProgressCallback, StorageConfig, StorageFactory, StorageRegistry, StoredFile,
     content_type_or_default, prefixed_key,
 };
+use rskit_util::env;
 use serde::{Deserialize, Serialize};
 
 /// Configuration for the S3 store.
@@ -92,10 +93,10 @@ impl S3Store {
         // Region: config → AWS_REGION → AWS_DEFAULT_REGION
         if let Some(region) = &config.region {
             builder = builder.region(aws_sdk_s3::config::Region::new(region.clone()));
-        } else if let Ok(r) = std::env::var("AWS_REGION") {
-            builder = builder.region(aws_sdk_s3::config::Region::new(r));
-        } else if let Ok(r) = std::env::var("AWS_DEFAULT_REGION") {
-            builder = builder.region(aws_sdk_s3::config::Region::new(r));
+        } else if let Some(region) = env::get_non_empty("AWS_REGION") {
+            builder = builder.region(aws_sdk_s3::config::Region::new(region));
+        } else if let Some(region) = env::get_non_empty("AWS_DEFAULT_REGION") {
+            builder = builder.region(aws_sdk_s3::config::Region::new(region));
         }
 
         if let Some(endpoint) = &config.endpoint {
@@ -321,16 +322,16 @@ fn resolve_credentials(config: &Config) -> AppResult<(String, String)> {
         return Ok((key.clone(), secret.clone()));
     }
 
-    let key = std::env::var("AWS_ACCESS_KEY_ID").unwrap_or_default();
-    let secret = std::env::var("AWS_SECRET_ACCESS_KEY").unwrap_or_default();
+    let key = env::get_non_empty("AWS_ACCESS_KEY_ID");
+    let secret = env::get_non_empty("AWS_SECRET_ACCESS_KEY");
 
-    if key.is_empty() || secret.is_empty() {
+    let (Some(key), Some(secret)) = (key, secret) else {
         return Err(AppError::new(
             ErrorCode::MissingField,
             "S3 credentials not found. Set access_key_id/secret_access_key in config \
              or AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY environment variables.",
         ));
-    }
+    };
 
     Ok((key, secret))
 }

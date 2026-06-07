@@ -31,13 +31,16 @@ rskit-bootstrap  = { version = "0.1.0", path = "../rskit-bootstrap" }
 rskit-component  = { version = "0.1.0", path = "../rskit-component" }
 rskit-provider   = { version = "0.1.0", path = "../rskit-provider" }
 rskit-pipeline   = { version = "0.1.0", path = "../rskit-pipeline" }
-rskit-resilience = { path = "../rskit-resilience" }
+rskit-resilience = { version = "0.1.0", path = "../rskit-resilience" }
 rskit-worker     = { version = "0.1.0", path = "../rskit-worker" }
-rskit-validation = { path = "../rskit-validation" }
+rskit-validation = { version = "0.1.0", path = "../rskit-validation" }
 validator = { workspace = true }
 rskit-chain      = { version = "0.1.0", path = "../rskit-chain", optional = true }
 rskit-process    = { version = "0.1.0", path = "../rskit-process", optional = true }
 rskit-stateful   = { version = "0.1.0", path = "../rskit-stateful", optional = true }
+rskit-version    = { version = "0.1.0", path = "../rskit-version", optional = true }
+rskit-schema     = { version = "0.1.0", path = "../rskit-schema", optional = true }
+rskit-hook       = { version = "0.1.0", path = "../rskit-hook", optional = true }
 
 # Feature-gated crates
 rskit-server        = { version = "0.1.0", path = "../rskit-server",        optional = true }
@@ -54,7 +57,7 @@ rskit-messaging     = { version = "0.1.0", path = "../rskit-messaging",     opti
 rskit-messaging-kafka = { version = "0.1.0", path = "../../contrib/messaging/kafka", optional = true }
 rskit-messaging-nats = { version = "0.1.0", path = "../../contrib/messaging/nats", optional = true }
 rskit-messaging-rabbitmq = { version = "0.1.0", path = "../../contrib/messaging/rabbitmq", optional = true }
-rskit-observability = { path = "../rskit-observability", optional = true }
+rskit-observability = { version = "0.1.0", path = "../rskit-observability", optional = true }
 rskit-authz         = { version = "0.1.0", path = "../rskit-authz",         optional = true }
 rskit-security      = { version = "0.1.0", path = "../rskit-security",      optional = true }
 rskit-discovery     = { version = "0.1.0", path = "../rskit-discovery",     optional = true }
@@ -154,6 +157,9 @@ vectorstore-qdrant = ["vectorstore", "dep:rskit-vectorstore-qdrant"]
 chain         = ["dep:rskit-chain"]
 process       = ["dep:rskit-process"]
 stateful      = ["dep:rskit-stateful"]
+version       = ["dep:rskit-version"]
+schema        = ["dep:rskit-schema"]
+hook          = ["dep:rskit-hook"]
 full          = [
     "server", "grpc", "encryption", "http", "httpclient", "auth", "di", "database", "cache", "messaging",
     "cache-fs", "cache-redis", "messaging-kafka", "messaging-nats", "messaging-rabbitmq",
@@ -162,4 +168,5 @@ full          = [
     "inference", "inference-triton", "inference-vllm", "inference-tgi",
     "prompt", "skill", "tool", "agent", "mcp", "media-full", "storage", "storage-s3", "storage-gcs",
     "cli", "git", "dataset", "bench", "vectorstore", "vectorstore-qdrant", "chain", "process", "stateful",
+    "version", "schema", "hook",
 ]

@@ -5,16 +5,16 @@
 
 use std::time::Duration;
 
-use rskit_storage::FileSource;
+use rskit::storage::FileSource;
 
 #[tokio::main]
-async fn main() -> rskit_errors::AppResult<()> {
+async fn main() -> rskit::AppResult<()> {
     let path = std::env::args()
         .nth(1)
         .unwrap_or_else(|| "input.wav".into());
 
-    let mut registry = rskit_media::Registry::default();
-    rskit_media_audio::register(&mut registry, rskit_media_audio::Config::default())?;
+    let mut registry = rskit::media::Registry::default();
+    rskit::media_audio::register(&mut registry, rskit::media_audio::Config::default())?;
     let probe = registry.probe("audio")?;
     let source = FileSource::from_path(&path);
     let metadata = probe.probe(&source).await?;

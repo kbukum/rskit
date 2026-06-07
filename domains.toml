@@ -46,6 +46,6 @@ modules = ["media", "media-audio", "media-ffmpeg", "media-image"]
 depends_on = ["core", "patterns", "crosscutting"]
 
 [domains.infra]
-description = "Workload management, CLI, benchmarking, dataset, test utilities, integration"
-modules = ["workload", "bench", "cli", "dataset", "git", "testutil", "integration"]
+description = "CLI, benchmarking, dataset, git, test utilities, and facade"
+modules = ["bench", "cli", "dataset", "git", "testutil", "rskit"]
 depends_on = ["core", "patterns"]

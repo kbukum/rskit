@@ -5321,6 +5321,7 @@ dependencies = [
  "chrono",
  "rskit-errors",
  "rskit-storage",
+ "rskit-util",
  "serde",
  "serde_json",
  "tokio",

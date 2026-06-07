@@ -3,6 +3,7 @@
 use std::time::{Duration, UNIX_EPOCH};
 
 use rskit_errors::{AppError, AppResult};
+use rskit_process::ProcessResult;
 
 use crate::error::GitError;
 use crate::manage::{ConfigReader, Maintainer, RefManager, RemoteManager};
@@ -51,21 +52,15 @@ impl RefManager for GitCli {
     }
 
     fn delete_branch(&self, name: &str) -> AppResult<()> {
-        let result = self.run(&["branch", "-d", "--", name]);
-        match result {
-            Ok(_) => Ok(()),
-            Err(err) => {
-                let msg = err.to_string();
-                if msg.contains("not found") || msg.contains("no such branch") {
-                    Err(GitError::RefNotFound {
-                        refname: name.to_string(),
-                    }
-                    .into())
-                } else {
-                    Err(err)
-                }
-            }
+        let args = ["branch", "-d", "--", name];
+        let output = self.run_result(&args)?;
+        if output.success() && !output.stdout_truncated && !output.stderr_truncated {
+            return Ok(());
         }
+        map_delete_ref_failure(name, &output).map_or_else(
+            || Err(GitCli::command_failed(&args, output)),
+            |error| Err(error.into()),
+        )
     }
 
     fn create_tag(&self, name: &str, target: &str, message: &str) -> AppResult<()> {
@@ -78,21 +73,70 @@ impl RefManager for GitCli {
     }
 
     fn delete_tag(&self, name: &str) -> AppResult<()> {
-        let result = self.run(&["tag", "-d", "--", name]);
-        match result {
-            Ok(_) => Ok(()),
-            Err(err) => {
-                let msg = err.to_string();
-                if msg.contains("not found") || msg.contains("No such tag") {
-                    Err(GitError::RefNotFound {
-                        refname: name.to_string(),
-                    }
-                    .into())
-                } else {
-                    Err(err)
-                }
-            }
+        let args = ["tag", "-d", "--", name];
+        let output = self.run_result(&args)?;
+        if output.success() && !output.stdout_truncated && !output.stderr_truncated {
+            return Ok(());
         }
+        map_delete_ref_failure(name, &output).map_or_else(
+            || Err(GitCli::command_failed(&args, output)),
+            |error| Err(error.into()),
+        )
+    }
+}
+
+fn map_delete_ref_failure(name: &str, output: &ProcessResult) -> Option<GitError> {
+    let stderr = output.stderr.to_ascii_lowercase();
+    let stdout = output.stdout.to_ascii_lowercase();
+    let diagnostic = if stderr.is_empty() { &stdout } else { &stderr };
+    if diagnostic.contains("not found")
+        || diagnostic.contains("no such branch")
+        || diagnostic.contains("no such tag")
+    {
+        Some(GitError::RefNotFound {
+            refname: name.to_string(),
+        })
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+mod delete_ref_tests {
+    use std::time::Duration;
+
+    use rskit_process::ProcessResult;
+
+    use super::map_delete_ref_failure;
+    use crate::error::GitError;
+
+    fn failed(stderr: &[u8]) -> ProcessResult {
+        ProcessResult::completed(
+            Some(1),
+            Vec::new(),
+            stderr.to_vec(),
+            false,
+            false,
+            Duration::ZERO,
+            false,
+            false,
+        )
+    }
+
+    #[test]
+    fn delete_ref_maps_missing_branch_diagnostic() {
+        let error =
+            map_delete_ref_failure("missing", &failed(b"error: branch 'missing' not found."))
+                .expect("missing ref should map");
+
+        assert!(matches!(error, GitError::RefNotFound { refname } if refname == "missing"));
+    }
+
+    #[test]
+    fn delete_ref_leaves_unrelated_command_failure_unmapped() {
+        let output = failed(b"error: branch 'main' is not fully merged");
+
+        assert!(map_delete_ref_failure("main", &output).is_none());
     }
 }
 

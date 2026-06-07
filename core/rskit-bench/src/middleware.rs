@@ -3,9 +3,10 @@
 use crate::evaluator::Evaluator;
 use crate::types::Prediction;
 use rskit_errors::AppResult;
+use rskit_util::time::{SharedClock, elapsed_millis, system_clock};
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use parking_lot::Mutex;
 
@@ -13,6 +14,7 @@ use parking_lot::Mutex;
 pub struct TimingMiddleware<L> {
     inner: Box<dyn Evaluator<L>>,
     timings: Arc<Mutex<Vec<(String, Duration)>>>,
+    clock: SharedClock,
 }
 
 impl<L: Send + Sync + Clone + 'static> TimingMiddleware<L> {
@@ -20,7 +22,15 @@ impl<L: Send + Sync + Clone + 'static> TimingMiddleware<L> {
         Self {
             inner,
             timings: Arc::new(Mutex::new(Vec::new())),
+            clock: system_clock(),
         }
+    }
+
+    /// Set the clock used to record evaluator timings.
+    #[must_use]
+    pub fn with_clock(mut self, clock: SharedClock) -> Self {
+        self.clock = clock;
+        self
     }
 
     pub fn timings(&self) -> Vec<(String, Duration)> {
@@ -48,9 +58,9 @@ impl<L: Send + Sync + Clone + 'static> Evaluator<L> for TimingMiddleware<L> {
     }
 
     async fn evaluate(&self, input: Vec<u8>) -> AppResult<Prediction<L>> {
-        let start = Instant::now();
+        let start = self.clock.monotonic_millis();
         let result = self.inner.evaluate(input).await;
-        let elapsed = start.elapsed();
+        let elapsed = Duration::from_millis(elapsed_millis(start, self.clock.monotonic_millis()));
         if let Ok(ref pred) = result {
             self.timings.lock().push((pred.sample_id.clone(), elapsed));
         }

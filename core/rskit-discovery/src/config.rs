@@ -6,6 +6,7 @@
 use std::collections::HashMap;
 
 use rskit_errors::{AppError, AppResult};
+use rskit_util::time::parse_duration;
 use serde::Deserialize;
 
 /// Top-level discovery configuration.
@@ -292,25 +293,4 @@ impl Default for StaticEndpoint {
 
 fn default_protocol() -> String {
     "grpc".to_string()
-}
-
-/// Parse a human-readable duration string like `"2s"`, `"500ms"`, `"1m"`.
-fn parse_duration(s: &str) -> Option<std::time::Duration> {
-    let s = s.trim();
-    if s.is_empty() {
-        return None;
-    }
-    if let Some(rest) = s.strip_suffix("ms") {
-        rest.parse::<u64>()
-            .ok()
-            .map(std::time::Duration::from_millis)
-    } else if let Some(rest) = s.strip_suffix('s') {
-        rest.parse::<u64>().ok().map(std::time::Duration::from_secs)
-    } else if let Some(rest) = s.strip_suffix('m') {
-        rest.parse::<u64>()
-            .ok()
-            .map(|v| std::time::Duration::from_secs(v * 60))
-    } else {
-        s.parse::<u64>().ok().map(std::time::Duration::from_secs)
-    }
 }

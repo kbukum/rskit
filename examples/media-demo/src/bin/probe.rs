@@ -5,13 +5,13 @@
 //!
 //! File paths are confined to the current working directory.
 
-use rskit_media::Registry;
-use rskit_media::types::TrackKind;
-use rskit_media_ffmpeg::register as register_ffmpeg;
-use rskit_storage::FileSource;
+use rskit::media::Registry;
+use rskit::media::types::TrackKind;
+use rskit::media_ffmpeg::register as register_ffmpeg;
+use rskit::storage::FileSource;
 
 #[tokio::main]
-async fn main() -> rskit_errors::AppResult<()> {
+async fn main() -> rskit::AppResult<()> {
     let path = std::env::args()
         .nth(1)
         .unwrap_or_else(|| "input.mp4".into());
