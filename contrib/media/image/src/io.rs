@@ -130,6 +130,15 @@ pub(crate) fn ensure_image_dimensions(image: &DynamicImage, config: &Config) -> 
     ensure_dimensions(image.width(), image.height(), config)
 }
 
+pub(crate) fn scaled_dimension(source: u32, target: u32, reference: u32) -> u32 {
+    if reference == 0 {
+        return 1;
+    }
+    ((f64::from(source) * f64::from(target)) / f64::from(reference))
+        .round()
+        .max(1.0) as u32
+}
+
 fn ensure_dimensions(width: u32, height: u32, config: &Config) -> AppResult<()> {
     if width == 0 || height == 0 {
         return Err(AppError::new(
@@ -182,7 +191,7 @@ mod tests {
 
     use rskit_media::spatial::Resolution;
 
-    use super::{ensure_resolution, read_path_bounded};
+    use super::{ensure_resolution, read_path_bounded, scaled_dimension};
 
     #[test]
     fn read_path_bounded_reports_missing_paths_as_not_found() {
@@ -218,5 +227,11 @@ mod tests {
             ensure_resolution(Resolution::new(10, 0), &crate::Config::default()).unwrap_err();
 
         assert_eq!(error.code(), ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn scaled_dimension_rounds_and_clamps_to_one() {
+        assert_eq!(scaled_dimension(1, 1, 100), 1);
+        assert_eq!(scaled_dimension(3, 2, 4), 2);
     }
 }

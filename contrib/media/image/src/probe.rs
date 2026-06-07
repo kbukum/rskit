@@ -127,8 +127,7 @@ impl MediaProbe for ImageProbe {
             img.resize(res.width, res.height, image::imageops::FilterType::Lanczos3)
         } else {
             // Default thumbnail: fit to 320px wide
-            let ratio = 320.0 / img.width() as f64;
-            let h = (img.height() as f64 * ratio) as u32;
+            let h = io::scaled_dimension(img.height(), 320, img.width());
             io::ensure_resolution(Resolution::new(320, h), &self.config)?;
             img.resize_exact(320, h, image::imageops::FilterType::Lanczos3)
         };

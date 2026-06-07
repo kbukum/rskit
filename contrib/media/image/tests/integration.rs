@@ -150,6 +150,20 @@ async fn thumbnail_rejects_output_above_pixel_limit() {
     assert!(err.to_string().contains("max_pixels"));
 }
 
+#[tokio::test]
+async fn thumbnail_default_clamps_short_images_to_one_pixel_height() {
+    let fixture = create_gradient_png(1000, 1);
+    let source = FileSource::from_path(fixture.path());
+    let probe = limited_image_probe(1_000);
+
+    let thumbnail = probe
+        .thumbnail(&source, rskit_media::Timestamp::from_millis(0), None)
+        .await
+        .expect("thumbnail");
+
+    assert_eq!(read_dimensions(&thumbnail), (320, 1));
+}
+
 /// Read image dimensions from a FileSource.
 fn read_dimensions(source: &FileSource) -> (u32, u32) {
     match source {
@@ -260,6 +274,25 @@ async fn resize_fit_width() {
 }
 
 #[tokio::test]
+async fn resize_fit_width_clamps_thin_images_to_one_pixel_height() {
+    let fixture = create_gradient_png(100, 1);
+    let source = FileSource::from_path(fixture.path());
+    let backend = image_executor();
+
+    let ops = vec![MediaOp::Resize(ResizeOp {
+        resolution: Resolution::new(1, 0),
+        mode: ResizeMode::FitWidth,
+    })];
+
+    let result = backend
+        .execute(&source, &ops, None)
+        .await
+        .expect("resize fit width");
+
+    assert_eq!(read_dimensions(&result), (1, 1));
+}
+
+#[tokio::test]
 async fn resize_fit_height() {
     let fixture = create_gradient_png(200, 100);
     let source = FileSource::from_path(fixture.path());
@@ -277,6 +310,25 @@ async fn resize_fit_height() {
     let (w, h) = read_dimensions(&result);
     assert_eq!(h, 50);
     assert_eq!(w, 100, "should maintain 2:1 ratio");
+}
+
+#[tokio::test]
+async fn resize_fit_height_clamps_narrow_images_to_one_pixel_width() {
+    let fixture = create_gradient_png(1, 100);
+    let source = FileSource::from_path(fixture.path());
+    let backend = image_executor();
+
+    let ops = vec![MediaOp::Resize(ResizeOp {
+        resolution: Resolution::new(0, 1),
+        mode: ResizeMode::FitHeight,
+    })];
+
+    let result = backend
+        .execute(&source, &ops, None)
+        .await
+        .expect("resize fit height");
+
+    assert_eq!(read_dimensions(&result), (1, 1));
 }
 
 // ── Crop tests ──────────────────────────────────────────────────────────────

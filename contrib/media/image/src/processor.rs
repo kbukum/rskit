@@ -102,8 +102,7 @@ impl MediaExecutor for ImageProcessor {
                             img.resize_to_fill(w, h, imageops::FilterType::Lanczos3)
                         }
                         ResizeMode::FitWidth => {
-                            let ratio = w as f64 / img.width() as f64;
-                            let new_h = (img.height() as f64 * ratio) as u32;
+                            let new_h = io::scaled_dimension(img.height(), w, img.width());
                             io::ensure_resolution(
                                 rskit_media::Resolution::new(w, new_h),
                                 &self.config,
@@ -111,8 +110,7 @@ impl MediaExecutor for ImageProcessor {
                             img.resize_exact(w, new_h, imageops::FilterType::Lanczos3)
                         }
                         ResizeMode::FitHeight => {
-                            let ratio = h as f64 / img.height() as f64;
-                            let new_w = (img.width() as f64 * ratio) as u32;
+                            let new_w = io::scaled_dimension(img.width(), h, img.height());
                             io::ensure_resolution(
                                 rskit_media::Resolution::new(new_w, h),
                                 &self.config,
