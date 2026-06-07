@@ -2,6 +2,7 @@
 
 use std::ffi::OsString;
 use std::fmt;
+use std::io::ErrorKind;
 use std::path::{Component, Path, PathBuf};
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
@@ -117,7 +118,7 @@ pub fn confine_path(root: &Path, path: &Path) -> AppResult<PathBuf> {
         root.join(path)
     };
     let (existing, missing) = existing_ancestor_and_missing_suffix(&candidate)?;
-    let existing = canonicalize(&existing)?;
+    let existing = canonicalize_existing_ancestor(&existing)?;
     ensure_confined(&root, &existing)?;
 
     let resolved = append_safe_missing_suffix(existing, missing)?;
@@ -128,7 +129,7 @@ pub fn confine_path(root: &Path, path: &Path) -> AppResult<PathBuf> {
 fn existing_ancestor_and_missing_suffix(path: &Path) -> AppResult<(PathBuf, Vec<OsString>)> {
     let mut missing = Vec::new();
     let mut current = path.to_path_buf();
-    while !current.exists() {
+    while !exists_without_following_symlinks(&current)? {
         let Some(name) = current.file_name().map(OsString::from) else {
             return Err(AppError::new(
                 ErrorCode::NotFound,
@@ -146,6 +147,30 @@ fn existing_ancestor_and_missing_suffix(path: &Path) -> AppResult<(PathBuf, Vec<
     }
     missing.reverse();
     Ok((current, missing))
+}
+
+fn exists_without_following_symlinks(path: &Path) -> AppResult<bool> {
+    match std::fs::symlink_metadata(path) {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(AppError::new(
+            ErrorCode::Internal,
+            format!("failed to inspect '{}': {error}", path.display()),
+        )),
+    }
+}
+
+fn canonicalize_existing_ancestor(path: &Path) -> AppResult<PathBuf> {
+    canonicalize(path).map_err(|error| {
+        AppError::new(
+            ErrorCode::InvalidInput,
+            format!(
+                "existing path ancestor '{}' cannot be resolved: {}",
+                path.display(),
+                error.message()
+            ),
+        )
+    })
 }
 
 fn append_safe_missing_suffix(mut base: PathBuf, missing: Vec<OsString>) -> AppResult<PathBuf> {
@@ -319,6 +344,19 @@ mod tests {
         std::os::unix::fs::symlink(outside.path(), &link).unwrap();
 
         let error = confine_path(root.path(), Path::new("link/output.txt")).unwrap_err();
+
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rejects_missing_paths_below_broken_symlink() {
+        let root = crate::TempDir::new().unwrap();
+        let link = root.child("broken-link").unwrap();
+        let target = root.child("missing-target").unwrap();
+        std::os::unix::fs::symlink(target, &link).unwrap();
+
+        let error = confine_path(root.path(), Path::new("broken-link/output.txt")).unwrap_err();
 
         assert_eq!(error.code(), ErrorCode::InvalidInput);
     }
