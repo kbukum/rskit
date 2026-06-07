@@ -118,6 +118,21 @@ async fn resize_rejects_output_above_pixel_limit() {
 }
 
 #[tokio::test]
+async fn resize_fit_rejects_requested_resolution_above_pixel_limit() {
+    let fixture = create_gradient_png(10, 10);
+    let source = FileSource::from_path(fixture.path());
+    let backend = limited_image_executor(100);
+    let ops = vec![MediaOp::Resize(ResizeOp {
+        resolution: Resolution::new(11, 10),
+        mode: ResizeMode::Fit,
+    })];
+
+    let err = backend.execute(&source, &ops, None).await.unwrap_err();
+
+    assert!(err.to_string().contains("max_pixels"));
+}
+
+#[tokio::test]
 async fn thumbnail_rejects_output_above_pixel_limit() {
     let fixture = create_gradient_png(10, 10);
     let source = FileSource::from_path(fixture.path());

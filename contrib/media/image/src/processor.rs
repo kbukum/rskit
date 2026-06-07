@@ -93,7 +93,10 @@ impl MediaExecutor for ImageProcessor {
                             io::ensure_resolution(resize_op.resolution, &self.config)?;
                             img.resize_exact(w, h, imageops::FilterType::Lanczos3)
                         }
-                        ResizeMode::Fit => img.resize(w, h, imageops::FilterType::Lanczos3),
+                        ResizeMode::Fit => {
+                            io::ensure_resolution(resize_op.resolution, &self.config)?;
+                            img.resize(w, h, imageops::FilterType::Lanczos3)
+                        }
                         ResizeMode::Fill => {
                             io::ensure_resolution(resize_op.resolution, &self.config)?;
                             img.resize_to_fill(w, h, imageops::FilterType::Lanczos3)
