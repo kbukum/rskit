@@ -27,7 +27,7 @@ crate_version_published() {
     local crate=$1
     local version=$2
 
-    if python3 - "$crate" "$version" <<'PY'
+    python3 - "$crate" "$version" <<'PY'
 import json
 import sys
 import urllib.error
@@ -52,11 +52,6 @@ except Exception as error:
 published = data.get("version", {}).get("num") == version
 raise SystemExit(0 if published else 1)
 PY
-    then
-        return 0
-    fi
-
-    return 1
 }
 
 notice() {
@@ -156,7 +151,10 @@ ordered.sort(key=lambda package_id: packages[package_id]["name"] == "rskit")
 
 for package_id in ordered:
     package = packages[package_id]
-    internal_deps = ",".join(sorted(packages[dep_id]["name"] for dep_id in edges[package_id]))
+    internal_deps = ",".join(
+        f"{packages[dep_id]['name']}@{packages[dep_id]['version']}"
+        for dep_id in sorted(edges[package_id], key=lambda item: packages[item]["name"])
+    )
     print(f"{package['name']}\t{package['manifest']}\t{package['version']}\t{internal_deps}")
 PY
 
@@ -170,11 +168,26 @@ while IFS=$'\t' read -r name manifest version internal_deps; do
     if [ "$MODE" = "--dry-run" ] && [ -n "$internal_deps" ]; then
         blocked=()
         IFS=',' read -r -a deps <<< "$internal_deps"
-        for dep in "${deps[@]}"; do
-            [ -n "$dep" ] || continue
-            if ! crate_version_published "$dep" "$version"; then
-                blocked+=("$dep")
+        for dep_entry in "${deps[@]}"; do
+            [ -n "$dep_entry" ] || continue
+            dep_name=${dep_entry%@*}
+            dep_version=${dep_entry##*@}
+            if [ -z "$dep_name" ] || [ -z "$dep_version" ] || [ "$dep_name" = "$dep_version" ]; then
+                echo "error: invalid internal dependency entry: ${dep_entry}" >&2
+                exit 1
             fi
+            set +e
+            crate_version_published "$dep_name" "$dep_version"
+            status=$?
+            set -e
+            case "$status" in
+                0) ;;
+                1) blocked+=("$dep_entry") ;;
+                *)
+                    echo "error: failed to verify crates.io publication status for ${dep_entry}" >&2
+                    exit "$status"
+                    ;;
+            esac
         done
         if [ "${#blocked[@]}" -gt 0 ]; then
             skipped=$((skipped + 1))

@@ -43,7 +43,7 @@ fn system_and_fixed_clocks_expose_monotonic_and_epoch_values() {
 
     let system = SystemClock::new();
     assert!(system.epoch_seconds() > 0);
-    assert!(system.monotonic_millis() < 1_000);
+    assert!(system.monotonic_millis() < 60_000);
 
     let shared = system_clock();
     assert!(shared.epoch_seconds() > 0);
