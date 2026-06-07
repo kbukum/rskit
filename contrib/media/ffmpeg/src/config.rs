@@ -17,6 +17,12 @@ pub struct FfmpegConfig {
     pub(crate) ffprobe_path: Option<PathBuf>,
     /// Directory for temporary files.
     pub(crate) temp_dir: Option<PathBuf>,
+    /// Optional existing root for user-provided local media paths.
+    ///
+    /// When configured, local `FileSource::Path` inputs and `FileSink::Path`
+    /// outputs must resolve under this root after canonicalization. Temporary
+    /// files created by the adapter are not confined by this setting.
+    pub(crate) path_root: Option<PathBuf>,
     /// Number of threads to use per FFmpeg process.
     pub(crate) threads: Option<u32>,
     /// Hardware acceleration mode.
@@ -81,6 +87,7 @@ impl Default for FfmpegConfig {
             ffmpeg_path: None,
             ffprobe_path: None,
             temp_dir: None,
+            path_root: None,
             threads: None,
             hw_accel: None,
             timeout: None,
@@ -115,6 +122,17 @@ impl FfmpegConfig {
     #[must_use]
     pub fn with_temp_dir(mut self, path: impl Into<PathBuf>) -> Self {
         self.temp_dir = Some(path.into());
+        self
+    }
+
+    /// Confine user-provided local input and output paths to an existing root.
+    ///
+    /// Relative media paths are resolved under this root. Absolute media paths
+    /// are accepted only when they canonicalize under the root. Output paths may
+    /// be missing, but their nearest existing ancestor must stay under the root.
+    #[must_use]
+    pub fn with_path_root(mut self, path: impl Into<PathBuf>) -> Self {
+        self.path_root = Some(path.into());
         self
     }
 
@@ -277,6 +295,12 @@ impl FfmpegConfig {
         self.ffprobe_path
             .clone()
             .unwrap_or_else(|| which::which("ffprobe").unwrap_or_else(|_| PathBuf::from("ffprobe")))
+    }
+
+    /// Return the optional root used to confine user-provided local media paths.
+    #[must_use]
+    pub fn path_root(&self) -> Option<&std::path::Path> {
+        self.path_root.as_deref()
     }
 
     /// Effective max concurrent processes.

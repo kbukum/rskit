@@ -52,7 +52,7 @@ async fn resolve_output(
     sink: Option<&FileSink>,
 ) -> AppResult<FileSource> {
     match sink {
-        Some(FileSink::Path(p)) => Ok(FileSource::Path(p.clone())),
+        Some(FileSink::Path(_)) => Ok(FileSource::Path(output_file)),
         Some(FileSink::Memory) => {
             let data = tokio::fs::read(&output_file).await.map_err(|e| {
                 AppError::new(ErrorCode::Internal, format!("read output failed: {e}"))

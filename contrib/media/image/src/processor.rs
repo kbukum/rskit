@@ -1,50 +1,33 @@
 //! Image processing executor using the `image` crate.
 
 use std::io::Cursor;
+use std::sync::Arc;
 
 use image::{DynamicImage, ImageFormat, imageops};
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_media::{executor::MediaExecutor, filter::FilterTarget, ops::*, pipeline::Progress};
 use rskit_storage::{FileSink, FileSource, TempFile};
 
+use crate::config::Config;
+use crate::io;
+
 /// Image-specific executor using the `image` crate.
 ///
 /// Handles image operations (Resize, Crop, Rotate, Flip, subset of Filters,
 /// Transcode). Returns `Err(unsupported)` for video/audio operations.
-pub(crate) struct ImageProcessor;
+pub(crate) struct ImageProcessor {
+    config: Arc<Config>,
+}
 
 impl ImageProcessor {
     /// Create a new image processor.
-    pub(crate) fn new() -> Self {
-        Self
+    pub(crate) fn new(config: Arc<Config>) -> Self {
+        Self { config }
     }
 
-    fn load_image(source: &FileSource) -> AppResult<DynamicImage> {
-        let data = match source {
-            FileSource::Path(p) => std::fs::read(p).map_err(|e| {
-                AppError::new(ErrorCode::NotFound, format!("failed to read image: {e}"))
-            })?,
-            FileSource::Bytes(b) => b.to_vec(),
-            FileSource::Temp(t) => std::fs::read(t.path()).map_err(|e| {
-                AppError::new(
-                    ErrorCode::Internal,
-                    format!("failed to read temp image: {e}"),
-                )
-            })?,
-            FileSource::Url(_) => {
-                return Err(AppError::new(
-                    ErrorCode::InvalidInput,
-                    "URL sources not supported; use to_local_path() first",
-                ));
-            }
-        };
-
-        image::load_from_memory(&data).map_err(|e| {
-            AppError::new(
-                ErrorCode::InvalidFormat,
-                format!("failed to decode image: {e}"),
-            )
-        })
+    fn load_image(&self, source: &FileSource) -> AppResult<DynamicImage> {
+        let data = io::load_data(source, &self.config)?;
+        io::decode_image(&data, &self.config).map(|decoded| decoded.image)
     }
 
     fn save_image(img: &DynamicImage, format: ImageFormat) -> AppResult<Vec<u8>> {
@@ -86,7 +69,7 @@ impl ImageProcessor {
 
 impl Default for ImageProcessor {
     fn default() -> Self {
-        Self::new()
+        Self::new(Arc::new(Config::default()))
     }
 }
 
@@ -98,7 +81,7 @@ impl MediaExecutor for ImageProcessor {
         ops: &[MediaOp],
         sink: Option<&FileSink>,
     ) -> AppResult<FileSource> {
-        let mut img = Self::load_image(source)?;
+        let mut img = self.load_image(source)?;
         let mut output_format = Self::detect_format(source);
 
         for op in ops {
@@ -106,25 +89,43 @@ impl MediaExecutor for ImageProcessor {
                 MediaOp::Resize(resize_op) => {
                     let (w, h) = (resize_op.resolution.width, resize_op.resolution.height);
                     img = match resize_op.mode {
-                        ResizeMode::Exact => img.resize_exact(w, h, imageops::FilterType::Lanczos3),
+                        ResizeMode::Exact => {
+                            io::ensure_resolution(resize_op.resolution, &self.config)?;
+                            img.resize_exact(w, h, imageops::FilterType::Lanczos3)
+                        }
                         ResizeMode::Fit => img.resize(w, h, imageops::FilterType::Lanczos3),
                         ResizeMode::Fill => {
+                            io::ensure_resolution(resize_op.resolution, &self.config)?;
                             img.resize_to_fill(w, h, imageops::FilterType::Lanczos3)
                         }
                         ResizeMode::FitWidth => {
                             let ratio = w as f64 / img.width() as f64;
                             let new_h = (img.height() as f64 * ratio) as u32;
+                            io::ensure_resolution(
+                                rskit_media::Resolution::new(w, new_h),
+                                &self.config,
+                            )?;
                             img.resize_exact(w, new_h, imageops::FilterType::Lanczos3)
                         }
                         ResizeMode::FitHeight => {
                             let ratio = h as f64 / img.height() as f64;
                             let new_w = (img.width() as f64 * ratio) as u32;
+                            io::ensure_resolution(
+                                rskit_media::Resolution::new(new_w, h),
+                                &self.config,
+                            )?;
                             img.resize_exact(new_w, h, imageops::FilterType::Lanczos3)
                         }
                     };
+                    io::ensure_image_dimensions(&img, &self.config)?;
                 }
                 MediaOp::Crop(region) => {
+                    io::ensure_resolution(
+                        rskit_media::Resolution::new(region.width, region.height),
+                        &self.config,
+                    )?;
                     img = img.crop_imm(region.x, region.y, region.width, region.height);
+                    io::ensure_image_dimensions(&img, &self.config)?;
                 }
                 MediaOp::Rotate(rotation) => {
                     img = match rotation {
@@ -141,6 +142,7 @@ impl MediaExecutor for ImageProcessor {
                             ));
                         }
                     };
+                    io::ensure_image_dimensions(&img, &self.config)?;
                 }
                 MediaOp::Flip(dir) => {
                     img = match dir {

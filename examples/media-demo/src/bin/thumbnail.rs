@@ -2,12 +2,14 @@
 //!
 //! Usage:
 //!   cargo run --bin thumbnail -- input.mp4 thumb.jpg 5.0
+//!
+//! File paths are confined to the current working directory.
 
 use rskit_media::{
     Registry, ops::ResizeMode, pipeline::MediaPipeline, presets, spatial::Resolution,
     time::TimeRange,
 };
-use rskit_media_ffmpeg::{Config as FfmpegConfig, register as register_ffmpeg};
+use rskit_media_ffmpeg::register as register_ffmpeg;
 use rskit_storage::{FileSink, FileSource};
 
 #[tokio::main]
@@ -20,7 +22,7 @@ async fn main() -> rskit_errors::AppResult<()> {
     let source = FileSource::from_path(input);
     let sink = FileSink::Path(output.into());
     let mut registry = Registry::default();
-    register_ffmpeg(&mut registry, FfmpegConfig::default())?;
+    register_ffmpeg(&mut registry, media_demo::ffmpeg_config()?)?;
     let executor = registry.executor("ffmpeg")?;
 
     let result = MediaPipeline::from(&source)

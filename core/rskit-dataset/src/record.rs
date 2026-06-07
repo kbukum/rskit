@@ -1,5 +1,7 @@
 //! Streaming row/record dataset abstractions.
 
+mod limits;
+
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
@@ -11,12 +13,12 @@ use rskit_pipeline::RskitStreamExt;
 use serde_json::Value;
 use tokio::sync::mpsc;
 
+use limits::{
+    MAX_CSV_RECORD_BYTES, MAX_JSON_ARRAY_BYTES, MAX_JSON_LINE_BYTES, validate_json_record,
+};
+
 /// Boxed stream of structured dataset records.
 pub type BoxRecordStream = Pin<Box<dyn Stream<Item = AppResult<DatasetRecord>> + Send + 'static>>;
-
-const MAX_JSON_ARRAY_BYTES: u64 = 1024 * 1024;
-const MAX_JSON_LINE_BYTES: usize = 1024 * 1024;
-const MAX_CSV_RECORD_BYTES: usize = 1024 * 1024;
 
 /// Format identifier for built-in dataset record readers and writers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -623,6 +625,7 @@ fn read_bounded_file(path: &Path, max_bytes: usize) -> AppResult<Vec<u8>> {
 }
 
 fn record_from_value(value: Value) -> AppResult<DatasetRecord> {
+    validate_json_record(&value)?;
     match value {
         Value::Object(fields) => Ok(DatasetRecord::new(fields.into_iter().collect())),
         _ => Err(AppError::new(

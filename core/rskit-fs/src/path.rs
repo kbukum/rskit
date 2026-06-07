@@ -1,5 +1,6 @@
 //! Safe path helpers.
 
+use std::ffi::OsString;
 use std::fmt;
 use std::path::{Component, Path, PathBuf};
 
@@ -73,6 +74,122 @@ pub fn canonicalize(path: &Path) -> AppResult<PathBuf> {
     })
 }
 
+/// Canonicalize an existing `path` and reject it when it resolves outside `root`.
+///
+/// Use this for existing untrusted file paths before handing them to lower-level IO
+/// or subprocess APIs. Both `root` and `path` are resolved through the filesystem so
+/// symlink escapes are rejected. Relative `path` values are interpreted under `root`;
+/// absolute `path` values are accepted only when their canonical destination is still
+/// within `root`.
+///
+/// # Errors
+///
+/// Returns an error when `root` or `path` cannot be canonicalized, or when `path`
+/// resolves outside the canonical root.
+pub fn confine_existing_path(root: &Path, path: &Path) -> AppResult<PathBuf> {
+    let root = canonicalize(root)?;
+    let candidate = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        root.join(path)
+    };
+    let candidate = canonicalize(&candidate)?;
+    ensure_confined(&root, &candidate)?;
+    Ok(candidate)
+}
+
+/// Resolve `path` under `root` and reject escapes, allowing the final path to be missing.
+///
+/// This is intended for output paths. The nearest existing ancestor is canonicalized to catch
+/// symlink escapes before new directories or files are created. Relative `path` values are
+/// interpreted under `root`; absolute `path` values are accepted only when their resolved
+/// existing ancestor remains within `root`.
+///
+/// # Errors
+///
+/// Returns an error when `root` cannot be canonicalized, no existing ancestor can be found,
+/// an existing ancestor resolves outside `root`, or a missing path segment is unsafe.
+pub fn confine_path(root: &Path, path: &Path) -> AppResult<PathBuf> {
+    let root = canonicalize(root)?;
+    let candidate = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        root.join(path)
+    };
+    let (existing, missing) = existing_ancestor_and_missing_suffix(&candidate)?;
+    let existing = canonicalize(&existing)?;
+    ensure_confined(&root, &existing)?;
+
+    let resolved = append_safe_missing_suffix(existing, missing)?;
+    ensure_confined(&root, &resolved)?;
+    Ok(resolved)
+}
+
+fn existing_ancestor_and_missing_suffix(path: &Path) -> AppResult<(PathBuf, Vec<OsString>)> {
+    let mut missing = Vec::new();
+    let mut current = path.to_path_buf();
+    while !current.exists() {
+        let Some(name) = current.file_name().map(OsString::from) else {
+            return Err(AppError::new(
+                ErrorCode::NotFound,
+                format!("no existing ancestor for '{}'", path.display()),
+            ));
+        };
+        missing.push(name);
+        let Some(parent) = current.parent() else {
+            return Err(AppError::new(
+                ErrorCode::NotFound,
+                format!("no existing ancestor for '{}'", path.display()),
+            ));
+        };
+        current = parent.to_path_buf();
+    }
+    missing.reverse();
+    Ok((current, missing))
+}
+
+fn append_safe_missing_suffix(mut base: PathBuf, missing: Vec<OsString>) -> AppResult<PathBuf> {
+    for segment in missing {
+        let segment_path = Path::new(&segment);
+        validate_relative_path(segment_path).map_err(|error| {
+            AppError::new(
+                ErrorCode::InvalidInput,
+                format!(
+                    "path segment '{}' is not safe: {error}",
+                    segment_path.display()
+                ),
+            )
+        })?;
+        if segment_path.components().any(|component| {
+            matches!(
+                component,
+                Component::RootDir | Component::ParentDir | Component::Prefix(_)
+            )
+        }) {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                format!("path segment '{}' is not safe", segment_path.display()),
+            ));
+        }
+        base.push(segment);
+    }
+    Ok(base)
+}
+
+fn ensure_confined(root: &Path, path: &Path) -> AppResult<()> {
+    if path.starts_with(root) {
+        return Ok(());
+    }
+    Err(AppError::new(
+        ErrorCode::InvalidInput,
+        format!(
+            "path '{}' resolves outside confined root '{}'",
+            path.display(),
+            root.display()
+        ),
+    ))
+}
+
 /// Return the non-empty parent directory for `path`.
 #[must_use]
 pub fn parent_dir(path: &Path) -> Option<&Path> {
@@ -84,7 +201,12 @@ pub fn parent_dir(path: &Path) -> Option<&Path> {
 mod tests {
     use std::path::Path;
 
-    use super::{SafePathError, absolute, canonicalize, safe_join, validate_relative_path};
+    use rskit_errors::ErrorCode;
+
+    use super::{
+        SafePathError, absolute, canonicalize, confine_existing_path, confine_path, safe_join,
+        validate_relative_path,
+    };
 
     #[test]
     fn validates_safe_relative_paths() {
@@ -155,5 +277,49 @@ mod tests {
             std::fs::canonicalize(&file).unwrap()
         );
         assert!(canonicalize(&dir.child("missing.txt").unwrap()).is_err());
+    }
+
+    #[test]
+    fn confines_existing_paths_under_root() {
+        let dir = crate::TempDir::new().unwrap();
+        let file = dir.write_file("nested/file.txt", b"hello").unwrap();
+
+        let confined = confine_existing_path(dir.path(), Path::new("nested/file.txt")).unwrap();
+
+        assert_eq!(confined, std::fs::canonicalize(file).unwrap());
+    }
+
+    #[test]
+    fn rejects_existing_paths_outside_root() {
+        let root = crate::TempDir::new().unwrap();
+        let outside = crate::TempDir::new().unwrap();
+        let file = outside.write_file("file.txt", b"hello").unwrap();
+
+        let error = confine_existing_path(root.path(), &file).unwrap_err();
+
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn confines_missing_output_paths_under_existing_parent() {
+        let dir = crate::TempDir::new().unwrap();
+
+        let confined = confine_path(dir.path(), Path::new("nested/output.txt")).unwrap();
+
+        assert!(confined.starts_with(std::fs::canonicalize(dir.path()).unwrap()));
+        assert!(confined.ends_with("nested/output.txt"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rejects_missing_paths_below_symlink_escape() {
+        let root = crate::TempDir::new().unwrap();
+        let outside = crate::TempDir::new().unwrap();
+        let link = root.child("link").unwrap();
+        std::os::unix::fs::symlink(outside.path(), &link).unwrap();
+
+        let error = confine_path(root.path(), Path::new("link/output.txt")).unwrap_err();
+
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
     }
 }

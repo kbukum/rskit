@@ -2,10 +2,12 @@
 //!
 //! Usage:
 //!   cargo run --bin probe -- path/to/video.mp4
+//!
+//! File paths are confined to the current working directory.
 
 use rskit_media::Registry;
 use rskit_media::types::TrackKind;
-use rskit_media_ffmpeg::{Config as FfmpegConfig, register as register_ffmpeg};
+use rskit_media_ffmpeg::register as register_ffmpeg;
 use rskit_storage::FileSource;
 
 #[tokio::main]
@@ -16,7 +18,7 @@ async fn main() -> rskit_errors::AppResult<()> {
 
     let source = FileSource::from_path(&path);
     let mut registry = Registry::default();
-    register_ffmpeg(&mut registry, FfmpegConfig::default())?;
+    register_ffmpeg(&mut registry, media_demo::ffmpeg_config()?)?;
     let probe = registry.probe("ffmpeg")?;
     let info = probe.probe(&source).await?;
 

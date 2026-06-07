@@ -13,6 +13,7 @@ mod error;
 mod executor;
 mod filter_map;
 mod hw_accel;
+mod paths;
 mod probe;
 mod process;
 mod progress;

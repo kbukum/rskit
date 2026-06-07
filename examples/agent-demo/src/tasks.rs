@@ -360,7 +360,7 @@ pub fn format_size(bytes: u64) -> String {
 
 fn image_executor() -> AppResult<std::sync::Arc<dyn MediaExecutor>> {
     let mut registry = Registry::default();
-    register_image(&mut registry, ImageConfig)?;
+    register_image(&mut registry, ImageConfig::default())?;
     registry.executor("image")
 }
 

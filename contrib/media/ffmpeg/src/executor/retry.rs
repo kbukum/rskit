@@ -43,12 +43,9 @@ impl FfmpegExecutor {
         let ext = self.determine_output_extension(ops);
         let output_file = match sink {
             Some(FileSink::Path(p)) => {
-                if let Some(parent) = p.parent() {
-                    tokio::fs::create_dir_all(parent).await.map_err(|e| {
-                        AppError::new(ErrorCode::Internal, format!("create dir failed: {e}"))
-                    })?;
-                }
-                p.clone()
+                let output_path = crate::paths::confine_output_path(&self.config, p)?;
+                crate::paths::create_output_parent(&self.config, &output_path).await?;
+                output_path
             }
             _ => TempFile::with_extension(&ext)?.path().to_path_buf(),
         };

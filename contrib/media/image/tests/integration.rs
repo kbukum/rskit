@@ -8,6 +8,7 @@ use rskit_media::{
     format::Format,
     ops::{CropRegion, FlipDirection, MediaOp, ResizeMode, ResizeOp, Rotation},
     output::OutputConfig,
+    probe::MediaProbe,
     spatial::Resolution,
 };
 use rskit_storage::{FileSink, FileSource, TempDir, TempFile};
@@ -42,9 +43,96 @@ fn create_jpeg(width: u32, height: u32) -> TempFile {
 
 fn image_executor() -> Arc<dyn MediaExecutor> {
     let mut registry = Registry::default();
-    rskit_media_image::register(&mut registry, rskit_media_image::Config)
+    rskit_media_image::register(&mut registry, rskit_media_image::Config::default())
         .expect("register image backend");
     registry.executor("image").expect("image executor")
+}
+
+fn limited_image_executor(max_pixels: u64) -> Arc<dyn MediaExecutor> {
+    let mut registry = Registry::default();
+    rskit_media_image::register(
+        &mut registry,
+        rskit_media_image::Config::default().with_max_pixels(max_pixels),
+    )
+    .expect("register image backend");
+    registry.executor("image").expect("image executor")
+}
+
+fn limited_image_probe(max_pixels: u64) -> Arc<dyn MediaProbe> {
+    let mut registry = Registry::default();
+    rskit_media_image::register(
+        &mut registry,
+        rskit_media_image::Config::default().with_max_pixels(max_pixels),
+    )
+    .expect("register image backend");
+    registry.probe("image").expect("image probe")
+}
+
+#[tokio::test]
+async fn probe_rejects_source_above_configured_byte_limit() {
+    let fixture = create_gradient_png(10, 10);
+    let source = FileSource::from_path(fixture.path());
+    let mut registry = Registry::default();
+    rskit_media_image::register(
+        &mut registry,
+        rskit_media_image::Config::default().with_max_source_bytes(1),
+    )
+    .expect("register image backend");
+    let probe = registry.probe("image").expect("image probe");
+
+    let err = probe.probe(&source).await.unwrap_err();
+
+    assert!(err.to_string().contains("max_source_bytes"));
+}
+
+#[tokio::test]
+async fn probe_rejects_images_above_pixel_limit() {
+    let fixture = create_gradient_png(11, 10);
+    let source = FileSource::from_path(fixture.path());
+    let mut registry = Registry::default();
+    rskit_media_image::register(
+        &mut registry,
+        rskit_media_image::Config::default().with_max_pixels(100),
+    )
+    .expect("register image backend");
+    let probe = registry.probe("image").expect("image probe");
+
+    let err = probe.probe(&source).await.unwrap_err();
+
+    assert!(err.to_string().contains("max_pixels"));
+}
+
+#[tokio::test]
+async fn resize_rejects_output_above_pixel_limit() {
+    let fixture = create_gradient_png(10, 10);
+    let source = FileSource::from_path(fixture.path());
+    let backend = limited_image_executor(100);
+    let ops = vec![MediaOp::Resize(ResizeOp {
+        resolution: Resolution::new(11, 10),
+        mode: ResizeMode::Exact,
+    })];
+
+    let err = backend.execute(&source, &ops, None).await.unwrap_err();
+
+    assert!(err.to_string().contains("max_pixels"));
+}
+
+#[tokio::test]
+async fn thumbnail_rejects_output_above_pixel_limit() {
+    let fixture = create_gradient_png(10, 10);
+    let source = FileSource::from_path(fixture.path());
+    let probe = limited_image_probe(100);
+
+    let err = probe
+        .thumbnail(
+            &source,
+            rskit_media::Timestamp::from_millis(0),
+            Some(Resolution::new(11, 10)),
+        )
+        .await
+        .unwrap_err();
+
+    assert!(err.to_string().contains("max_pixels"));
 }
 
 /// Read image dimensions from a FileSource.

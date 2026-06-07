@@ -122,6 +122,7 @@ impl FfmpegCommand {
 
         let mut ctx = CompileContext {
             cmd: &mut cmd,
+            config,
             hints,
             registry,
         };
@@ -184,6 +185,12 @@ impl FfmpegCommand {
                         format!("unsupported operation: {op:?}"),
                     ));
                 }
+            }
+        }
+
+        for input in &mut cmd.inputs {
+            if let FileSource::Path(path) = &input.source {
+                input.source = FileSource::Path(crate::paths::confine_source_path(config, path)?);
             }
         }
 
@@ -255,6 +262,51 @@ mod tests {
         FfmpegConfig {
             overwrite: true,
             ..FfmpegConfig::default()
+        }
+    }
+
+    #[test]
+    fn compile_rejects_input_outside_configured_path_root() {
+        let root = rskit_storage::TempDir::new().unwrap();
+        let outside = rskit_storage::TempDir::new().unwrap();
+        let outside_path = outside.path().join("input.mp4");
+        std::fs::write(&outside_path, b"not real media").unwrap();
+
+        let config = default_config().with_path_root(root.path());
+        let result = FfmpegCommand::compile(
+            &FileSource::from_path(&outside_path),
+            &[],
+            None,
+            &config,
+            &Registry::default(),
+        );
+        let error = match result {
+            Ok(_) => panic!("outside path should be rejected"),
+            Err(error) => error,
+        };
+
+        assert_eq!(error.code(), rskit_errors::ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn compile_canonicalizes_input_inside_configured_path_root() {
+        let root = rskit_storage::TempDir::new().unwrap();
+        let input = root.path().join("input.mp4");
+        std::fs::write(&input, b"not real media").unwrap();
+
+        let config = default_config().with_path_root(root.path());
+        let command = FfmpegCommand::compile(
+            &FileSource::from_path("input.mp4"),
+            &[],
+            None,
+            &config,
+            &Registry::default(),
+        )
+        .unwrap();
+
+        match &command.inputs[0].source {
+            FileSource::Path(path) => assert_eq!(path, &std::fs::canonicalize(input).unwrap()),
+            other => panic!("expected path source, got {other:?}"),
         }
     }
 

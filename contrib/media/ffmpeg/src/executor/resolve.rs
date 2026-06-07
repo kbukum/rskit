@@ -82,7 +82,7 @@ impl FfmpegExecutor {
         cancel: CancellationToken,
     ) -> AppResult<Option<Duration>> {
         let path = match source {
-            FileSource::Path(p) => p.clone(),
+            FileSource::Path(p) => crate::paths::confine_source_path(&self.config, p)?,
             _ => return Ok(None),
         };
 
@@ -132,7 +132,7 @@ impl FfmpegExecutor {
 
         // Quick ffprobe to detect whether audio pads should be included.
         let path = match source {
-            FileSource::Path(p) => p.clone(),
+            FileSource::Path(p) => crate::paths::confine_source_path(&self.config, p)?,
             _ => return Ok(SourceHints::default()),
         };
 

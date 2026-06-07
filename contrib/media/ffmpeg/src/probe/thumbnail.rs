@@ -20,13 +20,14 @@ impl FfmpegProbe {
         resolution: Option<Resolution>,
     ) -> AppResult<FileSource> {
         let resolved = source.to_local_path().await?;
+        let input_path = crate::paths::resolved_source_path(&self.config, source, resolved.path())?;
         let tmp = rskit_storage::TempFile::with_extension("jpg")?;
 
         let mut args = vec![
             OsString::from("-ss"),
             OsString::from(at.to_ffmpeg_time()),
             OsString::from("-i"),
-            resolved.path().as_os_str().to_os_string(),
+            input_path.as_os_str().to_os_string(),
             OsString::from("-vframes"),
             OsString::from("1"),
         ];
@@ -57,6 +58,7 @@ impl FfmpegProbe {
         resolution: Option<Resolution>,
     ) -> AppResult<Vec<FileSource>> {
         let resolved = source.to_local_path().await?;
+        let input_path = crate::paths::resolved_source_path(&self.config, source, resolved.path())?;
         let tmp_dir = rskit_storage::TempDir::new()?;
         let pattern = tmp_dir.path().join("thumb_%04d.jpg");
 
@@ -69,7 +71,7 @@ impl FfmpegProbe {
             self.config.ffmpeg_bin(),
             vec![
                 OsString::from("-i"),
-                resolved.path().as_os_str().to_os_string(),
+                input_path.as_os_str().to_os_string(),
                 OsString::from("-vf"),
                 OsString::from(vf),
                 OsString::from("-y"),
@@ -94,6 +96,7 @@ impl FfmpegProbe {
         columns: u32,
     ) -> AppResult<FileSource> {
         let resolved = source.to_local_path().await?;
+        let input_path = crate::paths::resolved_source_path(&self.config, source, resolved.path())?;
         let tmp = rskit_storage::TempFile::with_extension("jpg")?;
 
         let vf = format!(
@@ -108,7 +111,7 @@ impl FfmpegProbe {
             self.config.ffmpeg_bin(),
             vec![
                 OsString::from("-i"),
-                resolved.path().as_os_str().to_os_string(),
+                input_path.as_os_str().to_os_string(),
                 OsString::from("-vf"),
                 OsString::from(vf),
                 OsString::from("-frames:v"),
@@ -133,13 +136,14 @@ impl FfmpegProbe {
         resolution: Resolution,
     ) -> AppResult<FileSource> {
         let resolved = source.to_local_path().await?;
+        let input_path = crate::paths::resolved_source_path(&self.config, source, resolved.path())?;
         let tmp = rskit_storage::TempFile::with_extension("png")?;
 
         let output = run_capture(
             self.config.ffmpeg_bin(),
             vec![
                 OsString::from("-i"),
-                resolved.path().as_os_str().to_os_string(),
+                input_path.as_os_str().to_os_string(),
                 OsString::from("-filter_complex"),
                 OsString::from(format!(
                     "showwavespic=s={}x{}:colors=#4080ff",
