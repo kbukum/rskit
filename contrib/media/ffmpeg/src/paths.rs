@@ -33,7 +33,7 @@ pub(crate) async fn create_output_parent(config: &FfmpegConfig, output: &Path) -
     };
     match config.path_root() {
         Some(root) => {
-            let parent = rskit_fs::confine_path(root, parent)?;
+            let parent = confine_output_path_blocking(root, parent).await?;
             create_confined_dir_all(root, &parent).await
         }
         None => tokio::fs::create_dir_all(parent).await.map_err(|error| {
@@ -57,7 +57,7 @@ pub(crate) fn resolved_source_path(
 }
 
 async fn create_confined_dir_all(root: &Path, path: &Path) -> AppResult<()> {
-    let root = rskit_fs::canonicalize(root)?;
+    let root = canonicalize_async(root).await?;
     let target = if path.is_absolute() {
         path.to_path_buf()
     } else {
@@ -144,7 +144,7 @@ async fn create_or_verify_plain_directory(root: &Path, path: &Path) -> AppResult
         }
     }
 
-    let canonical = rskit_fs::canonicalize(path)?;
+    let canonical = canonicalize_async(path).await?;
     if canonical.starts_with(root) {
         Ok(())
     } else {
@@ -157,6 +157,28 @@ async fn create_or_verify_plain_directory(root: &Path, path: &Path) -> AppResult
             ),
         ))
     }
+}
+
+async fn confine_output_path_blocking(root: &Path, path: &Path) -> AppResult<PathBuf> {
+    let root = root.to_path_buf();
+    let path = path.to_path_buf();
+    tokio::task::spawn_blocking(move || rskit_fs::confine_path(&root, &path))
+        .await
+        .map_err(|error| {
+            AppError::new(
+                ErrorCode::Internal,
+                format!("path confinement task failed: {error}"),
+            )
+        })?
+}
+
+async fn canonicalize_async(path: &Path) -> AppResult<PathBuf> {
+    tokio::fs::canonicalize(path).await.map_err(|error| {
+        AppError::new(
+            ErrorCode::Internal,
+            format!("failed to canonicalize '{}': {error}", path.display()),
+        )
+    })
 }
 
 #[cfg(test)]
