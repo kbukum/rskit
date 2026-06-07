@@ -35,6 +35,7 @@ impl<L: Send + Clone + 'static> DatasetLoader<L> {
         }
     }
 
+    #[must_use]
     pub fn with_manifest_file(mut self, name: impl Into<String>) -> Self {
         self.config.manifest_file = name.into();
         self

@@ -22,6 +22,7 @@ impl Default for RenderConfig {
 }
 
 /// Create a render option that sets chart dimensions.
+#[must_use]
 pub fn with_size(w: usize, h: usize) -> RenderOption {
     RenderOption(Box::new(move |cfg| {
         cfg.width = w;

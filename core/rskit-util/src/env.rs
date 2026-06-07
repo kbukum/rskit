@@ -2,6 +2,22 @@
 
 use std::str::FromStr;
 
+/// Read a string environment variable.
+///
+/// Returns `None` when the variable is not set or cannot be represented as
+/// Unicode.
+pub fn get(key: &str) -> Option<String> {
+    std::env::var(key).ok()
+}
+
+/// Read a string environment variable and ignore empty values.
+///
+/// Returns `None` when the variable is unset, non-Unicode, or set to an empty
+/// string.
+pub fn get_non_empty(key: &str) -> Option<String> {
+    get(key).filter(|value| !value.is_empty())
+}
+
 /// Read a string environment variable with a fallback value.
 ///
 /// # Examples
@@ -70,6 +86,15 @@ mod tests {
         );
         // We know CARGO_MANIFEST_DIR is set by Cargo during tests.
         assert!(!get_or("CARGO_MANIFEST_DIR", "").is_empty());
+    }
+
+    #[test]
+    fn test_get_non_empty() {
+        assert_eq!(
+            get_non_empty("RSKIT_UTIL_TEST_NON_EXISTENT_VAR_12345"),
+            None
+        );
+        assert!(get_non_empty("CARGO_MANIFEST_DIR").is_some());
     }
 
     #[test]

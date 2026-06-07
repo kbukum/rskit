@@ -6,10 +6,5 @@ license.workspace     = true
 publish               = false
 
 [dependencies]
-rskit-errors       = { workspace = true }
-rskit-storage      = { workspace = true }
-rskit-media        = { workspace = true }
-rskit-media-ffmpeg = { workspace = true }
-rskit-media-image  = { workspace = true }
-rskit-media-audio  = { workspace = true }
-tokio              = { workspace = true, features = ["full"] }
+rskit = { workspace = true, features = ["media-full"] }
+tokio = { workspace = true, features = ["full"] }

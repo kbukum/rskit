@@ -12,14 +12,14 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use async_trait::async_trait;
-use rskit_errors::{AppError, AppResult, ErrorCode};
-use rskit_media::Registry;
-use rskit_media::executor::MediaExecutor;
-use rskit_media::ops::{CropRegion, MediaOp, ResizeMode, ResizeOp, Rotation};
-use rskit_media::spatial::Resolution;
-use rskit_media_image::{Config as ImageConfig, register as register_image};
-use rskit_storage::{FileSink, FileSource, TempFile, detect_mime, file_meta};
-use rskit_worker::{Event, Handler, Progress};
+use rskit::media::Registry;
+use rskit::media::executor::MediaExecutor;
+use rskit::media::ops::{CropRegion, MediaOp, ResizeMode, ResizeOp, Rotation};
+use rskit::media::spatial::Resolution;
+use rskit::media_image::{Config as ImageConfig, register as register_image};
+use rskit::storage::{FileSink, FileSource, TempFile, detect_mime, file_meta};
+use rskit::worker::{Event, Handler, Progress};
+use rskit::{AppError, AppResult, ErrorCode};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
@@ -73,7 +73,7 @@ pub struct TaskOutput {
     pub details: Vec<(String, String)>,
 }
 
-/// The handler that rskit-worker calls for each task.
+/// The handler that `rskit::worker` calls for each task.
 pub struct AgentHandler;
 
 #[async_trait]

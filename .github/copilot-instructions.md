@@ -20,7 +20,8 @@ Shared engineering baseline — apply to all work here:
 
 ## Build, Test, and Lint
 
-Requires: Rust 1.85+ (enforced via `rust-toolchain.toml`).
+Requires: Rust 1.91+ (declared by workspace `rust-version`; development
+toolchain pinned via `rust-toolchain.toml`).
 
 ```bash
 make check              # Full validation: fmt-check + lint + build + test
@@ -50,7 +51,7 @@ When adding a new foundation crate: create it under `core/rskit-<name>/`, add it
 
 ## Code Style
 
-- `cargo fmt` (`rustfmt.toml`: edition 2024, max_width 100) + `cargo clippy` (`clippy.toml`: msrv 1.85)
+- `cargo fmt` (`rustfmt.toml`: edition 2024, max_width 100) + `cargo clippy` (`clippy.toml`: msrv 1.91)
 - `#![warn(missing_docs)]` on all crates
 - `#[must_use]` on all `with_*` builder methods
 - `#[non_exhaustive]` on public enums that may grow

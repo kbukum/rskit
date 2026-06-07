@@ -6,7 +6,7 @@ Test utilities, mock providers, and assertion helpers for rskit services.
 [![crates.io](https://img.shields.io/crates/v/rskit-testutil.svg)](https://crates.io/crates/rskit-testutil)
 [![docs.rs](https://docs.rs/rskit-testutil/badge.svg)](https://docs.rs/rskit-testutil)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![MSRV: 1.85](https://img.shields.io/badge/MSRV-1.85-orange.svg)](https://blog.rust-lang.org/2025/02/20/Rust-1.85.0.html)
+[![MSRV: 1.91](https://img.shields.io/badge/MSRV-1.91-orange.svg)](https://www.rust-lang.org/)
 
 ## Features
 
@@ -15,6 +15,11 @@ Test utilities, mock providers, and assertion helpers for rskit services.
 - `assert_err_code(result, code)` — assert a specific `ErrorCode`
 - `TestWorkspace` / `test_workspace!` — managed temp workspaces with fixture loading and copying
 - Thread-safe via `parking_lot::Mutex`
+
+`TestWorkspace` is the generic fixture harness for rskit tests. Use
+`with_fixture_dir` when fixtures live outside the default crate layout, or
+`test_workspace!` when a crate follows the conventional `tests/fixtures`
+directory.
 
 ## Usage
 
@@ -47,6 +52,14 @@ let config_path = workspace
     .unwrap();
 
 assert!(config_path.starts_with(workspace.path()));
+```
+
+```rust
+use rskit_testutil::TestWorkspace;
+
+let fixtures = std::path::PathBuf::from("custom-fixtures");
+let workspace = TestWorkspace::new("custom").with_fixture_dir(fixtures);
+let _ = workspace.fixture_path("config/app.toml");
 ```
 
 ## See Also

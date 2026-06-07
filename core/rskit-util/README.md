@@ -17,7 +17,7 @@ owning crates:
 - Validation rules and `AppError` conversion: `rskit-validation`
 - Schema generation and JSON Schema validation: `rskit-schema`
 - Filesystem operations and safe paths: `rskit-fs`
-- Test clocks and runtime time control: use the owning crate's abstractions
+- Generic clocks and UTC formatting: `rskit_util::time`
 
 ## Modules
 
@@ -26,11 +26,11 @@ owning crates:
 | `backoff` | Stateless exponential backoff and deterministic jitter calculations |
 | `bytes` | Human-readable byte size formatting and parsing |
 | `collections` | `chunk`, `group_by`, `index_by`, and `partition` helpers |
-| `env` | Environment variable parsing with defaults |
+| `env` | Environment variable lookup, non-empty filtering, parsing, and defaults |
 | `secret` | Secret string masking for logs, debug output, and serialization |
 | `strings` | Case conversion and UTF-8-safe truncation |
 | `template` | Typed `{placeholder}` template parsing and rendering |
-| `time` | Duration formatting/parsing, UTC civil date/time conversion, RFC 3339 helpers, and synchronous timing helpers |
+| `time` | Duration formatting/parsing, UTC civil date/time conversion, RFC 3339/compact UTC helpers, injectable clocks, and timing helpers |
 
 ## Usage
 
@@ -59,13 +59,27 @@ assert_eq!(rskit_util::bytes::parse_bytes("1.5 MB"), Some(1_572_864));
 assert_eq!(rskit_util::time::parse_duration("2m"), Some(Duration::from_secs(120)));
 ```
 
+### Environment lookup
+
+```rust
+assert_eq!(rskit_util::env::get_non_empty("RSKIT_MISSING"), None);
+let value = rskit_util::env::get_or("RSKIT_MISSING", "fallback");
+assert_eq!(value, "fallback");
+```
+
 ### UTC date/time helpers
 
 ```rust
-use rskit_util::time::{format_rfc3339, parse_rfc3339_utc};
+use rskit_util::time::{
+    Clock, FixedClock, format_compact_utc, format_rfc3339, parse_rfc3339_utc,
+};
 
 assert_eq!(format_rfc3339(0), Some("1970-01-01T00:00:00Z".to_owned()));
+assert_eq!(format_compact_utc(0), Some("19700101-000000".to_owned()));
 assert_eq!(parse_rfc3339_utc("1970-01-01T00:00:00Z"), Some(0));
+
+let clock = FixedClock::new(1_700_000_000, 42);
+assert_eq!(clock.epoch_seconds(), 1_700_000_000);
 ```
 
 ### Typed templates

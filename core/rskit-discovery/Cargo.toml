@@ -41,3 +41,4 @@ rskit-bootstrap = { path = "../rskit-bootstrap", optional = true }
 rskit-errors = { path = "../rskit-errors" }
 rskit-httpclient = { path = "../rskit-httpclient", optional = true }
 rskit-resilience = { path = "../rskit-resilience" }
+rskit-util = { path = "../rskit-util" }

@@ -16,6 +16,7 @@ keywords               = ["s3", "minio", "storage", "async", "file"]
 [dependencies]
 rskit-errors.workspace = true
 rskit-storage.workspace = true
+rskit-util.workspace = true
 aws-sdk-s3   = "1"
 async-trait  = { workspace = true }
 bytes        = { workspace = true }

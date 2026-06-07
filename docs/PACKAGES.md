@@ -4,7 +4,8 @@ rskit is a **Cargo workspace** with a facade crate (`rskit`), foundation crates 
 
 ## MSRV
 
-**1.85** — enforced by `rust-toolchain.toml` and CI.
+**1.91** — declared by workspace `rust-version`. CI validates the MSRV and the
+pinned development toolchain from `rust-toolchain.toml`.
 
 ## Core
 

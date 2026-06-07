@@ -1,13 +1,11 @@
 //! Agent Demo — Interactive media processing agent built with rskit.
 //!
-//! Demonstrates: rskit-worker (background tasks with progress),
-//! rskit-cli (progress bars, output tables, cancellation),
-//! rskit-pipeline (stream processing), rskit-storage (I/O),
-//! rskit-media + rskit-media-image (actual image processing).
+//! Demonstrates the public `rskit` facade modules: `worker` background tasks,
+//! `cli` output helpers, `storage` I/O, and `media` + `media_image` processing.
 //!
 //! Run: cargo run -p agent-demo
 
-use rskit_errors::AppResult;
+use rskit::AppResult;
 
 #[tokio::main]
 async fn main() -> AppResult<()> {

@@ -7,16 +7,16 @@ use crate::execution::BenchExecutionPlan;
 use crate::metric::Suite;
 use crate::report_gen::Reporter;
 use crate::result::{BenchRunResult, BenchSampleResult, BranchResult, DatasetInfo, MetricResult};
+use crate::run_id::generate_run_id;
 use crate::run_storage::RunStorage;
 use crate::schema;
-use crate::storage::generate_run_id;
 use crate::types::{BenchSample, Prediction, ScoredSample};
 use futures::stream::{FuturesUnordered, StreamExt};
 use rskit_errors::{AppError, AppResult, ErrorCode};
+use rskit_util::time::{SharedClock, elapsed_millis, format_rfc3339, system_clock};
 use rskit_worker::{Event, Handler, Pool};
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Instant;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use tracing::Instrument;
@@ -49,26 +49,31 @@ impl Default for RunOptions {
 }
 
 impl RunOptions {
+    #[must_use]
     pub fn with_concurrency(mut self, n: usize) -> Self {
         self.concurrency = n;
         self
     }
 
+    #[must_use]
     pub fn with_timeout(mut self, secs: u64) -> Self {
         self.timeout_secs = secs;
         self
     }
 
+    #[must_use]
     pub fn with_tag(mut self, tag: impl Into<String>) -> Self {
         self.tag = tag.into();
         self
     }
 
+    #[must_use]
     pub fn with_fail_on_regression(mut self, fail: bool) -> Self {
         self.fail_on_regression = fail;
         self
     }
 
+    #[must_use]
     pub fn with_target(mut self, metric: impl Into<String>, threshold: f64) -> Self {
         self.targets.insert(metric.into(), threshold);
         self
@@ -82,6 +87,7 @@ pub struct BenchRunner<L> {
     storage: Option<Box<dyn RunStorage>>,
     reporters: Vec<Box<dyn Reporter>>,
     comparator: Option<RunComparator>,
+    clock: SharedClock,
 }
 
 impl<L> Default for BenchRunner<L>
@@ -104,6 +110,7 @@ where
             storage: None,
             reporters: Vec::new(),
             comparator: None,
+            clock: system_clock(),
         }
     }
 
@@ -121,23 +128,34 @@ where
         self
     }
 
+    #[must_use]
     pub fn with_metrics(mut self, suite: Suite<L>) -> Self {
         self.metrics = Some(suite);
         self
     }
 
+    #[must_use]
     pub fn with_storage(mut self, storage: Box<dyn RunStorage>) -> Self {
         self.storage = Some(storage);
         self
     }
 
+    #[must_use]
     pub fn with_reporter(mut self, reporter: Box<dyn Reporter>) -> Self {
         self.reporters.push(reporter);
         self
     }
 
+    #[must_use]
     pub fn with_comparator(mut self, comparator: RunComparator) -> Self {
         self.comparator = Some(comparator);
+        self
+    }
+
+    /// Set the clock used for run IDs, timestamps, and elapsed durations.
+    #[must_use]
+    pub fn with_clock(mut self, clock: SharedClock) -> Self {
+        self.clock = clock;
         self
     }
 
@@ -172,7 +190,7 @@ where
         opts: RunOptions,
         execution: &BenchExecutionPlan,
     ) -> AppResult<BenchRunResult> {
-        let start = Instant::now();
+        let start = self.clock.monotonic_millis();
         let samples = loader.all()?;
         let dataset_info = {
             let mut label_distribution: HashMap<String, usize> = HashMap::new();
@@ -192,11 +210,12 @@ where
         let mut sample_results: Vec<BenchSampleResult> = Vec::new();
 
         for branch in &self.branches {
-            let branch_start = Instant::now();
+            let branch_start = self.clock.monotonic_millis();
             let handler = Arc::new(EvaluationHandler {
                 evaluator: Arc::clone(&branch.evaluator),
                 branch_name: branch.name.clone(),
                 timeout_secs: opts.timeout_secs,
+                clock: Arc::clone(&self.clock),
             });
             let pool = Pool::new(handler, execution.pool_config_for(&branch.name));
             let mut branch_metrics: HashMap<String, f64> = HashMap::new();
@@ -215,7 +234,7 @@ where
                     };
                     let context = SampleFailureContext::from_sample(sample);
                     let handle = pool.submit(sample.clone()).await?;
-                    let submitted_at = Instant::now();
+                    let submitted_at = self.clock.monotonic_millis();
                     pending.push(async move { (context, submitted_at, handle.result().await) });
                 }
 
@@ -291,7 +310,7 @@ where
                         );
                         sample_results.push(failed_sample_context(
                             &submitted_sample,
-                            submitted_at.elapsed().as_millis() as u64,
+                            elapsed_millis(submitted_at, self.clock.monotonic_millis()),
                             format!("worker evaluation failed: {error}"),
                         ));
                     }
@@ -323,7 +342,7 @@ where
                     metrics: branch_metrics,
                     avg_score_positive,
                     avg_score_negative,
-                    duration_ms: branch_start.elapsed().as_millis() as u64,
+                    duration_ms: elapsed_millis(branch_start, self.clock.monotonic_millis()),
                     errors,
                 },
             );
@@ -335,15 +354,13 @@ where
             Vec::new()
         };
 
-        let duration = start.elapsed();
-        let run_id = generate_run_id(&opts.tag);
-        let timestamp = {
-            use std::time::SystemTime;
-            let d = SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap_or_default();
-            format!("{}Z", d.as_secs())
-        };
+        let duration_ms = elapsed_millis(start, self.clock.monotonic_millis());
+        let epoch_seconds = self.clock.epoch_seconds();
+        let run_id = generate_run_id(&opts.tag, epoch_seconds);
+        let timestamp = i64::try_from(epoch_seconds)
+            .ok()
+            .and_then(format_rfc3339)
+            .unwrap_or_else(|| "1970-01-01T00:00:00Z".to_string());
 
         let result = BenchRunResult {
             id: run_id,
@@ -351,7 +368,7 @@ where
             version: schema::version(),
             timestamp,
             tag: opts.tag.clone(),
-            duration_ms: duration.as_millis() as u64,
+            duration_ms,
             dataset: dataset_info,
             metrics: metric_results,
             branches: branch_results,
@@ -396,6 +413,7 @@ struct EvaluationHandler<L> {
     evaluator: Arc<dyn Evaluator<L>>,
     branch_name: String,
     timeout_secs: u64,
+    clock: SharedClock,
 }
 
 struct SampleFailureContext {
@@ -437,7 +455,7 @@ where
         _emit: mpsc::Sender<Event<EvaluationOutcome<L>>>,
         cancel: CancellationToken,
     ) -> AppResult<EvaluationOutcome<L>> {
-        let start = Instant::now();
+        let start = self.clock.monotonic_millis();
         let input = sample.input.clone();
         let timeout = tokio::time::Duration::from_secs(self.timeout_secs);
         let eval = tokio::time::timeout(timeout, self.evaluator.evaluate(input));
@@ -445,13 +463,13 @@ where
             _ = cancel.cancelled() => {
                 return Ok(EvaluationOutcome::Failure {
                     sample,
-                    duration_ms: start.elapsed().as_millis() as u64,
+                    duration_ms: elapsed_millis(start, self.clock.monotonic_millis()),
                     error: "cancelled".to_string(),
                 });
             }
             result = eval => result,
         };
-        let duration_ms = start.elapsed().as_millis() as u64;
+        let duration_ms = elapsed_millis(start, self.clock.monotonic_millis());
 
         match result {
             Ok(Ok(prediction)) => Ok(EvaluationOutcome::Success {

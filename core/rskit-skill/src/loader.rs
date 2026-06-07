@@ -1,7 +1,5 @@
 //! Filesystem loading and activation for skill packs.
 
-use std::fs::File;
-use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
 
 use rskit_config::{AppConfig, ConfigLoader, ServiceConfig};
@@ -271,43 +269,20 @@ fn hash_file_bounded(
     path: &Path,
     total_asset_bytes: &mut u64,
 ) -> Result<sha2::digest::Output<Sha256>, SkillError> {
-    let file = open_regular_file(path)?;
-    let mut reader = BufReader::new(file);
-    let mut buffer = [0_u8; 16 * 1024];
-    let mut hasher = Sha256::new();
-    let mut file_bytes = 0_u64;
-
-    loop {
-        let read = reader.read(&mut buffer).map_err(|source| SkillError::Io {
+    let bytes = sync_io::file::read_bounded(path, MAX_ASSET_BYTES)
+        .map_err(|error| bounded_read_error(path, MAX_ASSET_BYTES, error))?;
+    *total_asset_bytes += bytes.len() as u64;
+    if *total_asset_bytes > MAX_ASSET_TOTAL_BYTES {
+        return Err(SkillError::AssetsTooLarge {
             path: path.to_path_buf(),
-            source,
-        })?;
-        if read == 0 {
-            break;
-        }
-        file_bytes += read as u64;
-        if file_bytes > MAX_ASSET_BYTES {
-            return Err(SkillError::FileTooLarge {
-                path: path.to_path_buf(),
-                limit_bytes: MAX_ASSET_BYTES,
-            });
-        }
-        *total_asset_bytes += read as u64;
-        if *total_asset_bytes > MAX_ASSET_TOTAL_BYTES {
-            return Err(SkillError::AssetsTooLarge {
-                path: path.to_path_buf(),
-                total_bytes: *total_asset_bytes,
-                limit_bytes: MAX_ASSET_TOTAL_BYTES,
-            });
-        }
-        hasher.update(&buffer[..read]);
+            total_bytes: *total_asset_bytes,
+            limit_bytes: MAX_ASSET_TOTAL_BYTES,
+        });
     }
 
+    let mut hasher = Sha256::new();
+    hasher.update(&bytes);
     Ok(hasher.finalize())
-}
-
-fn open_regular_file(path: &Path) -> Result<File, SkillError> {
-    sync_io::file::open_no_follow_regular(path).map_err(|error| fs_error(path, error))
 }
 
 fn ensure_under_root(pack_root: &Path, path: &Path) -> Result<(), SkillError> {

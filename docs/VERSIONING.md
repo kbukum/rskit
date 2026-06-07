@@ -28,16 +28,18 @@ according to the spec (`alpha < beta < rc < <release>`).
 
 ## Workspace inheritance
 
-The version lives once in the root `Cargo.toml`:
+Each workspace declares shared package metadata once in its workspace manifest.
+For example, `core/Cargo.toml` uses paths relative to `core/`:
 
 ```toml
+# core/Cargo.toml
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.91"
 
 [workspace.dependencies]
-rskit-errors = { path = "core/rskit-errors", version = "0.1.0" }
+rskit-errors = { path = "rskit-errors", version = "0.1.0" }
 # … core and contrib members follow the same pattern
 ```
 
@@ -103,10 +105,11 @@ use rskit::resilience::CircuitBreaker;
 
 ## MSRV (Minimum Supported Rust Version)
 
-The MSRV is pinned in `rust-toolchain.toml` and `[workspace.package]
-rust-version`. MSRV bumps are **breaking** and ship in MINOR releases
-(pre-1.0) or MAJOR releases (post-1.0). The current MSRV is documented in
-the README badge.
+The MSRV is declared by `[workspace.package] rust-version`. MSRV bumps are
+**breaking** and ship in MINOR releases (pre-1.0) or MAJOR releases
+(post-1.0). The current MSRV is documented in the README badge. The
+`rust-toolchain.toml` file pins the development and CI toolchain, which may be
+newer than the MSRV.
 
 ## Best Practices
 

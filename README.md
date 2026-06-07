@@ -4,7 +4,7 @@
 [![Crates.io](https://img.shields.io/crates/v/rskit.svg)](https://crates.io/crates/rskit)
 [![docs.rs](https://img.shields.io/docsrs/rskit)](https://docs.rs/rskit)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![MSRV: 1.85](https://img.shields.io/badge/MSRV-1.85-orange.svg)](rust-toolchain.toml)
+[![MSRV: 1.91](https://img.shields.io/badge/MSRV-1.91-orange.svg)](core/Cargo.toml)
 
 **A production-grade Rust toolkit for building scalable, resilient services.** Structured errors, layered config, OpenTelemetry observability, typestate lifecycle, tower-based resilience, async pipelines, worker pools, security policy, and tonic gRPC — composable building blocks built on the standard Rust async ecosystem.
 
@@ -43,10 +43,17 @@ CI still runs the full workspace; on pull requests the `changes` job also publis
 ## Install
 
 ```toml
-# Facade — re-exports all rskit-* crates
+# Facade — always-on foundation modules plus opt-in features/adapters
 [dependencies]
 rskit = "0.1"
 tokio = { version = "1", features = ["full"] }
+```
+
+Enable optional modules through facade features:
+
+```toml
+[dependencies]
+rskit = { version = "0.1", features = ["server", "cli", "storage-s3"] }
 ```
 
 Or pick only what you need:
@@ -58,14 +65,13 @@ rskit-resilience = "0.1"
 rskit-worker     = "0.1"
 ```
 
-Requires **Rust 1.85+** (enforced by `rust-toolchain.toml`).
+Requires **Rust 1.91+** (declared by workspace `rust-version`). The pinned
+development and CI toolchain in `rust-toolchain.toml` may be newer.
 
 ## Quickstart
 
 ```rust
-use rskit_bootstrap::AppBuilder;
-use rskit_config::ServiceConfig;
-use rskit_errors::AppResult;
+use rskit::{AppBuilder, AppResult};
 
 #[tokio::main]
 async fn main() -> AppResult<()> {

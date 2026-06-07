@@ -20,7 +20,7 @@
 //! | `worker` | `rskit-worker` (worker pools and typed events) |
 //! | `validation` | `rskit-validation` (field-level validation) |
 //!
-//! Feature flags control optional modules:
+//! Optional feature flags control higher-level modules and adapters:
 //!
 //! | Feature | Extra crate |
 //! |---------|-------------|
@@ -28,11 +28,12 @@
 //! | `grpc`   | `rskit-grpc` (aligned gRPC client/server transport) |
 //! | `encryption` | `rskit-encryption` (encryption helpers) |
 //! | `http`   | `rskit-http` (axum transport details) |
+//! | `httpclient` | `rskit-httpclient` (bounded HTTP client) |
 //! | `auth`   | `rskit-auth` (JWT, OIDC, password) |
 //! | `di`     | `rskit-di` (dependency injection) |
 //! | `database` | `rskit-database` (core + memory backend) |
 //! | `cache`  | `rskit-cache` (core + memory adapter) |
-//! | `cache-fs` | Filesystem cache adapter |
+//! | `cache-fs` | Filesystem cache adapter in `rskit-cache` |
 //! | `cache-redis` | Redis cache adapter |
 //! | `messaging` | `rskit-messaging` (core abstractions + in-memory backend) |
 //! | `messaging-kafka` | `Kafka` messaging adapter |
@@ -49,6 +50,9 @@
 //! | `chain`  | `rskit-chain` (sequential execution) |
 //! | `process` | `rskit-process` (subprocess execution) |
 //! | `stateful` | `rskit-stateful` (stateful accumulators) |
+//! | `version` | `rskit-version` (build metadata) |
+//! | `schema` | `rskit-schema` (JSON Schema generation/validation) |
+//! | `hook` | `rskit-hook` (typed event hooks) |
 //! | `genai` | `rskit-ai` (shared `GenAI` vocabulary) |
 //! | `llm`    | `rskit-llm` (LLM providers) |
 //! | `llm-openai` | `OpenAI` LLM adapter |
@@ -57,6 +61,11 @@
 //! | `llm-gemini` | `Gemini` LLM adapter |
 //! | `embedding` | `rskit-embedding` (embedding abstractions) |
 //! | `inference` | `rskit-inference` (model-serving abstractions) |
+//! | `inference-triton` | Triton inference adapter |
+//! | `inference-vllm` | vLLM inference adapter |
+//! | `inference-tgi` | Hugging Face TGI inference adapter |
+//! | `prompt` | Prompt schema helpers from `rskit-ai` |
+//! | `skill` | `rskit-skill` (skill manifests and registries) |
 //! | `tool` | `rskit-tool` (tool contracts) |
 //! | `agent` | `rskit-agent` (agent contracts) |
 //! | `mcp` | `rskit-mcp` (Model Context Protocol support) |
@@ -135,6 +144,18 @@ pub use rskit_process as process;
 /// Stateful accumulators and keyed managers.
 #[cfg(feature = "stateful")]
 pub use rskit_stateful as stateful;
+
+/// Build-time version and git metadata.
+#[cfg(feature = "version")]
+pub use rskit_version as version;
+
+/// JSON Schema generation and validation helpers.
+#[cfg(feature = "schema")]
+pub use rskit_schema as schema;
+
+/// Typed event hook registry and event bus primitives.
+#[cfg(feature = "hook")]
+pub use rskit_hook as hook;
 
 // ── Feature-gated sub-crate facades ──────────────────────────────────────────
 

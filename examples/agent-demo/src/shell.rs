@@ -1,4 +1,4 @@
-//! Interactive command shell with Copilot-inspired UI.
+//! Interactive command shell using `rskit::worker` through the facade.
 //!
 //! Terminal layout (bottom of visible area):
 //!   [activity log — scrolls up via multi.println()]
@@ -13,8 +13,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use rskit_errors::AppResult;
-use rskit_worker::{EventKind, Pool, PoolConfig};
+use rskit::AppResult;
+use rskit::util::time::format_duration;
+use rskit::worker::{EventKind, Pool, PoolConfig};
 
 use crate::dashboard::{self, TaskStatus, TrackedTask};
 use crate::tasks::{AgentHandler, AgentTask, TaskOutput};
@@ -260,7 +261,7 @@ pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
                         multi.println(format!(
                             "\n  \x1b[1mWorker Pool\x1b[0m: {} active / {} capacity\n  \x1b[1mTasks\x1b[0m: {} running, {} done, {} failed, {} cancelled, {} total\n  \x1b[1mUptime\x1b[0m: {}\n",
                             st.running, st.capacity, running, done, failed, cancelled, tasks.len(),
-                            dashboard::format_duration(start_time.elapsed())
+                            format_duration(start_time.elapsed())
                         )).ok();
                     }
 
@@ -575,7 +576,7 @@ const BANNER: &str = concat!(
     "\n",
     "  \x1b[1;36m🚀 rskit Agent Demo\x1b[0m — Media Processing Pipeline\n",
     "  \x1b[2mShowcasing background workers, progress tracking, and stream processing\x1b[0m\n",
-    "  \x1b[2mrskit-worker │ rskit-cli │ rskit-pipeline │ rskit-storage │ rskit-media-image\x1b[0m\n",
+    "  \x1b[2mrskit::worker │ rskit::cli │ rskit::storage │ rskit::media_image\x1b[0m\n",
 );
 
 #[cfg(test)]

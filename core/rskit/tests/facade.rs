@@ -55,3 +55,21 @@ fn health_types_accessible_from_facade() {
     assert_eq!(health.status, HealthStatus::Healthy);
     assert!(health.is_healthy());
 }
+
+#[cfg(feature = "version")]
+#[test]
+fn version_crate_accessible_from_facade() {
+    let _ = std::any::TypeId::of::<rskit::version::VersionInfo>();
+}
+
+#[cfg(feature = "schema")]
+#[test]
+fn schema_crate_accessible_from_facade() {
+    let _ = std::any::TypeId::of::<rskit::schema::ValidationLimits>();
+}
+
+#[cfg(feature = "hook")]
+#[test]
+fn hook_crate_accessible_from_facade() {
+    let _ = std::any::TypeId::of::<rskit::hook::HookRegistry>();
+}

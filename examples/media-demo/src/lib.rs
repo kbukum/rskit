@@ -2,8 +2,8 @@
 
 use std::path::PathBuf;
 
-use rskit_errors::{AppError, AppResult, ErrorCode};
-use rskit_media_ffmpeg::Config as FfmpegConfig;
+use rskit::media_ffmpeg::Config as FfmpegConfig;
+use rskit::{AppError, AppResult, ErrorCode};
 
 /// Build FFmpeg demo configuration with local paths confined to the current directory.
 ///

@@ -30,4 +30,4 @@ ai · llm · llm-providers · embedding · inference · inference-tgi · inferen
 media · media-audio · media-ffmpeg · media-image
 
 ## ⚙️ Infra  (`make check-infra`)
-workload · bench · cli · dataset · testutil · integration
+bench · cli · dataset · git · testutil · rskit

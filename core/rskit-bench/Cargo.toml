@@ -28,7 +28,9 @@ parking_lot    = { workspace = true }
 rskit-errors   = { path = "../rskit-errors" }
 rskit-fs       = { path = "../rskit-fs" }
 rskit-provider = { path = "../rskit-provider" }
+rskit-util     = { path = "../rskit-util" }
 rskit-worker   = { path = "../rskit-worker" }
+rskit-cli      = { path = "../rskit-cli" }
 rskit-observability = { path = "../rskit-observability" }
 
 [dev-dependencies]

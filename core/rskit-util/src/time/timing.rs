@@ -24,6 +24,13 @@ where
     (result, start.elapsed())
 }
 
+/// Returns the non-negative elapsed milliseconds between two monotonic
+/// millisecond readings.
+#[must_use]
+pub const fn elapsed_millis(start: u64, end: u64) -> u64 {
+    end.saturating_sub(start)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -33,5 +40,11 @@ mod tests {
         let (res, elapsed) = time_it(|| 42);
         assert_eq!(res, 42);
         assert!(elapsed <= Duration::from_secs(1));
+    }
+
+    #[test]
+    fn elapsed_millis_saturates() {
+        assert_eq!(elapsed_millis(10, 25), 15);
+        assert_eq!(elapsed_millis(25, 10), 0);
     }
 }

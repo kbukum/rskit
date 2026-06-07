@@ -11,7 +11,6 @@ xtcheck = "clippy --workspace -- -D warnings"
 xttest  = "test --workspace"
 xtdoc   = "doc --workspace --no-deps"
 xtdeny  = "deny check"
-public-api = "public-api"
 xtask = "run --package xtask --"
 
 # Linker optimization: use mold on Linux for faster linking.
