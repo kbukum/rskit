@@ -56,6 +56,10 @@ jobs:
       - uses: taiki-e/install-action@15413b256f995d819248ea62704771a959284285  # v2
         with:
           tool: cargo-deny,cargo-audit,cargo-nextest,cargo-llvm-cov,cargo-cyclonedx
+      - name: Install nightly for rustdoc JSON
+        run: rustup toolchain install nightly --profile minimal
+      - name: Install cargo-public-api
+        run: cargo install cargo-public-api --version 0.52.0 --locked
       - name: Install mold linker
         run: sudo apt-get install -y mold
       - name: Install cosign

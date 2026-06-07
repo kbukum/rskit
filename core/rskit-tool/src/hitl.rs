@@ -279,6 +279,71 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn deny_on_sensitive_uses_lt_and_regex_matchers() {
+        let evaluator = DenyOnSensitive;
+        let ctx = Context::new();
+        let env = envelope(vec![
+            SensitivePredicate {
+                jsonpath: "$.risk".to_owned(),
+                matcher: SensitiveMatcher::Lt(0.25),
+            },
+            SensitivePredicate {
+                jsonpath: "$.email".to_owned(),
+                matcher: SensitiveMatcher::Regex(".*@example.com".to_owned()),
+            },
+        ]);
+
+        let low_risk = evaluator
+            .evaluate(&ctx, &call(json!({"risk": 0.1})), &env)
+            .await
+            .unwrap();
+        assert!(matches!(low_risk, Decision::Deny(_)));
+
+        let matching_email = evaluator
+            .evaluate(&ctx, &call(json!({"email": "dev@example.com"})), &env)
+            .await
+            .unwrap();
+        assert!(matches!(matching_email, Decision::Deny(_)));
+
+        let allowed = evaluator
+            .evaluate(&ctx, &call(json!({"risk": 0.8, "email": "dev.test"})), &env)
+            .await
+            .unwrap();
+        assert!(matches!(allowed, Decision::Allow));
+    }
+
+    #[tokio::test]
+    async fn deny_on_sensitive_ignores_invalid_or_non_scalar_paths() {
+        let evaluator = DenyOnSensitive;
+        let ctx = Context::new();
+        let env = envelope(vec![
+            SensitivePredicate {
+                jsonpath: "$.nested.".to_owned(),
+                matcher: SensitiveMatcher::Exists,
+            },
+            SensitivePredicate {
+                jsonpath: "$.nested.count".to_owned(),
+                matcher: SensitiveMatcher::Gt(1.0),
+            },
+            SensitivePredicate {
+                jsonpath: "$.nested.label".to_owned(),
+                matcher: SensitiveMatcher::Regex("secret.*".to_owned()),
+            },
+        ]);
+
+        let decision = evaluator
+            .evaluate(
+                &ctx,
+                &call(json!({"nested": {"count": "many", "label": 7}})),
+                &env,
+            )
+            .await
+            .unwrap();
+
+        assert!(matches!(decision, Decision::Allow));
+    }
+
+    #[tokio::test]
     async fn deny_human_approval_returns_false() {
         let approver = DenyHumanApproval;
         let ctx = Context::new();

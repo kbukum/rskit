@@ -72,6 +72,27 @@ make publish-dry-run
 
 If any check fails, fix it before tagging.
 
+### First-release publish rehearsal
+
+`cargo publish --dry-run` resolves registry dependencies from crates.io; it
+does not simulate publishing an unpublished internal dependency chain. For a
+lock-step first release (or any release where internal crates depend on the
+same not-yet-published version), `make publish-dry-run` therefore:
+
+1. Runs `cargo publish --dry-run --locked` for crates whose internal
+   same-version dependencies already exist on crates.io.
+2. Explicitly skips crates blocked by unpublished internal same-version
+   dependencies and runs `cargo package --locked --list` as a packaging sanity
+   check for each skipped crate.
+3. Prints a notice listing the skipped crates, so the rehearsal does not claim
+   full crates.io dependency-chain validation.
+
+The reliable first-release gate is the combination of full workspace
+build/test/docs/audit/coverage, generated publish order, package-list sanity
+checks for blocked crates, and the actual tag workflow publishing crates in
+dependency order. If any real publish step fails, stop and fix forward before
+continuing the chain.
+
 ## 5. Tag the release
 
 ```sh
@@ -83,8 +104,10 @@ The release workflow (`.github/workflows/release.yml`) is triggered by the
 tag push and will:
 
 - Re-run the full test + lint + audit suite on the tagged commit.
-- Dry-run publishing, then publish every publishable workspace crate to
-  crates.io in dependency order when `CARGO_REGISTRY_TOKEN` is configured.
+- Dry-run publishing where same-version internal dependencies already exist on
+  crates.io, package-list crates blocked by unpublished internal dependencies,
+  then publish every publishable workspace crate to crates.io in dependency
+  order when `CARGO_REGISTRY_TOKEN` is configured.
 - Sign the release SBOMs with [cosign](https://github.com/sigstore/cosign).
 - Generate and attach a CycloneDX SBOM (`cargo-cyclonedx`).
 

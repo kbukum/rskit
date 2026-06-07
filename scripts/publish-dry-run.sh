@@ -22,6 +22,52 @@ esac
 echo "==> Resolving publish order..."
 order_file="$(mktemp "${TMPDIR:-/tmp}/rskit-publish-order.XXXXXX")"
 trap 'rm -f "$order_file"' EXIT
+
+crate_version_published() {
+    local crate=$1
+    local version=$2
+
+    if python3 - "$crate" "$version" <<'PY'
+import json
+import sys
+import urllib.error
+import urllib.request
+
+crate = sys.argv[1]
+version = sys.argv[2]
+url = f"https://crates.io/api/v1/crates/{crate}/{version}"
+request = urllib.request.Request(url, headers={"User-Agent": "rskit-release-rehearsal"})
+try:
+    with urllib.request.urlopen(request, timeout=10) as response:
+        data = json.load(response)
+except urllib.error.HTTPError as error:
+    if error.code == 404:
+        raise SystemExit(1)
+    print(f"warning: crates.io lookup for {crate} {version} failed: HTTP {error.code}", file=sys.stderr)
+    raise SystemExit(2)
+except Exception as error:
+    print(f"warning: crates.io lookup for {crate} {version} failed: {error}", file=sys.stderr)
+    raise SystemExit(2)
+
+published = data.get("version", {}).get("num") == version
+raise SystemExit(0 if published else 1)
+PY
+    then
+        return 0
+    fi
+
+    return 1
+}
+
+notice() {
+    local message=$1
+    if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+        echo "::notice title=Publish dry-run skipped::${message}"
+    else
+        echo "notice: ${message}"
+    fi
+}
+
 python3 - "$ROOT" > "$order_file" <<'PY'
 import json
 import pathlib
@@ -62,6 +108,7 @@ for workspace_manifest in workspace_manifests:
         packages[package["id"]] = {
             "name": package["name"],
             "manifest": str(manifest_path),
+            "version": package["version"],
         }
 
 for data in metadata_documents:
@@ -109,17 +156,39 @@ ordered.sort(key=lambda package_id: packages[package_id]["name"] == "rskit")
 
 for package_id in ordered:
     package = packages[package_id]
-    print(f"{package['name']}\t{package['manifest']}")
+    internal_deps = ",".join(sorted(packages[dep_id]["name"] for dep_id in edges[package_id]))
+    print(f"{package['name']}\t{package['manifest']}\t{package['version']}\t{internal_deps}")
 PY
 
-while IFS=$'\t' read -r name manifest; do
+skipped=0
+while IFS=$'\t' read -r name manifest version internal_deps; do
     [ -n "$name" ] || continue
     if [ "$MODE" = "--list" ]; then
         printf '%s\t%s\n' "$name" "$manifest"
         continue
     fi
+    if [ "$MODE" = "--dry-run" ] && [ -n "$internal_deps" ]; then
+        blocked=()
+        IFS=',' read -r -a deps <<< "$internal_deps"
+        for dep in "${deps[@]}"; do
+            [ -n "$dep" ] || continue
+            if ! crate_version_published "$dep" "$version"; then
+                blocked+=("$dep")
+            fi
+        done
+        if [ "${#blocked[@]}" -gt 0 ]; then
+            skipped=$((skipped + 1))
+            joined=$(IFS=','; echo "${blocked[*]}")
+            notice "${name} ${version} depends on unpublished internal crate(s): ${joined}. cargo publish --dry-run cannot fully validate this crate until those same-version dependencies exist on crates.io; running package-list sanity check instead."
+            cargo package --locked --list "${dirty_args[@]}" --manifest-path "$manifest" >/dev/null
+            continue
+        fi
+    fi
     echo "==> cargo ${cargo_args[*]} ${name}"
     cargo "${cargo_args[@]}" --manifest-path "$manifest"
 done < "$order_file"
 
+if [ "$MODE" = "--dry-run" ] && [ "$skipped" -gt 0 ]; then
+    echo "warning: ${skipped} crate(s) were package-listed but not cargo publish --dry-run validated because their same-version internal dependencies are not on crates.io yet."
+fi
 echo "✓ Cargo publish ${MODE#--} completed"

@@ -5622,6 +5622,7 @@ dependencies = [
  "futures",
  "futures-util",
  "image",
+ "parking_lot",
  "rskit-errors",
  "rskit-fs",
  "rskit-pipeline",

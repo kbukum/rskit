@@ -125,7 +125,7 @@ jobs:
           cargo clippy --manifest-path contrib/Cargo.toml --workspace -- -D warnings
 
   # ---------------------------------------------------------------------------
-  # Tests — matrix across OS + pinned toolchain pair (N-1 / N)
+  # Tests — matrix across OS + declared MSRV and pinned development toolchain
   # ---------------------------------------------------------------------------
   test:
     name: Test (${{ matrix.os }} / ${{ matrix.rust }})
@@ -139,7 +139,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        rust: ["1.94", "1.95"]
+        rust: ["1.91", "1.95"]
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
@@ -245,6 +245,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: stable
+      - name: Install nightly for rustdoc JSON
+        run: rustup toolchain install nightly --profile minimal
       - name: Install cargo-public-api
         run: cargo install cargo-public-api --version 0.52.0 --locked
       - run: ./scripts/check-topology.sh
@@ -267,6 +269,8 @@ jobs:
       - uses: taiki-e/install-action@4bc351f7f2614e48088386e2a0ad917ca3a7e4ba  # v2
         with:
           tool: cargo-deny,cargo-audit
+      - name: Install nightly for rustdoc JSON
+        run: rustup toolchain install nightly --profile minimal
       - name: Install cargo-public-api
         run: cargo install cargo-public-api --version 0.52.0 --locked
       - run: cargo deny --manifest-path core/Cargo.toml check licenses advisories sources bans

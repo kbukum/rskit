@@ -38,8 +38,9 @@ default = ["image-transform"]
 image-transform = ["dep:image"]
 
 [dev-dependencies]
-tokio    = { workspace = true, features = ["test-util", "full"] }
-tempfile = { workspace = true }
+parking_lot = { workspace = true }
+tokio       = { workspace = true, features = ["test-util", "full"] }
+tempfile    = { workspace = true }
 
 [package.metadata.docs.rs]
 all-features = true

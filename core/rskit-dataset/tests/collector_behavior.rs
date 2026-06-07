@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use futures::stream;
+use parking_lot::Mutex;
 use rskit_dataset::{
     BoxDataStream, Collector, CollectorConfig, DataItem, DatasetLimits, Label, MediaType,
     ProgressCallback, PublishResult, Source, SourceStats, Target, Transform,
@@ -68,10 +69,7 @@ impl Source for FixtureSource {
     }
 
     fn set_resume_state(&mut self, offset: usize, already_fetched: usize) {
-        self.resume_calls
-            .lock()
-            .unwrap()
-            .push((offset, already_fetched));
+        self.resume_calls.lock().push((offset, already_fetched));
     }
 }
 
@@ -119,56 +117,44 @@ impl ProgressCallback for RecordingProgress {
     fn on_source_start(&self, index: usize, name: &str, max_items: Option<usize>) {
         self.events
             .lock()
-            .unwrap()
             .push(format!("start:{index}:{name}:{max_items:?}"));
     }
 
     fn on_source_progress(&self, index: usize, count: usize) {
-        self.events
-            .lock()
-            .unwrap()
-            .push(format!("progress:{index}:{count}"));
+        self.events.lock().push(format!("progress:{index}:{count}"));
     }
 
     fn on_source_done(&self, index: usize, name: &str, stats: &SourceStats) {
         self.events
             .lock()
-            .unwrap()
             .push(format!("done:{index}:{name}:{}", stats.total));
     }
 
     fn on_source_cached(&self, index: usize, name: &str, stats: &SourceStats) {
         self.events
             .lock()
-            .unwrap()
             .push(format!("cached:{index}:{name}:{}", stats.total));
     }
 
     fn on_source_error(&self, index: usize, name: &str, error: &str) {
         self.events
             .lock()
-            .unwrap()
             .push(format!("error:{index}:{name}:{error}"));
     }
 
     fn on_publish_start(&self, target: &str) {
-        self.events
-            .lock()
-            .unwrap()
-            .push(format!("publish-start:{target}"));
+        self.events.lock().push(format!("publish-start:{target}"));
     }
 
     fn on_publish_done(&self, target: &str, result: &PublishResult) {
         self.events
             .lock()
-            .unwrap()
             .push(format!("publish-done:{target}:{}", result.files_published));
     }
 
     fn on_publish_error(&self, target: &str, error: &str) {
         self.events
             .lock()
-            .unwrap()
             .push(format!("publish-error:{target}:{error}"));
     }
 }
@@ -219,7 +205,7 @@ fn source_display_name_uses_last_path_component_and_records_resume_state() {
     let mut source = FixtureSource::new("provider/path/name", Vec::new());
     assert_eq!(source.display_name(), "name");
     source.set_resume_state(10, 7);
-    assert_eq!(*source.resume_calls.lock().unwrap(), vec![(10, 7)]);
+    assert_eq!(*source.resume_calls.lock(), vec![(10, 7)]);
 }
 
 #[tokio::test]
@@ -279,7 +265,7 @@ async fn collector_runs_transforms_publishes_targets_and_reuses_done_cache() {
         b"ai"
     );
 
-    let observed = events.lock().unwrap().clone();
+    let observed = events.lock().clone();
     assert!(
         observed
             .iter()
@@ -328,7 +314,6 @@ async fn collector_runs_transforms_publishes_targets_and_reuses_done_cache() {
     assert!(
         cached_events
             .lock()
-            .unwrap()
             .iter()
             .any(|event| event == "cached:0:fixture:2")
     );
@@ -373,7 +358,6 @@ async fn collector_records_partial_stats_for_source_and_transform_failures() {
     assert!(
         events
             .lock()
-            .unwrap()
             .iter()
             .any(|event| event.starts_with("error:0:partial:"))
     );
@@ -398,5 +382,5 @@ async fn collector_records_partial_stats_for_source_and_transform_failures() {
     .await
     .unwrap();
 
-    assert_eq!(*resume_calls.lock().unwrap(), vec![(3, 1)]);
+    assert_eq!(*resume_calls.lock(), vec![(3, 1)]);
 }

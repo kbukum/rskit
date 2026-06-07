@@ -84,7 +84,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed — Cross-Cutting
 - **Release readiness**: added final release sweeps, dependency-ordered publish
   dry-runs, release coverage thresholds, CycloneDX SBOM generation, tag-release
-  SBOM signing, and CI guardrails for the Rust 1.94/1.95 toolchain pair.
+  SBOM signing, and CI guardrails for the declared MSRV plus pinned toolchain.
 - **Infra/facade refinement**: aligned facade feature wiring and documentation,
   routed examples through the public `rskit` facade, added facade feature-matrix
   validation, made public API checks select the owning workspace manifest,

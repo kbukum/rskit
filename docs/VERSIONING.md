@@ -72,6 +72,13 @@ Publishing order is derived from Cargo metadata by
 [`scripts/publish-dry-run.sh`](../scripts/publish-dry-run.sh), which publishes
 internal path dependencies before crates that depend on them.
 
+For first releases and lock-step releases, `cargo publish --dry-run` cannot
+fully validate crates whose same-version internal dependencies are not yet on
+crates.io. The publish rehearsal script reports those crates explicitly and
+falls back to `cargo package --locked --list` for packaging sanity; the actual
+release workflow remains dependency-ordered and stops on the first publish
+failure.
+
 ## Compatibility Policy
 
 ### Pre-1.0 (`0.x.y`)
