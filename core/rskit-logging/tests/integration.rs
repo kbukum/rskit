@@ -12,7 +12,10 @@ use rskit_config::{LogFormat, LogOutput, LoggingConfig};
 use rskit_logging::context::{
     component_span, request_span, set_correlation_id, set_trace_id, set_user_id,
 };
-use rskit_logging::init_logging;
+use rskit_logging::{
+    MaskingConfig, SamplingConfig, init_logging, init_logging_with_masking,
+    init_logging_with_options,
+};
 use tracing::subscriber::with_default;
 use tracing::{Subscriber, info_span};
 use tracing_subscriber::layer::SubscriberExt;
@@ -225,6 +228,150 @@ fn init_logging_file_output_writes_to_configured_file() {
 
     let output = std::fs::read_to_string(path).unwrap();
     assert!(output.contains("file output test"), "output: {output}");
+}
+
+#[test]
+fn init_logging_reports_file_open_errors_without_installing_successful_guard() {
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = LoggingConfig {
+        output: LogOutput::File {
+            path: dir
+                .path()
+                .join("missing-parent")
+                .join("app.log")
+                .to_string_lossy()
+                .into_owned(),
+        },
+        ..Default::default()
+    };
+
+    let error = match init_logging(&cfg) {
+        Ok(_) => panic!("missing parent directory should fail"),
+        Err(error) => error,
+    };
+
+    assert_eq!(error.code(), rskit_errors::ErrorCode::NotFound);
+    assert!(error.message().contains("open log output file"));
+}
+
+#[test]
+fn init_logging_with_options_combines_sampling_module_levels_and_masking() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("masked.log");
+    let cfg = LoggingConfig {
+        format: LogFormat::Json,
+        output: LogOutput::File {
+            path: path.to_string_lossy().into_owned(),
+        },
+        ..Default::default()
+    };
+    let sampling = SamplingConfig {
+        enabled: true,
+        initial_rate: 10,
+        thereafter_rate: 2,
+    };
+    let module_levels =
+        std::collections::HashMap::from([("rskit_logging_test".to_owned(), "trace".to_owned())]);
+    let masking = MaskingConfig {
+        enabled: true,
+        field_names: vec!["tenant_secret".to_owned()],
+        value_patterns: vec![r"tenant-[0-9]+".to_owned()],
+        replacement: "[MASKED]".to_owned(),
+    };
+
+    {
+        let _guard =
+            init_logging_with_options(&cfg, Some(&sampling), Some(&module_levels), Some(&masking))
+                .unwrap();
+        tracing::info!(
+            target: "rskit_logging_test",
+            tenant_secret = "tenant-123",
+            email = "user@example.com",
+            "masking options"
+        );
+    }
+
+    let output = std::fs::read_to_string(path).unwrap();
+    assert!(output.contains("[MASKED]"), "output: {output}");
+    assert!(output.contains("***@***.***"), "output: {output}");
+    assert!(!output.contains("tenant-123"), "output: {output}");
+    assert!(!output.contains("user@example.com"), "output: {output}");
+}
+
+#[test]
+fn init_logging_with_masking_disabled_writes_original_values() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("unmasked.log");
+    let cfg = LoggingConfig {
+        output: LogOutput::File {
+            path: path.to_string_lossy().into_owned(),
+        },
+        ..Default::default()
+    };
+    let masking = MaskingConfig {
+        enabled: false,
+        ..Default::default()
+    };
+
+    {
+        let _guard = init_logging_with_masking(&cfg, &masking).unwrap();
+        tracing::info!(email = "user@example.com", "unmasked options");
+    }
+
+    let output = std::fs::read_to_string(path).unwrap();
+    assert!(output.contains("user@example.com"), "output: {output}");
+}
+
+#[test]
+fn init_logging_with_options_rejects_invalid_custom_masking_pattern() {
+    let cfg = LoggingConfig::default();
+    let masking = MaskingConfig {
+        value_patterns: vec!["(".to_owned()],
+        ..Default::default()
+    };
+
+    let error = match init_logging_with_options(&cfg, None, None, Some(&masking)) {
+        Ok(_) => panic!("invalid masking regex should fail"),
+        Err(error) => error,
+    };
+
+    assert_eq!(error.code(), rskit_errors::ErrorCode::InvalidFormat);
+}
+
+#[cfg(feature = "otlp")]
+#[test]
+fn full_logging_setup_accepts_disabled_otlp_with_all_optional_layers() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("full.log");
+    let cfg = LoggingConfig {
+        output: LogOutput::File {
+            path: path.to_string_lossy().into_owned(),
+        },
+        ..Default::default()
+    };
+    let sampling = SamplingConfig {
+        enabled: true,
+        initial_rate: 2,
+        thereafter_rate: 1,
+    };
+    let module_levels =
+        std::collections::HashMap::from([("rskit_logging_full".to_owned(), "debug".to_owned())]);
+    let masking = MaskingConfig::default();
+    let otlp = rskit_logging::otlp::OtlpConfig::default();
+    let setup = rskit_logging::LoggingSetup::new(&cfg, "svc", "test", "0.1.0")
+        .with_sampling(&sampling)
+        .with_module_levels(&module_levels)
+        .with_masking(&masking)
+        .with_otlp(&otlp);
+
+    {
+        let _guard = rskit_logging::init_logging_full(setup).unwrap();
+        tracing::debug!(target: "rskit_logging_full", "full setup user@example.com");
+    }
+
+    let output = std::fs::read_to_string(path).unwrap();
+    assert!(output.contains("***@***.***"), "output: {output}");
+    assert!(!output.contains("user@example.com"), "output: {output}");
 }
 
 #[test]

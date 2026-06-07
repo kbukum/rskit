@@ -1,6 +1,6 @@
 //! Generic dataset loader with pipeline integration.
 
-use crate::dataset::{DatasetManifest, Sample, load_content, load_manifest};
+use crate::dataset::{DatasetManifest, Sample, load_content, load_manifest_file};
 use crate::types::{BenchSample, LabelMapper};
 use rskit_errors::AppResult;
 use std::path::PathBuf;
@@ -42,7 +42,7 @@ impl<L: Send + Clone + 'static> DatasetLoader<L> {
     }
 
     pub fn manifest(&self) -> AppResult<DatasetManifest> {
-        load_manifest(&self.dir)
+        load_manifest_file(&self.dir, &self.config.manifest_file)
     }
 
     pub fn all(&self) -> AppResult<Vec<BenchSample<L>>> {

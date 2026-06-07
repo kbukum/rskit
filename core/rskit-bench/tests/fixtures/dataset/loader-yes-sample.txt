@@ -1,0 +1,1 @@
+fixture payload used to verify custom manifest loading for a yes label

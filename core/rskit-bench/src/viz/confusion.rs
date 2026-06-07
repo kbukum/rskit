@@ -1,6 +1,6 @@
 //! Confusion matrix heatmap SVG rendering.
 
-use super::svg::{Svg, heat_color, xml_escape};
+use super::svg::{Svg, heat_color};
 use crate::curves::ConfusionMatrixDetail;
 
 const PAD_LEFT: usize = 90;
@@ -76,7 +76,7 @@ pub fn render_confusion(cm: &ConfusionMatrixDetail, width: usize, height: usize)
         svg.text(
             left - 8.0,
             top + i as f64 * cell_h + cell_h / 2.0 + 5.0,
-            &xml_escape(label),
+            label,
             "#333",
             10,
             r#"text-anchor="end""#,
@@ -88,7 +88,7 @@ pub fn render_confusion(cm: &ConfusionMatrixDetail, width: usize, height: usize)
         svg.text(
             left + i as f64 * cell_w + cell_w / 2.0,
             top - 8.0,
-            &xml_escape(label),
+            label,
             "#333",
             10,
             r#"text-anchor="middle""#,

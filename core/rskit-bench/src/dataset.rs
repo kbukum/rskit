@@ -32,7 +32,11 @@ fn default_version() -> String {
 }
 
 pub fn load_manifest(dir: &Path) -> AppResult<DatasetManifest> {
-    let manifest_path = dir.join("manifest.json");
+    load_manifest_file(dir, "manifest.json")
+}
+
+pub(crate) fn load_manifest_file(dir: &Path, manifest_file: &str) -> AppResult<DatasetManifest> {
+    let manifest_path = dir.join(manifest_file);
     let content = file::read_string(&manifest_path).map_err(|e| {
         AppError::new(
             ErrorCode::NotFound,

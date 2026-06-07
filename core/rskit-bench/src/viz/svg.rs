@@ -1,5 +1,7 @@
 //! Low-level SVG element builder.
 
+use std::fmt::Write as _;
+
 pub(crate) struct Point {
     pub x: f64,
     pub y: f64,
@@ -96,7 +98,7 @@ impl Svg {
             if i > 0 {
                 pts.push(' ');
             }
-            pts.push_str(&format!("{:.2},{:.2}", p.x, p.y));
+            let _ = write!(&mut pts, "{:.2},{:.2}", p.x, p.y);
         }
         let mut s = format!(
             r#"<polyline points="{pts}" stroke="{stroke}" stroke-width="{stroke_width:.1}" fill="{fill}""#

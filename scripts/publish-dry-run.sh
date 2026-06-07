@@ -20,7 +20,7 @@ case "$MODE" in
 esac
 
 echo "==> Resolving publish order..."
-order_file="$(mktemp)"
+order_file="$(mktemp "${TMPDIR:-/tmp}/rskit-publish-order.XXXXXX")"
 trap 'rm -f "$order_file"' EXIT
 python3 - "$ROOT" > "$order_file" <<'PY'
 import json

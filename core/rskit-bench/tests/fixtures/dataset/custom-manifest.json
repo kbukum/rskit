@@ -1,0 +1,23 @@
+{
+  "name": "fixture-dataset",
+  "version": "2.1.0",
+  "samples": [
+    {
+      "id": "loader-yes-sample",
+      "file": "loader-yes-sample.txt",
+      "label": "yes",
+      "source": "fixture",
+      "description": "Exercises custom manifest loading, metadata preservation, and label filtering.",
+      "metadata": {
+        "tier": 1
+      }
+    },
+    {
+      "id": "loader-no-sample",
+      "file": "loader-no-sample.txt",
+      "label": "no",
+      "source": "fixture",
+      "description": "Companion sample proving non-matching labels are filtered before content loading."
+    }
+  ]
+}

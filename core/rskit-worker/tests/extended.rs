@@ -10,7 +10,11 @@ use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
-use rskit_worker::{Event, EventKind, Handler, Pool, PoolConfig, Progress, RoundRobinDispatcher};
+use rskit_worker::{
+    Event, EventKind, Handler, Pool, PoolConfig, Progress, ResourceRequirements,
+    RoundRobinDispatcher, WorkerScheduler, WorkloadBatch, WorkloadConfig, WorkloadScheduler,
+    WorkloadSpec,
+};
 
 // ── Shared test handlers ──────────────────────────────────────────────────────
 
@@ -657,4 +661,76 @@ async fn multiple_handler_events_received() {
         "expected at least Result event, got: {:?}",
         kinds
     );
+}
+
+// ── 19. Workload config clamps pool limits ─────────────────────────────────────
+
+#[test]
+fn workload_config_clamps_zero_limits_for_pool_config() {
+    let config = WorkloadConfig {
+        max_concurrent: 0,
+        queue_size: 0,
+    };
+
+    let pool_config = config.to_pool_config("scheduler");
+
+    assert_eq!(pool_config.name, "scheduler");
+    assert_eq!(pool_config.size, 1);
+    assert_eq!(pool_config.queue_size, 1);
+}
+
+// ── 20. Workload specs preserve resources and labels ──────────────────────────
+
+#[test]
+fn workload_spec_builders_preserve_resources_and_labels() {
+    let spec = WorkloadSpec::new("ingest")
+        .with_resources(ResourceRequirements {
+            cpu_units: 4,
+            memory_mib: 1024,
+        })
+        .with_label("tier", "batch")
+        .with_label("region", "eu");
+
+    assert_eq!(spec.name, "ingest");
+    assert_eq!(spec.resources.cpu_units, 4);
+    assert_eq!(spec.resources.memory_mib, 1024);
+    assert_eq!(spec.labels["tier"], "batch");
+    assert_eq!(spec.labels["region"], "eu");
+}
+
+// ── 21. Worker scheduler exposes placement and backs typed pools ──────────────
+
+#[tokio::test]
+async fn worker_scheduler_plans_and_builds_bounded_pool() {
+    let scheduler = WorkerScheduler::new(
+        "release-workers",
+        WorkloadConfig {
+            max_concurrent: 2,
+            queue_size: 8,
+        },
+    );
+
+    let plan = scheduler
+        .plan_batch(
+            WorkloadBatch::new("release")
+                .with_workload(WorkloadSpec::new("lint"))
+                .with_workload(WorkloadSpec::new("test")),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(plan.batch, "release");
+    assert_eq!(plan.decisions.len(), 2);
+    assert_eq!(plan.decisions[0].workload, "lint");
+    assert_eq!(plan.decisions[1].pool, "release-workers");
+    assert!(plan.decisions[1].reason.contains("capacity=2"));
+    assert!(plan.decisions[1].reason.contains("queue=8"));
+
+    let pool = scheduler.pool(Arc::new(DoubleHandler));
+    let stats = pool.stats();
+    assert_eq!(stats.name, "release-workers");
+    assert_eq!(stats.capacity, 2);
+
+    let handle = pool.submit(11).await.unwrap();
+    assert_eq!(handle.result().await.unwrap(), 22);
 }

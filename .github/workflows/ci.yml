@@ -245,6 +245,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: stable
+      - name: Install cargo-public-api
+        run: cargo install cargo-public-api --version 0.52.0 --locked
       - run: ./scripts/check-topology.sh
       - run: ./scripts/check-l7-edges.sh
       - run: ./scripts/check-public-api.sh
@@ -265,6 +267,8 @@ jobs:
       - uses: taiki-e/install-action@4bc351f7f2614e48088386e2a0ad917ca3a7e4ba  # v2
         with:
           tool: cargo-deny,cargo-audit
+      - name: Install cargo-public-api
+        run: cargo install cargo-public-api --version 0.52.0 --locked
       - run: cargo deny --manifest-path core/Cargo.toml check licenses advisories sources bans
       - run: cargo deny --manifest-path contrib/Cargo.toml check licenses advisories sources bans
       - run: ./scripts/check-release-readiness.sh
