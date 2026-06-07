@@ -37,7 +37,7 @@ edition = "2024"
 rust-version = "1.91"
 
 [workspace.dependencies]
-rskit-errors = { path = "core/rskit-errors", version = "0.1.0" }
+rskit-errors = { path = "rskit-errors", version = "0.1.0" }
 # … core and contrib members follow the same pattern
 ```
 
