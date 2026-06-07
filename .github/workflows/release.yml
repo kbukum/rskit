@@ -3,6 +3,9 @@ name: Release
 on:
   push:
     branches: [main]
+    tags:
+      - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -14,6 +17,7 @@ concurrency:
 jobs:
   release-plz:
     name: Release-plz
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -34,6 +38,44 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  tag-release:
+    name: Tag release
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
+        with:
+          toolchain: "1.95"
+          components: clippy,rustfmt,llvm-tools
+      - uses: taiki-e/install-action@15413b256f995d819248ea62704771a959284285  # v2
+        with:
+          tool: cargo-deny,cargo-audit,cargo-nextest,cargo-llvm-cov,cargo-cyclonedx
+      - name: Install mold linker
+        run: sudo apt-get install -y mold
+      - name: Install cosign
+        run: go install github.com/sigstore/cosign/v2/cmd/cosign@v2.6.1
+      - name: Release readiness
+        run: make release-readiness
+      - name: Coverage thresholds
+        run: make release-coverage
+      - name: Publish dry-run
+        run: make publish-dry-run
+      - name: Generate SBOM
+        run: make release-sbom
+      - name: Sign SBOMs
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          set -euo pipefail
+          for file in target/sbom/*.cdx.json; do
+            cosign sign-blob --yes --bundle "${file}.bundle" "$file"
+          done
       - name: Check crates.io token
         id: crates-token
         env:
@@ -45,12 +87,17 @@ jobs:
             echo "present=false" >> "$GITHUB_OUTPUT"
             echo "::notice::Skipping crates.io publish because CARGO_REGISTRY_TOKEN is not configured."
           fi
-
-      - name: Publish crates
+      - name: Publish crates in dependency order
         if: steps.crates-token.outputs.present == 'true'
-        uses: MarcoIeni/release-plz-action@064f4d1e36c843611ddf013be726beaa4ad804db  # v0.5
-        with:
-          command: release
-          token: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: ./scripts/publish-dry-run.sh --publish
+      - name: Create GitHub release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release create "${GITHUB_REF_NAME}" target/sbom/* \
+            --verify-tag \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes

@@ -30,14 +30,14 @@ parking_lot  = { workspace = true }
 
 # Internal
 rskit-ai = { workspace = true }
-rskit-component = { path = "../rskit-component" }
-rskit-errors   = { path = "../rskit-errors" }
-rskit-llm      = { path = "../rskit-llm" }
-rskit-observability = { path = "../rskit-observability" }
-rskit-provider = { path = "../rskit-provider" }
-rskit-resilience = { path = "../rskit-resilience" }
-rskit-tool     = { path = "../rskit-tool" }
-rskit-hook     = { path = "../rskit-hook" }
+rskit-component = { version = "0.1.0", path = "../rskit-component" }
+rskit-errors   = { version = "0.1.0", path = "../rskit-errors" }
+rskit-llm      = { version = "0.1.0", path = "../rskit-llm" }
+rskit-observability = { version = "0.1.0", path = "../rskit-observability" }
+rskit-provider = { version = "0.1.0", path = "../rskit-provider" }
+rskit-resilience = { version = "0.1.0", path = "../rskit-resilience" }
+rskit-tool     = { version = "0.1.0", path = "../rskit-tool" }
+rskit-hook     = { version = "0.1.0", path = "../rskit-hook" }
 
 [dev-dependencies]
 schemars     = { workspace = true }

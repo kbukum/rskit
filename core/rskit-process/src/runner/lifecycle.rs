@@ -119,6 +119,9 @@ async fn terminate_and_wait(
 fn terminate_process(pid: Option<u32>, config: &ProcessConfig, signal: ProcessSignal) -> bool {
     if let Some(pid) = pid {
         #[cfg(unix)]
+        // SAFETY: `kill` targets either the child pid or the negated
+        // process-group id created by the `pre_exec` hook. ESRCH means the
+        // process already exited.
         unsafe {
             let target =
                 if config.signal.create_process_group && config.signal.terminate_descendants {
@@ -126,9 +129,6 @@ fn terminate_process(pid: Option<u32>, config: &ProcessConfig, signal: ProcessSi
                 } else {
                     pid as i32
                 };
-            // SAFETY: `kill` targets either the child pid or the negated
-            // process-group id created by the `pre_exec` hook. ESRCH means the
-            // process already exited.
             let result = libc::kill(target, signal.as_raw());
             if result != 0 {
                 let error = std::io::Error::last_os_error();

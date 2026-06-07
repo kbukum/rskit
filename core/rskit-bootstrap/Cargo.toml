@@ -30,14 +30,14 @@ parking_lot  = { workspace = true }
 serde        = { workspace = true }
 
 # Internal
-rskit-errors = { path = "../rskit-errors" }
-rskit-config = { path = "../rskit-config" }
-rskit-logging = { path = "../rskit-logging" }
-rskit-component = { path = "../rskit-component" }
-rskit-di = { path = "../rskit-di" }
-rskit-hook = { path = "../rskit-hook" }
-rskit-provider = { path = "../rskit-provider" }
-rskit-validation = { path = "../rskit-validation" }
+rskit-errors = { version = "0.1.0", path = "../rskit-errors" }
+rskit-config = { version = "0.1.0", path = "../rskit-config" }
+rskit-logging = { version = "0.1.0", path = "../rskit-logging" }
+rskit-component = { version = "0.1.0", path = "../rskit-component" }
+rskit-di = { version = "0.1.0", path = "../rskit-di" }
+rskit-hook = { version = "0.1.0", path = "../rskit-hook" }
+rskit-provider = { version = "0.1.0", path = "../rskit-provider" }
+rskit-validation = { version = "0.1.0", path = "../rskit-validation" }
 
 [dev-dependencies]
 tokio        = { workspace = true, features = ["full"] }

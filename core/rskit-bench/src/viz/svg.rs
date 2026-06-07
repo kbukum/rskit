@@ -1,7 +1,5 @@
 //! Low-level SVG element builder.
 
-use std::fmt::Write;
-
 pub(crate) struct Point {
     pub x: f64,
     pub y: f64,
@@ -26,7 +24,8 @@ impl Svg {
         let mut s =
             format!(r#"<rect x="{x:.2}" y="{y:.2}" width="{w:.2}" height="{h:.2}" fill="{fill}""#);
         if !attrs.is_empty() {
-            write!(s, " {attrs}").unwrap();
+            s.push(' ');
+            s.push_str(attrs);
         }
         s.push_str("/>");
         self.elements.push(s);
@@ -47,7 +46,8 @@ impl Svg {
             r#"<line x1="{x1:.2}" y1="{y1:.2}" x2="{x2:.2}" y2="{y2:.2}" stroke="{stroke}" stroke-width="{stroke_width:.1}""#
         );
         if !attrs.is_empty() {
-            write!(s, " {attrs}").unwrap();
+            s.push(' ');
+            s.push_str(attrs);
         }
         s.push_str("/>");
         self.elements.push(s);
@@ -64,16 +64,20 @@ impl Svg {
     ) {
         let mut s = format!(r#"<text x="{x:.2}" y="{y:.2}" fill="{fill}" font-size="{font_size}""#);
         if !attrs.is_empty() {
-            write!(s, " {attrs}").unwrap();
+            s.push(' ');
+            s.push_str(attrs);
         }
-        write!(s, ">{}</text>", xml_escape(content)).unwrap();
+        s.push('>');
+        s.push_str(&xml_escape(content));
+        s.push_str("</text>");
         self.elements.push(s);
     }
 
     pub fn circle(&mut self, cx: f64, cy: f64, r: f64, fill: &str, attrs: &str) {
         let mut s = format!(r#"<circle cx="{cx:.2}" cy="{cy:.2}" r="{r:.1}" fill="{fill}""#);
         if !attrs.is_empty() {
-            write!(s, " {attrs}").unwrap();
+            s.push(' ');
+            s.push_str(attrs);
         }
         s.push_str("/>");
         self.elements.push(s);
@@ -92,13 +96,14 @@ impl Svg {
             if i > 0 {
                 pts.push(' ');
             }
-            write!(pts, "{:.2},{:.2}", p.x, p.y).unwrap();
+            pts.push_str(&format!("{:.2},{:.2}", p.x, p.y));
         }
         let mut s = format!(
             r#"<polyline points="{pts}" stroke="{stroke}" stroke-width="{stroke_width:.1}" fill="{fill}""#
         );
         if !attrs.is_empty() {
-            write!(s, " {attrs}").unwrap();
+            s.push(' ');
+            s.push_str(attrs);
         }
         s.push_str("/>");
         self.elements.push(s);
@@ -110,12 +115,10 @@ impl Svg {
             self.width, self.height, self.width, self.height
         );
         out.push('\n');
-        write!(
-            out,
+        out.push_str(&format!(
             r#"<rect width="{}" height="{}" fill="white"/>"#,
             self.width, self.height
-        )
-        .unwrap();
+        ));
         out.push('\n');
         for el in &self.elements {
             out.push_str(el);

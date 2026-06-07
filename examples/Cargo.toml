@@ -16,7 +16,7 @@ publish = false
 
 [workspace.dependencies]
 # Core crates
-rskit = { path = "../core/rskit" }
+rskit = { path = "../core/rskit", version = "0.1.0" }
 
 # External
 tokio = { version = "1", features = ["full"] }

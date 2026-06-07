@@ -25,10 +25,10 @@ serde_norway = { workspace = true }
 sha2         = { workspace = true }
 thiserror    = { workspace = true }
 tracing      = { workspace = true }
-rskit-config = { path = "../rskit-config" }
-rskit-errors = { path = "../rskit-errors" }
-rskit-fs = { path = "../rskit-fs", default-features = false }
-rskit-validation = { path = "../rskit-validation" }
+rskit-config = { version = "0.1.0", path = "../rskit-config" }
+rskit-errors = { version = "0.1.0", path = "../rskit-errors" }
+rskit-fs = { version = "0.1.0", path = "../rskit-fs", default-features = false }
+rskit-validation = { version = "0.1.0", path = "../rskit-validation" }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }

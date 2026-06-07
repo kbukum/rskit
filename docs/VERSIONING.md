@@ -68,6 +68,10 @@ git push origin v0.1.0
 The release workflow then publishes every workspace crate from `core/` and
 `contrib/`, plus the facade, in lock-step.
 
+Publishing order is derived from Cargo metadata by
+[`scripts/publish-dry-run.sh`](../scripts/publish-dry-run.sh), which publishes
+internal path dependencies before crates that depend on them.
+
 ## Compatibility Policy
 
 ### Pre-1.0 (`0.x.y`)
@@ -118,8 +122,8 @@ newer than the MSRV.
 2. **Follow SemVer strictly** — breaking changes = MAJOR (after 1.0) or
    MINOR (in 0.x).
 3. **Update CHANGELOG.md** under `[Unreleased]` before tagging.
-4. **Test before tagging** — run `cargo test --workspace` and
-   `cargo deny check`.
+4. **Test before tagging** — run `make release-readiness`,
+   `make release-coverage`, and `make publish-dry-run`.
 5. **Never force-push tags.**
 6. **Use pre-release tags for testing** — `v0.2.0-beta.1`.
 

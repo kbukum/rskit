@@ -30,7 +30,7 @@ validator = { workspace = true }
 parking_lot     = { workspace = true }
 
 # Internal
-rskit-errors    = { path = "../rskit-errors" }
-rskit-bootstrap = { path = "../rskit-bootstrap" }
-rskit-validation = { path = "../rskit-validation" }
-rskit-config = { path = "../rskit-config" }
+rskit-errors    = { version = "0.1.0", path = "../rskit-errors" }
+rskit-bootstrap = { version = "0.1.0", path = "../rskit-bootstrap" }
+rskit-validation = { version = "0.1.0", path = "../rskit-validation" }
+rskit-config = { version = "0.1.0", path = "../rskit-config" }

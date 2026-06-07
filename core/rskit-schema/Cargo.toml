@@ -24,7 +24,7 @@ serde_json = { workspace = true }
 jsonschema = { workspace = true }
 
 # Internal dependencies
-rskit-errors = { path = "../rskit-errors" }
+rskit-errors = { version = "0.1.0", path = "../rskit-errors" }
 
 [dev-dependencies]
 serde = { workspace = true }

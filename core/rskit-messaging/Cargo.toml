@@ -38,10 +38,10 @@ chrono          = { workspace = true }
 uuid            = { workspace = true }
 
 # Internal
-rskit-errors      = { path = "../rskit-errors" }
-rskit-bootstrap   = { path = "../rskit-bootstrap" }
-rskit-resilience  = { path = "../rskit-resilience" }
-rskit-provider  = { path = "../rskit-provider", optional = true }
+rskit-errors      = { version = "0.1.0", path = "../rskit-errors" }
+rskit-bootstrap   = { version = "0.1.0", path = "../rskit-bootstrap" }
+rskit-resilience  = { version = "0.1.0", path = "../rskit-resilience" }
+rskit-provider  = { version = "0.1.0", path = "../rskit-provider", optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

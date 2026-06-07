@@ -40,8 +40,8 @@ opentelemetry-appender-tracing = { workspace = true, optional = true }
 opentelemetry-otlp             = { workspace = true, optional = true }
 
 # Internal
-rskit-errors       = { path = "../rskit-errors" }
-rskit-config       = { path = "../rskit-config" }
+rskit-errors       = { version = "0.1.0", path = "../rskit-errors" }
+rskit-config       = { version = "0.1.0", path = "../rskit-config" }
 
 [dev-dependencies]
 serde_json = { workspace = true }

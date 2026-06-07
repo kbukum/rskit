@@ -29,10 +29,10 @@ uuid         = { version = "1", features = ["v7"] }
 
 # Internal
 rskit-ai = { workspace = true }
-rskit-component = { path = "../rskit-component" }
-rskit-errors = { path = "../rskit-errors" }
-rskit-provider = { path = "../rskit-provider" }
-rskit-tool   = { path = "../rskit-tool" }
+rskit-component = { version = "0.1.0", path = "../rskit-component" }
+rskit-errors = { version = "0.1.0", path = "../rskit-errors" }
+rskit-provider = { version = "0.1.0", path = "../rskit-provider" }
+rskit-tool   = { version = "0.1.0", path = "../rskit-tool" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }

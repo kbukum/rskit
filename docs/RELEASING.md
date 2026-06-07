@@ -8,7 +8,8 @@ and [`policy/DEPRECATION.md`](policy/DEPRECATION.md).
 
 - You are listed in `MAINTAINERS.md` and have push access to `kbukum/rskit`.
 - Your local clone is on `main` with no uncommitted changes.
-- `git`, `gh`, `cargo`, and `cargo-release` are on your `$PATH`.
+- `git`, `gh`, `cargo`, `cargo-nextest`, `cargo-deny`, `cargo-audit`,
+  `cargo-llvm-cov`, `cargo-cyclonedx`, and `cosign` are on your `$PATH`.
 - Your commits are GPG-signed (`git config commit.gpgsign true`) — release
   tags must be signed.
 - A `CARGO_REGISTRY_TOKEN` is configured in CI for crates.io publishing
@@ -61,12 +62,12 @@ git commit -S -m "chore: prepare vX.Y.Z release"
 ## 4. Pre-flight checks
 
 ```sh
-cargo fmt --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
-cargo deny check
-cargo doc --workspace --no-deps
-cargo publish --dry-run -p rskit-errors    # smoke test the smallest crate
+make check
+make deny
+make release-readiness
+make release-coverage
+make release-sbom
+make publish-dry-run
 ```
 
 If any check fails, fix it before tagging.
@@ -82,9 +83,9 @@ The release workflow (`.github/workflows/release.yml`) is triggered by the
 tag push and will:
 
 - Re-run the full test + lint + audit suite on the tagged commit.
-- Publish every workspace crate to crates.io in dependency order via
-  `cargo-release` (or a topologically sorted `cargo publish`).
-- Sign the release artifacts with [cosign](https://github.com/sigstore/cosign).
+- Dry-run publishing, then publish every publishable workspace crate to
+  crates.io in dependency order when `CARGO_REGISTRY_TOKEN` is configured.
+- Sign the release SBOMs with [cosign](https://github.com/sigstore/cosign).
 - Generate and attach a CycloneDX SBOM (`cargo-cyclonedx`).
 
 ## 6. Cut the GitHub Release

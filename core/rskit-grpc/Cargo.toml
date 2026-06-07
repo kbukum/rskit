@@ -30,11 +30,11 @@ http           = { workspace = true }
 chrono         = { workspace = true }
 
 # Internal
-rskit-errors   = { path = "../rskit-errors" }
-rskit-fs       = { path = "../rskit-fs" }
-rskit-resilience = { path = "../rskit-resilience" }
-rskit-security = { path = "../rskit-security" }
-rskit-discovery = { path = "../rskit-discovery", optional = true }
+rskit-errors   = { version = "0.1.0", path = "../rskit-errors" }
+rskit-fs       = { version = "0.1.0", path = "../rskit-fs" }
+rskit-resilience = { version = "0.1.0", path = "../rskit-resilience" }
+rskit-security = { version = "0.1.0", path = "../rskit-security" }
+rskit-discovery = { version = "0.1.0", path = "../rskit-discovery", optional = true }
 
 [dev-dependencies]
 tokio-util     = { workspace = true }

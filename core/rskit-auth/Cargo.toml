@@ -43,11 +43,11 @@ zeroize       = { workspace = true }
 reqwest       = { workspace = true }
 
 # Internal
-rskit-errors  = { path = "../rskit-errors" }
-rskit-config  = { path = "../rskit-config" }
-rskit-httpclient = { path = "../rskit-httpclient" }
-rskit-security = { path = "../rskit-security" }
-rskit-util = { path = "../rskit-util" }
+rskit-errors  = { version = "0.1.0", path = "../rskit-errors" }
+rskit-config  = { version = "0.1.0", path = "../rskit-config" }
+rskit-httpclient = { version = "0.1.0", path = "../rskit-httpclient" }
+rskit-security = { version = "0.1.0", path = "../rskit-security" }
+rskit-util = { version = "0.1.0", path = "../rskit-util" }
 
 [dev-dependencies]
 tokio         = { workspace = true, features = ["full", "macros", "rt-multi-thread"] }

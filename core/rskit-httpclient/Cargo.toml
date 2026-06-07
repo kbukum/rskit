@@ -30,10 +30,10 @@ thiserror    = { workspace = true }
 base64       = { workspace = true }
 
 # Internal
-rskit-errors = { path = "../rskit-errors" }
-rskit-fs = { path = "../rskit-fs" }
-rskit-resilience = { path = "../rskit-resilience" }
-rskit-security = { path = "../rskit-security" }
+rskit-errors = { version = "0.1.0", path = "../rskit-errors" }
+rskit-fs = { version = "0.1.0", path = "../rskit-fs" }
+rskit-resilience = { version = "0.1.0", path = "../rskit-resilience" }
+rskit-security = { version = "0.1.0", path = "../rskit-security" }
 
 [dev-dependencies]
 futures      = { workspace = true }

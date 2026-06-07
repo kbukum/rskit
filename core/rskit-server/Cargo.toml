@@ -44,14 +44,14 @@ rustls-pemfile   = { workspace = true, optional = true }
 tokio-rustls     = { workspace = true, optional = true }
 
 # Internal
-rskit-errors     = { path = "../rskit-errors" }
-rskit-fs         = { path = "../rskit-fs" }
-rskit-bootstrap  = { path = "../rskit-bootstrap" }
-rskit-grpc       = { path = "../rskit-grpc", default-features = false, optional = true }
-rskit-http       = { path = "../rskit-http", optional = true }
-rskit-security   = { path = "../rskit-security", optional = true }
-rskit-validation = { path = "../rskit-validation" }
-rskit-version    = { path = "../rskit-version", optional = true }
+rskit-errors     = { version = "0.1.0", path = "../rskit-errors" }
+rskit-fs         = { version = "0.1.0", path = "../rskit-fs" }
+rskit-bootstrap  = { version = "0.1.0", path = "../rskit-bootstrap" }
+rskit-grpc       = { version = "0.1.0", path = "../rskit-grpc", default-features = false, optional = true }
+rskit-http       = { version = "0.1.0", path = "../rskit-http", optional = true }
+rskit-security   = { version = "0.1.0", path = "../rskit-security", optional = true }
+rskit-validation = { version = "0.1.0", path = "../rskit-validation" }
+rskit-version    = { version = "0.1.0", path = "../rskit-version", optional = true }
 
 [features]
 default = ["http", "grpc"]

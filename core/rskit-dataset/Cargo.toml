@@ -27,11 +27,11 @@ futures      = { workspace = true }
 futures-util = { workspace = true }
 
 # Internal
-rskit-errors     = { path = "../rskit-errors" }
-rskit-fs         = { path = "../rskit-fs" }
-rskit-pipeline   = { path = "../rskit-pipeline" }
-rskit-schema     = { path = "../rskit-schema" }
-rskit-validation = { path = "../rskit-validation" }
+rskit-errors     = { version = "0.1.0", path = "../rskit-errors" }
+rskit-fs         = { version = "0.1.0", path = "../rskit-fs" }
+rskit-pipeline   = { version = "0.1.0", path = "../rskit-pipeline" }
+rskit-schema     = { version = "0.1.0", path = "../rskit-schema" }
+rskit-validation = { version = "0.1.0", path = "../rskit-validation" }
 
 [features]
 default = ["image-transform"]

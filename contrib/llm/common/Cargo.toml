@@ -8,6 +8,9 @@ rust-version.workspace = true
 authors.workspace      = true
 repository.workspace   = true
 homepage.workspace     = true
+documentation          = "https://docs.rs/rskit-llm-common"
+categories             = ["api-bindings"]
+keywords               = ["llm", "provider", "parsing", "ai"]
 
 [lints]
 workspace = true
