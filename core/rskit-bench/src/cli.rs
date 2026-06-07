@@ -22,6 +22,7 @@ impl CliRunner {
     }
 
     /// Create a CLI runner with injected storage.
+    #[must_use]
     pub fn with_storage(storage: Box<dyn RunStorage>) -> Self {
         Self { storage }
     }

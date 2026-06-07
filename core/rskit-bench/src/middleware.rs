@@ -127,6 +127,7 @@ impl<L: Send + Sync + Clone + 'static> Evaluator<L> for CachingMiddleware<L> {
 }
 
 /// Convenience: wrap an evaluator with timing.
+#[must_use]
 pub fn with_timing<L: Send + Sync + Clone + 'static>(
     eval: Box<dyn Evaluator<L>>,
 ) -> TimingMiddleware<L> {
@@ -134,6 +135,7 @@ pub fn with_timing<L: Send + Sync + Clone + 'static>(
 }
 
 /// Convenience: wrap an evaluator with caching.
+#[must_use]
 pub fn with_caching<L: Send + Sync + Clone + 'static>(
     eval: Box<dyn Evaluator<L>>,
 ) -> CachingMiddleware<L> {

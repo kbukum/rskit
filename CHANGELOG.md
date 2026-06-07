@@ -176,6 +176,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   successful even when captured stdout/stderr exceeded process capture limits.
 - **rskit-bench**: file-backed run listing now skips unreadable or partially
   written JSON result files while preserving explicit `load` failures.
+- **rskit-bench**: generated run IDs now sanitize tag-derived filename
+  components and file-backed storage rejects run IDs containing path separators.
 
 ### Changed — Pattern Contracts
 - **rskit-hook**: replaced public downcast-based hook payload handling with typed hook registration and added a bounded in-process event bus.

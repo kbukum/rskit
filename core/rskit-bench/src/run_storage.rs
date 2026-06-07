@@ -2,8 +2,11 @@
 
 use crate::result::{BenchRunResult, BenchRunSummary};
 use rskit_errors::{AppError, AppResult, ErrorCode};
-use rskit_fs::sync_io::{dir, file};
-use std::path::PathBuf;
+use rskit_fs::{
+    confine_path,
+    sync_io::{dir, file},
+};
+use std::path::{Path, PathBuf};
 
 /// Options for listing stored results.
 pub struct ListOptions {
@@ -23,16 +26,19 @@ impl Default for ListOptions {
 }
 
 impl ListOptions {
+    #[must_use]
     pub fn with_limit(mut self, n: usize) -> Self {
         self.limit = n;
         self
     }
 
+    #[must_use]
     pub fn with_tag(mut self, tag: impl Into<String>) -> Self {
         self.tag = Some(tag.into());
         self
     }
 
+    #[must_use]
     pub fn with_dataset(mut self, dataset: impl Into<String>) -> Self {
         self.dataset = Some(dataset.into());
         self
@@ -61,7 +67,7 @@ impl FileRunStorage {
 impl RunStorage for FileRunStorage {
     fn save(&self, result: &BenchRunResult) -> AppResult<String> {
         dir::create_all(&self.dir)?;
-        let path = self.dir.join(format!("{}.json", result.id));
+        let path = run_result_path(&self.dir, &result.id)?;
         let json = serde_json::to_string_pretty(result)
             .map_err(|e| AppError::new(ErrorCode::Internal, format!("serialize: {e}")))?;
         file::write(&path, json)?;
@@ -69,7 +75,7 @@ impl RunStorage for FileRunStorage {
     }
 
     fn load(&self, run_id: &str) -> AppResult<BenchRunResult> {
-        let path = self.dir.join(format!("{run_id}.json"));
+        let path = run_result_path(&self.dir, run_id)?;
         let content = file::read_string(&path).map_err(|e| {
             AppError::new(
                 ErrorCode::NotFound,
@@ -136,6 +142,16 @@ impl RunStorage for FileRunStorage {
     }
 }
 
+fn run_result_path(root: &Path, run_id: &str) -> AppResult<PathBuf> {
+    if run_id.contains(['/', '\\']) {
+        return Err(AppError::new(
+            ErrorCode::InvalidInput,
+            format!("run id must not contain path separators: {run_id}"),
+        ));
+    }
+    confine_path(root, Path::new(&format!("{run_id}.json")))
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -179,5 +195,21 @@ mod tests {
 
         assert_eq!(summaries.len(), 1);
         assert_eq!(summaries[0].id, "valid");
+    }
+
+    #[test]
+    fn save_rejects_run_ids_with_path_separators() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let storage = FileRunStorage::new(dir.path());
+        let mut result = result("../escaped");
+
+        let error = storage
+            .save(&result)
+            .expect_err("path separator should fail");
+
+        assert_eq!(error.code(), rskit_errors::ErrorCode::InvalidInput);
+        result.id = "nested/path".to_string();
+        let error = storage.save(&result).expect_err("nested path should fail");
+        assert_eq!(error.code(), rskit_errors::ErrorCode::InvalidInput);
     }
 }

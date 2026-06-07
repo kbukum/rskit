@@ -13,6 +13,7 @@ impl RunComparator {
         Self { threshold: 0.01 }
     }
 
+    #[must_use]
     pub fn with_threshold(mut self, threshold: f64) -> Self {
         self.threshold = threshold;
         self

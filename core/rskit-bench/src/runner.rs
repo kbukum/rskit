@@ -49,26 +49,31 @@ impl Default for RunOptions {
 }
 
 impl RunOptions {
+    #[must_use]
     pub fn with_concurrency(mut self, n: usize) -> Self {
         self.concurrency = n;
         self
     }
 
+    #[must_use]
     pub fn with_timeout(mut self, secs: u64) -> Self {
         self.timeout_secs = secs;
         self
     }
 
+    #[must_use]
     pub fn with_tag(mut self, tag: impl Into<String>) -> Self {
         self.tag = tag.into();
         self
     }
 
+    #[must_use]
     pub fn with_fail_on_regression(mut self, fail: bool) -> Self {
         self.fail_on_regression = fail;
         self
     }
 
+    #[must_use]
     pub fn with_target(mut self, metric: impl Into<String>, threshold: f64) -> Self {
         self.targets.insert(metric.into(), threshold);
         self
@@ -123,21 +128,25 @@ where
         self
     }
 
+    #[must_use]
     pub fn with_metrics(mut self, suite: Suite<L>) -> Self {
         self.metrics = Some(suite);
         self
     }
 
+    #[must_use]
     pub fn with_storage(mut self, storage: Box<dyn RunStorage>) -> Self {
         self.storage = Some(storage);
         self
     }
 
+    #[must_use]
     pub fn with_reporter(mut self, reporter: Box<dyn Reporter>) -> Self {
         self.reporters.push(reporter);
         self
     }
 
+    #[must_use]
     pub fn with_comparator(mut self, comparator: RunComparator) -> Self {
         self.comparator = Some(comparator);
         self
