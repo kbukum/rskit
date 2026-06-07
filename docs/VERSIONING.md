@@ -28,9 +28,11 @@ according to the spec (`alpha < beta < rc < <release>`).
 
 ## Workspace inheritance
 
-The version lives once in the root `Cargo.toml`:
+Each workspace declares shared package metadata once in its workspace manifest.
+For example, `core/Cargo.toml` uses paths relative to `core/`:
 
 ```toml
+# core/Cargo.toml
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
