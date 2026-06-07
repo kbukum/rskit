@@ -185,12 +185,8 @@ fn append_safe_missing_suffix(mut base: PathBuf, missing: Vec<OsString>) -> AppR
                 ),
             )
         })?;
-        if segment_path.components().any(|component| {
-            matches!(
-                component,
-                Component::RootDir | Component::ParentDir | Component::Prefix(_)
-            )
-        }) {
+        let mut components = segment_path.components();
+        if !matches!(components.next(), Some(Component::Normal(_))) || components.next().is_some() {
             return Err(AppError::new(
                 ErrorCode::InvalidInput,
                 format!("path segment '{}' is not safe", segment_path.display()),
@@ -224,13 +220,14 @@ pub fn parent_dir(path: &Path) -> Option<&Path> {
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::OsString;
     use std::path::Path;
 
     use rskit_errors::ErrorCode;
 
     use super::{
-        SafePathError, absolute, canonicalize, confine_existing_path, confine_path, safe_join,
-        validate_relative_path,
+        SafePathError, absolute, append_safe_missing_suffix, canonicalize, confine_existing_path,
+        confine_path, safe_join, validate_relative_path,
     };
 
     #[test]
@@ -333,6 +330,16 @@ mod tests {
 
         assert!(confined.starts_with(std::fs::canonicalize(dir.path()).unwrap()));
         assert!(confined.ends_with("nested/output.txt"));
+    }
+
+    #[test]
+    fn rejects_curdir_missing_path_segments() {
+        let dir = crate::TempDir::new().unwrap();
+
+        let error = append_safe_missing_suffix(dir.path().to_path_buf(), vec![OsString::from(".")])
+            .unwrap_err();
+
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
     }
 
     #[cfg(unix)]

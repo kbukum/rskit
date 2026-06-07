@@ -25,15 +25,6 @@ impl FfmpegCommand {
         output_path: &std::path::Path,
         cancel: CancellationToken,
     ) -> Result<(), crate::error::FfmpegError> {
-        let output_path =
-            crate::paths::confine_output_path(config, output_path).map_err(|error| {
-                crate::error::FfmpegError {
-                    kind: crate::error::FfmpegErrorKind::InvalidInput,
-                    exit_code: None,
-                    stderr: String::new(),
-                    message: format!("invalid ffmpeg output path: {error}"),
-                }
-            })?;
         let mut args = self.to_os_args();
         args.push(output_path.as_os_str().to_os_string());
 

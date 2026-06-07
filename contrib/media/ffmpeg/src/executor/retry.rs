@@ -41,14 +41,11 @@ impl FfmpegExecutor {
         cancel: CancellationToken,
     ) -> AppResult<std::path::PathBuf> {
         let ext = self.determine_output_extension(ops);
-        let output_file = match sink {
-            Some(FileSink::Path(p)) => {
-                let output_path = crate::paths::confine_output_path(&self.config, p)?;
-                crate::paths::create_output_parent(&self.config, &output_path).await?;
-                output_path
-            }
-            _ => TempFile::with_extension(&ext)?.path().to_path_buf(),
-        };
+        let output = prepare_output_path(&self.config, &ext, sink)?;
+        if output.is_user_path {
+            crate::paths::create_output_parent(&self.config, &output.path).await?;
+        }
+        let output_file = output.path;
 
         let _permit = tokio::select! {
             biased;
@@ -213,9 +210,61 @@ impl FfmpegExecutor {
     }
 }
 
+#[derive(Debug)]
+struct PreparedOutputPath {
+    path: std::path::PathBuf,
+    is_user_path: bool,
+}
+
+fn prepare_output_path(
+    config: &FfmpegConfig,
+    ext: &str,
+    sink: Option<&FileSink>,
+) -> AppResult<PreparedOutputPath> {
+    match sink {
+        Some(FileSink::Path(path)) => Ok(PreparedOutputPath {
+            path: crate::paths::confine_output_path(config, path)?,
+            is_user_path: true,
+        }),
+        _ => Ok(PreparedOutputPath {
+            path: TempFile::with_extension(ext)?.path().to_path_buf(),
+            is_user_path: false,
+        }),
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use rskit_storage::{FileSink, TempDir};
+
     use super::*;
+
+    #[test]
+    fn prepare_output_path_confines_user_sink_paths() {
+        let root = TempDir::new().unwrap();
+        let outside = TempDir::new().unwrap();
+        let config = FfmpegConfig::default().with_path_root(root.path());
+
+        let error = prepare_output_path(
+            &config,
+            "mkv",
+            Some(&FileSink::Path(outside.path().join("out.mkv"))),
+        )
+        .unwrap_err();
+
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn prepare_output_path_does_not_confine_internal_temp_outputs() {
+        let root = TempDir::new().unwrap();
+        let config = FfmpegConfig::default().with_path_root(root.path());
+
+        let output = prepare_output_path(&config, "mkv", Some(&FileSink::Memory)).unwrap();
+
+        assert!(!output.is_user_path);
+        assert!(!output.path.starts_with(root.path()));
+    }
 
     #[test]
     fn test_av1_decode_failure_macos_videotoolbox() {
