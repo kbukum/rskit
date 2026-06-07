@@ -131,6 +131,12 @@ pub(crate) fn ensure_image_dimensions(image: &DynamicImage, config: &Config) -> 
 }
 
 fn ensure_dimensions(width: u32, height: u32, config: &Config) -> AppResult<()> {
+    if width == 0 || height == 0 {
+        return Err(AppError::new(
+            ErrorCode::InvalidInput,
+            format!("image dimensions must be non-zero, got {width}x{height}"),
+        ));
+    }
     let pixels = u64::from(width).saturating_mul(u64::from(height));
     if pixels > config.max_pixels {
         return Err(AppError::new(
@@ -174,7 +180,9 @@ mod tests {
 
     use rskit_errors::ErrorCode;
 
-    use super::read_path_bounded;
+    use rskit_media::spatial::Resolution;
+
+    use super::{ensure_resolution, read_path_bounded};
 
     #[test]
     fn read_path_bounded_reports_missing_paths_as_not_found() {
@@ -194,5 +202,21 @@ mod tests {
         let error = read_path_bounded(&file.join(Path::new("child.png")), 1024).unwrap_err();
 
         assert_eq!(error.code(), ErrorCode::Internal);
+    }
+
+    #[test]
+    fn ensure_resolution_rejects_zero_width() {
+        let error =
+            ensure_resolution(Resolution::new(0, 10), &crate::Config::default()).unwrap_err();
+
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn ensure_resolution_rejects_zero_height() {
+        let error =
+            ensure_resolution(Resolution::new(10, 0), &crate::Config::default()).unwrap_err();
+
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
     }
 }
