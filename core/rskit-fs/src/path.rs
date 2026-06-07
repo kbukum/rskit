@@ -94,7 +94,7 @@ pub fn confine_existing_path(root: &Path, path: &Path) -> AppResult<PathBuf> {
     } else {
         root.join(path)
     };
-    let candidate = canonicalize(&candidate)?;
+    let candidate = canonicalize_confined_input(&candidate, "confined path")?;
     ensure_confined(&root, &candidate)?;
     Ok(candidate)
 }
@@ -152,7 +152,7 @@ fn existing_ancestor_and_missing_suffix(path: &Path) -> AppResult<(PathBuf, Vec<
 }
 
 fn canonicalize_directory_root(root: &Path) -> AppResult<PathBuf> {
-    let root = canonicalize(root)?;
+    let root = canonicalize_confined_input(root, "confined root")?;
     let metadata = std::fs::metadata(&root).map_err(|error| {
         AppError::new(
             ErrorCode::Internal,
@@ -171,6 +171,26 @@ fn canonicalize_directory_root(root: &Path) -> AppResult<PathBuf> {
     ))
 }
 
+fn canonicalize_confined_input(path: &Path, label: &str) -> AppResult<PathBuf> {
+    std::fs::canonicalize(path).map_err(|error| {
+        AppError::new(
+            confined_canonicalize_error_code(error.kind()),
+            format!(
+                "failed to canonicalize {label} '{}': {error}",
+                path.display()
+            ),
+        )
+    })
+}
+
+const fn confined_canonicalize_error_code(kind: ErrorKind) -> ErrorCode {
+    match kind {
+        ErrorKind::NotFound => ErrorCode::NotFound,
+        ErrorKind::InvalidInput | ErrorKind::NotADirectory => ErrorCode::InvalidInput,
+        _ => ErrorCode::Internal,
+    }
+}
+
 fn exists_without_following_symlinks(path: &Path) -> AppResult<bool> {
     match std::fs::symlink_metadata(path) {
         Ok(_) => Ok(true),
@@ -185,7 +205,7 @@ fn exists_without_following_symlinks(path: &Path) -> AppResult<bool> {
 }
 
 fn canonicalize_existing_ancestor(path: &Path) -> AppResult<PathBuf> {
-    canonicalize(path).map_err(|error| {
+    canonicalize_confined_input(path, "existing path ancestor").map_err(|error| {
         AppError::new(
             ErrorCode::InvalidInput,
             format!(
@@ -369,6 +389,25 @@ mod tests {
         let error = confine_existing_path(root.path(), &file).unwrap_err();
 
         assert_eq!(error.code(), ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn rejects_missing_existing_paths_as_not_found() {
+        let root = crate::TempDir::new().unwrap();
+
+        let error = confine_existing_path(root.path(), Path::new("missing.txt")).unwrap_err();
+
+        assert_eq!(error.code(), ErrorCode::NotFound);
+    }
+
+    #[test]
+    fn rejects_missing_confined_roots_as_not_found() {
+        let dir = crate::TempDir::new().unwrap();
+        let missing_root = dir.child("missing-root").unwrap();
+
+        let error = confine_existing_path(&missing_root, Path::new("file.txt")).unwrap_err();
+
+        assert_eq!(error.code(), ErrorCode::NotFound);
     }
 
     #[test]
