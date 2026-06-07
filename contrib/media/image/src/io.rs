@@ -3,7 +3,7 @@
 //! The image adapter intentionally centralizes all read/decode limits here so
 //! probe and executor paths cannot drift in how they handle untrusted media.
 
-use std::io::{Cursor, Read as _};
+use std::io::{Cursor, ErrorKind, Read as _};
 
 use image::{DynamicImage, ImageFormat, ImageReader};
 use rskit_errors::{AppError, AppResult, ErrorCode};
@@ -76,7 +76,7 @@ fn reader_for<'a>(data: &'a [u8], config: &Config) -> AppResult<ImageReader<Curs
 fn read_path_bounded(path: &std::path::Path, max_bytes: u64) -> AppResult<Vec<u8>> {
     let mut file = std::fs::File::open(path).map_err(|error| {
         AppError::new(
-            ErrorCode::NotFound,
+            open_error_code(error.kind()),
             format!("failed to open image {}: {error}", path.display()),
         )
     })?;
@@ -100,6 +100,13 @@ fn read_path_bounded(path: &std::path::Path, max_bytes: u64) -> AppResult<Vec<u8
         ));
     }
     Ok(data)
+}
+
+fn open_error_code(kind: ErrorKind) -> ErrorCode {
+    match kind {
+        ErrorKind::NotFound => ErrorCode::NotFound,
+        _ => ErrorCode::Internal,
+    }
 }
 
 fn ensure_source_len(len: u64, config: &Config) -> AppResult<()> {
@@ -159,4 +166,33 @@ fn ensure_decoded_ratio(
         ));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use rskit_errors::ErrorCode;
+
+    use super::read_path_bounded;
+
+    #[test]
+    fn read_path_bounded_reports_missing_paths_as_not_found() {
+        let dir = rskit_storage::TempDir::new().unwrap();
+
+        let error = read_path_bounded(&dir.path().join("missing.png"), 1024).unwrap_err();
+
+        assert_eq!(error.code(), ErrorCode::NotFound);
+    }
+
+    #[test]
+    fn read_path_bounded_reports_non_not_found_open_errors_as_internal() {
+        let dir = rskit_storage::TempDir::new().unwrap();
+        let file = dir.path().join("file.txt");
+        std::fs::write(&file, b"not a dir").unwrap();
+
+        let error = read_path_bounded(&file.join(Path::new("child.png")), 1024).unwrap_err();
+
+        assert_eq!(error.code(), ErrorCode::Internal);
+    }
 }
