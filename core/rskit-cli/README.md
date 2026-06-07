@@ -30,9 +30,10 @@ use rskit_cli::{ErrorRenderer, ExitCode, OutputFormat};
 use rskit_errors::{AppError, ErrorCode};
 
 let error = AppError::new(ErrorCode::InvalidInput, "bad argument");
-let rendered = ErrorRenderer::new(OutputFormat::Json).render(&error);
+let (rendered, exit_code) = ErrorRenderer::new(OutputFormat::Json).render(&error);
 assert!(rendered.contains("\"code\""));
-assert_eq!(ExitCode::from_error_code(error.code()).code(), 2);
+assert_eq!(exit_code, ExitCode::from(error.code()));
+assert_eq!(exit_code.as_i32(), 2);
 ```
 
 ```rust
