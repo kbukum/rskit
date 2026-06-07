@@ -109,8 +109,8 @@ pub fn confine_existing_path(root: &Path, path: &Path) -> AppResult<PathBuf> {
 /// # Errors
 ///
 /// Returns an error when `root` cannot be canonicalized, `root` is not a directory, no existing
-/// ancestor can be found, an existing ancestor resolves outside `root`, or a missing path segment
-/// is unsafe.
+/// ancestor can be found, an existing ancestor resolves outside `root`, a missing suffix would be
+/// appended below a non-directory ancestor, or a missing path segment is unsafe.
 pub fn confine_path(root: &Path, path: &Path) -> AppResult<PathBuf> {
     let root = canonicalize_directory_root(root)?;
     let candidate = if path.is_absolute() {
@@ -121,6 +121,7 @@ pub fn confine_path(root: &Path, path: &Path) -> AppResult<PathBuf> {
     let (existing, missing) = existing_ancestor_and_missing_suffix(&candidate)?;
     let existing = canonicalize_existing_ancestor(&existing)?;
     ensure_confined(&root, &existing)?;
+    ensure_directory_for_missing_suffix(&existing, &missing)?;
 
     let resolved = append_safe_missing_suffix(existing, missing)?;
     ensure_confined(&root, &resolved)?;
@@ -173,7 +174,9 @@ fn canonicalize_directory_root(root: &Path) -> AppResult<PathBuf> {
 fn exists_without_following_symlinks(path: &Path) -> AppResult<bool> {
     match std::fs::symlink_metadata(path) {
         Ok(_) => Ok(true),
-        Err(error) if error.kind() == ErrorKind::NotFound => Ok(false),
+        Err(error) if matches!(error.kind(), ErrorKind::NotFound | ErrorKind::NotADirectory) => {
+            Ok(false)
+        }
         Err(error) => Err(AppError::new(
             ErrorCode::Internal,
             format!("failed to inspect '{}': {error}", path.display()),
@@ -192,6 +195,31 @@ fn canonicalize_existing_ancestor(path: &Path) -> AppResult<PathBuf> {
             ),
         )
     })
+}
+
+fn ensure_directory_for_missing_suffix(existing: &Path, missing: &[OsString]) -> AppResult<()> {
+    if missing.is_empty() {
+        return Ok(());
+    }
+    let metadata = std::fs::metadata(existing).map_err(|error| {
+        AppError::new(
+            ErrorCode::Internal,
+            format!(
+                "failed to inspect existing path ancestor '{}': {error}",
+                existing.display()
+            ),
+        )
+    })?;
+    if metadata.is_dir() {
+        return Ok(());
+    }
+    Err(AppError::new(
+        ErrorCode::InvalidInput,
+        format!(
+            "existing path ancestor '{}' is not a directory",
+            existing.display()
+        ),
+    ))
 }
 
 fn append_safe_missing_suffix(mut base: PathBuf, missing: Vec<OsString>) -> AppResult<PathBuf> {
@@ -369,6 +397,16 @@ mod tests {
         let root_file = dir.write_file("root.txt", b"not a dir").unwrap();
 
         let error = confine_path(&root_file, Path::new("output.txt")).unwrap_err();
+
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn rejects_missing_output_paths_below_existing_file() {
+        let dir = crate::TempDir::new().unwrap();
+        dir.write_file("file.txt", b"not a dir").unwrap();
+
+        let error = confine_path(dir.path(), Path::new("file.txt/output.txt")).unwrap_err();
 
         assert_eq!(error.code(), ErrorCode::InvalidInput);
     }
