@@ -85,10 +85,10 @@ pub fn canonicalize(path: &Path) -> AppResult<PathBuf> {
 ///
 /// # Errors
 ///
-/// Returns an error when `root` or `path` cannot be canonicalized, or when `path`
-/// resolves outside the canonical root.
+/// Returns an error when `root` or `path` cannot be canonicalized, when `root`
+/// is not a directory, or when `path` resolves outside the canonical root.
 pub fn confine_existing_path(root: &Path, path: &Path) -> AppResult<PathBuf> {
-    let root = canonicalize(root)?;
+    let root = canonicalize_directory_root(root)?;
     let candidate = if path.is_absolute() {
         path.to_path_buf()
     } else {
@@ -108,10 +108,11 @@ pub fn confine_existing_path(root: &Path, path: &Path) -> AppResult<PathBuf> {
 ///
 /// # Errors
 ///
-/// Returns an error when `root` cannot be canonicalized, no existing ancestor can be found,
-/// an existing ancestor resolves outside `root`, or a missing path segment is unsafe.
+/// Returns an error when `root` cannot be canonicalized, `root` is not a directory, no existing
+/// ancestor can be found, an existing ancestor resolves outside `root`, or a missing path segment
+/// is unsafe.
 pub fn confine_path(root: &Path, path: &Path) -> AppResult<PathBuf> {
-    let root = canonicalize(root)?;
+    let root = canonicalize_directory_root(root)?;
     let candidate = if path.is_absolute() {
         path.to_path_buf()
     } else {
@@ -147,6 +148,26 @@ fn existing_ancestor_and_missing_suffix(path: &Path) -> AppResult<(PathBuf, Vec<
     }
     missing.reverse();
     Ok((current, missing))
+}
+
+fn canonicalize_directory_root(root: &Path) -> AppResult<PathBuf> {
+    let root = canonicalize(root)?;
+    let metadata = std::fs::metadata(&root).map_err(|error| {
+        AppError::new(
+            ErrorCode::Internal,
+            format!(
+                "failed to inspect confined root '{}': {error}",
+                root.display()
+            ),
+        )
+    })?;
+    if metadata.is_dir() {
+        return Ok(root);
+    }
+    Err(AppError::new(
+        ErrorCode::InvalidInput,
+        format!("confined root '{}' is not a directory", root.display()),
+    ))
 }
 
 fn exists_without_following_symlinks(path: &Path) -> AppResult<bool> {
@@ -323,6 +344,16 @@ mod tests {
     }
 
     #[test]
+    fn rejects_file_root_for_existing_paths() {
+        let dir = crate::TempDir::new().unwrap();
+        let root_file = dir.write_file("root.txt", b"not a dir").unwrap();
+
+        let error = confine_existing_path(&root_file, Path::new("child.txt")).unwrap_err();
+
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
+    }
+
+    #[test]
     fn confines_missing_output_paths_under_existing_parent() {
         let dir = crate::TempDir::new().unwrap();
 
@@ -330,6 +361,16 @@ mod tests {
 
         assert!(confined.starts_with(std::fs::canonicalize(dir.path()).unwrap()));
         assert!(confined.ends_with("nested/output.txt"));
+    }
+
+    #[test]
+    fn rejects_file_root_for_output_paths() {
+        let dir = crate::TempDir::new().unwrap();
+        let root_file = dir.write_file("root.txt", b"not a dir").unwrap();
+
+        let error = confine_path(&root_file, Path::new("output.txt")).unwrap_err();
+
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
     }
 
     #[test]

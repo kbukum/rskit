@@ -101,15 +101,19 @@ async fn create_or_verify_plain_directory(root: &Path, path: &Path) -> AppResult
             ));
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            tokio::fs::create_dir(path).await.map_err(|error| {
-                AppError::new(
-                    ErrorCode::Internal,
-                    format!(
-                        "failed to create output directory '{}': {error}",
-                        path.display()
-                    ),
-                )
-            })?;
+            match tokio::fs::create_dir(path).await {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+                Err(error) => {
+                    return Err(AppError::new(
+                        ErrorCode::Internal,
+                        format!(
+                            "failed to create output directory '{}': {error}",
+                            path.display()
+                        ),
+                    ));
+                }
+            }
             let metadata = tokio::fs::symlink_metadata(path).await.map_err(|error| {
                 AppError::new(
                     ErrorCode::Internal,
@@ -185,6 +189,31 @@ mod tests {
 
         create_output_parent(&config, &output).await.unwrap();
 
+        assert!(root.path().join("a/b").is_dir());
+    }
+
+    #[tokio::test]
+    async fn create_output_parent_tolerates_concurrent_directory_creation() {
+        let root = rskit_storage::TempDir::new().unwrap();
+        let config = FfmpegConfig::default().with_path_root(root.path());
+        let output = root.path().join("a/b/out.mp4");
+
+        let results = tokio::join!(
+            create_output_parent(&config, &output),
+            create_output_parent(&config, &output),
+            create_output_parent(&config, &output),
+            create_output_parent(&config, &output),
+            create_output_parent(&config, &output),
+            create_output_parent(&config, &output),
+            create_output_parent(&config, &output),
+            create_output_parent(&config, &output),
+        );
+
+        for result in [
+            results.0, results.1, results.2, results.3, results.4, results.5, results.6, results.7,
+        ] {
+            result.unwrap();
+        }
         assert!(root.path().join("a/b").is_dir());
     }
 }
