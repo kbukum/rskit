@@ -57,7 +57,8 @@ Be respectful, constructive, and patient. We follow the
 
 ## Development Setup
 
-**Minimum Rust version:** 1.85 (enforced by `rust-toolchain.toml`).
+**Minimum Rust version:** 1.91 (declared by workspace `rust-version`). The
+repository pins a newer development toolchain in `rust-toolchain.toml`.
 
 ```sh
 # Install the pinned toolchain + components
