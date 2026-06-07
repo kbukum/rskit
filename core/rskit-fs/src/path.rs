@@ -207,7 +207,7 @@ fn exists_without_following_symlinks(path: &Path) -> AppResult<bool> {
 fn canonicalize_existing_ancestor(path: &Path) -> AppResult<PathBuf> {
     canonicalize_confined_input(path, "existing path ancestor").map_err(|error| {
         AppError::new(
-            ErrorCode::InvalidInput,
+            error.code(),
             format!(
                 "existing path ancestor '{}' cannot be resolved: {}",
                 path.display(),
@@ -483,6 +483,6 @@ mod tests {
 
         let error = confine_path(root.path(), Path::new("broken-link/output.txt")).unwrap_err();
 
-        assert_eq!(error.code(), ErrorCode::InvalidInput);
+        assert_eq!(error.code(), ErrorCode::NotFound);
     }
 }
