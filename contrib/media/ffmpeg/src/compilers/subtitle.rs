@@ -39,7 +39,10 @@ pub(crate) fn compile_add_subtitles(
 ) -> AppResult<()> {
     use rskit_media::ops::SubtitleSource;
     let sub_content = match &cfg.source {
-        SubtitleSource::File(path) => read_subtitle_file(path)?,
+        SubtitleSource::File(path) => {
+            let path = crate::paths::confine_source_path(ctx.config, path)?;
+            read_subtitle_file(&path)?
+        }
         SubtitleSource::Inline(s) => s.clone(),
         _ => {
             return Err(rskit_errors::AppError::new(
@@ -105,5 +108,55 @@ fn read_bounded(path: &std::path::Path, max_bytes: u64) -> AppResult<Vec<u8>> {
             format!("subtitle file exceeded max {max_bytes} bytes"),
         ));
     }
+
     Ok(bytes)
+}
+
+#[cfg(test)]
+mod tests {
+    use rskit_media::{
+        ops::{MediaOp, SubtitleConfig, SubtitleFormat, SubtitleSource},
+        registry::Registry,
+    };
+
+    use crate::{command::FfmpegCommand, config::FfmpegConfig};
+
+    #[test]
+    fn add_subtitles_rejects_file_outside_configured_path_root() {
+        let root = rskit_storage::TempDir::new().unwrap();
+        let outside = rskit_storage::TempDir::new().unwrap();
+        let subtitle = outside.path().join("captions.srt");
+        std::fs::write(&subtitle, "1\n00:00:00,000 --> 00:00:01,000\nhello\n").unwrap();
+        let config = FfmpegConfig::default().with_path_root(root.path());
+        let op = MediaOp::AddSubtitles(SubtitleConfig {
+            source: SubtitleSource::File(subtitle),
+            format: SubtitleFormat::Srt,
+            style: None,
+        });
+        let source = rskit_storage::FileSource::from_bytes(bytes::Bytes::from_static(b"media"));
+
+        let result = FfmpegCommand::compile(&source, &[op], None, &config, &Registry::default());
+        let error = match result {
+            Ok(_) => panic!("outside subtitle path should be rejected"),
+            Err(error) => error,
+        };
+
+        assert_eq!(error.code(), rskit_errors::ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn add_subtitles_accepts_file_inside_configured_path_root() {
+        let root = rskit_storage::TempDir::new().unwrap();
+        let subtitle = root.path().join("captions.srt");
+        std::fs::write(&subtitle, "1\n00:00:00,000 --> 00:00:01,000\nhello\n").unwrap();
+        let config = FfmpegConfig::default().with_path_root(root.path());
+        let op = MediaOp::AddSubtitles(SubtitleConfig {
+            source: SubtitleSource::File("captions.srt".into()),
+            format: SubtitleFormat::Srt,
+            style: None,
+        });
+        let source = rskit_storage::FileSource::from_bytes(bytes::Bytes::from_static(b"media"));
+
+        FfmpegCommand::compile(&source, &[op], None, &config, &Registry::default()).unwrap();
+    }
 }

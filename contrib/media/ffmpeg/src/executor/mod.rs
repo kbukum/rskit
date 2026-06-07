@@ -13,6 +13,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::command::FfmpegCommand;
 use crate::config::FfmpegConfig;
+use retry::PreparedOutputPath;
 
 /// FFmpeg-based media executor with concurrency control and hw accel fallback.
 pub(crate) struct FfmpegExecutor {
@@ -48,18 +49,21 @@ impl FfmpegExecutor {
 /// Convert run_with_retry's output path into the appropriate [`FileSource`]
 /// based on the requested sink type.
 async fn resolve_output(
-    output_file: std::path::PathBuf,
+    output: PreparedOutputPath,
     sink: Option<&FileSink>,
 ) -> AppResult<FileSource> {
     match sink {
-        Some(FileSink::Path(p)) => Ok(FileSource::Path(p.clone())),
+        Some(FileSink::Path(_)) => Ok(FileSource::Path(output.path)),
         Some(FileSink::Memory) => {
-            let data = tokio::fs::read(&output_file).await.map_err(|e| {
+            let data = tokio::fs::read(&output.path).await.map_err(|e| {
                 AppError::new(ErrorCode::Internal, format!("read output failed: {e}"))
             })?;
             Ok(FileSource::Bytes(bytes::Bytes::from(data)))
         }
-        _ => Ok(FileSource::Path(output_file)),
+        _ => match output.temp {
+            Some(temp) => Ok(temp.into_source()),
+            None => Ok(FileSource::Path(output.path)),
+        },
     }
 }
 

@@ -77,8 +77,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **rskit-mcp**: `ClientConfig` gained a `request_timeout` field (default 30s)
   and is no longer constructed via exhaustive struct literal defaults; use
   `ClientConfig::default()` / `with_request_timeout(..)`.
+- **rskit-media-image**: `Config` now carries bounded source/decode limits and
+  must be constructed with `Config::default()` plus `with_*` builders instead of
+  the former unit-struct value.
 
 ### Changed — Cross-Cutting
+- **Media/dataset refinement**: added reusable path confinement helpers in
+  `rskit-fs`, bounded JSON record structure in `rskit-dataset`, configurable
+  image decode/source limits in `rskit-media-image`, and optional FFmpeg
+  path-root confinement for user-provided local media paths.
 - **rskit-mcp**: every remote MCP call (`tools/call`, `tools/list`) is now
   bounded by `ClientConfig::request_timeout` so an unresponsive server can no
   longer block the caller indefinitely; timeouts surface as retryable

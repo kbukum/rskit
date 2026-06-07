@@ -37,7 +37,7 @@ impl FfmpegProbe {
     /// Run ffprobe and return the raw JSON output.
     pub(crate) async fn probe_raw(&self, source: &FileSource) -> AppResult<serde_json::Value> {
         let resolved = source.to_local_path().await?;
-        let path = resolved.path();
+        let path = crate::paths::resolved_source_path(&self.config, source, resolved.path())?;
 
         let output = run_capture(
             self.config.ffprobe_bin(),

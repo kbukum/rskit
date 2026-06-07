@@ -41,7 +41,8 @@ mod types;
 
 pub use app_dirs::app_cache_dir;
 pub use path::{
-    SafePathError, absolute, canonicalize, parent_dir, safe_join, validate_relative_path,
+    SafePathError, absolute, canonicalize, confine_existing_path, confine_path, parent_dir,
+    safe_join, validate_relative_path,
 };
 pub use temp::{TempDir, TempFile, sibling_temp_path};
 pub use types::{DirEntry, FileMeta};

@@ -6,7 +6,7 @@ FFmpeg CLI backend for video/audio processing.
 [![crates.io](https://img.shields.io/crates/v/rskit-media-ffmpeg.svg)](https://crates.io/crates/rskit-media-ffmpeg)
 [![docs.rs](https://docs.rs/rskit-media-ffmpeg/badge.svg)](https://docs.rs/rskit-media-ffmpeg)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![MSRV: 1.85](https://img.shields.io/badge/MSRV-1.85-orange.svg)](https://blog.rust-lang.org/2025/02/20/Rust-1.85.0.html)
+[![MSRV: 1.91](https://img.shields.io/badge/MSRV-1.91-orange.svg)](https://github.com/kbukum/rskit/blob/main/contrib/Cargo.toml)
 
 ## Features
 
@@ -14,6 +14,7 @@ FFmpeg CLI backend for video/audio processing.
 - Hardware acceleration support (`HwAccel`: CUDA, VAAPI, etc.)
 - Real-time progress parsing from FFmpeg output
 - Configurable log levels via `FfmpegLogLevel`
+- Optional path-root confinement for user-provided local input/output paths
 - Compiles `MediaPipeline` operations into FFmpeg CLI arguments
 
 ## Usage
@@ -29,7 +30,8 @@ use rskit_media_ffmpeg::{Config, register};
 
 async fn example() -> rskit_errors::AppResult<()> {
     let mut registry = Registry::default();
-    register(&mut registry, Config::default())?;
+    let config = Config::default().with_path_root("/srv/media");
+    register(&mut registry, config)?;
     let executor = registry.executor("ffmpeg")?;
 
     // Probe a file for metadata

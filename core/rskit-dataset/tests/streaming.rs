@@ -294,6 +294,35 @@ async fn json_array_reader_rejects_oversized_fixture_files() {
 }
 
 #[tokio::test]
+async fn json_lines_reader_rejects_deeply_nested_records() {
+    let dir = TempDir::new().unwrap();
+    let input = dir.path().join("records.jsonl");
+    let nested = format!("{{\"value\":{}}}\n", "[".repeat(33) + "0" + &"]".repeat(33));
+    std::fs::write(&input, nested).unwrap();
+
+    let mut records = Box::new(JsonLinesReader::new(&input)).stream();
+    let err = records.next().await.unwrap().unwrap_err();
+
+    assert!(err.to_string().contains("nesting exceeds"));
+}
+
+#[tokio::test]
+async fn json_lines_reader_rejects_records_with_too_many_fields() {
+    let dir = TempDir::new().unwrap();
+    let input = dir.path().join("records.jsonl");
+    let fields = (0..1025)
+        .map(|idx| format!("\"field{idx}\":{idx}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    std::fs::write(&input, format!("{{{fields}}}\n")).unwrap();
+
+    let mut records = Box::new(JsonLinesReader::new(&input)).stream();
+    let err = records.next().await.unwrap().unwrap_err();
+
+    assert!(err.to_string().contains("fields"));
+}
+
+#[tokio::test]
 async fn json_array_writer_streams_records_without_buffering() {
     let dir = TempDir::new().unwrap();
     let output = dir.path().join("records.json");

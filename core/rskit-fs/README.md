@@ -8,7 +8,7 @@ Local filesystem primitives for rskit.
 
 | Module | Responsibility |
 | --- | --- |
-| `path` | Safe relative paths, root joins, absolute/canonical paths, parent-dir helpers |
+| `path` | Safe relative paths, root joins, absolute/canonical paths, root confinement, parent-dir helpers |
 | `file` | Read, write, copy, rename, move, delete, metadata, atomic writes |
 | `dir` | Create, list, inspect, remove, and recursively remove directories |
 | `tree` | Recursive tree walking, listing, copying, and removal with symlink policy |
@@ -19,6 +19,7 @@ Local filesystem primitives for rskit.
 ## Security defaults
 
 - Use `path::safe_join` for user-provided relative paths before touching disk.
+- Use `path::confine_existing_path` for existing user-provided paths and `path::confine_path` for output paths that must stay under a caller-owned root after symlink resolution.
 - Tree copy/list operations do not follow symlinks unless explicitly requested.
 - Use `file::write_atomic` for same-filesystem writes without exposing partial files. Replacing an existing file is atomic on Unix-like platforms; Windows replacement returns an error instead of silently degrading.
 - Use `permissions::can_read` / `permissions::can_write` before optional user-facing operations.

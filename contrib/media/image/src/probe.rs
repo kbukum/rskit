@@ -1,6 +1,7 @@
 //! Native image probe — inspect image metadata without FFmpeg.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
@@ -15,60 +16,38 @@ use rskit_media::{
 };
 use rskit_storage::FileSource;
 
+use crate::config::Config;
+use crate::io;
+
 /// Native image probe using the `image` crate.
 ///
 /// Extracts resolution, format, and color type from images without
 /// requiring FFmpeg. Faster than spawning an ffprobe process.
-pub(crate) struct ImageProbe;
+pub(crate) struct ImageProbe {
+    config: Arc<Config>,
+}
 
 impl ImageProbe {
     /// Create a new image probe.
-    pub(crate) fn new() -> Self {
-        Self
-    }
-
-    fn load_data(source: &FileSource) -> AppResult<Vec<u8>> {
-        match source {
-            FileSource::Path(p) => std::fs::read(p).map_err(|e| {
-                AppError::new(ErrorCode::NotFound, format!("failed to read image: {e}"))
-            }),
-            FileSource::Bytes(b) => Ok(b.to_vec()),
-            FileSource::Temp(t) => std::fs::read(t.path()).map_err(|e| {
-                AppError::new(
-                    ErrorCode::Internal,
-                    format!("failed to read temp image: {e}"),
-                )
-            }),
-            FileSource::Url(_) => Err(AppError::new(
-                ErrorCode::InvalidInput,
-                "URL sources not supported; use to_local_path() first",
-            )),
-        }
+    pub(crate) fn new(config: Arc<Config>) -> Self {
+        Self { config }
     }
 }
 
 impl Default for ImageProbe {
     fn default() -> Self {
-        Self::new()
+        Self::new(Arc::new(Config::default()))
     }
 }
 
 #[async_trait::async_trait]
 impl MediaProbe for ImageProbe {
     async fn probe(&self, source: &FileSource) -> AppResult<MediaMetadata> {
-        let data = Self::load_data(source)?;
+        let data = io::load_data(source, &self.config)?;
         let size = data.len() as u64;
 
-        let reader = image::ImageReader::new(std::io::Cursor::new(&data))
-            .with_guessed_format()
-            .map_err(|e| {
-                AppError::new(
-                    ErrorCode::InvalidFormat,
-                    format!("failed to detect image format: {e}"),
-                )
-            })?;
-
-        let format = reader.format();
+        let decoded = io::decode_image(&data, &self.config)?;
+        let format = decoded.format;
         let (format_name, codec_name) = match format {
             Some(image::ImageFormat::Jpeg) => ("jpeg", "mjpeg"),
             Some(image::ImageFormat::Png) => ("png", "png"),
@@ -80,13 +59,7 @@ impl MediaProbe for ImageProbe {
             _ => ("unknown", "unknown"),
         };
 
-        let img = reader.decode().map_err(|e| {
-            AppError::new(
-                ErrorCode::InvalidFormat,
-                format!("failed to decode image: {e}"),
-            )
-        })?;
-
+        let img = decoded.image;
         let (width, height) = (img.width(), img.height());
 
         let bit_depth = match img.color() {
@@ -146,22 +119,19 @@ impl MediaProbe for ImageProbe {
         resolution: Option<Resolution>,
     ) -> AppResult<FileSource> {
         // For images, the thumbnail is just a resized version of the image itself
-        let data = Self::load_data(source)?;
-        let img = image::load_from_memory(&data).map_err(|e| {
-            AppError::new(
-                ErrorCode::InvalidFormat,
-                format!("failed to decode image: {e}"),
-            )
-        })?;
+        let data = io::load_data(source, &self.config)?;
+        let img = io::decode_image(&data, &self.config)?.image;
 
         let thumb = if let Some(res) = resolution {
+            io::ensure_resolution(res, &self.config)?;
             img.resize(res.width, res.height, image::imageops::FilterType::Lanczos3)
         } else {
             // Default thumbnail: fit to 320px wide
-            let ratio = 320.0 / img.width() as f64;
-            let h = (img.height() as f64 * ratio) as u32;
+            let h = io::scaled_dimension(img.height(), 320, img.width());
+            io::ensure_resolution(Resolution::new(320, h), &self.config)?;
             img.resize_exact(320, h, image::imageops::FilterType::Lanczos3)
         };
+        io::ensure_image_dimensions(&thumb, &self.config)?;
 
         let mut buf = Vec::new();
         thumb

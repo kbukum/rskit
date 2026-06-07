@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 fn image_executor() -> Arc<dyn MediaExecutor> {
     let mut registry = Registry::default();
-    rskit_media_image::register(&mut registry, rskit_media_image::Config)
+    rskit_media_image::register(&mut registry, rskit_media_image::Config::default())
         .expect("register image backend");
     registry.executor("image").expect("image executor")
 }

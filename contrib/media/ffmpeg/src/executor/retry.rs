@@ -26,7 +26,7 @@ impl FfmpegExecutor {
         ops: &[MediaOp],
         sink: Option<&FileSink>,
         on_progress: Option<Box<dyn Fn(Progress) + Send + Sync>>,
-    ) -> AppResult<std::path::PathBuf> {
+    ) -> AppResult<PreparedOutputPath> {
         self.run_with_retry_cancelable(source, ops, sink, on_progress, CancellationToken::new())
             .await
     }
@@ -39,19 +39,13 @@ impl FfmpegExecutor {
         sink: Option<&FileSink>,
         on_progress: Option<Box<dyn Fn(Progress) + Send + Sync>>,
         cancel: CancellationToken,
-    ) -> AppResult<std::path::PathBuf> {
+    ) -> AppResult<PreparedOutputPath> {
         let ext = self.determine_output_extension(ops);
-        let output_file = match sink {
-            Some(FileSink::Path(p)) => {
-                if let Some(parent) = p.parent() {
-                    tokio::fs::create_dir_all(parent).await.map_err(|e| {
-                        AppError::new(ErrorCode::Internal, format!("create dir failed: {e}"))
-                    })?;
-                }
-                p.clone()
-            }
-            _ => TempFile::with_extension(&ext)?.path().to_path_buf(),
-        };
+        let output = prepare_output_path(&self.config, &ext, sink)?;
+        if output.is_user_path {
+            crate::paths::create_output_parent(&self.config, &output.path).await?;
+        }
+        let output_file = output.path.clone();
 
         let _permit = tokio::select! {
             biased;
@@ -98,7 +92,7 @@ impl FfmpegExecutor {
             .await;
 
         match result {
-            Ok(()) => Ok(output_file),
+            Ok(()) => Ok(output),
             Err(ffmpeg_err) => {
                 // Direct access to classified error kind (no information loss)
                 let should_fallback = self.config.hw_accel_fallback
@@ -162,7 +156,7 @@ impl FfmpegExecutor {
                         .run_with_cancel(&fallback_config, progress_cb, &output_file, cancel)
                         .await
                         .map_err(|e| e.into_app_error())?;
-                    Ok(output_file)
+                    Ok(output)
                 } else {
                     Err(ffmpeg_err.into_app_error())
                 }
@@ -216,9 +210,69 @@ impl FfmpegExecutor {
     }
 }
 
+#[derive(Debug)]
+pub(crate) struct PreparedOutputPath {
+    pub(crate) path: std::path::PathBuf,
+    pub(crate) is_user_path: bool,
+    pub(crate) temp: Option<TempFile>,
+}
+
+fn prepare_output_path(
+    config: &FfmpegConfig,
+    ext: &str,
+    sink: Option<&FileSink>,
+) -> AppResult<PreparedOutputPath> {
+    match sink {
+        Some(FileSink::Path(path)) => Ok(PreparedOutputPath {
+            path: crate::paths::confine_output_path(config, path)?,
+            is_user_path: true,
+            temp: None,
+        }),
+        _ => {
+            let temp = TempFile::with_extension(ext)?;
+            Ok(PreparedOutputPath {
+                path: temp.path().to_path_buf(),
+                is_user_path: false,
+                temp: Some(temp),
+            })
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use rskit_storage::{FileSink, TempDir};
+
     use super::*;
+
+    #[test]
+    fn prepare_output_path_confines_user_sink_paths() {
+        let root = TempDir::new().unwrap();
+        let outside = TempDir::new().unwrap();
+        let config = FfmpegConfig::default().with_path_root(root.path());
+
+        let error = prepare_output_path(
+            &config,
+            "mkv",
+            Some(&FileSink::Path(outside.path().join("out.mkv"))),
+        )
+        .unwrap_err();
+
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn prepare_output_path_does_not_confine_internal_temp_outputs() {
+        let root = TempDir::new().unwrap();
+        let config = FfmpegConfig::default().with_path_root(root.path());
+
+        let output = prepare_output_path(&config, "mkv", Some(&FileSink::Memory)).unwrap();
+
+        assert!(!output.is_user_path);
+        assert!(!output.path.starts_with(root.path()));
+        assert!(output.temp.is_some());
+        assert!(output.path.exists());
+    }
 
     #[test]
     fn test_av1_decode_failure_macos_videotoolbox() {

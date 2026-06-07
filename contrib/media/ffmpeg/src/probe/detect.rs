@@ -21,13 +21,14 @@ impl FfmpegProbe {
         threshold: f64,
     ) -> AppResult<Vec<Timestamp>> {
         let resolved = source.to_local_path().await?;
+        let input_path = crate::paths::resolved_source_path(&self.config, source, resolved.path())?;
         let threshold = threshold.clamp(0.0, 1.0);
 
         let output = run_capture(
             self.config.ffmpeg_bin(),
             vec![
                 OsString::from("-i"),
-                resolved.path().as_os_str().to_os_string(),
+                input_path.as_os_str().to_os_string(),
                 OsString::from("-vf"),
                 OsString::from(format!("select='gt(scene\\,{threshold})',showinfo")),
                 OsString::from("-f"),
@@ -52,6 +53,7 @@ impl FfmpegProbe {
         source: &FileSource,
     ) -> AppResult<Vec<KeyframeInfo>> {
         let resolved = source.to_local_path().await?;
+        let input_path = crate::paths::resolved_source_path(&self.config, source, resolved.path())?;
 
         let output = run_capture(
             self.config.ffprobe_bin(),
@@ -65,7 +67,7 @@ impl FfmpegProbe {
                 OsString::from("frame=pts_time,pkt_size,pict_type,key_frame,coded_picture_number"),
                 OsString::from("-print_format"),
                 OsString::from("json"),
-                resolved.path().as_os_str().to_os_string(),
+                input_path.as_os_str().to_os_string(),
             ],
             self.config.timeout,
         )
@@ -93,6 +95,7 @@ impl FfmpegProbe {
         noise_threshold_db: f64,
     ) -> AppResult<Vec<SilenceInterval>> {
         let resolved = source.to_local_path().await?;
+        let input_path = crate::paths::resolved_source_path(&self.config, source, resolved.path())?;
         let threshold_db = noise_threshold_db.clamp(-96.0, 0.0);
         let min_secs = min_duration.as_secs_f64().max(0.01);
 
@@ -100,7 +103,7 @@ impl FfmpegProbe {
             self.config.ffmpeg_bin(),
             vec![
                 OsString::from("-i"),
-                resolved.path().as_os_str().to_os_string(),
+                input_path.as_os_str().to_os_string(),
                 OsString::from("-af"),
                 OsString::from(format!("silencedetect=noise={threshold_db}dB:d={min_secs}")),
                 OsString::from("-f"),

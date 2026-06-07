@@ -6,7 +6,7 @@ Streaming dataset collection framework: source, transform, target, schema valida
 [![crates.io](https://img.shields.io/crates/v/rskit-dataset.svg)](https://crates.io/crates/rskit-dataset)
 [![docs.rs](https://docs.rs/rskit-dataset/badge.svg)](https://docs.rs/rskit-dataset)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![MSRV: 1.85](https://img.shields.io/badge/MSRV-1.85-orange.svg)](https://blog.rust-lang.org/2025/02/20/Rust-1.85.0.html)
+[![MSRV: 1.91](https://img.shields.io/badge/MSRV-1.91-orange.svg)](https://github.com/kbukum/rskit/blob/main/core/Cargo.toml)
 
 ## Features
 
@@ -18,6 +18,7 @@ Streaming dataset collection framework: source, transform, target, schema valida
 - Schema validation delegated to `rskit-schema`
 - Stream adapters for `rskit-pipeline`
 - Streaming `DatasetRecord` readers/writers with JSON Lines and CSV support plus filter/column-selection operators
+- Bounded JSON record size, nesting depth, field count, array length, and string length for untrusted records
 - Progress callback support via `ProgressCallback`
 
 ## Usage
