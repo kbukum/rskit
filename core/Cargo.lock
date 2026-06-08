@@ -6071,7 +6071,6 @@ name = "rskit-vectorstore-qdrant"
 version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
- "reqwest",
  "rskit-errors",
  "rskit-httpclient",
  "rskit-util",
@@ -6079,6 +6078,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tracing",
+ "url",
  "uuid",
 ]
 
