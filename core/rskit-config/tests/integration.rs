@@ -12,10 +12,9 @@ static ENV_LOCK: Mutex<()> = Mutex::new(());
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize)]
 struct TestConfig {
     #[serde(flatten)]
-    #[validate(nested)]
     service: ServiceConfig,
     #[serde(default = "default_app_port")]
     app_port: u16,
@@ -32,25 +31,29 @@ impl rskit_config::AppConfig for TestConfig {
     }
 }
 
-#[derive(Debug, Deserialize, Validate)]
+impl Validate for TestConfig {
+    fn validate(&self) -> Result<(), validator::ValidationErrors> {
+        self.service.validate()
+    }
+}
+
+#[derive(Debug, Deserialize)]
 struct DefaultApplyConfig {
     #[serde(flatten)]
-    #[validate(nested)]
     service: ServiceConfig,
     #[serde(default)]
     grpc_port: u16,
 }
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ToolConfig {
-    #[validate(length(min = 1))]
     name: String,
     #[serde(default)]
     retries: u16,
 }
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize)]
 struct SecretConfig {
     api_token: SecretString,
 }
@@ -59,6 +62,32 @@ impl rskit_config::AppConfig for DefaultApplyConfig {
     fn apply_defaults(&mut self) {
         if self.grpc_port == 0 {
             self.grpc_port = 50051;
+        }
+
+        impl Validate for DefaultApplyConfig {
+            fn validate(&self) -> Result<(), validator::ValidationErrors> {
+                self.service.validate()
+            }
+        }
+
+        impl Validate for ToolConfig {
+            fn validate(&self) -> Result<(), validator::ValidationErrors> {
+                let mut errors = validator::ValidationErrors::new();
+                if self.name.trim().is_empty() {
+                    errors.add("name", validator::ValidationError::new("length"));
+                }
+                if errors.is_empty() {
+                    Ok(())
+                } else {
+                    Err(errors)
+                }
+            }
+        }
+
+        impl Validate for SecretConfig {
+            fn validate(&self) -> Result<(), validator::ValidationErrors> {
+                Ok(())
+            }
         }
     }
     fn service_config(&self) -> &ServiceConfig {

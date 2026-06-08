@@ -28,10 +28,10 @@ tracing      = { workspace = true }
 
 # Internal
 rskit-ai = { workspace = true }
-rskit-component   = { version = "0.1.0-alpha.1", path = "../rskit-component" }
-rskit-errors      = { version = "0.1.0-alpha.1", path = "../rskit-errors" }
-rskit-provider    = { version = "0.1.0-alpha.1", path = "../rskit-provider" }
-rskit-tool        = { version = "0.1.0-alpha.1", path = "../rskit-tool" }
+rskit-component = { workspace = true }
+rskit-errors = { workspace = true }
+rskit-provider = { workspace = true }
+rskit-tool = { workspace = true }
 
 [dev-dependencies]
 # External

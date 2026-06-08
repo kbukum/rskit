@@ -23,8 +23,8 @@ async-trait  = { workspace = true }
 tokio-util   = { workspace = true, features = ["rt"] }
 
 # Internal
-rskit-errors = { version = "0.1.0-alpha.1", path = "../rskit-errors" }
-rskit-storage   = { version = "0.1.0-alpha.1", path = "../rskit-storage" }
+rskit-errors = { workspace = true }
+rskit-storage = { workspace = true }
 
 [dev-dependencies]
 # External
@@ -33,7 +33,7 @@ serde_json = { workspace = true }
 insta = { workspace = true }
 
 # Internal
-rskit-storage = { version = "0.1.0-alpha.1", path = "../rskit-storage" }
+rskit-storage = { workspace = true }
 
 [package.metadata.docs.rs]
 all-features = true

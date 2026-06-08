@@ -20,9 +20,9 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 serde        = { workspace = true }
 serde_json   = { workspace = true }
-rskit-errors = { version = "0.1.0-alpha.1", path = "../rskit-errors" }
-tower        = "0.5"
-http         = "1.0"
+rskit-errors = { workspace = true }
+tower = { workspace = true }
+http = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }

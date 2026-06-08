@@ -1,11 +1,11 @@
 use rskit_validation::Validate;
 use serde::{Deserialize, Serialize};
+use validator::{ValidationError, ValidationErrors};
 
 /// Base service configuration — embed this in every application config.
-#[derive(Debug, Clone, Deserialize, Validate)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct ServiceConfig {
     /// Service name used in logs, traces, and health responses.
-    #[validate(length(min = 1))]
     #[serde(default = "ServiceConfig::default_name")]
     pub name: String,
 
@@ -32,6 +32,20 @@ pub struct ServiceConfig {
     /// Logging configuration.
     #[serde(default)]
     pub logging: LoggingConfig,
+}
+
+impl Validate for ServiceConfig {
+    fn validate(&self) -> Result<(), ValidationErrors> {
+        let mut errors = ValidationErrors::new();
+        if self.name.trim().is_empty() {
+            errors.add("name", ValidationError::new("length"));
+        }
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
+    }
 }
 
 impl ServiceConfig {

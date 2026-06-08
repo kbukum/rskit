@@ -22,4 +22,4 @@ tokio        = { workspace = true }
 parking_lot  = { workspace = true }
 tracing      = { workspace = true }
 tokio-util   = { workspace = true }
-rskit-errors = { version = "0.1.0-alpha.1", path = "../rskit-errors" }
+rskit-errors = { workspace = true }

@@ -523,10 +523,16 @@ mod tests {
 
     use super::AppBuilder;
 
-    #[derive(Debug, Default, serde::Deserialize, rskit_validation::Validate)]
+    #[derive(Debug, Default, serde::Deserialize)]
     struct TestCfg {
         #[serde(default)]
         service: rskit_config::ServiceConfig,
+    }
+
+    impl rskit_validation::Validate for TestCfg {
+        fn validate(&self) -> Result<(), validator::ValidationErrors> {
+            rskit_validation::Validate::validate(&self.service)
+        }
     }
 
     impl rskit_config::AppConfig for TestCfg {

@@ -17,6 +17,10 @@ keywords   = ["opentelemetry", "tracing", "metrics", "prometheus"]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[features]
+default = []
+otlp = ["dep:opentelemetry-otlp"]
+
 [dependencies]
 # External
 serde           = { workspace = true }
@@ -26,12 +30,12 @@ tracing-subscriber = { workspace = true }
 parking_lot     = { workspace = true }
 opentelemetry            = { workspace = true }
 opentelemetry_sdk        = { workspace = true }
-opentelemetry-otlp       = { workspace = true }
+opentelemetry-otlp       = { workspace = true, optional = true }
 tracing-opentelemetry    = { workspace = true }
 http            = { workspace = true }
 
 # Internal
-rskit-errors    = { version = "0.1.0-alpha.1", path = "../rskit-errors" }
+rskit-errors = { workspace = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }

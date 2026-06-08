@@ -26,11 +26,11 @@ futures-util     = { workspace = true }
 async-stream     = { workspace = true }
 pin-project-lite = { workspace = true }
 tracing          = { workspace = true }
-tokio-stream     = "0.1"
+tokio-stream = { workspace = true }
 parking_lot      = { workspace = true }
 
 # Internal
-rskit-errors     = { version = "0.1.0-alpha.1", path = "../rskit-errors" }
+rskit-errors = { workspace = true }
 
 [dev-dependencies]
-tokio = { version = "1", features = ["full", "test-util"] }
+tokio = { workspace = true, features = ["full", "test-util"] }

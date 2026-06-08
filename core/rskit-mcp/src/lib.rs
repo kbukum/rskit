@@ -10,6 +10,7 @@
 //! - **Transport helpers**: validate canonical transport names and build localhost-only
 //!   Streamable HTTP configuration defaults
 
+#[cfg(feature = "protocol")]
 pub mod convert;
 #[cfg(feature = "server")]
 pub mod transport;
@@ -36,6 +37,7 @@ pub mod tool_call;
 #[cfg(feature = "client")]
 pub mod client;
 
+#[cfg(feature = "protocol")]
 pub use convert::{
     app_error_to_mcp_error, call_result_to_tool_result, definition_to_tool,
     definitions_to_list_result, tool_result_to_call_result, tool_to_definition,

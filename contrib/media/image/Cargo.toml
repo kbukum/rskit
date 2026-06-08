@@ -18,8 +18,8 @@ rskit-errors.workspace = true
 rskit-fs.workspace = true
 rskit-storage.workspace = true
 rskit-media.workspace = true
-image        = "0.25"
-webp         = "0.3"
+image = { workspace = true }
+webp = { workspace = true }
 bytes        = { workspace = true }
 tokio        = { workspace = true }
 tracing      = { workspace = true }
@@ -27,7 +27,7 @@ async-trait  = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "full"] }
-image = "0.25"
+image = { workspace = true }
 rskit-storage.workspace = true
 rskit-media.workspace = true
 bytes = { workspace = true }

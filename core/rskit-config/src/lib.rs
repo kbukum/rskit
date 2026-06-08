@@ -7,14 +7,24 @@
 //! use rskit_validation::Validate;
 //! use serde::Deserialize;
 //!
-//! #[derive(Debug, Deserialize, Validate)]
+//! #[derive(Debug, Deserialize)]
 //! struct MyConfig {
 //!     #[serde(flatten)]
-//!     #[validate(nested)]
 //!     service: ServiceConfig,
-//!     #[validate(range(min = 1, max = 65535))]
 //!     grpc_port: u16,
 //!     api_token: SecretString,
+//! }
+//!
+//! impl Validate for MyConfig {
+//!     fn validate(&self) -> Result<(), validator::ValidationErrors> {
+//!         self.service.validate()?;
+//!         if self.grpc_port == 0 {
+//!             let mut errors = validator::ValidationErrors::new();
+//!             errors.add("grpc_port", validator::ValidationError::new("range"));
+//!             return Err(errors);
+//!         }
+//!         Ok(())
+//!     }
 //! }
 //!
 //! impl AppConfig for MyConfig {
@@ -62,14 +72,24 @@ pub use service::{Environment, LogFormat, LogOutput, LoggingConfig, ServiceConfi
 /// use rskit_config::{AppConfig, ConfigLoader, SecretString, ServiceConfig};
 /// use rskit_validation::Validate;
 ///
-/// #[derive(serde::Deserialize, Validate)]
+/// #[derive(serde::Deserialize)]
 /// struct MyConfig {
 ///     #[serde(flatten)]
-///     #[validate(nested)]
 ///     service: ServiceConfig,
-///     #[validate(range(min = 1, max = 65535))]
 ///     grpc_port: u16,
 ///     api_token: SecretString,
+/// }
+///
+/// impl Validate for MyConfig {
+///     fn validate(&self) -> Result<(), validator::ValidationErrors> {
+///         self.service.validate()?;
+///         if self.grpc_port == 0 {
+///             let mut errors = validator::ValidationErrors::new();
+///             errors.add("grpc_port", validator::ValidationError::new("range"));
+///             return Err(errors);
+///         }
+///         Ok(())
+///     }
 /// }
 ///
 /// impl AppConfig for MyConfig {

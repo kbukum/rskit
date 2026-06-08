@@ -187,12 +187,14 @@ check-facade-features:
 deny: check-l7-edges check-topology check-public-api
 	@echo "==> Running cargo-deny..."
 	@if [ -n "$(W)" ]; then \
-		cargo deny --manifest-path $(W)/Cargo.toml check licenses advisories sources bans; \
+		case "$(W)" in \
+			core) cargo deny --manifest-path core/Cargo.toml check --config deny.toml licenses advisories sources bans ;; \
+			contrib) cargo deny --manifest-path contrib/Cargo.toml check --config deny.contrib.toml licenses advisories sources bans ;; \
+			*) echo "error: make deny supports W=core or W=contrib" >&2; exit 2 ;; \
+		esac; \
 	else \
-		set -e; \
-		for manifest in $(WORKSPACE_MANIFESTS); do \
-			cargo deny --manifest-path $$manifest check licenses advisories sources bans; \
-		done; \
+		cargo deny --manifest-path core/Cargo.toml check --config deny.toml licenses advisories sources bans; \
+		cargo deny --manifest-path contrib/Cargo.toml check --config deny.contrib.toml licenses advisories sources bans; \
 	fi
 	@echo "✓ cargo-deny passed"
 

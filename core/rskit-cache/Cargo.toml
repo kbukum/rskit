@@ -29,11 +29,11 @@ async-trait     = { workspace = true }
 tokio           = { workspace = true }
 tracing         = { workspace = true }
 parking_lot     = { workspace = true }
-blake3          = { version = "1", optional = true }
+blake3 = { workspace = true, optional = true }
 
 # Internal
-rskit-errors    = { version = "0.1.0-alpha.1", path = "../rskit-errors" }
-rskit-fs        = { version = "0.1.0-alpha.1", path = "../rskit-fs", optional = true }
+rskit-errors = { workspace = true }
+rskit-fs = { workspace = true, optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

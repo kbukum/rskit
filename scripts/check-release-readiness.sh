@@ -132,15 +132,11 @@ if findings:
 PY
 
 echo "==> Running cargo-deny..."
-cargo deny --manifest-path core/Cargo.toml check licenses advisories sources bans
-cargo deny --manifest-path contrib/Cargo.toml check licenses advisories sources bans
+cargo deny --manifest-path core/Cargo.toml check --config deny.toml licenses advisories sources bans
+cargo deny --manifest-path contrib/Cargo.toml check --config deny.contrib.toml licenses advisories sources bans
 
 echo "==> Running cargo-audit..."
 audit_ignore=(
-    --ignore RUSTSEC-2023-0071
-    --ignore RUSTSEC-2024-0436
-    --ignore RUSTSEC-2025-0134
-    --ignore RUSTSEC-2026-0097
     --ignore RUSTSEC-2026-0098
     --ignore RUSTSEC-2026-0099
     --ignore RUSTSEC-2026-0104

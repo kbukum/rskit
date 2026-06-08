@@ -1,6 +1,4 @@
-use std::fs::File;
 use std::future::Future;
-use std::io::BufReader;
 use std::net::SocketAddr;
 use std::pin::pin;
 use std::sync::Arc;
@@ -20,7 +18,7 @@ use rskit_bootstrap::{Component, Health, Registry};
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_http::{SecurityHeadersConfig, SecurityHeadersLayer};
 use rskit_security::{TlsConfig, TlsVersion};
-use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpListener;
 use tokio_rustls::TlsAcceptor;
@@ -509,15 +507,14 @@ fn build_tls_acceptor(tls: &TlsConfig) -> AppResult<TlsAcceptor> {
 }
 
 fn load_certs(path: &str) -> AppResult<Vec<CertificateDer<'static>>> {
-    let file = File::open(path).map_err(|error| {
-        AppError::new(
-            ErrorCode::InvalidInput,
-            format!("failed to open HTTP TLS certificate file '{path}': {error}"),
-        )
-        .with_cause(error)
-    })?;
-    let mut reader = BufReader::new(file);
-    let certs = rustls_pemfile::certs(&mut reader)
+    let certs = CertificateDer::pem_file_iter(path)
+        .map_err(|error| {
+            AppError::new(
+                ErrorCode::InvalidInput,
+                format!("failed to open HTTP TLS certificate file '{path}': {error}"),
+            )
+            .with_cause(error)
+        })?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|error| {
             AppError::new(
@@ -536,28 +533,13 @@ fn load_certs(path: &str) -> AppResult<Vec<CertificateDer<'static>>> {
 }
 
 fn load_private_key(path: &str) -> AppResult<PrivateKeyDer<'static>> {
-    let file = File::open(path).map_err(|error| {
+    PrivateKeyDer::from_pem_file(path).map_err(|error| {
         AppError::new(
             ErrorCode::InvalidInput,
-            format!("failed to open HTTP TLS key file '{path}': {error}"),
+            format!("failed to parse HTTP TLS key file '{path}': {error}"),
         )
         .with_cause(error)
-    })?;
-    let mut reader = BufReader::new(file);
-    rustls_pemfile::private_key(&mut reader)
-        .map_err(|error| {
-            AppError::new(
-                ErrorCode::InvalidInput,
-                format!("failed to parse HTTP TLS key file '{path}': {error}"),
-            )
-            .with_cause(error)
-        })?
-        .ok_or_else(|| {
-            AppError::invalid_input(
-                "tls.key_file",
-                "key file must contain one PKCS#8, PKCS#1, or SEC1 private key",
-            )
-        })
+    })
 }
 
 /// Add a `/health` endpoint returning JSON from a [`Registry`].

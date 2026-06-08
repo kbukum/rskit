@@ -85,6 +85,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Release readiness**: added final release sweeps, dependency-ordered publish
   dry-runs, release coverage thresholds, CycloneDX SBOM generation, tag-release
   SBOM signing, and CI guardrails for the declared MSRV plus pinned toolchain.
+- **Release readiness**: removed cargo-deny/cargo-audit advisory ignores by
+  replacing unmaintained transitive dependency paths with maintained feature
+  selections, direct PEM parsing via `rustls-pki-types`, manual validation impls
+  instead of derive macros, and a REST-backed Qdrant adapter.
 - **Infra/facade refinement**: aligned facade feature wiring and documentation,
   routed examples through the public `rskit` facade, added facade feature-matrix
   validation, made public API checks select the owning workspace manifest,
@@ -191,6 +195,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   duplicate quote attributes.
 - **Release tooling**: publish ordering no longer depends on Python 3.9-only
   path APIs, and SBOM cleanup is constrained to `target/` subdirectories.
+- **Workspace hygiene**: Cargo dependency versions are now centralized in the
+  workspace roots, while member crates inherit dependencies via
+  `workspace = true` and root manifests separate external and internal
+  dependencies.
 - **rskit-git**: CLI branch/tag deletion now treats successful commands as
   successful even when captured stdout/stderr exceeded process capture limits.
 - **rskit-bench**: file-backed run listing now skips unreadable or partially

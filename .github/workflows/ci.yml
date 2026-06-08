@@ -55,6 +55,7 @@ jobs:
               - '.config/**'
               - 'clippy.toml'
               - 'deny.toml'
+              - 'deny.contrib.toml'
               - 'rust-toolchain.toml'
               - 'rustfmt.toml'
               - '.github/workflows/ci.yml'
@@ -273,8 +274,8 @@ jobs:
         run: rustup toolchain install nightly --profile minimal
       - name: Install cargo-public-api
         run: cargo install cargo-public-api --version 0.52.0 --locked
-      - run: cargo deny --manifest-path core/Cargo.toml check licenses advisories sources bans
-      - run: cargo deny --manifest-path contrib/Cargo.toml check licenses advisories sources bans
+      - run: cargo deny --manifest-path core/Cargo.toml check --config deny.toml licenses advisories sources bans
+      - run: cargo deny --manifest-path contrib/Cargo.toml check --config deny.contrib.toml licenses advisories sources bans
       - run: ./scripts/check-release-readiness.sh
       - uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998  # v2
         with:

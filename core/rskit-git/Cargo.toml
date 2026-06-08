@@ -22,15 +22,15 @@ testutil = ["dep:tempfile"]
 
 [dependencies]
 # External
-git2 = { version = "0.21", default-features = false, features = ["https", "ssh"] }
+git2 = { workspace = true, features = ["https", "ssh"] }
 thiserror = { workspace = true }
 tempfile = { workspace = true, optional = true }
 
 # Internal
-rskit-errors = { version = "0.1.0-alpha.1", path = "../rskit-errors" }
-rskit-fs = { version = "0.1.0-alpha.1", path = "../rskit-fs", default-features = false }
-rskit-process = { version = "0.1.0-alpha.1", path = "../rskit-process" }
+rskit-errors = { workspace = true }
+rskit-fs = { workspace = true }
+rskit-process = { workspace = true }
 
 [dev-dependencies]
-rskit-testutil = { version = "0.1.0-alpha.1", path = "../rskit-testutil" }
+rskit-testutil = { workspace = true }
 tempfile = { workspace = true }

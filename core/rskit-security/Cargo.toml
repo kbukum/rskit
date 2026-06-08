@@ -26,6 +26,6 @@ http         = { workspace = true }
 serde        = { workspace = true }
 
 # Internal
-rskit-errors = { version = "0.1.0-alpha.1", path = "../rskit-errors" }
-rskit-util   = { version = "0.1.0-alpha.1", path = "../rskit-util" }
-subtle       = "2.6"
+rskit-errors = { workspace = true }
+rskit-util = { workspace = true }
+subtle = { workspace = true }

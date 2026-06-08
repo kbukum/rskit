@@ -18,8 +18,8 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-rskit-util = { version = "0.1.0-alpha.1", path = "../rskit-util" }
-semver = "1"
+rskit-util = { workspace = true }
+semver = { workspace = true }
 serde = { workspace = true }
 
 [lints]

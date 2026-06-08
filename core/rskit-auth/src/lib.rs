@@ -1,4 +1,5 @@
-//! Authentication — JWT, OIDC, password hashing, API key management, request-context helpers.
+//! Authentication — password hashing, API key management, request-context helpers,
+//! and optional JWT/OIDC support.
 //!
 //! Request middleware is fail-closed by default. [`BearerAuthLayer`] reads only
 //! `Authorization: Bearer ...` headers and emits a neutral
@@ -14,8 +15,10 @@ mod bearer;
 /// Auth claims stored in request extensions / task-locals.
 pub mod context;
 /// JWT sign/verify service.
+#[cfg(feature = "jwt")]
 pub mod jwt;
 /// OpenID Connect (OIDC) support — discovery, token validation, userinfo.
+#[cfg(feature = "oidc")]
 pub mod oidc;
 /// Typed request authentication outcomes.
 pub mod outcome;
@@ -26,9 +29,16 @@ pub mod traits;
 
 pub use bearer::{BearerAuthLayer, BearerAuthService};
 pub use context::AuthClaims;
+#[cfg(feature = "jwt")]
 pub use jwt::{
     AsymmetricAlgorithm, JwtAlgorithm, JwtCodec, JwtConfig, JwtHeader, JwtKeyMaterial, JwtService,
     KeyPair,
+};
+#[cfg(feature = "oidc")]
+pub use oidc::{
+    OidcAuthorizationRequest, OidcClaims, OidcClient, OidcClientType, OidcConfig, OidcError,
+    OidcHttpClient, OidcProviderMetadata, OidcTokenExchangeRequest, OidcUserInfo, PkcePair,
+    ReqwestOidcHttpClient, validate_id_token,
 };
 pub use outcome::{AuthOutcome, MissingCredentialPolicy};
 pub use password::{HashAlgorithm, PasswordHasher, ResetTokenGenerator};

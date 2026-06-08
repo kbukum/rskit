@@ -14,9 +14,9 @@ categories             = ["database"]
 keywords               = ["vector", "qdrant", "adapter"]
 
 [dependencies]
-qdrant-client = ">=1.13, <1.18"
 reqwest       = { workspace = true }
 serde         = { workspace = true }
+serde_json    = { workspace = true }
 async-trait   = { workspace = true }
 tracing       = { workspace = true }
 uuid          = { workspace = true }

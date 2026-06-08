@@ -22,75 +22,75 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 # Always-on core crates
-rskit-util       = { version = "0.1.0-alpha.1", path = "../rskit-util" }
-rskit-errors     = { version = "0.1.0-alpha.1", path = "../rskit-errors" }
-rskit-fs         = { version = "0.1.0-alpha.1", path = "../rskit-fs" }
-rskit-config     = { version = "0.1.0-alpha.1", path = "../rskit-config" }
-rskit-logging    = { version = "0.1.0-alpha.1", path = "../rskit-logging" }
-rskit-bootstrap  = { version = "0.1.0-alpha.1", path = "../rskit-bootstrap" }
-rskit-component  = { version = "0.1.0-alpha.1", path = "../rskit-component" }
-rskit-provider   = { version = "0.1.0-alpha.1", path = "../rskit-provider" }
-rskit-pipeline   = { version = "0.1.0-alpha.1", path = "../rskit-pipeline" }
-rskit-resilience = { version = "0.1.0-alpha.1", path = "../rskit-resilience" }
-rskit-worker     = { version = "0.1.0-alpha.1", path = "../rskit-worker" }
-rskit-validation = { version = "0.1.0-alpha.1", path = "../rskit-validation" }
+rskit-util = { workspace = true }
+rskit-errors = { workspace = true }
+rskit-fs = { workspace = true }
+rskit-config = { workspace = true }
+rskit-logging = { workspace = true }
+rskit-bootstrap = { workspace = true }
+rskit-component = { workspace = true }
+rskit-provider = { workspace = true }
+rskit-pipeline = { workspace = true }
+rskit-resilience = { workspace = true }
+rskit-worker = { workspace = true }
+rskit-validation = { workspace = true }
 validator = { workspace = true }
-rskit-chain      = { version = "0.1.0-alpha.1", path = "../rskit-chain", optional = true }
-rskit-process    = { version = "0.1.0-alpha.1", path = "../rskit-process", optional = true }
-rskit-stateful   = { version = "0.1.0-alpha.1", path = "../rskit-stateful", optional = true }
-rskit-version    = { version = "0.1.0-alpha.1", path = "../rskit-version", optional = true }
-rskit-schema     = { version = "0.1.0-alpha.1", path = "../rskit-schema", optional = true }
-rskit-hook       = { version = "0.1.0-alpha.1", path = "../rskit-hook", optional = true }
+rskit-chain = { workspace = true, optional = true }
+rskit-process = { workspace = true, optional = true }
+rskit-stateful = { workspace = true, optional = true }
+rskit-version = { workspace = true, optional = true }
+rskit-schema = { workspace = true, optional = true }
+rskit-hook = { workspace = true, optional = true }
 
 # Feature-gated crates
-rskit-server        = { version = "0.1.0-alpha.1", path = "../rskit-server",        optional = true }
-rskit-grpc          = { version = "0.1.0-alpha.1", path = "../rskit-grpc",          optional = true }
-rskit-encryption    = { version = "0.1.0-alpha.1", path = "../rskit-encryption",    optional = true }
-rskit-http          = { version = "0.1.0-alpha.1", path = "../rskit-http",          optional = true }
-rskit-httpclient    = { version = "0.1.0-alpha.1", path = "../rskit-httpclient",    optional = true }
-rskit-auth          = { version = "0.1.0-alpha.1", path = "../rskit-auth",          optional = true }
-rskit-di            = { version = "0.1.0-alpha.1", path = "../rskit-di",            optional = true }
-rskit-database      = { version = "0.1.0-alpha.1", path = "../rskit-database",      optional = true }
-rskit-cache         = { version = "0.1.0-alpha.1", path = "../rskit-cache",         optional = true }
-rskit-cache-redis   = { version = "0.1.0-alpha.1", path = "../../contrib/cache/redis", optional = true }
-rskit-messaging     = { version = "0.1.0-alpha.1", path = "../rskit-messaging",     optional = true }
-rskit-messaging-kafka = { version = "0.1.0-alpha.1", path = "../../contrib/messaging/kafka", optional = true }
-rskit-messaging-nats = { version = "0.1.0-alpha.1", path = "../../contrib/messaging/nats", optional = true }
-rskit-messaging-rabbitmq = { version = "0.1.0-alpha.1", path = "../../contrib/messaging/rabbitmq", optional = true }
-rskit-observability = { version = "0.1.0-alpha.1", path = "../rskit-observability", optional = true }
-rskit-authz         = { version = "0.1.0-alpha.1", path = "../rskit-authz",         optional = true }
-rskit-security      = { version = "0.1.0-alpha.1", path = "../rskit-security",      optional = true }
-rskit-discovery     = { version = "0.1.0-alpha.1", path = "../rskit-discovery",     optional = true }
-rskit-sse           = { version = "0.1.0-alpha.1", path = "../rskit-sse",           optional = true }
-rskit-dag           = { version = "0.1.0-alpha.1", path = "../rskit-dag",           optional = true }
-rskit-ai        = { version = "0.1.0-alpha.1", path = "../rskit-ai",        optional = true }
-rskit-llm           = { version = "0.1.0-alpha.1", path = "../rskit-llm",           optional = true }
-rskit-llm-openai    = { version = "0.1.0-alpha.1", path = "../../contrib/llm/openai", optional = true }
-rskit-llm-anthropic = { version = "0.1.0-alpha.1", path = "../../contrib/llm/anthropic", optional = true }
-rskit-llm-ollama    = { version = "0.1.0-alpha.1", path = "../../contrib/llm/ollama", optional = true }
-rskit-llm-gemini    = { version = "0.1.0-alpha.1", path = "../../contrib/llm/gemini", optional = true }
-rskit-embedding     = { version = "0.1.0-alpha.1", path = "../rskit-embedding",     optional = true }
-rskit-inference     = { version = "0.1.0-alpha.1", path = "../rskit-inference",     optional = true }
-rskit-inference-triton = { version = "0.1.0-alpha.1", path = "../../contrib/inference/triton", optional = true }
-rskit-inference-vllm = { version = "0.1.0-alpha.1", path = "../../contrib/inference/vllm", optional = true }
-rskit-inference-tgi = { version = "0.1.0-alpha.1", path = "../../contrib/inference/tgi", optional = true }
-rskit-skill         = { version = "0.1.0-alpha.1", path = "../rskit-skill",         optional = true }
-rskit-tool          = { version = "0.1.0-alpha.1", path = "../rskit-tool",          optional = true }
-rskit-agent         = { version = "0.1.0-alpha.1", path = "../rskit-agent",         optional = true }
-rskit-mcp           = { version = "0.1.0-alpha.1", path = "../rskit-mcp",           optional = true }
-rskit-storage       = { version = "0.1.0-alpha.1", path = "../rskit-storage", optional = true }
-rskit-storage-s3    = { version = "0.1.0-alpha.1", path = "../../contrib/storage/s3", optional = true }
-rskit-storage-gcs   = { version = "0.1.0-alpha.1", path = "../../contrib/storage/gcs", optional = true }
-rskit-media         = { version = "0.1.0-alpha.1", path = "../rskit-media",         optional = true }
-rskit-media-ffmpeg  = { version = "0.1.0-alpha.1", path = "../../contrib/media/ffmpeg",  optional = true }
-rskit-media-image   = { version = "0.1.0-alpha.1", path = "../../contrib/media/image",   optional = true }
-rskit-media-audio   = { version = "0.1.0-alpha.1", path = "../../contrib/media/audio",   optional = true }
-rskit-cli           = { version = "0.1.0-alpha.1", path = "../rskit-cli",           optional = true }
-rskit-git           = { version = "0.1.0-alpha.1", path = "../rskit-git",           optional = true }
-rskit-dataset       = { version = "0.1.0-alpha.1", path = "../rskit-dataset",       optional = true }
-rskit-bench         = { version = "0.1.0-alpha.1", path = "../rskit-bench",         optional = true }
-rskit-vectorstore   = { version = "0.1.0-alpha.1", path = "../rskit-vectorstore",   optional = true }
-rskit-vectorstore-qdrant = { version = "0.1.0-alpha.1", path = "../../contrib/vectorstore/qdrant", optional = true }
+rskit-server = { workspace = true, optional = true }
+rskit-grpc = { workspace = true, optional = true }
+rskit-encryption = { workspace = true, optional = true }
+rskit-http = { workspace = true, optional = true }
+rskit-httpclient = { workspace = true, optional = true }
+rskit-auth = { workspace = true, optional = true }
+rskit-di = { workspace = true, optional = true }
+rskit-database = { workspace = true, optional = true }
+rskit-cache = { workspace = true, optional = true }
+rskit-cache-redis = { workspace = true, optional = true }
+rskit-messaging = { workspace = true, optional = true }
+rskit-messaging-kafka = { workspace = true, optional = true }
+rskit-messaging-nats = { workspace = true, optional = true }
+rskit-messaging-rabbitmq = { workspace = true, optional = true }
+rskit-observability = { workspace = true, optional = true }
+rskit-authz = { workspace = true, optional = true }
+rskit-security = { workspace = true, optional = true }
+rskit-discovery = { workspace = true, optional = true }
+rskit-sse = { workspace = true, optional = true }
+rskit-dag = { workspace = true, optional = true }
+rskit-ai = { workspace = true, optional = true }
+rskit-llm = { workspace = true, optional = true }
+rskit-llm-openai = { workspace = true, optional = true }
+rskit-llm-anthropic = { workspace = true, optional = true }
+rskit-llm-ollama = { workspace = true, optional = true }
+rskit-llm-gemini = { workspace = true, optional = true }
+rskit-embedding = { workspace = true, optional = true }
+rskit-inference = { workspace = true, optional = true }
+rskit-inference-triton = { workspace = true, optional = true }
+rskit-inference-vllm = { workspace = true, optional = true }
+rskit-inference-tgi = { workspace = true, optional = true }
+rskit-skill = { workspace = true, optional = true }
+rskit-tool = { workspace = true, optional = true }
+rskit-agent = { workspace = true, optional = true }
+rskit-mcp = { workspace = true, optional = true }
+rskit-storage = { workspace = true, optional = true }
+rskit-storage-s3 = { workspace = true, optional = true }
+rskit-storage-gcs = { workspace = true, optional = true }
+rskit-media = { workspace = true, optional = true }
+rskit-media-ffmpeg = { workspace = true, optional = true }
+rskit-media-image = { workspace = true, optional = true }
+rskit-media-audio = { workspace = true, optional = true }
+rskit-cli = { workspace = true, optional = true }
+rskit-git = { workspace = true, optional = true }
+rskit-dataset = { workspace = true, optional = true }
+rskit-bench = { workspace = true, optional = true }
+rskit-vectorstore = { workspace = true, optional = true }
+rskit-vectorstore-qdrant = { workspace = true, optional = true }
 
 [dev-dependencies]
 tokio       = { workspace = true, features = ["full"] }
@@ -109,6 +109,8 @@ encryption    = ["dep:rskit-encryption"]
 http          = ["dep:rskit-http"]
 httpclient    = ["dep:rskit-httpclient"]
 auth          = ["dep:rskit-auth"]
+auth-jwt      = ["auth", "rskit-auth/jwt"]
+auth-oidc     = ["auth", "rskit-auth/oidc"]
 di            = ["dep:rskit-di"]
 database      = ["dep:rskit-database"]
 cache         = ["dep:rskit-cache"]

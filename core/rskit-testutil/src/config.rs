@@ -4,11 +4,17 @@ use rskit_config::{AppConfig, ServiceConfig};
 use serde::Deserialize;
 
 /// Minimal application config for tests that need an `AppConfig`.
-#[derive(Debug, Clone, Default, Deserialize, rskit_validation::Validate)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct TestAppConfig {
     /// Embedded service configuration.
     #[serde(default)]
     pub service: ServiceConfig,
+}
+
+impl rskit_validation::Validate for TestAppConfig {
+    fn validate(&self) -> Result<(), validator::ValidationErrors> {
+        rskit_validation::Validate::validate(&self.service)
+    }
 }
 
 impl TestAppConfig {

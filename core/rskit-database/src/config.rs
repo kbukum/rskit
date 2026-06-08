@@ -4,9 +4,10 @@ use std::time::Duration;
 
 use rskit_validation::Validate;
 use serde::{Deserialize, Deserializer, Serialize};
+use validator::ValidationErrors;
 
 /// Config-driven database backend selection.
-#[derive(Debug, Clone, Deserialize, Serialize, Validate)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct DatabaseConfig {
     /// Backend name looked up in an injected [`crate::DatabaseRegistry`].
     #[serde(default = "default_backend")]
@@ -34,6 +35,12 @@ pub struct DatabaseConfig {
     pub slow_query_threshold: Duration,
 }
 
+impl Validate for DatabaseConfig {
+    fn validate(&self) -> Result<(), ValidationErrors> {
+        self.memory.validate()
+    }
+}
+
 impl Default for DatabaseConfig {
     fn default() -> Self {
         Self {
@@ -48,7 +55,7 @@ impl Default for DatabaseConfig {
 }
 
 /// In-memory database backend configuration.
-#[derive(Debug, Clone, Deserialize, Serialize, Validate)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct MemoryDatabaseConfig {
     /// Logical database name used for diagnostics.
     #[serde(default = "default_memory_name")]
@@ -56,6 +63,12 @@ pub struct MemoryDatabaseConfig {
     /// Maximum number of recorded statements kept for diagnostics. `0` disables recording.
     #[serde(default = "default_statement_history")]
     pub statement_history: usize,
+}
+
+impl Validate for MemoryDatabaseConfig {
+    fn validate(&self) -> Result<(), ValidationErrors> {
+        Ok(())
+    }
 }
 
 impl Default for MemoryDatabaseConfig {
