@@ -18,7 +18,7 @@ rust-version = "1.91"
 authors = ["kbukum contributors"]
 repository = "https://github.com/kbukum/rskit"
 homepage = "https://github.com/kbukum/rskit"
-documentation = "https://docs.rs/rskit-toolkit"
+documentation = "https://docs.rs/rskit-suite"
 
 [workspace.dependencies]
 # Internal

@@ -15,7 +15,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "indicatif",
- "rskit-toolkit",
+ "rskit-suite",
  "tokio",
  "tokio-util",
  "tracing",
@@ -1087,7 +1087,7 @@ dependencies = [
 name = "media-demo"
 version = "0.1.0-alpha.1"
 dependencies = [
- "rskit-toolkit",
+ "rskit-suite",
  "tokio",
 ]
 
@@ -1842,7 +1842,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rskit-toolkit"
+name = "rskit-suite"
 version = "0.1.0-alpha.1"
 dependencies = [
  "rskit-bootstrap",

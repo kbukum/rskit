@@ -1,6 +1,6 @@
 # rskit Developer Documentation
 
-This is the documentation hub for developers using or contributing to rskit. The repository is organized as split Cargo workspaces: `core/Cargo.toml` owns foundation crates and the `rskit-toolkit` facade package, `contrib/Cargo.toml` owns adapter crates, and `examples/Cargo.toml` validates demos. There is intentionally no root `Cargo.toml`.
+This is the documentation hub for developers using or contributing to rskit. The repository is organized as split Cargo workspaces: `core/Cargo.toml` owns foundation crates and the `rskit-suite` facade package, `contrib/Cargo.toml` owns adapter crates, and `examples/Cargo.toml` validates demos. There is intentionally no root `Cargo.toml`.
 
 ## Start here
 
@@ -20,7 +20,7 @@ This is the documentation hub for developers using or contributing to rskit. The
 | Architecture and sibling parity | [Design notes](DESIGN.md) |
 | Security model and production defaults | [Security model](security-model.md) |
 | Per-crate API details | Crate READMEs under [`core/`](../core/) and [`contrib/`](../contrib/) |
-| Published Rust API docs | [docs.rs/rskit-toolkit](https://docs.rs/rskit-toolkit) |
+| Published Rust API docs | [docs.rs/rskit-suite](https://docs.rs/rskit-suite) |
 
 ## Developing rskit
 

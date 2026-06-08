@@ -24,7 +24,7 @@ Initial alpha release of rskit, a Rust infrastructure toolkit for building servi
 ### Release model
 
 - Establishes lock-step `0.1.0-alpha.1` versioning across publishable crates while the project is pre-stable.
-- Publishes the facade package as `rskit-toolkit`; Rust code imports the facade crate as `rskit`.
+- Publishes the facade package as `rskit-suite`; Rust code imports the facade crate as `rskit`.
 - Uses split workspaces for `core/`, `contrib/`, and `examples/`, with examples validated but not published.
 - Publishes crates in dependency order, keeping the facade package last.
 

@@ -178,14 +178,14 @@ check-public-api:
 ## Check facade feature combinations
 check-facade-features:
 	@echo "==> Checking rskit facade feature combinations..."
-	@cargo check --manifest-path $(CORE_MANIFEST) -p rskit-toolkit
-	@cargo check --manifest-path $(CORE_MANIFEST) -p rskit-toolkit --all-features
-	@cargo check --manifest-path $(CORE_MANIFEST) -p rskit-toolkit --features "server grpc http httpclient sse"
-	@cargo check --manifest-path $(CORE_MANIFEST) -p rskit-toolkit --features "auth authz security encryption di observability discovery"
-	@cargo check --manifest-path $(CORE_MANIFEST) -p rskit-toolkit --features "database cache cache-fs cache-redis messaging messaging-kafka messaging-nats messaging-rabbitmq storage storage-s3 storage-gcs vectorstore vectorstore-qdrant"
-	@cargo check --manifest-path $(CORE_MANIFEST) -p rskit-toolkit --features "dag chain process stateful version schema hook"
-	@cargo check --manifest-path $(CORE_MANIFEST) -p rskit-toolkit --features "genai prompt llm llm-openai llm-anthropic llm-ollama llm-gemini embedding inference inference-triton inference-vllm inference-tgi skill tool agent mcp media-full"
-	@cargo check --manifest-path $(CORE_MANIFEST) -p rskit-toolkit --features "cli git dataset bench"
+	@cargo check --manifest-path $(CORE_MANIFEST) -p rskit-suite
+	@cargo check --manifest-path $(CORE_MANIFEST) -p rskit-suite --all-features
+	@cargo check --manifest-path $(CORE_MANIFEST) -p rskit-suite --features "server grpc http httpclient sse"
+	@cargo check --manifest-path $(CORE_MANIFEST) -p rskit-suite --features "auth authz security encryption di observability discovery"
+	@cargo check --manifest-path $(CORE_MANIFEST) -p rskit-suite --features "database cache cache-fs cache-redis messaging messaging-kafka messaging-nats messaging-rabbitmq storage storage-s3 storage-gcs vectorstore vectorstore-qdrant"
+	@cargo check --manifest-path $(CORE_MANIFEST) -p rskit-suite --features "dag chain process stateful version schema hook"
+	@cargo check --manifest-path $(CORE_MANIFEST) -p rskit-suite --features "genai prompt llm llm-openai llm-anthropic llm-ollama llm-gemini embedding inference inference-triton inference-vllm inference-tgi skill tool agent mcp media-full"
+	@cargo check --manifest-path $(CORE_MANIFEST) -p rskit-suite --features "cli git dataset bench"
 	@echo "✓ Facade feature combinations OK"
 
 ## Run cargo-deny, public API, topology, dependency sync, and dependency edge checks
