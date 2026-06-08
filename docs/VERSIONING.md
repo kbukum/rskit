@@ -6,7 +6,7 @@ This document explains the versioning and compatibility policy for rskit. For th
 
 rskit is published from two Cargo workspaces:
 
-- `core/Cargo.toml` contains the foundation crates and the `rskit-toolkit` facade package, whose Rust crate name remains `rskit`.
+- `core/Cargo.toml` contains the foundation crates and the `rskit-suite` facade package, whose Rust crate name remains `rskit`.
 - `contrib/Cargo.toml` contains adapter crates.
 
 `examples/Cargo.toml` is validated by CI and release gates, but examples are not published to crates.io.
@@ -93,7 +93,7 @@ Use the facade when you want one crate with opt-in features:
 
 ```toml
 [dependencies]
-rskit-toolkit = { version = "0.1.0-alpha.1", features = ["server", "database", "messaging"] }
+rskit-suite = { version = "0.1.0-alpha.1", features = ["server", "database", "messaging"] }
 ```
 
 Or depend on focused crates directly:

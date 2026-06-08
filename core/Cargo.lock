@@ -4946,7 +4946,7 @@ dependencies = [
  "rskit-fs",
  "rskit-observability",
  "rskit-provider",
- "rskit-toolkit",
+ "rskit-suite",
  "rskit-util",
  "rskit-worker",
  "serde",
@@ -5913,45 +5913,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rskit-testutil"
-version = "0.1.0-alpha.1"
-dependencies = [
- "async-trait",
- "parking_lot",
- "rskit-component",
- "rskit-config",
- "rskit-errors",
- "rskit-fs",
- "rskit-hook",
- "rskit-provider",
- "rskit-validation",
- "serde",
- "tokio",
- "uuid",
- "validator",
-]
-
-[[package]]
-name = "rskit-tool"
-version = "0.1.0-alpha.1"
-dependencies = [
- "async-trait",
- "parking_lot",
- "rskit-ai",
- "rskit-component",
- "rskit-errors",
- "rskit-observability",
- "rskit-schema",
- "schemars 1.2.1",
- "serde",
- "serde_json",
- "tokio",
- "tokio-util",
- "tracing",
-]
-
-[[package]]
-name = "rskit-toolkit"
+name = "rskit-suite"
 version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
@@ -6028,6 +5990,44 @@ dependencies = [
  "tokio",
  "tokio-util",
  "validator",
+]
+
+[[package]]
+name = "rskit-testutil"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "async-trait",
+ "parking_lot",
+ "rskit-component",
+ "rskit-config",
+ "rskit-errors",
+ "rskit-fs",
+ "rskit-hook",
+ "rskit-provider",
+ "rskit-validation",
+ "serde",
+ "tokio",
+ "uuid",
+ "validator",
+]
+
+[[package]]
+name = "rskit-tool"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "async-trait",
+ "parking_lot",
+ "rskit-ai",
+ "rskit-component",
+ "rskit-errors",
+ "rskit-observability",
+ "rskit-schema",
+ "schemars 1.2.1",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-util",
+ "tracing",
 ]
 
 [[package]]

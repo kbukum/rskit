@@ -1,8 +1,8 @@
-# rskit-toolkit — Production Rust Toolkit Facade
+# rskit-suite — Production Rust Toolkit Facade
 
 Pure facade package that re-exports `rskit-*` crates from the Rust crate name `rskit`. It contains no implementation logic; use it when an application wants one dependency entry point instead of importing each foundation crate directly.
 
-[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/rskit-toolkit.svg)](https://crates.io/crates/rskit-toolkit) [![docs.rs](https://docs.rs/rskit-toolkit/badge.svg)](https://docs.rs/rskit-toolkit) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/kbukum/rskit/blob/main/LICENSE) [![MSRV: 1.91](https://img.shields.io/badge/MSRV-1.91-orange.svg)](https://www.rust-lang.org/)
+[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/rskit-suite.svg)](https://crates.io/crates/rskit-suite) [![docs.rs](https://docs.rs/rskit-suite/badge.svg)](https://docs.rs/rskit-suite) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/kbukum/rskit/blob/main/LICENSE) [![MSRV: 1.91](https://img.shields.io/badge/MSRV-1.91-orange.svg)](https://www.rust-lang.org/)
 
 ## Always-on modules
 
@@ -28,9 +28,9 @@ Optional modules are enabled with Cargo features. Adapter features also enable t
 
 ```toml
 [dependencies]
-rskit-toolkit = "0.1.0-alpha.1"
+rskit-suite = "0.1.0-alpha.1"
 # or opt into higher-level modules/adapters:
-# rskit-toolkit = { version = "0.1.0-alpha.1", features = ["server", "cli", "storage-s3"] }
+# rskit-suite = { version = "0.1.0-alpha.1", features = ["server", "cli", "storage-s3"] }
 ```
 
 ```rust

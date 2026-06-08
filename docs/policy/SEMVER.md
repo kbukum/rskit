@@ -4,7 +4,7 @@
 
 ## Versioning surface
 
-`rskit` is published from split Cargo workspaces: `core/Cargo.toml` for foundation crates and the `rskit-toolkit` facade package (Rust crate name `rskit`), and `contrib/Cargo.toml` for adapter crates. **Each crate is versioned independently**, even though we currently cut all publishable crates in lock-step via `[workspace.package].version`. The lock-step practice is convenience, not contract — consumers should pin per crate.
+`rskit` is published from split Cargo workspaces: `core/Cargo.toml` for foundation crates and the `rskit-suite` facade package (Rust crate name `rskit`), and `contrib/Cargo.toml` for adapter crates. **Each crate is versioned independently**, even though we currently cut all publishable crates in lock-step via `[workspace.package].version`. The lock-step practice is convenience, not contract — consumers should pin per crate.
 
 ## Pre-1.0 (`0.x.y`)
 

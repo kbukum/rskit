@@ -11,7 +11,7 @@ The mechanical steps to cut a release of `rskit`. For *what* counts as a breakin
 
 This repository has split Cargo workspaces:
 
-- `core/Cargo.toml` for foundation crates and the `rskit-toolkit` facade package, whose Rust crate name remains `rskit`.
+- `core/Cargo.toml` for foundation crates and the `rskit-suite` facade package, whose Rust crate name remains `rskit`.
 - `contrib/Cargo.toml` for adapter crates.
 - `examples/Cargo.toml` for demos; examples are validated but not published.
 
@@ -120,11 +120,11 @@ If publishing fails after some crates were uploaded, do not delete or force-push
 
 ```sh
 cargo search rskit
-# Check https://crates.io/crates/rskit-toolkit/X.Y.Z
-# Check https://docs.rs/rskit-toolkit/X.Y.Z
+# Check https://crates.io/crates/rskit-suite/X.Y.Z
+# Check https://docs.rs/rskit-suite/X.Y.Z
 ```
 
-If `docs.rs` fails to build, investigate the build log on `https://docs.rs/crate/rskit-toolkit/X.Y.Z/builds`.
+If `docs.rs` fails to build, investigate the build log on `https://docs.rs/crate/rskit-suite/X.Y.Z/builds`.
 
 ## 8. Announce
 

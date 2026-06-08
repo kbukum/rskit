@@ -92,7 +92,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! rskit-toolkit = { version = "0.1.0-alpha.1", features = ["full"] }
+//! rskit-suite = { version = "0.1.0-alpha.1", features = ["full"] }
 //! ```
 
 #![warn(missing_docs)]
