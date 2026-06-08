@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use rskit_errors::{AppError, AppResult, ErrorCode};
-use rskit_httpclient::{HttpClient, HttpClientConfig, Request};
+use rskit_httpclient::{Auth, HttpClient, HttpClientConfig, Request};
 use rskit_vectorstore::{
     PointPayload, SearchFilter, SearchResult, SimilarityMetric, VectorFactory, VectorStore,
     VectorStoreConfig, VectorStoreLimits, VectorStoreRegistry,
@@ -30,12 +30,7 @@ struct QdrantVectorStore {
 impl QdrantVectorStore {
     fn new(config: Config, limits: VectorStoreLimits) -> AppResult<Self> {
         validate_qdrant_url(&config.url)?;
-        let mut http_config = HttpClientConfig::new()
-            .with_base_url(config.url.trim_end_matches('/'))
-            .with_user_agent("rskit-vectorstore-qdrant");
-        if let Some(key) = &config.api_key {
-            http_config = http_config.with_header("api-key", key.expose());
-        }
+        let http_config = qdrant_http_config(&config);
         Ok(Self {
             client: HttpClient::new(http_config)?,
             metric: config.metric,
@@ -60,6 +55,16 @@ impl QdrantVectorStore {
             .await?
             .error_for_status_with(|response| qdrant_http_error(context, response))
     }
+}
+
+fn qdrant_http_config(config: &Config) -> HttpClientConfig {
+    let mut http_config = HttpClientConfig::new()
+        .with_base_url(config.url.trim_end_matches('/'))
+        .with_user_agent("rskit-vectorstore-qdrant");
+    if let Some(key) = &config.api_key {
+        http_config = http_config.with_auth(Auth::api_key_secret("api-key", key.clone()));
+    }
+    http_config
 }
 
 #[async_trait]
@@ -238,6 +243,7 @@ pub(crate) fn register_qdrant(registry: &mut VectorStoreRegistry, config: Config
 #[cfg(test)]
 mod tests {
     use rskit_errors::ErrorCode;
+    use rskit_util::SecretString;
     use rskit_vectorstore::{VectorStoreConfig, VectorStoreLimits, VectorStoreRegistry};
 
     use super::*;
@@ -256,6 +262,21 @@ mod tests {
             .expect_err("dimension above configured limit must fail");
 
         assert_eq!(err.code(), ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn qdrant_http_config_redacts_api_key() {
+        let config = Config {
+            url: "https://qdrant.example.test".to_owned(),
+            api_key: Some(SecretString::new("super-secret-key")),
+            metric: SimilarityMetric::Cosine,
+        };
+
+        let debug = format!("{:?}", qdrant_http_config(&config));
+
+        assert!(!debug.contains("super-secret-key"));
+        assert!(debug.contains("api-key"));
+        assert!(debug.contains("SecretString(***)"));
     }
 
     #[tokio::test]

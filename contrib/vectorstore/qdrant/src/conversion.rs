@@ -152,7 +152,7 @@ fn unsupported_payload(field: &str) -> AppError {
 #[cfg(test)]
 mod tests {
     use rskit_errors::ErrorCode;
-    use rskit_vectorstore::SimilarityMetric;
+    use rskit_vectorstore::{PayloadValue, SimilarityMetric};
 
     use super::*;
 
@@ -169,6 +169,43 @@ mod tests {
 
         assert_eq!(err.code(), ErrorCode::InvalidInput);
         assert!(err.message().contains("tags"));
+    }
+
+    #[test]
+    fn payload_to_qdrant_value_rejects_non_finite_floats() {
+        for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let err = payload_to_qdrant_value(PayloadValue::Float(value)).unwrap_err();
+
+            assert_eq!(err.code(), ErrorCode::InvalidInput);
+            assert!(
+                err.message()
+                    .contains("payload float values must be finite")
+            );
+        }
+    }
+
+    #[test]
+    fn filter_condition_to_qdrant_rejects_non_finite_floats() {
+        for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let err = filter_condition_to_qdrant("score".to_owned(), PayloadValue::Float(value))
+                .unwrap_err();
+
+            assert_eq!(err.code(), ErrorCode::InvalidInput);
+            assert!(err.message().contains("filter float values must be finite"));
+        }
+    }
+
+    #[test]
+    fn returned_payload_float_guard_rejects_non_finite_floats() {
+        for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let err = finite_qdrant_float(value, "returned payload").unwrap_err();
+
+            assert_eq!(err.code(), ErrorCode::InvalidInput);
+            assert!(
+                err.message()
+                    .contains("returned payload float values must be finite")
+            );
+        }
     }
 
     #[test]
