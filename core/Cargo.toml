@@ -138,7 +138,7 @@ rustls = "0.23"
 tokio-rustls = "0.26"
 
 # Auth (Phase 2)
-jsonwebtoken = { version = "10", features = ["rust_crypto"] }
+jsonwebtoken = { version = "10", default-features = false, features = ["aws_lc_rs", "use_pem"] }
 argon2 = { version = "0.5", features = ["password-hash", "rand"] }
 
 # Observability (Phase 4)

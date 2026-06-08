@@ -536,7 +536,7 @@ fn load_private_key(path: &str) -> AppResult<PrivateKeyDer<'static>> {
     PrivateKeyDer::from_pem_file(path).map_err(|error| {
         AppError::new(
             ErrorCode::InvalidInput,
-            format!("failed to parse HTTP TLS key file '{path}': {error}"),
+            format!("failed to load HTTP TLS key file '{path}': {error}"),
         )
         .with_cause(error)
     })

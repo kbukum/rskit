@@ -19,7 +19,6 @@ rskit-fs.workspace = true
 rskit-storage.workspace = true
 rskit-media.workspace = true
 image = { workspace = true }
-webp = { workspace = true }
 bytes        = { workspace = true }
 tokio        = { workspace = true }
 tracing      = { workspace = true }

@@ -81,7 +81,6 @@ lapin = { version = "4", default-features = false, features = ["rustls", "tokio"
 
 # Media
 image = { version = "0.25", default-features = false, features = ["bmp", "gif", "ico", "jpeg", "png", "rayon", "tiff", "webp"] }
-webp = "0.3"
 which = "8"
 
 # Storage

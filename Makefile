@@ -193,7 +193,7 @@ deny: check-l7-edges check-topology check-public-api
 			*) echo "error: make deny supports W=core or W=contrib" >&2; exit 2 ;; \
 		esac; \
 	else \
-		cargo deny --manifest-path core/Cargo.toml check --config deny.toml licenses advisories sources bans; \
+		cargo deny --manifest-path core/Cargo.toml check --config deny.toml licenses advisories sources bans && \
 		cargo deny --manifest-path contrib/Cargo.toml check --config deny.contrib.toml licenses advisories sources bans; \
 	fi
 	@echo "✓ cargo-deny passed"

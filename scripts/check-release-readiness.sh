@@ -136,14 +136,8 @@ cargo deny --manifest-path core/Cargo.toml check --config deny.toml licenses adv
 cargo deny --manifest-path contrib/Cargo.toml check --config deny.contrib.toml licenses advisories sources bans
 
 echo "==> Running cargo-audit..."
-audit_ignore=(
-    --ignore RUSTSEC-2026-0098
-    --ignore RUSTSEC-2026-0099
-    --ignore RUSTSEC-2026-0104
-    --ignore RUSTSEC-2026-0173
-)
-cargo audit --file core/Cargo.lock "${audit_ignore[@]}"
-cargo audit --file contrib/Cargo.lock "${audit_ignore[@]}"
+cargo audit --file core/Cargo.lock
+cargo audit --file contrib/Cargo.lock
 
 echo "==> Checking release fuzz targets exist..."
 for target in \

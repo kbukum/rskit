@@ -179,6 +179,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **rskit-security**: narrowed to cross-transport TLS/security configuration instead of HTTP-only behavior.
 
 ### Fixed
+- **Release tooling**: deny/audit hygiene now avoids stale hardcoded audit
+  ignores, keeps duplicate-version skips aligned with current lockfiles, and
+  uses the reduced-feature JWT backend to avoid vulnerable unused crypto paths.
 - **Release tooling**: release-readiness sweeps now ignore ordinary line
   comments, SBOM generation fails fast when no artifacts are produced, and
   release signing reports an empty SBOM directory explicitly.

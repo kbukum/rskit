@@ -63,35 +63,36 @@ impl rskit_config::AppConfig for DefaultApplyConfig {
         if self.grpc_port == 0 {
             self.grpc_port = 50051;
         }
-
-        impl Validate for DefaultApplyConfig {
-            fn validate(&self) -> Result<(), validator::ValidationErrors> {
-                self.service.validate()
-            }
-        }
-
-        impl Validate for ToolConfig {
-            fn validate(&self) -> Result<(), validator::ValidationErrors> {
-                let mut errors = validator::ValidationErrors::new();
-                if self.name.trim().is_empty() {
-                    errors.add("name", validator::ValidationError::new("length"));
-                }
-                if errors.is_empty() {
-                    Ok(())
-                } else {
-                    Err(errors)
-                }
-            }
-        }
-
-        impl Validate for SecretConfig {
-            fn validate(&self) -> Result<(), validator::ValidationErrors> {
-                Ok(())
-            }
-        }
     }
+
     fn service_config(&self) -> &ServiceConfig {
         &self.service
+    }
+}
+
+impl Validate for DefaultApplyConfig {
+    fn validate(&self) -> Result<(), validator::ValidationErrors> {
+        self.service.validate()
+    }
+}
+
+impl Validate for ToolConfig {
+    fn validate(&self) -> Result<(), validator::ValidationErrors> {
+        let mut errors = validator::ValidationErrors::new();
+        if self.name.trim().is_empty() {
+            errors.add("name", validator::ValidationError::new("length"));
+        }
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
+    }
+}
+
+impl Validate for SecretConfig {
+    fn validate(&self) -> Result<(), validator::ValidationErrors> {
+        Ok(())
     }
 }
 

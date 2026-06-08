@@ -60,8 +60,6 @@ skip = [
     { name = "http", reason = "AWS SDK still carries http 0.2 while hyper/reqwest/tonic use http 1.x" },
     { name = "http-body", reason = "AWS SDK still carries http-body 0.4 while hyper/reqwest/tonic use http-body 1.x" },
     { name = "nom", reason = "AMQP protocol and ASN.1 parser stacks depend on different stable nom lines" },
-    { name = "opentelemetry", reason = "Google Cloud storage stack uses opentelemetry 0.31 while rskit observability uses 0.32" },
-    { name = "opentelemetry_sdk", reason = "Google Cloud storage stack uses opentelemetry_sdk 0.31 while rskit observability uses 0.32" },
     { name = "rand", reason = "adapter stacks include stable rand 0.8/0.9 while direct workspace code uses rand 0.10" },
     { name = "rand_chacha", reason = "adapter stacks include stable rand 0.8/0.9 while direct workspace code uses rand 0.10" },
     { name = "rand_core", reason = "adapter TLS/crypto stacks, rand 0.9 transitive crates, and rand 0.10 use different rand_core lines" },
@@ -70,7 +68,6 @@ skip = [
     { name = "spin", reason = "ring and PKI parser stacks depend on different stable spin lines" },
     { name = "thiserror", reason = "Google Cloud storage stack still uses thiserror 1 while workspace code uses thiserror 2" },
     { name = "thiserror-impl", reason = "Google Cloud storage stack still uses thiserror 1 while workspace code uses thiserror 2" },
-    { name = "tracing-opentelemetry", reason = "Google Cloud storage stack uses tracing-opentelemetry 0.32 while rskit observability uses 0.33" },
 ]
 
 # L7 dependency direction: rskit-ai is the only shared AI/ML vocabulary crate.
