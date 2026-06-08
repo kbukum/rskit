@@ -91,10 +91,10 @@ pub fn init_metrics_with_protocol(
         #[cfg(not(feature = "otlp"))]
         {
             let _ = (endpoint, protocol);
-            return Err(AppError::new(
+            Err(AppError::new(
                 ErrorCode::InvalidInput,
                 "OTLP metric exporter requires the `otlp` feature",
-            ));
+            ))?;
         }
 
         #[cfg(feature = "otlp")]

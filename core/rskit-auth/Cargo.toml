@@ -59,3 +59,15 @@ tokio         = { workspace = true, features = ["full", "macros", "rt-multi-thre
 serde_json    = { workspace = true }
 chrono        = { workspace = true }
 parking_lot   = { workspace = true }
+
+[[test]]
+name = "comprehensive"
+required-features = ["jwt"]
+
+[[test]]
+name = "integration"
+required-features = ["jwt"]
+
+[[test]]
+name = "security_audit"
+required-features = ["jwt"]

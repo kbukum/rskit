@@ -44,6 +44,34 @@ license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
 multiple-versions = "deny"
 # Deny crates with known security advisories.
 deny = []
+skip = [
+    # Contrib adapters intentionally cover several external service stacks.
+    # These exceptions are limited to upstream stable-version splits that cannot
+    # be aligned without dropping adapters, downgrading direct deps, or using RC
+    # crypto crates.
+    { name = "block-buffer", reason = "RustCrypto 0.10/0.11 ecosystem split; no all-stable alignment yet" },
+    { name = "const-oid", reason = "PKI/ASN.1 and RustCrypto stacks depend on different stable const-oid lines" },
+    { name = "cpufeatures", reason = "RustCrypto 0.10/0.11 ecosystem split; no all-stable alignment yet" },
+    { name = "crypto-common", reason = "RustCrypto 0.10/0.11 ecosystem split; no all-stable alignment yet" },
+    { name = "digest", reason = "RustCrypto 0.10/0.11 ecosystem split; no all-stable alignment yet" },
+    { name = "getrandom", reason = "adapter TLS/crypto stacks, rand 0.9 transitive crates, and rand 0.10 use different getrandom lines" },
+    { name = "hashbrown", reason = "dashmap/governor, jsonschema/referencing, and indexmap depend on different stable hashbrown lines" },
+    { name = "hmac", reason = "PKCS/PBKDF2 transitive deps and cloud SDK signing use different stable hmac lines" },
+    { name = "http", reason = "AWS SDK still carries http 0.2 while hyper/reqwest/tonic use http 1.x" },
+    { name = "http-body", reason = "AWS SDK still carries http-body 0.4 while hyper/reqwest/tonic use http-body 1.x" },
+    { name = "nom", reason = "AMQP protocol and ASN.1 parser stacks depend on different stable nom lines" },
+    { name = "opentelemetry", reason = "Google Cloud storage stack uses opentelemetry 0.31 while rskit observability uses 0.32" },
+    { name = "opentelemetry_sdk", reason = "Google Cloud storage stack uses opentelemetry_sdk 0.31 while rskit observability uses 0.32" },
+    { name = "rand", reason = "adapter stacks include stable rand 0.8/0.9 while direct workspace code uses rand 0.10" },
+    { name = "rand_chacha", reason = "adapter stacks include stable rand 0.8/0.9 while direct workspace code uses rand 0.10" },
+    { name = "rand_core", reason = "adapter TLS/crypto stacks, rand 0.9 transitive crates, and rand 0.10 use different rand_core lines" },
+    { name = "sha1", reason = "AWS/AMQP/PKI transitive stacks and current crypto crates use different stable sha1 lines" },
+    { name = "sha2", reason = "AWS/AMQP/PKI transitive stacks and direct workspace code use different stable sha2 lines" },
+    { name = "spin", reason = "ring and PKI parser stacks depend on different stable spin lines" },
+    { name = "thiserror", reason = "Google Cloud storage stack still uses thiserror 1 while workspace code uses thiserror 2" },
+    { name = "thiserror-impl", reason = "Google Cloud storage stack still uses thiserror 1 while workspace code uses thiserror 2" },
+    { name = "tracing-opentelemetry", reason = "Google Cloud storage stack uses tracing-opentelemetry 0.32 while rskit observability uses 0.33" },
+]
 
 # L7 dependency direction: rskit-ai is the only shared AI/ML vocabulary crate.
 # cargo-deny bans cannot express parent->child workspace path edges without banning

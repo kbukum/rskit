@@ -86,10 +86,10 @@ pub fn tracer_provider_with_protocol(
     #[cfg(not(feature = "otlp"))]
     {
         let _ = (cfg, protocol);
-        return Err(AppError::new(
+        Err(AppError::new(
             ErrorCode::InvalidInput,
             "OTLP tracing exporter requires the `otlp` feature",
-        ));
+        ))
     }
 
     #[cfg(feature = "otlp")]

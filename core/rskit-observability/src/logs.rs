@@ -57,10 +57,10 @@ pub fn init_logs(cfg: &LogsConfig) -> AppResult<LogsHandle> {
         #[cfg(not(feature = "otlp"))]
         {
             let _ = endpoint;
-            return Err(AppError::new(
+            Err(AppError::new(
                 ErrorCode::InvalidInput,
                 "OTLP log exporter requires the `otlp` feature",
-            ));
+            ))?;
         }
 
         #[cfg(feature = "otlp")]

@@ -66,8 +66,8 @@ reqwest = { version = "0.13", features = ["json", "rustls", "http2", "query"], d
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4"] }
 parking_lot = "0.12"
-prost = "0.14.3"
-tonic = { version = "0.14.6", features = ["transport", "tls-ring"] }
+prost = "0.14"
+tonic = { version = "0.14", features = ["transport", "tls-ring"] }
 base64 = "0.22"
 opentelemetry = "0.31"
 tracing-opentelemetry = "0.32"

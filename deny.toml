@@ -43,6 +43,20 @@ license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
 multiple-versions = "deny"
 # Deny crates with known security advisories.
 deny = []
+skip = [
+    # Stable RustCrypto crates are split between the 0.10 and 0.11 digest
+    # families; moving fully to 0.11 currently requires RC crypto crates.
+    { name = "block-buffer", reason = "RustCrypto 0.10/0.11 ecosystem split; no all-stable alignment yet" },
+    { name = "chacha20", reason = "rand 0.10 and chacha20poly1305 stable depend on different chacha20 lines" },
+    { name = "cpufeatures", reason = "RustCrypto 0.10/0.11 ecosystem split; no all-stable alignment yet" },
+    { name = "crypto-common", reason = "RustCrypto 0.10/0.11 ecosystem split; no all-stable alignment yet" },
+    { name = "digest", reason = "RustCrypto 0.10/0.11 ecosystem split; no all-stable alignment yet" },
+    { name = "getrandom", reason = "current stable rustls/ring, rand 0.9 transitive crates, and rand 0.10 use different getrandom lines" },
+    { name = "hashbrown", reason = "dashmap/governor, jsonschema/referencing, and indexmap depend on different stable hashbrown lines" },
+    { name = "openssl-probe", reason = "git2 and rustls-native-certs depend on different openssl-probe lines" },
+    { name = "rand", reason = "direct rand 0.10 use coexists with stable transitive rand 0.9 consumers" },
+    { name = "rand_core", reason = "current stable crypto, rand 0.9 transitive crates, and rand 0.10 use different rand_core lines" },
+]
 
 # L7 dependency direction: rskit-ai is the only shared AI/ML vocabulary crate.
 # cargo-deny bans cannot express parent->child workspace path edges without banning
