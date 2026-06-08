@@ -69,8 +69,6 @@ parking_lot = "0.12"
 prost = "0.14"
 tonic = { version = "0.14", features = ["transport", "tls-ring"] }
 base64 = "0.22"
-opentelemetry = "0.31"
-tracing-opentelemetry = "0.32"
 criterion = { version = "0.8", features = ["html_reports", "async_tokio"] }
 insta = { version = "1.47", features = ["json", "yaml", "redactions"] }
 

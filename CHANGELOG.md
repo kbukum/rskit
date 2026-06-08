@@ -190,6 +190,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   upstream client releases, removing obsolete `thiserror` duplicate-version
   skips while preserving documented skips for the remaining upstream rand,
   crypto, HTTP, and parser ecosystem splits.
+- **Workspace hygiene**: added a release guardrail that fails when shared
+  external workspace dependency versions drift between `core/Cargo.toml` and
+  `contrib/Cargo.toml`.
 - **rskit-storage**: explicitly enables the `rskit-fs` async feature it uses, so
   reduced package graphs no longer depend on workspace feature unification.
 - **Release tooling**: release-readiness sweeps now ignore ordinary line

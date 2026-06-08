@@ -132,6 +132,7 @@ if findings:
 PY
 
 echo "==> Running cargo-deny..."
+./scripts/check-workspace-deps-sync.sh
 cargo deny --manifest-path core/Cargo.toml check --config deny.toml licenses advisories sources bans
 cargo deny --manifest-path contrib/Cargo.toml check --config deny.contrib.toml licenses advisories sources bans
 

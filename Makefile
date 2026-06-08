@@ -1,6 +1,6 @@
 .PHONY: all build test test-nextest test-doc test-affected test-coverage test-coverage-html lint fmt fmt-check check check-fast check-facade-features \
        check-core check-patterns check-crosscutting check-composition check-transport check-auth check-data check-ai \
-       check-media check-infra doc deny check-l7-edges check-topology check-public-api release-readiness release-coverage \
+       check-media check-infra doc deny check-l7-edges check-workspace-deps-sync check-topology check-public-api release-readiness release-coverage \
        publish-dry-run release-sbom clean help ci ci-test ci-lint ci-fmt ensure-act
 
 CORE_MANIFEST = core/Cargo.toml
@@ -157,6 +157,12 @@ check-l7-edges:
 	@./scripts/check-l7-edges.sh
 	@echo "✓ L7 dependency edges OK"
 
+## Check shared core/contrib workspace dependency versions
+check-workspace-deps-sync:
+	@echo "==> Checking workspace dependency versions..."
+	@./scripts/check-workspace-deps-sync.sh
+	@echo "✓ Workspace dependency versions synced"
+
 ## Run module topology checks
 check-topology:
 	@echo "==> Checking module topology..."
@@ -182,9 +188,9 @@ check-facade-features:
 	@cargo check --manifest-path $(CORE_MANIFEST) -p rskit --features "cli git dataset bench"
 	@echo "✓ Facade feature combinations OK"
 
-## Run cargo-deny, public API, topology, and dependency edge checks
+## Run cargo-deny, public API, topology, dependency sync, and dependency edge checks
 ## Requires: cargo-deny, cargo-public-api, and a nightly rustdoc JSON toolchain
-deny: check-l7-edges check-topology check-public-api
+deny: check-l7-edges check-workspace-deps-sync check-topology check-public-api
 	@echo "==> Running cargo-deny..."
 	@if [ -n "$(W)" ]; then \
 		case "$(W)" in \
@@ -314,6 +320,7 @@ help:
 	@echo "  make fmt-check          [W=]               Check formatting"
 	@echo "  make doc                [C=] [W=]          Build documentation"
 	@echo "  make check-l7-edges                       Check L7 dependency edges"
+	@echo "  make check-workspace-deps-sync            Check shared core/contrib dependency versions"
 	@echo "  make check-topology                       Check module topology"
 	@echo "  make check-public-api                     Check public API guardrails"
 	@echo "  make check-facade-features                Check rskit facade feature combinations"
