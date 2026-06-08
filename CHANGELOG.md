@@ -205,6 +205,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **rskit-vectorstore-qdrant**: returned unsigned JSON integers now preserve
   the signed `PayloadValue::Integer(i64)` contract and reject values outside
   `i64` bounds instead of converting them to floats.
+- **rskit-vectorstore-qdrant**: endpoint validation now uses the shared `url`
+  crate directly instead of pulling `reqwest` into the adapter.
 - **Workspace hygiene**: dependency-sync help text now reflects that examples
   are checked alongside core and contrib.
 - **CI**: examples now include the shared cargo-nextest `ci` profile used by

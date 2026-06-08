@@ -2,6 +2,7 @@
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_httpclient::DestinationPolicy;
+use url::Url;
 
 /// Validate a Qdrant endpoint URL before constructing the client.
 pub(crate) fn validate_qdrant_url(url: &str) -> AppResult<()> {
@@ -11,7 +12,7 @@ pub(crate) fn validate_qdrant_url(url: &str) -> AppResult<()> {
             "Qdrant URL is required",
         ));
     }
-    let parsed = reqwest::Url::parse(url)
+    let parsed = Url::parse(url)
         .map_err(|error| AppError::invalid_input("url", format!("invalid Qdrant URL: {error}")))?;
     if !parsed.username().is_empty()
         || parsed.password().is_some()
