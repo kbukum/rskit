@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Check for breaking public API changes using cargo-public-api.
-# Install: cargo install cargo-public-api
+# Install: rustup toolchain install nightly --profile minimal && cargo install cargo-public-api
 # Usage: ./scripts/check-public-api.sh [crate-name]
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CRATE=${1:-rskit}
+RUSTDOC_JSON_TOOLCHAIN=${RUSTDOC_JSON_TOOLCHAIN:-nightly}
+CARGO_PUBLIC_API=(cargo "+${RUSTDOC_JSON_TOOLCHAIN}" public-api)
 MANIFESTS=(
   "core/Cargo.toml"
   "contrib/Cargo.toml"
@@ -65,10 +67,10 @@ if ! MANIFEST=$(manifest_for_crate "$CRATE"); then
 fi
 
 echo "Checking public API for $CRATE using $MANIFEST..."
-if ! output=$(cargo public-api --manifest-path "$ROOT_DIR/$MANIFEST" -p "$CRATE" diff 2>&1); then
+if ! output=$("${CARGO_PUBLIC_API[@]}" --manifest-path "$ROOT_DIR/$MANIFEST" -p "$CRATE" diff 2>&1); then
   if grep -q "Could not find crate \`$CRATE\`" <<<"$output"; then
     echo "No published baseline found for $CRATE; validating current public API generation instead."
-    cargo public-api --manifest-path "$ROOT_DIR/$MANIFEST" -p "$CRATE" >/dev/null
+    "${CARGO_PUBLIC_API[@]}" --manifest-path "$ROOT_DIR/$MANIFEST" -p "$CRATE" >/dev/null
   else
     printf '%s\n' "$output" >&2
     exit 1

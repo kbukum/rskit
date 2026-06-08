@@ -15,6 +15,7 @@ use hyper::body::Incoming;
 use hyper_util::rt::{TokioExecutor, TokioIo, TokioTimer};
 use hyper_util::server::conn::auto::Builder as HyperBuilder;
 use hyper_util::service::TowerToHyperService;
+use parking_lot::Mutex;
 use rskit_bootstrap::{Component, Health, Registry};
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_http::{SecurityHeadersConfig, SecurityHeadersLayer};
@@ -182,6 +183,7 @@ impl HttpServerBuilder {
             config: Arc::new(builder.config),
             cancel: builder.cancel,
             router: Arc::new(tokio::sync::Mutex::new(Some(router))),
+            local_addr: Arc::new(Mutex::new(None)),
         })
     }
 
@@ -246,6 +248,7 @@ pub struct HttpServer {
     config: Arc<HttpServerConfig>,
     cancel: CancellationToken,
     router: Arc<tokio::sync::Mutex<Option<Router>>>,
+    local_addr: Arc<Mutex<Option<SocketAddr>>>,
 }
 
 impl HttpServer {
@@ -253,6 +256,12 @@ impl HttpServer {
     #[must_use]
     pub fn bind_addr(&self) -> String {
         self.config.bind_addr()
+    }
+
+    /// Actual local socket address after [`start`](Component::start) binds.
+    #[must_use]
+    pub fn local_addr(&self) -> Option<SocketAddr> {
+        *self.local_addr.lock()
     }
 }
 
@@ -282,22 +291,28 @@ impl Component for HttpServer {
             None
         };
 
+        let listener = TcpListener::bind(addr).await.map_err(|error| {
+            AppError::new(
+                ErrorCode::Internal,
+                format!("HTTP server bind failed for {addr}: {error}"),
+            )
+        })?;
+        let actual_addr = listener.local_addr().map_err(|error| {
+            AppError::new(
+                ErrorCode::Internal,
+                format!("failed to inspect HTTP server local address: {error}"),
+            )
+        })?;
+        *self.local_addr.lock() = Some(actual_addr);
+
         let cancel = self.cancel.clone();
         let config = Arc::clone(&self.config);
         tokio::spawn(async move {
-            let listener = match TcpListener::bind(addr).await {
-                Ok(listener) => listener,
-                Err(error) => {
-                    tracing::error!(error = ?error, %addr, "HTTP server bind failed");
-                    return;
-                }
-            };
-
             if let Some(acceptor) = tls_acceptor {
-                tracing::info!(%addr, "HTTPS server listening");
+                tracing::info!(addr = %actual_addr, "HTTPS server listening");
                 serve_tls_listener(listener, acceptor, router, Arc::clone(&config), cancel).await;
             } else {
-                tracing::info!(%addr, "HTTP server listening");
+                tracing::info!(addr = %actual_addr, "HTTP server listening");
                 serve_listener(
                     listener,
                     router,

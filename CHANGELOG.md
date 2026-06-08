@@ -181,6 +181,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Release tooling**: examples now depend on the alpha `rskit` prerelease,
   version metadata tests accept prerelease SemVer bounds, and per-crate
   coverage failures report both core and contrib stderr.
+- **Release tooling**: public API guardrails now run cargo-public-api under
+  the nightly rustdoc JSON toolchain, and HTTP server tests use port-zero
+  binding instead of racing on released ephemeral ports.
+- **Release tooling**: CI coverage now preserves the established core
+  workspace line gate while still generating contrib LCOV reports for upload.
 - **rskit-git**: CLI branch/tag deletion now treats successful commands as
   successful even when captured stdout/stderr exceeded process capture limits.
 - **rskit-bench**: file-backed run listing now skips unreadable or partially

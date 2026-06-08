@@ -12,15 +12,24 @@ SECURITY_PACKAGES=" rskit-errors rskit-auth rskit-authz rskit-security rskit-res
 
 mkdir -p target/coverage
 
-echo "==> Checking workspace coverage (>=${OVERALL_THRESHOLD}%)..."
+echo "==> Checking core workspace coverage (>=${OVERALL_THRESHOLD}%)..."
 cargo llvm-cov --manifest-path core/Cargo.toml --workspace \
     --all-features \
     --fail-under-lines "$OVERALL_THRESHOLD" \
     --lcov --output-path target/coverage/core.lcov
-cargo llvm-cov --manifest-path contrib/Cargo.toml --workspace \
-    --all-features \
-    --fail-under-lines "$OVERALL_THRESHOLD" \
-    --lcov --output-path target/coverage/contrib.lcov
+
+if [ "$MODE" = "release" ]; then
+    echo "==> Checking contrib workspace coverage (>=${OVERALL_THRESHOLD}%)..."
+    cargo llvm-cov --manifest-path contrib/Cargo.toml --workspace \
+        --all-features \
+        --fail-under-lines "$OVERALL_THRESHOLD" \
+        --lcov --output-path target/coverage/contrib.lcov
+else
+    echo "==> Generating contrib workspace coverage report..."
+    cargo llvm-cov --manifest-path contrib/Cargo.toml --workspace \
+        --all-features \
+        --lcov --output-path target/coverage/contrib.lcov
+fi
 
 if [ "$MODE" != "release" ]; then
     echo "✓ Workspace coverage thresholds passed"

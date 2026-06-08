@@ -21,14 +21,6 @@ use tokio::net::TcpStream;
 use tokio_util::sync::CancellationToken;
 use tower::ServiceExt;
 
-fn unused_loopback_port() -> u16 {
-    std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port()
-}
-
 async fn raw_http_request(port: u16, request: &str) -> String {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
     let mut stream = loop {
@@ -57,6 +49,13 @@ fn loopback_http_config(port: u16) -> HttpServerConfig {
         port,
         ..HttpServerConfig::default()
     }
+}
+
+fn assigned_port(server: &rskit_server::HttpServer) -> u16 {
+    server
+        .local_addr()
+        .expect("server should expose bound local address after start")
+        .port()
 }
 
 #[test]
@@ -290,8 +289,7 @@ fn builder_validates_cors_and_security_header_configuration() {
 
 #[tokio::test]
 async fn http_server_serves_merged_routes_with_security_headers() {
-    let port = unused_loopback_port();
-    let server = HttpServerBuilder::new(loopback_http_config(port), CancellationToken::new())
+    let server = HttpServerBuilder::new(loopback_http_config(0), CancellationToken::new())
         .with_router(Router::new().route("/one", get(|| async { "one" })))
         .with_router(Router::new().route("/two", get(|| async { "two" })))
         .with_security_headers()
@@ -300,6 +298,7 @@ async fn http_server_serves_merged_routes_with_security_headers() {
         .unwrap();
 
     server.start().await.unwrap();
+    let port = assigned_port(&server);
     let response = raw_http_request(
         port,
         "GET /two HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
@@ -332,7 +331,6 @@ async fn http_server_applies_cors_body_limit_and_request_timeout() {
         "late"
     }
 
-    let port = unused_loopback_port();
     let config = HttpServerConfig {
         request_timeout: Duration::from_millis(25),
         max_body_bytes: 4,
@@ -343,7 +341,7 @@ async fn http_server_applies_cors_body_limit_and_request_timeout() {
             max_age: Duration::from_secs(60),
             ..CorsPolicy::default()
         }),
-        ..loopback_http_config(port)
+        ..loopback_http_config(0)
     };
     let server = HttpServerBuilder::new(config, CancellationToken::new())
         .with_router(
@@ -355,6 +353,7 @@ async fn http_server_applies_cors_body_limit_and_request_timeout() {
         .unwrap();
 
     server.start().await.unwrap();
+    let port = assigned_port(&server);
     let cors = raw_http_request(
         port,
         concat!(
@@ -396,8 +395,7 @@ async fn http_server_applies_cors_body_limit_and_request_timeout() {
 
 #[tokio::test]
 async fn http_server_rejects_second_start_after_router_is_consumed() {
-    let port = unused_loopback_port();
-    let server = HttpServerBuilder::new(loopback_http_config(port), CancellationToken::new())
+    let server = HttpServerBuilder::new(loopback_http_config(0), CancellationToken::new())
         .with_router(Router::new().route("/", get(|| async { "ok" })))
         .build()
         .unwrap();
@@ -443,7 +441,7 @@ async fn http_server_rejects_invalid_bind_address_and_missing_tls_files() {
                 min_version: TlsVersion::Tls13,
                 ..HttpTlsConfig::default()
             }),
-            ..loopback_http_config(unused_loopback_port())
+            ..loopback_http_config(0)
         },
         CancellationToken::new(),
     )
