@@ -46,30 +46,46 @@ impl LogsHandle {
 /// acts as an explicit no-export pipeline.
 pub fn init_logs(cfg: &LogsConfig) -> AppResult<LogsHandle> {
     use opentelemetry::KeyValue;
-    use opentelemetry_otlp::{LogExporter, WithExportConfig};
     use opentelemetry_sdk::{Resource, logs::SdkLoggerProvider};
 
     let resource = Resource::builder_empty()
         .with_attributes([KeyValue::new(SERVICE_NAME, cfg.service_name.clone())])
         .build();
-    let mut builder = SdkLoggerProvider::builder().with_resource(resource);
+    let builder = SdkLoggerProvider::builder().with_resource(resource);
 
     if let Some(endpoint) = &cfg.otlp_endpoint {
-        let exporter = match cfg.protocol {
-            OtlpProtocol::Grpc => LogExporter::builder()
-                .with_tonic()
-                .with_endpoint(endpoint)
-                .with_timeout(cfg.export_timeout)
-                .build(),
-            OtlpProtocol::HttpBinary => LogExporter::builder()
-                .with_http()
-                .with_protocol(opentelemetry_otlp::Protocol::HttpBinary)
-                .with_endpoint(endpoint)
-                .with_timeout(cfg.export_timeout)
-                .build(),
+        #[cfg(not(feature = "otlp"))]
+        {
+            let _ = endpoint;
+            Err(AppError::new(
+                ErrorCode::InvalidInput,
+                "OTLP log exporter requires the `otlp` feature",
+            ))?;
         }
-        .map_err(|e| AppError::new(ErrorCode::Internal, format!("OTLP log exporter: {e}")))?;
-        builder = builder.with_batch_exporter(exporter);
+
+        #[cfg(feature = "otlp")]
+        {
+            use opentelemetry_otlp::{LogExporter, WithExportConfig};
+
+            let exporter = match cfg.protocol {
+                OtlpProtocol::Grpc => LogExporter::builder()
+                    .with_tonic()
+                    .with_endpoint(endpoint)
+                    .with_timeout(cfg.export_timeout)
+                    .build(),
+                OtlpProtocol::HttpBinary => LogExporter::builder()
+                    .with_http()
+                    .with_protocol(opentelemetry_otlp::Protocol::HttpBinary)
+                    .with_endpoint(endpoint)
+                    .with_timeout(cfg.export_timeout)
+                    .build(),
+            }
+            .map_err(|e| AppError::new(ErrorCode::Internal, format!("OTLP log exporter: {e}")))?;
+            let builder = builder.with_batch_exporter(exporter);
+            return Ok(LogsHandle {
+                provider: builder.build(),
+            });
+        }
     }
 
     Ok(LogsHandle {

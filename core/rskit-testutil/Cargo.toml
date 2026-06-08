@@ -27,10 +27,10 @@ serde          = { workspace = true }
 validator      = { workspace = true }
 
 # Internal
-rskit-errors   = { version = "0.1.0-alpha.1", path = "../rskit-errors" }
-rskit-fs       = { version = "0.1.0-alpha.1", path = "../rskit-fs", default-features = false }
-rskit-provider = { version = "0.1.0-alpha.1", path = "../rskit-provider" }
-rskit-component = { version = "0.1.0-alpha.1", path = "../rskit-component" }
-rskit-hook     = { version = "0.1.0-alpha.1", path = "../rskit-hook" }
-rskit-config   = { version = "0.1.0-alpha.1", path = "../rskit-config" }
-rskit-validation = { version = "0.1.0-alpha.1", path = "../rskit-validation" }
+rskit-errors = { workspace = true }
+rskit-fs = { workspace = true }
+rskit-provider = { workspace = true }
+rskit-component = { workspace = true }
+rskit-hook = { workspace = true }
+rskit-config = { workspace = true }
+rskit-validation = { workspace = true }

@@ -24,8 +24,8 @@ bytes         = { workspace = true }
 chrono        = { workspace = true }
 serde         = { workspace = true }
 serde_json    = { workspace = true }
-google-cloud-storage = "=1.11.0"
-google-cloud-auth    = { version = "1.9", default-features = false }
+google-cloud-storage = { workspace = true }
+google-cloud-auth = { workspace = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }

@@ -22,14 +22,14 @@ rustdoc-args = ["--cfg", "docsrs"]
 serde           = { workspace = true }
 tokio           = { workspace = true }
 tower            = { workspace = true }
-tower-http      = { version = "0.6", features = ["cors", "trace", "request-id", "timeout"] }
-http             = "1"
+tower-http = { workspace = true, features = ["cors", "trace", "request-id", "timeout"] }
+http = { workspace = true }
 serde_json      = { workspace = true }
 uuid            = { workspace = true }
 
 # Internal
-rskit-errors    = { version = "0.1.0-alpha.1", path = "../rskit-errors" }
-rskit-security  = { version = "0.1.0-alpha.1", path = "../rskit-security" }
+rskit-errors = { workspace = true }
+rskit-security = { workspace = true }
 
 [dev-dependencies]
 axum      = { workspace = true }

@@ -20,7 +20,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 # External
 serde   = { workspace = true }
-subtle  = "2.6"
+subtle = { workspace = true }
 zeroize = { workspace = true }
 
 [dev-dependencies]

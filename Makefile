@@ -1,13 +1,13 @@
 .PHONY: all build test test-nextest test-doc test-affected test-coverage test-coverage-html lint fmt fmt-check check check-fast check-facade-features \
        check-core check-patterns check-crosscutting check-composition check-transport check-auth check-data check-ai \
-       check-media check-infra doc deny check-l7-edges check-topology check-public-api release-readiness release-coverage \
+       check-media check-infra doc deny check-l7-edges check-workspace-deps-sync check-topology check-public-api release-readiness release-coverage \
        publish-dry-run release-sbom clean help ci ci-test ci-lint ci-fmt ensure-act
 
 CORE_MANIFEST = core/Cargo.toml
 CONTRIB_MANIFEST = contrib/Cargo.toml
 EXAMPLES_MANIFEST = examples/Cargo.toml
-WORKSPACE_MANIFESTS = $(CORE_MANIFEST) $(CONTRIB_MANIFEST)
-FORMAT_MANIFESTS = $(WORKSPACE_MANIFESTS) $(EXAMPLES_MANIFEST)
+WORKSPACE_MANIFESTS = $(CORE_MANIFEST) $(CONTRIB_MANIFEST) $(EXAMPLES_MANIFEST)
+FORMAT_MANIFESTS = $(WORKSPACE_MANIFESTS)
 TEST_THREADS ?= 1
 
 # Test filter: pass -- $(T) when T is set
@@ -157,6 +157,12 @@ check-l7-edges:
 	@./scripts/check-l7-edges.sh
 	@echo "✓ L7 dependency edges OK"
 
+## Check shared core/contrib workspace dependency versions
+check-workspace-deps-sync:
+	@echo "==> Checking workspace dependency versions..."
+	@./scripts/check-workspace-deps-sync.sh
+	@echo "✓ Workspace dependency versions synced"
+
 ## Run module topology checks
 check-topology:
 	@echo "==> Checking module topology..."
@@ -182,17 +188,21 @@ check-facade-features:
 	@cargo check --manifest-path $(CORE_MANIFEST) -p rskit --features "cli git dataset bench"
 	@echo "✓ Facade feature combinations OK"
 
-## Run cargo-deny, public API, topology, and dependency edge checks
+## Run cargo-deny, public API, topology, dependency sync, and dependency edge checks
 ## Requires: cargo-deny, cargo-public-api, and a nightly rustdoc JSON toolchain
-deny: check-l7-edges check-topology check-public-api
+deny: check-l7-edges check-workspace-deps-sync check-topology check-public-api
 	@echo "==> Running cargo-deny..."
 	@if [ -n "$(W)" ]; then \
-		cargo deny --manifest-path $(W)/Cargo.toml check licenses advisories sources bans; \
+		case "$(W)" in \
+			core) cargo deny --manifest-path core/Cargo.toml check --config deny.toml licenses advisories sources bans ;; \
+			contrib) cargo deny --manifest-path contrib/Cargo.toml check --config deny.contrib.toml licenses advisories sources bans ;; \
+			examples) cargo deny --manifest-path examples/Cargo.toml check --config deny.examples.toml licenses advisories sources bans ;; \
+			*) echo "error: make deny supports W=core, W=contrib, or W=examples" >&2; exit 2 ;; \
+		esac; \
 	else \
-		set -e; \
-		for manifest in $(WORKSPACE_MANIFESTS); do \
-			cargo deny --manifest-path $$manifest check licenses advisories sources bans; \
-		done; \
+		cargo deny --manifest-path core/Cargo.toml check --config deny.toml licenses advisories sources bans && \
+		cargo deny --manifest-path contrib/Cargo.toml check --config deny.contrib.toml licenses advisories sources bans && \
+		cargo deny --manifest-path examples/Cargo.toml check --config deny.examples.toml licenses advisories sources bans; \
 	fi
 	@echo "✓ cargo-deny passed"
 
@@ -312,6 +322,7 @@ help:
 	@echo "  make fmt-check          [W=]               Check formatting"
 	@echo "  make doc                [C=] [W=]          Build documentation"
 	@echo "  make check-l7-edges                       Check L7 dependency edges"
+	@echo "  make check-workspace-deps-sync            Check shared core/contrib/examples dependency versions"
 	@echo "  make check-topology                       Check module topology"
 	@echo "  make check-public-api                     Check public API guardrails"
 	@echo "  make check-facade-features                Check rskit facade feature combinations"

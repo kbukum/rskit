@@ -65,14 +65,15 @@ homepage = "https://github.com/kbukum/rskit"
 documentation = "https://docs.rs/rskit"
 
 [workspace.dependencies]
-# prefer default-features = false for security-sensitive deps to reduce attack surface (RS-LO-09 / #84)
+# External
+# Prefer default-features = false for security-sensitive deps to reduce attack surface (RS-LO-09 / #84).
 # Async runtime
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["rt"] }
 tokio-stream = "0.1"
 
 # Tower middleware stack (tonic 0.13 uses tower 0.4)
-tower = { version = "0.5.3", features = ["full"] }
+tower = { version = "0.5", features = ["full"] }
 tower-layer = "0.3"
 tower-service = "0.3"
 
@@ -89,11 +90,11 @@ serde_norway = "0.9"
 toml = "1.1"
 
 # Config loading
-config = { version = "0.15.22", default-features = false, features = ["toml"] }
+config = { version = "0.15", default-features = false, features = ["toml"] }
 dotenvy = "0.15"
 
 # Validation
-validator = { version = "0.20.0", features = ["derive"] }
+validator = "0.20"
 
 # Error handling
 thiserror = "2"
@@ -104,15 +105,18 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "fmt"] }
 
 # Resilience
-governor = { version = "0.10.4", features = ["std"] }
-rand = "0.10.1"
+governor = { version = "0.10", features = ["std"] }
+# Keep rand on the current stable line used by governor/opentelemetry/tungstenite.
+# rand 0.10 is only needed by rmcp today and would force duplicate rand/chacha20
+# families into crates that only need simple token/jitter randomness.
+rand = "0.9"
 zeroize = { version = "1", features = ["derive"] }
 
 # gRPC
-tonic = { version = "0.14.6", features = ["transport", "tls-ring"] }
-tonic-health = "0.14.6"
-tonic-reflection = "0.14.6"
-prost = "0.14.3"
+tonic = { version = "0.14", features = ["transport", "tls-ring"] }
+tonic-health = "0.14"
+tonic-reflection = "0.14"
+prost = "0.14"
 
 # Utilities
 uuid = { version = "1", features = ["v4"] }
@@ -126,29 +130,28 @@ regex = "1"
 once_cell = "1"
 base64 = "0.22"
 schemars = "1"
-jsonschema = { version = "0.46.5", default-features = false }
+jsonschema = { version = "0.46", default-features = false }
 
 # HTTP server (Phase 2)
 axum = { version = "0.8", features = ["http2", "ws"] }
 tower-http = { version = "0.6", features = ["cors", "trace", "request-id", "timeout"] }
 hyper = { version = "1", features = ["full"] }
 hyper-util = { version = "0.1", features = ["tokio", "server-auto", "service"] }
-rustls = "0.23.40"
-rustls-pemfile = "2.2.0"
-tokio-rustls = "0.26.4"
+rustls = "0.23"
+tokio-rustls = "0.26"
 
 # Auth (Phase 2)
-jsonwebtoken = { version = "10", features = ["rust_crypto"] }
+jsonwebtoken = { version = "10", default-features = false, features = ["aws_lc_rs", "use_pem"] }
 argon2 = { version = "0.5", features = ["password-hash", "rand"] }
 
 # Observability (Phase 4)
-opentelemetry = "0.31"
-opentelemetry_sdk = { version = "0.31", features = ["rt-tokio", "logs"] }
-opentelemetry-otlp = { version = "0.31", features = ["grpc-tonic", "metrics", "logs", "http-proto"] }
-opentelemetry-appender-tracing = "0.31"
-opentelemetry-prometheus = "0.31.0"
-prometheus = "0.14.0"
-tracing-opentelemetry = "0.32"
+opentelemetry = "0.32"
+opentelemetry_sdk = { version = "0.32", features = ["rt-tokio", "logs"] }
+opentelemetry-otlp = { version = "0.32", features = ["grpc-tonic", "metrics", "logs", "http-proto"] }
+opentelemetry-appender-tracing = "0.32"
+opentelemetry-prometheus = "0.32"
+prometheus = "0.14"
+tracing-opentelemetry = "0.33"
 
 # HTTP client (shared)
 reqwest = { version = "0.13", features = ["json", "rustls", "http2", "query"], default-features = false }
@@ -165,16 +168,99 @@ sha2 = "0.11"
 
 # CLI progress bars (rskit-cli)
 indicatif = "0.18"
-crossterm = "0.28"
+crossterm = "0.29"
 
 # Benchmarking & snapshot testing
 criterion = { version = "0.8", features = ["html_reports", "async_tokio"] }
 insta = { version = "1.47", features = ["json", "yaml", "redactions"] }
 
-# Internal path crates
-rskit-ai = { path = "rskit-ai", version = "0.1.0-alpha.1" }
-rskit-fs = { path = "rskit-fs", version = "0.1.0-alpha.1" }
+# Crypto
+aes-gcm = "0.10"
+blake3 = { version = "1" }
+chacha20poly1305 = "0.10"
+hex = "0.4"
+hmac = "0.13"
+pbkdf2 = "0.13"
 
+# Data, media, and integration helpers
+csv = "1.3"
+git2 = { version = "0.21", default-features = false }
+image = { version = "0.25", default-features = false, features = ["bmp", "gif", "ico", "jpeg", "png", "rayon", "tiff", "webp"] }
+rmcp = { version = "1.5", default-features = false }
+
+# Internal
+rskit = { path = "rskit", version = "0.1.0-alpha.1" }
+rskit-agent = { path = "rskit-agent", version = "0.1.0-alpha.1" }
+rskit-ai = { path = "rskit-ai", version = "0.1.0-alpha.1" }
+rskit-auth = { path = "rskit-auth", version = "0.1.0-alpha.1" }
+rskit-authz = { path = "rskit-authz", version = "0.1.0-alpha.1" }
+rskit-bench = { path = "rskit-bench", version = "0.1.0-alpha.1" }
+rskit-bootstrap = { path = "rskit-bootstrap", version = "0.1.0-alpha.1" }
+rskit-cache = { path = "rskit-cache", version = "0.1.0-alpha.1" }
+rskit-cache-redis = { path = "../contrib/cache/redis", version = "0.1.0-alpha.1" }
+rskit-chain = { path = "rskit-chain", version = "0.1.0-alpha.1" }
+rskit-cli = { path = "rskit-cli", version = "0.1.0-alpha.1" }
+rskit-component = { path = "rskit-component", version = "0.1.0-alpha.1" }
+rskit-config = { path = "rskit-config", version = "0.1.0-alpha.1" }
+rskit-dag = { path = "rskit-dag", version = "0.1.0-alpha.1" }
+rskit-database = { path = "rskit-database", version = "0.1.0-alpha.1" }
+rskit-dataset = { path = "rskit-dataset", version = "0.1.0-alpha.1" }
+rskit-di = { path = "rskit-di", version = "0.1.0-alpha.1" }
+rskit-discovery = { path = "rskit-discovery", version = "0.1.0-alpha.1" }
+rskit-embedding = { path = "rskit-embedding", version = "0.1.0-alpha.1" }
+rskit-encryption = { path = "rskit-encryption", version = "0.1.0-alpha.1" }
+rskit-errors = { path = "rskit-errors", version = "0.1.0-alpha.1" }
+rskit-fs = { path = "rskit-fs", version = "0.1.0-alpha.1", default-features = false }
+rskit-git = { path = "rskit-git", version = "0.1.0-alpha.1" }
+rskit-grpc = { path = "rskit-grpc", version = "0.1.0-alpha.1", default-features = false }
+rskit-hook = { path = "rskit-hook", version = "0.1.0-alpha.1" }
+rskit-http = { path = "rskit-http", version = "0.1.0-alpha.1" }
+rskit-httpclient = { path = "rskit-httpclient", version = "0.1.0-alpha.1" }
+rskit-inference = { path = "rskit-inference", version = "0.1.0-alpha.1" }
+rskit-inference-tgi = { path = "../contrib/inference/tgi", version = "0.1.0-alpha.1" }
+rskit-inference-triton = { path = "../contrib/inference/triton", version = "0.1.0-alpha.1" }
+rskit-inference-vllm = { path = "../contrib/inference/vllm", version = "0.1.0-alpha.1" }
+rskit-llm = { path = "rskit-llm", version = "0.1.0-alpha.1" }
+rskit-llm-anthropic = { path = "../contrib/llm/anthropic", version = "0.1.0-alpha.1" }
+rskit-llm-gemini = { path = "../contrib/llm/gemini", version = "0.1.0-alpha.1" }
+rskit-llm-ollama = { path = "../contrib/llm/ollama", version = "0.1.0-alpha.1" }
+rskit-llm-openai = { path = "../contrib/llm/openai", version = "0.1.0-alpha.1" }
+rskit-logging = { path = "rskit-logging", version = "0.1.0-alpha.1" }
+rskit-mcp = { path = "rskit-mcp", version = "0.1.0-alpha.1" }
+rskit-media = { path = "rskit-media", version = "0.1.0-alpha.1" }
+rskit-media-audio = { path = "../contrib/media/audio", version = "0.1.0-alpha.1" }
+rskit-media-ffmpeg = { path = "../contrib/media/ffmpeg", version = "0.1.0-alpha.1" }
+rskit-media-image = { path = "../contrib/media/image", version = "0.1.0-alpha.1" }
+rskit-messaging = { path = "rskit-messaging", version = "0.1.0-alpha.1" }
+rskit-messaging-kafka = { path = "../contrib/messaging/kafka", version = "0.1.0-alpha.1" }
+rskit-messaging-nats = { path = "../contrib/messaging/nats", version = "0.1.0-alpha.1" }
+rskit-messaging-rabbitmq = { path = "../contrib/messaging/rabbitmq", version = "0.1.0-alpha.1" }
+rskit-observability = { path = "rskit-observability", version = "0.1.0-alpha.1" }
+rskit-pipeline = { path = "rskit-pipeline", version = "0.1.0-alpha.1" }
+rskit-process = { path = "rskit-process", version = "0.1.0-alpha.1" }
+rskit-provider = { path = "rskit-provider", version = "0.1.0-alpha.1" }
+rskit-resilience = { path = "rskit-resilience", version = "0.1.0-alpha.1" }
+rskit-schema = { path = "rskit-schema", version = "0.1.0-alpha.1" }
+rskit-security = { path = "rskit-security", version = "0.1.0-alpha.1" }
+rskit-server = { path = "rskit-server", version = "0.1.0-alpha.1" }
+rskit-skill = { path = "rskit-skill", version = "0.1.0-alpha.1" }
+rskit-sse = { path = "rskit-sse", version = "0.1.0-alpha.1" }
+rskit-stateful = { path = "rskit-stateful", version = "0.1.0-alpha.1" }
+rskit-storage = { path = "rskit-storage", version = "0.1.0-alpha.1" }
+rskit-storage-gcs = { path = "../contrib/storage/gcs", version = "0.1.0-alpha.1" }
+rskit-storage-s3 = { path = "../contrib/storage/s3", version = "0.1.0-alpha.1" }
+rskit-testutil = { path = "rskit-testutil", version = "0.1.0-alpha.1" }
+rskit-tool = { path = "rskit-tool", version = "0.1.0-alpha.1" }
+rskit-util = { path = "rskit-util", version = "0.1.0-alpha.1" }
+rskit-validation = { path = "rskit-validation", version = "0.1.0-alpha.1" }
+rskit-vectorstore = { path = "rskit-vectorstore", version = "0.1.0-alpha.1" }
+rskit-vectorstore-qdrant = { path = "../contrib/vectorstore/qdrant", version = "0.1.0-alpha.1" }
+rskit-version = { path = "rskit-version", version = "0.1.0-alpha.1" }
+rskit-worker = { path = "rskit-worker", version = "0.1.0-alpha.1" }
+semver = { version = "1" }
+subtle = "2.6"
+url = "2"
+wiremock = "0.6"
 [workspace.lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"

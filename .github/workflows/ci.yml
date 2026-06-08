@@ -55,6 +55,8 @@ jobs:
               - '.config/**'
               - 'clippy.toml'
               - 'deny.toml'
+              - 'deny.contrib.toml'
+              - 'deny.examples.toml'
               - 'rust-toolchain.toml'
               - 'rustfmt.toml'
               - '.github/workflows/ci.yml'
@@ -93,6 +95,7 @@ jobs:
       - run: |
           cd core && cargo fmt --all --check
           cd ../contrib && cargo fmt --all --check
+          cd ../examples && cargo fmt --all --check
 
   # ---------------------------------------------------------------------------
   # Clippy (uses the pinned toolchain from rust-toolchain.toml)
@@ -123,6 +126,7 @@ jobs:
       - run: |
           cargo clippy --manifest-path core/Cargo.toml --workspace -- -D warnings
           cargo clippy --manifest-path contrib/Cargo.toml --workspace -- -D warnings
+          cargo clippy --manifest-path examples/Cargo.toml --workspace -- -D warnings
 
   # ---------------------------------------------------------------------------
   # Tests — matrix across OS + declared MSRV and pinned development toolchain
@@ -164,6 +168,7 @@ jobs:
           export RUSTC="$(rustup which rustc)"
           cargo-nextest nextest run --manifest-path core/Cargo.toml --workspace --profile ci
           cargo-nextest nextest run --manifest-path contrib/Cargo.toml --workspace --profile ci
+          cargo-nextest nextest run --manifest-path examples/Cargo.toml --workspace --profile ci
 
   # ---------------------------------------------------------------------------
   # Documentation (ensure no broken intra-doc links)
@@ -194,6 +199,7 @@ jobs:
       - run: |
           cargo doc --manifest-path core/Cargo.toml --workspace --no-deps --document-private-items
           cargo doc --manifest-path contrib/Cargo.toml --workspace --no-deps --document-private-items
+          cargo doc --manifest-path examples/Cargo.toml --workspace --no-deps --document-private-items
 
   # ---------------------------------------------------------------------------
   # Coverage (runs on pinned Linux only, uploads LCOV)
@@ -273,17 +279,7 @@ jobs:
         run: rustup toolchain install nightly --profile minimal
       - name: Install cargo-public-api
         run: cargo install cargo-public-api --version 0.52.0 --locked
-      - run: cargo deny --manifest-path core/Cargo.toml check licenses advisories sources bans
-      - run: cargo deny --manifest-path contrib/Cargo.toml check licenses advisories sources bans
       - run: ./scripts/check-release-readiness.sh
-      - uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998  # v2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          working-directory: core
-      - uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998  # v2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          working-directory: contrib
 
   # ---------------------------------------------------------------------------
   # Gate: Aggregate status for branch protection

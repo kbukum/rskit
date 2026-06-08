@@ -83,47 +83,59 @@ pub fn tracer_provider_with_protocol(
     cfg: &TracingConfig,
     protocol: OtlpProtocol,
 ) -> AppResult<TracerGuard> {
-    use opentelemetry::trace::TracerProvider as _;
-    use opentelemetry::{InstrumentationScope, KeyValue};
-    use opentelemetry_otlp::{SpanExporter, WithExportConfig};
-    use opentelemetry_sdk::Resource;
-    use opentelemetry_sdk::trace::{Sampler, SdkTracerProvider};
-    let exporter = match protocol {
-        OtlpProtocol::Grpc => SpanExporter::builder()
-            .with_tonic()
-            .with_endpoint(&cfg.endpoint)
-            .with_timeout(cfg.export_timeout)
-            .build(),
-        OtlpProtocol::HttpBinary => SpanExporter::builder()
-            .with_http()
-            .with_protocol(opentelemetry_otlp::Protocol::HttpBinary)
-            .with_endpoint(&cfg.endpoint)
-            .with_timeout(cfg.export_timeout)
-            .build(),
+    #[cfg(not(feature = "otlp"))]
+    {
+        let _ = (cfg, protocol);
+        Err(AppError::new(
+            ErrorCode::InvalidInput,
+            "OTLP tracing exporter requires the `otlp` feature",
+        ))
     }
-    .map_err(|e| AppError::new(ErrorCode::Internal, format!("OTLP span exporter: {e}")))?;
 
-    let sampler = if (cfg.sample_rate - 1.0).abs() < f64::EPSILON {
-        Sampler::AlwaysOn
-    } else if cfg.sample_rate <= 0.0 {
-        Sampler::AlwaysOff
-    } else {
-        Sampler::TraceIdRatioBased(cfg.sample_rate)
-    };
+    #[cfg(feature = "otlp")]
+    {
+        use opentelemetry::trace::TracerProvider as _;
+        use opentelemetry::{InstrumentationScope, KeyValue};
+        use opentelemetry_otlp::{SpanExporter, WithExportConfig};
+        use opentelemetry_sdk::Resource;
+        use opentelemetry_sdk::trace::{Sampler, SdkTracerProvider};
+        let exporter = match protocol {
+            OtlpProtocol::Grpc => SpanExporter::builder()
+                .with_tonic()
+                .with_endpoint(&cfg.endpoint)
+                .with_timeout(cfg.export_timeout)
+                .build(),
+            OtlpProtocol::HttpBinary => SpanExporter::builder()
+                .with_http()
+                .with_protocol(opentelemetry_otlp::Protocol::HttpBinary)
+                .with_endpoint(&cfg.endpoint)
+                .with_timeout(cfg.export_timeout)
+                .build(),
+        }
+        .map_err(|e| AppError::new(ErrorCode::Internal, format!("OTLP span exporter: {e}")))?;
 
-    let resource = Resource::builder_empty()
-        .with_attributes([KeyValue::new(SERVICE_NAME, cfg.service_name.clone())])
-        .build();
+        let sampler = if (cfg.sample_rate - 1.0).abs() < f64::EPSILON {
+            Sampler::AlwaysOn
+        } else if cfg.sample_rate <= 0.0 {
+            Sampler::AlwaysOff
+        } else {
+            Sampler::TraceIdRatioBased(cfg.sample_rate)
+        };
 
-    let provider = SdkTracerProvider::builder()
-        .with_batch_exporter(exporter)
-        .with_sampler(sampler)
-        .with_resource(resource)
-        .build();
+        let resource = Resource::builder_empty()
+            .with_attributes([KeyValue::new(SERVICE_NAME, cfg.service_name.clone())])
+            .build();
 
-    let scope = InstrumentationScope::builder(cfg.service_name.clone()).build();
-    let tracer = provider.tracer_with_scope(scope);
-    Ok(TracerGuard { provider, tracer })
+        let provider = SdkTracerProvider::builder()
+            .with_batch_exporter(exporter)
+            .with_sampler(sampler)
+            .with_resource(resource)
+            .build();
+
+        let scope = InstrumentationScope::builder(cfg.service_name.clone()).build();
+        let tracer = provider.tracer_with_scope(scope);
+        Ok(TracerGuard { provider, tracer })
+    }
 }
 
 /// Attach bounded operation attributes to an active tracing span.

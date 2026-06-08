@@ -30,15 +30,15 @@ thiserror    = { workspace = true }
 base64       = { workspace = true }
 
 # Internal
-rskit-errors = { version = "0.1.0-alpha.1", path = "../rskit-errors" }
-rskit-fs = { version = "0.1.0-alpha.1", path = "../rskit-fs" }
-rskit-resilience = { version = "0.1.0-alpha.1", path = "../rskit-resilience" }
-rskit-security = { version = "0.1.0-alpha.1", path = "../rskit-security" }
+rskit-errors = { workspace = true }
+rskit-fs = { workspace = true }
+rskit-resilience = { workspace = true }
+rskit-security = { workspace = true }
 
 [dev-dependencies]
 futures      = { workspace = true }
 tokio        = { workspace = true }
-wiremock     = "0.6"
+wiremock = { workspace = true }
 tempfile     = { workspace = true }
 insta        = { workspace = true }
 

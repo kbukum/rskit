@@ -4,7 +4,7 @@ use aes_gcm::{
     Aes256Gcm, Nonce,
     aead::{Aead, KeyInit, Payload},
 };
-use rand::Rng;
+use rand::RngCore;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use sha2::Sha256;
 use zeroize::Zeroize;

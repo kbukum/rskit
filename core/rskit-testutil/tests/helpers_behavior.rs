@@ -2,6 +2,7 @@ use rskit_component::Component;
 use rskit_config::AppConfig;
 use rskit_hook::Event;
 use rskit_testutil::{FakeComponent, TestAppConfig, TestEvent};
+use rskit_validation::Validate;
 
 #[tokio::test]
 async fn fake_component_tracks_lifecycle_and_health() {
@@ -28,6 +29,19 @@ fn test_app_config_exposes_named_service_config() {
 
     assert_eq!(config.service_config().name, "worker");
     assert_eq!(TestAppConfig::default().service_config().name, "service");
+}
+
+#[test]
+fn test_app_config_validation_reports_service_field() {
+    let config = TestAppConfig::named("");
+
+    let err = config
+        .validate()
+        .expect_err("invalid embedded service config must fail");
+
+    let field_errors = err.field_errors();
+    assert!(field_errors.contains_key("service"));
+    assert!(!field_errors.contains_key("name"));
 }
 
 #[test]

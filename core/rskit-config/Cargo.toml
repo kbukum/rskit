@@ -26,14 +26,14 @@ validator = { workspace = true }
 tracing      = { workspace = true }
 
 # Internal
-rskit-errors = { version = "0.1.0-alpha.1", path = "../rskit-errors" }
-rskit-version = { version = "0.1.0-alpha.1", path = "../rskit-version" }
-rskit-fs = { version = "0.1.0-alpha.1", path = "../rskit-fs", default-features = false }
-rskit-util = { version = "0.1.0-alpha.1", path = "../rskit-util" }
-rskit-validation = { version = "0.1.0-alpha.1", path = "../rskit-validation" }
+rskit-errors = { workspace = true }
+rskit-version = { workspace = true }
+rskit-fs = { workspace = true }
+rskit-util = { workspace = true }
+rskit-validation = { workspace = true }
 
 [dev-dependencies]
 parking_lot = { workspace = true }
 serde_json   = { workspace = true }
-tempfile    = "3"
+tempfile = { workspace = true }
 tokio       = { workspace = true }

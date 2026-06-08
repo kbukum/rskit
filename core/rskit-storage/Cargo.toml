@@ -25,17 +25,17 @@ async-trait     = { workspace = true }
 futures         = { workspace = true }
 futures-util    = { workspace = true }
 pin-project-lite = { workspace = true }
-tempfile        = "3"
-mime_guess      = "2"
-infer           = "0.19"
+tempfile = { workspace = true }
+mime_guess = { workspace = true }
+infer = { workspace = true }
 
 # Internal
-rskit-errors    = { version = "0.1.0-alpha.1", path = "../rskit-errors" }
-rskit-fs        = { version = "0.1.0-alpha.1", path = "../rskit-fs" }
+rskit-errors = { workspace = true }
+rskit-fs = { workspace = true, features = ["async"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "full"] }
-image = "0.25"
+image = { workspace = true }
 bytes = { workspace = true }
 insta = { workspace = true }
 

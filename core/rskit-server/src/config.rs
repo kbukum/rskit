@@ -1,5 +1,6 @@
 use rskit_validation::Validate;
 use serde::{Deserialize, Serialize};
+use validator::{ValidationError, ValidationErrors};
 
 /// TLS configuration for the gRPC server.
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -11,14 +12,12 @@ pub struct TlsConfig {
 }
 
 /// Configuration for the gRPC server component.
-#[derive(Debug, Clone, Deserialize, Serialize, Validate)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct GrpcServerConfig {
     /// Bind address (e.g. `"0.0.0.0"` or `"127.0.0.1"`).
-    #[validate(length(min = 1))]
     pub host: String,
 
     /// TCP port to listen on (1–65535).
-    #[validate(range(min = 1, max = 65535))]
     pub port: u16,
 
     /// Optional maximum number of concurrent connections.
@@ -32,6 +31,23 @@ pub struct GrpcServerConfig {
     /// When configured, tonic/rustls modern defaults are used with TLS 1.3
     /// preferred and TLS 1.2 as the minimum supported version.
     pub tls: Option<TlsConfig>,
+}
+
+impl Validate for GrpcServerConfig {
+    fn validate(&self) -> Result<(), ValidationErrors> {
+        let mut errors = ValidationErrors::new();
+        if self.host.trim().is_empty() {
+            errors.add("host", ValidationError::new("length"));
+        }
+        if self.port == 0 {
+            errors.add("port", ValidationError::new("range"));
+        }
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
+    }
 }
 
 impl Default for GrpcServerConfig {

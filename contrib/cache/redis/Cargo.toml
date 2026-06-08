@@ -15,7 +15,7 @@ keywords               = ["cache", "redis", "adapter"]
 
 [dependencies]
 async-trait = { workspace = true }
-redis       = { version = "1.2", features = ["tokio-comp", "connection-manager"] }
+redis = { workspace = true, features = ["tokio-comp", "connection-manager"] }
 serde       = { workspace = true }
 tokio       = { workspace = true }
 tracing     = { workspace = true }

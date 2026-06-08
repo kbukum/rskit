@@ -100,8 +100,8 @@ impl MessageProducer<Vec<u8>> for RabbitMqProducer {
         }
         channel
             .basic_publish(
-                &self.config.exchange,
-                &routing_key,
+                self.config.exchange.as_str().into(),
+                routing_key.into(),
                 BasicPublishOptions::default(),
                 &msg.payload,
                 BasicProperties::default(),
@@ -138,18 +138,26 @@ impl MessageProducer<Vec<u8>> for RabbitMqProducer {
     async fn close(&self) -> AppResult<()> {
         let state = self.state.lock().await.take();
         if let Some(state) = state {
-            state.channel.close(200, "closed").await.map_err(|e| {
-                AppError::new(
-                    ErrorCode::ExternalService,
-                    format!("RabbitMQ channel close failed: {e}"),
-                )
-            })?;
-            state.connection.close(200, "closed").await.map_err(|e| {
-                AppError::new(
-                    ErrorCode::ExternalService,
-                    format!("RabbitMQ connection close failed: {e}"),
-                )
-            })?;
+            state
+                .channel
+                .close(200, "closed".into())
+                .await
+                .map_err(|e| {
+                    AppError::new(
+                        ErrorCode::ExternalService,
+                        format!("RabbitMQ channel close failed: {e}"),
+                    )
+                })?;
+            state
+                .connection
+                .close(200, "closed".into())
+                .await
+                .map_err(|e| {
+                    AppError::new(
+                        ErrorCode::ExternalService,
+                        format!("RabbitMQ connection close failed: {e}"),
+                    )
+                })?;
         }
         self.declared_queues.lock().await.clear();
         Ok(())
@@ -244,8 +252,8 @@ impl MessageConsumer<Vec<u8>> for RabbitMqConsumer {
             configure_qos(&channel, self.config.effective_prefetch_count()?).await?;
             let consumer = channel
                 .basic_consume(
-                    &queue,
-                    &self.config.consumer_tag,
+                    queue.as_str().into(),
+                    self.config.consumer_tag.as_str().into(),
                     BasicConsumeOptions {
                         no_ack: self.config.effective_auto_ack(),
                         ..BasicConsumeOptions::default()
@@ -456,7 +464,7 @@ async fn configure_qos(channel: &lapin::Channel, prefetch_count: u16) -> AppResu
 async fn declare_queue(channel: &lapin::Channel, queue: &str, durable: bool) -> AppResult<()> {
     channel
         .queue_declare(
-            queue,
+            queue.into(),
             QueueDeclareOptions {
                 durable,
                 ..QueueDeclareOptions::default()

@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use base64::Engine;
 use chrono::{DateTime, Utc};
-use rand::Rng;
+use rand::RngCore;
 
 /// Generates short-lived opaque reset tokens (random bytes, base64-URL encoded).
 #[derive(Debug, Clone)]

@@ -40,18 +40,17 @@ base64           = { workspace = true, optional = true }
 axum             = { workspace = true, optional = true }
 tower-http       = { workspace = true, optional = true }
 rustls           = { workspace = true, optional = true }
-rustls-pemfile   = { workspace = true, optional = true }
 tokio-rustls     = { workspace = true, optional = true }
 
 # Internal
-rskit-errors     = { version = "0.1.0-alpha.1", path = "../rskit-errors" }
-rskit-fs         = { version = "0.1.0-alpha.1", path = "../rskit-fs" }
-rskit-bootstrap  = { version = "0.1.0-alpha.1", path = "../rskit-bootstrap" }
-rskit-grpc       = { version = "0.1.0-alpha.1", path = "../rskit-grpc", default-features = false, optional = true }
-rskit-http       = { version = "0.1.0-alpha.1", path = "../rskit-http", optional = true }
-rskit-security   = { version = "0.1.0-alpha.1", path = "../rskit-security", optional = true }
-rskit-validation = { version = "0.1.0-alpha.1", path = "../rskit-validation" }
-rskit-version    = { version = "0.1.0-alpha.1", path = "../rskit-version", optional = true }
+rskit-errors = { workspace = true }
+rskit-fs = { workspace = true, features = ["async"] }
+rskit-bootstrap = { workspace = true }
+rskit-grpc = { workspace = true, optional = true }
+rskit-http = { workspace = true, optional = true }
+rskit-security = { workspace = true, optional = true }
+rskit-validation = { workspace = true }
+rskit-version = { workspace = true, optional = true }
 
 [features]
 default = ["http", "grpc"]
@@ -64,7 +63,6 @@ http = [
     "dep:rskit-security",
     "dep:rskit-version",
     "dep:rustls",
-    "dep:rustls-pemfile",
     "dep:tokio-rustls",
     "dep:tower",
     "dep:tower-http",

@@ -30,7 +30,7 @@ schemars       = { workspace = true }
 
 # Internal
 rskit-ai = { workspace = true }
-rskit-component = { version = "0.1.0-alpha.1", path = "../rskit-component" }
-rskit-observability = { version = "0.1.0-alpha.1", path = "../rskit-observability" }
-rskit-schema   = { version = "0.1.0-alpha.1", path = "../rskit-schema" }
-rskit-errors   = { version = "0.1.0-alpha.1", path = "../rskit-errors" }
+rskit-component = { workspace = true }
+rskit-observability = { workspace = true }
+rskit-schema = { workspace = true }
+rskit-errors = { workspace = true }

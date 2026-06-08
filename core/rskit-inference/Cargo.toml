@@ -25,14 +25,14 @@ async-trait  = { workspace = true }
 bytes        = { workspace = true, features = ["serde"] }
 thiserror    = { workspace = true }
 tokio-stream = { workspace = true }
-uuid         = { version = "1", features = ["v7"] }
+uuid = { workspace = true, features = ["v7"] }
 
 # Internal
 rskit-ai = { workspace = true }
-rskit-component = { version = "0.1.0-alpha.1", path = "../rskit-component" }
-rskit-errors = { version = "0.1.0-alpha.1", path = "../rskit-errors" }
-rskit-provider = { version = "0.1.0-alpha.1", path = "../rskit-provider" }
-rskit-tool   = { version = "0.1.0-alpha.1", path = "../rskit-tool" }
+rskit-component = { workspace = true }
+rskit-errors = { workspace = true }
+rskit-provider = { workspace = true }
+rskit-tool = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }

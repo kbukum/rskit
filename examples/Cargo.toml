@@ -15,7 +15,7 @@ repository = "https://github.com/kbukum/rskit"
 publish = false
 
 [workspace.dependencies]
-# Core crates
+# Internal
 rskit = { path = "../core/rskit", version = "0.1.0-alpha.1" }
 
 # External

@@ -85,30 +85,52 @@ pub fn init_metrics_with_protocol(
         .with_attributes([KeyValue::new(SERVICE_NAME, cfg.service_name.clone())])
         .build();
 
-    let mut builder = SdkMeterProvider::builder().with_resource(resource);
+    let builder = SdkMeterProvider::builder().with_resource(resource);
 
     if let Some(endpoint) = &cfg.otlp_endpoint {
-        use opentelemetry_otlp::{MetricExporter, WithExportConfig};
-        use opentelemetry_sdk::metrics::PeriodicReader;
-
-        let exporter = match protocol {
-            OtlpProtocol::Grpc => MetricExporter::builder()
-                .with_tonic()
-                .with_endpoint(endpoint)
-                .build(),
-            OtlpProtocol::HttpBinary => MetricExporter::builder()
-                .with_http()
-                .with_protocol(opentelemetry_otlp::Protocol::HttpBinary)
-                .with_endpoint(endpoint)
-                .build(),
+        #[cfg(not(feature = "otlp"))]
+        {
+            let _ = (endpoint, protocol);
+            Err(AppError::new(
+                ErrorCode::InvalidInput,
+                "OTLP metric exporter requires the `otlp` feature",
+            ))?;
         }
-        .map_err(|e| AppError::new(ErrorCode::Internal, format!("OTLP metric exporter: {e}")))?;
 
-        let reader = PeriodicReader::builder(exporter)
-            .with_interval(cfg.export_interval)
-            .build();
+        #[cfg(feature = "otlp")]
+        {
+            use opentelemetry_otlp::{MetricExporter, WithExportConfig};
+            use opentelemetry_sdk::metrics::PeriodicReader;
 
-        builder = builder.with_reader(reader);
+            let exporter = match protocol {
+                OtlpProtocol::Grpc => MetricExporter::builder()
+                    .with_tonic()
+                    .with_endpoint(endpoint)
+                    .build(),
+                OtlpProtocol::HttpBinary => MetricExporter::builder()
+                    .with_http()
+                    .with_protocol(opentelemetry_otlp::Protocol::HttpBinary)
+                    .with_endpoint(endpoint)
+                    .build(),
+            }
+            .map_err(|e| {
+                AppError::new(ErrorCode::Internal, format!("OTLP metric exporter: {e}"))
+            })?;
+
+            let reader = PeriodicReader::builder(exporter)
+                .with_interval(cfg.export_interval)
+                .build();
+
+            let builder = builder.with_reader(reader);
+            let provider = builder.build();
+            let scope = InstrumentationScope::builder(cfg.service_name.clone()).build();
+            let meter = provider.meter_with_scope(scope);
+
+            return Ok(MetricsHandle {
+                meter,
+                _provider: provider,
+            });
+        }
     }
 
     let provider = builder.build();

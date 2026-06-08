@@ -14,5 +14,5 @@ tokio-util  = { workspace = true }
 indicatif   = { workspace = true }
 async-trait = { workspace = true }
 tracing     = { workspace = true }
-uuid        = { version = "1", features = ["v4"] }
+uuid = { workspace = true, features = ["v4"] }
 chrono      = { workspace = true }

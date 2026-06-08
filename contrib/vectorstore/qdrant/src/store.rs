@@ -4,27 +4,26 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use qdrant_client::Qdrant;
-use qdrant_client::qdrant::{
-    CreateCollectionBuilder, DeletePointsBuilder, Filter, PointStruct, SearchPointsBuilder,
-    UpsertPointsBuilder, VectorParamsBuilder,
-};
 use rskit_errors::{AppError, AppResult, ErrorCode};
+use rskit_httpclient::{Auth, HttpClient, HttpClientConfig, Request};
 use rskit_vectorstore::{
     PointPayload, SearchFilter, SearchResult, SimilarityMetric, VectorFactory, VectorStore,
     VectorStoreConfig, VectorStoreLimits, VectorStoreRegistry,
 };
+use serde::Deserialize;
+use serde::de::DeserializeOwned;
+use serde_json::Value;
 use tracing::{debug, info};
 
 use crate::Config;
 use crate::conversion::{
-    filter_condition_to_qdrant, payload_to_qdrant_value, qdrant_distance,
+    QdrantPointId, filter_condition_to_qdrant, payload_to_qdrant_value, qdrant_distance,
     qdrant_point_id_from_string, qdrant_point_id_to_string, qdrant_value_to_payload,
 };
 use crate::url::validate_qdrant_url;
 
 struct QdrantVectorStore {
-    client: Qdrant,
+    client: HttpClient,
     metric: SimilarityMetric,
     limits: VectorStoreLimits,
 }
@@ -32,57 +31,71 @@ struct QdrantVectorStore {
 impl QdrantVectorStore {
     fn new(config: Config, limits: VectorStoreLimits) -> AppResult<Self> {
         validate_qdrant_url(&config.url)?;
-        let mut builder = Qdrant::from_url(&config.url);
-        if let Some(key) = &config.api_key {
-            builder = builder.api_key(key.expose().to_owned());
-        }
-        let client = builder.build().map_err(|e| {
-            AppError::new(
-                ErrorCode::ConnectionFailed,
-                format!("failed to connect to Qdrant: {e}"),
-            )
-            .with_cause(e)
-        })?;
+        let http_config = qdrant_http_config(&config);
         Ok(Self {
-            client,
+            client: HttpClient::new(http_config)?,
             metric: config.metric,
             limits,
         })
     }
+
+    async fn send_json<T: serde::Serialize>(
+        &self,
+        request: Request,
+        body: &T,
+        context: &str,
+    ) -> AppResult<rskit_httpclient::Response> {
+        self.client
+            .send(request.json_body(body).map_err(|error| {
+                AppError::new(
+                    ErrorCode::InvalidInput,
+                    format!("failed to encode Qdrant request body: {error}"),
+                )
+                .with_cause(error)
+            })?)
+            .await?
+            .error_for_status_with(|response| qdrant_http_error(context, response))
+    }
+}
+
+fn qdrant_http_config(config: &Config) -> HttpClientConfig {
+    let mut http_config = HttpClientConfig::new()
+        .with_base_url(config.url.trim_end_matches('/'))
+        .with_user_agent("rskit-vectorstore-qdrant");
+    if let Some(key) = &config.api_key {
+        http_config = http_config.with_auth(Auth::api_key_secret("api-key", key.clone()));
+    }
+    http_config
 }
 
 #[async_trait]
 impl VectorStore for QdrantVectorStore {
     async fn ensure_collection(&self, collection: &str, dimensions: usize) -> AppResult<()> {
         self.limits.validate_dimensions(dimensions)?;
-        let exists = self
+        let collection_path = qdrant_collection_path(collection)?;
+        let response = self
             .client
-            .collection_exists(collection)
-            .await
-            .map_err(|e| {
-                AppError::new(
-                    ErrorCode::ExternalService,
-                    format!("failed to check Qdrant collection: {e}"),
-                )
-                .with_cause(e)
-            })?;
-        if !exists {
+            .send(Request::get(format!("/collections/{collection_path}")))
+            .await?;
+        if response.status_u16() == 404 {
             info!(collection, dimensions, "creating Qdrant collection");
-            let distance = qdrant_distance(self.metric)?;
-            self.client
-                .create_collection(
-                    CreateCollectionBuilder::new(collection)
-                        .vectors_config(VectorParamsBuilder::new(dimensions as u64, distance)),
-                )
-                .await
-                .map_err(|e| {
-                    AppError::new(
-                        ErrorCode::ExternalService,
-                        format!("failed to create Qdrant collection: {e}"),
-                    )
-                    .with_cause(e)
-                })?;
+            let body = serde_json::json!({
+                "vectors": {
+                    "size": dimensions,
+                    "distance": qdrant_distance(self.metric)?,
+                }
+            });
+            self.send_json(
+                Request::put(format!("/collections/{collection_path}")),
+                &body,
+                "failed to create Qdrant collection",
+            )
+            .await?;
+            return Ok(());
         }
+        response.error_for_status_with(|response| {
+            qdrant_http_error("failed to check Qdrant collection", response)
+        })?;
         Ok(())
     }
 
@@ -94,24 +107,28 @@ impl VectorStore for QdrantVectorStore {
         payload: PointPayload,
     ) -> AppResult<()> {
         self.limits.validate_dimensions(vector.len())?;
+        let collection_path = qdrant_collection_path(collection)?;
         payload.validate_limits(&self.limits)?;
         debug!(collection, id, "upserting vector point");
-        let payload: HashMap<String, qdrant_client::qdrant::Value> = payload
+        let payload: HashMap<String, Value> = payload
             .fields
             .into_iter()
             .map(|(k, v)| payload_to_qdrant_value(v).map(|value| (k, value)))
             .collect::<AppResult<_>>()?;
-        let point = PointStruct::new(qdrant_point_id_from_string(id)?, vector, payload);
-        self.client
-            .upsert_points(UpsertPointsBuilder::new(collection, vec![point]).wait(true))
-            .await
-            .map_err(|e| {
-                AppError::new(
-                    ErrorCode::ExternalService,
-                    format!("failed to upsert vector point: {e}"),
-                )
-                .with_cause(e)
-            })?;
+        let body = serde_json::json!({
+            "points": [{
+                "id": qdrant_point_id_from_string(id)?,
+                "vector": vector,
+                "payload": payload,
+            }]
+        });
+        self.send_json(
+            Request::put(format!("/collections/{collection_path}/points"))
+                .query_param("wait", "true"),
+            &body,
+            "failed to upsert vector point",
+        )
+        .await?;
         Ok(())
     }
 
@@ -127,8 +144,13 @@ impl VectorStore for QdrantVectorStore {
         if let Some(filter) = filter.as_ref() {
             filter.validate_limits(&self.limits)?;
         }
-        let mut builder =
-            SearchPointsBuilder::new(collection, vector, limit as u64).with_payload(true);
+        let collection_path = qdrant_collection_path(collection)?;
+
+        let mut body = serde_json::json!({
+            "vector": vector,
+            "limit": limit,
+            "with_payload": true,
+        });
         if let Some(filter) = filter
             && !filter.must.is_empty()
         {
@@ -137,21 +159,24 @@ impl VectorStore for QdrantVectorStore {
                 .into_iter()
                 .map(|condition| filter_condition_to_qdrant(condition.field, condition.equals))
                 .collect::<AppResult<Vec<_>>>()?;
-            builder = builder.filter(Filter::must(conditions));
+            body["filter"] = serde_json::json!({ "must": conditions });
         }
-        let results = self.client.search_points(builder).await.map_err(|e| {
-            AppError::new(
-                ErrorCode::ExternalService,
-                format!("vector search failed: {e}"),
+
+        let response = self
+            .send_json(
+                Request::post(format!("/collections/{collection_path}/points/search")),
+                &body,
+                "vector search failed",
             )
-            .with_cause(e)
-        })?;
-        results
+            .await?
+            .and_then_qdrant_json::<QdrantSearchResponse>("vector search failed")?;
+        response
             .result
             .into_iter()
             .map(|point| {
                 let fields = point
                     .payload
+                    .unwrap_or_default()
                     .into_iter()
                     .map(|(field, value)| {
                         qdrant_value_to_payload(&field, value).map(|value| (field, value))
@@ -159,15 +184,7 @@ impl VectorStore for QdrantVectorStore {
                     .collect::<AppResult<_>>()?;
 
                 Ok(SearchResult {
-                    id: point
-                        .id
-                        .ok_or_else(|| {
-                            AppError::new(
-                                ErrorCode::InvalidInput,
-                                "Qdrant search result did not include a point ID",
-                            )
-                        })
-                        .and_then(qdrant_point_id_to_string)?,
+                    id: qdrant_point_id_to_string(point.id),
                     score: point.score,
                     payload: PointPayload { fields },
                 })
@@ -176,23 +193,80 @@ impl VectorStore for QdrantVectorStore {
     }
 
     async fn delete(&self, collection: &str, id: &str) -> AppResult<()> {
-        let point_id = qdrant_point_id_from_string(id)?;
-        self.client
-            .delete_points(
-                DeletePointsBuilder::new(collection)
-                    .points(vec![point_id])
-                    .wait(true),
-            )
-            .await
-            .map_err(|e| {
-                AppError::new(
-                    ErrorCode::ExternalService,
-                    format!("failed to delete vector point: {e}"),
-                )
-                .with_cause(e)
-            })?;
+        let collection_path = qdrant_collection_path(collection)?;
+        let body = serde_json::json!({
+            "points": [qdrant_point_id_from_string(id)?],
+        });
+        self.send_json(
+            Request::post(format!("/collections/{collection_path}/points/delete"))
+                .query_param("wait", "true"),
+            &body,
+            "failed to delete vector point",
+        )
+        .await?;
         Ok(())
     }
+}
+
+fn qdrant_collection_path(collection: &str) -> AppResult<&str> {
+    if collection.is_empty() || matches!(collection, "." | "..") {
+        return Err(invalid_qdrant_collection(collection));
+    }
+    if collection
+        .bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+    {
+        Ok(collection)
+    } else {
+        Err(invalid_qdrant_collection(collection))
+    }
+}
+
+fn invalid_qdrant_collection(collection: &str) -> AppError {
+    AppError::invalid_input(
+        "collection",
+        format!("Qdrant collection name must be a non-empty safe URL path segment: {collection:?}"),
+    )
+}
+
+#[derive(Debug, Deserialize)]
+struct QdrantSearchResponse {
+    result: Vec<QdrantScoredPoint>,
+}
+
+#[derive(Debug, Deserialize)]
+struct QdrantScoredPoint {
+    id: QdrantPointId,
+    score: f32,
+    payload: Option<HashMap<String, Value>>,
+}
+
+fn qdrant_http_error(context: &str, response: rskit_httpclient::ErrorResponse) -> AppError {
+    AppError::new(
+        ErrorCode::ExternalService,
+        format!("{context}: Qdrant returned HTTP {}", response.status),
+    )
+    .with_detail("body", response.body)
+}
+
+trait QdrantResponseExt {
+    fn and_then_qdrant_json<T: DeserializeOwned>(self, context: &str) -> AppResult<T>;
+}
+
+impl QdrantResponseExt for rskit_httpclient::Response {
+    fn and_then_qdrant_json<T: DeserializeOwned>(self, context: &str) -> AppResult<T> {
+        decode_qdrant_json(self.body_bytes(), context)
+    }
+}
+
+fn decode_qdrant_json<T: DeserializeOwned>(body: &[u8], context: &str) -> AppResult<T> {
+    serde_json::from_slice(body).map_err(|error| {
+        AppError::new(
+            ErrorCode::ExternalService,
+            format!("{context}: failed to decode Qdrant JSON response: {error}"),
+        )
+        .with_cause(error)
+    })
 }
 
 struct QdrantFactory {
@@ -216,6 +290,7 @@ pub(crate) fn register_qdrant(registry: &mut VectorStoreRegistry, config: Config
 #[cfg(test)]
 mod tests {
     use rskit_errors::ErrorCode;
+    use rskit_util::SecretString;
     use rskit_vectorstore::{VectorStoreConfig, VectorStoreLimits, VectorStoreRegistry};
 
     use super::*;
@@ -234,6 +309,62 @@ mod tests {
             .expect_err("dimension above configured limit must fail");
 
         assert_eq!(err.code(), ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn qdrant_http_config_redacts_api_key() {
+        let config = Config {
+            url: "https://qdrant.example.test".to_owned(),
+            api_key: Some(SecretString::new("super-secret-key")),
+            metric: SimilarityMetric::Cosine,
+        };
+
+        let debug = format!("{:?}", qdrant_http_config(&config));
+
+        assert!(!debug.contains("super-secret-key"));
+        assert!(debug.contains("api-key"));
+        assert!(debug.contains("SecretString(***)"));
+    }
+
+    #[test]
+    fn qdrant_json_decode_errors_are_external_service_failures() {
+        let err =
+            decode_qdrant_json::<QdrantSearchResponse>(br#"{"result":"not-points"}"#, "search")
+                .expect_err("malformed upstream response must fail");
+
+        assert_eq!(err.code(), ErrorCode::ExternalService);
+        assert!(
+            err.message()
+                .contains("failed to decode Qdrant JSON response")
+        );
+    }
+
+    #[test]
+    fn qdrant_collection_path_accepts_safe_single_segments() {
+        assert_eq!(
+            qdrant_collection_path("tenant_1.collection-prod").unwrap(),
+            "tenant_1.collection-prod"
+        );
+    }
+
+    #[test]
+    fn qdrant_collection_path_rejects_unsafe_segments() {
+        for collection in [
+            "",
+            ".",
+            "..",
+            "tenant/collection",
+            "../collection",
+            "collection?wait=true",
+            "collection#fragment",
+            "collection%2fother",
+            "collection name",
+            "collection\nname",
+        ] {
+            let err = qdrant_collection_path(collection)
+                .expect_err("unsafe collection segment must be rejected");
+            assert_eq!(err.code(), ErrorCode::InvalidInput);
+        }
     }
 
     #[tokio::test]

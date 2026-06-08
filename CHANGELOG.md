@@ -85,6 +85,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Release readiness**: added final release sweeps, dependency-ordered publish
   dry-runs, release coverage thresholds, CycloneDX SBOM generation, tag-release
   SBOM signing, and CI guardrails for the declared MSRV plus pinned toolchain.
+- **Release readiness**: removed cargo-deny/cargo-audit advisory ignores by
+  replacing unmaintained transitive dependency paths with maintained feature
+  selections, direct PEM parsing via `rustls-pki-types`, manual validation impls
+  instead of derive macros, and a REST-backed Qdrant adapter.
 - **Infra/facade refinement**: aligned facade feature wiring and documentation,
   routed examples through the public `rskit` facade, added facade feature-matrix
   validation, made public API checks select the owning workspace manifest,
@@ -175,6 +179,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **rskit-security**: narrowed to cross-transport TLS/security configuration instead of HTTP-only behavior.
 
 ### Fixed
+- **Release tooling**: deny/audit hygiene now avoids stale hardcoded audit
+  ignores, fails on non-ignored cargo-audit warnings, keeps duplicate-version
+  skips aligned with current lockfiles, and uses the reduced-feature JWT backend
+  to avoid vulnerable unused crypto paths.
+- **Workspace hygiene**: core crates now stay on `rand` 0.9 where that lower
+  stable line matches most upstream dependencies, avoiding unnecessary
+  duplicate `rand`/`chacha20` families while `rand` 0.10 is only required
+  transitively by `rmcp`.
+- **Workspace hygiene**: NATS and Google Cloud Storage adapters now use current
+  upstream client releases, removing obsolete `thiserror` duplicate-version
+  skips while preserving documented skips for the remaining upstream rand,
+  crypto, HTTP, and parser ecosystem splits.
+- **Workspace hygiene**: added a release guardrail that fails when shared
+  external workspace dependency versions drift across `core/Cargo.toml`,
+  `contrib/Cargo.toml`, and `examples/Cargo.toml`.
+- **Release tooling**: examples now participate in build, test, lint, docs,
+  dependency-sync, cargo-deny, and cargo-audit gates with a narrow examples
+  deny policy.
+- **Domain tooling**: `domains.toml` now maps all current core/contrib crates
+  and cross-domain dependency edges to concrete modules so domain-scoped checks
+  and generated module docs stay aligned with the workspace.
+- **rskit-vectorstore-qdrant**: malformed Qdrant JSON responses now surface as
+  external-service failures instead of client input errors.
+- **rskit-vectorstore-qdrant**: returned unsigned JSON integers now preserve
+  the signed `PayloadValue::Integer(i64)` contract and reject values outside
+  `i64` bounds instead of converting them to floats.
+- **rskit-vectorstore-qdrant**: endpoint validation now uses the shared `url`
+  crate directly instead of pulling `reqwest` into the adapter.
+- **rskit-vectorstore-qdrant**: reject unsafe collection names before building
+  Qdrant REST paths.
+- **rskit-messaging-rabbitmq**: avoid unnecessary exchange, routing-key, queue,
+  and consumer-tag string clones on publish and subscribe paths.
+- **rskit-testutil**: report invalid embedded `ServiceConfig` validation under
+  the `service` field in `TestAppConfig`.
+- **Workspace hygiene**: dependency-sync help text now reflects that examples
+  are checked alongside core and contrib.
+- **CI**: examples now include the shared cargo-nextest `ci` profile used by
+  the test matrix.
+- **rskit-storage**: explicitly enables the `rskit-fs` async feature it uses, so
+  reduced package graphs no longer depend on workspace feature unification.
 - **Release tooling**: release-readiness sweeps now ignore ordinary line
   comments, SBOM generation fails fast when no artifacts are produced, and
   release signing reports an empty SBOM directory explicitly.
@@ -191,6 +235,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   duplicate quote attributes.
 - **Release tooling**: publish ordering no longer depends on Python 3.9-only
   path APIs, and SBOM cleanup is constrained to `target/` subdirectories.
+- **Workspace hygiene**: Cargo dependency versions are now centralized in the
+  workspace roots, while member crates inherit dependencies via
+  `workspace = true` and root manifests separate external and internal
+  dependencies.
 - **rskit-git**: CLI branch/tag deletion now treats successful commands as
   successful even when captured stdout/stderr exceeded process capture limits.
 - **rskit-bench**: file-backed run listing now skips unreadable or partially
