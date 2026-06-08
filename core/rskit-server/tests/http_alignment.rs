@@ -452,6 +452,6 @@ async fn http_server_rejects_invalid_bind_address_and_missing_tls_files() {
     assert!(
         tls_error
             .to_string()
-            .contains("failed to open HTTP TLS certificate file")
+            .contains("failed to load HTTP TLS certificate file")
     );
 }
