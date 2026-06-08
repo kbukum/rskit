@@ -2,8 +2,8 @@
 # Module names use the kit's canonical naming (directory/crate/package name without kit prefix).
 
 [domains.core]
-description = "Foundation types, config, logging, validation, encryption"
-modules = ["errors", "config", "logging", "validation", "encryption", "util", "version", "schema"]
+description = "Foundation types, config, logging, validation, encryption, filesystem utilities"
+modules = ["errors", "config", "logging", "validation", "encryption", "util", "fs", "version", "schema"]
 
 [domains.patterns]
 description = "Component lifecycle, provider shapes, DI, hooks"
@@ -23,7 +23,7 @@ depends_on = ["core", "patterns", "crosscutting"]
 [domains.transport]
 description = "Server, HTTP client, gRPC, SSE, connect, discovery"
 modules = ["server", "httpclient", "grpc", "sse", "http", "discovery"]
-depends_on = ["core", "patterns", "crosscutting"]
+depends_on = ["core", "patterns", "crosscutting", "composition"]
 
 [domains.auth]
 description = "Authentication and authorization"
@@ -32,20 +32,20 @@ depends_on = ["core", "patterns", "crosscutting", "transport"]
 
 [domains.data]
 description = "Database, cache, storage, vectorstore, messaging"
-modules = ["database", "cache", "storage", "storage-gcs", "storage-s3", "vectorstore", "messaging", "messaging-kafka", "messaging-nats", "messaging-rabbitmq"]
-depends_on = ["core", "patterns", "crosscutting", "transport", "auth"]
+modules = ["database", "cache", "cache-redis", "storage", "storage-gcs", "storage-s3", "vectorstore", "vectorstore-qdrant", "messaging", "messaging-kafka", "messaging-nats", "messaging-rabbitmq"]
+depends_on = ["core", "patterns", "crosscutting", "composition", "transport", "auth"]
 
 [domains.ai]
 description = "LLM, inference, embedding, agent, tool, MCP, skill"
-modules = ["ai", "llm", "llm-providers", "embedding", "inference", "inference-tgi", "inference-triton", "inference-vllm", "agent", "tool", "mcp", "skill"]
+modules = ["ai", "llm", "llm-common", "llm-openai", "llm-anthropic", "llm-ollama", "llm-gemini", "embedding", "inference", "inference-tgi", "inference-triton", "inference-vllm", "agent", "tool", "mcp", "skill"]
 depends_on = ["core", "patterns", "crosscutting", "transport", "auth"]
 
 [domains.media]
 description = "Media processing, transcription"
 modules = ["media", "media-audio", "media-ffmpeg", "media-image"]
-depends_on = ["core", "patterns", "crosscutting"]
+depends_on = ["core", "patterns", "crosscutting", "composition", "data"]
 
 [domains.infra]
 description = "CLI, benchmarking, dataset, git, test utilities, and facade"
 modules = ["bench", "cli", "dataset", "git", "testutil", "rskit"]
-depends_on = ["core", "patterns"]
+depends_on = ["core", "patterns", "crosscutting", "composition"]

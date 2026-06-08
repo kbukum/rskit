@@ -197,6 +197,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Release tooling**: examples now participate in build, test, lint, docs,
   dependency-sync, cargo-deny, and cargo-audit gates with a narrow examples
   deny policy.
+- **Domain tooling**: `domains.toml` now maps all current core/contrib crates
+  and cross-domain dependency edges to concrete modules so domain-scoped checks
+  and generated module docs stay aligned with the workspace.
 - **rskit-storage**: explicitly enables the `rskit-fs` async feature it uses, so
   reduced package graphs no longer depend on workspace feature unification.
 - **Release tooling**: release-readiness sweeps now ignore ordinary line
