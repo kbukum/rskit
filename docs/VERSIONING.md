@@ -93,7 +93,7 @@ Use the facade when you want one crate with opt-in features:
 
 ```toml
 [dependencies]
-rskit = { version = "0.1.0-alpha.1", features = ["server", "database", "messaging"] }
+rskit-toolkit = { version = "0.1.0-alpha.1", features = ["server", "database", "messaging"] }
 ```
 
 Or depend on focused crates directly:

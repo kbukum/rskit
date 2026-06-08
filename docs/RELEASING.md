@@ -120,11 +120,11 @@ If publishing fails after some crates were uploaded, do not delete or force-push
 
 ```sh
 cargo search rskit
-# Check https://crates.io/crates/rskit/X.Y.Z
-# Check https://docs.rs/rskit/X.Y.Z
+# Check https://crates.io/crates/rskit-toolkit/X.Y.Z
+# Check https://docs.rs/rskit-toolkit/X.Y.Z
 ```
 
-If `docs.rs` fails to build, investigate the build log on `https://docs.rs/crate/rskit/X.Y.Z/builds`.
+If `docs.rs` fails to build, investigate the build log on `https://docs.rs/crate/rskit-toolkit/X.Y.Z/builds`.
 
 ## 8. Announce
 

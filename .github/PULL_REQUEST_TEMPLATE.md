@@ -28,7 +28,9 @@
 
 <!-- List key changes in bullet points -->
 
-- - -
+-
+-
+-
 
 ## Testing
 

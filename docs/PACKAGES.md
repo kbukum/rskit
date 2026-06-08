@@ -1,12 +1,12 @@
 # rskit Package Catalog
 
-rskit is distributed as focused crates instead of one monolithic package. Use the `rskit` facade when you want common modules behind feature flags, or depend directly on individual crates when you want a narrower dependency graph.
+rskit is distributed as focused crates instead of one monolithic package. Use the `rskit-toolkit` facade package when you want common modules behind feature flags, or depend directly on individual crates when you want a narrower dependency graph.
 
 The repository has three workspace manifests and intentionally no root `Cargo.toml`:
 
 | Workspace | Purpose | Manifest |
 |---|---|---|
-| Core | Foundation crates and the `rskit` facade | [`core/Cargo.toml`](../core/Cargo.toml) |
+| Core | Foundation crates and the `rskit-toolkit` facade | [`core/Cargo.toml`](../core/Cargo.toml) |
 | Contrib | Vendor and infrastructure adapters | [`contrib/Cargo.toml`](../contrib/Cargo.toml) |
 | Examples | Demo applications validated by CI, not published | [`examples/Cargo.toml`](../examples/Cargo.toml) |
 
@@ -16,7 +16,7 @@ All publishable crates currently use the same pre-1.0 version from their owning 
 
 | If you need | Start with |
 |---|---|
-| A simple application dependency with opt-in features | [`rskit`](../core/rskit/README.md) |
+| A simple application dependency with opt-in features | [`rskit-toolkit`](../core/rskit/README.md) |
 | Stable error/config/logging foundations | `rskit-errors`, `rskit-config`, `rskit-logging` |
 | Lifecycle-managed services | `rskit-bootstrap`, `rskit-component`, `rskit-server` |
 | HTTP/gRPC/SSE transport | `rskit-http`, `rskit-httpclient`, `rskit-grpc`, `rskit-sse` |
@@ -31,7 +31,7 @@ All publishable crates currently use the same pre-1.0 version from their owning 
 
 | Crate | Role |
 |---|---|
-| [`rskit`](../core/rskit/README.md) | Facade crate that re-exports foundation crates and exposes adapter integrations through feature flags. |
+| [`rskit-toolkit`](../core/rskit/README.md) | Facade package that re-exports foundation crates as the Rust crate `rskit` and exposes adapter integrations through feature flags. |
 | [`rskit-util`](../core/rskit-util/README.md) | Domain-free utility primitives for secrets, templates, strings, collections, environment parsing, byte sizes, duration parsing, UTC formatting, and backoff helpers. |
 | [`rskit-fs`](../core/rskit-fs/README.md) | Local filesystem primitives for confined paths, files, directories, temp files, links, permissions, and atomic writes. |
 | [`rskit-version`](../core/rskit-version/README.md) | Build-time version and git metadata helpers. |

@@ -62,7 +62,7 @@ rust-version = "1.91"
 authors = ["kbukum contributors"]
 repository = "https://github.com/kbukum/rskit"
 homepage = "https://github.com/kbukum/rskit"
-documentation = "https://docs.rs/rskit"
+documentation = "https://docs.rs/rskit-toolkit"
 
 [workspace.dependencies]
 # External
@@ -189,7 +189,7 @@ image = { version = "0.25", default-features = false, features = ["bmp", "gif", 
 rmcp = { version = "1.5", default-features = false }
 
 # Internal
-rskit = { path = "rskit", version = "0.1.0-alpha.1" }
+rskit = { package = "rskit-toolkit", path = "rskit", version = "0.1.0-alpha.1" }
 rskit-agent = { path = "rskit-agent", version = "0.1.0-alpha.1" }
 rskit-ai = { path = "rskit-ai", version = "0.1.0-alpha.1" }
 rskit-auth = { path = "rskit-auth", version = "0.1.0-alpha.1" }

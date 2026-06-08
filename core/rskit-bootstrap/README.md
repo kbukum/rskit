@@ -2,7 +2,7 @@
 
 Typestate `App<S,C>` builder, `Component` trait, ordered `Registry`, and `Health` reporting.
 
-[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/rskit-bootstrap.svg)](https://crates.io/crates/rskit-bootstrap) [![docs.rs](https://docs.rs/rskit-bootstrap/badge.svg)](https://docs.rs/rskit-bootstrap) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![MSRV: 1.85](https://img.shields.io/badge/MSRV-1.85-orange.svg)](https://blog.rust-lang.org/2025/02/20/Rust-1.85.0.html)
+[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/rskit-bootstrap.svg)](https://crates.io/crates/rskit-bootstrap) [![docs.rs](https://docs.rs/rskit-bootstrap/badge.svg)](https://docs.rs/rskit-bootstrap) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![MSRV: 1.91](https://img.shields.io/badge/MSRV-1.91-orange.svg)](https://github.com/kbukum/rskit/blob/main/core/Cargo.toml)
 
 ## Features
 
