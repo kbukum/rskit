@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 _No unreleased changes._
 
-## [0.1.0-alpha.1] - 2026-06-08
+## [v0.1.0-alpha.1] - 2026-06-08
 
 ### Added
 
@@ -35,4 +35,4 @@ _No unreleased changes._
 - The first release is marked as an alpha preview for downstream evaluation before any stable compatibility commitment.
 
 [Unreleased]: https://github.com/kbukum/rskit/compare/v0.1.0-alpha.1...HEAD
-[0.1.0-alpha.1]: https://github.com/kbukum/rskit/releases/tag/v0.1.0-alpha.1
+[v0.1.0-alpha.1]: https://github.com/kbukum/rskit/releases/tag/v0.1.0-alpha.1

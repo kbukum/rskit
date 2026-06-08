@@ -11,7 +11,7 @@ The mechanical steps to cut a release of `rskit`. For *what* counts as a breakin
 
 This repository has split Cargo workspaces:
 
-- `core/Cargo.toml` for foundation crates and the `rskit` facade.
+- `core/Cargo.toml` for foundation crates and the `rskit-toolkit` facade package, whose Rust crate name remains `rskit`.
 - `contrib/Cargo.toml` for adapter crates.
 - `examples/Cargo.toml` for demos; examples are validated but not published.
 
@@ -34,10 +34,10 @@ Use the [SEMVER policy](./policy/SEMVER.md) to pick the next version. While in `
 1. Open `CHANGELOG.md`.
 2. Replace `## [Unreleased]` with `## [vX.Y.Z] - YYYY-MM-DD`.
 3. Add a fresh empty `## [Unreleased]` section above it.
-4. If `[Unreleased]` is empty, refuse to release — there is nothing to ship.
+4. If the newly created `[vX.Y.Z]` release section is empty, refuse to release — there is nothing to ship.
 5. Update the link reference at the bottom of the file (if present).
 
-CI refuses to tag if `[Unreleased]` is the only populated section, or if `[vX.Y.Z]` for the version you're cutting doesn't exist in the file.
+As a maintainer rule, do not cut the release if `[Unreleased]` is the only populated section, or if `[vX.Y.Z]` for the version you're cutting doesn't exist in the file.
 
 ## 3. Bump versions across the workspaces
 
@@ -94,7 +94,7 @@ Use the GitHub Release UI as the publishing entrypoint:
 5. For pre-releases such as `v0.1.0-alpha.1`, check **Set as a pre-release**.
 6. Publish the release.
 
-Publishing the GitHub Release creates the `v*` tag and triggers `.github/workflows/release.yml` from the `release.published` event. The workflow verifies that the tag starts with `v` and points at `main`, then runs the release gates, publishes crates, signs SBOMs, and uploads generated assets back to the same GitHub Release.
+Publishing the GitHub Release creates the `v*` tag and triggers `.github/workflows/release.yml` from the `release.published` event. The workflow verifies that the tag starts with `v` and is reachable from `main`, then runs the release gates, publishes crates, signs SBOMs, and uploads generated assets back to the same GitHub Release.
 
 Directly pushing a `v*` tag does not trigger publishing. The release workflow (`.github/workflows/release.yml`) is triggered by publishing a GitHub Release and will:
 

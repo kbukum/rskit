@@ -6,7 +6,7 @@ This document explains the versioning and compatibility policy for rskit. For th
 
 rskit is published from two Cargo workspaces:
 
-- `core/Cargo.toml` contains the foundation crates and the `rskit` facade.
+- `core/Cargo.toml` contains the foundation crates and the `rskit-toolkit` facade package, whose Rust crate name remains `rskit`.
 - `contrib/Cargo.toml` contains adapter crates.
 
 `examples/Cargo.toml` is validated by CI and release gates, but examples are not published to crates.io.

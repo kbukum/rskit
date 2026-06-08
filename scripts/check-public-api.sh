@@ -5,7 +5,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CRATE=${1:-rskit}
+CRATE=${1:-rskit-toolkit}
 RUSTDOC_JSON_TOOLCHAIN=${RUSTDOC_JSON_TOOLCHAIN:-nightly}
 CARGO_PUBLIC_API=(cargo "+${RUSTDOC_JSON_TOOLCHAIN}" public-api)
 MANIFESTS=(
