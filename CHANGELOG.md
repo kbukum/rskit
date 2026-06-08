@@ -211,6 +211,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Qdrant REST paths.
 - **rskit-messaging-rabbitmq**: avoid unnecessary exchange, routing-key, queue,
   and consumer-tag string clones on publish and subscribe paths.
+- **rskit-testutil**: report invalid embedded `ServiceConfig` validation under
+  the `service` field in `TestAppConfig`.
 - **Workspace hygiene**: dependency-sync help text now reflects that examples
   are checked alongside core and contrib.
 - **CI**: examples now include the shared cargo-nextest `ci` profile used by
