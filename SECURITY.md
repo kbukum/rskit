@@ -53,7 +53,7 @@ When using rskit in production:
 - Use the `rskit-encryption` crate for sensitive data at rest.
 - Configure TLS via the `rskit-server` / `rskit-httpclient` crates for all network communication — never disable certificate verification in production.
 - Never commit secrets — use environment variables or secret managers (`rskit-config` integrates with `dotenvy` and env-var layering).
-- Review `cargo audit` and `cargo deny` advisory findings regularly. CI runs both on every push.
+- Review `cargo audit` and `cargo deny` advisory findings regularly. CI runs both on pushes that affect Rust code, Cargo metadata, or workflow inputs.
 - Avoid `unwrap()` / `expect()` in library code — see [CONTRIBUTING.md](CONTRIBUTING.md#crate-conventions).
 - Any `unsafe` block must carry a `// SAFETY:` comment justifying the invariant.
 
