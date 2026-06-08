@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Check for breaking public API changes using cargo-public-api.
 # Install: rustup toolchain install nightly --profile minimal && cargo install cargo-public-api
-# Usage: ./scripts/check-public-api.sh [crate-name]
+# Usage: ./scripts/check-public-api.sh [package-name]
+# The facade package is rskit-toolkit, while its Rust crate name remains rskit.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
