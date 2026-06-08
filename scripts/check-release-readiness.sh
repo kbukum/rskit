@@ -80,8 +80,7 @@ for source_root in (root / "core", root / "contrib"):
             if (
                 not in_test_scope
                 and not stripped.startswith("#")
-                and not stripped.startswith("///")
-                and not stripped.startswith("//!")
+                and not stripped.startswith("//")
                 and hazard_re.search(line)
             ):
                 findings.append(f"{relative}:{line_no}:{line}")
@@ -118,7 +117,7 @@ for source_root in (root / "core", root / "contrib"):
         lines = path.read_text(encoding="utf-8").splitlines()
         for index, line in enumerate(lines):
             stripped = line.strip()
-            if stripped.startswith("///") or stripped.startswith("//!") or stripped.startswith("#"):
+            if stripped.startswith("//") or stripped.startswith("#"):
                 continue
             if not unsafe_re.search(line):
                 continue

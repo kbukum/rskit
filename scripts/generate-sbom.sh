@@ -43,11 +43,18 @@ for manifest in manifests:
         if package["id"] in members:
             package_by_dir[pathlib.Path(package["manifest_path"]).resolve().parent] = package["name"]
 
-for file in sorted(root.glob("core/**/*.cdx.json")) + sorted(root.glob("contrib/**/*.cdx.json")):
+sbom_files = sorted(root.glob("core/**/*.cdx.json")) + sorted(root.glob("contrib/**/*.cdx.json"))
+moved = 0
+for file in sbom_files:
     crate = package_by_dir.get(file.parent)
     if crate is None:
         continue
     shutil.move(str(file), out_dir / f"{crate}.cdx.json")
+    moved += 1
+
+if moved == 0:
+    print("error: cargo cyclonedx did not produce any workspace SBOM files", file=sys.stderr)
+    sys.exit(1)
 PY
 
 echo "✓ SBOMs written to ${OUT_DIR}"

@@ -175,6 +175,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **rskit-security**: narrowed to cross-transport TLS/security configuration instead of HTTP-only behavior.
 
 ### Fixed
+- **Release tooling**: release-readiness sweeps now ignore ordinary line
+  comments, SBOM generation fails fast when no artifacts are produced, and
+  release signing reports an empty SBOM directory explicitly.
 - **rskit-git**: CLI branch/tag deletion now treats successful commands as
   successful even when captured stdout/stderr exceeded process capture limits.
 - **rskit-bench**: file-backed run listing now skips unreadable or partially

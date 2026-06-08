@@ -77,7 +77,13 @@ jobs:
           COSIGN_EXPERIMENTAL: "1"
         run: |
           set -euo pipefail
-          for file in target/sbom/*.cdx.json; do
+          shopt -s nullglob
+          sboms=(target/sbom/*.cdx.json)
+          if [ "${#sboms[@]}" -eq 0 ]; then
+            echo "error: no SBOM files found in target/sbom" >&2
+            exit 1
+          fi
+          for file in "${sboms[@]}"; do
             cosign sign-blob --yes --bundle "${file}.bundle" "$file"
           done
       - name: Check crates.io token
