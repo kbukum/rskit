@@ -160,12 +160,15 @@ git push origin v0.2.1
 
 ## Pre-releases
 
+For the first public crates.io publish, prefer `v0.1.0-alpha.1` so downstream
+users can opt into an explicitly cautious preview before a final `v0.1.0`.
+
 ```sh
-git tag -s -a v0.3.0-rc.1 -m "v0.3.0-rc.1"
-git push origin v0.3.0-rc.1
-gh release create v0.3.0-rc.1 --prerelease --title "v0.3.0-rc.1" \
+git tag -s -a v0.1.0-alpha.1 -m "v0.1.0-alpha.1"
+git push origin v0.1.0-alpha.1
+gh release create v0.1.0-alpha.1 --prerelease --title "v0.1.0-alpha.1" \
   --notes-file /tmp/notes.md
 ```
 
-Pre-releases bypass the CHANGELOG check (the `-rc.N` / `-beta.N` suffix is
-detected by the release workflow).
+Pre-releases bypass the CHANGELOG check (the `-alpha.N`, `-beta.N`, or
+`-rc.N` suffix is detected by the release workflow).

@@ -299,7 +299,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **rskit-messaging**: Enhanced `InMemoryBroker` with message history, topic tracking, and reset
 - **rskit-messaging**: Test assertions — `assert_published()`, `assert_published_n()`, `assert_no_messages()`, `wait_for_message()`
 
-## [0.1.0] - 2026-04-26
+## [0.1.0-alpha.1] - 2026-04-26
 
 ### Added
 
@@ -380,5 +380,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### `rskit` (facade)
 - Re-exports all sub-crates under a single dependency
 
-[Unreleased]: https://github.com/kbukum/rskit/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/kbukum/rskit/releases/tag/v0.1.0
+[Unreleased]: https://github.com/kbukum/rskit/compare/v0.1.0-alpha.1...HEAD
+[0.1.0-alpha.1]: https://github.com/kbukum/rskit/releases/tag/v0.1.0-alpha.1
