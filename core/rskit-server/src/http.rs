@@ -511,7 +511,7 @@ fn load_certs(path: &str) -> AppResult<Vec<CertificateDer<'static>>> {
         .map_err(|error| {
             AppError::new(
                 ErrorCode::InvalidInput,
-                format!("failed to open HTTP TLS certificate file '{path}': {error}"),
+                format!("failed to load HTTP TLS certificate file '{path}': {error}"),
             )
             .with_cause(error)
         })?

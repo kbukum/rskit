@@ -135,10 +135,12 @@ echo "==> Running cargo-deny..."
 ./scripts/check-workspace-deps-sync.sh
 cargo deny --manifest-path core/Cargo.toml check --config deny.toml licenses advisories sources bans
 cargo deny --manifest-path contrib/Cargo.toml check --config deny.contrib.toml licenses advisories sources bans
+cargo deny --manifest-path examples/Cargo.toml check --config deny.examples.toml licenses advisories sources bans
 
 echo "==> Running cargo-audit..."
-cargo audit --file core/Cargo.lock
-cargo audit --file contrib/Cargo.lock
+cargo audit --deny warnings --file core/Cargo.lock
+cargo audit --deny warnings --file contrib/Cargo.lock
+cargo audit --deny warnings --file examples/Cargo.lock
 
 echo "==> Checking release fuzz targets exist..."
 for target in \

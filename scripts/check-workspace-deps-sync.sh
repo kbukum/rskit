@@ -84,40 +84,58 @@ def workspace_versions(manifest_path: Path) -> dict[str, DependencyVersion]:
     return versions
 
 
-core_path = root / "core" / "Cargo.toml"
-contrib_path = root / "contrib" / "Cargo.toml"
-core_manifest = load(core_path)
-contrib_manifest = load(contrib_path)
-core = workspace_versions(core_path)
-contrib = workspace_versions(contrib_path)
+workspace_paths = {
+    "core": root / "core" / "Cargo.toml",
+    "contrib": root / "contrib" / "Cargo.toml",
+    "examples": root / "examples" / "Cargo.toml",
+}
+workspace_manifests = {name: load(path) for name, path in workspace_paths.items()}
+workspace_dependency_versions = {
+    name: workspace_versions(path) for name, path in workspace_paths.items()
+}
 
 errors: list[str] = []
-core_workspace_version = core_manifest.get("workspace", {}).get("package", {}).get("version")
-contrib_workspace_version = contrib_manifest.get("workspace", {}).get("package", {}).get("version")
-if core_workspace_version != contrib_workspace_version:
+workspace_package_versions = {
+    name: manifest.get("workspace", {}).get("package", {}).get("version")
+    for name, manifest in workspace_manifests.items()
+}
+for name, version in sorted(workspace_package_versions.items()):
+    if version == workspace_package_versions["core"]:
+        continue
     errors.append(
         "workspace.package.version: "
-        f"core={core_workspace_version!r}, contrib={contrib_workspace_version!r}"
+        f"core={workspace_package_versions['core']!r}, {name}={version!r}"
     )
 
-for package in sorted(set(core) & set(contrib)):
-    core_dep = core[package]
-    contrib_dep = contrib[package]
-    if core_dep.version == contrib_dep.version:
+all_packages = sorted(
+    {
+        package
+        for versions in workspace_dependency_versions.values()
+        for package in versions
+    }
+)
+for package in all_packages:
+    owners = {
+        name: versions[package]
+        for name, versions in workspace_dependency_versions.items()
+        if package in versions
+    }
+    package_versions = {dep.version for dep in owners.values()}
+    if len(package_versions) <= 1:
         continue
 
-    errors.append(
-        f"{package}: core {core_dep.name}={core_dep.version!r}, "
-        f"contrib {contrib_dep.name}={contrib_dep.version!r}"
+    details = ", ".join(
+        f"{name} {dep.name}={dep.version!r}" for name, dep in sorted(owners.items())
     )
+    errors.append(f"{package}: {details}")
 
 if errors:
     print("workspace dependency version drift detected:", file=sys.stderr)
     for error in errors:
         print(f"  - {error}", file=sys.stderr)
     print(
-        "Keep shared external dependency versions aligned in core/Cargo.toml "
-        "and contrib/Cargo.toml, or remove the unused declaration.",
+        "Keep shared external dependency versions aligned in core/Cargo.toml, "
+        "contrib/Cargo.toml, and examples/Cargo.toml, or remove the unused declaration.",
         file=sys.stderr,
     )
     sys.exit(1)

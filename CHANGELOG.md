@@ -180,8 +180,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **Release tooling**: deny/audit hygiene now avoids stale hardcoded audit
-  ignores, keeps duplicate-version skips aligned with current lockfiles, and
-  uses the reduced-feature JWT backend to avoid vulnerable unused crypto paths.
+  ignores, fails on non-ignored cargo-audit warnings, keeps duplicate-version
+  skips aligned with current lockfiles, and uses the reduced-feature JWT backend
+  to avoid vulnerable unused crypto paths.
 - **Workspace hygiene**: core crates now stay on `rand` 0.9 where that lower
   stable line matches most upstream dependencies, avoiding unnecessary
   duplicate `rand`/`chacha20` families while `rand` 0.10 is only required
@@ -191,8 +192,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   skips while preserving documented skips for the remaining upstream rand,
   crypto, HTTP, and parser ecosystem splits.
 - **Workspace hygiene**: added a release guardrail that fails when shared
-  external workspace dependency versions drift between `core/Cargo.toml` and
-  `contrib/Cargo.toml`.
+  external workspace dependency versions drift across `core/Cargo.toml`,
+  `contrib/Cargo.toml`, and `examples/Cargo.toml`.
+- **Release tooling**: examples now participate in build, test, lint, docs,
+  dependency-sync, cargo-deny, and cargo-audit gates with a narrow examples
+  deny policy.
 - **rskit-storage**: explicitly enables the `rskit-fs` async feature it uses, so
   reduced package graphs no longer depend on workspace feature unification.
 - **Release tooling**: release-readiness sweeps now ignore ordinary line
