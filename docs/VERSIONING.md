@@ -72,7 +72,7 @@ rskit-errors = { path = "../core/rskit-errors", version = "0.1.0-alpha.1" }
 
 ## Release mechanics
 
-A single `v*` tag covers a repository release while crates remain lock-step. The exact version-bump, changelog, tagging, publish dry-run, SBOM, signing, and crates.io publishing steps live in [`RELEASING.md`](RELEASING.md). Keep this guide policy-focused so contributors do not have to reconcile duplicate runbooks.
+A single `v*` GitHub Release covers a repository release while crates remain lock-step. The exact version-bump, changelog, release publication, publish dry-run, SBOM, signing, and crates.io publishing steps live in [`RELEASING.md`](RELEASING.md). Keep this guide policy-focused so contributors do not have to reconcile duplicate runbooks.
 
 ## Compatibility policy
 

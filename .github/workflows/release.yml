@@ -1,15 +1,14 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*'
+  release:
+    types: [published]
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.release.tag_name }}
   cancel-in-progress: false
 
 jobs:
@@ -22,7 +21,29 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
+          ref: ${{ github.event.release.tag_name }}
           fetch-depth: 0
+      - name: Validate release target
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          case "$RELEASE_TAG" in
+            v*) ;;
+            *)
+              echo "error: release tag must start with v: ${RELEASE_TAG}" >&2
+              exit 1
+              ;;
+          esac
+          git fetch --force origin \
+            refs/heads/main:refs/remotes/origin/main \
+            refs/tags/"${RELEASE_TAG}":refs/tags/"${RELEASE_TAG}"
+          tag_commit="$(git rev-list -n 1 "${RELEASE_TAG}")"
+          main_commit="$(git rev-parse origin/main)"
+          if [ "$tag_commit" != "$main_commit" ]; then
+            echo "error: release tag ${RELEASE_TAG} must point at origin/main" >&2
+            exit 1
+          fi
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: "1.95"
@@ -76,16 +97,10 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: ./scripts/publish-dry-run.sh --publish
-      - name: Create or update GitHub release
+      - name: Upload generated assets to GitHub release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
-          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
-            gh release upload "${GITHUB_REF_NAME}" target/sbom/* --clobber
-          else
-            gh release create "${GITHUB_REF_NAME}" target/sbom/* \
-              --verify-tag \
-              --title "${GITHUB_REF_NAME}" \
-              --generate-notes
-          fi
+          gh release upload "${RELEASE_TAG}" target/sbom/* --clobber

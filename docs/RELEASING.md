@@ -6,9 +6,8 @@ The mechanical steps to cut a release of `rskit`. For *what* counts as a breakin
 
 - You are listed in `MAINTAINERS.md` and have push access to `kbukum/rskit`.
 - Your local clone is on `main` with no uncommitted changes.
-- `git`, `gh`, `cargo`, `cargo-nextest`, `cargo-deny`, `cargo-audit`, `cargo-llvm-cov`, `cargo-cyclonedx`, and `cosign` are on your `$PATH`.
-- Your commits are GPG-signed (`git config commit.gpgsign true`) — release tags must be signed.
-- A repository Actions secret named `CARGO_REGISTRY_TOKEN` is configured for crates.io publishing. The tag workflow skips crates.io publishing when this secret is absent.
+- `git`, `gh`, `cargo`, `cargo-nextest`, `cargo-deny`, `cargo-audit`, `cargo-llvm-cov`, `cargo-cyclonedx`, and `cosign` are on your `$PATH` for local pre-flight checks.
+- A repository Actions secret named `CARGO_REGISTRY_TOKEN` is configured for crates.io publishing. The release workflow skips crates.io publishing when this secret is absent.
 
 This repository has split Cargo workspaces:
 
@@ -72,7 +71,7 @@ make release-sbom
 make publish-dry-run
 ```
 
-If any check fails, fix it before tagging.
+If any check fails, fix it before publishing the GitHub Release.
 
 ### First-release publish rehearsal
 
@@ -82,13 +81,11 @@ If any check fails, fix it before tagging.
 2. Explicitly skips crates blocked by unpublished internal same-version dependencies and runs `cargo package --locked --list` as a packaging sanity check for each skipped crate.
 3. Prints a notice listing the skipped crates, so the rehearsal does not claim full crates.io dependency-chain validation.
 
-The reliable first-release gate is the combination of full workspace build/test/docs/audit/coverage, generated publish order, package-list sanity checks for blocked crates, and the actual tag workflow publishing crates in dependency order. If any real publish step fails, stop and fix forward before continuing the chain.
+The reliable first-release gate is the combination of full workspace build/test/docs/audit/coverage, generated publish order, package-list sanity checks for blocked crates, and the GitHub Release workflow publishing crates in dependency order. If any real publish step fails, stop and fix forward before continuing the chain.
 
-## 5. Create the release tag
+## 5. Publish the GitHub Release
 
-### Preferred: GitHub Release UI
-
-Use the GitHub Release UI when you want GitHub to create the tag and generate release notes:
+Use the GitHub Release UI as the publishing entrypoint:
 
 1. Open <https://github.com/kbukum/rskit/releases/new>.
 2. Set **Choose a tag** to `vX.Y.Z`, then choose **Create new tag: vX.Y.Z on publish**.
@@ -97,30 +94,20 @@ Use the GitHub Release UI when you want GitHub to create the tag and generate re
 5. For pre-releases such as `v0.1.0-alpha.1`, check **Set as a pre-release**.
 6. Publish the release.
 
-Publishing the GitHub Release creates the `v*` tag. The tag push triggers `.github/workflows/release.yml`, which runs the release gates, publishes crates, signs SBOMs, and uploads generated assets back to the same GitHub Release.
+Publishing the GitHub Release creates the `v*` tag and triggers `.github/workflows/release.yml` from the `release.published` event. The workflow verifies that the tag starts with `v` and points at `main`, then runs the release gates, publishes crates, signs SBOMs, and uploads generated assets back to the same GitHub Release.
 
-### CLI fallback
-
-```sh
-git fetch origin
-git checkout main
-git pull --ff-only
-git tag -s -a vX.Y.Z -m "vX.Y.Z"
-git push origin vX.Y.Z
-```
-
-The release workflow (`.github/workflows/release.yml`) is triggered by the tag push and will:
+Directly pushing a `v*` tag does not trigger publishing. The release workflow (`.github/workflows/release.yml`) is triggered by publishing a GitHub Release and will:
 
 - Re-run the full test + lint + audit suite on the tagged commit.
 - Generate release coverage reports and enforce release coverage thresholds.
 - Dry-run publishing where same-version internal dependencies already exist on crates.io, package-list crates blocked by unpublished internal dependencies, then publish every publishable workspace crate to crates.io in dependency order when `CARGO_REGISTRY_TOKEN` is configured.
 - Generate and attach a CycloneDX SBOM (`cargo-cyclonedx`).
 - Sign the release SBOMs with [cosign](https://github.com/sigstore/cosign).
-- Create the GitHub Release for the verified tag when one does not already exist, or upload generated assets to the existing GitHub Release created from the UI.
+- Upload generated assets to the GitHub Release that triggered the workflow.
 
 ## 6. Verify the workflow release
 
-Watch the tag workflow until it completes:
+Watch the release workflow until it completes:
 
 ```sh
 RUN_ID=$(gh run list --workflow Release --limit 1 --json databaseId --jq '.[0].databaseId')
@@ -147,17 +134,8 @@ If `docs.rs` fails to build, investigate the build log on `https://docs.rs/crate
 
 ## Hotfix releases
 
-Hotfixes follow the same flow but skip the `[Unreleased]` rotation if the fix is targeted at an older line:
-
-```sh
-git checkout v0.2.0
-git checkout -b hotfix/v0.2.1
-# … apply fix …
-# add a `## [0.2.1] - YYYY-MM-DD` section to CHANGELOG.md
-git tag -s -a v0.2.1 -m "v0.2.1"
-git push origin v0.2.1
-```
+Hotfixes follow the same GitHub Release flow but skip the `[Unreleased]` rotation if the fix is targeted at an older line. Prepare the hotfix commit, add a `## [vX.Y.Z] - YYYY-MM-DD` section to `CHANGELOG.md`, merge the hotfix line, then publish the GitHub Release from the Releases UI.
 
 ## Pre-releases
 
-For the first public crates.io publish, prefer `v0.1.0-alpha.1` so downstream users can opt into an explicitly cautious preview before a final `v0.1.0`. Follow the same release flow above and check **Set as a pre-release** in the GitHub Release UI before publishing. If you use the CLI fallback, mark the generated GitHub Release as a prerelease after the workflow creates it.
+For the first public crates.io publish, prefer `v0.1.0-alpha.1` so downstream users can opt into an explicitly cautious preview before a final `v0.1.0`. Follow the same release flow above and check **Set as a pre-release** in the GitHub Release UI before publishing.
