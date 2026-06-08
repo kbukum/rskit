@@ -2,7 +2,7 @@
 
 FFmpeg CLI backend for video/audio processing.
 
-[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/rskit-media-ffmpeg.svg)](https://crates.io/crates/rskit-media-ffmpeg) [![docs.rs](https://docs.rs/rskit-media-ffmpeg/badge.svg)](https://docs.rs/rskit-media-ffmpeg) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![MSRV: 1.91](https://img.shields.io/badge/MSRV-1.91-orange.svg)](https://github.com/kbukum/rskit/blob/main/contrib/Cargo.toml)
+[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/rskit-media-ffmpeg.svg)](https://crates.io/crates/rskit-media-ffmpeg) [![docs.rs](https://docs.rs/rskit-media-ffmpeg/badge.svg)](https://docs.rs/rskit-media-ffmpeg) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/kbukum/rskit/blob/main/LICENSE) [![MSRV: 1.91](https://img.shields.io/badge/MSRV-1.91-orange.svg)](https://github.com/kbukum/rskit/blob/main/contrib/Cargo.toml)
 
 ## Features
 

@@ -39,9 +39,8 @@ jobs:
             refs/heads/main:refs/remotes/origin/main \
             refs/tags/"${RELEASE_TAG}":refs/tags/"${RELEASE_TAG}"
           tag_commit="$(git rev-list -n 1 "${RELEASE_TAG}")"
-          main_commit="$(git rev-parse origin/main)"
-          if [ "$tag_commit" != "$main_commit" ]; then
-            echo "error: release tag ${RELEASE_TAG} must point at origin/main" >&2
+          if ! git merge-base --is-ancestor "$tag_commit" origin/main; then
+            echo "error: release tag ${RELEASE_TAG} must be reachable from origin/main" >&2
             exit 1
           fi
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable

@@ -2,7 +2,7 @@
 
 File I/O, local storage, temp files, MIME detection, and the shared storage backend registry.
 
-[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/rskit-storage.svg)](https://crates.io/crates/rskit-storage) [![docs.rs](https://docs.rs/rskit-storage/badge.svg)](https://docs.rs/rskit-storage) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![MSRV: 1.91](https://img.shields.io/badge/MSRV-1.91-orange.svg)](https://github.com/kbukum/rskit/blob/main/core/Cargo.toml)
+[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/rskit-storage.svg)](https://crates.io/crates/rskit-storage) [![docs.rs](https://docs.rs/rskit-storage/badge.svg)](https://docs.rs/rskit-storage) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/kbukum/rskit/blob/main/LICENSE) [![MSRV: 1.91](https://img.shields.io/badge/MSRV-1.91-orange.svg)](https://github.com/kbukum/rskit/blob/main/core/Cargo.toml)
 
 ## Capabilities
 

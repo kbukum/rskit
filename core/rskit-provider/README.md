@@ -2,7 +2,7 @@
 
 Typed async interaction traits (`Provider`, `RequestResponse`, `Stream`, `Sink`, `Duplex`) with a Tower bridge.
 
-[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/rskit-provider.svg)](https://crates.io/crates/rskit-provider) [![docs.rs](https://docs.rs/rskit-provider/badge.svg)](https://docs.rs/rskit-provider) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![MSRV: 1.91](https://img.shields.io/badge/MSRV-1.91-orange.svg)](https://github.com/kbukum/rskit/blob/main/core/Cargo.toml)
+[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/rskit-provider.svg)](https://crates.io/crates/rskit-provider) [![docs.rs](https://docs.rs/rskit-provider/badge.svg)](https://docs.rs/rskit-provider) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/kbukum/rskit/blob/main/LICENSE) [![MSRV: 1.91](https://img.shields.io/badge/MSRV-1.91-orange.svg)](https://github.com/kbukum/rskit/blob/main/core/Cargo.toml)
 
 ## Features
 
