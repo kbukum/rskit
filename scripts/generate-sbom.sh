@@ -6,8 +6,14 @@ cd "$ROOT"
 
 OUT_DIR_INPUT="${1:-target/sbom}"
 case "$OUT_DIR_INPUT" in
-    ""|"/"|.|/*|*"/../"*|../*|*/..)
-        echo "error: output directory must be a non-empty repo-relative path without '..': ${OUT_DIR_INPUT}" >&2
+    ""|"/"|.|/*|*"/../"*|../*|*/..|target|target/)
+        echo "error: output directory must be a non-empty repo-relative target subdirectory without '..': ${OUT_DIR_INPUT}" >&2
+        exit 2
+        ;;
+    target/*)
+        ;;
+    *)
+        echo "error: output directory must be under target/: ${OUT_DIR_INPUT}" >&2
         exit 2
         ;;
 esac

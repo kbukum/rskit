@@ -189,6 +189,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Release tooling/rskit-bench**: action SHA-pin guardrails now reject dotted
   version tags, and benchmark SVG output has regression coverage for malformed
   duplicate quote attributes.
+- **Release tooling**: publish ordering no longer depends on Python 3.9-only
+  path APIs, and SBOM cleanup is constrained to `target/` subdirectories.
 - **rskit-git**: CLI branch/tag deletion now treats successful commands as
   successful even when captured stdout/stderr exceeded process capture limits.
 - **rskit-bench**: file-backed run listing now skips unreadable or partially

@@ -76,6 +76,13 @@ packages: dict[str, dict[str, str]] = {}
 edges: dict[str, set[str]] = defaultdict(set)
 metadata_documents: list[dict] = []
 
+def is_relative_to(path: pathlib.Path, parent: pathlib.Path) -> bool:
+    try:
+        path.relative_to(parent)
+    except ValueError:
+        return False
+    return True
+
 for workspace_manifest in workspace_manifests:
     data = json.loads(
         subprocess.check_output(
@@ -98,7 +105,10 @@ for workspace_manifest in workspace_manifests:
             continue
         if package.get("publish") == []:
             continue
-        if not (manifest_path.is_relative_to(root / "core") or manifest_path.is_relative_to(root / "contrib")):
+        if not (
+            is_relative_to(manifest_path, root / "core")
+            or is_relative_to(manifest_path, root / "contrib")
+        ):
             continue
         packages[package["id"]] = {
             "name": package["name"],
