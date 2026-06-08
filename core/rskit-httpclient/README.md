@@ -85,10 +85,7 @@ let resp = client.send(
 ).await?;
 ```
 
-`Auth::header()` intentionally exposes credential values only at the final
-request-application boundary. Do not use `with_header` for bearer/API-key
-credentials; prefer `with_auth` or per-request auth helpers so debug output keeps
-credential fields redacted.
+`Auth::header()` intentionally exposes credential values only at the final request-application boundary. Do not use `with_header` for bearer/API-key credentials; prefer `with_auth` or per-request auth helpers so debug output keeps credential fields redacted.
 
 ## Transport hardening
 
@@ -112,9 +109,7 @@ let config = HttpClientConfig::new()
     .with_max_response_body_bytes(2 * 1024 * 1024);
 ```
 
-Hostname validation happens before DNS resolution, so host allow-lists are the
-preferred protection for high-trust clients that must not follow arbitrary
-destination names.
+Hostname validation happens before DNS resolution, so host allow-lists are the preferred protection for high-trust clients that must not follow arbitrary destination names.
 
 ## Error Handling
 

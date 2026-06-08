@@ -2,11 +2,7 @@
 
 Test utilities, mock providers, and assertion helpers for rskit services.
 
-[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml)
-[![crates.io](https://img.shields.io/crates/v/rskit-testutil.svg)](https://crates.io/crates/rskit-testutil)
-[![docs.rs](https://docs.rs/rskit-testutil/badge.svg)](https://docs.rs/rskit-testutil)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![MSRV: 1.91](https://img.shields.io/badge/MSRV-1.91-orange.svg)](https://www.rust-lang.org/)
+[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/rskit-testutil.svg)](https://crates.io/crates/rskit-testutil) [![docs.rs](https://docs.rs/rskit-testutil/badge.svg)](https://docs.rs/rskit-testutil) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/kbukum/rskit/blob/main/LICENSE) [![MSRV: 1.91](https://img.shields.io/badge/MSRV-1.91-orange.svg)](https://www.rust-lang.org/)
 
 ## Features
 
@@ -16,16 +12,13 @@ Test utilities, mock providers, and assertion helpers for rskit services.
 - `TestWorkspace` / `test_workspace!` — managed temp workspaces with fixture loading and copying
 - Thread-safe via `parking_lot::Mutex`
 
-`TestWorkspace` is the generic fixture harness for rskit tests. Use
-`with_fixture_dir` when fixtures live outside the default crate layout, or
-`test_workspace!` when a crate follows the conventional `tests/fixtures`
-directory.
+`TestWorkspace` is the generic fixture harness for rskit tests. Use `with_fixture_dir` when fixtures live outside the default crate layout, or `test_workspace!` when a crate follows the conventional `tests/fixtures` directory.
 
 ## Usage
 
 ```toml
 [dev-dependencies]
-rskit-testutil = "0.1"
+rskit-testutil = "0.1.0-alpha.1"
 ```
 
 ```rust

@@ -1,6 +1,6 @@
-# rskit-llm — LLM provider abstractions
+# rskit-llm-openai — OpenAI provider adapter
 
-`rskit-llm` owns the SDK-free completion contract for chat models: requests, responses, canonical tool-use blocks, capability metadata, and the single `Provider` trait used across the Rust kit.
+`rskit-llm-openai` registers an OpenAI-compatible chat provider for the canonical `rskit-llm` registry. It uses `rskit-httpclient` for outbound transport and redacts API keys through `rskit-util::SecretString`.
 
 ## Install
 
@@ -15,7 +15,6 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ## Quick start
 
 ```rust
-use futures::StreamExt;
 use rskit_llm::{CompletionRequest, Registry, user};
 use rskit_llm_openai::{self as openai, Config};
 use rskit_util::SecretString;
@@ -30,27 +29,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         embedding_model: "text-embedding-3-small".into(),
         embedding_dimensions: Some(1536),
     })?;
+
     let provider = registry.build("openai")?;
+    let response = provider
+        .complete(CompletionRequest {
+            model: "gpt-4o".into(),
+            messages: vec![user("Summarize explicit provider registration.")],
+            max_tokens: Some(128),
+            temperature: Some(0.2),
+            stream: false,
+            tools: None,
+            tool_choice: None,
+        })
+        .await?;
 
-    let request = CompletionRequest {
-        model: "gpt-4o".into(),
-        messages: vec![user("Summarize why explicit registration is safer.")],
-        max_tokens: Some(128),
-        temperature: Some(0.2),
-        stream: false,
-        tools: None,
-        tool_choice: None,
-    };
-
-    let response = provider.complete(request.clone()).await?;
     println!("{}", response.text());
-
-    let mut stream = provider.stream(request).await?;
-    while let Some(_event) = stream.next().await {}
     Ok(())
 }
 ```
 
 ## When to use
 
-Use `rskit-llm` for canonical chat completions and stream events. Use `rskit-inference` for serving-runtime protocols such as Triton, vLLM, and TGI.
+Use this adapter when you want the canonical `rskit-llm::Provider` API backed by OpenAI or an OpenAI-compatible endpoint. Use `rskit-llm` directly for provider-agnostic contracts and `rskit-embedding` plus `embedding_provider` when you need embeddings.

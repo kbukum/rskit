@@ -1,13 +1,8 @@
 # rskit-storage
 
-File I/O, local storage, temp files, MIME detection, and the shared storage
-backend registry.
+File I/O, local storage, temp files, MIME detection, and the shared storage backend registry.
 
-[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml)
-[![crates.io](https://img.shields.io/crates/v/rskit-storage.svg)](https://crates.io/crates/rskit-storage)
-[![docs.rs](https://docs.rs/rskit-storage/badge.svg)](https://docs.rs/rskit-storage)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![MSRV: 1.85](https://img.shields.io/badge/MSRV-1.85-orange.svg)](https://blog.rust-lang.org/2025/02/20/Rust-1.85.0.html)
+[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/rskit-storage.svg)](https://crates.io/crates/rskit-storage) [![docs.rs](https://docs.rs/rskit-storage/badge.svg)](https://docs.rs/rskit-storage) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/kbukum/rskit/blob/main/LICENSE) [![MSRV: 1.91](https://img.shields.io/badge/MSRV-1.91-orange.svg)](https://github.com/kbukum/rskit/blob/main/core/Cargo.toml)
 
 ## Capabilities
 
@@ -17,9 +12,7 @@ backend registry.
 - `detect_mime` / `detect_kind` — magic-byte + extension fallback
 - `FileStore` trait with a local filesystem backend
 - `StorageRegistry` for explicit, config-driven backend selection
-- local backend keys and write targets are confined under the configured root
-  and reject `..`, absolute path escapes, and symlink traversal before creating
-  parent directories
+- local backend keys and write targets are confined under the configured root and reject `..`, absolute path escapes, and symlink traversal before creating parent directories
 - `TempFile` / `TempDir` — RAII-managed temporaries (auto-deleted on drop)
 - Async streaming reads and file transfers
 
@@ -28,14 +21,13 @@ Cloud backends live in opt-in adapter crates:
 - `rskit-storage-s3` for Amazon S3 and S3-compatible stores
 - `rskit-storage-gcs` for Google Cloud Storage
 
-Adapter crates register through an application-owned `StorageRegistry`; importing
-an adapter crate has no side effects.
+Adapter crates register through an application-owned `StorageRegistry`; importing an adapter crate has no side effects.
 
 ## Usage
 
 ```toml
 [dependencies]
-rskit-storage = "0.1"
+rskit-storage = "0.1.0-alpha.1"
 ```
 
 ```rust

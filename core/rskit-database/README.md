@@ -1,7 +1,6 @@
 # rskit-database
 
-Vendor-neutral database contracts with an explicit backend registry and an
-in-memory backend for tests and local development.
+Vendor-neutral database contracts with an explicit backend registry and an in-memory backend for tests and local development.
 
 ```rust,no_run
 use rskit_database::{DatabaseConfig, DatabaseQuery, DatabaseRegistry, register_memory};

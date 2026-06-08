@@ -2,16 +2,11 @@
 
 L0 domain-free utility primitives for the rskit ecosystem.
 
-`rskit-util` owns low-level, domain-free primitives that are useful across
-foundation and higher-level crates. It has no internal workspace crate
-dependencies; small external dependencies are limited to capabilities that must
-live at L0, such as serde support and zeroizing secret storage.
+`rskit-util` owns low-level, domain-free primitives that are useful across foundation and higher-level crates. It has no internal workspace crate dependencies; small external dependencies are limited to capabilities that must live at L0, such as serde support and zeroizing secret storage.
 
 ## What belongs here
 
-Use `rskit-util` for reusable helpers that have no service, transport, config,
-storage, validation, or AI domain ownership. Domain-owned helpers stay in their
-owning crates:
+Use `rskit-util` for reusable helpers that have no service, transport, config, storage, validation, or AI domain ownership. Domain-owned helpers stay in their owning crates:
 
 - Secret masking primitive: `rskit_util::SecretString`
 - Validation rules and `AppError` conversion: `rskit-validation`
@@ -36,7 +31,7 @@ owning crates:
 
 ```toml
 [dependencies]
-rskit-util = "0.1"
+rskit-util = "0.1.0-alpha.1"
 ```
 
 ### Secret values

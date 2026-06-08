@@ -60,6 +60,7 @@ jobs:
               - 'rust-toolchain.toml'
               - 'rustfmt.toml'
               - '.github/workflows/ci.yml'
+              - '.github/workflows/release.yml'
       - name: Detect affected domains
         id: domains
         if: github.event_name == 'pull_request'
@@ -105,9 +106,6 @@ jobs:
     if: needs.changes.outputs.rust-code == 'true'
     needs: changes
     runs-on: ubuntu-latest
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
@@ -116,7 +114,6 @@ jobs:
           components: clippy
       - name: Install mold linker
         run: sudo apt-get install -y mold
-      - uses: mozilla-actions/sccache-action@9e7fa8a12102821edf02ca5dbea1acd0f89a2696  # v0.0.10
       - uses: Swatinem/rust-cache@874b06e0d3f63371f9ddbee43d4c8ebc73021583  # v2.7.8
         with:
           workspaces: |
@@ -136,9 +133,6 @@ jobs:
     if: needs.changes.outputs.rust-code == 'true'
     needs: changes
     runs-on: ${{ matrix.os }}
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
     strategy:
       fail-fast: false
       matrix:
@@ -149,7 +143,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: ${{ matrix.rust }}
-      - uses: mozilla-actions/sccache-action@9e7fa8a12102821edf02ca5dbea1acd0f89a2696  # v0.0.10
       - name: Install mold linker (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get install -y mold
@@ -180,14 +173,11 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RUSTDOCFLAGS: "-D warnings"
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: stable
-      - uses: mozilla-actions/sccache-action@9e7fa8a12102821edf02ca5dbea1acd0f89a2696  # v0.0.10
       - name: Install mold linker
         run: sudo apt-get install -y mold
       - uses: Swatinem/rust-cache@874b06e0d3f63371f9ddbee43d4c8ebc73021583  # v2.7.8
@@ -209,16 +199,12 @@ jobs:
     if: needs.changes.outputs.rust-code == 'true'
     needs: changes
     runs-on: ubuntu-latest
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: "1.95"
           components: llvm-tools-preview
-      - uses: mozilla-actions/sccache-action@9e7fa8a12102821edf02ca5dbea1acd0f89a2696  # v0.0.10
       - name: Install mold linker
         run: sudo apt-get install -y mold
       - uses: Swatinem/rust-cache@874b06e0d3f63371f9ddbee43d4c8ebc73021583  # v2.7.8

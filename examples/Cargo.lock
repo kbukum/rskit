@@ -15,7 +15,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "indicatif",
- "rskit",
+ "rskit-toolkit",
  "tokio",
  "tokio-util",
  "tracing",
@@ -1087,7 +1087,7 @@ dependencies = [
 name = "media-demo"
 version = "0.1.0-alpha.1"
 dependencies = [
- "rskit",
+ "rskit-toolkit",
  "tokio",
 ]
 
@@ -1574,31 +1574,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "47b34b781b31e5d73e9fbc8689c70551fd1ade9a19e3e28cfec8580a79290cc4"
 
 [[package]]
-name = "rskit"
-version = "0.1.0-alpha.1"
-dependencies = [
- "rskit-bootstrap",
- "rskit-cli",
- "rskit-component",
- "rskit-config",
- "rskit-errors",
- "rskit-fs",
- "rskit-logging",
- "rskit-media",
- "rskit-media-audio",
- "rskit-media-ffmpeg",
- "rskit-media-image",
- "rskit-pipeline",
- "rskit-provider",
- "rskit-resilience",
- "rskit-storage",
- "rskit-util",
- "rskit-validation",
- "rskit-worker",
- "validator",
-]
-
-[[package]]
 name = "rskit-bootstrap"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -1864,6 +1839,31 @@ dependencies = [
  "tempfile",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "rskit-toolkit"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "rskit-bootstrap",
+ "rskit-cli",
+ "rskit-component",
+ "rskit-config",
+ "rskit-errors",
+ "rskit-fs",
+ "rskit-logging",
+ "rskit-media",
+ "rskit-media-audio",
+ "rskit-media-ffmpeg",
+ "rskit-media-image",
+ "rskit-pipeline",
+ "rskit-provider",
+ "rskit-resilience",
+ "rskit-storage",
+ "rskit-util",
+ "rskit-validation",
+ "rskit-worker",
+ "validator",
 ]
 
 [[package]]

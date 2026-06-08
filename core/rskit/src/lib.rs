@@ -24,12 +24,14 @@
 //!
 //! | Feature | Extra crate |
 //! |---------|-------------|
-//! | `server` | `rskit-server` (service-facing HTTP + lifecycle) |
+//! | `server` | `rskit-server` (service-facing server abstractions) |
 //! | `grpc`   | `rskit-grpc` (aligned gRPC client/server transport) |
 //! | `encryption` | `rskit-encryption` (encryption helpers) |
-//! | `http`   | `rskit-http` (axum transport details) |
+//! | `http`   | `rskit-http` (framework-neutral HTTP abstractions) |
 //! | `httpclient` | `rskit-httpclient` (bounded HTTP client) |
 //! | `auth`   | `rskit-auth` (JWT, OIDC, password) |
+//! | `auth-jwt` | JWT support in `rskit-auth` |
+//! | `auth-oidc` | OIDC support in `rskit-auth` |
 //! | `di`     | `rskit-di` (dependency injection) |
 //! | `database` | `rskit-database` (core + memory backend) |
 //! | `cache`  | `rskit-cache` (core + memory adapter) |
@@ -67,8 +69,8 @@
 //! | `prompt` | Prompt schema helpers from `rskit-ai` |
 //! | `skill` | `rskit-skill` (skill manifests and registries) |
 //! | `tool` | `rskit-tool` (tool contracts) |
-//! | `agent` | `rskit-agent` (agent contracts) |
-//! | `mcp` | `rskit-mcp` (Model Context Protocol support) |
+//! | `agent` | `rskit-agent` (agentic turn-loop engine) |
+//! | `mcp` | `rskit-mcp` (tool registry to Model Context Protocol bridge) |
 //! | `storage` | `rskit-storage` (File I/O, storage) |
 //! | `media`  | `rskit-media` (media types, pipeline) |
 //! | `media-ffmpeg` | `rskit-media-ffmpeg` (`FFmpeg` backend) |
@@ -90,7 +92,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! rskit = { version = "0.1", features = ["full"] }
+//! rskit-toolkit = { version = "0.1.0-alpha.1", features = ["full"] }
 //! ```
 
 #![warn(missing_docs)]
@@ -159,7 +161,7 @@ pub use rskit_hook as hook;
 
 // ── Feature-gated sub-crate facades ──────────────────────────────────────────
 
-/// gRPC server component (opt-in via `server` feature).
+/// Service-facing server abstractions and lifecycle-managed transports.
 #[cfg(feature = "server")]
 pub use rskit_server as server;
 
@@ -171,7 +173,7 @@ pub use rskit_grpc as grpc;
 #[cfg(feature = "encryption")]
 pub use rskit_encryption as encryption;
 
-/// Axum transport details used by `rskit-server`.
+/// Framework-neutral HTTP abstractions and Tower adapters.
 #[cfg(feature = "http")]
 pub use rskit_http as http;
 
@@ -243,7 +245,7 @@ pub use rskit_dag as dag;
 #[cfg(feature = "genai")]
 pub use rskit_ai as genai;
 
-/// LLM provider abstractions for `OpenAI` and `Anthropic`.
+/// LLM provider abstractions and shared chat/completion contracts.
 #[cfg(feature = "llm")]
 pub use rskit_llm as llm;
 
@@ -275,11 +277,11 @@ pub use rskit_inference as inference;
 #[cfg(feature = "inference-triton")]
 pub use rskit_inference_triton as inference_triton;
 
-/// vLLM raw REST inference adapter skeleton.
+/// vLLM REST inference adapter.
 #[cfg(feature = "inference-vllm")]
 pub use rskit_inference_vllm as inference_vllm;
 
-/// Hugging Face TGI REST inference adapter skeleton.
+/// Hugging Face TGI REST inference adapter.
 #[cfg(feature = "inference-tgi")]
 pub use rskit_inference_tgi as inference_tgi;
 
@@ -295,11 +297,11 @@ pub use rskit_skill as skill;
 #[cfg(feature = "tool")]
 pub use rskit_tool as tool;
 
-/// Agent contracts and orchestration primitives.
+/// Agentic loop orchestration over providers, tools, and hooks.
 #[cfg(feature = "agent")]
 pub use rskit_agent as agent;
 
-/// Model Context Protocol contracts.
+/// Bridge between the rskit tool registry and Model Context Protocol.
 #[cfg(feature = "mcp")]
 pub use rskit_mcp as mcp;
 

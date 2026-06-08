@@ -4,8 +4,7 @@
 
 ## Motivation
 
-<!-- Why is this change needed? What problem does it solve? -->
-<!-- Link to related issues: Fixes #123 or Closes #456 -->
+<!-- Why is this change needed? What problem does it solve? --> <!-- Link to related issues: Fixes #123 or Closes #456 -->
 
 ## Type of Change
 
@@ -37,11 +36,11 @@
 
 <!-- Describe how you tested your changes -->
 
-- [ ] `cargo test --workspace` passes locally
-- [ ] `cargo clippy --workspace --all-targets -- -D warnings` is clean
-- [ ] `cargo fmt --check` passes
-- [ ] `cargo deny check` passes (advisories, bans, licenses, sources)
-- [ ] `cargo doc --workspace --no-deps` builds without warnings
+- [ ] `make test` or an affected-crate equivalent passes locally
+- [ ] `make lint` or an affected-crate equivalent is clean
+- [ ] `make fmt-check` passes
+- [ ] `make deny` or the affected workspace policy check passes
+- [ ] `make doc` or an affected-crate equivalent builds without warnings
 - [ ] Manual testing performed (describe below if applicable)
 
 ### Test Evidence
@@ -49,7 +48,7 @@
 <!-- Optional: show test output, screenshots, or logs demonstrating your changes work -->
 
 ```
-$ cargo test -p rskit-<name>
+$ make test C=rskit-<name>
 ...
 ```
 
@@ -73,9 +72,9 @@ or link the corresponding sibling issue. -->
 - [ ] New public enums are `#[non_exhaustive]` if they may grow
 - [ ] No `unwrap()` / `expect()` in library code (tests are fine)
 - [ ] Any new `unsafe` block has a `// SAFETY:` comment
-- [ ] `Cargo.lock` updated and committed if dependencies changed
+- [ ] Affected split workspace lockfiles updated and committed if dependencies changed
 - [ ] CHANGELOG entry added under `[Unreleased]`
-- [ ] New dependencies (if any) are justified and pass `cargo deny check`
+- [ ] New dependencies (if any) are justified and pass the relevant `make deny` check
 
 ## Additional Notes
 

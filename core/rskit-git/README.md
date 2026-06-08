@@ -13,7 +13,7 @@ Composable git repository interfaces backed by libgit2 and the `git` CLI.
 
 ```toml
 [dependencies]
-rskit-git = "0.1"
+rskit-git = "0.1.0-alpha.1"
 ```
 
 ```rust
@@ -25,7 +25,4 @@ let status = repo.status()?;
 # Ok::<(), rskit_git::AppError>(())
 ```
 
-The CLI backend builds commands with `ProcessSpec::new("git").args(...)` and
-sets `GIT_TERMINAL_PROMPT=0` to avoid interactive credential prompts in
-automation. Command failures preserve argv, exit code, stdout/stderr, and
-truncation metadata.
+The CLI backend builds commands with `ProcessSpec::new("git").args(...)` and sets `GIT_TERMINAL_PROMPT=0` to avoid interactive credential prompts in automation. Command failures preserve argv, exit code, stdout/stderr, and truncation metadata.

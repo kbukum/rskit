@@ -157,7 +157,7 @@ def visit(package_id: str) -> None:
 for package_id in sorted(packages, key=lambda item: packages[item]["name"]):
     visit(package_id)
 
-ordered.sort(key=lambda package_id: packages[package_id]["name"] == "rskit")
+ordered.sort(key=lambda package_id: packages[package_id]["name"] == "rskit-toolkit")
 
 for package_id in ordered:
     package = packages[package_id]

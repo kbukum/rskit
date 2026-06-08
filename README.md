@@ -1,14 +1,14 @@
 # rskit
 
 [![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml)
-[![Crates.io](https://img.shields.io/crates/v/rskit.svg)](https://crates.io/crates/rskit)
-[![docs.rs](https://img.shields.io/docsrs/rskit)](https://docs.rs/rskit)
+[![Crates.io](https://img.shields.io/crates/v/rskit-toolkit.svg)](https://crates.io/crates/rskit-toolkit)
+[![docs.rs](https://img.shields.io/docsrs/rskit-toolkit)](https://docs.rs/rskit-toolkit)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![MSRV: 1.91](https://img.shields.io/badge/MSRV-1.91-orange.svg)](core/Cargo.toml)
 
 **A production-grade Rust toolkit for building scalable, resilient services.** Structured errors, layered config, OpenTelemetry observability, typestate lifecycle, tower-based resilience, async pipelines, worker pools, security policy, and tonic gRPC — composable building blocks built on the standard Rust async ecosystem.
 
-> **Status — pre-1.0.** Public surface is semver-stable per crate; breaking changes are documented in [`CHANGELOG.md`](CHANGELOG.md). See [`docs/policy/SEMVER.md`](docs/policy/SEMVER.md). MSRV bumps are minor version changes.
+> **Status — pre-1.0.** Crates are versioned per crate and currently released in lock-step. Breaking changes are allowed before `1.0`, documented in [`CHANGELOG.md`](CHANGELOG.md), and governed by [`docs/policy/SEMVER.md`](docs/policy/SEMVER.md). MSRV bumps are minor version changes during `0.x`.
 
 > **Sibling projects.** [**gokit**](https://github.com/kbukum/gokit) (Go) · rskit (Rust, this repo) · [**pykit**](https://github.com/kbukum/pykit) (Python). Public abstractions (`AppError`, `Component`, `Provider`, `Pipeline`, lifecycle hooks) are evaluated for parity across all three.
 
@@ -33,7 +33,7 @@ CI still runs the full workspace; on pull requests the `changes` job also publis
 
 ## Highlights
 
-- **Cargo workspace** — facade crate (`rskit`) + 40+ independent `rskit-*` sub-crates. Add only what you need.
+- **Split Cargo workspaces** — facade package (`rskit-toolkit`, imported as `rskit`), foundation crates under `core/`, adapters under `contrib/`, and examples under `examples/`. There is no root `Cargo.toml`; use the Makefile or pass the correct `--manifest-path`.
 - **Idiomatic Rust** — `tower::Layer` middleware, `futures::Stream` extensions, `parking_lot` non-poisoning mutexes, `CancellationToken` cooperative shutdown, `JoinSet` worker pools.
 - **Compile-time lifecycle safety** — typestate `App<S, C>` makes invalid lifecycle transitions impossible to write.
 - **Production resilience** — `governor` rate limiter, circuit breaker, retry with backoff + jitter, bulkhead — all available as `tower::Layer`.
@@ -45,7 +45,7 @@ CI still runs the full workspace; on pull requests the `changes` job also publis
 ```toml
 # Facade — always-on foundation modules plus opt-in features/adapters
 [dependencies]
-rskit = "0.1"
+rskit-toolkit = "0.1.0-alpha.1"
 tokio = { version = "1", features = ["full"] }
 ```
 
@@ -53,20 +53,19 @@ Enable optional modules through facade features:
 
 ```toml
 [dependencies]
-rskit = { version = "0.1", features = ["server", "cli", "storage-s3"] }
+rskit-toolkit = { version = "0.1.0-alpha.1", features = ["server", "cli", "storage-s3"] }
 ```
 
 Or pick only what you need:
 
 ```toml
 [dependencies]
-rskit-errors     = "0.1"
-rskit-resilience = "0.1"
-rskit-worker     = "0.1"
+rskit-errors     = "0.1.0-alpha.1"
+rskit-resilience = "0.1.0-alpha.1"
+rskit-worker     = "0.1.0-alpha.1"
 ```
 
-Requires **Rust 1.91+** (declared by workspace `rust-version`). The pinned
-development and CI toolchain in `rust-toolchain.toml` may be newer.
+Requires **Rust 1.91+** (declared by workspace `rust-version`). The pinned development and CI toolchain in `rust-toolchain.toml` may be newer. See [`docs/VERSIONING.md`](docs/VERSIONING.md) for the split-workspace versioning policy.
 
 ## Quickstart
 
@@ -92,12 +91,15 @@ async fn main() -> AppResult<()> {
 }
 ```
 
-More examples (resilience, pipelines, workers, tower layers, …) → [`docs/EXAMPLES.md`](docs/EXAMPLES.md). Full crate list → [`docs/PACKAGES.md`](docs/PACKAGES.md).
+More examples (resilience, pipelines, workers, tower layers, ...) -> [`docs/EXAMPLES.md`](docs/EXAMPLES.md). Full crate list -> [`docs/PACKAGES.md`](docs/PACKAGES.md).
 
 ## Documentation
 
+Start with the [`developer documentation hub`](docs/README.md) if you are not sure which guide you need.
+
 | Topic | Link |
 |---|---|
+| Developer docs hub | [`docs/README.md`](docs/README.md) |
 | All crates | [`docs/PACKAGES.md`](docs/PACKAGES.md) |
 | Usage examples | [`docs/EXAMPLES.md`](docs/EXAMPLES.md) |
 | Design decisions & gokit comparison | [`docs/DESIGN.md`](docs/DESIGN.md) |
@@ -106,7 +108,7 @@ More examples (resilience, pipelines, workers, tower layers, …) → [`docs/EXA
 | Versioning & releases | [`docs/VERSIONING.md`](docs/VERSIONING.md) · [`docs/RELEASING.md`](docs/RELEASING.md) |
 | Semver & deprecation policy | [`docs/policy/SEMVER.md`](docs/policy/SEMVER.md) · [`docs/policy/DEPRECATION.md`](docs/policy/DEPRECATION.md) |
 | Cross-crate integration | [`INTEGRATION.md`](INTEGRATION.md) |
-| Per-crate API docs | [docs.rs/rskit](https://docs.rs/rskit) |
+| Per-crate API docs | [docs.rs/rskit-toolkit](https://docs.rs/rskit-toolkit) |
 
 ## Contributing
 

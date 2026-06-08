@@ -2,11 +2,7 @@
 
 Production-grade resilience primitives with Tower layer integration.
 
-[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml)
-[![crates.io](https://img.shields.io/crates/v/rskit-resilience.svg)](https://crates.io/crates/rskit-resilience)
-[![docs.rs](https://docs.rs/rskit-resilience/badge.svg)](https://docs.rs/rskit-resilience)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![MSRV: 1.85](https://img.shields.io/badge/MSRV-1.85-orange.svg)](https://blog.rust-lang.org/2025/02/20/Rust-1.85.0.html)
+[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/rskit-resilience.svg)](https://crates.io/crates/rskit-resilience) [![docs.rs](https://docs.rs/rskit-resilience/badge.svg)](https://docs.rs/rskit-resilience) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/kbukum/rskit/blob/main/LICENSE) [![MSRV: 1.91](https://img.shields.io/badge/MSRV-1.91-orange.svg)](https://github.com/kbukum/rskit/blob/main/core/Cargo.toml)
 
 ## Features
 
@@ -20,8 +16,8 @@ Production-grade resilience primitives with Tower layer integration.
 
 ```toml
 [dependencies]
-rskit-resilience = "0.1"
-rskit-errors = "0.1"
+rskit-resilience = "0.1.0-alpha.1"
+rskit-errors = "0.1.0-alpha.1"
 ```
 
 ```rust

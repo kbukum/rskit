@@ -1,12 +1,10 @@
 # rskit security model
 
-This document covers the current Rust-side security posture for `rskit-auth`, `rskit-authz`,
-`rskit-security`, and `rskit-encryption`.
+This document covers the current Rust-side security posture for `rskit-auth`, `rskit-authz`, `rskit-security`, and `rskit-encryption`.
 
 ## Threat model
 
-- Protect bearer tokens, API keys, passwords, cookies, and encryption keys from accidental
-  disclosure, replay, and substitution.
+- Protect bearer tokens, API keys, passwords, cookies, and encryption keys from accidental disclosure, replay, and substitution.
 - Default to deny when authorization data is missing, mismatched, or stale.
 - Require explicit transport security choices so production deployments keep TLS/HSTS on.
 - Favor public-key token verification paths for external trust boundaries.
