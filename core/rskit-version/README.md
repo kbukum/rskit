@@ -16,13 +16,13 @@ use rskit_version::{get_version_info, get_short_version, get_full_version, packa
 
 fn main() {
     let info = get_version_info();
-    println!("{}", info.version);       // e.g. "0.1.0"
+    println!("{}", info.version);       // e.g. "0.1.0-alpha.1"
     println!("{}", info.git_commit);    // e.g. "a1b2c3d4..."
     println!("{}", info.git_branch);    // e.g. "main"
     println!("{}", info.rust_version);  // e.g. "rustc 1.91.0 ..."
 
-    println!("{}", get_short_version()); // "0.1.0-a1b2c3d"
-    println!("{}", get_full_version());  // "0.1.0-a1b2c3d (built 2024-01-15T10:30:00Z)"
+    println!("{}", get_short_version()); // "0.1.0-alpha.1-a1b2c3d"
+    println!("{}", get_full_version());  // "0.1.0-alpha.1-a1b2c3d (built 2024-01-15T10:30:00Z)"
     println!("{:?}", package_semver());   // Some(Version { major: 0, minor: 1, patch: 0 })
 }
 ```

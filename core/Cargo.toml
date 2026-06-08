@@ -55,7 +55,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 edition = "2024"
 license = "MIT"
 rust-version = "1.91"
@@ -172,8 +172,8 @@ criterion = { version = "0.8", features = ["html_reports", "async_tokio"] }
 insta = { version = "1.47", features = ["json", "yaml", "redactions"] }
 
 # Internal path crates
-rskit-ai = { path = "rskit-ai", version = "0.1.0" }
-rskit-fs = { path = "rskit-fs", version = "0.1.0" }
+rskit-ai = { path = "rskit-ai", version = "0.1.0-alpha.1" }
+rskit-fs = { path = "rskit-fs", version = "0.1.0-alpha.1" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

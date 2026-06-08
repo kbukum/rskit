@@ -47,7 +47,7 @@ fn main() {
 
     let _handler = create_server(
         "example-mcp",
-        "0.1.0",
+        "0.1.0-alpha.1",
         tools,
         ServerConfig {
             prefix: "local.".into(),

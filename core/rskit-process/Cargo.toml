@@ -27,8 +27,8 @@ libc       = { workspace = true }
 parking_lot = { workspace = true }
 
 # Internal
-rskit-errors = { version = "0.1.0", path = "../rskit-errors" }
-rskit-util   = { version = "0.1.0", path = "../rskit-util" }
+rskit-errors = { version = "0.1.0-alpha.1", path = "../rskit-errors" }
+rskit-util   = { version = "0.1.0-alpha.1", path = "../rskit-util" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full", "test-util"] }

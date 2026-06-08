@@ -27,4 +27,4 @@ chrono       = { workspace = true }
 validator = { workspace = true }
 
 # Internal
-rskit-errors = { version = "0.1.0", path = "../rskit-errors" }
+rskit-errors = { version = "0.1.0-alpha.1", path = "../rskit-errors" }

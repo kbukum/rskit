@@ -27,10 +27,10 @@ thiserror = { workspace = true }
 tempfile = { workspace = true, optional = true }
 
 # Internal
-rskit-errors = { version = "0.1.0", path = "../rskit-errors" }
-rskit-fs = { version = "0.1.0", path = "../rskit-fs", default-features = false }
-rskit-process = { version = "0.1.0", path = "../rskit-process" }
+rskit-errors = { version = "0.1.0-alpha.1", path = "../rskit-errors" }
+rskit-fs = { version = "0.1.0-alpha.1", path = "../rskit-fs", default-features = false }
+rskit-process = { version = "0.1.0-alpha.1", path = "../rskit-process" }
 
 [dev-dependencies]
-rskit-testutil = { version = "0.1.0", path = "../rskit-testutil" }
+rskit-testutil = { version = "0.1.0-alpha.1", path = "../rskit-testutil" }
 tempfile = { workspace = true }

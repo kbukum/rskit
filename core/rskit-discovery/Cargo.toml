@@ -37,8 +37,8 @@ rand         = { workspace = true }
 parking_lot  = { workspace = true }
 
 # Internal
-rskit-bootstrap = { version = "0.1.0", path = "../rskit-bootstrap", optional = true }
-rskit-errors = { version = "0.1.0", path = "../rskit-errors" }
-rskit-httpclient = { version = "0.1.0", path = "../rskit-httpclient", optional = true }
-rskit-resilience = { version = "0.1.0", path = "../rskit-resilience" }
-rskit-util = { version = "0.1.0", path = "../rskit-util" }
+rskit-bootstrap = { version = "0.1.0-alpha.1", path = "../rskit-bootstrap", optional = true }
+rskit-errors = { version = "0.1.0-alpha.1", path = "../rskit-errors" }
+rskit-httpclient = { version = "0.1.0-alpha.1", path = "../rskit-httpclient", optional = true }
+rskit-resilience = { version = "0.1.0-alpha.1", path = "../rskit-resilience" }
+rskit-util = { version = "0.1.0-alpha.1", path = "../rskit-util" }

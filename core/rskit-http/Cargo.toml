@@ -28,8 +28,8 @@ serde_json      = { workspace = true }
 uuid            = { workspace = true }
 
 # Internal
-rskit-errors    = { version = "0.1.0", path = "../rskit-errors" }
-rskit-security  = { version = "0.1.0", path = "../rskit-security" }
+rskit-errors    = { version = "0.1.0-alpha.1", path = "../rskit-errors" }
+rskit-security  = { version = "0.1.0-alpha.1", path = "../rskit-security" }
 
 [dev-dependencies]
 axum      = { workspace = true }

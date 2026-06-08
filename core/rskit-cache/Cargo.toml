@@ -32,8 +32,8 @@ parking_lot     = { workspace = true }
 blake3          = { version = "1", optional = true }
 
 # Internal
-rskit-errors    = { version = "0.1.0", path = "../rskit-errors" }
-rskit-fs        = { version = "0.1.0", path = "../rskit-fs", optional = true }
+rskit-errors    = { version = "0.1.0-alpha.1", path = "../rskit-errors" }
+rskit-fs        = { version = "0.1.0-alpha.1", path = "../rskit-fs", optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
