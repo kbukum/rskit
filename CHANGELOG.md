@@ -182,6 +182,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Release tooling**: deny/audit hygiene now avoids stale hardcoded audit
   ignores, keeps duplicate-version skips aligned with current lockfiles, and
   uses the reduced-feature JWT backend to avoid vulnerable unused crypto paths.
+- **Workspace hygiene**: core crates now stay on `rand` 0.9 where that lower
+  stable line matches most upstream dependencies, avoiding unnecessary
+  duplicate `rand`/`chacha20` families while `rand` 0.10 is only required
+  transitively by `rmcp`.
+- **Workspace hygiene**: NATS and Google Cloud Storage adapters now use current
+  upstream client releases, removing obsolete `thiserror` duplicate-version
+  skips while preserving documented skips for the remaining upstream rand,
+  crypto, HTTP, and parser ecosystem splits.
+- **rskit-storage**: explicitly enables the `rskit-fs` async feature it uses, so
+  reduced package graphs no longer depend on workspace feature unification.
 - **Release tooling**: release-readiness sweeps now ignore ordinary line
   comments, SBOM generation fails fast when no artifacts are produced, and
   release signing reports an empty SBOM directory explicitly.

@@ -76,7 +76,7 @@ insta = { version = "1.47", features = ["json", "yaml", "redactions"] }
 
 # Messaging adapters
 rdkafka = { version = "0.39", features = ["tokio"] }
-async-nats = "0.47"
+async-nats = "0.49"
 lapin = { version = "4", default-features = false, features = ["rustls", "tokio"] }
 
 # Media
@@ -86,8 +86,8 @@ which = "8"
 # Storage
 tempfile = "3"
 aws-sdk-s3 = { version = "1", default-features = false, features = ["behavior-version-latest", "default-https-client", "http-1x", "rt-tokio"] }
-google-cloud-storage = "=1.11.0"
-google-cloud-auth = { version = "1.9", default-features = false }
+google-cloud-storage = "1.14"
+google-cloud-auth = { version = "1.12", default-features = false }
 
 # Inference
 wiremock = "0.6"

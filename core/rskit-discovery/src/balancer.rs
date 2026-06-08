@@ -48,7 +48,7 @@ impl LoadBalancer for Random {
         if instances.is_empty() {
             return None;
         }
-        use rand::RngExt;
+        use rand::Rng;
         let idx = rand::rng().random_range(0..instances.len());
         Some(&instances[idx])
     }
@@ -68,7 +68,7 @@ impl LoadBalancer for Weighted {
             .iter()
             .map(|instance| u64::from(instance.weight.max(1)))
             .sum::<u64>();
-        use rand::RngExt;
+        use rand::Rng;
         let mut slot = rand::rng().random_range(0..total);
         for instance in instances {
             let weight = u64::from(instance.weight.max(1));

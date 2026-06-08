@@ -106,7 +106,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "fmt"]
 
 # Resilience
 governor = { version = "0.10", features = ["std"] }
-rand = "0.10"
+# Keep rand on the current stable line used by governor/opentelemetry/tungstenite.
+# rand 0.10 is only needed by rmcp today and would force duplicate rand/chacha20
+# families into crates that only need simple token/jitter randomness.
+rand = "0.9"
 zeroize = { version = "1", features = ["derive"] }
 
 # gRPC

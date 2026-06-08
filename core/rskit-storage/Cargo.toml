@@ -31,7 +31,7 @@ infer = { workspace = true }
 
 # Internal
 rskit-errors = { workspace = true }
-rskit-fs = { workspace = true }
+rskit-fs = { workspace = true, features = ["async"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "full"] }
