@@ -200,6 +200,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Domain tooling**: `domains.toml` now maps all current core/contrib crates
   and cross-domain dependency edges to concrete modules so domain-scoped checks
   and generated module docs stay aligned with the workspace.
+- **rskit-vectorstore-qdrant**: malformed Qdrant JSON responses now surface as
+  external-service failures instead of client input errors.
+- **Workspace hygiene**: dependency-sync help text now reflects that examples
+  are checked alongside core and contrib.
+- **CI**: examples now include the shared cargo-nextest `ci` profile used by
+  the test matrix.
 - **rskit-storage**: explicitly enables the `rskit-fs` async feature it uses, so
   reduced package graphs no longer depend on workspace feature unification.
 - **Release tooling**: release-readiness sweeps now ignore ordinary line

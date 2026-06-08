@@ -322,7 +322,7 @@ help:
 	@echo "  make fmt-check          [W=]               Check formatting"
 	@echo "  make doc                [C=] [W=]          Build documentation"
 	@echo "  make check-l7-edges                       Check L7 dependency edges"
-	@echo "  make check-workspace-deps-sync            Check shared core/contrib dependency versions"
+	@echo "  make check-workspace-deps-sync            Check shared core/contrib/examples dependency versions"
 	@echo "  make check-topology                       Check module topology"
 	@echo "  make check-public-api                     Check public API guardrails"
 	@echo "  make check-facade-features                Check rskit facade feature combinations"

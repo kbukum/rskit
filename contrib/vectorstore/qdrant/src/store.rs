@@ -11,6 +11,7 @@ use rskit_vectorstore::{
     VectorStoreConfig, VectorStoreLimits, VectorStoreRegistry,
 };
 use serde::Deserialize;
+use serde::de::DeserializeOwned;
 use serde_json::Value;
 use tracing::{debug, info};
 
@@ -164,7 +165,7 @@ impl VectorStore for QdrantVectorStore {
                 "vector search failed",
             )
             .await?
-            .json::<QdrantSearchResponse>()?;
+            .and_then_qdrant_json::<QdrantSearchResponse>("vector search failed")?;
         response
             .result
             .into_iter()
@@ -222,6 +223,26 @@ fn qdrant_http_error(context: &str, response: rskit_httpclient::ErrorResponse) -
     .with_detail("body", response.body)
 }
 
+trait QdrantResponseExt {
+    fn and_then_qdrant_json<T: DeserializeOwned>(self, context: &str) -> AppResult<T>;
+}
+
+impl QdrantResponseExt for rskit_httpclient::Response {
+    fn and_then_qdrant_json<T: DeserializeOwned>(self, context: &str) -> AppResult<T> {
+        decode_qdrant_json(self.body_bytes(), context)
+    }
+}
+
+fn decode_qdrant_json<T: DeserializeOwned>(body: &[u8], context: &str) -> AppResult<T> {
+    serde_json::from_slice(body).map_err(|error| {
+        AppError::new(
+            ErrorCode::ExternalService,
+            format!("{context}: failed to decode Qdrant JSON response: {error}"),
+        )
+        .with_cause(error)
+    })
+}
+
 struct QdrantFactory {
     config: Config,
 }
@@ -277,6 +298,19 @@ mod tests {
         assert!(!debug.contains("super-secret-key"));
         assert!(debug.contains("api-key"));
         assert!(debug.contains("SecretString(***)"));
+    }
+
+    #[test]
+    fn qdrant_json_decode_errors_are_external_service_failures() {
+        let err =
+            decode_qdrant_json::<QdrantSearchResponse>(br#"{"result":"not-points"}"#, "search")
+                .expect_err("malformed upstream response must fail");
+
+        assert_eq!(err.code(), ErrorCode::ExternalService);
+        assert!(
+            err.message()
+                .contains("failed to decode Qdrant JSON response")
+        );
     }
 
     #[tokio::test]

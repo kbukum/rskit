@@ -1,0 +1,16 @@
+# cargo-nextest configuration
+# See https://nexte.st/docs/configuration/
+
+[profile.default]
+# Fail fast: stop on first failure during development
+fail-fast = true
+# No retries in dev; CI profile adds retries
+retries = 0
+
+[profile.ci]
+# In CI, run all tests even if some fail
+fail-fast = false
+# Retry flaky tests up to 2 times
+retries = 2
+# Slower timeout for CI (some integration tests are slow)
+slow-timeout = { period = "120s", terminate-after = 2 }
