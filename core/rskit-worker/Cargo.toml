@@ -31,5 +31,5 @@ parking_lot      = { workspace = true }
 serde            = { workspace = true }
 
 # Internal
-rskit-errors     = { path = "../rskit-errors" }
-rskit-provider   = { path = "../rskit-provider" }
+rskit-errors     = { version = "0.1.0-alpha.1", path = "../rskit-errors" }
+rskit-provider   = { version = "0.1.0-alpha.1", path = "../rskit-provider" }

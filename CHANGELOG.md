@@ -82,6 +82,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the former unit-struct value.
 
 ### Changed — Cross-Cutting
+- **Release readiness**: added final release sweeps, dependency-ordered publish
+  dry-runs, release coverage thresholds, CycloneDX SBOM generation, tag-release
+  SBOM signing, and CI guardrails for the declared MSRV plus pinned toolchain.
 - **Infra/facade refinement**: aligned facade feature wiring and documentation,
   routed examples through the public `rskit` facade, added facade feature-matrix
   validation, made public API checks select the owning workspace manifest,
@@ -172,6 +175,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **rskit-security**: narrowed to cross-transport TLS/security configuration instead of HTTP-only behavior.
 
 ### Fixed
+- **Release tooling**: release-readiness sweeps now ignore ordinary line
+  comments, SBOM generation fails fast when no artifacts are produced, and
+  release signing reports an empty SBOM directory explicitly.
+- **Release tooling**: examples now depend on the alpha `rskit` prerelease,
+  version metadata tests accept prerelease SemVer bounds, and per-crate
+  coverage failures report both core and contrib stderr.
+- **Release tooling**: public API guardrails now run cargo-public-api under
+  the nightly rustdoc JSON toolchain, and HTTP server tests use port-zero
+  binding instead of racing on released ephemeral ports.
+- **Release tooling**: CI coverage now preserves the established core
+  workspace line gate while still generating contrib LCOV reports for upload.
+- **Release tooling/rskit-bench**: action SHA-pin guardrails now reject dotted
+  version tags, and benchmark SVG output has regression coverage for malformed
+  duplicate quote attributes.
+- **Release tooling**: publish ordering no longer depends on Python 3.9-only
+  path APIs, and SBOM cleanup is constrained to `target/` subdirectories.
 - **rskit-git**: CLI branch/tag deletion now treats successful commands as
   successful even when captured stdout/stderr exceeded process capture limits.
 - **rskit-bench**: file-backed run listing now skips unreadable or partially
@@ -293,7 +312,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **rskit-messaging**: Enhanced `InMemoryBroker` with message history, topic tracking, and reset
 - **rskit-messaging**: Test assertions — `assert_published()`, `assert_published_n()`, `assert_no_messages()`, `wait_for_message()`
 
-## [0.1.0] - 2026-04-26
+## [0.1.0-alpha.1] - 2026-04-26
 
 ### Added
 
@@ -374,5 +393,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### `rskit` (facade)
 - Re-exports all sub-crates under a single dependency
 
-[Unreleased]: https://github.com/kbukum/rskit/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/kbukum/rskit/releases/tag/v0.1.0
+[Unreleased]: https://github.com/kbukum/rskit/compare/v0.1.0-alpha.1...HEAD
+[0.1.0-alpha.1]: https://github.com/kbukum/rskit/releases/tag/v0.1.0-alpha.1

@@ -35,14 +35,14 @@ parking_lot  = { workspace = true }
 url          = "2"
 
 # Internal
-rskit-ai     = { path = "../rskit-ai" }
-rskit-component = { path = "../rskit-component" }
-rskit-observability = { path = "../rskit-observability" }
-rskit-tool   = { path = "../rskit-tool" }
-rskit-schema = { path = "../rskit-schema" }
-rskit-errors = { path = "../rskit-errors" }
-rskit-skill  = { path = "../rskit-skill" }
-rskit-authz  = { path = "../rskit-authz" }
+rskit-ai     = { version = "0.1.0-alpha.1", path = "../rskit-ai" }
+rskit-component = { version = "0.1.0-alpha.1", path = "../rskit-component" }
+rskit-observability = { version = "0.1.0-alpha.1", path = "../rskit-observability" }
+rskit-tool   = { version = "0.1.0-alpha.1", path = "../rskit-tool" }
+rskit-schema = { version = "0.1.0-alpha.1", path = "../rskit-schema" }
+rskit-errors = { version = "0.1.0-alpha.1", path = "../rskit-errors" }
+rskit-skill  = { version = "0.1.0-alpha.1", path = "../rskit-skill" }
+rskit-authz  = { version = "0.1.0-alpha.1", path = "../rskit-authz" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }

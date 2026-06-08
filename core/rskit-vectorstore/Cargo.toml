@@ -9,6 +9,7 @@ authors.workspace      = true
 repository.workspace   = true
 homepage.workspace     = true
 documentation = "https://docs.rs/rskit-vectorstore"
+readme = "README.md"
 categories = ["database"]
 keywords   = ["vector", "memory", "similarity", "search"]
 
@@ -25,7 +26,7 @@ tracing       = { workspace = true }
 parking_lot   = { workspace = true }
 
 # Internal
-rskit-errors  = { path = "../rskit-errors" }
+rskit-errors  = { version = "0.1.0-alpha.1", path = "../rskit-errors" }
 
 [dev-dependencies]
 tokio = { workspace = true }

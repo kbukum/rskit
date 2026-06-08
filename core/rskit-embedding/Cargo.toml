@@ -9,6 +9,7 @@ authors.workspace      = true
 repository.workspace   = true
 homepage.workspace     = true
 documentation = "https://docs.rs/rskit-embedding"
+readme = "README.md"
 categories = ["api-bindings"]
 keywords   = ["embedding", "vector", "openai", "ai"]
 
@@ -25,10 +26,10 @@ tracing      = { workspace = true }
 
 # Internal
 rskit-ai = { workspace = true }
-rskit-component = { path = "../rskit-component" }
-rskit-errors = { path = "../rskit-errors" }
-rskit-observability = { path = "../rskit-observability" }
-rskit-provider = { path = "../rskit-provider" }
+rskit-component = { version = "0.1.0-alpha.1", path = "../rskit-component" }
+rskit-errors = { version = "0.1.0-alpha.1", path = "../rskit-errors" }
+rskit-observability = { version = "0.1.0-alpha.1", path = "../rskit-observability" }
+rskit-provider = { version = "0.1.0-alpha.1", path = "../rskit-provider" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }

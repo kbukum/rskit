@@ -30,4 +30,4 @@ futures-util = { workspace = true }
 parking_lot  = { workspace = true }
 
 # Internal
-rskit-errors = { path = "../rskit-errors" }
+rskit-errors = { version = "0.1.0-alpha.1", path = "../rskit-errors" }

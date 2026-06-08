@@ -1,6 +1,7 @@
 .PHONY: all build test test-nextest test-doc test-affected test-coverage test-coverage-html lint fmt fmt-check check check-fast check-facade-features \
        check-core check-patterns check-crosscutting check-composition check-transport check-auth check-data check-ai \
-       check-media check-infra doc deny check-l7-edges check-topology clean help ci ci-test ci-lint ci-fmt ensure-act
+       check-media check-infra doc deny check-l7-edges check-topology check-public-api release-readiness release-coverage \
+       publish-dry-run release-sbom clean help ci ci-test ci-lint ci-fmt ensure-act
 
 CORE_MANIFEST = core/Cargo.toml
 CONTRIB_MANIFEST = contrib/Cargo.toml
@@ -162,6 +163,12 @@ check-topology:
 	@./scripts/check-topology.sh
 	@echo "✓ Module topology OK"
 
+## Check public API guardrails
+check-public-api:
+	@echo "==> Checking public API guardrails..."
+	@./scripts/check-public-api.sh
+	@echo "✓ Public API guardrails OK"
+
 ## Check facade feature combinations
 check-facade-features:
 	@echo "==> Checking rskit facade feature combinations..."
@@ -175,9 +182,9 @@ check-facade-features:
 	@cargo check --manifest-path $(CORE_MANIFEST) -p rskit --features "cli git dataset bench"
 	@echo "✓ Facade feature combinations OK"
 
-## Run cargo-deny checks (licenses, advisories, sources, bans) and dependency edge checks
-## Requires: cargo install cargo-deny
-deny: check-l7-edges check-topology
+## Run cargo-deny, public API, topology, and dependency edge checks
+## Requires: cargo-deny, cargo-public-api, and a nightly rustdoc JSON toolchain
+deny: check-l7-edges check-topology check-public-api
 	@echo "==> Running cargo-deny..."
 	@if [ -n "$(W)" ]; then \
 		cargo deny --manifest-path $(W)/Cargo.toml check licenses advisories sources bans; \
@@ -188,6 +195,25 @@ deny: check-l7-edges check-topology
 		done; \
 	fi
 	@echo "✓ cargo-deny passed"
+
+## Run the release-readiness supply-chain and API sweep
+## Requires: cargo-deny, cargo-audit
+release-readiness: check
+	@./scripts/check-release-readiness.sh
+
+## Run release coverage gates (overall >=85%, per-crate >=80%, security crates >=85%)
+## Requires: cargo-llvm-cov
+release-coverage:
+	@./scripts/check-coverage-thresholds.sh release
+
+## Dry-run publishing all publishable crates in dependency order
+publish-dry-run:
+	@./scripts/publish-dry-run.sh --dry-run
+
+## Generate CycloneDX SBOMs under target/sbom
+## Requires: cargo-cyclonedx
+release-sbom:
+	@./scripts/generate-sbom.sh
 
 ## Fast check: format + lint + build only (no tests) — for rapid iteration
 check-fast: fmt-check lint build
@@ -286,8 +312,14 @@ help:
 	@echo "  make fmt-check          [W=]               Check formatting"
 	@echo "  make doc                [C=] [W=]          Build documentation"
 	@echo "  make check-l7-edges                       Check L7 dependency edges"
+	@echo "  make check-topology                       Check module topology"
+	@echo "  make check-public-api                     Check public API guardrails"
 	@echo "  make check-facade-features                Check rskit facade feature combinations"
 	@echo "  make deny               [W=]               Run cargo-deny + L7 edge checks"
+	@echo "  make release-readiness                    Run final release-readiness sweep"
+	@echo "  make release-coverage                     Run release coverage thresholds"
+	@echo "  make publish-dry-run                      Dry-run publishing in dependency order"
+	@echo "  make release-sbom                         Generate CycloneDX SBOMs"
 	@echo "  make check-fast                           fmt + lint + build"
 	@echo "  make check              [C=] [W=]          fmt + lint + build + test"
 	@echo "  make check-core                           Check only core domain modules"

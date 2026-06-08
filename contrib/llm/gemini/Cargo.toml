@@ -8,6 +8,9 @@ rust-version.workspace = true
 authors.workspace      = true
 repository.workspace   = true
 homepage.workspace     = true
+documentation          = "https://docs.rs/rskit-llm-gemini"
+categories             = ["api-bindings"]
+keywords               = ["gemini", "llm", "ai", "google"]
 
 [lints]
 workspace = true

@@ -8,7 +8,8 @@ and [`policy/DEPRECATION.md`](policy/DEPRECATION.md).
 
 - You are listed in `MAINTAINERS.md` and have push access to `kbukum/rskit`.
 - Your local clone is on `main` with no uncommitted changes.
-- `git`, `gh`, `cargo`, and `cargo-release` are on your `$PATH`.
+- `git`, `gh`, `cargo`, `cargo-nextest`, `cargo-deny`, `cargo-audit`,
+  `cargo-llvm-cov`, `cargo-cyclonedx`, and `cosign` are on your `$PATH`.
 - Your commits are GPG-signed (`git config commit.gpgsign true`) — release
   tags must be signed.
 - A `CARGO_REGISTRY_TOKEN` is configured in CI for crates.io publishing
@@ -61,15 +62,36 @@ git commit -S -m "chore: prepare vX.Y.Z release"
 ## 4. Pre-flight checks
 
 ```sh
-cargo fmt --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
-cargo deny check
-cargo doc --workspace --no-deps
-cargo publish --dry-run -p rskit-errors    # smoke test the smallest crate
+make check
+make deny
+make release-readiness
+make release-coverage
+make release-sbom
+make publish-dry-run
 ```
 
 If any check fails, fix it before tagging.
+
+### First-release publish rehearsal
+
+`cargo publish --dry-run` resolves registry dependencies from crates.io; it
+does not simulate publishing an unpublished internal dependency chain. For a
+lock-step first release (or any release where internal crates depend on the
+same not-yet-published version), `make publish-dry-run` therefore:
+
+1. Runs `cargo publish --dry-run --locked` for crates whose internal
+   same-version dependencies already exist on crates.io.
+2. Explicitly skips crates blocked by unpublished internal same-version
+   dependencies and runs `cargo package --locked --list` as a packaging sanity
+   check for each skipped crate.
+3. Prints a notice listing the skipped crates, so the rehearsal does not claim
+   full crates.io dependency-chain validation.
+
+The reliable first-release gate is the combination of full workspace
+build/test/docs/audit/coverage, generated publish order, package-list sanity
+checks for blocked crates, and the actual tag workflow publishing crates in
+dependency order. If any real publish step fails, stop and fix forward before
+continuing the chain.
 
 ## 5. Tag the release
 
@@ -82,9 +104,11 @@ The release workflow (`.github/workflows/release.yml`) is triggered by the
 tag push and will:
 
 - Re-run the full test + lint + audit suite on the tagged commit.
-- Publish every workspace crate to crates.io in dependency order via
-  `cargo-release` (or a topologically sorted `cargo publish`).
-- Sign the release artifacts with [cosign](https://github.com/sigstore/cosign).
+- Dry-run publishing where same-version internal dependencies already exist on
+  crates.io, package-list crates blocked by unpublished internal dependencies,
+  then publish every publishable workspace crate to crates.io in dependency
+  order when `CARGO_REGISTRY_TOKEN` is configured.
+- Sign the release SBOMs with [cosign](https://github.com/sigstore/cosign).
 - Generate and attach a CycloneDX SBOM (`cargo-cyclonedx`).
 
 ## 6. Cut the GitHub Release
@@ -136,12 +160,15 @@ git push origin v0.2.1
 
 ## Pre-releases
 
+For the first public crates.io publish, prefer `v0.1.0-alpha.1` so downstream
+users can opt into an explicitly cautious preview before a final `v0.1.0`.
+
 ```sh
-git tag -s -a v0.3.0-rc.1 -m "v0.3.0-rc.1"
-git push origin v0.3.0-rc.1
-gh release create v0.3.0-rc.1 --prerelease --title "v0.3.0-rc.1" \
+git tag -s -a v0.1.0-alpha.1 -m "v0.1.0-alpha.1"
+git push origin v0.1.0-alpha.1
+gh release create v0.1.0-alpha.1 --prerelease --title "v0.1.0-alpha.1" \
   --notes-file /tmp/notes.md
 ```
 
-Pre-releases bypass the CHANGELOG check (the `-rc.N` / `-beta.N` suffix is
-detected by the release workflow).
+Pre-releases bypass the CHANGELOG check (the `-alpha.N`, `-beta.N`, or
+`-rc.N` suffix is detected by the release workflow).

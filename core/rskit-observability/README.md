@@ -34,7 +34,7 @@ let ctx = OperationContext::new("order-svc", "create_order", "req-1", "user-42")
 ctx.end_operation("success", None);
 let _elapsed = ctx.elapsed();
 
-let health = ServiceHealth::new("order-svc", "0.1.0");
+let health = ServiceHealth::new("order-svc", "0.1.0-alpha.1");
 health.register("db");
 health.update("db", HealthStatus::Healthy, None);
 assert!(health.is_healthy());

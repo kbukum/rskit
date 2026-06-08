@@ -63,3 +63,30 @@ pub(crate) fn parse_decimal_scaled(value: &str, multiplier: u128) -> Option<u128
     let fraction_scaled = fraction.checked_mul(multiplier)?.checked_div(scale)?;
     whole_scaled.checked_add(fraction_scaled)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::parse_decimal_scaled;
+
+    #[test]
+    fn parse_decimal_scaled_accepts_whole_and_fractional_values() {
+        assert_eq!(parse_decimal_scaled("0", 1000), Some(0));
+        assert_eq!(parse_decimal_scaled("12", 1000), Some(12_000));
+        assert_eq!(parse_decimal_scaled("12.345", 1000), Some(12_345));
+        assert_eq!(parse_decimal_scaled(".5", 1000), Some(500));
+        assert_eq!(parse_decimal_scaled("1.", 1000), Some(1000));
+        assert_eq!(parse_decimal_scaled("1.2345", 1000), Some(1234));
+    }
+
+    #[test]
+    fn parse_decimal_scaled_rejects_invalid_or_overflowing_values() {
+        assert_eq!(parse_decimal_scaled("", 1000), None);
+        assert_eq!(parse_decimal_scaled("+1", 1000), None);
+        assert_eq!(parse_decimal_scaled("-1", 1000), None);
+        assert_eq!(parse_decimal_scaled(".", 1000), None);
+        assert_eq!(parse_decimal_scaled("1.2.3", 1000), None);
+        assert_eq!(parse_decimal_scaled("1a", 1000), None);
+        assert_eq!(parse_decimal_scaled("2", u128::MAX), None);
+        assert_eq!(parse_decimal_scaled("1.1", u128::MAX), None);
+    }
+}

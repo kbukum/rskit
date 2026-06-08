@@ -17,7 +17,8 @@ MAJOR.MINOR.PATCH[-PRERELEASE][+BUILDMETADATA]
 ```
 
 Examples:
-- `0.1.0` — first minor release
+- `0.1.0-alpha.1` — cautious first prerelease
+- `0.1.0` — first final minor release
 - `1.0.0` — first major release
 - `1.2.3` — standard release
 - `0.3.0-rc.1` — release candidate
@@ -34,12 +35,12 @@ For example, `core/Cargo.toml` uses paths relative to `core/`:
 ```toml
 # core/Cargo.toml
 [workspace.package]
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 edition = "2024"
 rust-version = "1.91"
 
 [workspace.dependencies]
-rskit-errors = { path = "rskit-errors", version = "0.1.0" }
+rskit-errors = { path = "rskit-errors", version = "0.1.0-alpha.1" }
 # … core and contrib members follow the same pattern
 ```
 
@@ -61,12 +62,23 @@ Bump the workspace version with `cargo set-version --workspace X.Y.Z`
 A single Git tag covers the whole workspace:
 
 ```sh
-git tag -s -a v0.1.0 -m "v0.1.0"
-git push origin v0.1.0
+git tag -s -a v0.1.0-alpha.1 -m "v0.1.0-alpha.1"
+git push origin v0.1.0-alpha.1
 ```
 
 The release workflow then publishes every workspace crate from `core/` and
 `contrib/`, plus the facade, in lock-step.
+
+Publishing order is derived from Cargo metadata by
+[`scripts/publish-dry-run.sh`](../scripts/publish-dry-run.sh), which publishes
+internal path dependencies before crates that depend on them.
+
+For first releases and lock-step releases, `cargo publish --dry-run` cannot
+fully validate crates whose same-version internal dependencies are not yet on
+crates.io. The publish rehearsal script reports those crates explicitly and
+falls back to `cargo package --locked --list` for packaging sanity; the actual
+release workflow remains dependency-ordered and stops on the first publish
+failure.
 
 ## Compatibility Policy
 
@@ -118,8 +130,8 @@ newer than the MSRV.
 2. **Follow SemVer strictly** — breaking changes = MAJOR (after 1.0) or
    MINOR (in 0.x).
 3. **Update CHANGELOG.md** under `[Unreleased]` before tagging.
-4. **Test before tagging** — run `cargo test --workspace` and
-   `cargo deny check`.
+4. **Test before tagging** — run `make release-readiness`,
+   `make release-coverage`, and `make publish-dry-run`.
 5. **Never force-push tags.**
 6. **Use pre-release tags for testing** — `v0.2.0-beta.1`.
 

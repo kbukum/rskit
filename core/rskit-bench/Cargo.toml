@@ -25,20 +25,20 @@ async-trait    = { workspace = true }
 parking_lot    = { workspace = true }
 
 # Internal
-rskit-errors   = { path = "../rskit-errors" }
-rskit-fs       = { path = "../rskit-fs" }
-rskit-provider = { path = "../rskit-provider" }
-rskit-util     = { path = "../rskit-util" }
-rskit-worker   = { path = "../rskit-worker" }
-rskit-cli      = { path = "../rskit-cli" }
-rskit-observability = { path = "../rskit-observability" }
+rskit-errors   = { version = "0.1.0-alpha.1", path = "../rskit-errors" }
+rskit-fs       = { version = "0.1.0-alpha.1", path = "../rskit-fs" }
+rskit-provider = { version = "0.1.0-alpha.1", path = "../rskit-provider" }
+rskit-util     = { version = "0.1.0-alpha.1", path = "../rskit-util" }
+rskit-worker   = { version = "0.1.0-alpha.1", path = "../rskit-worker" }
+rskit-cli      = { version = "0.1.0-alpha.1", path = "../rskit-cli" }
+rskit-observability = { version = "0.1.0-alpha.1", path = "../rskit-observability" }
 
 [dev-dependencies]
 tokio     = { workspace = true, features = ["test-util", "full"] }
 tempfile  = { workspace = true }
 insta     = { workspace = true }
 criterion = { workspace = true }
-rskit     = { path = "../rskit" }
+rskit     = { version = "0.1.0-alpha.1", path = "../rskit" }
 
 [[bench]]
 name    = "metrics"

@@ -10,7 +10,7 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
 name = "agent-demo"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1703,7 +1703,7 @@ checksum = "47b34b781b31e5d73e9fbc8689c70551fd1ade9a19e3e28cfec8580a79290cc4"
 
 [[package]]
 name = "rskit"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "rskit-bootstrap",
  "rskit-cli",
@@ -1728,7 +1728,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-bootstrap"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "futures",
@@ -1751,7 +1751,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-cli"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "indicatif",
  "rskit-errors",
@@ -1763,7 +1763,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-component"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "parking_lot",
@@ -1776,7 +1776,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-config"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "config",
  "dotenvy",
@@ -1792,7 +1792,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-di"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "parking_lot",
@@ -1802,7 +1802,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-errors"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "http",
  "serde",
@@ -1811,7 +1811,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-fs"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "libc",
  "rskit-errors",
@@ -1821,7 +1821,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-hook"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "parking_lot",
  "rskit-errors",
@@ -1832,7 +1832,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-logging"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "parking_lot",
  "regex",
@@ -1845,7 +1845,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-media"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1859,7 +1859,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-media-audio"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "bytes",
@@ -1872,7 +1872,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-media-ffmpeg"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "bytes",
@@ -1893,7 +1893,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-media-image"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "bytes",
@@ -1909,7 +1909,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-pipeline"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-stream",
  "futures",
@@ -1925,7 +1925,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-process"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "libc",
  "parking_lot",
@@ -1939,7 +1939,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-provider"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "bytes",
@@ -1957,7 +1957,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-resilience"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "futures-util",
  "governor",
@@ -1976,7 +1976,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-storage"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "bytes",
@@ -1997,7 +1997,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-util"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "serde",
  "subtle",
@@ -2006,7 +2006,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-validation"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "chrono",
  "regex",
@@ -2019,7 +2019,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-version"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "rskit-util",
  "semver",
@@ -2028,7 +2028,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-worker"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "chrono",

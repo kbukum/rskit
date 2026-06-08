@@ -26,7 +26,7 @@ serde = { workspace = true }
 async-trait = { workspace = true }
 
 # Internal
-rskit-errors = { path = "../rskit-errors" }
+rskit-errors = { version = "0.1.0-alpha.1", path = "../rskit-errors" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full", "test-util"] }

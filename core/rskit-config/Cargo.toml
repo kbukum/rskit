@@ -26,11 +26,11 @@ validator = { workspace = true }
 tracing      = { workspace = true }
 
 # Internal
-rskit-errors = { path = "../rskit-errors" }
-rskit-version = { path = "../rskit-version" }
-rskit-fs = { path = "../rskit-fs", default-features = false }
-rskit-util = { path = "../rskit-util" }
-rskit-validation = { path = "../rskit-validation" }
+rskit-errors = { version = "0.1.0-alpha.1", path = "../rskit-errors" }
+rskit-version = { version = "0.1.0-alpha.1", path = "../rskit-version" }
+rskit-fs = { version = "0.1.0-alpha.1", path = "../rskit-fs", default-features = false }
+rskit-util = { version = "0.1.0-alpha.1", path = "../rskit-util" }
+rskit-validation = { version = "0.1.0-alpha.1", path = "../rskit-validation" }
 
 [dev-dependencies]
 parking_lot = { workspace = true }

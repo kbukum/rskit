@@ -250,4 +250,41 @@ mod tests {
                 .contains("failed to serialize tool output: boom")
         );
     }
+
+    #[test]
+    fn schema_and_input_helpers_preserve_json_object_contract() {
+        let schema = ToolSchema::any_object();
+        assert!(schema.is_object());
+        assert_eq!(schema.as_json()["type"], "object");
+        assert_eq!(
+            ToolSchema::default().into_json(),
+            serde_json::json!({"type": "object"})
+        );
+        assert_eq!(
+            ToolSchema::try_from(serde_json::json!("string"))
+                .unwrap_err()
+                .code(),
+            ErrorCode::InvalidInput
+        );
+
+        let mut object = serde_json::Map::new();
+        object.insert("query".to_owned(), serde_json::json!("rust"));
+        let input = ToolInput::from_object(object);
+        assert_eq!(input.as_json()["query"], "rust");
+        assert_eq!(ToolInput::empty().into_json(), serde_json::json!({}));
+        assert_eq!(
+            ToolInput::try_from(serde_json::json!(["not", "object"]))
+                .unwrap_err()
+                .code(),
+            ErrorCode::InvalidInput
+        );
+    }
+
+    #[test]
+    fn output_helpers_expose_and_consume_json() {
+        let output = ToolOutput::from(serde_json::json!({"ok": true}));
+        assert_eq!(output.as_json()["ok"], true);
+        assert_eq!(output.clone()["ok"], true);
+        assert_eq!(output.into_json(), serde_json::json!({"ok": true}));
+    }
 }

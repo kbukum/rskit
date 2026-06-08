@@ -28,7 +28,7 @@ base64       = { workspace = true }
 zeroize      = { version = "1", features = ["derive"] }
 
 # Internal
-rskit-errors = { path = "../rskit-errors" }
+rskit-errors = { version = "0.1.0-alpha.1", path = "../rskit-errors" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt"] }

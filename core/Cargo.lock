@@ -5286,7 +5286,7 @@ dependencies = [
 
 [[package]]
 name = "rskit"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "futures",
@@ -5366,7 +5366,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-agent"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-stream",
  "async-trait",
@@ -5390,7 +5390,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-ai"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "rskit-errors",
  "rskit-version",
@@ -5402,7 +5402,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-auth"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "argon2",
  "async-trait",
@@ -5433,7 +5433,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-authz"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "http 1.4.0",
  "rskit-errors",
@@ -5445,7 +5445,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-bench"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "criterion",
@@ -5470,7 +5470,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-bootstrap"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "futures",
@@ -5493,7 +5493,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-cache"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "blake3",
@@ -5508,7 +5508,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-cache-redis"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "redis",
@@ -5522,7 +5522,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-chain"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "parking_lot",
  "rskit-errors",
@@ -5534,7 +5534,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-cli"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "indicatif",
  "rskit-errors",
@@ -5547,7 +5547,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-component"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "parking_lot",
@@ -5560,7 +5560,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-config"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "config",
  "dotenvy",
@@ -5580,7 +5580,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-dag"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "futures",
@@ -5596,7 +5596,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-database"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -5615,13 +5615,14 @@ dependencies = [
 
 [[package]]
 name = "rskit-dataset"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "csv",
  "futures",
  "futures-util",
  "image",
+ "parking_lot",
  "rskit-errors",
  "rskit-fs",
  "rskit-pipeline",
@@ -5637,7 +5638,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-di"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "parking_lot",
@@ -5647,7 +5648,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-discovery"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "dashmap",
@@ -5668,7 +5669,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-embedding"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "rskit-ai",
@@ -5684,7 +5685,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-encryption"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "aes-gcm",
  "base64",
@@ -5699,7 +5700,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-errors"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "http 1.4.0",
  "serde",
@@ -5708,7 +5709,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-fs"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "libc",
  "rskit-errors",
@@ -5718,7 +5719,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-git"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "git2",
  "rskit-errors",
@@ -5731,7 +5732,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-grpc"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -5753,7 +5754,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-hook"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "parking_lot",
  "rskit-errors",
@@ -5764,7 +5765,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-http"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "axum 0.8.9",
  "criterion",
@@ -5781,7 +5782,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-httpclient"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "base64",
  "bytes",
@@ -5804,7 +5805,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-inference"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "bytes",
@@ -5823,7 +5824,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-inference-tgi"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "reqwest 0.13.3",
@@ -5842,7 +5843,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-inference-triton"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "base64",
@@ -5868,7 +5869,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-inference-vllm"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "reqwest 0.13.3",
@@ -5887,7 +5888,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-llm"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "futures",
@@ -5905,7 +5906,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-llm-anthropic"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "reqwest 0.13.3",
@@ -5926,7 +5927,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-llm-common"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "rskit-ai",
  "rskit-errors",
@@ -5941,7 +5942,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-llm-gemini"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "reqwest 0.13.3",
@@ -5962,7 +5963,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-llm-ollama"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "reqwest 0.13.3",
@@ -5983,7 +5984,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-llm-openai"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "reqwest 0.13.3",
@@ -6006,7 +6007,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-logging"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "opentelemetry",
  "opentelemetry-appender-tracing",
@@ -6025,7 +6026,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-mcp"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "parking_lot",
@@ -6050,7 +6051,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-media"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -6066,7 +6067,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-media-audio"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "bytes",
@@ -6079,7 +6080,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-media-ffmpeg"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "bytes",
@@ -6100,7 +6101,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-media-image"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "bytes",
@@ -6116,7 +6117,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-messaging"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-stream",
  "async-trait",
@@ -6138,7 +6139,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-messaging-kafka"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "rdkafka",
@@ -6151,7 +6152,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-messaging-nats"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-nats",
  "async-trait",
@@ -6168,7 +6169,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-messaging-rabbitmq"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "futures-util",
@@ -6184,7 +6185,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-observability"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "http 1.4.0",
  "opentelemetry",
@@ -6202,7 +6203,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-pipeline"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-stream",
  "futures",
@@ -6218,7 +6219,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-process"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "libc",
  "parking_lot",
@@ -6232,7 +6233,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-provider"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "bytes",
@@ -6250,7 +6251,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-resilience"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "futures-util",
  "governor",
@@ -6269,7 +6270,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-schema"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "jsonschema",
  "rskit-errors",
@@ -6280,7 +6281,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-security"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "http 1.4.0",
  "rskit-errors",
@@ -6291,7 +6292,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-server"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "axum 0.8.9",
@@ -6329,7 +6330,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-skill"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "libc",
  "parking_lot",
@@ -6347,7 +6348,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-sse"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "axum 0.8.9",
@@ -6363,7 +6364,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-stateful"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "parking_lot",
  "rskit-errors",
@@ -6372,7 +6373,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-storage"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "bytes",
@@ -6395,7 +6396,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-storage-gcs"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "bytes",
@@ -6410,7 +6411,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-storage-s3"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "aws-sdk-s3",
@@ -6426,7 +6427,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-testutil"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "parking_lot",
@@ -6445,7 +6446,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-tool"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "parking_lot",
@@ -6464,7 +6465,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-util"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -6474,7 +6475,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-validation"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "chrono",
  "regex",
@@ -6487,7 +6488,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-vectorstore"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "parking_lot",
@@ -6500,7 +6501,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-vectorstore-qdrant"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "qdrant-client",
@@ -6516,7 +6517,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-version"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "rskit-util",
  "semver",
@@ -6525,7 +6526,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-worker"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "chrono",

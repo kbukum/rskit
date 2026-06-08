@@ -9,6 +9,7 @@ authors.workspace      = true
 repository.workspace   = true
 homepage.workspace     = true
 documentation = "https://docs.rs/rskit-ai"
+readme = "README.md"
 categories = ["api-bindings"]
 keywords   = ["ai", "llm", "prompt", "vocabulary"]
 
@@ -24,5 +25,5 @@ thiserror    = { workspace = true }
 semver       = { version = "1", features = ["serde"] }
 
 # Internal
-rskit-errors = { path = "../rskit-errors" }
-rskit-version = { path = "../rskit-version" }
+rskit-errors = { version = "0.1.0-alpha.1", path = "../rskit-errors" }
+rskit-version = { version = "0.1.0-alpha.1", path = "../rskit-version" }

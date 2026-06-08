@@ -557,4 +557,113 @@ mod tests {
 
         assert!(!result.is_error);
     }
+
+    #[tokio::test]
+    async fn call_batch_clamps_zero_concurrency_and_continues_when_not_fail_fast() {
+        let registry = Registry::new();
+        registry.register(stub("ok", Envelope::default())).unwrap();
+        registry.register(invalid_stub("invalid")).unwrap();
+
+        let results = registry
+            .call_batch(
+                vec![
+                    ("missing", ToolInput::empty()),
+                    ("ok", ToolInput::new(json!({"id": 1})).unwrap()),
+                    ("invalid", ToolInput::empty()),
+                ],
+                &Context::new(),
+                BatchOptions {
+                    concurrency: 0,
+                    fail_fast: false,
+                },
+            )
+            .await;
+
+        assert_eq!(results.len(), 3);
+        assert_eq!(results[0].as_ref().unwrap_err().code(), ErrorCode::NotFound);
+        assert_eq!(
+            results[1].as_ref().unwrap().output.as_ref().unwrap()["id"],
+            1
+        );
+        assert_eq!(
+            results[2].as_ref().unwrap_err().code(),
+            ErrorCode::InvalidInput
+        );
+    }
+
+    #[tokio::test]
+    async fn call_batch_stops_after_first_failure_when_fail_fast() {
+        let registry = Registry::new();
+        registry.register(stub("ok", Envelope::default())).unwrap();
+
+        let results = registry
+            .call_batch(
+                vec![
+                    ("missing", ToolInput::empty()),
+                    ("ok", ToolInput::new(json!({"id": 1})).unwrap()),
+                ],
+                &Context::new(),
+                BatchOptions {
+                    concurrency: 1,
+                    fail_fast: true,
+                },
+            )
+            .await;
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].as_ref().unwrap_err().code(), ErrorCode::NotFound);
+    }
+
+    #[tokio::test]
+    async fn call_requires_approval_denies_without_approver_and_allows_with_approval() {
+        struct NeedsApproval;
+
+        #[async_trait::async_trait]
+        impl SensitivityEvaluator for NeedsApproval {
+            async fn evaluate(
+                &self,
+                _ctx: &Context,
+                _call: &ToolCall,
+                _envelope: &Envelope,
+            ) -> AppResult<Decision> {
+                Ok(Decision::RequireApproval("sensitive".to_owned()))
+            }
+        }
+
+        struct AllowApproval;
+
+        #[async_trait::async_trait]
+        impl HumanApproval for AllowApproval {
+            async fn approve(
+                &self,
+                _ctx: &Context,
+                _call: &ToolCall,
+                reason: &str,
+            ) -> AppResult<bool> {
+                Ok(reason == "sensitive")
+            }
+        }
+
+        let denied = Registry::new().with_sensitivity_evaluator(Arc::new(NeedsApproval));
+        denied.register(stub("tool", Envelope::default())).unwrap();
+        let err = denied
+            .call("tool", &Context::new(), ToolInput::empty())
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::Forbidden);
+        assert!(
+            err.message()
+                .contains("approval required but no approver configured")
+        );
+
+        let allowed = Registry::new()
+            .with_sensitivity_evaluator(Arc::new(NeedsApproval))
+            .with_human_approval(Arc::new(AllowApproval));
+        allowed.register(stub("tool", Envelope::default())).unwrap();
+        let result = allowed
+            .call("tool", &Context::new(), ToolInput::empty())
+            .await
+            .unwrap();
+        assert!(!result.is_error);
+    }
 }

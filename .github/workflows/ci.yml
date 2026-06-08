@@ -125,7 +125,7 @@ jobs:
           cargo clippy --manifest-path contrib/Cargo.toml --workspace -- -D warnings
 
   # ---------------------------------------------------------------------------
-  # Tests — matrix across OS + MSRV + stable
+  # Tests — matrix across OS + declared MSRV and pinned development toolchain
   # ---------------------------------------------------------------------------
   test:
     name: Test (${{ matrix.os }} / ${{ matrix.rust }})
@@ -139,7 +139,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        rust: ["1.91", "stable"]
+        rust: ["1.91", "1.95"]
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
@@ -196,7 +196,7 @@ jobs:
           cargo doc --manifest-path contrib/Cargo.toml --workspace --no-deps --document-private-items
 
   # ---------------------------------------------------------------------------
-  # Coverage (runs on stable Linux only, uploads LCOV)
+  # Coverage (runs on pinned Linux only, uploads LCOV)
   # ---------------------------------------------------------------------------
   coverage:
     name: Coverage
@@ -210,7 +210,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
-          toolchain: stable
+          toolchain: "1.95"
           components: llvm-tools-preview
       - uses: mozilla-actions/sccache-action@9e7fa8a12102821edf02ca5dbea1acd0f89a2696  # v0.0.10
       - name: Install mold linker
@@ -224,21 +224,19 @@ jobs:
       - uses: taiki-e/install-action@4bc351f7f2614e48088386e2a0ad917ca3a7e4ba  # v2
         with:
           tool: cargo-llvm-cov
-      - run: |
-          cargo llvm-cov --manifest-path core/Cargo.toml --workspace --lcov --output-path core-coverage.lcov
-          cargo llvm-cov --manifest-path contrib/Cargo.toml --workspace --lcov --output-path contrib-coverage.lcov
+      - run: ./scripts/check-coverage-thresholds.sh workspace
       - uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354  # v5
         with:
-          files: core-coverage.lcov,contrib-coverage.lcov
+          files: target/coverage/core.lcov,target/coverage/contrib.lcov
           fail_ci_if_error: false
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   # ---------------------------------------------------------------------------
-  # L7 dependency edge guard
+  # Release guardrails
   # ---------------------------------------------------------------------------
-  l7-depguard:
-    name: L7 Dependency Guard
+  guardrails:
+    name: Release Guardrails
     if: needs.changes.outputs.rust-code == 'true'
     needs: changes
     runs-on: ubuntu-latest
@@ -247,7 +245,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: stable
+      - name: Install nightly for rustdoc JSON
+        run: rustup toolchain install nightly --profile minimal
+      - name: Install cargo-public-api
+        run: cargo install cargo-public-api --version 0.52.0 --locked
+      - run: ./scripts/check-topology.sh
       - run: ./scripts/check-l7-edges.sh
+      - run: ./scripts/check-public-api.sh
 
   # ---------------------------------------------------------------------------
   # Supply-chain audit (cargo-deny + cargo-audit)
@@ -264,10 +268,14 @@ jobs:
           toolchain: stable
       - uses: taiki-e/install-action@4bc351f7f2614e48088386e2a0ad917ca3a7e4ba  # v2
         with:
-          tool: cargo-deny
+          tool: cargo-deny,cargo-audit
+      - name: Install nightly for rustdoc JSON
+        run: rustup toolchain install nightly --profile minimal
+      - name: Install cargo-public-api
+        run: cargo install cargo-public-api --version 0.52.0 --locked
       - run: cargo deny --manifest-path core/Cargo.toml check licenses advisories sources bans
       - run: cargo deny --manifest-path contrib/Cargo.toml check licenses advisories sources bans
-      - run: ./scripts/check-l7-edges.sh
+      - run: ./scripts/check-release-readiness.sh
       - uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998  # v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -283,7 +291,7 @@ jobs:
   ci-status:
     name: CI Status
     if: always()
-    needs: [changes, fmt, clippy, test, docs, l7-depguard, coverage, security]
+    needs: [changes, fmt, clippy, test, docs, guardrails, coverage, security]
     runs-on: ubuntu-latest
     steps:
       - name: Evaluate results
@@ -293,7 +301,7 @@ jobs:
                    "${{ needs.clippy.result }}" \
                    "${{ needs.test.result }}" \
                    "${{ needs.docs.result }}" \
-                   "${{ needs.l7-depguard.result }}" \
+                   "${{ needs.guardrails.result }}" \
                    "${{ needs.coverage.result }}" \
                    "${{ needs.security.result }}")
           for r in "${results[@]}"; do

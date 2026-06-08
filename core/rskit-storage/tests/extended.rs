@@ -6,6 +6,7 @@
 use std::collections::HashMap;
 
 use bytes::Bytes;
+use rskit_errors::{AppError, ErrorCode};
 use rskit_storage::*;
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -165,6 +166,19 @@ async fn source_to_local_path_from_bytes_creates_temp() {
 }
 
 #[tokio::test]
+async fn source_to_local_path_from_bytes_keeps_temp_alive_until_resolved_path_drops() {
+    let source = FileSource::from_bytes(Bytes::from_static(b"scoped temp"));
+    let resolved = source.to_local_path().await.unwrap();
+    let path = resolved.path().to_path_buf();
+
+    assert_eq!(std::fs::read(&path).unwrap(), b"scoped temp");
+
+    drop(resolved);
+
+    assert!(!path.exists());
+}
+
+#[tokio::test]
 async fn source_to_local_path_from_temp() {
     let tmp = TempFile::new().unwrap();
     std::fs::write(tmp.path(), b"temp local").unwrap();
@@ -215,6 +229,24 @@ async fn sink_memory_multiple_writes() {
         FileSource::Bytes(b) => assert_eq!(b.as_ref(), b"hello world"),
         _ => panic!("expected Bytes"),
     }
+}
+
+#[tokio::test]
+async fn sink_write_stream_returns_chunk_error_without_finalizing_partial_output() {
+    let sink = FileSink::Memory;
+    let mut writer = sink.writer().await.unwrap();
+    let stream = futures::stream::iter([
+        Ok(Bytes::from_static(b"before error")),
+        Err(AppError::new(
+            ErrorCode::Internal,
+            "synthetic stream failure",
+        )),
+    ]);
+
+    let error = writer.write_stream(stream).await.unwrap_err();
+
+    assert_eq!(error.code(), ErrorCode::Internal);
+    assert!(error.to_string().contains("synthetic stream failure"));
 }
 
 #[tokio::test]
@@ -437,6 +469,30 @@ fn temp_dir_create_file_with_extension() {
     let f = dir.create_file_with_extension("log").unwrap();
     assert!(f.path().to_string_lossy().ends_with(".log"));
     assert!(f.path().starts_with(dir.path()));
+}
+
+#[test]
+fn temp_dir_cleanup_removes_created_files_on_drop() {
+    let dir_path = {
+        let dir = TempDir::new().unwrap();
+        let nested = dir.path().join("nested");
+        std::fs::create_dir(&nested).unwrap();
+        std::fs::write(nested.join("owned.txt"), b"cleanup").unwrap();
+        dir.path().to_path_buf()
+    };
+
+    assert!(!dir_path.exists());
+}
+
+#[test]
+fn temp_file_in_dir_errors_for_missing_directory() {
+    let dir = TempDir::new().unwrap();
+    let missing_dir = dir.path().join("missing");
+
+    let error = TempFile::in_dir(&missing_dir).unwrap_err();
+
+    assert_eq!(error.code(), ErrorCode::Internal);
+    assert!(error.to_string().contains("failed to create temp file"));
 }
 
 #[test]
@@ -929,6 +985,83 @@ fn local_store_config_no_auto_create_existing_dir_ok() {
     assert!(store.is_ok());
 }
 
+#[test]
+fn local_store_new_rejects_file_root() {
+    let dir = TempDir::new().unwrap();
+    let root_file = dir.path().join("root-file");
+    std::fs::write(&root_file, b"not a directory").unwrap();
+
+    let error = match store::LocalStore::new(store::LocalStoreConfig {
+        root_dir: root_file,
+        auto_create: false,
+    }) {
+        Ok(_) => panic!("file root should be rejected"),
+        Err(error) => error,
+    };
+
+    assert_eq!(error.code(), ErrorCode::InvalidInput);
+    assert!(error.to_string().contains("must be a directory"));
+}
+
+#[cfg(unix)]
+#[test]
+fn local_store_new_rejects_symlink_root() {
+    let dir = TempDir::new().unwrap();
+    let real_root = dir.path().join("real-root");
+    let linked_root = dir.path().join("linked-root");
+    std::fs::create_dir(&real_root).unwrap();
+    std::os::unix::fs::symlink(&real_root, &linked_root).unwrap();
+
+    let error = match store::LocalStore::new(store::LocalStoreConfig {
+        root_dir: linked_root,
+        auto_create: false,
+    }) {
+        Ok(_) => panic!("symlink root should be rejected"),
+        Err(error) => error,
+    };
+
+    assert_eq!(error.code(), ErrorCode::InvalidInput);
+    assert!(error.to_string().contains("must not be a symlink"));
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn store_upload_rejects_symlink_parent_escape_without_writing_outside_root() {
+    let dir = TempDir::new().unwrap();
+    let outside = TempDir::new().unwrap();
+    let store = make_store(dir.path());
+    std::os::unix::fs::symlink(outside.path(), dir.path().join("link")).unwrap();
+
+    let error = store
+        .upload(
+            &FileSource::from_bytes(Bytes::from_static(b"escape")),
+            "link/escape.txt",
+            None,
+            None,
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), ErrorCode::InvalidInput);
+    assert!(!outside.path().join("escape.txt").exists());
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn store_presigned_url_rejects_existing_symlink_target() {
+    let dir = TempDir::new().unwrap();
+    let store = make_store(dir.path());
+    std::fs::write(dir.path().join("target.txt"), b"target").unwrap();
+    std::os::unix::fs::symlink(dir.path().join("target.txt"), dir.path().join("link.txt")).unwrap();
+
+    let error = store
+        .presigned_url("link.txt", std::time::Duration::from_secs(60))
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), ErrorCode::NotFound);
+}
+
 #[tokio::test]
 async fn store_upload_with_progress() {
     let dir = TempDir::new().unwrap();
@@ -985,6 +1118,51 @@ async fn copy_file_temp_to_path() {
     let result = copy_file(&source, &sink, None).await.unwrap();
     let content = result.read_all().await.unwrap();
     assert_eq!(content.as_ref(), b"temp to path");
+}
+
+#[tokio::test]
+async fn transfer_between_local_stores_copies_content_and_detected_content_type() {
+    let from_dir = TempDir::new().unwrap();
+    let to_dir = TempDir::new().unwrap();
+    let from_store = make_store(from_dir.path());
+    let to_store = make_store(to_dir.path());
+    let source = FileSource::from_bytes(Bytes::from_static(b"transfer content"));
+    from_store
+        .upload(&source, "input.txt", Some("text/plain"), None)
+        .await
+        .unwrap();
+
+    let stored = transfer(&from_store, "input.txt", &to_store, "nested/output.txt")
+        .await
+        .unwrap();
+
+    assert_eq!(stored.key, "nested/output.txt");
+    assert_eq!(stored.size, b"transfer content".len() as u64);
+    assert_eq!(stored.content_type, "text/plain");
+    assert!(from_store.exists("input.txt").await.unwrap());
+    let copied = to_store
+        .download("nested/output.txt")
+        .await
+        .unwrap()
+        .read_all()
+        .await
+        .unwrap();
+    assert_eq!(copied.as_ref(), b"transfer content");
+}
+
+#[tokio::test]
+async fn transfer_missing_source_does_not_create_destination() {
+    let from_dir = TempDir::new().unwrap();
+    let to_dir = TempDir::new().unwrap();
+    let from_store = make_store(from_dir.path());
+    let to_store = make_store(to_dir.path());
+
+    let error = transfer(&from_store, "missing.txt", &to_store, "created.txt")
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), ErrorCode::NotFound);
+    assert!(!to_store.exists("created.txt").await.unwrap());
 }
 
 // ── UploadProgress struct ──────────────────────────────────────────────────

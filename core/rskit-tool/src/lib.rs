@@ -434,8 +434,25 @@ mod tests {
         let token = tokio_util::sync::CancellationToken::new();
         let ctx = Context::with_cancellation(token.clone());
         assert!(!ctx.is_cancelled());
+        assert!(!ctx.cancel_token().is_cancelled());
         token.cancel();
         assert!(ctx.is_cancelled());
+    }
+
+    #[test]
+    fn test_context_default_and_debug_are_metadata_safe() {
+        let mut ctx = Context::default();
+        ctx.request_id = "req-1".to_owned();
+        ctx.tool_use_id = "tool-1".to_owned();
+        ctx.max_result_size = 1024;
+        ctx.set("secret", serde_json::json!("redacted-by-key-only").into());
+
+        let debug = format!("{ctx:?}");
+        assert!(debug.contains("req-1"));
+        assert!(debug.contains("tool-1"));
+        assert!(debug.contains("metadata_keys"));
+        assert!(debug.contains("secret"));
+        assert!(!debug.contains("redacted-by-key-only"));
     }
 
     #[test]
@@ -458,6 +475,15 @@ mod tests {
         assert!(!r.is_error);
         assert!(r.output.is_some());
         assert_eq!(r.output.unwrap()["x"], 1);
+    }
+
+    #[test]
+    fn test_tool_result_block_conversion_preserves_error_state() {
+        let result = error_result("denied");
+        let block = result.to_block("tool-use-1");
+        assert_eq!(block.id, "tool-use-1");
+        assert_eq!(block.content, "denied");
+        assert!(block.is_error);
     }
 
     #[test]
