@@ -100,8 +100,8 @@ impl MessageProducer<Vec<u8>> for RabbitMqProducer {
         }
         channel
             .basic_publish(
-                self.config.exchange.clone().into(),
-                routing_key.clone().into(),
+                self.config.exchange.as_str().into(),
+                routing_key.into(),
                 BasicPublishOptions::default(),
                 &msg.payload,
                 BasicProperties::default(),
@@ -252,8 +252,8 @@ impl MessageConsumer<Vec<u8>> for RabbitMqConsumer {
             configure_qos(&channel, self.config.effective_prefetch_count()?).await?;
             let consumer = channel
                 .basic_consume(
-                    queue.clone().into(),
-                    self.config.consumer_tag.clone().into(),
+                    queue.as_str().into(),
+                    self.config.consumer_tag.as_str().into(),
                     BasicConsumeOptions {
                         no_ack: self.config.effective_auto_ack(),
                         ..BasicConsumeOptions::default()
