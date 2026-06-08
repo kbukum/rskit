@@ -182,8 +182,8 @@ check-facade-features:
 	@cargo check --manifest-path $(CORE_MANIFEST) -p rskit --features "cli git dataset bench"
 	@echo "✓ Facade feature combinations OK"
 
-## Run cargo-deny checks (licenses, advisories, sources, bans) and dependency edge checks
-## Requires: cargo install cargo-deny
+## Run cargo-deny, public API, topology, and dependency edge checks
+## Requires: cargo-deny, cargo-public-api, and a nightly rustdoc JSON toolchain
 deny: check-l7-edges check-topology check-public-api
 	@echo "==> Running cargo-deny..."
 	@if [ -n "$(W)" ]; then \

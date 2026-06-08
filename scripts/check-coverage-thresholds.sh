@@ -44,16 +44,19 @@ while IFS= read -r package; do
         rm -f "$core_stderr"
         continue
     fi
+    contrib_stderr="$(mktemp "${TMPDIR:-/tmp}/rskit-contrib-coverage.XXXXXX")"
     if cargo llvm-cov --manifest-path contrib/Cargo.toml -p "$package" \
         --all-features \
         --fail-under-lines "$threshold" \
-        --lcov --output-path "target/coverage/${package}.lcov"; then
-        rm -f "$core_stderr"
+        --lcov --output-path "target/coverage/${package}.lcov" 2>"$contrib_stderr"; then
+        rm -f "$core_stderr" "$contrib_stderr"
         continue
     fi
-    echo "error: core coverage attempt for ${package} failed before contrib fallback:" >&2
+    echo "error: coverage failed for ${package}; core attempt stderr:" >&2
     cat "$core_stderr" >&2
-    rm -f "$core_stderr"
+    echo "error: coverage failed for ${package}; contrib attempt stderr:" >&2
+    cat "$contrib_stderr" >&2
+    rm -f "$core_stderr" "$contrib_stderr"
     exit 1
 done < <(
     python3 - "$ROOT" <<'PY'

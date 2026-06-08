@@ -11,10 +11,10 @@
 //! use rskit_version::{get_version_info, get_short_version, get_full_version, is_release};
 //!
 //! let info = get_version_info();
-//! println!("{}", info.version);      // e.g. "0.1.0"
+//! println!("{}", info.version);      // e.g. "0.1.0-alpha.1"
 //! println!("{}", info.git_commit);   // e.g. "a1b2c3d..."
-//! println!("{}", get_short_version()); // "0.1.0-a1b2c3d"
-//! println!("{}", get_full_version()); // "0.1.0-a1b2c3d (built 2024-01-15T10:30:00Z)"
+//! println!("{}", get_short_version()); // "0.1.0-alpha.1-a1b2c3d"
+//! println!("{}", get_full_version()); // "0.1.0-alpha.1-a1b2c3d (built 2024-01-15T10:30:00Z)"
 //! ```
 
 #![warn(missing_docs)]
@@ -32,7 +32,7 @@ const GIT_BRANCH: &str = env!("GIT_BRANCH");
 /// Immutable snapshot of build/version metadata. Compatible with gokit and pykit `VersionInfo`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VersionInfo {
-    /// Crate version from `Cargo.toml` (e.g. `"0.1.0"`).
+    /// Crate version from `Cargo.toml` (e.g. `"0.1.0-alpha.1"`).
     pub version: String,
     /// Full git commit hash at build time, or empty if unavailable.
     pub git_commit: String,
@@ -227,7 +227,7 @@ mod tests {
 
     #[test]
     fn is_release_reflects_version() {
-        // The workspace version is "0.1.0" which is not "dev" and not dirty
+        // Pre-release versions are still release builds; only dev/dirty builds are not.
         assert!(is_release());
     }
 
@@ -247,7 +247,8 @@ mod tests {
     #[test]
     fn version_info_matches_semver_requirement() {
         let info = get_version_info();
-        assert_eq!(info.matches_requirement(">=0.1.0"), Some(true));
+        assert_eq!(info.matches_requirement(">=0.1.0-alpha.1"), Some(true));
+        assert_eq!(info.matches_requirement(">=0.1.0"), Some(false));
         assert_eq!(info.matches_requirement("not a requirement"), None);
     }
 }

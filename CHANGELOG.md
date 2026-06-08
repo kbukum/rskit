@@ -178,6 +178,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Release tooling**: release-readiness sweeps now ignore ordinary line
   comments, SBOM generation fails fast when no artifacts are produced, and
   release signing reports an empty SBOM directory explicitly.
+- **Release tooling**: examples now depend on the alpha `rskit` prerelease,
+  version metadata tests accept prerelease SemVer bounds, and per-crate
+  coverage failures report both core and contrib stderr.
 - **rskit-git**: CLI branch/tag deletion now treats successful commands as
   successful even when captured stdout/stderr exceeded process capture limits.
 - **rskit-bench**: file-backed run listing now skips unreadable or partially
