@@ -186,6 +186,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   binding instead of racing on released ephemeral ports.
 - **Release tooling**: CI coverage now preserves the established core
   workspace line gate while still generating contrib LCOV reports for upload.
+- **Release tooling/rskit-bench**: action SHA-pin guardrails now reject dotted
+  version tags, and benchmark SVG output has regression coverage for malformed
+  duplicate quote attributes.
 - **rskit-git**: CLI branch/tag deletion now treats successful commands as
   successful even when captured stdout/stderr exceeded process capture limits.
 - **rskit-bench**: file-backed run listing now skips unreadable or partially

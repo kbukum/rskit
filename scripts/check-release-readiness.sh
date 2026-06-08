@@ -10,7 +10,7 @@ echo "==> Checking release guardrails..."
 ./scripts/check-public-api.sh
 
 echo "==> Checking GitHub Actions are SHA-pinned..."
-if git grep -n -E 'uses: [^[:space:]#@]+([[:space:]]*$|@(v[0-9]|main|master|stable)([[:space:]#]|$))' -- .github/workflows; then
+if git grep -n -E 'uses: [^[:space:]#@]+([[:space:]]*$|@((v[0-9][^[:space:]#]*)|main|master|stable)([[:space:]#]|$))' -- .github/workflows; then
     echo "error: unpinned GitHub Actions references found" >&2
     exit 1
 fi

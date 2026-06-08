@@ -223,6 +223,7 @@ fn svg_renderers_handle_empty_inputs_clamping_sorting_and_xml_escape() {
     assert!(confusion.contains("Confusion Matrix"));
     assert!(confusion.contains("yes&lt;&amp;"));
     assert!(confusion.contains(">10<"));
+    assert!(!confusion.contains("\"\""));
 
     let calibration = render_calibration(
         &CalibrationCurve {
@@ -236,6 +237,7 @@ fn svg_renderers_handle_empty_inputs_clamping_sorting_and_xml_escape() {
     assert!(calibration.contains("Calibration Curve"));
     assert!(calibration.contains("Predicted Probability"));
     assert!(calibration.contains("Actual Frequency"));
+    assert!(!calibration.contains("\"\""));
 
     let no_metric_comparison = render_comparison(
         &HashMap::from([(
@@ -290,4 +292,5 @@ fn svg_renderers_handle_empty_inputs_clamping_sorting_and_xml_escape() {
     assert!(comparison.find("branch-a").unwrap() < comparison.find("branch-b").unwrap());
     assert!(comparison.contains("accuracy"));
     assert!(comparison.contains("f1"));
+    assert!(!comparison.contains("\"\""));
 }
