@@ -1,8 +1,8 @@
 [advisories]
 ignore = [
-    # cargo-audit evaluates Cargo.lock package metadata without feature
-    # resolution, so it reports image's optional avif/ravif path even though
-    # rskit does not enable image/avif. cargo-deny remains the feature-aware
-    # advisory gate for enabled dependency graphs.
+    # cargo-audit is lockfile-based and reports vulnerable packages that remain
+    # in Cargo.lock from image's optional avif/ravif dependency metadata. The
+    # feature-aware dependency graph does not enable that path; cargo-deny
+    # remains the advisory gate for enabled dependency graphs.
     "RUSTSEC-2024-0436",
 ]
