@@ -1,12 +1,12 @@
 # rskit-embedding — canonical embedding abstraction
 
-`rskit-embedding` owns the SDK-free embedding contract plus deterministic test adapter. Provider backends live under `rskit-llm-providers` and register explicitly during composition.
+`rskit-embedding` owns the SDK-free embedding contract plus deterministic test adapter. Provider backends live in focused adapter crates and register explicitly during composition.
 
 ## Install
 
 ```toml
 [dependencies]
-rskit-embedding = "0.1"
+rskit-embedding = "0.1.0-alpha.1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 

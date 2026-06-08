@@ -2,9 +2,7 @@
 
 JSON Schema generation and validation helpers for rskit.
 
-`rskit-schema` wraps `schemars` and `jsonschema` behind a small foundational
-API for generating schemas from Rust types, compiling schemas once, validating
-JSON values, and bounding structured-output validation.
+`rskit-schema` wraps `schemars` and `jsonschema` behind a small foundational API for generating schemas from Rust types, compiling schemas once, validating JSON values, and bounding structured-output validation.
 
 ## Features
 

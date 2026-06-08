@@ -2,11 +2,7 @@
 
 ML benchmarking framework: evaluators, metrics, reports, and visualization.
 
-[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml)
-[![crates.io](https://img.shields.io/crates/v/rskit-bench.svg)](https://crates.io/crates/rskit-bench)
-[![docs.rs](https://docs.rs/rskit-bench/badge.svg)](https://docs.rs/rskit-bench)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![MSRV: 1.91](https://img.shields.io/badge/MSRV-1.91-orange.svg)](https://www.rust-lang.org/)
+[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/rskit-bench.svg)](https://crates.io/crates/rskit-bench) [![docs.rs](https://docs.rs/rskit-bench/badge.svg)](https://docs.rs/rskit-bench) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![MSRV: 1.91](https://img.shields.io/badge/MSRV-1.91-orange.svg)](https://www.rust-lang.org/)
 
 ## Features
 
@@ -19,16 +15,13 @@ ML benchmarking framework: evaluators, metrics, reports, and visualization.
 - ROC curves, confusion matrices, score distribution charts
 - `BenchClock` / `FixedClock` for deterministic timestamps and durations in tests
 
-Benchmark orchestration accepts injected clock and storage implementations.
-Production CLIs can choose `SystemClock` and `FileRunStorage`; tests and
-reproducible harnesses should inject `FixedClock` and an in-memory or tempdir
-storage implementation.
+Benchmark orchestration accepts injected clock and storage implementations. Production CLIs can choose `SystemClock` and `FileRunStorage`; tests and reproducible harnesses should inject `FixedClock` and an in-memory or tempdir storage implementation.
 
 ## Usage
 
 ```toml
 [dependencies]
-rskit-bench = "0.1"
+rskit-bench = "0.1.0-alpha.1"
 ```
 
 ```rust

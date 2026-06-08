@@ -29,7 +29,7 @@ async fn setup_discovery_server(
         tags: vec!["v1".to_string(), "prod".to_string()],
         metadata: Default::default(),
     };
-    
+
     let discovery_server = DiscoveryServer::new(http_server, registry, service_instance, log)?;
     Ok(discovery_server)
 }
@@ -37,23 +37,23 @@ async fn setup_discovery_server(
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let log = Logger::new();
-    
+
     // Create HTTP server
     let http_server = HttpServer::new("0.0.0.0:8080")?;
-    
+
     // Setup discovery registry (e.g., Consul)
     let registry: Box<dyn Registry> = Box::new(/* consul registry */);
-    
+
     // Wrap with discovery
     let disc_server = setup_discovery_server(http_server, registry, log).await?;
-    
+
     // Start (auto-registers on Start, deregisters on Stop)
     disc_server.start().await?;
-    
+
     // Keep running
     tokio::signal::ctrl_c().await?;
     disc_server.stop().await?;
-    
+
     Ok(())
 }
 ```
@@ -95,7 +95,7 @@ impl MessageHandler for OrderHandler {
 
 async fn setup_message_handler(tracer: Arc<Tracer>, log: Logger) -> Arc<dyn MessageHandler> {
     let base_handler = Arc::new(OrderHandler);
-    
+
     // Wrap with retry middleware
     let with_retry = rskit_messaging::middleware::retry_handler(
         base_handler,
@@ -105,7 +105,7 @@ async fn setup_message_handler(tracer: Arc<Tracer>, log: Logger) -> Arc<dyn Mess
             dlq_topic: Some("orders.dlq".to_string()),
         },
     );
-    
+
     // Wrap with circuit breaker
     let with_cb = rskit_messaging::middleware::circuit_breaker_handler(
         with_retry,
@@ -115,20 +115,20 @@ async fn setup_message_handler(tracer: Arc<Tracer>, log: Logger) -> Arc<dyn Mess
             timeout_seconds: 30,
         },
     );
-    
+
     // Wrap with metrics
     let with_metrics = rskit_messaging::middleware::metrics_handler(
         with_cb,
         "orders.created",
         "order-processor",
     );
-    
+
     // Wrap with tracing (outermost)
     let with_tracing = rskit_messaging::middleware::tracing_handler(
         with_metrics,
         tracer,
     );
-    
+
     with_tracing
 }
 
@@ -136,26 +136,26 @@ async fn setup_message_handler(tracer: Arc<Tracer>, log: Logger) -> Arc<dyn Mess
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let log = Logger::new();
     let tracer = Arc::new(Tracer::new("order-service"));
-    
+
     // Setup message handler with middleware
     let handler = setup_message_handler(tracer.clone(), log.clone()).await;
-    
+
     // Create Kafka consumer with wrapped handler
     let config = KafkaConfig {
         brokers: vec!["localhost:9092".to_string()],
         group_id: "order-processor".to_string(),
         ..Default::default()
     };
-    
+
     let consumer = KafkaConsumer::new(config, "orders.created", handler)?;
-    
+
     // Run consumer
     consumer.start().await?;
-    
+
     // Graceful shutdown
     tokio::signal::ctrl_c().await?;
     consumer.stop().await?;
-    
+
     Ok(())
 }
 ```
@@ -179,7 +179,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```rust
 // Cargo.toml
-// rskit-grpc = { version = "0.1", features = ["client", "discovery"] }
+// rskit-grpc = { version = "0.1.0-alpha.1", features = ["client", "discovery"] }
 
 use rskit_grpc::{DiscoveryChannel, GrpcClientConfig};
 use rskit_discovery::Discovery;
@@ -210,7 +210,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             data: "hello world".to_string(),
         }))
         .await?;
-    
+
     println!("Analysis result: {:?}", response.into_inner());
 
     Ok(())
@@ -299,17 +299,17 @@ struct OrderCreatedEvent {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create Kafka producer
     let producer = KafkaProducer::new("localhost:9092")?;
-    
+
     // Wrap with EventPublisher for auto-envelope
     let event_pub = EventPublisher::new(producer, "order-service");
-    
+
     // Publish event (no manual envelope needed)
     let order_event = OrderCreatedEvent {
         order_id: "order-123".to_string(),
         customer_id: "cust-456".to_string(),
         amount: 99.99,
     };
-    
+
     event_pub
         .publish(
             "orders.created",
@@ -317,7 +317,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             &order_event,
         )
         .await?;
-    
+
     // Publish with partition key for ordering
     event_pub
         .publish_keyed(
@@ -327,7 +327,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "cust-456",  // key ensures ordering per customer
         )
         .await?;
-    
+
     Ok(())
 }
 ```
@@ -358,10 +358,10 @@ use tokio_util::sync::CancellationToken;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let log = Logger::new();
-    
+
     // Configure subprocess execution
     let config = ProcessConfig::default().with_timeout(Some(Duration::from_secs(30)));
-    
+
     // Execute FFmpeg command for video processing
     let spec = ProcessSpec::new("ffmpeg")
         .args(&[
@@ -371,7 +371,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "-preset", "fast",
             "output.mp4",
         ]);
-    
+
     match run_with_cancel(&spec, &config, CancellationToken::new()).await {
         Ok(result) => {
             println!("Process succeeded");
@@ -388,7 +388,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Err(app_err.into());
         }
     }
-    
+
     Ok(())
 }
 ```
@@ -428,7 +428,7 @@ use std::sync::Arc;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let log = Logger::new();
-    
+
     // 1. HTTP server with discovery
     let http_server = HttpServer::new("0.0.0.0:8080")?;
     let registry: Box<dyn Registry> = Box::new(/* ConsulRegistry */);
@@ -439,16 +439,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         log.clone(),
     )?;
     disc_server.start().await?;
-    
+
     // 2. Message handler with middleware
     let handler = setup_message_handler(log.clone()).await;
     let consumer = KafkaConsumer::new(KafkaConfig::default(), "orders.created", handler)?;
     consumer.start().await?;
-    
+
     // 3. Event publisher
     let producer = KafkaProducer::new("localhost:9092")?;
     let event_pub = EventPublisher::new(producer, "order-service");
-    
+
     // 4. gRPC client with discovery
     let discovery: Arc<dyn Discovery> = Arc::new(/* ConsulDiscovery */);
     let grpc_channel = DiscoveryChannel::new(
@@ -456,17 +456,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "analysis-service",
         GrpcClientConfig::new("analysis-service:50051"),
     );
-    
+
     // 5. HTTP client with resilience
     let http_config = HttpClientConfig::new().with_base_url("https://api.example.com");
     let http_client = HttpClient::new(http_config)?;
-    
+
     // Keep running
     tokio::signal::ctrl_c().await?;
-    
+
     consumer.stop().await?;
     disc_server.stop().await?;
-    
+
     Ok(())
 }
 ```

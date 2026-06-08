@@ -2,11 +2,7 @@
 
 `JoinSet` + `Semaphore` worker pool with typed event streaming, panic detection, and graceful drain.
 
-[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml)
-[![crates.io](https://img.shields.io/crates/v/rskit-worker.svg)](https://crates.io/crates/rskit-worker)
-[![docs.rs](https://docs.rs/rskit-worker/badge.svg)](https://docs.rs/rskit-worker)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![MSRV: 1.85](https://img.shields.io/badge/MSRV-1.85-orange.svg)](https://blog.rust-lang.org/2025/02/20/Rust-1.85.0.html)
+[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/rskit-worker.svg)](https://crates.io/crates/rskit-worker) [![docs.rs](https://docs.rs/rskit-worker/badge.svg)](https://docs.rs/rskit-worker) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![MSRV: 1.85](https://img.shields.io/badge/MSRV-1.85-orange.svg)](https://blog.rust-lang.org/2025/02/20/Rust-1.85.0.html)
 
 ## Features
 
@@ -20,7 +16,7 @@
 
 ```toml
 [dependencies]
-rskit-worker = "0.1"
+rskit-worker = "0.1.0-alpha.1"
 async-trait = "0.1"
 ```
 

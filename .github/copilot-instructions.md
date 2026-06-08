@@ -20,8 +20,7 @@ Shared engineering baseline — apply to all work here:
 
 ## Build, Test, and Lint
 
-Requires: Rust 1.91+ (declared by workspace `rust-version`; development
-toolchain pinned via `rust-toolchain.toml`).
+Requires: Rust 1.91+ (declared by workspace `rust-version`; development toolchain pinned via `rust-toolchain.toml`).
 
 ```bash
 make check              # Full validation: fmt-check + lint + build + test
@@ -37,7 +36,7 @@ make deny               # cargo-deny (licenses, advisories, sources)
 
 ## Crate Structure
 
-Cargo workspace split by role:
+Cargo workspaces are split by role:
 
 - `core/rskit-<name>/` — foundation crates and the `rskit` facade
 - `contrib/<domain>/<name>/` — adapter crates grouped by domain (`storage`, `cache`, `messaging`, `inference`, `llm`, `media`, `vectorstore`)
@@ -47,7 +46,7 @@ Core crates cover the shared foundations and cross-cutting modules (for example 
 
 The facade crate (`rskit`) re-exports core crates and exposes adapter integrations via feature flags.
 
-When adding a new foundation crate: create it under `core/rskit-<name>/`, add it to workspace members, inherit workspace package metadata, add `#![warn(missing_docs)]`, and wire it into the facade as appropriate. When adding an adapter crate, place it under `contrib/<domain>/<name>/`.
+When adding a new foundation crate: create it under `core/rskit-<name>/`, add it to `core/Cargo.toml`, inherit workspace package metadata, add `#![warn(missing_docs)]`, and wire it into the facade as appropriate. When adding an adapter crate, place it under `contrib/<domain>/<name>/` and make sure it is covered by the matching `contrib/Cargo.toml` workspace member pattern.
 
 ## Code Style
 

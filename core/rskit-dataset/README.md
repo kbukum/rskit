@@ -2,11 +2,7 @@
 
 Streaming dataset collection framework: source, transform, target, schema validation, and collector orchestration.
 
-[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml)
-[![crates.io](https://img.shields.io/crates/v/rskit-dataset.svg)](https://crates.io/crates/rskit-dataset)
-[![docs.rs](https://docs.rs/rskit-dataset/badge.svg)](https://docs.rs/rskit-dataset)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![MSRV: 1.91](https://img.shields.io/badge/MSRV-1.91-orange.svg)](https://github.com/kbukum/rskit/blob/main/core/Cargo.toml)
+[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/rskit-dataset.svg)](https://crates.io/crates/rskit-dataset) [![docs.rs](https://docs.rs/rskit-dataset/badge.svg)](https://docs.rs/rskit-dataset) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![MSRV: 1.91](https://img.shields.io/badge/MSRV-1.91-orange.svg)](https://github.com/kbukum/rskit/blob/main/core/Cargo.toml)
 
 ## Features
 
@@ -25,7 +21,7 @@ Streaming dataset collection framework: source, transform, target, schema valida
 
 ```toml
 [dependencies]
-rskit-dataset = "0.1"
+rskit-dataset = "0.1.0-alpha.1"
 ```
 
 ```rust

@@ -2,11 +2,7 @@
 
 Native image processing backend using the `image` crate.
 
-[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml)
-[![crates.io](https://img.shields.io/crates/v/rskit-media-image.svg)](https://crates.io/crates/rskit-media-image)
-[![docs.rs](https://docs.rs/rskit-media-image/badge.svg)](https://docs.rs/rskit-media-image)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![MSRV: 1.91](https://img.shields.io/badge/MSRV-1.91-orange.svg)](https://github.com/kbukum/rskit/blob/main/contrib/Cargo.toml)
+[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/rskit-media-image.svg)](https://crates.io/crates/rskit-media-image) [![docs.rs](https://docs.rs/rskit-media-image/badge.svg)](https://docs.rs/rskit-media-image) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![MSRV: 1.91](https://img.shields.io/badge/MSRV-1.91-orange.svg)](https://github.com/kbukum/rskit/blob/main/contrib/Cargo.toml)
 
 ## Features
 
@@ -21,7 +17,7 @@ Native image processing backend using the `image` crate.
 
 ```toml
 [dependencies]
-rskit-media-image = "0.1"
+rskit-media-image = "0.1.0-alpha.1"
 ```
 
 ```rust

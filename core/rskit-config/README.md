@@ -2,11 +2,7 @@
 
 Load application, service, tool, and adapter-backed configuration through one source pipeline.
 
-[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml)
-[![crates.io](https://img.shields.io/crates/v/rskit-config.svg)](https://crates.io/crates/rskit-config)
-[![docs.rs](https://docs.rs/rskit-config/badge.svg)](https://docs.rs/rskit-config)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![MSRV: 1.85](https://img.shields.io/badge/MSRV-1.85-orange.svg)](https://blog.rust-lang.org/2025/02/20/Rust-1.85.0.html)
+[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/rskit-config.svg)](https://crates.io/crates/rskit-config) [![docs.rs](https://docs.rs/rskit-config/badge.svg)](https://docs.rs/rskit-config) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![MSRV: 1.85](https://img.shields.io/badge/MSRV-1.85-orange.svg)](https://blog.rust-lang.org/2025/02/20/Rust-1.85.0.html)
 
 ## Features
 
@@ -29,21 +25,15 @@ Load application, service, tool, and adapter-backed configuration through one so
 6. Environment variables (`__` separator, optional prefix via `with_env_prefix`)
 7. Programmatic overrides (`with_override`)
 
-Profile files requested through `with_profile` and explicit `.env` files requested
-through `with_env_file` are fail-closed: missing or malformed files return an
-`AppError` during `load()` instead of being silently ignored.
+Profile files requested through `with_profile` and explicit `.env` files requested through `with_env_file` are fail-closed: missing or malformed files return an `AppError` during `load()` instead of being silently ignored.
 
-Dotenv values are loaded into the `ConfigLoader` source chain only; they do not
-mutate the process environment. Code that needs dotenv-backed values should read
-them from the typed config returned by `load()` rather than from `std::env`.
-Malformed auto-discovered `.env` files are logged and skipped so optional local
-developer files do not prevent startup.
+Dotenv values are loaded into the `ConfigLoader` source chain only; they do not mutate the process environment. Code that needs dotenv-backed values should read them from the typed config returned by `load()` rather than from `std::env`. Malformed auto-discovered `.env` files are logged and skipped so optional local developer files do not prevent startup.
 
 ## Usage
 
 ```toml
 [dependencies]
-rskit-config = "0.1"
+rskit-config = "0.1.0-alpha.1"
 serde = { version = "1", features = ["derive"] }
 validator = { version = "0.20", features = ["derive"] }
 ```
@@ -76,13 +66,9 @@ let cfg: Config = ConfigLoader::app()
     .load_app()?;
 ```
 
-Use [`SecretString`](https://docs.rs/rskit-config/latest/rskit_config/struct.SecretString.html)
-for credentials, tokens, private keys, and other secret fields. It deserializes
-from config sources but masks `Debug`, `Display`, and serialization output; call
-`expose()` only at the boundary that needs the plaintext.
+Use [`SecretString`](https://docs.rs/rskit-config/latest/rskit_config/struct.SecretString.html) for credentials, tokens, private keys, and other secret fields. It deserializes from config sources but masks `Debug`, `Display`, and serialization output; call `expose()` only at the boundary that needs the plaintext.
 
-Deterministic tool/project config should use an explicit policy that does not
-read dotenv files or process environment variables:
+Deterministic tool/project config should use an explicit policy that does not read dotenv files or process environment variables:
 
 ```rust
 let cfg: ToolConfig = ConfigLoader::toml("tool.toml").load()?;
@@ -122,9 +108,7 @@ let cfg: Config = ConfigLoader::app()
 
 ## Validation
 
-Structs loaded with `load()` must implement `Deserialize` and `Validate`.
-Application configs loaded with `load_app()` must implement `AppConfig`; the
-loader calls `AppConfig::apply_defaults()` before validation.
+Structs loaded with `load()` must implement `Deserialize` and `Validate`. Application configs loaded with `load_app()` must implement `AppConfig`; the loader calls `AppConfig::apply_defaults()` before validation.
 
 ## See Also
 

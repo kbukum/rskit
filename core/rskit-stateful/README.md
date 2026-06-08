@@ -1,13 +1,8 @@
 # rskit-stateful — State Machines and Accumulators
 
-Stateful accumulation primitives with pluggable stores, configurable flush triggers, size limits,
-TTL expiration, and keyed manager cleanup.
+Stateful accumulation primitives with pluggable stores, configurable flush triggers, size limits, TTL expiration, and keyed manager cleanup.
 
-[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml)
-[![crates.io](https://img.shields.io/crates/v/rskit-stateful.svg)](https://crates.io/crates/rskit-stateful)
-[![docs.rs](https://docs.rs/rskit-stateful/badge.svg)](https://docs.rs/rskit-stateful)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![MSRV: 1.85](https://img.shields.io/badge/MSRV-1.85-orange.svg)](https://blog.rust-lang.org/2025/02/20/Rust-1.85.0.html)
+[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/rskit-stateful.svg)](https://crates.io/crates/rskit-stateful) [![docs.rs](https://docs.rs/rskit-stateful/badge.svg)](https://docs.rs/rskit-stateful) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![MSRV: 1.85](https://img.shields.io/badge/MSRV-1.85-orange.svg)](https://blog.rust-lang.org/2025/02/20/Rust-1.85.0.html)
 
 ## Features
 
@@ -23,7 +18,7 @@ TTL expiration, and keyed manager cleanup.
 
 ```toml
 [dependencies]
-rskit-stateful = "0.1"
+rskit-stateful = "0.1.0-alpha.1"
 ```
 
 ```rust

@@ -2,11 +2,7 @@
 
 Production-ready structured logging built on the [tracing](https://docs.rs/tracing) ecosystem.
 
-[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml)
-[![crates.io](https://img.shields.io/crates/v/rskit-logging.svg)](https://crates.io/crates/rskit-logging)
-[![docs.rs](https://docs.rs/rskit-logging/badge.svg)](https://docs.rs/rskit-logging)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![MSRV: 1.85](https://img.shields.io/badge/MSRV-1.85-orange.svg)](https://blog.rust-lang.org/2025/02/20/Rust-1.85.0.html)
+[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/rskit-logging.svg)](https://crates.io/crates/rskit-logging) [![docs.rs](https://docs.rs/rskit-logging/badge.svg)](https://docs.rs/rskit-logging) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![MSRV: 1.85](https://img.shields.io/badge/MSRV-1.85-orange.svg)](https://blog.rust-lang.org/2025/02/20/Rust-1.85.0.html)
 
 ## Features
 
@@ -23,10 +19,10 @@ Production-ready structured logging built on the [tracing](https://docs.rs/traci
 
 ```toml
 [dependencies]
-rskit-logging = "0.1"
+rskit-logging = "0.1.0-alpha.1"
 
 # With OTLP export support
-rskit-logging = { version = "0.1", features = ["otlp"] }
+rskit-logging = { version = "0.1.0-alpha.1", features = ["otlp"] }
 ```
 
 ## Quick Start
@@ -256,7 +252,7 @@ The OpenTelemetry Logs bridge sends tracing events to an OTLP collector. It uses
 
 ```toml
 [dependencies]
-rskit-logging = { version = "0.1", features = ["otlp"] }
+rskit-logging = { version = "0.1.0-alpha.1", features = ["otlp"] }
 ```
 
 ### Setup

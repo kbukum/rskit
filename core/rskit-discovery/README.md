@@ -2,11 +2,7 @@
 
 Service discovery with registry and load balancing strategies.
 
-[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml)
-[![crates.io](https://img.shields.io/crates/v/rskit-discovery.svg)](https://crates.io/crates/rskit-discovery)
-[![docs.rs](https://docs.rs/rskit-discovery/badge.svg)](https://docs.rs/rskit-discovery)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![MSRV: 1.85](https://img.shields.io/badge/MSRV-1.85-orange.svg)](https://blog.rust-lang.org/2025/02/20/Rust-1.85.0.html)
+[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/rskit-discovery.svg)](https://crates.io/crates/rskit-discovery) [![docs.rs](https://docs.rs/rskit-discovery/badge.svg)](https://docs.rs/rskit-discovery) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![MSRV: 1.85](https://img.shields.io/badge/MSRV-1.85-orange.svg)](https://blog.rust-lang.org/2025/02/20/Rust-1.85.0.html)
 
 ## Features
 
@@ -21,7 +17,7 @@ Service discovery with registry and load balancing strategies.
 
 ```toml
 [dependencies]
-rskit-discovery = "0.1"
+rskit-discovery = "0.1.0-alpha.1"
 ```
 
 ```rust
@@ -50,9 +46,7 @@ async fn example() {
 
 ## Consul transport behavior
 
-The optional Consul backend builds on `rskit-httpclient`. Consul requests use a
-bounded timeout that exceeds the blocking-query wait interval, do not follow
-redirects, and allow-list only the configured Consul host.
+The optional Consul backend builds on `rskit-httpclient`. Consul requests use a bounded timeout that exceeds the blocking-query wait interval, do not follow redirects, and allow-list only the configured Consul host.
 
 ## See Also
 

@@ -2,11 +2,7 @@
 
 Directed acyclic graph task orchestrator with parallel execution.
 
-[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml)
-[![crates.io](https://img.shields.io/crates/v/rskit-dag.svg)](https://crates.io/crates/rskit-dag)
-[![docs.rs](https://docs.rs/rskit-dag/badge.svg)](https://docs.rs/rskit-dag)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![MSRV: 1.85](https://img.shields.io/badge/MSRV-1.85-orange.svg)](https://blog.rust-lang.org/2025/02/20/Rust-1.85.0.html)
+[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/rskit-dag.svg)](https://crates.io/crates/rskit-dag) [![docs.rs](https://docs.rs/rskit-dag/badge.svg)](https://docs.rs/rskit-dag) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![MSRV: 1.85](https://img.shields.io/badge/MSRV-1.85-orange.svg)](https://blog.rust-lang.org/2025/02/20/Rust-1.85.0.html)
 
 ## Features
 
@@ -30,20 +26,17 @@ Directed acyclic graph task orchestrator with parallel execution.
 
 ### Cycle-detection guarantee
 
-`Dag::add_edge` rejects any edge that would create a cycle. `Dag::execute` also runs a
-topological-sort validation before scheduling work.
+`Dag::add_edge` rejects any edge that would create a cycle. `Dag::execute` also runs a topological-sort validation before scheduling work.
 
 ### Parallel sibling execution
 
-Nodes whose dependencies are satisfied are spawned as siblings and run concurrently. By default,
-parallelism is bounded by the host's available parallelism. Use
-`Dag::with_max_parallelism(n)` to set the cap; `n` is clamped to at least one.
+Nodes whose dependencies are satisfied are spawned as siblings and run concurrently. By default, parallelism is bounded by the host's available parallelism. Use `Dag::with_max_parallelism(n)` to set the cap; `n` is clamped to at least one.
 
 ## Usage
 
 ```toml
 [dependencies]
-rskit-dag = "0.1"
+rskit-dag = "0.1.0-alpha.1"
 ```
 
 ```rust

@@ -14,7 +14,7 @@ Shared TLS, secret redaction, and HTTP security vocabulary for rskit transports.
 
 ```toml
 [dependencies]
-rskit-security = "0.1"
+rskit-security = "0.1.0-alpha.1"
 ```
 
 ```rust
