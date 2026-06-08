@@ -80,6 +80,13 @@ pub(crate) fn qdrant_value_to_payload(field: &str, value: Value) -> AppResult<Pa
         Value::Number(n) => {
             if let Some(i) = n.as_i64() {
                 Ok(PayloadValue::Integer(i))
+            } else if let Some(u) = n.as_u64() {
+                i64::try_from(u).map(PayloadValue::Integer).map_err(|_| {
+                    AppError::new(
+                        ErrorCode::InvalidInput,
+                        format!("Qdrant payload integer for field '{field}' is outside i64 bounds"),
+                    )
+                })
             } else if let Some(f) = n.as_f64() {
                 Ok(PayloadValue::Float(finite_qdrant_float(
                     f,
@@ -169,6 +176,26 @@ mod tests {
 
         assert_eq!(err.code(), ErrorCode::InvalidInput);
         assert!(err.message().contains("tags"));
+    }
+
+    #[test]
+    fn qdrant_value_to_payload_preserves_unsigned_integer_contract() {
+        let value = Value::Number(Number::from(i64::MAX as u64));
+
+        assert_eq!(
+            qdrant_value_to_payload("count", value).unwrap(),
+            PayloadValue::Integer(i64::MAX)
+        );
+    }
+
+    #[test]
+    fn qdrant_value_to_payload_rejects_unsigned_integer_overflow() {
+        let value = Value::Number(Number::from(i64::MAX as u64 + 1));
+
+        let err = qdrant_value_to_payload("count", value).unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+        assert!(err.message().contains("outside i64 bounds"));
     }
 
     #[test]

@@ -202,6 +202,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and generated module docs stay aligned with the workspace.
 - **rskit-vectorstore-qdrant**: malformed Qdrant JSON responses now surface as
   external-service failures instead of client input errors.
+- **rskit-vectorstore-qdrant**: returned unsigned JSON integers now preserve
+  the signed `PayloadValue::Integer(i64)` contract and reject values outside
+  `i64` bounds instead of converting them to floats.
 - **Workspace hygiene**: dependency-sync help text now reflects that examples
   are checked alongside core and contrib.
 - **CI**: examples now include the shared cargo-nextest `ci` profile used by
