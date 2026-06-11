@@ -159,6 +159,7 @@ def run_workspace_coverage(
                 process_registry=process_registry,
             )
             if returncode != 0:
+                print_command_log_tail(log_path)
                 event_bus.emit(
                     CoverageEvent(
                         "step_failed",
@@ -223,6 +224,27 @@ def run_workspace_coverage(
         )
     event_bus.emit(CoverageEvent("package_completed", package=event_package))
     return results
+
+
+def print_command_log_tail(log_path: Path, max_lines: int = 120) -> None:
+    """Print a bounded command log tail so CI exposes the root failure."""
+
+    try:
+        lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError as error:
+        print(
+            f"error: failed to read coverage command log {log_path.relative_to(ROOT)}: {error}",
+            file=sys.stderr,
+        )
+        return
+
+    print(
+        "error: coverage command failed; "
+        f"last {min(max_lines, len(lines))} line(s) from {log_path.relative_to(ROOT)}:",
+        file=sys.stderr,
+    )
+    for line in lines[-max_lines:]:
+        print(line, file=sys.stderr)
 
 
 def workspace_event_package(plan: WorkspaceCoveragePlan) -> Package:

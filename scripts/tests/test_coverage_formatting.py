@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import tempfile
 import unittest
 
 from . import support  # noqa: F401
@@ -11,6 +12,7 @@ from rskit_tool.cargo import Package
 from rskit_tool.coverage.events import CoverageEvent, CoverageEventBus, CoverageProgressReporter
 from rskit_tool.coverage.formatting import format_bar, format_package_result, format_percent, format_stage_progress
 from rskit_tool.coverage.models import CoverageTotals, Metric, ModuleResult
+from rskit_tool.coverage.runner import print_command_log_tail
 from rskit_tool.paths import ROOT
 
 
@@ -88,6 +90,22 @@ class CoverageFormattingTests(unittest.TestCase):
             dashboard.handle(CoverageEvent("package_started", package=package))
             dashboard.handle(CoverageEvent("step_completed", package=package, step="clean", package_completed_steps=1))
         self.assertTrue(dashboard.dashboard_lines()[0].startswith("coverage [=---------] 12.5%"))
+
+    def test_command_log_tail_prints_bounded_failure_context(self) -> None:
+        target = ROOT / "target"
+        target.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=target) as directory:
+            log_path = ROOT / directory / "command.log"
+            log_path.write_text("line 1\nline 2\nline 3\n", encoding="utf-8")
+
+            with contextlib.redirect_stderr(io.StringIO()) as output:
+                print_command_log_tail(log_path, max_lines=2)
+
+        rendered = output.getvalue()
+        self.assertIn("last 2 line(s)", rendered)
+        self.assertNotIn("line 1", rendered)
+        self.assertIn("line 2", rendered)
+        self.assertIn("line 3", rendered)
 
 
 if __name__ == "__main__":

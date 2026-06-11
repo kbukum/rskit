@@ -246,6 +246,12 @@ jobs:
           else
             ./scripts/rskit_tool.py coverage --mode coverage --line-threshold "${COVERAGE_LINE_THRESHOLD:-90}"
           fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        if: failure()
+        with:
+          name: coverage-debug
+          path: target/coverage
+          if-no-files-found: ignore
       - uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354  # v5
         with:
           directory: target/coverage/workspaces
