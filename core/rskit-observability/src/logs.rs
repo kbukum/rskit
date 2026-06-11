@@ -92,3 +92,49 @@ pub fn init_logs(cfg: &LogsConfig) -> AppResult<LogsHandle> {
         provider: builder.build(),
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use super::*;
+
+    fn config(endpoint: Option<&str>) -> LogsConfig {
+        LogsConfig {
+            service_name: "logs-test".to_string(),
+            otlp_endpoint: endpoint.map(str::to_string),
+            protocol: OtlpProtocol::Grpc,
+            export_timeout: Duration::from_millis(10),
+        }
+    }
+
+    #[test]
+    fn no_export_pipeline_builds_and_shuts_down_cleanly() {
+        let handle = init_logs(&config(None)).expect("build no-export logger provider");
+        let _provider = handle.provider();
+
+        handle.shutdown().expect("shutdown no-export provider");
+    }
+
+    #[cfg(not(feature = "otlp"))]
+    #[test]
+    fn otlp_endpoint_requires_feature() {
+        let error = match init_logs(&config(Some("http://127.0.0.1:4317"))) {
+            Ok(_) => panic!("otlp disabled should reject log exporter configuration"),
+            Err(error) => error,
+        };
+
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
+        assert!(error.message().contains("otlp"));
+    }
+
+    #[cfg(feature = "otlp")]
+    #[test]
+    fn otlp_pipeline_builds_for_http_protocol_without_connecting() {
+        let mut cfg = config(Some("http://127.0.0.1:4318/v1/logs"));
+        cfg.protocol = OtlpProtocol::HttpBinary;
+
+        let handle = init_logs(&cfg).expect("build otlp logger provider");
+        let _provider = handle.provider();
+    }
+}

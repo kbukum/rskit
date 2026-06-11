@@ -162,4 +162,77 @@ mod tests {
             "invalid skill: assets exceed total size limit of 64 bytes while reading references/large.bin (65 bytes)"
         );
     }
+
+    #[test]
+    fn registry_errors_map_to_expected_app_error_codes() {
+        let not_found = AppError::from(SkillError::NotFound("resize".into()));
+        assert_eq!(not_found.code(), ErrorCode::NotFound);
+        assert!(not_found.message().contains("resize"));
+
+        let duplicate = AppError::from(SkillError::AlreadyRegistered("resize".into()));
+        assert_eq!(duplicate.code(), ErrorCode::AlreadyExists);
+        assert!(duplicate.message().contains("resize"));
+    }
+
+    #[test]
+    fn validation_errors_map_to_invalid_input() {
+        for error in [
+            SkillError::InvalidManifest("missing name".into()),
+            SkillError::Config("bad source".into()),
+            SkillError::Verification("unsigned".into()),
+        ] {
+            let app_error = AppError::from(error);
+            assert_eq!(app_error.code(), ErrorCode::InvalidInput);
+        }
+    }
+
+    #[test]
+    fn file_content_errors_preserve_context_and_causes() {
+        let too_large = AppError::from(SkillError::FileTooLarge {
+            path: PathBuf::from("SKILL.md"),
+            limit_bytes: 8,
+        });
+        assert_eq!(too_large.code(), ErrorCode::InvalidInput);
+        assert!(too_large.message().contains("SKILL.md"));
+
+        let utf8_source = String::from_utf8(vec![0xff]).unwrap_err();
+        let invalid_utf8 = AppError::from(SkillError::InvalidUtf8 {
+            path: PathBuf::from("SKILL.md"),
+            source: utf8_source,
+        });
+        assert_eq!(invalid_utf8.code(), ErrorCode::InvalidInput);
+        assert!(invalid_utf8.cause().is_some());
+    }
+
+    #[test]
+    fn filesystem_and_manifest_parse_errors_preserve_causes() {
+        let io = AppError::from(SkillError::Io {
+            path: PathBuf::from("skill.toml"),
+            source: std::io::Error::other("disk"),
+        });
+        assert_eq!(io.code(), ErrorCode::Internal);
+        assert!(io.cause().is_some());
+
+        let source = serde_norway::from_str::<serde_norway::Value>(": bad").unwrap_err();
+        let parse = AppError::from(SkillError::ParseManifest {
+            path: PathBuf::from("skill.toml"),
+            source,
+        });
+        assert_eq!(parse.code(), ErrorCode::InvalidInput);
+        assert!(parse.cause().is_some());
+    }
+
+    #[test]
+    fn invalid_pack_file_maps_reason_to_invalid_input() {
+        let error = AppError::from(SkillError::InvalidPackFile {
+            path: PathBuf::from("references/link"),
+            reason: "symlinks are not allowed".into(),
+        });
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
+        assert!(
+            error
+                .message()
+                .contains("references/link: symlinks are not allowed")
+        );
+    }
 }

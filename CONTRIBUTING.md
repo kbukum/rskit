@@ -47,6 +47,7 @@ Be respectful, constructive, and patient. We follow the [Contributor Covenant v2
 ## Prerequisites
 
 - Install Rust via [rustup](https://rustup.rs/). The repo is pinned to a specific toolchain via `rust-toolchain.toml` — rustup will automatically download and use the correct version.
+- Install Python 3.11+ for repository automation, then run `make setup` to install or verify local Cargo tooling.
 - **Linux:** Install `mold` linker for faster builds: `sudo apt install mold`
 - **Linux:** `clang` is also required as the linker driver when using the documented `mold` setup.
 - **macOS:** No additional linker setup needed (uses platform default)
@@ -58,8 +59,8 @@ Be respectful, constructive, and patient. We follow the [Contributor Covenant v2
 **Minimum Rust version:** 1.91 (declared by workspace `rust-version`). The repository pins a newer development toolchain in `rust-toolchain.toml`.
 
 ```sh
-# Install the pinned toolchain + components
-rustup show
+# Install/verify the pinned toolchain, Python runtime, and local Cargo tools
+make setup
 
 # Build all split workspaces
 make build
@@ -77,9 +78,8 @@ make fmt-check
 Optional but recommended:
 
 ```sh
-# Supply-chain audit
-cargo install cargo-deny
-make deny
+# Try system/release tool setup as well
+scripts/setup.sh --system --release
 
 # Documentation
 make doc

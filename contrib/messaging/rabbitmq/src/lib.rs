@@ -6,6 +6,7 @@
 #![warn(missing_docs)]
 
 use std::collections::HashSet;
+use std::fmt;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
@@ -63,12 +64,7 @@ impl RabbitMqProducer {
         }
 
         let connection = connect(&self.config).await?;
-        let channel = connection.create_channel().await.map_err(|e| {
-            AppError::new(
-                ErrorCode::ExternalService,
-                format!("RabbitMQ channel failed: {e}"),
-            )
-        })?;
+        let channel = connection.create_channel().await.map_err(channel_failed)?;
         *guard = Some(RabbitMqProducerState {
             connection,
             channel: channel.clone(),
@@ -107,19 +103,9 @@ impl MessageProducer<Vec<u8>> for RabbitMqProducer {
                 BasicProperties::default(),
             )
             .await
-            .map_err(|e| {
-                AppError::new(
-                    ErrorCode::ExternalService,
-                    format!("RabbitMQ publish failed: {e}"),
-                )
-            })?
+            .map_err(publish_failed)?
             .await
-            .map_err(|e| {
-                AppError::new(
-                    ErrorCode::ExternalService,
-                    format!("RabbitMQ publish confirm failed: {e}"),
-                )
-            })?;
+            .map_err(publish_confirm_failed)?;
         debug!(topic = %msg.topic, "message sent to RabbitMQ");
         Ok(())
     }
@@ -142,22 +128,12 @@ impl MessageProducer<Vec<u8>> for RabbitMqProducer {
                 .channel
                 .close(200, "closed".into())
                 .await
-                .map_err(|e| {
-                    AppError::new(
-                        ErrorCode::ExternalService,
-                        format!("RabbitMQ channel close failed: {e}"),
-                    )
-                })?;
+                .map_err(channel_close_failed)?;
             state
                 .connection
                 .close(200, "closed".into())
                 .await
-                .map_err(|e| {
-                    AppError::new(
-                        ErrorCode::ExternalService,
-                        format!("RabbitMQ connection close failed: {e}"),
-                    )
-                })?;
+                .map_err(connection_close_failed)?;
         }
         self.declared_queues.lock().await.clear();
         Ok(())
@@ -240,12 +216,7 @@ impl MessageConsumer<Vec<u8>> for RabbitMqConsumer {
 
         for topic in topics {
             let queue = queue_for(&self.config, topic)?;
-            let channel = connection.create_channel().await.map_err(|e| {
-                AppError::new(
-                    ErrorCode::ExternalService,
-                    format!("RabbitMQ channel failed: {e}"),
-                )
-            })?;
+            let channel = connection.create_channel().await.map_err(channel_failed)?;
             if self.config.declare_queues {
                 declare_queue(&channel, &queue, self.config.durable_queues).await?;
             }
@@ -261,12 +232,7 @@ impl MessageConsumer<Vec<u8>> for RabbitMqConsumer {
                     FieldTable::default(),
                 )
                 .await
-                .map_err(|e| {
-                    AppError::new(
-                        ErrorCode::ExternalService,
-                        format!("RabbitMQ consume failed: {e}"),
-                    )
-                })?;
+                .map_err(consume_failed)?;
             consumers.push((queue, consumer));
             channels.push(channel);
         }
@@ -376,11 +342,27 @@ impl MessagingFactory<Vec<u8>> for RabbitMqFactory {
 
 fn spawn_consumer_task(
     topic: String,
-    mut consumer: lapin::Consumer,
+    consumer: lapin::Consumer,
     sender: mpsc::Sender<Message<Vec<u8>>>,
     active_tasks: Arc<AtomicUsize>,
     task_finished: Arc<tokio::sync::Notify>,
 ) -> ConsumerTask {
+    let deliveries = consumer
+        .map(|delivery| delivery.map(|delivery| (delivery.routing_key.to_string(), delivery.data)));
+    spawn_forwarding_task(topic, deliveries, sender, active_tasks, task_finished)
+}
+
+fn spawn_forwarding_task<S, E>(
+    topic: String,
+    mut deliveries: S,
+    sender: mpsc::Sender<Message<Vec<u8>>>,
+    active_tasks: Arc<AtomicUsize>,
+    task_finished: Arc<tokio::sync::Notify>,
+) -> ConsumerTask
+where
+    S: futures_util::Stream<Item = Result<(String, Vec<u8>), E>> + Unpin + Send + 'static,
+    E: fmt::Display + Send + 'static,
+{
     let cancellation = CancellationToken::new();
     let task_cancellation = cancellation.clone();
     active_tasks.fetch_add(1, Ordering::SeqCst);
@@ -391,20 +373,18 @@ fn spawn_consumer_task(
                     debug!(topic = %topic, "RabbitMQ consumer task shutting down");
                     break;
                 }
-                delivery = consumer.next() => {
+                delivery = deliveries.next() => {
                     let Some(delivery) = delivery else {
                         warn!(topic = %topic, "RabbitMQ consumer stream ended");
                         break;
                     };
-                    let delivery = match delivery {
+                    let (routing_key, payload) = match delivery {
                         Ok(delivery) => delivery,
                         Err(error) => {
                             warn!(topic = %topic, error = %error, "RabbitMQ consumer stream error");
                             break;
                         }
                     };
-                    let routing_key = delivery.routing_key.to_string();
-                    let payload = delivery.data.clone();
                     tokio::select! {
                         () = task_cancellation.cancelled() => {
                             debug!(topic = %topic, "RabbitMQ consumer task shutting down");
@@ -435,30 +415,15 @@ async fn connect(config: &Config) -> AppResult<Connection> {
         Connection::connect(&config.uri, ConnectionProperties::default()),
     )
     .await
-    .map_err(|e| {
-        AppError::new(
-            ErrorCode::ExternalService,
-            format!("RabbitMQ connect timed out: {e}"),
-        )
-    })?
-    .map_err(|e| {
-        AppError::new(
-            ErrorCode::ExternalService,
-            format!("RabbitMQ connect failed: {e}"),
-        )
-    })
+    .map_err(connect_timed_out)?
+    .map_err(connect_failed)
 }
 
 async fn configure_qos(channel: &lapin::Channel, prefetch_count: u16) -> AppResult<()> {
     channel
         .basic_qos(prefetch_count, BasicQosOptions::default())
         .await
-        .map_err(|e| {
-            AppError::new(
-                ErrorCode::ExternalService,
-                format!("RabbitMQ qos configuration failed: {e}"),
-            )
-        })
+        .map_err(qos_configuration_failed)
 }
 
 async fn declare_queue(channel: &lapin::Channel, queue: &str, durable: bool) -> AppResult<()> {
@@ -472,13 +437,55 @@ async fn declare_queue(channel: &lapin::Channel, queue: &str, durable: bool) -> 
             FieldTable::default(),
         )
         .await
-        .map_err(|e| {
-            AppError::new(
-                ErrorCode::ExternalService,
-                format!("RabbitMQ queue declare failed: {e}"),
-            )
-        })?;
+        .map_err(queue_declare_failed)?;
     Ok(())
+}
+
+fn rabbitmq_external_error(context: &str, error: impl fmt::Display) -> AppError {
+    AppError::new(
+        ErrorCode::ExternalService,
+        format!("RabbitMQ {context}: {error}"),
+    )
+}
+
+fn channel_failed(error: lapin::Error) -> AppError {
+    rabbitmq_external_error("channel failed", error)
+}
+
+fn publish_failed(error: lapin::Error) -> AppError {
+    rabbitmq_external_error("publish failed", error)
+}
+
+fn publish_confirm_failed(error: lapin::Error) -> AppError {
+    rabbitmq_external_error("publish confirm failed", error)
+}
+
+fn channel_close_failed(error: lapin::Error) -> AppError {
+    rabbitmq_external_error("channel close failed", error)
+}
+
+fn connection_close_failed(error: lapin::Error) -> AppError {
+    rabbitmq_external_error("connection close failed", error)
+}
+
+fn consume_failed(error: lapin::Error) -> AppError {
+    rabbitmq_external_error("consume failed", error)
+}
+
+fn connect_timed_out(error: impl fmt::Display) -> AppError {
+    rabbitmq_external_error("connect timed out", error)
+}
+
+fn connect_failed(error: lapin::Error) -> AppError {
+    rabbitmq_external_error("connect failed", error)
+}
+
+fn qos_configuration_failed(error: lapin::Error) -> AppError {
+    rabbitmq_external_error("qos configuration failed", error)
+}
+
+fn queue_declare_failed(error: lapin::Error) -> AppError {
+    rabbitmq_external_error("queue declare failed", error)
 }
 
 fn shutdown_consumer_tasks(tasks: Vec<ConsumerTask>) {
@@ -516,6 +523,8 @@ fn shutdown_consumer_tasks(tasks: Vec<ConsumerTask>) {
 
 #[cfg(test)]
 mod tests {
+    use std::io;
+
     use rskit_messaging::{CommitStrategy, DeliveryGuarantee};
 
     use super::*;
@@ -525,6 +534,32 @@ mod tests {
         let mut registry = MessagingRegistry::<Vec<u8>>::new();
         register(&mut registry, Config::default()).unwrap();
         assert_eq!(registry.adapters(), vec!["rabbitmq"]);
+    }
+
+    #[test]
+    fn register_skips_disabled_rabbitmq_backend() {
+        let mut registry = MessagingRegistry::<Vec<u8>>::new();
+        let config = Config {
+            base: rskit_messaging::BrokerConfig {
+                enabled: false,
+                ..Config::default().base
+            },
+            ..Config::default()
+        };
+
+        register(&mut registry, config).unwrap();
+
+        assert!(registry.is_empty());
+    }
+
+    #[test]
+    fn register_rejects_duplicate_rabbitmq_backend() {
+        let mut registry = MessagingRegistry::<Vec<u8>>::new();
+        register(&mut registry, Config::default()).unwrap();
+
+        let err = register(&mut registry, Config::default()).unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::AlreadyExists);
     }
 
     #[test]
@@ -579,6 +614,61 @@ mod tests {
     }
 
     #[test]
+    fn rabbitmq_config_rejects_all_validation_edge_cases() {
+        let mut config = Config::default();
+        config.base.adapter = "other".to_string();
+        assert!(config.validate().is_err());
+
+        config = Config::default();
+        config.base.retries = 1;
+        assert!(config.validate().is_err());
+
+        config = Config::default();
+        config.base.dlq.enabled = true;
+        assert!(config.validate().is_err());
+
+        config = Config::default();
+        config.base.request_timeout = Some(100);
+        assert!(config.validate().is_err());
+
+        config = Config::default();
+        config.base.consumer_group = Some("workers".to_string());
+        assert!(config.validate().is_err());
+
+        config = Config::default();
+        config.base.topics = vec!["bad queue".to_string()];
+        assert!(config.validate().is_err());
+
+        config = Config::default();
+        config.uri.clear();
+        assert!(config.validate().is_err());
+
+        config = Config::default();
+        config.uri = "amqps://rabbit.example.test/%2f?heartbeat=30".to_string();
+        assert!(config.validate().is_err());
+
+        config = Config::default();
+        config.exchange = "bad exchange".to_string();
+        assert!(config.validate().is_err());
+
+        config = Config::default();
+        config.subscription_buffer = 0;
+        assert!(config.validate().is_err());
+
+        config = Config::default();
+        config.connection_timeout = 0;
+        assert!(config.validate().is_err());
+
+        config = Config::default();
+        config.prefetch_count = Some(0);
+        assert!(config.validate().is_err());
+
+        config = Config::default();
+        config.base.max_in_flight = usize::from(u16::MAX) + 1;
+        assert!(config.effective_prefetch_count().is_err());
+    }
+
+    #[test]
     fn rabbitmq_config_rejects_plaintext_without_dev_opt_in_and_bad_names() {
         let mut config = Config {
             uri: "amqp://127.0.0.1:5672/%2f".to_string(),
@@ -616,6 +706,63 @@ mod tests {
         assert!(!debug.contains("password"));
     }
 
+    #[test]
+    fn rabbitmq_queue_prefix_is_applied_and_validated() {
+        let config = Config {
+            queue_prefix: "svc.".to_string(),
+            ..Config::default()
+        };
+
+        assert_eq!(queue_for(&config, "events").unwrap(), "svc.events");
+
+        let config = Config {
+            queue_prefix: "bad prefix.".to_string(),
+            ..Config::default()
+        };
+        assert!(queue_for(&config, "events").is_err());
+        assert!(validate_name("RabbitMQ queue", "").is_err());
+        assert!(validate_name("RabbitMQ queue", &"x".repeat(250)).is_err());
+    }
+
+    #[tokio::test]
+    async fn producer_and_consumer_constructors_validate_without_connecting() {
+        let valid = Config::default();
+
+        RabbitMqProducer::new(valid.clone()).unwrap();
+        RabbitMqConsumer::new(valid).unwrap();
+
+        let invalid = Config {
+            subscription_buffer: 0,
+            ..Config::default()
+        };
+        assert!(RabbitMqProducer::new(invalid.clone()).is_err());
+        assert!(RabbitMqConsumer::new(invalid).is_err());
+    }
+
+    #[tokio::test]
+    async fn producer_rejects_invalid_routing_key_before_connecting() {
+        let producer = RabbitMqProducer::new(Config::default()).unwrap();
+
+        let err = producer
+            .send(Message::new("bad routing key", Vec::from("payload")))
+            .await
+            .unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+    }
+
+    #[tokio::test]
+    async fn producer_empty_batches_flush_and_close_do_not_connect() {
+        let producer = RabbitMqProducer::new(Config::default()).unwrap();
+
+        producer.send_batch(Vec::new()).await.unwrap();
+        producer.publish_batch("events", Vec::new()).await.unwrap();
+        producer.flush(Duration::from_millis(1)).await.unwrap();
+        producer.close().await.unwrap();
+
+        assert!(producer.declared_queues.lock().await.is_empty());
+    }
+
     #[tokio::test]
     async fn producer_queue_declaration_cache_tracks_declared_queues() {
         let producer = RabbitMqProducer::new(Config::default()).unwrap();
@@ -647,11 +794,32 @@ mod tests {
         assert!(!producer.needs_queue_declare("events").await);
     }
 
+    #[tokio::test]
+    async fn producer_skips_declaration_cache_when_queue_declare_disabled() {
+        let producer = RabbitMqProducer::new(Config {
+            declare_queues: false,
+            ..Config::default()
+        })
+        .unwrap();
+
+        assert!(!producer.needs_queue_declare("events").await);
+    }
+
     #[test]
     fn consumer_lifecycle_starts_without_resources() {
         let consumer = RabbitMqConsumer::new(Config::default()).unwrap();
 
         assert!(consumer.subscriptions.lock().is_empty());
+    }
+
+    #[tokio::test]
+    async fn consumer_empty_subscribe_and_close_do_not_connect() {
+        let consumer = RabbitMqConsumer::new(Config::default()).unwrap();
+
+        MessageConsumer::subscribe(&consumer, &[]).await.unwrap();
+        consumer.close().await.unwrap();
+
+        assert!(!consumer.subscribed.load(Ordering::SeqCst));
     }
 
     #[tokio::test]
@@ -673,6 +841,143 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn shutdown_consumer_tasks_handles_empty_and_already_finished_tasks() {
+        shutdown_consumer_tasks(Vec::new());
+
+        let handle = tokio::spawn(async {});
+        let task = ConsumerTask {
+            cancellation: CancellationToken::new(),
+            handle,
+        };
+        tokio::task::yield_now().await;
+
+        shutdown_consumer_tasks(vec![task]);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn shutdown_consumer_tasks_aborts_tasks_that_ignore_cancellation() {
+        let handle = tokio::spawn(futures_util::future::pending::<()>());
+        let task = ConsumerTask {
+            cancellation: CancellationToken::new(),
+            handle,
+        };
+
+        shutdown_consumer_tasks(vec![task]);
+        tokio::time::advance(Duration::from_millis(101)).await;
+        tokio::task::yield_now().await;
+    }
+
+    fn lapin_io_error() -> lapin::Error {
+        io::Error::other("broker failed").into()
+    }
+
+    #[test]
+    fn rabbitmq_error_mappers_preserve_operation_context() {
+        let cases: [(&str, AppError); 10] = [
+            ("channel failed", channel_failed(lapin_io_error())),
+            ("publish failed", publish_failed(lapin_io_error())),
+            (
+                "publish confirm failed",
+                publish_confirm_failed(lapin_io_error()),
+            ),
+            (
+                "channel close failed",
+                channel_close_failed(lapin_io_error()),
+            ),
+            (
+                "connection close failed",
+                connection_close_failed(lapin_io_error()),
+            ),
+            ("consume failed", consume_failed(lapin_io_error())),
+            ("connect timed out", connect_timed_out("deadline elapsed")),
+            ("connect failed", connect_failed(lapin_io_error())),
+            (
+                "qos configuration failed",
+                qos_configuration_failed(lapin_io_error()),
+            ),
+            (
+                "queue declare failed",
+                queue_declare_failed(lapin_io_error()),
+            ),
+        ];
+
+        for (context, error) in cases {
+            assert_eq!(error.code(), ErrorCode::ExternalService);
+            assert!(error.message().contains(context));
+        }
+    }
+
+    #[tokio::test]
+    async fn forwarding_task_delivers_messages_and_notifies_when_stream_ends() {
+        let (sender, mut receiver) = mpsc::channel(2);
+        let active_tasks = Arc::new(AtomicUsize::new(0));
+        let task_finished = Arc::new(tokio::sync::Notify::new());
+        let stream = futures_util::stream::iter(vec![Ok::<_, std::io::Error>((
+            "events".to_string(),
+            b"payload".to_vec(),
+        ))]);
+
+        let task = spawn_forwarding_task(
+            "events".to_string(),
+            stream,
+            sender,
+            active_tasks.clone(),
+            task_finished.clone(),
+        );
+
+        let message = receiver.recv().await.unwrap();
+        assert_eq!(message.topic, "events");
+        assert_eq!(message.payload, b"payload");
+        task.handle.await.unwrap();
+        assert_eq!(active_tasks.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn forwarding_task_stops_on_stream_error_receiver_close_and_cancellation() {
+        let (sender, receiver) = mpsc::channel(1);
+        drop(receiver);
+        let active_tasks = Arc::new(AtomicUsize::new(0));
+        let task_finished = Arc::new(tokio::sync::Notify::new());
+        let stream = futures_util::stream::iter(vec![Ok::<_, std::io::Error>((
+            "events".to_string(),
+            b"payload".to_vec(),
+        ))]);
+        let task = spawn_forwarding_task(
+            "events".to_string(),
+            stream,
+            sender,
+            active_tasks.clone(),
+            task_finished.clone(),
+        );
+        task.handle.await.unwrap();
+
+        let (sender, _receiver) = mpsc::channel(1);
+        let stream = futures_util::stream::iter(vec![Err::<(String, Vec<u8>), _>(
+            std::io::Error::other("stream failed"),
+        )]);
+        let task = spawn_forwarding_task(
+            "events".to_string(),
+            stream,
+            sender,
+            active_tasks.clone(),
+            task_finished.clone(),
+        );
+        task.handle.await.unwrap();
+
+        let (sender, _receiver) = mpsc::channel(1);
+        let stream = futures_util::stream::pending::<Result<(String, Vec<u8>), std::io::Error>>();
+        let task = spawn_forwarding_task(
+            "events".to_string(),
+            stream,
+            sender,
+            active_tasks,
+            task_finished.clone(),
+        );
+        task.cancellation.cancel();
+        task.handle.await.unwrap();
     }
     #[test]
     fn rabbitmq_queue_prefix_validates_combined_queue() {
@@ -705,5 +1010,62 @@ mod tests {
         let result = consumer.recv().await;
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn rabbitmq_factory_creates_lazy_producer_and_consumer() {
+        let factory = RabbitMqFactory {
+            config: Config::default(),
+        };
+        let broker = rskit_messaging::BrokerConfig::default();
+
+        factory.create_producer(&broker).unwrap();
+        factory.create_consumer(&broker).unwrap();
+    }
+
+    #[tokio::test]
+    async fn event_wrappers_validate_and_decode_through_message_paths() {
+        let producer = RabbitMqProducer::new(Config::default()).unwrap();
+        let event = Event::new("example.created", "test");
+
+        let err = producer
+            .publish("bad routing key", event)
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+
+        let consumer = RabbitMqConsumer::new(Config::default()).unwrap();
+        EventConsumer::subscribe(&consumer, &[]).await.unwrap();
+        consumer
+            .sender
+            .send(Message::new("events", b"not-json".to_vec()))
+            .await
+            .unwrap();
+
+        let err = consumer.recv_event().await.unwrap_err();
+        assert_eq!(err.code(), ErrorCode::Internal);
+    }
+
+    #[tokio::test]
+    async fn producer_and_consumer_report_fast_connection_failures() {
+        let config = Config {
+            uri: "amqp://127.0.0.1:1/%2f".to_string(),
+            allow_insecure_dev: true,
+            connection_timeout: 1,
+            ..Config::default()
+        };
+
+        let producer = RabbitMqProducer::new(config.clone()).unwrap();
+        let err = producer
+            .send(Message::new("events", Vec::from("payload")))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::ExternalService);
+
+        let consumer = RabbitMqConsumer::new(config).unwrap();
+        let err = MessageConsumer::subscribe(&consumer, &["events"])
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::ExternalService);
     }
 }

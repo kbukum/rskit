@@ -62,3 +62,63 @@ impl OutputObserver {
         self
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    use super::*;
+
+    #[test]
+    fn output_observer_builders_store_callbacks_and_debug_flags() {
+        let stdout_lines = Arc::new(AtomicUsize::new(0));
+        let stderr_lines = Arc::new(AtomicUsize::new(0));
+        let stdout_bytes = Arc::new(AtomicUsize::new(0));
+        let stderr_bytes = Arc::new(AtomicUsize::new(0));
+
+        let observer = OutputObserver::new()
+            .with_stdout_line({
+                let calls = Arc::clone(&stdout_lines);
+                move |_| {
+                    calls.fetch_add(1, Ordering::SeqCst);
+                }
+            })
+            .with_stderr_line({
+                let calls = Arc::clone(&stderr_lines);
+                move |_| {
+                    calls.fetch_add(1, Ordering::SeqCst);
+                }
+            })
+            .with_stdout_bytes({
+                let bytes = Arc::clone(&stdout_bytes);
+                move |chunk| {
+                    bytes.fetch_add(chunk.len(), Ordering::SeqCst);
+                }
+            })
+            .with_stderr_bytes({
+                let bytes = Arc::clone(&stderr_bytes);
+                move |chunk| {
+                    bytes.fetch_add(chunk.len(), Ordering::SeqCst);
+                }
+            });
+
+        (observer.stdout_line.as_ref().unwrap())("out");
+        (observer.stderr_line.as_ref().unwrap())("err");
+        (observer.stdout_bytes.as_ref().unwrap())(b"stdout");
+        (observer.stderr_bytes.as_ref().unwrap())(b"stderr");
+
+        assert_eq!(stdout_lines.load(Ordering::SeqCst), 1);
+        assert_eq!(stderr_lines.load(Ordering::SeqCst), 1);
+        assert_eq!(stdout_bytes.load(Ordering::SeqCst), 6);
+        assert_eq!(stderr_bytes.load(Ordering::SeqCst), 6);
+
+        let debug = format!("{observer:?}");
+        assert!(debug.contains("stdout_line: true"));
+        assert!(debug.contains("stderr_line: true"));
+        assert!(debug.contains("stdout_bytes: true"));
+        assert!(debug.contains("stderr_bytes: true"));
+    }
+}

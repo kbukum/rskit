@@ -142,6 +142,8 @@ fn is_allowed_redirect_uri(url: &Url) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use jsonwebtoken::Algorithm;
 
     use super::{OidcClientType, OidcConfig};
@@ -176,5 +178,66 @@ mod tests {
             OidcClientType::Public,
         );
         assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn oidc_config_rejects_invalid_boundaries() {
+        let base = || {
+            OidcConfig::new(
+                "https://issuer.example",
+                "client",
+                "https://app.example/callback",
+                OidcClientType::Confidential,
+            )
+        };
+
+        assert!(
+            OidcConfig::new(
+                "not a url",
+                "client",
+                "https://app.example/callback",
+                OidcClientType::Public,
+            )
+            .validate()
+            .is_err()
+        );
+        assert!(
+            OidcConfig::new(
+                "http://issuer.example",
+                "client",
+                "https://app.example/callback",
+                OidcClientType::Public,
+            )
+            .validate()
+            .is_err()
+        );
+        assert!(
+            OidcConfig::new(
+                "https://issuer.example",
+                "client",
+                "not a redirect",
+                OidcClientType::Public,
+            )
+            .validate()
+            .is_err()
+        );
+        assert!(
+            OidcConfig::new(
+                "https://issuer.example",
+                "client",
+                "http://app.example/callback",
+                OidcClientType::Public,
+            )
+            .validate()
+            .is_err()
+        );
+        assert!(base().with_audience(Vec::new()).validate().is_err());
+        assert!(
+            base()
+                .with_clock_skew(Duration::from_secs(61))
+                .validate()
+                .is_err()
+        );
+        assert!(base().validate().is_ok());
     }
 }

@@ -81,4 +81,15 @@ mod tests {
         assert!(debug.contains("<redacted>"));
         assert!(debug.contains("SecretString(***)"));
     }
+
+    #[test]
+    fn builders_set_url_api_key_and_metric() {
+        let config = Config::new("https://qdrant.example.test")
+            .with_api_key("secret")
+            .with_metric(SimilarityMetric::Dot);
+
+        assert_eq!(config.url, "https://qdrant.example.test");
+        assert_eq!(config.metric, SimilarityMetric::Dot);
+        assert!(config.api_key.is_some());
+    }
 }

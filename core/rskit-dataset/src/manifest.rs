@@ -371,4 +371,97 @@ mod tests {
             other => panic!("expected Done, got {other:?}"),
         }
     }
+
+    #[test]
+    fn cache_status_handles_mismatch_zero_partial_unknown_and_nearly_complete() {
+        let config = serde_json::json!({"repo": "org/dataset"});
+        let mut manifest = Manifest::default();
+
+        assert!(matches!(
+            manifest.cache_status("missing", &config, Some(100)),
+            CacheStatus::NotCached
+        ));
+
+        manifest.sources.insert(
+            "unknown".to_string(),
+            SourceEntry {
+                config: config.clone(),
+                stats: SourceStats::default(),
+                status: "unknown".to_string(),
+            },
+        );
+        assert!(matches!(
+            manifest.cache_status("unknown", &config, Some(100)),
+            CacheStatus::NotCached
+        ));
+
+        manifest.mark_partial(
+            "zero".to_string(),
+            config.clone(),
+            SourceStats {
+                total: 0,
+                real: 0,
+                ai: 0,
+                fetched_offset: 0,
+            },
+        );
+        assert!(matches!(
+            manifest.cache_status("zero", &config, Some(100)),
+            CacheStatus::NotCached
+        ));
+
+        manifest.mark_partial(
+            "almost".to_string(),
+            config.clone(),
+            SourceStats {
+                total: 995,
+                real: 995,
+                ai: 0,
+                fetched_offset: 995,
+            },
+        );
+        assert!(matches!(
+            manifest.cache_status("almost", &config, Some(1000)),
+            CacheStatus::Done(_)
+        ));
+
+        assert!(matches!(
+            manifest.cache_status("almost", &serde_json::json!({"other": true}), Some(1000)),
+            CacheStatus::NotCached
+        ));
+    }
+
+    #[test]
+    fn manifest_load_rejects_invalid_json_and_oversized_files() {
+        let dir = TempDir::new().unwrap();
+        std::fs::write(dir.path().join(MANIFEST_FILE), b"{not json}").unwrap();
+        let err = Manifest::load(dir.path()).unwrap_err();
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+        assert!(err.to_string().contains("parse"));
+
+        let dir = TempDir::new().unwrap();
+        std::fs::write(
+            dir.path().join(MANIFEST_FILE),
+            vec![b' '; MAX_MANIFEST_BYTES as usize + 1],
+        )
+        .unwrap();
+        let err = Manifest::load(dir.path()).unwrap_err();
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+        assert!(err.to_string().contains("exceeded max"));
+    }
+
+    #[test]
+    fn manifest_save_errors_when_output_directory_is_missing_or_not_directory() {
+        let missing_parent = TempDir::new().unwrap().path().join("gone");
+        let manifest = Manifest::default();
+        let err = manifest.save(&missing_parent).unwrap_err();
+        assert_eq!(err.code(), ErrorCode::Internal);
+        assert!(err.to_string().contains("write"));
+
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("not-dir");
+        std::fs::write(&file, b"x").unwrap();
+        let err = manifest.save(&file).unwrap_err();
+        assert_eq!(err.code(), ErrorCode::Internal);
+    }
 }

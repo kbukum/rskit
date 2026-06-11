@@ -19,7 +19,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 default = []
-fs = ["dep:blake3", "dep:rskit-fs"]
+fs = ["dep:blake3", "dep:rskit-fs", "rskit-fs/async"]
 
 [dependencies]
 # External

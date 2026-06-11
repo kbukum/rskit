@@ -129,3 +129,38 @@ pub enum PersistentOutputStream {
     /// Forward bytes to parent stderr.
     Stderr,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn persistent_config_builders_update_nested_policy() {
+        let readiness = PersistentReadiness::OutputContains("ready".to_string());
+        let output = PersistentOutput::forward(
+            PersistentOutputStream::Stdout,
+            PersistentOutputStream::Stderr,
+        );
+        let config = PersistentConfig::default()
+            .with_readiness(readiness.clone())
+            .with_readiness_timeout(Duration::from_secs(2))
+            .with_shutdown_grace_period(Duration::from_secs(3))
+            .with_max_capture_bytes(64)
+            .with_output(output);
+
+        assert_eq!(config.readiness, readiness);
+        assert_eq!(config.readiness_timeout, Duration::from_secs(2));
+        assert_eq!(config.shutdown_grace_period, Duration::from_secs(3));
+        assert_eq!(config.max_capture_bytes, Some(64));
+        assert_eq!(
+            config.output.stdout_stream(),
+            Some(PersistentOutputStream::Stdout)
+        );
+        assert_eq!(
+            config.output.stderr_stream(),
+            Some(PersistentOutputStream::Stderr)
+        );
+
+        assert_eq!(config.with_unbounded_capture().max_capture_bytes, None);
+    }
+}

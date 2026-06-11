@@ -253,9 +253,22 @@ impl FfmpegCommand {
 mod tests {
     use super::*;
     use rskit_media::{
-        ops::{CropRegion, FlipDirection, ResizeMode, ResizeOp, Rotation},
-        spatial::Resolution,
-        time::TimeRange,
+        TrackKind,
+        audio::{ChannelLayout, SampleRate},
+        codec::{Codec, CodecLevel, CodecProfile, audio as audio_codec, video as video_codec},
+        format::Format,
+        ops::{
+            ColorAdjustments, ConcatOp, CropRegion, FilterConfig, FilterPreset, FlipDirection,
+            ImageFormat, InterpolateConfig, InterpolateModel, MixAudioOp, OverlayOp,
+            OverlayPosition, ResizeMode, ResizeOp, Rotation, SceneDetectConfig, SubtitleFormat,
+            SubtitleSource, ThumbnailConfig, UpscaleConfig, UpscaleModel,
+        },
+        output::{
+            AudioSettings, Bitrate, DashConfig, EncodingSpeed, OutputConfig, Quality, RtmpConfig,
+            StreamingConfig, VideoSettings,
+        },
+        spatial::{FrameRate, Resolution},
+        time::{TimeRange, Timestamp},
     };
 
     fn default_config() -> FfmpegConfig {
@@ -320,6 +333,13 @@ mod tests {
             FfmpegCommand::compile(&source, ops, None, &default_config(), &default_registry())
                 .expect("compile");
         cmd.to_args()
+    }
+
+    fn compile_args_with_config(ops: &[MediaOp], config: &FfmpegConfig) -> Vec<String> {
+        let source = FileSource::from_path("/tmp/input.mp4");
+        FfmpegCommand::compile(&source, ops, None, config, &default_registry())
+            .expect("compile")
+            .to_args()
     }
 
     // ── Golden tests: verify exact CLI args for each operation ────────
@@ -517,5 +537,377 @@ mod tests {
         let args = compile_args(&[]);
         let i_idx = args.iter().position(|a| a == "-i").unwrap();
         assert_eq!(args[i_idx + 1], "/tmp/input.mp4");
+    }
+
+    #[test]
+    fn global_options_follow_configured_execution_knobs() {
+        let config = default_config()
+            .with_overwrite(false)
+            .with_debug_log_level()
+            .with_threads(4)
+            .with_software_decode()
+            .with_input_video_decoder("libdav1d");
+
+        let args = compile_args_with_config(&[], &config);
+
+        assert!(!args.contains(&"-y".to_string()));
+        assert!(args.windows(2).any(|w| w == ["-loglevel", "debug"]));
+        assert!(args.windows(2).any(|w| w == ["-threads", "4"]));
+        assert!(args.windows(2).any(|w| w == ["-hwaccel", "none"]));
+        assert!(args.windows(2).any(|w| w == ["-c:v", "libdav1d"]));
+    }
+
+    #[test]
+    fn non_path_sources_are_read_from_stdin_pipe() {
+        let source = FileSource::from_bytes(bytes::Bytes::from_static(b"media"));
+        let cmd =
+            FfmpegCommand::compile(&source, &[], None, &default_config(), &default_registry())
+                .unwrap();
+        let args = cmd.to_args();
+
+        let i_idx = args.iter().position(|a| a == "-i").unwrap();
+        assert_eq!(args[i_idx + 1], "pipe:0");
+    }
+
+    #[test]
+    fn temp_sources_use_managed_temp_file_path() {
+        let temp = rskit_storage::TempFile::with_extension("mp4").unwrap();
+        std::fs::write(temp.path(), b"media").unwrap();
+        let source = FileSource::Temp(temp);
+
+        let cmd =
+            FfmpegCommand::compile(&source, &[], None, &default_config(), &default_registry())
+                .unwrap();
+        let args = cmd.to_args();
+
+        let i_idx = args.iter().position(|a| a == "-i").unwrap();
+        assert_ne!(args[i_idx + 1], "pipe:0");
+        assert!(std::path::Path::new(&args[i_idx + 1]).exists());
+    }
+
+    #[test]
+    fn concat_respects_audio_presence_hints() {
+        let source = FileSource::from_path("/tmp/input.mp4");
+        let op = MediaOp::Concat(ConcatOp {
+            source: FileSource::from_path("/tmp/second.mp4"),
+            transition: None,
+        });
+        let command = FfmpegCommand::compile_with_hints(
+            &source,
+            &[op],
+            None,
+            &default_config(),
+            &default_registry(),
+            &SourceHints {
+                has_audio: Some(false),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(
+            command.complex_filter.as_deref(),
+            Some("[0:v][1:v]concat=n=2:v=1:a=0")
+        );
+    }
+
+    #[test]
+    fn composition_operations_add_inputs_and_filter_graphs() {
+        let overlay = compile_args(&[MediaOp::Overlay(OverlayOp {
+            source: FileSource::from_path("/tmp/logo.png"),
+            position: OverlayPosition::BottomRight(10, 20),
+            opacity: 1.0,
+            time_range: None,
+            scale: None,
+        })]);
+        assert!(
+            overlay
+                .windows(2)
+                .any(|w| w == ["-filter_complex", "[0][1]overlay=W-w-10:H-h-20"])
+        );
+
+        let replace = compile_args(&[MediaOp::ReplaceAudio(rskit_media::ops::ReplaceAudioOp {
+            audio_source: FileSource::from_path("/tmp/audio.wav"),
+            offset: Some(Timestamp::from_seconds(1.0)),
+        })]);
+        assert!(replace.windows(2).any(|w| w == ["-map", "0:v"]));
+        assert!(replace.windows(2).any(|w| w == ["-map", "1:a"]));
+
+        let mixed = compile_args(&[MediaOp::MixAudio(MixAudioOp {
+            audio_source: FileSource::from_path("/tmp/music.wav"),
+            volume: 0.5,
+            offset: None,
+        })]);
+        assert!(mixed.windows(2).any(|w| w
+            == [
+                "-filter_complex",
+                "[0:a][1:a]amix=inputs=2:duration=first:dropout_transition=3"
+            ]));
+    }
+
+    #[test]
+    fn track_selection_maps_indices_and_supported_track_kinds() {
+        let args = compile_args(&[
+            MediaOp::SelectTracks(vec![0, 2]),
+            MediaOp::SelectTracksByKind(vec![
+                TrackKind::Video,
+                TrackKind::Audio,
+                TrackKind::Subtitle,
+                TrackKind::Data,
+                TrackKind::Attachment,
+            ]),
+        ]);
+
+        for expected in ["0:0", "0:2", "0:v", "0:a", "0:s"] {
+            assert!(
+                args.windows(2).any(|w| w == ["-map", expected]),
+                "missing {expected}: {args:?}"
+            );
+        }
+        assert!(!args.windows(2).any(|w| w == ["-map", "0:d"]));
+    }
+
+    #[test]
+    fn thumbnail_and_scene_detection_compile_to_ffmpeg_options() {
+        let thumbnail = compile_args(&[MediaOp::GenerateThumbnail(ThumbnailConfig {
+            timestamp: 2.5,
+            width: Some(320),
+            height: None,
+            format: ImageFormat::Webp,
+            quality: Some(80),
+        })]);
+        let ss_idx = thumbnail.iter().position(|a| a == "-ss").unwrap();
+        assert!(thumbnail[ss_idx + 1].ends_with("2.500"));
+        assert!(thumbnail.windows(2).any(|w| w == ["-vframes", "1"]));
+        assert!(thumbnail.windows(2).any(|w| w == ["-c:v", "libwebp"]));
+        assert!(thumbnail.windows(2).any(|w| w == ["-q:v", "80"]));
+        assert!(thumbnail.windows(2).any(|w| w == ["-vf", "scale=320:-2"]));
+        assert!(thumbnail.windows(2).any(|w| w == ["-f", "image2"]));
+
+        let scenes = compile_args(&[MediaOp::DetectScenes(SceneDetectConfig {
+            threshold: 0.42,
+            min_scene_duration: 1.0,
+            method: rskit_media::ops::SceneDetectMethod::ContentAware,
+        })]);
+        assert!(
+            scenes
+                .windows(2)
+                .any(|w| w == ["-vf", "select='gt(scene,0.42)',showinfo"])
+        );
+        assert!(scenes.windows(2).any(|w| w == ["-f", "null"]));
+    }
+
+    #[test]
+    fn visual_filter_presets_and_custom_adjustments_compile() {
+        let bw = compile_args(&[MediaOp::ApplyFilter(FilterConfig {
+            preset: FilterPreset::BW,
+            intensity: 1.0,
+            custom_params: None,
+        })]);
+        assert!(bw.windows(2).any(|w| w == ["-vf", "hue=s=0"]));
+
+        let custom = compile_args(&[MediaOp::ApplyFilter(FilterConfig {
+            preset: FilterPreset::Custom,
+            intensity: 0.5,
+            custom_params: Some(ColorAdjustments {
+                brightness: Some(0.2),
+                contrast: Some(0.4),
+                saturation: Some(-0.2),
+                temperature: None,
+                gamma: Some(1.2),
+            }),
+        })]);
+        assert!(custom.windows(2).any(|w| w
+            == [
+                "-vf",
+                "eq=brightness=0.1:contrast=1.2:saturation=0.9:gamma=1.2"
+            ]));
+    }
+
+    #[test]
+    fn transcode_video_and_audio_options_compile() {
+        let output = OutputConfig::new(Format::new("mp4"))
+            .with_video(
+                VideoSettings::new(Codec::new(video_codec::H264))
+                    .with_resolution(Resolution::new(1920, 1080))
+                    .with_frame_rate(FrameRate::ntsc_30())
+                    .with_quality(Quality::High)
+                    .with_bitrate(Bitrate::Constrained {
+                        target: 2_000_000,
+                        max: 3_000_000,
+                    })
+                    .with_speed(EncodingSpeed::VerySlow)
+                    .with_profile(CodecProfile::H264High)
+                    .with_level(CodecLevel::new("4.1")),
+            )
+            .with_audio(
+                AudioSettings::new(Codec::new(audio_codec::AAC))
+                    .with_sample_rate(SampleRate::dvd())
+                    .with_channels(ChannelLayout::Stereo)
+                    .with_bitrate(Bitrate::Variable(128_000)),
+            )
+            .with_strip_metadata()
+            .with_param("movflags", "+faststart");
+
+        let args = compile_args(&[MediaOp::Transcode(output)]);
+
+        for expected in [
+            ("-c:v", "libx264"),
+            ("-crf", "18"),
+            ("-b:v", "2000000"),
+            ("-maxrate", "3000000"),
+            ("-preset", "veryslow"),
+            ("-r", "30000/1001"),
+            ("-profile:v", "high"),
+            ("-level", "4.1"),
+            ("-c:a", "aac"),
+            ("-ar", "48000"),
+            ("-ac", "2"),
+            ("-b:a", "128000"),
+            ("-f", "mp4"),
+            ("-map_metadata", "-1"),
+            ("-movflags", "+faststart"),
+        ] {
+            assert!(
+                args.windows(2).any(|w| w == [expected.0, expected.1]),
+                "missing {expected:?}: {args:?}"
+            );
+        }
+        assert!(args.windows(2).any(|w| w == ["-vf", "scale=1920:1080"]));
+    }
+
+    #[test]
+    fn transcode_quality_bitrate_speed_and_streaming_variants_compile() {
+        for (quality, crf) in [
+            (Quality::Lossless, "0"),
+            (Quality::UltraHigh, "14"),
+            (Quality::Medium, "23"),
+            (Quality::Low, "28"),
+            (Quality::VeryLow, "35"),
+            (Quality::Custom(31), "31"),
+        ] {
+            let output = OutputConfig::new(Format::new("mkv")).with_video(
+                VideoSettings::new(Codec::new(video_codec::H265)).with_quality(quality),
+            );
+            let args = compile_args(&[MediaOp::Transcode(output)]);
+            assert!(
+                args.windows(2).any(|w| w == ["-crf", crf]),
+                "missing {crf}: {args:?}"
+            );
+        }
+
+        for (speed, preset) in [
+            (EncodingSpeed::UltraFast, "ultrafast"),
+            (EncodingSpeed::SuperFast, "superfast"),
+            (EncodingSpeed::VeryFast, "veryfast"),
+            (EncodingSpeed::Fast, "fast"),
+            (EncodingSpeed::Medium, "medium"),
+            (EncodingSpeed::Slow, "slow"),
+        ] {
+            let output = OutputConfig::new(Format::new("mp4"))
+                .with_video(VideoSettings::new(Codec::new(video_codec::H264)).with_speed(speed));
+            let args = compile_args(&[MediaOp::Transcode(output)]);
+            assert!(
+                args.windows(2).any(|w| w == ["-preset", preset]),
+                "missing {preset}: {args:?}"
+            );
+        }
+
+        let constant = compile_args(&[MediaOp::Transcode(
+            OutputConfig::new(Format::new("mp4")).with_video(
+                VideoSettings::new(Codec::new(video_codec::H264))
+                    .with_bitrate(Bitrate::Constant(1_000_000)),
+            ),
+        )]);
+        assert!(constant.windows(2).any(|w| w == ["-b:v", "1000000"]));
+
+        let audio_constrained = compile_args(&[MediaOp::Transcode(
+            OutputConfig::new(Format::new("mp3")).with_audio(
+                AudioSettings::new(Codec::new(audio_codec::MP3)).with_bitrate(
+                    Bitrate::Constrained {
+                        target: 96_000,
+                        max: 128_000,
+                    },
+                ),
+            ),
+        )]);
+        assert!(audio_constrained.windows(2).any(|w| w == ["-b:a", "96000"]));
+
+        let dash = compile_args(&[MediaOp::Transcode(
+            OutputConfig::new(Format::new("mp4")).with_streaming(StreamingConfig::Dash(
+                DashConfig {
+                    segment_duration: 6,
+                    use_template: true,
+                    use_timeline: true,
+                },
+            )),
+        )]);
+        for expected in [
+            ("-f", "dash"),
+            ("-seg_duration", "6"),
+            ("-use_template", "1"),
+            ("-use_timeline", "1"),
+        ] {
+            assert!(
+                dash.windows(2).any(|w| w == [expected.0, expected.1]),
+                "missing {expected:?}: {dash:?}"
+            );
+        }
+
+        let rtmp = compile_args(&[MediaOp::Transcode(
+            OutputConfig::new(Format::new("flv")).with_streaming(StreamingConfig::Rtmp(
+                RtmpConfig {
+                    url: "rtmp://live.example.test/app/key".into(),
+                },
+            )),
+        )]);
+        assert!(rtmp.windows(2).any(|w| w == ["-f", "flv"]));
+        assert!(rtmp.windows(2).any(|w| w == ["-rtmp_live", "live"]));
+        assert!(rtmp.contains(&"rtmp://live.example.test/app/key".to_string()));
+    }
+
+    #[test]
+    fn add_subtitles_inline_content_compiles_to_temp_filter() {
+        let args = compile_args(&[MediaOp::AddSubtitles(rskit_media::ops::SubtitleConfig {
+            source: SubtitleSource::Inline("1\n00:00:00,000 --> 00:00:01,000\nhello\n".into()),
+            format: SubtitleFormat::Srt,
+            style: None,
+        })]);
+
+        let vf_idx = args.iter().position(|a| a == "-vf").unwrap();
+        assert!(args[vf_idx + 1].starts_with("subtitles=filename="));
+    }
+
+    #[test]
+    fn ai_operations_are_reported_as_unsupported_by_ffmpeg_backend() {
+        let upscale = match FfmpegCommand::compile(
+            &FileSource::from_path("/tmp/input.mp4"),
+            &[MediaOp::Upscale(UpscaleConfig {
+                model: UpscaleModel::RealEsrganX4Plus,
+                scale: 4,
+                denoise_strength: None,
+            })],
+            None,
+            &default_config(),
+            &default_registry(),
+        ) {
+            Ok(_) => panic!("upscale should be rejected by ffmpeg backend"),
+            Err(error) => error,
+        };
+        assert_eq!(upscale.code(), rskit_errors::ErrorCode::InvalidInput);
+
+        let interpolate = match FfmpegCommand::compile(
+            &FileSource::from_path("/tmp/input.mp4"),
+            &[MediaOp::Interpolate(InterpolateConfig {
+                model: InterpolateModel::Rife,
+                multiplier: 2,
+            })],
+            None,
+            &default_config(),
+            &default_registry(),
+        ) {
+            Ok(_) => panic!("interpolate should be rejected by ffmpeg backend"),
+            Err(error) => error,
+        };
+        assert_eq!(interpolate.code(), rskit_errors::ErrorCode::InvalidInput);
     }
 }

@@ -710,3 +710,265 @@ fn count_files(dir: &Path) -> AppResult<usize> {
                 .count()
         })
 }
+
+#[cfg(test)]
+mod focused_tests {
+    use super::*;
+    use crate::{DataItem, MediaType};
+
+    #[test]
+    fn collector_config_default_and_null_progress_defaults_are_callable() {
+        let cfg = CollectorConfig::default();
+        assert_eq!(cfg.output_dir, PathBuf::from("dataset_build"));
+        assert_eq!(cfg.concurrency, 4);
+        assert_eq!(cfg.source_timeout_secs, 600.0);
+        assert!(!cfg.force);
+        assert_eq!(cfg.limits, DatasetLimits::default());
+
+        let progress = NullProgress;
+        let stats = SourceStats {
+            total: 1,
+            real: 1,
+            ai: 0,
+            fetched_offset: 1,
+        };
+        let published = PublishResult {
+            target_name: "target".to_string(),
+            location: "local".to_string(),
+            files_published: 1,
+            message: "ok".to_string(),
+        };
+        progress.on_source_start(0, "source", Some(1));
+        progress.on_source_progress(0, 1);
+        progress.on_source_done(0, "source", &stats);
+        progress.on_source_cached(0, "source", &stats);
+        progress.on_source_error(0, "source", "error");
+        progress.on_publish_start("target");
+        progress.on_publish_done("target", &published);
+        progress.on_publish_error("target", "error");
+    }
+
+    #[test]
+    fn count_files_ignores_directories_and_reports_read_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("file.txt"), b"x").unwrap();
+        std::fs::create_dir(dir.path().join("nested")).unwrap();
+        assert_eq!(count_files(dir.path()).unwrap(), 1);
+        assert_eq!(count_files(&dir.path().join("missing")).unwrap(), 0);
+
+        let file = dir.path().join("not-dir");
+        std::fs::write(&file, b"x").unwrap();
+        let err = count_files(&file).unwrap_err();
+        assert_eq!(err.code(), ErrorCode::Internal);
+        assert!(
+            err.to_string()
+                .contains("failed to read dataset output directory")
+        );
+    }
+
+    struct StaticSource {
+        name: &'static str,
+        items: Vec<AppResult<DataItem>>,
+        resume: Option<std::sync::Arc<std::sync::atomic::AtomicUsize>>,
+        max_items: Option<usize>,
+    }
+
+    impl Source for StaticSource {
+        fn name(&self) -> &str {
+            self.name
+        }
+
+        fn stream(self: Box<Self>, _cancel: CancellationToken) -> crate::BoxDataStream {
+            Box::pin(futures_util::stream::iter(self.items))
+        }
+
+        fn cache_key(&self) -> serde_json::Value {
+            serde_json::json!({"name": self.name})
+        }
+
+        fn max_items(&self) -> Option<usize> {
+            self.max_items.or(Some(self.items.len()))
+        }
+
+        fn set_resume_state(&mut self, offset: usize, _already_fetched: usize) {
+            if let Some(resume) = &self.resume {
+                resume.store(offset, std::sync::atomic::Ordering::SeqCst);
+            }
+        }
+    }
+
+    struct DropNamedTransform;
+
+    impl Transform for DropNamedTransform {
+        fn name(&self) -> &str {
+            "drop-named"
+        }
+
+        fn apply(&self, item: DataItem, _limits: &DatasetLimits) -> AppResult<Option<DataItem>> {
+            if item.metadata.get("drop").is_some() {
+                Ok(None)
+            } else {
+                Ok(Some(item.with_extension("txt")))
+            }
+        }
+    }
+
+    struct CountingTarget;
+
+    #[async_trait::async_trait]
+    impl Target for CountingTarget {
+        fn name(&self) -> &str {
+            "counting"
+        }
+
+        async fn publish(
+            &self,
+            directory: &Path,
+            _metadata: Option<&std::collections::HashMap<String, String>>,
+        ) -> AppResult<PublishResult> {
+            Ok(PublishResult {
+                target_name: self.name().to_string(),
+                location: directory.display().to_string(),
+                files_published: count_files(&directory.join("real"))?
+                    + count_files(&directory.join("ai"))?,
+                message: "counted".to_string(),
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn collector_runs_sources_transforms_failures_and_targets() {
+        let out = tempfile::tempdir().unwrap();
+        let keep = DataItem::new(b"real".to_vec(), Label::Real, MediaType::Text, "ok")
+            .unwrap()
+            .with_source_offset(7);
+        let drop = DataItem::new(b"skip".to_vec(), Label::AiGenerated, MediaType::Text, "ok")
+            .unwrap()
+            .with_metadata("drop", "yes");
+        let sources: Vec<Box<dyn Source>> = vec![
+            Box::new(StaticSource {
+                name: "ok",
+                items: vec![Ok(keep), Ok(drop)],
+                resume: None,
+                max_items: None,
+            }),
+            Box::new(StaticSource {
+                name: "bad",
+                items: vec![Err(AppError::new(ErrorCode::InvalidInput, "bad item"))],
+                resume: None,
+                max_items: None,
+            }),
+        ];
+        let collector = Collector::new(
+            sources,
+            vec![Box::new(DropNamedTransform)],
+            vec![Box::new(CountingTarget)],
+            CollectorConfig {
+                output_dir: out.path().to_path_buf(),
+                concurrency: 2,
+                source_timeout_secs: 0.0,
+                force: true,
+                limits: DatasetLimits {
+                    max_in_memory_bytes: 1024,
+                    stream_buffer: 1,
+                },
+            },
+            Box::new(NullProgress),
+        );
+
+        let result = collector.run(&CancellationToken::new()).await.unwrap();
+
+        assert_eq!(result.total_items, 1);
+        assert_eq!(result.real_count, 1);
+        assert_eq!(result.ai_count, 0);
+        assert!(result.source_stats.contains_key("ok"));
+        assert!(result.source_stats.contains_key("bad"));
+        assert_eq!(result.publish_results[0].files_published, 1);
+        assert_eq!(count_files(&out.path().join("real")).unwrap(), 1);
+    }
+
+    #[tokio::test]
+    async fn collector_skips_done_sources_and_resumes_partial_sources_from_manifest() {
+        let out = tempfile::tempdir().unwrap();
+        prepare_output_dirs(out.path().join("real"), out.path().join("ai"))
+            .await
+            .unwrap();
+        let mut manifest = Manifest::default();
+        manifest.sources.insert(
+            "cached".to_string(),
+            crate::manifest::SourceEntry {
+                config: serde_json::json!({"name": "cached"}),
+                stats: SourceStats {
+                    total: 2,
+                    real: 1,
+                    ai: 1,
+                    fetched_offset: 2,
+                },
+                status: "done".to_string(),
+            },
+        );
+        manifest.sources.insert(
+            "partial".to_string(),
+            crate::manifest::SourceEntry {
+                config: serde_json::json!({"name": "partial"}),
+                stats: SourceStats {
+                    total: 1,
+                    real: 1,
+                    ai: 0,
+                    fetched_offset: 7,
+                },
+                status: "partial".to_string(),
+            },
+        );
+        manifest.save(out.path()).unwrap();
+
+        let resume = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let item = DataItem::new(
+            b"ai".to_vec(),
+            Label::AiGenerated,
+            MediaType::Text,
+            "partial",
+        )
+        .unwrap()
+        .with_source_offset(8);
+        let collector = Collector::new(
+            vec![
+                Box::new(StaticSource {
+                    name: "cached",
+                    items: Vec::new(),
+                    resume: None,
+                    max_items: None,
+                }),
+                Box::new(StaticSource {
+                    name: "partial",
+                    items: vec![Ok(item)],
+                    resume: Some(std::sync::Arc::clone(&resume)),
+                    max_items: Some(20),
+                }),
+            ],
+            Vec::new(),
+            Vec::new(),
+            CollectorConfig {
+                output_dir: out.path().to_path_buf(),
+                concurrency: 1,
+                source_timeout_secs: 0.0,
+                force: false,
+                limits: DatasetLimits {
+                    max_in_memory_bytes: 1024,
+                    stream_buffer: 1,
+                },
+            },
+            Box::new(NullProgress),
+        );
+
+        let result = collector.run(&CancellationToken::new()).await.unwrap();
+
+        assert_eq!(resume.load(std::sync::atomic::Ordering::SeqCst), 7);
+        assert_eq!(result.cached_sources, ["cached"]);
+        assert_eq!(result.total_items, 4);
+        assert_eq!(result.real_count, 2);
+        assert_eq!(result.ai_count, 2);
+        assert!(result.source_stats.contains_key("cached"));
+        assert!(result.source_stats.contains_key("partial"));
+    }
+}

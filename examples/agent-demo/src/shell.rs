@@ -1,527 +1,104 @@
-//! Interactive command shell using `rskit::worker` through the facade.
-//!
-//! Terminal layout (bottom of visible area):
-//!   [activity log — scrolls up via multi.println()]
-//!   ⠋ Agent #1 (Analyze …) — step message [37%]     ← task spinners
-//!   ⠋ Agent #2 (Resize …)  — step message [50%]
-//!   ─── 2 running · 1 done │ pool: 2/4 │ 12.5s      ← persistent status bar
-//!   ❯ [user input]                                    ← prompt
+//! Deterministic helpers for the interactive agent shell.
 
-use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
 
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use rskit::AppResult;
-use rskit::util::time::format_duration;
-use rskit::worker::{EventKind, Pool, PoolConfig};
-
-use crate::dashboard::{self, TaskStatus, TrackedTask};
-use crate::tasks::{AgentHandler, AgentTask, TaskOutput};
-
-// ── Channel message types ─────────────────────────────────────────────
-
-struct Completion {
-    id: usize,
-    result: Result<TaskOutput, String>,
+/// Parsed non-interactive representation of a shell command.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ShellCommand {
+    /// Show help.
+    Help,
+    /// Analyze a media file.
+    Analyze { path: PathBuf },
+    /// Resize an image.
+    Resize {
+        path: PathBuf,
+        width: u32,
+        height: u32,
+    },
+    /// Run the image pipeline.
+    Pipeline { path: PathBuf },
+    /// Process a synthetic batch.
+    Batch { count: usize },
+    /// Review a file.
+    Review { path: PathBuf },
+    /// Launch the demo scenario.
+    Demo,
+    /// Cancel a running task.
+    Cancel { id: usize },
+    /// Show task status.
+    Status,
+    /// Show task details.
+    Detail { id: usize },
+    /// Show worker stats.
+    Stats,
+    /// Clear completed tasks.
+    Clear,
+    /// Quit the shell.
+    Quit,
 }
 
-struct ProgressUpdate {
-    id: usize,
-    current: u64,
-    total: u64,
-    message: String,
-}
-
-struct RunningHandle {
-    id: usize,
-    cancel: tokio_util::sync::CancellationToken,
-    spinner: ProgressBar,
-}
-
-const POOL_SIZE: usize = 4;
-
-// ── Main loop ─────────────────────────────────────────────────────────
-
-pub async fn run(cancel: tokio_util::sync::CancellationToken) -> AppResult<()> {
-    let pool = Pool::new(
-        Arc::new(AgentHandler),
-        PoolConfig::new("agent-pool").with_size(POOL_SIZE),
-    );
-
-    let multi = MultiProgress::new();
-    let mut tasks: Vec<TrackedTask> = Vec::new();
-    let mut handles: Vec<RunningHandle> = Vec::new();
-    let mut next_id: usize = 1;
-    let start_time = Instant::now();
-
-    // Channels
-    let (done_tx, mut done_rx) = tokio::sync::mpsc::unbounded_channel::<Completion>();
-    let (prog_tx, mut prog_rx) = tokio::sync::mpsc::unbounded_channel::<ProgressUpdate>();
-
-    // Async stdin reader
-    let (line_tx, mut line_rx) = tokio::sync::mpsc::channel::<String>(1);
-    let cancel_for_stdin = cancel.clone();
-    tokio::task::spawn_blocking(move || {
-        let stdin = io::stdin();
-        loop {
-            if cancel_for_stdin.is_cancelled() {
-                break;
-            }
-            let mut buf = String::new();
-            match stdin.lock().read_line(&mut buf) {
-                Ok(0) | Err(_) => break,
-                Ok(_) => {
-                    let trimmed = buf.trim().to_string();
-                    if line_tx.blocking_send(trimmed).is_err() {
-                        break;
-                    }
-                }
-            }
-        }
-    });
-
-    // Banner + instructions
-    println!("{BANNER}");
-    println!(
-        "  \x1b[2mType\x1b[0m \x1b[1m/help\x1b[0m \x1b[2mor\x1b[0m \x1b[1m?\x1b[0m \x1b[2mfor commands. Prefix with\x1b[0m \x1b[1m/\x1b[0m \x1b[2mfor menu style.\x1b[0m"
-    );
-    print_status_line(&tasks, &pool, start_time);
-    print_prompt();
-
-    loop {
-        tokio::select! {
-            // ── User input ────────────────────────────────────
-            Some(line) = line_rx.recv() => {
-                if line.is_empty() {
-                    print_prompt();
-                    continue;
-                }
-
-                let cmd_line = line.strip_prefix('/').unwrap_or(&line);
-                let parts: Vec<&str> = cmd_line.splitn(3, ' ').collect();
-
-                match parts[0] {
-                    "help" | "h" | "?" | "" => {
-                        multi.println(format_help()).ok();
-                    }
-
-                    "analyze" | "a" if parts.len() >= 2 => {
-                        let path = resolve_path(parts[1]);
-                        if !path.exists() {
-                            multi.println(format!(
-                                "  \x1b[31m✗ File not found:\x1b[0m {}",
-                                path.display()
-                            )).ok();
-                        } else {
-                            multi.println(dashboard::log_thinking(
-                                &format!("Analyzing {} for MIME type, metadata, and structural properties.", parts[1])
-                            )).ok();
-                            let task = AgentTask::Analyze { path };
-                            submit_task(&pool, &multi, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task).await?;
-                        }
-                    }
-
-                    "resize" | "r" if parts.len() >= 2 => {
-                        let path = resolve_path(parts[1]);
-                        if !path.exists() {
-                            multi.println(format!(
-                                "  \x1b[31m✗ File not found:\x1b[0m {}",
-                                path.display()
-                            )).ok();
-                        } else {
-                            let (w, h) = if parts.len() >= 3 {
-                                parse_dimensions(parts[2]).unwrap_or((200, 200))
-                            } else {
-                                (200, 200)
-                            };
-                            multi.println(dashboard::log_thinking(
-                                &format!("Resizing {} to {}×{} using Fit mode.", parts[1], w, h)
-                            )).ok();
-                            let task = AgentTask::Resize { path, width: w, height: h };
-                            submit_task(&pool, &multi, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task).await?;
-                        }
-                    }
-
-                    "pipeline" | "p" if parts.len() >= 2 => {
-                        let path = resolve_path(parts[1]);
-                        if !path.exists() {
-                            multi.println(format!(
-                                "  \x1b[31m✗ File not found:\x1b[0m {}",
-                                path.display()
-                            )).ok();
-                        } else {
-                            multi.println(dashboard::log_thinking(
-                                &format!("Running 3-step pipeline on {}: resize → crop → rotate.", parts[1])
-                            )).ok();
-                            let task = AgentTask::Pipeline { path };
-                            submit_task(&pool, &multi, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task).await?;
-                        }
-                    }
-
-                    "batch" | "b" => {
-                        let count = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(30);
-                        multi.println(dashboard::log_thinking(
-                            &format!("Starting batch processing of {count} items.")
-                        )).ok();
-                        let task = AgentTask::BatchProcess { count };
-                        submit_task(&pool, &multi, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task).await?;
-                    }
-
-                    "review" | "rv" if parts.len() >= 2 => {
-                        let path = resolve_path(parts[1]);
-                        if !path.exists() {
-                            multi.println(format!(
-                                "  \x1b[31m✗ File not found:\x1b[0m {}",
-                                path.display()
-                            )).ok();
-                        } else {
-                            multi.println(dashboard::log_thinking(
-                                &format!("Running code review on {}: AST analysis, security, complexity.", parts[1])
-                            )).ok();
-                            let task = AgentTask::CodeReview { path };
-                            submit_task(&pool, &multi, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task).await?;
-                        }
-                    }
-
-                    "demo" | "d" => {
-                        multi.println("").ok();
-                        multi.println(dashboard::log_thinking(
-                            "Spawning 4 parallel agents to process real media fixtures."
-                        )).ok();
-                        multi.println(dashboard::log_thinking(
-                            "Each agent runs independently — watch spinners and completions."
-                        )).ok();
-                        multi.println("").ok();
-
-                        let fix = fixture_dir();
-                        let demo_tasks = vec![
-                            AgentTask::Analyze {
-                                path: fix.join("image/real-photo.jpg"),
-                            },
-                            AgentTask::Resize {
-                                path: fix.join("image/sample.png"),
-                                width: 150,
-                                height: 150,
-                            },
-                            AgentTask::Pipeline {
-                                path: fix.join("image/ai-generated.jpg"),
-                            },
-                            AgentTask::CodeReview {
-                                path: fix.join("image/real-photo.jpg"),
-                            },
-                        ];
-                        for task in demo_tasks {
-                            submit_task(&pool, &multi, &mut tasks, &mut handles, &done_tx, &prog_tx, &mut next_id, task).await?;
-                        }
-                        multi.println("").ok();
-                    }
-
-                    "cancel" if parts.len() >= 2 => {
-                        if let Ok(id) = parts[1].parse::<usize>() {
-                            if let Some(h) = handles.iter().find(|h| h.id == id) {
-                                h.cancel.cancel();
-                                if let Some(t) = tasks.iter_mut().find(|t| t.id == id) {
-                                    t.status = TaskStatus::Cancelled;
-                                    t.message = "Cancelled by user".into();
-                                    multi.println(dashboard::log_cancel(t)).ok();
-                                }
-                            } else {
-                                multi.println(format!(
-                                    "  \x1b[31m✗ No running task with ID {id}\x1b[0m"
-                                )).ok();
-                            }
-                        }
-                    }
-
-                    "status" | "s" => {
-                        drain_completions(&mut done_rx, &mut tasks, &mut handles, &multi);
-                        multi.println(dashboard::render_status_table(&tasks)).ok();
-                    }
-
-                    "detail" if parts.len() >= 2 => {
-                        if let Ok(id) = parts[1].parse::<usize>() {
-                            if let Some(t) = tasks.iter().find(|t| t.id == id) {
-                                multi.println(dashboard::render_task_details(t)).ok();
-                            } else {
-                                multi.println(format!(
-                                    "  \x1b[31m✗ Unknown task ID:\x1b[0m {id}"
-                                )).ok();
-                            }
-                        }
-                    }
-
-                    "stats" => {
-                        let st = pool.stats();
-                        let running = tasks.iter().filter(|t| t.status == TaskStatus::Running).count();
-                        let done = tasks.iter().filter(|t| t.status == TaskStatus::Done).count();
-                        let failed = tasks.iter().filter(|t| t.status == TaskStatus::Failed).count();
-                        let cancelled = tasks.iter().filter(|t| t.status == TaskStatus::Cancelled).count();
-                        multi.println(format!(
-                            "\n  \x1b[1mWorker Pool\x1b[0m: {} active / {} capacity\n  \x1b[1mTasks\x1b[0m: {} running, {} done, {} failed, {} cancelled, {} total\n  \x1b[1mUptime\x1b[0m: {}\n",
-                            st.running, st.capacity, running, done, failed, cancelled, tasks.len(),
-                            format_duration(start_time.elapsed())
-                        )).ok();
-                    }
-
-                    "clear" | "c" => {
-                        let before = tasks.len();
-                        tasks.retain(|t| t.status == TaskStatus::Running);
-                        handles.retain(|h| tasks.iter().any(|t| t.id == h.id));
-                        multi.println(format!(
-                            "  \x1b[2mCleared {} completed task(s).\x1b[0m",
-                            before - tasks.len()
-                        )).ok();
-                    }
-
-                    "quit" | "q" | "exit" => {
-                        let running = tasks.iter().filter(|t| t.status == TaskStatus::Running).count();
-                        if running > 0 {
-                            multi.println(format!(
-                                "  \x1b[33m⚠ Shutting down — cancelling {running} running task(s)\x1b[0m"
-                            )).ok();
-                            for h in &handles {
-                                h.cancel.cancel();
-                            }
-                        }
-                        break;
-                    }
-
-                    other => {
-                        multi.println(format!(
-                            "  \x1b[31m✗ Unknown command:\x1b[0m {other}\n  Type \x1b[1m/help\x1b[0m for commands."
-                        )).ok();
-                    }
-                }
-
-                print_prompt();
-            }
-
-            // ── Task completion (appears immediately!) ────────
-            Some(comp) = done_rx.recv() => {
-                if let Some(t) = tasks.iter_mut().find(|t| t.id == comp.id)
-                    && t.status == TaskStatus::Running {
-                        match comp.result {
-                            Ok(output) => {
-                                t.status = TaskStatus::Done;
-                                t.result = Some(output);
-                            }
-                            Err(err) => {
-                                if err.contains("cancelled") {
-                                    t.status = TaskStatus::Cancelled;
-                                } else {
-                                    t.status = TaskStatus::Failed;
-                                }
-                                t.result = Some(TaskOutput {
-                                    summary: err,
-                                    details: vec![],
-                                });
-                            }
-                        }
-                        multi.println(dashboard::log_result(t)).ok();
-                    }
-                // Clean up spinner for completed task
-                if let Some(pos) = handles.iter().position(|h| h.id == comp.id) {
-                    handles[pos].spinner.finish_and_clear();
-                    handles.remove(pos);
-                }
-            }
-
-            // ── Progress updates ──────────────────────────────
-            Some(update) = prog_rx.recv() => {
-                if let Some(t) = tasks.iter_mut().find(|t| t.id == update.id) {
-                    t.progress = Some((update.current, update.total));
-                    t.message = update.message;
-                }
-            }
-
-            // ── Ctrl+C ───────────────────────────────────────
-            _ = cancel.cancelled() => {
-                multi.println("  \x1b[33m⚠ Interrupted\x1b[0m").ok();
-                for h in &handles {
-                    h.cancel.cancel();
-                }
-                break;
-            }
-        }
+/// Parse a user-entered shell command without performing side effects.
+pub fn parse_command(input: &str) -> Result<Option<ShellCommand>, String> {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
     }
 
-    // Graceful shutdown
-    cancel.cancel();
-    for h in &handles {
-        h.spinner.finish_and_clear();
-    }
-    let running = tasks
-        .iter()
-        .filter(|t| t.status == TaskStatus::Running)
-        .count();
-    if running > 0 {
-        println!("  \x1b[2mWaiting for {running} task(s) to finish...\x1b[0m");
-    }
-    pool.shutdown().await.ok();
-    println!("  \x1b[1;32m👋 Done.\x1b[0m");
-
-    // Force exit — the blocking stdin thread can't be interrupted
-    #[allow(clippy::disallowed_methods)]
-    std::process::exit(0);
-}
-
-// ── Task submission ───────────────────────────────────────────────────
-
-#[allow(clippy::too_many_arguments)]
-async fn submit_task(
-    pool: &Pool<AgentTask, TaskOutput>,
-    multi: &MultiProgress,
-    tasks: &mut Vec<TrackedTask>,
-    handles: &mut Vec<RunningHandle>,
-    done_tx: &tokio::sync::mpsc::UnboundedSender<Completion>,
-    prog_tx: &tokio::sync::mpsc::UnboundedSender<ProgressUpdate>,
-    next_id: &mut usize,
-    task: AgentTask,
-) -> AppResult<()> {
-    let id = *next_id;
-    *next_id += 1;
-    let label = task.to_string();
-
-    // Add spinner to MultiProgress
-    let spinner = multi.add(ProgressBar::new_spinner());
-    spinner.set_style(
-        ProgressStyle::with_template("  {spinner:.cyan} \x1b[1mAgent #{prefix}\x1b[0m {wide_msg}")
-            .unwrap()
-            .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏", " "]),
-    );
-    spinner.set_prefix(id.to_string());
-    spinner.set_message(format!("({label}) \x1b[2m— Spawning...\x1b[0m"));
-    spinner.enable_steady_tick(Duration::from_millis(80));
-
-    let handle = pool.submit(task).await?;
-    let task_cancel = handle.cancel_token();
-
-    // Activity log: spawn notification
-    multi.println(dashboard::log_spawn(id, &label)).ok();
-
-    tasks.push(TrackedTask {
-        id,
-        label: label.clone(),
-        status: TaskStatus::Running,
-        started: Instant::now(),
-        progress: None,
-        message: "Starting...".into(),
-        result: None,
-    });
-
-    // Spawn event listener
-    let done_tx = done_tx.clone();
-    let prog_tx = prog_tx.clone();
-    let spinner_clone = spinner.clone();
-    tokio::spawn(async move {
-        let mut events = handle.events();
-
-        // Listen for progress events → update spinner + tracked progress
-        let event_spinner = spinner_clone.clone();
-        let event_label = label.clone();
-        let event_prog_tx = prog_tx;
-        let event_loop = tokio::spawn(async move {
-            loop {
-                match events.recv().await {
-                    Ok(event) => {
-                        if event.kind == EventKind::Progress
-                            && let Some(ref p) = event.progress
-                        {
-                            let pct = p.percent.unwrap_or(0.0) as u32;
-                            let step_msg = p.message.as_deref().unwrap_or("Working...");
-                            event_spinner.set_message(format!(
-                                "({event_label}) \x1b[2m— {step_msg}\x1b[0m \x1b[36m[{pct}%]\x1b[0m"
-                            ));
-                            let _ = event_prog_tx.send(ProgressUpdate {
-                                id,
-                                current: p.current,
-                                total: p.total.unwrap_or(0),
-                                message: step_msg.to_string(),
-                            });
-                        }
-                    }
-                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
-                    Err(_) => break,
-                }
-            }
-        });
-
-        // Wait for final result
-        let result = match handle.result().await {
-            Ok(output) => Ok(output),
-            Err(e) => Err(e.message().to_string()),
-        };
-
-        event_loop.abort();
-        // Spinner cleanup handled by completion handler in main loop
-        let _ = done_tx.send(Completion { id, result });
-    });
-
-    handles.push(RunningHandle {
-        id,
-        cancel: task_cancel,
-        spinner,
-    });
-
-    Ok(())
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────
-
-fn drain_completions(
-    done_rx: &mut tokio::sync::mpsc::UnboundedReceiver<Completion>,
-    tasks: &mut [TrackedTask],
-    handles: &mut Vec<RunningHandle>,
-    multi: &MultiProgress,
-) {
-    while let Ok(comp) = done_rx.try_recv() {
-        if let Some(t) = tasks.iter_mut().find(|t| t.id == comp.id)
-            && t.status == TaskStatus::Running
-        {
-            match comp.result {
-                Ok(output) => {
-                    t.status = TaskStatus::Done;
-                    t.result = Some(output);
-                }
-                Err(err) => {
-                    if err.contains("cancelled") {
-                        t.status = TaskStatus::Cancelled;
-                    } else {
-                        t.status = TaskStatus::Failed;
-                    }
-                    t.result = Some(TaskOutput {
-                        summary: err,
-                        details: vec![],
-                    });
-                }
-            }
-            multi.println(dashboard::log_result(t)).ok();
+    let cmd_line = trimmed.strip_prefix('/').unwrap_or(trimmed);
+    let parts: Vec<&str> = cmd_line.splitn(3, ' ').collect();
+    match parts[0] {
+        "help" | "h" | "?" | "" => Ok(Some(ShellCommand::Help)),
+        "analyze" | "a" if parts.len() >= 2 => Ok(Some(ShellCommand::Analyze {
+            path: resolve_path(parts[1]),
+        })),
+        "resize" | "r" if parts.len() >= 2 => {
+            let (width, height) = parts
+                .get(2)
+                .and_then(|value| parse_dimensions(value))
+                .unwrap_or((200, 200));
+            Ok(Some(ShellCommand::Resize {
+                path: resolve_path(parts[1]),
+                width,
+                height,
+            }))
         }
-        if let Some(pos) = handles.iter().position(|h| h.id == comp.id) {
-            handles[pos].spinner.finish_and_clear();
-            handles.remove(pos);
+        "pipeline" | "p" if parts.len() >= 2 => Ok(Some(ShellCommand::Pipeline {
+            path: resolve_path(parts[1]),
+        })),
+        "batch" | "b" => Ok(Some(ShellCommand::Batch {
+            count: parts
+                .get(1)
+                .and_then(|value| value.parse().ok())
+                .unwrap_or(30),
+        })),
+        "review" | "rv" if parts.len() >= 2 => Ok(Some(ShellCommand::Review {
+            path: resolve_path(parts[1]),
+        })),
+        "demo" | "d" => Ok(Some(ShellCommand::Demo)),
+        "cancel" if parts.len() >= 2 => {
+            parse_id(parts[1], "cancel").map(|id| Some(ShellCommand::Cancel { id }))
         }
+        "status" | "s" => Ok(Some(ShellCommand::Status)),
+        "detail" if parts.len() >= 2 => {
+            parse_id(parts[1], "detail").map(|id| Some(ShellCommand::Detail { id }))
+        }
+        "stats" => Ok(Some(ShellCommand::Stats)),
+        "clear" | "c" => Ok(Some(ShellCommand::Clear)),
+        "quit" | "q" | "exit" => Ok(Some(ShellCommand::Quit)),
+        other => Err(format_unknown_command(other)),
     }
 }
 
-fn print_prompt() {
-    print!("\x1b[1;36m❯\x1b[0m ");
-    io::stdout().flush().ok();
+/// Render an unknown-command message matching the interactive shell.
+pub fn format_unknown_command(command: &str) -> String {
+    format!(
+        "  \x1b[31m✗ Unknown command:\x1b[0m {command}\n  Type \x1b[1m/help\x1b[0m for commands."
+    )
 }
 
-fn print_status_line(
-    tasks: &[TrackedTask],
-    pool: &Pool<AgentTask, TaskOutput>,
-    start_time: Instant,
-) {
-    let st = pool.stats();
-    let bar = dashboard::format_status_bar(tasks, st.running, st.capacity, start_time.elapsed());
-    println!("  {bar}");
-}
-
-fn format_help() -> String {
+/// Render the interactive command help panel.
+pub fn format_help() -> String {
     let mut s = String::new();
     s.push_str("\n  \x1b[1;36m┌─────────────────────────────────────────────────┐\x1b[0m\n");
     s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[1mAgent Commands\x1b[0m                                 \x1b[1;36m│\x1b[0m\n");
@@ -543,36 +120,39 @@ fn format_help() -> String {
     s
 }
 
+/// Resolve a user path, falling back to the shared fixtures for relative fixture paths.
 pub fn resolve_path(input: &str) -> PathBuf {
-    let p = PathBuf::from(input);
-    if p.is_absolute() || p.exists() {
-        p
+    let path = PathBuf::from(input);
+    if path.is_absolute() || path.exists() {
+        path
     } else {
         fixture_dir().join(input)
     }
 }
 
+/// Return the repository fixture directory used by the examples.
 pub fn fixture_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
+        .and_then(|path| path.parent())
+        .expect("agent-demo manifest is nested under examples")
         .join("tests/fixtures")
 }
 
-pub fn parse_dimensions(s: &str) -> Option<(u32, u32)> {
-    let parts: Vec<&str> = s.split('x').collect();
-    if parts.len() == 2 {
-        let w = parts[0].parse().ok()?;
-        let h = parts[1].parse().ok()?;
-        Some((w, h))
-    } else {
-        None
-    }
+/// Parse dimensions in `WIDTHxHEIGHT` form.
+pub fn parse_dimensions(input: &str) -> Option<(u32, u32)> {
+    let (width, height) = input.split_once('x')?;
+    Some((width.parse().ok()?, height.parse().ok()?))
 }
 
-const BANNER: &str = concat!(
+fn parse_id(input: &str, command: &str) -> Result<usize, String> {
+    input
+        .parse()
+        .map_err(|_| format!("  \x1b[31m✗ Invalid {command} task ID:\x1b[0m {input}"))
+}
+
+/// Static banner text used by the interactive shell.
+pub const BANNER: &str = concat!(
     "\n",
     "  \x1b[1;36m🚀 rskit Agent Demo\x1b[0m — Media Processing Pipeline\n",
     "  \x1b[2mShowcasing background workers, progress tracking, and stream processing\x1b[0m\n",
@@ -582,6 +162,110 @@ const BANNER: &str = concat!(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_command_recognizes_help_aliases_and_empty_input() {
+        assert_eq!(parse_command("").unwrap(), None);
+        assert_eq!(parse_command("/help").unwrap(), Some(ShellCommand::Help));
+        assert_eq!(parse_command("?").unwrap(), Some(ShellCommand::Help));
+        assert_eq!(parse_command("h").unwrap(), Some(ShellCommand::Help));
+    }
+
+    #[test]
+    fn parse_command_recognizes_file_commands() {
+        assert!(matches!(
+            parse_command("/analyze image/real-photo.jpg").unwrap(),
+            Some(ShellCommand::Analyze { path }) if path.ends_with("image/real-photo.jpg")
+        ));
+        assert!(matches!(
+            parse_command("p image/sample.png").unwrap(),
+            Some(ShellCommand::Pipeline { path }) if path.ends_with("image/sample.png")
+        ));
+        assert!(matches!(
+            parse_command("rv image/sample.png").unwrap(),
+            Some(ShellCommand::Review { path }) if path.ends_with("image/sample.png")
+        ));
+    }
+
+    #[test]
+    fn parse_command_resize_uses_defaults_or_explicit_dimensions() {
+        assert_eq!(
+            parse_command("resize image/sample.png").unwrap(),
+            Some(ShellCommand::Resize {
+                path: fixture_dir().join("image/sample.png"),
+                width: 200,
+                height: 200,
+            })
+        );
+        assert_eq!(
+            parse_command("r image/sample.png 320x180").unwrap(),
+            Some(ShellCommand::Resize {
+                path: fixture_dir().join("image/sample.png"),
+                width: 320,
+                height: 180,
+            })
+        );
+        assert_eq!(
+            parse_command("r image/sample.png wide").unwrap(),
+            Some(ShellCommand::Resize {
+                path: fixture_dir().join("image/sample.png"),
+                width: 200,
+                height: 200,
+            })
+        );
+    }
+
+    #[test]
+    fn parse_command_batch_defaults_invalid_count_to_thirty() {
+        assert_eq!(
+            parse_command("batch").unwrap(),
+            Some(ShellCommand::Batch { count: 30 })
+        );
+        assert_eq!(
+            parse_command("b 7").unwrap(),
+            Some(ShellCommand::Batch { count: 7 })
+        );
+        assert_eq!(
+            parse_command("b many").unwrap(),
+            Some(ShellCommand::Batch { count: 30 })
+        );
+    }
+
+    #[test]
+    fn parse_command_recognizes_state_commands() {
+        assert_eq!(parse_command("demo").unwrap(), Some(ShellCommand::Demo));
+        assert_eq!(
+            parse_command("cancel 42").unwrap(),
+            Some(ShellCommand::Cancel { id: 42 })
+        );
+        assert_eq!(parse_command("status").unwrap(), Some(ShellCommand::Status));
+        assert_eq!(
+            parse_command("detail 9").unwrap(),
+            Some(ShellCommand::Detail { id: 9 })
+        );
+        assert_eq!(parse_command("stats").unwrap(), Some(ShellCommand::Stats));
+        assert_eq!(parse_command("clear").unwrap(), Some(ShellCommand::Clear));
+        assert_eq!(parse_command("exit").unwrap(), Some(ShellCommand::Quit));
+    }
+
+    #[test]
+    fn parse_command_reports_invalid_or_unknown_commands() {
+        assert!(
+            parse_command("cancel no")
+                .unwrap_err()
+                .contains("Invalid cancel")
+        );
+        assert!(
+            parse_command("detail no")
+                .unwrap_err()
+                .contains("Invalid detail")
+        );
+        assert!(
+            parse_command("bogus")
+                .unwrap_err()
+                .contains("Unknown command")
+        );
+    }
 
     #[test]
     fn resolve_path_uses_fixtures_for_relative() {
@@ -594,8 +278,8 @@ mod tests {
 
     #[test]
     fn resolve_path_keeps_absolute() {
-        let p = resolve_path("/tmp/test.jpg");
-        assert_eq!(p, PathBuf::from("/tmp/test.jpg"));
+        let p = resolve_path("/not-tmp/test.jpg");
+        assert_eq!(p, PathBuf::from("/not-tmp/test.jpg"));
     }
 
     #[test]
@@ -609,6 +293,7 @@ mod tests {
         assert_eq!(parse_dimensions("abc"), None);
         assert_eq!(parse_dimensions("200"), None);
         assert_eq!(parse_dimensions("200xabc"), None);
+        assert_eq!(parse_dimensions("200X150"), None);
     }
 
     #[test]
@@ -636,6 +321,13 @@ mod tests {
         ] {
             assert!(help.contains(cmd), "help should contain {cmd}");
         }
+    }
+
+    #[test]
+    fn format_unknown_command_points_to_help() {
+        let output = format_unknown_command("wat");
+        assert!(output.contains("wat"));
+        assert!(output.contains("/help"));
     }
 
     #[test]

@@ -587,3 +587,406 @@ pub fn healthz_router() -> Router {
 
     Router::new().route("/healthz", get(healthz_handler))
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use axum::{http::Request, routing::get};
+    use rskit_bootstrap::{Component, Registry};
+    use rskit_http::CorsPolicy;
+    use rskit_security::TransportSecurity;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tower::ServiceExt;
+
+    use super::*;
+
+    fn local_config() -> HttpServerConfig {
+        HttpServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            request_timeout: Duration::from_secs(1),
+            ..Default::default()
+        }
+    }
+
+    #[tokio::test]
+    async fn builder_applies_baseline_layers_to_application_routes() {
+        let server = HttpServerBuilder::new(local_config(), CancellationToken::new())
+            .with_router(Router::new().route("/", get(|| async { "ok" })))
+            .with_security_headers_config(
+                SecurityHeadersConfig::default()
+                    .with_transport_security(TransportSecurity::AllowInsecureLocal),
+            )
+            .expect("configure security headers")
+            .with_request_id()
+            .with_tracing()
+            .with_body_limit()
+            .with_timeout()
+            .build()
+            .expect("build server");
+        let router = server
+            .router
+            .lock()
+            .await
+            .take()
+            .expect("router is present");
+
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .uri("/")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("route response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response
+                .headers()
+                .get(http::header::X_CONTENT_TYPE_OPTIONS)
+                .expect("x-content-type-options header"),
+            "nosniff"
+        );
+    }
+
+    #[tokio::test]
+    async fn builder_applies_ordered_transform_helpers_and_cors() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let transform = |calls: Arc<AtomicUsize>| {
+            move |router: Router| {
+                calls.fetch_add(1, Ordering::SeqCst);
+                router
+            }
+        };
+
+        let server = HttpServerBuilder::new(local_config(), CancellationToken::new())
+            .with_router(Router::new().route("/", get(|| async { "ok" })))
+            .with_logging_transform(transform(Arc::clone(&calls)))
+            .with_auth_transform(transform(Arc::clone(&calls)))
+            .with_validation_transform(transform(Arc::clone(&calls)))
+            .with_metrics_transform(transform(Arc::clone(&calls)))
+            .with_cors()
+            .expect("default cors state is valid")
+            .build()
+            .expect("build server");
+
+        let router = server
+            .router
+            .lock()
+            .await
+            .take()
+            .expect("router is present");
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .uri("/")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("route response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(calls.load(Ordering::SeqCst), 4);
+        assert_eq!(calls.load(Ordering::SeqCst), 4);
+    }
+    #[test]
+    fn builder_helpers_validate_cors_security_headers_and_middleware_stack() {
+        let invalid_cors = HttpServerConfig {
+            cors: Some(CorsPolicy {
+                allow_credentials: true,
+                ..Default::default()
+            }),
+            ..local_config()
+        };
+        assert_eq!(
+            HttpServerBuilder::new(invalid_cors, CancellationToken::new())
+                .with_cors()
+                .err()
+                .unwrap()
+                .code(),
+            ErrorCode::InvalidInput
+        );
+        let invalid_cors = HttpServerConfig {
+            cors: Some(CorsPolicy {
+                allowed_origins: vec!["*".to_string()],
+                ..Default::default()
+            }),
+            ..local_config()
+        };
+        assert_eq!(
+            HttpServerBuilder::new(invalid_cors, CancellationToken::new())
+                .build()
+                .err()
+                .unwrap()
+                .code(),
+            ErrorCode::InvalidInput
+        );
+
+        let builder = HttpServerBuilder::new(local_config(), CancellationToken::new())
+            .with_middleware_stack(HttpMiddlewareStack::new())
+            .with_security_headers()
+            .expect("default security headers are valid");
+        assert!(builder.security_headers.is_some());
+    }
+
+    #[test]
+    fn builder_builds_with_valid_cors_and_exposes_server_accessors() {
+        let config = HttpServerConfig {
+            cors: Some(CorsPolicy {
+                allowed_origins: vec!["https://example.com".to_string()],
+                allowed_methods: vec!["GET".to_string()],
+                allowed_headers: vec!["x-test".to_string()],
+                ..Default::default()
+            }),
+            ..local_config()
+        };
+        let server = HttpServerBuilder::new(config, CancellationToken::new())
+            .with_router(Router::new())
+            .build()
+            .expect("valid CORS policy builds");
+
+        assert_eq!(server.name(), "http-server");
+        assert_eq!(server.bind_addr(), "127.0.0.1:0");
+        assert_eq!(server.local_addr(), None);
+    }
+
+    #[tokio::test]
+    async fn builder_applies_ordered_transform_shortcuts() {
+        let server = HttpServerBuilder::new(local_config(), CancellationToken::new())
+            .with_logging_transform(|router| router.route("/logging", get(|| async { "logging" })))
+            .with_auth_transform(|router| router.route("/auth", get(|| async { "auth" })))
+            .with_validation_transform(|router| {
+                router.route("/validation", get(|| async { "validation" }))
+            })
+            .with_metrics_transform(|router| router.route("/metrics", get(|| async { "metrics" })))
+            .with_cors()
+            .expect("empty cors config is accepted")
+            .build()
+            .expect("build server");
+        let router = server
+            .router
+            .lock()
+            .await
+            .take()
+            .expect("router is present");
+
+        for (path, expected) in [
+            ("/logging", "logging"),
+            ("/auth", "auth"),
+            ("/validation", "validation"),
+            ("/metrics", "metrics"),
+        ] {
+            let response = router
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .uri(path)
+                        .body(Body::empty())
+                        .expect("request"),
+                )
+                .await
+                .expect("route response");
+            let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+                .await
+                .expect("body bytes");
+            assert_eq!(&body[..], expected.as_bytes());
+        }
+    }
+
+    #[test]
+    fn security_header_configuration_is_validated_at_build_time() {
+        let config = SecurityHeadersConfig::default()
+            .with_transport_security(TransportSecurity::AllowInsecureLocal)
+            .with_content_security_policy(None)
+            .with_permissions_policy(None)
+            .with_referrer_policy(None)
+            .with_frame_options(None)
+            .with_content_type_options(None);
+
+        let error = match HttpServerBuilder::new(local_config(), CancellationToken::new())
+            .with_security_headers_config(config)
+        {
+            Ok(_) => panic!("invalid security header policy should be rejected"),
+            Err(error) => error,
+        };
+
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
+    }
+
+    #[tokio::test]
+    async fn lifecycle_sets_local_address_and_cancels_shutdown() {
+        let server = HttpServerBuilder::new(local_config(), CancellationToken::new())
+            .build()
+            .expect("build server");
+
+        assert_eq!(server.bind_addr(), "127.0.0.1:0");
+        assert!(server.local_addr().is_none());
+        assert!(server.health().is_healthy());
+
+        server.start().await.expect("start http server");
+        assert!(server.local_addr().is_some());
+        server.stop().await.expect("stop http server");
+    }
+
+    #[tokio::test]
+    async fn local_http_listener_serves_requests_and_rejects_double_start() {
+        let server = HttpServerBuilder::new(local_config(), CancellationToken::new())
+            .with_router(Router::new().route("/ping", get(|| async { "pong" })))
+            .build()
+            .expect("build server");
+
+        server.start().await.expect("start http server");
+        let second_start = server.start().await.unwrap_err();
+        assert_eq!(second_start.code(), ErrorCode::Internal);
+        assert!(second_start.message().contains("already started"));
+
+        let addr = server.local_addr().expect("local address");
+        let mut stream = tokio::net::TcpStream::connect(addr)
+            .await
+            .expect("connect to local server");
+        stream
+            .write_all(b"GET /ping HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+            .await
+            .expect("write request");
+        let mut response = String::new();
+        tokio::time::timeout(Duration::from_secs(2), stream.read_to_string(&mut response))
+            .await
+            .expect("response read timed out")
+            .expect("read response");
+
+        assert!(response.starts_with("HTTP/1.1 200 OK"), "{response}");
+        assert!(response.contains("pong"), "{response}");
+        server.stop().await.expect("stop http server");
+    }
+
+    #[tokio::test]
+    async fn local_http_listener_serves_http1_when_h2c_disabled() {
+        let mut config = local_config();
+        config.enable_h2c = false;
+        let server = HttpServerBuilder::new(config, CancellationToken::new())
+            .with_router(Router::new().route("/http1", get(|| async { "ok" })))
+            .build()
+            .expect("build server");
+
+        server.start().await.expect("start http1 server");
+        let addr = server.local_addr().expect("local address");
+        let mut stream = tokio::net::TcpStream::connect(addr)
+            .await
+            .expect("connect to local server");
+        stream
+            .write_all(b"GET /http1 HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+            .await
+            .expect("write request");
+        let mut response = String::new();
+        tokio::time::timeout(Duration::from_secs(2), stream.read_to_string(&mut response))
+            .await
+            .expect("response read timed out")
+            .expect("read response");
+
+        assert!(response.starts_with("HTTP/1.1 200 OK"), "{response}");
+        assert!(response.contains("ok"), "{response}");
+        server.stop().await.expect("stop http1 server");
+    }
+
+    #[tokio::test]
+    async fn health_routers_report_registry_and_liveness() {
+        let registry = Arc::new(Registry::new());
+        let health = health_router(registry);
+        let response = health
+            .oneshot(
+                Request::builder()
+                    .uri("/health")
+                    .body(Body::empty())
+                    .expect("health request"),
+            )
+            .await
+            .expect("health response");
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("health body");
+        assert_eq!(&body[..], b"[]");
+
+        let liveness = healthz_router();
+        let response = liveness
+            .oneshot(
+                Request::builder()
+                    .uri("/healthz")
+                    .body(Body::empty())
+                    .expect("healthz request"),
+            )
+            .await
+            .expect("healthz response");
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("healthz body");
+        let body = String::from_utf8_lossy(&body);
+        assert!(body.contains("\"status\":\"ok\""));
+        assert!(body.contains("\"version\""));
+    }
+
+    #[test]
+    fn tls_acceptor_rejects_missing_certificate_paths() {
+        let tls = TlsConfig::default();
+
+        let error = match build_tls_acceptor(&tls) {
+            Ok(_) => panic!("missing TLS files should be rejected"),
+            Err(error) => error,
+        };
+
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
+        assert!(error.message().contains("cert_file"));
+    }
+
+    #[test]
+    fn tls_acceptor_rejects_missing_key_path_after_cert_path() {
+        let tls = TlsConfig {
+            cert_file: Some("missing-cert.pem".to_string()),
+            ..Default::default()
+        };
+
+        let error = match build_tls_acceptor(&tls) {
+            Ok(_) => panic!("missing key file should be rejected before reading files"),
+            Err(error) => error,
+        };
+
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
+        assert!(error.message().contains("key_file"));
+    }
+
+    #[test]
+    fn tls_loader_reports_missing_certificate_and_key_files() {
+        let cert_error = load_certs("missing-cert.pem").unwrap_err();
+        assert_eq!(cert_error.code(), ErrorCode::InvalidInput);
+        assert!(
+            cert_error
+                .message()
+                .contains("failed to load HTTP TLS certificate")
+        );
+
+        let key_error = load_private_key("missing-key.pem").unwrap_err();
+        assert_eq!(key_error.code(), ErrorCode::InvalidInput);
+        assert!(key_error.message().contains("failed to load HTTP TLS key"));
+    }
+
+    #[test]
+    fn connection_accept_errors_are_classified_as_transient() {
+        for kind in [
+            std::io::ErrorKind::ConnectionRefused,
+            std::io::ErrorKind::ConnectionAborted,
+            std::io::ErrorKind::ConnectionReset,
+        ] {
+            let error = std::io::Error::from(kind);
+            assert!(is_connection_accept_error(&error));
+        }
+        assert!(!is_connection_accept_error(&std::io::Error::from(
+            std::io::ErrorKind::PermissionDenied
+        )));
+    }
+}

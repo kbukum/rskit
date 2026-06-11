@@ -5892,6 +5892,7 @@ dependencies = [
  "google-cloud-storage",
  "rskit-errors",
  "rskit-storage",
+ "rustls",
  "serde",
  "serde_json",
 ]

@@ -142,3 +142,58 @@ pub fn init_metrics_with_protocol(
         _provider: provider,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use super::*;
+
+    fn config(endpoint: Option<&str>) -> MetricsConfig {
+        MetricsConfig {
+            service_name: "metrics-test".to_string(),
+            export_interval: Duration::from_millis(50),
+            otlp_endpoint: endpoint.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn no_export_metrics_pipeline_creates_all_instrument_kinds() {
+        let metrics = init_metrics(&config(None)).expect("build metrics provider");
+
+        metrics.counter("requests", "request count").add(1, &[]);
+        metrics
+            .histogram("latency", "request latency")
+            .record(12.5, &[]);
+        metrics.gauge("load", "current load").record(0.75, &[]);
+        metrics
+            .up_down_counter("inflight", "inflight requests")
+            .add(1, &[]);
+    }
+
+    #[cfg(not(feature = "otlp"))]
+    #[test]
+    fn otlp_endpoint_requires_feature() {
+        let error = match init_metrics_with_protocol(
+            &config(Some("http://127.0.0.1:4317")),
+            OtlpProtocol::Grpc,
+        ) {
+            Ok(_) => panic!("otlp disabled should reject metric exporter configuration"),
+            Err(error) => error,
+        };
+
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
+        assert!(error.message().contains("otlp"));
+    }
+
+    #[cfg(feature = "otlp")]
+    #[tokio::test]
+    async fn otlp_metrics_pipeline_builds_for_supported_protocols() {
+        for protocol in [OtlpProtocol::Grpc, OtlpProtocol::HttpBinary] {
+            let metrics =
+                init_metrics_with_protocol(&config(Some("http://127.0.0.1:4317")), protocol)
+                    .expect("build otlp metrics provider");
+            metrics.counter("requests", "request count").add(1, &[]);
+        }
+    }
+}

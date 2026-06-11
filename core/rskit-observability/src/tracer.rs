@@ -188,3 +188,103 @@ impl Extractor for HeaderMapExtractor<'_> {
         self.0.keys().map(|k| k.as_str()).collect()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use super::*;
+
+    fn config() -> TracingConfig {
+        TracingConfig {
+            service_name: "test-service".to_string(),
+            endpoint: "http://127.0.0.1:4317".to_string(),
+            sample_rate: 1.0,
+            export_timeout: Duration::from_millis(10),
+        }
+    }
+
+    #[test]
+    fn otlp_protocol_round_trips_through_serde() {
+        let grpc = serde_json::to_string(&OtlpProtocol::Grpc).expect("serialize grpc");
+        let http = serde_json::to_string(&OtlpProtocol::HttpBinary).expect("serialize http");
+
+        assert_eq!(
+            serde_json::from_str::<OtlpProtocol>(&grpc).expect("deserialize grpc"),
+            OtlpProtocol::Grpc
+        );
+        assert_eq!(
+            serde_json::from_str::<OtlpProtocol>(&http).expect("deserialize http"),
+            OtlpProtocol::HttpBinary
+        );
+    }
+
+    #[cfg(not(feature = "otlp"))]
+    #[test]
+    fn tracer_provider_requires_otlp_feature_for_exporter() {
+        let error = match tracer_provider_with_protocol(&config(), OtlpProtocol::Grpc) {
+            Ok(_) => panic!("otlp disabled should reject exporter configuration"),
+            Err(error) => error,
+        };
+
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
+        assert!(error.message().contains("otlp"));
+    }
+
+    #[cfg(feature = "otlp")]
+    #[tokio::test]
+    async fn tracer_provider_builds_exporters_for_supported_protocols() {
+        for (protocol, sample_rate) in [
+            (OtlpProtocol::Grpc, 1.0),
+            (OtlpProtocol::HttpBinary, 0.0),
+            (OtlpProtocol::HttpBinary, 0.5),
+        ] {
+            let mut cfg = config();
+            cfg.sample_rate = sample_rate;
+            let guard =
+                tracer_provider_with_protocol(&cfg, protocol).expect("build tracer provider");
+            let _provider = guard.provider();
+            let _tracer = guard.tracer();
+        }
+    }
+
+    #[test]
+    fn operation_attributes_and_trace_context_helpers_are_tolerant() {
+        let span = tracing::info_span!("operation");
+        set_operation_attributes(&span, "svc", "op", "req-1");
+
+        let mut headers = http::HeaderMap::new();
+        headers.insert(
+            "traceparent",
+            http::HeaderValue::from_static(
+                "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+            ),
+        );
+        headers.insert("tracestate", http::HeaderValue::from_static("vendor=value"));
+        let _context = extract_trace_context(&headers);
+
+        headers.insert(
+            "traceparent",
+            http::HeaderValue::from_bytes(b"\xff").expect("invalid utf8 header value is allowed"),
+        );
+        let _context = extract_trace_context(&headers);
+
+        let _entered = span.enter();
+        let mut injected = http::HeaderMap::new();
+        inject_trace_context(&mut injected);
+    }
+
+    #[test]
+    fn header_carriers_ignore_invalid_injected_values_and_list_valid_keys() {
+        let mut headers = http::HeaderMap::new();
+        let mut injector = HeaderMapCarrier(&mut headers);
+        injector.set("UPPERCASE", "ok".to_string());
+        injector.set("valid-header", "\ninvalid".to_string());
+        assert!(headers.contains_key("uppercase"));
+        assert!(!headers.contains_key("valid-header"));
+
+        let extractor = HeaderMapExtractor(&headers);
+        assert_eq!(extractor.get("uppercase"), Some("ok"));
+        assert!(extractor.keys().contains(&"uppercase"));
+    }
+}

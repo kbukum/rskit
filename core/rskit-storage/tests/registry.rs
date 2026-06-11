@@ -21,9 +21,13 @@ impl StorageFactory for FailingFactory {
 #[test]
 fn storage_registry_empty_until_explicit_registration() {
     let registry = StorageRegistry::new();
+    let config = StorageConfig::default();
+
     assert!(registry.is_empty());
     assert_eq!(registry.len(), 0);
     assert!(!registry.contains("local"));
+    assert_eq!(config.backend, "local");
+    assert!(config.local.auto_create);
 }
 
 #[test]

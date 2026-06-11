@@ -89,3 +89,37 @@ fn walkdir(dir: &Path) -> AppResult<Vec<std::path::PathBuf>> {
     }
     Ok(files)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn local_target_counts_nested_files_and_missing_directory_as_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join("nested")).unwrap();
+        std::fs::write(dir.path().join("a.txt"), b"a").unwrap();
+        std::fs::write(dir.path().join("nested").join("b.txt"), b"b").unwrap();
+
+        let target = LocalTarget;
+        let result = target.publish(dir.path(), None).await.unwrap();
+
+        assert_eq!(target.name(), "local");
+        assert_eq!(result.target_name, "local");
+        assert_eq!(result.files_published, 2);
+        assert!(result.message.contains("Data saved"));
+
+        let missing = dir.path().join("missing");
+        let result = target.publish(&missing, None).await.unwrap();
+        assert_eq!(result.files_published, 0);
+    }
+
+    #[test]
+    fn walkdir_rejects_file_as_directory_with_empty_listing() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("file.txt");
+        std::fs::write(&file, b"x").unwrap();
+
+        assert!(walkdir(&file).unwrap().is_empty());
+    }
+}

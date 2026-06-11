@@ -1,0 +1,27 @@
+[thresholds]
+line = 90.0
+
+[security]
+line = 95.0
+packages = [
+  "rskit-auth",
+  "rskit-authz",
+  "rskit-encryption",
+  "rskit-errors",
+  "rskit-resilience",
+  "rskit-security",
+]
+
+[runner]
+clean = "profraw"
+exclude_packages = ["rskit-suite"]
+html = false
+progress_interval_seconds = 10.0
+progress_style = "auto"
+progress_width = 32
+
+[packages.rskit-testutil]
+line = 80.0
+
+[packages.rskit-suite]
+line = 80.0

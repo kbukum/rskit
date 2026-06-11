@@ -161,6 +161,58 @@ pub fn truncate_stderr(stderr: &str, max_lines: usize) -> String {
 mod tests {
     use super::*;
 
+    fn ffmpeg_error(kind: FfmpegErrorKind, stderr: &str) -> FfmpegError {
+        FfmpegError {
+            kind,
+            exit_code: Some(1),
+            stderr: stderr.to_string(),
+            message: "ffmpeg failed".to_string(),
+        }
+    }
+
+    #[test]
+    fn into_app_error_maps_codes_and_preserves_stderr_detail() {
+        let cases = [
+            (
+                FfmpegErrorKind::HwAccelUnavailable,
+                ErrorCode::ServiceUnavailable,
+                true,
+            ),
+            (FfmpegErrorKind::Timeout, ErrorCode::Timeout, true),
+            (FfmpegErrorKind::Cancelled, ErrorCode::Cancelled, false),
+            (
+                FfmpegErrorKind::InvalidInput,
+                ErrorCode::InvalidInput,
+                false,
+            ),
+            (FfmpegErrorKind::CodecError, ErrorCode::Internal, false),
+            (FfmpegErrorKind::OutputError, ErrorCode::Internal, false),
+            (
+                FfmpegErrorKind::SpawnFailed,
+                ErrorCode::ServiceUnavailable,
+                true,
+            ),
+            (FfmpegErrorKind::Unknown, ErrorCode::Internal, true),
+        ];
+
+        for (kind, code, retryable) in cases {
+            let error = ffmpeg_error(kind, "diagnostic").into_app_error();
+
+            assert_eq!(error.code(), code);
+            assert_eq!(error.is_retryable(), retryable);
+            assert!(error.message().contains("ffmpeg failed"));
+            assert!(error.message().contains("diagnostic"));
+        }
+    }
+
+    #[test]
+    fn into_app_error_uses_message_when_stderr_is_empty() {
+        let error = ffmpeg_error(FfmpegErrorKind::InvalidInput, "").into_app_error();
+
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
+        assert_eq!(error.message(), "ffmpeg failed");
+    }
+
     #[test]
     fn classify_exit_69_as_hw_accel() {
         assert_eq!(

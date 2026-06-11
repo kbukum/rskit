@@ -26,10 +26,12 @@ serde         = { workspace = true }
 serde_json    = { workspace = true }
 google-cloud-storage = { workspace = true }
 google-cloud-auth = { workspace = true }
+rustls = { workspace = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }
 tokio      = { workspace = true, features = ["test-util", "full"] }
+google-cloud-gax = { workspace = true }
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docsrs"]

@@ -378,3 +378,120 @@ impl FfmpegLogLevel {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn builder_methods_set_all_runtime_knobs() {
+        let config = FfmpegConfig::default()
+            .with_ffmpeg_path("/opt/bin/ffmpeg")
+            .with_ffprobe_path("/opt/bin/ffprobe")
+            .with_temp_dir("/tmp/rskit-ffmpeg")
+            .with_path_root("/media")
+            .with_threads(4)
+            .with_software_decode()
+            .with_auto_hw_accel()
+            .with_videotoolbox()
+            .with_cuda()
+            .with_qsv()
+            .with_vaapi()
+            .with_vulkan()
+            .with_d3d11va()
+            .with_timeout(Duration::from_secs(30))
+            .with_overwrite(false)
+            .with_quiet_log_level()
+            .with_error_log_level()
+            .with_warning_log_level()
+            .with_info_log_level()
+            .with_debug_log_level()
+            .with_max_concurrent(3)
+            .with_hw_accel_fallback(false)
+            .with_max_retries(2)
+            .with_max_stderr_lines(7)
+            .with_input_video_decoder("libdav1d");
+
+        assert_eq!(config.ffmpeg_bin(), PathBuf::from("/opt/bin/ffmpeg"));
+        assert_eq!(config.ffprobe_bin(), PathBuf::from("/opt/bin/ffprobe"));
+        assert_eq!(
+            config.temp_dir.as_deref(),
+            Some(std::path::Path::new("/tmp/rskit-ffmpeg"))
+        );
+        assert_eq!(config.path_root(), Some(std::path::Path::new("/media")));
+        assert_eq!(config.threads, Some(4));
+        assert!(matches!(config.hw_accel, Some(HwAccel::D3d11va)));
+        assert_eq!(config.timeout, Some(Duration::from_secs(30)));
+        assert!(!config.overwrite);
+        assert!(matches!(config.log_level, FfmpegLogLevel::Debug));
+        assert_eq!(config.effective_max_concurrent(), 3);
+        assert!(!config.hw_accel_fallback);
+        assert_eq!(config.max_retries, 2);
+        assert_eq!(config.max_stderr_lines, 7);
+        assert_eq!(config.input_video_decoder.as_deref(), Some("libdav1d"));
+    }
+
+    #[test]
+    fn default_binary_resolution_falls_back_to_binary_names() {
+        let config = FfmpegConfig::default();
+
+        let ffmpeg = config.ffmpeg_bin();
+        let ffprobe = config.ffprobe_bin();
+
+        assert!(ffmpeg.ends_with("ffmpeg"));
+        assert!(ffprobe.ends_with("ffprobe"));
+    }
+
+    #[test]
+    fn max_concurrent_defaults_to_at_least_one() {
+        assert!(FfmpegConfig::default().effective_max_concurrent() >= 1);
+    }
+
+    #[test]
+    fn timeout_calculator_takes_precedence_when_duration_is_known() {
+        let calculator = TimeoutCalculator::default()
+            .with_base_timeout(Duration::from_secs(10))
+            .with_max_timeout(Duration::from_secs(1_000))
+            .with_multiplier(OperationKind::Filter, 1.0);
+        let config = FfmpegConfig::default()
+            .with_timeout(Duration::from_secs(5))
+            .with_timeout_calculator(calculator);
+
+        let timeout =
+            config.resolve_timeout(Some(Duration::from_secs(20)), Some(OperationKind::Filter));
+
+        assert_eq!(timeout, Some(Duration::from_secs(140)));
+    }
+
+    #[test]
+    fn timeout_resolution_falls_back_to_fixed_timeout() {
+        let calculator = TimeoutCalculator::default();
+        let config = FfmpegConfig::default()
+            .with_timeout(Duration::from_secs(5))
+            .with_timeout_calculator(calculator);
+
+        assert_eq!(
+            config.resolve_timeout(None, Some(OperationKind::Filter)),
+            Some(Duration::from_secs(5))
+        );
+        assert_eq!(FfmpegConfig::default().resolve_timeout(None, None), None);
+    }
+
+    #[test]
+    fn log_levels_map_to_ffmpeg_arguments() {
+        let cases = [
+            (FfmpegLogLevel::Quiet, "quiet"),
+            (FfmpegLogLevel::Panic, "panic"),
+            (FfmpegLogLevel::Fatal, "fatal"),
+            (FfmpegLogLevel::Error, "error"),
+            (FfmpegLogLevel::Warning, "warning"),
+            (FfmpegLogLevel::Info, "info"),
+            (FfmpegLogLevel::Verbose, "verbose"),
+            (FfmpegLogLevel::Debug, "debug"),
+        ];
+
+        for (level, expected) in cases {
+            assert_eq!(level.as_ffmpeg_arg(), expected);
+        }
+    }
+}

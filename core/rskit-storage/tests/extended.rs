@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use bytes::Bytes;
 use rskit_errors::{AppError, ErrorCode};
 use rskit_storage::*;
+use serde_json::json;
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -118,6 +119,39 @@ async fn source_size_nonexistent_path_fails() {
     assert!(result.is_err());
 }
 
+#[tokio::test]
+async fn sink_variants_finalize_to_expected_sources_and_tempdir_helpers_create_files() {
+    let dir = TempDir::new().unwrap();
+    let temp_in_dir = dir.create_file("named").unwrap();
+    assert!(temp_in_dir.path().exists());
+    let temp_with_ext = dir.create_file_with_extension("dat").unwrap();
+    assert_eq!(
+        temp_with_ext
+            .path()
+            .extension()
+            .and_then(|ext| ext.to_str()),
+        Some("dat")
+    );
+
+    let mut temp_writer = FileSink::Temp.writer().await.unwrap();
+    temp_writer.write_all(b"temp sink").await.unwrap();
+    let temp_source = temp_writer.finalize().await.unwrap();
+    assert_eq!(temp_source.read_all().await.unwrap().as_ref(), b"temp sink");
+
+    let path = dir.path().join("nested").join("out.txt");
+    let mut path_writer = FileSink::Path(path.clone()).writer().await.unwrap();
+    path_writer
+        .write_stream(futures::stream::iter([
+            Ok(Bytes::from_static(b"path ")),
+            Ok(Bytes::from_static(b"sink")),
+        ]))
+        .await
+        .unwrap();
+    let path_source = path_writer.finalize().await.unwrap();
+    assert!(matches!(path_source, FileSource::Path(_)));
+    assert_eq!(tokio::fs::read(path).await.unwrap(), b"path sink");
+}
+
 // ── FileSource extensions ──────────────────────────────────────────────────
 
 #[test]
@@ -144,6 +178,140 @@ fn source_extension_from_temp() {
     let tmp = TempFile::with_extension("wav").unwrap();
     let source = FileSource::Temp(tmp);
     assert_eq!(source.extension(), Some("wav"));
+}
+
+#[test]
+fn source_extension_rejects_suspiciously_long_url_suffixes() {
+    let source = FileSource::from_url("https://example.com/object.averylongextension?sig=redacted");
+    assert_eq!(source.extension(), None);
+}
+
+#[tokio::test]
+async fn source_url_stream_returns_error_before_network_access() {
+    let source = FileSource::from_url("https://example.com/file.txt");
+    match source.stream().await {
+        Ok(_) => panic!("URL stream should fail before network access"),
+        Err(error) => assert_eq!(error.code(), ErrorCode::InvalidInput),
+    }
+}
+
+#[tokio::test]
+async fn file_source_serde_round_trips_path_url_and_bytes() {
+    let path_source = FileSource::from_path("fixtures/image.png");
+    let url_source = FileSource::from_url("https://example.com/file.bin");
+    let bytes_source = FileSource::from_bytes(Bytes::from_static(b"abc"));
+
+    assert_eq!(
+        serde_json::to_value(&path_source).unwrap(),
+        json!({"type": "Path", "value": "fixtures/image.png"})
+    );
+    assert_eq!(
+        serde_json::to_value(&url_source).unwrap(),
+        json!({"type": "Url", "value": "https://example.com/file.bin"})
+    );
+
+    let decoded: FileSource = serde_json::from_value(serde_json::to_value(&bytes_source).unwrap())
+        .expect("bytes source should decode");
+    assert_eq!(decoded.read_all().await.unwrap().as_ref(), b"abc");
+
+    let decoded_path: FileSource = serde_json::from_value(json!({
+        "type": "Path",
+        "value": "fixtures/image.png"
+    }))
+    .unwrap();
+    assert_eq!(decoded_path.extension(), Some("png"));
+
+    let decoded_url: FileSource = serde_json::from_value(json!({
+        "type": "Url",
+        "value": "https://example.com/file.bin"
+    }))
+    .unwrap();
+    assert_eq!(decoded_url.extension(), Some("bin"));
+}
+
+#[tokio::test]
+async fn file_source_clone_and_temp_serde_preserve_readable_content() {
+    let temp = TempFile::new().unwrap();
+    tokio::fs::write(temp.path(), b"temp bytes").await.unwrap();
+    let source = FileSource::Temp(temp);
+    let temp_path = match &source {
+        FileSource::Temp(temp) => temp.path().to_path_buf(),
+        _ => unreachable!("constructed a temp source"),
+    };
+    let cloned = source.clone();
+
+    assert_eq!(cloned.read_all().await.unwrap().as_ref(), b"temp bytes");
+    assert_eq!(
+        serde_json::to_value(&source).unwrap(),
+        json!({"type": "Path", "value": temp_path})
+    );
+}
+
+#[tokio::test]
+async fn file_source_clone_covers_path_url_and_bytes_variants() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("file.txt");
+    std::fs::write(&path, b"path bytes").unwrap();
+
+    let path_clone = FileSource::from_path(&path).clone();
+    assert_eq!(path_clone.read_all().await.unwrap().as_ref(), b"path bytes");
+
+    let url_clone = FileSource::from_url("https://example.com/file.txt").clone();
+    assert_eq!(url_clone.extension(), Some("txt"));
+    assert_eq!(url_clone.size().await.unwrap(), None);
+
+    let bytes_clone = FileSource::from_bytes(Bytes::from_static(b"abc")).clone();
+    assert_eq!(bytes_clone.read_all().await.unwrap().as_ref(), b"abc");
+}
+
+#[tokio::test]
+async fn temp_source_reader_reports_missing_backing_file() {
+    let temp = TempFile::new().unwrap();
+    let path = temp.path().to_path_buf();
+    tokio::fs::remove_file(&path).await.unwrap();
+    let source = FileSource::Temp(temp);
+
+    let err = match source.reader().await {
+        Ok(_) => panic!("missing temp backing file should fail"),
+        Err(error) => error,
+    };
+    assert_eq!(err.code(), ErrorCode::Internal);
+    assert!(err.to_string().contains("failed to open temp file"));
+}
+
+#[tokio::test]
+async fn source_stream_reports_async_read_errors() {
+    use futures_util::StreamExt as _;
+
+    let dir = TempDir::new().unwrap();
+    let source = FileSource::from_path(dir.path());
+    let stream = source.stream().await.unwrap();
+    futures_util::pin_mut!(stream);
+    let err = stream.next().await.unwrap().unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::Internal);
+    assert!(err.to_string().contains("stream read error"));
+}
+
+#[tokio::test]
+async fn file_source_read_all_reports_read_errors_after_open() {
+    let dir = TempDir::new().unwrap();
+    let source = FileSource::from_path(dir.path());
+
+    let err = source.read_all().await.unwrap_err();
+    assert_eq!(err.code(), ErrorCode::Internal);
+    assert!(err.to_string().contains("failed to read file"));
+}
+
+#[tokio::test]
+async fn temp_source_size_reports_missing_backing_file() {
+    let temp = TempFile::new().unwrap();
+    let path = temp.path().to_path_buf();
+    tokio::fs::remove_file(&path).await.unwrap();
+    let source = FileSource::Temp(temp);
+
+    let err = source.size().await.unwrap_err();
+    assert_eq!(err.code(), ErrorCode::Internal);
 }
 
 // ── FileSource to_local_path ───────────────────────────────────────────────
@@ -247,6 +415,20 @@ async fn sink_write_stream_returns_chunk_error_without_finalizing_partial_output
 
     assert_eq!(error.code(), ErrorCode::Internal);
     assert!(error.to_string().contains("synthetic stream failure"));
+}
+
+#[tokio::test]
+async fn sink_path_finalize_reports_write_failure() {
+    let dir = TempDir::new().unwrap();
+    let output_dir = dir.path().join("existing-dir");
+    std::fs::create_dir(&output_dir).unwrap();
+
+    let mut writer = FileSink::Path(output_dir).writer().await.unwrap();
+    writer.write_all(b"data").await.unwrap();
+    let err = writer.finalize().await.unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::Internal);
+    assert!(err.to_string().contains("failed to write"));
 }
 
 #[tokio::test]
@@ -464,6 +646,25 @@ fn temp_file_persist_removes_original() {
 }
 
 #[test]
+fn temp_file_persist_reports_target_errors() {
+    let dir = TempDir::new().unwrap();
+    let temp = TempFile::new().unwrap();
+    let err = temp.persist(dir.path()).unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::Internal);
+    assert!(err.to_string().contains("failed to persist"));
+}
+
+#[test]
+fn temp_file_with_extension_errors_for_missing_directory() {
+    let missing = TempDir::new().unwrap().path().join("missing");
+    let err = TempFile::in_dir_with_extension(&missing, "dat").unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::Internal);
+    assert!(err.to_string().contains("with extension"));
+}
+
+#[test]
 fn temp_dir_create_file_with_extension() {
     let dir = TempDir::new().unwrap();
     let f = dir.create_file_with_extension("log").unwrap();
@@ -634,6 +835,47 @@ async fn store_head_rejects_directory() {
 
     let error = store.head("nested").await.unwrap_err();
     assert_eq!(error.code(), rskit_errors::ErrorCode::NotFound);
+}
+
+#[tokio::test]
+async fn store_operations_reject_directory_keys_as_missing_files() {
+    let dir = TempDir::new().unwrap();
+    let store = make_store(dir.path());
+    std::fs::create_dir(dir.path().join("dir")).unwrap();
+
+    assert!(!store.exists("dir").await.unwrap());
+    assert_eq!(
+        store.download("dir").await.unwrap_err().code(),
+        ErrorCode::NotFound
+    );
+    assert_eq!(
+        store.delete("dir").await.unwrap_err().code(),
+        ErrorCode::NotFound
+    );
+    assert_eq!(
+        store.copy("dir", "copy").await.unwrap_err().code(),
+        ErrorCode::NotFound
+    );
+}
+
+#[tokio::test]
+async fn store_upload_rejects_existing_file_as_parent_component() {
+    let dir = TempDir::new().unwrap();
+    let store = make_store(dir.path());
+    std::fs::write(dir.path().join("not-dir"), b"x").unwrap();
+
+    let err = store
+        .upload(
+            &FileSource::from_bytes(Bytes::from_static(b"content")),
+            "not-dir/child.txt",
+            None,
+            None,
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::InvalidInput);
+    assert!(err.to_string().contains("not a directory"));
 }
 
 #[cfg(unix)]
@@ -983,6 +1225,22 @@ fn local_store_config_no_auto_create_existing_dir_ok() {
         auto_create: false,
     });
     assert!(store.is_ok());
+}
+
+#[test]
+fn local_store_new_rejects_missing_root_when_auto_create_is_disabled() {
+    let missing = TempDir::new().unwrap().path().join("missing-root");
+
+    let err = match store::LocalStore::new(store::LocalStoreConfig {
+        root_dir: missing,
+        auto_create: false,
+    }) {
+        Ok(_) => panic!("missing root should be rejected"),
+        Err(error) => error,
+    };
+
+    assert_eq!(err.code(), ErrorCode::NotFound);
+    assert!(err.to_string().contains("does not exist"));
 }
 
 #[test]

@@ -6,7 +6,7 @@ The mechanical steps to cut a release of `rskit`. For *what* counts as a breakin
 
 - You are listed in `MAINTAINERS.md` and have push access to `kbukum/rskit`.
 - Your local clone is on `main` with no uncommitted changes.
-- `git`, `gh`, `cargo`, `cargo-nextest`, `cargo-deny`, `cargo-audit`, `cargo-llvm-cov`, `cargo-cyclonedx`, and `cosign` are on your `$PATH` for local pre-flight checks.
+- Run `make setup` first; for local release pre-flight checks, also run `scripts/setup.sh --release` and ensure `git`, `gh`, `cargo`, `cargo-nextest`, `cargo-deny`, `cargo-audit`, `cargo-llvm-cov`, `cargo-cyclonedx`, and `cosign` are on your `$PATH`.
 - A repository Actions secret named `CARGO_REGISTRY_TOKEN` is configured for crates.io publishing. The release workflow skips crates.io publishing when this secret is absent.
 
 This repository has split Cargo workspaces:

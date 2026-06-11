@@ -1,4 +1,4 @@
-.PHONY: all build test test-nextest test-doc test-affected test-coverage test-coverage-html lint fmt fmt-check check check-fast check-facade-features \
+.PHONY: all setup build test test-nextest test-doc test-affected coverage coverage-changed test-coverage test-coverage-html lint fmt fmt-check check check-fast check-facade-features \
        check-core check-patterns check-crosscutting check-composition check-transport check-auth check-data check-ai \
        check-media check-infra doc deny check-l7-edges check-workspace-deps-sync check-topology check-public-api release-readiness release-coverage \
        publish-dry-run release-sbom clean help ci ci-test ci-lint ci-fmt ensure-act
@@ -6,15 +6,22 @@
 CORE_MANIFEST = core/Cargo.toml
 CONTRIB_MANIFEST = contrib/Cargo.toml
 EXAMPLES_MANIFEST = examples/Cargo.toml
+PYTHON ?= python3
+RSKIT_TOOL = $(PYTHON) ./scripts/rskit_tool.py
 WORKSPACE_MANIFESTS = $(CORE_MANIFEST) $(CONTRIB_MANIFEST) $(EXAMPLES_MANIFEST)
 FORMAT_MANIFESTS = $(WORKSPACE_MANIFESTS)
 TEST_THREADS ?= 1
+THRESHOLD ?=
 
 # Test filter: pass -- $(T) when T is set
 _T = $(if $(T),-- $(T))
 
 ## Default target
 all: check
+
+## Install or verify local development tooling
+setup:
+	@PYTHON="$(PYTHON)" ./scripts/setup.sh
 
 define run_cargo_target
 	@if [ -n "$(C)" ]; then \
@@ -29,6 +36,29 @@ define run_cargo_target
 			cargo $(1) --manifest-path $$manifest --workspace $(2); \
 		done; \
 	fi
+endef
+
+define run_coverage_target
+	@$(RSKIT_TOOL) coverage $(1) \
+		$(if $(W),--workspace $(W)) \
+		$(if $(C),--package $(C)) \
+		$(if $(PACKAGES),--packages "$(PACKAGES)") \
+		$(if $(JOBS),--jobs $(JOBS)) \
+		$(if $(CLEAN),--clean $(CLEAN)) \
+		$(if $(EXCLUDE_PACKAGES),--exclude-packages "$(EXCLUDE_PACKAGES)") \
+		$(if $(THRESHOLD),--line-threshold $(THRESHOLD)) \
+		$(if $(FUNCTION_THRESHOLD),--function-threshold $(FUNCTION_THRESHOLD)) \
+		$(if $(REGION_THRESHOLD),--region-threshold $(REGION_THRESHOLD)) \
+		$(if $(SECURITY_THRESHOLD),--security-line-threshold $(SECURITY_THRESHOLD)) \
+		$(if $(PROGRESS_INTERVAL),--progress-interval $(PROGRESS_INTERVAL)) \
+		$(if $(PROGRESS_STYLE),--progress-style $(PROGRESS_STYLE)) \
+		$(if $(PROGRESS_WIDTH),--progress-width $(PROGRESS_WIDTH)) \
+		$(if $(T),--test-filter "$(T)")
+endef
+
+define run_domain_target
+	@$(RSKIT_TOOL) check domain $(1) \
+		$(if $(JOBS),--jobs $(JOBS))
 endef
 
 define run_fmt_target
@@ -103,18 +133,21 @@ test-affected:
 		fi; \
 	fi
 
-## Run tests with coverage (C=<crate>, T=<test pattern>)
-## Requires: cargo install cargo-llvm-cov
-test-coverage:
-	@echo "==> Testing with coverage..."
-	$(call run_cargo_target,llvm-cov,--lcov --output-path coverage.lcov $(_T),$(WORKSPACE_MANIFESTS))
-	@echo "✓ Coverage report: coverage.lcov"
+## Run workspace-level coverage with per-package reporting (C=<crate>, PACKAGES=<list>, W=core|contrib|examples, JOBS=<n>, THRESHOLD=<pct>, T=<test pattern>)
+## Requires: cargo install cargo-nextest cargo-llvm-cov
+coverage:
+	$(call run_coverage_target,)
+
+## Alias for coverage
+test-coverage: coverage
+
+## Run workspace-level coverage for changed crates
+coverage-changed:
+	$(call run_coverage_target,--changed)
 
 ## Run tests with coverage HTML report
 test-coverage-html:
-	@echo "==> Testing with coverage (HTML)..."
-	$(call run_cargo_target,llvm-cov,--html $(_T),$(WORKSPACE_MANIFESTS))
-	@echo "✓ Coverage report generated"
+	$(call run_coverage_target,--html)
 
 ## Run clippy linter (C=<crate>)
 lint:
@@ -154,25 +187,25 @@ doc:
 ## Run L7 dependency edge checks
 check-l7-edges:
 	@echo "==> Checking L7 dependency edges..."
-	@./scripts/check-l7-edges.sh
+	@$(RSKIT_TOOL) check l7-edges
 	@echo "✓ L7 dependency edges OK"
 
 ## Check shared core/contrib workspace dependency versions
 check-workspace-deps-sync:
 	@echo "==> Checking workspace dependency versions..."
-	@./scripts/check-workspace-deps-sync.sh
+	@$(RSKIT_TOOL) check workspace-deps-sync
 	@echo "✓ Workspace dependency versions synced"
 
 ## Run module topology checks
 check-topology:
 	@echo "==> Checking module topology..."
-	@./scripts/check-topology.sh
+	@$(RSKIT_TOOL) check topology
 	@echo "✓ Module topology OK"
 
 ## Check public API guardrails
 check-public-api:
 	@echo "==> Checking public API guardrails..."
-	@./scripts/check-public-api.sh
+	@$(RSKIT_TOOL) check public-api
 	@echo "✓ Public API guardrails OK"
 
 ## Check facade feature combinations
@@ -209,21 +242,21 @@ deny: check-l7-edges check-workspace-deps-sync check-topology check-public-api
 ## Run the release-readiness supply-chain and API sweep
 ## Requires: cargo-deny, cargo-audit
 release-readiness: check
-	@./scripts/check-release-readiness.sh
+	@$(RSKIT_TOOL) release readiness
 
-## Run release coverage gates (overall >=85%, per-crate >=80%, security crates >=85%)
-## Requires: cargo-llvm-cov
+## Run release coverage gates (default per-package line coverage >=90%)
+## Requires: cargo-nextest, cargo-llvm-cov
 release-coverage:
-	@./scripts/check-coverage-thresholds.sh release
+	$(call run_coverage_target,--mode release)
 
 ## Dry-run publishing all publishable crates in dependency order
 publish-dry-run:
-	@./scripts/publish-dry-run.sh --dry-run
+	@$(RSKIT_TOOL) release publish-dry-run --dry-run
 
 ## Generate CycloneDX SBOMs under target/sbom
 ## Requires: cargo-cyclonedx
 release-sbom:
-	@./scripts/generate-sbom.sh
+	@$(RSKIT_TOOL) release sbom
 
 ## Fast check: format + lint + build only (no tests) — for rapid iteration
 check-fast: fmt-check lint build
@@ -233,43 +266,43 @@ check: fmt-check lint build test-nextest test-doc
 
 ## Check only core domain modules
 check-core:
-	@./scripts/check-domain.sh core
+	$(call run_domain_target,core)
 
 ## Check only patterns domain modules
 check-patterns:
-	@./scripts/check-domain.sh patterns
+	$(call run_domain_target,patterns)
 
 ## Check only crosscutting domain modules
 check-crosscutting:
-	@./scripts/check-domain.sh crosscutting
+	$(call run_domain_target,crosscutting)
 
 ## Check only composition domain modules
 check-composition:
-	@./scripts/check-domain.sh composition
+	$(call run_domain_target,composition)
 
 ## Check only transport domain modules
 check-transport:
-	@./scripts/check-domain.sh transport
+	$(call run_domain_target,transport)
 
 ## Check only auth domain modules
 check-auth:
-	@./scripts/check-domain.sh auth
+	$(call run_domain_target,auth)
 
 ## Check only data domain modules
 check-data:
-	@./scripts/check-domain.sh data
+	$(call run_domain_target,data)
 
 ## Check only ai domain modules
 check-ai:
-	@./scripts/check-domain.sh ai
+	$(call run_domain_target,ai)
 
 ## Check only media domain modules
 check-media:
-	@./scripts/check-domain.sh media
+	$(call run_domain_target,media)
 
 ## Check only infra domain modules
 check-infra:
-	@./scripts/check-domain.sh infra
+	$(call run_domain_target,infra)
 
 ## Clean build artifacts
 clean:
@@ -310,13 +343,16 @@ help:
 	@echo ""
 	@echo "Development:"
 	@echo "  make help                                  Show this help"
+	@echo "  make setup                                Install or verify local tooling"
 	@echo "  make build              [C=] [W=]          Build workspace(s)"
 	@echo "  make test               [C=] [T=] [W=]     Run tests"
 	@echo "  make test-nextest       [PROFILE=] [W=]    Run tests with nextest"
 	@echo "  make test-doc           [C=] [W=]          Run doctests only"
 	@echo "  make test-affected                        Run tests for changed crates"
-	@echo "  make test-coverage      [C=] [T=] [W=]     Run tests with coverage (LCOV)"
-	@echo "  make test-coverage-html [C=] [T=] [W=]     Run tests with coverage (HTML)"
+	@echo "  make coverage           [C=] [PACKAGES=] [T=] [W=] [JOBS=] [CLEAN=] [THRESHOLD=] [PROGRESS_INTERVAL=] [PROGRESS_STYLE=]  Run workspace coverage with per-package reporting"
+	@echo "  make coverage-changed   [T=] [JOBS=] [THRESHOLD=]                       Run coverage for changed crates"
+	@echo "  make test-coverage      [C=] [T=] [W=]                                  Alias for coverage"
+	@echo "  make test-coverage-html [C=] [T=] [W=]                                  Run coverage with HTML reports"
 	@echo "  make lint               [C=] [W=]          Run clippy"
 	@echo "  make fmt                [W=]               Format code"
 	@echo "  make fmt-check          [W=]               Check formatting"
@@ -328,21 +364,21 @@ help:
 	@echo "  make check-facade-features                Check rskit facade feature combinations"
 	@echo "  make deny               [W=]               Run cargo-deny + L7 edge checks"
 	@echo "  make release-readiness                    Run final release-readiness sweep"
-	@echo "  make release-coverage                     Run release coverage thresholds"
+	@echo "  make release-coverage                     Run per-package release coverage thresholds"
 	@echo "  make publish-dry-run                      Dry-run publishing in dependency order"
 	@echo "  make release-sbom                         Generate CycloneDX SBOMs"
 	@echo "  make check-fast                           fmt + lint + build"
 	@echo "  make check              [C=] [W=]          fmt + lint + build + test"
-	@echo "  make check-core                           Check only core domain modules"
-	@echo "  make check-patterns                       Check only patterns domain modules"
-	@echo "  make check-crosscutting                   Check only crosscutting domain modules"
-	@echo "  make check-composition                    Check only composition domain modules"
-	@echo "  make check-transport                      Check only transport domain modules"
-	@echo "  make check-auth                           Check only auth domain modules"
-	@echo "  make check-data                           Check only data domain modules"
-	@echo "  make check-ai                             Check only ai domain modules"
-	@echo "  make check-media                          Check only media domain modules"
-	@echo "  make check-infra                          Check only infra domain modules"
+	@echo "  make check-core         [JOBS=]            Check only core domain modules"
+	@echo "  make check-patterns     [JOBS=]            Check only patterns domain modules"
+	@echo "  make check-crosscutting [JOBS=]            Check only crosscutting domain modules"
+	@echo "  make check-composition  [JOBS=]            Check only composition domain modules"
+	@echo "  make check-transport    [JOBS=]            Check only transport domain modules"
+	@echo "  make check-auth         [JOBS=]            Check only auth domain modules"
+	@echo "  make check-data         [JOBS=]            Check only data domain modules"
+	@echo "  make check-ai           [JOBS=]            Check only ai domain modules"
+	@echo "  make check-media        [JOBS=]            Check only media domain modules"
+	@echo "  make check-infra        [JOBS=]            Check only infra domain modules"
 	@echo "  make clean                                Remove build artifacts"
 	@echo ""
 	@echo "Local CI (GitHub Actions via act + Docker):"
@@ -365,4 +401,6 @@ help:
 	@echo "  make test C=rskit-storage-s3             Test S3 contrib crate"
 	@echo "  make lint C=rskit-errors                 Lint errors crate"
 	@echo "  make check W=core                        Full check on core workspace"
-	@echo "  make test-coverage-html                  Coverage report in browser"
+	@echo "  make coverage C=rskit-errors             Coverage for one crate"
+	@echo "  make coverage W=core JOBS=4              Coverage for core crates"
+	@echo "  make coverage-changed                    Coverage for changed crates"

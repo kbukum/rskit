@@ -341,4 +341,102 @@ mod tests {
         let ch = parse_chapters(&json);
         assert!(ch.is_empty());
     }
+
+    #[test]
+    fn parsers_ignore_malformed_or_incomplete_entries() {
+        let timestamps = parse_showinfo_timestamps(
+            "pts_time:not-a-number\npts_time:-1.25 something\nno timestamp",
+        );
+        assert_eq!(timestamps.len(), 1);
+
+        assert!(parse_keyframes(&serde_json::json!({ "format": {} })).is_empty());
+        let keyframes = parse_keyframes(&serde_json::json!({
+            "frames": [
+                { "key_frame": 0, "pts_time": "1.0", "pict_type": "P" },
+                { "key_frame": 1, "pts_time": "bad", "pict_type": "?", "pkt_size": 1234 },
+            ]
+        }));
+        assert_eq!(keyframes.len(), 1);
+        assert_eq!(keyframes[0].timestamp.as_seconds(), 0.0);
+        assert_eq!(keyframes[0].size_bytes, Some(1234));
+
+        let silence = parse_silence_intervals(
+            "silence_start: 3.0\nsilence_end: 2.0 | silence_duration: -1\nsilence_end: 5.0",
+        );
+        assert_eq!(silence.len(), 1);
+        assert_eq!(silence[0].duration, Duration::ZERO);
+
+        let chapters = parse_chapters(&serde_json::json!({
+            "chapters": [
+                { "start_time": "bad", "end_time": "2.0" },
+                { "start_time": "1.0" },
+                { "start_time": "1.0", "end_time": "2.0" }
+            ]
+        }));
+        assert_eq!(chapters.len(), 1);
+        assert!(chapters[0].title.is_none());
+    }
+
+    #[cfg(unix)]
+    use crate::test_support::write_executable_script as write_script;
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn detection_methods_parse_fake_process_outputs() {
+        let ffmpeg = write_script(
+            r#"
+case "$*" in
+  *showinfo*) echo "[Parsed_showinfo_1] pts_time:0.250 pos:1" >&2 ;;
+  *silencedetect*) echo "silence_start: 1.5" >&2; echo "silence_end: 2.75 | silence_duration: 1.25" >&2 ;;
+esac
+"#,
+        );
+        let ffprobe = write_script(
+            r#"
+case "$*" in
+  *-show_frames*) printf '{"frames":[{"key_frame":1,"pts_time":"0.5","pict_type":"I","pkt_size":"99"}]}' ;;
+  *) printf '{"chapters":[{"start_time":"0.0","end_time":"5.0","tags":{"title":"Intro"}}]}' ;;
+esac
+"#,
+        );
+        let input = rskit_storage::TempFile::with_extension("mp4").unwrap();
+        std::fs::write(input.path(), b"media").unwrap();
+        let source = FileSource::from_path(input.path());
+        let probe = FfmpegProbe::new(
+            crate::config::FfmpegConfig::default()
+                .with_ffmpeg_path(ffmpeg.path())
+                .with_ffprobe_path(ffprobe.path()),
+        );
+
+        let scenes = probe.detect_scenes(&source, 2.0).await.unwrap();
+        assert_eq!(scenes[0].as_seconds(), 0.25);
+
+        let keyframes = probe.extract_keyframes(&source).await.unwrap();
+        assert_eq!(keyframes[0].size_bytes, Some(99));
+
+        let silence = probe
+            .detect_silence(&source, Duration::ZERO, -200.0)
+            .await
+            .unwrap();
+        assert_eq!(silence[0].duration, Duration::from_secs_f64(1.25));
+
+        let chapters = probe.extract_chapters(&source).await.unwrap();
+        assert_eq!(chapters[0].title.as_deref(), Some("Intro"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn keyframe_probe_rejects_invalid_json_output() {
+        let ffprobe = write_script("printf 'not json'");
+        let input = rskit_storage::TempFile::with_extension("mp4").unwrap();
+        std::fs::write(input.path(), b"media").unwrap();
+        let source = FileSource::from_path(input.path());
+        let probe = FfmpegProbe::new(
+            crate::config::FfmpegConfig::default().with_ffprobe_path(ffprobe.path()),
+        );
+
+        let err = probe.extract_keyframes(&source).await.unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::Internal);
+    }
 }

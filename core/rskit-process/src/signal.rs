@@ -38,3 +38,22 @@ impl ProcessSignal {
         0
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn signal_names_and_raw_values_are_stable() {
+        assert_eq!(ProcessSignal::Interrupt.name(), "SIGINT");
+        assert_eq!(ProcessSignal::Terminate.name(), "SIGTERM");
+        assert_eq!(ProcessSignal::Kill.name(), "SIGKILL");
+
+        #[cfg(unix)]
+        {
+            assert_eq!(ProcessSignal::Interrupt.as_raw(), libc::SIGINT);
+            assert_eq!(ProcessSignal::Terminate.as_raw(), libc::SIGTERM);
+            assert_eq!(ProcessSignal::Kill.as_raw(), libc::SIGKILL);
+        }
+    }
+}

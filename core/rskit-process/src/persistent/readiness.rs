@@ -96,10 +96,12 @@ pub(in crate::persistent) fn run_readiness_command(
     spec: &ProcessSpec,
     process_config: &ProcessConfig,
     timeout: Duration,
+    shutdown_grace_period: Duration,
     cancel: CancellationToken,
 ) -> AppResult<()> {
     let mut config = process_config.clone();
     config.timeout = Some(timeout);
+    config.signal = config.signal.with_grace_period(shutdown_grace_period);
     let spec = spec.clone();
     let result = thread::spawn(move || {
         let runtime = tokio::runtime::Builder::new_current_thread()
@@ -166,5 +168,44 @@ mod tests {
         assert_eq!(error, mpsc::RecvTimeoutError::Timeout);
         assert!(cancelled.load(Ordering::SeqCst));
         assert!(start.elapsed() < Duration::from_secs(1));
+    }
+
+    #[test]
+    fn validate_readiness_rejects_empty_output_marker() {
+        assert!(validate_readiness(&PersistentReadiness::Started).is_ok());
+        assert!(validate_readiness(&PersistentReadiness::OutputContains("ready".into())).is_ok());
+        assert!(validate_readiness(&PersistentReadiness::OutputContains(String::new())).is_err());
+    }
+
+    #[test]
+    fn readiness_command_reports_failure_and_timeout_kinds() {
+        let config = ProcessConfig::default().with_signal_policy(
+            crate::SignalPolicy::default().with_grace_period(Duration::from_millis(10)),
+        );
+        let failed = run_readiness_command(
+            &ProcessSpec::new("python3").args(["-c", "import sys; sys.exit(7)"]),
+            &config,
+            Duration::from_secs(2),
+            Duration::from_millis(10),
+            CancellationToken::new(),
+        )
+        .unwrap_err();
+        assert_eq!(
+            crate::persistent_start_error_kind(&failed),
+            Some(PersistentStartErrorKind::ReadinessCommandFailed)
+        );
+
+        let timed_out = run_readiness_command(
+            &ProcessSpec::new("python3").args(["-c", "import time; time.sleep(5)"]),
+            &config,
+            Duration::from_millis(20),
+            Duration::from_millis(10),
+            CancellationToken::new(),
+        )
+        .unwrap_err();
+        assert_eq!(
+            crate::persistent_start_error_kind(&timed_out),
+            Some(PersistentStartErrorKind::ReadinessCommandTimedOut)
+        );
     }
 }

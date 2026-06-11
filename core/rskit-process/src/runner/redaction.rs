@@ -124,4 +124,20 @@ mod tests {
         assert!(rendered.contains("\"<redacted>\""));
         assert!(!rendered.contains("hunter2"));
     }
+
+    #[test]
+    fn redacted_args_preserves_sensitive_flag_when_next_arg_is_sensitive_assignment() {
+        let args = vec![
+            OsString::from("--token"),
+            OsString::from("--password=hunter2"),
+            OsString::from("visible"),
+        ];
+
+        let rendered = format!("{:?}", RedactedArgs::new(&args, &ArgRedaction::default()));
+
+        assert!(rendered.contains("\"--token\""));
+        assert!(rendered.contains("\"--password=<redacted>\""));
+        assert!(rendered.contains("\"visible\""));
+        assert!(!rendered.contains("hunter2"));
+    }
 }

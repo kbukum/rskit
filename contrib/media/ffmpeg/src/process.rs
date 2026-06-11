@@ -128,4 +128,62 @@ mod tests {
 
         assert_eq!(error.code(), ErrorCode::Cancelled);
     }
+
+    #[test]
+    fn ensure_success_accepts_successful_process() {
+        let result = ProcessResult::completed(
+            Some(0),
+            Vec::new(),
+            Vec::new(),
+            false,
+            false,
+            Duration::from_millis(1),
+            false,
+            false,
+        );
+
+        ensure_success(&result, "ffmpeg").unwrap();
+    }
+
+    #[test]
+    fn ensure_success_maps_timeout_and_failure() {
+        let timed_out = ProcessResult::completed(
+            None,
+            Vec::new(),
+            b"slow".to_vec(),
+            false,
+            false,
+            Duration::from_millis(1),
+            true,
+            false,
+        );
+        let timeout = ensure_success(&timed_out, "ffmpeg").unwrap_err();
+        assert_eq!(timeout.code(), ErrorCode::Timeout);
+        assert!(timeout.message().contains("slow"));
+
+        let failed = ProcessResult::completed(
+            Some(1),
+            Vec::new(),
+            b"bad input".to_vec(),
+            false,
+            false,
+            Duration::from_millis(1),
+            false,
+            false,
+        );
+        let failure = ensure_success(&failed, "ffmpeg").unwrap_err();
+        assert_eq!(failure.code(), ErrorCode::Internal);
+        assert!(failure.message().contains("bad input"));
+    }
+
+    #[test]
+    fn context_preserves_error_code_and_adds_operation() {
+        let error = AppError::new(ErrorCode::InvalidInput, "bad input");
+
+        let contextual = with_context(error, "ffmpeg probe");
+
+        assert_eq!(contextual.code(), ErrorCode::InvalidInput);
+        assert!(contextual.message().contains("ffmpeg probe"));
+        assert!(contextual.message().contains("bad input"));
+    }
 }

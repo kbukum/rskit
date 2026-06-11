@@ -188,7 +188,6 @@ mod tests {
     use std::path::Path;
 
     use rskit_errors::ErrorCode;
-
     use rskit_media::spatial::Resolution;
 
     use super::{ensure_resolution, read_path_bounded, scaled_dimension};
@@ -231,6 +230,7 @@ mod tests {
 
     #[test]
     fn scaled_dimension_rounds_and_clamps_to_one() {
+        assert_eq!(scaled_dimension(10, 10, 0), 1);
         assert_eq!(scaled_dimension(1, 1, 100), 1);
         assert_eq!(scaled_dimension(3, 2, 4), 2);
     }

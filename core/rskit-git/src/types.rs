@@ -348,3 +348,57 @@ pub enum ResetMode {
     /// Reset HEAD, index, and worktree.
     Hard,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn oid_display_debug_and_zero_detection_are_stable() {
+        let zero = Oid::from_bytes([0; 20]);
+        let mut bytes = [0; 20];
+        bytes[0] = 0xab;
+        bytes[19] = 0x05;
+        let oid = Oid::from_bytes(bytes);
+
+        assert!(zero.is_zero());
+        assert!(!oid.is_zero());
+        assert_eq!(oid.as_bytes(), &bytes);
+        assert_eq!(oid.to_string(), "ab00000000000000000000000000000000000005");
+        assert_eq!(
+            format!("{oid:?}"),
+            "Oid(ab00000000000000000000000000000000000005)"
+        );
+    }
+
+    #[test]
+    fn enum_display_values_match_public_contract() {
+        assert_eq!(FileStatus::Added.to_string(), "added");
+        assert_eq!(FileStatus::Modified.to_string(), "modified");
+        assert_eq!(FileStatus::Deleted.to_string(), "deleted");
+        assert_eq!(FileStatus::Renamed.to_string(), "renamed");
+        assert_eq!(FileStatus::Copied.to_string(), "copied");
+        assert_eq!(FileStatus::Untracked.to_string(), "untracked");
+        assert_eq!(FileStatus::Ignored.to_string(), "ignored");
+        assert_eq!(FileStatus::TypeChanged.to_string(), "type_changed");
+        assert_eq!(FileStatus::Conflicted.to_string(), "conflicted");
+
+        assert_eq!(EntryState::Staged.to_string(), "staged");
+        assert_eq!(EntryState::Unstaged.to_string(), "unstaged");
+        assert_eq!(EntryState::Untracked.to_string(), "untracked");
+        assert_eq!(EntryState::Conflicted.to_string(), "conflicted");
+
+        assert_eq!(EntryKind::Blob.to_string(), "blob");
+        assert_eq!(EntryKind::Tree.to_string(), "tree");
+        assert_eq!(EntryKind::Submodule.to_string(), "submodule");
+    }
+
+    #[test]
+    fn default_result_types_are_empty_and_non_destructive() {
+        assert_eq!(DiffStats::default().files_changed, 0);
+        assert_eq!(BranchFilter::default(), BranchFilter::Local);
+        assert_eq!(ResetMode::default(), ResetMode::Mixed);
+        assert_eq!(MergeResult::default().conflicts, Vec::<String>::new());
+        assert_eq!(RebaseResult::default().applied, 0);
+    }
+}

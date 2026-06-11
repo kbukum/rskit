@@ -126,3 +126,96 @@ impl Component for OllamaAdapter {
         Health::healthy(self.name())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rskit_llm::types;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+
+    fn config(base_url: String) -> Config {
+        Config {
+            base_url,
+            model: "llama3.2".into(),
+            api_key: None,
+        }
+    }
+
+    #[test]
+    fn new_adapter_constructs_without_api_key() {
+        let adapter = new_adapter(&config("http://localhost:11434".into())).unwrap();
+        assert_eq!(rskit_provider::Provider::name(&adapter), PROVIDER_ID);
+    }
+
+    #[test]
+    fn new_adapter_constructs_with_api_key() {
+        let cfg = Config {
+            api_key: Some(rskit_util::SecretString::new("ollama-token")),
+            ..config("http://localhost:11434".into())
+        };
+        let adapter = new_adapter(&cfg).unwrap();
+        let component: &dyn Component = &adapter;
+        assert_eq!(component.name(), "rskit-llm-ollama.ollama");
+        assert!(component.health().is_healthy());
+    }
+
+    #[test]
+    fn register_adds_ollama_factory() {
+        let mut registry = rskit_llm::Registry::new();
+        register(&mut registry, config("http://localhost:11434".into())).unwrap();
+        assert_eq!(registry.kinds(), vec![PROVIDER_ID]);
+        assert!(registry.build(PROVIDER_ID).is_ok());
+    }
+
+    #[tokio::test]
+    async fn complete_posts_openai_compatible_request() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = vec![0; 4096];
+            let read = stream.read(&mut request).await.unwrap();
+            let request = String::from_utf8_lossy(&request[..read]);
+            assert!(request.starts_with("POST /chat/completions HTTP/1.1"));
+            assert!(request.contains(r#""model":"llama3.2""#));
+            assert!(request.contains(r#""content":"hello""#));
+
+            let body = r#"{"model":"llama3.2","choices":[{"message":{"content":"hi"},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"completion_tokens":2}}"#;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            stream.write_all(response.as_bytes()).await.unwrap();
+        });
+
+        let adapter = new_adapter(&config(format!("http://{addr}"))).unwrap();
+        let response = adapter
+            .complete(types::CompletionRequest {
+                model: String::new(),
+                messages: vec![types::user("hello")],
+                max_tokens: None,
+                temperature: None,
+                stream: false,
+                tools: None,
+                tool_choice: None,
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(response.model, "llama3.2");
+        assert_eq!(response.text(), "hi");
+        assert_eq!(response.usage.input_tokens, 3);
+        assert_eq!(response.usage.output_tokens, 2);
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn lifecycle_methods_are_noops() {
+        let adapter = new_adapter(&config("http://localhost:11434".into())).unwrap();
+        adapter.start().await.unwrap();
+        adapter.stop().await.unwrap();
+        assert!(adapter.health().is_healthy());
+    }
+}

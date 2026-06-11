@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::Once;
 use std::time::Duration;
 
 use google_cloud_auth::credentials::anonymous::Builder as AnonymousCredentials;
@@ -31,8 +32,11 @@ pub struct Config {
 }
 
 /// Google Cloud Storage backend.
-struct GcsStore {
-    storage: Storage,
+struct GcsStore<S = google_cloud_storage::stub::DefaultStorage>
+where
+    S: google_cloud_storage::stub::Storage + 'static,
+{
+    storage: Storage<S>,
     control: StorageControl,
     config: Config,
 }
@@ -40,6 +44,8 @@ struct GcsStore {
 impl GcsStore {
     /// Create a new Google Cloud Storage backend.
     async fn new(config: Config) -> AppResult<Self> {
+        install_rustls_crypto_provider();
+
         let (storage, control) = if config.anonymous {
             let storage = Storage::builder()
                 .with_credentials(AnonymousCredentials::new().build())
@@ -83,17 +89,37 @@ impl GcsStore {
             config,
         })
     }
+}
 
+fn install_rustls_crypto_provider() {
+    static INSTALL: Once = Once::new();
+    INSTALL.call_once(|| {
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+    });
+}
+
+impl<S> GcsStore<S>
+where
+    S: google_cloud_storage::stub::Storage + 'static,
+{
     fn full_key(&self, key: &str) -> String {
-        prefixed_key(self.config.prefix.as_deref(), key)
+        full_key(self.config.prefix.as_deref(), key)
     }
 
     fn bucket_resource(&self) -> String {
-        if self.config.bucket.starts_with("projects/") {
-            self.config.bucket.clone()
-        } else {
-            format!("projects/_/buckets/{}", self.config.bucket)
-        }
+        bucket_resource(&self.config.bucket)
+    }
+}
+
+fn full_key(prefix: Option<&str>, key: &str) -> String {
+    prefixed_key(prefix, key)
+}
+
+fn bucket_resource(bucket: &str) -> String {
+    if bucket.starts_with("projects/") {
+        bucket.to_owned()
+    } else {
+        format!("projects/_/buckets/{bucket}")
     }
 }
 
@@ -114,7 +140,10 @@ fn stored_file_from_object(key: String, obj: Object) -> AppResult<StoredFile> {
 }
 
 #[async_trait::async_trait]
-impl FileStore for GcsStore {
+impl<S> FileStore for GcsStore<S>
+where
+    S: google_cloud_storage::stub::Storage + 'static,
+{
     async fn upload(
         &self,
         source: &FileSource,
@@ -278,6 +307,149 @@ pub fn register(registry: &mut StorageRegistry, config: Config) -> AppResult<()>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use google_cloud_gax::options::RequestOptions as GaxRequestOptions;
+    use google_cloud_gax::response::Response;
+    use google_cloud_storage::model::{
+        DeleteObjectRequest, GetObjectRequest, ListObjectsRequest, ListObjectsResponse,
+        ReadObjectRequest,
+    };
+    use google_cloud_storage::model_ext::{ObjectHighlights, WriteObjectRequest};
+    use google_cloud_storage::read_object::ReadObjectResponse;
+    use google_cloud_storage::request_options::RequestOptions as StorageRequestOptions;
+    use google_cloud_storage::streaming_source::StreamingSource;
+
+    #[derive(Debug, Default)]
+    struct MockStorage;
+
+    impl google_cloud_storage::stub::Storage for MockStorage {
+        fn read_object(
+            &self,
+            req: ReadObjectRequest,
+            _options: StorageRequestOptions,
+        ) -> impl std::future::Future<Output = google_cloud_storage::Result<ReadObjectResponse>> + Send
+        {
+            async move {
+                assert_eq!(req.bucket, "projects/_/buckets/test-bucket");
+                assert_eq!(req.object, "assets/input.txt");
+                Ok(ReadObjectResponse::from_source(
+                    ObjectHighlights::default(),
+                    "downloaded",
+                ))
+            }
+        }
+
+        fn write_object_buffered<P>(
+            &self,
+            _payload: P,
+            req: WriteObjectRequest,
+            _options: StorageRequestOptions,
+        ) -> impl std::future::Future<Output = google_cloud_storage::Result<Object>> + Send
+        where
+            P: StreamingSource + Send + Sync + 'static,
+        {
+            async move {
+                let resource = req.spec.resource.expect("write resource");
+                assert_eq!(resource.bucket, "projects/_/buckets/test-bucket");
+                assert_eq!(resource.name, "assets/output.txt");
+                assert!(
+                    resource.content_type == "text/plain"
+                        || resource.content_type == "application/octet-stream"
+                );
+                if resource.content_type == "text/plain" && !resource.metadata.is_empty() {
+                    assert_eq!(
+                        resource.metadata.get("trace").map(String::as_str),
+                        Some("yes")
+                    );
+                }
+                Ok(resource)
+            }
+        }
+    }
+
+    #[derive(Debug, Default)]
+    struct MockControl;
+
+    impl google_cloud_storage::stub::StorageControl for MockControl {
+        fn delete_object(
+            &self,
+            req: DeleteObjectRequest,
+            _options: GaxRequestOptions,
+        ) -> impl std::future::Future<Output = google_cloud_storage::Result<Response<()>>> + Send
+        {
+            async move {
+                assert_eq!(req.bucket, "projects/_/buckets/test-bucket");
+                assert_eq!(req.object, "assets/input.txt");
+                Ok(Response::from(()))
+            }
+        }
+
+        fn get_object(
+            &self,
+            req: GetObjectRequest,
+            _options: GaxRequestOptions,
+        ) -> impl std::future::Future<Output = google_cloud_storage::Result<Response<Object>>> + Send
+        {
+            async move {
+                assert_eq!(req.bucket, "projects/_/buckets/test-bucket");
+                assert_eq!(req.object, "assets/input.txt");
+                Ok(Response::from(object(
+                    "assets/input.txt",
+                    10,
+                    "text/plain",
+                    [("origin", "head")],
+                )))
+            }
+        }
+
+        fn list_objects(
+            &self,
+            req: ListObjectsRequest,
+            _options: GaxRequestOptions,
+        ) -> impl std::future::Future<
+            Output = google_cloud_storage::Result<Response<ListObjectsResponse>>,
+        > + Send {
+            async move {
+                assert_eq!(req.parent, "projects/_/buckets/test-bucket");
+                assert_eq!(req.prefix, "assets/logs");
+                assert_eq!(req.page_size, 2);
+                let response = ListObjectsResponse::new().set_objects([
+                    object("assets/logs/a.txt", 1, "text/plain", []),
+                    object("assets/logs/b.txt", 2, "text/plain", [("kind", "log")]),
+                ]);
+                Ok(Response::from(response))
+            }
+        }
+    }
+
+    fn object<const N: usize>(
+        name: &str,
+        size: i64,
+        content_type: &str,
+        metadata: [(&str, &str); N],
+    ) -> Object {
+        Object::default()
+            .set_bucket("projects/_/buckets/test-bucket")
+            .set_name(name)
+            .set_size(size)
+            .set_content_type(content_type)
+            .set_metadata(
+                metadata
+                    .into_iter()
+                    .map(|(k, v)| (k.to_owned(), v.to_owned())),
+            )
+    }
+
+    fn test_store() -> GcsStore<MockStorage> {
+        GcsStore {
+            storage: Storage::from_stub(MockStorage),
+            control: StorageControl::from_stub(MockControl),
+            config: Config {
+                bucket: "test-bucket".into(),
+                prefix: Some("assets".into()),
+                anonymous: true,
+            },
+        }
+    }
 
     #[test]
     fn config_deserializes_with_authenticated_default() {
@@ -297,8 +469,164 @@ mod tests {
         assert!(cfg.anonymous);
     }
 
+    #[test]
+    fn key_and_bucket_helpers_normalize_inputs() {
+        assert_eq!(full_key(Some("/assets/"), "/image.png"), "assets/image.png");
+        assert_eq!(full_key(Some("///"), "image.png"), "image.png");
+        assert_eq!(full_key(None, "/image.png"), "image.png");
+        assert_eq!(
+            bucket_resource("plain-bucket"),
+            "projects/_/buckets/plain-bucket"
+        );
+        assert_eq!(
+            bucket_resource("projects/p/buckets/named"),
+            "projects/p/buckets/named"
+        );
+    }
+
+    #[test]
+    fn object_size_rejects_negative_values() {
+        let err = object_size(-1).unwrap_err();
+        assert_eq!(err.code(), ErrorCode::Internal);
+        assert!(err.message().contains("must not be negative"));
+    }
+
+    #[test]
+    fn stored_file_from_object_preserves_metadata() {
+        let stored = stored_file_from_object(
+            "logical.txt".into(),
+            object("assets/logical.txt", 42, "text/plain", [("owner", "test")]),
+        )
+        .unwrap();
+        assert_eq!(stored.key, "logical.txt");
+        assert_eq!(stored.size, 42);
+        assert_eq!(stored.content_type, "text/plain");
+        assert_eq!(
+            stored.metadata.get("owner").map(String::as_str),
+            Some("test")
+        );
+    }
+
     #[tokio::test]
-    #[ignore = "requires GCS network access; run with --include-ignored in a configured environment"]
+    async fn upload_writes_prefixed_object_and_returns_logical_key() {
+        let store = test_store();
+        let mut metadata = HashMap::new();
+        metadata.insert("trace".into(), "yes".into());
+        let stored = store
+            .upload(
+                &FileSource::Bytes(bytes::Bytes::from_static(b"payload")),
+                "output.txt",
+                Some("text/plain"),
+                Some(metadata),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(stored.key, "output.txt");
+        assert_eq!(stored.size, 7);
+        assert_eq!(stored.content_type, "text/plain");
+        assert_eq!(
+            stored.metadata.get("trace").map(String::as_str),
+            Some("yes")
+        );
+    }
+
+    #[tokio::test]
+    async fn upload_defaults_content_type_and_empty_metadata() {
+        let store = test_store();
+        let stored = store
+            .upload(
+                &FileSource::Bytes(bytes::Bytes::from_static(b"payload")),
+                "output.txt",
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(stored.key, "output.txt");
+        assert_eq!(stored.size, 7);
+        assert_eq!(stored.content_type, "application/octet-stream");
+        assert!(stored.metadata.is_empty());
+    }
+
+    #[tokio::test]
+    async fn upload_with_progress_delegates_to_upload() {
+        let store = test_store();
+        let stored = store
+            .upload_with_progress(
+                &FileSource::Bytes(bytes::Bytes::from_static(b"payload")),
+                "output.txt",
+                Some("text/plain"),
+                Arc::new(|_| {}),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(stored.key, "output.txt");
+        assert_eq!(stored.size, 7);
+    }
+
+    #[tokio::test]
+    async fn download_reads_all_chunks_into_bytes() {
+        let store = test_store();
+        let source = store.download("input.txt").await.unwrap();
+        let data = source.read_all().await.unwrap();
+        assert_eq!(data.as_ref(), b"downloaded");
+    }
+
+    #[tokio::test]
+    async fn delete_head_exists_and_list_use_control_client() {
+        let store = test_store();
+        store.delete("input.txt").await.unwrap();
+
+        let head = store.head("input.txt").await.unwrap();
+        assert_eq!(head.key, "input.txt");
+        assert_eq!(head.size, 10);
+        assert_eq!(
+            head.metadata.get("origin").map(String::as_str),
+            Some("head")
+        );
+        assert!(store.exists("input.txt").await.unwrap());
+
+        let listed = store.list("logs", Some(2)).await.unwrap();
+        assert_eq!(listed.len(), 2);
+        assert_eq!(listed[0].key, "assets/logs/a.txt");
+        assert_eq!(listed[1].size, 2);
+    }
+
+    #[tokio::test]
+    async fn list_rejects_limits_larger_than_gcs_accepts() {
+        let store = test_store();
+        let err = store
+            .list("logs", Some(i32::MAX as usize + 1))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+    }
+
+    #[tokio::test]
+    async fn presigned_url_reports_unsupported_operation() {
+        let store = test_store();
+        let err = store
+            .presigned_url("input.txt", Duration::from_secs(60))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+    }
+
+    #[tokio::test]
+    async fn copy_and_rename_compose_existing_operations() {
+        let store = test_store();
+        let copied = store.copy("input.txt", "output.txt").await.unwrap();
+        assert_eq!(copied.key, "output.txt");
+        assert_eq!(copied.size, 10);
+
+        let renamed = store.rename("input.txt", "output.txt").await.unwrap();
+        assert_eq!(renamed.key, "output.txt");
+    }
+
+    #[tokio::test]
     async fn anonymous_store_constructs_without_credentials() {
         let store = GcsStore::new(Config {
             bucket: "public-assets".into(),
@@ -312,7 +640,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires GCS network access; run with --include-ignored in a configured environment"]
     async fn slash_only_prefix_is_ignored() {
         let store = GcsStore::new(Config {
             bucket: "public-assets".into(),
@@ -338,5 +665,18 @@ mod tests {
         )
         .unwrap();
         assert!(registry.contains("gcs"));
+    }
+
+    #[tokio::test]
+    async fn factory_constructs_anonymous_store_from_config() {
+        let factory = GcsFactory {
+            config: Config {
+                bucket: "public-assets".into(),
+                prefix: Some("uploads".into()),
+                anonymous: true,
+            },
+        };
+
+        factory.create(&StorageConfig::default()).await.unwrap();
     }
 }

@@ -23,7 +23,7 @@ async fn fake_component_tracks_lifecycle_and_health() {
 }
 
 #[test]
-fn test_app_config_exposes_named_service_config() {
+fn app_config_exposes_named_service_config() {
     let mut config = TestAppConfig::named("worker");
     config.apply_defaults();
 
@@ -32,7 +32,7 @@ fn test_app_config_exposes_named_service_config() {
 }
 
 #[test]
-fn test_app_config_validation_reports_service_field() {
+fn app_config_validation_reports_service_field() {
     let config = TestAppConfig::named("");
 
     let err = config
@@ -45,7 +45,7 @@ fn test_app_config_validation_reports_service_field() {
 }
 
 #[test]
-fn test_event_preserves_type_and_message() {
+fn event_preserves_type_and_message() {
     let event = TestEvent::new("user.created", "created user 42");
 
     assert_eq!(event.event_type().as_str(), "user.created");

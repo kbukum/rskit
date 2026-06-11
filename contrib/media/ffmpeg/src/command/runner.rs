@@ -125,3 +125,90 @@ fn push_stderr_line(lines: &Mutex<VecDeque<String>>, max_stderr_lines: usize, li
     }
     lines.push_back(line.to_string());
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    use rskit_media::registry::Registry;
+    use tokio_util::sync::CancellationToken;
+
+    use super::*;
+
+    #[cfg(unix)]
+    use crate::test_support::write_executable_script as write_script;
+
+    fn command() -> FfmpegCommand {
+        FfmpegCommand::compile(
+            &rskit_storage::FileSource::from_bytes(bytes::Bytes::from_static(b"media")),
+            &[],
+            None,
+            &FfmpegConfig::default(),
+            &Registry::default(),
+        )
+        .unwrap()
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn runner_invokes_progress_callback_for_stderr_progress_lines() {
+        let script = write_script("echo 'time=00:00:01.00 speed=2.0x' >&2\nexit 0");
+        let config = FfmpegConfig::default().with_ffmpeg_path(script.path());
+        let output = rskit_storage::TempFile::with_extension("mp4").unwrap();
+        let callbacks = Arc::new(AtomicUsize::new(0));
+        let seen = Arc::clone(&callbacks);
+
+        command()
+            .run_with_cancel(
+                &config,
+                Some(Box::new(move |_| {
+                    seen.fetch_add(1, Ordering::SeqCst);
+                })),
+                output.path(),
+                CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(callbacks.load(Ordering::SeqCst), 1);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn runner_classifies_failed_exit_and_truncates_stderr_window() {
+        let script = write_script(
+            "echo 'first line' >&2\necho 'invalid data found when processing input' >&2\nexit 1",
+        );
+        let config = FfmpegConfig::default()
+            .with_ffmpeg_path(script.path())
+            .with_max_stderr_lines(1);
+        let output = rskit_storage::TempFile::with_extension("mp4").unwrap();
+
+        let error = command()
+            .run_with_cancel(&config, None, output.path(), CancellationToken::new())
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.kind, crate::error::FfmpegErrorKind::InvalidInput);
+        assert_eq!(error.exit_code, Some(1));
+        assert!(error.stderr.contains("invalid data found"));
+        assert!(!error.stderr.contains("first line"));
+    }
+
+    #[test]
+    fn stderr_ring_buffer_keeps_last_lines() {
+        let lines = Mutex::new(VecDeque::with_capacity(2));
+
+        push_stderr_line(&lines, 2, "one");
+        push_stderr_line(&lines, 2, "two");
+        push_stderr_line(&lines, 2, "three");
+
+        assert_eq!(
+            lines.lock().iter().cloned().collect::<Vec<_>>(),
+            vec!["two".to_string(), "three".to_string()]
+        );
+    }
+}

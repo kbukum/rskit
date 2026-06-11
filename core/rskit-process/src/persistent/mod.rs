@@ -127,6 +127,7 @@ pub fn start_persistent_with_cancel(
                 command,
                 process_config,
                 persistent_config.readiness_timeout,
+                persistent_config.shutdown_grace_period,
                 cancel.clone(),
             ) {
                 let mut process = persistent_process(

@@ -170,3 +170,82 @@ pub async fn file_meta(source: &FileSource) -> AppResult<FileMeta> {
         checksum: None,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use bytes::Bytes;
+
+    use super::*;
+    use crate::TempFile;
+
+    #[test]
+    fn file_kind_classifies_common_mime_families() {
+        assert_eq!(FileKind::from_mime("video/mp4"), FileKind::Video);
+        assert_eq!(FileKind::from_mime("audio/mpeg"), FileKind::Audio);
+        assert_eq!(FileKind::from_mime("image/png"), FileKind::Image);
+        assert_eq!(FileKind::from_mime("text/plain"), FileKind::Text);
+        assert_eq!(FileKind::from_mime("application/pdf"), FileKind::Document);
+        assert_eq!(
+            FileKind::from_mime(
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            ),
+            FileKind::Document
+        );
+        assert_eq!(FileKind::from_mime("application/zip"), FileKind::Archive);
+        assert_eq!(FileKind::from_mime("application/json"), FileKind::Text);
+        assert_eq!(
+            FileKind::from_mime("application/octet-stream"),
+            FileKind::Binary
+        );
+        assert_eq!(FileKind::from_mime("custom"), FileKind::Unknown);
+    }
+
+    #[tokio::test]
+    async fn mime_detection_prefers_magic_then_extension_then_default() {
+        let png = FileSource::from_bytes(Bytes::from_static(&[
+            0x89, b'P', b'N', b'G', b'\r', b'\n', 0x1a, b'\n', 0, 0, 0, 0,
+        ]));
+        assert_eq!(detect_mime(&png).await.unwrap(), "image/png");
+        assert_eq!(detect_kind(&png).await.unwrap(), FileKind::Image);
+
+        let by_extension = FileSource::from_path("report.pdf");
+        assert_eq!(detect_mime(&by_extension).await.unwrap(), "application/pdf");
+
+        let url = FileSource::from_url("https://example.invalid/download");
+        assert_eq!(detect_mime(&url).await.unwrap(), "application/octet-stream");
+    }
+
+    #[tokio::test]
+    async fn file_meta_extracts_path_url_temp_and_bytes_details() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("sample.txt");
+        tokio::fs::write(&file, b"hello").await.unwrap();
+
+        let path_meta = file_meta(&FileSource::from_path(&file)).await.unwrap();
+        assert_eq!(path_meta.name.as_deref(), Some("sample.txt"));
+        assert_eq!(path_meta.extension.as_deref(), Some("txt"));
+        assert_eq!(path_meta.mime_type, "text/plain");
+        assert_eq!(path_meta.size, Some(5));
+        assert!(path_meta.modified_at.is_some());
+
+        let url_meta = file_meta(&FileSource::from_url(
+            "https://example.invalid/assets/archive.tar.gz?download=1",
+        ))
+        .await
+        .unwrap();
+        assert_eq!(url_meta.name.as_deref(), Some("archive.tar.gz"));
+        assert_eq!(url_meta.extension.as_deref(), Some("gz"));
+        assert_eq!(url_meta.size, None);
+
+        let temp = TempFile::new().unwrap();
+        tokio::fs::write(temp.path(), b"temp").await.unwrap();
+        let temp_meta = file_meta(&FileSource::Temp(temp)).await.unwrap();
+        assert_eq!(temp_meta.size, Some(4));
+
+        let bytes_meta = file_meta(&FileSource::from_bytes(Bytes::from_static(b"bytes")))
+            .await
+            .unwrap();
+        assert_eq!(bytes_meta.name, None);
+        assert_eq!(bytes_meta.size, Some(5));
+    }
+}

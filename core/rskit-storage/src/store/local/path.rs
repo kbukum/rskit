@@ -197,3 +197,66 @@ pub(super) fn file_not_found_error(key: &str) -> AppError {
 pub(super) fn file_not_found_error_with_cause(key: &str, cause: AppError) -> AppError {
     file_not_found_error(key).with_cause(cause)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn canonicalize_and_parent_helpers_report_confined_error_paths() {
+        let root = tempfile::tempdir().unwrap();
+        let missing_root = root.path().join("missing-root");
+        let err = canonicalize_confined(&missing_root, &missing_root.join("file"))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::Internal);
+        assert!(err.to_string().contains("storage root"));
+
+        let outside = tempfile::tempdir().unwrap();
+        let outside_file = outside.path().join("outside.txt");
+        std::fs::write(&outside_file, b"x").unwrap();
+        let err = canonicalize_confined(root.path(), &outside_file)
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+        assert!(err.to_string().contains("escapes configured root"));
+
+        let parent = root.path().join("file-parent");
+        std::fs::write(&parent, b"x").unwrap();
+        let err = ensure_target_parent_confined(root.path(), &parent.join("child.txt"))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+        assert!(err.to_string().contains("not a directory"));
+    }
+
+    #[tokio::test]
+    async fn replace_with_temp_reports_rename_errors_and_temp_names_are_siblings() {
+        let root = tempfile::tempdir().unwrap();
+        let target = root.path().join("target.txt");
+        let temp = storage_temp_path(&target);
+
+        assert_eq!(temp.parent(), target.parent());
+        assert!(
+            temp.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .ends_with(".rskit-tmp")
+        );
+
+        let err = replace_with_temp(&temp, &target).await.unwrap_err();
+        assert_eq!(err.code(), ErrorCode::Internal);
+        assert!(err.to_string().contains("failed to replace"));
+    }
+
+    #[test]
+    fn normalize_local_key_and_not_found_errors_are_stable() {
+        assert_eq!(normalize_local_key("/a/b.txt").unwrap(), "a/b.txt");
+        assert_eq!(file_not_found_error("missing").code(), ErrorCode::NotFound);
+        let cause = AppError::new(ErrorCode::Internal, "io");
+        assert_eq!(
+            file_not_found_error_with_cause("missing", cause).code(),
+            ErrorCode::NotFound
+        );
+    }
+}

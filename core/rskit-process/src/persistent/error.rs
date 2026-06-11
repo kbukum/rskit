@@ -61,3 +61,34 @@ pub(in crate::persistent) fn persistent_start_error(
 ) -> AppError {
     AppError::new(code, message).with_detail(PERSISTENT_START_ERROR_KIND_DETAIL, kind.as_str())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn persistent_start_error_round_trips_all_structured_kinds() {
+        for kind in [
+            PersistentStartErrorKind::SpawnFailed,
+            PersistentStartErrorKind::ReadinessCommandTimedOut,
+            PersistentStartErrorKind::ReadinessCommandFailed,
+            PersistentStartErrorKind::ReadinessTimedOut,
+            PersistentStartErrorKind::OutputEndedBeforeReadiness,
+            PersistentStartErrorKind::ExitedBeforeReadiness,
+        ] {
+            let error = persistent_start_error(kind, ErrorCode::Internal, "failed");
+            assert_eq!(persistent_start_error_kind(&error), Some(kind));
+        }
+    }
+
+    #[test]
+    fn missing_or_unknown_persistent_error_kind_returns_none() {
+        assert_eq!(
+            persistent_start_error_kind(&AppError::new(ErrorCode::Internal, "plain")),
+            None
+        );
+        let error = AppError::new(ErrorCode::Internal, "bad")
+            .with_detail(PERSISTENT_START_ERROR_KIND_DETAIL, "unknown");
+        assert_eq!(persistent_start_error_kind(&error), None);
+    }
+}

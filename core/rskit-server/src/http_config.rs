@@ -146,3 +146,85 @@ impl HttpServerConfig {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use rskit_errors::ErrorCode;
+    use rskit_security::TlsVersion;
+
+    use super::*;
+
+    #[test]
+    fn bind_addr_wraps_ipv6_and_validation_rejects_invalid_port() {
+        let config = HttpServerConfig {
+            host: "::1".to_string(),
+            port: 443,
+            ..Default::default()
+        };
+        assert_eq!(config.bind_addr(), "[::1]:443");
+        assert_eq!(HttpServerConfig::default().bind_addr(), "0.0.0.0:8080");
+
+        let invalid = HttpServerConfig {
+            port: 0,
+            ..Default::default()
+        };
+        assert!(invalid.validate().is_err());
+    }
+
+    #[test]
+    fn validate_http_tls_rejects_missing_and_client_side_fields() {
+        let missing = TlsConfig::default();
+        assert_eq!(
+            validate_http_tls_config(&missing).unwrap_err().code(),
+            ErrorCode::InvalidInput
+        );
+
+        let client_side = TlsConfig {
+            cert_file: Some("cert.pem".to_string()),
+            key_file: Some("key.pem".to_string()),
+            skip_verify: true,
+            min_version: TlsVersion::Tls12,
+            ..Default::default()
+        };
+        let error = validate_http_tls_config(&client_side).unwrap_err();
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
+        assert!(error.to_string().contains("client-side TLS settings"));
+    }
+
+    #[test]
+    fn http_config_validation_reports_invalid_cors_and_tls_branches() {
+        let invalid_cors = HttpServerConfig {
+            cors: Some(CorsPolicy {
+                allow_credentials: true,
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let errors = invalid_cors.validate().unwrap_err();
+        assert!(errors.field_errors().contains_key("cors"));
+
+        let invalid_tls = HttpServerConfig {
+            tls: Some(TlsConfig {
+                cert_file: Some("cert.pem".to_string()),
+                key_file: None,
+                min_version: TlsVersion::Tls12,
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let errors = invalid_tls.validate().unwrap_err();
+        assert!(errors.field_errors().contains_key("tls"));
+
+        let valid_tls = HttpServerConfig {
+            tls: Some(TlsConfig {
+                cert_file: Some("cert.pem".to_string()),
+                key_file: Some("key.pem".to_string()),
+                min_version: TlsVersion::Tls12,
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        valid_tls.validate().unwrap();
+        validate_http_tls_config(valid_tls.tls.as_ref().unwrap()).unwrap();
+    }
+}

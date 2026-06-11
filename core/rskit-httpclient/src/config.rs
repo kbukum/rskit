@@ -203,4 +203,26 @@ mod tests {
         assert!(formatted.contains("SecretString(***)"));
         assert!(!formatted.contains("secret-token"));
     }
+
+    #[test]
+    fn builder_methods_override_defaults() {
+        let headers = HashMap::from([("x-default".to_string(), "yes".to_string())]);
+        let policy = DestinationPolicy::new()
+            .with_allowed_schemes(["https"])
+            .with_block_metadata(false);
+        let config = HttpClientConfig::new()
+            .with_timeout(Duration::from_secs(5))
+            .with_connect_timeout(Duration::from_secs(2))
+            .with_headers(headers.clone())
+            .with_follow_redirects(false)
+            .with_max_redirects(0)
+            .with_destination_policy(policy.clone());
+
+        assert_eq!(config.timeout, Duration::from_secs(5));
+        assert_eq!(config.connect_timeout, Duration::from_secs(2));
+        assert_eq!(config.default_headers, headers);
+        assert!(!config.follow_redirects);
+        assert_eq!(config.max_redirects, 0);
+        assert_eq!(config.destination_policy, policy);
+    }
 }

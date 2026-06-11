@@ -28,3 +28,53 @@ pub trait DatasetStreamExt: Stream<Item = AppResult<DataItem>> + Sized + Send + 
 }
 
 impl<S> DatasetStreamExt for S where S: Stream<Item = AppResult<DataItem>> + Sized + Send + 'static {}
+
+#[cfg(test)]
+mod tests {
+    use futures::{StreamExt, stream};
+    use rskit_errors::{AppError, ErrorCode};
+
+    use super::*;
+    use crate::{DataItem, Label, MediaType};
+
+    #[derive(Clone)]
+    struct FilterBySource {
+        allowed: &'static str,
+    }
+
+    impl Transform for FilterBySource {
+        fn name(&self) -> &str {
+            "filter-by-source"
+        }
+
+        fn apply(&self, item: DataItem, _limits: &DatasetLimits) -> AppResult<Option<DataItem>> {
+            if item.source_name == self.allowed {
+                Ok(Some(item))
+            } else {
+                Ok(None)
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn dataset_stream_transform_maps_items_and_forwards_errors() {
+        let transform = FilterBySource { allowed: "keep" };
+        assert_eq!(transform.name(), "filter-by-source");
+        let keep = DataItem::new(vec![1], Label::Real, MediaType::Text, "keep").unwrap();
+        let drop = DataItem::new(vec![2], Label::AiGenerated, MediaType::Text, "drop").unwrap();
+        let input = stream::iter([
+            Ok(keep),
+            Ok(drop),
+            Err(AppError::new(ErrorCode::Internal, "boom")),
+        ]);
+
+        let output = input
+            .apply_dataset_transform(transform, DatasetLimits::default())
+            .collect::<Vec<_>>()
+            .await;
+
+        assert!(output[0].as_ref().unwrap().is_some());
+        assert!(output[1].as_ref().unwrap().is_none());
+        assert_eq!(output[2].as_ref().unwrap_err().code(), ErrorCode::Internal);
+    }
+}

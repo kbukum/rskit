@@ -105,3 +105,68 @@ impl CacheRegistry {
         factory.create(config).await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Default)]
+    struct DummyFactory;
+
+    #[async_trait::async_trait]
+    impl CacheStoreFactory for DummyFactory {
+        async fn create(&self, _config: &CacheConfig) -> AppResult<Arc<dyn CacheStore>> {
+            Err(AppError::new(ErrorCode::Internal, "not used"))
+        }
+    }
+
+    #[test]
+    fn register_rejects_empty_store_name() {
+        let mut registry = CacheRegistry::new();
+        let err = registry
+            .register(" \t ", Arc::new(DummyFactory))
+            .expect_err("empty store names must be rejected");
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn register_rejects_duplicate_store_name() {
+        let mut registry = CacheRegistry::new();
+        registry
+            .register("memory", Arc::new(DummyFactory))
+            .expect("first registration should succeed");
+
+        let err = registry
+            .register("memory", Arc::new(DummyFactory))
+            .expect_err("duplicate store names must be rejected");
+        assert_eq!(err.code(), ErrorCode::AlreadyExists);
+    }
+
+    #[tokio::test]
+    async fn build_rejects_empty_selected_store() {
+        let registry = CacheRegistry::new();
+        let config = CacheConfig {
+            store: " ".into(),
+            ..CacheConfig::default()
+        };
+
+        let Err(err) = registry.build(&config).await else {
+            panic!("empty selected stores must be rejected");
+        };
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+    }
+
+    #[tokio::test]
+    async fn build_rejects_unregistered_selected_store() {
+        let registry = CacheRegistry::new();
+        let config = CacheConfig {
+            store: "redis".into(),
+            ..CacheConfig::default()
+        };
+
+        let Err(err) = registry.build(&config).await else {
+            panic!("unregistered stores must be rejected");
+        };
+        assert_eq!(err.code(), ErrorCode::NotFound);
+    }
+}

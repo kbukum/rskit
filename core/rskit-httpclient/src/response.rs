@@ -238,6 +238,21 @@ mod tests {
     }
 
     #[test]
+    fn body_accessors_and_debug_do_not_expose_body_contents() {
+        let resp = Response::new(
+            StatusCode::CREATED,
+            HashMap::from([("x-id".to_string(), "123".to_string())]),
+            Bytes::from_static(b"created"),
+        );
+
+        assert_eq!(resp.body_bytes(), &Bytes::from_static(b"created"));
+        let debug = format!("{resp:?}");
+        assert!(debug.contains("body_len"));
+        assert!(!debug.contains("created"));
+        assert_eq!(resp.into_bytes(), Bytes::from_static(b"created"));
+    }
+
+    #[test]
     fn test_response_json() {
         let json_data = r#"{"key":"value"}"#;
         let resp = Response::new(StatusCode::OK, HashMap::new(), Bytes::from(json_data));
@@ -312,5 +327,61 @@ mod tests {
                 .and_then(serde_json::Value::as_str),
             Some("upstream unavailable")
         );
+    }
+
+    #[test]
+    fn checked_json_with_uses_custom_error_mapper() {
+        let resp = Response::new(
+            StatusCode::IM_A_TEAPOT,
+            HashMap::new(),
+            Bytes::from("short and stout"),
+        );
+
+        let error = resp
+            .checked_json_with::<serde_json::Value, _>(|response| {
+                AppError::new(
+                    ErrorCode::ExternalService,
+                    format!("mapped {}", response.status.as_u16()),
+                )
+                .with_detail("body", response.body)
+            })
+            .expect_err("teapot response should be mapped");
+
+        assert!(error.message().contains("mapped 418"));
+        assert_eq!(
+            error
+                .details()
+                .get("body")
+                .and_then(serde_json::Value::as_str),
+            Some("short and stout")
+        );
+    }
+
+    #[test]
+    fn default_error_mapper_covers_client_auth_and_server_statuses() {
+        let cases = [
+            (StatusCode::BAD_REQUEST, ErrorCode::InvalidInput),
+            (StatusCode::UNAUTHORIZED, ErrorCode::Unauthorized),
+            (StatusCode::FORBIDDEN, ErrorCode::Forbidden),
+            (StatusCode::INTERNAL_SERVER_ERROR, ErrorCode::Internal),
+            (StatusCode::BAD_GATEWAY, ErrorCode::Internal),
+            (StatusCode::SERVICE_UNAVAILABLE, ErrorCode::Internal),
+            (StatusCode::GATEWAY_TIMEOUT, ErrorCode::Internal),
+            (StatusCode::IM_A_TEAPOT, ErrorCode::ExternalService),
+        ];
+
+        for (status, code) in cases {
+            let error = Response::new(status, HashMap::new(), Bytes::from("body"))
+                .error_for_status()
+                .expect_err("non-success status should fail");
+            assert_eq!(error.code(), code, "{status}");
+            assert_eq!(
+                error
+                    .details()
+                    .get("status")
+                    .and_then(serde_json::Value::as_str),
+                Some(status.as_u16().to_string().as_str())
+            );
+        }
     }
 }

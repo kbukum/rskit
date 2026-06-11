@@ -258,4 +258,126 @@ mod tests {
         let config = GrpcClientConfig::new("127.0.0.1:50051").with_tls(tls.clone());
         assert_eq!(default_tls_domain_name(&config, &tls), "grpc.internal");
     }
+
+    #[test]
+    fn default_tls_domain_name_falls_back_to_localhost_for_invalid_targets() {
+        let tls = TlsConfig::default();
+        let config = GrpcClientConfig::new("not a uri").with_tls(tls.clone());
+
+        assert_eq!(default_tls_domain_name(&config, &tls), "localhost");
+    }
+
+    #[tokio::test]
+    async fn build_endpoint_rejects_invalid_plaintext_targets_before_connecting() {
+        let err = build_endpoint(&GrpcClientConfig::new("not a uri"))
+            .await
+            .unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+        assert!(err.to_string().contains("invalid gRPC endpoint"));
+    }
+
+    #[tokio::test]
+    async fn build_endpoint_applies_tls_and_keepalive_without_connecting() {
+        let endpoint = build_endpoint(
+            &GrpcClientConfig::new("example.com:443").with_tls(TlsConfig::default()),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(endpoint.uri().scheme_str(), Some("https"));
+    }
+
+    #[tokio::test]
+    async fn connect_to_closed_local_port_returns_retryable_service_error() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind local listener");
+        let addr = listener.local_addr().expect("local addr");
+        drop(listener);
+        let channel = GrpcChannel::new(GrpcClientConfig::new(addr.to_string()));
+
+        let err = channel.connect().await.unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::ServiceUnavailable);
+        assert!(err.is_retryable());
+    }
+
+    #[tokio::test]
+    async fn build_tls_config_reports_missing_ca_bundle() {
+        let tls = TlsConfig {
+            ca_file: Some("missing/ca.pem".to_string()),
+            ..Default::default()
+        };
+        let config = GrpcClientConfig::new("example.com:443").with_tls(tls.clone());
+
+        let err = build_tls_config(&config, &tls).await.unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+        assert!(err.to_string().contains("failed to read gRPC CA bundle"));
+    }
+
+    #[tokio::test]
+    async fn close_clears_channel_without_requiring_connection() {
+        let mut channel = GrpcChannel::new(GrpcClientConfig::new("localhost:50051"));
+
+        channel.close().await.unwrap();
+
+        assert_eq!(channel.target(), "localhost:50051");
+        assert_eq!(channel.config().address(), "localhost:50051");
+    }
+
+    #[tokio::test]
+    async fn connected_channel_uses_local_listener_and_caches_result() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind local listener");
+        let addr = listener.local_addr().expect("local addr");
+        let accept_task = tokio::spawn(async move {
+            let (_stream, _addr) = listener.accept().await.expect("accept connection");
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        });
+        let channel = GrpcChannel::new(
+            GrpcClientConfig::new(addr.to_string())
+                .with_resilience_policy(rskit_resilience::Policy::new()),
+        );
+
+        channel.connect().await.expect("connect to local listener");
+        let _first = channel.connected_channel().await.expect("cached channel");
+        let _second = channel
+            .channel()
+            .await
+            .expect("alias returns cached channel");
+
+        assert_eq!(channel.target(), addr.to_string());
+        assert!(channel.is_ready().await);
+        accept_task.abort();
+    }
+
+    #[tokio::test]
+    async fn build_tls_config_reports_missing_client_key_after_reading_cert() {
+        let workspace = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+            .join("target")
+            .join("rskit-grpc-tests")
+            .join(format!("tls-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&workspace);
+        std::fs::create_dir_all(&workspace).expect("create workspace");
+        let cert = workspace.join("client.pem");
+        std::fs::write(&cert, b"not a real cert").expect("write cert");
+        let missing_key = workspace.join("missing.key");
+        let tls = TlsConfig {
+            cert_file: Some(cert.display().to_string()),
+            key_file: Some(missing_key.display().to_string()),
+            ..Default::default()
+        };
+        let config = GrpcClientConfig::new("example.com:443").with_tls(tls.clone());
+
+        let err = build_tls_config(&config, &tls).await.unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+        assert!(err.to_string().contains("failed to read gRPC client key"));
+        let _ = std::fs::remove_dir_all(&workspace);
+    }
 }

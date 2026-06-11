@@ -6,7 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-_No unreleased changes._
+### Tooling
+
+- Rework coverage collection to run once per selected workspace group, preserve cached instrumented builds with profile-only cleanup, exclude the facade package from default coverage, honor explicit threshold overrides, and derive per-package summaries from workspace reports.
+- Add focused authorization, configuration, lifecycle, DI, DAG, logging, messaging, resilience, Ollama, image, Redis, S3, Kafka, NATS, RabbitMQ, FFmpeg, and GCS adapter tests to raise package coverage with deterministic behavioral checks.
+
+### Fixed
+
+- Install the rustls crypto provider before constructing Google Cloud Storage clients so GCS adapter tests and coverage runs do not panic under mixed TLS feature sets.
 
 ## [v0.1.0-alpha.1] - 2026-06-08
 

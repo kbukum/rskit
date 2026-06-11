@@ -30,7 +30,7 @@ When a foundation crate needs a service that lives in a higher layer (e.g. an HT
 The layer contract is enforced via:
 
 - [`cargo-deny`](https://embarkstudios.github.io/cargo-deny/) `bans` rules in [`deny.toml`](../../deny.toml) and the split workspace deny configs — denies forbidden dependency edges and dependency policy violations.
-- Custom CI scripts that walk the crate graph and assert topology invariants, especially [`scripts/check-topology.sh`](../../scripts/check-topology.sh) and [`scripts/check-l7-edges.sh`](../../scripts/check-l7-edges.sh).
+- The repository tooling app commands that walk the crate graph and assert topology invariants, especially `scripts/rskit_tool.py check topology` and `scripts/rskit_tool.py check l7-edges`.
 
 ## Consequences
 

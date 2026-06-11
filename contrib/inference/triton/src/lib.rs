@@ -880,4 +880,50 @@ mod tests {
         register(&mut registry, Config::default()).expect("register triton");
         assert_eq!(registry.kinds(), vec![TRITON_KIND.to_owned()]);
     }
+
+    #[test]
+    fn config_builders_and_debug_redact_runtime_hooks() {
+        let config = Config::default()
+            .with_policy(Policy::new())
+            .with_decider(Arc::new(DenyDecider));
+
+        let debug = format!("{config:?}");
+
+        assert!(debug.contains("<configured>"));
+        assert!(config.policy.is_some());
+        assert!(config.decider.is_some());
+    }
+
+    #[tokio::test]
+    async fn component_and_request_response_fast_paths() {
+        let adapter = TritonInference::new(Config::default()).unwrap();
+
+        assert_eq!(rskit_provider::Provider::name(&adapter), TRITON_KIND);
+        assert_eq!(rskit_component::Component::name(&adapter), "triton");
+        rskit_component::Component::start(&adapter).await.unwrap();
+        rskit_component::Component::stop(&adapter).await.unwrap();
+        assert!(rskit_component::Component::health(&adapter).is_healthy());
+        assert_eq!(adapter.descriptor().name, "triton");
+    }
+
+    #[test]
+    fn merged_wire_parameters_rejects_non_object_options() {
+        let request = PredictRequest {
+            options: serde_json::json!("bad"),
+            ..PredictRequest::default()
+        };
+
+        let err = merged_wire_parameters(&request).unwrap_err();
+
+        assert!(matches!(err, InferenceError::Decode(_)));
+    }
+
+    #[test]
+    fn numeric_and_bytes_helpers_accept_scalar_bytes_and_empty_usage() {
+        assert_eq!(
+            bytes_data(&serde_json::json!("plain"), None).unwrap(),
+            vec![Bytes::from_static(b"plain")]
+        );
+        assert_eq!(decode_usage(None).input_tokens, 0);
+    }
 }

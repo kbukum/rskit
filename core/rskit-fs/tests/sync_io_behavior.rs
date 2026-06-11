@@ -1,4 +1,4 @@
-//! Behavioral coverage for public synchronous filesystem helpers.
+//! Behavioral tests for public synchronous filesystem helpers.
 
 use rskit_fs::TempDir;
 use rskit_fs::sync_io::{dir, file};

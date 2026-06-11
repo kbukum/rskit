@@ -31,7 +31,7 @@ chrono         = { workspace = true }
 
 # Internal
 rskit-errors = { workspace = true }
-rskit-fs = { workspace = true }
+rskit-fs = { workspace = true, features = ["async"] }
 rskit-resilience = { workspace = true }
 rskit-security = { workspace = true }
 rskit-discovery = { workspace = true, optional = true }

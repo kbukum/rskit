@@ -219,6 +219,44 @@ mod tests {
     }
 
     #[test]
+    fn allowed_schemes_are_case_insensitive_and_empty_rejects_all() {
+        let allowed = DestinationPolicy::new().with_allowed_schemes(["HTTPS"]);
+        let rejected = DestinationPolicy::new().with_allowed_schemes(Vec::<String>::new());
+
+        assert!(
+            allowed
+                .validate(&Url::parse("https://api.example.com/").unwrap())
+                .is_ok()
+        );
+        let error = rejected
+            .validate(&Url::parse("https://api.example.com/").unwrap())
+            .expect_err("empty scheme allow-list should reject");
+        assert!(
+            error
+                .message()
+                .contains("URL scheme 'https' is not allowed")
+        );
+    }
+
+    #[test]
+    fn metadata_and_link_local_blocks_can_be_disabled() {
+        let policy = DestinationPolicy::new()
+            .with_block_metadata(false)
+            .with_block_link_local(false);
+
+        assert!(
+            policy
+                .validate(&Url::parse("http://169.254.169.254/latest").unwrap())
+                .is_ok()
+        );
+        assert!(
+            policy
+                .validate(&Url::parse("http://[fe80::1]/").unwrap())
+                .is_ok()
+        );
+    }
+
+    #[test]
     fn default_policy_blocks_ipv4_mapped_metadata_literal() {
         let url = Url::parse("http://[::ffff:169.254.169.254]/latest/meta-data").unwrap();
 

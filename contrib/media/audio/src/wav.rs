@@ -236,6 +236,37 @@ mod tests {
         buf
     }
 
+    fn make_wav(
+        audio_format: u16,
+        channels: u16,
+        sample_rate: u32,
+        bps: u16,
+        data: &[u8],
+    ) -> Vec<u8> {
+        let data_size = data.len() as u32;
+        let bytes_per_sample = u32::from(bps / 8).max(1);
+        let byte_rate = sample_rate * u32::from(channels) * bytes_per_sample;
+        let block_align = channels * (bps / 8).max(1);
+        let file_size = 36 + data_size;
+        let mut buf = Vec::with_capacity(file_size as usize + 8);
+
+        buf.extend_from_slice(b"RIFF");
+        buf.extend_from_slice(&file_size.to_le_bytes());
+        buf.extend_from_slice(b"WAVE");
+        buf.extend_from_slice(b"fmt ");
+        buf.extend_from_slice(&16u32.to_le_bytes());
+        buf.extend_from_slice(&audio_format.to_le_bytes());
+        buf.extend_from_slice(&channels.to_le_bytes());
+        buf.extend_from_slice(&sample_rate.to_le_bytes());
+        buf.extend_from_slice(&byte_rate.to_le_bytes());
+        buf.extend_from_slice(&block_align.to_le_bytes());
+        buf.extend_from_slice(&bps.to_le_bytes());
+        buf.extend_from_slice(b"data");
+        buf.extend_from_slice(&data_size.to_le_bytes());
+        buf.extend_from_slice(data);
+        buf
+    }
+
     #[test]
     fn parse_valid_wav() {
         let samples = vec![0, 16383, -16384, 32767, -32768];
@@ -265,5 +296,80 @@ mod tests {
     fn rejects_too_small() {
         let result = WavReader::from_bytes(b"tiny");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn channel_samples_returns_requested_channel_or_empty() {
+        let wav_data = make_wav_16bit_mono(44_100, &[1, 2, 3, 4]);
+        let reader = WavReader::from_bytes(&wav_data).unwrap();
+
+        assert_eq!(reader.channel_samples(0).len(), 4);
+        assert!(reader.channel_samples(1).is_empty());
+    }
+
+    #[test]
+    fn rejects_unsupported_format_and_short_fmt_chunk() {
+        let unsupported = make_wav(6, 1, 8_000, 16, &[0, 0]);
+        let err = WavReader::from_bytes(&unsupported).unwrap_err();
+        assert!(err.message().contains("Unsupported WAV audio format"));
+
+        let mut short = Vec::new();
+        short.extend_from_slice(b"RIFF");
+        short.extend_from_slice(&28u32.to_le_bytes());
+        short.extend_from_slice(b"WAVE");
+        short.extend_from_slice(b"fmt ");
+        short.extend_from_slice(&4u32.to_le_bytes());
+        short.extend_from_slice(&[0, 0, 0, 0]);
+        short.extend_from_slice(b"data");
+        short.extend_from_slice(&0u32.to_le_bytes());
+        let err = WavReader::from_bytes(&short).unwrap_err();
+        assert!(
+            err.message().contains("fmt chunk too small")
+                || err.message().contains("WAV file too small")
+        );
+    }
+
+    #[test]
+    fn rejects_missing_data_chunk_after_aligned_unknown_chunk() {
+        let mut wav = make_wav(1, 1, 8_000, 16, &[0, 0]);
+        wav.truncate(36);
+        wav.extend_from_slice(b"JUNK");
+        wav.extend_from_slice(&3u32.to_le_bytes());
+        wav.extend_from_slice(&[1, 2, 3, 0]);
+
+        let err = WavReader::from_bytes(&wav).unwrap_err();
+
+        assert!(err.message().contains("data"));
+    }
+
+    #[test]
+    fn decodes_supported_sample_widths_and_clamps_float() {
+        let eight = make_wav(1, 1, 8_000, 8, &[0, 128, 255]);
+        let eight = WavReader::from_bytes(&eight).unwrap();
+        assert_eq!(eight.samples[0], -1.0);
+        assert_eq!(eight.samples[1], 0.0);
+
+        let twenty_four = make_wav(1, 1, 8_000, 24, &[0xff, 0x7f, 0x00, 0x00, 0x80, 0xff]);
+        let twenty_four = WavReader::from_bytes(&twenty_four).unwrap();
+        assert!(twenty_four.samples[0] > 0.99);
+        assert!(twenty_four.samples[1] < -0.99);
+
+        let mut float_data = Vec::new();
+        float_data.extend_from_slice(&2.0f32.to_le_bytes());
+        float_data.extend_from_slice(&(-2.0f32).to_le_bytes());
+        let float = make_wav(3, 1, 8_000, 32, &float_data);
+        let float = WavReader::from_bytes(&float).unwrap();
+        assert_eq!(float.samples, vec![1.0, -1.0]);
+    }
+
+    #[test]
+    fn rejects_invalid_or_unsupported_bits_per_sample() {
+        let invalid = make_wav(1, 1, 8_000, 0, &[0]);
+        let err = WavReader::from_bytes(&invalid).unwrap_err();
+        assert!(err.message().contains("Invalid bits_per_sample"));
+
+        let unsupported = make_wav(1, 1, 8_000, 12, &[0, 0]);
+        let err = WavReader::from_bytes(&unsupported).unwrap_err();
+        assert!(err.message().contains("Unsupported bits_per_sample"));
     }
 }

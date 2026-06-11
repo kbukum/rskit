@@ -1,4 +1,4 @@
-//! Behavioral coverage for utility template errors and clock helpers.
+//! Behavioral tests for utility template errors and clock helpers.
 
 use rskit_util::template::TemplateError;
 use rskit_util::time::{Clock, FixedClock, SystemClock, system_clock};

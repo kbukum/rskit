@@ -260,3 +260,131 @@ impl GrpcServerBuilder {
         GrpcServer::new(self.name, self.config, start_fn)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::convert::Infallible;
+    use std::future::{Ready, ready};
+    use std::task::{Context, Poll};
+
+    use http::{Request, Response};
+    use rskit_bootstrap::Component;
+    use rskit_errors::ErrorCode;
+    use tonic::body::Body;
+    use tower::Service;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn builder_preserves_name_and_waits_for_cancel_without_services() {
+        let config = GrpcServerConfig::new("127.0.0.1", 50051);
+        let server = GrpcServerBuilder::new(config)
+            .with_name("api-grpc")
+            .with_reflection(b"not-a-descriptor")
+            .build();
+
+        assert_eq!(server.name(), "api-grpc");
+        assert!(!server.health().is_healthy());
+
+        server.start().await.expect("start no-service server");
+        assert!(server.health().is_healthy());
+        server.stop().await.expect("stop no-service server");
+        assert!(!server.health().is_healthy());
+    }
+
+    #[tokio::test]
+    async fn start_rejects_invalid_bind_address_before_spawning() {
+        let config = GrpcServerConfig::new("not a host", 50051);
+        let server = GrpcServerBuilder::new(config).build();
+
+        let error = server.start().await.expect_err("invalid address");
+
+        assert_eq!(error.code(), ErrorCode::Internal);
+        assert!(error.message().contains("invalid gRPC address"));
+        assert!(!server.health().is_healthy());
+    }
+
+    #[tokio::test]
+    async fn builder_runs_added_service_on_local_listener_until_cancelled() {
+        let config = GrpcServerConfig::new("127.0.0.1", 0);
+        let server = GrpcServerBuilder::new(config)
+            .with_name("local-grpc")
+            .add_service(EmptyGrpcService)
+            .build();
+
+        server.start().await.expect("start service server");
+        assert!(server.health().is_healthy());
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        server.stop().await.expect("stop service server");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+
+    #[tokio::test]
+    async fn builder_falls_back_when_reflection_descriptor_is_invalid() {
+        let config = GrpcServerConfig::new("127.0.0.1", 0);
+        let server = GrpcServerBuilder::new(config)
+            .with_reflection(b"not a protobuf file descriptor set")
+            .add_service(EmptyGrpcService)
+            .build();
+
+        server.start().await.expect("start service server");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        server.stop().await.expect("stop service server");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+
+    #[tokio::test]
+    async fn builder_reports_missing_tls_files_from_service_task_without_panicking() {
+        let config = GrpcServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            tls: Some(crate::config::TlsConfig {
+                cert_path: "missing-cert.pem".to_string(),
+                key_path: "missing-key.pem".to_string(),
+            }),
+            ..GrpcServerConfig::default()
+        };
+        let server = GrpcServerBuilder::new(config)
+            .add_service(EmptyGrpcService)
+            .build();
+
+        server.start().await.expect("spawn service task");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        server.stop().await.expect("stop service server");
+    }
+
+    #[derive(Clone)]
+    struct EmptyGrpcService;
+
+    impl tonic::server::NamedService for EmptyGrpcService {
+        const NAME: &'static str = "test.Empty";
+    }
+
+    impl tonic::codegen::Service<Request<Body>> for EmptyGrpcService {
+        type Response = Response<Body>;
+        type Error = Infallible;
+        type Future = Ready<Result<Self::Response, Self::Error>>;
+
+        fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+            Poll::Ready(Ok(()))
+        }
+
+        fn call(&mut self, _req: Request<Body>) -> Self::Future {
+            ready(Ok(Response::new(Body::default())))
+        }
+    }
+
+    #[test]
+    fn empty_test_service_is_ready_and_returns_empty_body() {
+        let mut service = EmptyGrpcService;
+        let waker = std::task::Waker::noop();
+        let mut cx = Context::from_waker(waker);
+
+        assert!(matches!(service.poll_ready(&mut cx), Poll::Ready(Ok(()))));
+        let response = service
+            .call(Request::new(Body::default()))
+            .into_inner()
+            .unwrap();
+        assert_eq!(response.status(), http::StatusCode::OK);
+    }
+}

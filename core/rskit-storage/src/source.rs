@@ -287,3 +287,131 @@ impl std::fmt::Debug for ResolvedPath {
             .finish()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use futures::StreamExt;
+    use serde_json::json;
+    use tokio::io::AsyncReadExt;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn file_source_serializes_paths_urls_bytes_and_temp_as_stable_representations() {
+        let path = FileSource::from_path("data/file.txt");
+        assert_eq!(
+            serde_json::to_value(&path).unwrap(),
+            json!({"type":"Path","value":"data/file.txt"})
+        );
+        assert!(matches!(path.clone(), FileSource::Path(_)));
+
+        let url = FileSource::from_url("https://example.invalid/file.bin");
+        assert_eq!(
+            serde_json::to_value(&url).unwrap(),
+            json!({"type":"Url","value":"https://example.invalid/file.bin"})
+        );
+        assert!(matches!(url.clone(), FileSource::Url(_)));
+
+        let bytes = FileSource::from_bytes(Bytes::from_static(b"abc"));
+        assert_eq!(
+            serde_json::to_value(&bytes).unwrap(),
+            json!({"type":"Bytes","value":[97,98,99]})
+        );
+        assert!(matches!(bytes.clone(), FileSource::Bytes(_)));
+
+        let temp = TempFile::new().unwrap();
+        let value = serde_json::to_value(FileSource::Temp(temp)).unwrap();
+        assert_eq!(value["type"], "Path");
+
+        let decoded: FileSource =
+            serde_json::from_value(json!({"type":"Bytes","value":[1,2,3]})).unwrap();
+        assert_eq!(
+            decoded.read_all().await.unwrap(),
+            Bytes::from_static(&[1, 2, 3])
+        );
+    }
+
+    #[tokio::test]
+    async fn file_source_reads_sizes_streams_and_resolves_local_paths() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("input.txt");
+        tokio::fs::write(&path, b"path-data").await.unwrap();
+
+        let path_source = FileSource::from_path(&path);
+        assert_eq!(path_source.extension(), Some("txt"));
+        assert_eq!(path_source.size().await.unwrap(), Some(9));
+        assert_eq!(
+            path_source.read_all().await.unwrap(),
+            Bytes::from_static(b"path-data")
+        );
+        assert_eq!(
+            path_source.to_local_path().await.unwrap().path(),
+            path.as_path()
+        );
+
+        let mut reader = FileSource::from_bytes(Bytes::from_static(b"reader"))
+            .reader()
+            .await
+            .unwrap();
+        let mut data = Vec::new();
+        reader.read_to_end(&mut data).await.unwrap();
+        assert_eq!(data, b"reader");
+
+        let bytes_source = FileSource::from_bytes(Bytes::from_static(b"stream-data"));
+        let stream = bytes_source.stream().await.unwrap();
+        futures::pin_mut!(stream);
+        let mut streamed = Vec::new();
+        while let Some(chunk) = stream.next().await {
+            streamed.extend_from_slice(&chunk.unwrap());
+        }
+        assert_eq!(streamed, b"stream-data");
+        drop(stream);
+
+        let resolved = bytes_source.to_local_path().await.unwrap();
+        assert_eq!(
+            tokio::fs::read(resolved.path()).await.unwrap(),
+            b"stream-data"
+        );
+        assert!(format!("{resolved:?}").contains("ResolvedPath"));
+        assert_eq!(resolved.as_ref(), resolved.path());
+    }
+
+    #[tokio::test]
+    async fn file_source_handles_temp_url_and_missing_file_branches() {
+        let temp = TempFile::new().unwrap();
+        tokio::fs::write(temp.path(), b"temporary").await.unwrap();
+        let source = FileSource::Temp(temp);
+        assert_eq!(source.size().await.unwrap(), Some(9));
+        assert_eq!(
+            source.read_all().await.unwrap(),
+            Bytes::from_static(b"temporary")
+        );
+        assert_eq!(
+            source.to_local_path().await.unwrap().path().extension(),
+            None
+        );
+        assert!(matches!(source.clone(), FileSource::Temp(_)));
+
+        let url = FileSource::from_url("https://example.invalid/file.tar.gz?token=redacted");
+        assert_eq!(url.extension(), Some("gz"));
+        assert_eq!(url.size().await.unwrap(), None);
+        assert_eq!(
+            url.reader().await.err().unwrap().code(),
+            ErrorCode::InvalidInput
+        );
+        assert_eq!(
+            url.to_local_path().await.unwrap_err().code(),
+            ErrorCode::InvalidInput
+        );
+
+        let missing = FileSource::from_path("missing-file.bin");
+        assert_eq!(
+            missing.reader().await.err().unwrap().code(),
+            ErrorCode::NotFound
+        );
+        assert_eq!(
+            missing.size().await.unwrap_err().code(),
+            ErrorCode::NotFound
+        );
+    }
+}

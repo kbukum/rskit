@@ -87,6 +87,8 @@ tempfile = "3"
 aws-sdk-s3 = { version = "1", default-features = false, features = ["behavior-version-latest", "default-https-client", "http-1x", "rt-tokio"] }
 google-cloud-storage = "1.14"
 google-cloud-auth = { version = "1.12", default-features = false }
+google-cloud-gax = "1.11"
+rustls = "0.23"
 
 # Inference
 wiremock = "0.6"

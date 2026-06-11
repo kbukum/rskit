@@ -130,4 +130,31 @@ mod tests {
 
         assert!(error.message().contains("must not contain '..'"));
     }
+
+    #[test]
+    fn returns_empty_relative_path_for_repo_root() {
+        let root = rskit_testutil::test_workspace!("git-repo-root-relative");
+        let repo = root.path().join("repo");
+        fs::create_dir_all(&repo).expect("create repo root");
+
+        let relative = repo_relative_path(&repo, &repo).expect("repo root is inside itself");
+
+        assert_eq!(relative, std::path::Path::new(""));
+    }
+
+    #[test]
+    fn rejects_missing_or_external_paths_with_actionable_errors() {
+        let root = rskit_testutil::test_workspace!("git-repo-relative-errors");
+        let repo = root.path().join("repo");
+        let outside = root.path().join("outside");
+        fs::create_dir_all(&repo).expect("create repo root");
+        fs::create_dir_all(&outside).expect("create outside dir");
+
+        let missing =
+            repo_relative_path(&repo, &repo.join("missing")).expect_err("missing path fails");
+        assert!(missing.message().contains("failed to resolve path"));
+
+        let external = repo_relative_path(&repo, &outside).expect_err("external path fails");
+        assert!(external.message().contains("is not inside git root"));
+    }
 }

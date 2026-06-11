@@ -81,3 +81,40 @@ fn validate_json_value(value: &Value, depth: usize) -> AppResult<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn validate_json_record_rejects_oversized_strings_directly() {
+        let value = json!({"blob": "x".repeat(MAX_JSON_STRING_BYTES + 1)});
+
+        let err = validate_json_record(&value).unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+        assert!(err.to_string().contains("JSON string"));
+    }
+
+    #[test]
+    fn validate_json_record_covers_object_array_depth_and_scalar_paths() {
+        assert!(validate_json_record(&json!({"ok": [true, null, 1, "x"]})).is_ok());
+
+        let too_many_fields = Value::Object(
+            (0..=MAX_JSON_OBJECT_FIELDS)
+                .map(|idx| (format!("f{idx}"), Value::Null))
+                .collect(),
+        );
+        let err = validate_json_record(&too_many_fields).unwrap_err();
+        assert!(err.to_string().contains("fields"));
+
+        let too_many_items = json!({"items": vec![Value::Null; MAX_JSON_ARRAY_ITEMS + 1]});
+        let err = validate_json_record(&too_many_items).unwrap_err();
+        assert!(err.to_string().contains("array"));
+
+        let deep = (0..=MAX_JSON_DEPTH + 1).fold(Value::Null, |inner, _| json!([inner]));
+        let err = validate_json_record(&deep).unwrap_err();
+        assert!(err.to_string().contains("nesting"));
+    }
+}

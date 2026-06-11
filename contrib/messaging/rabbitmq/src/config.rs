@@ -367,3 +367,42 @@ fn validate_adapter(adapter: &str) -> AppResult<()> {
 fn invalid(message: impl Into<String>) -> AppResult<()> {
     Err(AppError::new(ErrorCode::InvalidInput, message.into()))
 }
+
+#[cfg(test)]
+mod tests {
+    use rskit_messaging::BrokerConfigExt;
+
+    use super::*;
+
+    #[test]
+    fn broker_config_ext_exposes_shared_base() {
+        let config = RabbitMqConfig::default();
+
+        assert_eq!(config.base().adapter, ADAPTER_NAME);
+    }
+
+    #[test]
+    fn rabbitmq_debug_keeps_credential_free_uris_unchanged() {
+        let without_scheme = RabbitMqConfig {
+            uri: "rabbit.example.test/%2f".to_string(),
+            allow_insecure_dev: true,
+            ..RabbitMqConfig::default()
+        };
+        assert!(format!("{without_scheme:?}").contains("rabbit.example.test/%2f"));
+
+        let without_credentials = RabbitMqConfig {
+            uri: "amqps://rabbit.example.test/%2f".to_string(),
+            ..RabbitMqConfig::default()
+        };
+        assert!(format!("{without_credentials:?}").contains("amqps://rabbit.example.test/%2f"));
+    }
+
+    #[test]
+    fn rabbitmq_uri_credential_detection_requires_url_authority() {
+        assert!(!has_url_credentials("rabbit.example.test/%2f"));
+        assert!(!has_url_credentials("amqps://rabbit.example.test/%2f"));
+        assert!(has_url_credentials(
+            "amqps://user:secret@rabbit.example.test/%2f"
+        ));
+    }
+}

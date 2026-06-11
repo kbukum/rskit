@@ -128,3 +128,133 @@ impl StorageFactory for LocalFactory {
 pub fn register_local(registry: &mut StorageRegistry) -> AppResult<()> {
     registry.register("local", Arc::new(LocalFactory))
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use bytes::Bytes;
+
+    use super::*;
+    use crate::FileSource;
+
+    struct CountingFactory {
+        calls: Arc<AtomicUsize>,
+    }
+
+    #[async_trait::async_trait]
+    impl StorageFactory for CountingFactory {
+        async fn create(&self, _config: &StorageConfig) -> AppResult<Arc<dyn FileStore>> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            Ok(Arc::new(LocalStore::new(LocalStoreConfig::default())?))
+        }
+    }
+
+    #[tokio::test]
+    async fn registry_registers_and_builds_explicit_factories() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let mut registry = StorageRegistry::new();
+        assert!(registry.is_empty());
+        assert_eq!(registry.len(), 0);
+
+        registry
+            .register(
+                " memory ",
+                Arc::new(CountingFactory {
+                    calls: Arc::clone(&calls),
+                }),
+            )
+            .unwrap();
+
+        assert!(registry.contains("memory"));
+        assert_eq!(registry.len(), 1);
+        let store = registry
+            .build(&StorageConfig {
+                backend: "memory".to_string(),
+                local: LocalStoreConfig::default(),
+            })
+            .await
+            .unwrap();
+        store
+            .upload(
+                &FileSource::from_bytes(Bytes::from_static(b"data")),
+                "item.bin",
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn registry_rejects_empty_duplicate_and_missing_backends() {
+        let mut registry = StorageRegistry::new();
+        let factory = Arc::new(CountingFactory {
+            calls: Arc::new(AtomicUsize::new(0)),
+        });
+
+        assert_eq!(
+            registry.register(" ", factory.clone()).unwrap_err().code(),
+            ErrorCode::InvalidInput
+        );
+        registry.register("local", factory.clone()).unwrap();
+        assert_eq!(
+            registry.register("local", factory).unwrap_err().code(),
+            ErrorCode::AlreadyExists
+        );
+        assert_eq!(
+            registry
+                .build(&StorageConfig {
+                    backend: " ".to_string(),
+                    local: LocalStoreConfig::default(),
+                })
+                .await
+                .err()
+                .unwrap()
+                .code(),
+            ErrorCode::InvalidInput
+        );
+        assert_eq!(
+            registry
+                .build(&StorageConfig {
+                    backend: "missing".to_string(),
+                    local: LocalStoreConfig::default(),
+                })
+                .await
+                .err()
+                .unwrap()
+                .code(),
+            ErrorCode::NotFound
+        );
+    }
+
+    #[tokio::test]
+    async fn local_registration_builds_local_store_from_config() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut registry = StorageRegistry::new();
+        register_local(&mut registry).unwrap();
+
+        let store = registry
+            .build(&StorageConfig {
+                backend: "local".to_string(),
+                local: LocalStoreConfig {
+                    root_dir: dir.path().to_path_buf(),
+                    auto_create: false,
+                },
+            })
+            .await
+            .unwrap();
+
+        store
+            .upload(
+                &FileSource::from_bytes(Bytes::from_static(b"local")),
+                "local.bin",
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert!(dir.path().join("local.bin").exists());
+    }
+}

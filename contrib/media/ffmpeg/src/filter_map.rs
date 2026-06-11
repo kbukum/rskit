@@ -540,4 +540,244 @@ mod tests {
         let f = video_filter("custom_unknown", Params::new());
         assert_eq!(to_ffmpeg_filter(&f), "custom_unknown");
     }
+
+    #[test]
+    fn video_filter_catalog_maps_color_geometry_text_and_timing_filters() {
+        let cases = [
+            (
+                "removegrain",
+                Params::new().set("mode", ParamValue::Int(2)),
+                "removegrain=m=2",
+            ),
+            (
+                "deflicker",
+                Params::new().set("size", ParamValue::Int(0)),
+                "deflicker=s=1",
+            ),
+            (
+                "contrast",
+                Params::new().set("value", ParamValue::Float(1.25)),
+                "eq=contrast=1.25",
+            ),
+            (
+                "saturation",
+                Params::new().set("value", ParamValue::Float(0.8)),
+                "eq=saturation=0.8",
+            ),
+            (
+                "gamma",
+                Params::new().set("value", ParamValue::Float(1.1)),
+                "eq=gamma=1.1",
+            ),
+            (
+                "hue",
+                Params::new().set("degrees", ParamValue::Int(15)),
+                "hue=h=15",
+            ),
+            ("invert", Params::new(), "negate"),
+            (
+                "colorbalance",
+                Params::new()
+                    .set("rs", ParamValue::Float(0.1))
+                    .set("gs", ParamValue::Float(0.2))
+                    .set("bs", ParamValue::Float(0.3)),
+                "colorbalance=rs=0.1:gs=0.2:bs=0.3",
+            ),
+            (
+                "curves",
+                Params::new().set("preset", ParamValue::Str("strong_contrast".into())),
+                "curves=preset=strong_contrast",
+            ),
+            ("curves", Params::new(), "curves"),
+            ("normalize", Params::new(), "normalize"),
+            (
+                "lut3d",
+                Params::new().set("file", ParamValue::Str("look.cube".into())),
+                "lut3d='look.cube'",
+            ),
+            (
+                "chromakey",
+                Params::new()
+                    .set("color", ParamValue::Str("green".into()))
+                    .set("similarity", ParamValue::Float(0.2))
+                    .set("blend", ParamValue::Float(0.1)),
+                "chromakey=green:0.2:0.1",
+            ),
+            (
+                "colorkey",
+                Params::new()
+                    .set("color", ParamValue::Str("blue".into()))
+                    .set("similarity", ParamValue::Float(0.3))
+                    .set("blend", ParamValue::Float(0.4)),
+                "colorkey=blue:0.3:0.4",
+            ),
+            (
+                "vignette",
+                Params::new().set("angle", ParamValue::Float(0.7)),
+                "vignette=a=0.7",
+            ),
+            ("vignette", Params::new(), "vignette"),
+            (
+                "lenscorrection",
+                Params::new()
+                    .set("k1", ParamValue::Float(0.01))
+                    .set("k2", ParamValue::Float(-0.02)),
+                "lenscorrection=k1=0.01:k2=-0.02",
+            ),
+            (
+                "drawtext",
+                Params::new()
+                    .set("text", ParamValue::Str("hello".into()))
+                    .set("x", ParamValue::Str("10".into()))
+                    .set("y", ParamValue::Str("20".into()))
+                    .set("fontsize", ParamValue::Float(24.9))
+                    .set("fontcolor", ParamValue::Str("yellow".into())),
+                "drawtext=text='hello':x=10:y=20:fontsize=24:fontcolor=yellow",
+            ),
+            (
+                "drawbox",
+                Params::new()
+                    .set("x", ParamValue::Int(1))
+                    .set("y", ParamValue::Int(2))
+                    .set("w", ParamValue::Int(3))
+                    .set("h", ParamValue::Int(4))
+                    .set("color", ParamValue::Str("white".into()))
+                    .set("thickness", ParamValue::Str("fill".into())),
+                "drawbox=x=1:y=2:w=3:h=4:color=white:t=fill",
+            ),
+            (
+                "fade",
+                Params::new()
+                    .set("type", ParamValue::Str("out".into()))
+                    .set("start", ParamValue::Float(2.0))
+                    .set("duration", ParamValue::Float(0.5)),
+                "fade=t=out:st=2:d=0.5",
+            ),
+            (
+                "fps",
+                Params::new().set("rate", ParamValue::Int(30)),
+                "fps=30",
+            ),
+            (
+                "minterpolate",
+                Params::new()
+                    .set("fps", ParamValue::Int(60))
+                    .set("mi_mode", ParamValue::Str("blend".into())),
+                "minterpolate=fps=60:mi_mode=blend",
+            ),
+            (
+                "tile",
+                Params::new()
+                    .set("cols", ParamValue::Int(3))
+                    .set("rows", ParamValue::Int(2)),
+                "tile=3x2",
+            ),
+        ];
+
+        for (name, params, expected) in cases {
+            assert_eq!(to_ffmpeg_filter(&video_filter(name, params)), expected);
+        }
+    }
+
+    #[test]
+    fn audio_filter_catalog_maps_eq_dynamics_noise_loudness_and_format_filters() {
+        let cases = [
+            (
+                "equalizer",
+                Params::new()
+                    .set("frequency", ParamValue::Int(1000))
+                    .set("width", ParamValue::Float(2.0))
+                    .set("gain", ParamValue::Float(3.5)),
+                "equalizer=f=1000:width_type=h:width=2:gain=3.5",
+            ),
+            (
+                "limiter",
+                Params::new().set("limit", ParamValue::Float(0.95)),
+                "alimiter=limit=0.95",
+            ),
+            (
+                "gate",
+                Params::new()
+                    .set("threshold", ParamValue::Float(-35.0))
+                    .set("ratio", ParamValue::Float(2.0)),
+                "agate=threshold=-35:ratio=2",
+            ),
+            (
+                "noise_reduction",
+                Params::new().set("amount", ParamValue::Float(0.4)),
+                "afftdn=nf=-10",
+            ),
+            (
+                "silenceremove",
+                Params::new()
+                    .set("threshold", ParamValue::Str("-45dB".into()))
+                    .set("duration", ParamValue::Float(0.25)),
+                "silenceremove=start_periods=1:start_silence=0.25:start_threshold=-45dB",
+            ),
+            (
+                "silencedetect",
+                Params::new()
+                    .set("noise", ParamValue::Str("-42dB".into()))
+                    .set("duration", ParamValue::Float(0.5)),
+                "silencedetect=noise=-42dB:d=0.5",
+            ),
+            (
+                "loudnorm",
+                Params::new()
+                    .set("I", ParamValue::Float(-16.0))
+                    .set("TP", ParamValue::Float(-1.5))
+                    .set("LRA", ParamValue::Float(11.0)),
+                "loudnorm=I=-16:TP=-1.5:LRA=11",
+            ),
+            ("loudnorm", Params::new(), "loudnorm"),
+            (
+                "echo",
+                Params::new()
+                    .set("in_gain", ParamValue::Float(0.8))
+                    .set("out_gain", ParamValue::Float(0.9))
+                    .set("delays", ParamValue::Int(60))
+                    .set("decays", ParamValue::Float(0.4)),
+                "aecho=0.8:0.9:60:0.4",
+            ),
+            (
+                "delay",
+                Params::new().set("ms", ParamValue::Int(250)),
+                "adelay=250|250",
+            ),
+            (
+                "aformat",
+                Params::new()
+                    .set("sample_rate", ParamValue::Str("48000".into()))
+                    .set("channel_layout", ParamValue::Str("stereo".into())),
+                "aformat=sample_rates=48000:channel_layouts=stereo",
+            ),
+            (
+                "aresample",
+                Params::new().set("rate", ParamValue::Int(48_000)),
+                "aresample=48000",
+            ),
+            (
+                "channelmap",
+                Params::new().set("map", ParamValue::Str("0-1|1-0".into())),
+                "channelmap=map=0-1|1-0",
+            ),
+            (
+                "stereotools",
+                Params::new().set("balance", ParamValue::Float(-0.2)),
+                "stereotools=balance_out=-0.2",
+            ),
+            ("volumedetect", Params::new(), "volumedetect"),
+            ("astats", Params::new(), "astats"),
+        ];
+
+        for (name, params, expected) in cases {
+            assert_eq!(to_ffmpeg_filter(&audio_filter(name, params)), expected);
+        }
+    }
+
+    #[test]
+    fn unknown_audio_filters_pass_through_verbatim() {
+        let f = audio_filter("custom_audio", Params::new());
+        assert_eq!(to_ffmpeg_filter(&f), "custom_audio");
+    }
 }

@@ -88,3 +88,47 @@ fn signal_target(pid: u32, signal: ProcessSignal, process_group: bool) -> bool {
         false
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::process::Stdio;
+    use std::time::Duration;
+
+    use super::*;
+
+    #[test]
+    fn process_group_helpers_reject_zero_pid() {
+        assert!(!interrupt(0));
+        assert!(!terminate(0));
+        assert!(!kill(0));
+        assert!(!terminate_target(0, false));
+        assert!(!kill_target(0, false));
+    }
+
+    #[test]
+    fn terminate_and_kill_targets_can_signal_child_processes() {
+        let mut terminate_child = StdCommand::new("python3")
+            .args(["-c", "import time; time.sleep(30)"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let terminate_pid = terminate_child.id();
+        assert!(terminate_target(terminate_pid, false));
+        let _ = terminate_child.wait().unwrap();
+
+        let mut kill_child = StdCommand::new("python3")
+            .args(["-c", "import time; time.sleep(30)"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let kill_pid = kill_child.id();
+        assert!(kill_target(kill_pid, false));
+        let _ = kill_child.wait().unwrap();
+
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}

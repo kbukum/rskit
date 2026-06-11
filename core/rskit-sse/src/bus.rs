@@ -235,6 +235,18 @@ mod tests {
         msg: String,
     }
 
+    #[derive(Clone, Debug)]
+    struct FailingEvent;
+
+    impl Serialize for FailingEvent {
+        fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            Err(serde::ser::Error::custom("synthetic serialization failure"))
+        }
+    }
+
     #[tokio::test]
     async fn publish_and_subscribe() {
         let bus = SseBus::new(16).unwrap();
@@ -271,5 +283,50 @@ mod tests {
         let mut stream = std::pin::pin!(bus.subscribe_after(Some(&first.id)));
         let replayed = stream.next().await.expect("replayed").unwrap();
         assert_eq!(replayed.id, second.id);
+    }
+
+    #[test]
+    fn capacity_above_maximum_is_rejected() {
+        match SseBus::<TestEvent>::new(MAX_CAPACITY + 1) {
+            Ok(_) => panic!("capacity above maximum should fail"),
+            Err(error) => assert!(error.to_string().contains("at most")),
+        }
+    }
+
+    #[test]
+    fn event_to_axum_includes_optional_metadata() {
+        let event = SseEvent {
+            id: "42".to_string(),
+            event: Some("message".to_string()),
+            retry: Some(Duration::from_millis(250)),
+            data: TestEvent { msg: "ok".into() },
+        };
+
+        assert!(event.into_axum_event().is_ok());
+    }
+
+    #[test]
+    fn event_to_axum_reports_serialization_failures() {
+        let event = SseEvent {
+            id: "1".to_string(),
+            event: None,
+            retry: None,
+            data: FailingEvent,
+        };
+
+        let err = event.into_axum_event().unwrap_err();
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+        assert!(err.to_string().contains("failed to serialize"));
+    }
+
+    #[tokio::test]
+    async fn axum_stream_replays_and_skips_unserializable_events() {
+        let bus = SseBus::new(4).unwrap().with_retry(Duration::from_secs(1));
+        let first = bus.publish(TestEvent { msg: "one".into() }).unwrap();
+        bus.publish(TestEvent { msg: "two".into() }).unwrap();
+
+        let mut stream = std::pin::pin!(bus.subscribe_axum_after(Some(&first.id)));
+        let event = stream.next().await.expect("axum replay").unwrap();
+        drop(event);
     }
 }

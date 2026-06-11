@@ -242,8 +242,12 @@ fn prepare_output_path(
 #[cfg(test)]
 mod tests {
     use rskit_storage::{FileSink, TempDir};
+    use tokio_util::sync::CancellationToken;
 
     use super::*;
+
+    #[cfg(unix)]
+    use crate::test_support::write_executable_script as write_script;
 
     #[test]
     fn prepare_output_path_confines_user_sink_paths() {
@@ -303,5 +307,53 @@ mod tests {
     fn test_not_av1_decode_failure_unrelated() {
         let stderr = "Error muxing: permission denied";
         assert!(!FfmpegExecutor::is_av1_decode_failure(stderr));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn software_av1_decoder_prefers_libdav1d_from_decoder_listing() {
+        let script = write_script("printf ' V..... libaom-av1\\n V..... libdav1d\\n'");
+        let config = FfmpegConfig::default().with_ffmpeg_path(script.path());
+
+        let decoder = FfmpegExecutor::find_sw_av1_decoder(&config, CancellationToken::new())
+            .await
+            .unwrap();
+
+        assert_eq!(decoder.as_deref(), Some("libdav1d"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn software_av1_decoder_falls_back_to_libaom_then_none() {
+        let script = write_script("printf ' V..... libaom-av1\\n'");
+        let config = FfmpegConfig::default().with_ffmpeg_path(script.path());
+
+        let decoder = FfmpegExecutor::find_sw_av1_decoder(&config, CancellationToken::new())
+            .await
+            .unwrap();
+
+        assert_eq!(decoder.as_deref(), Some("libaom-av1"));
+
+        let empty_script = write_script("printf ' V..... h264\\n'");
+        let config = FfmpegConfig::default().with_ffmpeg_path(empty_script.path());
+
+        let decoder = FfmpegExecutor::find_sw_av1_decoder(&config, CancellationToken::new())
+            .await
+            .unwrap();
+
+        assert_eq!(decoder, None);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn software_av1_decoder_reports_query_failures() {
+        let missing = TempDir::new().unwrap().path().join("missing-ffmpeg");
+        let config = FfmpegConfig::default().with_ffmpeg_path(&missing);
+
+        let error = FfmpegExecutor::find_sw_av1_decoder(&config, CancellationToken::new())
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.code(), ErrorCode::Internal);
     }
 }
