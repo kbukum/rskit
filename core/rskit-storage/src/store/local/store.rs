@@ -378,3 +378,203 @@ impl FileStore for LocalStore {
         self.head(to_key).await
     }
 }
+
+#[cfg(test)]
+mod focused_tests {
+    use super::*;
+    use tokio::io::{AsyncRead, ReadBuf};
+
+    struct FailingReader;
+
+    impl AsyncRead for FailingReader {
+        fn poll_read(
+            self: std::pin::Pin<&mut Self>,
+            _cx: &mut std::task::Context<'_>,
+            _buf: &mut ReadBuf<'_>,
+        ) -> std::task::Poll<std::io::Result<()>> {
+            std::task::Poll::Ready(Err(std::io::Error::other("read failed")))
+        }
+    }
+
+    fn store_at(root: &Path) -> LocalStore {
+        LocalStore::new(LocalStoreConfig {
+            root_dir: root.to_path_buf(),
+            auto_create: true,
+        })
+        .unwrap()
+    }
+
+    #[test]
+    fn inspect_existing_file_error_maps_not_found_and_internal_causes() {
+        let not_found = LocalStore::inspect_existing_file_error(
+            "missing",
+            Path::new("missing"),
+            std::io::Error::new(std::io::ErrorKind::NotFound, "gone"),
+        );
+        assert_eq!(not_found.code(), ErrorCode::NotFound);
+
+        let denied = LocalStore::inspect_existing_file_error(
+            "blocked",
+            Path::new("blocked"),
+            std::io::Error::new(std::io::ErrorKind::PermissionDenied, "denied"),
+        );
+        assert_eq!(denied.code(), ErrorCode::Internal);
+        assert!(
+            denied
+                .to_string()
+                .contains("failed to inspect storage file")
+        );
+    }
+
+    #[test]
+    fn new_rejects_missing_root_when_auto_create_is_disabled() {
+        let root = tempfile::tempdir().unwrap();
+        let missing = root.path().join("missing");
+        let err = match LocalStore::new(LocalStoreConfig {
+            root_dir: missing,
+            auto_create: false,
+        }) {
+            Ok(_) => panic!("missing root should be rejected"),
+            Err(err) => err,
+        };
+
+        assert_eq!(err.code(), ErrorCode::NotFound);
+        assert!(err.to_string().contains("store root"));
+    }
+
+    #[tokio::test]
+    async fn private_path_flows_cover_directory_presign_and_stream_cleanup_errors() {
+        let root = tempfile::tempdir().unwrap();
+        let store = store_at(root.path());
+        std::fs::create_dir(root.path().join("dir")).unwrap();
+
+        assert!(
+            store
+                .confined_existing_dir_path("missing")
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            store
+                .confined_existing_dir_path("dir")
+                .await
+                .unwrap()
+                .is_some()
+        );
+        assert_eq!(
+            store
+                .confined_presigned_path("dir")
+                .await
+                .unwrap_err()
+                .code(),
+            ErrorCode::NotFound
+        );
+
+        let mut reader = FailingReader;
+        let target = root.path().join("failed.bin");
+        let err = store
+            .stream_to_target(&mut reader, &target)
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::Internal);
+        assert!(err.to_string().contains("failed to stream"));
+        assert!(!target.exists());
+    }
+
+    #[tokio::test]
+    async fn upload_copy_and_rename_normalize_keys_and_preserve_metadata_paths() {
+        let root = tempfile::tempdir().unwrap();
+        let store = store_at(root.path());
+        let source = FileSource::from_bytes(bytes::Bytes::from_static(b"data"));
+        let metadata = [("owner".to_string(), "dataset".to_string())]
+            .into_iter()
+            .collect();
+
+        let stored = store
+            .upload(
+                &source,
+                "/nested/item.txt",
+                Some("text/plain"),
+                Some(metadata),
+            )
+            .await
+            .unwrap();
+        assert_eq!(stored.key, "nested/item.txt");
+        assert_eq!(
+            stored.metadata.get("owner").map(String::as_str),
+            Some("dataset")
+        );
+
+        let copied = store.copy("nested/item.txt", "copy.txt").await.unwrap();
+        assert_eq!(copied.key, "copy.txt");
+        let renamed = store.rename("copy.txt", "renamed.txt").await.unwrap();
+        assert_eq!(renamed.key, "renamed.txt");
+        assert!(store.exists("renamed.txt").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn download_head_list_presign_progress_and_delete_cover_local_store_contract() {
+        let root = tempfile::tempdir().unwrap();
+        let store = store_at(root.path());
+        let source = FileSource::from_bytes(bytes::Bytes::from_static(b"hello"));
+
+        let uploaded = store
+            .upload_with_progress(
+                &source,
+                "dir/hello.txt",
+                Some("text/plain"),
+                std::sync::Arc::new(|_| {}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(uploaded.size, 5);
+
+        let head = store.head("dir/hello.txt").await.unwrap();
+        assert_eq!(head.key, "dir/hello.txt");
+        assert_eq!(head.size, 5);
+        assert!(head.content_type.contains("text"));
+
+        let downloaded = store.download("dir/hello.txt").await.unwrap();
+        assert!(matches!(downloaded, FileSource::Path(_)));
+        let listed = store.list("dir", Some(1)).await.unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].key, "dir/hello.txt");
+        assert!(store.list("missing", None).await.unwrap().is_empty());
+
+        let existing_url = store
+            .presigned_url("dir/hello.txt", Duration::from_secs(60))
+            .await
+            .unwrap();
+        assert!(existing_url.starts_with("file://"));
+        let missing_url = store
+            .presigned_url("dir/new.txt", Duration::from_secs(60))
+            .await
+            .unwrap();
+        assert!(missing_url.ends_with("dir/new.txt"));
+
+        store.delete("dir/hello.txt").await.unwrap();
+        assert!(!store.exists("dir/hello.txt").await.unwrap());
+        assert_eq!(
+            store.delete("dir/hello.txt").await.unwrap_err().code(),
+            ErrorCode::NotFound
+        );
+    }
+
+    #[tokio::test]
+    async fn file_operations_reject_directory_keys_as_missing_files() {
+        let root = tempfile::tempdir().unwrap();
+        let store = store_at(root.path());
+        std::fs::create_dir_all(root.path().join("dir")).unwrap();
+
+        assert_eq!(
+            store.download("dir").await.unwrap_err().code(),
+            ErrorCode::NotFound
+        );
+        assert_eq!(
+            store.head("dir").await.unwrap_err().code(),
+            ErrorCode::NotFound
+        );
+        assert!(!store.exists("dir").await.unwrap());
+    }
+}

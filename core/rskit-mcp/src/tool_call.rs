@@ -210,3 +210,49 @@ fn denied_message(reason: &str) -> String {
         format!("tool call denied: {reason}")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use rskit_tool::Registry;
+
+    use crate::config::ServerConfig;
+    use crate::server::create_server;
+
+    use super::*;
+
+    #[test]
+    fn prefix_and_allow_list_helpers_are_exact() {
+        let handler = create_server(
+            "test",
+            "0.1.0",
+            Arc::new(Registry::new()),
+            ServerConfig {
+                prefix: "pre_".to_string(),
+                allowed_tools: vec!["echo".to_string()],
+                ..Default::default()
+            },
+        );
+
+        assert_eq!(handler.strip_prefix("pre_echo"), "echo");
+        assert_eq!(handler.strip_prefix("other_echo"), "other_echo");
+        assert!(handler.allows_tool("echo"));
+        assert!(!handler.allows_tool("missing"));
+
+        let open = create_server(
+            "test",
+            "0.1.0",
+            Arc::new(Registry::new()),
+            Default::default(),
+        );
+        assert_eq!(open.strip_prefix("echo"), "echo");
+        assert!(open.allows_tool("anything"));
+    }
+
+    #[test]
+    fn denied_message_omits_empty_reason() {
+        assert_eq!(denied_message(""), "tool call denied");
+        assert_eq!(denied_message("policy"), "tool call denied: policy");
+    }
+}

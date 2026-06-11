@@ -225,3 +225,151 @@ impl From<GitError> for AppError {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn git_errors_map_to_actionable_app_error_codes() {
+        let cases = [
+            (
+                GitError::NotFound {
+                    path: PathBuf::from("repo"),
+                },
+                ErrorCode::NotFound,
+            ),
+            (
+                GitError::RefNotFound {
+                    refname: "main".to_string(),
+                },
+                ErrorCode::NotFound,
+            ),
+            (
+                GitError::RemoteNotFound {
+                    name: "origin".to_string(),
+                },
+                ErrorCode::NotFound,
+            ),
+            (
+                GitError::ConfigNotFound {
+                    key: "user.name".to_string(),
+                },
+                ErrorCode::NotFound,
+            ),
+            (
+                GitError::AmbiguousRef {
+                    refname: "feature".to_string(),
+                },
+                ErrorCode::InvalidInput,
+            ),
+            (
+                GitError::AlreadyExists {
+                    kind: "branch",
+                    name: "main".to_string(),
+                },
+                ErrorCode::AlreadyExists,
+            ),
+            (
+                GitError::CheckedOutBranch {
+                    name: "main".to_string(),
+                },
+                ErrorCode::Conflict,
+            ),
+            (
+                GitError::Conflict {
+                    path: PathBuf::from("src/lib.rs"),
+                },
+                ErrorCode::Conflict,
+            ),
+            (GitError::DetachedHead, ErrorCode::InvalidInput),
+            (
+                GitError::InvalidLineRange { start: 5, end: 3 },
+                ErrorCode::InvalidInput,
+            ),
+            (
+                GitError::InvalidPath {
+                    path: "../outside".to_string(),
+                },
+                ErrorCode::InvalidInput,
+            ),
+            (
+                GitError::InvalidConfigKey {
+                    key: "bad key".to_string(),
+                },
+                ErrorCode::InvalidInput,
+            ),
+            (
+                GitError::NoMergeBase {
+                    a: "a".to_string(),
+                    b: "b".to_string(),
+                },
+                ErrorCode::NotFound,
+            ),
+            (GitError::SigningNotSupported, ErrorCode::InvalidInput),
+            (
+                GitError::InvalidTransport {
+                    kind: "ssh".to_string(),
+                },
+                ErrorCode::InvalidInput,
+            ),
+            (
+                GitError::Network("offline".to_string()),
+                ErrorCode::ExternalService,
+            ),
+            (
+                GitError::CommandFailed {
+                    args: vec!["status".to_string()],
+                    exit_code: Some(128),
+                    stdout: "partial stdout".to_string(),
+                    stderr: "fatal".to_string(),
+                    stdout_truncated: true,
+                    stderr_truncated: false,
+                },
+                ErrorCode::ExternalService,
+            ),
+            (
+                GitError::InvalidOid {
+                    value: "not-a-sha".to_string(),
+                },
+                ErrorCode::InvalidInput,
+            ),
+            (
+                GitError::NotImplemented { operation: "sign" },
+                ErrorCode::InvalidInput,
+            ),
+            (
+                GitError::Internal(git2::Error::from_str("git2 failed")),
+                ErrorCode::Internal,
+            ),
+        ];
+
+        for (git_error, expected) in cases {
+            let app_error = AppError::from(git_error);
+            assert_eq!(app_error.code(), expected);
+        }
+    }
+
+    #[test]
+    fn command_failure_message_includes_diagnostics() {
+        let app_error = AppError::from(GitError::CommandFailed {
+            args: vec!["push".to_string(), "origin".to_string()],
+            exit_code: Some(1),
+            stdout: "hint".to_string(),
+            stderr: "denied".to_string(),
+            stdout_truncated: false,
+            stderr_truncated: true,
+        });
+
+        let detail = app_error
+            .cause()
+            .as_ref()
+            .map(ToString::to_string)
+            .unwrap_or_else(|| app_error.message().to_string());
+        assert!(detail.contains("push origin"));
+        assert!(detail.contains("denied"));
+        assert!(detail.contains("exit code: 1"));
+        assert!(detail.contains("stderr_truncated: true"));
+        assert!(detail.contains("stdout: hint"));
+    }
+}

@@ -368,3 +368,64 @@ fn terminate_process(pid: Option<u32>, config: &ProcessConfig, signal: i32) -> b
     }
     false
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{CapturedIo, ProcessIo};
+
+    #[test]
+    fn stdio_helpers_map_input_and_output_policies() {
+        assert!(pipe_stdin_stdio(&InputPolicy::Closed).is_ok());
+        assert!(pipe_stdin_stdio(&InputPolicy::Bytes(b"x".to_vec())).is_ok());
+        assert_eq!(
+            pipe_stdin_stdio(&InputPolicy::Inherit).unwrap_err().code(),
+            ErrorCode::InvalidInput
+        );
+
+        let captured = OutputPolicy::captured();
+        let _ = stdout_stdio(Some(&captured));
+        let _ = stderr_stdio(Some(&captured));
+        let discarded = OutputPolicy::observe_only();
+        let _ = stdout_stdio(Some(&discarded));
+        let _ = stderr_stdio(Some(&discarded));
+        let _ = stdout_stdio(None);
+        let _ = stderr_stdio(None);
+        let _ = stdin_stdio(&InputPolicy::Closed);
+        let _ = stdin_stdio(&InputPolicy::Bytes(Vec::new()));
+        let _ = stdin_stdio(&InputPolicy::Inherit);
+    }
+
+    #[test]
+    fn inherited_config_disables_descendant_signalling_and_join_none_is_ok() {
+        let config = ProcessConfig::default()
+            .with_io(ProcessIo::captured(CapturedIo::new()))
+            .with_timeout(None);
+        let inherited = inherited_config(&config);
+
+        assert!(!inherited.signal.create_process_group);
+        assert!(!inherited.signal.terminate_descendants);
+        assert_eq!(inherited.timeout, None);
+        join_stdin(None).unwrap();
+        let output = join_reader(None).unwrap();
+        assert!(output.bytes.is_empty());
+        assert!(!output.truncated);
+        assert!(!terminate_process(None, &config, libc::SIGTERM));
+    }
+
+    #[test]
+    fn append_bounded_preserves_separator_and_reports_truncation() {
+        let mut bytes = b"abc".to_vec();
+        assert!(!append_bounded(&mut bytes, b"def", None));
+        assert_eq!(bytes, b"abc\ndef");
+
+        let mut limited = b"abc".to_vec();
+        assert!(!append_bounded(&mut limited, b"de", Some(6)));
+        assert_eq!(limited, b"abc\nde");
+        assert!(append_bounded(&mut limited, b"f", Some(6)));
+
+        let mut already_full = b"abcdef".to_vec();
+        assert!(append_bounded(&mut already_full, b"g", Some(6)));
+        assert_eq!(already_full, b"abcdef");
+    }
+}

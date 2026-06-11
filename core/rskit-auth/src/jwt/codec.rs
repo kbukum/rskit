@@ -329,4 +329,64 @@ mod tests {
 
         assert_eq!(err.code(), ErrorCode::InvalidInput);
     }
+
+    #[test]
+    fn codec_rejects_invalid_policy_and_key_material() {
+        for config in [
+            JwtConfig::hs256_internal(
+                "codec-test-secret-32-bytes-long!",
+                " \t ",
+                vec![AUDIENCE.to_owned()],
+            ),
+            JwtConfig::hs256_internal("codec-test-secret-32-bytes-long!", ISSUER, Vec::new()),
+            JwtConfig {
+                leeway: std::time::Duration::from_secs(61),
+                ..JwtConfig::hs256_internal(
+                    "codec-test-secret-32-bytes-long!",
+                    ISSUER,
+                    vec![AUDIENCE.to_owned()],
+                )
+            },
+            JwtConfig::hs256_internal("", ISSUER, vec![AUDIENCE.to_owned()]),
+            JwtConfig::hs256_internal("too-short", ISSUER, vec![AUDIENCE.to_owned()]),
+        ] {
+            assert_eq!(
+                JwtCodec::new(config).err().unwrap().code(),
+                ErrorCode::InvalidInput
+            );
+        }
+
+        let asymmetric = JwtConfig::rs256(
+            "not a private key",
+            "not a public key",
+            ISSUER,
+            vec![AUDIENCE.to_owned()],
+        );
+        assert_eq!(
+            JwtCodec::new(asymmetric).err().unwrap().code(),
+            ErrorCode::InvalidInput
+        );
+    }
+
+    #[test]
+    fn codec_rejects_algorithm_mismatch_and_malformed_header() {
+        let codec = codec();
+        let mut header = Header::new(jsonwebtoken::Algorithm::HS384);
+        header.typ = Some("JWT".to_string());
+        let token = jsonwebtoken::encode(
+            &header,
+            &claims(),
+            &EncodingKey::from_secret(b"codec-test-secret-32-bytes-long!"),
+        )
+        .unwrap();
+
+        assert_eq!(
+            codec.decode::<Claims>(&token).unwrap_err().code(),
+            ErrorCode::InvalidToken
+        );
+        assert_eq!(
+            JwtCodec::decode_header("not-a-jwt").unwrap_err().code(),
+            ErrorCode::InvalidToken
+        );
+    }
 }

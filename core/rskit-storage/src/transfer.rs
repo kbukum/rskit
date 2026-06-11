@@ -29,3 +29,79 @@ pub async fn transfer(
         .upload(&source, to_key, Some(&meta.content_type), None)
         .await
 }
+
+#[cfg(test)]
+mod tests {
+    use bytes::Bytes;
+
+    use super::*;
+    use crate::{FileStore, LocalStore, LocalStoreConfig};
+
+    #[tokio::test]
+    async fn copy_file_moves_source_bytes_to_each_sink_type() {
+        let source = FileSource::from_bytes(Bytes::from_static(b"copy-data"));
+
+        let memory = copy_file(&source, &FileSink::Memory, None).await.unwrap();
+        assert_eq!(
+            memory.read_all().await.unwrap(),
+            Bytes::from_static(b"copy-data")
+        );
+
+        let temp = copy_file(&source, &FileSink::Temp, None).await.unwrap();
+        assert_eq!(
+            temp.read_all().await.unwrap(),
+            Bytes::from_static(b"copy-data")
+        );
+
+        let dir = tempfile::tempdir().unwrap();
+        let output = dir.path().join("copied.bin");
+        let path = copy_file(&source, &FileSink::Path(output.clone()), None)
+            .await
+            .unwrap();
+        assert!(matches!(path, FileSource::Path(_)));
+        assert_eq!(tokio::fs::read(output).await.unwrap(), b"copy-data");
+    }
+
+    #[tokio::test]
+    async fn transfer_downloads_from_source_store_and_uploads_to_destination() {
+        let from_dir = tempfile::tempdir().unwrap();
+        let to_dir = tempfile::tempdir().unwrap();
+        let from_store = LocalStore::new(LocalStoreConfig {
+            root_dir: from_dir.path().to_path_buf(),
+            auto_create: false,
+        })
+        .unwrap();
+        let to_store = LocalStore::new(LocalStoreConfig {
+            root_dir: to_dir.path().to_path_buf(),
+            auto_create: false,
+        })
+        .unwrap();
+
+        from_store
+            .upload(
+                &FileSource::from_bytes(Bytes::from_static(b"transfer-data")),
+                "source.bin",
+                Some("application/custom"),
+                None,
+            )
+            .await
+            .unwrap();
+
+        let stored = transfer(&from_store, "source.bin", &to_store, "nested/target.bin")
+            .await
+            .unwrap();
+
+        assert_eq!(stored.key, "nested/target.bin");
+        assert_eq!(stored.content_type, "application/octet-stream");
+        assert_eq!(
+            to_store
+                .download("nested/target.bin")
+                .await
+                .unwrap()
+                .read_all()
+                .await
+                .unwrap(),
+            Bytes::from_static(b"transfer-data")
+        );
+    }
+}

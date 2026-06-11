@@ -1,7 +1,7 @@
 use parking_lot::Mutex;
 use rskit_config::{
-    AppConfig, ConfigLoader, ConfigMapSource, DotenvFileSource, Environment, LogFormat,
-    SecretString, ServiceConfig, load_config,
+    AppConfig, ConfigLoader, ConfigMapSource, DotenvFileSource, Environment, EnvironmentSource,
+    LogFormat, SecretString, ServiceConfig, TomlFileSource, load_config,
 };
 use rskit_validation::Validate;
 use serde::Deserialize;
@@ -58,6 +58,11 @@ struct SecretConfig {
     api_token: SecretString,
 }
 
+#[derive(Debug, Deserialize)]
+struct NameOnlyConfig {
+    name: String,
+}
+
 impl rskit_config::AppConfig for DefaultApplyConfig {
     fn apply_defaults(&mut self) {
         if self.grpc_port == 0 {
@@ -91,6 +96,12 @@ impl Validate for ToolConfig {
 }
 
 impl Validate for SecretConfig {
+    fn validate(&self) -> Result<(), validator::ValidationErrors> {
+        Ok(())
+    }
+}
+
+impl Validate for NameOnlyConfig {
     fn validate(&self) -> Result<(), validator::ValidationErrors> {
         Ok(())
     }
@@ -210,6 +221,46 @@ fn dotenv_source_deserializes_secret_string_without_mutating_environment() {
 
     assert_eq!(cfg.api_token.expose(), "dotenv-secret");
     assert!(std::env::var("API_TOKEN").is_err());
+}
+
+#[test]
+fn required_dotenv_source_rejects_malformed_files() {
+    let dir = tempfile::tempdir().unwrap();
+    let env_path = dir.path().join(".env");
+    std::fs::write(&env_path, b"not valid dotenv\n").unwrap();
+
+    let err = ConfigLoader::custom()
+        .with_source(DotenvFileSource::required(&env_path, ""))
+        .load::<NameOnlyConfig>()
+        .expect_err("required dotenv parsing should fail closed");
+
+    assert!(err.to_string().contains("failed to parse env file"));
+}
+
+#[test]
+fn environment_source_without_prefix_reads_unprefixed_values() {
+    let _guard = ENV_LOCK.lock();
+    let previous = std::env::var("NAME").ok();
+    set_env("NAME", "from-env");
+
+    let cfg: NameOnlyConfig = ConfigLoader::custom()
+        .with_source(EnvironmentSource::new())
+        .load()
+        .expect("should load unprefixed environment value");
+
+    assert_eq!(cfg.name, "from-env");
+    if let Some(value) = previous {
+        set_env("NAME", value);
+    } else {
+        remove_env("NAME");
+    }
+}
+
+#[test]
+fn toml_file_source_exposes_configured_path() {
+    let source = TomlFileSource::required("config/settings.toml");
+
+    assert_eq!(source.path(), std::path::Path::new("config/settings.toml"));
 }
 
 // ── ConfigLoader builder tests ──────────────────────────────────────

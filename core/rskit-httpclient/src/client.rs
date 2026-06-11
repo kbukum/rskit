@@ -481,6 +481,55 @@ mod tests {
     }
 
     #[test]
+    fn from_parts_preserves_config_and_debug_uses_redacted_config() {
+        let config = HttpClientConfig::new()
+            .with_base_url("https://api.example.com")
+            .with_auth(crate::Auth::bearer("secret-token"));
+        let client = HttpClient::from_parts(config, reqwest::Client::new());
+
+        assert_eq!(
+            client.config().base_url.as_deref(),
+            Some("https://api.example.com")
+        );
+        let debug = format!("{client:?}");
+        assert!(debug.contains("HttpClient"));
+        assert!(debug.contains("SecretString(***)"));
+        assert!(!debug.contains("secret-token"));
+    }
+
+    #[test]
+    fn base_url_joining_handles_all_slash_combinations() {
+        let cases = [
+            (
+                "https://api.example.com/v1/",
+                "/users",
+                "https://api.example.com/v1/users",
+            ),
+            (
+                "https://api.example.com/v1/",
+                "users",
+                "https://api.example.com/v1/users",
+            ),
+            (
+                "https://api.example.com/v1",
+                "/users",
+                "https://api.example.com/v1/users",
+            ),
+            (
+                "https://api.example.com/v1",
+                "users",
+                "https://api.example.com/v1/users",
+            ),
+        ];
+
+        for (base, path, expected) in cases {
+            let client = HttpClient::new(HttpClientConfig::new().with_base_url(base)).unwrap();
+
+            assert_eq!(client.build_url(path).unwrap().as_str(), expected);
+        }
+    }
+
+    #[test]
     fn tls_server_name_override_is_rejected() {
         let config = HttpClientConfig::new().with_tls(TlsConfig {
             server_name: Some("api.internal".to_string()),
@@ -503,6 +552,70 @@ mod tests {
         } else {
             assert!(result.is_err());
         }
+    }
+
+    #[test]
+    fn tls13_minimum_is_accepted() {
+        let config = HttpClientConfig::new().with_tls(TlsConfig {
+            min_version: TlsVersion::Tls13,
+            ..Default::default()
+        });
+
+        assert!(HttpClient::new(config).is_ok());
+    }
+
+    #[test]
+    fn missing_ca_bundle_is_rejected() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let ca = temp_dir.path().join("missing-ca.pem");
+        let config = HttpClientConfig::new().with_tls(TlsConfig {
+            ca_file: Some(ca.display().to_string()),
+            ..Default::default()
+        });
+
+        let error = HttpClient::new(config).expect_err("missing CA bundle");
+
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
+        assert!(error.message().contains("failed to read HTTP CA bundle"));
+    }
+
+    #[test]
+    fn missing_client_identity_files_are_rejected() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let cert = temp_dir.path().join("client.pem");
+        let key = temp_dir.path().join("client.key");
+        let config = HttpClientConfig::new().with_tls(TlsConfig {
+            cert_file: Some(cert.display().to_string()),
+            key_file: Some(key.display().to_string()),
+            ..Default::default()
+        });
+
+        let error = HttpClient::new(config).expect_err("missing identity files");
+
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
+        assert!(
+            error
+                .message()
+                .contains("failed to read HTTP client certificate")
+        );
+    }
+
+    #[test]
+    fn invalid_client_identity_is_rejected() {
+        let cert = tempfile::NamedTempFile::new().unwrap();
+        let key = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(cert.path(), b"not a cert").unwrap();
+        std::fs::write(key.path(), b"not a key").unwrap();
+        let config = HttpClientConfig::new().with_tls(TlsConfig {
+            cert_file: Some(cert.path().display().to_string()),
+            key_file: Some(key.path().display().to_string()),
+            ..Default::default()
+        });
+
+        let error = HttpClient::new(config).expect_err("invalid identity");
+
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
+        assert!(error.message().contains("invalid HTTP client identity"));
     }
 
     #[test]

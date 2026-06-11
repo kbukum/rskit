@@ -135,6 +135,26 @@ mod tests {
     }
 
     #[test]
+    fn api_key_rejects_invalid_header_name() {
+        let auth = Auth::api_key("bad header", "secret");
+
+        let error = auth.header().expect_err("invalid header name");
+
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
+        assert!(error.message().contains("invalid API key header name"));
+    }
+
+    #[test]
+    fn api_key_and_none_headers_are_explicit() {
+        assert_eq!(
+            Auth::api_key("x-api-key", "secret").header().unwrap(),
+            Some(("x-api-key".to_string(), "secret".to_string()))
+        );
+        assert_eq!(Auth::None.header().unwrap(), None);
+        assert_eq!(Auth::None.to_string(), "None");
+    }
+
+    #[test]
     fn debug_redacts_secret_values() {
         let cases = [
             format!("{:?}", Auth::bearer("secret-token")),

@@ -178,3 +178,29 @@ pub(in crate::persistent) fn join_stdin(handle: StdinThread) -> AppResult<()> {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn capture_and_matcher_helpers_cover_truncation_and_cross_chunk_matches() {
+        let capture = Arc::new(Mutex::new(CapturedOutput::default()));
+        append_capture(&capture, b"hello", Some(7));
+        append_capture(&capture, b" world", Some(7));
+        let output = take_capture(&capture);
+        assert_eq!(output.bytes, b"hello w");
+        assert!(output.truncated);
+
+        let mut buffer = Vec::new();
+        assert!(update_match_buffer(&mut buffer, b"", ""));
+        assert!(!update_match_buffer(&mut buffer, b"rea", "ready"));
+        assert!(update_match_buffer(&mut buffer, b"dy", "ready"));
+    }
+
+    #[test]
+    fn empty_reader_and_stdin_joins_are_ok() {
+        join_reader(None).unwrap();
+        join_stdin(None).unwrap();
+    }
+}

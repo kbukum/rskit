@@ -56,3 +56,45 @@ pub fn validate_transport(auth: &TransportAuth) -> AppResult<()> {
         .into()),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::*;
+
+    #[test]
+    fn validates_all_supported_transport_auth_variants() {
+        let variants = [
+            TransportAuth::Default,
+            TransportAuth::UsernamePassword {
+                username: "user".to_string(),
+                password: "password".to_string(),
+            },
+            TransportAuth::Token {
+                username: None,
+                token: "token".to_string(),
+            },
+            TransportAuth::SshKey {
+                username: "git".to_string(),
+                public_key: None,
+                private_key: PathBuf::from("id_ed25519"),
+                passphrase: Some("passphrase".to_string()),
+            },
+            TransportAuth::SshAgent {
+                username: "git".to_string(),
+            },
+        ];
+
+        for auth in variants {
+            validate_transport(&auth).expect("supported auth variant validates");
+            let _callbacks =
+                remote_callbacks(Some(&auth)).expect("supported auth variant builds callbacks");
+        }
+    }
+
+    #[test]
+    fn remote_callbacks_defaults_when_auth_is_absent() {
+        let _callbacks = remote_callbacks(None).expect("default callbacks build");
+    }
+}

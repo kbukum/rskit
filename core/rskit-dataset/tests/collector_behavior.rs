@@ -164,6 +164,26 @@ struct CountingTarget {
     fail: bool,
 }
 
+struct DefaultResumeSource;
+
+impl Source for DefaultResumeSource {
+    fn name(&self) -> &str {
+        "default-resume"
+    }
+
+    fn stream(self: Box<Self>, _cancel: CancellationToken) -> BoxDataStream {
+        Box::pin(stream::empty())
+    }
+
+    fn cache_key(&self) -> serde_json::Value {
+        json!({"source": "default-resume"})
+    }
+
+    fn max_items(&self) -> Option<usize> {
+        None
+    }
+}
+
 #[async_trait::async_trait]
 impl Target for CountingTarget {
     fn name(&self) -> &str {
@@ -206,6 +226,13 @@ fn source_display_name_uses_last_path_component_and_records_resume_state() {
     assert_eq!(source.display_name(), "name");
     source.set_resume_state(10, 7);
     assert_eq!(*source.resume_calls.lock(), vec![(10, 7)]);
+
+    let source = FixtureSource::new("plain", Vec::new());
+    assert_eq!(source.display_name(), "plain");
+
+    let mut default_resume = DefaultResumeSource;
+    default_resume.set_resume_state(1, 1);
+    assert_eq!(default_resume.display_name(), "default-resume");
 }
 
 #[tokio::test]

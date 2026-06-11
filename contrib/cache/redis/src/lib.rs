@@ -235,7 +235,37 @@ mod duration_seconds {
 
 #[cfg(test)]
 mod tests {
+    use rskit_cache::CacheConfig;
+
     use super::*;
+
+    #[test]
+    fn default_config_targets_local_redis_without_prefix() {
+        let config = Config::default();
+
+        assert_eq!(config.host, "127.0.0.1");
+        assert_eq!(config.port, 6379);
+        assert!(config.password.is_none());
+        assert_eq!(config.database, 0);
+        assert_eq!(config.connect_timeout, Duration::from_secs(5));
+        assert!(config.key_prefix.is_none());
+    }
+
+    #[test]
+    fn config_round_trips_duration_as_seconds() {
+        let config = Config {
+            connect_timeout: Duration::from_secs(9),
+            key_prefix: Some("svc".to_string()),
+            ..Config::default()
+        };
+
+        let json = serde_json::to_string(&config).unwrap();
+        let decoded: Config = serde_json::from_str(&json).unwrap();
+
+        assert!(json.contains("\"connect_timeout\":9"));
+        assert_eq!(decoded.connect_timeout, Duration::from_secs(9));
+        assert_eq!(decoded.key_prefix.as_deref(), Some("svc"));
+    }
 
     #[test]
     fn connection_url_uses_auth_when_password_is_set() {
@@ -279,6 +309,16 @@ mod tests {
     }
 
     #[test]
+    fn debug_omits_redaction_marker_when_password_is_absent() {
+        let config = Config::default();
+
+        let debug = format!("{config:?}");
+
+        assert!(debug.contains("password: None"));
+        assert!(!debug.contains("<redacted>"));
+    }
+
+    #[test]
     fn ttl_millis_rounds_sub_millisecond_up() {
         assert_eq!(redis_ttl_millis(Duration::from_nanos(1)).unwrap(), 1);
     }
@@ -292,9 +332,29 @@ mod tests {
     }
 
     #[test]
+    fn redis_errors_preserve_external_service_context() {
+        let redis_error = redis::RedisError::from((
+            redis::ErrorKind::UnexpectedReturnType,
+            "bad redis response",
+            "expected string".to_string(),
+        ));
+
+        let app_error = redis_err(redis_error);
+
+        assert_eq!(app_error.code(), ErrorCode::ExternalService);
+        assert!(app_error.message().contains("redis error:"));
+        assert!(app_error.cause().is_some());
+    }
+
+    #[test]
     fn key_prefix_is_applied_when_configured() {
         assert_eq!(prefixed_key("user:1", Some("app")), "app:user:1");
         assert_eq!(prefixed_key("user:1", None), "user:1");
+    }
+
+    #[test]
+    fn key_prefix_keeps_empty_prefix_explicit() {
+        assert_eq!(prefixed_key("user:1", Some("")), ":user:1");
     }
 
     #[tokio::test]
@@ -307,5 +367,67 @@ mod tests {
         let err = RedisClient::new(config).await.err().unwrap();
 
         assert_eq!(err.code(), ErrorCode::InvalidInput);
+    }
+
+    #[tokio::test]
+    async fn invalid_connection_url_is_rejected_before_connecting() {
+        let config = Config {
+            host: "bad host".to_string(),
+            ..Config::default()
+        };
+
+        let err = RedisClient::new(config).await.err().unwrap();
+
+        assert_eq!(err.code(), ErrorCode::ConnectionFailed);
+        assert!(err.cause().is_some());
+    }
+
+    #[tokio::test]
+    async fn connection_failures_are_reported_with_context() {
+        let config = Config {
+            host: "127.0.0.1".to_string(),
+            port: 1,
+            connect_timeout: Duration::from_millis(50),
+            ..Config::default()
+        };
+
+        let err = match RedisClient::new(config).await {
+            Ok(_) => panic!("closed Redis port should fail to connect"),
+            Err(err) => err,
+        };
+
+        assert_eq!(err.code(), ErrorCode::ConnectionFailed);
+    }
+
+    #[tokio::test]
+    async fn factory_uses_cache_prefix_when_adapter_prefix_is_absent() {
+        let factory = RedisFactory {
+            config: Config {
+                connect_timeout: Duration::ZERO,
+                key_prefix: None,
+                ..Config::default()
+            },
+        };
+        let cache_config = CacheConfig {
+            key_prefix: Some("shared".to_string()),
+            ..CacheConfig::default()
+        };
+
+        let err = match factory.create(&cache_config).await {
+            Ok(_) => panic!("zero connect timeout must be rejected before connecting"),
+            Err(err) => err,
+        };
+
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn register_adds_redis_factory() {
+        let mut registry = CacheRegistry::new();
+
+        register(&mut registry, Config::default()).unwrap();
+
+        assert!(registry.contains("redis"));
+        assert_eq!(registry.len(), 1);
     }
 }

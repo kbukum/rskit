@@ -36,3 +36,32 @@ impl DatasetSchema {
 pub fn validate_record(schema: &DatasetSchema, record: &serde_json::Value) -> AppResult<()> {
     schema.validate(record)
 }
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn dataset_schema_validates_records_and_reports_failures() {
+        let schema = DatasetSchema::compile(&json!({
+            "type": "object",
+            "required": ["id"],
+            "properties": {
+                "id": {"type": "string"},
+                "score": {"type": "number"}
+            }
+        }))
+        .unwrap();
+
+        validate_record(&schema, &json!({"id": "a", "score": 1.0})).unwrap();
+
+        let err = validate_record(&schema, &json!({"score": "bad"})).unwrap_err();
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+        assert!(
+            err.to_string()
+                .contains("dataset record failed schema validation")
+        );
+    }
+}

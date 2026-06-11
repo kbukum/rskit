@@ -200,4 +200,27 @@ mod tests {
         let _l1 = ErrorLayer;
         let _l2 = ErrorLayer::new();
     }
+
+    #[tokio::test]
+    async fn layer_wraps_service_and_enriches_error_response() {
+        use tower::ServiceExt;
+
+        let inner = tower::service_fn(|_req: Request<Body>| async {
+            Ok::<_, std::convert::Infallible>(
+                Response::builder()
+                    .header("grpc-status", "14")
+                    .header("grpc-message", "backend unavailable")
+                    .body(Body::default())
+                    .unwrap(),
+            )
+        });
+        let service = ErrorLayer::new().layer(inner);
+
+        let result = service
+            .oneshot(Request::new(Body::default()))
+            .await
+            .expect("service response");
+
+        assert!(result.headers().contains_key("grpc-status-details-bin"));
+    }
 }

@@ -197,3 +197,104 @@ async fn collect_images(dir: &std::path::Path) -> AppResult<Vec<FileSource>> {
 
     Ok(results)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::FfmpegConfig;
+
+    fn probe_with_fake_ffmpeg(script: &std::path::Path) -> FfmpegProbe {
+        FfmpegProbe::new(FfmpegConfig::default().with_ffmpeg_path(script))
+    }
+
+    #[cfg(unix)]
+    use crate::test_support::write_executable_script as write_fake_ffmpeg;
+
+    #[tokio::test]
+    async fn collect_images_returns_sorted_jpeg_bytes_only() {
+        let dir = rskit_storage::TempDir::new().unwrap();
+        std::fs::write(dir.path().join("thumb_0002.jpg"), b"two").unwrap();
+        std::fs::write(dir.path().join("thumb_0001.jpg"), b"one").unwrap();
+        std::fs::write(dir.path().join("notes.txt"), b"ignored").unwrap();
+
+        let images = collect_images(dir.path()).await.unwrap();
+
+        assert_eq!(images.len(), 2);
+        assert_eq!(&images[0].read_all().await.unwrap()[..], b"one");
+        assert_eq!(&images[1].read_all().await.unwrap()[..], b"two");
+    }
+
+    #[tokio::test]
+    async fn collect_images_reports_directory_read_errors() {
+        let missing = std::path::PathBuf::from("/tmp/rskit-ffmpeg-missing-thumbnails-dir");
+
+        let err = collect_images(&missing).await.unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::Internal);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn thumbnail_sprite_and_waveform_use_generated_temp_outputs() {
+        let script = write_fake_ffmpeg(
+            r#"
+last=""
+for arg in "$@"; do last="$arg"; done
+case "$last" in
+  *%04d.jpg) first="${last%%%04d.jpg}0001.jpg"; second="${last%%%04d.jpg}0002.jpg"; printf one > "$first"; printf two > "$second" ;;
+  *) printf image > "$last" ;;
+esac
+"#,
+        );
+        let input = rskit_storage::TempFile::with_extension("mp4").unwrap();
+        std::fs::write(input.path(), b"media").unwrap();
+        let source = FileSource::from_path(input.path());
+        let probe = probe_with_fake_ffmpeg(script.path());
+
+        let thumb = probe
+            .extract_thumbnail(
+                &source,
+                Timestamp::from_seconds(1.25),
+                Some(Resolution::new(64, 36)),
+            )
+            .await
+            .unwrap();
+        assert_eq!(&thumb.read_all().await.unwrap()[..], b"image");
+
+        let thumbs = probe
+            .extract_thumbnails(&source, Duration::ZERO, Some(Resolution::new(32, 18)))
+            .await
+            .unwrap();
+        assert_eq!(thumbs.len(), 2);
+
+        let sprite = probe
+            .extract_sprite_sheet(&source, Duration::from_secs(2), Resolution::new(32, 18), 3)
+            .await
+            .unwrap();
+        assert_eq!(&sprite.read_all().await.unwrap()[..], b"image");
+
+        let waveform = probe
+            .extract_waveform(&source, Resolution::new(640, 120))
+            .await
+            .unwrap();
+        assert_eq!(&waveform.read_all().await.unwrap()[..], b"image");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn thumbnail_errors_include_operation_context() {
+        let script = write_fake_ffmpeg("echo broken >&2\nexit 7");
+        let input = rskit_storage::TempFile::with_extension("mp4").unwrap();
+        std::fs::write(input.path(), b"media").unwrap();
+        let source = FileSource::from_path(input.path());
+        let probe = probe_with_fake_ffmpeg(script.path());
+
+        let err = probe
+            .extract_thumbnail(&source, Timestamp::from_seconds(0.0), None)
+            .await
+            .unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::Internal);
+        assert!(err.message().contains("ffmpeg thumbnail"));
+    }
+}

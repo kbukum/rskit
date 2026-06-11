@@ -109,3 +109,69 @@ impl FileWriter {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use bytes::Bytes;
+    use futures::stream;
+
+    use super::*;
+
+    #[test]
+    fn file_sink_debug_describes_destination_without_side_effects() {
+        assert_eq!(
+            format!("{:?}", FileSink::Path(PathBuf::from("out.bin"))),
+            "Path(\"out.bin\")"
+        );
+        assert_eq!(format!("{:?}", FileSink::Temp), "Temp");
+        assert_eq!(format!("{:?}", FileSink::Memory), "Memory");
+    }
+
+    #[tokio::test]
+    async fn memory_writer_collects_direct_and_streamed_bytes() {
+        let mut writer = FileSink::Memory.writer().await.unwrap();
+        writer.write_all(b"hello ").await.unwrap();
+        writer
+            .write_stream(stream::iter([
+                Ok(Bytes::from_static(b"stream")),
+                Ok(Bytes::from_static(b"!")),
+            ]))
+            .await
+            .unwrap();
+
+        let source = writer.finalize().await.unwrap();
+        assert_eq!(
+            source.read_all().await.unwrap(),
+            Bytes::from_static(b"hello stream!")
+        );
+    }
+
+    #[tokio::test]
+    async fn path_and_temp_writers_materialize_file_sources() {
+        let dir = tempfile::tempdir().unwrap();
+        let output = dir.path().join("nested").join("file.txt");
+        let mut path_writer = FileSink::Path(output.clone()).writer().await.unwrap();
+        path_writer.write_all(b"path").await.unwrap();
+        let path_source = path_writer.finalize().await.unwrap();
+        assert!(matches!(path_source, FileSource::Path(_)));
+        assert_eq!(tokio::fs::read(&output).await.unwrap(), b"path");
+
+        let mut temp_writer = FileSink::Temp.writer().await.unwrap();
+        temp_writer.write_all(b"temp").await.unwrap();
+        let temp_source = temp_writer.finalize().await.unwrap();
+        assert_eq!(
+            temp_source.read_all().await.unwrap(),
+            Bytes::from_static(b"temp")
+        );
+    }
+
+    #[tokio::test]
+    async fn writer_stream_forwards_chunk_errors() {
+        let mut writer = FileSink::Memory.writer().await.unwrap();
+        let error = AppError::new(ErrorCode::Internal, "chunk failed");
+        let result = writer
+            .write_stream(stream::iter([Err::<Bytes, _>(error)]))
+            .await;
+        assert_eq!(result.unwrap_err().code(), ErrorCode::Internal);
+    }
+}

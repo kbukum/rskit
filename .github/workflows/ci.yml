@@ -41,6 +41,10 @@ jobs:
       affected: ${{ steps.domains.outputs.affected || 'all' }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        with:
+          fetch-depth: 0
+      - name: Check Python tooling runtime
+        run: python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else "Python 3.11+ is required")'
       - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d  # v4.0.1
         id: filter
         with:
@@ -67,7 +71,7 @@ jobs:
         run: |
           CHANGED=$(git diff --name-only ${{ github.event.pull_request.base.sha }}...${{ github.sha }} 2>/dev/null || echo "")
           if [ -n "$CHANGED" ]; then
-            AFFECTED=$(echo "$CHANGED" | ./scripts/affected-domains.sh)
+            AFFECTED=$(echo "$CHANGED" | ./scripts/rskit_tool.py domains affected)
           else
             AFFECTED=""
           fi
@@ -78,6 +82,21 @@ jobs:
           printf '%s\n' "$AFFECTED" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
           echo "Affected domains: $AFFECTED"
+
+  # ---------------------------------------------------------------------------
+  # Python repository tooling tests
+  # ---------------------------------------------------------------------------
+  python-tooling:
+    name: Python Tooling
+    needs: changes
+    if: needs.changes.outputs.rust-code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+      - name: Check Python tooling runtime
+        run: python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else "Python 3.11+ is required")'
+      - name: Run Python tooling tests
+        run: python3 -m unittest discover -s scripts/tests -t .
 
   # ---------------------------------------------------------------------------
   # Format check (fast gate — runs on stable, no need to pin MSRV here)
@@ -201,6 +220,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        with:
+          fetch-depth: 0
+      - name: Check Python tooling runtime
+        run: python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else "Python 3.11+ is required")'
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: "1.95"
@@ -215,11 +238,23 @@ jobs:
             examples
       - uses: taiki-e/install-action@4bc351f7f2614e48088386e2a0ad917ca3a7e4ba  # v2
         with:
-          tool: cargo-llvm-cov
-      - run: ./scripts/check-coverage-thresholds.sh workspace
+          tool: cargo-nextest,cargo-llvm-cov
+      - name: Run coverage
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            ./scripts/rskit_tool.py coverage --mode coverage --changed --changed-base "${{ github.event.pull_request.base.sha }}...${{ github.sha }}" --line-threshold "${PR_COVERAGE_LINE_THRESHOLD:-70}"
+          else
+            ./scripts/rskit_tool.py coverage --mode coverage --line-threshold "${COVERAGE_LINE_THRESHOLD:-90}"
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        if: failure()
+        with:
+          name: coverage-debug
+          path: target/coverage
+          if-no-files-found: ignore
       - uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354  # v5
         with:
-          files: target/coverage/core.lcov,target/coverage/contrib.lcov
+          directory: target/coverage/workspaces
           fail_ci_if_error: false
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
@@ -234,6 +269,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+      - name: Check Python tooling runtime
+        run: python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else "Python 3.11+ is required")'
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: stable
@@ -241,9 +278,9 @@ jobs:
         run: rustup toolchain install nightly --profile minimal
       - name: Install cargo-public-api
         run: cargo install cargo-public-api --version 0.52.0 --locked
-      - run: ./scripts/check-topology.sh
-      - run: ./scripts/check-l7-edges.sh
-      - run: ./scripts/check-public-api.sh
+      - run: ./scripts/rskit_tool.py check topology
+      - run: ./scripts/rskit_tool.py check l7-edges
+      - run: ./scripts/rskit_tool.py check public-api
 
   # ---------------------------------------------------------------------------
   # Supply-chain audit (cargo-deny + cargo-audit)
@@ -255,6 +292,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+      - name: Check Python tooling runtime
+        run: python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else "Python 3.11+ is required")'
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: stable
@@ -265,7 +304,7 @@ jobs:
         run: rustup toolchain install nightly --profile minimal
       - name: Install cargo-public-api
         run: cargo install cargo-public-api --version 0.52.0 --locked
-      - run: ./scripts/check-release-readiness.sh
+      - run: ./scripts/rskit_tool.py release readiness
 
   # ---------------------------------------------------------------------------
   # Gate: Aggregate status for branch protection
@@ -273,12 +312,13 @@ jobs:
   ci-status:
     name: CI Status
     if: always()
-    needs: [changes, fmt, clippy, test, docs, guardrails, coverage, security]
+    needs: [changes, python-tooling, fmt, clippy, test, docs, guardrails, coverage, security]
     runs-on: ubuntu-latest
     steps:
       - name: Evaluate results
         run: |
           results=("${{ needs.changes.result }}" \
+                   "${{ needs.python-tooling.result }}" \
                    "${{ needs.fmt.result }}" \
                    "${{ needs.clippy.result }}" \
                    "${{ needs.test.result }}" \

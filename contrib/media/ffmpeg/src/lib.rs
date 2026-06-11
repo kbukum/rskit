@@ -17,6 +17,8 @@ mod paths;
 mod probe;
 mod process;
 mod progress;
+#[cfg(all(test, unix))]
+mod test_support;
 
 use std::sync::Arc;
 

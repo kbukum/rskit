@@ -205,6 +205,11 @@ where
 
 #[cfg(test)]
 mod tests {
+    use rskit_tool::{Registry, ToolInput, context::Context, from_fn, text_result};
+    use serde::Deserialize;
+
+    use crate::server::create_server;
+
     use super::*;
 
     #[test]
@@ -218,5 +223,99 @@ mod tests {
     fn test_client_config_with_request_timeout() {
         let config = ClientConfig::default().with_request_timeout(Duration::from_secs(5));
         assert_eq!(config.request_timeout, Duration::from_secs(5));
+    }
+
+    #[test]
+    fn validation_result_from_error_preserves_message() {
+        let result = validation_result_from_error(AppError::new(
+            ErrorCode::InvalidInput,
+            "schema is invalid",
+        ));
+
+        assert!(!result.valid);
+        assert_eq!(result.errors.len(), 1);
+        assert_eq!(result.errors[0].message, "schema is invalid");
+    }
+
+    #[derive(Deserialize, schemars::JsonSchema)]
+    struct EchoInput {
+        message: String,
+    }
+
+    #[tokio::test]
+    async fn discover_tools_wraps_remote_tools_and_calls_server() {
+        let registry = Registry::new();
+        registry
+            .register(
+                from_fn(
+                    "echo",
+                    "Echo a message",
+                    |_ctx: Context, input: EchoInput| async move {
+                        Ok(text_result(&input.message))
+                    },
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        registry
+            .register(
+                from_fn(
+                    "slow",
+                    "Sleep before responding",
+                    |_ctx: Context, _input: EchoInput| async move {
+                        tokio::time::sleep(Duration::from_millis(250)).await;
+                        Ok(text_result("slow"))
+                    },
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        let server = create_server("server", "0.1.0", Arc::new(registry), Default::default());
+        let (client_io, server_io) = tokio::io::duplex(16 * 1024);
+        let server_task = tokio::spawn(async move {
+            let running = rmcp::serve_server(server, server_io).await.unwrap();
+            running.waiting().await.unwrap()
+        });
+        let mut client = rmcp::serve_client((), client_io).await.unwrap();
+
+        let tools = discover_tools(
+            &client,
+            &ClientConfig::default().with_request_timeout(Duration::from_millis(50)),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(tools.len(), 2);
+        let echo = tools
+            .iter()
+            .find(|tool| tool.definition().name == "echo")
+            .unwrap();
+        assert!(
+            echo.validate(&ToolInput::new(serde_json::json!({"message":"hello"})).unwrap())
+                .valid
+        );
+        let result = echo
+            .call(
+                &Context::new(),
+                ToolInput::new(serde_json::json!({"message":"hello"})).unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(result.text(), "hello");
+        let slow = tools
+            .iter()
+            .find(|tool| tool.definition().name == "slow")
+            .unwrap();
+        let timeout = slow
+            .call(
+                &Context::new(),
+                ToolInput::new(serde_json::json!({"message":"hello"})).unwrap(),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(timeout.code(), ErrorCode::Timeout);
+
+        let _ = client.close().await.unwrap();
+        let _ = server_task.await.unwrap();
     }
 }

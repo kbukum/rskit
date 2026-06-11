@@ -296,6 +296,29 @@ mod tests {
     }
 
     #[test]
+    fn build_body_maps_all_message_roles() {
+        let req = CompletionRequest {
+            model: "gpt-4o".to_string(),
+            messages: vec![
+                types::system("be brief"),
+                types::assistant("previous"),
+                types::tool_result_msg("call_1", "result", false),
+            ],
+            max_tokens: None,
+            temperature: None,
+            stream: false,
+            tools: None,
+            tool_choice: None,
+        };
+
+        let body = OpenAiDialect::build_body(&req).unwrap();
+
+        assert_eq!(body["messages"][0]["role"], "system");
+        assert_eq!(body["messages"][1]["role"], "assistant");
+        assert_eq!(body["messages"][2]["role"], "tool");
+    }
+
+    #[test]
     fn parse_response_extracts_content() {
         let body = r#"{
             "id": "chatcmpl-1",
@@ -309,6 +332,62 @@ mod tests {
         assert_eq!(resp.usage.input_tokens, 10);
         assert_eq!(resp.usage.output_tokens, 5);
         assert_eq!(resp.stop_reason, Some(FinishReason::Stop));
+    }
+
+    #[test]
+    fn parse_response_handles_empty_choices_tool_calls_and_finish_reasons() {
+        let empty = OpenAiDialect::parse_response(
+            r#"{"model":"gpt-4o","choices":[],"usage":{"prompt_tokens":0,"completion_tokens":0}}"#,
+        )
+        .unwrap();
+        assert!(empty.text().is_empty());
+        assert_eq!(empty.stop_reason, Some(FinishReason::Stop));
+
+        let body = r#"{
+            "model": "gpt-4o",
+            "choices": [{
+                "message": {
+                    "content": null,
+                    "tool_calls": [{"id":"","function":{"name":"lookup","arguments":"{\"q\":\"rust\"}"}}]
+                },
+                "finish_reason": "tool_calls"
+            }],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 2}
+        }"#;
+        let resp = OpenAiDialect::parse_response(body).unwrap();
+        assert_eq!(resp.stop_reason, Some(FinishReason::ToolUse));
+        assert_eq!(resp.message.tool_calls[0].id, "tool_call_0");
+        assert_eq!(resp.message.tool_calls[0].input["q"], "rust");
+
+        for (wire, expected) in [
+            ("length", FinishReason::Length),
+            ("content_filter", FinishReason::ContentFilter),
+            ("error", FinishReason::Error),
+            ("cancelled", FinishReason::Cancelled),
+        ] {
+            let body = format!(
+                r#"{{"model":"gpt-4o","choices":[{{"message":{{"content":"x"}},"finish_reason":"{wire}"}}],"usage":{{"prompt_tokens":1,"completion_tokens":1}}}}"#
+            );
+            let resp = OpenAiDialect::parse_response(&body).unwrap();
+            assert_eq!(resp.stop_reason, Some(expected));
+        }
+    }
+
+    #[test]
+    fn parse_response_rejects_invalid_json_and_tool_arguments() {
+        assert_eq!(
+            OpenAiDialect::parse_response("{").unwrap_err().code(),
+            ErrorCode::ExternalService
+        );
+        let body = r#"{
+            "model": "gpt-4o",
+            "choices": [{"message": {"tool_calls": [{"function":{"name":"lookup","arguments":"not-json"}}]}}],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 2}
+        }"#;
+        assert_eq!(
+            OpenAiDialect::parse_response(body).unwrap_err().code(),
+            ErrorCode::InvalidFormat
+        );
     }
 
     #[test]
@@ -358,5 +437,28 @@ mod tests {
         let chunk = OpenAiDialect::parse_stream_chunk(data).unwrap();
         assert!(chunk.content.is_empty());
         assert!(!chunk.done);
+    }
+
+    #[test]
+    fn stream_chunk_rejects_invalid_utf8_or_json_and_defaults_tool_fields() {
+        assert_eq!(
+            OpenAiDialect::parse_stream_chunk(&[0xff])
+                .unwrap_err()
+                .code(),
+            ErrorCode::InvalidFormat
+        );
+        assert_eq!(
+            OpenAiDialect::parse_stream_chunk(b"{").unwrap_err().code(),
+            ErrorCode::ExternalService
+        );
+
+        let data =
+            br#"{"choices":[{"delta":{"tool_calls":[{"index":18446744073709551615,"function":{}}]},"finish_reason":"tool_calls"}]}"#;
+        let chunk = OpenAiDialect::parse_stream_chunk(data).unwrap();
+        assert!(chunk.done);
+        assert_eq!(chunk.tool_calls[0].index, usize::MAX);
+        assert!(chunk.tool_calls[0].id.is_empty());
+        assert!(chunk.tool_calls[0].name.is_empty());
+        assert!(chunk.tool_calls[0].input_delta.is_empty());
     }
 }

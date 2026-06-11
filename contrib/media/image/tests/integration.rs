@@ -1,6 +1,7 @@
 //! Integration tests for rskit-media-image with real image fixtures.
 
 use image::{ImageFormat, Rgb, RgbImage};
+use rskit_errors::ErrorCode;
 use rskit_media::{
     Registry,
     executor::MediaExecutor,
@@ -41,11 +42,31 @@ fn create_jpeg(width: u32, height: u32) -> TempFile {
     tmp
 }
 
+fn create_solid_image(width: u32, height: u32, extension: &str, format: ImageFormat) -> TempFile {
+    let img = RgbImage::from_pixel(width, height, Rgb([40, 80, 120]));
+    let tmp = TempFile::with_extension(extension).expect("create temp");
+    img.save_with_format(tmp.path(), format)
+        .expect("save image fixture");
+    tmp
+}
+
 fn image_executor() -> Arc<dyn MediaExecutor> {
     let mut registry = Registry::default();
     rskit_media_image::register(&mut registry, rskit_media_image::Config::default())
         .expect("register image backend");
     registry.executor("image").expect("image executor")
+}
+
+#[test]
+fn registering_image_backend_twice_reports_duplicate_executor() {
+    let mut registry = Registry::default();
+    rskit_media_image::register(&mut registry, rskit_media_image::Config::default())
+        .expect("first registration");
+
+    let err = rskit_media_image::register(&mut registry, rskit_media_image::Config::default())
+        .expect_err("duplicate image registration must fail");
+
+    assert_eq!(err.code(), ErrorCode::AlreadyExists);
 }
 
 fn limited_image_executor(max_pixels: u64) -> Arc<dyn MediaExecutor> {
@@ -68,6 +89,16 @@ fn limited_image_probe(max_pixels: u64) -> Arc<dyn MediaProbe> {
     registry.probe("image").expect("image probe")
 }
 
+fn ratio_limited_image_probe(max_decode_ratio: u64) -> Arc<dyn MediaProbe> {
+    let mut registry = Registry::default();
+    rskit_media_image::register(
+        &mut registry,
+        rskit_media_image::Config::default().with_max_decode_ratio(max_decode_ratio),
+    )
+    .expect("register image backend");
+    registry.probe("image").expect("image probe")
+}
+
 #[tokio::test]
 async fn probe_rejects_source_above_configured_byte_limit() {
     let fixture = create_gradient_png(10, 10);
@@ -83,6 +114,78 @@ async fn probe_rejects_source_above_configured_byte_limit() {
     let err = probe.probe(&source).await.unwrap_err();
 
     assert!(err.to_string().contains("max_source_bytes"));
+}
+
+#[tokio::test]
+async fn probe_rejects_byte_sources_above_configured_byte_limit() {
+    let mut registry = Registry::default();
+    rskit_media_image::register(
+        &mut registry,
+        rskit_media_image::Config::default().with_max_source_bytes(1),
+    )
+    .expect("register image backend");
+    let probe = registry.probe("image").expect("image probe");
+
+    let err = probe
+        .probe(&FileSource::Bytes(bytes::Bytes::from_static(b"too large")))
+        .await
+        .unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::InvalidInput);
+    assert!(err.to_string().contains("max_source_bytes"));
+}
+
+#[tokio::test]
+async fn probe_reports_directory_sources_as_read_errors() {
+    let dir = TempDir::new().expect("temp dir");
+    let probe = image_probe();
+
+    let err = probe
+        .probe(&FileSource::from_path(dir.path()))
+        .await
+        .unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::Internal);
+    assert!(err.to_string().contains("failed to read image"));
+}
+
+#[tokio::test]
+async fn probe_rejects_url_sources_before_fetching() {
+    let probe = limited_image_probe(100);
+
+    let err = probe
+        .probe(&FileSource::from_url("https://example.test/image.png"))
+        .await
+        .unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::InvalidInput);
+    assert!(err.to_string().contains("URL sources not supported"));
+}
+
+#[tokio::test]
+async fn probe_rejects_invalid_image_bytes() {
+    let probe = limited_image_probe(100);
+
+    let err = probe
+        .probe(&FileSource::Bytes(bytes::Bytes::from_static(
+            b"not an image",
+        )))
+        .await
+        .unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::InvalidFormat);
+}
+
+#[tokio::test]
+async fn probe_rejects_images_above_decode_ratio_limit() {
+    let fixture = create_gradient_png(64, 64);
+    let source = FileSource::from_path(fixture.path());
+    let probe = ratio_limited_image_probe(1);
+
+    let err = probe.probe(&source).await.unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::InvalidInput);
+    assert!(err.to_string().contains("max_decode_ratio"));
 }
 
 #[tokio::test]
@@ -162,6 +265,44 @@ async fn thumbnail_default_clamps_short_images_to_one_pixel_height() {
         .expect("thumbnail");
 
     assert_eq!(read_dimensions(&thumbnail), (320, 1));
+}
+
+#[tokio::test]
+async fn thumbnails_returns_single_resized_image_thumbnail() {
+    let fixture = create_gradient_png(40, 20);
+    let source = FileSource::from_path(fixture.path());
+    let probe = image_probe();
+
+    let thumbnails = probe
+        .thumbnails(
+            &source,
+            std::time::Duration::from_secs(1),
+            Some(Resolution::new(10, 10)),
+        )
+        .await
+        .expect("thumbnails");
+
+    assert_eq!(thumbnails.len(), 1);
+    assert_eq!(read_dimensions(&thumbnails[0]), (10, 5));
+}
+
+#[tokio::test]
+async fn probe_reads_managed_temp_sources() {
+    let fixture = create_gradient_png(16, 12);
+    let source = FileSource::Temp(fixture);
+    let probe = image_probe();
+
+    let metadata = probe.probe(&source).await.expect("probe temp image");
+    let resolution = metadata.resolution().expect("resolution");
+
+    assert_eq!((resolution.width, resolution.height), (16, 12));
+}
+
+fn image_probe() -> Arc<dyn MediaProbe> {
+    let mut registry = Registry::default();
+    rskit_media_image::register(&mut registry, rskit_media_image::Config::default())
+        .expect("register image backend");
+    registry.probe("image").expect("image probe")
 }
 
 /// Read image dimensions from a FileSource.
@@ -393,6 +534,21 @@ async fn rotate_270() {
     assert_eq!((w, h), (50, 100));
 }
 
+#[tokio::test]
+async fn rotate_arbitrary_degrees_is_rejected() {
+    let fixture = create_gradient_png(20, 10);
+    let source = FileSource::from_path(fixture.path());
+    let backend = image_executor();
+
+    let err = backend
+        .execute(&source, &[MediaOp::Rotate(Rotation::Arbitrary(17.0))], None)
+        .await
+        .unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::InvalidInput);
+    assert!(err.to_string().contains("arbitrary rotation"));
+}
+
 // ── Flip tests ──────────────────────────────────────────────────────────────
 
 #[tokio::test]
@@ -417,6 +573,20 @@ async fn flip_vertical() {
     let result = backend.execute(&source, &ops, None).await.expect("flip v");
     let (w, h) = read_dimensions(&result);
     assert_eq!((w, h), (100, 100));
+}
+
+#[tokio::test]
+async fn flip_both_preserves_dimensions() {
+    let fixture = create_gradient_png(100, 50);
+    let source = FileSource::from_path(fixture.path());
+    let backend = image_executor();
+
+    let result = backend
+        .execute(&source, &[MediaOp::Flip(FlipDirection::Both)], None)
+        .await
+        .expect("flip both");
+
+    assert_eq!(read_dimensions(&result), (100, 50));
 }
 
 // ── Filter tests ────────────────────────────────────────────────────────────
@@ -498,6 +668,171 @@ async fn filter_contrast() {
     assert_eq!((w, h), (50, 50));
 }
 
+#[tokio::test]
+async fn filters_cover_parameter_defaults_and_integer_conversions() {
+    let fixture = create_gradient_png(24, 24);
+    let source = FileSource::from_path(fixture.path());
+    let backend = image_executor();
+    let filters = [
+        Filter {
+            name: "blur".into(),
+            target: FilterTarget::Video,
+            params: Params::new().set("radius", ParamValue::Int(2)),
+        },
+        Filter {
+            name: "brightness".into(),
+            target: FilterTarget::Video,
+            params: Params::new().set("value", ParamValue::Float(12.8)),
+        },
+        Filter {
+            name: "contrast".into(),
+            target: FilterTarget::Video,
+            params: Params::new().set("value", ParamValue::Int(2)),
+        },
+        Filter {
+            name: "sharpen".into(),
+            target: FilterTarget::Video,
+            params: Params::new()
+                .set("sigma", ParamValue::Float(1.0))
+                .set("threshold", ParamValue::Int(2)),
+        },
+        Filter {
+            name: "hue".into(),
+            target: FilterTarget::Video,
+            params: Params::new().set("degrees", ParamValue::Int(90)),
+        },
+        Filter {
+            name: "posterize".into(),
+            target: FilterTarget::Video,
+            params: Params::new().set("levels", ParamValue::Int(1)),
+        },
+        Filter {
+            name: "pixelate".into(),
+            target: FilterTarget::Video,
+            params: Params::new().set("size", ParamValue::Int(0)),
+        },
+    ];
+
+    for filter in filters {
+        let result = backend
+            .execute(&source, &[MediaOp::Filter(filter)], None)
+            .await
+            .expect("filter");
+        assert_eq!(read_dimensions(&result), (24, 24));
+    }
+
+    let extra_filters = [
+        Filter {
+            name: "sharpen".into(),
+            target: FilterTarget::Video,
+            params: Params::new()
+                .set("sigma", ParamValue::Int(1))
+                .set("threshold", ParamValue::Float(2.0)),
+        },
+        Filter {
+            name: "hue".into(),
+            target: FilterTarget::Video,
+            params: Params::new().set("degrees", ParamValue::Float(45.0)),
+        },
+    ];
+
+    for filter in extra_filters {
+        let result = backend
+            .execute(&source, &[MediaOp::Filter(filter)], None)
+            .await
+            .expect("extra filter");
+        assert_eq!(read_dimensions(&result), (24, 24));
+    }
+}
+
+#[tokio::test]
+async fn filters_ignore_wrong_typed_params_and_use_defaults() {
+    let fixture = create_gradient_png(24, 24);
+    let source = FileSource::from_path(fixture.path());
+    let backend = image_executor();
+    let filters = [
+        Filter {
+            name: "blur".into(),
+            target: FilterTarget::Video,
+            params: Params::new().set("radius", ParamValue::Str("wide".into())),
+        },
+        Filter {
+            name: "brightness".into(),
+            target: FilterTarget::Video,
+            params: Params::new().set("value", ParamValue::Bool(true)),
+        },
+        Filter {
+            name: "contrast".into(),
+            target: FilterTarget::Video,
+            params: Params::new().set("value", ParamValue::Str("high".into())),
+        },
+        Filter {
+            name: "sharpen".into(),
+            target: FilterTarget::Video,
+            params: Params::new()
+                .set("sigma", ParamValue::Str("sharp".into()))
+                .set("threshold", ParamValue::Bool(false)),
+        },
+        Filter {
+            name: "hue".into(),
+            target: FilterTarget::Video,
+            params: Params::new().set("degrees", ParamValue::Str("blue".into())),
+        },
+        Filter {
+            name: "posterize".into(),
+            target: FilterTarget::Video,
+            params: Params::new().set("levels", ParamValue::Float(3.0)),
+        },
+        Filter {
+            name: "pixelate".into(),
+            target: FilterTarget::Video,
+            params: Params::new().set("size", ParamValue::Str("large".into())),
+        },
+    ];
+
+    for filter in filters {
+        let result = backend
+            .execute(&source, &[MediaOp::Filter(filter)], None)
+            .await
+            .expect("filter default");
+        assert_eq!(read_dimensions(&result), (24, 24));
+    }
+}
+
+#[tokio::test]
+async fn image_filter_rejects_audio_target() {
+    let fixture = create_gradient_png(20, 20);
+    let source = FileSource::from_path(fixture.path());
+    let backend = image_executor();
+    let op = MediaOp::Filter(Filter {
+        name: "volume".into(),
+        target: FilterTarget::Audio,
+        params: Params::new(),
+    });
+
+    let err = backend.execute(&source, &[op], None).await.unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::InvalidInput);
+    assert!(err.to_string().contains("audio filter"));
+}
+
+#[tokio::test]
+async fn image_filter_rejects_unknown_filter_names() {
+    let fixture = create_gradient_png(20, 20);
+    let source = FileSource::from_path(fixture.path());
+    let backend = image_executor();
+    let op = MediaOp::Filter(Filter {
+        name: "emboss".into(),
+        target: FilterTarget::Video,
+        params: Params::new(),
+    });
+
+    let err = backend.execute(&source, &[op], None).await.unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::InvalidInput);
+    assert!(err.to_string().contains("unsupported image filter"));
+}
+
 // ── Format transcoding ─────────────────────────────────────────────────────
 
 #[tokio::test]
@@ -566,6 +901,68 @@ async fn transcode_png_to_webp() {
     }
 }
 
+#[tokio::test]
+async fn transcode_uses_requested_image_formats_for_memory_output() {
+    let cases = [
+        ("jpg", "jpg", ImageFormat::Jpeg),
+        ("gif", "gif", ImageFormat::Gif),
+        ("bmp", "bmp", ImageFormat::Bmp),
+        ("tif", "tif", ImageFormat::Tiff),
+        ("unknown", "unknown", ImageFormat::Png),
+    ];
+    let backend = image_executor();
+
+    for (format_id, extension, expected) in cases {
+        let fixture = create_gradient_png(16, 16);
+        let source = FileSource::from_path(fixture.path());
+        let result = backend
+            .execute(
+                &source,
+                &[MediaOp::Transcode(OutputConfig::new(Format::new(
+                    format_id,
+                )))],
+                Some(&FileSink::Memory),
+            )
+            .await
+            .unwrap_or_else(|err| panic!("transcode {format_id} failed: {err}"));
+
+        let FileSource::Bytes(bytes) = result else {
+            panic!("expected memory output");
+        };
+        let actual = image::guess_format(&bytes)
+            .unwrap_or_else(|err| panic!("guess {extension} failed: {err}"));
+        assert_eq!(actual, expected);
+    }
+}
+
+#[tokio::test]
+async fn source_extension_selects_output_format_when_not_transcoding() {
+    let cases = [
+        ("jpeg", ImageFormat::Jpeg),
+        ("gif", ImageFormat::Gif),
+        ("bmp", ImageFormat::Bmp),
+        ("tiff", ImageFormat::Tiff),
+        ("webp", ImageFormat::WebP),
+        ("bin", ImageFormat::Png),
+    ];
+    let backend = image_executor();
+
+    for (extension, expected) in cases {
+        let source_fixture = create_solid_image(12, 12, extension, expected);
+        let source = FileSource::from_path(source_fixture.path());
+        let result = backend
+            .execute(&source, &[MediaOp::Flip(FlipDirection::Horizontal)], None)
+            .await
+            .unwrap_or_else(|err| panic!("execute for {extension} failed: {err}"));
+        let FileSource::Bytes(bytes) = result else {
+            panic!("expected memory output");
+        };
+        let actual = image::guess_format(&bytes)
+            .unwrap_or_else(|err| panic!("guess for {extension} failed: {err}"));
+        assert_eq!(actual, expected);
+    }
+}
+
 // ── Multi-op pipeline ───────────────────────────────────────────────────────
 
 #[tokio::test]
@@ -620,6 +1017,50 @@ async fn output_to_path() {
 }
 
 #[tokio::test]
+async fn output_to_path_reports_parent_directory_creation_errors() {
+    let fixture = create_gradient_png(20, 20);
+    let source = FileSource::from_path(fixture.path());
+    let backend = image_executor();
+    let dir = TempDir::new().expect("temp dir");
+    let file_parent = dir.path().join("not-a-dir");
+    std::fs::write(&file_parent, b"file").expect("write parent placeholder");
+    let sink = FileSink::Path(file_parent.join("result.png"));
+
+    let err = backend
+        .execute(
+            &source,
+            &[MediaOp::Flip(FlipDirection::Horizontal)],
+            Some(&sink),
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::Internal);
+    assert!(err.to_string().contains("create dir failed"));
+}
+
+#[tokio::test]
+async fn output_to_path_reports_write_errors() {
+    let fixture = create_gradient_png(20, 20);
+    let source = FileSource::from_path(fixture.path());
+    let backend = image_executor();
+    let dir = TempDir::new().expect("temp dir");
+    let sink = FileSink::Path(dir.path().to_path_buf());
+
+    let err = backend
+        .execute(
+            &source,
+            &[MediaOp::Flip(FlipDirection::Horizontal)],
+            Some(&sink),
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::Internal);
+    assert!(err.to_string().contains("write image failed"));
+}
+
+#[tokio::test]
 async fn output_to_memory() {
     let fixture = create_gradient_png(50, 50);
     let source = FileSource::from_path(fixture.path());
@@ -663,6 +1104,25 @@ async fn output_to_temp() {
     }
 }
 
+#[tokio::test]
+async fn execute_with_progress_delegates_to_execute() {
+    let fixture = create_gradient_png(50, 50);
+    let source = FileSource::from_path(fixture.path());
+    let backend = image_executor();
+
+    let result = backend
+        .execute_with_progress(
+            &source,
+            &[MediaOp::Flip(FlipDirection::Horizontal)],
+            Some(&FileSink::Memory),
+            Box::new(|_| {}),
+        )
+        .await
+        .expect("execute with progress");
+
+    assert_eq!(read_dimensions(&result), (50, 50));
+}
+
 // ── Supports / error handling ───────────────────────────────────────────────
 
 #[test]
@@ -685,6 +1145,23 @@ fn rejects_video_ops() {
     assert!(!p.supports(&MediaOp::Reverse));
     assert!(!p.supports(&MediaOp::NormalizeAudio));
     assert!(!p.supports(&MediaOp::Speed(2.0)));
+}
+
+#[test]
+fn preview_reports_operation_count() {
+    let p = image_executor();
+
+    let preview = p
+        .preview(
+            &FileSource::Bytes(bytes::Bytes::new()),
+            &[
+                MediaOp::Flip(FlipDirection::Horizontal),
+                MediaOp::Flip(FlipDirection::Vertical),
+            ],
+        )
+        .expect("preview");
+
+    assert_eq!(preview, vec!["ImageProcessor: 2 operations"]);
 }
 
 #[tokio::test]

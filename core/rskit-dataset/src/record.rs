@@ -644,3 +644,86 @@ fn value_to_cell(value: &Value) -> String {
         Value::Array(_) | Value::Object(_) => value.to_string(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use futures_util::StreamExt as _;
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn dataset_record_projection_and_json_are_deterministic() {
+        let record = DatasetRecord::new(
+            DatasetRecord::from_fields([("b", json!(2)), ("a", json!("one")), ("c", Value::Null)])
+                .into_fields(),
+        );
+
+        assert_eq!(record.get("a"), Some(&json!("one")));
+        assert_eq!(
+            record.fields().keys().cloned().collect::<Vec<_>>(),
+            ["a", "b", "c"]
+        );
+        let selected = record.select(&["c".to_string(), "missing".to_string(), "a".to_string()]);
+        assert_eq!(
+            selected.fields().keys().cloned().collect::<Vec<_>>(),
+            ["a", "c"]
+        );
+        assert_eq!(selected.into_json(), json!({"a":"one","c":null}));
+    }
+
+    #[test]
+    fn private_record_parsers_reject_invalid_shapes_and_convert_cells() {
+        assert!(record_from_json_bytes(b"not-json").is_err());
+        assert!(record_from_value(json!([1, 2])).is_err());
+        assert!(parse_csv_record(b"").is_err());
+        assert_eq!(value_to_cell(&Value::Null), "");
+        assert_eq!(value_to_cell(&json!("text")), "text");
+        assert_eq!(value_to_cell(&json!(true)), "true");
+        assert_eq!(value_to_cell(&json!(42)), "42");
+        assert_eq!(value_to_cell(&json!({"a": 1})), "{\"a\":1}");
+        assert_eq!(value_to_cell(&json!([1, 2])), "[1,2]");
+    }
+
+    #[tokio::test]
+    async fn missing_record_readers_emit_errors_in_stream() {
+        let missing = std::env::temp_dir().join("rskit-dataset-missing-record-file");
+        let readers: Vec<Box<dyn DatasetReader>> = vec![
+            Box::new(CsvReader::new(&missing)),
+            Box::new(JsonLinesReader::new(&missing)),
+            Box::new(JsonArrayReader::new(&missing)),
+        ];
+
+        for reader in readers {
+            let mut stream = reader.stream();
+            assert!(stream.next().await.unwrap().is_err());
+        }
+    }
+
+    #[tokio::test]
+    async fn select_and_filter_streams_forward_errors_and_drop_false_predicates() {
+        let records = stream::iter(vec![
+            Ok(DatasetRecord::from_fields([
+                ("keep", json!(true)),
+                ("name", json!("a")),
+            ])),
+            Ok(DatasetRecord::from_fields([
+                ("keep", json!(false)),
+                ("name", json!("b")),
+            ])),
+            Err(AppError::new(ErrorCode::Internal, "boom")),
+        ]);
+        let filtered = filter_records(records, |record| {
+            Ok(record.get("keep").and_then(Value::as_bool).unwrap_or(false))
+        });
+        let selected = select_columns(filtered, vec!["name".to_string()]);
+        futures_util::pin_mut!(selected);
+
+        assert_eq!(
+            selected.next().await.unwrap().unwrap().into_json(),
+            json!({"name":"a"})
+        );
+        assert!(selected.next().await.unwrap().is_err());
+        assert!(selected.next().await.is_none());
+    }
+}

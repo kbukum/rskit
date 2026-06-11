@@ -171,6 +171,74 @@ mod tests {
     }
 
     #[test]
+    fn payload_to_qdrant_value_maps_supported_scalars() {
+        assert_eq!(
+            payload_to_qdrant_value(PayloadValue::String("blue".to_owned())).unwrap(),
+            serde_json::json!("blue")
+        );
+        assert_eq!(
+            payload_to_qdrant_value(PayloadValue::Integer(7)).unwrap(),
+            serde_json::json!(7)
+        );
+        assert_eq!(
+            payload_to_qdrant_value(PayloadValue::Float(1.5)).unwrap(),
+            serde_json::json!(1.5)
+        );
+        assert_eq!(
+            payload_to_qdrant_value(PayloadValue::Bool(true)).unwrap(),
+            serde_json::json!(true)
+        );
+    }
+
+    #[test]
+    fn filter_condition_to_qdrant_maps_supported_scalars() {
+        assert_eq!(
+            filter_condition_to_qdrant("color".to_owned(), PayloadValue::String("blue".to_owned()))
+                .unwrap(),
+            serde_json::json!({"key":"color","match":{"value":"blue"}})
+        );
+        assert_eq!(
+            filter_condition_to_qdrant("count".to_owned(), PayloadValue::Integer(7)).unwrap(),
+            serde_json::json!({"key":"count","match":{"value":7}})
+        );
+        assert_eq!(
+            filter_condition_to_qdrant("score".to_owned(), PayloadValue::Float(1.5)).unwrap(),
+            serde_json::json!({"key":"score","range":{"gte":1.5,"lte":1.5}})
+        );
+        assert_eq!(
+            filter_condition_to_qdrant("active".to_owned(), PayloadValue::Bool(true)).unwrap(),
+            serde_json::json!({"key":"active","match":{"value":true}})
+        );
+    }
+
+    #[test]
+    fn qdrant_value_to_payload_maps_supported_scalars() {
+        assert_eq!(
+            qdrant_value_to_payload("color", serde_json::json!("blue")).unwrap(),
+            PayloadValue::String("blue".to_owned())
+        );
+        assert_eq!(
+            qdrant_value_to_payload("score", serde_json::json!(1.5)).unwrap(),
+            PayloadValue::Float(1.5)
+        );
+        assert_eq!(
+            qdrant_value_to_payload("active", serde_json::json!(true)).unwrap(),
+            PayloadValue::Bool(true)
+        );
+    }
+
+    #[test]
+    fn qdrant_point_id_to_string_preserves_numeric_and_uuid_ids() {
+        assert_eq!(qdrant_point_id_to_string(QdrantPointId::Num(42)), "42");
+        assert_eq!(
+            qdrant_point_id_to_string(QdrantPointId::Uuid(
+                "550e8400-e29b-41d4-a716-446655440000".to_owned()
+            )),
+            "550e8400-e29b-41d4-a716-446655440000"
+        );
+    }
+
+    #[test]
     fn qdrant_value_to_payload_rejects_unsupported_returned_values() {
         let err = qdrant_value_to_payload("tags", serde_json::json!([])).unwrap_err();
 

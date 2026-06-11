@@ -61,7 +61,7 @@ chrono        = { workspace = true }
 parking_lot   = { workspace = true }
 
 [[test]]
-name = "comprehensive"
+name = "credentials_jwt_behavior"
 required-features = ["jwt"]
 
 [[test]]

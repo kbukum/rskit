@@ -134,3 +134,28 @@ impl MediaProbe for FfmpegProbe {
         self.extract_chapters(source).await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(unix)]
+    use crate::test_support::write_executable_script as write_script;
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn probe_raw_reports_invalid_json_from_ffprobe() {
+        let ffprobe = write_script("printf 'not-json'");
+        let input = rskit_storage::TempFile::with_extension("mp4").unwrap();
+        std::fs::write(input.path(), b"media").unwrap();
+        let probe = FfmpegProbe::new(FfmpegConfig::default().with_ffprobe_path(ffprobe.path()));
+
+        let error = probe
+            .probe_raw(&FileSource::from_path(input.path()))
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.code(), ErrorCode::Internal);
+        assert!(error.message().contains("not valid JSON"));
+    }
+}

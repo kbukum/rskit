@@ -224,6 +224,7 @@ impl rskit_provider::RequestResponse<EmbedRequest, EmbedResponse> for EmbeddingP
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rskit_embedding::EmbedAsset;
     use rskit_resilience::{ConstantBackoff, RetryPolicy};
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -266,6 +267,80 @@ mod tests {
 
         let json = serde_json::to_value(body).unwrap();
         assert_eq!(json["dimensions"], 768);
+    }
+
+    #[tokio::test]
+    async fn embed_returns_empty_response_without_http_for_empty_inputs() {
+        let provider = EmbeddingProvider::new(&config(None)).unwrap();
+
+        let response = provider.embed(request(Vec::new())).await.unwrap();
+
+        assert!(response.embeddings.is_empty());
+        assert_eq!(response.model.name, "text-embedding-3-small");
+    }
+
+    #[tokio::test]
+    async fn embed_rejects_non_text_inputs_before_http() {
+        let provider = EmbeddingProvider::new(&config(None)).unwrap();
+
+        let err = provider
+            .embed(request(vec![EmbedInput::Image(EmbedAsset::Url(
+                "https://example.test/image.png".into(),
+            ))]))
+            .await
+            .unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+    }
+
+    #[tokio::test]
+    async fn embed_batch_and_request_response_forward_to_embed() {
+        let (base_url, server) = spawn_response_server(vec![
+            (
+                200,
+                r#"{"data":[{"embedding":[0.1]}],"usage":{"prompt_tokens":1,"total_tokens":2}}"#,
+            ),
+            (
+                200,
+                r#"{"data":[{"embedding":[0.2]}],"usage":{"prompt_tokens":2,"total_tokens":3}}"#,
+            ),
+        ])
+        .await;
+        let provider = EmbeddingProvider::new(&config(Some(base_url))).unwrap();
+
+        assert_eq!(
+            rskit_provider::Provider::name(&provider),
+            "openai_embedding"
+        );
+        let via_trait = rskit_provider::RequestResponse::execute(
+            &provider,
+            request(vec![EmbedInput::Text("one".into())]),
+        )
+        .await
+        .unwrap();
+        let batch = provider
+            .embed_batch(vec![request(vec![EmbedInput::Text("two".into())])])
+            .await
+            .unwrap();
+
+        assert_eq!(via_trait.embeddings[0].vector, vec![0.1]);
+        assert_eq!(batch[0].embeddings[0].vector, vec![0.2]);
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn embed_maps_http_errors_without_policy() {
+        let (base_url, server) = spawn_response_server(vec![(503, "try later")]).await;
+        let provider = EmbeddingProvider::new(&config(Some(base_url))).unwrap();
+
+        let err = provider
+            .embed(request(vec![EmbedInput::Text("hello".into())]))
+            .await
+            .unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::ExternalService);
+        assert!(err.message().contains("embedding API returned HTTP 503"));
+        server.await.unwrap();
     }
 
     #[tokio::test]
@@ -335,5 +410,52 @@ mod tests {
         assert_eq!(attempts.load(Ordering::SeqCst), 2);
         assert_eq!(response.embeddings.len(), 1);
         server.await.unwrap();
+    }
+
+    fn config(base_url: Option<String>) -> Config {
+        Config {
+            api_key: rskit_util::SecretString::new("sk-test"),
+            base_url: base_url.unwrap_or_else(|| "https://api.openai.com/v1".into()),
+            model: "gpt-4o".into(),
+            embedding_model: "text-embedding-3-small".into(),
+            embedding_dimensions: Some(3),
+        }
+    }
+
+    fn request(inputs: Vec<EmbedInput>) -> EmbedRequest {
+        EmbedRequest {
+            model: rskit_ai::Model {
+                name: String::new(),
+                provider: rskit_ai::Provider::OpenAI,
+                version: None,
+                capabilities: rskit_ai::Capabilities::default(),
+            },
+            inputs,
+            options: rskit_embedding::EmbeddingOptions::default(),
+        }
+    }
+
+    async fn spawn_response_server(
+        responses: Vec<(u16, &'static str)>,
+    ) -> (String, tokio::task::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            for (status, body) in responses {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                tokio::spawn(async move {
+                    let mut buffer = [0_u8; 2048];
+                    let _ = socket.read(&mut buffer).await;
+                    let reason = if status >= 400 { "Error" } else { "OK" };
+                    let response = format!(
+                        "HTTP/1.1 {status} {reason}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                        body.len()
+                    );
+                    socket.write_all(response.as_bytes()).await.unwrap();
+                    socket.shutdown().await.unwrap();
+                });
+            }
+        });
+        (format!("http://{address}"), server)
     }
 }

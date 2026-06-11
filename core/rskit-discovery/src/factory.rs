@@ -125,4 +125,70 @@ mod tests {
         let result = registry.create(&cfg);
         assert!(result.is_ok());
     }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn static_provider_registers_configured_endpoints() {
+        let registry = DiscoveryRegistry::builtins();
+        let cfg = DiscoveryConfig {
+            provider: "static".to_string(),
+            static_endpoints: vec![crate::config::StaticEndpoint {
+                name: "users".to_string(),
+                address: "127.0.0.1".to_string(),
+                port: 8080,
+                protocol: "grpc".to_string(),
+                tags: vec!["blue".to_string()],
+                metadata: [("zone".to_string(), "a".to_string())]
+                    .into_iter()
+                    .collect(),
+                weight: 3,
+                healthy: false,
+            }],
+            ..Default::default()
+        };
+
+        let (_reg, disc) = registry.create(&cfg).unwrap();
+        let instances = disc.resolve("users").await.unwrap();
+
+        assert_eq!(instances.len(), 1);
+        assert_eq!(instances[0].id, "users-127.0.0.1:8080");
+        assert_eq!(instances[0].tags, vec!["blue"]);
+        assert_eq!(
+            instances[0].metadata.get("zone").map(String::as_str),
+            Some("a")
+        );
+        assert_eq!(instances[0].weight, 3);
+        assert!(!instances[0].healthy);
+    }
+
+    #[test]
+    fn explicit_factory_registration_can_override_provider_name() {
+        let mut registry = DiscoveryRegistry::new();
+        registry.register(
+            "custom",
+            Box::new(|_config| {
+                let mem = Arc::new(crate::memory::InMemoryDiscovery::new());
+                Ok((mem.clone(), mem))
+            }),
+        );
+
+        let cfg = DiscoveryConfig {
+            provider: "custom".to_string(),
+            ..Default::default()
+        };
+
+        assert!(registry.create(&cfg).is_ok());
+    }
+
+    #[cfg(feature = "consul")]
+    #[test]
+    fn builtin_consul_factory_uses_default_address_and_optional_token() {
+        let registry = DiscoveryRegistry::builtins();
+        let cfg = DiscoveryConfig {
+            provider: "consul".to_string(),
+            token: "secret".to_string(),
+            ..Default::default()
+        };
+
+        assert!(registry.create(&cfg).is_ok());
+    }
 }

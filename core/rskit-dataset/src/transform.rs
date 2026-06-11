@@ -102,3 +102,74 @@ impl Transform for ResizeTransform {
         ))
     }
 }
+
+#[cfg(all(test, feature = "image-transform"))]
+mod tests {
+    use image::{ImageBuffer, ImageFormat, Rgb};
+    use std::io::Cursor;
+
+    use super::*;
+    use crate::{Label, MediaType};
+
+    fn png_bytes(width: u32, height: u32) -> Vec<u8> {
+        let image = ImageBuffer::from_pixel(width, height, Rgb([10_u8, 20, 30]));
+        let mut bytes = Vec::new();
+        image
+            .write_to(&mut Cursor::new(&mut bytes), ImageFormat::Png)
+            .unwrap();
+        bytes
+    }
+
+    #[test]
+    fn resize_transform_validates_dimensions_and_quality() {
+        assert!(ResizeTransform::new(0, 10).is_err());
+        assert!(ResizeTransform::new(10, 0).is_err());
+
+        let transform = ResizeTransform::new(4, 5).unwrap();
+        assert_eq!(transform.name(), "resize-4x5");
+        assert!(transform.clone().with_quality(0).is_err());
+        assert!(transform.clone().with_quality(101).is_err());
+        assert_eq!(transform.with_quality(90).unwrap().quality, 90);
+    }
+
+    #[test]
+    fn resize_transform_reencodes_image_and_preserves_metadata() {
+        let limits = DatasetLimits::default();
+        let item = DataItem::new(png_bytes(8, 6), Label::Real, MediaType::Image, "fixture")
+            .unwrap()
+            .with_extension(".png")
+            .with_source_offset(42);
+        let transform = ResizeTransform::new(3, 2)
+            .unwrap()
+            .with_quality(80)
+            .unwrap();
+
+        let output = transform.apply(item, &limits).unwrap().unwrap();
+        let bytes = output.payload().read_bytes_bounded(&limits).unwrap();
+        let decoded = image::load_from_memory(&bytes).unwrap();
+
+        assert_eq!(decoded.width(), 3);
+        assert_eq!(decoded.height(), 2);
+        assert_eq!(output.extension, ".jpg");
+        assert_eq!(output.source_offset(), Some(42));
+        assert_eq!(output.source_name, "fixture");
+    }
+
+    #[test]
+    fn resize_transform_rejects_non_image_payloads() {
+        let item = DataItem::new(
+            b"not an image".to_vec(),
+            Label::AiGenerated,
+            MediaType::Image,
+            "bad",
+        )
+        .unwrap();
+
+        let error = ResizeTransform::new(2, 2)
+            .unwrap()
+            .apply(item, &DatasetLimits::default())
+            .unwrap_err();
+
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
+    }
+}

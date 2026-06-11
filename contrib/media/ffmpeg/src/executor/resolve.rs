@@ -164,3 +164,200 @@ impl FfmpegExecutor {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rskit_media::{
+        ops::{ConcatOp, MediaOp, ResizeMode, ResizeOp},
+        registry::Registry,
+        spatial::Resolution,
+        timeout::TimeoutCalculator,
+    };
+
+    #[cfg(unix)]
+    use crate::test_support::write_executable_script as write_script;
+
+    fn executor(config: FfmpegConfig) -> FfmpegExecutor {
+        FfmpegExecutor::new(config, Registry::default())
+    }
+
+    #[test]
+    fn infer_operation_kind_uses_heaviest_operation() {
+        let ops = vec![
+            MediaOp::StripAudio,
+            MediaOp::Resize(ResizeOp {
+                resolution: Resolution::new(320, 240),
+                mode: ResizeMode::Exact,
+            }),
+        ];
+
+        assert_eq!(infer_operation_kind(&ops), OperationKind::Transcode);
+        assert_eq!(infer_operation_kind(&[]), OperationKind::StreamCopy);
+    }
+
+    #[tokio::test]
+    async fn effective_config_skips_probe_without_timeout_calculator() {
+        let exec = executor(FfmpegConfig::default().with_timeout(Duration::from_secs(9)));
+
+        let config = exec
+            .resolve_effective_config(
+                &FileSource::from_bytes(bytes::Bytes::from_static(b"media")),
+                &[],
+                CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(config.timeout, Some(Duration::from_secs(9)));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn effective_config_uses_probed_duration_when_available() {
+        let ffprobe = write_script("printf '10.0'");
+        let input = rskit_storage::TempFile::with_extension("mp4").unwrap();
+        std::fs::write(input.path(), b"media").unwrap();
+        let config = FfmpegConfig::default()
+            .with_ffprobe_path(ffprobe.path())
+            .with_timeout_calculator(
+                TimeoutCalculator::default()
+                    .with_base_timeout(Duration::from_secs(10))
+                    .with_max_timeout(Duration::from_secs(1_000))
+                    .with_multiplier(OperationKind::Filter, 1.0),
+            );
+        let exec = executor(config);
+
+        let config = exec
+            .resolve_effective_config(
+                &FileSource::from_path(input.path()),
+                &[MediaOp::Resize(ResizeOp {
+                    resolution: Resolution::new(320, 240),
+                    mode: ResizeMode::Exact,
+                })],
+                CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(config.timeout, Some(Duration::from_secs(145)));
+    }
+
+    #[tokio::test]
+    async fn quick_probe_duration_skips_non_path_sources() {
+        let exec = executor(FfmpegConfig::default());
+
+        let duration = exec
+            .quick_probe_duration(
+                &FileSource::from_bytes(bytes::Bytes::from_static(b"media")),
+                CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(duration, None);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn quick_probe_duration_returns_none_for_unparseable_stdout() {
+        let ffprobe = write_script("printf 'N/A'");
+        let input = rskit_storage::TempFile::with_extension("mp4").unwrap();
+        std::fs::write(input.path(), b"media").unwrap();
+        let exec = executor(FfmpegConfig::default().with_ffprobe_path(ffprobe.path()));
+
+        let duration = exec
+            .quick_probe_duration(
+                &FileSource::from_path(input.path()),
+                CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(duration, None);
+    }
+
+    #[tokio::test]
+    async fn source_hints_skip_probe_when_operations_do_not_need_stream_info() {
+        let exec = executor(FfmpegConfig::default());
+
+        let hints = exec
+            .build_source_hints(
+                &FileSource::from_bytes(bytes::Bytes::from_static(b"media")),
+                &[MediaOp::StripAudio],
+                CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(hints.has_audio, None);
+    }
+
+    #[tokio::test]
+    async fn source_hints_skip_non_path_sources_even_when_needed() {
+        let exec = executor(FfmpegConfig::default());
+        let ops = [MediaOp::Concat(ConcatOp {
+            source: FileSource::from_path("/tmp/second.mp4"),
+            transition: None,
+        })];
+
+        let hints = exec
+            .build_source_hints(
+                &FileSource::from_bytes(bytes::Bytes::from_static(b"media")),
+                &ops,
+                CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(hints.has_audio, None);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn source_hints_detect_audio_streams_from_ffprobe_stdout() {
+        let ffprobe = write_script("printf 'video\\naudio\\n'");
+        let input = rskit_storage::TempFile::with_extension("mp4").unwrap();
+        std::fs::write(input.path(), b"media").unwrap();
+        let exec = executor(FfmpegConfig::default().with_ffprobe_path(ffprobe.path()));
+        let ops = [MediaOp::Concat(ConcatOp {
+            source: FileSource::from_path("/tmp/second.mp4"),
+            transition: None,
+        })];
+
+        let hints = exec
+            .build_source_hints(
+                &FileSource::from_path(input.path()),
+                &ops,
+                CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(hints.has_audio, Some(true));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn source_hints_report_no_audio_when_probe_stdout_has_no_audio() {
+        let ffprobe = write_script("exit 3");
+        let input = rskit_storage::TempFile::with_extension("mp4").unwrap();
+        std::fs::write(input.path(), b"media").unwrap();
+        let exec = executor(FfmpegConfig::default().with_ffprobe_path(ffprobe.path()));
+        let ops = [MediaOp::Concat(ConcatOp {
+            source: FileSource::from_path("/tmp/second.mp4"),
+            transition: None,
+        })];
+
+        let hints = exec
+            .build_source_hints(
+                &FileSource::from_path(input.path()),
+                &ops,
+                CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(hints.has_audio, Some(false));
+    }
+}

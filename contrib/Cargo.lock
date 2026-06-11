@@ -4450,6 +4450,7 @@ dependencies = [
  "rskit-errors",
  "rskit-util",
  "serde",
+ "serde_json",
  "tokio",
  "tracing",
 ]
@@ -4692,6 +4693,7 @@ dependencies = [
  "rskit-resilience",
  "serde",
  "serde_json",
+ "tokio",
  "tracing",
 ]
 
@@ -5030,9 +5032,11 @@ dependencies = [
  "bytes",
  "chrono",
  "google-cloud-auth",
+ "google-cloud-gax",
  "google-cloud-storage",
  "rskit-errors",
  "rskit-storage",
+ "rustls",
  "serde",
  "serde_json",
  "tokio",

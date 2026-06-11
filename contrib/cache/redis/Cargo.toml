@@ -23,3 +23,6 @@ tracing     = { workspace = true }
 rskit-cache  = { workspace = true }
 rskit-errors = { workspace = true }
 rskit-util   = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

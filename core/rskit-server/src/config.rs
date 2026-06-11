@@ -115,6 +115,16 @@ mod tests {
     }
 
     #[test]
+    fn zero_port_fails_validation() {
+        let cfg = GrpcServerConfig {
+            port: 0,
+            ..Default::default()
+        };
+        let errors = cfg.validate().unwrap_err();
+        assert!(errors.field_errors().contains_key("port"));
+    }
+
+    #[test]
     fn tls_config_stores_paths() {
         let tls = TlsConfig {
             cert_path: "/certs/server.crt".into(),

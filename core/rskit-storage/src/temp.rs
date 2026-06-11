@@ -145,3 +145,47 @@ impl std::fmt::Debug for TempDir {
             .finish()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn temp_file_clone_source_and_persist_keep_expected_contents() {
+        let file = TempFile::with_extension("txt").unwrap();
+        std::fs::write(file.path(), b"hello").unwrap();
+
+        let clone = file.try_clone().unwrap();
+        assert_eq!(std::fs::read(clone.path()).unwrap(), b"hello");
+        assert!(matches!(clone.into_source(), crate::FileSource::Temp(_)));
+
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("persisted.txt");
+        let persisted = file.persist(&target).unwrap();
+        assert_eq!(persisted, target);
+        assert_eq!(std::fs::read(&target).unwrap(), b"hello");
+    }
+
+    #[test]
+    fn temp_dir_creates_files_and_debug_exposes_path() {
+        let dir = TempDir::new().unwrap();
+        let named = dir.create_file("named").unwrap();
+        let with_ext = dir.create_file_with_extension("bin").unwrap();
+
+        assert!(named.path().starts_with(dir.path()));
+        assert!(with_ext.path().starts_with(dir.path()));
+        assert!(
+            format!("{dir:?}").contains(dir.path().file_name().unwrap().to_string_lossy().as_ref())
+        );
+    }
+
+    #[test]
+    fn temp_file_reports_invalid_directory_errors() {
+        let missing =
+            std::env::temp_dir().join(format!("rskit-storage-missing-{}", std::process::id()));
+        let error = TempFile::in_dir(&missing).unwrap_err();
+
+        assert_eq!(error.code(), ErrorCode::Internal);
+        assert!(error.to_string().contains("failed to create temp file"));
+    }
+}

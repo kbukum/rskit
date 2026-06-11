@@ -114,9 +114,12 @@ fn read_bounded(path: &std::path::Path, max_bytes: u64) -> AppResult<Vec<u8>> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use rskit_media::{
         ops::{MediaOp, SubtitleConfig, SubtitleFormat, SubtitleSource},
         registry::Registry,
+        subtitle::SubtitleTrack,
+        time::TimeRange,
     };
 
     use crate::{command::FfmpegCommand, config::FfmpegConfig};
@@ -158,5 +161,63 @@ mod tests {
         let source = rskit_storage::FileSource::from_bytes(bytes::Bytes::from_static(b"media"));
 
         FfmpegCommand::compile(&source, &[op], None, &config, &Registry::default()).unwrap();
+    }
+
+    #[test]
+    fn burn_subtitles_writes_srt_filter_and_keeps_temp_file_alive() {
+        let mut cmd = FfmpegCommand::compile(
+            &rskit_storage::FileSource::from_bytes(bytes::Bytes::from_static(b"media")),
+            &[],
+            None,
+            &FfmpegConfig::default(),
+            &Registry::default(),
+        )
+        .unwrap();
+        let config = FfmpegConfig::default();
+        let registry = Registry::default();
+        let hints = crate::command::SourceHints::default();
+        let mut ctx = crate::compilers::CompileContext {
+            cmd: &mut cmd,
+            config: &config,
+            hints: &hints,
+            registry: &registry,
+        };
+        let subs = SubtitleTrack::new().add(TimeRange::from_seconds(0.0, 1.0), "hello");
+
+        compile_burn_subtitles(&mut ctx, &subs).unwrap();
+
+        assert_eq!(ctx.cmd.video_filters.len(), 1);
+        assert!(ctx.cmd.video_filters[0].contains("subtitles=filename="));
+        assert_eq!(ctx.cmd.temp_files.len(), 1);
+        assert!(ctx.cmd.temp_files[0].path().exists());
+    }
+
+    #[test]
+    fn subtitle_file_rejects_invalid_utf8() {
+        let temp = rskit_storage::TempFile::with_extension("srt").unwrap();
+        std::fs::write(temp.path(), [0xff, 0xfe, 0xfd]).unwrap();
+
+        let error = read_subtitle_file(temp.path()).unwrap_err();
+
+        assert_eq!(error.code(), rskit_errors::ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn subtitle_file_rejects_files_over_the_byte_limit() {
+        let temp = rskit_storage::TempFile::with_extension("srt").unwrap();
+        std::fs::write(temp.path(), vec![b'a'; (MAX_SUBTITLE_BYTES + 1) as usize]).unwrap();
+
+        let error = read_subtitle_file(temp.path()).unwrap_err();
+
+        assert_eq!(error.code(), rskit_errors::ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn subtitle_file_reports_open_errors() {
+        let missing = std::path::Path::new("missing-captions.srt");
+
+        let error = read_subtitle_file(missing).unwrap_err();
+
+        assert_eq!(error.code(), rskit_errors::ErrorCode::Internal);
     }
 }

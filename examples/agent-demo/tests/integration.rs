@@ -409,3 +409,59 @@ async fn demo_tasks_all_complete_in_parallel() -> AppResult<()> {
     pool.shutdown().await.ok();
     Ok(())
 }
+
+#[test]
+fn shell_binary_handles_non_destructive_commands() {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+    use std::thread;
+    use std::time::Duration as StdDuration;
+
+    let exe = env!("CARGO_BIN_EXE_agent-demo");
+    let mut child = Command::new(exe)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn agent-demo");
+
+    {
+        let stdin = child.stdin.as_mut().expect("stdin");
+        for command in [
+            "/help",
+            "/analyze missing.file",
+            "/resize missing.file 20x30",
+            "/pipeline missing.file",
+            "/review missing.file",
+            "/batch 0",
+            "/demo",
+            "/analyze image/real-photo.jpg",
+            "/resize image/sample.png 20x30",
+            "/pipeline image/ai-generated.jpg",
+            "/review image/real-photo.jpg",
+            "/cancel 1",
+            "/status",
+            "/detail 999",
+            "/cancel 999",
+            "/stats",
+            "/clear",
+            "/bogus",
+            "/quit",
+        ] {
+            writeln!(stdin, "{command}").expect("write command");
+            stdin.flush().expect("flush command");
+            thread::sleep(StdDuration::from_millis(25));
+        }
+    }
+
+    let output = child.wait_with_output().expect("agent-demo exits");
+    assert!(
+        output.status.success(),
+        "status: {:?}, stderr: {}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("rskit Agent Demo"));
+    assert!(stdout.contains("Done"));
+}

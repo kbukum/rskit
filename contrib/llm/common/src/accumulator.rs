@@ -78,3 +78,57 @@ pub fn accumulate_tool_uses(
         })
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_input_json_accepts_empty_null_and_objects() {
+        assert!(parse_input_json("").unwrap().is_empty());
+        assert!(parse_input_json("null").unwrap().is_empty());
+        assert_eq!(parse_input_json(r#"{"a":1}"#).unwrap()["a"], 1);
+    }
+
+    #[test]
+    fn parse_input_json_rejects_invalid_or_non_object_values() {
+        assert_eq!(
+            parse_input_json("{").unwrap_err().code(),
+            ErrorCode::InvalidFormat
+        );
+        assert_eq!(
+            value_to_input_map(Value::String("bad".into()))
+                .unwrap_err()
+                .code(),
+            ErrorCode::InvalidFormat
+        );
+    }
+
+    #[test]
+    fn accumulate_tool_uses_merges_fragments_and_defaults_missing_ids() {
+        let calls = accumulate_tool_uses([
+            StreamChunk {
+                tool_calls: vec![StreamToolCall {
+                    index: 1,
+                    name: "lookup".into(),
+                    input_delta: r#"{"q":"#.into(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            },
+            StreamChunk {
+                tool_calls: vec![StreamToolCall {
+                    index: 1,
+                    input_delta: r#""rust"}"#.into(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            },
+        ])
+        .unwrap();
+
+        assert_eq!(calls[0].id, "tool_call_1");
+        assert_eq!(calls[0].name, "lookup");
+        assert_eq!(calls[0].input["q"], "rust");
+    }
+}

@@ -195,6 +195,36 @@ impl Component for DiscoveryComponent {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::instance::ServiceInstance;
+    use async_trait::async_trait;
+
+    struct FailingRegistry {
+        fail_register: bool,
+        deregistered: Arc<Mutex<Vec<String>>>,
+    }
+
+    #[async_trait]
+    impl Registry for FailingRegistry {
+        async fn register(&self, _instance: &ServiceInstance) -> AppResult<()> {
+            if self.fail_register {
+                Err(AppError::new(ErrorCode::Internal, "registration failed"))
+            } else {
+                Ok(())
+            }
+        }
+
+        async fn deregister(&self, id: &str) -> AppResult<()> {
+            self.deregistered.lock().push(id.to_string());
+            Ok(())
+        }
+    }
+
+    #[async_trait]
+    impl Discovery for FailingRegistry {
+        async fn resolve(&self, _service: &str) -> AppResult<Vec<ServiceInstance>> {
+            Ok(Vec::new())
+        }
+    }
 
     #[tokio::test]
     async fn disabled_component_uses_static() {
@@ -206,6 +236,7 @@ mod tests {
         comp.start().await.unwrap();
         assert!(comp.discovery().is_some());
         assert!(comp.registry().is_some());
+        assert!(comp.health().is_healthy());
         comp.stop().await.unwrap();
     }
 
@@ -229,5 +260,133 @@ mod tests {
         assert!(comp.instance_id.lock().is_some());
         comp.stop().await.unwrap();
         assert!(comp.instance_id.lock().is_none());
+    }
+
+    #[test]
+    fn with_registry_initial_health_is_unhealthy_and_accessors_are_empty() {
+        let comp =
+            DiscoveryComponent::with_registry(DiscoveryConfig::default(), DiscoveryRegistry::new());
+
+        assert_eq!(comp.name(), "discovery");
+        assert!(comp.registry().is_none());
+        assert!(comp.discovery().is_none());
+        assert!(!comp.health().is_healthy());
+    }
+
+    #[tokio::test]
+    async fn optional_registration_failure_starts_degraded_without_instance_id() {
+        let provider = Arc::new(FailingRegistry {
+            fail_register: true,
+            deregistered: Arc::new(Mutex::new(Vec::new())),
+        });
+        let mut providers = DiscoveryRegistry::new();
+        providers.register(
+            "fake",
+            Box::new({
+                let provider = provider.clone();
+                move |_| Ok((provider.clone(), provider.clone()))
+            }),
+        );
+        let comp = DiscoveryComponent::with_registry(
+            DiscoveryConfig {
+                enabled: true,
+                provider: "fake".to_string(),
+                registration: crate::config::RegistrationConfig {
+                    enabled: true,
+                    required: false,
+                    service_name: "svc".to_string(),
+                    service_port: 8080,
+                    max_retries: 1,
+                    retry_interval: "1ms".to_string(),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            providers,
+        );
+
+        comp.start().await.unwrap();
+
+        assert!(comp.registry().is_some());
+        assert!(comp.discovery().is_some());
+        assert!(comp.instance_id.lock().is_none());
+        assert!(!comp.health().is_healthy());
+    }
+
+    #[tokio::test]
+    async fn required_registration_failure_returns_start_error() {
+        let provider = Arc::new(FailingRegistry {
+            fail_register: true,
+            deregistered: Arc::new(Mutex::new(Vec::new())),
+        });
+        let mut providers = DiscoveryRegistry::new();
+        providers.register(
+            "fake",
+            Box::new({
+                let provider = provider.clone();
+                move |_| Ok((provider.clone(), provider.clone()))
+            }),
+        );
+        let comp = DiscoveryComponent::with_registry(
+            DiscoveryConfig {
+                enabled: true,
+                provider: "fake".to_string(),
+                registration: crate::config::RegistrationConfig {
+                    enabled: true,
+                    required: true,
+                    service_name: "svc".to_string(),
+                    service_port: 8080,
+                    max_retries: 1,
+                    retry_interval: "1ms".to_string(),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            providers,
+        );
+
+        let err = comp.start().await.unwrap_err();
+        assert_eq!(err.code(), ErrorCode::Internal);
+        assert!(err.to_string().contains("register self"));
+    }
+
+    #[tokio::test]
+    async fn successful_registration_adds_health_url_and_deregisters_on_stop() {
+        let deregistered = Arc::new(Mutex::new(Vec::new()));
+        let provider = Arc::new(FailingRegistry {
+            fail_register: false,
+            deregistered: deregistered.clone(),
+        });
+        let mut providers = DiscoveryRegistry::new();
+        providers.register(
+            "fake",
+            Box::new({
+                let provider = provider.clone();
+                move |_| Ok((provider.clone(), provider.clone()))
+            }),
+        );
+        let comp = DiscoveryComponent::with_registry(
+            DiscoveryConfig {
+                enabled: true,
+                provider: "fake".to_string(),
+                registration: crate::config::RegistrationConfig {
+                    enabled: true,
+                    service_name: "svc".to_string(),
+                    service_id: "svc-1".to_string(),
+                    service_port: 8080,
+                    max_retries: 1,
+                    retry_interval: "1ms".to_string(),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            providers,
+        );
+
+        comp.start().await.unwrap();
+        assert!(comp.health().is_healthy());
+        comp.stop().await.unwrap();
+
+        assert_eq!(*deregistered.lock(), vec!["svc-1".to_string()]);
     }
 }

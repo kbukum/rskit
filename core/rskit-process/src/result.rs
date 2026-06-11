@@ -124,3 +124,58 @@ impl ProcessResult {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ErrorCode;
+
+    fn result(exit_code: Option<i32>, timed_out: bool, cancelled: bool) -> ProcessResult {
+        ProcessResult::completed(
+            exit_code,
+            b"out".to_vec(),
+            b"err".to_vec(),
+            false,
+            true,
+            Duration::from_millis(5),
+            timed_out,
+            cancelled,
+        )
+    }
+
+    #[test]
+    fn completed_result_preserves_bytes_strings_flags_and_duration() {
+        let result = result(Some(0), false, false);
+
+        assert!(result.success());
+        assert_eq!(result.stdout, "out");
+        assert_eq!(result.stdout_bytes, b"out");
+        assert_eq!(result.stderr, "err");
+        assert_eq!(result.stderr_bytes, b"err");
+        assert!(!result.stdout_truncated);
+        assert!(result.stderr_truncated);
+        assert_eq!(result.duration, Duration::from_millis(5));
+        assert!(std::ptr::eq(result.check().unwrap(), &result));
+    }
+
+    #[test]
+    fn check_reports_cancelled_timeout_failed_and_killed_states() {
+        assert_eq!(
+            result(Some(0), false, true).check().unwrap_err().code(),
+            ErrorCode::Cancelled
+        );
+        assert_eq!(
+            result(Some(0), true, false).check().unwrap_err().code(),
+            ErrorCode::Timeout
+        );
+        assert_eq!(
+            result(Some(2), false, false).check().unwrap_err().code(),
+            ErrorCode::Internal
+        );
+        assert_eq!(
+            result(None, false, false).check().unwrap_err().code(),
+            ErrorCode::Internal
+        );
+        assert!(!result(Some(2), false, false).success());
+    }
+}

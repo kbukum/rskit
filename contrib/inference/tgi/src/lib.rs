@@ -74,6 +74,83 @@ impl TgiAdapter {
     }
 }
 
+fn tgi_chat_body(adapter: &Config, request: &PredictRequest) -> OaiChatRequest {
+    let prompt = request
+        .inputs
+        .get("prompt")
+        .or_else(|| request.inputs.get("text"))
+        .and_then(|value| match value {
+            Value::Text { text } => Some(text.clone()),
+            _ => None,
+        })
+        .unwrap_or_default();
+
+    let model = if request.model_name.is_empty() {
+        adapter.model.clone()
+    } else {
+        request.model_name.clone()
+    };
+
+    let max_tokens = request
+        .parameters
+        .get("max_tokens")
+        .and_then(serde_json::Value::as_u64)
+        .map(|value| value as u32)
+        .unwrap_or(adapter.max_tokens);
+
+    let temperature = request
+        .parameters
+        .get("temperature")
+        .and_then(serde_json::Value::as_f64)
+        .map(|value| value as f32);
+
+    OaiChatRequest {
+        model,
+        messages: vec![OaiMessage {
+            role: "user".to_string(),
+            content: prompt,
+        }],
+        max_tokens,
+        temperature,
+        stream: false,
+    }
+}
+
+fn tgi_predict_response(oai: OaiChatResponse, model_version: Option<String>) -> PredictResponse {
+    let generated = oai
+        .choices
+        .first()
+        .and_then(|choice| choice.message.content.clone())
+        .unwrap_or_default();
+    let finish = oai
+        .choices
+        .first()
+        .and_then(|choice| choice.finish_reason.as_deref())
+        .map(|reason| ("finish_reason".to_string(), reason.to_string()))
+        .into_iter()
+        .collect();
+
+    PredictResponse {
+        outputs: std::collections::HashMap::from([(
+            "text".to_string(),
+            Value::Text { text: generated },
+        )]),
+        usage: Usage {
+            input_tokens: oai.usage.prompt_tokens as u64,
+            output_tokens: oai.usage.completion_tokens as u64,
+            ..Usage::default()
+        },
+        model: Model {
+            name: oai.model,
+            provider: ModelProvider::Custom(TGI_KIND.to_string()),
+            version: model_version,
+            capabilities: Capabilities::default(),
+        },
+        status: PredictStatus::Success,
+        metadata: finish,
+    }
+}
+
 #[derive(Serialize)]
 struct OaiChatRequest {
     model: String,
@@ -131,45 +208,7 @@ impl rskit_provider::RequestResponse<PredictRequest, PredictResponse> for TgiAda
 #[async_trait]
 impl Inference for TgiAdapter {
     async fn predict(&self, request: PredictRequest) -> Result<PredictResponse, InferenceError> {
-        let prompt = request
-            .inputs
-            .get("prompt")
-            .or_else(|| request.inputs.get("text"))
-            .and_then(|value| match value {
-                Value::Text { text } => Some(text.clone()),
-                _ => None,
-            })
-            .unwrap_or_default();
-
-        let model = if request.model_name.is_empty() {
-            self.config.model.clone()
-        } else {
-            request.model_name.clone()
-        };
-
-        let max_tokens = request
-            .parameters
-            .get("max_tokens")
-            .and_then(serde_json::Value::as_u64)
-            .map(|value| value as u32)
-            .unwrap_or(self.config.max_tokens);
-
-        let temperature = request
-            .parameters
-            .get("temperature")
-            .and_then(serde_json::Value::as_f64)
-            .map(|value| value as f32);
-
-        let body = OaiChatRequest {
-            model: model.clone(),
-            messages: vec![OaiMessage {
-                role: "user".to_string(),
-                content: prompt,
-            }],
-            max_tokens,
-            temperature,
-            stream: false,
-        };
+        let body = tgi_chat_body(&self.config, &request);
 
         let req = Request::post("/v1/chat/completions")
             .json_body(&body)
@@ -188,38 +227,7 @@ impl Inference for TgiAdapter {
         let oai: OaiChatResponse =
             serde_json::from_str(&text).map_err(|err| InferenceError::Decode(err.to_string()))?;
 
-        let generated = oai
-            .choices
-            .first()
-            .and_then(|choice| choice.message.content.clone())
-            .unwrap_or_default();
-        let finish = oai
-            .choices
-            .first()
-            .and_then(|choice| choice.finish_reason.as_deref())
-            .map(|reason| ("finish_reason".to_string(), reason.to_string()))
-            .into_iter()
-            .collect();
-
-        Ok(PredictResponse {
-            outputs: std::collections::HashMap::from([(
-                "text".to_string(),
-                Value::Text { text: generated },
-            )]),
-            usage: Usage {
-                input_tokens: oai.usage.prompt_tokens as u64,
-                output_tokens: oai.usage.completion_tokens as u64,
-                ..Usage::default()
-            },
-            model: Model {
-                name: oai.model,
-                provider: ModelProvider::Custom(TGI_KIND.to_string()),
-                version: request.model_version,
-                capabilities: Capabilities::default(),
-            },
-            status: PredictStatus::Success,
-            metadata: finish,
-        })
+        Ok(tgi_predict_response(oai, request.model_version))
     }
 
     fn descriptor(&self) -> InferenceDescriptor {
@@ -273,6 +281,7 @@ pub fn register(registry: &mut Registry, config: Config) -> Result<(), RegistryE
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rskit_provider::RequestResponse as _;
 
     #[test]
     fn tgi_descriptor() {
@@ -311,6 +320,116 @@ mod tests {
         assert_eq!(config.model, "tgi");
         assert_eq!(config.max_tokens, 256);
         assert!(config.api_key.is_none());
+    }
+
+    #[test]
+    fn request_body_uses_text_alias_defaults_and_parameters() {
+        let config = Config {
+            base_url: "http://localhost:8080".into(),
+            model: "default-model".into(),
+            api_key: Some(rskit_util::SecretString::new("secret")),
+            max_tokens: 64,
+        };
+        let mut req = PredictRequest {
+            model_name: String::new(),
+            inputs: std::collections::HashMap::from([(
+                "text".to_owned(),
+                Value::Text {
+                    text: "hello".to_owned(),
+                },
+            )]),
+            ..PredictRequest::default()
+        };
+        req.parameters
+            .insert("max_tokens".to_owned(), serde_json::json!(7));
+        req.parameters
+            .insert("temperature".to_owned(), serde_json::json!(0.25));
+
+        let body = serde_json::to_value(tgi_chat_body(&config, &req)).unwrap();
+
+        assert_eq!(body["model"], "default-model");
+        assert_eq!(body["messages"][0]["role"], "user");
+        assert_eq!(body["messages"][0]["content"], "hello");
+        assert_eq!(body["max_tokens"], 7);
+        assert_eq!(body["temperature"], 0.25);
+        assert_eq!(body["stream"], false);
+    }
+
+    #[test]
+    fn response_mapping_handles_finish_reason_and_empty_choices() {
+        let response = tgi_predict_response(
+            OaiChatResponse {
+                model: "served".to_owned(),
+                choices: vec![OaiChatChoice {
+                    message: OaiChatMessage {
+                        content: Some("done".to_owned()),
+                    },
+                    finish_reason: Some("stop".to_owned()),
+                }],
+                usage: OaiUsage {
+                    prompt_tokens: 2,
+                    completion_tokens: 3,
+                },
+            },
+            Some("v1".to_owned()),
+        );
+
+        assert!(matches!(
+            response.outputs.get("text"),
+            Some(Value::Text { text }) if text == "done"
+        ));
+        assert_eq!(
+            response.metadata.get("finish_reason").map(String::as_str),
+            Some("stop")
+        );
+        assert_eq!(response.usage.input_tokens, 2);
+        assert_eq!(response.model.version.as_deref(), Some("v1"));
+
+        let empty = tgi_predict_response(
+            OaiChatResponse {
+                model: "served".to_owned(),
+                choices: Vec::new(),
+                usage: OaiUsage {
+                    prompt_tokens: 0,
+                    completion_tokens: 0,
+                },
+            },
+            None,
+        );
+        assert!(matches!(
+            empty.outputs.get("text"),
+            Some(Value::Text { text }) if text.is_empty()
+        ));
+        assert!(empty.metadata.is_empty());
+    }
+
+    #[tokio::test]
+    async fn provider_component_streaming_and_execute_fast_paths() {
+        let adapter = TgiAdapter::new(Config {
+            base_url: "http://127.0.0.1:1".into(),
+            model: "test".into(),
+            api_key: None,
+            max_tokens: 64,
+        })
+        .unwrap();
+
+        assert_eq!(rskit_provider::Provider::name(&adapter), TGI_KIND);
+        assert_eq!(Component::name(&adapter), "rskit-inference.tgi");
+        adapter.start().await.unwrap();
+        adapter.stop().await.unwrap();
+        assert!(adapter.health().is_healthy());
+        assert!(matches!(
+            adapter.predict_stream(PredictRequest::default()).await,
+            Err(InferenceError::NotImplemented(_))
+        ));
+        let err = adapter
+            .execute(PredictRequest::default())
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            err.code(),
+            rskit_errors::ErrorCode::ExternalService | rskit_errors::ErrorCode::Internal
+        ));
     }
 
     #[tokio::test]

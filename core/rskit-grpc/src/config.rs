@@ -207,4 +207,58 @@ mod tests {
         };
         assert!(cfg.validate().is_err());
     }
+
+    #[test]
+    fn validate_rejects_zero_message_limits_independently() {
+        let recv_zero = GrpcClientConfig {
+            max_message_size: 0,
+            ..Default::default()
+        };
+        assert!(
+            recv_zero
+                .validate()
+                .unwrap_err()
+                .to_string()
+                .contains("max_message_size")
+        );
+
+        let send_zero = GrpcClientConfig {
+            max_send_message_size: 0,
+            ..Default::default()
+        };
+        assert!(
+            send_zero
+                .validate()
+                .unwrap_err()
+                .to_string()
+                .contains("max_send_message_size")
+        );
+    }
+
+    #[test]
+    fn debug_output_reports_resilience_policy_presence_without_dumping_policy() {
+        let cfg = GrpcClientConfig::new("example.com:443").with_resilience_policy(Policy::new());
+
+        let rendered = format!("{cfg:?}");
+
+        assert!(rendered.contains("example.com:443"));
+        assert!(rendered.contains("has_resilience_policy: true"));
+    }
+
+    #[test]
+    fn serde_defaults_fill_optional_transport_settings() {
+        let cfg: GrpcClientConfig = serde_json::from_value(serde_json::json!({
+            "target": "api.internal:443",
+            "max_message_size": 1024,
+            "max_send_message_size": 2048
+        }))
+        .unwrap();
+
+        assert_eq!(cfg.address(), "api.internal:443");
+        assert_eq!(cfg.timeout, Duration::from_secs(30));
+        assert_eq!(cfg.connect_timeout, Duration::from_secs(10));
+        assert_eq!(cfg.keepalive_interval, Some(Duration::from_secs(30)));
+        assert_eq!(cfg.max_message_size, 1024);
+        assert_eq!(cfg.max_send_message_size, 2048);
+    }
 }

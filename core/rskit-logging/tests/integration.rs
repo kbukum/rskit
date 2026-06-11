@@ -1,4 +1,4 @@
-//! Comprehensive integration tests for rskit-logging.
+//! Integration tests for rskit-logging configuration, formatting, masking, and context behavior.
 //!
 //! Covers: LogConfig defaults, format switching, level filtering, correlation-id
 //! context helpers, span operations, edge cases, and output capture via a
@@ -13,11 +13,14 @@ use rskit_logging::context::{
     component_span, request_span, set_correlation_id, set_trace_id, set_user_id,
 };
 use rskit_logging::{
-    MaskingConfig, SamplingConfig, init_logging, init_logging_with_masking,
-    init_logging_with_options,
+    Masker, MaskingConfig, MaskingMakeWriter, SamplingConfig, init_logging,
+    init_logging_with_masking, init_logging_with_options,
 };
+use std::io::Write;
+use std::sync::Arc as StdArc;
 use tracing::subscriber::with_default;
 use tracing::{Subscriber, info_span};
+use tracing_subscriber::fmt::MakeWriter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::{EnvFilter, Layer, Registry};
 
@@ -36,7 +39,6 @@ struct CapturedEvent {
     message: String,
     level: tracing::Level,
     target: String,
-    #[allow(dead_code)]
     fields: Vec<(String, String)>,
 }
 
@@ -110,7 +112,7 @@ impl tracing::field::Visit for FieldVisitor {
 }
 
 /// Build a test subscriber with a capture layer and an optional filter string.
-fn test_subscriber(filter: &str) -> (impl Subscriber + Send + Sync, CapturedLogs) {
+fn capture_subscriber(filter: &str) -> (impl Subscriber + Send + Sync, CapturedLogs) {
     let captured = CapturedLogs::default();
     let layer = CapturingLayer {
         logs: captured.clone(),
@@ -323,6 +325,94 @@ fn init_logging_with_masking_disabled_writes_original_values() {
 }
 
 #[test]
+fn init_logging_with_options_console_masking_redacts_configured_fields() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("console-masked.log");
+    let cfg = LoggingConfig {
+        output: LogOutput::File {
+            path: path.to_string_lossy().into_owned(),
+        },
+        ..Default::default()
+    };
+    let masking = MaskingConfig {
+        field_names: vec!["session_secret".to_owned()],
+        value_patterns: vec![r"abc[0-9]+".to_owned()],
+        replacement: "[HIDDEN]".to_owned(),
+        ..Default::default()
+    };
+
+    {
+        let _guard = init_logging_with_options(&cfg, None, None, Some(&masking)).unwrap();
+        tracing::info!(session_secret = "abc123", user = "alice", "console masking");
+    }
+
+    let output = std::fs::read_to_string(path).unwrap();
+    assert!(output.contains("[HIDDEN]"), "output: {output}");
+    assert!(output.contains("alice"), "output: {output}");
+    assert!(!output.contains("abc123"), "output: {output}");
+}
+
+#[test]
+fn init_logging_with_options_json_without_masking_preserves_output() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("json-unmasked.log");
+    let cfg = LoggingConfig {
+        format: LogFormat::Json,
+        output: LogOutput::File {
+            path: path.to_string_lossy().into_owned(),
+        },
+        ..Default::default()
+    };
+    let sampling = SamplingConfig {
+        enabled: true,
+        initial_rate: 5,
+        thereafter_rate: 1,
+    };
+
+    {
+        let _guard = init_logging_with_options(&cfg, Some(&sampling), None, None).unwrap();
+        tracing::info!(email = "user@example.com", "json unmasked options");
+    }
+
+    let output = std::fs::read_to_string(path).unwrap();
+    assert!(
+        output.contains("\"email\":\"user@example.com\""),
+        "output: {output}"
+    );
+    assert!(
+        output.contains("\"message\":\"json unmasked options\""),
+        "output: {output}"
+    );
+}
+
+#[test]
+fn masking_make_writer_masks_buffer_on_explicit_flush() {
+    let output = Arc::new(Mutex::new(Vec::<u8>::new()));
+    let writer = SharedBufferWriter {
+        output: Arc::clone(&output),
+    };
+    let masker: StdArc<dyn Masker> = StdArc::new(rskit_logging::DefaultMasker::default());
+    let make_writer = MaskingMakeWriter::new(writer, masker);
+
+    {
+        let mut writer = make_writer.make_writer();
+        writer
+            .write_all(br#"{"password":"hunter2","name":"Alice"}"#)
+            .unwrap();
+        writer.flush().unwrap();
+    }
+
+    let bytes = output.lock().clone();
+    let rendered = String::from_utf8(bytes).unwrap();
+    assert!(
+        rendered.contains(r#""password":"[REDACTED]""#),
+        "output: {rendered}"
+    );
+    assert!(rendered.contains(r#""name":"Alice""#), "output: {rendered}");
+    assert!(!rendered.contains("hunter2"), "output: {rendered}");
+}
+
+#[test]
 fn init_logging_with_options_rejects_invalid_custom_masking_pattern() {
     let cfg = LoggingConfig::default();
     let masking = MaskingConfig {
@@ -336,6 +426,36 @@ fn init_logging_with_options_rejects_invalid_custom_masking_pattern() {
     };
 
     assert_eq!(error.code(), rskit_errors::ErrorCode::InvalidFormat);
+}
+
+#[derive(Clone)]
+struct SharedBufferWriter {
+    output: Arc<Mutex<Vec<u8>>>,
+}
+
+impl<'a> MakeWriter<'a> for SharedBufferWriter {
+    type Writer = SharedBuffer;
+
+    fn make_writer(&'a self) -> Self::Writer {
+        SharedBuffer {
+            output: Arc::clone(&self.output),
+        }
+    }
+}
+
+struct SharedBuffer {
+    output: Arc<Mutex<Vec<u8>>>,
+}
+
+impl Write for SharedBuffer {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.output.lock().extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
 }
 
 #[cfg(feature = "otlp")]
@@ -374,6 +494,23 @@ fn full_logging_setup_accepts_disabled_otlp_with_all_optional_layers() {
     assert!(!output.contains("user@example.com"), "output: {output}");
 }
 
+#[cfg(feature = "otlp")]
+#[test]
+fn enabled_http_otlp_provider_builds_layer_and_shutdowns_without_records() {
+    let cfg = rskit_logging::otlp::OtlpConfig {
+        enabled: true,
+        endpoint: "http://localhost:4318/v1/logs".to_owned(),
+        protocol: "http".to_owned(),
+        headers: std::collections::HashMap::from([("x-test".to_owned(), "value".to_owned())]),
+    };
+
+    let provider = rskit_logging::otlp::OtlpProvider::new(&cfg, "svc", "test", "0.1.0")
+        .unwrap()
+        .expect("enabled config should create a provider");
+    let _layer = provider.layer::<Registry>();
+    provider.shutdown().unwrap();
+}
+
 #[test]
 fn init_logging_env_does_not_panic() {
     let _guard = rskit_logging::init_logging_env();
@@ -399,7 +536,7 @@ fn guard_drop_restores_previous_subscriber() {
 
 #[test]
 fn filter_info_passes_info_and_above() {
-    let (sub, captured) = test_subscriber("info");
+    let (sub, captured) = capture_subscriber("info");
     with_default(sub, || {
         tracing::trace!("trace msg");
         tracing::debug!("debug msg");
@@ -416,7 +553,7 @@ fn filter_info_passes_info_and_above() {
 
 #[test]
 fn filter_debug_passes_debug_and_above() {
-    let (sub, captured) = test_subscriber("debug");
+    let (sub, captured) = capture_subscriber("debug");
     with_default(sub, || {
         tracing::trace!("trace msg");
         tracing::debug!("debug msg");
@@ -430,7 +567,7 @@ fn filter_debug_passes_debug_and_above() {
 
 #[test]
 fn filter_error_only() {
-    let (sub, captured) = test_subscriber("error");
+    let (sub, captured) = capture_subscriber("error");
     with_default(sub, || {
         tracing::info!("info msg");
         tracing::warn!("warn msg");
@@ -443,7 +580,7 @@ fn filter_error_only() {
 
 #[test]
 fn filter_trace_passes_everything() {
-    let (sub, captured) = test_subscriber("trace");
+    let (sub, captured) = capture_subscriber("trace");
     with_default(sub, || {
         tracing::trace!("trace msg");
         tracing::debug!("debug msg");
@@ -458,7 +595,7 @@ fn filter_trace_passes_everything() {
 #[test]
 fn filter_with_target_directive() {
     // Only allow warn globally but trace for a specific target.
-    let (sub, captured) = test_subscriber("warn,integration=trace");
+    let (sub, captured) = capture_subscriber("warn,integration=trace");
     with_default(sub, || {
         tracing::trace!(target: "integration", "targeted trace");
         tracing::debug!(target: "other_crate", "other debug");
@@ -503,7 +640,7 @@ fn envfilter_parse_invalid_string_handled_by_init_logging() {
 
 #[test]
 fn set_correlation_id_does_not_panic_outside_span() {
-    let (sub, _captured) = test_subscriber("trace");
+    let (sub, _captured) = capture_subscriber("trace");
     with_default(sub, || {
         // Outside any span — should be a no-op, not a panic.
         set_correlation_id("abc-123");
@@ -512,7 +649,7 @@ fn set_correlation_id_does_not_panic_outside_span() {
 
 #[test]
 fn set_user_id_does_not_panic_outside_span() {
-    let (sub, _captured) = test_subscriber("trace");
+    let (sub, _captured) = capture_subscriber("trace");
     with_default(sub, || {
         set_user_id("user-42");
     });
@@ -520,7 +657,7 @@ fn set_user_id_does_not_panic_outside_span() {
 
 #[test]
 fn set_trace_id_does_not_panic_outside_span() {
-    let (sub, _captured) = test_subscriber("trace");
+    let (sub, _captured) = capture_subscriber("trace");
     with_default(sub, || {
         set_trace_id("trace-xyz");
     });
@@ -528,7 +665,7 @@ fn set_trace_id_does_not_panic_outside_span() {
 
 #[test]
 fn correlation_id_recorded_inside_span_with_field() {
-    let (sub, captured) = test_subscriber("trace");
+    let (sub, captured) = capture_subscriber("trace");
     with_default(sub, || {
         let span = info_span!("test_op", correlation_id = tracing::field::Empty);
         let _enter = span.enter();
@@ -542,7 +679,7 @@ fn correlation_id_recorded_inside_span_with_field() {
 
 #[test]
 fn user_id_recorded_inside_span_with_field() {
-    let (sub, _captured) = test_subscriber("trace");
+    let (sub, _captured) = capture_subscriber("trace");
     with_default(sub, || {
         let span = info_span!("test_op", user_id = tracing::field::Empty);
         let _enter = span.enter();
@@ -553,7 +690,7 @@ fn user_id_recorded_inside_span_with_field() {
 
 #[test]
 fn trace_id_recorded_inside_span_with_field() {
-    let (sub, _captured) = test_subscriber("trace");
+    let (sub, _captured) = capture_subscriber("trace");
     with_default(sub, || {
         let span = info_span!("test_op", trace_id = tracing::field::Empty);
         let _enter = span.enter();
@@ -568,7 +705,7 @@ fn trace_id_recorded_inside_span_with_field() {
 
 #[test]
 fn component_span_creates_named_span() {
-    let (sub, captured) = test_subscriber("trace");
+    let (sub, captured) = capture_subscriber("trace");
     with_default(sub, || {
         let _s = component_span("auth-service").entered();
         tracing::info!("inside component span");
@@ -583,7 +720,7 @@ fn component_span_creates_named_span() {
 
 #[test]
 fn request_span_captures_http_metadata() {
-    let (sub, captured) = test_subscriber("trace");
+    let (sub, captured) = capture_subscriber("trace");
     with_default(sub, || {
         let _s = request_span("GET", "/api/v1/health", "req-001").entered();
         tracing::info!("inside request span");
@@ -609,7 +746,7 @@ fn request_span_captures_http_metadata() {
 
 #[test]
 fn request_span_various_methods() {
-    let (sub, captured) = test_subscriber("trace");
+    let (sub, captured) = capture_subscriber("trace");
     with_default(sub, || {
         for method in &["GET", "POST", "PUT", "DELETE", "PATCH"] {
             let _s = request_span(method, "/test", "rid").entered();
@@ -621,7 +758,7 @@ fn request_span_various_methods() {
 
 #[test]
 fn nested_component_and_request_spans() {
-    let (sub, captured) = test_subscriber("trace");
+    let (sub, captured) = capture_subscriber("trace");
     with_default(sub, || {
         let _comp = component_span("gateway").entered();
         let _req = request_span("POST", "/login", "req-login").entered();
@@ -709,7 +846,7 @@ fn empty_service_name() {
 #[test]
 fn very_long_message() {
     let long_msg = "x".repeat(100_000);
-    let (sub, captured) = test_subscriber("info");
+    let (sub, captured) = capture_subscriber("info");
     with_default(sub, || {
         tracing::info!("{}", long_msg);
     });
@@ -721,7 +858,7 @@ fn very_long_message() {
 
 #[test]
 fn unicode_in_messages() {
-    let (sub, captured) = test_subscriber("info");
+    let (sub, captured) = capture_subscriber("info");
     with_default(sub, || {
         tracing::info!("こんにちは世界 🌍 مرحبا");
     });
@@ -734,7 +871,7 @@ fn unicode_in_messages() {
 
 #[test]
 fn unicode_in_span_fields() {
-    let (sub, captured) = test_subscriber("trace");
+    let (sub, captured) = capture_subscriber("trace");
     with_default(sub, || {
         let _s = request_span("GET", "/路径/テスト", "req-ünïcödé").entered();
         tracing::info!("unicode span test");
@@ -790,7 +927,7 @@ fn concurrent_logging_does_not_panic() {
 
 #[test]
 fn special_characters_in_field_values() {
-    let (sub, captured) = test_subscriber("info");
+    let (sub, captured) = capture_subscriber("info");
     with_default(sub, || {
         tracing::info!(
             path = r#"C:\Users\test\file"with"quotes"#,
@@ -800,6 +937,15 @@ fn special_characters_in_field_values() {
     });
     let events = captured.events.lock();
     assert_eq!(events.len(), 1);
+    let field_map: std::collections::HashMap<_, _> = events[0].fields.iter().cloned().collect();
+    assert_eq!(
+        field_map.get("path").map(|s| s.as_str()),
+        Some(r#"C:\Users\test\file"with"quotes"#)
+    );
+    assert_eq!(
+        field_map.get("query").map(|s| s.as_str()),
+        Some("SELECT * FROM t WHERE x='1' AND y=\"2\"")
+    );
 }
 
 #[test]
@@ -819,7 +965,7 @@ fn with_caller_config_field_accepted() {
 
 #[test]
 fn reexported_macros_compile_and_run() {
-    let (sub, captured) = test_subscriber("trace");
+    let (sub, captured) = capture_subscriber("trace");
     with_default(sub, || {
         rskit_logging::trace!("re-export trace");
         rskit_logging::debug!("re-export debug");

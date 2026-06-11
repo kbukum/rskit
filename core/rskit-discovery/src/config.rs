@@ -294,3 +294,181 @@ impl Default for StaticEndpoint {
 fn default_protocol() -> String {
     "grpc".to_string()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde::Deserialize;
+
+    #[test]
+    fn discovery_defaults_are_static_and_disabled() {
+        let cfg = DiscoveryConfig::default();
+
+        assert!(!cfg.enabled);
+        assert_eq!(cfg.provider, "static");
+        assert_eq!(cfg.scheme, "http");
+        assert_eq!(cfg.cache_ttl, "30s");
+        assert!(cfg.services.is_empty());
+        assert!(cfg.static_endpoints.is_empty());
+    }
+
+    #[test]
+    fn apply_defaults_fills_nested_zero_values_without_overwriting_explicit_values() {
+        let mut cfg = DiscoveryConfig {
+            provider: String::new(),
+            scheme: String::new(),
+            registration: RegistrationConfig {
+                service_name: "svc".to_string(),
+                max_retries: 0,
+                retry_interval: String::new(),
+                ..Default::default()
+            },
+            health: HealthConfig {
+                check_type: String::new(),
+                path: String::new(),
+                interval: String::new(),
+                timeout: String::new(),
+                deregister_after: String::new(),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        cfg.apply_defaults();
+
+        assert_eq!(cfg.provider, "static");
+        assert_eq!(cfg.scheme, "http");
+        assert_eq!(cfg.registration.service_id, "svc");
+        assert_eq!(cfg.registration.max_retries, 3);
+        assert_eq!(cfg.registration.retry_interval, "2s");
+        assert_eq!(cfg.health.check_type, "http");
+        assert_eq!(cfg.health.path, "/health");
+        assert_eq!(cfg.health.interval, "10s");
+        assert_eq!(cfg.health.timeout, "5s");
+        assert_eq!(cfg.health.deregister_after, "1m");
+    }
+
+    #[test]
+    fn validate_ignores_disabled_registration_but_rejects_missing_enabled_fields() {
+        let disabled = DiscoveryConfig {
+            enabled: false,
+            registration: RegistrationConfig {
+                enabled: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert!(disabled.validate().is_ok());
+
+        let missing_name = DiscoveryConfig {
+            enabled: true,
+            registration: RegistrationConfig {
+                enabled: true,
+                service_port: 8080,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert!(
+            missing_name
+                .validate()
+                .unwrap_err()
+                .to_string()
+                .contains("service name")
+        );
+
+        let missing_port = DiscoveryConfig {
+            enabled: true,
+            registration: RegistrationConfig {
+                enabled: true,
+                service_name: "svc".to_string(),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert!(
+            missing_port
+                .validate()
+                .unwrap_err()
+                .to_string()
+                .contains("port")
+        );
+    }
+
+    #[test]
+    fn build_instance_uses_service_name_as_default_id_and_preserves_metadata() {
+        let mut metadata = HashMap::new();
+        metadata.insert("zone".to_string(), "a".to_string());
+        let cfg = DiscoveryConfig {
+            registration: RegistrationConfig {
+                service_name: "api".to_string(),
+                service_address: "127.0.0.1".to_string(),
+                service_port: 8080,
+                tags: vec!["blue".to_string()],
+                metadata: metadata.clone(),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let instance = cfg.build_instance();
+
+        assert_eq!(instance.id, "api");
+        assert_eq!(instance.name, "api");
+        assert_eq!(instance.address, "127.0.0.1");
+        assert_eq!(instance.port, 8080);
+        assert_eq!(instance.tags, vec!["blue"]);
+        assert_eq!(instance.metadata, metadata);
+    }
+
+    #[test]
+    fn retry_duration_accepts_valid_values_and_rejects_invalid_values() {
+        let valid = RegistrationConfig {
+            retry_interval: "250ms".to_string(),
+            ..Default::default()
+        };
+        assert_eq!(
+            valid.retry_duration().unwrap(),
+            std::time::Duration::from_millis(250)
+        );
+
+        let invalid = RegistrationConfig {
+            retry_interval: "soon".to_string(),
+            ..Default::default()
+        };
+        assert!(
+            invalid
+                .retry_duration()
+                .unwrap_err()
+                .to_string()
+                .contains("invalid duration")
+        );
+    }
+
+    #[test]
+    fn serde_defaults_fill_protocol_and_static_endpoint_fields() {
+        #[derive(Deserialize)]
+        struct Wrapper {
+            services: Vec<DiscoveredService>,
+            endpoint: StaticEndpoint,
+        }
+
+        let parsed: Wrapper = toml::from_str(
+            r#"
+            [[services]]
+            name = "users"
+
+            [endpoint]
+            name = "users"
+            address = "127.0.0.1"
+            "#,
+        )
+        .unwrap();
+
+        assert_eq!(parsed.services[0].protocol, "grpc");
+        assert_eq!(parsed.endpoint.port, 0);
+        assert_eq!(parsed.endpoint.protocol, "grpc");
+        assert_eq!(parsed.endpoint.weight, 1);
+        assert!(parsed.endpoint.healthy);
+    }
+}

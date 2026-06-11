@@ -207,6 +207,43 @@ mod tests {
         }
     }
 
+    struct ErrorServer {
+        fail_start: bool,
+        fail_stop: bool,
+        healthy: bool,
+    }
+
+    #[async_trait]
+    impl Component for ErrorServer {
+        fn name(&self) -> &str {
+            "error-server"
+        }
+
+        async fn start(&self) -> AppResult<()> {
+            if self.fail_start {
+                Err(AppError::new(ErrorCode::Internal, "start failed"))
+            } else {
+                Ok(())
+            }
+        }
+
+        async fn stop(&self) -> AppResult<()> {
+            if self.fail_stop {
+                Err(AppError::new(ErrorCode::Internal, "stop failed"))
+            } else {
+                Ok(())
+            }
+        }
+
+        fn health(&self) -> Health {
+            if self.healthy {
+                Health::healthy("error-server")
+            } else {
+                Health::unhealthy("error-server", "down")
+            }
+        }
+    }
+
     /// Mock registry for testing
     struct MockRegistry {
         registered: parking_lot::Mutex<Vec<ServiceInstance>>,
@@ -392,8 +429,93 @@ mod tests {
         );
 
         assert_eq!(discovery_server.name(), "my-discovery-server");
+        assert_eq!(discovery_server.inner().name(), "mock-server");
         assert_eq!(discovery_server.instance().id, "test-4");
         assert_eq!(discovery_server.instance().name, "my-service");
         assert_eq!(discovery_server.instance().port, 9000);
+    }
+
+    #[tokio::test]
+    async fn inner_start_failure_prevents_registration() {
+        let server = Arc::new(ErrorServer {
+            fail_start: true,
+            fail_stop: false,
+            healthy: true,
+        });
+        let registry = MockRegistry::new();
+        let discovery_server = DiscoveryServer::new(
+            "discovery-test".to_string(),
+            server,
+            registry.clone(),
+            test_instance("test-5"),
+        );
+
+        let err = discovery_server.start().await.unwrap_err();
+
+        assert!(err.to_string().contains("failed to start inner server"));
+        assert!(registry.registered_instances().is_empty());
+    }
+
+    #[tokio::test]
+    async fn inner_stop_failure_is_returned_after_deregistering() {
+        let server = Arc::new(ErrorServer {
+            fail_start: false,
+            fail_stop: true,
+            healthy: true,
+        });
+        let registry = MockRegistry::new();
+        let discovery_server = DiscoveryServer::new(
+            "discovery-test".to_string(),
+            server,
+            registry.clone(),
+            test_instance("test-6"),
+        );
+        discovery_server.start().await.unwrap();
+
+        let err = discovery_server.stop().await.unwrap_err();
+
+        assert!(err.to_string().contains("failed to stop inner server"));
+        assert_eq!(registry.deregistered_ids(), vec!["test-6".to_string()]);
+    }
+
+    #[test]
+    fn health_reflects_inner_component_state() {
+        let registry = MockRegistry::new();
+        let healthy = DiscoveryServer::new(
+            "discovery-test".to_string(),
+            Arc::new(ErrorServer {
+                fail_start: false,
+                fail_stop: false,
+                healthy: true,
+            }),
+            registry.clone(),
+            test_instance("test-7"),
+        );
+        let unhealthy = DiscoveryServer::new(
+            "discovery-test".to_string(),
+            Arc::new(ErrorServer {
+                fail_start: false,
+                fail_stop: false,
+                healthy: false,
+            }),
+            registry,
+            test_instance("test-8"),
+        );
+
+        assert!(healthy.health().is_healthy());
+        assert!(!unhealthy.health().is_healthy());
+    }
+
+    fn test_instance(id: &str) -> ServiceInstance {
+        ServiceInstance {
+            id: id.to_string(),
+            name: "test-service".to_string(),
+            address: "127.0.0.1".to_string(),
+            port: 8080,
+            healthy: true,
+            weight: 1,
+            tags: Vec::new(),
+            metadata: Default::default(),
+        }
     }
 }

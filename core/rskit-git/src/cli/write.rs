@@ -287,3 +287,102 @@ fn parse_conflict_paths(backend: &GitCli) -> Vec<String> {
         _ => Vec::new(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use rskit_errors::{AppError, ErrorCode};
+
+    use super::*;
+
+    fn run_git(dir: &std::path::Path, args: &[&str]) {
+        let status = std::process::Command::new("git")
+            .args(args)
+            .current_dir(dir)
+            .status()
+            .unwrap();
+        assert!(status.success(), "git {args:?} failed");
+    }
+
+    fn initialized_repo() -> tempfile::TempDir {
+        let repo = tempfile::tempdir().unwrap();
+        run_git(repo.path(), &["init", "-q"]);
+        run_git(repo.path(), &["config", "user.name", "Test User"]);
+        run_git(repo.path(), &["config", "user.email", "test@example.com"]);
+        std::fs::write(repo.path().join("file.txt"), "one\n").unwrap();
+        run_git(repo.path(), &["add", "file.txt"]);
+        run_git(repo.path(), &["commit", "-q", "-m", "initial"]);
+        repo
+    }
+
+    #[test]
+    fn parse_stash_entry_rejects_invalid_reference_shapes() {
+        let backend = GitCli::new(std::env::temp_dir());
+
+        assert!(parse_stash_entry(&backend, "stash@{0} missing separator").is_err());
+        assert!(parse_stash_entry(&backend, "stash@: message").is_err());
+        assert!(parse_stash_entry(&backend, "stash@{bad}: message").is_err());
+    }
+
+    #[test]
+    fn conflict_stderr_falls_back_to_error_message_without_cause() {
+        let error = AppError::new(ErrorCode::ExternalService, "merge failed");
+
+        assert_eq!(conflict_stderr(&error).as_deref(), Some("merge failed"));
+    }
+
+    #[test]
+    fn conflict_stderr_prefers_cause_and_conflict_paths_are_empty_outside_repo() {
+        let error = AppError::new(ErrorCode::ExternalService, "merge failed")
+            .with_cause(std::io::Error::other("CONFLICT in file.txt"));
+        let backend = GitCli::new(std::env::temp_dir());
+
+        assert_eq!(
+            conflict_stderr(&error).as_deref(),
+            Some("CONFLICT in file.txt")
+        );
+        assert!(parse_conflict_paths(&backend).is_empty());
+    }
+
+    #[test]
+    fn checkout_files_empty_path_list_is_noop() {
+        let backend = GitCli::new(std::env::temp_dir());
+
+        backend.checkout_files(&[]).unwrap();
+    }
+
+    #[test]
+    fn checkout_reset_and_stash_paths_execute_against_real_repo() {
+        let repo = initialized_repo();
+        let backend = GitCli::new(repo.path().to_path_buf());
+
+        backend
+            .checkout(
+                "HEAD",
+                Some(&CheckoutOptions {
+                    force: true,
+                    create_branch: Some("feature".to_string()),
+                    detach: false,
+                    extra_args: Vec::new(),
+                }),
+            )
+            .unwrap();
+        std::fs::write(repo.path().join("file.txt"), "two\n").unwrap();
+        backend.checkout_files(&["file.txt"]).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(repo.path().join("file.txt")).unwrap(),
+            "one\n"
+        );
+
+        std::fs::write(repo.path().join("file.txt"), "three\n").unwrap();
+        let oid = backend.stash("work in progress").unwrap();
+        assert!(!oid.is_zero());
+        let entries = backend.stash_list().unwrap();
+        assert_eq!(entries[0].index, 0);
+        assert!(entries[0].message.contains("work in progress"));
+        backend.stash_pop_index(0).unwrap();
+        std::fs::write(repo.path().join("file.txt"), "four\n").unwrap();
+        backend.stash("second stash").unwrap();
+        backend.stash_pop().unwrap();
+        backend.reset("HEAD", ResetMode::Mixed).unwrap();
+    }
+}

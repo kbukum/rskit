@@ -138,10 +138,33 @@ mod tests {
             SpanAttributeValue::I64(i64::MAX)
         );
         assert_eq!(SpanAttributeValue::from(7_u64), SpanAttributeValue::I64(7));
+        assert_eq!(
+            SpanAttributeValue::from(usize::MAX),
+            SpanAttributeValue::I64(i64::MAX)
+        );
+        assert_eq!(
+            SpanAttributeValue::from(7_usize),
+            SpanAttributeValue::I64(7)
+        );
     }
 
     #[test]
     fn helpers_accept_common_attribute_values() {
+        let owned = String::from("owned");
+        assert_eq!(
+            SpanAttributeValue::from(owned.clone()),
+            SpanAttributeValue::String(owned.clone())
+        );
+        assert_eq!(
+            SpanAttributeValue::from(&owned),
+            SpanAttributeValue::String(owned)
+        );
+        assert_eq!(SpanAttributeValue::from(7_i32), SpanAttributeValue::I64(7));
+        assert_eq!(
+            SpanAttributeValue::from(1.25_f32),
+            SpanAttributeValue::F64(1.25)
+        );
+
         let span = tracing::info_span!(
             "attribute-test",
             string = tracing::field::Empty,
@@ -155,5 +178,9 @@ mod tests {
         record_span_attribute(&span, "float", 1.5_f64);
         record_span_attribute(&span, "boolean", true);
         set_span_attribute(&span, "otel.only", "value");
+
+        let _entered = span.enter();
+        set_current_span_attribute("current.otel", false);
+        record_current_span_attribute("boolean", false);
     }
 }

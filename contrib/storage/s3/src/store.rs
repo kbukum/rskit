@@ -148,8 +148,7 @@ impl FileStore for S3Store {
             .await
             .map_err(|e| AppError::new(ErrorCode::Internal, format!("S3 upload failed: {e}")))?;
 
-        Ok(StoredFile::new(prefixed_key(None, key), size, content_type)
-            .with_metadata(metadata.unwrap_or_default()))
+        Ok(uploaded_file(key, size, content_type, metadata))
     }
 
     async fn upload_with_progress(
@@ -219,16 +218,7 @@ impl FileStore for S3Store {
             .await
             .map_err(|e| AppError::new(ErrorCode::NotFound, format!("S3 head failed: {e}")))?;
 
-        Ok(StoredFile::new(
-            prefixed_key(None, key),
-            resp.content_length().unwrap_or(0) as u64,
-            resp.content_type(),
-        )
-        .with_metadata(
-            resp.metadata()
-                .map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
-                .unwrap_or_default(),
-        ))
+        Ok(stored_file_from_head(key, &resp))
     }
 
     async fn list(&self, prefix: &str, limit: Option<usize>) -> AppResult<Vec<StoredFile>> {
@@ -251,13 +241,7 @@ impl FileStore for S3Store {
         let items = resp
             .contents()
             .iter()
-            .map(|obj| {
-                StoredFile::new(
-                    obj.key().unwrap_or(""),
-                    obj.size().unwrap_or(0) as u64,
-                    None,
-                )
-            })
+            .map(stored_file_from_object)
             .collect();
 
         Ok(items)
@@ -313,8 +297,49 @@ impl FileStore for S3Store {
     }
 }
 
+fn uploaded_file(
+    key: &str,
+    size: u64,
+    content_type: Option<&str>,
+    metadata: Option<HashMap<String, String>>,
+) -> StoredFile {
+    StoredFile::new(prefixed_key(None, key), size, content_type)
+        .with_metadata(metadata.unwrap_or_default())
+}
+
+fn stored_file_from_head(
+    key: &str,
+    resp: &aws_sdk_s3::operation::head_object::HeadObjectOutput,
+) -> StoredFile {
+    StoredFile::new(
+        prefixed_key(None, key),
+        resp.content_length().unwrap_or(0) as u64,
+        resp.content_type(),
+    )
+    .with_metadata(
+        resp.metadata()
+            .map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
+            .unwrap_or_default(),
+    )
+}
+
+fn stored_file_from_object(obj: &aws_sdk_s3::types::Object) -> StoredFile {
+    StoredFile::new(
+        obj.key().unwrap_or(""),
+        obj.size().unwrap_or(0) as u64,
+        None,
+    )
+}
+
 /// Resolve AWS credentials from config fields or environment variables.
 fn resolve_credentials(config: &Config) -> AppResult<(String, String)> {
+    resolve_credentials_with(config, env::get_non_empty)
+}
+
+fn resolve_credentials_with(
+    config: &Config,
+    get_env: impl Fn(&str) -> Option<String>,
+) -> AppResult<(String, String)> {
     if let (Some(key), Some(secret)) = (&config.access_key_id, &config.secret_access_key)
         && !key.is_empty()
         && !secret.is_empty()
@@ -322,8 +347,8 @@ fn resolve_credentials(config: &Config) -> AppResult<(String, String)> {
         return Ok((key.clone(), secret.clone()));
     }
 
-    let key = env::get_non_empty("AWS_ACCESS_KEY_ID");
-    let secret = env::get_non_empty("AWS_SECRET_ACCESS_KEY");
+    let key = get_env("AWS_ACCESS_KEY_ID");
+    let secret = get_env("AWS_SECRET_ACCESS_KEY");
 
     let (Some(key), Some(secret)) = (key, secret) else {
         return Err(AppError::new(
@@ -384,6 +409,45 @@ mod tests {
     }
 
     #[test]
+    fn config_debug_redacts_credentials() {
+        let cfg = Config {
+            bucket: "assets".into(),
+            region: Some("us-east-1".into()),
+            endpoint: Some("https://s3.example.test".into()),
+            prefix: Some("uploads".into()),
+            force_path_style: true,
+            access_key_id: Some("access-key".into()),
+            secret_access_key: Some("secret-key".into()),
+        };
+
+        let debug = format!("{cfg:?}");
+
+        assert!(debug.contains("<redacted>"));
+        assert!(!debug.contains("access-key"));
+        assert!(!debug.contains("secret-key"));
+        assert!(debug.contains("assets"));
+    }
+
+    #[test]
+    fn config_debug_omits_redaction_marker_without_credentials() {
+        let cfg = Config {
+            bucket: "assets".into(),
+            region: None,
+            endpoint: None,
+            prefix: None,
+            force_path_style: false,
+            access_key_id: None,
+            secret_access_key: None,
+        };
+
+        let debug = format!("{cfg:?}");
+
+        assert!(debug.contains("access_key_id: None"));
+        assert!(debug.contains("secret_access_key: None"));
+        assert!(!debug.contains("<redacted>"));
+    }
+
+    #[test]
     fn resolve_explicit_credentials() {
         let cfg = Config {
             bucket: "test".into(),
@@ -400,6 +464,23 @@ mod tests {
     }
 
     #[test]
+    fn resolve_blank_explicit_credentials_falls_back_to_error_without_env() {
+        let cfg = Config {
+            bucket: "test".into(),
+            region: None,
+            endpoint: None,
+            prefix: None,
+            force_path_style: false,
+            access_key_id: Some(String::new()),
+            secret_access_key: Some(String::new()),
+        };
+
+        let err = resolve_credentials_with(&cfg, |_| None).unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::MissingField);
+    }
+
+    #[test]
     fn resolve_empty_credentials_errors() {
         let cfg = Config {
             bucket: "test".into(),
@@ -410,11 +491,32 @@ mod tests {
             access_key_id: None,
             secret_access_key: None,
         };
-        // Without env vars set, this should fail
-        // (env vars may or may not be set in CI, so we test the explicit path)
-        let result = resolve_credentials(&cfg);
-        // Just verify the function doesn't panic — actual result depends on env
-        let _ = result;
+        let err = resolve_credentials_with(&cfg, |_| None).unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::MissingField);
+    }
+
+    #[test]
+    fn resolve_credentials_uses_environment_when_explicit_credentials_absent() {
+        let cfg = Config {
+            bucket: "test".into(),
+            region: None,
+            endpoint: None,
+            prefix: None,
+            force_path_style: false,
+            access_key_id: None,
+            secret_access_key: None,
+        };
+
+        let (key, secret) = resolve_credentials_with(&cfg, |name| match name {
+            "AWS_ACCESS_KEY_ID" => Some("env-key".to_string()),
+            "AWS_SECRET_ACCESS_KEY" => Some("env-secret".to_string()),
+            _ => None,
+        })
+        .unwrap();
+
+        assert_eq!(key, "env-key");
+        assert_eq!(secret, "env-secret");
     }
 
     #[test]
@@ -461,5 +563,121 @@ mod tests {
         })
         .unwrap();
         assert_eq!(store.full_key("file.txt"), "file.txt");
+    }
+
+    #[test]
+    fn register_rejects_duplicate_s3_backend() {
+        let mut registry = StorageRegistry::new();
+        let config = Config {
+            bucket: "b".into(),
+            region: None,
+            endpoint: None,
+            prefix: None,
+            force_path_style: false,
+            access_key_id: Some("k".into()),
+            secret_access_key: Some("s".into()),
+        };
+
+        register(&mut registry, config.clone()).unwrap();
+        let err = register(&mut registry, config).unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::AlreadyExists);
+    }
+
+    #[test]
+    fn store_construction_applies_region_endpoint_and_path_style() {
+        let store = S3Store::new(Config {
+            bucket: "b".into(),
+            region: Some("us-east-1".into()),
+            endpoint: Some("http://127.0.0.1:9000".into()),
+            prefix: Some("uploads".into()),
+            force_path_style: true,
+            access_key_id: Some("k".into()),
+            secret_access_key: Some("s".into()),
+        })
+        .unwrap();
+
+        assert_eq!(store.full_key("file.txt"), "uploads/file.txt");
+    }
+
+    #[tokio::test]
+    async fn factory_creates_store_from_explicit_credentials() {
+        let factory = S3Factory {
+            config: Config {
+                bucket: "b".into(),
+                region: Some("us-east-1".into()),
+                endpoint: Some("http://127.0.0.1:9000".into()),
+                prefix: None,
+                force_path_style: true,
+                access_key_id: Some("k".into()),
+                secret_access_key: Some("s".into()),
+            },
+        };
+
+        factory.create(&StorageConfig::default()).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn presigned_url_validates_duration_and_uses_configured_key_prefix() {
+        let store = S3Store::new(Config {
+            bucket: "bucket".into(),
+            region: Some("us-east-1".into()),
+            endpoint: Some("http://127.0.0.1:9000".into()),
+            prefix: Some("uploads".into()),
+            force_path_style: true,
+            access_key_id: Some("access".into()),
+            secret_access_key: Some("secret".into()),
+        })
+        .unwrap();
+
+        let too_long = store
+            .presigned_url("file.txt", Duration::from_secs(60 * 60 * 24 * 8))
+            .await
+            .unwrap_err();
+        assert_eq!(too_long.code(), ErrorCode::InvalidInput);
+
+        let url = store
+            .presigned_url("file.txt", Duration::from_secs(60))
+            .await
+            .unwrap();
+        assert!(url.contains("uploads/file.txt"));
+    }
+
+    #[test]
+    fn stored_file_mappers_preserve_keys_sizes_content_types_and_metadata() {
+        let mut metadata = HashMap::new();
+        metadata.insert("owner".to_string(), "media".to_string());
+        let uploaded = uploaded_file("file.txt", 4, Some("text/plain"), Some(metadata.clone()));
+        assert_eq!(uploaded.key, "file.txt");
+        assert_eq!(uploaded.size, 4);
+        assert_eq!(uploaded.content_type, "text/plain");
+        assert_eq!(uploaded.metadata, metadata);
+
+        let head = aws_sdk_s3::operation::head_object::HeadObjectOutput::builder()
+            .content_length(9)
+            .content_type("application/json")
+            .metadata("trace", "abc")
+            .build();
+        let from_head = stored_file_from_head("meta.json", &head);
+        assert_eq!(from_head.key, "meta.json");
+        assert_eq!(from_head.size, 9);
+        assert_eq!(from_head.content_type, "application/json");
+        assert_eq!(
+            from_head.metadata.get("trace").map(String::as_str),
+            Some("abc")
+        );
+
+        let object = aws_sdk_s3::types::Object::builder()
+            .key("uploads/a.txt")
+            .size(12)
+            .build();
+        let from_object = stored_file_from_object(&object);
+        assert_eq!(from_object.key, "uploads/a.txt");
+        assert_eq!(from_object.size, 12);
+
+        let empty_object = aws_sdk_s3::types::Object::builder().build();
+        let from_empty_object = stored_file_from_object(&empty_object);
+        assert_eq!(from_empty_object.key, "");
+        assert_eq!(from_empty_object.size, 0);
     }
 }

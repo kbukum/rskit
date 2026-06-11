@@ -1,4 +1,4 @@
-//! Comprehensive tests for rskit-media types, registry, pipeline, and parsing.
+//! Integration tests for rskit-media types, registry, pipeline, and parsing behavior.
 
 use std::time::Duration;
 

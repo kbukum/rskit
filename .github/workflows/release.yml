@@ -23,6 +23,8 @@ jobs:
         with:
           ref: ${{ github.event.release.tag_name }}
           fetch-depth: 0
+      - name: Check Python tooling runtime
+        run: python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else "Python 3.11+ is required")'
       - name: Validate release target
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
@@ -95,7 +97,7 @@ jobs:
         if: steps.crates-token.outputs.present == 'true'
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: ./scripts/publish-dry-run.sh --publish
+        run: ./scripts/rskit_tool.py release publish-dry-run --publish
       - name: Upload generated assets to GitHub release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

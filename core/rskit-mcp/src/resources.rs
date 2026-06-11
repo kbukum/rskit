@@ -136,3 +136,35 @@ fn template_literals(template: &str) -> Vec<String> {
     literals.push(current);
     literals
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resource_templates_match_literals_in_order() {
+        assert!(resource_template_matches(
+            "file:///{workspace}/src/{path}",
+            "file:///rskit/src/lib.rs"
+        ));
+        assert!(resource_template_matches("urn:item/{id}", "urn:item/123"));
+        assert!(!resource_template_matches(
+            "file:///{workspace}/src/{path}",
+            "file:///rskit/tests/lib.rs"
+        ));
+        assert!(!resource_template_matches(
+            "urn:item/{id}/tail",
+            "urn:item/123/other"
+        ));
+        assert!(resource_template_matches("literal", "literal"));
+        assert!(!resource_template_matches("literal", "literal/extra"));
+    }
+
+    #[test]
+    fn nested_template_braces_are_ignored_as_placeholders() {
+        assert_eq!(
+            template_literals("prefix/{outer{inner}}/suffix"),
+            vec!["prefix/".to_string(), "/suffix".to_string()]
+        );
+    }
+}

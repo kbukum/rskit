@@ -47,3 +47,62 @@ pub(crate) fn validate_tool_output(
         .first()
         .map(std::string::ToString::to_string)
 }
+
+#[cfg(test)]
+mod tests {
+    use rskit_schema::{ValidationError, ValidationResult};
+    use rskit_tool::result::{error_result, json_result, text_result};
+
+    use super::*;
+
+    #[test]
+    fn validation_details_use_default_message_when_schema_has_no_errors() {
+        assert_eq!(
+            validation_error_details(&ValidationResult {
+                valid: false,
+                errors: Vec::new(),
+            }),
+            "schema validation failed"
+        );
+        assert_eq!(
+            validation_error_details(&ValidationResult {
+                valid: false,
+                errors: vec![ValidationError {
+                    path: "field".to_string(),
+                    message: "required".to_string(),
+                }],
+            }),
+            "field: required"
+        );
+    }
+
+    #[test]
+    fn result_size_prefers_structured_output_and_skips_error_output_validation() {
+        let json = json_result(&serde_json::json!({"ok": true})).unwrap();
+        assert_eq!(
+            result_size_bytes(&json),
+            json_size_bytes(json.output.as_ref().unwrap().as_json())
+        );
+        assert_eq!(result_size_bytes(&text_result("hello")), 5);
+
+        let definition = rskit_tool::Definition {
+            name: "demo".to_string(),
+            description: "demo".to_string(),
+            input_schema: rskit_tool::ToolSchema::any_object(),
+            output_schema: Some(
+                rskit_tool::ToolSchema::new(serde_json::json!({
+                    "type": "object",
+                    "required": ["ok"],
+                    "properties": {"ok": {"type": "boolean"}}
+                }))
+                .unwrap(),
+            ),
+            annotations: rskit_tool::Annotations::default(),
+            envelope: rskit_tool::Envelope::default(),
+        };
+
+        assert!(validate_tool_output(&definition, &json).is_none());
+        assert!(validate_tool_output(&definition, &error_result("bad")).is_none());
+        assert!(validate_tool_output(&definition, &text_result("not an object")).is_some());
+    }
+}

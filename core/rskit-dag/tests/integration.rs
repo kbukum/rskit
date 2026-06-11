@@ -1,5 +1,5 @@
-use rskit_dag::{Dag, DagNode};
-use rskit_errors::AppResult;
+use rskit_dag::{Dag, DagNode, TypedDagNode};
+use rskit_errors::{AppError, AppResult, ErrorCode};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::future::Future;
@@ -150,4 +150,100 @@ async fn execute_independent_nodes() {
 
     assert_eq!(outputs["x"], json!(7));
     assert_eq!(outputs["y"], json!(3));
+}
+
+#[tokio::test]
+async fn default_dag_and_root_inputs_are_supported() {
+    let dag = Dag::default().add_node(TestNode::new("root", 5));
+    let mut inputs = HashMap::new();
+    inputs.insert("external".to_string(), json!(7));
+
+    let outputs = dag
+        .execute_with_inputs(inputs, CancellationToken::new())
+        .await
+        .unwrap();
+
+    assert_eq!(outputs["root"], json!(12));
+}
+
+#[tokio::test]
+async fn add_edge_with_missing_from_node_fails() {
+    let result = Dag::new()
+        .add_node(TestNode::new("existing", 1))
+        .add_edge("missing", "existing");
+
+    let Err(err) = result else {
+        panic!("missing from node should fail");
+    };
+    assert_eq!(err.code(), ErrorCode::InvalidInput);
+    assert!(err.to_string().contains("missing"));
+}
+
+#[tokio::test]
+async fn typed_node_maps_inputs_and_serializes_output() {
+    #[derive(serde::Serialize)]
+    struct Output {
+        total: i64,
+    }
+
+    let node = TypedDagNode::new(
+        "typed",
+        |inputs: HashMap<String, Value>| Ok(inputs.values().filter_map(Value::as_i64).sum::<i64>()),
+        |input, _cancel| async move { Ok::<_, AppError>(Output { total: input + 3 }) },
+    );
+
+    let mut inputs = HashMap::new();
+    inputs.insert("a".to_string(), json!(4));
+    inputs.insert("b".to_string(), json!(5));
+
+    let result = node
+        .execute(inputs, CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(result, json!({ "total": 12 }));
+}
+
+#[tokio::test]
+async fn typed_node_surfaces_input_mapping_errors() {
+    let node = TypedDagNode::new(
+        "typed-error",
+        |_inputs: HashMap<String, Value>| {
+            Err(AppError::new(
+                ErrorCode::InvalidInput,
+                "missing required input",
+            ))
+        },
+        |_input: (), _cancel| async move { Ok::<_, AppError>(()) },
+    );
+
+    let err = node
+        .execute(HashMap::new(), CancellationToken::new())
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidInput);
+}
+
+struct PanicNode;
+
+impl DagNode for PanicNode {
+    fn id(&self) -> &str {
+        "panic"
+    }
+
+    fn execute(
+        &self,
+        _inputs: HashMap<String, Value>,
+        _cancel: CancellationToken,
+    ) -> Pin<Box<dyn Future<Output = AppResult<Value>> + Send + '_>> {
+        Box::pin(async { panic!("dag node panic") })
+    }
+}
+
+#[tokio::test]
+async fn dag_task_panic_is_reported_as_internal_error() {
+    let dag = Dag::new().add_node(PanicNode);
+
+    let err = dag.execute(CancellationToken::new()).await.unwrap_err();
+    assert_eq!(err.code(), ErrorCode::Internal);
+    assert!(err.to_string().contains("DAG task panicked"));
 }

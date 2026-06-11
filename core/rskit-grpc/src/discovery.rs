@@ -496,7 +496,8 @@ mod tests {
     use super::*;
     use async_trait::async_trait;
     use parking_lot::Mutex;
-    use rskit_discovery::instance::ServiceInstance;
+    use rskit_discovery::{Watcher, instance::ServiceInstance};
+    use tokio::sync::mpsc;
 
     struct MockDiscovery;
 
@@ -583,6 +584,15 @@ mod tests {
         let cfg = DiscoveryChannelConfig::new(GrpcClientConfig::new("localhost:50051"));
         assert_eq!(cfg.resolve_interval, Duration::from_secs(10));
         assert_eq!(cfg.grpc.target, "localhost:50051");
+    }
+
+    #[test]
+    fn discovery_channel_config_can_be_built_from_grpc_config() {
+        let cfg = DiscoveryChannelConfig::from(GrpcClientConfig::new("seed:50051"))
+            .with_resolve_interval(Duration::from_millis(25));
+
+        assert_eq!(cfg.grpc.target, "seed:50051");
+        assert_eq!(cfg.resolve_interval, Duration::from_millis(25));
     }
 
     #[tokio::test]
@@ -673,6 +683,79 @@ mod tests {
         assert!(!ch.refresh().await.unwrap());
     }
 
+    #[tokio::test]
+    async fn resolve_errors_when_discovery_returns_no_instances() {
+        let discovery = Arc::new(EmptyDiscovery);
+        let ch = DiscoveryChannel::new(
+            discovery,
+            "empty-service",
+            GrpcClientConfig::new("localhost:50051"),
+        );
+
+        let err = ch.resolve().await.unwrap_err();
+
+        assert_eq!(err.code(), rskit_errors::ErrorCode::ServiceUnavailable);
+        assert!(err.to_string().contains("no instances"));
+    }
+
+    #[tokio::test]
+    async fn refresh_propagates_connector_failure_without_caching_target() {
+        let discovery = Arc::new(SequenceDiscovery::new(["127.0.0.1:9090"]));
+        let connector = Arc::new(MockConnector::new([false]));
+        let ch = DiscoveryChannel::with_connector(
+            discovery,
+            None,
+            "valid-service",
+            DiscoveryChannelConfig::new(GrpcClientConfig::new("localhost:50051")),
+            connector,
+        );
+
+        let err = ch.refresh().await.unwrap_err();
+
+        assert_eq!(err.code(), rskit_errors::ErrorCode::ServiceUnavailable);
+        assert!(ch.current_target().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn watcher_background_reconnects_on_non_empty_updates_and_skips_empty_updates() {
+        let discovery = Arc::new(StaticDiscovery::new("127.0.0.1:9090"));
+        let (watcher, tx) = ChannelWatcher::new();
+        let connector = Arc::new(MockConnector::new([true]));
+        let mut ch = DiscoveryChannel::with_connector(
+            discovery,
+            Some(Arc::new(watcher)),
+            "valid-service",
+            DiscoveryChannelConfig::new(GrpcClientConfig::new("seed:50051")),
+            connector,
+        );
+
+        ch.start_background().await.unwrap();
+        tx.send(Vec::new()).await.expect("send empty update");
+        tokio::task::yield_now().await;
+        assert!(ch.current_target().await.is_none());
+
+        tx.send(vec![service_instance("valid-service", "127.0.0.1:9443")])
+            .await
+            .expect("send service update");
+        for _ in 0..4 {
+            tokio::task::yield_now().await;
+            if ch.current_target().await.is_some() {
+                break;
+            }
+        }
+
+        assert_eq!(
+            ch.current_target().await,
+            Some("127.0.0.1:9443".to_string())
+        );
+        assert_eq!(ch.service_name(), "valid-service");
+        assert_eq!(ch.grpc_config().target, "seed:50051");
+        assert_eq!(ch.config().grpc.target, "seed:50051");
+        ch.start_background().await.unwrap();
+        ch.close().await.unwrap();
+        assert!(ch.current_target().await.is_none());
+    }
+
     struct StaticDiscovery {
         target: String,
     }
@@ -689,6 +772,15 @@ mod tests {
     impl Discovery for StaticDiscovery {
         async fn resolve(&self, service: &str) -> AppResult<Vec<ServiceInstance>> {
             Ok(vec![service_instance(service, &self.target)])
+        }
+    }
+
+    struct EmptyDiscovery;
+
+    #[async_trait]
+    impl Discovery for EmptyDiscovery {
+        async fn resolve(&self, _service: &str) -> AppResult<Vec<ServiceInstance>> {
+            Ok(Vec::new())
         }
     }
 
@@ -757,6 +849,34 @@ mod tests {
             weight: 1,
             tags: vec![],
             metadata: Default::default(),
+        }
+    }
+
+    struct ChannelWatcher {
+        receiver: Mutex<Option<mpsc::Receiver<Vec<ServiceInstance>>>>,
+    }
+
+    impl ChannelWatcher {
+        fn new() -> (Self, mpsc::Sender<Vec<ServiceInstance>>) {
+            let (tx, rx) = mpsc::channel(4);
+            (
+                Self {
+                    receiver: Mutex::new(Some(rx)),
+                },
+                tx,
+            )
+        }
+    }
+
+    #[async_trait]
+    impl Watcher for ChannelWatcher {
+        async fn watch(&self, _service: &str) -> AppResult<mpsc::Receiver<Vec<ServiceInstance>>> {
+            self.receiver.lock().take().ok_or_else(|| {
+                rskit_errors::AppError::new(
+                    rskit_errors::ErrorCode::Internal,
+                    "watcher already consumed",
+                )
+            })
         }
     }
 }

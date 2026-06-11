@@ -27,6 +27,11 @@ impl TestRepo {
         Self { dir }
     }
 
+    pub fn empty_dir() -> Self {
+        let dir = TempDir::new().expect("failed to create temp dir");
+        Self { dir }
+    }
+
     pub fn path(&self) -> &Path {
         self.dir.path()
     }

@@ -83,3 +83,29 @@ pub(in crate::persistent) fn spawn_cancel_thread(
         thread,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cancel_thread_records_requested_cancellation_before_stop() {
+        let cancel = CancellationToken::new();
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let thread = spawn_cancel_thread(
+            0,
+            cancel.clone(),
+            Arc::clone(&cancelled),
+            SignalPolicy::default(),
+            Duration::from_millis(1),
+        )
+        .unwrap();
+
+        cancel.cancel();
+        std::thread::sleep(Duration::from_millis(5));
+
+        assert!(thread.is_cancel_requested());
+        thread.stop().unwrap();
+        assert!(cancelled.load(Ordering::SeqCst));
+    }
+}

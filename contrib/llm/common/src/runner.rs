@@ -152,3 +152,87 @@ fn annotate_response(response: &CompletionResponse) {
         record_current_span_attribute(semconv::RESPONSE_FINISH_REASON, format!("{reason:?}"));
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rskit_ai::{ContentPart, FinishReason, Usage};
+    use rskit_llm::types::{AssistantMessage, CompletionRequest, Message};
+
+    fn request(model: &str) -> CompletionRequest {
+        CompletionRequest {
+            model: model.to_owned(),
+            messages: vec![rskit_llm::types::user("hello")],
+            max_tokens: Some(8),
+            temperature: Some(0.1),
+            stream: false,
+            tools: None,
+            tool_choice: None,
+        }
+    }
+
+    fn response(model: &str) -> CompletionResponse {
+        CompletionResponse {
+            message: AssistantMessage {
+                content: vec![ContentPart::Text {
+                    text: "ok".to_owned(),
+                }],
+                tool_calls: Vec::new(),
+                usage: None,
+            },
+            model: model.to_owned(),
+            usage: Usage {
+                input_tokens: 1,
+                output_tokens: 2,
+                cached_tokens: 3,
+                reasoning_tokens: 4,
+            },
+            stop_reason: Some(FinishReason::Stop),
+        }
+    }
+
+    #[tokio::test]
+    async fn complete_fills_default_model_and_records_success() {
+        let runner = ChatRunner::new("test", "default-model");
+
+        let completed = runner
+            .complete(request(""), |req| async move {
+                assert_eq!(req.model, "default-model");
+                assert!(matches!(req.messages.first(), Some(Message::User(_))));
+                Ok(response(&req.model))
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(completed.model, "default-model");
+        assert_eq!(completed.usage.output_tokens, 2);
+    }
+
+    #[tokio::test]
+    async fn complete_with_policy_runs_closure() {
+        let runner = ChatRunner::new("test", "fallback").with_policy(Policy::new());
+
+        let completed = runner
+            .complete(request("explicit"), |req| async move {
+                Ok(response(&req.model))
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(completed.model, "explicit");
+    }
+
+    #[tokio::test]
+    async fn complete_propagates_adapter_error() {
+        let runner = ChatRunner::new("test", "fallback");
+
+        let err = runner
+            .complete(request("explicit"), |_req| async move {
+                Err(AppError::new(ErrorCode::ExternalService, "provider failed"))
+            })
+            .await
+            .unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::ExternalService);
+    }
+}

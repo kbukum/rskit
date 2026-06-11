@@ -335,3 +335,125 @@ fn normalize_format_name(format_name: &str) -> &str {
         other => other,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rskit_media::types::TrackKind;
+    use serde_json::json;
+
+    #[test]
+    fn metadata_parses_format_tags_and_mixed_stream_details() {
+        let json = json!({
+            "format": {
+                "format_name": "matroska,webm",
+                "duration": "12.5",
+                "size": "4096",
+                "bit_rate": "2048",
+                "tags": {"title": "sample", "empty": 7}
+            },
+            "streams": [
+                {
+                    "codec_type": "video",
+                    "codec_name": "hevc",
+                    "width": 1920,
+                    "height": 1080,
+                    "r_frame_rate": "30000/1001",
+                    "pix_fmt": "yuv420p10le",
+                    "color_space": "bt709",
+                    "color_range": "pc",
+                    "profile": "Main 10",
+                    "tags": {"rotate": "90", "language": "eng", "title": "main"},
+                    "disposition": {"default": 1}
+                },
+                {
+                    "codec_type": "audio",
+                    "codec_name": "aac",
+                    "sample_rate": "48000",
+                    "channels": 6,
+                    "duration": "10.0",
+                    "bit_rate": "192000",
+                    "tags": {"language": "deu"}
+                },
+                {
+                    "codec_type": "subtitle",
+                    "codec_name": "subrip",
+                    "disposition": {"forced": 1}
+                },
+                {"codec_type": "data", "codec_name": "bin_data"},
+                {"codec_type": "attachment", "codec_name": "ttf"},
+                {"codec_type": "unknown"}
+            ]
+        });
+
+        let metadata = parse_metadata(&json).unwrap();
+
+        assert_eq!(metadata.media_type, rskit_media::types::MediaType::Video);
+        assert_eq!(metadata.format.id(), "webm");
+        assert_eq!(metadata.duration.unwrap().as_secs_f64(), 12.5);
+        assert_eq!(metadata.size, Some(4096));
+        assert_eq!(metadata.bitrate, Some(2048));
+        assert_eq!(
+            metadata.tags.get("title").map(String::as_str),
+            Some("sample")
+        );
+        assert_eq!(metadata.tags.get("empty").map(String::as_str), Some(""));
+        assert_eq!(metadata.tracks.len(), 5);
+
+        let video = &metadata.tracks[0];
+        assert_eq!(video.kind, TrackKind::Video);
+        assert!(video.is_default);
+        assert_eq!(video.language.as_deref(), Some("eng"));
+        assert_eq!(video.title.as_deref(), Some("main"));
+        let video_info = video.video.as_ref().unwrap();
+        assert_eq!(video_info.resolution.width, 1920);
+        assert_eq!(video_info.resolution.height, 1080);
+        assert_eq!(video_info.rotation, Some(90));
+        assert_eq!(video_info.bit_depth, Some(10));
+        assert!(video_info.frame_rate.is_some());
+
+        let audio = &metadata.tracks[1];
+        assert_eq!(audio.kind, TrackKind::Audio);
+        assert_eq!(audio.duration.unwrap().as_secs(), 10);
+        assert!(matches!(
+            audio.audio.as_ref().unwrap().channels,
+            rskit_media::audio::ChannelLayout::Surround51
+        ));
+
+        let subtitle = &metadata.tracks[2];
+        assert_eq!(subtitle.kind, TrackKind::Subtitle);
+        assert_eq!(subtitle.subtitle.as_ref().unwrap().format, "subrip");
+        assert!(subtitle.subtitle.as_ref().unwrap().forced);
+        assert_eq!(metadata.tracks[3].kind, TrackKind::Data);
+        assert_eq!(metadata.tracks[4].kind, TrackKind::Attachment);
+    }
+
+    #[test]
+    fn metadata_defaults_to_image_and_handles_malformed_numeric_fields() {
+        let json = json!({
+            "format": {"format_name": "flac", "duration": "bad", "size": "bad"},
+            "streams": [
+                {
+                    "codec_type": "audio",
+                    "sample_rate": "bad",
+                    "channels": 8,
+                    "r_frame_rate": "1/0"
+                }
+            ]
+        });
+
+        let metadata = parse_metadata(&json).unwrap();
+
+        assert_eq!(metadata.media_type, rskit_media::types::MediaType::Audio);
+        assert_eq!(metadata.duration, None);
+        assert_eq!(metadata.size, None);
+        assert!(matches!(
+            metadata.tracks[0].audio.as_ref().unwrap().channels,
+            rskit_media::audio::ChannelLayout::Surround71
+        ));
+
+        let empty = parse_metadata(&json!({"format": {"format_name": "avi"}})).unwrap();
+        assert_eq!(empty.media_type, rskit_media::types::MediaType::Image);
+        assert_eq!(empty.format.id(), "avi");
+    }
+}
