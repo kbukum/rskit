@@ -39,7 +39,6 @@ struct CapturedEvent {
     message: String,
     level: tracing::Level,
     target: String,
-    #[allow(dead_code)]
     fields: Vec<(String, String)>,
 }
 
@@ -490,26 +489,26 @@ fn full_logging_setup_accepts_disabled_otlp_with_all_optional_layers() {
         tracing::debug!(target: "rskit_logging_full", "full setup user@example.com");
     }
 
-    #[cfg(feature = "otlp")]
-    #[test]
-    fn enabled_http_otlp_provider_builds_layer_and_shutdowns_without_records() {
-        let cfg = rskit_logging::otlp::OtlpConfig {
-            enabled: true,
-            endpoint: "http://localhost:4318/v1/logs".to_owned(),
-            protocol: "http".to_owned(),
-            headers: std::collections::HashMap::from([("x-test".to_owned(), "value".to_owned())]),
-        };
-
-        let provider = rskit_logging::otlp::OtlpProvider::new(&cfg, "svc", "test", "0.1.0")
-            .unwrap()
-            .expect("enabled config should create a provider");
-        let _layer = provider.layer::<Registry>();
-        provider.shutdown().unwrap();
-    }
-
     let output = std::fs::read_to_string(path).unwrap();
     assert!(output.contains("***@***.***"), "output: {output}");
     assert!(!output.contains("user@example.com"), "output: {output}");
+}
+
+#[cfg(feature = "otlp")]
+#[test]
+fn enabled_http_otlp_provider_builds_layer_and_shutdowns_without_records() {
+    let cfg = rskit_logging::otlp::OtlpConfig {
+        enabled: true,
+        endpoint: "http://localhost:4318/v1/logs".to_owned(),
+        protocol: "http".to_owned(),
+        headers: std::collections::HashMap::from([("x-test".to_owned(), "value".to_owned())]),
+    };
+
+    let provider = rskit_logging::otlp::OtlpProvider::new(&cfg, "svc", "test", "0.1.0")
+        .unwrap()
+        .expect("enabled config should create a provider");
+    let _layer = provider.layer::<Registry>();
+    provider.shutdown().unwrap();
 }
 
 #[test]
@@ -938,6 +937,15 @@ fn special_characters_in_field_values() {
     });
     let events = captured.events.lock();
     assert_eq!(events.len(), 1);
+    let field_map: std::collections::HashMap<_, _> = events[0].fields.iter().cloned().collect();
+    assert_eq!(
+        field_map.get("path").map(|s| s.as_str()),
+        Some(r#"C:\Users\test\file"with"quotes"#)
+    );
+    assert_eq!(
+        field_map.get("query").map(|s| s.as_str()),
+        Some("SELECT * FROM t WHERE x='1' AND y=\"2\"")
+    );
 }
 
 #[test]
