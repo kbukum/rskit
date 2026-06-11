@@ -1,6 +1,6 @@
 use std::collections::HashSet;
-use std::sync::Arc;
 use std::time::Duration;
+use std::{collections::HashMap, sync::Arc};
 
 use parking_lot::RwLock;
 use rskit_errors::{AppError, AppResult, ErrorCode};
@@ -178,6 +178,7 @@ impl Registry {
 
         let semaphore = Arc::new(tokio::sync::Semaphore::new(concurrency.max(1)));
         let mut join_set = JoinSet::new();
+        let mut task_indexes = HashMap::new();
         let candidate_names = candidates
             .iter()
             .map(|snapshot| snapshot.name.clone())
@@ -185,29 +186,34 @@ impl Registry {
 
         for snapshot in candidates {
             self.set_state(snapshot.index, State::Starting);
+            let snapshot_index = snapshot.index;
             let components = Arc::clone(&self.components);
             let semaphore = Arc::clone(&semaphore);
             let cancel = cancel.clone();
             let start_timeout = self.config.start_timeout;
-            join_set.spawn(async move {
+            let abort_handle = join_set.spawn(async move {
                 let _permit = semaphore.acquire_owned().await.map_err(|_| {
                     AppError::new(ErrorCode::Cancelled, "component startup was cancelled")
                 })?;
                 start_component_snapshot(components, snapshot, cancel, start_timeout).await
             });
+            task_indexes.insert(abort_handle.id(), snapshot_index);
         }
 
         let mut first_error = None;
-        while let Some(join_result) = join_set.join_next().await {
+        while let Some(join_result) = join_set.join_next_with_id().await {
             match join_result {
-                Ok(Ok(())) => {}
-                Ok(Err(error)) => {
+                Ok((_id, Ok(()))) => {}
+                Ok((_id, Err(error))) => {
                     if first_error.is_none() {
                         cancel.cancel();
                         first_error = Some(error);
                     }
                 }
                 Err(error) => {
+                    if let Some(index) = task_indexes.get(&error.id()) {
+                        self.set_state(*index, State::Failed);
+                    }
                     if first_error.is_none() {
                         cancel.cancel();
                         first_error = Some(AppError::internal(error));
@@ -471,7 +477,7 @@ mod tests {
     use rskit_errors::AppError;
     use tokio_util::sync::CancellationToken;
 
-    use super::{Registry, RegistryConfig};
+    use super::{Registry, RegistryConfig, restore_state};
     use crate::{Component, Health, State};
 
     struct MockComponent {
@@ -577,6 +583,44 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn start_all_skips_running_components_and_rejects_in_progress_states() {
+        let component = Arc::new(MockComponent::new("svc"));
+        let start_count = Arc::clone(&component.start_count);
+        let mut registry = Registry::new();
+        registry.register(component);
+
+        registry.start_all().await.expect("start should succeed");
+        registry
+            .start_all()
+            .await
+            .expect("running components should be skipped");
+        assert_eq!(start_count.load(Ordering::SeqCst), 1);
+
+        registry.set_state(0, State::Starting);
+        let error = registry.start_all().await.unwrap_err();
+        assert_eq!(error.code(), rskit_errors::ErrorCode::Conflict);
+        assert!(error.message().contains("cannot start from state starting"));
+    }
+
+    #[test]
+    fn registry_accessors_and_private_state_helpers_cover_empty_and_missing_indexes() {
+        let mut registry = Registry::new();
+        assert!(registry.is_empty());
+        assert_eq!(registry.len(), 0);
+        registry.set_state(42, State::Failed);
+
+        let component = Arc::new(MockComponent::new("svc"));
+        assert!(component.health().is_healthy());
+        registry.register(component);
+        assert!(!registry.is_empty());
+        assert_eq!(registry.len(), 1);
+
+        restore_state(&registry.components, 42, State::Created);
+        restore_state(&registry.components, 0, State::Stopped);
+        assert_eq!(registry.state("svc"), Some(State::Stopped));
+    }
+
+    #[tokio::test]
     async fn start_failure_rolls_back_started_components() {
         let started = Arc::new(MockComponent::new("started"));
         let failing = Arc::new(MockComponent::new("failing").with_fail_on_start());
@@ -616,6 +660,105 @@ mod tests {
         assert_eq!(registry.state("slow"), Some(State::Failed));
     }
 
+    #[tokio::test(start_paused = true)]
+    async fn start_timeout_reports_rollback_stop_failures() {
+        struct StopFailComponent(&'static str);
+
+        #[async_trait::async_trait]
+        impl Component for StopFailComponent {
+            fn name(&self) -> &str {
+                self.0
+            }
+
+            async fn start(&self) -> rskit_errors::AppResult<()> {
+                Ok(())
+            }
+
+            async fn stop(&self) -> rskit_errors::AppResult<()> {
+                Err(AppError::service_unavailable(self.0))
+            }
+
+            fn health(&self) -> Health {
+                Health::healthy(self.0)
+            }
+        }
+
+        let mut registry = Registry::with_config(RegistryConfig {
+            start_timeout: Duration::from_secs(1),
+            stop_timeout: Duration::from_secs(1),
+            ..RegistryConfig::default()
+        });
+        registry.register(Arc::new(StopFailComponent("started")));
+        registry.register(Arc::new(
+            MockComponent::new("slow").with_delay(Duration::from_secs(60)),
+        ));
+
+        let error = registry.start_all().await.unwrap_err();
+
+        assert_eq!(error.code(), rskit_errors::ErrorCode::Timeout);
+        assert!(error.to_string().contains("rollback failures"));
+        assert_eq!(registry.state("started"), Some(State::Failed));
+        assert_eq!(registry.state("slow"), Some(State::Failed));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn start_failure_reports_rollback_stop_timeout() {
+        struct SlowStopComponent;
+
+        #[async_trait::async_trait]
+        impl Component for SlowStopComponent {
+            fn name(&self) -> &str {
+                "slow-stop-started"
+            }
+
+            async fn start(&self) -> rskit_errors::AppResult<()> {
+                Ok(())
+            }
+
+            async fn stop(&self) -> rskit_errors::AppResult<()> {
+                tokio::time::sleep(Duration::from_secs(60)).await;
+                Ok(())
+            }
+
+            fn health(&self) -> Health {
+                Health::healthy(self.name())
+            }
+        }
+
+        let mut registry = Registry::with_config(RegistryConfig {
+            stop_timeout: Duration::from_secs(1),
+            ..RegistryConfig::default()
+        });
+        registry.register(Arc::new(SlowStopComponent));
+        registry.register(Arc::new(MockComponent::new("failing").with_fail_on_start()));
+
+        let error = registry.start_all().await.unwrap_err();
+
+        assert_eq!(error.code(), rskit_errors::ErrorCode::ServiceUnavailable);
+        assert!(error.to_string().contains("rollback failures"));
+        assert_eq!(registry.state("slow-stop-started"), Some(State::Failed));
+        assert_eq!(registry.state("failing"), Some(State::Failed));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn concurrent_start_timeout_marks_component_failed_in_internal_suite() {
+        let mut registry = Registry::with_config(RegistryConfig {
+            start_timeout: Duration::from_secs(1),
+            ..RegistryConfig::default()
+        });
+        registry.register(Arc::new(
+            MockComponent::new("slow-concurrent").with_delay(Duration::from_secs(60)),
+        ));
+
+        let error = registry
+            .start_all_concurrent(CancellationToken::new())
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.code(), rskit_errors::ErrorCode::Timeout);
+        assert_eq!(registry.state("slow-concurrent"), Some(State::Failed));
+    }
+
     #[test]
     fn health_all_supports_concurrent_snapshots() {
         let gate = Arc::new(Mutex::new(()));
@@ -650,6 +793,25 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn blocking_health_component_start_stop_and_health_are_all_exercised() {
+        let gate = Arc::new(Mutex::new(()));
+        let health_count = Arc::new(AtomicUsize::new(0));
+        let mut registry = Registry::new();
+        registry.register(Arc::new(BlockingHealthComponent {
+            name: "blocking".to_string(),
+            gate,
+            health_count: Arc::clone(&health_count),
+        }));
+
+        registry.start_all().await.expect("start should succeed");
+        assert!(registry.health_all()[0].is_healthy());
+        registry.stop_all().await.expect("stop should succeed");
+
+        assert_eq!(health_count.load(Ordering::SeqCst), 1);
+        assert_eq!(registry.state("blocking"), Some(State::Stopped));
+    }
+
+    #[tokio::test]
     async fn stop_all_detailed_collects_all_errors() {
         struct StopFailComponent(&'static str);
 
@@ -676,6 +838,7 @@ mod tests {
         registry.register(Arc::new(StopFailComponent("a")));
         registry.register(Arc::new(StopFailComponent("b")));
         registry.start_all().await.expect("start should succeed");
+        assert!(registry.health_all().iter().all(Health::is_healthy));
 
         let results = registry.stop_all_detailed().await;
         assert_eq!(results.len(), 2);
@@ -714,6 +877,7 @@ mod tests {
         });
         registry.register(Arc::new(SlowStopComponent));
         registry.start_all().await.expect("start should succeed");
+        assert!(registry.health_all()[0].is_healthy());
 
         let results = registry.stop_all_detailed().await;
         assert_eq!(results.len(), 1);

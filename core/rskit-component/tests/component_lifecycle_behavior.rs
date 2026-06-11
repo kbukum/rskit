@@ -389,5 +389,5 @@ async fn concurrent_start_converts_join_panics_to_internal_errors() {
         .await
         .unwrap_err();
     assert_eq!(err.code(), ErrorCode::Internal);
-    assert_eq!(registry.state("panic"), Some(State::Starting));
+    assert_eq!(registry.state("panic"), Some(State::Failed));
 }

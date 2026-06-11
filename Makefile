@@ -1,4 +1,4 @@
-.PHONY: all setup build test test-nextest test-doc test-affected coverage coverage-changed test-coverage test-coverage-html lint fmt fmt-check check check-fast check-facade-features \
+.PHONY: all setup build test test-nextest test-doc test-python test-affected coverage coverage-changed test-coverage test-coverage-html lint fmt fmt-check check check-fast check-facade-features \
        check-core check-patterns check-crosscutting check-composition check-transport check-auth check-data check-ai \
        check-media check-infra doc deny check-l7-edges check-workspace-deps-sync check-topology check-public-api release-readiness release-coverage \
        publish-dry-run release-sbom clean help ci ci-test ci-lint ci-fmt ensure-act
@@ -97,6 +97,12 @@ endif
 test-doc:
 	@echo "==> Running doctests..."
 	$(call run_cargo_target,test,--doc,$(WORKSPACE_MANIFESTS))
+
+## Run Python repository tooling tests
+test-python:
+	@echo "==> Running Python tooling tests..."
+	@$(PYTHON) -m unittest discover -s scripts/tests -t .
+	@echo "✓ Python tooling tests passed"
 
 ## Run tests only for crates affected by current changes
 test-affected:
@@ -262,7 +268,7 @@ release-sbom:
 check-fast: fmt-check lint build
 
 ## Run all checks (fmt + lint + build + test)
-check: fmt-check lint build test-nextest test-doc
+check: fmt-check lint build test-nextest test-doc test-python
 
 ## Check only core domain modules
 check-core:
@@ -348,6 +354,7 @@ help:
 	@echo "  make test               [C=] [T=] [W=]     Run tests"
 	@echo "  make test-nextest       [PROFILE=] [W=]    Run tests with nextest"
 	@echo "  make test-doc           [C=] [W=]          Run doctests only"
+	@echo "  make test-python                          Run Python tooling tests"
 	@echo "  make test-affected                        Run tests for changed crates"
 	@echo "  make coverage           [C=] [PACKAGES=] [T=] [W=] [JOBS=] [CLEAN=] [THRESHOLD=] [PROGRESS_INTERVAL=] [PROGRESS_STYLE=]  Run workspace coverage with per-package reporting"
 	@echo "  make coverage-changed   [T=] [JOBS=] [THRESHOLD=]                       Run coverage for changed crates"

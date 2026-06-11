@@ -84,6 +84,21 @@ jobs:
           echo "Affected domains: $AFFECTED"
 
   # ---------------------------------------------------------------------------
+  # Python repository tooling tests
+  # ---------------------------------------------------------------------------
+  python-tooling:
+    name: Python Tooling
+    needs: changes
+    if: needs.changes.outputs.rust-code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+      - name: Check Python tooling runtime
+        run: python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else "Python 3.11+ is required")'
+      - name: Run Python tooling tests
+        run: python3 -m unittest discover -s scripts/tests -t .
+
+  # ---------------------------------------------------------------------------
   # Format check (fast gate — runs on stable, no need to pin MSRV here)
   # ---------------------------------------------------------------------------
   fmt:
@@ -291,12 +306,13 @@ jobs:
   ci-status:
     name: CI Status
     if: always()
-    needs: [changes, fmt, clippy, test, docs, guardrails, coverage, security]
+    needs: [changes, python-tooling, fmt, clippy, test, docs, guardrails, coverage, security]
     runs-on: ubuntu-latest
     steps:
       - name: Evaluate results
         run: |
           results=("${{ needs.changes.result }}" \
+                   "${{ needs.python-tooling.result }}" \
                    "${{ needs.fmt.result }}" \
                    "${{ needs.clippy.result }}" \
                    "${{ needs.test.result }}" \
