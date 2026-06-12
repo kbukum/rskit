@@ -135,6 +135,28 @@ async fn async_run_treats_stdin_broken_pipe_as_success() {
 }
 
 #[tokio::test]
+async fn async_run_applies_working_directory_empty_env_and_overrides() {
+    let workspace = TestWorkspace::new("async-dir-env");
+    let dir = workspace.path();
+    let result = run_with_cancel(
+        &ProcessSpec::new("/bin/sh")
+            .arg("-c")
+            .arg("printf '%s:%s:%s' \"$PWD\" \"$ONLY_ME\" \"${RSKIT_MISSING-unset}\"")
+            .dir(dir)
+            .env("ONLY_ME", "present")
+            .empty_env(),
+        &ProcessConfig::default().with_timeout(None),
+        CancellationToken::new(),
+    )
+    .await
+    .unwrap();
+
+    assert!(result.success());
+    assert!(result.stdout.contains(dir.to_string_lossy().as_ref()));
+    assert!(result.stdout.contains(":present:unset"));
+}
+
+#[tokio::test]
 async fn scrub_env_starts_with_empty_environment() {
     let command = ProcessSpec::new("/usr/bin/env")
         .env("ONLY_ME", "present")

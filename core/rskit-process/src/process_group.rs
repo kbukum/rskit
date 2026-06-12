@@ -96,6 +96,34 @@ mod tests {
 
     use super::*;
 
+    #[cfg(unix)]
+    #[test]
+    fn public_helpers_signal_a_real_process_group_leader() {
+        use std::os::unix::process::ExitStatusExt;
+
+        // Spawn a child that becomes its own process-group leader via
+        // `isolate`, so the public `terminate(pid)` helper (which targets the
+        // negated process-group id) reaches it.
+        let mut command = StdCommand::new("/bin/sh");
+        command
+            .args(["-c", "sleep 30"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        isolate(&mut command);
+        let mut child = command.spawn().expect("group-leader child spawns");
+        let pid = child.id();
+
+        assert!(terminate(pid), "terminating the process group succeeds");
+
+        let status = child.wait().expect("child is reaped");
+        assert_eq!(
+            status.signal(),
+            Some(ProcessSignal::Terminate.as_raw()),
+            "child should be terminated by the group SIGTERM"
+        );
+    }
+
     #[test]
     fn process_group_helpers_reject_zero_pid() {
         assert!(!interrupt(0));
