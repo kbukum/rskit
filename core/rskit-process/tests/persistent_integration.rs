@@ -274,9 +274,7 @@ fn persistent_shutdown_reports_already_exited_when_child_finished() {
     // reap call; the surrounding sync guarantees the child is past its
     // useful work in both cases.
     let workspace = TestWorkspace::new("persistent-already-exited");
-    let fifo = workspace
-        .child("exit.fifo")
-        .expect("fifo path resolves");
+    let fifo = workspace.child("exit.fifo").expect("fifo path resolves");
     let status = std::process::Command::new("mkfifo")
         .arg(&fifo)
         .status()
