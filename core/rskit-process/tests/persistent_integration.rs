@@ -173,7 +173,7 @@ fn persistent_output_forwarding_still_retains_capture() {
 fn persistent_spawn_applies_working_directory_empty_env_and_overrides() {
     let workspace = TestWorkspace::new("persistent-dir-env");
     let dir = workspace.path();
-    let command = ProcessSpec::new("sh")
+    let command = ProcessSpec::new("/bin/sh")
         .arg("-c")
         .arg("printf '%s:%s:%s' \"$PWD\" \"$ONLY_ME\" \"${RSKIT_MISSING-unset}\"; sleep 1")
         .dir(dir)

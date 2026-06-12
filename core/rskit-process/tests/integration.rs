@@ -448,7 +448,7 @@ fn blocking_run_applies_working_directory_empty_env_and_overrides() {
     let workspace = TestWorkspace::new("blocking-dir-env");
     let dir = workspace.path();
     let result = run(
-        &ProcessSpec::new("sh")
+        &ProcessSpec::new("/bin/sh")
             .arg("-c")
             .arg("printf '%s:%s:%s' \"$PWD\" \"$ONLY_ME\" \"${RSKIT_MISSING-unset}\"")
             .dir(dir)
