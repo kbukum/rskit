@@ -237,7 +237,7 @@ fn terminate_group(signal: SignalPolicy) -> bool {
     signal.create_process_group && signal.terminate_descendants
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use std::time::Duration;
 
@@ -250,7 +250,7 @@ mod tests {
     };
 
     fn start_ready_process(command: &str) -> PersistentProcess {
-        let spec = ProcessSpec::new("sh").arg("-c").arg(command);
+        let spec = ProcessSpec::new("/bin/sh").arg("-c").arg(command);
         let config = PersistentConfig::default()
             .with_readiness(PersistentReadiness::OutputContains("ready".to_string()))
             .with_readiness_timeout(Duration::from_secs(2))
@@ -304,7 +304,7 @@ mod tests {
 
     #[test]
     fn cleanup_spawned_child_terminates_process() {
-        let mut child = std::process::Command::new("sh")
+        let mut child = std::process::Command::new("/bin/sh")
             .arg("-c")
             .arg("while :; do sleep 1; done")
             .stdout(std::process::Stdio::null())

@@ -223,9 +223,10 @@ mod tests {
         assert!(!cancelled.load(Ordering::SeqCst));
     }
 
+    #[cfg(unix)]
     #[test]
     fn readiness_wait_error_reports_cancelled_for_running_child() {
-        let mut child = std::process::Command::new("sh")
+        let mut child = std::process::Command::new("/bin/sh")
             .arg("-c")
             .arg("sleep 30")
             .spawn()

@@ -451,6 +451,7 @@ mod tests {
         assert_eq!(stdin_error.code(), ErrorCode::Internal);
     }
 
+    #[cfg(unix)]
     #[test]
     fn terminate_process_treats_esrch_as_already_exited() {
         // Spawn and reap a short-lived child so the PID is guaranteed dead,
