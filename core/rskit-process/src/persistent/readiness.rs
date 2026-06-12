@@ -227,13 +227,18 @@ mod tests {
     fn readiness_wait_error_reports_cancelled_for_running_child() {
         let mut child = std::process::Command::new("sh")
             .arg("-c")
-            .arg("sleep 2")
+            .arg("sleep 30")
             .spawn()
             .expect("child process starts");
         let cancelled = AtomicBool::new(true);
 
         let error = readiness_wait_error(&mut child, mpsc::RecvTimeoutError::Timeout, &cancelled)
             .expect("readiness wait error maps to app error");
+
+        // Clean up the spawned child so the test does not leak a running
+        // process under parallel test execution.
+        let _ = child.kill();
+        let _ = child.wait();
 
         assert_eq!(error.code(), ErrorCode::Cancelled);
     }
