@@ -247,8 +247,6 @@ fn spawn_child(
     cmd.args(&spec.args)
         .stdin(if matches!(input, InputPolicy::Bytes(_)) {
             Stdio::piped()
-        } else if matches!(input, InputPolicy::Inherit) {
-            Stdio::inherit()
         } else {
             Stdio::null()
         })

@@ -5,6 +5,7 @@ use rskit_process::{
     ErrorCode, InheritedIo, InputPolicy, ObservedIo, OutputObserver, OutputPolicy, ProcessConfig,
     ProcessIo, ProcessSpec, run, run_with_cancel,
 };
+use rskit_testutil::TestWorkspace;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
@@ -23,6 +24,69 @@ async fn runs_command_and_captures_stdout() {
     assert_eq!(result.stderr, "");
     assert_eq!(result.exit_code, Some(0));
     assert!(result.success());
+}
+
+#[tokio::test]
+async fn async_run_with_no_timeout_waits_for_successful_exit() {
+    let command = ProcessSpec::new("/usr/bin/printf").args(["%s", "no-timeout"]);
+    let config = ProcessConfig::default().with_timeout(None);
+
+    let result = run_with_cancel(&command, &config, CancellationToken::new())
+        .await
+        .unwrap();
+
+    assert_eq!(result.stdout, "no-timeout");
+    assert_eq!(result.exit_code, Some(0));
+    assert!(!result.timed_out);
+    assert!(!result.cancelled);
+}
+
+#[tokio::test]
+async fn async_run_with_no_timeout_observes_cancellation() {
+    let command = ProcessSpec::new("/bin/sh").args(["-c", "while :; do sleep 1; done"]);
+    let cancel = CancellationToken::new();
+    let child_cancel = cancel.clone();
+    let handle = tokio::spawn(async move {
+        run_with_cancel(
+            &command,
+            &ProcessConfig::default()
+                .with_timeout(None)
+                .with_signal_policy(
+                    rskit_process::SignalPolicy::default()
+                        .with_grace_period(Duration::from_millis(10)),
+                ),
+            child_cancel,
+        )
+        .await
+    });
+
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    cancel.cancel();
+    let result = handle.await.unwrap().unwrap();
+
+    assert!(result.cancelled);
+    assert!(!result.timed_out);
+}
+
+#[tokio::test]
+async fn async_run_rejects_empty_program_and_reports_spawn_failure() {
+    let empty = run_with_cancel(
+        &ProcessSpec::new(""),
+        &ProcessConfig::default(),
+        CancellationToken::new(),
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(empty.code(), ErrorCode::InvalidInput);
+
+    let missing = run_with_cancel(
+        &ProcessSpec::new("/definitely/not/rskit-process-missing"),
+        &ProcessConfig::default(),
+        CancellationToken::new(),
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(missing.code(), ErrorCode::Internal);
 }
 
 #[tokio::test]
@@ -221,6 +285,45 @@ async fn timeout_escalates_and_marks_result() {
 }
 
 #[tokio::test]
+async fn async_timeout_accepts_successful_sigterm_handler_as_timed_out() {
+    let command =
+        ProcessSpec::new("/bin/sh").args(["-c", "trap 'exit 42' TERM; while :; do sleep 1; done"]);
+    let signal =
+        rskit_process::SignalPolicy::default().with_grace_period(Duration::from_millis(500));
+    let config = ProcessConfig::default()
+        .with_timeout(Some(Duration::from_millis(50)))
+        .with_signal_policy(signal);
+
+    let result = run_with_cancel(&command, &config, CancellationToken::new())
+        .await
+        .unwrap();
+
+    assert!(result.timed_out);
+    assert_eq!(result.exit_code, Some(42));
+    assert!(!result.cancelled);
+}
+
+#[tokio::test]
+async fn async_timeout_with_direct_child_signalling_marks_result() {
+    let command =
+        ProcessSpec::new("/bin/sh").args(["-c", "trap '' TERM; while :; do sleep 1; done"]);
+    let signal = rskit_process::SignalPolicy::default()
+        .with_create_process_group(false)
+        .with_terminate_descendants(false)
+        .with_grace_period(Duration::from_millis(10));
+    let config = ProcessConfig::default()
+        .with_timeout(Some(Duration::from_millis(50)))
+        .with_signal_policy(signal);
+
+    let result = run_with_cancel(&command, &config, CancellationToken::new())
+        .await
+        .unwrap();
+
+    assert!(result.timed_out);
+    assert!(!result.cancelled);
+}
+
+#[tokio::test]
 async fn timeout_does_not_discard_captured_stderr_at_limit() {
     let command = ProcessSpec::new("/bin/sh").args([
         "-c",
@@ -331,6 +434,107 @@ fn blocking_run_captures_stdout() {
 }
 
 #[test]
+fn blocking_run_with_no_timeout_waits_for_successful_exit() {
+    let command = ProcessSpec::new("/usr/bin/printf").args(["%s", "blocking-no-timeout"]);
+    let result = run(&command, &ProcessConfig::default().with_timeout(None)).unwrap();
+
+    assert_eq!(result.stdout, "blocking-no-timeout");
+    assert_eq!(result.exit_code, Some(0));
+    assert!(!result.timed_out);
+}
+
+#[test]
+fn blocking_run_applies_working_directory_empty_env_and_overrides() {
+    let workspace = TestWorkspace::new("blocking-dir-env");
+    let dir = workspace.path();
+    let result = run(
+        &ProcessSpec::new("sh")
+            .arg("-c")
+            .arg("printf '%s:%s:%s' \"$PWD\" \"$ONLY_ME\" \"${RSKIT_MISSING-unset}\"")
+            .dir(dir)
+            .env("ONLY_ME", "present")
+            .empty_env(),
+        &ProcessConfig::default().with_timeout(None),
+    )
+    .unwrap();
+
+    assert!(result.success());
+    assert!(result.stdout.contains(dir.to_string_lossy().as_ref()));
+    assert!(result.stdout.contains(":present:unset"));
+}
+
+#[test]
+fn blocking_timeout_with_direct_child_signalling_marks_result() {
+    let command =
+        ProcessSpec::new("/bin/sh").args(["-c", "trap '' TERM; while :; do sleep 1; done"]);
+    let signal = rskit_process::SignalPolicy::default()
+        .with_create_process_group(false)
+        .with_terminate_descendants(false)
+        .with_grace_period(Duration::from_millis(10));
+    let config = ProcessConfig::default()
+        .with_timeout(Some(Duration::from_millis(50)))
+        .with_signal_policy(signal);
+
+    let result = run(&command, &config).unwrap();
+
+    assert!(result.timed_out);
+    assert!(!result.cancelled);
+}
+
+#[test]
+fn blocking_run_treats_stdin_broken_pipe_as_success() {
+    let command = ProcessSpec::new("/usr/bin/true");
+    let config =
+        ProcessConfig::default().with_input(InputPolicy::Bytes(vec![b'x'; 2 * 1024 * 1024]));
+
+    let result = run(&command, &config).unwrap();
+
+    assert!(result.success());
+}
+
+#[test]
+fn blocking_run_can_discard_output_without_retaining_capture() {
+    let command =
+        ProcessSpec::new("/bin/sh").args(["-c", "printf hidden; printf secret-error >&2"]);
+    let config = ProcessConfig::default().with_io(ProcessIo::captured(
+        rskit_process::CapturedIo::new().with_output(OutputPolicy::observe_only()),
+    ));
+
+    let result = run(&command, &config).unwrap();
+
+    assert!(result.success());
+    assert!(result.stdout.is_empty());
+    assert!(result.stderr.is_empty());
+}
+
+#[test]
+fn blocking_inherited_mode_executes_without_capture() {
+    let command = ProcessSpec::new("/usr/bin/true");
+    let config = ProcessConfig::default()
+        .with_io(ProcessIo::inherited(
+            InheritedIo::new().with_input(InputPolicy::Closed),
+        ))
+        .with_timeout(None);
+
+    let result = run(&command, &config).unwrap();
+
+    assert!(result.success());
+    assert!(result.stdout.is_empty());
+    assert!(result.stderr.is_empty());
+}
+
+#[test]
+fn blocking_run_reports_spawn_failure() {
+    let error = run(
+        &ProcessSpec::new("/definitely/not/rskit-process-missing"),
+        &ProcessConfig::default(),
+    )
+    .unwrap_err();
+
+    assert_eq!(error.code(), ErrorCode::Internal);
+}
+
+#[test]
 fn blocking_run_drains_output_while_writing_stdin() {
     let stdin = vec![b'x'; 2 * 1024 * 1024];
     let command = ProcessSpec::new("/bin/sh").args([
@@ -375,6 +579,23 @@ fn blocking_timeout_does_not_discard_captured_stderr_at_limit() {
     assert!(result.timed_out);
     assert_eq!(result.stderr, "1234567p");
     assert!(result.stderr_truncated);
+}
+
+#[test]
+fn blocking_timeout_accepts_successful_sigterm_handler_as_timed_out() {
+    let command =
+        ProcessSpec::new("/bin/sh").args(["-c", "trap 'exit 42' TERM; while :; do sleep 1; done"]);
+    let signal =
+        rskit_process::SignalPolicy::default().with_grace_period(Duration::from_millis(500));
+    let config = ProcessConfig::default()
+        .with_timeout(Some(Duration::from_millis(50)))
+        .with_signal_policy(signal);
+
+    let result = run(&command, &config).unwrap();
+
+    assert!(result.timed_out);
+    assert_eq!(result.exit_code, Some(42));
+    assert!(!result.cancelled);
 }
 
 #[tokio::test]

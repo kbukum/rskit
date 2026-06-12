@@ -208,4 +208,33 @@ mod tests {
             Some(PersistentStartErrorKind::ReadinessCommandTimedOut)
         );
     }
+
+    #[test]
+    fn wait_for_readiness_reports_disconnected_channel() {
+        let (ready_tx, ready_rx) = mpsc::channel::<()>();
+        drop(ready_tx);
+        let cancel = CancellationToken::new();
+        let cancelled = AtomicBool::new(false);
+
+        let error = wait_for_readiness(&ready_rx, Duration::from_secs(1), &cancel, &cancelled)
+            .expect_err("disconnected readiness channel should fail");
+
+        assert_eq!(error, mpsc::RecvTimeoutError::Disconnected);
+        assert!(!cancelled.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn readiness_wait_error_reports_cancelled_for_running_child() {
+        let mut child = std::process::Command::new("sh")
+            .arg("-c")
+            .arg("sleep 2")
+            .spawn()
+            .expect("child process starts");
+        let cancelled = AtomicBool::new(true);
+
+        let error = readiness_wait_error(&mut child, mpsc::RecvTimeoutError::Timeout, &cancelled)
+            .expect("readiness wait error maps to app error");
+
+        assert_eq!(error.code(), ErrorCode::Cancelled);
+    }
 }

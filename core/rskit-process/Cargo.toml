@@ -33,3 +33,4 @@ rskit-util = { workspace = true }
 [dev-dependencies]
 tokio = { workspace = true, features = ["full", "test-util"] }
 parking_lot = { workspace = true }
+rskit-testutil = { workspace = true }

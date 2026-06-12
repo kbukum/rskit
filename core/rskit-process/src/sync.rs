@@ -428,4 +428,32 @@ mod tests {
         assert!(append_bounded(&mut already_full, b"g", Some(6)));
         assert_eq!(already_full, b"abcdef");
     }
+
+    #[test]
+    fn join_helpers_report_panicked_threads() {
+        let reader = std::thread::spawn(|| -> std::io::Result<ReaderOutput> {
+            panic!("reader panic");
+        });
+        let stdin = std::thread::spawn(|| -> AppResult<()> {
+            panic!("stdin panic");
+        });
+
+        let reader_error = match join_reader(Some(reader)) {
+            Ok(_) => panic!("reader panic should map to error"),
+            Err(error) => error,
+        };
+        let stdin_error = match join_stdin(Some(stdin)) {
+            Ok(_) => panic!("stdin panic should map to error"),
+            Err(error) => error,
+        };
+
+        assert_eq!(reader_error.code(), ErrorCode::Internal);
+        assert_eq!(stdin_error.code(), ErrorCode::Internal);
+    }
+
+    #[test]
+    fn terminate_process_treats_esrch_as_already_exited() {
+        let config = ProcessConfig::default();
+        assert!(terminate_process(Some(999_999), &config, libc::SIGTERM));
+    }
 }
