@@ -570,7 +570,10 @@ safety: read-only
 
         let populated = SkillLoaderConfig {
             service: ServiceConfig::default(),
-            root: "/tmp/pack".to_string(),
+            root: PathBuf::from("packs")
+                .join("demo")
+                .to_string_lossy()
+                .into_owned(),
         };
         populated
             .validate()
