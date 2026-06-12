@@ -453,7 +453,17 @@ mod tests {
 
     #[test]
     fn terminate_process_treats_esrch_as_already_exited() {
+        // Spawn and reap a short-lived child so the PID is guaranteed dead and
+        // not in use elsewhere on the system; signaling it must yield ESRCH.
+        let mut child = std::process::Command::new("/usr/bin/true")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("spawning /usr/bin/true succeeds");
+        let pid = child.id();
+        child.wait().expect("child exits and is reaped");
+
         let config = ProcessConfig::default();
-        assert!(terminate_process(Some(999_999), &config, libc::SIGTERM));
+        assert!(terminate_process(Some(pid), &config, libc::SIGTERM));
     }
 }
