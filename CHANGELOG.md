@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Rework coverage collection to run once per selected workspace group, preserve cached instrumented builds with profile-only cleanup, exclude the facade package from default coverage, honor explicit threshold overrides, and derive per-package summaries from workspace reports.
 - Add focused authorization, configuration, lifecycle, DI, DAG, logging, messaging, resilience, Ollama, image, Redis, S3, Kafka, NATS, RabbitMQ, FFmpeg, and GCS adapter tests to raise package coverage with deterministic behavioral checks.
+- Cover every `rskit-storage-s3` `FileStore` operation with wire-level request-construction and remote-failure tests using an in-process mock HTTP client, with no network or credentials.
 
 ### Fixed
 

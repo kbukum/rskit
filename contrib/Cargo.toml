@@ -85,6 +85,10 @@ which = "8"
 # Storage
 tempfile = "3"
 aws-sdk-s3 = { version = "1", default-features = false, features = ["behavior-version-latest", "default-https-client", "http-1x", "rt-tokio"] }
+# Test-only wire-level mocking for the AWS SDK (no network, no credentials).
+aws-smithy-http-client = { version = "1", features = ["test-util"] }
+aws-smithy-types = "1"
+http = "1"
 google-cloud-storage = "1.14"
 google-cloud-auth = { version = "1.12", default-features = false }
 google-cloud-gax = "1.11"

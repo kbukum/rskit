@@ -27,3 +27,6 @@ tracing      = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "full"] }
+aws-smithy-http-client = { workspace = true }
+aws-smithy-types = { workspace = true }
+http = { workspace = true }

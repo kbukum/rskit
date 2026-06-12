@@ -76,45 +76,52 @@ impl S3Store {
     /// Resolves credentials from config fields, then env vars.
     /// The client is synchronously constructed and reused for all operations.
     fn new(config: Config) -> AppResult<Self> {
-        let (access_key, secret_key) = resolve_credentials(&config)?;
-
-        let creds = aws_sdk_s3::config::Credentials::new(
-            &access_key,
-            &secret_key,
-            None,
-            None,
-            "rskit-storage-s3",
-        );
-
-        let mut builder = aws_sdk_s3::Config::builder()
-            .credentials_provider(creds)
-            .behavior_version_latest();
-
-        // Region: config → AWS_REGION → AWS_DEFAULT_REGION
-        if let Some(region) = &config.region {
-            builder = builder.region(aws_sdk_s3::config::Region::new(region.clone()));
-        } else if let Some(region) = env::get_non_empty("AWS_REGION") {
-            builder = builder.region(aws_sdk_s3::config::Region::new(region));
-        } else if let Some(region) = env::get_non_empty("AWS_DEFAULT_REGION") {
-            builder = builder.region(aws_sdk_s3::config::Region::new(region));
-        }
-
-        if let Some(endpoint) = &config.endpoint {
-            builder = builder.endpoint_url(endpoint);
-        }
-
-        if config.force_path_style {
-            builder = builder.force_path_style(true);
-        }
-
-        let client = aws_sdk_s3::Client::from_conf(builder.build());
-
+        let client = aws_sdk_s3::Client::from_conf(client_config_builder(&config)?.build());
         Ok(Self { client, config })
     }
 
     fn full_key(&self, key: &str) -> String {
         prefixed_key(self.config.prefix.as_deref(), key)
     }
+}
+
+/// Build the AWS SDK configuration for a store from validated [`Config`].
+///
+/// Kept separate from [`S3Store::new`] so tests can attach a wire-level mock
+/// HTTP client to the same builder the production path uses.
+fn client_config_builder(config: &Config) -> AppResult<aws_sdk_s3::config::Builder> {
+    let (access_key, secret_key) = resolve_credentials(config)?;
+
+    let creds = aws_sdk_s3::config::Credentials::new(
+        &access_key,
+        &secret_key,
+        None,
+        None,
+        "rskit-storage-s3",
+    );
+
+    let mut builder = aws_sdk_s3::Config::builder()
+        .credentials_provider(creds)
+        .behavior_version_latest();
+
+    // Region: config → AWS_REGION → AWS_DEFAULT_REGION
+    if let Some(region) = &config.region {
+        builder = builder.region(aws_sdk_s3::config::Region::new(region.clone()));
+    } else if let Some(region) = env::get_non_empty("AWS_REGION") {
+        builder = builder.region(aws_sdk_s3::config::Region::new(region));
+    } else if let Some(region) = env::get_non_empty("AWS_DEFAULT_REGION") {
+        builder = builder.region(aws_sdk_s3::config::Region::new(region));
+    }
+
+    if let Some(endpoint) = &config.endpoint {
+        builder = builder.endpoint_url(endpoint);
+    }
+
+    if config.force_path_style {
+        builder = builder.force_path_style(true);
+    }
+
+    Ok(builder)
 }
 
 #[async_trait::async_trait]
@@ -679,5 +686,310 @@ mod tests {
         let from_empty_object = stored_file_from_object(&empty_object);
         assert_eq!(from_empty_object.key, "");
         assert_eq!(from_empty_object.size, 0);
+    }
+
+    // --- Wire-level operation tests -----------------------------------------
+    //
+    // These exercise request construction and response/error mapping for every
+    // `FileStore` operation against an in-process mock HTTP client. No network,
+    // credentials, or live S3 service are involved.
+
+    use aws_smithy_http_client::test_util::{ReplayEvent, StaticReplayClient};
+    use aws_smithy_types::body::SdkBody;
+
+    fn wire_config(prefix: Option<&str>) -> Config {
+        Config {
+            bucket: "test-bucket".into(),
+            region: Some("us-east-1".into()),
+            endpoint: Some("http://s3.local".into()),
+            prefix: prefix.map(str::to_owned),
+            force_path_style: true,
+            access_key_id: Some("test-key".into()),
+            secret_access_key: Some("test-secret".into()),
+        }
+    }
+
+    /// Build a store whose AWS client replays the given responses in order.
+    fn wire_store(config: Config, events: Vec<ReplayEvent>) -> (S3Store, StaticReplayClient) {
+        let http = StaticReplayClient::new(events);
+        let conf = client_config_builder(&config)
+            .unwrap()
+            .http_client(http.clone())
+            .build();
+        (
+            S3Store {
+                client: aws_sdk_s3::Client::from_conf(conf),
+                config,
+            },
+            http,
+        )
+    }
+
+    fn ok_response(status: u16, body: impl Into<SdkBody>) -> ReplayEvent {
+        ReplayEvent::new(
+            http::Request::builder().body(SdkBody::empty()).unwrap(),
+            http::Response::builder()
+                .status(status)
+                .body(body.into())
+                .unwrap(),
+        )
+    }
+
+    fn error_response(status: u16, code: &str) -> ReplayEvent {
+        let body = format!(
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\
+             <Error><Code>{code}</Code><Message>mock failure</Message>\
+             <RequestId>req-1</RequestId></Error>"
+        );
+        ok_response(status, SdkBody::from(body))
+    }
+
+    #[tokio::test]
+    async fn upload_puts_prefixed_object_and_returns_logical_key() {
+        let (store, http) = wire_store(wire_config(Some("uploads")), vec![ok_response(200, "")]);
+        let mut metadata = HashMap::new();
+        metadata.insert("owner".to_string(), "media".to_string());
+
+        let stored = store
+            .upload(
+                &FileSource::Bytes(bytes::Bytes::from_static(b"payload")),
+                "file.txt",
+                Some("text/plain"),
+                Some(metadata),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(stored.key, "file.txt");
+        assert_eq!(stored.size, 7);
+        assert_eq!(stored.content_type, "text/plain");
+        assert_eq!(stored.metadata.get("owner").map(String::as_str), Some("media"));
+
+        let request = http.actual_requests().next().expect("a request was sent");
+        assert_eq!(request.method(), "PUT");
+        assert!(
+            request.uri().contains("/test-bucket/uploads/file.txt"),
+            "unexpected upload uri: {}",
+            request.uri()
+        );
+    }
+
+    #[tokio::test]
+    async fn upload_maps_remote_failure_to_internal_error() {
+        let (store, _http) = wire_store(wire_config(None), vec![error_response(500, "InternalError")]);
+
+        let err = store
+            .upload(
+                &FileSource::Bytes(bytes::Bytes::from_static(b"x")),
+                "file.txt",
+                None,
+                None,
+            )
+            .await
+            .unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::Internal);
+        assert!(err.message().contains("S3 upload failed"));
+    }
+
+    #[tokio::test]
+    async fn download_collects_object_body_into_bytes() {
+        let (store, http) = wire_store(wire_config(None), vec![ok_response(200, "downloaded")]);
+
+        let source = store.download("file.txt").await.unwrap();
+        let data = source.read_all().await.unwrap();
+        assert_eq!(data.as_ref(), b"downloaded");
+
+        let request = http.actual_requests().next().unwrap();
+        assert_eq!(request.method(), "GET");
+        assert!(request.uri().contains("/test-bucket/file.txt"));
+    }
+
+    #[tokio::test]
+    async fn download_maps_missing_object_to_not_found() {
+        let (store, _http) = wire_store(wire_config(None), vec![error_response(404, "NoSuchKey")]);
+
+        let err = store.download("missing.txt").await.unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::NotFound);
+        assert!(err.message().contains("S3 download failed"));
+    }
+
+    #[tokio::test]
+    async fn delete_sends_delete_object_request() {
+        let (store, http) = wire_store(wire_config(None), vec![ok_response(204, "")]);
+
+        store.delete("file.txt").await.unwrap();
+
+        let request = http.actual_requests().next().unwrap();
+        assert_eq!(request.method(), "DELETE");
+        assert!(request.uri().contains("/test-bucket/file.txt"));
+    }
+
+    #[tokio::test]
+    async fn delete_maps_remote_failure_to_internal_error() {
+        let (store, _http) = wire_store(wire_config(None), vec![error_response(403, "AccessDenied")]);
+
+        let err = store.delete("file.txt").await.unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::Internal);
+        assert!(err.message().contains("S3 delete failed"));
+    }
+
+    #[tokio::test]
+    async fn exists_reports_presence_from_head_outcome() {
+        let (present, _) = wire_store(wire_config(None), vec![ok_response(200, "")]);
+        assert!(present.exists("file.txt").await.unwrap());
+
+        let (absent, _) = wire_store(wire_config(None), vec![error_response(404, "NotFound")]);
+        assert!(!absent.exists("file.txt").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn head_maps_headers_to_stored_file_metadata() {
+        let response = ReplayEvent::new(
+            http::Request::builder().body(SdkBody::empty()).unwrap(),
+            http::Response::builder()
+                .status(200)
+                .header("content-length", "9")
+                .header("content-type", "application/json")
+                .header("x-amz-meta-trace", "abc")
+                .body(SdkBody::empty())
+                .unwrap(),
+        );
+        let (store, _http) = wire_store(wire_config(Some("uploads")), vec![response]);
+
+        let stored = store.head("meta.json").await.unwrap();
+
+        assert_eq!(stored.key, "meta.json");
+        assert_eq!(stored.size, 9);
+        assert_eq!(stored.content_type, "application/json");
+        assert_eq!(stored.metadata.get("trace").map(String::as_str), Some("abc"));
+    }
+
+    #[tokio::test]
+    async fn head_maps_missing_object_to_not_found() {
+        let (store, _http) = wire_store(wire_config(None), vec![error_response(404, "NoSuchKey")]);
+
+        let err = store.head("missing.txt").await.unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::NotFound);
+        assert!(err.message().contains("S3 head failed"));
+    }
+
+    #[tokio::test]
+    async fn list_parses_contents_and_sends_prefix() {
+        let body = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\
+            <ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">\
+            <Name>test-bucket</Name><Prefix>uploads/logs</Prefix>\
+            <KeyCount>2</KeyCount><MaxKeys>2</MaxKeys><IsTruncated>false</IsTruncated>\
+            <Contents><Key>uploads/logs/a.txt</Key><Size>12</Size>\
+            <LastModified>2024-01-01T00:00:00.000Z</LastModified></Contents>\
+            <Contents><Key>uploads/logs/b.txt</Key><Size>34</Size>\
+            <LastModified>2024-01-01T00:00:00.000Z</LastModified></Contents>\
+            </ListBucketResult>";
+        let (store, http) =
+            wire_store(wire_config(Some("uploads")), vec![ok_response(200, SdkBody::from(body))]);
+
+        let items = store.list("logs", Some(2)).await.unwrap();
+
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].key, "uploads/logs/a.txt");
+        assert_eq!(items[0].size, 12);
+        assert_eq!(items[1].size, 34);
+
+        let request = http.actual_requests().next().unwrap();
+        assert!(request.uri().contains("prefix=uploads%2Flogs"));
+        assert!(request.uri().contains("max-keys=2"));
+    }
+
+    #[tokio::test]
+    async fn list_maps_remote_failure_to_internal_error() {
+        let (store, _http) = wire_store(wire_config(None), vec![error_response(500, "InternalError")]);
+
+        let err = store.list("logs", None).await.unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::Internal);
+        assert!(err.message().contains("S3 list failed"));
+    }
+
+    #[tokio::test]
+    async fn copy_copies_source_then_heads_destination() {
+        let copy_body = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\
+            <CopyObjectResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">\
+            <ETag>\"abc\"</ETag><LastModified>2024-01-01T00:00:00.000Z</LastModified>\
+            </CopyObjectResult>";
+        let head = ReplayEvent::new(
+            http::Request::builder().body(SdkBody::empty()).unwrap(),
+            http::Response::builder()
+                .status(200)
+                .header("content-length", "5")
+                .header("content-type", "text/plain")
+                .body(SdkBody::empty())
+                .unwrap(),
+        );
+        let (store, http) = wire_store(
+            wire_config(Some("uploads")),
+            vec![ok_response(200, SdkBody::from(copy_body)), head],
+        );
+
+        let stored = store.copy("a.txt", "b.txt").await.unwrap();
+
+        assert_eq!(stored.key, "b.txt");
+        assert_eq!(stored.size, 5);
+
+        let mut requests = http.actual_requests();
+        let copy = requests.next().unwrap();
+        assert_eq!(copy.method(), "PUT");
+        assert!(copy.uri().contains("/test-bucket/uploads/b.txt"));
+        assert_eq!(
+            copy.headers().get("x-amz-copy-source"),
+            Some("test-bucket/uploads/a.txt")
+        );
+        assert_eq!(requests.next().unwrap().method(), "HEAD");
+    }
+
+    #[tokio::test]
+    async fn copy_maps_remote_failure_to_internal_error() {
+        let (store, _http) =
+            wire_store(wire_config(None), vec![error_response(404, "NoSuchKey")]);
+
+        let err = store.copy("a.txt", "b.txt").await.unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::Internal);
+        assert!(err.message().contains("S3 copy failed"));
+    }
+
+    #[tokio::test]
+    async fn rename_copies_then_deletes_source() {
+        let copy_body = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\
+            <CopyObjectResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">\
+            <ETag>\"abc\"</ETag><LastModified>2024-01-01T00:00:00.000Z</LastModified>\
+            </CopyObjectResult>";
+        let head = ReplayEvent::new(
+            http::Request::builder().body(SdkBody::empty()).unwrap(),
+            http::Response::builder()
+                .status(200)
+                .header("content-length", "5")
+                .body(SdkBody::empty())
+                .unwrap(),
+        );
+        let (store, http) = wire_store(
+            wire_config(None),
+            vec![ok_response(200, SdkBody::from(copy_body)), head, ok_response(204, "")],
+        );
+
+        let stored = store.rename("a.txt", "b.txt").await.unwrap();
+
+        assert_eq!(stored.key, "b.txt");
+
+        let methods: Vec<String> = http
+            .actual_requests()
+            .map(|r| r.method().to_owned())
+            .collect();
+        assert_eq!(
+            methods.iter().map(String::as_str).collect::<Vec<_>>(),
+            ["PUT", "HEAD", "DELETE"]
+        );
     }
 }
