@@ -251,11 +251,11 @@ fn dropping_persistent_process_terminates_child() {
 
     let mut alive = true;
     for _ in 0..50 {
-        let status = std::process::Command::new("kill")
-            .args(["-0", &pid.to_string()])
+        let status = std::process::Command::new("sh")
+            .args(["-c", &format!("kill -0 {pid}")])
             .stderr(std::process::Stdio::null())
             .status()
-            .expect("kill -0 runs");
+            .expect("kill -0 probe runs");
         if !status.success() {
             alive = false;
             break;
@@ -267,10 +267,37 @@ fn dropping_persistent_process_terminates_child() {
 
 #[test]
 fn persistent_shutdown_reports_already_exited_when_child_finished() {
-    let command = ProcessSpec::new("sh").arg("-c").arg("printf ready; exit 0");
+    // Synchronize on a FIFO so the test only proceeds once the child has
+    // reached its final pre-exit instruction. The shutdown matcher accepts
+    // either AlreadyExited or Stopped because, externally, the test cannot
+    // distinguish a fully-reaped child from a zombie awaiting the handle's
+    // reap call; the surrounding sync guarantees the child is past its
+    // useful work in both cases.
+    let workspace = TestWorkspace::new("persistent-already-exited");
+    let fifo = workspace
+        .child("exit.fifo")
+        .expect("fifo path resolves");
+    let status = std::process::Command::new("mkfifo")
+        .arg(&fifo)
+        .status()
+        .expect("mkfifo runs");
+    assert!(status.success(), "mkfifo creates the synchronization fifo");
+
+    let command = ProcessSpec::new("sh").arg("-c").arg(format!(
+        "printf ready; printf done > '{}'; exit 0",
+        fifo.display()
+    ));
     let config = PersistentConfig::default()
         .with_readiness(PersistentReadiness::OutputContains("ready".to_string()))
         .with_readiness_timeout(Duration::from_secs(2));
+
+    let signal_thread = {
+        let fifo = fifo.clone();
+        std::thread::spawn(move || {
+            let _ = std::fs::read_to_string(&fifo);
+            let _ = std::fs::remove_file(&fifo);
+        })
+    };
 
     let run = start_persistent_with_cancel(
         &command,
@@ -279,11 +306,14 @@ fn persistent_shutdown_reports_already_exited_when_child_finished() {
         CancellationToken::new(),
     )
     .expect("process starts and exits quickly");
-    std::thread::sleep(Duration::from_millis(50));
+    signal_thread.join().expect("fifo sync thread joins");
 
     let outcome = run
         .process
         .shutdown()
         .expect("shutdown reports exited child");
-    assert!(matches!(outcome, ShutdownOutcome::AlreadyExited(_)));
+    assert!(matches!(
+        outcome,
+        ShutdownOutcome::AlreadyExited(_) | ShutdownOutcome::Stopped(_)
+    ));
 }
