@@ -289,14 +289,6 @@ fn persistent_shutdown_reports_already_exited_when_child_finished() {
         .with_readiness(PersistentReadiness::OutputContains("ready".to_string()))
         .with_readiness_timeout(Duration::from_secs(2));
 
-    let signal_thread = {
-        let fifo = fifo.clone();
-        std::thread::spawn(move || {
-            let _ = std::fs::read_to_string(&fifo);
-            let _ = std::fs::remove_file(&fifo);
-        })
-    };
-
     let run = start_persistent_with_cancel(
         &command,
         &ProcessConfig::default(),
@@ -304,7 +296,9 @@ fn persistent_shutdown_reports_already_exited_when_child_finished() {
         CancellationToken::new(),
     )
     .expect("process starts and exits quickly");
-    signal_thread.join().expect("fifo sync thread joins");
+    let signal = std::fs::read_to_string(&fifo).expect("fifo signal is read");
+    std::fs::remove_file(&fifo).expect("fifo is removed");
+    assert_eq!(signal, "done");
 
     let outcome = run
         .process

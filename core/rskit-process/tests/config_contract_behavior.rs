@@ -1,9 +1,10 @@
 #![allow(missing_docs)]
 
 use std::ffi::OsString;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 
+use parking_lot::Mutex;
 use rskit_process::{
     ArgRedaction, CapturedIo, EnvPolicy, InheritedIo, InputPolicy, ObservedIo, OutputObserver,
     OutputPolicy, ProcessConfig, ProcessIo, ProcessResult, ProcessSpec, SignalPolicy, command,
@@ -205,19 +206,19 @@ async fn observed_run_invokes_line_and_byte_callbacks_without_retaining_output()
     let observer = OutputObserver::new()
         .with_stdout_line({
             let lines = Arc::clone(&stdout_lines);
-            move |line| lines.lock().unwrap().push(line.to_string())
+            move |line| lines.lock().push(line.to_string())
         })
         .with_stderr_line({
             let lines = Arc::clone(&stderr_lines);
-            move |line| lines.lock().unwrap().push(line.to_string())
+            move |line| lines.lock().push(line.to_string())
         })
         .with_stdout_bytes({
             let bytes = Arc::clone(&stdout_bytes);
-            move |chunk| bytes.lock().unwrap().extend_from_slice(chunk)
+            move |chunk| bytes.lock().extend_from_slice(chunk)
         })
         .with_stderr_bytes({
             let bytes = Arc::clone(&stderr_bytes);
-            move |chunk| bytes.lock().unwrap().extend_from_slice(chunk)
+            move |chunk| bytes.lock().extend_from_slice(chunk)
         });
     let config = ProcessConfig::default()
         .with_io(ProcessIo::observed(
@@ -239,10 +240,10 @@ async fn observed_run_invokes_line_and_byte_callbacks_without_retaining_output()
     assert!(result.success());
     assert!(result.stdout.is_empty());
     assert!(result.stderr.is_empty());
-    assert_eq!(stdout_lines.lock().unwrap().as_slice(), ["out"]);
-    assert_eq!(stderr_lines.lock().unwrap().as_slice(), ["err"]);
-    assert!(String::from_utf8_lossy(&stdout_bytes.lock().unwrap()).contains("out"));
-    assert!(String::from_utf8_lossy(&stderr_bytes.lock().unwrap()).contains("err"));
+    assert_eq!(stdout_lines.lock().as_slice(), ["out"]);
+    assert_eq!(stderr_lines.lock().as_slice(), ["err"]);
+    assert!(String::from_utf8_lossy(&stdout_bytes.lock()).contains("out"));
+    assert!(String::from_utf8_lossy(&stderr_bytes.lock()).contains("err"));
 }
 
 #[tokio::test]
