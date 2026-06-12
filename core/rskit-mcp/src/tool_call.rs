@@ -384,7 +384,10 @@ mod tests {
         let result = handler.handle_call_tool(echo_request()).await;
 
         assert_eq!(result.is_error, Some(true));
-        assert_eq!(first_text(&result), Some("result too large: exceeds 4 bytes"));
+        assert_eq!(
+            first_text(&result),
+            Some("result too large: exceeds 4 bytes")
+        );
         assert_eq!(events.lock()[0].outcome, "result_too_large");
     }
 
@@ -435,8 +438,8 @@ mod tests {
 
     #[tokio::test]
     async fn tool_returning_error_result_is_audited_as_tool_error() {
-        use rskit_tool::{Callable, Definition};
         use rskit_schema::ValidationResult;
+        use rskit_tool::{Callable, Definition};
 
         struct ErrorResultTool {
             definition: Definition,
