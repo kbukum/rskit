@@ -236,3 +236,89 @@ fn wait_for_exit(
 fn terminate_group(signal: SignalPolicy) -> bool {
     signal.create_process_group && signal.terminate_descendants
 }
+
+#[cfg(all(test, unix))]
+mod tests {
+    use std::time::Duration;
+
+    use tokio_util::sync::CancellationToken;
+
+    use super::*;
+    use crate::{
+        ErrorCode, PersistentConfig, PersistentReadiness, ProcessConfig, ProcessSpec,
+        start_persistent_with_cancel,
+    };
+
+    fn start_ready_process(command: &str) -> PersistentProcess {
+        let spec = ProcessSpec::new("/bin/sh").arg("-c").arg(command);
+        let config = PersistentConfig::default()
+            .with_readiness(PersistentReadiness::OutputContains("ready".to_string()))
+            .with_readiness_timeout(Duration::from_secs(2))
+            .with_shutdown_grace_period(Duration::from_millis(50));
+
+        start_persistent_with_cancel(
+            &spec,
+            &ProcessConfig::default(),
+            &config,
+            CancellationToken::new(),
+        )
+        .expect("persistent process starts")
+        .process
+    }
+
+    #[test]
+    fn wait_inner_rejects_reuse_after_shutdown() {
+        let mut process = start_ready_process("printf ready; while :; do sleep 1; done");
+        let _ = process.shutdown_inner().expect("initial shutdown succeeds");
+
+        let error = process
+            .wait_inner()
+            .expect_err("wait after shutdown should fail");
+
+        assert_eq!(error.code(), ErrorCode::Conflict);
+    }
+
+    #[test]
+    fn shutdown_inner_rejects_reuse_after_wait() {
+        let mut process = start_ready_process("printf ready; exit 0");
+        let _ = process.wait_inner().expect("initial wait succeeds");
+
+        let error = process
+            .shutdown_inner()
+            .expect_err("shutdown after wait should fail");
+
+        assert_eq!(error.code(), ErrorCode::Conflict);
+    }
+
+    #[test]
+    fn shutdown_inner_handles_missing_cancel_thread() {
+        let mut process = start_ready_process("printf ready; while :; do sleep 1; done");
+        process.cancel_thread = None;
+
+        let outcome = process
+            .shutdown_inner()
+            .expect("shutdown should work without cancel thread handle");
+
+        assert!(matches!(outcome, ShutdownOutcome::Stopped(_)));
+    }
+
+    #[test]
+    fn cleanup_spawned_child_terminates_process() {
+        let mut child = std::process::Command::new("/bin/sh")
+            .arg("-c")
+            .arg("while :; do sleep 1; done")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("child starts");
+
+        cleanup_spawned_child(
+            &mut child,
+            SignalPolicy::default()
+                .with_create_process_group(false)
+                .with_terminate_descendants(false),
+            Duration::from_millis(20),
+        )
+        .expect("cleanup should stop spawned child");
+    }
+}

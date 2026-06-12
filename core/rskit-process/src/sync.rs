@@ -428,4 +428,45 @@ mod tests {
         assert!(append_bounded(&mut already_full, b"g", Some(6)));
         assert_eq!(already_full, b"abcdef");
     }
+
+    #[test]
+    fn join_helpers_report_panicked_threads() {
+        let reader = std::thread::spawn(|| -> std::io::Result<ReaderOutput> {
+            panic!("reader panic");
+        });
+        let stdin = std::thread::spawn(|| -> AppResult<()> {
+            panic!("stdin panic");
+        });
+
+        let reader_error = match join_reader(Some(reader)) {
+            Ok(_) => panic!("reader panic should map to error"),
+            Err(error) => error,
+        };
+        let stdin_error = match join_stdin(Some(stdin)) {
+            Ok(_) => panic!("stdin panic should map to error"),
+            Err(error) => error,
+        };
+
+        assert_eq!(reader_error.code(), ErrorCode::Internal);
+        assert_eq!(stdin_error.code(), ErrorCode::Internal);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn terminate_process_treats_esrch_as_already_exited() {
+        // Spawn and reap a short-lived child so the PID is guaranteed dead,
+        // then probe with signal 0 (existence check) instead of SIGTERM so
+        // PID-reuse cannot cause this test to deliver a real signal to an
+        // unrelated process.
+        let mut child = std::process::Command::new("/usr/bin/true")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("spawning /usr/bin/true succeeds");
+        let pid = child.id();
+        child.wait().expect("child exits and is reaped");
+
+        let config = ProcessConfig::default();
+        assert!(terminate_process(Some(pid), &config, 0));
+    }
 }
