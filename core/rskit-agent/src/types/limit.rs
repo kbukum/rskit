@@ -28,3 +28,53 @@ impl AgentLimitError {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cancellation_outranks_every_budget_failure() {
+        let budgets = [
+            AgentLimitError::WallClockExceeded,
+            AgentLimitError::MaxToolCallsExceeded,
+            AgentLimitError::MaxTokensExceeded,
+            AgentLimitError::MaxTurnsExceeded,
+        ];
+        for budget in budgets {
+            assert!(
+                AgentLimitError::Cancelled.precedence() > budget.precedence(),
+                "cancellation must win over {budget:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn precedence_is_strict_total_order_with_locked_ranking() {
+        // Highest-to-lowest priority is a stable, documented contract.
+        let ranked = [
+            AgentLimitError::Cancelled,
+            AgentLimitError::WallClockExceeded,
+            AgentLimitError::MaxToolCallsExceeded,
+            AgentLimitError::MaxTokensExceeded,
+            AgentLimitError::MaxTurnsExceeded,
+        ];
+        for pair in ranked.windows(2) {
+            assert!(
+                pair[0].precedence() > pair[1].precedence(),
+                "{:?} must outrank {:?}",
+                pair[0],
+                pair[1],
+            );
+        }
+
+        // Selecting the winner by max precedence is order-independent.
+        let mut shuffled = ranked;
+        shuffled.reverse();
+        let winner = shuffled
+            .into_iter()
+            .max_by_key(|error| error.precedence())
+            .expect("non-empty");
+        assert_eq!(winner, AgentLimitError::Cancelled);
+    }
+}

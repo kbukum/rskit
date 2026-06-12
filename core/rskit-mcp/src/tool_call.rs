@@ -255,4 +255,256 @@ mod tests {
         assert_eq!(denied_message(""), "tool call denied");
         assert_eq!(denied_message("policy"), "tool call denied: policy");
     }
+
+    use async_trait::async_trait;
+    use parking_lot::Mutex;
+    use rmcp::model::{CallToolRequestParams, CallToolResult};
+    use rskit_errors::{AppError, ErrorCode};
+    use rskit_tool::context::Context;
+    use rskit_tool::{ToolMetadata, ToolResult, from_fn, text_result};
+    use schemars::JsonSchema;
+    use serde::Deserialize;
+    use serde_json::json;
+
+    use crate::audit::{ToolAuditEvent, ToolAuditSink};
+    use crate::authz::{ToolAuthorizationDecision, ToolAuthorizationRequest, ToolAuthorizer};
+
+    #[derive(Deserialize, JsonSchema)]
+    struct EchoInput {
+        message: String,
+    }
+
+    fn echo_registry() -> Arc<Registry> {
+        let registry = Registry::new();
+        registry
+            .register(
+                from_fn(
+                    "echo",
+                    "Echo a message back",
+                    |_ctx: Context, input: EchoInput| async move { Ok(text_result(&input.message)) },
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        Arc::new(registry)
+    }
+
+    fn failing_registry() -> Arc<Registry> {
+        let registry = Registry::new();
+        registry
+            .register(
+                from_fn(
+                    "boom",
+                    "Always fails",
+                    |_ctx: Context, _input: EchoInput| async move {
+                        Err(AppError::new(ErrorCode::Internal, "tool exploded"))
+                    },
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        Arc::new(registry)
+    }
+
+    struct ErroringAuthorizer;
+
+    #[async_trait]
+    impl ToolAuthorizer for ErroringAuthorizer {
+        async fn authorize_tool(
+            &self,
+            _request: &ToolAuthorizationRequest,
+        ) -> Result<ToolAuthorizationDecision, String> {
+            Err("authorizer backend unavailable".to_string())
+        }
+    }
+
+    #[derive(Default)]
+    struct RecordingAuditSink {
+        events: Arc<Mutex<Vec<ToolAuditEvent>>>,
+    }
+
+    #[async_trait]
+    impl ToolAuditSink for RecordingAuditSink {
+        async fn record_tool_call(&self, event: ToolAuditEvent) {
+            self.events.lock().push(event);
+        }
+    }
+
+    fn first_text(result: &CallToolResult) -> Option<&str> {
+        result
+            .content
+            .first()
+            .and_then(|content| match &content.raw {
+                rmcp::model::RawContent::Text(text) => Some(text.text.as_ref()),
+                _ => None,
+            })
+    }
+
+    fn echo_request() -> CallToolRequestParams {
+        serde_json::from_value(json!({
+            "name": "echo",
+            "arguments": { "message": "hello" }
+        }))
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn call_time_allow_list_denies_tool_outside_list() {
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let config = ServerConfig {
+            allowed_tools: vec!["other".to_string()],
+            tool_audit_sink: Some(Arc::new(RecordingAuditSink {
+                events: Arc::clone(&events),
+            })),
+            ..Default::default()
+        };
+        let handler = create_server("test", "0.1.0", echo_registry(), config);
+
+        let result = handler.handle_call_tool(echo_request()).await;
+
+        assert_eq!(result.is_error, Some(true));
+        assert_eq!(first_text(&result), Some("tool is not allowed"));
+        let captured = events.lock();
+        assert_eq!(captured[0].outcome, "denied");
+        assert_eq!(captured[0].reason, "not in allow-list");
+    }
+
+    #[tokio::test]
+    async fn oversized_result_is_rejected_before_returning_to_caller() {
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let config = ServerConfig {
+            max_result_bytes: 4,
+            tool_audit_sink: Some(Arc::new(RecordingAuditSink {
+                events: Arc::clone(&events),
+            })),
+            ..Default::default()
+        };
+        let handler = create_server("test", "0.1.0", echo_registry(), config);
+
+        let result = handler.handle_call_tool(echo_request()).await;
+
+        assert_eq!(result.is_error, Some(true));
+        assert_eq!(first_text(&result), Some("result too large: exceeds 4 bytes"));
+        assert_eq!(events.lock()[0].outcome, "result_too_large");
+    }
+
+    #[tokio::test]
+    async fn authorizer_backend_error_fails_closed_without_leaking_detail() {
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let config = ServerConfig {
+            tool_authorizer: Some(Arc::new(ErroringAuthorizer)),
+            tool_audit_sink: Some(Arc::new(RecordingAuditSink {
+                events: Arc::clone(&events),
+            })),
+            ..Default::default()
+        };
+        let handler = create_server("test", "0.1.0", echo_registry(), config);
+
+        let result = handler.handle_call_tool(echo_request()).await;
+
+        assert_eq!(result.is_error, Some(true));
+        // Caller sees a generic message; the backend detail stays in the audit trail only.
+        assert_eq!(first_text(&result), Some("authorization error"));
+        let captured = events.lock();
+        assert_eq!(captured[0].outcome, "authorization_error");
+        assert_eq!(captured[0].error, "authorizer backend unavailable");
+    }
+
+    #[tokio::test]
+    async fn tool_execution_failure_is_reported_and_audited() {
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let config = ServerConfig {
+            tool_audit_sink: Some(Arc::new(RecordingAuditSink {
+                events: Arc::clone(&events),
+            })),
+            ..Default::default()
+        };
+        let handler = create_server("test", "0.1.0", failing_registry(), config);
+
+        let request: CallToolRequestParams = serde_json::from_value(json!({
+            "name": "boom",
+            "arguments": { "message": "hi" }
+        }))
+        .unwrap();
+        let result = handler.handle_call_tool(request).await;
+
+        assert_eq!(result.is_error, Some(true));
+        assert_eq!(first_text(&result), Some("tool exploded"));
+        assert_eq!(events.lock()[0].outcome, "tool_error");
+    }
+
+    #[tokio::test]
+    async fn tool_returning_error_result_is_audited_as_tool_error() {
+        use rskit_tool::{Callable, Definition};
+        use rskit_schema::ValidationResult;
+
+        struct ErrorResultTool {
+            definition: Definition,
+        }
+
+        #[async_trait]
+        impl Callable for ErrorResultTool {
+            fn definition(&self) -> &Definition {
+                &self.definition
+            }
+
+            fn validate(&self, _input: &ToolInput) -> ValidationResult {
+                ValidationResult {
+                    valid: true,
+                    errors: Vec::new(),
+                }
+            }
+
+            async fn call(
+                &self,
+                _ctx: &Context,
+                _input: ToolInput,
+            ) -> rskit_errors::AppResult<ToolResult> {
+                Ok(ToolResult {
+                    output: None,
+                    content: String::from("boom from tool body"),
+                    is_error: true,
+                    metadata: ToolMetadata::new(),
+                })
+            }
+        }
+
+        let registry = Registry::new();
+        registry
+            .register(Box::new(ErrorResultTool {
+                definition: Definition {
+                    name: String::from("err"),
+                    description: String::from("Returns an error result"),
+                    input_schema: rskit_tool::ToolSchema::new(json!({
+                        "type": "object", "properties": {}
+                    }))
+                    .unwrap(),
+                    output_schema: None,
+                    annotations: rskit_tool::Annotations::default(),
+                    envelope: rskit_tool::Envelope::default(),
+                },
+            }))
+            .unwrap();
+
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let config = ServerConfig {
+            tool_audit_sink: Some(Arc::new(RecordingAuditSink {
+                events: Arc::clone(&events),
+            })),
+            ..Default::default()
+        };
+        let handler = create_server("test", "0.1.0", Arc::new(registry), config);
+
+        let request: CallToolRequestParams = serde_json::from_value(json!({
+            "name": "err",
+            "arguments": {}
+        }))
+        .unwrap();
+        let result = handler.handle_call_tool(request).await;
+
+        assert_eq!(result.is_error, Some(true));
+        let captured = events.lock();
+        assert_eq!(captured[0].outcome, "tool_error");
+        assert_eq!(captured[0].error, "boom from tool body");
+    }
 }

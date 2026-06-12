@@ -564,4 +564,18 @@ mod tests {
         ));
         assert!(matches!(events.last(), Some(AgentEvent::Complete { .. })));
     }
+
+    #[tokio::test]
+    async fn agent_component_lifecycle_is_named_and_healthy() {
+        use rskit_component::Component;
+
+        let agent = Agent::with_defaults(Arc::new(MockProvider::single_text("ok")));
+
+        assert_eq!(Component::name(&agent), "rskit-agent");
+        agent.start().await.expect("start is a no-op success");
+        agent.stop().await.expect("stop is a no-op success");
+
+        let health = agent.health();
+        assert!(health.is_healthy());
+    }
 }
