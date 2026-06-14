@@ -324,4 +324,42 @@ mod tests {
         let result = policy.execute(|| async { Ok::<_, AppError>(42) }).await;
         assert_eq!(result.unwrap(), 42);
     }
+
+    #[tokio::test]
+    async fn policy_rejects_invalid_builder_configs() {
+        assert!(
+            Policy::new()
+                .with_circuit_breaker(CbConfig::new("bad-cb").with_max_failures(0))
+                .is_err()
+        );
+        assert!(
+            Policy::new()
+                .with_bulkhead(BulkheadConfig::new("bad-bulkhead", 0))
+                .is_err()
+        );
+        assert!(
+            Policy::new()
+                .try_with_rate_limiter_config(RateLimiterConfig::new("bad-rate", 0, 1))
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn policy_without_retry_calls_operation_once_and_propagates_error() {
+        let attempts = Arc::new(AtomicUsize::new(0));
+        let policy = Policy::new();
+
+        let result = policy
+            .execute(|| {
+                let attempts = Arc::clone(&attempts);
+                async move {
+                    attempts.fetch_add(1, Ordering::SeqCst);
+                    Err::<(), AppError>(AppError::connection_failed("upstream"))
+                }
+            })
+            .await;
+
+        assert_eq!(attempts.load(Ordering::SeqCst), 1);
+        assert_eq!(result.unwrap_err().code(), ErrorCode::ConnectionFailed);
+    }
 }

@@ -288,7 +288,8 @@ fn validate_prefix(prefix: &str) -> AppResult<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{GenerateResult, Hasher, HashingConfig, split_key};
+    use super::{GenerateResult, Hasher, HashingConfig, Key, split_key};
+    use chrono::Utc;
 
     #[test]
     fn hashing_config_debug_redacts_pepper() {
@@ -309,6 +310,45 @@ mod tests {
         );
         assert!(formatted.contains("<redacted>"));
         assert!(!formatted.contains("sk_live.secret"));
+    }
+
+    #[test]
+    fn key_and_hasher_debug_redact_secret_material() {
+        let hasher =
+            Hasher::new(HashingConfig::new("very-secret-pepper-material-32-bytes")).unwrap();
+        let key = Key {
+            id: "key-1".into(),
+            owner_id: "owner-1".into(),
+            name: "primary".into(),
+            key_prefix: "pk".into(),
+            key_digest: "stored-digest".into(),
+            scopes: vec!["read".into()],
+            is_active: true,
+            expires_at: None,
+            grace_ends_at: None,
+            rotated_by_id: None,
+            last_used_at: None,
+            created_at: Utc::now(),
+        };
+
+        let hasher_debug = format!("{hasher:?}");
+        assert!(hasher_debug.contains("<redacted>"));
+        assert!(!hasher_debug.contains("very-secret-pepper-material-32-bytes"));
+
+        let key_debug = format!("{key:?}");
+        assert!(key_debug.contains("<redacted>"));
+        assert!(!key_debug.contains("stored-digest"));
+    }
+
+    #[test]
+    fn empty_api_key_prefix_is_rejected() {
+        let hasher =
+            Hasher::new(HashingConfig::new("very-secret-pepper-material-32-bytes")).unwrap();
+
+        let error = hasher.generate_key("").unwrap_err();
+
+        assert_eq!(error.code(), rskit_errors::ErrorCode::InvalidInput);
+        assert!(error.message().contains("prefix"));
     }
 
     #[test]

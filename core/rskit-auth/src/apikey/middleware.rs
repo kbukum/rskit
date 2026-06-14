@@ -173,7 +173,7 @@ mod tests {
     use chrono::Utc;
     use http::{Request, Response, StatusCode};
     use rskit_errors::AppError;
-    use tower::{Layer, Service};
+    use tower::{Layer, Service, ServiceExt};
 
     use super::{ApiKeyLayer, CredentialExtraction, KeyValidator, extract_api_key};
     use crate::{AuthOutcome, apikey::Key};
@@ -285,12 +285,18 @@ mod tests {
         let mut service = ApiKeyLayer::new(Validator).layer(ExtensionCheckingService);
 
         let missing = service
+            .ready()
+            .await
+            .unwrap()
             .call(Request::builder().body(()).unwrap())
             .await
             .unwrap();
         assert_eq!(missing.status(), StatusCode::UNAUTHORIZED);
 
         let valid = service
+            .ready()
+            .await
+            .unwrap()
             .call(
                 Request::builder()
                     .header("x-api-key", "pk.secret")
@@ -300,6 +306,41 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(valid.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn api_key_layer_uses_configured_header_name() {
+        let mut service = ApiKeyLayer::new(Validator)
+            .with_header(http::header::HeaderName::from_static("x-service-key"))
+            .layer(ExtensionCheckingService);
+
+        let default_header = service
+            .ready()
+            .await
+            .unwrap()
+            .call(
+                Request::builder()
+                    .header("x-api-key", "pk.secret")
+                    .body(())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(default_header.status(), StatusCode::UNAUTHORIZED);
+
+        let custom_header = service
+            .ready()
+            .await
+            .unwrap()
+            .call(
+                Request::builder()
+                    .header("x-service-key", "pk.secret")
+                    .body(())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(custom_header.status(), StatusCode::OK);
     }
 
     #[tokio::test]

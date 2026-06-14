@@ -81,13 +81,13 @@ mod tests {
 
     #[tokio::test]
     async fn bounds_slow_service() {
+        let layer = TimeoutLayer::new(Duration::from_millis(1));
+        assert_eq!(layer.timeout(), Duration::from_millis(1));
         let service = tower::service_fn(|_req: i32| async move {
             tokio::time::sleep(Duration::from_millis(50)).await;
             Ok::<i32, AppError>(1)
         });
-        let mut service = ServiceBuilder::new()
-            .layer(TimeoutLayer::new(Duration::from_millis(1)))
-            .service(service);
+        let mut service = ServiceBuilder::new().layer(layer).service(service);
 
         let error = service.ready().await.unwrap().call(0).await.unwrap_err();
         assert_eq!(error.code(), ErrorCode::Timeout);

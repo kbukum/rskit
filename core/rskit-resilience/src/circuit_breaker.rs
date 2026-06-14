@@ -409,6 +409,16 @@ mod tests {
         );
     }
 
+    #[test]
+    fn config_debug_reports_callback_without_exposing_closure() {
+        let config = CbConfig::new("debug-cb").with_on_state_change(|_, _| {});
+
+        let formatted = format!("{config:?}");
+
+        assert!(formatted.contains("debug-cb"));
+        assert!(formatted.contains("<fn>"));
+    }
+
     #[tokio::test(start_paused = true)]
     async fn open_breaker_moves_to_half_open_with_virtual_time() {
         let cb = CircuitBreaker::new(
@@ -468,5 +478,33 @@ mod tests {
         release.notify_one();
         assert!(first_probe.await.unwrap().is_ok());
         assert_eq!(cb.state(), CbState::Closed);
+    }
+
+    #[tokio::test]
+    async fn state_change_callback_observes_open_half_open_and_closed_transitions() {
+        let transitions = Arc::new(Mutex::new(Vec::new()));
+        let observed = Arc::clone(&transitions);
+        let cb = CircuitBreaker::new(
+            CbConfig::new("callbacks")
+                .with_max_failures(1)
+                .with_timeout(Duration::ZERO)
+                .with_half_open_max_calls(1)
+                .with_on_state_change(move |from, to| observed.lock().push((from, to))),
+        )
+        .unwrap();
+
+        let _ = cb
+            .execute(|| async { Err::<(), AppError>(AppError::new(ErrorCode::Internal, "fail")) })
+            .await;
+        let _ = cb.execute(|| async { Ok::<_, AppError>(()) }).await;
+
+        assert_eq!(
+            *transitions.lock(),
+            vec![
+                (CbState::Closed, CbState::Open),
+                (CbState::Open, CbState::HalfOpen),
+                (CbState::HalfOpen, CbState::Closed),
+            ]
+        );
     }
 }

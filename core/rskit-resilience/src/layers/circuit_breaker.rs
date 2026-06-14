@@ -79,10 +79,10 @@ mod tests {
     async fn passes_through_success() {
         let breaker =
             CircuitBreaker::new(CbConfig::new("test-layer-cb").with_max_failures(3)).unwrap();
+        let layer = CircuitBreakerLayer::new(breaker.clone());
+        assert_eq!(layer.breaker().state(), CbState::Closed);
         let service = tower::service_fn(|req: i32| async move { Ok::<i32, AppError>(req + 1) });
-        let mut service = ServiceBuilder::new()
-            .layer(CircuitBreakerLayer::new(breaker))
-            .service(service);
+        let mut service = ServiceBuilder::new().layer(layer).service(service);
 
         let result = service.ready().await.unwrap().call(9).await;
         assert_eq!(result.unwrap(), 10);

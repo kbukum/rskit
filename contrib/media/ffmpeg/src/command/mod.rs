@@ -268,7 +268,7 @@ mod tests {
             StreamingConfig, VideoSettings,
         },
         spatial::{FrameRate, Resolution},
-        time::{TimeRange, Timestamp},
+        time::{Segment, TimeRange, Timestamp},
     };
 
     fn default_config() -> FfmpegConfig {
@@ -493,6 +493,167 @@ mod tests {
         let args = compile_args(&ops);
         let af_idx = args.iter().position(|a| a == "-af").unwrap();
         assert_eq!(args[af_idx + 1], "loudnorm");
+    }
+
+    #[test]
+    fn speed_compiler_chains_atempo_filters_for_extreme_factors() {
+        let fast = compile_args(&[MediaOp::Speed(8.0)]);
+        let af_idx = fast.iter().position(|a| a == "-af").unwrap();
+        assert_eq!(fast[af_idx + 1], "atempo=2.0,atempo=2.0,atempo=2");
+
+        let slow = compile_args(&[MediaOp::Speed(0.125)]);
+        let af_idx = slow.iter().position(|a| a == "-af").unwrap();
+        assert_eq!(slow[af_idx + 1], "atempo=0.5,atempo=0.5,atempo=0.5");
+    }
+
+    #[test]
+    fn fade_operations_add_matching_audio_and_video_filters() {
+        let args = compile_args(&[
+            MediaOp::FadeIn(Duration::from_millis(1500)),
+            MediaOp::FadeOut(Duration::from_secs(2)),
+        ]);
+
+        let vf_idx = args.iter().position(|a| a == "-vf").unwrap();
+        assert_eq!(args[vf_idx + 1], "fade=t=in:d=1.5,fade=t=out:d=2");
+        let af_idx = args.iter().position(|a| a == "-af").unwrap();
+        assert_eq!(args[af_idx + 1], "afade=t=in:d=1.5,afade=t=out:d=2");
+    }
+
+    #[test]
+    fn spatial_variants_compile_to_expected_filters() {
+        let args = compile_args(&[
+            MediaOp::Resize(ResizeOp {
+                resolution: Resolution::new(640, 360),
+                mode: ResizeMode::FitWidth,
+            }),
+            MediaOp::Resize(ResizeOp {
+                resolution: Resolution::new(640, 360),
+                mode: ResizeMode::FitHeight,
+            }),
+            MediaOp::Rotate(Rotation::Degrees270),
+            MediaOp::Rotate(Rotation::Arbitrary(45.0)),
+            MediaOp::Flip(FlipDirection::Vertical),
+            MediaOp::Pad(PadOp {
+                width: 800,
+                height: 600,
+                color: "black".into(),
+            }),
+        ]);
+
+        let vf_idx = args.iter().position(|a| a == "-vf").unwrap();
+        let vf = &args[vf_idx + 1];
+        for expected in [
+            "scale=-2:360",
+            "transpose=2",
+            "rotate=45*PI/180",
+            "vflip",
+            "pad=800:600:(ow-iw)/2:(oh-ih)/2:black",
+        ] {
+            assert!(vf.contains(expected), "missing {expected} in {vf}");
+        }
+    }
+
+    #[test]
+    fn extract_many_compiles_single_and_multi_segment_modes() {
+        let one = compile_args(&[MediaOp::ExtractMany(vec![
+            Segment::new(TimeRange::from_seconds(1.0, 2.0)).with_label("intro"),
+        ])]);
+        assert!(one.contains(&"-ss".to_string()), "missing seek in {one:?}");
+        assert!(one.contains(&"-t".to_string()), "missing duration in {one:?}");
+
+        let command = FfmpegCommand::compile_with_hints(
+            &FileSource::from_path("/tmp/input.mp4"),
+            &[MediaOp::ExtractMany(vec![
+                Segment::new(TimeRange::from_seconds(0.0, 1.0)),
+                Segment::new(TimeRange::from_seconds(3.0, 4.5)),
+            ])],
+            None,
+            &default_config(),
+            &default_registry(),
+            &SourceHints {
+                has_audio: Some(false),
+            },
+        )
+        .unwrap();
+        assert_eq!(command.inputs.len(), 2);
+        assert_eq!(
+            command.complex_filter.as_deref(),
+            Some("[0:v][1:v]concat=n=2:v=1:a=0[outv]")
+        );
+        assert_eq!(command.output_opts, vec!["-map", "[outv]"]);
+
+        let empty = FfmpegCommand::compile(
+            &FileSource::from_path("/tmp/input.mp4"),
+            &[MediaOp::ExtractMany(Vec::new())],
+            None,
+            &default_config(),
+            &default_registry(),
+        );
+        let error = match empty {
+            Ok(_) => panic!("empty extract-many should be rejected"),
+            Err(error) => error,
+        };
+        assert_eq!(error.code(), rskit_errors::ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn visual_filter_presets_and_custom_adjustments_chain() {
+        let args = compile_args(&[
+            MediaOp::ApplyFilter(FilterConfig {
+                preset: FilterPreset::BW,
+                intensity: 1.0,
+                custom_params: None,
+            }),
+            MediaOp::ApplyFilter(FilterConfig {
+                preset: FilterPreset::Cinematic,
+                intensity: 0.5,
+                custom_params: None,
+            }),
+            MediaOp::ApplyFilter(FilterConfig {
+                preset: FilterPreset::Custom,
+                intensity: 0.5,
+                custom_params: Some(ColorAdjustments {
+                    brightness: Some(0.2),
+                    contrast: Some(0.4),
+                    saturation: Some(0.6),
+                    temperature: None,
+                    gamma: Some(1.1),
+                }),
+            }),
+        ]);
+
+        let vf_idx = args.iter().position(|a| a == "-vf").unwrap();
+        let vf = &args[vf_idx + 1];
+        assert!(vf.contains("hue=s=0"));
+        assert!(vf.contains("eq=brightness=-0.025:contrast=1.05:saturation=0.95"));
+        assert!(vf.contains("eq=brightness=0.1:contrast=1.2:saturation=1.3:gamma=1.1"));
+    }
+
+    #[test]
+    fn thumbnail_compiler_supports_width_only_and_height_only_scaling() {
+        let width_only = compile_args(&[MediaOp::GenerateThumbnail(ThumbnailConfig {
+            timestamp: 1.25,
+            width: Some(320),
+            height: None,
+            quality: Some(3),
+            format: ImageFormat::Jpeg,
+        })]);
+        assert!(width_only.contains(&"-ss".to_string()));
+        assert!(width_only.windows(2).any(|w| w == ["-vframes", "1"]));
+        assert!(width_only.windows(2).any(|w| w == ["-q:v", "3"]));
+        let vf_idx = width_only.iter().position(|a| a == "-vf").unwrap();
+        assert_eq!(width_only[vf_idx + 1], "scale=320:-2");
+
+        let height_only = compile_args(&[MediaOp::GenerateThumbnail(ThumbnailConfig {
+            timestamp: 2.0,
+            width: None,
+            height: Some(180),
+            quality: None,
+            format: ImageFormat::Png,
+        })]);
+        let vf_idx = height_only.iter().position(|a| a == "-vf").unwrap();
+        assert_eq!(height_only[vf_idx + 1], "scale=-2:180");
+        assert!(height_only.windows(2).any(|w| w == ["-f", "image2"]));
     }
 
     #[test]

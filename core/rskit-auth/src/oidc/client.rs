@@ -450,6 +450,22 @@ mod tests {
         .unwrap()
     }
 
+    fn mock_client_with_discovery(discovery: Value) -> OidcClient<MockHttpClient> {
+        let responses = HashMap::from([(
+            format!("{ISSUER}/.well-known/openid-configuration"),
+            discovery,
+        )]);
+
+        OidcClient::with_http_client(
+            OidcConfig::new(ISSUER, CLIENT_ID, REDIRECT_URI, OidcClientType::Public),
+            MockHttpClient {
+                responses: Arc::new(responses),
+                request_counts: Arc::new(HashMap::new()),
+            },
+        )
+        .unwrap()
+    }
+
     fn issue_token(nonce: &str) -> String {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -516,6 +532,57 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn discovery_rejects_issuer_mismatch_and_missing_authorization_code_support() {
+        let issuer_mismatch = mock_client_with_discovery(serde_json::json!({
+            "issuer": "https://other-issuer.example",
+            "authorization_endpoint": format!("{ISSUER}/authorize"),
+            "token_endpoint": format!("{ISSUER}/token"),
+            "jwks_uri": format!("{ISSUER}/jwks"),
+            "response_types_supported": ["code"],
+            "code_challenge_methods_supported": ["S256"],
+            "id_token_signing_alg_values_supported": ["RS256"]
+        }));
+        assert!(matches!(
+            issuer_mismatch.discover().await,
+            Err(OidcError::Discovery(message))
+                if message.contains("issuer did not exactly match")
+        ));
+
+        let no_code_flow = mock_client_with_discovery(serde_json::json!({
+            "issuer": ISSUER,
+            "authorization_endpoint": format!("{ISSUER}/authorize"),
+            "token_endpoint": format!("{ISSUER}/token"),
+            "jwks_uri": format!("{ISSUER}/jwks"),
+            "response_types_supported": ["token"],
+            "code_challenge_methods_supported": ["S256"],
+            "id_token_signing_alg_values_supported": ["RS256"]
+        }));
+        assert!(matches!(
+            no_code_flow.discover().await,
+            Err(OidcError::Discovery(message))
+                if message.contains("authorization code flow")
+        ));
+    }
+
+    #[tokio::test]
+    async fn public_client_discovery_requires_s256_pkce_support() {
+        let client = mock_client_with_discovery(serde_json::json!({
+            "issuer": ISSUER,
+            "authorization_endpoint": format!("{ISSUER}/authorize"),
+            "token_endpoint": format!("{ISSUER}/token"),
+            "jwks_uri": format!("{ISSUER}/jwks"),
+            "response_types_supported": ["code"],
+            "code_challenge_methods_supported": ["plain"],
+            "id_token_signing_alg_values_supported": ["RS256"]
+        }));
+
+        assert!(matches!(
+            client.discover().await,
+            Err(OidcError::Discovery(message)) if message.contains("PKCE S256")
+        ));
+    }
+
+    #[tokio::test]
     async fn state_mismatch_is_rejected() {
         let client = mock_client();
         let request = client
@@ -541,6 +608,42 @@ mod tests {
             .build_token_exchange_request(&request, "code-123", "state-123", None)
             .await;
         assert_eq!(result.unwrap_err(), OidcError::MissingPkce);
+    }
+
+    #[tokio::test]
+    async fn token_exchange_uses_pending_pkce_when_state_matches() {
+        let client = mock_client();
+        let pending = client
+            .build_authorization_request(&["openid"])
+            .await
+            .unwrap();
+        let verifier = pending.pkce.as_ref().unwrap().verifier.clone();
+
+        let exchange = client
+            .build_token_exchange_request(&pending, "code-123", &pending.state, None)
+            .await
+            .unwrap();
+
+        assert_eq!(exchange.token_endpoint, format!("{ISSUER}/token"));
+        assert_eq!(exchange.code, "code-123");
+        assert_eq!(exchange.redirect_uri, REDIRECT_URI);
+        assert_eq!(exchange.state, pending.state);
+        assert_eq!(exchange.code_verifier.as_deref(), Some(verifier.as_str()));
+    }
+
+    #[tokio::test]
+    async fn validate_id_token_rejects_malformed_token_before_fetching_jwks() {
+        let client = mock_client();
+
+        let error = client
+            .validate_id_token("not-a-jwt", Some("nonce-123"))
+            .await
+            .unwrap_err();
+
+        assert!(matches!(
+            error,
+            OidcError::InvalidToken(message) if message.contains("invalid token header")
+        ));
     }
 
     #[tokio::test]
@@ -607,6 +710,57 @@ mod tests {
             result.unwrap_err(),
             OidcError::InvalidToken("token header is missing required kid".into())
         );
+    }
+
+    #[tokio::test]
+    async fn fetch_userinfo_fails_closed_when_endpoint_is_absent_or_malformed() {
+        let without_userinfo = mock_client_with_discovery(serde_json::json!({
+            "issuer": ISSUER,
+            "authorization_endpoint": format!("{ISSUER}/authorize"),
+            "token_endpoint": format!("{ISSUER}/token"),
+            "jwks_uri": format!("{ISSUER}/jwks"),
+            "response_types_supported": ["code"],
+            "code_challenge_methods_supported": ["S256"],
+            "id_token_signing_alg_values_supported": ["RS256"]
+        }));
+        assert!(matches!(
+            without_userinfo.fetch_userinfo("token").await,
+            Err(OidcError::Discovery(message))
+                if message.contains("userinfo endpoint")
+        ));
+
+        let mut responses = HashMap::new();
+        responses.insert(
+            format!("{ISSUER}/.well-known/openid-configuration"),
+            serde_json::json!({
+                "issuer": ISSUER,
+                "authorization_endpoint": format!("{ISSUER}/authorize"),
+                "token_endpoint": format!("{ISSUER}/token"),
+                "jwks_uri": format!("{ISSUER}/jwks"),
+                "userinfo_endpoint": format!("{ISSUER}/userinfo"),
+                "response_types_supported": ["code"],
+                "code_challenge_methods_supported": ["S256"],
+                "id_token_signing_alg_values_supported": ["RS256"]
+            }),
+        );
+        responses.insert(
+            format!("{ISSUER}/userinfo"),
+            serde_json::json!({"email": "missing-sub@example.com"}),
+        );
+        let malformed_userinfo = OidcClient::with_http_client(
+            OidcConfig::new(ISSUER, CLIENT_ID, REDIRECT_URI, OidcClientType::Public),
+            MockHttpClient {
+                responses: Arc::new(responses),
+                request_counts: Arc::new(HashMap::new()),
+            },
+        )
+        .unwrap();
+
+        assert!(matches!(
+            malformed_userinfo.fetch_userinfo("token").await,
+            Err(OidcError::ProviderUnreachable(message))
+                if message.contains("invalid userinfo response")
+        ));
     }
 
     #[tokio::test]

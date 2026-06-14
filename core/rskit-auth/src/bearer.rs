@@ -172,7 +172,7 @@ mod tests {
     use rskit_errors::{AppError, AppResult};
     use rskit_security::BEARER_AUTH_SCHEME;
     use serde::{Deserialize, Serialize};
-    use tower::{Layer, Service};
+    use tower::{Layer, Service, ServiceExt};
 
     use super::{BearerAuthLayer, CredentialExtraction, extract_bearer_token};
     use crate::{AuthClaims, AuthOutcome, TokenValidator};
@@ -291,6 +291,9 @@ mod tests {
             BearerAuthLayer::<_, Claims>::new(Validator).layer(ExtensionCheckingService);
 
         let missing = service
+            .ready()
+            .await
+            .unwrap()
             .call(Request::builder().body(()).unwrap())
             .await
             .unwrap();
@@ -306,6 +309,9 @@ mod tests {
         );
 
         let valid = service
+            .ready()
+            .await
+            .unwrap()
             .call(
                 Request::builder()
                     .header(http::header::AUTHORIZATION, "Bearer good.token")

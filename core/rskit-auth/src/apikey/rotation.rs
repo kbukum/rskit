@@ -346,4 +346,59 @@ mod tests {
         let original = manager.store().get_by_id("key-1").await.unwrap();
         assert_eq!(original.rotated_by_id.as_deref(), Some("key-2"));
     }
+
+    #[tokio::test]
+    async fn rotate_key_inherits_existing_metadata_when_config_fields_are_empty() {
+        let manager = manager();
+        let (_issued, original) = manager
+            .issue_key(
+                "key-1",
+                "owner-1",
+                "primary",
+                "pk",
+                &[String::from("read"), String::from("write")],
+                None,
+            )
+            .await
+            .unwrap();
+
+        let rotation = manager
+            .rotate_key(
+                &original.id,
+                RotationConfig {
+                    new_key_id: String::from("key-2"),
+                    ..RotationConfig::default()
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(rotation.record.owner_id, "owner-1");
+        assert_eq!(rotation.record.name, "primary");
+        assert_eq!(rotation.record.key_prefix, "pk");
+        assert_eq!(
+            rotation.record.scopes,
+            vec![String::from("read"), String::from("write")]
+        );
+        assert!(rotation.grace_ends_at > Utc::now());
+        assert!(!rotation.issued.plain_key.is_empty());
+    }
+
+    #[tokio::test]
+    async fn rotate_key_rejects_missing_new_key_id_before_mutating_store() {
+        let manager = manager();
+        manager
+            .issue_key("key-1", "owner-1", "primary", "pk", &[], None)
+            .await
+            .unwrap();
+
+        let error = manager
+            .rotate_key("key-1", RotationConfig::default())
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.code(), rskit_errors::ErrorCode::InvalidInput);
+        let original = manager.store().get_by_id("key-1").await.unwrap();
+        assert!(original.rotated_by_id.is_none());
+    }
 }

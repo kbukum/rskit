@@ -129,3 +129,150 @@ fn abac_condition_supports_one_of_and_context_attributes() {
         .insert(String::from("classification"), json!("secret"));
     assert!(!engine.check(&request));
 }
+
+#[test]
+fn abac_conditions_fail_closed_for_missing_attributes() {
+    let engine = Engine::new(
+        vec![Role {
+            name: String::from("owner"),
+            inherits: vec![],
+            permissions: vec![Permission {
+                resource: String::from("document"),
+                action: String::from("read"),
+                conditions: vec![Condition {
+                    source: AttributeSource::Resource,
+                    key: String::from("owner_id"),
+                    operator: Operator::Equals,
+                    values: vec![],
+                    compare_source: Some(AttributeSource::Subject),
+                    compare_key: Some(String::from("id")),
+                }],
+            }],
+        }],
+        vec![Policy {
+            name: String::from("context-required"),
+            effect: Effect::Allow,
+            actions: vec![String::from("approve")],
+            resources: vec![String::from("document")],
+            conditions: vec![Condition {
+                source: AttributeSource::Context,
+                key: String::from("ticket"),
+                operator: Operator::Equals,
+                values: vec![json!("approved")],
+                compare_source: None,
+                compare_key: None,
+            }],
+        }],
+    )
+    .unwrap();
+
+    let mut missing_resource_owner = empty_request();
+    missing_resource_owner.subject.roles = vec![String::from("owner")];
+    missing_resource_owner.resource.resource_type = String::from("document");
+    assert!(!engine.check(&missing_resource_owner));
+
+    let mut missing_context = missing_resource_owner.clone();
+    missing_context.subject.roles.clear();
+    missing_context.action = String::from("approve");
+    assert!(!engine.check(&missing_context));
+}
+
+#[test]
+fn resource_id_and_type_can_be_used_as_authorization_attributes() {
+    let engine = Engine::new(
+        vec![],
+        vec![Policy {
+            name: String::from("specific-document"),
+            effect: Effect::Allow,
+            actions: vec![String::from("read")],
+            resources: vec![String::from("document")],
+            conditions: vec![
+                Condition {
+                    source: AttributeSource::Resource,
+                    key: String::from("id"),
+                    operator: Operator::Equals,
+                    values: vec![json!("doc-1")],
+                    compare_source: None,
+                    compare_key: None,
+                },
+                Condition {
+                    source: AttributeSource::Resource,
+                    key: String::from("type"),
+                    operator: Operator::Equals,
+                    values: vec![json!("document")],
+                    compare_source: None,
+                    compare_key: None,
+                },
+            ],
+        }],
+    )
+    .unwrap();
+
+    let mut request = empty_request();
+    request.subject.roles.clear();
+    request.resource.resource_type = String::from("document");
+    request.resource.id = String::from("doc-1");
+    assert!(engine.check(&request));
+
+    request.resource.id.clear();
+    assert!(!engine.check(&request));
+}
+
+#[test]
+fn cyclic_role_inheritance_is_visited_once_and_fails_closed_on_miss() {
+    let engine = Engine::new(
+        vec![
+            Role {
+                name: String::from("a"),
+                inherits: vec![String::from("b")],
+                permissions: vec![],
+            },
+            Role {
+                name: String::from("b"),
+                inherits: vec![String::from("a")],
+                permissions: vec![],
+            },
+        ],
+        vec![],
+    )
+    .unwrap();
+
+    let mut request = empty_request();
+    request.subject.roles = vec![String::from("a")];
+
+    let decision = engine.authorize(&request);
+    assert!(!decision.allowed);
+    assert_eq!(decision.reason, "default deny");
+}
+
+#[test]
+fn cross_attribute_comparison_fails_closed_when_compare_value_is_missing() {
+    let engine = Engine::new(
+        vec![],
+        vec![Policy {
+            name: String::from("tenant-match"),
+            effect: Effect::Allow,
+            actions: vec![String::from("read")],
+            resources: vec![String::from("invoice")],
+            conditions: vec![Condition {
+                source: AttributeSource::Subject,
+                key: String::from("tenant_id"),
+                operator: Operator::Equals,
+                values: vec![],
+                compare_source: Some(AttributeSource::Resource),
+                compare_key: Some(String::from("tenant_id")),
+            }],
+        }],
+    )
+    .unwrap();
+
+    let mut request = empty_request();
+    request.subject.roles.clear();
+    request.resource.resource_type = String::from("invoice");
+    request
+        .subject
+        .attributes
+        .insert(String::from("tenant_id"), json!("acme"));
+
+    assert!(!engine.check(&request));
+}

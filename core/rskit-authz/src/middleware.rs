@@ -110,7 +110,7 @@ mod tests {
     use std::{collections::HashMap, convert::Infallible, future::Ready};
 
     use http::{Request as HttpRequest, Response, StatusCode};
-    use tower::{Layer, Service};
+    use tower::{Layer, Service, ServiceExt};
 
     use super::{AuthorizationLayer, RequestAuthorizer};
     use crate::{Checker, Decision, Request, Resource, Subject};
@@ -180,12 +180,24 @@ mod tests {
     async fn authorization_layer_allows_only_explicit_allow_decisions() {
         let mut service =
             AuthorizationLayer::new(StaticChecker(true), StaticAuthorizer(true)).layer(OkService);
-        let response = service.call(HttpRequest::new(())).await.unwrap();
+        let response = service
+            .ready()
+            .await
+            .unwrap()
+            .call(HttpRequest::new(()))
+            .await
+            .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
         let mut service =
             AuthorizationLayer::new(StaticChecker(false), StaticAuthorizer(true)).layer(OkService);
-        let response = service.call(HttpRequest::new(())).await.unwrap();
+        let response = service
+            .ready()
+            .await
+            .unwrap()
+            .call(HttpRequest::new(()))
+            .await
+            .unwrap();
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
 
@@ -193,7 +205,13 @@ mod tests {
     async fn authorization_layer_denies_missing_authorization_context() {
         let mut service =
             AuthorizationLayer::new(StaticChecker(true), StaticAuthorizer(false)).layer(OkService);
-        let response = service.call(HttpRequest::new(())).await.unwrap();
+        let response = service
+            .ready()
+            .await
+            .unwrap()
+            .call(HttpRequest::new(()))
+            .await
+            .unwrap();
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
 }

@@ -78,10 +78,10 @@ mod tests {
     #[tokio::test]
     async fn passes_through() {
         let bulkhead = Bulkhead::new(BulkheadConfig::new("test", 4)).unwrap();
+        let layer = BulkheadLayer::new(bulkhead.clone());
+        assert_eq!(layer.bulkhead().available(), bulkhead.available());
         let service = tower::service_fn(|req: i32| async move { Ok::<i32, AppError>(req) });
-        let mut service = ServiceBuilder::new()
-            .layer(BulkheadLayer::new(bulkhead))
-            .service(service);
+        let mut service = ServiceBuilder::new().layer(layer).service(service);
 
         let result = service.ready().await.unwrap().call(7).await;
         assert_eq!(result.unwrap(), 7);

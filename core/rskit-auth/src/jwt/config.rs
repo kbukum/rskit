@@ -328,6 +328,28 @@ mod tests {
     }
 
     #[test]
+    fn jwt_algorithm_policy_identifies_symmetric_internal_mode() {
+        assert!(JwtAlgorithm::Hs256Internal.is_symmetric());
+        assert!(!JwtAlgorithm::Rs256.is_symmetric());
+        assert!(!JwtAlgorithm::Es256.is_symmetric());
+        assert!(!JwtAlgorithm::EdDsa.is_symmetric());
+    }
+
+    #[test]
+    fn jwt_config_builders_preserve_ttl_and_leeway_overrides() {
+        let config = JwtConfig::hs256_internal(
+            "secret-material-that-is-long-enough",
+            "https://issuer.example",
+            vec!["audience".into()],
+        )
+        .with_ttl(Duration::from_secs(300))
+        .with_leeway(Duration::from_secs(10));
+
+        assert_eq!(config.ttl, Duration::from_secs(300));
+        assert_eq!(config.leeway, Duration::from_secs(10));
+    }
+
+    #[test]
     fn jwt_config_debug_redacts_nested_key_material() {
         let config = JwtConfig::hs256_internal(
             "another-secret-value",
