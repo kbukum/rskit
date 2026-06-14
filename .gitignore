@@ -45,7 +45,7 @@ criterion/
 
 # OS
 .DS_Store
-Thumbs.dbgraph.png
+Thumbs.db
 
 /tmp/*
 !/tmp/.keep

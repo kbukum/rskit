@@ -38,7 +38,7 @@ For significant architectural changes (e.g. introducing a new sub-crate, removin
 
 ## Release Process
 
-Releases are cut by maintainers following [docs/RELEASING.md](docs/RELEASING.md). Each release MUST be accompanied by a CHANGELOG entry that follows the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format. The single `[Unreleased]` heading invariant is enforced in CI.
+Releases are cut by maintainers following [docs/RELEASING.md](docs/RELEASING.md). Each release MUST be accompanied by a CHANGELOG entry that follows the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format. Maintainers keep a single `[Unreleased]` heading and rotate it on release per [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Security Issues
 

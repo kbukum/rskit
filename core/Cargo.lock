@@ -4946,7 +4946,6 @@ dependencies = [
  "rskit-fs",
  "rskit-observability",
  "rskit-provider",
- "rskit-suite",
  "rskit-util",
  "rskit-worker",
  "serde",

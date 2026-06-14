@@ -19,6 +19,7 @@ from ..errors import ToolError
 from ..paths import CORE_AND_CONTRIB, ROOT, WORKSPACES
 from ..process import command_exists, notice, run
 from .checks import run_l7_edges, run_public_api, run_topology, run_workspace_deps_sync
+from .domains import DOMAIN_ORDER, DOMAIN_TITLES, load_domains
 
 
 def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -30,7 +31,7 @@ def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) 
     release_sub.add_parser("readiness", help="Run release-readiness guardrails").set_defaults(func=run_readiness)
 
     depgraphs = release_sub.add_parser("depgraphs", help="Generate dependency graph SVGs")
-    depgraphs.add_argument("out_dir", nargs="?", default="depgraphs")
+    depgraphs.add_argument("out_dir", nargs="?", default="docs/depgraphs")
     depgraphs.set_defaults(func=run_depgraphs)
 
     sbom = release_sub.add_parser("sbom", help="Generate CycloneDX SBOMs")
@@ -211,8 +212,80 @@ def check_unsafe_policy() -> list[str]:
     return findings
 
 
+def _domain_reachable(node: str, deps: dict[str, set[str]], seen: set[str]) -> set[str]:
+    """Collect every domain transitively depended on by ``node``."""
+
+    for child in deps.get(node, set()):
+        if child not in seen:
+            seen.add(child)
+            _domain_reachable(child, deps, seen)
+    return seen
+
+
+def _domain_reduced_edges(deps: dict[str, set[str]]) -> dict[str, list[str]]:
+    """Transitively reduce the domain ``depends_on`` DAG to its essential edges.
+
+    ``domains.toml`` lists the full set of ancestor domains for each entry, so a
+    naive rendering would draw every transitive edge. Keeping only edges that are
+    not reachable through another direct dependency yields a clean layer diagram.
+    """
+
+    reduced: dict[str, list[str]] = {}
+    for name, directs in deps.items():
+        keep: list[str] = []
+        for dependency in sorted(directs):
+            via_others: set[str] = set()
+            for other in directs - {dependency}:
+                _domain_reachable(other, deps, via_others)
+            if dependency not in via_others:
+                keep.append(dependency)
+        reduced[name] = keep
+    return reduced
+
+
+def build_domain_dot() -> str:
+    """Build a Graphviz layer diagram of inter-domain dependencies from domains.toml."""
+
+    domains = load_domains()
+    deps = {name: set(domain.depends_on) for name, domain in domains.items()}
+    reduced = _domain_reduced_edges(deps)
+    order = [name for name in DOMAIN_ORDER if name in domains]
+    order += [name for name in domains if name not in order]
+
+    lines = [
+        "digraph rskit_domains {",
+        "  rankdir=TB;",
+        "  splines=true;",
+        '  node [shape=box, style="rounded,filled", fillcolor="#eef3fb", '
+        'color="#5b6b7f", fontname="Helvetica"];',
+        '  edge [color="#5b6b7f"];',
+    ]
+    for name in order:
+        title = DOMAIN_TITLES.get(name, name)
+        count = len(domains[name].modules)
+        plural = "module" if count == 1 else "modules"
+        lines.append(f'  "{name}" [label="{title}\\n({count} {plural})"];')
+    for name in order:
+        for dependency in reduced.get(name, []):
+            lines.append(f'  "{name}" -> "{dependency}";')
+    lines.append("}")
+    return "\n".join(lines) + "\n"
+
+
+def _rskit_package_names(manifest: Path) -> list[str]:
+    """Return every resolved ``rskit-*`` package visible from ``manifest``."""
+
+    data = metadata(manifest, no_deps=False)
+    names = {
+        str(package["name"])
+        for package in data["packages"]  # type: ignore[index]
+        if str(package["name"]).startswith("rskit-")
+    }
+    return sorted(names)
+
+
 def run_depgraphs(args: argparse.Namespace) -> int:
-    """Generate dependency graph SVGs."""
+    """Generate dependency graph SVGs embedded in docs/DESIGN.md."""
 
     if not command_exists("cargo"):
         raise ToolError("error: cargo is not installed or not in PATH")
@@ -221,20 +294,40 @@ def run_depgraphs(args: argparse.Namespace) -> int:
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     print(f"Generating dependency graphs into: {out_dir}")
-    graph_specs = [
-        ("graph-all", WORKSPACES["core"], ["--workspace-only", "--dedup-transitive-deps"]),
-        ("graph-contrib", WORKSPACES["contrib"], ["--workspace-only", "--dedup-transitive-deps"]),
-        ("graph-agent", WORKSPACES["core"], ["--workspace-only", "--focus", "rskit-agent", "--depth", "2", "--dedup-transitive-deps"]),
-        ("graph-errors", WORKSPACES["core"], ["--workspace-only", "--focus", "rskit-errors", "--depth", "2", "--dedup-transitive-deps"]),
-        ("graph-resilience", WORKSPACES["core"], ["--workspace-only", "--focus", "rskit-resilience", "--depth", "2", "--dedup-transitive-deps"]),
-    ]
-    for name, manifest, extra in graph_specs:
-        out_file = out_dir / f"{name}.svg"
-        print(f"-> generating {out_file}")
-        depgraph = run(["cargo", "depgraph", "--manifest-path", str(manifest), *extra], capture=True)
-        with out_file.open("w", encoding="utf-8") as output:
-            run(["dot", "-Grankdir=LR", "-Nshape=box", "-Tsvg"], stdin=depgraph.stdout, stdout=output)
-        print(f"   done: {out_file}")
+
+    # Big-picture layer diagram: 10 domains with their reduced depends_on edges.
+    domains_file = out_dir / "graph-domains.svg"
+    print(f"-> generating {domains_file}")
+    with domains_file.open("w", encoding="utf-8") as output:
+        run(
+            ["dot", "-Grankdir=TB", "-Tsvg"],
+            stdin=build_domain_dot(),
+            stdout=output,
+        )
+    print(f"   done: {domains_file}")
+
+    # Crate-level detail: contrib adapters and the core crates they build on.
+    # `--workspace-only` would hide every core crate, so instead include all
+    # resolved rskit crates and let `dot` draw the contrib -> core edges.
+    contrib_file = out_dir / "graph-contrib.svg"
+    print(f"-> generating {contrib_file}")
+    names = _rskit_package_names(WORKSPACES["contrib"])
+    depgraph = run(
+        [
+            "cargo",
+            "depgraph",
+            "--manifest-path",
+            str(WORKSPACES["contrib"]),
+            "--include",
+            ",".join(names),
+            "--dedup-transitive-deps",
+        ],
+        capture=True,
+    )
+    with contrib_file.open("w", encoding="utf-8") as output:
+        run(["dot", "-Grankdir=LR", "-Nshape=box", "-Tsvg"], stdin=depgraph.stdout, stdout=output)
+    print(f"   done: {contrib_file}")
+
     print("All graphs generated successfully.")
     return 0
 
