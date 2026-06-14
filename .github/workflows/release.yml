@@ -19,7 +19,7 @@ jobs:
       contents: write
       id-token: write
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
         with:
           ref: ${{ github.event.release.tag_name }}
           fetch-depth: 0
@@ -49,7 +49,7 @@ jobs:
         with:
           toolchain: "1.95"
           components: clippy,rustfmt,llvm-tools-preview
-      - uses: taiki-e/install-action@15413b256f995d819248ea62704771a959284285  # v2
+      - uses: taiki-e/install-action@7a79fe8c3a13344501c80d99cae481c1c9085912  # v2
         with:
           tool: cargo-deny,cargo-audit,cargo-nextest,cargo-llvm-cov,cargo-cyclonedx
       - name: Install nightly for rustdoc JSON
