@@ -148,14 +148,20 @@ jobs:
   # Tests — behavioral tests on the pinned development toolchain
   # ---------------------------------------------------------------------------
   test:
-    name: Test (${{ matrix.os }} / 1.95)
+    name: Test (${{ matrix.os }} / 1.95 / ${{ matrix.feature-mode }})
     if: needs.changes.outputs.rust-code == 'true'
     needs: changes
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            feature-mode: default
+          - os: ubuntu-latest
+            feature-mode: all
+          - os: macos-latest
+            feature-mode: all
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
         with:
@@ -168,7 +174,7 @@ jobs:
         run: sudo apt-get install -y mold
       - uses: Swatinem/rust-cache@c106961feec855ef5a58494c5a2a31c9d80429a9  # v2.7.8
         with:
-          key: ${{ matrix.os }}-1.95
+          key: ${{ matrix.os }}-1.95-${{ matrix.feature-mode }}
           workspaces: |
             core
             contrib
@@ -184,10 +190,11 @@ jobs:
             ./scripts/rskit_tool.py ci test \
               --scope changed \
               --changed-base "${{ github.event.pull_request.base.sha }}...${{ github.sha }}" \
-              --feature-mode both \
-              --profile ci
+              --feature-mode "${{ matrix.feature-mode }}" \
+              --profile ci \
+              --jobs 3
           else
-            ./scripts/rskit_tool.py ci test --scope all --feature-mode both --profile ci
+            ./scripts/rskit_tool.py ci test --scope all --feature-mode "${{ matrix.feature-mode }}" --profile ci --jobs 3
           fi
 
   # ---------------------------------------------------------------------------
@@ -195,10 +202,14 @@ jobs:
   # duplicating the full behavioral test matrix.
   # ---------------------------------------------------------------------------
   msrv:
-    name: MSRV (ubuntu-latest / 1.91)
+    name: MSRV (ubuntu-latest / 1.91 / ${{ matrix.feature-mode }})
     if: needs.changes.outputs.rust-code == 'true'
     needs: changes
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        feature-mode: [default, all]
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
         with:
@@ -210,7 +221,7 @@ jobs:
         run: sudo apt-get install -y mold
       - uses: Swatinem/rust-cache@c106961feec855ef5a58494c5a2a31c9d80429a9  # v2.7.8
         with:
-          key: ubuntu-latest-1.91-msrv
+          key: ubuntu-latest-1.91-msrv-${{ matrix.feature-mode }}
           workspaces: |
             core
             contrib
@@ -223,9 +234,10 @@ jobs:
             ./scripts/rskit_tool.py ci msrv \
               --scope changed \
               --changed-base "${{ github.event.pull_request.base.sha }}...${{ github.sha }}" \
-              --feature-mode both
+              --feature-mode "${{ matrix.feature-mode }}" \
+              --jobs 3
           else
-            ./scripts/rskit_tool.py ci msrv --scope all --feature-mode both
+            ./scripts/rskit_tool.py ci msrv --scope all --feature-mode "${{ matrix.feature-mode }}" --jobs 3
           fi
 
   # ---------------------------------------------------------------------------

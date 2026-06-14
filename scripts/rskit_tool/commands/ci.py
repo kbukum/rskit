@@ -9,7 +9,7 @@ from ..cargo import Package, discover_packages, package_manifest, packages_for_p
 from ..errors import ToolError
 from ..git import changed_paths
 from ..paths import WORKSPACES
-from ..process import command_exists, run
+from ..process import ParallelTask, command_exists, run, run_parallel
 
 
 FEATURE_MODES = ("default", "all", "both")
@@ -29,6 +29,7 @@ def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) 
     test = ci_sub.add_parser("test", help="Run selected package tests with nextest")
     add_selection_args(test)
     test.add_argument("--profile", default="ci", help="nextest profile")
+    test.add_argument("--jobs", type=int, help="Concurrent independent workspace checks")
     test.add_argument(
         "--feature-mode",
         choices=FEATURE_MODES,
@@ -39,6 +40,7 @@ def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) 
 
     msrv = ci_sub.add_parser("msrv", help="Run selected MSRV compile checks")
     add_selection_args(msrv)
+    msrv.add_argument("--jobs", type=int, help="Concurrent independent workspace checks")
     msrv.add_argument(
         "--feature-mode",
         choices=FEATURE_MODES,
@@ -84,23 +86,21 @@ def run_test(args: argparse.Namespace) -> int:
     if not command_exists("cargo-nextest"):
         raise ToolError("cargo-nextest is required for CI test runs")
 
-    for workspace, workspace_packages in group_by_workspace(packages).items():
-        for feature_args in feature_arg_sets(args.feature_mode):
-            run(
-                [
-                    "cargo",
-                    "nextest",
-                    "run",
-                    "--manifest-path",
-                    str(WORKSPACES[workspace]),
-                    *package_selection_args(workspace, workspace_packages),
-                    *feature_args,
-                    "--profile",
-                    args.profile,
-                    "--no-tests",
-                    "pass",
-                ]
+    run_parallel(
+        [
+            ParallelTask(
+                name=f"test/{workspace}",
+                action=lambda workspace=workspace, workspace_packages=workspace_packages: run_workspace_tests(
+                    workspace,
+                    workspace_packages,
+                    feature_mode=args.feature_mode,
+                    profile=args.profile,
+                ),
             )
+            for workspace, workspace_packages in group_by_workspace(packages).items()
+        ],
+        jobs=args.jobs,
+    )
     return 0
 
 
@@ -112,20 +112,65 @@ def run_msrv(args: argparse.Namespace) -> int:
         print("No packages selected for MSRV checks")
         return 0
 
-    for workspace, workspace_packages in group_by_workspace(packages).items():
-        for feature_args in feature_arg_sets(args.feature_mode):
-            run(
-                [
-                    "cargo",
-                    "check",
-                    "--manifest-path",
-                    str(WORKSPACES[workspace]),
-                    *package_selection_args(workspace, workspace_packages),
-                    *feature_args,
-                    "--tests",
-                ]
+    run_parallel(
+        [
+            ParallelTask(
+                name=f"msrv/{workspace}",
+                action=lambda workspace=workspace, workspace_packages=workspace_packages: run_workspace_msrv(
+                    workspace,
+                    workspace_packages,
+                    feature_mode=args.feature_mode,
+                ),
             )
+            for workspace, workspace_packages in group_by_workspace(packages).items()
+        ],
+        jobs=args.jobs,
+    )
     return 0
+
+
+def run_workspace_tests(
+    workspace: str,
+    packages: Sequence[Package],
+    *,
+    feature_mode: str,
+    profile: str,
+) -> None:
+    """Run nextest for one workspace package group."""
+
+    for feature_args in feature_arg_sets(feature_mode):
+        run(
+            [
+                "cargo",
+                "nextest",
+                "run",
+                "--manifest-path",
+                str(WORKSPACES[workspace]),
+                *package_selection_args(workspace, packages),
+                *feature_args,
+                "--profile",
+                profile,
+                "--no-tests",
+                "pass",
+            ]
+        )
+
+
+def run_workspace_msrv(workspace: str, packages: Sequence[Package], *, feature_mode: str) -> None:
+    """Run MSRV compile checks for one workspace package group."""
+
+    for feature_args in feature_arg_sets(feature_mode):
+        run(
+            [
+                "cargo",
+                "check",
+                "--manifest-path",
+                str(WORKSPACES[workspace]),
+                *package_selection_args(workspace, packages),
+                *feature_args,
+                "--tests",
+            ]
+        )
 
 
 def select_packages(args: argparse.Namespace) -> list[Package]:
