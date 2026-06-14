@@ -8,7 +8,8 @@ import unittest
 from pathlib import Path
 
 from . import support  # noqa: F401
-from rskit_tool.cargo import Package
+from rskit_tool.cargo import Package, packages_for_paths
+from rskit_tool.commands.ci import feature_arg_sets, group_by_workspace
 from rskit_tool.commands.domains import affected_domains, resolve_crate_name
 from rskit_tool.commands.release import validate_target_subdir
 from rskit_tool.errors import ToolError
@@ -33,6 +34,75 @@ class ToolingCommandTests(unittest.TestCase):
         }
 
         self.assertEqual(resolve_crate_name("rskit", packages), "rskit-suite")
+
+    def test_changed_tooling_paths_select_all_packages(self) -> None:
+        packages = [
+            Package(
+                "rskit-errors",
+                "core",
+                ROOT / "core/Cargo.toml",
+                ROOT / "core/rskit-errors",
+                "0.0.0",
+                True,
+            ),
+            Package(
+                "rskit-storage-s3",
+                "contrib",
+                ROOT / "contrib/Cargo.toml",
+                ROOT / "contrib/storage/s3",
+                "0.0.0",
+                True,
+            ),
+        ]
+
+        for changed_path in (
+            Path("Makefile"),
+            Path("scripts/rskit_tool.py"),
+            Path(".github/workflows/ci.yml"),
+        ):
+            with self.subTest(changed_path=changed_path):
+                self.assertEqual(
+                    packages_for_paths(packages, [changed_path]),
+                    {"rskit-errors", "rskit-storage-s3"},
+                )
+
+    def test_ci_feature_arg_sets_cover_default_and_all_features(self) -> None:
+        self.assertEqual(feature_arg_sets("default"), [[]])
+        self.assertEqual(feature_arg_sets("all"), [["--all-features"]])
+        self.assertEqual(feature_arg_sets("both"), [[], ["--all-features"]])
+
+    def test_ci_group_by_workspace_is_deterministic(self) -> None:
+        packages = [
+            Package(
+                "rskit-storage-s3",
+                "contrib",
+                ROOT / "contrib/Cargo.toml",
+                ROOT / "contrib/storage/s3",
+                "0.0.0",
+                True,
+            ),
+            Package(
+                "rskit-errors",
+                "core",
+                ROOT / "core/Cargo.toml",
+                ROOT / "core/rskit-errors",
+                "0.0.0",
+                True,
+            ),
+            Package(
+                "rskit-config",
+                "core",
+                ROOT / "core/Cargo.toml",
+                ROOT / "core/rskit-config",
+                "0.0.0",
+                True,
+            ),
+        ]
+
+        grouped = group_by_workspace(packages)
+
+        self.assertEqual(list(grouped), ["core", "contrib"])
+        self.assertEqual([package.name for package in grouped["core"]], ["rskit-config", "rskit-errors"])
 
     def test_run_parallel_preserves_none_results(self) -> None:
         self.assertEqual(run_parallel([ParallelTask("none-result", lambda: None)]), [None])

@@ -95,12 +95,19 @@ def packages_for_paths(packages: Sequence[Package], paths: Iterable[Path]) -> se
     workspace_config = {
         Path("Cargo.lock"),
         Path("rust-toolchain.toml"),
+        Path("Makefile"),
+        Path("clippy.toml"),
+        Path("rustfmt.toml"),
+        Path("deny.toml"),
+        Path("deny.contrib.toml"),
+        Path("deny.examples.toml"),
         Path("core/Cargo.toml"),
         Path("contrib/Cargo.toml"),
         Path("examples/Cargo.toml"),
     }
     changed_paths = list(paths)
-    if any(path in workspace_config or path.parts[:1] in {(".cargo",), (".config",)} for path in changed_paths):
+    global_dirs = {(".cargo",), (".config",), (".github",), ("scripts",)}
+    if any(path in workspace_config or path.parts[:1] in global_dirs for path in changed_paths):
         return {package.name for package in packages}
 
     selected: set[str] = set()

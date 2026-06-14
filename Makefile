@@ -12,6 +12,8 @@ WORKSPACE_MANIFESTS = $(CORE_MANIFEST) $(CONTRIB_MANIFEST) $(EXAMPLES_MANIFEST)
 FORMAT_MANIFESTS = $(WORKSPACE_MANIFESTS)
 TEST_THREADS ?= 1
 THRESHOLD ?=
+FEATURES ?=
+TEST_FEATURES ?= --all-features
 
 # Test filter: pass -- $(T) when T is set
 _T = $(if $(T),-- $(T))
@@ -25,15 +27,14 @@ setup:
 
 define run_cargo_target
 	@if [ -n "$(C)" ]; then \
-		cargo $(1) --manifest-path $(CORE_MANIFEST) -p $(C) $(2) 2>/dev/null || \
-		cargo $(1) --manifest-path $(CONTRIB_MANIFEST) -p $(C) $(2) 2>/dev/null || \
-		cargo $(1) --manifest-path $(EXAMPLES_MANIFEST) -p $(C) $(2); \
+		manifest=$$($(RSKIT_TOOL) ci package-manifest "$(C)") || exit $$?; \
+		cargo $(1) --manifest-path "$$manifest" -p $(C) $(4) $(2); \
 	elif [ -n "$(W)" ]; then \
-		cargo $(1) --manifest-path $(W)/Cargo.toml --workspace $(2); \
+		cargo $(1) --manifest-path $(W)/Cargo.toml --workspace $(4) $(2); \
 	else \
 		set -e; \
 		for manifest in $(3); do \
-			cargo $(1) --manifest-path $$manifest --workspace $(2); \
+			cargo $(1) --manifest-path $$manifest --workspace $(4) $(2); \
 		done; \
 	fi
 endef
@@ -75,28 +76,28 @@ endef
 ## Build workspace (C=<crate> for specific crate, W=core|contrib|examples for specific workspace)
 build:
 	@echo "==> Building..."
-	$(call run_cargo_target,build,,$(WORKSPACE_MANIFESTS))
+	$(call run_cargo_target,build,,$(WORKSPACE_MANIFESTS),$(FEATURES))
 	@echo "✓ Build succeeded"
 
 ## Run tests (C=<crate>, T=<test pattern>, W=core|contrib|examples)
 test:
 	@echo "==> Testing..."
-	$(call run_cargo_target,test,$(_T),$(WORKSPACE_MANIFESTS))
+	$(call run_cargo_target,test,$(_T),$(WORKSPACE_MANIFESTS),$(or $(FEATURES),$(TEST_FEATURES)))
 	@echo "✓ Tests passed"
 
 ## Run tests using nextest (parallel, with retries in CI)
 test-nextest:
 	@echo "==> Running tests with nextest..."
 ifeq ($(TEST_RUNNER),cargo-test)
-	$(call run_cargo_target,test,-- --test-threads=$(TEST_THREADS),$(WORKSPACE_MANIFESTS))
+	$(call run_cargo_target,test,-- --test-threads=$(TEST_THREADS),$(WORKSPACE_MANIFESTS),$(or $(FEATURES),$(TEST_FEATURES)))
 else
-	$(call run_cargo_target,nextest run,$(if $(PROFILE),--profile $(PROFILE)),$(WORKSPACE_MANIFESTS))
+	$(call run_cargo_target,nextest run,$(if $(PROFILE),--profile $(PROFILE)),$(WORKSPACE_MANIFESTS),$(or $(FEATURES),$(TEST_FEATURES)))
 endif
 
 ## Run only doctests (nextest doesn't support doctests)
 test-doc:
 	@echo "==> Running doctests..."
-	$(call run_cargo_target,test,--doc,$(WORKSPACE_MANIFESTS))
+	$(call run_cargo_target,test,--doc,$(WORKSPACE_MANIFESTS),$(or $(FEATURES),$(TEST_FEATURES)))
 
 ## Run Python repository tooling tests
 test-python:
@@ -106,38 +107,7 @@ test-python:
 
 ## Run tests only for crates affected by current changes
 test-affected:
-	@echo "==> Detecting affected crates..."
-	@CHANGED=$$(git diff --name-only origin/main...HEAD 2>/dev/null || git diff --name-only HEAD~1 2>/dev/null); \
-	if [ -z "$$CHANGED" ]; then \
-		echo "No changes detected, running all tests"; \
-		cargo nextest run --manifest-path $(CORE_MANIFEST) --workspace; \
-		cargo nextest run --manifest-path $(CONTRIB_MANIFEST) --workspace; \
-	elif echo "$$CHANGED" | grep -qE '^(Cargo\.(toml|lock)|rust-toolchain\.toml|\.cargo/|\.config/|core/Cargo\.toml|contrib/Cargo\.toml|examples/Cargo\.toml)'; then \
-		echo "Root/workspace config changed, running all tests"; \
-		cargo nextest run --manifest-path $(CORE_MANIFEST) --workspace; \
-		cargo nextest run --manifest-path $(CONTRIB_MANIFEST) --workspace; \
-	else \
-		CRATES=$$(echo "$$CHANGED" | grep -E '\.(rs|toml)$$' | xargs -I{} dirname {} | sort -u | while read dir; do \
-			d="$$dir"; \
-			while [ "$$d" != "." ] && [ ! -f "$$d/Cargo.toml" ]; do d=$$(dirname "$$d"); done; \
-			if [ -f "$$d/Cargo.toml" ] && [ "$$d" != "." ] && [ "$$d" != "core" ] && [ "$$d" != "contrib" ] && [ "$$d" != "examples" ]; then \
-				grep -m1 '^name\s*=\s*"' "$$d/Cargo.toml" | sed 's/.*= *"\(.*\)"/\1/'; \
-			fi; \
-		done | sort -u); \
-		if [ -z "$$CRATES" ]; then \
-			echo "No crate changes detected, running all tests"; \
-			cargo nextest run --manifest-path $(CORE_MANIFEST) --workspace; \
-			cargo nextest run --manifest-path $(CONTRIB_MANIFEST) --workspace; \
-		else \
-			echo "Affected crates: $$CRATES"; \
-			echo "$$CRATES" | while IFS= read -r crate; do \
-				[ -n "$$crate" ] || continue; \
-				cargo nextest run --manifest-path $(CORE_MANIFEST) -p "$$crate" 2>/dev/null || \
-				cargo nextest run --manifest-path $(CONTRIB_MANIFEST) -p "$$crate" 2>/dev/null || \
-				cargo nextest run --manifest-path $(EXAMPLES_MANIFEST) -p "$$crate"; \
-			done; \
-		fi; \
-	fi
+	@$(RSKIT_TOOL) ci test --scope changed --changed-base origin/main...HEAD --feature-mode both $(if $(PROFILE),--profile $(PROFILE),--profile ci)
 
 ## Run workspace-level coverage with per-package reporting (C=<crate>, PACKAGES=<list>, W=core|contrib|examples, JOBS=<n>, THRESHOLD=<pct>, T=<test pattern>)
 ## Requires: cargo install cargo-nextest cargo-llvm-cov
@@ -158,7 +128,7 @@ test-coverage-html:
 ## Run clippy linter (C=<crate>)
 lint:
 	@echo "==> Linting..."
-	$(call run_cargo_target,clippy,--all-targets -- -D warnings,$(WORKSPACE_MANIFESTS))
+	$(call run_cargo_target,clippy,--all-targets -- -D warnings,$(WORKSPACE_MANIFESTS),$(or $(FEATURES),--all-features))
 	@echo "✓ Lint passed"
 
 ## Format code (W=core|contrib|examples)
@@ -345,22 +315,22 @@ ci-fmt: ensure-act
 
 ## Show help
 help:
-	@echo "Usage: make <target> [C=<crate>] [T=<test>] [PROFILE=<profile>] [W=core|contrib|examples]"
+	@echo "Usage: make <target> [C=<crate>] [T=<test>] [PROFILE=<profile>] [W=core|contrib|examples] [FEATURES=...]"
 	@echo ""
 	@echo "Development:"
 	@echo "  make help                                  Show this help"
 	@echo "  make setup                                Install or verify local tooling"
-	@echo "  make build              [C=] [W=]          Build workspace(s)"
-	@echo "  make test               [C=] [T=] [W=]     Run tests"
-	@echo "  make test-nextest       [PROFILE=] [W=]    Run tests with nextest"
-	@echo "  make test-doc           [C=] [W=]          Run doctests only"
+	@echo "  make build              [C=] [W=] [FEATURES=]                Build workspace(s)"
+	@echo "  make test               [C=] [T=] [W=] [FEATURES=]            Run tests; defaults to TEST_FEATURES=--all-features"
+	@echo "  make test-nextest       [PROFILE=] [W=] [FEATURES=]           Run tests with nextest; defaults to TEST_FEATURES=--all-features"
+	@echo "  make test-doc           [C=] [W=] [FEATURES=]                 Run doctests only; defaults to TEST_FEATURES=--all-features"
 	@echo "  make test-python                          Run Python tooling tests"
 	@echo "  make test-affected                        Run tests for changed crates"
 	@echo "  make coverage           [C=] [PACKAGES=] [T=] [W=] [JOBS=] [CLEAN=] [THRESHOLD=] [PROGRESS_INTERVAL=] [PROGRESS_STYLE=]  Run workspace coverage with per-package reporting"
 	@echo "  make coverage-changed   [T=] [JOBS=] [THRESHOLD=]                       Run coverage for changed crates"
 	@echo "  make test-coverage      [C=] [T=] [W=]                                  Alias for coverage"
 	@echo "  make test-coverage-html [C=] [T=] [W=]                                  Run coverage with HTML reports"
-	@echo "  make lint               [C=] [W=]          Run clippy"
+	@echo "  make lint               [C=] [W=] [FEATURES=]                 Run clippy; defaults to --all-features"
 	@echo "  make fmt                [W=]               Format code"
 	@echo "  make fmt-check          [W=]               Check formatting"
 	@echo "  make doc                [C=] [W=]          Build documentation"

@@ -1,8 +1,9 @@
 #![allow(missing_docs)]
 #![cfg(feature = "server")]
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
+use parking_lot::Mutex;
 use rskit_authz::{AuthzDecision, AuthzRequest, Decider};
 use rskit_mcp::{
     DeciderToolAuthorizer, TRANSPORT_STDIO, TRANSPORT_STREAMABLE_HTTP, ToolAuthorizationRequest,
@@ -27,7 +28,7 @@ impl CapturingDecider {
 
 impl Decider for CapturingDecider {
     fn decide(&self, request: &AuthzRequest) -> AuthzDecision {
-        self.seen.lock().unwrap().push(request.clone());
+        self.seen.lock().push(request.clone());
         self.decision.clone()
     }
 }
@@ -94,7 +95,7 @@ async fn decider_authorizer_maps_requests_and_decisions() {
     let decision = auth.authorize_tool(&request()).await.unwrap();
     assert!(decision.allowed);
     assert_eq!(decision.reason, "allow");
-    let seen = decider.seen.lock().unwrap();
+    let seen = decider.seen.lock();
     assert_eq!(seen[0].principal, "alice");
     assert_eq!(seen[0].action, "custom/call");
     assert_eq!(seen[0].resource, "mcp:tool:lookup");

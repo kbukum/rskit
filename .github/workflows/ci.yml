@@ -99,7 +99,7 @@ jobs:
         run: python3 -m unittest discover -s scripts/tests -t .
 
   # ---------------------------------------------------------------------------
-  # Format check (fast gate — runs on stable, no need to pin MSRV here)
+  # Format check (fast gate — pinned to the repository toolchain)
   # ---------------------------------------------------------------------------
   fmt:
     name: Rustfmt
@@ -110,7 +110,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
-          toolchain: stable
+          toolchain: "1.95"
           components: rustfmt
       - run: |
           cd core && cargo fmt --all --check
@@ -118,7 +118,7 @@ jobs:
           cd ../examples && cargo fmt --all --check
 
   # ---------------------------------------------------------------------------
-  # Clippy (uses the pinned toolchain from rust-toolchain.toml)
+  # Clippy (uses the pinned repository toolchain and all features)
   # ---------------------------------------------------------------------------
   clippy:
     name: Clippy
@@ -129,7 +129,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
-          toolchain: stable
+          toolchain: "1.95"
           components: clippy
       - name: Install mold linker
         run: sudo apt-get install -y mold
@@ -140,15 +140,15 @@ jobs:
             contrib
             examples
       - run: |
-          cargo clippy --manifest-path core/Cargo.toml --workspace -- -D warnings
-          cargo clippy --manifest-path contrib/Cargo.toml --workspace -- -D warnings
-          cargo clippy --manifest-path examples/Cargo.toml --workspace -- -D warnings
+          cargo clippy --manifest-path core/Cargo.toml --workspace --all-features --all-targets -- -D warnings
+          cargo clippy --manifest-path contrib/Cargo.toml --workspace --all-features --all-targets -- -D warnings
+          cargo clippy --manifest-path examples/Cargo.toml --workspace --all-features --all-targets -- -D warnings
 
   # ---------------------------------------------------------------------------
-  # Tests — matrix across OS + declared MSRV and pinned development toolchain
+  # Tests — behavioral tests on the pinned development toolchain
   # ---------------------------------------------------------------------------
   test:
-    name: Test (${{ matrix.os }} / ${{ matrix.rust }})
+    name: Test (${{ matrix.os }} / 1.95)
     if: needs.changes.outputs.rust-code == 'true'
     needs: changes
     runs-on: ${{ matrix.os }}
@@ -156,18 +156,19 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        rust: ["1.91", "1.95"]
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        with:
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
-          toolchain: ${{ matrix.rust }}
+          toolchain: "1.95"
       - name: Install mold linker (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get install -y mold
       - uses: Swatinem/rust-cache@c106961feec855ef5a58494c5a2a31c9d80429a9  # v2.7.8
         with:
-          key: ${{ matrix.os }}-${{ matrix.rust }}
+          key: ${{ matrix.os }}-1.95
           workspaces: |
             core
             contrib
@@ -175,12 +176,57 @@ jobs:
       - uses: taiki-e/install-action@7a79fe8c3a13344501c80d99cae481c1c9085912  # v2
         with:
           tool: cargo-nextest
-      - run: |
+      - name: Run selected tests
+        run: |
           export CARGO="$(rustup which cargo)"
           export RUSTC="$(rustup which rustc)"
-          cargo-nextest nextest run --manifest-path core/Cargo.toml --workspace --profile ci
-          cargo-nextest nextest run --manifest-path contrib/Cargo.toml --workspace --profile ci
-          cargo-nextest nextest run --manifest-path examples/Cargo.toml --workspace --profile ci
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            ./scripts/rskit_tool.py ci test \
+              --scope changed \
+              --changed-base "${{ github.event.pull_request.base.sha }}...${{ github.sha }}" \
+              --feature-mode both \
+              --profile ci
+          else
+            ./scripts/rskit_tool.py ci test --scope all --feature-mode both --profile ci
+          fi
+
+  # ---------------------------------------------------------------------------
+  # MSRV — compile tests on the declared minimum Rust version without
+  # duplicating the full behavioral test matrix.
+  # ---------------------------------------------------------------------------
+  msrv:
+    name: MSRV (ubuntu-latest / 1.91)
+    if: needs.changes.outputs.rust-code == 'true'
+    needs: changes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
+        with:
+          toolchain: "1.91"
+      - name: Install mold linker
+        run: sudo apt-get install -y mold
+      - uses: Swatinem/rust-cache@c106961feec855ef5a58494c5a2a31c9d80429a9  # v2.7.8
+        with:
+          key: ubuntu-latest-1.91-msrv
+          workspaces: |
+            core
+            contrib
+            examples
+      - name: Run selected MSRV checks
+        run: |
+          export CARGO="$(rustup which cargo)"
+          export RUSTC="$(rustup which rustc)"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            ./scripts/rskit_tool.py ci msrv \
+              --scope changed \
+              --changed-base "${{ github.event.pull_request.base.sha }}...${{ github.sha }}" \
+              --feature-mode both
+          else
+            ./scripts/rskit_tool.py ci msrv --scope all --feature-mode both
+          fi
 
   # ---------------------------------------------------------------------------
   # Documentation (ensure no broken intra-doc links)
@@ -196,7 +242,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
-          toolchain: stable
+          toolchain: "1.95"
       - name: Install mold linker
         run: sudo apt-get install -y mold
       - uses: Swatinem/rust-cache@c106961feec855ef5a58494c5a2a31c9d80429a9  # v2.7.8
@@ -273,7 +319,7 @@ jobs:
         run: python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else "Python 3.11+ is required")'
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
-          toolchain: stable
+          toolchain: "1.95"
       - name: Install nightly for rustdoc JSON
         run: rustup toolchain install nightly --profile minimal
       - name: Install cargo-public-api
@@ -296,7 +342,7 @@ jobs:
         run: python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else "Python 3.11+ is required")'
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
-          toolchain: stable
+          toolchain: "1.95"
       - uses: taiki-e/install-action@7a79fe8c3a13344501c80d99cae481c1c9085912  # v2
         with:
           tool: cargo-deny,cargo-audit
@@ -312,7 +358,7 @@ jobs:
   ci-status:
     name: CI Status
     if: always()
-    needs: [changes, python-tooling, fmt, clippy, test, docs, guardrails, coverage, security]
+    needs: [changes, python-tooling, fmt, clippy, test, msrv, docs, guardrails, coverage, security]
     runs-on: ubuntu-latest
     steps:
       - name: Evaluate results
@@ -322,6 +368,7 @@ jobs:
                    "${{ needs.fmt.result }}" \
                    "${{ needs.clippy.result }}" \
                    "${{ needs.test.result }}" \
+                   "${{ needs.msrv.result }}" \
                    "${{ needs.docs.result }}" \
                    "${{ needs.guardrails.result }}" \
                    "${{ needs.coverage.result }}" \
