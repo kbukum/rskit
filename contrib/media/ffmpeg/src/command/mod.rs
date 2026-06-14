@@ -559,7 +559,10 @@ mod tests {
             Segment::new(TimeRange::from_seconds(1.0, 2.0)).with_label("intro"),
         ])]);
         assert!(one.contains(&"-ss".to_string()), "missing seek in {one:?}");
-        assert!(one.contains(&"-t".to_string()), "missing duration in {one:?}");
+        assert!(
+            one.contains(&"-t".to_string()),
+            "missing duration in {one:?}"
+        );
 
         let command = FfmpegCommand::compile_with_hints(
             &FileSource::from_path("/tmp/input.mp4"),
