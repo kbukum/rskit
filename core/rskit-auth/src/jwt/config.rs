@@ -342,10 +342,10 @@ mod tests {
             "https://issuer.example",
             vec!["audience".into()],
         )
-        .with_ttl(Duration::from_secs(300))
+        .with_ttl(Duration::from_mins(5))
         .with_leeway(Duration::from_secs(10));
 
-        assert_eq!(config.ttl, Duration::from_secs(300));
+        assert_eq!(config.ttl, Duration::from_mins(5));
         assert_eq!(config.leeway, Duration::from_secs(10));
     }
 
