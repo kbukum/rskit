@@ -31,6 +31,7 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use rskit_config::ConfigLoader;
+    use rskit_config::ServiceConfig;
 
     use super::*;
 
@@ -513,5 +514,69 @@ safety: read-only
             .map(|manifest| manifest.name)
             .collect::<Vec<_>>();
         assert_eq!(names, vec!["alpha", "beta"]);
+    }
+
+    #[test]
+    fn manifest_rejects_script_paths_that_escape_the_pack() {
+        for bad_path in ["../escape.sh", "/abs/escape.sh", "nested/../../escape.sh"] {
+            let mut manifest = manifest("script-escape");
+            manifest.scripts = vec![ScriptAsset {
+                path: bad_path.to_string(),
+                description: "untrusted script reference".to_string(),
+            }];
+            let error = manifest
+                .validate()
+                .expect_err("traversal script path rejected");
+            assert!(
+                matches!(error, SkillError::InvalidManifest(ref message) if message.contains("path")),
+                "expected path rejection for {bad_path:?}, got {error:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn activate_rejects_asset_directory_that_is_actually_a_file() {
+        let root = test_root("references-not-a-dir");
+        fs::write(
+            root.join(MANIFEST_FILE_NAME),
+            serde_norway::to_string(&manifest("references-file")).expect("serialize manifest"),
+        )
+        .expect("write manifest");
+        fs::write(root.join(SKILL_MD_FILE_NAME), "# Demo").expect("write body");
+        // `references` is expected to be a directory; a regular file must fail closed.
+        fs::write(root.join("references"), "not a directory").expect("write references file");
+
+        let error = Loader::default()
+            .activate(&root)
+            .expect_err("non-directory references rejected");
+
+        assert!(
+            matches!(error, SkillError::InvalidPackFile { ref reason, .. } if reason.contains("expected directory")),
+            "got {error:?}",
+        );
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn skill_loader_config_validation_requires_non_empty_root() {
+        use rskit_validation::Validate;
+
+        let blank = SkillLoaderConfig {
+            service: ServiceConfig::default(),
+            root: "   ".to_string(),
+        };
+        let errors = blank.validate().expect_err("blank root rejected");
+        assert!(errors.field_errors().contains_key("root"));
+
+        let populated = SkillLoaderConfig {
+            service: ServiceConfig::default(),
+            root: PathBuf::from("packs")
+                .join("demo")
+                .to_string_lossy()
+                .into_owned(),
+        };
+        populated
+            .validate()
+            .expect("populated root with default service validates");
     }
 }

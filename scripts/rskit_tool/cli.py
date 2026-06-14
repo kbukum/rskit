@@ -6,7 +6,7 @@ import argparse
 import sys
 from collections.abc import Sequence
 
-from .commands import checks, coverage, domains, release, selftest
+from .commands import checks, ci, coverage, domains, release, selftest
 from .errors import ToolError
 
 
@@ -16,6 +16,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="rskit repository tooling")
     subparsers = parser.add_subparsers(dest="command", required=True)
     coverage.add_parser(subparsers)
+    ci.add_parser(subparsers)
     checks.add_parser(subparsers)
     domains.add_parser(subparsers)
     release.add_parser(subparsers)

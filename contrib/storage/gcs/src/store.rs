@@ -322,47 +322,42 @@ mod tests {
     struct MockStorage;
 
     impl google_cloud_storage::stub::Storage for MockStorage {
-        fn read_object(
+        async fn read_object(
             &self,
             req: ReadObjectRequest,
             _options: StorageRequestOptions,
-        ) -> impl std::future::Future<Output = google_cloud_storage::Result<ReadObjectResponse>> + Send
-        {
-            async move {
-                assert_eq!(req.bucket, "projects/_/buckets/test-bucket");
-                assert_eq!(req.object, "assets/input.txt");
-                Ok(ReadObjectResponse::from_source(
-                    ObjectHighlights::default(),
-                    "downloaded",
-                ))
-            }
+        ) -> google_cloud_storage::Result<ReadObjectResponse> {
+            assert_eq!(req.bucket, "projects/_/buckets/test-bucket");
+            assert_eq!(req.object, "assets/input.txt");
+            Ok(ReadObjectResponse::from_source(
+                ObjectHighlights::default(),
+                "downloaded",
+            ))
         }
 
-        fn write_object_buffered<P>(
+        async fn write_object_buffered<P>(
             &self,
             _payload: P,
             req: WriteObjectRequest,
             _options: StorageRequestOptions,
-        ) -> impl std::future::Future<Output = google_cloud_storage::Result<Object>> + Send
+        ) -> google_cloud_storage::Result<Object>
         where
             P: StreamingSource + Send + Sync + 'static,
         {
-            async move {
-                let resource = req.spec.resource.expect("write resource");
-                assert_eq!(resource.bucket, "projects/_/buckets/test-bucket");
-                assert_eq!(resource.name, "assets/output.txt");
-                assert!(
-                    resource.content_type == "text/plain"
-                        || resource.content_type == "application/octet-stream"
+            let resource = req.spec.resource.expect("write resource");
+            assert_eq!(resource.bucket, "projects/_/buckets/test-bucket");
+            assert_eq!(resource.name, "assets/output.txt");
+            assert!(
+                resource.content_type == "text/plain"
+                    || resource.content_type == "application/octet-stream"
+            );
+            if resource.content_type == "text/plain" && !resource.metadata.is_empty() {
+                assert_eq!(
+                    resource.metadata.get("trace").map(String::as_str),
+                    Some("yes")
                 );
-                if resource.content_type == "text/plain" && !resource.metadata.is_empty() {
-                    assert_eq!(
-                        resource.metadata.get("trace").map(String::as_str),
-                        Some("yes")
-                    );
-                }
-                Ok(resource)
             }
+            Ok(resource)
         }
     }
 
@@ -370,54 +365,44 @@ mod tests {
     struct MockControl;
 
     impl google_cloud_storage::stub::StorageControl for MockControl {
-        fn delete_object(
+        async fn delete_object(
             &self,
             req: DeleteObjectRequest,
             _options: GaxRequestOptions,
-        ) -> impl std::future::Future<Output = google_cloud_storage::Result<Response<()>>> + Send
-        {
-            async move {
-                assert_eq!(req.bucket, "projects/_/buckets/test-bucket");
-                assert_eq!(req.object, "assets/input.txt");
-                Ok(Response::from(()))
-            }
+        ) -> google_cloud_storage::Result<Response<()>> {
+            assert_eq!(req.bucket, "projects/_/buckets/test-bucket");
+            assert_eq!(req.object, "assets/input.txt");
+            Ok(Response::from(()))
         }
 
-        fn get_object(
+        async fn get_object(
             &self,
             req: GetObjectRequest,
             _options: GaxRequestOptions,
-        ) -> impl std::future::Future<Output = google_cloud_storage::Result<Response<Object>>> + Send
-        {
-            async move {
-                assert_eq!(req.bucket, "projects/_/buckets/test-bucket");
-                assert_eq!(req.object, "assets/input.txt");
-                Ok(Response::from(object(
-                    "assets/input.txt",
-                    10,
-                    "text/plain",
-                    [("origin", "head")],
-                )))
-            }
+        ) -> google_cloud_storage::Result<Response<Object>> {
+            assert_eq!(req.bucket, "projects/_/buckets/test-bucket");
+            assert_eq!(req.object, "assets/input.txt");
+            Ok(Response::from(object(
+                "assets/input.txt",
+                10,
+                "text/plain",
+                [("origin", "head")],
+            )))
         }
 
-        fn list_objects(
+        async fn list_objects(
             &self,
             req: ListObjectsRequest,
             _options: GaxRequestOptions,
-        ) -> impl std::future::Future<
-            Output = google_cloud_storage::Result<Response<ListObjectsResponse>>,
-        > + Send {
-            async move {
-                assert_eq!(req.parent, "projects/_/buckets/test-bucket");
-                assert_eq!(req.prefix, "assets/logs");
-                assert_eq!(req.page_size, 2);
-                let response = ListObjectsResponse::new().set_objects([
-                    object("assets/logs/a.txt", 1, "text/plain", []),
-                    object("assets/logs/b.txt", 2, "text/plain", [("kind", "log")]),
-                ]);
-                Ok(Response::from(response))
-            }
+        ) -> google_cloud_storage::Result<Response<ListObjectsResponse>> {
+            assert_eq!(req.parent, "projects/_/buckets/test-bucket");
+            assert_eq!(req.prefix, "assets/logs");
+            assert_eq!(req.page_size, 2);
+            let response = ListObjectsResponse::new().set_objects([
+                object("assets/logs/a.txt", 1, "text/plain", []),
+                object("assets/logs/b.txt", 2, "text/plain", [("kind", "log")]),
+            ]);
+            Ok(Response::from(response))
         }
     }
 
@@ -609,7 +594,7 @@ mod tests {
     async fn presigned_url_reports_unsupported_operation() {
         let store = test_store();
         let err = store
-            .presigned_url("input.txt", Duration::from_secs(60))
+            .presigned_url("input.txt", Duration::from_mins(1))
             .await
             .unwrap_err();
         assert_eq!(err.code(), ErrorCode::InvalidInput);

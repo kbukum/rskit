@@ -31,16 +31,11 @@ impl<T: Send + Sync + 'static> Provider for ProducerSink<T> {
 }
 
 impl<T: Send + Sync + 'static> Sink<Message<T>> for ProducerSink<T> {
-    fn send(
-        &self,
-        mut input: Message<T>,
-    ) -> impl std::future::Future<Output = AppResult<()>> + Send + '_ {
-        async move {
-            if input.topic.is_empty() {
-                input.topic.clone_from(&self.topic);
-            }
-            self.producer.send(input).await
+    async fn send(&self, mut input: Message<T>) -> AppResult<()> {
+        if input.topic.is_empty() {
+            input.topic.clone_from(&self.topic);
         }
+        self.producer.send(input).await
     }
 }
 
@@ -81,30 +76,25 @@ impl<T: Send + Sync + 'static> Provider for ConsumerStream<T> {
 }
 
 impl<T: Send + Sync + Clone + 'static> Stream<(), Message<T>> for ConsumerStream<T> {
-    fn execute(
-        &self,
-        _input: (),
-    ) -> impl std::future::Future<Output = AppResult<BoxStream<Message<T>>>> + Send + '_ {
-        async move {
-            let consumer = Arc::clone(&self.consumer);
-            let max_messages = self.max_messages;
-            let stream = async_stream::try_stream! {
-                match max_messages {
-                    Some(max_messages) => {
-                        for _ in 0..max_messages {
-                            let msg = consumer.recv().await?;
-                            yield msg;
-                        }
-                    }
-                    None => loop {
+    async fn execute(&self, _input: ()) -> AppResult<BoxStream<Message<T>>> {
+        let consumer = Arc::clone(&self.consumer);
+        let max_messages = self.max_messages;
+        let stream = async_stream::try_stream! {
+            match max_messages {
+                Some(max_messages) => {
+                    for _ in 0..max_messages {
                         let msg = consumer.recv().await?;
                         yield msg;
                     }
                 }
-            };
-            let stream: BoxStream<Message<T>> = Box::pin(stream);
-            Ok(stream)
-        }
+                None => loop {
+                    let msg = consumer.recv().await?;
+                    yield msg;
+                },
+            }
+        };
+        let stream: BoxStream<Message<T>> = Box::pin(stream);
+        Ok(stream)
     }
 }
 

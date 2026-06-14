@@ -68,3 +68,26 @@ impl Default for AgentConfig {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn budget_maps_config_limits_to_shared_genai_vocabulary() {
+        let config = AgentConfig {
+            max_tokens: 4_096,
+            max_tool_calls: 7,
+            wall_clock: Duration::from_secs(45),
+            ..AgentConfig::default()
+        };
+
+        let budget = config.budget();
+
+        assert_eq!(budget.max_tokens, Some(4_096));
+        assert_eq!(budget.max_calls, Some(7));
+        assert_eq!(budget.wall_clock, Some(45));
+        // Cost is not derived from the runtime config and stays unset.
+        assert_eq!(budget.max_cost, None);
+    }
+}

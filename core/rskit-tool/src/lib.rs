@@ -94,6 +94,61 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn from_fn_simple_rejects_schema_invalid_input_before_handler_runs() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let handler_calls = Arc::clone(&calls);
+        let tool = from_fn_simple("add", "Add", move |input: AddInput| {
+            let handler_calls = Arc::clone(&handler_calls);
+            async move {
+                handler_calls.fetch_add(1, Ordering::SeqCst);
+                Ok(AddOutput {
+                    sum: input.a + input.b,
+                })
+            }
+        })
+        .unwrap();
+
+        let ctx = Context::new();
+        let err = tool
+            .call(
+                &ctx,
+                ToolInput::new(serde_json::json!({"a": "not-an-int", "b": 2})).unwrap(),
+            )
+            .await
+            .expect_err("untrusted input that violates the schema must fail closed");
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+        assert!(err.message().contains("invalid tool input"));
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            0,
+            "handler must not run on schema-invalid input",
+        );
+    }
+
+    #[tokio::test]
+    async fn from_fn_simple_validate_reports_schema_conformance() {
+        let tool = from_fn_simple("add", "Add", |input: AddInput| async move {
+            Ok(AddOutput {
+                sum: input.a + input.b,
+            })
+        })
+        .unwrap();
+
+        assert!(
+            tool.validate(&ToolInput::new(serde_json::json!({"a": 1, "b": 2})).unwrap())
+                .valid
+        );
+        assert!(
+            !tool
+                .validate(&ToolInput::new(serde_json::json!({"a": "bad", "b": 2})).unwrap())
+                .valid
+        );
+    }
+
+    #[tokio::test]
     async fn test_from_fn_schema_generated() {
         let tool = from_fn("add", "Add", |_ctx: Context, _input: AddInput| async move {
             Ok(text_result("0"))

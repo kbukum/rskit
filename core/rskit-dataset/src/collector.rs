@@ -805,7 +805,7 @@ mod focused_tests {
         }
 
         fn apply(&self, item: DataItem, _limits: &DatasetLimits) -> AppResult<Option<DataItem>> {
-            if item.metadata.get("drop").is_some() {
+            if item.metadata.contains_key("drop") {
                 Ok(None)
             } else {
                 Ok(Some(item.with_extension("txt")))

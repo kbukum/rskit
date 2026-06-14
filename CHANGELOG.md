@@ -8,9 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Tooling
 
+- Refactor CI and local validation around shared package-selection helpers, reduce PR test duplication by separating pinned behavioral tests from Ubuntu-only MSRV compile checks, and run feature-gated tests with explicit default/all-feature coverage.
 - Rework coverage collection to run once per selected workspace group, preserve cached instrumented builds with profile-only cleanup, exclude the facade package from default coverage, honor explicit threshold overrides, and derive per-package summaries from workspace reports.
 - Add focused authorization, configuration, lifecycle, DI, DAG, logging, messaging, resilience, Ollama, image, Redis, S3, Kafka, NATS, RabbitMQ, FFmpeg, and GCS adapter tests to raise package coverage with deterministic behavioral checks.
 - Cover every `rskit-storage-s3` `FileStore` operation with wire-level request-construction and remote-failure tests using an in-process mock HTTP client, with no network or credentials.
+- Add behavioral failure-path tests for the AI modules: MCP privileged tool-call denial, oversized-result, authorizer-error, and tool-failure auditing; agent limit precedence, budget mapping, and lifecycle; skill manifest path-traversal, asset-directory, and loader-config validation; and tool input fail-closed validation.
 
 ### Fixed
 

@@ -416,7 +416,7 @@ mod tests {
         assert!(config.validate().is_err());
 
         config = Config::default();
-        config.brokers = vec!["".to_string()];
+        config.brokers = vec![String::new()];
         assert!(config.validate().is_err());
 
         config = Config::default();

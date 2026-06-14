@@ -101,7 +101,7 @@ fn auth_outcome_claims_and_missing_policy_are_typed() {
 
 #[test]
 fn reset_tokens_are_url_safe_and_expire_after_ttl() {
-    let generator = ResetTokenGenerator::new(Duration::from_secs(60));
+    let generator = ResetTokenGenerator::new(Duration::from_mins(1));
     let (token, expires_at) = generator.generate();
     assert_eq!(token.len(), 43);
     assert!(
