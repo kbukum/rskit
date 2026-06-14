@@ -258,16 +258,14 @@ mod tests {
 
     use async_trait::async_trait;
     use parking_lot::Mutex;
-    use rmcp::model::{CallToolRequestParams, CallToolResult};
     use rskit_errors::{AppError, ErrorCode};
-    use rskit_tool::context::Context;
     use rskit_tool::{ToolMetadata, ToolResult, from_fn, text_result};
     use schemars::JsonSchema;
     use serde::Deserialize;
     use serde_json::json;
 
-    use crate::audit::{ToolAuditEvent, ToolAuditSink};
-    use crate::authz::{ToolAuthorizationDecision, ToolAuthorizationRequest, ToolAuthorizer};
+    use crate::audit::ToolAuditSink;
+    use crate::authz::ToolAuthorizer;
 
     #[derive(Deserialize, JsonSchema)]
     struct EchoInput {
