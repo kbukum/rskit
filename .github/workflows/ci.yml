@@ -302,7 +302,7 @@ jobs:
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             ./scripts/rskit_tool.py coverage --mode coverage --changed --changed-base "${{ github.event.pull_request.base.sha }}...${{ github.sha }}" --line-threshold "${PR_COVERAGE_LINE_THRESHOLD:-70}"
           else
-            ./scripts/rskit_tool.py coverage --mode coverage --line-threshold "${COVERAGE_LINE_THRESHOLD:-90}"
+            ./scripts/rskit_tool.py coverage --mode coverage --clean full --line-threshold "${COVERAGE_LINE_THRESHOLD:-90}"
           fi
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         if: failure()
