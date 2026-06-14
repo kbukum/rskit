@@ -312,14 +312,16 @@ def run_depgraphs(args: argparse.Namespace) -> int:
     contrib_file = out_dir / "graph-contrib.svg"
     print(f"-> generating {contrib_file}")
     names = _rskit_package_names(WORKSPACES["contrib"])
+    include_args: list[str] = []
+    for name in names:
+        include_args.extend(("--include", name))
     depgraph = run(
         [
             "cargo",
             "depgraph",
             "--manifest-path",
             str(WORKSPACES["contrib"]),
-            "--include",
-            ",".join(names),
+            *include_args,
             "--dedup-transitive-deps",
         ],
         capture=True,

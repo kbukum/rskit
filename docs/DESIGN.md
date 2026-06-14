@@ -64,6 +64,8 @@ builds on. Transitive third-party dependencies are excluded for readability.
 make depgraphs
 ```
 
-This regenerates `graph-domains.svg` and `graph-contrib.svg` in `docs/depgraphs/`
-(requires `cargo-depgraph` and Graphviz `dot`; both are installed by `make setup`).
-Regenerate whenever domains or crate dependencies change.
+This regenerates `graph-domains.svg` and `graph-contrib.svg` in `docs/depgraphs/`.
+`make setup` installs `cargo-depgraph`, but Graphviz `dot` is only installed when
+system tools are enabled (`scripts/setup.sh --system`, or `INSTALL_SYSTEM_TOOLS=1`);
+otherwise install Graphviz manually. Regenerate whenever domains or crate
+dependencies change.
