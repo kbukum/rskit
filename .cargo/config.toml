@@ -1,7 +1,12 @@
 [build]
 # Pass --cfg docsrs when building documentation so #[cfg_attr(docsrs, ...)]
 # attributes are activated on docs.rs.
-# Uncomment to enable sccache locally (install: cargo install sccache).
+# Optional local compile cache (sccache 0.15+; install: cargo install sccache).
+# NOTE: sccache cannot cache *incremental* builds, so enabling it implies
+# CARGO_INCREMENTAL=0 to be effective. That helps cold / cross-branch builds but
+# slows the inner edit->rebuild loop, so it is left opt-in. Do NOT combine it
+# with Swatinem/rust-cache in CI (they overlap). To enable locally:
+#   export CARGO_INCREMENTAL=0
 # rustc-wrapper = "sccache"
 # rustdocflags = ["--cfg", "docsrs"]   # uncomment when publishing to docs.rs
 
@@ -20,8 +25,10 @@ xtask = "run --package xtask --"
 linker = "clang"
 rustflags = ["-C", "link-arg=-fuse-ld=mold"]
 
-# macOS (Apple Silicon): use lld for faster linking.
-# Install: brew install llvm (provides lld at /opt/homebrew/opt/llvm/bin/ld64.lld)
-# Uncomment the following after installing llvm:
+# macOS: Apple's default linker (ld-prime, Xcode 15+) is already fast, so no
+# linker override is set here. mold/sold no longer support Mach-O, so they are
+# not an option on macOS. lld (from `brew install llvm`) can be marginally
+# faster on some setups; opt in per-developer by uncommenting below once llvm is
+# installed (path is for Apple Silicon; Intel Homebrew uses /usr/local/...).
 # [target.aarch64-apple-darwin]
 # rustflags = ["-C", "link-arg=-fuse-ld=/opt/homebrew/opt/llvm/bin/ld64.lld"]

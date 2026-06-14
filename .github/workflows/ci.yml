@@ -127,6 +127,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        with:
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: "1.95"
@@ -139,10 +141,19 @@ jobs:
             core
             contrib
             examples
-      - run: |
-          cargo clippy --manifest-path core/Cargo.toml --workspace --all-features --all-targets -- -D warnings
-          cargo clippy --manifest-path contrib/Cargo.toml --workspace --all-features --all-targets -- -D warnings
-          cargo clippy --manifest-path examples/Cargo.toml --workspace --all-features --all-targets -- -D warnings
+      - name: Run clippy (changed packages on PRs, full otherwise)
+        run: |
+          export CARGO="$(rustup which cargo)"
+          export RUSTC="$(rustup which rustc)"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            ./scripts/rskit_tool.py ci lint \
+              --scope changed \
+              --changed-base "${{ github.event.pull_request.base.sha }}...${{ github.sha }}" \
+              --feature-mode all \
+              --jobs 3
+          else
+            ./scripts/rskit_tool.py ci lint --scope all --feature-mode all --jobs 3
+          fi
 
   # ---------------------------------------------------------------------------
   # Tests — behavioral tests on the pinned development toolchain

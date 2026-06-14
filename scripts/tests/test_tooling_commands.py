@@ -9,9 +9,14 @@ from pathlib import Path
 
 from . import support  # noqa: F401
 from rskit_tool.cargo import Package, packages_for_paths
-from rskit_tool.commands.ci import feature_arg_sets, group_by_workspace
-from rskit_tool.commands.domains import affected_domains, resolve_crate_name
-from rskit_tool.commands.release import validate_target_subdir
+from rskit_tool.cli import build_parser
+from rskit_tool.commands.ci import feature_arg_sets, group_by_workspace, run_lint, run_test
+from rskit_tool.commands.domains import DOMAIN_ORDER, affected_domains, load_domains, resolve_crate_name
+from rskit_tool.commands.release import (
+    _domain_reduced_edges,
+    build_domain_dot,
+    validate_target_subdir,
+)
 from rskit_tool.errors import ToolError
 from rskit_tool.paths import ROOT
 from rskit_tool.process import ParallelTask, run, run_parallel
@@ -71,6 +76,32 @@ class ToolingCommandTests(unittest.TestCase):
         self.assertEqual(feature_arg_sets("all"), [["--all-features"]])
         self.assertEqual(feature_arg_sets("both"), [[], ["--all-features"]])
 
+    def test_ci_test_runs_doctests_by_default(self) -> None:
+        parser = build_parser()
+        args = parser.parse_args(["ci", "test", "--scope", "all"])
+        self.assertIs(args.func, run_test)
+        self.assertTrue(args.run_doctests)
+
+    def test_ci_test_no_doc_disables_doctests(self) -> None:
+        parser = build_parser()
+        args = parser.parse_args(["ci", "test", "--no-doc"])
+        self.assertFalse(args.run_doctests)
+
+    def test_ci_lint_defaults_to_changed_scope_all_features(self) -> None:
+        parser = build_parser()
+        args = parser.parse_args(["ci", "lint"])
+        self.assertIs(args.func, run_lint)
+        self.assertEqual(args.scope, "changed")
+        self.assertEqual(args.feature_mode, "all")
+
+    def test_ci_lint_accepts_changed_base_and_workspace(self) -> None:
+        parser = build_parser()
+        args = parser.parse_args(
+            ["ci", "lint", "--scope", "changed", "--changed-base", "BASE...HEAD", "--workspace", "core"]
+        )
+        self.assertEqual(args.changed_base, "BASE...HEAD")
+        self.assertEqual(args.workspace, ["core"])
+
     def test_ci_group_by_workspace_is_deterministic(self) -> None:
         packages = [
             Package(
@@ -118,6 +149,60 @@ class ToolingCommandTests(unittest.TestCase):
                     validate_target_subdir(invalid_target)
 
         self.assertEqual(validate_target_subdir("target/release/sbom").name, "sbom")
+
+    def test_domain_reduced_edges_drops_transitively_reachable_edges(self) -> None:
+        # a depends on b, c and d directly, but c and d are reachable through b,
+        # so only the essential a -> b layer edge should survive the reduction.
+        deps = {
+            "a": {"b", "c", "d"},
+            "b": {"c"},
+            "c": {"d"},
+            "d": set(),
+        }
+
+        reduced = _domain_reduced_edges(deps)
+
+        self.assertEqual(reduced["a"], ["b"])
+        self.assertEqual(reduced["b"], ["c"])
+        self.assertEqual(reduced["c"], ["d"])
+        self.assertEqual(reduced["d"], [])
+
+    def test_domain_reduced_edges_keeps_independent_edges_sorted(self) -> None:
+        # When two dependencies are not reachable from one another, both are kept,
+        # and the order is deterministic (sorted) regardless of set iteration order.
+        deps = {"root": {"z", "a"}, "a": set(), "z": set()}
+
+        self.assertEqual(_domain_reduced_edges(deps)["root"], ["a", "z"])
+
+    def test_build_domain_dot_renders_every_domain_with_reduced_edges(self) -> None:
+        domains = load_domains()
+        deps = {name: set(domain.depends_on) for name, domain in domains.items()}
+        reduced = _domain_reduced_edges(deps)
+
+        dot = build_domain_dot()
+
+        self.assertTrue(dot.startswith("digraph rskit_domains {"))
+        self.assertTrue(dot.endswith("}\n"))
+        for name in domains:
+            self.assertIn(f'"{name}" [label=', dot)
+        expected_edges = {
+            f'  "{name}" -> "{dependency}";'
+            for name, dependencies in reduced.items()
+            for dependency in dependencies
+        }
+        rendered_edges = {line for line in dot.splitlines() if "->" in line}
+        self.assertEqual(rendered_edges, expected_edges)
+
+    def test_build_domain_dot_orders_known_domains_first(self) -> None:
+        domains = load_domains()
+        dot = build_domain_dot()
+        node_order = [
+            line.split('"')[1]
+            for line in dot.splitlines()
+            if "[label=" in line
+        ]
+        known = [name for name in DOMAIN_ORDER if name in domains]
+        self.assertEqual(node_order[: len(known)], known)
 
 
 if __name__ == "__main__":

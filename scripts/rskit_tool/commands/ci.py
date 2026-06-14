@@ -36,7 +36,24 @@ def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) 
         default="both",
         help="Feature coverage to run",
     )
-    test.set_defaults(func=run_test)
+    test.add_argument(
+        "--no-doc",
+        dest="run_doctests",
+        action="store_false",
+        help="Skip doctests (nextest does not run them; they run by default after nextest)",
+    )
+    test.set_defaults(func=run_test, run_doctests=True)
+
+    lint = ci_sub.add_parser("lint", help="Run clippy for selected packages")
+    add_selection_args(lint)
+    lint.add_argument("--jobs", type=int, help="Concurrent independent workspace checks")
+    lint.add_argument(
+        "--feature-mode",
+        choices=FEATURE_MODES,
+        default="all",
+        help="Feature coverage to lint",
+    )
+    lint.set_defaults(func=run_lint)
 
     msrv = ci_sub.add_parser("msrv", help="Run selected MSRV compile checks")
     add_selection_args(msrv)
@@ -95,6 +112,32 @@ def run_test(args: argparse.Namespace) -> int:
                     workspace_packages,
                     feature_mode=args.feature_mode,
                     profile=args.profile,
+                    run_doctests=args.run_doctests,
+                ),
+            )
+            for workspace, workspace_packages in group_by_workspace(packages).items()
+        ],
+        jobs=args.jobs,
+    )
+    return 0
+
+
+def run_lint(args: argparse.Namespace) -> int:
+    """Run clippy for selected packages."""
+
+    packages = select_packages(args)
+    if not packages:
+        print("No packages selected for lint")
+        return 0
+
+    run_parallel(
+        [
+            ParallelTask(
+                name=f"lint/{workspace}",
+                action=lambda workspace=workspace, workspace_packages=workspace_packages: run_workspace_lint(
+                    workspace,
+                    workspace_packages,
+                    feature_mode=args.feature_mode,
                 ),
             )
             for workspace, workspace_packages in group_by_workspace(packages).items()
@@ -135,9 +178,11 @@ def run_workspace_tests(
     *,
     feature_mode: str,
     profile: str,
+    run_doctests: bool = True,
 ) -> None:
-    """Run nextest for one workspace package group."""
+    """Run nextest (and doctests) for one workspace package group."""
 
+    selection = package_selection_args(workspace, packages)
     for feature_args in feature_arg_sets(feature_mode):
         run(
             [
@@ -146,12 +191,46 @@ def run_workspace_tests(
                 "run",
                 "--manifest-path",
                 str(WORKSPACES[workspace]),
-                *package_selection_args(workspace, packages),
+                *selection,
                 *feature_args,
                 "--profile",
                 profile,
                 "--no-tests",
                 "pass",
+            ]
+        )
+        # nextest does not execute doctests; run them separately so doctest
+        # assertions are validated in CI (and not silently lost).
+        if run_doctests:
+            run(
+                [
+                    "cargo",
+                    "test",
+                    "--doc",
+                    "--manifest-path",
+                    str(WORKSPACES[workspace]),
+                    *selection,
+                    *feature_args,
+                ]
+            )
+
+
+def run_workspace_lint(workspace: str, packages: Sequence[Package], *, feature_mode: str) -> None:
+    """Run clippy for one workspace package group."""
+
+    for feature_args in feature_arg_sets(feature_mode):
+        run(
+            [
+                "cargo",
+                "clippy",
+                "--manifest-path",
+                str(WORKSPACES[workspace]),
+                *package_selection_args(workspace, packages),
+                *feature_args,
+                "--all-targets",
+                "--",
+                "-D",
+                "warnings",
             ]
         )
 

@@ -1,7 +1,7 @@
 .PHONY: all setup build test test-nextest test-doc test-python test-affected coverage coverage-changed test-coverage test-coverage-html lint fmt fmt-check check check-fast check-facade-features \
        check-core check-patterns check-crosscutting check-composition check-transport check-auth check-data check-ai \
        check-media check-infra doc deny check-l7-edges check-workspace-deps-sync check-topology check-public-api release-readiness release-coverage \
-       publish-dry-run release-sbom clean help ci ci-test ci-lint ci-fmt ensure-act
+       publish-dry-run release-sbom depgraphs clean help ci ci-test ci-lint ci-fmt ensure-act
 
 CORE_MANIFEST = core/Cargo.toml
 CONTRIB_MANIFEST = contrib/Cargo.toml
@@ -234,6 +234,11 @@ publish-dry-run:
 release-sbom:
 	@$(RSKIT_TOOL) release sbom
 
+## Regenerate workspace dependency-graph SVGs in docs/depgraphs (embedded in docs/DESIGN.md)
+## Requires: cargo-depgraph, Graphviz (dot)
+depgraphs:
+	@$(RSKIT_TOOL) release depgraphs
+
 ## Fast check: format + lint + build only (no tests) — for rapid iteration
 check-fast: fmt-check lint build
 
@@ -344,6 +349,7 @@ help:
 	@echo "  make release-coverage                     Run per-package release coverage thresholds"
 	@echo "  make publish-dry-run                      Dry-run publishing in dependency order"
 	@echo "  make release-sbom                         Generate CycloneDX SBOMs"
+	@echo "  make depgraphs                            Regenerate docs dependency graphs (docs/depgraphs)"
 	@echo "  make check-fast                           fmt + lint + build"
 	@echo "  make check              [C=] [W=]          fmt + lint + build + test"
 	@echo "  make check-core         [JOBS=]            Check only core domain modules"

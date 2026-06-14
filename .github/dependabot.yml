@@ -18,11 +18,16 @@ updates:
         patterns:
           - "*"
 
-  # ── Cargo (workspace + every crate) ─────────────────────────────────────────
-  # Dependabot reads the workspace root Cargo.toml and updates resolved
-  # dependencies for every workspace member in a single PR per ecosystem.
+  # ── Cargo (split workspaces: core, contrib, examples) ──────────────────────
+  # There is no root Cargo.toml — rskit is a split workspace family. Each entry
+  # below is a real Cargo workspace with a committed Cargo.lock, so Dependabot
+  # resolves and updates every member crate per workspace. (fuzz/ is dev-only
+  # tooling with an untracked lockfile and is intentionally excluded.)
   - package-ecosystem: "cargo"
-    directory: "/"
+    directories:
+      - "/core"
+      - "/contrib"
+      - "/examples"
     schedule:
       interval: "weekly"
       day: "friday"

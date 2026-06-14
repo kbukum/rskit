@@ -14,6 +14,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Add focused authorization, configuration, lifecycle, DI, DAG, logging, messaging, resilience, Ollama, image, Redis, S3, Kafka, NATS, RabbitMQ, FFmpeg, and GCS adapter tests to raise package coverage with deterministic behavioral checks.
 - Cover every `rskit-storage-s3` `FileStore` operation with wire-level request-construction and remote-failure tests using an in-process mock HTTP client, with no network or credentials.
 - Add behavioral failure-path tests for the AI modules: MCP privileged tool-call denial, oversized-result, authorizer-error, and tool-failure auditing; agent limit precedence, budget mapping, and lifecycle; skill manifest path-traversal, asset-directory, and loader-config validation; and tool input fail-closed validation.
+- Run doctests in CI and scope clippy to changed crates on pull requests for faster, more complete validation, while keeping full-scope checks on push and merge queues.
+- Configure Dependabot to update the split `core/`, `contrib/`, and `examples/` Cargo workspaces, and extend CodeQL to scan Rust (build-mode none) alongside the existing GitHub Actions analysis.
+- Redesign dependency-graph generation into a truthful domain-layer diagram plus an adapter-to-core graph, add a `make depgraphs` regeneration target, and cover the domain-graph reduction/rendering logic with focused tooling tests.
+
+### Documentation
+
+- Embed the regenerated domain-layer and contrib adapter dependency graphs in `docs/DESIGN.md`, document how to regenerate them, and remove the stale, out-of-sync graph copies.
 
 ### Fixed
 
