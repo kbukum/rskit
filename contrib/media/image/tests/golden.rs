@@ -69,6 +69,21 @@ fn source_bytes(source: &FileSource) -> Vec<u8> {
     }
 }
 
+/// Asserts a JSON snapshot with map keys sorted.
+///
+/// `serde_json::json!` builds a `Value::Object` whose key ordering depends on
+/// the `preserve_order` feature: with it enabled keys keep insertion order,
+/// without it they are sorted. That feature is turned on transitively by other
+/// workspace crates and unified across the whole graph, so the same snapshot
+/// would render differently depending on the build scope. Sorting the maps
+/// makes these snapshots deterministic regardless of how the build resolves
+/// `serde_json`'s features.
+fn assert_sorted_json_snapshot(name: &str, value: serde_json::Value) {
+    insta::with_settings!({sort_maps => true}, {
+        insta::assert_json_snapshot!(name, value);
+    });
+}
+
 // ── Test 1: Real image processing ────────────────────────────────────────────
 
 #[tokio::test]
@@ -83,13 +98,13 @@ async fn golden_resize_real_jpeg() {
     let result = backend.execute(&source, &ops, None).await.unwrap();
     let (w, h) = read_dimensions(&result);
 
-    insta::assert_json_snapshot!(
+    assert_sorted_json_snapshot(
         "resize_real_jpeg",
         serde_json::json!({
             "width": w,
             "height": h,
             "format": "jpeg",
-        })
+        }),
     );
 }
 
@@ -116,12 +131,12 @@ async fn golden_multi_format_pipeline() {
     let png_result = backend.execute(&png_source, &ops, None).await.unwrap();
     let (pw, ph) = read_dimensions(&png_result);
 
-    insta::assert_json_snapshot!(
+    assert_sorted_json_snapshot(
         "multi_format_pipeline",
         serde_json::json!({
             "jpeg": { "width": jw, "height": jh },
             "png":  { "width": pw, "height": ph },
-        })
+        }),
     );
 }
 
@@ -139,12 +154,12 @@ async fn golden_crop_center_real_photo() {
     let result = backend.execute(&source, &ops, None).await.unwrap();
     let (w, h) = read_dimensions(&result);
 
-    insta::assert_json_snapshot!(
+    assert_sorted_json_snapshot(
         "crop_center_real_photo",
         serde_json::json!({
             "width": w,
             "height": h,
-        })
+        }),
     );
 }
 
@@ -162,14 +177,14 @@ async fn golden_rotate_90() {
     let (w, h) = read_dimensions(&result);
 
     // 500x378 rotated 90° → 378x500
-    insta::assert_json_snapshot!(
+    assert_sorted_json_snapshot(
         "rotate_90_real_photo",
         serde_json::json!({
             "original_width": 500,
             "original_height": 378,
             "rotated_width": w,
             "rotated_height": h,
-        })
+        }),
     );
 }
 
@@ -188,15 +203,17 @@ async fn golden_png_to_jpeg_conversion() {
     let is_jpeg = bytes.len() >= 2 && bytes[0] == 0xFF && bytes[1] == 0xD8;
     let (w, h) = read_dimensions(&result);
 
-    insta::assert_json_snapshot!("png_to_jpeg_conversion", {
-        ".size_bytes" => insta::rounded_redaction(0),
-    }, serde_json::json!({
-        "is_jpeg": is_jpeg,
-        "width": w,
-        "height": h,
-        "size_bytes": bytes.len(),
-        "size_reasonable": bytes.len() > 1000 && bytes.len() < 500_000,
-    }));
+    insta::with_settings!({sort_maps => true}, {
+        insta::assert_json_snapshot!("png_to_jpeg_conversion", {
+            ".size_bytes" => insta::rounded_redaction(0),
+        }, serde_json::json!({
+            "is_jpeg": is_jpeg,
+            "width": w,
+            "height": h,
+            "size_bytes": bytes.len(),
+            "size_reasonable": bytes.len() > 1000 && bytes.len() < 500_000,
+        }));
+    });
 }
 
 // ── Test 6: Pipeline on real data ────────────────────────────────────────────
@@ -218,13 +235,13 @@ async fn golden_pipeline_resize_crop_rotate() {
     let (w, h) = read_dimensions(&result);
 
     // 200x200 → crop center 100x100 → rotate 90° → 100x100 (square stays square)
-    insta::assert_json_snapshot!(
+    assert_sorted_json_snapshot(
         "pipeline_resize_crop_rotate",
         serde_json::json!({
             "final_width": w,
             "final_height": h,
             "pipeline_steps": ["resize(200x200)", "crop(100x100)", "rotate(90)"],
-        })
+        }),
     );
 }
 
@@ -275,7 +292,7 @@ async fn golden_image_filters_new() {
     let original = image::open(fixtures_dir().join("image/sample.png")).unwrap();
     let (ow, oh) = (original.width(), original.height());
 
-    insta::assert_json_snapshot!(
+    assert_sorted_json_snapshot(
         "image_filters_new",
         serde_json::json!({
             "original": { "width": ow, "height": oh },
@@ -283,7 +300,7 @@ async fn golden_image_filters_new() {
             "sepia": { "width": ew, "height": eh, "dims_preserved": ew == ow && eh == oh },
             "invert": { "width": iw, "height": ih, "dims_preserved": iw == ow && ih == oh },
             "pixelate": { "width": pw, "height": ph, "dims_preserved": pw == ow && ph == oh },
-        })
+        }),
     );
 }
 
@@ -312,7 +329,7 @@ async fn golden_image_probe_png() {
 
     let res = meta.resolution().expect("should have resolution");
 
-    insta::assert_json_snapshot!(
+    assert_sorted_json_snapshot(
         "image_probe_png",
         serde_json::json!({
             "has_video": meta.has_video(),
@@ -321,7 +338,7 @@ async fn golden_image_probe_png() {
             "height": res.height,
             "track_count": meta.tracks.len(),
             "format": meta.format.id(),
-        })
+        }),
     );
 }
 
@@ -338,13 +355,13 @@ async fn golden_flip_horizontal() {
     let result_bytes = source_bytes(&result);
     let original_bytes = std::fs::read(fixtures_dir().join("image/real-photo.jpg")).unwrap();
 
-    insta::assert_json_snapshot!(
+    assert_sorted_json_snapshot(
         "flip_horizontal",
         serde_json::json!({
             "width": w,
             "height": h,
             "dimensions_preserved": w == 500 && h == 378,
             "content_changed": result_bytes != original_bytes,
-        })
+        }),
     );
 }

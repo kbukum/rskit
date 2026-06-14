@@ -102,6 +102,21 @@ fn normalized_preview(source: &FileSource, ops: &[MediaOp]) -> Vec<String> {
         .collect()
 }
 
+/// Asserts a JSON snapshot with map keys sorted.
+///
+/// `serde_json::json!` builds a `Value::Object` whose key ordering depends on
+/// the `preserve_order` feature: with it enabled keys keep insertion order,
+/// without it they are sorted. That feature is turned on transitively by other
+/// workspace crates and unified across the whole graph, so the same snapshot
+/// would render differently depending on the build scope. Sorting the maps
+/// makes these snapshots deterministic regardless of how the build resolves
+/// `serde_json`'s features.
+fn assert_sorted_json_snapshot(name: &str, value: serde_json::Value) {
+    insta::with_settings!({sort_maps => true}, {
+        insta::assert_json_snapshot!(name, value);
+    });
+}
+
 // ── Test 1: Probe real JPEG ──────────────────────────────────────────────────
 
 #[tokio::test]
@@ -191,13 +206,13 @@ async fn golden_process_real_image() {
     let meta = probe.probe(&result).await.expect("probe resized image");
     let res = meta.resolution().expect("should have resolution");
 
-    insta::assert_json_snapshot!(
+    assert_sorted_json_snapshot(
         "process_real_image_resize",
         serde_json::json!({
             "output_width": res.width,
             "output_height": res.height,
             "has_video_track": meta.has_video(),
-        })
+        }),
     );
 }
 
@@ -222,14 +237,16 @@ async fn golden_process_real_audio() {
     let probe = ffmpeg_probe();
     let meta = probe.probe(&result).await.expect("probe extracted audio");
 
-    insta::assert_json_snapshot!("process_real_audio_extract", {
-        ".duration_secs" => insta::rounded_redaction(1),
-    }, serde_json::json!({
-        "has_audio": meta.has_audio(),
-        "has_video": meta.has_video(),
-        "duration_secs": meta.duration.map(|d| d.as_secs_f64()),
-        "sample_rate": meta.sample_rate().map(|sr| sr.0),
-    }));
+    insta::with_settings!({sort_maps => true}, {
+        insta::assert_json_snapshot!("process_real_audio_extract", {
+            ".duration_secs" => insta::rounded_redaction(1),
+        }, serde_json::json!({
+            "has_audio": meta.has_audio(),
+            "has_video": meta.has_video(),
+            "duration_secs": meta.duration.map(|d| d.as_secs_f64()),
+            "sample_rate": meta.sample_rate().map(|sr| sr.0),
+        }));
+    });
 }
 
 // ── Test 6: Process real video (resize) ──────────────────────────────────────
@@ -257,15 +274,17 @@ async fn golden_process_real_video() {
     let meta = probe.probe(&result).await.expect("probe resized video");
     let res = meta.resolution().expect("should have resolution");
 
-    insta::assert_json_snapshot!("process_real_video_resize", {
-        ".duration_secs" => insta::rounded_redaction(1),
-    }, serde_json::json!({
-        "output_width": res.width,
-        "output_height": res.height,
-        "has_video": meta.has_video(),
-        "has_audio": meta.has_audio(),
-        "duration_secs": meta.duration.map(|d| d.as_secs_f64()),
-    }));
+    insta::with_settings!({sort_maps => true}, {
+        insta::assert_json_snapshot!("process_real_video_resize", {
+            ".duration_secs" => insta::rounded_redaction(1),
+        }, serde_json::json!({
+            "output_width": res.width,
+            "output_height": res.height,
+            "has_video": meta.has_video(),
+            "has_audio": meta.has_audio(),
+            "duration_secs": meta.duration.map(|d| d.as_secs_f64()),
+        }));
+    });
 }
 
 // ── Test 7: ExtractMany (multi-segment extraction) ───────────────────────────
@@ -298,14 +317,16 @@ async fn golden_extract_many() {
         .await
         .expect("probe extract-many output");
 
-    insta::assert_json_snapshot!("extract_many_two_segments", {
-        ".duration_secs" => insta::rounded_redaction(1),
-    }, serde_json::json!({
-        "has_video": meta.has_video(),
-        "has_audio": meta.has_audio(),
-        "duration_secs": meta.duration.map(|d| d.as_secs_f64()),
-        "track_count": meta.tracks.len(),
-    }));
+    insta::with_settings!({sort_maps => true}, {
+        insta::assert_json_snapshot!("extract_many_two_segments", {
+            ".duration_secs" => insta::rounded_redaction(1),
+        }, serde_json::json!({
+            "has_video": meta.has_video(),
+            "has_audio": meta.has_audio(),
+            "duration_secs": meta.duration.map(|d| d.as_secs_f64()),
+            "track_count": meta.tracks.len(),
+        }));
+    });
 }
 
 // ── Test 8: Video filter chain (grayscale + blur) ────────────────────────────
@@ -333,15 +354,17 @@ async fn golden_filter_chain_video() {
     let meta = probe.probe(&result).await.expect("probe filtered video");
     let res = meta.resolution().expect("should have resolution");
 
-    insta::assert_json_snapshot!("filter_chain_grayscale_blur", {
-        ".duration_secs" => insta::rounded_redaction(1),
-    }, serde_json::json!({
-        "has_video": meta.has_video(),
-        "has_audio": meta.has_audio(),
-        "width": res.width,
-        "height": res.height,
-        "duration_secs": meta.duration.map(|d| d.as_secs_f64()),
-    }));
+    insta::with_settings!({sort_maps => true}, {
+        insta::assert_json_snapshot!("filter_chain_grayscale_blur", {
+            ".duration_secs" => insta::rounded_redaction(1),
+        }, serde_json::json!({
+            "has_video": meta.has_video(),
+            "has_audio": meta.has_audio(),
+            "width": res.width,
+            "height": res.height,
+            "duration_secs": meta.duration.map(|d| d.as_secs_f64()),
+        }));
+    });
 }
 
 // ── Test 9: BurnSubtitles ────────────────────────────────────────────────────
@@ -377,15 +400,17 @@ async fn golden_burn_subtitles() {
     let meta = probe.probe(&result).await.expect("probe subtitled video");
     let res = meta.resolution().expect("should have resolution");
 
-    insta::assert_json_snapshot!("burn_subtitles", {
-        ".duration_secs" => insta::rounded_redaction(1),
-    }, serde_json::json!({
-        "has_video": meta.has_video(),
-        "has_audio": meta.has_audio(),
-        "width": res.width,
-        "height": res.height,
-        "duration_secs": meta.duration.map(|d| d.as_secs_f64()),
-    }));
+    insta::with_settings!({sort_maps => true}, {
+        insta::assert_json_snapshot!("burn_subtitles", {
+            ".duration_secs" => insta::rounded_redaction(1),
+        }, serde_json::json!({
+            "has_video": meta.has_video(),
+            "has_audio": meta.has_audio(),
+            "width": res.width,
+            "height": res.height,
+            "duration_secs": meta.duration.map(|d| d.as_secs_f64()),
+        }));
+    });
 }
 
 // ── Test 10: Public preview snapshot (streaming config) ──────────────────────

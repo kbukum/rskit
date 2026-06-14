@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Sort JSON map keys in `rskit-media-image` and `rskit-media-ffmpeg` golden snapshot tests so they no longer depend on `serde_json`'s `preserve_order` feature, which workspace feature unification toggles depending on build scope and which made the snapshots fail intermittently.
 - Install the rustls crypto provider before constructing Google Cloud Storage clients so GCS adapter tests and coverage runs do not panic under mixed TLS feature sets.
 
 ## [v0.1.0-alpha.1] - 2026-06-08

@@ -763,7 +763,10 @@ mod tests {
         assert_eq!(stored.key, "file.txt");
         assert_eq!(stored.size, 7);
         assert_eq!(stored.content_type, "text/plain");
-        assert_eq!(stored.metadata.get("owner").map(String::as_str), Some("media"));
+        assert_eq!(
+            stored.metadata.get("owner").map(String::as_str),
+            Some("media")
+        );
 
         let request = http.actual_requests().next().expect("a request was sent");
         assert_eq!(request.method(), "PUT");
@@ -776,7 +779,10 @@ mod tests {
 
     #[tokio::test]
     async fn upload_maps_remote_failure_to_internal_error() {
-        let (store, _http) = wire_store(wire_config(None), vec![error_response(500, "InternalError")]);
+        let (store, _http) = wire_store(
+            wire_config(None),
+            vec![error_response(500, "InternalError")],
+        );
 
         let err = store
             .upload(
@@ -828,7 +834,8 @@ mod tests {
 
     #[tokio::test]
     async fn delete_maps_remote_failure_to_internal_error() {
-        let (store, _http) = wire_store(wire_config(None), vec![error_response(403, "AccessDenied")]);
+        let (store, _http) =
+            wire_store(wire_config(None), vec![error_response(403, "AccessDenied")]);
 
         let err = store.delete("file.txt").await.unwrap_err();
 
@@ -864,7 +871,10 @@ mod tests {
         assert_eq!(stored.key, "meta.json");
         assert_eq!(stored.size, 9);
         assert_eq!(stored.content_type, "application/json");
-        assert_eq!(stored.metadata.get("trace").map(String::as_str), Some("abc"));
+        assert_eq!(
+            stored.metadata.get("trace").map(String::as_str),
+            Some("abc")
+        );
     }
 
     #[tokio::test]
@@ -888,8 +898,10 @@ mod tests {
             <Contents><Key>uploads/logs/b.txt</Key><Size>34</Size>\
             <LastModified>2024-01-01T00:00:00.000Z</LastModified></Contents>\
             </ListBucketResult>";
-        let (store, http) =
-            wire_store(wire_config(Some("uploads")), vec![ok_response(200, SdkBody::from(body))]);
+        let (store, http) = wire_store(
+            wire_config(Some("uploads")),
+            vec![ok_response(200, SdkBody::from(body))],
+        );
 
         let items = store.list("logs", Some(2)).await.unwrap();
 
@@ -905,7 +917,10 @@ mod tests {
 
     #[tokio::test]
     async fn list_maps_remote_failure_to_internal_error() {
-        let (store, _http) = wire_store(wire_config(None), vec![error_response(500, "InternalError")]);
+        let (store, _http) = wire_store(
+            wire_config(None),
+            vec![error_response(500, "InternalError")],
+        );
 
         let err = store.list("logs", None).await.unwrap_err();
 
@@ -951,8 +966,7 @@ mod tests {
 
     #[tokio::test]
     async fn copy_maps_remote_failure_to_internal_error() {
-        let (store, _http) =
-            wire_store(wire_config(None), vec![error_response(404, "NoSuchKey")]);
+        let (store, _http) = wire_store(wire_config(None), vec![error_response(404, "NoSuchKey")]);
 
         let err = store.copy("a.txt", "b.txt").await.unwrap_err();
 
@@ -976,7 +990,11 @@ mod tests {
         );
         let (store, http) = wire_store(
             wire_config(None),
-            vec![ok_response(200, SdkBody::from(copy_body)), head, ok_response(204, "")],
+            vec![
+                ok_response(200, SdkBody::from(copy_body)),
+                head,
+                ok_response(204, ""),
+            ],
         );
 
         let stored = store.rename("a.txt", "b.txt").await.unwrap();
