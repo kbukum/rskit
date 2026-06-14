@@ -358,14 +358,16 @@ mod tests {
         assert_eq!(data, b"reader");
 
         let bytes_source = FileSource::from_bytes(Bytes::from_static(b"stream-data"));
-        let stream = bytes_source.stream().await.unwrap();
-        futures::pin_mut!(stream);
-        let mut streamed = Vec::new();
-        while let Some(chunk) = stream.next().await {
-            streamed.extend_from_slice(&chunk.unwrap());
-        }
+        let streamed = {
+            let stream = bytes_source.stream().await.unwrap();
+            futures::pin_mut!(stream);
+            let mut streamed = Vec::new();
+            while let Some(chunk) = stream.next().await {
+                streamed.extend_from_slice(&chunk.unwrap());
+            }
+            streamed
+        };
         assert_eq!(streamed, b"stream-data");
-        drop(stream);
 
         let resolved = bytes_source.to_local_path().await.unwrap();
         assert_eq!(

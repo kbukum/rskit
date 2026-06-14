@@ -501,7 +501,7 @@ mod tests {
         assert!(config.validate().is_err());
 
         config = Config::default();
-        config.servers = vec!["".to_string()];
+        config.servers = vec![String::new()];
         assert!(config.validate().is_err());
 
         config = Config::default();

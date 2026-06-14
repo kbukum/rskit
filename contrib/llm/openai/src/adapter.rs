@@ -166,7 +166,7 @@ mod tests {
             embedding_dimensions: Some(1536),
         };
         let mut registry = rskit_llm::Registry::new();
-        register(&mut registry, cfg.clone()).unwrap();
+        register(&mut registry, cfg).unwrap();
         let provider = registry.build(PROVIDER_ID).unwrap();
         assert_eq!(provider.name(), PROVIDER_ID);
 
