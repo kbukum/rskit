@@ -3,13 +3,10 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import re
 import shutil
 import sys
-import urllib.error
-import urllib.request
 from collections import defaultdict
 from pathlib import Path
 from types import SimpleNamespace
@@ -18,6 +15,13 @@ from ..cargo import is_relative_to, metadata
 from ..errors import ToolError
 from ..paths import CORE_AND_CONTRIB, ROOT, WORKSPACES
 from ..process import command_exists, notice, run
+from ..publish import (
+    CommandResult,
+    CratePlan,
+    CratesIoRegistry,
+    RateAwarePublisher,
+    crate_version_published,
+)
 from .checks import run_l7_edges, run_public_api, run_topology, run_workspace_deps_sync
 from .domains import DOMAIN_ORDER, DOMAIN_TITLES, load_domains
 
@@ -387,12 +391,10 @@ def run_publish(args: argparse.Namespace) -> int:
 
     mode = args.mode
     dirty_args = [os.environ["CARGO_PACKAGE_DIRTY_FLAG"]] if os.environ.get("CARGO_PACKAGE_DIRTY_FLAG") else []
-    if mode == "--list":
-        cargo_args: list[str] = []
-    elif mode == "--dry-run":
-        cargo_args = ["publish", "--dry-run", "--locked", *dirty_args]
-    else:
-        cargo_args = ["publish", "--locked"]
+    if mode == "--publish":
+        return run_publish_release(dirty_args)
+
+    cargo_args = ["publish", "--dry-run", "--locked", *dirty_args] if mode == "--dry-run" else []
 
     print("==> Resolving publish order...")
     skipped = 0
@@ -427,6 +429,35 @@ def run_publish(args: argparse.Namespace) -> int:
             f"warning: {skipped} crate(s) were package-listed but not cargo publish --dry-run validated because their same-version internal dependencies are not on crates.io yet."
         )
     print(f"✓ Cargo publish {mode.removeprefix('--')} completed")
+    return 0
+
+
+def run_publish_release(dirty_args: list[str]) -> int:
+    """Publish all crates to crates.io idempotently, honoring the rate budget."""
+
+    print("==> Resolving publish order...")
+    plans = [
+        CratePlan(name=package["name"], version=package["version"], manifest=package["manifest"])
+        for package in publish_order()
+    ]
+
+    def publish_crate(plan: CratePlan) -> CommandResult:
+        completed = run(
+            ["cargo", "publish", "--locked", *dirty_args, "--manifest-path", plan.manifest],
+            capture=True,
+            check=False,
+        )
+        output = (completed.stdout or "") + (completed.stderr or "")
+        if output:
+            print(output, end="" if output.endswith("\n") else "\n")
+        return CommandResult(returncode=completed.returncode, output=output)
+
+    publisher = RateAwarePublisher(registry=CratesIoRegistry(), publish_crate=publish_crate)
+    outcome = publisher.publish(plans)
+    print(
+        f"✓ Cargo publish completed: {len(outcome.published)} published, "
+        f"{len(outcome.skipped)} already on crates.io"
+    )
     return 0
 
 
@@ -512,19 +543,3 @@ def publish_order() -> list[dict[str, str]]:
         result.append({**package, "internal_deps": internal_deps})
     return result
 
-
-def crate_version_published(crate: str, version: str) -> bool:
-    """Return true when crates.io has a crate version, false for 404."""
-
-    url = f"https://crates.io/api/v1/crates/{crate}/{version}"
-    request = urllib.request.Request(url, headers={"User-Agent": "rskit-release-rehearsal"})
-    try:
-        with urllib.request.urlopen(request, timeout=10) as response:
-            data = json.load(response)
-    except urllib.error.HTTPError as error:
-        if error.code == 404:
-            return False
-        raise ToolError(f"crates.io lookup for {crate} {version} failed: HTTP {error.code}") from error
-    except Exception as error:
-        raise ToolError(f"crates.io lookup for {crate} {version} failed: {error}") from error
-    return data.get("version", {}).get("num") == version

@@ -3,31 +3,42 @@ name: Release
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish (e.g. v0.1.0-alpha.1). Must already exist and be reachable from main."
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.release.tag_name }}
+  group: ${{ github.workflow }}-${{ github.event.release.tag_name || inputs.tag }}
   cancel-in-progress: false
 
 jobs:
   publish:
     name: Publish release
     runs-on: ubuntu-latest
+    # GitHub-hosted runners hard-cap at 6h. The first release waits out the
+    # crates.io new-crate rate budget (~11h for ~69 new crates), so the job may
+    # exit here mid-publish; the rate-aware publisher is idempotent, so a
+    # workflow_dispatch re-trigger resumes from where it left off.
+    timeout-minutes: 350
     permissions:
       contents: write
       id-token: write
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
           fetch-depth: 0
       - name: Check Python tooling runtime
         run: python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else "Python 3.11+ is required")'
       - name: Validate release target
-        env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
           case "$RELEASE_TAG" in
@@ -59,7 +70,7 @@ jobs:
       - name: Install mold linker
         run: sudo apt-get install -y mold
       - name: Install cosign
-        run: go install github.com/sigstore/cosign/v2/cmd/cosign@v2.6.1
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6  # v4.1.2
       - name: Release readiness
         run: make release-readiness
       - name: Coverage thresholds
@@ -97,11 +108,10 @@ jobs:
         if: steps.crates-token.outputs.present == 'true'
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: ./scripts/rskit_tool.py release publish-dry-run --publish
+        run: make release-publish
       - name: Upload generated assets to GitHub release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
           gh release upload "${RELEASE_TAG}" target/sbom/* --clobber

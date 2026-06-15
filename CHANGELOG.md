@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Tooling
 
+- Make crates.io publishing idempotent and rate-aware: skip any `name@version` already on crates.io so an interrupted release resumes cleanly, and wait out the per-account new-crate and update rate budgets (with a `Retry-After`/refill fallback on `429`) instead of failing mid-release.
+- Replace the from-source `go install` of cosign in the release workflow with the SHA-pinned `sigstore/cosign-installer` action.
+- Allow the release workflow to be re-triggered for a given tag via `workflow_dispatch`, and bound the publish job with an explicit timeout, so a first-release publish that exceeds the hosted-runner limit while waiting out the crates.io rate budget can be resumed idempotently.
 - Refactor CI and local validation around shared package-selection helpers, reduce PR test duplication by separating pinned behavioral tests from Ubuntu-only MSRV compile checks, and run feature-gated tests with explicit default/all-feature coverage.
 - Rework coverage collection to run once per selected workspace group, preserve cached instrumented builds with profile-only cleanup, exclude the facade package from default coverage, honor explicit threshold overrides, and derive per-package summaries from workspace reports.
 - Run push/full CI coverage with full cleanup so cached instrumented build artifacts cannot produce stale per-package line counts on `main`.
