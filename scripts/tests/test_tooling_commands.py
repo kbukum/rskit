@@ -15,6 +15,7 @@ from rskit_tool.commands.domains import DOMAIN_ORDER, affected_domains, load_dom
 from rskit_tool.commands.release import (
     _domain_reduced_edges,
     build_domain_dot,
+    resolve_publish_order,
     validate_target_subdir,
 )
 from rskit_tool.errors import ToolError
@@ -149,6 +150,80 @@ class ToolingCommandTests(unittest.TestCase):
                     validate_target_subdir(invalid_target)
 
         self.assertEqual(validate_target_subdir("target/release/sbom").name, "sbom")
+
+    def test_publish_order_treats_dev_dependencies_as_ordering_constraints(self) -> None:
+        # cargo publish must resolve a versioned dev-dependency on crates.io, so a
+        # crate that only dev-depends on an internal crate (e.g. rskit-testutil)
+        # must still be published after it. Regression for the first-release
+        # failure where rskit-process was ordered before rskit-testutil.
+        packages = {
+            id_: {"name": id_, "manifest": f"{id_}/Cargo.toml", "version": "0.1.0"}
+            for id_ in ("testutil", "consumer", "normal-dep")
+        }
+        documents = [
+            {
+                "packages": [
+                    {"id": "testutil", "name": "testutil", "dependencies": []},
+                    {
+                        "id": "consumer",
+                        "name": "consumer",
+                        "dependencies": [{"name": "testutil", "kind": "dev"}],
+                    },
+                    {
+                        "id": "normal-dep",
+                        "name": "normal-dep",
+                        "dependencies": [{"name": "testutil", "kind": None}],
+                    },
+                ],
+                "resolve": {"nodes": []},
+            }
+        ]
+
+        order = [package["name"] for package in resolve_publish_order(packages, documents)]
+
+        self.assertLess(order.index("testutil"), order.index("consumer"))
+        self.assertLess(order.index("testutil"), order.index("normal-dep"))
+
+    def test_publish_order_emits_facade_last(self) -> None:
+        packages = {
+            id_: {"name": id_, "manifest": f"{id_}/Cargo.toml", "version": "0.1.0"}
+            for id_ in ("rskit-suite", "rskit-errors")
+        }
+        documents = [
+            {
+                "packages": [
+                    {"id": "rskit-errors", "name": "rskit-errors", "dependencies": []},
+                    {
+                        "id": "rskit-suite",
+                        "name": "rskit-suite",
+                        "dependencies": [{"name": "rskit-errors", "kind": None}],
+                    },
+                ],
+                "resolve": {"nodes": []},
+            }
+        ]
+
+        order = [package["name"] for package in resolve_publish_order(packages, documents)]
+
+        self.assertEqual(order[-1], "rskit-suite")
+
+    def test_publish_order_raises_on_dependency_cycle(self) -> None:
+        packages = {
+            id_: {"name": id_, "manifest": f"{id_}/Cargo.toml", "version": "0.1.0"}
+            for id_ in ("a", "b")
+        }
+        documents = [
+            {
+                "packages": [
+                    {"id": "a", "name": "a", "dependencies": [{"name": "b", "kind": None}]},
+                    {"id": "b", "name": "b", "dependencies": [{"name": "a", "kind": None}]},
+                ],
+                "resolve": {"nodes": []},
+            }
+        ]
+
+        with self.assertRaises(ToolError):
+            resolve_publish_order(packages, documents)
 
     def test_domain_reduced_edges_drops_transitively_reachable_edges(self) -> None:
         # a depends on b, c and d directly, but c and d are reachable through b,

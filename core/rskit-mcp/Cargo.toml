@@ -11,7 +11,7 @@ homepage.workspace     = true
 documentation = "https://docs.rs/rskit-mcp"
 readme = "README.md"
 categories = ["api-bindings"]
-keywords   = ["mcp", "tool", "agent", "model-context-protocol"]
+keywords   = ["mcp", "tool", "agent", "context-protocol"]
 
 [package.metadata.docs.rs]
 all-features = true
