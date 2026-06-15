@@ -73,6 +73,19 @@ class TokenBucketTests(unittest.TestCase):
         clock.value += 200.0
         self.assertAlmostEqual(bucket.time_until_available(), 400.0)
 
+    def test_backwards_clock_jump_does_not_stall_refill(self) -> None:
+        # A backwards wall-clock jump (NTP/manual set) must not leave the refill
+        # baseline in the future, which would freeze refills until the clock
+        # caught back up. The bucket resyncs and keeps refilling forward.
+        clock = FakeClock()
+        bucket = TokenBucket(1, 600.0, now=clock.now)
+        clock.value = 1000.0
+        bucket.consume()
+        clock.value -= 500.0  # clock jumps backwards
+        bucket.time_until_available()  # resync baseline, no negative credit
+        clock.value += 600.0  # then a full refill window elapses forward
+        self.assertEqual(bucket.time_until_available(), 0.0)
+
 
 class ParseTests(unittest.TestCase):
     def test_is_rate_limited_detects_429(self) -> None:
@@ -99,7 +112,9 @@ class ParseTests(unittest.TestCase):
 
 
 class RateAwarePublisherTests(unittest.TestCase):
-    def _publisher(self, registry: FakeRegistry, publish_crate, clock: FakeClock) -> RateAwarePublisher:
+    def _publisher(
+        self, registry: FakeRegistry, publish_crate, clock: FakeClock, *, poll_interval: float = 10.0
+    ) -> RateAwarePublisher:
         return RateAwarePublisher(
             registry=registry,
             publish_crate=publish_crate,
@@ -107,6 +122,7 @@ class RateAwarePublisherTests(unittest.TestCase):
             sleep=clock.sleep,
             wall_now=clock.now,
             log=lambda _message: None,
+            poll_interval=poll_interval,
         )
 
     def test_skips_already_published_versions(self) -> None:
@@ -148,8 +164,9 @@ class RateAwarePublisherTests(unittest.TestCase):
         crates = [_plan(f"rskit-crate-{index}") for index in range(NEW_CRATE_BURST + 1)]
         self._publisher(registry, publish_crate, clock).publish(crates)
 
-        # First NEW_CRATE_BURST publishes are free; the next waits one refill window.
-        self.assertEqual(clock.sleeps, [NEW_CRATE_REFILL_SECONDS])
+        # First NEW_CRATE_BURST publishes are free; the next waits one refill
+        # window in total (sliced into poll-interval chunks).
+        self.assertAlmostEqual(sum(clock.sleeps), NEW_CRATE_REFILL_SECONDS)
 
     def test_existing_crate_uses_update_budget(self) -> None:
         clock = FakeClock()
@@ -180,7 +197,23 @@ class RateAwarePublisherTests(unittest.TestCase):
         self.assertEqual(calls["count"], 2)
         self.assertEqual(outcome.published, ["rskit-errors"])
         # Fell back to the update refill interval since no Retry-After date was given.
-        self.assertEqual(clock.sleeps, [UPDATE_REFILL_SECONDS])
+        self.assertAlmostEqual(sum(clock.sleeps), UPDATE_REFILL_SECONDS)
+
+    def test_long_wait_is_sliced_into_poll_interval_chunks(self) -> None:
+        # A long rate-limit wait must be sliced so progress stays visible and a
+        # clock jump can be re-evaluated, never one opaque multi-minute sleep.
+        clock = FakeClock()
+        registry = FakeRegistry()  # every crate is new
+
+        def publish_crate(plan: CratePlan) -> CommandResult:
+            return CommandResult(0, "ok")
+
+        crates = [_plan(f"rskit-crate-{index}") for index in range(NEW_CRATE_BURST + 1)]
+        self._publisher(registry, publish_crate, clock, poll_interval=10.0).publish(crates)
+
+        self.assertTrue(all(slice_ <= 10.0 for slice_ in clock.sleeps), clock.sleeps)
+        self.assertGreater(len(clock.sleeps), 1)
+        self.assertAlmostEqual(sum(clock.sleeps), NEW_CRATE_REFILL_SECONDS)
 
     def test_real_publish_error_raises(self) -> None:
         clock = FakeClock()
@@ -191,6 +224,17 @@ class RateAwarePublisherTests(unittest.TestCase):
 
         with self.assertRaises(ToolError):
             self._publisher(registry, publish_crate, clock).publish([_plan("rskit-errors")])
+
+    def test_non_positive_poll_interval_is_rejected(self) -> None:
+        clock = FakeClock()
+        registry = FakeRegistry()
+
+        def publish_crate(plan: CratePlan) -> CommandResult:
+            return CommandResult(0, "ok")
+
+        for invalid in (0.0, -1.0, float("nan"), float("inf")):
+            with self.assertRaises(ValueError):
+                self._publisher(registry, publish_crate, clock, poll_interval=invalid)
 
     def test_rate_limit_retries_consume_tokens(self) -> None:
         # Each post-429 retry must spend a token, otherwise the local budget runs
@@ -216,11 +260,9 @@ class RateAwarePublisherTests(unittest.TestCase):
         self._publisher(registry, publish_crate, clock).publish([_plan("rskit-a"), _plan("rskit-b")])
 
         # rskit-a took NEW_CRATE_BURST attempts, draining the burst, so rskit-b
-        # must wait roughly a full refill window for its token.
-        self.assertTrue(
-            any(sleep >= NEW_CRATE_REFILL_SECONDS * 0.9 for sleep in clock.sleeps),
-            clock.sleeps,
-        )
+        # must wait roughly a full refill window for its token. (Total wait, since
+        # long waits are sliced into poll-interval chunks.)
+        self.assertGreaterEqual(sum(clock.sleeps), NEW_CRATE_REFILL_SECONDS * 0.9)
 
 
 if __name__ == "__main__":
