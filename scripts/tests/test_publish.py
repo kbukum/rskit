@@ -38,8 +38,8 @@ class FakeRegistry:
     """In-memory crates.io stand-in for the publisher."""
 
     def __init__(self, *, published: set[tuple[str, str]] | None = None, names: set[str] | None = None) -> None:
-        self.published = published or set()
-        self.names = names or set()
+        self.published = set() if published is None else published
+        self.names = set() if names is None else names
 
     def version_published(self, name: str, version: str) -> bool:
         return (name, version) in self.published
@@ -154,7 +154,6 @@ class RateAwarePublisherTests(unittest.TestCase):
     def test_existing_crate_uses_update_budget(self) -> None:
         clock = FakeClock()
         registry = FakeRegistry(names={"rskit-errors"})  # name exists -> update budget
-        buckets_waited: list[float] = []
 
         def publish_crate(plan: CratePlan) -> CommandResult:
             return CommandResult(0, "ok")
@@ -164,7 +163,6 @@ class RateAwarePublisherTests(unittest.TestCase):
             [_plan("rskit-errors", "0.2.0"), _plan("rskit-errors", "0.3.0")]
         )
         self.assertEqual(clock.sleeps, [])
-        self.assertEqual(buckets_waited, [])
 
     def test_retries_after_rate_limit_then_succeeds(self) -> None:
         clock = FakeClock()
