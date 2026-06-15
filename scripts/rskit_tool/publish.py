@@ -195,6 +195,7 @@ class RateAwarePublisher:
         wall_now: Callable[[], float] = time.time,
         log: Callable[[str], None] = print,
         max_rate_retries: int = 8,
+        poll_interval: float = 10.0,
     ) -> None:
         self._registry = registry
         self._publish_crate = publish_crate
@@ -202,6 +203,7 @@ class RateAwarePublisher:
         self._wall_now = wall_now
         self._log = log
         self._max_rate_retries = max_rate_retries
+        self._poll_interval = poll_interval
         self._new_bucket = TokenBucket(NEW_CRATE_BURST, NEW_CRATE_REFILL_SECONDS, now=now)
         self._update_bucket = TokenBucket(UPDATE_BURST, UPDATE_REFILL_SECONDS, now=now)
 
@@ -220,17 +222,31 @@ class RateAwarePublisher:
             outcome.published.append(plan.name)
         return outcome
 
+    def _wait(self, seconds: float, *, reason: str, plan: CratePlan) -> None:
+        """Sleep in short slices with a countdown so long waits stay visible.
+
+        Re-deriving the remaining time each slice keeps the wait honest if the
+        wall/monotonic clock jumps (e.g. the machine suspends mid-wait), instead
+        of blindly over-sleeping one large interval.
+        """
+
+        deadline = self._wall_now() + seconds
+        while True:
+            remaining = deadline - self._wall_now()
+            if remaining <= 0:
+                return
+            self._log(
+                f"==> {plan.name} {plan.version}: {reason}; waiting {remaining:.0f}s for a token"
+            )
+            self._sleep(min(self._poll_interval, remaining))
+
     def _acquire_token(self, plan: CratePlan, bucket: TokenBucket, is_new: bool) -> None:
         """Wait for and consume one token, so each publish attempt costs a token."""
 
         wait = bucket.time_until_available()
         if wait > 0:
             kind = "new-crate" if is_new else "update"
-            self._log(
-                f"==> {plan.name} {plan.version}: {kind} rate budget exhausted; "
-                f"waiting {wait:.0f}s for a token"
-            )
-            self._sleep(wait)
+            self._wait(wait, reason=f"{kind} rate budget exhausted", plan=plan)
         bucket.consume()
 
     def _publish_with_retry(self, plan: CratePlan, bucket: TokenBucket, is_new: bool) -> None:
@@ -248,11 +264,11 @@ class RateAwarePublisher:
                 wait = parse_retry_after(result.output, wall_now=self._wall_now())
                 if wait is None:
                     wait = bucket.refill_seconds
-                self._log(
-                    f"==> {plan.name} {plan.version}: crates.io rate limit hit; "
-                    f"waiting {wait:.0f}s then retrying (attempt {attempts}/{self._max_rate_retries})"
+                self._wait(
+                    wait,
+                    reason=f"crates.io rate limit hit (retry {attempts}/{self._max_rate_retries})",
+                    plan=plan,
                 )
-                self._sleep(wait)
                 continue
             raise ToolError(
                 f"cargo publish failed for {plan.name} {plan.version} "

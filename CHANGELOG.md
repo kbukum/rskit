@@ -6,31 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-### Tooling
-
-- Make crates.io publishing idempotent and rate-aware: skip any `name@version` already on crates.io so an interrupted release resumes cleanly, and wait out the per-account new-crate and update rate budgets (with a `Retry-After`/refill fallback on `429`) instead of failing mid-release.
-- Replace the from-source `go install` of cosign in the release workflow with the SHA-pinned `sigstore/cosign-installer` action.
-- Allow the release workflow to be re-triggered for a given tag via `workflow_dispatch`, and bound the publish job with an explicit timeout, so a first-release publish that exceeds the hosted-runner limit while waiting out the crates.io rate budget can be resumed idempotently.
-- Refactor CI and local validation around shared package-selection helpers, reduce PR test duplication by separating pinned behavioral tests from Ubuntu-only MSRV compile checks, and run feature-gated tests with explicit default/all-feature coverage.
-- Rework coverage collection to run once per selected workspace group, preserve cached instrumented builds with profile-only cleanup, exclude the facade package from default coverage, honor explicit threshold overrides, and derive per-package summaries from workspace reports.
-- Run push/full CI coverage with full cleanup so cached instrumented build artifacts cannot produce stale per-package line counts on `main`.
-- Add focused authorization, configuration, lifecycle, DI, DAG, logging, messaging, resilience, Ollama, image, Redis, S3, Kafka, NATS, RabbitMQ, FFmpeg, and GCS adapter tests to raise package coverage with deterministic behavioral checks.
-- Cover every `rskit-storage-s3` `FileStore` operation with wire-level request-construction and remote-failure tests using an in-process mock HTTP client, with no network or credentials.
-- Add behavioral failure-path tests for the AI modules: MCP privileged tool-call denial, oversized-result, authorizer-error, and tool-failure auditing; agent limit precedence, budget mapping, and lifecycle; skill manifest path-traversal, asset-directory, and loader-config validation; and tool input fail-closed validation.
-- Run doctests in CI and scope clippy to changed crates on pull requests for faster, more complete validation, while keeping full-scope checks on push and merge queues.
-- Configure Dependabot to update the split `core/`, `contrib/`, and `examples/` Cargo workspaces, and extend CodeQL to scan Rust (build-mode none) alongside the existing GitHub Actions analysis.
-- Redesign dependency-graph generation into a truthful domain-layer diagram plus an adapter-to-core graph, add a `make depgraphs` regeneration target, and cover the domain-graph reduction/rendering logic with focused tooling tests.
-
-### Documentation
-
-- Embed the regenerated domain-layer and contrib adapter dependency graphs in `docs/DESIGN.md`, document how to regenerate them, and remove the stale, out-of-sync graph copies.
-
-### Fixed
-
-- Sort JSON map keys in `rskit-media-image` and `rskit-media-ffmpeg` golden snapshot tests so they no longer depend on `serde_json`'s `preserve_order` feature, which workspace feature unification toggles depending on build scope and which made the snapshots fail intermittently.
-- Install the rustls crypto provider before constructing Google Cloud Storage clients so GCS adapter tests and coverage runs do not panic under mixed TLS feature sets.
-
-## [v0.1.0-alpha.1] - 2026-06-08
+## [v0.1.0-alpha.1] - 2026-06-14
 
 Initial alpha release of rskit, a Rust infrastructure toolkit for building services and reusable application foundations. This release establishes the first public baseline for the core, contrib, and example workspaces.
 
