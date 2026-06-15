@@ -232,7 +232,7 @@ class RateAwarePublisherTests(unittest.TestCase):
         def publish_crate(plan: CratePlan) -> CommandResult:
             return CommandResult(0, "ok")
 
-        for invalid in (0.0, -1.0):
+        for invalid in (0.0, -1.0, float("nan"), float("inf")):
             with self.assertRaises(ValueError):
                 self._publisher(registry, publish_crate, clock, poll_interval=invalid)
 

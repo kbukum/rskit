@@ -19,6 +19,7 @@ update (existing)   30     1 per minute
 from __future__ import annotations
 
 import json
+import math
 import re
 import time
 import urllib.error
@@ -206,8 +207,10 @@ class RateAwarePublisher:
         max_rate_retries: int = 8,
         poll_interval: float = 10.0,
     ) -> None:
-        if poll_interval <= 0:
-            raise ValueError(f"poll_interval must be positive, got {poll_interval!r}")
+        if not math.isfinite(poll_interval) or poll_interval <= 0:
+            raise ValueError(
+                f"poll_interval must be a positive, finite number of seconds, got {poll_interval!r}"
+            )
         self._registry = registry
         self._publish_crate = publish_crate
         self._sleep = sleep
