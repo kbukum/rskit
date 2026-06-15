@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Release publisher waits out crates.io rate limits in short, deadline-driven slices so long pauses show a live countdown and self-correct across host suspend or clock changes.
 
+### Documentation
+
+- Add `docs/VERSIONING-ROADMAP.md` describing how rskit's versioning model is expected to evolve (lock-step now, `release-plz` adoption, then independent per-crate versioning) and link it from the docs hub and versioning guide.
+
 ## [v0.1.0-alpha.1] - 2026-06-14
 
 Initial alpha release of rskit, a Rust infrastructure toolkit for building services and reusable application foundations. This release establishes the first public baseline for the core, contrib, and example workspaces.

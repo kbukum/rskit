@@ -37,6 +37,7 @@ This is the documentation hub for developers using or contributing to rskit. The
 | Topic | Canonical doc |
 |---|---|
 | Versioning and compatibility policy | [Versioning guide](VERSIONING.md) and [SemVer policy](policy/SEMVER.md) |
+| How the versioning model will evolve | [Versioning roadmap](VERSIONING-ROADMAP.md) |
 | Mechanical release runbook | [Releasing guide](RELEASING.md) |
 | Deprecation policy | [Deprecation policy](policy/DEPRECATION.md) |
 | Vulnerability reporting | [Security policy](../SECURITY.md) |

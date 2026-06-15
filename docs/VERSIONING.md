@@ -1,6 +1,6 @@
 # Versioning Guide
 
-This document explains the versioning and compatibility policy for rskit. For the mechanical release runbook, use [`RELEASING.md`](RELEASING.md).
+This document explains the versioning and compatibility policy for rskit. For the mechanical release runbook, use [`RELEASING.md`](RELEASING.md). For how this model is expected to evolve (lock-step → independent, and tooling), see [`VERSIONING-ROADMAP.md`](VERSIONING-ROADMAP.md).
 
 ## Workspace model
 
