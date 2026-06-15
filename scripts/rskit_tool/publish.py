@@ -96,6 +96,12 @@ class TokenBucket:
         if elapsed > 0:
             self._tokens = min(self._capacity, self._tokens + elapsed / self._refill_seconds)
             self._last = current
+        elif elapsed < 0:
+            # Wall clock moved backwards (NTP correction / manual set). Resync the
+            # baseline to the new time so a backward jump doesn't stall refills
+            # until the clock catches back up; we simply credit no tokens for the
+            # negative interval.
+            self._last = current
 
     def time_until_available(self) -> float:
         """Return seconds to wait before a token is available (0 when ready)."""
@@ -230,9 +236,9 @@ class RateAwarePublisher:
     def _wait(self, seconds: float, *, reason: str, plan: CratePlan) -> None:
         """Sleep in short slices with a countdown so long waits stay visible.
 
-        Re-deriving the remaining time each slice keeps the wait honest if the
-        wall/monotonic clock jumps (e.g. the machine suspends mid-wait), instead
-        of blindly over-sleeping one large interval.
+        Re-deriving the remaining time from a wall-clock deadline each slice keeps
+        the wait honest if the wall clock jumps (e.g. the machine suspends
+        mid-wait), instead of blindly over-sleeping one large interval.
         """
 
         deadline = self._wall_now() + seconds

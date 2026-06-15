@@ -73,6 +73,19 @@ class TokenBucketTests(unittest.TestCase):
         clock.value += 200.0
         self.assertAlmostEqual(bucket.time_until_available(), 400.0)
 
+    def test_backwards_clock_jump_does_not_stall_refill(self) -> None:
+        # A backwards wall-clock jump (NTP/manual set) must not leave the refill
+        # baseline in the future, which would freeze refills until the clock
+        # caught back up. The bucket resyncs and keeps refilling forward.
+        clock = FakeClock()
+        bucket = TokenBucket(1, 600.0, now=clock.now)
+        clock.value = 1000.0
+        bucket.consume()
+        clock.value -= 500.0  # clock jumps backwards
+        bucket.time_until_available()  # resync baseline, no negative credit
+        clock.value += 600.0  # then a full refill window elapses forward
+        self.assertEqual(bucket.time_until_available(), 0.0)
+
 
 class ParseTests(unittest.TestCase):
     def test_is_rate_limited_detects_429(self) -> None:
