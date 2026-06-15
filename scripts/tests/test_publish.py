@@ -79,6 +79,12 @@ class ParseTests(unittest.TestCase):
         self.assertTrue(is_rate_limited("the remote server responded with status 429 Too Many Requests"))
         self.assertFalse(is_rate_limited("error: failed to verify package tarball"))
 
+    def test_is_rate_limited_ignores_bare_429_number(self) -> None:
+        # A bare "429" in unrelated output (e.g. a line/ID) must not be treated
+        # as a rate-limit rejection; only the real phrasings should match.
+        self.assertFalse(is_rate_limited("error[E0429]: compile failure at line 429"))
+        self.assertTrue(is_rate_limited("You have published too many new crates"))
+
     def test_parse_retry_after_returns_seconds(self) -> None:
         # Tue, 01 Jan 2030 00:00:00 GMT is the target; wall clock 60s before it.
         target = "Tue, 01 Jan 2030 00:00:00 GMT"
@@ -187,6 +193,36 @@ class RateAwarePublisherTests(unittest.TestCase):
 
         with self.assertRaises(ToolError):
             self._publisher(registry, publish_crate, clock).publish([_plan("rskit-errors")])
+
+    def test_rate_limit_retries_consume_tokens(self) -> None:
+        # Each post-429 retry must spend a token, otherwise the local budget runs
+        # ahead of crates.io. Drive one new crate through the full new-crate burst
+        # via retries, then assert the next crate has to wait for a refill.
+        from email.utils import formatdate
+
+        base = 1_900_000_000.0
+        clock = FakeClock()
+        clock.value = base
+        registry = FakeRegistry()  # every crate is new
+        retry_date = formatdate(base + 5, usegmt=True)
+        attempts = {"count": 0}
+
+        def publish_crate(plan: CratePlan) -> CommandResult:
+            if plan.name != "rskit-a":
+                return CommandResult(0, "ok")
+            attempts["count"] += 1
+            if attempts["count"] <= NEW_CRATE_BURST - 1:
+                return CommandResult(1, f"published too many new crates; try again after {retry_date}")
+            return CommandResult(0, "ok")
+
+        self._publisher(registry, publish_crate, clock).publish([_plan("rskit-a"), _plan("rskit-b")])
+
+        # rskit-a took NEW_CRATE_BURST attempts, draining the burst, so rskit-b
+        # must wait roughly a full refill window for its token.
+        self.assertTrue(
+            any(sleep >= NEW_CRATE_REFILL_SECONDS * 0.9 for sleep in clock.sleeps),
+            clock.sleeps,
+        )
 
 
 if __name__ == "__main__":

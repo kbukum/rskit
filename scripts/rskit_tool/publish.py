@@ -37,8 +37,9 @@ UPDATE_REFILL_SECONDS = 60.0  # 1 token per minute
 
 # Cargo surfaces a crates.io rate-limit rejection in its error output; these
 # markers let the publisher react to a 429 even though it rate-limits proactively.
+# A bare "429" is intentionally excluded — it collides with unrelated numbers in
+# cargo output (line/IDs) and the phrasings below already cover real rejections.
 _RATE_LIMIT_MARKERS = (
-    "429",
     "too many requests",
     "rate limit",
     "published too many",
@@ -215,26 +216,29 @@ class RateAwarePublisher:
                 continue
             is_new = not self._registry.crate_exists(plan.name)
             bucket = self._new_bucket if is_new else self._update_bucket
-            self._await_token(plan, bucket, is_new)
-            bucket.consume()
-            self._publish_with_retry(plan, bucket)
+            self._publish_with_retry(plan, bucket, is_new)
             outcome.published.append(plan.name)
         return outcome
 
-    def _await_token(self, plan: CratePlan, bucket: TokenBucket, is_new: bool) -> None:
-        wait = bucket.time_until_available()
-        if wait <= 0:
-            return
-        kind = "new-crate" if is_new else "update"
-        self._log(
-            f"==> {plan.name} {plan.version}: {kind} rate budget exhausted; "
-            f"waiting {wait:.0f}s for a token"
-        )
-        self._sleep(wait)
+    def _acquire_token(self, plan: CratePlan, bucket: TokenBucket, is_new: bool) -> None:
+        """Wait for and consume one token, so each publish attempt costs a token."""
 
-    def _publish_with_retry(self, plan: CratePlan, bucket: TokenBucket) -> None:
+        wait = bucket.time_until_available()
+        if wait > 0:
+            kind = "new-crate" if is_new else "update"
+            self._log(
+                f"==> {plan.name} {plan.version}: {kind} rate budget exhausted; "
+                f"waiting {wait:.0f}s for a token"
+            )
+            self._sleep(wait)
+        bucket.consume()
+
+    def _publish_with_retry(self, plan: CratePlan, bucket: TokenBucket, is_new: bool) -> None:
         attempts = 0
         while True:
+            # Every attempt — including a post-429 retry — spends a token so the
+            # local model never runs ahead of the real crates.io budget.
+            self._acquire_token(plan, bucket, is_new)
             self._log(f"==> cargo publish --locked {plan.name} {plan.version}")
             result = self._publish_crate(plan)
             if result.returncode == 0:
