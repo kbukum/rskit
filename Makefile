@@ -1,7 +1,7 @@
 .PHONY: all setup build test test-nextest test-doc test-python test-affected coverage coverage-changed test-coverage test-coverage-html lint fmt fmt-check check check-fast check-facade-features \
        check-core check-patterns check-crosscutting check-composition check-transport check-auth check-data check-ai \
        check-media check-infra doc deny check-l7-edges check-workspace-deps-sync check-topology check-public-api release-readiness release-coverage \
-       publish-dry-run release-sbom depgraphs clean help ci ci-test ci-lint ci-fmt ensure-act
+       publish-dry-run release-publish release-sbom depgraphs clean help ci ci-test ci-lint ci-fmt ensure-act
 
 CORE_MANIFEST = core/Cargo.toml
 CONTRIB_MANIFEST = contrib/Cargo.toml
@@ -229,6 +229,11 @@ release-coverage:
 publish-dry-run:
 	@$(RSKIT_TOOL) release publish-dry-run --dry-run
 
+## Publish all crates to crates.io idempotently in dependency order (rate-aware, resumable)
+## Requires: CARGO_REGISTRY_TOKEN
+release-publish:
+	@$(RSKIT_TOOL) release publish-dry-run --publish
+
 ## Generate CycloneDX SBOMs under target/sbom
 ## Requires: cargo-cyclonedx
 release-sbom:
@@ -348,6 +353,7 @@ help:
 	@echo "  make release-readiness                    Run final release-readiness sweep"
 	@echo "  make release-coverage                     Run per-package release coverage thresholds"
 	@echo "  make publish-dry-run                      Dry-run publishing in dependency order"
+	@echo "  make release-publish                      Publish crates to crates.io (idempotent, rate-aware)"
 	@echo "  make release-sbom                         Generate CycloneDX SBOMs"
 	@echo "  make depgraphs                            Regenerate docs dependency graphs (docs/depgraphs)"
 	@echo "  make check-fast                           fmt + lint + build"
