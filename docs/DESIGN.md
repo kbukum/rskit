@@ -36,25 +36,17 @@ See [`adr/`](adr/) for full Architecture Decision Records, and [`adr/0001-layere
 
 ## Dependency graphs
 
-rskit is a split workspace family (`core/` and `contrib/`) with no unifying root
-manifest, so these graphs are generated at two complementary levels rather than as
-one cross-workspace dump.
+rskit is a split workspace family (`core/` and `contrib/`) with no unifying root manifest, so these graphs are generated at two complementary levels rather than as one cross-workspace dump.
 
 ### Domain layers
 
-The big-picture view: the ten domains from [`domains.toml`](../domains.toml) and the
-dependency direction between them, following the layered architecture in
-[`adr/0001-layered-crate-architecture.md`](adr/0001-layered-crate-architecture.md).
-Edges are transitively reduced, so each arrow is an essential layer boundary — a
-domain only points at the next layer it builds on, never at every ancestor.
+The big-picture view: the ten domains from [`domains.toml`](../domains.toml) and the dependency direction between them, following the layered architecture in [`adr/0001-layered-crate-architecture.md`](adr/0001-layered-crate-architecture.md). Edges are transitively reduced, so each arrow is an essential layer boundary — a domain only points at the next layer it builds on, never at every ancestor.
 
 ![rskit domain layer graph](depgraphs/graph-domains.svg)
 
 ### Contrib adapters
 
-The crate-level detail for the adapter layer: each contrib crate (cache, storage,
-messaging, vectorstore, inference, llm, media) and the specific core crates it
-builds on. Transitive third-party dependencies are excluded for readability.
+The crate-level detail for the adapter layer: each contrib crate (cache, storage, messaging, vectorstore, inference, llm, media) and the specific core crates it builds on. Transitive third-party dependencies are excluded for readability.
 
 ![Contrib adapter dependency graph](depgraphs/graph-contrib.svg)
 
@@ -64,8 +56,4 @@ builds on. Transitive third-party dependencies are excluded for readability.
 make depgraphs
 ```
 
-This regenerates `graph-domains.svg` and `graph-contrib.svg` in `docs/depgraphs/`.
-`make setup` installs `cargo-depgraph`, but Graphviz `dot` is only installed when
-system tools are enabled (`scripts/setup.sh --system`, or `INSTALL_SYSTEM_TOOLS=1`);
-otherwise install Graphviz manually. Regenerate whenever domains or crate
-dependencies change.
+This regenerates `graph-domains.svg` and `graph-contrib.svg` in `docs/depgraphs/`. `make setup` installs `cargo-depgraph`, but Graphviz `dot` is only installed when system tools are enabled (`scripts/setup.sh --system`, or `INSTALL_SYSTEM_TOOLS=1`); otherwise install Graphviz manually. Regenerate whenever domains or crate dependencies change.
