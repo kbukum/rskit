@@ -190,13 +190,18 @@ class RateAwarePublisher:
         *,
         registry: CratesIoRegistry,
         publish_crate: Callable[[CratePlan], CommandResult],
-        now: Callable[[], float] = time.monotonic,
+        # crates.io budgets refill in wall-clock time and keep refilling while the
+        # host is suspended, so the buckets share the same wall basis as ``_wait``
+        # and ``parse_retry_after`` instead of a monotonic clock that can pause.
+        now: Callable[[], float] = time.time,
         sleep: Callable[[float], None] = time.sleep,
         wall_now: Callable[[], float] = time.time,
         log: Callable[[str], None] = print,
         max_rate_retries: int = 8,
         poll_interval: float = 10.0,
     ) -> None:
+        if poll_interval <= 0:
+            raise ValueError(f"poll_interval must be positive, got {poll_interval!r}")
         self._registry = registry
         self._publish_crate = publish_crate
         self._sleep = sleep
@@ -235,9 +240,7 @@ class RateAwarePublisher:
             remaining = deadline - self._wall_now()
             if remaining <= 0:
                 return
-            self._log(
-                f"==> {plan.name} {plan.version}: {reason}; waiting {remaining:.0f}s for a token"
-            )
+            self._log(f"==> {plan.name} {plan.version}: {reason}; waiting {remaining:.0f}s")
             self._sleep(min(self._poll_interval, remaining))
 
     def _acquire_token(self, plan: CratePlan, bucket: TokenBucket, is_new: bool) -> None:

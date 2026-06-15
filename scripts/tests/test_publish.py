@@ -212,6 +212,17 @@ class RateAwarePublisherTests(unittest.TestCase):
         with self.assertRaises(ToolError):
             self._publisher(registry, publish_crate, clock).publish([_plan("rskit-errors")])
 
+    def test_non_positive_poll_interval_is_rejected(self) -> None:
+        clock = FakeClock()
+        registry = FakeRegistry()
+
+        def publish_crate(plan: CratePlan) -> CommandResult:
+            return CommandResult(0, "ok")
+
+        for invalid in (0.0, -1.0):
+            with self.assertRaises(ValueError):
+                self._publisher(registry, publish_crate, clock, poll_interval=invalid)
+
     def test_rate_limit_retries_consume_tokens(self) -> None:
         # Each post-429 retry must spend a token, otherwise the local budget runs
         # ahead of crates.io. Drive one new crate through the full new-crate burst
