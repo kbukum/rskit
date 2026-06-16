@@ -606,7 +606,7 @@ mod tests {
         let request = OidcAuthorizationRequest {
             url: "https://issuer.example/authorize".into(),
             state: "state-123".into(),
-            nonce: "nonce-123".into(),
+            nonce: random_nonce(),
             pkce: None,
         };
         let result = client
@@ -641,7 +641,7 @@ mod tests {
         let client = mock_client();
 
         let error = client
-            .validate_id_token("not-a-jwt", Some("nonce-123"))
+            .validate_id_token("not-a-jwt", Some(&random_nonce()))
             .await
             .unwrap_err();
 
@@ -655,7 +655,7 @@ mod tests {
     async fn nonce_mismatch_is_rejected() {
         let client = mock_client();
         let expected = random_nonce();
-        let wrong = random_nonce();
+        let wrong = format!("{expected}-mismatch");
         let token = issue_token(&expected);
         let result = client.validate_id_token(&token, Some(&wrong)).await;
         assert_eq!(result.unwrap_err(), OidcError::NonceMismatch);
@@ -699,6 +699,7 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
+        let nonce = random_nonce();
         let token = encode(
             &Header::new(Algorithm::RS256),
             &serde_json::json!({
@@ -708,13 +709,13 @@ mod tests {
                 "exp": now + 3600,
                 "nbf": now.saturating_sub(1),
                 "iat": now,
-                "nonce": "nonce-123"
+                "nonce": nonce
             }),
             &EncodingKey::from_rsa_pem(RSA_PRIVATE_KEY.as_bytes()).unwrap(),
         )
         .unwrap();
 
-        let result = client.validate_id_token(&token, Some("nonce-123")).await;
+        let result = client.validate_id_token(&token, Some(&nonce)).await;
         assert_eq!(
             result.unwrap_err(),
             OidcError::InvalidToken("token header is missing required kid".into())
@@ -781,6 +782,7 @@ mod tests {
             .as_secs();
         let mut header = Header::new(Algorithm::RS256);
         header.kid = Some("missing-kid".into());
+        let nonce = random_nonce();
         let token = encode(
             &header,
             &serde_json::json!({
@@ -790,7 +792,7 @@ mod tests {
                 "exp": now + 3600,
                 "nbf": now.saturating_sub(1),
                 "iat": now,
-                "nonce": "nonce-123"
+                "nonce": nonce
             }),
             &EncodingKey::from_rsa_pem(RSA_PRIVATE_KEY.as_bytes()).unwrap(),
         )
@@ -803,14 +805,14 @@ mod tests {
             .get(&jwks_url)
             .expect("jwks counter must exist");
 
-        let first = client.validate_id_token(&token, Some("nonce-123")).await;
+        let first = client.validate_id_token(&token, Some(&nonce)).await;
         assert_eq!(
             first.unwrap_err(),
             OidcError::InvalidToken("no matching JWK found for token header".into())
         );
         assert_eq!(counter.load(Ordering::Relaxed), 2);
 
-        let second = client.validate_id_token(&token, Some("nonce-123")).await;
+        let second = client.validate_id_token(&token, Some(&nonce)).await;
         assert_eq!(
             second.unwrap_err(),
             OidcError::InvalidToken("no matching JWK found for token header".into())
