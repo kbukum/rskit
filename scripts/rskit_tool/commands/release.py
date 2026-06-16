@@ -25,6 +25,13 @@ from ..publish import (
 from .checks import run_l7_edges, run_public_api, run_topology, run_workspace_deps_sync
 from .domains import DOMAIN_ORDER, DOMAIN_TITLES, load_domains
 
+# Dependency kinds that constrain publish order. `cargo publish` verifies the
+# package by building it, and a dev-dependency that carries a version requirement
+# (e.g. a workspace `rskit-testutil = { workspace = true }`) must already exist on
+# crates.io for that verification to resolve. So dev-dependencies impose the same
+# ordering constraint as normal/build dependencies and must be included here.
+_PUBLISH_DEP_KINDS = (None, "build", "dev")
+
 
 def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     """Register release commands."""
@@ -474,7 +481,6 @@ def publish_order() -> list[dict[str, str]]:
     """Resolve publishable packages in dependency order."""
 
     packages: dict[str, dict[str, str]] = {}
-    edges: dict[str, set[str]] = defaultdict(set)
     documents: list[dict] = []
     for workspace_manifest in CORE_AND_CONTRIB.values():
         data = metadata(workspace_manifest, all_features=True, no_deps=False)
@@ -492,26 +498,47 @@ def publish_order() -> list[dict[str, str]]:
                 "version": package["version"],
             }
 
+    return resolve_publish_order(packages, documents)
+
+
+def _publish_edges(packages: dict[str, dict[str, str]], documents: list[dict]) -> dict[str, set[str]]:
+    """Build publish-order edges (package -> internal dependency) across workspaces."""
+
+    edges: dict[str, set[str]] = defaultdict(set)
     for data in documents:
-        package_by_id = {package["id"]: package for package in data["packages"]}  # type: ignore[index]
-        name_to_id = {package["name"]: package["id"] for package in data["packages"] if package["id"] in packages}  # type: ignore[index]
+        package_by_id = {package["id"]: package for package in data["packages"]}
+        name_to_id = {package["name"]: package["id"] for package in data["packages"] if package["id"] in packages}
         for package_id, package in package_by_id.items():
             if package_id not in packages:
                 continue
             for dep in package["dependencies"]:
-                if dep["kind"] not in (None, "build"):
+                if dep["kind"] not in _PUBLISH_DEP_KINDS:
                     continue
                 dep_id = name_to_id.get(dep["name"])
                 if dep_id in packages:
                     edges[package_id].add(dep_id)
-        for node in data["resolve"]["nodes"]:  # type: ignore[index]
+        for node in data.get("resolve", {}).get("nodes", []):
             if node["id"] not in packages:
                 continue
             for dep in node["deps"]:
-                if not any(kind["kind"] in (None, "build") for kind in dep.get("dep_kinds", [])):
+                if not any(kind["kind"] in _PUBLISH_DEP_KINDS for kind in dep.get("dep_kinds", [])):
                     continue
                 if dep["pkg"] in packages:
                     edges[node["id"]].add(dep["pkg"])
+    return edges
+
+
+def resolve_publish_order(
+    packages: dict[str, dict[str, str]], documents: list[dict]
+) -> list[dict[str, str]]:
+    """Topologically order publishable packages by their publish-time dependencies.
+
+    Edges include normal, build, and dev dependencies (see ``_PUBLISH_DEP_KINDS``)
+    because ``cargo publish`` must resolve all of them. The facade package
+    ``rskit-suite`` is always emitted last, and a true dependency cycle raises.
+    """
+
+    edges = _publish_edges(packages, documents)
 
     visited: set[str] = set()
     visiting: set[str] = set()
