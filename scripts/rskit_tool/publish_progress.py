@@ -64,11 +64,16 @@ class WaitReporter:
         if not self._active or total <= 0:
             return
         remaining = max(0.0, total - elapsed)
+        # A backward wall-clock jump (NTP/manual set/suspend) can drive elapsed
+        # out of [0, total]; clamp the value used for the percent and bar so the
+        # display never shows a negative or >100% fill, while remaining above
+        # stays derived from the true elapsed to keep the countdown honest.
+        shown = min(max(elapsed, 0.0), total)
         if self._isatty:
-            self._render_inplace(label, elapsed, total, remaining)
+            self._render_inplace(label, shown, total, remaining)
         elif elapsed >= self._next_log_at:
             self._next_log_at = elapsed + self._log_interval
-            pct = format_percent(int(elapsed), int(total))
+            pct = format_percent(int(shown), int(total))
             self._write(f"    {label}: {pct} ready, {format_duration(remaining)} left\n")
 
     def finish(self, label: str) -> None:

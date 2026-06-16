@@ -48,6 +48,20 @@ class WaitReporterTests(unittest.TestCase):
         # Throttled: a 90s wait at 30s cadence yields only a handful of lines.
         self.assertLessEqual(len(lines), 6)
 
+    def test_backward_clock_jump_clamps_displayed_progress(self) -> None:
+        # A backward wall-clock jump can hand update() a negative elapsed; the
+        # percent/bar must clamp to 0% rather than render a negative fill, while
+        # the remaining countdown stays honest (derived from the true elapsed).
+        reporter, stream = self._reporter(isatty=True)
+        reporter.start("rskit-a 0.1.0", 120.0, reason="rate limit")
+        reporter.update("rskit-a 0.1.0", -30.0, 120.0)
+        output = stream.getvalue()
+
+        self.assertIn("0.0%", output)
+        self.assertNotIn("-25.0%", output)  # the unclamped percent
+        # remaining stays honest: 120 - (-30) = 150s -> 2m30s left.
+        self.assertIn("next publish in 2m30s", output)
+
     def test_zero_total_is_inert(self) -> None:
         reporter, stream = self._reporter(isatty=True)
         reporter.start("rskit-a 0.1.0", 0.0, reason="rate limit")
