@@ -11,12 +11,21 @@ from . import support  # noqa: F401
 from rskit_tool.cargo import Package
 from rskit_tool.coverage.events import CoverageEvent, CoverageEventBus, CoverageProgressReporter
 from rskit_tool.coverage.formatting import format_bar, format_package_result, format_percent, format_stage_progress
+from rskit_tool.formatting import format_duration
 from rskit_tool.coverage.models import CoverageTotals, Metric, ModuleResult
 from rskit_tool.coverage.runner import print_command_log_tail
 from rskit_tool.paths import ROOT
 
 
 class CoverageFormattingTests(unittest.TestCase):
+    def test_duration_renders_subsecond_as_under_one_second(self) -> None:
+        # A positive sub-second value must not truncate to "0s" — it should read
+        # as time still remaining in the live wait UX.
+        self.assertEqual(format_duration(0.8), "<1s")
+        self.assertEqual(format_duration(0.0), "0s")
+        self.assertEqual(format_duration(1.0), "1s")
+        self.assertEqual(format_duration(90.0), "1m30s")
+
     def test_package_result_and_progress_formatting_include_counters(self) -> None:
         package = Package(
             name="demo",

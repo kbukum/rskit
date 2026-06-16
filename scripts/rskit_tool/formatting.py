@@ -31,8 +31,14 @@ def format_bar(completed: float, total: float, *, width: int) -> str:
 
 
 def format_duration(seconds: float) -> str:
-    """Format elapsed time compactly."""
+    """Format elapsed time compactly.
 
+    Sub-second positive values render as ``<1s`` rather than truncating to
+    ``0s``, so a short live wait still reads as time remaining.
+    """
+
+    if 0 < seconds < 1:
+        return "<1s"
     total_seconds = max(0, int(seconds))
     minutes, seconds = divmod(total_seconds, 60)
     hours, minutes = divmod(minutes, 60)

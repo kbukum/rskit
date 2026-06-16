@@ -72,6 +72,8 @@ class WaitReporterTests(unittest.TestCase):
 
         self.assertIn("25.0%", output)  # 0.2 / 0.8, not 100%
         self.assertNotIn("100.0%", output)
+        # Sub-second remaining renders as "<1s", not a truncated "0s".
+        self.assertIn("next publish in <1s", output)
 
     def test_zero_total_is_inert(self) -> None:
         reporter, stream = self._reporter(isatty=True)

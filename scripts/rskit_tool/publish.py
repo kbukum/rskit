@@ -37,7 +37,7 @@ from dataclasses import dataclass, field
 from email.utils import parsedate_to_datetime
 
 from .errors import ToolError
-from .publish_progress import WaitReporter
+from .publish_progress import WaitProgress, WaitReporter
 
 # Fallback refill cadences mirrored from the crates.io source (per account).
 # These only bound the probe interval when a 429 omits a retry-after hint.
@@ -168,7 +168,7 @@ class RateAwarePublisher:
         sleep: Callable[[float], None] = time.sleep,
         wall_now: Callable[[], float] = time.time,
         log: Callable[[str], None] = print,
-        progress: WaitReporter | None = None,
+        progress: WaitProgress | None = None,
         max_rate_retries: int = 8,
         poll_interval: float = 1.0,
         probe_interval: float = 60.0,

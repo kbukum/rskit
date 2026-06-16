@@ -13,7 +13,7 @@ so the reporter falls back to a small, bounded number of plain status lines.
 from __future__ import annotations
 
 import sys
-from typing import TextIO
+from typing import Protocol, TextIO
 
 from .formatting import format_bar, format_duration, format_percent
 
@@ -24,6 +24,24 @@ _SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 # ANSI: carriage return + clear-to-end-of-line, so each in-place redraw fully
 # overwrites the previous (possibly longer) frame instead of leaving residue.
 _CLEAR_LINE = "\r\x1b[2K"
+
+
+class WaitProgress(Protocol):
+    """Structural contract the publisher drives while waiting out a rate limit.
+
+    Typing the publisher against this protocol (rather than the concrete
+    ``WaitReporter``) lets callers and tests substitute any compatible reporter
+    — e.g. a silent no-op in tests — without static-typing friction.
+    """
+
+    def start(self, label: str, total: float, *, reason: str) -> None:
+        """Begin a wait of ``total`` seconds described by ``reason``."""
+
+    def update(self, label: str, elapsed: float, total: float) -> None:
+        """Redraw progress for a wait ``elapsed`` of ``total`` seconds in."""
+
+    def finish(self, label: str) -> None:
+        """Collapse the wait to a single confirmation once it is over."""
 
 
 class WaitReporter:
