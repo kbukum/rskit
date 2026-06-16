@@ -28,7 +28,7 @@ class WaitReporterTests(unittest.TestCase):
         self.assertIn("next publish in", output)
         self.assertIn("25.0%", output)  # 30 / 120
         self.assertIn("75.0%", output)  # 90 / 120
-        self.assertIn("100%", output)  # finish line
+        self.assertIn("100.0%", output)  # finish line, via shared formatter
         self.assertIn("publishing", output)
 
     def test_non_tty_emits_bounded_plain_lines(self) -> None:

@@ -82,8 +82,9 @@ class WaitReporter:
         if not self._active:
             return
         if self._isatty:
-            bar = format_bar(1, 1, width=self._bar_width)
-            self._write(f"{_CLEAR_LINE}\u2713 {label}  {bar} 100%  publishing…\n")
+            bar = format_bar(1.0, 1.0, width=self._bar_width)
+            pct = format_percent(1.0, 1.0)
+            self._write(f"{_CLEAR_LINE}\u2713 {label}  {bar} {pct}  publishing…\n")
         else:
             self._write(f"==> {label}: rate limit cleared; publishing\n")
         self._active = False
