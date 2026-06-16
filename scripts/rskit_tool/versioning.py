@@ -303,6 +303,88 @@ def parse_workspace_dep_floors(text: str) -> dict[str, SemVer]:
     return floors
 
 
+def _workspace_dep_floors_by_key(text: str) -> dict[str, SemVer]:
+    """Map ``[workspace.dependencies]`` *table key* to its caret floor.
+
+    Unlike :func:`parse_workspace_dep_floors` (keyed by resolved package name),
+    this keys by the manifest key on the left-hand side, which is what a member
+    crate references via ``<key>.workspace = true`` / ``<key> = { workspace = true }``.
+    """
+
+    floors: dict[str, SemVer] = {}
+    current: str | None = None
+    for line in text.split("\n"):
+        header = _table_header(line)
+        if header is not None:
+            current = header
+            continue
+        if current != "workspace.dependencies":
+            continue
+        match = _DEP_LINE_RE.match(line)
+        if match is None:
+            continue
+        version_match = _VERSION_FIELD_RE.search(match["body"])
+        if version_match is None:
+            continue
+        parsed = _parse_optional(version_match[2])
+        if parsed is not None:
+            floors[match["key"]] = parsed
+    return floors
+
+
+def workspace_dep_floor_changes(old_text: str, new_text: str) -> set[str]:
+    """Return ``[workspace.dependencies]`` keys whose caret floor changed.
+
+    A key counts as changed when its floor differs between the two manifests or
+    when it is present in exactly one of them. Member crates that inherit such a
+    key (``<key>.workspace = true``) have a different *published* manifest even
+    when no file under their own crate root changed, so they must republish.
+    """
+
+    old = _workspace_dep_floors_by_key(old_text)
+    new = _workspace_dep_floors_by_key(new_text)
+    return {key for key in old.keys() | new.keys() if old.get(key) != new.get(key)}
+
+
+_DEP_TABLE_LEAVES = frozenset({"dependencies", "dev-dependencies", "build-dependencies"})
+_INLINE_WORKSPACE_RE = re.compile(r"\bworkspace\s*=\s*true\b")
+_DOTTED_WORKSPACE_RE = re.compile(r"^\s*(?P<key>[A-Za-z0-9_.-]+)\.workspace\s*=\s*true\b")
+
+
+def _is_dependency_table(header: str) -> bool:
+    """Return True for ``[dependencies]``/``[*-dependencies]`` and target variants."""
+
+    return header.split(".")[-1] in _DEP_TABLE_LEAVES
+
+
+def inherited_workspace_dep_keys(manifest_text: str) -> set[str]:
+    """Return dependency keys a crate inherits via ``workspace = true``.
+
+    Covers both the dotted (``serde.workspace = true``) and inline-table
+    (``serde = { workspace = true }``) forms across ``[dependencies]``,
+    ``[dev-dependencies]``, ``[build-dependencies]``, and their
+    ``[target.<cfg>.*dependencies]`` variants.
+    """
+
+    keys: set[str] = set()
+    current: str | None = None
+    for line in manifest_text.split("\n"):
+        header = _table_header(line)
+        if header is not None:
+            current = header
+            continue
+        if current is None or not _is_dependency_table(current):
+            continue
+        dotted = _DOTTED_WORKSPACE_RE.match(line)
+        if dotted is not None:
+            keys.add(dotted["key"])
+            continue
+        inline = _DEP_LINE_RE.match(line)
+        if inline is not None and _INLINE_WORKSPACE_RE.search(inline["body"]):
+            keys.add(inline["key"])
+    return keys
+
+
 def _set_table_string(text: str, table: str, key: str, new_value: str) -> tuple[str, bool]:
     """Replace the ``key = "..."`` string inside ``[table]`` (first occurrence)."""
 

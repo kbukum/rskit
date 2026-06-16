@@ -15,19 +15,21 @@ from pathlib import Path
 
 from .cargo import Package, discover_packages, is_relative_to, metadata
 from .errors import ToolError
-from .git import changed_paths, file_at_ref, latest_tag
+from .git import changed_paths, file_at_ref, latest_tag, merge_base
 from .paths import ROOT, WORKSPACES
 from .publish import CratesIoRegistry
 from .versioning import (
     BumpPlan,
     SemVer,
     compute_bump_plan,
+    inherited_workspace_dep_keys,
     package_version_diff_only,
     parse_package_version,
     parse_workspace_dep_floors,
     parse_workspace_package_version,
     set_package_version,
     set_workspace_dep_version,
+    workspace_dep_floor_changes,
 )
 
 # Only publishable workspaces are bump targets; examples are publish=false and
@@ -96,18 +98,29 @@ def _workspace_graph(workspace: str) -> tuple[dict[str, Package], dict[str, set[
     return members, dependents
 
 
-def _detect_changed(members: dict[str, Package], base_ref: str) -> set[str]:
+def _detect_changed(members: dict[str, Package], base_ref: str, workspace: str) -> set[str]:
     """Map paths changed since ``base_ref`` to owning crates in this workspace.
+
+    Change detection diffs from the *merge base* of ``base_ref`` and ``HEAD`` so
+    a release branch or backport whose tag is not a strict ancestor of ``HEAD``
+    still resolves the correct set of changes (mirroring ``changed_paths``).
 
     Only paths under a crate root count, so workspace-global and tooling changes
     (``Cargo.toml``, ``scripts/``, ``.github/`` ...) do not over-bump the world.
     A crate whose *only* change is a version-field-only edit to its own manifest
     is ignored: the version field is an output of this tool, not a source change
     (this guards the lock-step de-lockstep and the tool's own prior writes).
+
+    Workspace-global ``[workspace.dependencies]`` floor changes are the one
+    exception: a crate that inherits a bumped floor via ``<dep>.workspace = true``
+    has a different *published* manifest even though nothing under its crate root
+    changed, so those inheritors are selected too (the cross-workspace cascade,
+    e.g. a ``core`` breaking-minor rewriting ``contrib/Cargo.toml`` floors).
     """
 
+    diff_base = merge_base(base_ref, "HEAD") or base_ref
     changed_by_crate: dict[str, list[Path]] = defaultdict(list)
-    for changed in changed_paths(f"{base_ref}..HEAD"):
+    for changed in changed_paths(f"{diff_base}..HEAD"):
         absolute = (ROOT / changed).resolve()
         for package in members.values():
             if is_relative_to(absolute, package.root):
@@ -121,11 +134,40 @@ def _detect_changed(members: dict[str, Package], base_ref: str) -> set[str]:
             selected.add(name)
             continue
         relative = members[name].manifest_path.relative_to(ROOT).as_posix()
-        base_text = file_at_ref(base_ref, relative)
+        base_text = file_at_ref(diff_base, relative)
         current_text = members[name].manifest_path.read_text(encoding="utf-8")
         if base_text is None or not package_version_diff_only(base_text, current_text):
             selected.add(name)
+
+    selected |= _floor_inheritors(members, workspace, diff_base)
     return selected
+
+
+def _floor_inheritors(
+    members: dict[str, Package], workspace: str, diff_base: str
+) -> set[str]:
+    """Select crates whose inherited ``[workspace.dependencies]`` floor changed.
+
+    Compares the workspace manifest at ``diff_base`` against the working tree, so
+    an uncommitted floor rewrite from an earlier workspace's bump is still seen.
+    """
+
+    base_text = file_at_ref(diff_base, f"{workspace}/Cargo.toml")
+    if base_text is None:
+        return set()
+    current_text = WORKSPACES[workspace].read_text(encoding="utf-8")
+    changed_keys = workspace_dep_floor_changes(base_text, current_text)
+    if not changed_keys:
+        return set()
+
+    affected: set[str] = set()
+    for name, package in members.items():
+        inherited = inherited_workspace_dep_keys(
+            package.manifest_path.read_text(encoding="utf-8")
+        )
+        if inherited & changed_keys:
+            affected.add(name)
+    return affected
 
 
 def _all_workspace_floors() -> dict[str, SemVer]:
@@ -242,7 +284,7 @@ def run_bump(args: argparse.Namespace) -> int:
             f"--minor crate(s) not in workspace '{args.workspace}': {', '.join(sorted(unknown))}"
         )
 
-    changed = _detect_changed(members, base_ref)
+    changed = _detect_changed(members, base_ref, args.workspace)
     registry = None if args.offline else CratesIoRegistry()
     baselines = _released_baselines(members, base_ref, registry=registry)
     current_versions = {name: SemVer.parse(package.version) for name, package in members.items()}

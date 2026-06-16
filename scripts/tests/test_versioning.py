@@ -9,6 +9,7 @@ from rskit_tool.versioning import (
     SemVer,
     bump,
     compute_bump_plan,
+    inherited_workspace_dep_keys,
     package_version_diff_only,
     parse_package_version,
     parse_workspace_dep_floors,
@@ -17,6 +18,7 @@ from rskit_tool.versioning import (
     set_workspace_dep_version,
     transitive_dependents,
     within_caret,
+    workspace_dep_floor_changes,
 )
 
 
@@ -271,6 +273,70 @@ class PlanTests(unittest.TestCase):
     def test_transitive_dependents_closure(self) -> None:
         dependents = {"a": {"b"}, "b": {"c"}, "c": {"d"}}
         self.assertEqual(transitive_dependents(["a"], dependents), {"b", "c", "d"})
+
+
+class WorkspaceFloorInheritanceTests(unittest.TestCase):
+    def _ws(self, errors_floor: str, util_floor: str) -> str:
+        return (
+            "[workspace.dependencies]\n"
+            f'rskit-errors = {{ path = "../core/rskit-errors", version = "{errors_floor}" }}\n'
+            f'rskit-util = {{ path = "../core/rskit-util", version = "{util_floor}" }}\n'
+            'tokio = { version = "1", features = ["full"] }\n'
+        )
+
+    def test_floor_change_detects_changed_key(self) -> None:
+        old = self._ws("0.1.0-alpha.1", "0.1.0-alpha.1")
+        new = self._ws("0.2.0-alpha.1", "0.1.0-alpha.1")
+        self.assertEqual(workspace_dep_floor_changes(old, new), {"rskit-errors"})
+
+    def test_no_floor_change_is_empty(self) -> None:
+        text = self._ws("0.1.0-alpha.1", "0.1.0-alpha.1")
+        self.assertEqual(workspace_dep_floor_changes(text, text), set())
+
+    def test_added_and_removed_floors_count_as_changed(self) -> None:
+        old = '[workspace.dependencies]\nrskit-errors = { version = "0.1.0-alpha.1" }\n'
+        new = (
+            "[workspace.dependencies]\n"
+            'rskit-errors = { version = "0.1.0-alpha.1" }\n'
+            'rskit-fs = { version = "0.1.0-alpha.1" }\n'
+        )
+        self.assertEqual(workspace_dep_floor_changes(old, new), {"rskit-fs"})
+        self.assertEqual(workspace_dep_floor_changes(new, old), {"rskit-fs"})
+
+    def test_inherited_keys_cover_dotted_and_inline_forms(self) -> None:
+        manifest = (
+            "[package]\nname = \"rskit-s3\"\nversion = \"0.1.0-alpha.1\"\n\n"
+            "[dependencies]\n"
+            "rskit-errors.workspace = true\n"
+            "aws-sdk-s3 = { workspace = true }\n"
+            'serde = { version = "1" }\n\n'
+            "[dev-dependencies]\n"
+            "rskit-testutil.workspace = true\n\n"
+            "[build-dependencies]\n"
+            "prost-build = { workspace = true }\n"
+        )
+        self.assertEqual(
+            inherited_workspace_dep_keys(manifest),
+            {"rskit-errors", "aws-sdk-s3", "rskit-testutil", "prost-build"},
+        )
+
+    def test_inherited_keys_ignore_non_dependency_tables(self) -> None:
+        manifest = (
+            "[package]\nname = \"x\"\n\n"
+            "[features]\n"
+            "default = []\n\n"
+            "[dependencies]\n"
+            "rskit-errors.workspace = true\n"
+        )
+        self.assertEqual(inherited_workspace_dep_keys(manifest), {"rskit-errors"})
+
+    def test_inherited_keys_cover_target_specific_tables(self) -> None:
+        manifest = (
+            "[package]\nname = \"x\"\n\n"
+            "[target.'cfg(unix)'.dependencies]\n"
+            "nix = { workspace = true }\n"
+        )
+        self.assertEqual(inherited_workspace_dep_keys(manifest), {"nix"})
 
 
 if __name__ == "__main__":

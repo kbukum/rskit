@@ -43,6 +43,18 @@ def latest_tag() -> str | None:
     return tag or None
 
 
+def merge_base(left: str, right: str) -> str | None:
+    """Return the best common ancestor of two refs (None when unrelated)."""
+
+    completed = run(
+        ["git", "merge-base", left, right], cwd=ROOT, capture=True, check=False
+    )
+    if completed.returncode != 0:
+        return None
+    base = completed.stdout.strip()
+    return base or None
+
+
 def file_at_ref(ref: str, relative_path: str) -> str | None:
     """Return the text of ``relative_path`` at ``ref`` (None when it is absent)."""
 
