@@ -45,7 +45,7 @@ NEW_CRATE_REFILL_SECONDS = 600.0  # 1 token per 10 minutes
 UPDATE_REFILL_SECONDS = 60.0  # 1 token per minute
 
 # Cargo surfaces a crates.io rate-limit rejection in its error output; these
-# markers let the publisher react to a 429 even though it rate-limits proactively.
+# markers let the publisher detect a 429 so its reactive-first loop can wait.
 # A bare "429" is intentionally excluded — it collides with unrelated numbers in
 # cargo output (line/IDs) and the phrasings below already cover real rejections.
 _RATE_LIMIT_MARKERS = (
@@ -247,9 +247,13 @@ class RateAwarePublisher:
             if is_rate_limited(result.output) and attempts < self._max_rate_retries:
                 attempts += 1
                 scheduled = parse_retry_after(result.output, wall_now=self._wall_now())
-                if scheduled is not None:
+                if scheduled is not None and scheduled > 0:
                     wait, reason = scheduled, "crates.io rate limit; scheduled from retry-after"
                 else:
+                    # No usable hint: the 429 either omitted a retry-after or it
+                    # parsed to a now/past deadline (clock skew). Probing a bounded
+                    # interval avoids a tight retry loop that would hammer crates.io
+                    # and burn the retry budget near-instantly.
                     wait, reason = self._fallback_wait(is_new), "crates.io rate limit; probing budget"
                 self._log(
                     f"==> {plan.name} {plan.version}: {reason} "

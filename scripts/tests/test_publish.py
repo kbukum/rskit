@@ -225,6 +225,29 @@ class RateAwarePublisherTests(unittest.TestCase):
 
         self.assertAlmostEqual(sum(clock.sleeps), UPDATE_REFILL_SECONDS)
 
+    def test_past_retry_after_falls_back_to_bounded_probe(self) -> None:
+        # A retry-after that parses to now/the past (clock skew) must not collapse
+        # to a zero wait and hammer crates.io; it falls back to the bounded probe
+        # interval instead of tight-looping through the retry budget.
+        base = 1_900_000_000.0
+        clock = FakeClock(base)
+        registry = FakeRegistry()
+        retry_after = formatdate(base - 30, usegmt=True)  # already elapsed
+        calls = {"count": 0}
+
+        def publish_crate(plan: CratePlan) -> CommandResult:
+            calls["count"] += 1
+            if calls["count"] == 1:
+                return _rate_limited(retry_after)
+            return CommandResult(0, "ok")
+
+        self._publisher(registry, publish_crate, clock, probe_interval=30.0).publish(
+            [_plan("rskit-a")]
+        )
+
+        self.assertEqual(calls["count"], 2)
+        self.assertAlmostEqual(sum(clock.sleeps), 30.0)
+
     def test_long_wait_is_sliced_into_poll_interval_chunks(self) -> None:
         # A long scheduled wait must be sliced so the bar updates and a clock jump
         # can be re-evaluated, never one opaque multi-minute sleep.

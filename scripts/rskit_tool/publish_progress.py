@@ -80,7 +80,7 @@ class WaitReporter:
             bar = format_bar(1, 1, width=self._bar_width)
             self._write(f"{_CLEAR_LINE}\u2713 {label}  {bar} 100%  publishing…\n")
         else:
-            self._write(f"==> {label}: rate budget ready; publishing\n")
+            self._write(f"==> {label}: rate limit cleared; publishing\n")
         self._active = False
 
     def _render_inplace(self, label: str, elapsed: float, total: float, remaining: float) -> None:
