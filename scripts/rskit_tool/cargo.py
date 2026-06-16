@@ -21,6 +21,7 @@ class Package:
     root: Path
     version: str
     publishable: bool
+    umbrella: bool = False
 
 
 def is_relative_to(path: Path, parent: Path) -> bool:
@@ -60,6 +61,8 @@ def discover_packages(workspace: str | None = None) -> list[Package]:
             if name in seen:
                 raise ToolError(f"duplicate package name discovered: {name}")
             manifest_path = Path(package_data["manifest_path"]).resolve()
+            package_metadata = package_data.get("metadata") or {}
+            release_metadata = package_metadata.get("release") or {}
             packages.append(
                 Package(
                     name=name,
@@ -68,6 +71,7 @@ def discover_packages(workspace: str | None = None) -> list[Package]:
                     root=manifest_path.parent,
                     version=package_data.get("version", ""),
                     publishable=package_data.get("publish") != [],
+                    umbrella=bool(release_metadata.get("umbrella", False)),
                 )
             )
             seen.add(name)

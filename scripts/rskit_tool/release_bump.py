@@ -170,6 +170,25 @@ def _floor_inheritors(
     return affected
 
 
+def _umbrella_selection(members: dict[str, Package], changed: set[str]) -> set[str]:
+    """Add umbrella crates to ``changed`` when a real release is happening.
+
+    An umbrella crate (marked ``[package.metadata.release] umbrella = true``) is a
+    facade that re-exports its workspace, so it should carry the headline release
+    version even when its own source did not change. It is force-selected whenever
+    any *other* crate in its workspace is bumped, but never on its own — an empty
+    release stays empty. Idempotency is preserved by the planner, which anchors the
+    target on the released baseline, so re-running never bumps it twice.
+    """
+
+    umbrella = {name for name, package in members.items() if package.umbrella}
+    if not umbrella:
+        return changed
+    if changed - umbrella:
+        return changed | umbrella
+    return changed
+
+
 def _all_workspace_floors() -> dict[str, SemVer]:
     """Collect each internal crate's caret floor across all workspace manifests.
 
@@ -307,6 +326,7 @@ def run_bump(args: argparse.Namespace) -> int:
         )
 
     changed = _detect_changed(members, base_ref, args.workspace)
+    changed = _umbrella_selection(members, changed)
     registry = None if args.offline else CratesIoRegistry()
     baselines = _released_baselines(members, base_ref, registry=registry)
     current_versions = {name: SemVer.parse(package.version) for name, package in members.items()}

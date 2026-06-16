@@ -38,7 +38,9 @@ class FakeRegistry:
         return self.versions.get(name)
 
 
-def _pkg(root: Path, name: str, workspace: str, version: str = "0.1.0-alpha.1") -> Package:
+def _pkg(
+    root: Path, name: str, workspace: str, version: str = "0.1.0-alpha.1", *, umbrella: bool = False
+) -> Package:
     return Package(
         name=name,
         workspace=workspace,
@@ -46,6 +48,7 @@ def _pkg(root: Path, name: str, workspace: str, version: str = "0.1.0-alpha.1") 
         root=root,
         version=version,
         publishable=True,
+        umbrella=umbrella,
     )
 
 
@@ -279,6 +282,31 @@ class AllWorkspaceFloorsTests(unittest.TestCase):
             with mock.patch.object(rb, "WORKSPACES", {"core": core, "contrib": contrib}):
                 floors = rb._all_workspace_floors()
         self.assertEqual(floors, {"rskit-errors": SemVer.parse("0.1.0-alpha.1")})
+
+
+class UmbrellaSelectionTests(unittest.TestCase):
+    """``_umbrella_selection`` force-bumps a facade only on a real release."""
+
+    def _members(self) -> dict[str, Package]:
+        facade = _pkg(Path("/ws/facade"), "rskit-suite", "core", umbrella=True)
+        leaf = _pkg(Path("/ws/leaf"), "rskit-auth", "core")
+        return {"rskit-suite": facade, "rskit-auth": leaf}
+
+    def test_umbrella_added_when_other_crate_changed(self) -> None:
+        selected = rb._umbrella_selection(self._members(), {"rskit-auth"})
+        self.assertEqual(selected, {"rskit-auth", "rskit-suite"})
+
+    def test_umbrella_not_added_for_empty_release(self) -> None:
+        self.assertEqual(rb._umbrella_selection(self._members(), set()), set())
+
+    def test_umbrella_alone_does_not_self_trigger(self) -> None:
+        self.assertEqual(
+            rb._umbrella_selection(self._members(), {"rskit-suite"}), {"rskit-suite"}
+        )
+
+    def test_no_umbrella_marker_is_noop(self) -> None:
+        members = {"rskit-auth": _pkg(Path("/ws/leaf"), "rskit-auth", "core")}
+        self.assertEqual(rb._umbrella_selection(members, {"rskit-auth"}), {"rskit-auth"})
 
 
 if __name__ == "__main__":
