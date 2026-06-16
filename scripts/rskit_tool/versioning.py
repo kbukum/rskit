@@ -2,7 +2,7 @@
 
 Pure, dependency-free helpers for the ``release bump`` command. The repository
 runs independent per-crate semver with caret pins and 0.x breaking semantics
-(see ``tmp/versioning-refactor-plan.md`` and ``docs/VERSIONING-ROADMAP.md``):
+(see ``docs/VERSIONING.md`` and ``docs/VERSIONING-ROADMAP.md``):
 
 * a **patch** bump is absorbed by a dependent's caret pin (no cascade);
 * a **minor** bump (the breaking position in 0.x) leaves the caret range, so
@@ -158,11 +158,13 @@ def bump(version: SemVer, kind: str) -> SemVer:
 
 
 def within_caret(floor: SemVer, candidate: SemVer) -> bool:
-    """Return ``True`` when ``candidate`` satisfies a bare ``= floor`` (caret) pin.
+    """Return ``True`` when ``candidate`` satisfies a bare ``floor`` (caret ``^floor``) pin.
 
-    Mirrors cargo's default (caret) requirement, including its pre-release rule:
-    a pre-release candidate only matches when it shares the floor's
-    ``major.minor.patch`` and the floor itself carries a pre-release.
+    Cargo treats a bare version string as a caret requirement, so ``floor`` here
+    means ``^floor`` (not the exact ``=floor`` requirement). Mirrors cargo's
+    default, including its pre-release rule: a pre-release candidate only matches
+    when it shares the floor's ``major.minor.patch`` and the floor itself carries
+    a pre-release.
     """
 
     if candidate < floor:
@@ -186,10 +188,21 @@ def within_caret(floor: SemVer, candidate: SemVer) -> bool:
 
 
 def _table_header(line: str) -> str | None:
-    """Return the table name for a ``[table]``/``[[table]]`` header line."""
+    """Return the table name for a ``[table]``/``[[table]]`` header line.
+
+    Tolerates a trailing TOML comment (``[table] # note``): the comment is
+    stripped before the closing bracket is checked, but only when doing so still
+    leaves a valid header, so a ``#`` inside a quoted key is left untouched.
+    """
 
     stripped = line.strip()
-    if stripped.startswith("[") and stripped.endswith("]"):
+    if not (stripped.startswith("[") and "]" in stripped):
+        return None
+    if "#" in stripped:
+        without_comment = stripped[: stripped.index("#")].rstrip()
+        if without_comment.endswith("]"):
+            stripped = without_comment
+    if stripped.endswith("]"):
         return stripped.strip("[]").strip()
     return None
 

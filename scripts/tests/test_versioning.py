@@ -7,6 +7,7 @@ import unittest
 from . import support  # noqa: F401
 from rskit_tool.versioning import (
     SemVer,
+    _table_header,
     bump,
     compute_bump_plan,
     inherited_workspace_dep_keys,
@@ -146,6 +147,14 @@ class ManifestEditTests(unittest.TestCase):
         updated, changed = set_workspace_dep_version(text, "rskit-missing", "0.2.0")
         self.assertFalse(changed)
         self.assertEqual(updated, text)
+
+    def test_table_header_tolerates_trailing_comment(self) -> None:
+        self.assertEqual(_table_header("[workspace.dependencies] # internal floors"), "workspace.dependencies")
+        self.assertEqual(_table_header("[package]"), "package")
+        self.assertEqual(_table_header("[[bin]] # entry"), "bin")
+        self.assertIsNone(_table_header('serde = { version = "1" } # dep'))
+        # A '#' inside a quoted key must not truncate the header.
+        self.assertEqual(_table_header("[target.'cfg(unix)'.dependencies]"), "target.'cfg(unix)'.dependencies")
 
     def test_parse_helpers(self) -> None:
         crate = '[package]\nname = "x"\nversion = "0.3.0-alpha.1"\n'
