@@ -66,7 +66,12 @@ pins — caret pins already absorb patches.
   absorbed by the caret (no cascade); a 0.x **minor** bump leaves the caret range
   and cascades to in-workspace dependents.
 - `core/` and `contrib/` are **independent release trains**; tooling operates
-  **per workspace** with no cross-workspace cascade machinery.
+  **per workspace**. Cross-workspace propagation is deliberately minimal rather
+  than absent: a breaking bump rewrites the affected dependency floor in **every**
+  workspace manifest (e.g. a `core` breaking bump updates `contrib/Cargo.toml`),
+  and the follow-up `release bump` for the dependent workspace selects the crates
+  that inherit the changed floor and republishes them — there is no single
+  combined pass that bumps both workspaces at once.
 - Bumps are computed by `make release-bump W=<workspace>` (the bespoke
   `rskit_tool release bump`): patch by default, `MINOR="<crate>"` for breaking
   changes, idempotent against the crates.io max published version. The existing

@@ -197,6 +197,9 @@ def _released_baselines(
     """Resolve each crate's released baseline = max(crates.io max, version-at-tag).
 
     Crates with neither anchor are omitted (treated as unreleased by the planner).
+    A crates.io lookup is only an idempotency optimization, so a transient
+    registry failure (HTTP 429/5xx, network error) is downgraded to a warning and
+    planning falls back to tag-only baselines instead of aborting the bump.
     """
 
     seeds: dict[str, SemVer | None] = {}
@@ -218,9 +221,17 @@ def _released_baselines(
                 candidates.append(tag_version)
 
         if registry is not None:
-            published = registry.max_published_version(name)
-            if published is not None:
-                candidates.append(SemVer.parse(published))
+            try:
+                published = registry.max_published_version(name)
+            except ToolError as error:
+                print(
+                    f"  ! crates.io lookup failed ({error}); "
+                    "falling back to tag-only baselines"
+                )
+                registry = None
+            else:
+                if published is not None:
+                    candidates.append(SemVer.parse(published))
 
         if candidates:
             baselines[name] = max(candidates)
