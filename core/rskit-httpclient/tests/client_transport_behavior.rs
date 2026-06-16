@@ -4,6 +4,7 @@
 mod client_transport_behavior {
     use std::time::Duration;
 
+    use base64::Engine;
     use rskit_errors::AppError;
     use rskit_errors::ErrorCode;
     use rskit_httpclient::{
@@ -359,11 +360,19 @@ mod client_transport_behavior {
     async fn request_builder_applies_headers_queries_auth_and_text_or_byte_bodies() {
         let mock_server = MockServer::start().await;
 
+        let basic_user = format!("user-{:08x}", rand::random::<u32>());
+        let basic_password = format!("pw-{:08x}", rand::random::<u32>());
+        let expected_basic = format!(
+            "Basic {}",
+            base64::engine::general_purpose::STANDARD
+                .encode(format!("{basic_user}:{basic_password}"))
+        );
+
         Mock::given(method("POST"))
             .and(path("/text"))
             .and(query_param("mode", "text"))
             .and(header("x-custom", "override"))
-            .and(header("authorization", "Basic dXNlcjpwYXNz"))
+            .and(header("authorization", expected_basic.as_str()))
             .and(body_string("hello"))
             .respond_with(ResponseTemplate::new(200).set_body_string("text-ok"))
             .mount(&mock_server)
@@ -389,7 +398,7 @@ mod client_transport_behavior {
                     .path("/text")
                     .header("x-custom", "override")
                     .query_param("mode", "text")
-                    .basic_auth("user", "pass")
+                    .basic_auth(&basic_user, &basic_password)
                     .body(RequestBody::text("hello")),
             )
             .await
@@ -510,7 +519,8 @@ mod client_transport_behavior {
 
     #[test]
     fn basic_auth_display_redacts_credentials() {
-        let auth = Auth::basic("user", "pass");
+        let password = format!("pw-{:08x}", rand::random::<u32>());
+        let auth = Auth::basic("user", password);
         assert_eq!(auth.to_string(), "Basic");
     }
 

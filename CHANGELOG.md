@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Eliminate CodeQL `rust/hard-coded-cryptographic-value` alerts by generating AES-GCM/ChaCha20 salts and nonces directly from the RNG instead of zero-initialized buffers, and by deriving OIDC nonces and HTTP basic-auth credentials dynamically in tests.
 - Order crates for publishing by their dev-dependencies as well as their normal and build dependencies, so a crate that dev-depends on an internal crate (e.g. `rskit-testutil`) is published after it; `cargo publish` requires every versioned dependency, including dev, to already exist on crates.io.
 
 ### Documentation

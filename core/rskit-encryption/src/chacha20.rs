@@ -4,7 +4,6 @@ use chacha20poly1305::{
     ChaCha20Poly1305, Nonce,
     aead::{Aead, KeyInit, Payload},
 };
-use rand::RngCore;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use sha2::Sha256;
 use zeroize::Zeroize;
@@ -45,15 +44,13 @@ impl Drop for ChaCha20Encryptor {
 
 impl Encryptor for ChaCha20Encryptor {
     fn encrypt(&self, plaintext: &[u8]) -> AppResult<String> {
-        let mut salt = [0u8; SALT_SIZE];
-        rand::rng().fill_bytes(&mut salt);
+        let salt: [u8; SALT_SIZE] = rand::random();
 
         let mut key_bytes = self.derive_key(&salt);
         let cipher = ChaCha20Poly1305::new((&key_bytes[..]).into());
         key_bytes.zeroize();
 
-        let mut nonce_bytes = [0u8; NONCE_SIZE];
-        rand::rng().fill_bytes(&mut nonce_bytes);
+        let nonce_bytes: [u8; NONCE_SIZE] = rand::random();
         let nonce = Nonce::from_slice(&nonce_bytes);
         let aad =
             crate::envelope::associated_data(Algorithm::ChaCha20Poly1305, &salt, &nonce_bytes);
