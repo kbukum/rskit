@@ -171,11 +171,22 @@ def _floor_inheritors(
 
 
 def _all_workspace_floors() -> dict[str, SemVer]:
-    """Collect every internal caret floor across all workspace manifests."""
+    """Collect each internal crate's caret floor across all workspace manifests.
+
+    A crate can be pinned in more than one workspace manifest. When floors
+    diverge, the **minimum** (most conservative) floor is kept so floor-rewrite
+    detection still fires for every manifest that needs it — picking the last or
+    highest floor could mask a manifest whose floor no longer contains the bumped
+    version.
+    """
 
     floors: dict[str, SemVer] = {}
     for manifest in WORKSPACES.values():
-        floors.update(parse_workspace_dep_floors(manifest.read_text(encoding="utf-8")))
+        manifest_floors = parse_workspace_dep_floors(manifest.read_text(encoding="utf-8"))
+        for name, floor in manifest_floors.items():
+            existing = floors.get(name)
+            if existing is None or floor < existing:
+                floors[name] = floor
     return floors
 
 

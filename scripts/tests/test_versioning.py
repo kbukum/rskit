@@ -29,9 +29,16 @@ class SemVerTests(unittest.TestCase):
             self.assertEqual(str(SemVer.parse(text)), text)
 
     def test_invalid_version_raises(self) -> None:
-        for bad in ("", "1", "1.2", "0.1.x", "v1.2.3", "01.2.3"):
+        for bad in ("", "1", "1.2", "0.1.x", "v1.2.3", "01.2.3", "1.0.0-01", "1.0.0-1.02", "1.0.0-00"):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 SemVer.parse(bad)
+
+    def test_prerelease_allows_alphanumeric_and_leading_zero_build(self) -> None:
+        # Alphanumeric identifiers may contain digits/leading zeros; build
+        # metadata is permissive and ignored for precedence.
+        for ok in ("1.0.0-0a", "1.0.0-alpha01", "1.0.0-rc.1", "1.0.0+0010", "1.0.0-x.7.z.92"):
+            with self.subTest(ok=ok):
+                self.assertEqual(str(SemVer.parse(ok)), ok)
 
     def test_release_outranks_prerelease(self) -> None:
         self.assertGreater(SemVer.parse("0.1.0"), SemVer.parse("0.1.0-alpha.1"))

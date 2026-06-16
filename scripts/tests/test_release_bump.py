@@ -217,5 +217,28 @@ class RunBumpTests(unittest.TestCase):
         registry_cls.assert_called_once_with()
 
 
+class AllWorkspaceFloorsTests(unittest.TestCase):
+    def test_diverging_floors_keep_the_minimum(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            core = root / "core" / "Cargo.toml"
+            contrib = root / "contrib" / "Cargo.toml"
+            core.parent.mkdir(parents=True)
+            contrib.parent.mkdir(parents=True)
+            core.write_text(
+                "[workspace.dependencies]\n"
+                'rskit-errors = { path = "rskit-errors", version = "0.2.0-alpha.1" }\n',
+                encoding="utf-8",
+            )
+            contrib.write_text(
+                "[workspace.dependencies]\n"
+                'rskit-errors = { path = "../core/rskit-errors", version = "0.1.0-alpha.1" }\n',
+                encoding="utf-8",
+            )
+            with mock.patch.object(rb, "WORKSPACES", {"core": core, "contrib": contrib}):
+                floors = rb._all_workspace_floors()
+        self.assertEqual(floors, {"rskit-errors": SemVer.parse("0.1.0-alpha.1")})
+
+
 if __name__ == "__main__":
     unittest.main()

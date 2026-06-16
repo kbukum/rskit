@@ -21,9 +21,14 @@ import re
 from collections.abc import Iterable, Mapping
 
 # Semantic-version grammar (semver.org 2.0.0), anchored to a full version.
+# Pre-release identifiers follow the spec's strict form: a numeric identifier is
+# ``0`` or ``[1-9]\d*`` (no leading zeros), while an alphanumeric identifier must
+# contain at least one non-digit. Build metadata stays permissive (leading zeros
+# are allowed there per §10).
+_PRERELEASE_ID = r"(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)"
 _SEMVER_RE = re.compile(
     r"^(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)"
-    r"(?:-(?P<prerelease>[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?"
+    rf"(?:-(?P<prerelease>{_PRERELEASE_ID}(?:\.{_PRERELEASE_ID})*))?"
     r"(?:\+(?P<build>[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$"
 )
 
