@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Adopt independent per-crate versioning: each crate now carries its own `version` instead of inheriting one lock-step workspace version, so releases republish only the crates that changed plus the correct caret cascade. Add a `release bump` command (`make release-bump W=<workspace>`) that detects changed crates since the last tag, applies patch-by-default / `MINOR` breaking bumps, cascades breaking minors to in-workspace dependents, rewrites caret floors, and is idempotent against the crates.io max published version.
 - Release publisher waits out crates.io rate limits in short, deadline-driven slices so long pauses show a live countdown and self-correct across host suspend or clock changes.
+- `release bump` now treats the `rskit-suite` facade as the release-train umbrella: a crate marked `[package.metadata.release] umbrella = true` is force-bumped whenever any other crate in its workspace is bumped, so the facade version always reflects the headline release even when only re-exported crates changed (idempotent against the released baseline).
 
 ### Fixed
 
