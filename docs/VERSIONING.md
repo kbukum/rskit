@@ -1,6 +1,6 @@
 # Versioning Guide
 
-This document explains the versioning and compatibility policy for rskit. For the mechanical release runbook, use [`RELEASING.md`](RELEASING.md). For how this model is expected to evolve (lock-step → independent, and tooling), see [`VERSIONING-ROADMAP.md`](VERSIONING-ROADMAP.md).
+This document explains the versioning and compatibility policy for rskit. For the mechanical release runbook, use [`RELEASING.md`](RELEASING.md). For how this model is expected to evolve (and the supporting tooling), see [`VERSIONING-ROADMAP.md`](VERSIONING-ROADMAP.md).
 
 ## Workspace model
 
@@ -13,11 +13,26 @@ rskit is published from two Cargo workspaces:
 
 There is intentionally no root `Cargo.toml`.
 
-## Lock-step versioning
+## Independent per-crate versioning
 
-Publishable crates currently share one lock-step version during the `0.x` phase. This keeps the first releases predictable while the API surface is still settling.
+Each publishable crate carries its **own** `version` and bumps only when it
+changes (plus the correct cascade). Crates share all other `[workspace.package]`
+metadata (edition, license, rust-version, authors, repository, homepage,
+documentation) but **not** the version.
 
-The lock-step convention is a repository policy, not a Cargo requirement. Consumers should still depend on the specific crates they use and pin versions normally.
+The model uses 0.x SemVer with caret dependency pins:
+
+- A dependent's internal pin (`{ path = "...", version = "x.y.z" }`) is a **caret**
+  requirement, so a dependency **patch** bump is absorbed — **no cascade, no
+  republish**.
+- A dependency **minor** bump (the breaking position in 0.x) leaves the caret
+  range, so its in-workspace dependents must move their pin floor and republish.
+
+`core/` and `contrib/` are separate workspaces and release as **independent
+trains**; tooling operates per workspace.
+
+This is a repository policy, not a Cargo requirement. Consumers should depend on
+the specific crates they use and pin versions normally.
 
 ## Version format
 
@@ -39,26 +54,28 @@ Cargo orders prerelease identifiers according to SemVer (`alpha < beta < rc < fi
 
 ## Workspace inheritance
 
-Each split workspace declares shared package metadata once:
+Each split workspace declares shared package metadata once — but **not** the
+version, which each crate owns:
 
 ```toml
 [workspace.package]
-version = "0.1.0-alpha.1"
 edition = "2024"
 rust-version = "1.91"
 ```
 
-Member crates inherit the shared version:
+Member crates carry their own version and inherit the rest:
 
 ```toml
 [package]
 name = "rskit-errors"
-version.workspace = true
+version = "0.1.0-alpha.1"
 edition.workspace = true
 rust-version.workspace = true
 ```
 
-Internal workspace dependencies also include explicit versions so crates can be published to crates.io:
+Internal workspace dependencies include a caret version (floor) so crates can be
+published to crates.io; `cargo publish` strips `path` and keeps `version`, so the
+`path` is local-dev convenience only:
 
 ```toml
 rskit-errors = { path = "rskit-errors", version = "0.1.0-alpha.1" }
@@ -72,7 +89,12 @@ rskit-errors = { path = "../core/rskit-errors", version = "0.1.0-alpha.1" }
 
 ## Release mechanics
 
-A single `v*` GitHub Release covers a repository release while crates remain lock-step. The exact version-bump, changelog, release publication, publish dry-run, SBOM, signing, and crates.io publishing steps live in [`RELEASING.md`](RELEASING.md). Keep this guide policy-focused so contributors do not have to reconcile duplicate runbooks.
+`scripts/rskit_tool.py release bump` (also `make release-bump`) detects the
+crates changed since the last release tag, applies a **patch** bump by default
+and a **minor** bump for crates flagged `--minor`, cascades breaking minors to
+in-workspace dependents, and rewrites caret floors. It is idempotent against the
+crates.io max published version. The idempotent publisher then republishes only
+the new `name@version`s. The full runbook lives in [`RELEASING.md`](RELEASING.md).
 
 ## Compatibility policy
 
@@ -113,8 +135,8 @@ The README badge documents the current MSRV. `rust-toolchain.toml` pins the deve
 
 ## Rules of thumb
 
-1. Release the split workspaces together until per-crate release cadence is formally adopted.
-2. Treat `0.x` minor releases as the place for documented breaking changes.
+1. Bump only what changed: `make release-bump W=<workspace>`; flag breaking crates with `MINOR="rskit-foo"`.
+2. Treat `0.x` minor releases as the place for documented breaking changes (they cascade to dependents).
 3. Never force-push release tags.
 4. Keep release mechanics in [`RELEASING.md`](RELEASING.md).
 5. Fix forward with a new version if crates.io publishing partially succeeds; published crate versions are immutable.

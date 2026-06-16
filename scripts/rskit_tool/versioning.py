@@ -1,0 +1,471 @@
+"""Independent per-crate semantic versioning building blocks.
+
+Pure, dependency-free helpers for the ``release bump`` command. The repository
+runs independent per-crate semver with caret pins and 0.x breaking semantics
+(see ``tmp/versioning-refactor-plan.md`` and ``docs/VERSIONING-ROADMAP.md``):
+
+* a **patch** bump is absorbed by a dependent's caret pin (no cascade);
+* a **minor** bump (the breaking position in 0.x) leaves the caret range, so
+  the dependency floor must move and in-workspace dependents republish.
+
+Everything here operates on plain data so it stays trivially testable: semver
+parsing/ordering/bumping, caret-range checks, ``Cargo.toml`` text edits that
+preserve formatting, and bump-plan computation over a crate dependency graph.
+"""
+
+from __future__ import annotations
+
+import dataclasses
+import functools
+import re
+from collections.abc import Iterable, Mapping
+
+# Semantic-version grammar (semver.org 2.0.0), anchored to a full version.
+_SEMVER_RE = re.compile(
+    r"^(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)"
+    r"(?:-(?P<prerelease>[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?"
+    r"(?:\+(?P<build>[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$"
+)
+
+_BUMP_KINDS = ("patch", "minor", "major")
+
+
+def _split_identifiers(text: str) -> tuple[int | str, ...]:
+    """Split a dotted pre-release/build string into typed identifiers."""
+
+    parts: list[int | str] = []
+    for part in text.split("."):
+        # A purely-numeric identifier is compared numerically; anything else is
+        # an alphanumeric identifier compared lexically (semver §11).
+        if part.isdigit() and (part == "0" or not part.startswith("0")):
+            parts.append(int(part))
+        else:
+            parts.append(part)
+    return tuple(parts)
+
+
+@functools.total_ordering
+@dataclasses.dataclass(frozen=True)
+class SemVer:
+    """A parsed semantic version with precedence-correct ordering."""
+
+    major: int
+    minor: int
+    patch: int
+    prerelease: tuple[int | str, ...] = ()
+    build: tuple[str, ...] = ()
+
+    @classmethod
+    def parse(cls, text: str) -> SemVer:
+        """Parse ``text`` into a :class:`SemVer` or raise ``ValueError``."""
+
+        match = _SEMVER_RE.match(text.strip())
+        if match is None:
+            raise ValueError(f"invalid semantic version: {text!r}")
+        prerelease = _split_identifiers(match["prerelease"]) if match["prerelease"] else ()
+        build = tuple(match["build"].split(".")) if match["build"] else ()
+        return cls(int(match["major"]), int(match["minor"]), int(match["patch"]), prerelease, build)
+
+    @property
+    def core(self) -> tuple[int, int, int]:
+        """The ``(major, minor, patch)`` precedence triple."""
+
+        return (self.major, self.minor, self.patch)
+
+    def __str__(self) -> str:
+        text = f"{self.major}.{self.minor}.{self.patch}"
+        if self.prerelease:
+            text += "-" + ".".join(str(part) for part in self.prerelease)
+        if self.build:
+            text += "+" + ".".join(self.build)
+        return text
+
+    def __eq__(self, other: object) -> bool:
+        # Build metadata is ignored for precedence (semver §10).
+        if not isinstance(other, SemVer):
+            return NotImplemented
+        return self.core == other.core and self.prerelease == other.prerelease
+
+    def __hash__(self) -> int:
+        return hash((self.core, self.prerelease))
+
+    def __lt__(self, other: object) -> bool:
+        if not isinstance(other, SemVer):
+            return NotImplemented
+        if self.core != other.core:
+            return self.core < other.core
+        return _prerelease_lt(self.prerelease, other.prerelease)
+
+
+def _prerelease_lt(left: tuple[int | str, ...], right: tuple[int | str, ...]) -> bool:
+    """Order pre-release identifier tuples (a release outranks any pre-release)."""
+
+    if left == right:
+        return False
+    if not left:
+        return False  # release > pre-release
+    if not right:
+        return True
+    for lhs, rhs in zip(left, right):
+        if lhs == rhs:
+            continue
+        lhs_num, rhs_num = isinstance(lhs, int), isinstance(rhs, int)
+        if lhs_num and rhs_num:
+            return lhs < rhs  # type: ignore[operator]
+        if lhs_num != rhs_num:
+            return lhs_num  # numeric identifiers rank below alphanumeric ones
+        return str(lhs) < str(rhs)
+    return len(left) < len(right)
+
+
+def _reset_prerelease(prerelease: tuple[int | str, ...]) -> tuple[int | str, ...]:
+    """Reset the trailing numeric counter of a pre-release seed to 1.
+
+    Keeps the alpha/beta train when starting a fresh minor/major line, e.g.
+    ``-alpha.3`` becomes ``-alpha.1``; a release version stays a release.
+    """
+
+    if not prerelease:
+        return ()
+    reset = list(prerelease)
+    if isinstance(reset[-1], int):
+        reset[-1] = 1
+    return tuple(reset)
+
+
+def bump(version: SemVer, kind: str) -> SemVer:
+    """Return ``version`` bumped by ``kind`` (``patch``/``minor``/``major``).
+
+    Pre-release lines are kept on a ``patch`` (``-alpha.1`` -> ``-alpha.2``) and
+    re-seeded on a ``minor``/``major`` (``0.1.0-alpha.3`` -> ``0.2.0-alpha.1``),
+    so a crate keeps publishing within its current alpha/beta train.
+    """
+
+    if kind not in _BUMP_KINDS:
+        raise ValueError(f"unknown bump kind: {kind!r}")
+    if kind == "patch":
+        if version.prerelease:
+            tail = list(version.prerelease)
+            if isinstance(tail[-1], int):
+                tail[-1] += 1
+            else:
+                tail.append(1)
+            return dataclasses.replace(version, prerelease=tuple(tail), build=())
+        return dataclasses.replace(version, patch=version.patch + 1, build=())
+    if kind == "minor":
+        return SemVer(version.major, version.minor + 1, 0, _reset_prerelease(version.prerelease))
+    return SemVer(version.major + 1, 0, 0, _reset_prerelease(version.prerelease))
+
+
+def within_caret(floor: SemVer, candidate: SemVer) -> bool:
+    """Return ``True`` when ``candidate`` satisfies a bare ``= floor`` (caret) pin.
+
+    Mirrors cargo's default (caret) requirement, including its pre-release rule:
+    a pre-release candidate only matches when it shares the floor's
+    ``major.minor.patch`` and the floor itself carries a pre-release.
+    """
+
+    if candidate < floor:
+        return False
+    if floor.major > 0:
+        upper = (floor.major + 1, 0, 0)
+    elif floor.minor > 0:
+        upper = (0, floor.minor + 1, 0)
+    else:
+        upper = (0, 0, floor.patch + 1)
+    if candidate.core >= upper:
+        return False
+    if candidate.prerelease and not (floor.prerelease and candidate.core == floor.core):
+        return False
+    return True
+
+
+# --------------------------------------------------------------------------- #
+# Cargo.toml text edits (formatting-preserving, idempotent)
+# --------------------------------------------------------------------------- #
+
+
+def _table_header(line: str) -> str | None:
+    """Return the table name for a ``[table]``/``[[table]]`` header line."""
+
+    stripped = line.strip()
+    if stripped.startswith("[") and stripped.endswith("]"):
+        return stripped.strip("[]").strip()
+    return None
+
+
+def set_package_version(text: str, new_version: str) -> tuple[str, bool]:
+    """Set ``[package].version`` to ``new_version``; return ``(text, changed)``."""
+
+    return _set_table_string(text, "package", "version", new_version)
+
+
+def _get_table_string(text: str, table: str, key: str) -> str | None:
+    """Return the literal ``key = "..."`` string value inside ``[table]``."""
+
+    pattern = re.compile(rf'^\s*{re.escape(key)}\s*=\s*"([^"]*)"')
+    current: str | None = None
+    for line in text.split("\n"):
+        header = _table_header(line)
+        if header is not None:
+            current = header
+            continue
+        if current != table:
+            continue
+        match = pattern.match(line)
+        if match is not None:
+            return match[1]
+    return None
+
+
+def _parse_optional(value: str | None) -> SemVer | None:
+    """Parse ``value`` into a :class:`SemVer`, returning None on absence/invalid."""
+
+    if value is None:
+        return None
+    try:
+        return SemVer.parse(value)
+    except ValueError:
+        return None
+
+
+def parse_package_version(text: str) -> SemVer | None:
+    """Return the literal ``[package].version`` (None when inherited/absent)."""
+
+    return _parse_optional(_get_table_string(text, "package", "version"))
+
+
+def parse_workspace_package_version(text: str) -> SemVer | None:
+    """Return the literal ``[workspace.package].version`` (None when absent)."""
+
+    return _parse_optional(_get_table_string(text, "workspace.package", "version"))
+
+
+_PACKAGE_VERSION_LINE_RE = re.compile(r"^\s*version(\.workspace)?\s*=")
+
+
+def _strip_package_version_line(text: str) -> str:
+    """Drop the ``[package]`` version line (literal or inherited form) from ``text``."""
+
+    out: list[str] = []
+    current: str | None = None
+    for line in text.split("\n"):
+        header = _table_header(line)
+        if header is not None:
+            current = header
+            out.append(line)
+            continue
+        if current == "package" and _PACKAGE_VERSION_LINE_RE.match(line):
+            continue
+        out.append(line)
+    return "\n".join(out)
+
+
+def package_version_diff_only(old_text: str, new_text: str) -> bool:
+    """Return True when two manifests differ *only* in the ``[package]`` version line.
+
+    The version field is an output of the release tooling, not a source change, so
+    a manifest edit that touches nothing else (e.g. the lock-step de-lockstep, or
+    a prior bump's own write) must not be counted as a release-worthy change.
+    """
+
+    return _strip_package_version_line(old_text) == _strip_package_version_line(new_text)
+
+
+def parse_workspace_dep_floors(text: str) -> dict[str, SemVer]:
+    """Map crate package-name to its caret floor in ``[workspace.dependencies]``.
+
+    Resolves ``package = "..."`` aliases and ignores entries without a version
+    field (e.g. pure ``{ path = ... }`` or plain string requirements).
+    """
+
+    floors: dict[str, SemVer] = {}
+    current: str | None = None
+    for line in text.split("\n"):
+        header = _table_header(line)
+        if header is not None:
+            current = header
+            continue
+        if current != "workspace.dependencies":
+            continue
+        match = _DEP_LINE_RE.match(line)
+        if match is None:
+            continue
+        body = match["body"]
+        version_match = _VERSION_FIELD_RE.search(body)
+        if version_match is None:
+            continue
+        package_match = _PACKAGE_FIELD_RE.search(body)
+        package = package_match[1] if package_match else match["key"]
+        parsed = _parse_optional(version_match[2])
+        if parsed is not None:
+            floors[package] = parsed
+    return floors
+
+
+def _set_table_string(text: str, table: str, key: str, new_value: str) -> tuple[str, bool]:
+    """Replace the ``key = "..."`` string inside ``[table]`` (first occurrence)."""
+
+    had_final_newline = text.endswith("\n")
+    lines = text.split("\n")
+    pattern = re.compile(rf'^(\s*{re.escape(key)}\s*=\s*")([^"]*)(".*)$')
+    current: str | None = None
+    changed = False
+    for index, line in enumerate(lines):
+        header = _table_header(line)
+        if header is not None:
+            current = header
+            continue
+        if current != table:
+            continue
+        match = pattern.match(line)
+        if match is not None:
+            if match[2] != new_value:
+                lines[index] = f"{match[1]}{new_value}{match[3]}"
+                changed = True
+            break
+    result = "\n".join(lines)
+    if had_final_newline and not result.endswith("\n"):
+        result += "\n"
+    return result, changed
+
+
+_DEP_LINE_RE = re.compile(r"^(?P<indent>\s*)(?P<key>[A-Za-z0-9_.-]+)\s*=\s*\{(?P<body>.*)\}(?P<rest>\s*(#.*)?)$")
+_VERSION_FIELD_RE = re.compile(r'(version\s*=\s*")([^"]*)(")')
+_PACKAGE_FIELD_RE = re.compile(r'package\s*=\s*"([^"]+)"')
+
+
+def set_workspace_dep_version(text: str, crate_name: str, new_version: str) -> tuple[str, bool]:
+    """Rewrite the caret floor of ``crate_name`` in ``[workspace.dependencies]``.
+
+    Matches the dependency by package name, resolving ``package = "..."`` aliases
+    (e.g. the ``rskit`` key that renames ``rskit-suite``). Inline-table formatting
+    and trailing comments are preserved; only the ``version`` field changes.
+    """
+
+    had_final_newline = text.endswith("\n")
+    lines = text.split("\n")
+    current: str | None = None
+    changed = False
+    for index, line in enumerate(lines):
+        header = _table_header(line)
+        if header is not None:
+            current = header
+            continue
+        if current != "workspace.dependencies":
+            continue
+        match = _DEP_LINE_RE.match(line)
+        if match is None:
+            continue
+        body = match["body"]
+        package_match = _PACKAGE_FIELD_RE.search(body)
+        package = package_match[1] if package_match else match["key"]
+        if package != crate_name:
+            continue
+        new_body, count = _VERSION_FIELD_RE.subn(rf"\g<1>{new_version}\g<3>", body, count=1)
+        if count == 0 or new_body == body:
+            break
+        lines[index] = f'{match["indent"]}{match["key"]} = {{{new_body}}}{match["rest"]}'
+        changed = True
+        break
+    result = "\n".join(lines)
+    if had_final_newline and not result.endswith("\n"):
+        result += "\n"
+    return result, changed
+
+
+# --------------------------------------------------------------------------- #
+# Bump-plan computation
+# --------------------------------------------------------------------------- #
+
+
+@dataclasses.dataclass(frozen=True)
+class BumpAction:
+    """A single crate version change produced by :func:`compute_bump_plan`."""
+
+    name: str
+    old: SemVer
+    new: SemVer
+    kind: str
+    reason: str  # "changed" (direct edit) or "cascade" (breaking dependency)
+
+
+@dataclasses.dataclass(frozen=True)
+class BumpPlan:
+    """The result of planning a bump: version actions and caret-floor rewrites."""
+
+    actions: tuple[BumpAction, ...]
+    floor_rewrites: tuple[tuple[str, SemVer], ...]
+
+
+def transitive_dependents(roots: Iterable[str], dependents: Mapping[str, set[str]]) -> set[str]:
+    """Collect every crate that transitively depends on any crate in ``roots``."""
+
+    found: set[str] = set()
+    stack = list(roots)
+    while stack:
+        node = stack.pop()
+        for parent in dependents.get(node, set()):
+            if parent not in found:
+                found.add(parent)
+                stack.append(parent)
+    return found
+
+
+def compute_bump_plan(
+    *,
+    changed: Iterable[str],
+    minor: Iterable[str],
+    dependents: Mapping[str, set[str]],
+    current_versions: Mapping[str, SemVer],
+    baselines: Mapping[str, SemVer],
+    current_floors: Mapping[str, SemVer],
+) -> BumpPlan:
+    """Plan version bumps and caret-floor rewrites for one workspace.
+
+    ``changed`` crates default to a **patch** bump; those also listed in
+    ``minor`` take a breaking **minor** bump and cascade a patch to their
+    in-workspace transitive dependents. Each target is computed against the
+    released ``baselines`` (max of crates.io and the last tag) so re-running is a
+    no-op once the local manifest already carries the bumped version.
+
+    Floor rewrites are emitted for any dependency whose final version no longer
+    satisfies its current caret floor — exactly the breaking-minor case — which
+    keeps path-based resolution valid and is itself idempotent.
+    """
+
+    minor_set = set(minor)
+    decided: dict[str, tuple[str, str]] = {}  # name -> (kind, reason)
+    for name in changed:
+        kind = "minor" if name in minor_set else "patch"
+        decided[name] = (kind, "changed")
+
+    breaking = [name for name, (kind, _) in decided.items() if kind == "minor"]
+    for dependent in transitive_dependents(breaking, dependents):
+        decided.setdefault(dependent, ("patch", "cascade"))
+
+    actions: list[BumpAction] = []
+    final_versions: dict[str, SemVer] = dict(current_versions)
+    for name, (kind, reason) in sorted(decided.items()):
+        baseline = baselines.get(name)
+        if baseline is None:
+            # Never released (no tag/crates.io anchor): the crate ships at its
+            # current seed version, so there is nothing to supersede yet.
+            continue
+        target = bump(baseline, kind)
+        current = current_versions[name]
+        # Idempotent: only move forward, and never past an already-bumped manifest.
+        if current >= target:
+            continue
+        actions.append(BumpAction(name=name, old=current, new=target, kind=kind, reason=reason))
+        final_versions[name] = target
+
+    floor_rewrites: list[tuple[str, SemVer]] = []
+    for name, floor in sorted(current_floors.items()):
+        final = final_versions.get(name)
+        if final is None:
+            continue
+        if not within_caret(floor, final):
+            floor_rewrites.append((name, final))
+
+    return BumpPlan(actions=tuple(actions), floor_rewrites=tuple(floor_rewrites))

@@ -29,3 +29,26 @@ def changed_paths(base: str = "origin/main...HEAD") -> list[Path]:
     if untracked.returncode == 0:
         changed.update(Path(line) for line in untracked.stdout.splitlines() if line)
     return sorted(changed)
+
+
+def latest_tag() -> str | None:
+    """Return the most recent annotated/lightweight tag, or None when untagged."""
+
+    completed = run(
+        ["git", "describe", "--tags", "--abbrev=0"], cwd=ROOT, capture=True, check=False
+    )
+    if completed.returncode != 0:
+        return None
+    tag = completed.stdout.strip()
+    return tag or None
+
+
+def file_at_ref(ref: str, relative_path: str) -> str | None:
+    """Return the text of ``relative_path`` at ``ref`` (None when it is absent)."""
+
+    completed = run(
+        ["git", "show", f"{ref}:{relative_path}"], cwd=ROOT, capture=True, check=False
+    )
+    if completed.returncode != 0:
+        return None
+    return completed.stdout

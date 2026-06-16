@@ -24,6 +24,7 @@ from ..publish import (
 )
 from .checks import run_l7_edges, run_public_api, run_topology, run_workspace_deps_sync
 from .domains import DOMAIN_ORDER, DOMAIN_TITLES, load_domains
+from ..release_bump import add_bump_parser
 
 # Dependency kinds that constrain publish order. `cargo publish` verifies the
 # package by building it, and a dev-dependency that carries a version requirement
@@ -55,6 +56,8 @@ def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) 
     publish.add_argument("--publish", dest="mode", action="store_const", const="--publish")
     publish.set_defaults(mode="--dry-run")
     publish.set_defaults(func=run_publish)
+
+    add_bump_parser(release_sub)
 
 
 def run_readiness(args: argparse.Namespace) -> int:

@@ -185,7 +185,7 @@ chore(ci): pin cargo-deny to 0.16
 
 1. Create foundation crates under `core/rskit-<name>/` with `cargo new --lib`, or adapter crates under `contrib/<domain>/<name>/`.
 2. Add foundation crates to `core/Cargo.toml` or adapter crates to the matching `contrib/<domain>/*` workspace pattern in `contrib/Cargo.toml`.
-3. Inherit workspace metadata (`version.workspace = true`, etc.) and add any shared dependencies through the owning workspace manifest.
+3. Give the crate its own `version` (seeded from the current alpha, e.g. `version = "0.1.0-alpha.1"`), inherit the remaining workspace metadata (`edition.workspace = true`, etc.), and add any shared dependencies through the owning workspace manifest.
 4. Add `#![warn(missing_docs)]` to `src/lib.rs`.
 5. Wire it into the `rskit` facade crate.
 6. Add or update package documentation in `docs/PACKAGES.md` and facade feature documentation when applicable.

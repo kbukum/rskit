@@ -4,7 +4,7 @@
 
 ## Versioning surface
 
-`rskit` is published from split Cargo workspaces: `core/Cargo.toml` for foundation crates and the `rskit-suite` facade package (Rust crate name `rskit`), and `contrib/Cargo.toml` for adapter crates. **Each crate is versioned independently**, even though we currently cut all publishable crates in lock-step via `[workspace.package].version`. The lock-step practice is convenience, not contract — consumers should pin per crate.
+`rskit` is published from split Cargo workspaces: `core/Cargo.toml` for foundation crates and the `rskit-suite` facade package (Rust crate name `rskit`), and `contrib/Cargo.toml` for adapter crates. **Each crate is versioned independently**: it carries its own `[package].version` and bumps only when it changes, plus the caret cascade. Consumers should pin per crate.
 
 ## Pre-1.0 (`0.x.y`)
 
@@ -44,7 +44,7 @@ The following are explicitly **not** part of the public API and may change in an
 
 ## Workspace-level version skew
 
-Sub-crates may temporarily be at different versions when a focused fix ships (e.g. `rskit-storage 0.2.1` while the rest of the workspace stays at `0.2.0`). The next workspace-level release brings everything back into lock-step.
+Sub-crates are expected to sit at different versions: a focused fix ships as e.g. `rskit-storage 0.2.1` while unaffected crates stay put. Caret pins absorb such patch bumps in dependents, so version skew is the normal steady state, not a temporary condition to reconcile.
 
 ## Pre-release identifiers
 

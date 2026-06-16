@@ -38,6 +38,7 @@ from email.utils import parsedate_to_datetime
 
 from .errors import ToolError
 from .publish_progress import WaitProgress, WaitReporter
+from .versioning import SemVer
 
 # Fallback refill cadences mirrored from the crates.io source (per account).
 # These only bound the probe interval when a 429 omits a retry-after hint.
@@ -101,6 +102,34 @@ def crate_exists(crate: str) -> bool:
     return data is not None
 
 
+def max_published_version(crate: str) -> str | None:
+    """Return the highest non-yanked version of ``crate`` on crates.io (or None).
+
+    Considers pre-releases (the alpha/beta train this repo publishes on) and
+    orders by semantic precedence rather than publish recency, so the result is a
+    stable idempotency anchor for ``release bump``.
+    """
+
+    url = f"https://crates.io/api/v1/crates/{crate}"
+    data = _get_json(url, f"crates.io versions for {crate}")
+    if data is None:
+        return None
+    candidates: list[SemVer] = []
+    for entry in data.get("versions") or []:
+        if entry.get("yanked"):
+            continue
+        num = entry.get("num")
+        if not num:
+            continue
+        try:
+            candidates.append(SemVer.parse(num))
+        except ValueError:
+            continue
+    if not candidates:
+        return None
+    return str(max(candidates))
+
+
 def _get_json(url: str, context: str) -> dict | None:
     """GET a crates.io JSON resource, returning None on 404."""
 
@@ -128,6 +157,11 @@ class CratesIoRegistry:
         """Return true when the crate name already exists on crates.io."""
 
         return crate_exists(name)
+
+    def max_published_version(self, name: str) -> str | None:
+        """Return the highest non-yanked crates.io version of ``name`` (or None)."""
+
+        return max_published_version(name)
 
 
 def is_rate_limited(output: str) -> bool:
