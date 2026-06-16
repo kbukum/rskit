@@ -2,7 +2,21 @@
 
 from __future__ import annotations
 
+from ..formatting import format_bar, format_duration, format_percent
 from .models import Metric, ModuleResult
+
+__all__ = [
+    "format_bar",
+    "format_duration",
+    "format_percent",
+    "format_package_result",
+    "format_stage_progress",
+    "format_metric",
+    "format_percent_metric",
+    "format_percent_result",
+    "format_threshold",
+]
+
 
 
 def format_package_result(result: ModuleResult, completed: int, total: int) -> str:
@@ -36,24 +50,6 @@ def format_stage_progress(
     )
 
 
-def format_percent(completed: int, total: int) -> str:
-    """Format completion percentage."""
-
-    if total <= 0:
-        return "100.0%"
-    return f"{(completed / total) * 100:.1f}%"
-
-
-def format_bar(completed: int, total: int, *, width: int) -> str:
-    """Format a fixed-width ASCII progress bar."""
-
-    if width < 1:
-        return ""
-    ratio = 1.0 if total <= 0 else min(1.0, max(0.0, completed / total))
-    filled = int(round(ratio * width))
-    return "[" + ("=" * filled) + ("-" * (width - filled)) + "]"
-
-
 def format_metric(metric: Metric) -> str:
     """Format a metric row."""
 
@@ -76,16 +72,3 @@ def format_threshold(value: float | None) -> str:
     """Format an optional threshold."""
 
     return "disabled" if value is None else f"{value:.2f}"
-
-
-def format_duration(seconds: float) -> str:
-    """Format elapsed time compactly."""
-
-    total_seconds = max(0, int(seconds))
-    minutes, seconds = divmod(total_seconds, 60)
-    hours, minutes = divmod(minutes, 60)
-    if hours:
-        return f"{hours}h{minutes:02d}m{seconds:02d}s"
-    if minutes:
-        return f"{minutes}m{seconds:02d}s"
-    return f"{seconds}s"

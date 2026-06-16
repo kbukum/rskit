@@ -72,6 +72,63 @@ def run(
     return completed
 
 
+def run_streamed(
+    command: Sequence[str],
+    *,
+    cwd: Path = ROOT,
+    env: Mapping[str, str] | None = None,
+    sink: Callable[[str], None] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Run a command, teeing combined output to ``sink`` while capturing it.
+
+    Unlike ``run(capture=True)`` — which buffers everything and reveals it only
+    after the process exits — this streams each line as the child emits it, so a
+    long step (e.g. ``cargo publish`` compiling and uploading) shows live
+    progress. stderr is merged into stdout to preserve ordering, and the full
+    combined text is still returned for callers that need to inspect it.
+    """
+
+    emit = sink if sink is not None else _default_sink
+    chunks: list[str] = []
+    try:
+        with subprocess.Popen(
+            list(command),
+            cwd=cwd,
+            env=None if env is None else {**os.environ, **dict(env)},
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            bufsize=1,
+        ) as process:
+            stream = process.stdout
+            if stream is None:  # defensive: PIPE is configured above.
+                raise ToolError(f"failed to capture output for command: {printable(command)}")
+            # Keep draining the child pipe even if the sink fails (e.g. a
+            # BrokenPipeError when our own stdout is closed by a downstream
+            # reader). Aborting the loop would leave the pipe full and can
+            # deadlock the child, hanging the release run; instead we stop teeing
+            # but keep reading so the process can finish and output stays captured.
+            teeing = True
+            for line in stream:
+                chunks.append(line)
+                if teeing:
+                    try:
+                        emit(line)
+                    except Exception:  # noqa: BLE001 - any sink failure disables teeing, never drainage.
+                        teeing = False
+            returncode = process.wait()
+    except OSError as error:
+        raise ToolError(f"failed to execute command: {printable(command)}: {error}") from error
+    return subprocess.CompletedProcess(list(command), returncode, "".join(chunks), "")
+
+
+def _default_sink(text: str) -> None:
+    """Write streamed output straight through to stdout without extra newlines."""
+
+    sys.stdout.write(text)
+    sys.stdout.flush()
+
+
 def run_json(command: Sequence[str], *, cwd: Path = ROOT) -> dict[str, object]:
     """Run a JSON-emitting command."""
 
