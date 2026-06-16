@@ -381,6 +381,11 @@ mod tests {
       }]
     }"#;
 
+    /// Generates a unique, non-hard-coded nonce for each test invocation.
+    fn random_nonce() -> String {
+        format!("nonce-{:016x}", rand::random::<u64>())
+    }
+
     #[derive(Debug, Clone)]
     struct MockHttpClient {
         responses: Arc<HashMap<String, Value>>,
@@ -649,17 +654,20 @@ mod tests {
     #[tokio::test]
     async fn nonce_mismatch_is_rejected() {
         let client = mock_client();
-        let token = issue_token("expected-nonce");
-        let result = client.validate_id_token(&token, Some("wrong-nonce")).await;
+        let expected = random_nonce();
+        let wrong = random_nonce();
+        let token = issue_token(&expected);
+        let result = client.validate_id_token(&token, Some(&wrong)).await;
         assert_eq!(result.unwrap_err(), OidcError::NonceMismatch);
     }
 
     #[tokio::test]
     async fn valid_id_token_and_userinfo_roundtrip() {
         let client = mock_client();
-        let token = issue_token("nonce-123");
+        let nonce = random_nonce();
+        let token = issue_token(&nonce);
         let claims = client
-            .validate_id_token(&token, Some("nonce-123"))
+            .validate_id_token(&token, Some(&nonce))
             .await
             .unwrap();
         let userinfo = client.fetch_userinfo("opaque-access-token").await.unwrap();
@@ -672,10 +680,11 @@ mod tests {
     #[tokio::test]
     async fn valid_id_token_without_nbf_is_accepted() {
         let client = mock_client();
-        let token = issue_token_without_nbf("nonce-123");
+        let nonce = random_nonce();
+        let token = issue_token_without_nbf(&nonce);
 
         let claims = client
-            .validate_id_token(&token, Some("nonce-123"))
+            .validate_id_token(&token, Some(&nonce))
             .await
             .unwrap();
 
