@@ -217,6 +217,47 @@ class RunBumpTests(unittest.TestCase):
         registry_cls.assert_called_once_with()
 
 
+class RunBumpApplyTests(unittest.TestCase):
+    """End-to-end dry-run vs apply: the safety property that --dry-run writes nothing."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name).resolve()
+        crate_dir = self.root / "contrib" / "storage" / "s3"
+        crate_dir.mkdir(parents=True)
+        self.manifest = crate_dir / "Cargo.toml"
+        self.original = '[package]\nname = "rskit-storage-s3"\nversion = "0.1.0-alpha.1"\n'
+        self.manifest.write_text(self.original, encoding="utf-8")
+        self.members = {"rskit-storage-s3": _pkg(crate_dir, "rskit-storage-s3", "contrib")}
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    @contextlib.contextmanager
+    def _patched(self):
+        with (
+            mock.patch.object(rb, "latest_tag", return_value="TAG"),
+            mock.patch.object(rb, "_workspace_graph", return_value=(self.members, {})),
+            mock.patch.object(rb, "_detect_changed", return_value={"rskit-storage-s3"}),
+            mock.patch.object(
+                rb, "_released_baselines", return_value={"rskit-storage-s3": SemVer.parse("0.1.0-alpha.1")}
+            ),
+            mock.patch.object(rb, "_all_workspace_floors", return_value={}),
+        ):
+            with contextlib.redirect_stdout(io.StringIO()):
+                yield
+
+    def test_dry_run_writes_nothing(self) -> None:
+        with self._patched():
+            rb.run_bump(_args(dry_run=True, offline=True))
+        self.assertEqual(self.manifest.read_text(encoding="utf-8"), self.original)
+
+    def test_apply_writes_bumped_version(self) -> None:
+        with self._patched():
+            rb.run_bump(_args(dry_run=False, offline=True))
+        self.assertIn('version = "0.1.0-alpha.2"', self.manifest.read_text(encoding="utf-8"))
+
+
 class AllWorkspaceFloorsTests(unittest.TestCase):
     def test_diverging_floors_keep_the_minimum(self) -> None:
         with tempfile.TemporaryDirectory() as name:
