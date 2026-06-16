@@ -33,5 +33,28 @@ class RunStreamedTests(unittest.TestCase):
         self.assertIn("boom", completed.stdout)
 
 
+    def test_sink_failure_disables_teeing_but_drains_output(self) -> None:
+        # A sink that fails mid-stream (e.g. BrokenPipe when a downstream reader
+        # closes) must not abort draining the child pipe — that could leave the
+        # pipe full and deadlock the child. Teeing stops; capture and the process
+        # both complete.
+        calls = {"count": 0}
+
+        def flaky(_line: str) -> None:
+            calls["count"] += 1
+            raise BrokenPipeError("downstream closed")
+
+        completed = run_streamed(
+            [sys.executable, "-c", "print('a'); print('b'); print('c')"],
+            sink=flaky,
+        )
+
+        self.assertEqual(completed.returncode, 0)
+        self.assertIn("a", completed.stdout)
+        self.assertIn("c", completed.stdout)
+        # Teeing was disabled after the first failure, not retried per line.
+        self.assertEqual(calls["count"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()

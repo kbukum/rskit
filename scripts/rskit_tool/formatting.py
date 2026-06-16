@@ -8,15 +8,19 @@ without coupling those areas to each other.
 from __future__ import annotations
 
 
-def format_percent(completed: int, total: int) -> str:
-    """Format completion percentage."""
+def format_percent(completed: float, total: float) -> str:
+    """Format completion percentage.
+
+    Accepts floats so sub-unit progress (e.g. a few hundred milliseconds of a
+    one-second wait) is not truncated to 0 and mis-rendered as complete.
+    """
 
     if total <= 0:
         return "100.0%"
     return f"{(completed / total) * 100:.1f}%"
 
 
-def format_bar(completed: int, total: int, *, width: int) -> str:
+def format_bar(completed: float, total: float, *, width: int) -> str:
     """Format a fixed-width ASCII progress bar."""
 
     if width < 1:

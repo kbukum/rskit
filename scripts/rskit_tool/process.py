@@ -100,10 +100,22 @@ def run_streamed(
             stderr=subprocess.STDOUT,
             bufsize=1,
         ) as process:
-            assert process.stdout is not None  # PIPE is configured above.
-            for line in process.stdout:
+            stream = process.stdout
+            if stream is None:  # defensive: PIPE is configured above.
+                raise ToolError(f"failed to capture output for command: {printable(command)}")
+            # Keep draining the child pipe even if the sink fails (e.g. a
+            # BrokenPipeError when our own stdout is closed by a downstream
+            # reader). Aborting the loop would leave the pipe full and can
+            # deadlock the child, hanging the release run; instead we stop teeing
+            # but keep reading so the process can finish and output stays captured.
+            teeing = True
+            for line in stream:
                 chunks.append(line)
-                emit(line)
+                if teeing:
+                    try:
+                        emit(line)
+                    except Exception:  # noqa: BLE001 - any sink failure disables teeing, never drainage.
+                        teeing = False
             returncode = process.wait()
     except OSError as error:
         raise ToolError(f"failed to execute command: {printable(command)}: {error}") from error

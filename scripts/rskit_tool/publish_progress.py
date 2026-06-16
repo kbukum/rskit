@@ -73,7 +73,7 @@ class WaitReporter:
             self._render_inplace(label, shown, total, remaining)
         elif elapsed >= self._next_log_at:
             self._next_log_at = elapsed + self._log_interval
-            pct = format_percent(int(shown), int(total))
+            pct = format_percent(shown, total)
             self._write(f"    {label}: {pct} ready, {format_duration(remaining)} left\n")
 
     def finish(self, label: str) -> None:
@@ -91,8 +91,8 @@ class WaitReporter:
     def _render_inplace(self, label: str, elapsed: float, total: float, remaining: float) -> None:
         frame = _SPINNER_FRAMES[self._frame % len(_SPINNER_FRAMES)]
         self._frame += 1
-        bar = format_bar(int(elapsed), int(total), width=self._bar_width)
-        pct = format_percent(int(elapsed), int(total))
+        bar = format_bar(elapsed, total, width=self._bar_width)
+        pct = format_percent(elapsed, total)
         line = f"{frame} {label}  {bar} {pct}  next publish in {format_duration(remaining)}"
         self._write(_CLEAR_LINE + line)
 

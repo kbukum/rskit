@@ -62,6 +62,17 @@ class WaitReporterTests(unittest.TestCase):
         # remaining stays honest: 120 - (-30) = 150s -> 2m30s left.
         self.assertIn("next publish in 2m30s", output)
 
+    def test_subsecond_wait_does_not_render_as_complete(self) -> None:
+        # A sub-second wait (e.g. a retry-after a few hundred ms out) must not be
+        # truncated so total rounds to 0 and shows a full/100% bar while waiting.
+        reporter, stream = self._reporter(isatty=True)
+        reporter.start("rskit-a 0.1.0", 0.8, reason="rate limit")
+        reporter.update("rskit-a 0.1.0", 0.2, 0.8)
+        output = stream.getvalue()
+
+        self.assertIn("25.0%", output)  # 0.2 / 0.8, not 100%
+        self.assertNotIn("100.0%", output)
+
     def test_zero_total_is_inert(self) -> None:
         reporter, stream = self._reporter(isatty=True)
         reporter.start("rskit-a 0.1.0", 0.0, reason="rate limit")
