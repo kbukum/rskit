@@ -1,12 +1,16 @@
 """Idempotent, rate-aware crates.io publishing primitive.
 
-The publisher mirrors the crates.io publish rate limits locally so a release run
-*waits out* its budget instead of failing on a ``429``. It is also idempotent:
-any crate whose ``name@version`` is already on crates.io is skipped, which makes
-an interrupted release resumable with no manual bookkeeping.
+The publisher is *reactive-first*: it attempts each ``cargo publish`` straight
+away and only waits when crates.io actually rejects the upload with a rate-limit
+``429``. crates.io includes an authoritative ``try again after <date>`` hint on
+those rejections, so the publisher schedules the wait to exactly that deadline.
+When a rejection omits the hint it falls back to a bounded *probe* interval and
+retries — a rejected publish does not consume budget, so probing never makes the
+limit worse. It is also idempotent: any crate whose ``name@version`` is already
+on crates.io is skipped, which makes an interrupted release resumable with no
+manual bookkeeping.
 
-Rate limits are keyed per publishing account (``(user_id, action)``), so every
-crate shares one bucket per action class:
+Rate limits are keyed per publishing account (``(user_id, action)``):
 
 ==================  =====  =================
 Action              Burst  Refill
@@ -14,6 +18,10 @@ Action              Burst  Refill
 new crate           5      1 per 10 minutes
 update (existing)   30     1 per minute
 ==================  =====  =================
+
+The refill cadence above is the *fallback* probe interval (capped) used only
+when a rejection carries no explicit retry-after; the server's hint is always
+preferred when present.
 """
 
 from __future__ import annotations
@@ -29,11 +37,11 @@ from dataclasses import dataclass, field
 from email.utils import parsedate_to_datetime
 
 from .errors import ToolError
+from .publish_progress import WaitReporter
 
-# Rate limits mirrored from the crates.io source (per publishing account).
-NEW_CRATE_BURST = 5
+# Fallback refill cadences mirrored from the crates.io source (per account).
+# These only bound the probe interval when a 429 omits a retry-after hint.
 NEW_CRATE_REFILL_SECONDS = 600.0  # 1 token per 10 minutes
-UPDATE_BURST = 30
 UPDATE_REFILL_SECONDS = 60.0  # 1 token per minute
 
 # Cargo surfaces a crates.io rate-limit rejection in its error output; these
@@ -73,50 +81,6 @@ class PublishOutcome:
 
     published: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
-
-
-class TokenBucket:
-    """A refilling token bucket mirroring a crates.io publish budget."""
-
-    def __init__(self, capacity: int, refill_seconds: float, *, now: Callable[[], float]) -> None:
-        self._capacity = float(capacity)
-        self._refill_seconds = refill_seconds
-        self._tokens = float(capacity)
-        self._now = now
-        self._last = now()
-
-    @property
-    def refill_seconds(self) -> float:
-        """Seconds to regain one token once the bucket is empty."""
-
-        return self._refill_seconds
-
-    def _refill(self) -> None:
-        current = self._now()
-        elapsed = current - self._last
-        if elapsed > 0:
-            self._tokens = min(self._capacity, self._tokens + elapsed / self._refill_seconds)
-            self._last = current
-        elif elapsed < 0:
-            # Wall clock moved backwards (NTP correction / manual set). Resync the
-            # baseline to the new time so a backward jump doesn't stall refills
-            # until the clock catches back up; we simply credit no tokens for the
-            # negative interval.
-            self._last = current
-
-    def time_until_available(self) -> float:
-        """Return seconds to wait before a token is available (0 when ready)."""
-
-        self._refill()
-        if self._tokens >= 1.0:
-            return 0.0
-        return (1.0 - self._tokens) * self._refill_seconds
-
-    def consume(self) -> None:
-        """Spend one token, refilling first."""
-
-        self._refill()
-        self._tokens -= 1.0
 
 
 def crate_version_published(crate: str, version: str) -> bool:
@@ -190,36 +154,42 @@ def parse_retry_after(output: str, *, wall_now: float) -> float | None:
 
 
 class RateAwarePublisher:
-    """Publish crates idempotently, waiting out the crates.io rate budget."""
+    """Publish crates idempotently, scheduling waits around crates.io 429s."""
 
     def __init__(
         self,
         *,
         registry: CratesIoRegistry,
         publish_crate: Callable[[CratePlan], CommandResult],
-        # crates.io budgets refill in wall-clock time and keep refilling while the
-        # host is suspended, so the buckets share the same wall basis as ``_wait``
-        # and ``parse_retry_after`` instead of a monotonic clock that can pause.
-        now: Callable[[], float] = time.time,
+        # crates.io retry-after hints are absolute wall-clock deadlines and the
+        # budget keeps refilling while the host is suspended, so waits are derived
+        # from the same wall basis as ``parse_retry_after`` rather than a monotonic
+        # clock that can pause.
         sleep: Callable[[float], None] = time.sleep,
         wall_now: Callable[[], float] = time.time,
         log: Callable[[str], None] = print,
+        progress: WaitReporter | None = None,
         max_rate_retries: int = 8,
-        poll_interval: float = 10.0,
+        poll_interval: float = 1.0,
+        probe_interval: float = 60.0,
     ) -> None:
         if not math.isfinite(poll_interval) or poll_interval <= 0:
             raise ValueError(
                 f"poll_interval must be a positive, finite number of seconds, got {poll_interval!r}"
+            )
+        if not math.isfinite(probe_interval) or probe_interval <= 0:
+            raise ValueError(
+                f"probe_interval must be a positive, finite number of seconds, got {probe_interval!r}"
             )
         self._registry = registry
         self._publish_crate = publish_crate
         self._sleep = sleep
         self._wall_now = wall_now
         self._log = log
+        self._progress = progress if progress is not None else WaitReporter()
         self._max_rate_retries = max_rate_retries
         self._poll_interval = poll_interval
-        self._new_bucket = TokenBucket(NEW_CRATE_BURST, NEW_CRATE_REFILL_SECONDS, now=now)
-        self._update_bucket = TokenBucket(UPDATE_BURST, UPDATE_REFILL_SECONDS, now=now)
+        self._probe_interval = probe_interval
 
     def publish(self, crates: Sequence[CratePlan]) -> PublishOutcome:
         """Publish each crate not already on crates.io, in dependency order."""
@@ -231,56 +201,61 @@ class RateAwarePublisher:
                 outcome.skipped.append(plan.name)
                 continue
             is_new = not self._registry.crate_exists(plan.name)
-            bucket = self._new_bucket if is_new else self._update_bucket
-            self._publish_with_retry(plan, bucket, is_new)
+            self._publish_with_retry(plan, is_new)
             outcome.published.append(plan.name)
         return outcome
 
     def _wait(self, seconds: float, *, reason: str, plan: CratePlan) -> None:
-        """Sleep in short slices with a countdown so long waits stay visible.
+        """Sleep until ``seconds`` elapse, drawing an in-place countdown bar.
 
         Re-deriving the remaining time from a wall-clock deadline each slice keeps
         the wait honest if the wall clock jumps (e.g. the machine suspends
         mid-wait), instead of blindly over-sleeping one large interval.
         """
 
+        if seconds <= 0:
+            return
+        label = f"{plan.name} {plan.version}"
         deadline = self._wall_now() + seconds
+        self._progress.start(label, seconds, reason=reason)
         while True:
             remaining = deadline - self._wall_now()
             if remaining <= 0:
-                return
-            self._log(f"==> {plan.name} {plan.version}: {reason}; waiting {remaining:.0f}s")
+                break
+            self._progress.update(label, seconds - remaining, seconds)
             self._sleep(min(self._poll_interval, remaining))
+        self._progress.finish(label)
 
-    def _acquire_token(self, plan: CratePlan, bucket: TokenBucket, is_new: bool) -> None:
-        """Wait for and consume one token, so each publish attempt costs a token."""
+    def _fallback_wait(self, is_new: bool) -> float:
+        """Bounded probe interval used when a 429 carries no retry-after hint.
 
-        wait = bucket.time_until_available()
-        if wait > 0:
-            kind = "new-crate" if is_new else "update"
-            self._wait(wait, reason=f"{kind} rate budget exhausted", plan=plan)
-        bucket.consume()
+        A rejected publish does not spend budget, so we re-probe at the smaller of
+        the action's refill cadence and ``probe_interval`` instead of sleeping a
+        full, opaque refill window we cannot confirm.
+        """
 
-    def _publish_with_retry(self, plan: CratePlan, bucket: TokenBucket, is_new: bool) -> None:
+        refill = NEW_CRATE_REFILL_SECONDS if is_new else UPDATE_REFILL_SECONDS
+        return min(refill, self._probe_interval)
+
+    def _publish_with_retry(self, plan: CratePlan, is_new: bool) -> None:
         attempts = 0
         while True:
-            # Every attempt — including a post-429 retry — spends a token so the
-            # local model never runs ahead of the real crates.io budget.
-            self._acquire_token(plan, bucket, is_new)
             self._log(f"==> cargo publish --locked {plan.name} {plan.version}")
             result = self._publish_crate(plan)
             if result.returncode == 0:
                 return
             if is_rate_limited(result.output) and attempts < self._max_rate_retries:
                 attempts += 1
-                wait = parse_retry_after(result.output, wall_now=self._wall_now())
-                if wait is None:
-                    wait = bucket.refill_seconds
-                self._wait(
-                    wait,
-                    reason=f"crates.io rate limit hit (retry {attempts}/{self._max_rate_retries})",
-                    plan=plan,
+                scheduled = parse_retry_after(result.output, wall_now=self._wall_now())
+                if scheduled is not None:
+                    wait, reason = scheduled, "crates.io rate limit; scheduled from retry-after"
+                else:
+                    wait, reason = self._fallback_wait(is_new), "crates.io rate limit; probing budget"
+                self._log(
+                    f"==> {plan.name} {plan.version}: {reason} "
+                    f"(retry {attempts}/{self._max_rate_retries})"
                 )
+                self._wait(wait, reason=reason, plan=plan)
                 continue
             raise ToolError(
                 f"cargo publish failed for {plan.name} {plan.version} "

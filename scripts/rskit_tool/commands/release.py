@@ -14,7 +14,7 @@ from types import SimpleNamespace
 from ..cargo import is_relative_to, metadata
 from ..errors import ToolError
 from ..paths import CORE_AND_CONTRIB, ROOT, WORKSPACES
-from ..process import command_exists, notice, run
+from ..process import command_exists, notice, run, run_streamed
 from ..publish import (
     CommandResult,
     CratePlan,
@@ -449,15 +449,10 @@ def run_publish_release(dirty_args: list[str]) -> int:
     ]
 
     def publish_crate(plan: CratePlan) -> CommandResult:
-        completed = run(
+        completed = run_streamed(
             ["cargo", "publish", "--locked", *dirty_args, "--manifest-path", plan.manifest],
-            capture=True,
-            check=False,
         )
-        output = (completed.stdout or "") + (completed.stderr or "")
-        if output:
-            print(output, end="" if output.endswith("\n") else "\n")
-        return CommandResult(returncode=completed.returncode, output=output)
+        return CommandResult(returncode=completed.returncode, output=completed.stdout or "")
 
     publisher = RateAwarePublisher(registry=CratesIoRegistry(), publish_crate=publish_crate)
     outcome = publisher.publish(plans)

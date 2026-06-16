@@ -72,6 +72,51 @@ def run(
     return completed
 
 
+def run_streamed(
+    command: Sequence[str],
+    *,
+    cwd: Path = ROOT,
+    env: Mapping[str, str] | None = None,
+    sink: Callable[[str], None] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Run a command, teeing combined output to ``sink`` while capturing it.
+
+    Unlike ``run(capture=True)`` — which buffers everything and reveals it only
+    after the process exits — this streams each line as the child emits it, so a
+    long step (e.g. ``cargo publish`` compiling and uploading) shows live
+    progress. stderr is merged into stdout to preserve ordering, and the full
+    combined text is still returned for callers that need to inspect it.
+    """
+
+    emit = sink if sink is not None else _default_sink
+    chunks: list[str] = []
+    try:
+        with subprocess.Popen(
+            list(command),
+            cwd=cwd,
+            env=None if env is None else {**os.environ, **dict(env)},
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            bufsize=1,
+        ) as process:
+            assert process.stdout is not None  # PIPE is configured above.
+            for line in process.stdout:
+                chunks.append(line)
+                emit(line)
+            returncode = process.wait()
+    except OSError as error:
+        raise ToolError(f"failed to execute command: {printable(command)}: {error}") from error
+    return subprocess.CompletedProcess(list(command), returncode, "".join(chunks), "")
+
+
+def _default_sink(text: str) -> None:
+    """Write streamed output straight through to stdout without extra newlines."""
+
+    sys.stdout.write(text)
+    sys.stdout.flush()
+
+
 def run_json(command: Sequence[str], *, cwd: Path = ROOT) -> dict[str, object]:
     """Run a JSON-emitting command."""
 

@@ -3,27 +3,26 @@
 from __future__ import annotations
 
 import unittest
+from email.utils import formatdate
 
 from . import support  # noqa: F401
 from rskit_tool.errors import ToolError
 from rskit_tool.publish import (
-    NEW_CRATE_BURST,
     NEW_CRATE_REFILL_SECONDS,
     UPDATE_REFILL_SECONDS,
     CommandResult,
     CratePlan,
     RateAwarePublisher,
-    TokenBucket,
     is_rate_limited,
     parse_retry_after,
 )
 
 
 class FakeClock:
-    """A manually advanced monotonic clock that records sleeps."""
+    """A manually advanced wall clock that records sleeps."""
 
-    def __init__(self) -> None:
-        self.value = 0.0
+    def __init__(self, start: float = 0.0) -> None:
+        self.value = start
         self.sleeps: list[float] = []
 
     def now(self) -> float:
@@ -34,10 +33,25 @@ class FakeClock:
         self.value += seconds
 
 
+class NullReporter:
+    """A no-op wait reporter so tests stay silent and side-effect free."""
+
+    def start(self, label: str, total: float, *, reason: str) -> None:
+        pass
+
+    def update(self, label: str, elapsed: float, total: float) -> None:
+        pass
+
+    def finish(self, label: str) -> None:
+        pass
+
+
 class FakeRegistry:
     """In-memory crates.io stand-in for the publisher."""
 
-    def __init__(self, *, published: set[tuple[str, str]] | None = None, names: set[str] | None = None) -> None:
+    def __init__(
+        self, *, published: set[tuple[str, str]] | None = None, names: set[str] | None = None
+    ) -> None:
         self.published = set() if published is None else published
         self.names = set() if names is None else names
 
@@ -52,44 +66,18 @@ def _plan(name: str, version: str = "0.1.0") -> CratePlan:
     return CratePlan(name=name, version=version, manifest=f"{name}/Cargo.toml")
 
 
-class TokenBucketTests(unittest.TestCase):
-    def test_burst_is_available_immediately(self) -> None:
-        clock = FakeClock()
-        bucket = TokenBucket(3, 60.0, now=clock.now)
-        for _ in range(3):
-            self.assertEqual(bucket.time_until_available(), 0.0)
-            bucket.consume()
-
-    def test_empty_bucket_reports_full_refill_interval(self) -> None:
-        clock = FakeClock()
-        bucket = TokenBucket(1, 600.0, now=clock.now)
-        bucket.consume()
-        self.assertEqual(bucket.time_until_available(), 600.0)
-
-    def test_partial_elapsed_reduces_wait(self) -> None:
-        clock = FakeClock()
-        bucket = TokenBucket(1, 600.0, now=clock.now)
-        bucket.consume()
-        clock.value += 200.0
-        self.assertAlmostEqual(bucket.time_until_available(), 400.0)
-
-    def test_backwards_clock_jump_does_not_stall_refill(self) -> None:
-        # A backwards wall-clock jump (NTP/manual set) must not leave the refill
-        # baseline in the future, which would freeze refills until the clock
-        # caught back up. The bucket resyncs and keeps refilling forward.
-        clock = FakeClock()
-        bucket = TokenBucket(1, 600.0, now=clock.now)
-        clock.value = 1000.0
-        bucket.consume()
-        clock.value -= 500.0  # clock jumps backwards
-        bucket.time_until_available()  # resync baseline, no negative credit
-        clock.value += 600.0  # then a full refill window elapses forward
-        self.assertEqual(bucket.time_until_available(), 0.0)
+def _rate_limited(retry_after: str | None = None) -> CommandResult:
+    message = "You have published too many new crates"
+    if retry_after is not None:
+        message += f"; please try again after {retry_after}."
+    return CommandResult(1, message)
 
 
 class ParseTests(unittest.TestCase):
     def test_is_rate_limited_detects_429(self) -> None:
-        self.assertTrue(is_rate_limited("the remote server responded with status 429 Too Many Requests"))
+        self.assertTrue(
+            is_rate_limited("the remote server responded with status 429 Too Many Requests")
+        )
         self.assertFalse(is_rate_limited("error: failed to verify package tarball"))
 
     def test_is_rate_limited_ignores_bare_429_number(self) -> None:
@@ -113,16 +101,25 @@ class ParseTests(unittest.TestCase):
 
 class RateAwarePublisherTests(unittest.TestCase):
     def _publisher(
-        self, registry: FakeRegistry, publish_crate, clock: FakeClock, *, poll_interval: float = 10.0
+        self,
+        registry: FakeRegistry,
+        publish_crate,
+        clock: FakeClock,
+        *,
+        poll_interval: float = 10.0,
+        probe_interval: float = 60.0,
+        max_rate_retries: int = 8,
     ) -> RateAwarePublisher:
         return RateAwarePublisher(
             registry=registry,
             publish_crate=publish_crate,
-            now=clock.now,
             sleep=clock.sleep,
             wall_now=clock.now,
             log=lambda _message: None,
+            progress=NullReporter(),
             poll_interval=poll_interval,
+            probe_interval=probe_interval,
+            max_rate_retries=max_rate_retries,
         )
 
     def test_skips_already_published_versions(self) -> None:
@@ -140,9 +137,10 @@ class RateAwarePublisherTests(unittest.TestCase):
         self.assertEqual(outcome.skipped, ["rskit-errors"])
         self.assertEqual(outcome.published, [])
 
-    def test_publishes_unpublished_crate(self) -> None:
+    def test_successful_new_crate_publishes_without_waiting(self) -> None:
+        # Reactive-first: a publish that succeeds never pre-waits on a local budget.
         clock = FakeClock()
-        registry = FakeRegistry()
+        registry = FakeRegistry()  # nothing exists yet -> "new" crate
         published: list[str] = []
 
         def publish_crate(plan: CratePlan) -> CommandResult:
@@ -153,67 +151,121 @@ class RateAwarePublisherTests(unittest.TestCase):
 
         self.assertEqual(published, ["rskit-errors"])
         self.assertEqual(outcome.published, ["rskit-errors"])
-
-    def test_new_crate_burst_then_waits_for_refill(self) -> None:
-        clock = FakeClock()
-        registry = FakeRegistry()  # nothing exists yet -> every crate is "new"
-
-        def publish_crate(plan: CratePlan) -> CommandResult:
-            return CommandResult(0, "ok")
-
-        crates = [_plan(f"rskit-crate-{index}") for index in range(NEW_CRATE_BURST + 1)]
-        self._publisher(registry, publish_crate, clock).publish(crates)
-
-        # First NEW_CRATE_BURST publishes are free; the next waits one refill
-        # window in total (sliced into poll-interval chunks).
-        self.assertAlmostEqual(sum(clock.sleeps), NEW_CRATE_REFILL_SECONDS)
-
-    def test_existing_crate_uses_update_budget(self) -> None:
-        clock = FakeClock()
-        registry = FakeRegistry(names={"rskit-errors"})  # name exists -> update budget
-
-        def publish_crate(plan: CratePlan) -> CommandResult:
-            return CommandResult(0, "ok")
-
-        # Update burst is 30, so two updates publish without waiting.
-        self._publisher(registry, publish_crate, clock).publish(
-            [_plan("rskit-errors", "0.2.0"), _plan("rskit-errors", "0.3.0")]
-        )
         self.assertEqual(clock.sleeps, [])
 
-    def test_retries_after_rate_limit_then_succeeds(self) -> None:
+    def test_burst_of_new_crates_does_not_wait_until_rejected(self) -> None:
+        # The first crates publish freely; the publisher only waits once crates.io
+        # actually rejects an upload, not on a mirrored local burst count.
         clock = FakeClock()
-        registry = FakeRegistry(names={"rskit-errors"})
+        registry = FakeRegistry()
+
+        def publish_crate(plan: CratePlan) -> CommandResult:
+            return CommandResult(0, "ok")
+
+        crates = [_plan(f"rskit-crate-{index}") for index in range(6)]
+        self._publisher(registry, publish_crate, clock).publish(crates)
+
+        self.assertEqual(clock.sleeps, [])
+
+    def test_schedules_wait_from_server_retry_after(self) -> None:
+        # When crates.io supplies an explicit retry-after, the wait is scheduled to
+        # exactly that deadline rather than a guessed interval.
+        base = 1_900_000_000.0
+        clock = FakeClock(base)
+        registry = FakeRegistry()
+        retry_after = formatdate(base + 120, usegmt=True)
         calls = {"count": 0}
 
         def publish_crate(plan: CratePlan) -> CommandResult:
             calls["count"] += 1
             if calls["count"] == 1:
-                return CommandResult(1, "status 429 Too Many Requests")
+                return _rate_limited(retry_after)
             return CommandResult(0, "ok")
 
-        outcome = self._publisher(registry, publish_crate, clock).publish([_plan("rskit-errors", "0.2.0")])
+        self._publisher(registry, publish_crate, clock).publish([_plan("rskit-a")])
 
         self.assertEqual(calls["count"], 2)
-        self.assertEqual(outcome.published, ["rskit-errors"])
-        # Fell back to the update refill interval since no Retry-After date was given.
+        self.assertAlmostEqual(sum(clock.sleeps), 120.0)
+
+    def test_probes_bounded_interval_when_no_retry_after(self) -> None:
+        # Without an explicit retry-after we re-probe at the bounded probe interval
+        # (min of the action refill and probe_interval), not a blind full window.
+        clock = FakeClock()
+        registry = FakeRegistry()  # new crate -> refill 600s, capped by probe 30s
+        calls = {"count": 0}
+
+        def publish_crate(plan: CratePlan) -> CommandResult:
+            calls["count"] += 1
+            if calls["count"] == 1:
+                return _rate_limited()
+            return CommandResult(0, "ok")
+
+        self._publisher(registry, publish_crate, clock, probe_interval=30.0).publish(
+            [_plan("rskit-a")]
+        )
+
+        self.assertEqual(calls["count"], 2)
+        self.assertAlmostEqual(sum(clock.sleeps), 30.0)
+        self.assertLess(30.0, NEW_CRATE_REFILL_SECONDS)
+
+    def test_update_probe_uses_update_refill(self) -> None:
+        clock = FakeClock()
+        registry = FakeRegistry(names={"rskit-errors"})  # existing crate -> update refill 60s
+        calls = {"count": 0}
+
+        def publish_crate(plan: CratePlan) -> CommandResult:
+            calls["count"] += 1
+            if calls["count"] == 1:
+                return _rate_limited()
+            return CommandResult(0, "ok")
+
+        self._publisher(registry, publish_crate, clock, probe_interval=600.0).publish(
+            [_plan("rskit-errors", "0.2.0")]
+        )
+
         self.assertAlmostEqual(sum(clock.sleeps), UPDATE_REFILL_SECONDS)
 
     def test_long_wait_is_sliced_into_poll_interval_chunks(self) -> None:
-        # A long rate-limit wait must be sliced so progress stays visible and a
-        # clock jump can be re-evaluated, never one opaque multi-minute sleep.
-        clock = FakeClock()
-        registry = FakeRegistry()  # every crate is new
+        # A long scheduled wait must be sliced so the bar updates and a clock jump
+        # can be re-evaluated, never one opaque multi-minute sleep.
+        base = 1_900_000_000.0
+        clock = FakeClock(base)
+        registry = FakeRegistry()
+        retry_after = formatdate(base + 600, usegmt=True)
+        calls = {"count": 0}
 
         def publish_crate(plan: CratePlan) -> CommandResult:
+            calls["count"] += 1
+            if calls["count"] == 1:
+                return _rate_limited(retry_after)
             return CommandResult(0, "ok")
 
-        crates = [_plan(f"rskit-crate-{index}") for index in range(NEW_CRATE_BURST + 1)]
-        self._publisher(registry, publish_crate, clock, poll_interval=10.0).publish(crates)
+        self._publisher(registry, publish_crate, clock, poll_interval=10.0).publish(
+            [_plan("rskit-a")]
+        )
 
         self.assertTrue(all(slice_ <= 10.0 for slice_ in clock.sleeps), clock.sleeps)
         self.assertGreater(len(clock.sleeps), 1)
-        self.assertAlmostEqual(sum(clock.sleeps), NEW_CRATE_REFILL_SECONDS)
+        self.assertAlmostEqual(sum(clock.sleeps), 600.0)
+
+    def test_gives_up_after_max_rate_retries(self) -> None:
+        base = 1_900_000_000.0
+        clock = FakeClock(base)
+        registry = FakeRegistry()
+        retry_after = formatdate(base + 10, usegmt=True)
+        calls = {"count": 0}
+
+        def publish_crate(plan: CratePlan) -> CommandResult:
+            calls["count"] += 1
+            return _rate_limited(retry_after)
+
+        with self.assertRaises(ToolError):
+            self._publisher(registry, publish_crate, clock, max_rate_retries=2).publish(
+                [_plan("rskit-a")]
+            )
+
+        # Two waits, then one final attempt that is no longer retried.
+        self.assertEqual(calls["count"], 3)
 
     def test_real_publish_error_raises(self) -> None:
         clock = FakeClock()
@@ -225,7 +277,7 @@ class RateAwarePublisherTests(unittest.TestCase):
         with self.assertRaises(ToolError):
             self._publisher(registry, publish_crate, clock).publish([_plan("rskit-errors")])
 
-    def test_non_positive_poll_interval_is_rejected(self) -> None:
+    def test_non_positive_intervals_are_rejected(self) -> None:
         clock = FakeClock()
         registry = FakeRegistry()
 
@@ -235,34 +287,8 @@ class RateAwarePublisherTests(unittest.TestCase):
         for invalid in (0.0, -1.0, float("nan"), float("inf")):
             with self.assertRaises(ValueError):
                 self._publisher(registry, publish_crate, clock, poll_interval=invalid)
-
-    def test_rate_limit_retries_consume_tokens(self) -> None:
-        # Each post-429 retry must spend a token, otherwise the local budget runs
-        # ahead of crates.io. Drive one new crate through the full new-crate burst
-        # via retries, then assert the next crate has to wait for a refill.
-        from email.utils import formatdate
-
-        base = 1_900_000_000.0
-        clock = FakeClock()
-        clock.value = base
-        registry = FakeRegistry()  # every crate is new
-        retry_date = formatdate(base + 5, usegmt=True)
-        attempts = {"count": 0}
-
-        def publish_crate(plan: CratePlan) -> CommandResult:
-            if plan.name != "rskit-a":
-                return CommandResult(0, "ok")
-            attempts["count"] += 1
-            if attempts["count"] <= NEW_CRATE_BURST - 1:
-                return CommandResult(1, f"published too many new crates; try again after {retry_date}")
-            return CommandResult(0, "ok")
-
-        self._publisher(registry, publish_crate, clock).publish([_plan("rskit-a"), _plan("rskit-b")])
-
-        # rskit-a took NEW_CRATE_BURST attempts, draining the burst, so rskit-b
-        # must wait roughly a full refill window for its token. (Total wait, since
-        # long waits are sliced into poll-interval chunks.)
-        self.assertGreaterEqual(sum(clock.sleeps), NEW_CRATE_REFILL_SECONDS * 0.9)
+            with self.assertRaises(ValueError):
+                self._publisher(registry, publish_crate, clock, probe_interval=invalid)
 
 
 if __name__ == "__main__":
