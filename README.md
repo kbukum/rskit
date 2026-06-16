@@ -1,7 +1,7 @@
 # rskit
 
 [![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml)
-[![Crates.io](https://img.shields.io/crates/v/rskit-suite.svg)](https://crates.io/crates/rskit-suite)
+[![Crates.io](https://img.shields.io/crates/v/rskit-suite.svg?include_prereleases)](https://crates.io/crates/rskit-suite)
 [![docs.rs](https://img.shields.io/docsrs/rskit-suite)](https://docs.rs/rskit-suite)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![MSRV: 1.91](https://img.shields.io/badge/MSRV-1.91-orange.svg)](core/Cargo.toml)
