@@ -41,14 +41,23 @@ As a maintainer rule, do not cut the release if `[Unreleased]` is the only popul
 
 ## 3. Bump versions across the workspaces
 
-All publishable crates currently share a single lock-step version. Release preparation is manual for the first public release because the repository has split workspaces and no root `Cargo.toml`.
+Crates are versioned **independently**: each bumps only when it changes, plus the
+correct cascade. Use the bump tooling rather than hand-editing manifests.
 
-When preparing a release PR, update both split workspace manifests:
+```sh
+# Preview the plan for a workspace (no writes):
+make release-bump W=core DRY=1
+# Apply it (patch by default; flag breaking crates with MINOR):
+make release-bump W=core MINOR="rskit-httpclient"
+make release-bump W=contrib
+```
 
-- `core/Cargo.toml`: `[workspace.package].version`.
-- `contrib/Cargo.toml`: `[workspace.package].version`.
-- Internal dependency versions in `contrib/Cargo.toml` that point at core crates.
-- Any internal dependency versions in crate manifests that do not inherit from the workspace dependency tables.
+The tool detects crates changed since the last release tag, applies a **patch**
+bump by default and a **minor** bump for crates listed in `MINOR`, cascades a
+breaking minor to its in-workspace dependents, and rewrites caret floors. It is
+idempotent against the crates.io max published version, so re-running is a no-op
+once manifests are up to date. It performs **no network writes** — manifest edits
+only.
 
 Then refresh the split lockfiles:
 
@@ -75,7 +84,7 @@ If any check fails, fix it before publishing the GitHub Release.
 
 ### First-release publish rehearsal
 
-`cargo publish --dry-run` resolves registry dependencies from crates.io; it does not simulate publishing an unpublished internal dependency chain. For a lock-step first release, or any release where internal crates depend on the same not-yet-published version, `make publish-dry-run` therefore:
+`cargo publish --dry-run` resolves registry dependencies from crates.io; it does not simulate publishing an unpublished internal dependency chain. When internal crates depend on a same-version sibling that is not yet on crates.io (e.g. the first release, where every crate is new), `make publish-dry-run` therefore:
 
 1. Runs `cargo publish --dry-run --locked` for crates whose internal same-version dependencies already exist on crates.io.
 2. Explicitly skips crates blocked by unpublished internal same-version dependencies and runs `cargo package --locked --list` as a packaging sanity check for each skipped crate.

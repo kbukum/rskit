@@ -1,7 +1,7 @@
 .PHONY: all setup build test test-nextest test-doc test-python test-affected coverage coverage-changed test-coverage test-coverage-html lint fmt fmt-check check check-fast check-facade-features \
        check-core check-patterns check-crosscutting check-composition check-transport check-auth check-data check-ai \
        check-media check-infra doc deny check-l7-edges check-workspace-deps-sync check-topology check-public-api release-readiness release-coverage \
-       publish-dry-run release-publish release-sbom depgraphs clean help ci ci-test ci-lint ci-fmt ensure-act
+       publish-dry-run release-publish release-bump release-sbom depgraphs clean help ci ci-test ci-lint ci-fmt ensure-act
 
 CORE_MANIFEST = core/Cargo.toml
 CONTRIB_MANIFEST = contrib/Cargo.toml
@@ -234,6 +234,13 @@ publish-dry-run:
 release-publish:
 	@$(RSKIT_TOOL) release publish-dry-run --publish
 
+## Compute and apply independent per-crate version bumps for one workspace.
+## Usage: make release-bump W=core [MINOR="rskit-foo rskit-bar"] [DRY=1] [OFFLINE=1]
+release-bump:
+	@$(RSKIT_TOOL) release bump --workspace $(W) \
+		$(foreach crate,$(MINOR),--minor $(crate)) \
+		$(if $(DRY),--dry-run,) $(if $(OFFLINE),--offline,)
+
 ## Generate CycloneDX SBOMs under target/sbom
 ## Requires: cargo-cyclonedx
 release-sbom:
@@ -354,6 +361,7 @@ help:
 	@echo "  make release-coverage                     Run per-package release coverage thresholds"
 	@echo "  make publish-dry-run                      Dry-run publishing in dependency order"
 	@echo "  make release-publish                      Publish crates to crates.io (idempotent, rate-aware)"
+	@echo "  make release-bump W=core [MINOR=...]      Apply independent per-crate version bumps"
 	@echo "  make release-sbom                         Generate CycloneDX SBOMs"
 	@echo "  make depgraphs                            Regenerate docs dependency graphs (docs/depgraphs)"
 	@echo "  make check-fast                           fmt + lint + build"

@@ -8,7 +8,7 @@
 
 **A production-grade Rust toolkit for building scalable, resilient services.** Structured errors, layered config, OpenTelemetry observability, typestate lifecycle, tower-based resilience, async pipelines, worker pools, security policy, and tonic gRPC — composable building blocks built on the standard Rust async ecosystem.
 
-> **Status — pre-1.0.** Crates are versioned per crate and currently released in lock-step. Breaking changes are allowed before `1.0`, documented in [`CHANGELOG.md`](CHANGELOG.md), and governed by [`docs/policy/SEMVER.md`](docs/policy/SEMVER.md). MSRV bumps are minor version changes during `0.x`.
+> **Status — pre-1.0.** Crates are versioned independently per crate. Breaking changes are allowed before `1.0`, documented in [`CHANGELOG.md`](CHANGELOG.md), and governed by [`docs/policy/SEMVER.md`](docs/policy/SEMVER.md). MSRV bumps are minor version changes during `0.x`.
 
 > **Sibling projects.** [**gokit**](https://github.com/kbukum/gokit) (Go) · rskit (Rust, this repo) · [**pykit**](https://github.com/kbukum/pykit) (Python). Public abstractions (`AppError`, `Component`, `Provider`, `Pipeline`, lifecycle hooks) are evaluated for parity across all three.
 

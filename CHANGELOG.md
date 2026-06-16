@@ -8,16 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Adopt independent per-crate versioning: each crate now carries its own `version` instead of inheriting one lock-step workspace version, so releases republish only the crates that changed plus the correct caret cascade. Add a `release bump` command (`make release-bump W=<workspace>`) that detects changed crates since the last tag, applies patch-by-default / `MINOR` breaking bumps, cascades breaking minors to in-workspace dependents, rewrites caret floors, and is idempotent against the crates.io max published version.
 - Release publisher waits out crates.io rate limits in short, deadline-driven slices so long pauses show a live countdown and self-correct across host suspend or clock changes.
 
 ### Fixed
 
+- `release bump` now republishes crates whose only change is an inherited `[workspace.dependencies]` caret floor (e.g. a `core` breaking-minor that rewrites `contrib/Cargo.toml`), instead of reporting "No crates changed" and leaving the new floor unpublished, and diffs change detection from the tag merge-base so release branches and backports resolve the correct change set. Transient crates.io lookup failures now degrade to tag-only baselines with a warning rather than aborting the bump.
 - Eliminate CodeQL `rust/hard-coded-cryptographic-value` alerts by generating AES-GCM/ChaCha20 salts and nonces directly from the RNG instead of zero-initialized buffers, and by deriving OIDC nonces and HTTP basic-auth credentials dynamically in tests.
 - Order crates for publishing by their dev-dependencies as well as their normal and build dependencies, so a crate that dev-depends on an internal crate (e.g. `rskit-testutil`) is published after it; `cargo publish` requires every versioned dependency, including dev, to already exist on crates.io.
 
 ### Documentation
 
-- Add `docs/VERSIONING-ROADMAP.md` describing how rskit's versioning model is expected to evolve (lock-step now, `release-plz` adoption, then independent per-crate versioning) and link it from the docs hub and versioning guide.
+- Rework `docs/VERSIONING.md` and `docs/VERSIONING-ROADMAP.md` for the independent per-crate model (caret pins, 0.x semantics, per-workspace release trains), document the upstream-API watch-list and the future core/contrib repository sever, and update the `RELEASING.md` bump runbook to use the new tooling.
 
 ## [v0.1.0-alpha.1] - 2026-06-14
 
