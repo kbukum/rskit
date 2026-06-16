@@ -4891,7 +4891,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-auth"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "argon2",
  "async-trait",
@@ -5173,7 +5173,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-encryption"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "aes-gcm",
  "base64",
@@ -5270,7 +5270,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-httpclient"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "base64",
  "bytes",
