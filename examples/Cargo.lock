@@ -1843,7 +1843,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-suite"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "rskit-bootstrap",
  "rskit-cli",
