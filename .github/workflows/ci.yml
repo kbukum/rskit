@@ -40,7 +40,7 @@ jobs:
       rust-code: ${{ steps.filter.outputs.rust-code }}
       affected: ${{ steps.domains.outputs.affected || 'all' }}
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
         with:
           fetch-depth: 0
       - name: Check Python tooling runtime
@@ -92,7 +92,7 @@ jobs:
     if: needs.changes.outputs.rust-code == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
       - name: Check Python tooling runtime
         run: python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else "Python 3.11+ is required")'
       - name: Run Python tooling tests
@@ -107,7 +107,7 @@ jobs:
     if: needs.changes.outputs.rust-code == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: "1.95"
@@ -126,7 +126,7 @@ jobs:
     needs: changes
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
         with:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
@@ -135,7 +135,7 @@ jobs:
           components: clippy
       - name: Install mold linker
         run: sudo apt-get install -y mold
-      - uses: Swatinem/rust-cache@c106961feec855ef5a58494c5a2a31c9d80429a9  # v2.7.8
+      - uses: Swatinem/rust-cache@baf1a810e98b6a3001d0d7234864ed75a17c42fb  # v2.7.8
         with:
           workspaces: |
             core
@@ -174,7 +174,7 @@ jobs:
           - os: macos-latest
             feature-mode: all
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
         with:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
@@ -183,14 +183,14 @@ jobs:
       - name: Install mold linker (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get install -y mold
-      - uses: Swatinem/rust-cache@c106961feec855ef5a58494c5a2a31c9d80429a9  # v2.7.8
+      - uses: Swatinem/rust-cache@baf1a810e98b6a3001d0d7234864ed75a17c42fb  # v2.7.8
         with:
           key: ${{ matrix.os }}-1.95-${{ matrix.feature-mode }}
           workspaces: |
             core
             contrib
             examples
-      - uses: taiki-e/install-action@7a79fe8c3a13344501c80d99cae481c1c9085912  # v2
+      - uses: taiki-e/install-action@b8cecb83565409bcc297b2df6e77f030b2a468d5  # v2
         with:
           tool: cargo-nextest
       - name: Run selected tests
@@ -222,7 +222,7 @@ jobs:
       matrix:
         feature-mode: [default, all]
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
         with:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
@@ -230,7 +230,7 @@ jobs:
           toolchain: "1.91"
       - name: Install mold linker
         run: sudo apt-get install -y mold
-      - uses: Swatinem/rust-cache@c106961feec855ef5a58494c5a2a31c9d80429a9  # v2.7.8
+      - uses: Swatinem/rust-cache@baf1a810e98b6a3001d0d7234864ed75a17c42fb  # v2.7.8
         with:
           key: ubuntu-latest-1.91-msrv-${{ matrix.feature-mode }}
           workspaces: |
@@ -262,13 +262,13 @@ jobs:
     env:
       RUSTDOCFLAGS: "-D warnings"
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: "1.95"
       - name: Install mold linker
         run: sudo apt-get install -y mold
-      - uses: Swatinem/rust-cache@c106961feec855ef5a58494c5a2a31c9d80429a9  # v2.7.8
+      - uses: Swatinem/rust-cache@baf1a810e98b6a3001d0d7234864ed75a17c42fb  # v2.7.8
         with:
           workspaces: |
             core
@@ -288,7 +288,7 @@ jobs:
     needs: changes
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
         with:
           fetch-depth: 0
       - name: Check Python tooling runtime
@@ -299,13 +299,13 @@ jobs:
           components: llvm-tools-preview
       - name: Install mold linker
         run: sudo apt-get install -y mold
-      - uses: Swatinem/rust-cache@c106961feec855ef5a58494c5a2a31c9d80429a9  # v2.7.8
+      - uses: Swatinem/rust-cache@baf1a810e98b6a3001d0d7234864ed75a17c42fb  # v2.7.8
         with:
           workspaces: |
             core
             contrib
             examples
-      - uses: taiki-e/install-action@7a79fe8c3a13344501c80d99cae481c1c9085912  # v2
+      - uses: taiki-e/install-action@b8cecb83565409bcc297b2df6e77f030b2a468d5  # v2
         with:
           tool: cargo-nextest,cargo-llvm-cov
       - name: Run coverage
@@ -337,7 +337,7 @@ jobs:
     needs: changes
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
       - name: Check Python tooling runtime
         run: python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else "Python 3.11+ is required")'
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
@@ -360,13 +360,13 @@ jobs:
     needs: changes
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
       - name: Check Python tooling runtime
         run: python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else "Python 3.11+ is required")'
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: "1.95"
-      - uses: taiki-e/install-action@7a79fe8c3a13344501c80d99cae481c1c9085912  # v2
+      - uses: taiki-e/install-action@b8cecb83565409bcc297b2df6e77f030b2a468d5  # v2
         with:
           tool: cargo-deny,cargo-audit
       - name: Install nightly for rustdoc JSON
