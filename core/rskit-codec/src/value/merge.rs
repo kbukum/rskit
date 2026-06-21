@@ -98,6 +98,30 @@ mod tests {
     }
 
     #[test]
+    fn overlay_adds_new_keys() {
+        let merged = merge(json!({ "a": 1 }), json!({ "b": 2 }));
+
+        assert_eq!(merged, json!({ "a": 1, "b": 2 }));
+    }
+
+    #[test]
+    fn unselected_arrays_replace_under_concat_strategy() {
+        let merged = merge_with(
+            json!({ "groups": [1], "ports": [1, 2] }),
+            json!({ "groups": [2], "ports": [9] }),
+            |key| {
+                if key == "groups" {
+                    ArrayStrategy::Concat
+                } else {
+                    ArrayStrategy::Replace
+                }
+            },
+        );
+
+        assert_eq!(merged, json!({ "groups": [1, 2], "ports": [9] }));
+    }
+
+    #[test]
     fn arrays_replace_by_default() {
         let merged = merge(json!({ "ports": [1, 2, 3] }), json!({ "ports": [9] }));
 
