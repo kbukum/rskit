@@ -22,7 +22,7 @@ default = ["validate"]
 # Opt-in `rskit_validation::Validate` integration: enables `ServiceConfig`,
 # `AppConfig`, `load_validated*`, `load_app`, and `load_config`. Disable with
 # `default-features = false` for apps/CLIs/libraries that load plain serde types.
-validate = ["dep:validator", "dep:rskit-validation"]
+validate = ["dep:validator", "dep:rskit-validation", "dep:rskit-logging"]
 # Opt-in dynamic-reload contract (`ConfigWatch`) and the in-memory watch
 # reference impl. One-shot tools and CLIs leave this off. The bounded fan-out
 # mechanism is owned by `rskit-pipeline::Broadcaster`; `tokio-util` supplies the
@@ -48,6 +48,7 @@ rskit-util = { workspace = true }
 rskit-codec = { workspace = true }
 rskit-pipeline = { workspace = true, optional = true }
 rskit-validation = { workspace = true, optional = true }
+rskit-logging = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

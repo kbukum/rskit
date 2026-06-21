@@ -6,6 +6,7 @@ Production-ready structured logging built on the [tracing](https://docs.rs/traci
 
 ## Features
 
+- Owns its configuration vocabulary — `LoggingConfig` / `LogFormat` / `LogOutput` are plain `serde` data with no `tracing` dependency
 - Structured JSON / pretty console output
 - Sensitive data masking (**on by default**)
 - Rate-based log sampling (burst + thereafter)
@@ -15,11 +16,26 @@ Production-ready structured logging built on the [tracing](https://docs.rs/traci
 - Drop-based guard ensures all buffered logs are flushed on shutdown
 - `RUST_LOG` env-filter support
 
+## Feature flags
+
+| Feature | Default | Description |
+|---------|---------|-------------|
+| `setup` | ✅ | The subscriber-building layer: `init_logging*`, `LoggingGuard`, masking, sampling, per-module levels, and context helpers. Pulls in the `tracing`/`tracing-subscriber` stack. |
+| `otlp` | | OpenTelemetry Logs bridge with OTLP export (implies `setup`). |
+
+Disable default features (`default-features = false`) to depend on only the
+tracing-free configuration vocabulary (`LoggingConfig` / `LogFormat` /
+`LogOutput`) — useful for configuration crates that compose the vocabulary
+without linking the subscriber stack.
+
 ## Installation
 
 ```toml
 [dependencies]
 rskit-logging = "0.1.0-alpha.1"
+
+# Vocabulary only — no tracing subscriber stack
+rskit-logging = { version = "0.1.0-alpha.1", default-features = false }
 
 # With OTLP export support
 rskit-logging = { version = "0.1.0-alpha.1", features = ["otlp"] }
@@ -29,7 +45,7 @@ rskit-logging = { version = "0.1.0-alpha.1", features = ["otlp"] }
 
 ```rust
 use rskit_logging::{LoggingResult, init_logging};
-use rskit_config::LoggingConfig;
+use rskit_logging::LoggingConfig;
 
 fn main() -> LoggingResult<()> {
     let cfg = LoggingConfig::default();
@@ -46,7 +62,10 @@ fn main() -> LoggingResult<()> {
 
 ## Configuration
 
-rskit-logging integrates with `rskit-config` for configuration-driven setup. All logging options come from `LoggingConfig`:
+rskit-logging owns the logging configuration vocabulary (`LoggingConfig` /
+`LogFormat` / `LogOutput`). These are plain `serde` types, so configuration
+crates such as `rskit-config` re-export and compose them without pulling in the
+subscriber stack. All logging options come from `LoggingConfig`:
 
 ```yaml
 logging:
@@ -73,12 +92,12 @@ use rskit_logging::{
     LoggingSetup, MaskingConfig, SamplingConfig,
 };
 use rskit_logging::otlp::OtlpConfig;  // requires "otlp" feature
-use rskit_config::LoggingConfig;
+use rskit_logging::LoggingConfig;
 
 fn main() -> rskit_logging::LoggingResult<()> {
     let cfg = LoggingConfig {
         level: "info".into(),
-        format: rskit_config::LogFormat::Json,
+        format: rskit_logging::LogFormat::Json,
         ..Default::default()
     };
 
@@ -124,7 +143,7 @@ Masking is **enabled by default** in `MaskingConfig`. The `DefaultMasker` operat
 
 ```rust
 use rskit_logging::{init_logging_with_masking, MaskingConfig};
-use rskit_config::LoggingConfig;
+use rskit_logging::LoggingConfig;
 
 let cfg = LoggingConfig::default();
 let masking = MaskingConfig::default(); // enabled: true
@@ -222,7 +241,7 @@ Override the global log level for specific modules using `tracing_subscriber::En
 ```rust
 use std::collections::HashMap;
 use rskit_logging::init_logging_with_options;
-use rskit_config::LoggingConfig;
+use rskit_logging::LoggingConfig;
 
 let cfg = LoggingConfig::default();
 

@@ -1,3 +1,11 @@
+//! Logging configuration vocabulary.
+//!
+//! These are plain `serde` data types describing *what* logging should do —
+//! the level, output format, and sink. They carry no `tracing` dependency and
+//! are always available, even when the `setup` feature (the subscriber-building
+//! layer) is disabled. This lets configuration crates compose the logging
+//! vocabulary without linking the `tracing` subscriber stack.
+
 use serde::Deserialize;
 
 /// Logging configuration.
@@ -11,7 +19,7 @@ pub struct LoggingConfig {
     #[serde(default)]
     pub format: LogFormat,
 
-    /// Override service name in log output (defaults to [`super::ServiceConfig::name`]).
+    /// Override service name in log output (defaults to the service identity).
     pub service_name: Option<String>,
 
     /// Where to write log output.

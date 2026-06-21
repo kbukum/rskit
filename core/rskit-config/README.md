@@ -205,6 +205,12 @@ Use [`SecretString`](https://docs.rs/rskit-config/latest/rskit_config/struct.Sec
 | `debug` | `bool` | `false` | Debug mode |
 | `logging` | `LoggingConfig` | | Logging (level, format, output) |
 
+> `LoggingConfig`, `LogFormat`, and `LogOutput` are owned by
+> [`rskit-logging`](https://docs.rs/rskit-logging) and re-exported here under the
+> `validate` feature for convenience. They are plain `serde` data and carry no
+> `tracing` dependency, so loading config never links the logging subscriber
+> stack.
+
 ## See also
 
 [Main repository README](https://github.com/kbukum/rskit)

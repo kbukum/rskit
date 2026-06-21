@@ -3,18 +3,21 @@
 //! Covers: LogConfig defaults, format switching, level filtering, correlation-id
 //! context helpers, span operations, edge cases, and output capture via a
 //! custom `tracing_subscriber::Layer`.
+//!
+//! These tests exercise the subscriber-building layer and therefore require the
+//! default-on `setup` feature.
+#![cfg(feature = "setup")]
 
 use parking_lot::Mutex;
 #[allow(clippy::disallowed_types)]
 use std::sync::Arc;
 
-use rskit_config::{LogFormat, LogOutput, LoggingConfig};
 use rskit_logging::context::{
     component_span, request_span, set_correlation_id, set_trace_id, set_user_id,
 };
 use rskit_logging::{
-    Masker, MaskingConfig, MaskingMakeWriter, SamplingConfig, init_logging,
-    init_logging_with_masking, init_logging_with_options,
+    LogFormat, LogOutput, LoggingConfig, Masker, MaskingConfig, MaskingMakeWriter, SamplingConfig,
+    init_logging, init_logging_with_masking, init_logging_with_options,
 };
 use std::io::Write;
 use std::sync::Arc as StdArc;

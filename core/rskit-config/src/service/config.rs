@@ -3,7 +3,7 @@ use serde::Deserialize;
 use validator::{ValidationError, ValidationErrors};
 
 use super::environment::Environment;
-use super::logging::LoggingConfig;
+use rskit_logging::LoggingConfig;
 
 /// Base service configuration — embed this in every application config.
 #[derive(Debug, Clone, Deserialize)]
