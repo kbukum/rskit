@@ -103,12 +103,61 @@ impl StrictLoader {
     /// Validates identity-keyed sections but performs no schema typing, so
     /// callers can inspect or hand off dynamic-keyed subtrees verbatim.
     pub fn load_raw(&self) -> AppResult<Value> {
+        let canonical = self.read(&self.path)?;
+        self.assemble(self.includes.iter().map(PathBuf::as_path), canonical)
+    }
+
+    /// Load and deserialize into `T`, resolving include paths from the canonical
+    /// document itself.
+    ///
+    /// Reads the canonical file exactly once, passes its decoded value tree to
+    /// `resolve` to obtain the include list (for configs that declare their own
+    /// includes, e.g. `[toven].include = [...]`), then merges those includes
+    /// beneath the canonical document. Any statically-registered
+    /// [`with_includes`](Self::with_includes) are ignored by this entry point.
+    ///
+    /// Honors `#[serde(deny_unknown_fields)]`.
+    pub fn load_resolving_includes<T, F>(&self, resolve: F) -> AppResult<T>
+    where
+        T: DeserializeOwned,
+        F: FnOnce(&Value) -> AppResult<Vec<PathBuf>>,
+    {
+        let value = self.load_raw_resolving_includes(resolve)?;
+        T::deserialize(value).map_err(|error| {
+            AppError::invalid_input(
+                "config",
+                format!("failed to parse '{}': {error}", self.path.display()),
+            )
+        })
+    }
+
+    /// Raw counterpart of [`load_resolving_includes`](Self::load_resolving_includes).
+    ///
+    /// Reads the canonical file once, derives the include list from it via
+    /// `resolve`, and merges the includes beneath the canonical document.
+    pub fn load_raw_resolving_includes<F>(&self, resolve: F) -> AppResult<Value>
+    where
+        F: FnOnce(&Value) -> AppResult<Vec<PathBuf>>,
+    {
+        let canonical = self.read(&self.path)?;
+        let includes = resolve(&canonical)?;
+        self.assemble(includes.iter().map(PathBuf::as_path), canonical)
+    }
+
+    /// Merge `includes` beneath an already-decoded `canonical` document.
+    ///
+    /// Includes are applied in increasing precedence (later wins over earlier),
+    /// then the canonical document is merged on top so it wins every collision.
+    fn assemble<'a>(
+        &self,
+        includes: impl Iterator<Item = &'a Path>,
+        canonical: Value,
+    ) -> AppResult<Value> {
         let mut document = Value::Object(serde_json::Map::new());
-        for include in &self.includes {
+        for include in includes {
             let overlay = self.read(include)?;
             document = self.merge.merge(document, overlay)?;
         }
-        let canonical = self.read(&self.path)?;
         document = self.merge.merge(document, canonical)?;
         self.merge.validate(&document)?;
         Ok(document)
@@ -188,6 +237,25 @@ mod tests {
         let doc: Doc = StrictLoader::new(&main).with_include(&base).load().unwrap();
 
         assert_eq!(doc.name, "main");
+    }
+
+    #[test]
+    fn resolving_includes_reads_canonical_once_and_merges_beneath() {
+        let dir = tempfile::tempdir().unwrap();
+        write(dir.path(), "extra.toml", "name = \"included\"\n");
+        let main = write(
+            dir.path(),
+            "c.toml",
+            "name = \"main\"\n[ecosystems.rust]\nedition = 2024\n",
+        );
+
+        let doc: Doc = StrictLoader::new(&main)
+            .load_resolving_includes(|_canonical| Ok(vec![dir.path().join("extra.toml")]))
+            .unwrap();
+
+        // Canonical wins the scalar; the included default merges beneath.
+        assert_eq!(doc.name, "main");
+        assert!(doc.ecosystems.contains_key("rust"));
     }
 
     #[test]

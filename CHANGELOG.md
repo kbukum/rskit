@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Extend `rskit-config` strict include-merge with richer identity rules and document-driven includes: generalize the `MergeIdentity` trait to a human-facing `label()` plus an `identity_of(&Value)` token extractor; add `CompositeKey` for multi-field and nested (dotted-path) identities encoded injectively so no field value can forge an identity boundary; add `IncludeMerge::with_unique_keys` to hard-error on a map key (`[section.<name>]`) contributed by more than one merged document instead of silently last-wins merging; and add `StrictLoader::load_resolving_includes` / `load_raw_resolving_includes` to read the canonical document once and derive its include list from inside it.
+
+### Changed
+
+- **Breaking (`rskit-config`):** `MergeIdentity` no longer exposes `identity_key()`. Custom implementors now provide `label()` (the error-message name) and `identity_of(&Value) -> Option<String>` (the identity token). The built-in `IdentityKey` is unchanged at call sites; only hand-rolled `MergeIdentity` implementations need to migrate.
+
 ## [v0.1.0-alpha.3] - 2026-06-21
 
 ### Added

@@ -5052,7 +5052,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-config"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 dependencies = [
  "config",
  "dotenvy",
@@ -5885,7 +5885,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-suite"
-version = "0.1.0-alpha.3"
+version = "0.1.0-alpha.4"
 dependencies = [
  "async-trait",
  "futures",

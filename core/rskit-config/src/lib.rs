@@ -80,7 +80,7 @@ pub use source::{
     TomlFileSource,
 };
 pub use strict::{
-    IdentityKey, IncludeMerge, MergeIdentity, RawTable, RawValue, StrictLoader,
+    CompositeKey, IdentityKey, IncludeMerge, MergeIdentity, RawTable, RawValue, StrictLoader,
     deserialize_subtree, load_strict,
 };
 #[cfg(feature = "watch")]
