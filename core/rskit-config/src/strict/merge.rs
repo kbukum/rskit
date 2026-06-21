@@ -74,7 +74,6 @@ impl IncludeMerge {
     }
 
     /// Merge `overlay` onto `base`, returning the combined document.
-    /// Merge `overlay` onto `base`, returning the combined document.
     ///
     /// Delegates the value-tree mechanics to [`rskit_codec::value::merge_with`]:
     /// objects merge recursively, scalars are last-wins, and arrays under a

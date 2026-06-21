@@ -22,7 +22,10 @@ use std::hash::Hash;
 /// let dups = find_duplicates_by(&items, |s| s.chars().next().unwrap());
 /// assert_eq!(dups, vec!['a', 'c']);
 /// ```
-pub fn find_duplicates_by<T, K, F>(items: impl IntoIterator<Item = T>, mut key_selector: F) -> Vec<K>
+pub fn find_duplicates_by<T, K, F>(
+    items: impl IntoIterator<Item = T>,
+    mut key_selector: F,
+) -> Vec<K>
 where
     K: Eq + Hash + Clone,
     F: FnMut(&T) -> K,
@@ -63,15 +66,14 @@ pub fn ensure_unique_by<T, K, F>(
     mut key_selector: F,
 ) -> Result<(), K>
 where
-    K: Eq + Hash,
+    K: Eq + Hash + Clone,
     F: FnMut(&T) -> K,
 {
     let mut seen = HashSet::new();
     for item in items {
         let key = key_selector(&item);
-        if !seen.insert(key) {
-            // Re-extract to return the owned key without requiring `Clone`.
-            return Err(key_selector(&item));
+        if !seen.insert(key.clone()) {
+            return Err(key);
         }
     }
     Ok(())
@@ -83,7 +85,14 @@ mod tests {
 
     #[test]
     fn find_duplicates_reports_each_key_once_in_order() {
-        let items = vec!["apple", "avocado", "banana", "cherry", "cantaloupe", "apricot"];
+        let items = vec![
+            "apple",
+            "avocado",
+            "banana",
+            "cherry",
+            "cantaloupe",
+            "apricot",
+        ];
         let dups = find_duplicates_by(&items, |s| s.chars().next().unwrap());
         assert_eq!(dups, vec!['a', 'c']);
     }

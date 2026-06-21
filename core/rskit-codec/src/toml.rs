@@ -24,9 +24,8 @@ impl Codec for TomlCodec {
     }
 
     fn decode_value(&self, contents: &str) -> AppResult<Value> {
-        toml::from_str::<Value>(contents).map_err(|err| {
-            AppError::invalid_input("codec", "failed to parse TOML").with_cause(err)
-        })
+        toml::from_str::<Value>(contents)
+            .map_err(|err| AppError::invalid_input("codec", "failed to parse TOML").with_cause(err))
     }
 }
 

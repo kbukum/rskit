@@ -9,9 +9,9 @@ use std::path::Path;
 use std::sync::Arc;
 
 use crate::JsonCodec;
-use crate::codec::Codec;
 #[cfg(feature = "toml")]
 use crate::TomlCodec;
+use crate::codec::Codec;
 
 /// Return a codec for a lowercase format `name` (for example `"toml"`,
 /// `"json"`), or `None` when no compiled-in codec matches.
@@ -42,7 +42,9 @@ mod tests {
         assert_eq!(codec_for_name("json").unwrap().name(), "json");
         assert_eq!(codec_for_name("JSON").unwrap().name(), "json");
         assert_eq!(
-            codec_for_path(Path::new("/etc/app/config.json")).unwrap().name(),
+            codec_for_path(Path::new("/etc/app/config.json"))
+                .unwrap()
+                .name(),
             "json"
         );
     }

@@ -79,7 +79,10 @@ mod tests {
 
     #[test]
     fn overlay_scalar_wins_last() {
-        let merged = merge(json!({ "name": "base", "retries": 1 }), json!({ "retries": 5 }));
+        let merged = merge(
+            json!({ "name": "base", "retries": 1 }),
+            json!({ "retries": 5 }),
+        );
 
         assert_eq!(merged, json!({ "name": "base", "retries": 5 }));
     }

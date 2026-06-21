@@ -67,6 +67,7 @@ where
     T: DeserializeOwned,
 {
     let value = codec.decode_value(contents)?;
-    T::deserialize(value)
-        .map_err(|err| AppError::invalid_input("codec", "failed to deserialize value").with_cause(err))
+    T::deserialize(value).map_err(|err| {
+        AppError::invalid_input("codec", "failed to deserialize value").with_cause(err)
+    })
 }

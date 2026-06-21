@@ -20,7 +20,14 @@ struct State {
 /// remote backend. Cheaply cloneable; clones share the same underlying store.
 ///
 /// With the `watch` feature enabled it also implements
-/// [`ConfigWatch`](crate::ConfigWatch): every [`set`](ConfigSink::set) and
+#[cfg_attr(
+    feature = "watch",
+    doc = " [`ConfigWatch`](crate::ConfigWatch): every [`set`](ConfigSink::set) and"
+)]
+#[cfg_attr(
+    not(feature = "watch"),
+    doc = " `ConfigWatch`: every [`set`](ConfigSink::set) and"
+)]
 /// [`remove`](ConfigSink::remove) fans a change event out to active subscribers.
 #[derive(Debug, Clone, Default)]
 pub struct InMemoryConfigSink {

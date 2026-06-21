@@ -5,7 +5,14 @@
 //! injected explicitly. Two reference implementations ship here:
 //!
 //! - [`InMemoryConfigSink`] — a process-local store, also a
-//!   [`ConfigWatch`](crate::ConfigWatch) source under the `watch` feature.
+#![cfg_attr(
+    feature = "watch",
+    doc = "  [`ConfigWatch`](crate::ConfigWatch) source under the `watch` feature."
+)]
+#![cfg_attr(
+    not(feature = "watch"),
+    doc = "  `ConfigWatch` source under the `watch` feature."
+)]
 //! - [`FileConfigSink`] — a file-backed store with a pluggable on-disk
 //!   [`Codec`](rskit_codec::Codec) (TOML by default).
 //!

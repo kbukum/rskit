@@ -22,9 +22,8 @@ impl Codec for JsonCodec {
     }
 
     fn decode_value(&self, contents: &str) -> AppResult<Value> {
-        serde_json::from_str(contents).map_err(|err| {
-            AppError::invalid_input("codec", "failed to parse JSON").with_cause(err)
-        })
+        serde_json::from_str(contents)
+            .map_err(|err| AppError::invalid_input("codec", "failed to parse JSON").with_cause(err))
     }
 }
 
