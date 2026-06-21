@@ -49,9 +49,9 @@ impl MergeIdentity for IdentityKey {
 /// Use this when no single field identifies an element — for example an edge
 /// identified by both of its structured endpoints. Each field is a `.`-separated
 /// path walked through nested objects (`"from.ecosystem"` reads
-/// `element["from"]["ecosystem"]`); the resulting scalar tokens are joined into
-/// one composite identity. An element missing any field has no identity and is
-/// skipped (the typed schema step reports it).
+/// `element["from"]["ecosystem"]`); the resulting scalar tokens are combined
+/// into one injective composite identity. An element missing any field has no
+/// identity and is skipped (the typed schema step reports it).
 #[derive(Debug, Clone)]
 pub struct CompositeKey {
     fields: Vec<Vec<String>>,
@@ -83,13 +83,19 @@ impl MergeIdentity for CompositeKey {
     }
 
     fn identity_of(&self, element: &Value) -> Option<String> {
-        let mut parts = Vec::with_capacity(self.fields.len());
+        let mut token = String::new();
         for path in &self.fields {
-            parts.push(scalar_token(lookup(element, path)?)?);
+            let part = scalar_token(lookup(element, path)?)?;
+            // Length-prefix each part so the encoding is injective: the byte
+            // length unambiguously delimits the part, so no scalar value can
+            // forge a field boundary regardless of the characters it contains.
+            // A raw separator join would let e.g. `["a\u{1f}b", "c"]` collide
+            // with `["a", "b\u{1f}c"]` and reject a valid config as a duplicate.
+            token.push_str(part.len().to_string().as_str());
+            token.push(':');
+            token.push_str(&part);
         }
-        // Join with the ASCII unit separator so distinct field tuples cannot
-        // collide through their concatenation.
-        Some(parts.join("\u{1f}"))
+        Some(token)
     }
 }
 
@@ -161,5 +167,24 @@ mod tests {
 
         assert!(first.is_some());
         assert_ne!(first, second);
+    }
+
+    #[test]
+    fn composite_key_is_injective_for_separator_like_values() {
+        let key = CompositeKey::new(["a", "b"]);
+
+        // A raw separator join (U+001F) would let a value containing the
+        // separator forge a field boundary; the length-prefixed encoding must
+        // keep these distinct tuples distinct.
+        let with_sep = key.identity_of(&json!({ "a": "x\u{1f}y", "b": "z" }));
+        let split = key.identity_of(&json!({ "a": "x", "b": "y\u{1f}z" }));
+        assert!(with_sep.is_some());
+        assert_ne!(with_sep, split);
+
+        // The same guarantee must hold for the length-prefix delimiter itself,
+        // so a value that looks like an encoded part cannot collide.
+        let looks_encoded = key.identity_of(&json!({ "a": "1:x", "b": "y" }));
+        let genuinely_split = key.identity_of(&json!({ "a": "1", "b": "x1:y" }));
+        assert_ne!(looks_encoded, genuinely_split);
     }
 }
