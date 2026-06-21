@@ -252,7 +252,7 @@ mod tests {
             .map(|i| {
                 let sink = sink.clone();
                 thread::spawn(move || {
-                    sink.set(&format!("k{i}"), SecretString::new(&i.to_string()))
+                    sink.set(&format!("k{i}"), SecretString::new(i.to_string()))
                         .unwrap();
                 })
             })
