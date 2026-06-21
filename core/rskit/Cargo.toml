@@ -35,7 +35,7 @@ rskit-util = { workspace = true }
 rskit-errors = { workspace = true }
 rskit-fs = { workspace = true }
 rskit-config = { workspace = true }
-rskit-logging = { workspace = true }
+rskit-logging = { workspace = true, features = ["setup"] }
 rskit-bootstrap = { workspace = true }
 rskit-component = { workspace = true }
 rskit-provider = { workspace = true }

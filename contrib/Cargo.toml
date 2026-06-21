@@ -32,7 +32,7 @@ rskit-media = { path = "../core/rskit-media", version = "0.1.0-alpha.1" }
 rskit-process = { path = "../core/rskit-process", version = "0.1.0-alpha.1" }
 rskit-vectorstore = { path = "../core/rskit-vectorstore", version = "0.1.0-alpha.1" }
 rskit-config = { path = "../core/rskit-config", version = "0.1.0-alpha.1" }
-rskit-logging = { path = "../core/rskit-logging", version = "0.1.0-alpha.1" }
+rskit-logging = { path = "../core/rskit-logging", version = "0.1.0-alpha.1", default-features = false }
 rskit-component = { path = "../core/rskit-component", version = "0.1.0-alpha.1" }
 rskit-provider = { path = "../core/rskit-provider", version = "0.1.0-alpha.1" }
 rskit-httpclient = { path = "../core/rskit-httpclient", version = "0.1.0-alpha.1" }
