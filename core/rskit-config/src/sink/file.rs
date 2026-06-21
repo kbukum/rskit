@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use parking_lot::Mutex;
 use rskit_codec::{Codec, TomlCodec, Value};
 use rskit_errors::{AppError, AppResult};
 use rskit_fs::sync_io::file;
@@ -26,6 +27,12 @@ const TEMP_PREFIX: &str = "config";
 /// Filesystem access goes through `rskit-fs` (bounded reads + atomic
 /// replacement), so a concurrent reader never observes a partial write.
 ///
+/// Mutations (`set`/`remove`/`set_many`) are read-modify-write sequences
+/// serialized by a shared in-process lock, so concurrent writers — including
+/// separate clones, which share the same lock — never lose each other's
+/// updates. Cross-process coordination is out of scope; protect the file with
+/// OS-level mechanisms if multiple processes write it.
+///
 /// Persisting writes the plaintext value to disk — this is the sink's explicit,
 /// intended persistence. Protect the file with appropriate permissions; the
 /// plaintext is never logged.
@@ -33,6 +40,8 @@ const TEMP_PREFIX: &str = "config";
 pub struct FileConfigSink {
     path: PathBuf,
     codec: Arc<dyn Codec>,
+    /// Serializes read-modify-write mutations across all clones of this sink.
+    mutation_lock: Arc<Mutex<()>>,
 }
 
 impl FileConfigSink {
@@ -43,6 +52,7 @@ impl FileConfigSink {
         Self {
             path: path.into(),
             codec: Arc::new(TomlCodec),
+            mutation_lock: Arc::new(Mutex::new(())),
         }
     }
 
@@ -53,6 +63,7 @@ impl FileConfigSink {
         Self {
             path: path.into(),
             codec,
+            mutation_lock: Arc::new(Mutex::new(())),
         }
     }
 
@@ -128,18 +139,21 @@ fn value_into_table(value: &Value) -> Option<ConfigTable> {
 
 impl ConfigSink for FileConfigSink {
     fn set(&self, key: &str, value: SecretString) -> AppResult<()> {
+        let _guard = self.mutation_lock.lock();
         let mut table = self.read_table()?;
         table.insert(key.to_string(), value.expose().to_string());
         self.write_table(&table)
     }
 
     fn remove(&self, key: &str) -> AppResult<()> {
+        let _guard = self.mutation_lock.lock();
         let mut table = self.read_table()?;
         table.remove(key);
         self.write_table(&table)
     }
 
     fn set_many(&self, entries: Vec<(String, SecretString)>) -> AppResult<()> {
+        let _guard = self.mutation_lock.lock();
         let mut table = self.read_table()?;
         for (key, value) in entries {
             table.insert(key, value.expose().to_string());
@@ -199,6 +213,39 @@ mod tests {
         .unwrap();
         assert_eq!(read_back(&sink, "a").as_deref(), Some("1"));
         assert_eq!(read_back(&sink, "b").as_deref(), Some("2"));
+    }
+
+    #[test]
+    fn concurrent_set_does_not_lose_updates() {
+        use std::thread;
+
+        let dir = tempdir().unwrap();
+        let sink = FileConfigSink::new(dir.path().join("config.toml"));
+
+        // Many clones share the same backing file and mutation lock; each writes
+        // a distinct key concurrently. Without serialization, read-modify-write
+        // races would drop some keys.
+        let handles: Vec<_> = (0..16)
+            .map(|i| {
+                let sink = sink.clone();
+                thread::spawn(move || {
+                    sink.set(&format!("k{i}"), SecretString::new(&i.to_string()))
+                        .unwrap();
+                })
+            })
+            .collect();
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        let table = sink.read_table().unwrap();
+        assert_eq!(table.len(), 16);
+        for i in 0..16 {
+            assert_eq!(
+                table.get(&format!("k{i}")).map(String::as_str),
+                Some(i.to_string().as_str())
+            );
+        }
     }
 
     #[test]
