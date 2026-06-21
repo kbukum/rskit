@@ -30,7 +30,6 @@ async-trait     = { workspace = true }
 async-stream    = { workspace = true }
 tokio           = { workspace = true }
 tokio-util      = { workspace = true }
-tokio-stream    = { workspace = true }
 futures         = { workspace = true }
 tracing         = { workspace = true }
 parking_lot     = { workspace = true }
@@ -39,7 +38,6 @@ uuid            = { workspace = true }
 
 # Internal
 rskit-errors = { workspace = true }
-rskit-bootstrap = { workspace = true }
 rskit-resilience = { workspace = true }
 rskit-provider = { workspace = true, optional = true }
 

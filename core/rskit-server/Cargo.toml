@@ -20,13 +20,10 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 # External
 tonic            = { workspace = true, optional = true }
-tonic-health     = { workspace = true, optional = true }
 tonic-reflection = { workspace = true, optional = true }
 tokio            = { workspace = true }
 tokio-util       = { workspace = true }
 tower            = { workspace = true, optional = true }
-tower-layer      = { workspace = true, optional = true }
-tower-service    = { workspace = true, optional = true }
 tracing          = { workspace = true }
 async-trait      = { workspace = true }
 serde            = { workspace = true }
@@ -71,12 +68,9 @@ grpc = [
     "dep:base64",
     "dep:http",
     "dep:tonic",
-    "dep:tonic-health",
     "dep:tonic-reflection",
     "dep:rskit-grpc",
     "dep:tower",
-    "dep:tower-layer",
-    "dep:tower-service",
 ]
 
 [dev-dependencies]

@@ -21,13 +21,11 @@ rustdoc-args = ["--cfg", "docsrs"]
 # External
 tonic          = { workspace = true }
 tokio          = { workspace = true, features = ["test-util"] }
-tower          = { workspace = true }
 tracing        = { workspace = true }
 async-trait    = { workspace = true }
 serde          = { workspace = true }
 serde_json     = { workspace = true }
 http           = { workspace = true }
-chrono         = { workspace = true }
 
 # Internal
 rskit-errors = { workspace = true }
