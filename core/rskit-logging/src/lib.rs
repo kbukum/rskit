@@ -45,15 +45,15 @@ pub mod masking;
 /// Per-module log level overrides from config.
 #[cfg(feature = "setup")]
 pub mod module_levels;
+/// OpenTelemetry Logs bridge with OTLP export.
+#[cfg(feature = "otlp")]
+pub mod otlp;
 /// Rate-based log sampling layer.
 #[cfg(feature = "setup")]
 pub mod sampling;
 /// Subscriber setup — building and installing `tracing` subscribers.
 #[cfg(feature = "setup")]
 pub mod setup;
-/// OpenTelemetry Logs bridge with OTLP export.
-#[cfg(feature = "otlp")]
-pub mod otlp;
 
 pub use config::{LogFormat, LogOutput, LoggingConfig};
 pub use error::LoggingResult;
@@ -62,6 +62,8 @@ pub use error::LoggingResult;
 pub use masking::{DefaultMasker, Masker, MaskingConfig, MaskingMakeWriter};
 #[cfg(feature = "setup")]
 pub use module_levels::{ModuleLevelsConfig, build_env_filter};
+#[cfg(feature = "otlp")]
+pub use otlp::{OtlpConfig, OtlpProvider};
 #[cfg(feature = "setup")]
 pub use sampling::SamplingConfig;
 #[cfg(feature = "setup")]
@@ -69,8 +71,6 @@ pub use setup::{
     LoggingGuard, init_logging, init_logging_env, init_logging_with_masking,
     init_logging_with_options,
 };
-#[cfg(feature = "otlp")]
-pub use otlp::{OtlpConfig, OtlpProvider};
 #[cfg(feature = "otlp")]
 pub use setup::{LoggingSetup, init_logging_full};
 
