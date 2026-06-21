@@ -1,0 +1,22 @@
+[package]
+name        = "core-cli"
+version = "0.1.0-alpha.1"
+edition.workspace      = true
+license.workspace      = true
+rust-version.workspace = true
+publish     = false
+
+# Standing regression guard for the "consumer classes" goal (docs/CONSUMER-CLASSES.md):
+# a real CLI built purely on rskit *core* crates. It must never depend on a
+# transport/server crate (rskit-server/http/httpclient/grpc/sse/messaging) or on
+# the rskit facade. If a core crate grows a service-shaped dependency, this
+# example's build surfaces it.
+[dependencies]
+rskit-errors  = { path = "../../core/rskit-errors" }
+rskit-config  = { path = "../../core/rskit-config", default-features = false }
+rskit-logging = { path = "../../core/rskit-logging" }
+rskit-cli     = { path = "../../core/rskit-cli" }
+rskit-version = { path = "../../core/rskit-version" }
+
+serde = { version = "1", features = ["derive"] }
+tokio = { workspace = true, features = ["full"] }
