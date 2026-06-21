@@ -24,8 +24,6 @@ tokio-util       = { workspace = true, features = ["rt"] }
 futures          = { workspace = true }
 futures-util     = { workspace = true }
 async-stream     = { workspace = true }
-pin-project-lite = { workspace = true }
-tracing          = { workspace = true }
 tokio-stream = { workspace = true }
 parking_lot      = { workspace = true }
 
