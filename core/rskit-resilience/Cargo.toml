@@ -26,11 +26,6 @@ rand          = { workspace = true }
 parking_lot   = { workspace = true }
 tracing       = { workspace = true }
 tower         = { workspace = true }
-tower-layer   = { workspace = true }
-tower-service = { workspace = true }
-futures-util  = { workspace = true }
-pin-project-lite = { workspace = true }
-serde         = { workspace = true, features = ["derive"] }
 
 # Internal
 rskit-errors = { workspace = true }
