@@ -4961,7 +4961,6 @@ name = "rskit-bootstrap"
 version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
- "futures",
  "futures-util",
  "parking_lot",
  "rskit-component",
@@ -4969,7 +4968,6 @@ dependencies = [
  "rskit-di",
  "rskit-errors",
  "rskit-hook",
- "rskit-logging",
  "rskit-provider",
  "rskit-validation",
  "serde",
@@ -5263,7 +5261,6 @@ dependencies = [
  "rskit-errors",
  "tokio",
  "tokio-util",
- "tracing",
 ]
 
 [[package]]
@@ -5739,17 +5736,11 @@ name = "rskit-provider"
 version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
- "bytes",
  "futures",
- "futures-util",
  "parking_lot",
- "pin-project-lite",
  "rskit-errors",
  "tokio",
  "tower",
- "tower-layer",
- "tower-service",
- "tracing",
 ]
 
 [[package]]
