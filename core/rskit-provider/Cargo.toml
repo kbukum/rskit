@@ -21,14 +21,8 @@ rustdoc-args = ["--cfg", "docsrs"]
 # External
 tokio            = { workspace = true }
 futures          = { workspace = true }
-futures-util     = { workspace = true }
 tower            = { workspace = true }
-tower-layer      = { workspace = true }
-tower-service    = { workspace = true }
-tracing          = { workspace = true }
-pin-project-lite = { workspace = true }
 async-trait      = { workspace = true }
-bytes            = { workspace = true }
 parking_lot      = { workspace = true }
 
 # Internal
