@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Prune composition-domain dependencies (no behavior change): `rskit-pipeline` drops unused `pin-project-lite` and `tracing`; `rskit-dag` drops unused `futures`; `rskit-worker` drops unused `futures-util`; `rskit-chain` drops unused `tracing`.
 - Prune transport-domain dependencies (no behavior change): `rskit-server` drops `tonic-health`/`tower-layer`/`tower-service`; `rskit-httpclient` drops `thiserror`; `rskit-grpc` drops `chrono`/`tower`; `rskit-sse` drops `async-trait`; `rskit-messaging` drops `tokio-stream` and `rskit-bootstrap`.
 - Prune data-domain dependencies (no behavior change): `rskit-database` drops `chrono`/`uuid`/`tracing`/`rskit-config`; `rskit-cache` drops `tracing`; `rskit-storage` drops `pin-project-lite`; `rskit-dataset` drops `rskit-fs`.
+- Prune ai-domain dependencies (no behavior change): `rskit-llm` drops unused `tracing` (and redundant dev-dep `serde_json`); `rskit-inference` drops unused `uuid`; `rskit-skill` drops unused `serde_json`; `rskit-mcp` drops unused `thiserror` and `rskit-skill`; `rskit-media` drops unused `tracing` (and redundant dev-deps `serde_json`/`rskit-storage`).
 
 ## [v0.1.0-alpha.2] - 2026-06-16
 

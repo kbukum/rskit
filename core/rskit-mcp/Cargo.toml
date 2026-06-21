@@ -31,7 +31,6 @@ serde_json   = { workspace = true }
 tokio        = { workspace = true }
 tracing      = { workspace = true }
 async-trait  = { workspace = true }
-thiserror    = { workspace = true }
 parking_lot  = { workspace = true }
 url = { workspace = true }
 
@@ -42,7 +41,6 @@ rskit-observability = { workspace = true }
 rskit-tool = { workspace = true }
 rskit-schema = { workspace = true }
 rskit-errors = { workspace = true }
-rskit-skill = { workspace = true }
 rskit-authz = { workspace = true }
 
 [dev-dependencies]
