@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [v0.1.0-alpha.3] - 2026-06-21
+
 ### Added
 
 - Document consumer classes (service / app / CLI / tool / library) and the guarantees the foundation layer makes to each in `docs/CONSUMER-CLASSES.md`, so new core crates are designed consumer-neutral from day one.
@@ -74,5 +76,7 @@ Initial alpha release of rskit, a Rust infrastructure toolkit for building servi
 
 This is an **alpha preview** intended for early evaluation. APIs may change before the first stable release, especially while rskit is still aligning its foundational crates and adapter boundaries.
 
-[Unreleased]: https://github.com/kbukum/rskit/compare/v0.1.0-alpha.1...HEAD
+[Unreleased]: https://github.com/kbukum/rskit/compare/v0.1.0-alpha.3...HEAD
+[v0.1.0-alpha.3]: https://github.com/kbukum/rskit/compare/v0.1.0-alpha.2...v0.1.0-alpha.3
+[v0.1.0-alpha.2]: https://github.com/kbukum/rskit/compare/v0.1.0-alpha.1...v0.1.0-alpha.2
 [v0.1.0-alpha.1]: https://github.com/kbukum/rskit/releases/tag/v0.1.0-alpha.1

@@ -1,7 +1,7 @@
 [package]
 name        = "rskit-hook"
 description = "Generic event hook system — register handlers and emit events with zero domain dependencies"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 edition.workspace      = true
 license.workspace      = true
 rust-version.workspace = true
