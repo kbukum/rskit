@@ -115,11 +115,21 @@ for (name, raw) in manifest.plugins {
 Identity-aware include-merge hard-errors on duplicate identities instead of silently overriding:
 
 ```rust
-use rskit_config::{IdentityKey, IncludeMerge};
+use rskit_config::{CompositeKey, IdentityKey, IncludeMerge};
 
-// Arrays-of-tables keyed by their `name` field: a duplicate `name` across
-// merged documents is a hard error, not a silent last-wins override.
-let merge = IncludeMerge::new().with_identity("groups", IdentityKey::new("name"));
+let merge = IncludeMerge::new()
+    // Arrays-of-tables keyed by a single `name` field: a duplicate `name`
+    // across merged documents is a hard error, not a silent last-wins override.
+    .with_identity("groups", IdentityKey::new("name"))
+    // Arrays-of-tables with no single identifying field: identity is the
+    // joined value of several (optionally nested) fields.
+    .with_identity(
+        "edges",
+        CompositeKey::new(["from.module", "to.module"]),
+    )
+    // Tables-of-tables keyed by name (`[domains.<name>]`): a key contributed by
+    // two documents is a duplicate identity, rejected rather than merged.
+    .with_unique_keys("domains");
 ```
 
 ### 4. Pluggable providers — read / write / watch

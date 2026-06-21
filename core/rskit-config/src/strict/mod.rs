@@ -20,5 +20,5 @@ mod merge;
 mod raw;
 
 pub use document::{StrictLoader, load_strict};
-pub use merge::{IdentityKey, IncludeMerge, MergeIdentity};
+pub use merge::{CompositeKey, IdentityKey, IncludeMerge, MergeIdentity};
 pub use raw::{RawTable, RawValue, deserialize_subtree};

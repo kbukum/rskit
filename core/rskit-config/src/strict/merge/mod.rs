@@ -1,56 +1,39 @@
-use std::collections::BTreeMap;
+//! Identity-aware include-merge for strict, layered config documents.
+
+mod identity;
+
+use std::collections::{BTreeMap, BTreeSet};
 
 use rskit_codec::value::{ArrayStrategy, merge_with};
 use rskit_errors::{AppError, AppResult};
 use rskit_util::collections::ensure_unique_by;
 use serde_json::Value;
 
-/// Identity rule for an array-of-tables section during include-merge.
-///
-/// Sections registered with an identity are concatenated across documents rather
-/// than overwritten, and duplicate identities are a hard error. Implement this
-/// trait for custom identity logic, or use [`IdentityKey`] for the common case
-/// of "a single named field identifies each element".
-pub trait MergeIdentity: Send + Sync {
-    /// Field within each array element that uniquely identifies it.
-    fn identity_key(&self) -> &str;
-}
-
-/// A simple [`MergeIdentity`] naming the identity field directly.
-#[derive(Debug, Clone)]
-pub struct IdentityKey(String);
-
-impl IdentityKey {
-    /// Identify array elements by the value of `field`.
-    pub fn new(field: impl Into<String>) -> Self {
-        Self(field.into())
-    }
-}
-
-impl MergeIdentity for IdentityKey {
-    fn identity_key(&self) -> &str {
-        &self.0
-    }
-}
+pub use identity::{CompositeKey, IdentityKey, MergeIdentity};
 
 /// Identity-aware include-merge configuration.
 ///
-/// Merges TOML documents with deterministic, schema-aware rules:
+/// Merges config documents with deterministic, schema-aware rules:
 ///
-/// - tables merge recursively; on a key collision the overlay value wins
+/// - tables merge recursively; on a scalar key collision the overlay value wins
 ///   (last-wins scalars);
 /// - array-of-tables sections registered via [`IncludeMerge::with_identity`] are
 ///   concatenated across documents and hard-error on duplicate identity;
+/// - map sections registered via [`IncludeMerge::with_unique_keys`] hard-error
+///   when the same map key is contributed by more than one document (a duplicate
+///   identity for sections keyed by name rather than by an array element);
 /// - any other array is replaced wholesale by the overlay.
 #[derive(Default)]
 pub struct IncludeMerge {
     identity_sections: BTreeMap<String, Box<dyn MergeIdentity>>,
+    unique_key_sections: BTreeSet<String>,
 }
 
 impl std::fmt::Debug for IncludeMerge {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("IncludeMerge")
             .field("identity_sections", &self.identity_sections.keys())
+            .field("unique_key_sections", &self.unique_key_sections)
             .finish()
     }
 }
@@ -62,6 +45,9 @@ impl IncludeMerge {
     }
 
     /// Register `section` as an identity-keyed array-of-tables.
+    ///
+    /// Such sections are concatenated across documents and hard-error on a
+    /// duplicate identity (see [`IdentityKey`] / [`CompositeKey`]).
     #[must_use]
     pub fn with_identity(
         mut self,
@@ -73,18 +59,34 @@ impl IncludeMerge {
         self
     }
 
+    /// Register `section` as a map whose keys must be unique across documents.
+    ///
+    /// Use this for sections modelled as a table-of-tables keyed by name (for
+    /// example `[groups.<name>]`): a key contributed by two documents is a
+    /// duplicate identity and a hard error, rather than a silent recursive merge.
+    #[must_use]
+    pub fn with_unique_keys(mut self, section: impl Into<String>) -> Self {
+        self.unique_key_sections.insert(section.into());
+        self
+    }
+
     /// Merge `overlay` onto `base`, returning the combined document.
     ///
     /// Delegates the value-tree mechanics to [`rskit_codec::value::merge_with`]:
     /// objects merge recursively, scalars are last-wins, and arrays under a
-    /// registered identity section are concatenated (all others replaced). This
-    /// layer contributes only the policy of *which* sections are identity-keyed.
+    /// registered identity section are concatenated (all others replaced). Before
+    /// merging, any [`with_unique_keys`](Self::with_unique_keys) section is checked
+    /// for keys present in both documents, since the recursive merge would
+    /// otherwise silently collapse the collision.
     ///
     /// # Errors
     ///
-    /// Currently infallible, but returns [`AppResult`] so identity/merge policy
-    /// can surface typed errors without a signature change.
+    /// Returns [`AppError`] when a unique-key section receives the same key from
+    /// both documents.
     pub fn merge(&self, base: Value, overlay: Value) -> AppResult<Value> {
+        if !self.unique_key_sections.is_empty() {
+            self.check_unique_keys(&base, &overlay)?;
+        }
         let identity_sections = &self.identity_sections;
         Ok(merge_with(base, overlay, |key| {
             if identity_sections.contains_key(key) {
@@ -97,8 +99,8 @@ impl IncludeMerge {
 
     /// Validate identity-keyed sections in a (possibly merged) document.
     ///
-    /// Detects duplicate identities within every registered section, covering
-    /// both single-document and merged-document cases.
+    /// Detects duplicate identities within every registered array section,
+    /// covering both single-document and merged-document cases.
     pub(crate) fn validate(&self, value: &Value) -> AppResult<()> {
         match value {
             Value::Object(table) => {
@@ -106,7 +108,7 @@ impl IncludeMerge {
                     if let (Some(identity), Value::Array(elements)) =
                         (self.identity_sections.get(key), child)
                     {
-                        check_unique_identities(key, identity.identity_key(), elements)?;
+                        check_unique_identities(key, identity.as_ref(), elements)?;
                     }
                     self.validate(child)?;
                 }
@@ -122,18 +124,56 @@ impl IncludeMerge {
         }
         Ok(())
     }
+
+    /// Reject keys contributed to a unique-key section by both documents.
+    ///
+    /// Walks `base` and `overlay` in lockstep: for each registered section that is
+    /// a table in both, an overlapping member key is a duplicate identity. Recurses
+    /// through shared objects so a nested registered section is still found.
+    fn check_unique_keys(&self, base: &Value, overlay: &Value) -> AppResult<()> {
+        let (Value::Object(base), Value::Object(overlay)) = (base, overlay) else {
+            return Ok(());
+        };
+        for (key, overlay_child) in overlay {
+            let Some(base_child) = base.get(key) else {
+                continue;
+            };
+            if self.unique_key_sections.contains(key)
+                && let (Value::Object(base_section), Value::Object(overlay_section)) =
+                    (base_child, overlay_child)
+            {
+                for member in overlay_section.keys() {
+                    if base_section.contains_key(member) {
+                        return Err(AppError::invalid_input(
+                            key,
+                            format!(
+                                "duplicate '{member}' in section '{key}' across merged documents"
+                            ),
+                        ));
+                    }
+                }
+            }
+            self.check_unique_keys(base_child, overlay_child)?;
+        }
+        Ok(())
+    }
 }
 
-fn check_unique_identities(section: &str, identity: &str, elements: &[Value]) -> AppResult<()> {
-    // Missing or non-string identities are schema errors surfaced by the typed
-    // deserialize step; the merge layer only guards duplicates.
+fn check_unique_identities(
+    section: &str,
+    identity: &dyn MergeIdentity,
+    elements: &[Value],
+) -> AppResult<()> {
     let identities = elements
         .iter()
-        .filter_map(|element| element.get(identity).and_then(Value::as_str));
-    ensure_unique_by(identities, |id| *id).map_err(|duplicate| {
+        .filter_map(|element| identity.identity_of(element));
+    ensure_unique_by(identities, Clone::clone).map_err(|duplicate| {
         AppError::invalid_input(
             section,
-            format!("duplicate '{identity}' value '{duplicate}' in section '{section}'"),
+            format!(
+                "duplicate {} identity '{duplicate}' in section '{section}'",
+                identity.label()
+            ),
         )
     })
 }
@@ -218,6 +258,57 @@ mod tests {
         let err = merge.validate(&doc).unwrap_err();
 
         assert!(err.to_string().contains("duplicate"));
+    }
+
+    #[test]
+    fn composite_identity_concatenates_distinct_edges() {
+        let merge =
+            IncludeMerge::new().with_identity("overlays", CompositeKey::new(["from", "to"]));
+        let base = json!({ "overlays": [{ "from": "a", "to": "b" }] });
+        let overlay = json!({ "overlays": [{ "from": "a", "to": "c" }] });
+
+        let merged = merge.merge(base, overlay).unwrap();
+        merge.validate(&merged).unwrap();
+
+        assert_eq!(merged.get("overlays").unwrap().as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn duplicate_composite_identity_is_rejected() {
+        let merge =
+            IncludeMerge::new().with_identity("overlays", CompositeKey::new(["from", "to"]));
+        let base = json!({ "overlays": [{ "from": "a", "to": "b" }] });
+        let overlay = json!({ "overlays": [{ "from": "a", "to": "b" }] });
+
+        let merged = merge.merge(base, overlay).unwrap();
+        let err = merge.validate(&merged).unwrap_err();
+
+        assert!(err.to_string().contains("duplicate"));
+    }
+
+    #[test]
+    fn unique_key_sections_reject_duplicate_keys_across_documents() {
+        let merge = IncludeMerge::new().with_unique_keys("groups");
+        let base = json!({ "groups": { "core": { "modules": ["a"] } } });
+        let overlay = json!({ "groups": { "core": { "modules": ["b"] } } });
+
+        let err = merge.merge(base, overlay).unwrap_err();
+
+        assert!(err.to_string().contains("duplicate"));
+        assert!(err.to_string().contains("core"));
+    }
+
+    #[test]
+    fn unique_key_sections_allow_distinct_keys() {
+        let merge = IncludeMerge::new().with_unique_keys("groups");
+        let base = json!({ "groups": { "core": {} } });
+        let overlay = json!({ "groups": { "services": {} } });
+
+        let merged = merge.merge(base, overlay).unwrap();
+        let groups = merged.get("groups").unwrap().as_object().unwrap();
+
+        assert!(groups.contains_key("core"));
+        assert!(groups.contains_key("services"));
     }
 
     #[test]
