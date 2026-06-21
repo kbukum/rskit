@@ -4987,7 +4987,6 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
- "tracing",
 ]
 
 [[package]]
@@ -5096,17 +5095,13 @@ name = "rskit-database"
 version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
- "chrono",
  "parking_lot",
  "rskit-bootstrap",
- "rskit-config",
  "rskit-errors",
  "rskit-validation",
  "serde",
  "serde_json",
  "tokio",
- "tracing",
- "uuid",
  "validator",
 ]
 
@@ -5121,7 +5116,6 @@ dependencies = [
  "image",
  "parking_lot",
  "rskit-errors",
- "rskit-fs",
  "rskit-pipeline",
  "rskit-schema",
  "rskit-validation",
@@ -5856,7 +5850,6 @@ dependencies = [
  "infer",
  "insta",
  "mime_guess",
- "pin-project-lite",
  "rskit-errors",
  "rskit-fs",
  "serde",
