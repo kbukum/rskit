@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use rskit_codec::value::{ArrayStrategy, merge_with};
 use rskit_errors::{AppError, AppResult};
-use rskit_util::collections::find_duplicates_by;
+use rskit_util::collections::ensure_unique_by;
 use serde_json::Value;
 
 /// Identity rule for an array-of-tables section during include-merge.
@@ -130,13 +130,12 @@ fn check_unique_identities(section: &str, identity: &str, elements: &[Value]) ->
     let identities = elements
         .iter()
         .filter_map(|element| element.get(identity).and_then(Value::as_str));
-    if let Some(duplicate) = find_duplicates_by(identities, |id| *id).first() {
-        return Err(AppError::invalid_input(
+    ensure_unique_by(identities, |id| *id).map_err(|duplicate| {
+        AppError::invalid_input(
             section,
             format!("duplicate '{identity}' value '{duplicate}' in section '{section}'"),
-        ));
-    }
-    Ok(())
+        )
+    })
 }
 
 #[cfg(test)]

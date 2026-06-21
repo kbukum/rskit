@@ -78,12 +78,18 @@ impl ConfigSink for InMemoryConfigSink {
     }
 
     fn remove(&self, key: &str) -> AppResult<()> {
-        self.state.lock().values.remove(key);
+        let removed = self.state.lock().values.remove(key).is_some();
+        // Only emit a change event when state actually changed, so a no-op
+        // remove of an absent key never triggers a spurious reload for watchers.
         #[cfg(feature = "watch")]
-        self.broadcaster
-            .broadcast(&crate::watch::ConfigChange::Removed {
-                key: key.to_string(),
-            });
+        if removed {
+            self.broadcaster
+                .broadcast(&crate::watch::ConfigChange::Removed {
+                    key: key.to_string(),
+                });
+        }
+        #[cfg(not(feature = "watch"))]
+        let _ = removed;
         Ok(())
     }
 }
