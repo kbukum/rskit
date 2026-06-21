@@ -28,7 +28,6 @@ futures-util = { workspace = true }
 
 # Internal
 rskit-errors = { workspace = true }
-rskit-fs = { workspace = true }
 rskit-pipeline = { workspace = true }
 rskit-schema = { workspace = true }
 rskit-validation = { workspace = true }
