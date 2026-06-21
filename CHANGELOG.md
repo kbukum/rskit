@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Prune patterns-domain dependencies (no behavior change): `rskit-provider` drops unused `bytes`, `futures-util`, `pin-project-lite`, `tower-layer`, `tower-service`, and `tracing`; `rskit-hook` drops unused `tracing`; `rskit-bootstrap` drops unused `futures` and `rskit-logging` and relocates test-only `async-trait`, `validator`, `rskit-validation`, `serde`, and `parking_lot` to `dev-dependencies`.
 - Prune crosscutting-domain dependencies (no behavior change): `rskit-observability` drops unused `tracing-subscriber`; `rskit-resilience` drops unused `futures-util`, `pin-project-lite`, `serde`, `tower-layer`, and `tower-service`; `rskit-auth` drops unused `rskit-config` and `uuid`.
 - Prune composition-domain dependencies (no behavior change): `rskit-pipeline` drops unused `pin-project-lite` and `tracing`; `rskit-dag` drops unused `futures`; `rskit-worker` drops unused `futures-util`; `rskit-chain` drops unused `tracing`.
+- Prune transport-domain dependencies (no behavior change): `rskit-server` drops `tonic-health`/`tower-layer`/`tower-service`; `rskit-httpclient` drops `thiserror`; `rskit-grpc` drops `chrono`/`tower`; `rskit-sse` drops `async-trait`; `rskit-messaging` drops `tokio-stream` and `rskit-bootstrap`.
 
 ## [v0.1.0-alpha.2] - 2026-06-16
 

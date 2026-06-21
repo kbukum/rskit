@@ -82,7 +82,7 @@ pub trait EventConsumer: Send + Sync {
 
 /// Lifecycle management for a message-broker connection.
 ///
-/// This is intentionally simpler than [`rskit_bootstrap::Component`] — it
+/// This is intentionally simpler than the bootstrap `Component` trait — it
 /// captures the start / stop / health contract that every broker adapter
 /// needs without pulling in the full component registry.  Implementations
 /// can bridge to the bootstrap `Component` trait where needed.

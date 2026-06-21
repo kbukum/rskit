@@ -5232,7 +5232,6 @@ name = "rskit-grpc"
 version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
- "chrono",
  "http 1.4.1",
  "parking_lot",
  "rskit-discovery",
@@ -5245,7 +5244,6 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tonic",
- "tower",
  "tracing",
 ]
 
@@ -5294,7 +5292,6 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
- "thiserror",
  "tokio",
  "tracing",
  "wiremock",
@@ -5619,14 +5616,12 @@ dependencies = [
  "chrono",
  "futures",
  "parking_lot",
- "rskit-bootstrap",
  "rskit-errors",
  "rskit-provider",
  "rskit-resilience",
  "serde",
  "serde_json",
  "tokio",
- "tokio-stream",
  "tokio-util",
  "tracing",
  "uuid",
@@ -5799,12 +5794,9 @@ dependencies = [
  "tokio-rustls",
  "tokio-util",
  "tonic",
- "tonic-health",
  "tonic-reflection",
  "tower",
  "tower-http",
- "tower-layer",
- "tower-service",
  "tracing",
  "validator",
 ]
@@ -5831,7 +5823,6 @@ dependencies = [
 name = "rskit-sse"
 version = "0.1.0-alpha.1"
 dependencies = [
- "async-trait",
  "axum",
  "futures-util",
  "parking_lot",
@@ -7114,19 +7105,6 @@ dependencies = [
  "tower-layer",
  "tower-service",
  "tracing",
-]
-
-[[package]]
-name = "tonic-health"
-version = "0.14.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fcfab99db777fba2802f0dfa861d1628d1ae916fb199d29819941f139ae85082"
-dependencies = [
- "prost",
- "tokio",
- "tokio-stream",
- "tonic",
- "tonic-prost",
 ]
 
 [[package]]
