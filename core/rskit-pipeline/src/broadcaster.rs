@@ -63,13 +63,19 @@ impl<T> fmt::Debug for Broadcaster<T> {
     }
 }
 
-impl<T> Default for Broadcaster<T> {
+impl<T> Default for Broadcaster<T>
+where
+    T: Clone + Send + 'static,
+{
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T> Broadcaster<T> {
+impl<T> Broadcaster<T>
+where
+    T: Clone + Send + 'static,
+{
     /// Create a broadcaster with the [`DEFAULT_BROADCAST_BUFFER`] per-subscriber
     /// buffer.
     #[must_use]
@@ -88,7 +94,9 @@ impl<T> Broadcaster<T> {
             buffer: buffer.max(1),
         }
     }
+}
 
+impl<T> Broadcaster<T> {
     /// The per-subscriber buffer capacity.
     #[must_use]
     pub fn buffer(&self) -> usize {

@@ -148,7 +148,11 @@ impl ConfigSink for FileConfigSink {
     fn remove(&self, key: &str) -> AppResult<()> {
         let _guard = self.mutation_lock.lock();
         let mut table = self.read_table()?;
-        table.remove(key);
+        // Removing an absent key is an idempotent no-op: avoid rewriting the
+        // file (which would create an empty file / bump mtime and wake watchers).
+        if table.remove(key).is_none() {
+            return Ok(());
+        }
         self.write_table(&table)
     }
 
@@ -185,10 +189,29 @@ mod tests {
     #[test]
     fn missing_file_reads_as_empty() {
         let dir = tempdir().unwrap();
-        let sink = FileConfigSink::new(dir.path().join("absent.toml"));
+        let path = dir.path().join("absent.toml");
+        let sink = FileConfigSink::new(&path);
         assert!(sink.read_table().unwrap().is_empty());
-        // Removing from an absent file is a no-op success.
+        // Removing from an absent file is a no-op success that does not create
+        // the backing file.
         sink.remove("anything").unwrap();
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn remove_absent_key_does_not_rewrite_file() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        let sink = FileConfigSink::new(&path);
+        sink.set("keep", SecretString::new("v")).unwrap();
+        let before = std::fs::metadata(&path).unwrap().modified().unwrap();
+
+        // Removing a key that isn't present must not touch the file.
+        sink.remove("missing").unwrap();
+        let after = std::fs::metadata(&path).unwrap().modified().unwrap();
+
+        assert_eq!(before, after);
+        assert_eq!(read_back(&sink, "keep").as_deref(), Some("v"));
     }
 
     #[test]

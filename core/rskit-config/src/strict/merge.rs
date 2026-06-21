@@ -100,15 +100,25 @@ impl IncludeMerge {
     /// Detects duplicate identities within every registered section, covering
     /// both single-document and merged-document cases.
     pub(crate) fn validate(&self, value: &Value) -> AppResult<()> {
-        if let Value::Object(table) = value {
-            for (key, child) in table {
-                if let (Some(identity), Value::Array(elements)) =
-                    (self.identity_sections.get(key), child)
-                {
-                    check_unique_identities(key, identity.identity_key(), elements)?;
+        match value {
+            Value::Object(table) => {
+                for (key, child) in table {
+                    if let (Some(identity), Value::Array(elements)) =
+                        (self.identity_sections.get(key), child)
+                    {
+                        check_unique_identities(key, identity.identity_key(), elements)?;
+                    }
+                    self.validate(child)?;
                 }
-                self.validate(child)?;
             }
+            // Recurse into array elements so identity-keyed sections nested
+            // inside a list (e.g. an object under an array) are still checked.
+            Value::Array(elements) => {
+                for element in elements {
+                    self.validate(element)?;
+                }
+            }
+            _ => {}
         }
         Ok(())
     }
@@ -189,6 +199,22 @@ mod tests {
     fn duplicate_identity_within_single_document_is_rejected() {
         let merge = IncludeMerge::new().with_identity("groups", IdentityKey::new("name"));
         let doc = json!({ "groups": [{ "name": "x" }, { "name": "x" }] });
+
+        let err = merge.validate(&doc).unwrap_err();
+
+        assert!(err.to_string().contains("duplicate"));
+    }
+
+    #[test]
+    fn duplicate_identity_nested_inside_array_is_rejected() {
+        // The identity section lives inside an array element, so validation must
+        // recurse through arrays to catch it.
+        let merge = IncludeMerge::new().with_identity("groups", IdentityKey::new("name"));
+        let doc = json!({
+            "tenants": [
+                { "groups": [{ "name": "x" }, { "name": "x" }] }
+            ]
+        });
 
         let err = merge.validate(&doc).unwrap_err();
 
