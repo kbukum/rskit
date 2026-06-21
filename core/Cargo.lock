@@ -5153,7 +5153,6 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
- "tokio-stream",
  "toml",
  "tracing",
 ]
@@ -5702,7 +5701,6 @@ dependencies = [
  "rskit-errors",
  "rskit-testutil",
  "rskit-util",
- "thiserror",
  "tokio",
  "tokio-util",
  "tracing",
