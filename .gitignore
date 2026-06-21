@@ -49,3 +49,6 @@ Thumbs.db
 
 /tmp/*
 !/tmp/.keep
+
+# Stray CycloneDX SBOMs if a release-sbom run is interrupted before files move to target/sbom/
+*.cdx.json
