@@ -21,7 +21,6 @@ rustdoc-args = ["--cfg", "docsrs"]
 # External
 tokio      = { workspace = true, features = ["process", "time", "signal", "sync"] }
 tokio-util = { workspace = true }
-thiserror  = { workspace = true }
 tracing    = { workspace = true }
 libc       = { workspace = true }
 parking_lot = { workspace = true }
