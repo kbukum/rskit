@@ -1,0 +1,6 @@
+app_name = "core-cli-demo"
+workers = 3
+unexpected_key = true
+
+[logging]
+level = "info"

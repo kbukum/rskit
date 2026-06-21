@@ -18,6 +18,7 @@ This is the documentation hub for developers using or contributing to rskit. The
 |---|---|
 | Facade features and crate selection | [Package catalog](PACKAGES.md) |
 | Architecture and sibling parity | [Design notes](DESIGN.md) |
+| Consumer classes and foundation guarantees | [Consumer classes](CONSUMER-CLASSES.md) |
 | Security model and production defaults | [Security model](security-model.md) |
 | Per-crate API details | Crate READMEs under [`core/`](../core/) and [`contrib/`](../contrib/) |
 | Published Rust API docs | [docs.rs/rskit-suite](https://docs.rs/rskit-suite) |

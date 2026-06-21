@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Document consumer classes (service / app / CLI / tool / library) and the guarantees the foundation layer makes to each in `docs/CONSUMER-CLASSES.md`, so new core crates are designed consumer-neutral from day one.
+- Add the `core-cli` example: a real CLI built purely on `core/` crates (`rskit-config`, `rskit-logging`, `rskit-cli`, `rskit-errors`, `rskit-version`) that intentionally links no transport/server crate. It serves as a standing regression guard against service-shaped creep in the foundation layer.
+
 ### Changed
 
 - Decouple `rskit-logging` from `rskit-config`: `rskit-logging` now owns its configuration vocabulary (`LoggingConfig` / `LogFormat` / `LogOutput`) as tracing-free `serde` data in a new always-on `config` module, and `rskit-config` consumes it instead of defining it. `rskit-config` re-exports the types under its `validate` feature, so `rskit_config::{LoggingConfig, LogFormat, LogOutput}` stays stable. `rskit-logging` gains a default-on `setup` feature gating the `tracing`/`tracing-subscriber` subscriber stack (`init_logging*`, `LoggingGuard`, masking, sampling, per-module levels, context, OTLP), so consumers can depend on the vocabulary alone via `default-features = false`. `rskit-logging` no longer depends on `rskit-config`, restoring downward layering.

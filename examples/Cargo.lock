@@ -315,6 +315,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "core-cli"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "rskit-cli",
+ "rskit-config",
+ "rskit-errors",
+ "rskit-logging",
+ "rskit-version",
+ "serde",
+ "tokio",
+]
+
+[[package]]
 name = "core-foundation-sys"
 version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1577,23 +1590,16 @@ checksum = "47b34b781b31e5d73e9fbc8689c70551fd1ade9a19e3e28cfec8580a79290cc4"
 name = "rskit-bootstrap"
 version = "0.1.0-alpha.1"
 dependencies = [
- "async-trait",
- "futures",
  "futures-util",
- "parking_lot",
  "rskit-component",
  "rskit-config",
  "rskit-di",
  "rskit-errors",
  "rskit-hook",
- "rskit-logging",
  "rskit-provider",
- "rskit-validation",
- "serde",
  "tokio",
  "tokio-util",
  "tracing",
- "validator",
 ]
 
 [[package]]
@@ -1641,6 +1647,7 @@ dependencies = [
  "rskit-codec",
  "rskit-errors",
  "rskit-fs",
+ "rskit-logging",
  "rskit-util",
  "rskit-validation",
  "rskit-version",
@@ -1687,7 +1694,6 @@ dependencies = [
  "rskit-errors",
  "tokio",
  "tokio-util",
- "tracing",
 ]
 
 [[package]]
@@ -1696,7 +1702,6 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "parking_lot",
  "regex",
- "rskit-config",
  "rskit-errors",
  "serde",
  "tracing",
@@ -1714,7 +1719,6 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio-util",
- "tracing",
 ]
 
 [[package]]
@@ -1774,12 +1778,10 @@ dependencies = [
  "futures",
  "futures-util",
  "parking_lot",
- "pin-project-lite",
  "rskit-errors",
  "tokio",
  "tokio-stream",
  "tokio-util",
- "tracing",
 ]
 
 [[package]]
@@ -1790,7 +1792,6 @@ dependencies = [
  "parking_lot",
  "rskit-errors",
  "rskit-util",
- "thiserror",
  "tokio",
  "tokio-util",
  "tracing",
@@ -1801,35 +1802,24 @@ name = "rskit-provider"
 version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
- "bytes",
  "futures",
- "futures-util",
  "parking_lot",
- "pin-project-lite",
  "rskit-errors",
  "tokio",
  "tower",
- "tower-layer",
- "tower-service",
- "tracing",
 ]
 
 [[package]]
 name = "rskit-resilience"
 version = "0.1.0-alpha.1"
 dependencies = [
- "futures-util",
  "governor",
  "parking_lot",
- "pin-project-lite",
  "rand",
  "rskit-errors",
- "serde",
  "tokio",
  "tokio-util",
  "tower",
- "tower-layer",
- "tower-service",
  "tracing",
 ]
 
@@ -1844,7 +1834,6 @@ dependencies = [
  "futures-util",
  "infer",
  "mime_guess",
- "pin-project-lite",
  "rskit-errors",
  "rskit-fs",
  "serde",
@@ -1918,7 +1907,6 @@ dependencies = [
  "async-trait",
  "chrono",
  "futures",
- "futures-util",
  "parking_lot",
  "rskit-errors",
  "rskit-provider",
