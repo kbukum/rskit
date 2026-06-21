@@ -68,15 +68,20 @@ fn unknown_command(command: Option<&str>) -> AppError {
 /// Demonstrates lifecycle ownership using only core crates: the caller owns the
 /// returned [`CancellationToken`] and the work loop races it to wind down
 /// promptly.
+///
+/// The Ctrl+C watcher is only spawned when a Tokio runtime is available, so
+/// calling this outside a runtime returns a usable token instead of panicking.
 #[must_use]
 pub fn install_signal_handler() -> CancellationToken {
     let token = CancellationToken::new();
-    let trigger = token.clone();
-    tokio::spawn(async move {
-        if tokio::signal::ctrl_c().await.is_ok() {
-            trigger.cancel();
-        }
-    });
+    if let Ok(handle) = tokio::runtime::Handle::try_current() {
+        let trigger = token.clone();
+        handle.spawn(async move {
+            if tokio::signal::ctrl_c().await.is_ok() {
+                trigger.cancel();
+            }
+        });
+    }
     token
 }
 
@@ -125,5 +130,12 @@ mod tests {
     fn unknown_command_reports_command() {
         assert!(unknown_command(Some("bogus")).to_string().contains("bogus"));
         assert!(unknown_command(None).to_string().contains("<none>"));
+    }
+
+    #[test]
+    fn install_signal_handler_does_not_panic_without_runtime() {
+        // Called outside any Tokio runtime: must return a token, not panic.
+        let token = install_signal_handler();
+        assert!(!token.is_cancelled());
     }
 }

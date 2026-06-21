@@ -15,6 +15,15 @@ fn fixture(name: &str) -> PathBuf {
         .join(name)
 }
 
+/// Extract the value rendered for `key` in an `rskit_cli::OutputKV` block,
+/// which formats each pair as `  <key>:  <value>`.
+fn field<'a>(rendered: &'a str, key: &str) -> Option<&'a str> {
+    rendered.lines().find_map(|line| {
+        let (k, v) = line.split_once(':')?;
+        (k.trim() == key).then(|| v.trim())
+    })
+}
+
 #[test]
 fn loads_strict_settings_from_fixture() {
     let settings = settings::load(fixture("app.toml")).expect("fixture should load");
@@ -54,8 +63,9 @@ async fn run_processes_all_units_when_not_cancelled() {
     let token = CancellationToken::new();
     let summary = run::execute(3, &token).await.to_string();
 
-    assert!(summary.contains("processed"));
-    assert!(summary.contains('3'));
+    assert_eq!(field(&summary, "requested"), Some("3"));
+    assert_eq!(field(&summary, "processed"), Some("3"));
+    assert_eq!(field(&summary, "cancelled"), Some("false"));
 }
 
 #[tokio::test]
@@ -66,8 +76,8 @@ async fn run_stops_immediately_when_pre_cancelled() {
     let summary = run::execute(5, &token).await.to_string();
 
     // No unit should be processed once cancellation is already requested.
-    assert!(summary.contains("cancelled"));
-    assert!(summary.contains("true"));
+    assert_eq!(field(&summary, "processed"), Some("0"));
+    assert_eq!(field(&summary, "cancelled"), Some("true"));
 }
 
 #[tokio::test]
