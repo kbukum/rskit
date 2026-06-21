@@ -75,6 +75,45 @@ pub fn canonicalize(path: &Path) -> AppResult<PathBuf> {
     })
 }
 
+/// Resolve `root` against a base directory when relative, then canonicalize it.
+///
+/// Common when a config or manifest file declares a `root` that is either
+/// absolute or relative to the file's own directory. A relative `root` is joined
+/// to `base_dir`; an absolute `root` is used as-is. The result is canonicalized,
+/// so the returned path always exists (canonicalization resolves symlinks and
+/// requires the target to exist). When `root` is `None`, the current directory
+/// (`"."`) is resolved against `base_dir`.
+///
+/// `field` names the source field for error reporting.
+///
+/// This resolves and canonicalizes but does not confine: it does not reject a
+/// `root` that escapes `base_dir`. Use [`confine_path`] or [`confine_existing_path`]
+/// when the resolved path must stay within a trust boundary.
+///
+/// # Errors
+///
+/// Returns [`AppError`] when the resolved path cannot be canonicalized (for
+/// example, it does not exist), with the underlying cause preserved.
+pub fn resolve_root_relative_to(
+    field: &str,
+    base_dir: &Path,
+    root: Option<&Path>,
+) -> AppResult<PathBuf> {
+    let root = root.unwrap_or_else(|| Path::new("."));
+    let resolved = if root.is_absolute() {
+        root.to_path_buf()
+    } else {
+        base_dir.join(root)
+    };
+    canonicalize(&resolved).map_err(|error| {
+        AppError::invalid_input(
+            field,
+            format!("failed to resolve {field} '{}'", resolved.display()),
+        )
+        .with_cause(error)
+    })
+}
+
 /// Canonicalize an existing `path` and reject it when it resolves outside `root`.
 ///
 /// Use this for existing untrusted file paths before handing them to lower-level IO
@@ -296,7 +335,7 @@ mod tests {
 
     use super::{
         SafePathError, absolute, append_safe_missing_suffix, canonicalize, confine_existing_path,
-        confine_path, safe_join, validate_relative_path,
+        confine_path, resolve_root_relative_to, safe_join, validate_relative_path,
     };
 
     #[test]
@@ -484,5 +523,47 @@ mod tests {
         let error = confine_path(root.path(), Path::new("broken-link/output.txt")).unwrap_err();
 
         assert_eq!(error.code(), ErrorCode::NotFound);
+    }
+
+    #[test]
+    fn resolve_root_defaults_to_base_dir() {
+        let dir = crate::TempDir::new().unwrap();
+
+        let root = resolve_root_relative_to("root", dir.path(), None).unwrap();
+
+        assert_eq!(root, canonicalize(dir.path()).unwrap());
+    }
+
+    #[test]
+    fn resolve_root_joins_relative_against_base_dir() {
+        let dir = crate::TempDir::new().unwrap();
+        let workspace = dir.path().join("workspace");
+        std::fs::create_dir(&workspace).unwrap();
+
+        let root =
+            resolve_root_relative_to("root", dir.path(), Some(Path::new("workspace"))).unwrap();
+
+        assert_eq!(root, canonicalize(&workspace).unwrap());
+    }
+
+    #[test]
+    fn resolve_root_accepts_absolute_root() {
+        let base = crate::TempDir::new().unwrap();
+        let target = crate::TempDir::new().unwrap();
+
+        let root = resolve_root_relative_to("root", base.path(), Some(target.path())).unwrap();
+
+        assert_eq!(root, canonicalize(target.path()).unwrap());
+    }
+
+    #[test]
+    fn resolve_root_surfaces_canonicalization_failure() {
+        let dir = crate::TempDir::new().unwrap();
+
+        let error =
+            resolve_root_relative_to("root", dir.path(), Some(Path::new("missing"))).unwrap_err();
+
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
+        assert!(error.message().contains("failed to resolve root"));
     }
 }

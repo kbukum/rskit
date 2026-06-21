@@ -5034,6 +5034,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "rskit-codec"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "rskit-errors",
+ "serde",
+ "serde_json",
+ "toml",
+]
+
+[[package]]
 name = "rskit-component"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -5052,9 +5062,12 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "config",
  "dotenvy",
+ "futures",
  "parking_lot",
+ "rskit-codec",
  "rskit-errors",
  "rskit-fs",
+ "rskit-pipeline",
  "rskit-util",
  "rskit-validation",
  "rskit-version",
@@ -5062,6 +5075,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
+ "tokio-util",
  "tracing",
  "validator",
 ]
@@ -6088,6 +6102,7 @@ dependencies = [
 name = "rskit-version"
 version = "0.1.0-alpha.1"
 dependencies = [
+ "rskit-errors",
  "rskit-util",
  "semver",
  "serde",

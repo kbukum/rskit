@@ -2,6 +2,8 @@
 
 #![warn(missing_docs)]
 
+/// Bounded fan-out broadcaster source (`Broadcaster<T>`).
+pub mod broadcaster;
 /// Sequential step-based executor with progress and cancellation.
 pub mod executor;
 /// Extension trait adding `rskit` operators to any `Stream`.
@@ -13,6 +15,7 @@ pub mod sink;
 /// Stream source constructors (`from_slice`, `from_fn`, `from_channel`).
 pub mod source;
 
+pub use broadcaster::{BroadcastStream, Broadcaster, DEFAULT_BROADCAST_BUFFER};
 pub use executor::{Step, StepExecutor, StepStatus};
 pub use ext::RskitStreamExt;
 pub use operators::combine::{concat, merge};

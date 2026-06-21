@@ -44,6 +44,17 @@ Operators available on any `futures::Stream` via `RskitStreamExt`:
 | take | `RskitStreamExt::rtake` | Emit only the first `n` items. |
 | skip | `RskitStreamExt::rskip` | Drop the first `n` items. |
 
+## Sources
+
+| Source | rskit API | Semantics |
+|--------|-----------|-----------|
+| from_slice | `from_slice` | Stream a `Vec<T>` in order. |
+| from_fn | `from_fn` | Lazily generate items from an async closure until it returns `None`. |
+| from_channel | `from_channel` | Wrap a `tokio::sync::mpsc::Receiver` as a stream. |
+| broadcaster | `Broadcaster<T>` | Bounded, cancellable one-to-many fan-out: each `subscribe` returns its own bounded `BroadcastStream`; lagging subscribers drop overflow (never block the broadcaster), disconnected ones are pruned lazily. Cancellation via `CancellationToken`. |
+
+`Broadcaster<T>` is the canonical owner for "observe a backend → bounded, cancellable stream of typed change events" — config reloads, service discovery, cache invalidation, secret rotation — instead of each crate reinventing a per-subscriber fan-out.
+
 ## Usage
 
 ```toml

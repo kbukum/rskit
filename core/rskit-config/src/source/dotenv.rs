@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 
 use rskit_errors::{AppError, AppResult};
 
+use super::contract::ConfigSource;
 use super::env::{normalize_env_key, parse_env_value};
-use super::source::ConfigSource;
 
 /// Profile environment-file selection.
 #[derive(Debug, Clone)]

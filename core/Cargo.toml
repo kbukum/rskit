@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "rskit-util",
     "rskit-fs",
+    "rskit-codec",
     "rskit",
     "rskit-version",
     "rskit-errors",
@@ -201,6 +202,7 @@ rskit-chain = { path = "rskit-chain", version = "0.1.0-alpha.1" }
 rskit-cli = { path = "rskit-cli", version = "0.1.0-alpha.1" }
 rskit-component = { path = "rskit-component", version = "0.1.0-alpha.1" }
 rskit-config = { path = "rskit-config", version = "0.1.0-alpha.1" }
+rskit-codec = { path = "rskit-codec", version = "0.1.0-alpha.1" }
 rskit-dag = { path = "rskit-dag", version = "0.1.0-alpha.1" }
 rskit-database = { path = "rskit-database", version = "0.1.0-alpha.1" }
 rskit-dataset = { path = "rskit-dataset", version = "0.1.0-alpha.1" }

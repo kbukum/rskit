@@ -18,6 +18,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
+rskit-errors = { workspace = true }
 rskit-util = { workspace = true }
 semver = { workspace = true }
 serde = { workspace = true }

@@ -179,7 +179,7 @@ impl<V: Verifier> Loader<V> {
     /// Activate a skill using canonical `rskit-config` source resolution.
     pub fn activate_from_config(&self, loader: &ConfigLoader) -> Result<Pack, SkillError> {
         let config = loader
-            .load::<SkillLoaderConfig>()
+            .load_validated::<SkillLoaderConfig>()
             .map_err(|error| SkillError::Config(error.to_string()))?;
         self.activate(config.root)
     }

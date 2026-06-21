@@ -1,3 +1,5 @@
+#![cfg(feature = "validate")]
+
 use parking_lot::Mutex;
 use rskit_config::{
     AppConfig, ConfigLoader, ConfigMapSource, DotenvFileSource, Environment, EnvironmentSource,
@@ -95,17 +97,9 @@ impl Validate for ToolConfig {
     }
 }
 
-impl Validate for SecretConfig {
-    fn validate(&self) -> Result<(), validator::ValidationErrors> {
-        Ok(())
-    }
-}
-
-impl Validate for NameOnlyConfig {
-    fn validate(&self) -> Result<(), validator::ValidationErrors> {
-        Ok(())
-    }
-}
+// `SecretConfig` and `NameOnlyConfig` intentionally do NOT implement `Validate`:
+// they load through the validation-free `load()` path, proving the typed loader
+// no longer requires `rskit_validation::Validate`.
 
 fn set_required_env() {
     set_env("ADDRESS", "127.0.0.1");
@@ -185,6 +179,48 @@ fn toml_loader_load_with_applies_defaults_before_validation() {
         .expect("should apply defaults");
 
     assert_eq!(cfg.retries, 3);
+}
+
+#[test]
+fn load_does_not_run_validation() {
+    // `name` is empty, which `ToolConfig::validate` rejects. The plain `load`
+    // path must NOT validate, so this succeeds.
+    let dir = tempfile::tempdir().unwrap();
+    let toml_path = dir.path().join("tool.toml");
+    std::fs::write(&toml_path, b"name = \"\"\nretries = 1\n").unwrap();
+
+    let cfg: ToolConfig = ConfigLoader::toml(&toml_path)
+        .load()
+        .expect("plain load skips validation");
+
+    assert_eq!(cfg.name, "");
+}
+
+#[test]
+fn load_validated_rejects_invalid_config() {
+    let dir = tempfile::tempdir().unwrap();
+    let toml_path = dir.path().join("tool.toml");
+    std::fs::write(&toml_path, b"name = \"\"\nretries = 1\n").unwrap();
+
+    let err = ConfigLoader::toml(&toml_path)
+        .load_validated::<ToolConfig>()
+        .expect_err("validation should reject empty name");
+
+    assert!(err.to_string().contains("name"));
+}
+
+#[test]
+fn load_validated_accepts_valid_config() {
+    let dir = tempfile::tempdir().unwrap();
+    let toml_path = dir.path().join("tool.toml");
+    std::fs::write(&toml_path, b"name = \"toven\"\nretries = 2\n").unwrap();
+
+    let cfg: ToolConfig = ConfigLoader::toml(&toml_path)
+        .load_validated()
+        .expect("valid config passes validation");
+
+    assert_eq!(cfg.name, "toven");
+    assert_eq!(cfg.retries, 2);
 }
 
 #[test]
