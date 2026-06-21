@@ -71,3 +71,56 @@ where
         AppError::invalid_input("codec", "failed to deserialize value").with_cause(err)
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::JsonCodec;
+    use serde::Deserialize;
+
+    #[derive(Debug, PartialEq, Serialize, Deserialize)]
+    struct Settings {
+        name: String,
+        retries: u32,
+    }
+
+    #[test]
+    fn encode_then_decode_round_trips_typed_value() {
+        let settings = Settings {
+            name: "svc".to_owned(),
+            retries: 3,
+        };
+
+        let encoded = encode(&JsonCodec, &settings).unwrap();
+        let decoded: Settings = decode(&JsonCodec, &encoded).unwrap();
+
+        assert_eq!(decoded, settings);
+    }
+
+    #[test]
+    fn encode_reports_unrepresentable_values() {
+        use std::collections::HashMap;
+
+        // A map keyed by a non-string type cannot be represented in the JSON
+        // value model, so conversion fails before the codec is invoked.
+        let map: HashMap<(i32, i32), i32> = HashMap::from([((1, 2), 3)]);
+        let err = encode(&JsonCodec, &map).unwrap_err();
+
+        assert!(err.to_string().contains("value model"));
+    }
+
+    #[test]
+    fn decode_reports_type_mismatches() {
+        // Valid JSON, but the shape does not match the target type.
+        let err = decode::<Settings>(&JsonCodec, "[1, 2, 3]").unwrap_err();
+
+        assert!(err.to_string().contains("deserialize"));
+    }
+
+    #[test]
+    fn decode_propagates_codec_parse_errors() {
+        let err = decode::<Settings>(&JsonCodec, "{ not json").unwrap_err();
+
+        assert!(err.to_string().contains("parse"));
+    }
+}

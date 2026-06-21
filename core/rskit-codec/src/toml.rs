@@ -54,4 +54,12 @@ mod tests {
         let err = TomlCodec.decode_value("= not valid").unwrap_err();
         assert!(err.to_string().contains("parse"));
     }
+
+    #[test]
+    fn rejects_unrepresentable_values() {
+        // JSON `null` has no TOML representation; this must surface as a typed
+        // error rather than a panic.
+        let err = TomlCodec.encode_value(&Value::Null).unwrap_err();
+        assert!(err.to_string().contains("serialize"));
+    }
 }
