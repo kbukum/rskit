@@ -4904,7 +4904,6 @@ dependencies = [
  "parking_lot",
  "rand 0.9.4",
  "reqwest",
- "rskit-config",
  "rskit-errors",
  "rskit-httpclient",
  "rskit-security",
@@ -4916,7 +4915,6 @@ dependencies = [
  "thiserror",
  "tokio",
  "tower",
- "uuid",
  "zeroize",
 ]
 
@@ -5697,7 +5695,6 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-opentelemetry",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -5747,18 +5744,13 @@ dependencies = [
 name = "rskit-resilience"
 version = "0.1.0-alpha.1"
 dependencies = [
- "futures-util",
  "governor",
  "parking_lot",
- "pin-project-lite",
  "rand 0.9.4",
  "rskit-errors",
- "serde",
  "tokio",
  "tokio-util",
  "tower",
- "tower-layer",
- "tower-service",
  "tracing",
 ]
 
