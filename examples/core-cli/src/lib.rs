@@ -6,5 +6,6 @@
 //! `rskit-errors`, `rskit-version`) and links **no** transport/server crate —
 //! see `docs/CONSUMER-CLASSES.md`.
 
+pub mod cli;
 pub mod commands;
 pub mod settings;

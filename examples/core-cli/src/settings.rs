@@ -1,5 +1,7 @@
 //! Typed application settings loaded from a single strict TOML file.
 
+use std::path::PathBuf;
+
 use rskit_errors::AppResult;
 use rskit_logging::LoggingConfig;
 use serde::Deserialize;
@@ -23,12 +25,13 @@ pub struct Settings {
 /// Load [`Settings`] from a single strict TOML file at `path`.
 ///
 /// Uses `rskit-config`'s strict loader, so unknown keys are rejected rather
-/// than silently ignored.
+/// than silently ignored. Accepts anything convertible to a [`PathBuf`] so
+/// callers can pass portable [`std::path::Path`] values.
 ///
 /// # Errors
 ///
 /// Returns a typed [`rskit_errors::AppError`] when the file is missing,
 /// malformed, or contains unknown fields.
-pub fn load(path: &str) -> AppResult<Settings> {
-    rskit_config::load_strict(path)
+pub fn load(path: impl Into<PathBuf>) -> AppResult<Settings> {
+    rskit_config::load_strict(path.into())
 }
