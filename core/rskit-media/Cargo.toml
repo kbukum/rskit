@@ -18,7 +18,6 @@ keywords               = ["media", "video", "audio", "pipeline"]
 serde        = { workspace = true, features = ["rc"] }
 serde_json   = { workspace = true }
 chrono       = { workspace = true }
-tracing      = { workspace = true }
 async-trait  = { workspace = true }
 tokio-util   = { workspace = true, features = ["rt"] }
 
@@ -29,11 +28,7 @@ rskit-storage = { workspace = true }
 [dev-dependencies]
 # External
 tokio      = { workspace = true, features = ["test-util"] }
-serde_json = { workspace = true }
 insta = { workspace = true }
-
-# Internal
-rskit-storage = { workspace = true }
 
 [package.metadata.docs.rs]
 all-features = true

@@ -24,7 +24,6 @@ serde_json   = { workspace = true }
 async-trait  = { workspace = true }
 futures      = { workspace = true }
 parking_lot  = { workspace = true }
-tracing      = { workspace = true }
 
 # Internal
 rskit-ai = { workspace = true }
@@ -36,4 +35,3 @@ rskit-tool = { workspace = true }
 [dev-dependencies]
 # External
 tokio               = { workspace = true }
-serde_json          = { workspace = true }
