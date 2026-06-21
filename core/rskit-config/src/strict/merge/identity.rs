@@ -51,7 +51,8 @@ impl MergeIdentity for IdentityKey {
 /// path walked through nested objects (`"from.ecosystem"` reads
 /// `element["from"]["ecosystem"]`); the resulting scalar tokens are combined
 /// into one injective composite identity. An element missing any field has no
-/// identity and is skipped (the typed schema step reports it).
+/// identity and is skipped (the typed schema step reports it); likewise a key
+/// built from an empty field list has no identity and never reports duplicates.
 #[derive(Debug, Clone)]
 pub struct CompositeKey {
     fields: Vec<Vec<String>>,
@@ -83,6 +84,13 @@ impl MergeIdentity for CompositeKey {
     }
 
     fn identity_of(&self, element: &Value) -> Option<String> {
+        // An empty field list cannot identify anything: returning an empty token
+        // here would make every element collide as a "duplicate". Treat it as no
+        // identity (consistent with a missing field) so such a section simply
+        // concatenates instead of spuriously failing the merge.
+        if self.fields.is_empty() {
+            return None;
+        }
         let mut token = String::new();
         for path in &self.fields {
             let part = scalar_token(lookup(element, path)?)?;
@@ -157,6 +165,16 @@ mod tests {
         let element = json!({ "from": { "ecosystem": "go" } });
 
         assert_eq!(key.identity_of(&element), None);
+    }
+
+    #[test]
+    fn composite_key_with_no_fields_has_no_identity() {
+        // An empty field list must not collapse every element to the same empty
+        // token, which would make any multi-element section look duplicated.
+        let key = CompositeKey::new(Vec::<String>::new());
+
+        assert_eq!(key.identity_of(&json!({ "name": "a" })), None);
+        assert_eq!(key.identity_of(&json!({ "name": "b" })), None);
     }
 
     #[test]
