@@ -19,6 +19,7 @@
 
 #![warn(missing_docs)]
 
+pub mod schema;
 pub mod semver;
 
 use serde::{Deserialize, Serialize};

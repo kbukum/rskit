@@ -17,12 +17,27 @@ keywords   = ["config", "toml", "env", "settings"]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[features]
+default = ["validate"]
+# Opt-in `rskit_validation::Validate` integration: enables `ServiceConfig`,
+# `AppConfig`, `load_validated*`, `load_app`, and `load_config`. Disable with
+# `default-features = false` for apps/CLIs/libraries that load plain serde types.
+validate = ["dep:validator", "dep:rskit-validation"]
+# Opt-in dynamic-reload contract (`ConfigWatch`) and the in-memory watch
+# reference impl. One-shot tools and CLIs leave this off. The bounded fan-out
+# mechanism is owned by `rskit-pipeline::Broadcaster`; `tokio-util` supplies the
+# `CancellationToken` at the watch boundary.
+watch = ["dep:rskit-pipeline", "dep:tokio-util"]
+
 [dependencies]
 # External
 serde        = { workspace = true }
+serde_json   = { workspace = true }
 config       = { workspace = true }
 dotenvy      = { workspace = true }
-validator = { workspace = true }
+parking_lot  = { workspace = true }
+validator = { workspace = true, optional = true }
+tokio-util = { workspace = true, optional = true }
 tracing      = { workspace = true }
 
 # Internal
@@ -30,10 +45,13 @@ rskit-errors = { workspace = true }
 rskit-version = { workspace = true }
 rskit-fs = { workspace = true }
 rskit-util = { workspace = true }
-rskit-validation = { workspace = true }
+rskit-codec = { workspace = true }
+rskit-pipeline = { workspace = true, optional = true }
+rskit-validation = { workspace = true, optional = true }
 
 [dev-dependencies]
-parking_lot = { workspace = true }
-serde_json   = { workspace = true }
 tempfile = { workspace = true }
 tokio       = { workspace = true }
+futures     = { workspace = true }
+validator = { workspace = true }
+rskit-validation = { workspace = true }

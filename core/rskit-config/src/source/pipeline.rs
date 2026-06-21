@@ -1,21 +1,20 @@
-//! Adapter-oriented configuration loading.
-
-mod decode;
-mod dotenv;
-mod env;
-mod source;
+//! Ordered-source merge engine: defaults → files → env → overrides.
 
 use std::path::PathBuf;
 
 use rskit_errors::{AppError, AppResult};
-use rskit_validation::Validate;
 use serde::de::DeserializeOwned;
 
-use crate::AppConfig;
+use super::contract::ConfigSource;
+use super::dotenv::{self, DotenvFileSource, Profile};
+use super::env::EnvironmentSource;
+use super::toml::TomlFileSource;
+use crate::typed::decode;
 
-pub use dotenv::{DotenvFileSource, Profile};
-pub use env::EnvironmentSource;
-pub use source::{ConfigMapSource, ConfigSource, TomlFileSource};
+#[cfg(feature = "validate")]
+use crate::AppConfig;
+#[cfg(feature = "validate")]
+use rskit_validation::Validate;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LoaderPolicy {
@@ -171,27 +170,53 @@ impl ConfigLoader {
     }
 
     /// Load any typed config from this loader's source policy.
+    ///
+    /// This path does not run validation; the type only needs to be
+    /// `Deserialize`. Use [`ConfigLoader::load_validated`] to additionally run
+    /// [`rskit_validation::Validate`], or [`ConfigLoader::load_app`] for the
+    /// service-application convenience.
     pub fn load<T>(&self) -> AppResult<T>
     where
-        T: DeserializeOwned + Validate,
+        T: DeserializeOwned,
     {
         self.load_with(|_| {})
     }
 
-    /// Load any typed config and apply defaults before validation.
+    /// Load any typed config and apply programmatic defaults (no validation).
     pub fn load_with<T>(&self, apply_defaults: impl FnOnce(&mut T)) -> AppResult<T>
+    where
+        T: DeserializeOwned,
+    {
+        decode::decode_typed(self.collect()?, apply_defaults)
+    }
+
+    /// Load a typed config and run [`rskit_validation::Validate`] after decoding.
+    #[cfg(feature = "validate")]
+    pub fn load_validated<T>(&self) -> AppResult<T>
     where
         T: DeserializeOwned + Validate,
     {
-        decode::decode(self.collect()?, apply_defaults)
+        self.load_validated_with(|_| {})
+    }
+
+    /// Load a typed config, apply programmatic defaults, then run validation.
+    #[cfg(feature = "validate")]
+    pub fn load_validated_with<T>(&self, apply_defaults: impl FnOnce(&mut T)) -> AppResult<T>
+    where
+        T: DeserializeOwned + Validate,
+    {
+        decode::decode_validated(self.collect()?, apply_defaults)
     }
 
     /// Load an application/service config and call [`AppConfig::apply_defaults`].
+    ///
+    /// Applies defaults via [`AppConfig::apply_defaults`], then runs validation.
+    #[cfg(feature = "validate")]
     pub fn load_app<T>(&self) -> AppResult<T>
     where
         T: AppConfig,
     {
-        self.load_with(T::apply_defaults)
+        self.load_validated_with(T::apply_defaults)
     }
 
     fn collect(&self) -> AppResult<config::Config> {
@@ -281,6 +306,7 @@ impl ConfigLoader {
 }
 
 /// Convenience function: create a default app loader and call [`ConfigLoader::load_app`].
+#[cfg(feature = "validate")]
 pub fn load_config<T: AppConfig>() -> AppResult<T> {
     ConfigLoader::app().load_app()
 }

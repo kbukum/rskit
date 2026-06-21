@@ -1,6 +1,6 @@
 use rskit_errors::{AppError, AppResult};
 
-use super::source::ConfigSource;
+use super::contract::ConfigSource;
 
 /// Environment-variable configuration source.
 #[derive(Debug, Clone, Default)]

@@ -1609,6 +1609,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "rskit-codec"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "rskit-errors",
+ "serde",
+ "serde_json",
+ "toml",
+]
+
+[[package]]
 name = "rskit-component"
 version = "0.1.0-alpha.1"
 dependencies = [
@@ -1627,12 +1637,15 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "config",
  "dotenvy",
+ "parking_lot",
+ "rskit-codec",
  "rskit-errors",
  "rskit-fs",
  "rskit-util",
  "rskit-validation",
  "rskit-version",
  "serde",
+ "serde_json",
  "tracing",
  "validator",
 ]
@@ -1892,6 +1905,7 @@ dependencies = [
 name = "rskit-version"
 version = "0.1.0-alpha.1"
 dependencies = [
+ "rskit-errors",
  "rskit-util",
  "semver",
  "serde",
@@ -2253,10 +2267,12 @@ version = "1.1.2+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81f3d15e84cbcd896376e6730314d59fb5a87f31e4b038454184435cd57defee"
 dependencies = [
+ "indexmap",
  "serde_core",
  "serde_spanned",
  "toml_datetime",
  "toml_parser",
+ "toml_writer",
  "winnow",
 ]
 
@@ -2277,6 +2293,12 @@ checksum = "a2abe9b86193656635d2411dc43050282ca48aa31c2451210f4202550afb7526"
 dependencies = [
  "winnow",
 ]
+
+[[package]]
+name = "toml_writer"
+version = "1.1.1+spec-1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "756daf9b1013ebe47a8776667b466417e2d4c5679d441c26230efd9ef78692db"
 
 [[package]]
 name = "tower"
