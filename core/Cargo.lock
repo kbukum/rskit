@@ -5013,7 +5013,6 @@ dependencies = [
  "serde",
  "tokio",
  "tokio-util",
- "tracing",
 ]
 
 [[package]]
@@ -5082,7 +5081,6 @@ name = "rskit-dag"
 version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
- "futures",
  "parking_lot",
  "rskit-errors",
  "rskit-provider",
@@ -5705,12 +5703,10 @@ dependencies = [
  "futures",
  "futures-util",
  "parking_lot",
- "pin-project-lite",
  "rskit-errors",
  "tokio",
  "tokio-stream",
  "tokio-util",
- "tracing",
 ]
 
 [[package]]
@@ -6098,7 +6094,6 @@ dependencies = [
  "async-trait",
  "chrono",
  "futures",
- "futures-util",
  "parking_lot",
  "rskit-errors",
  "rskit-provider",

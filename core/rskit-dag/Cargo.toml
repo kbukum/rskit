@@ -24,7 +24,6 @@ serde        = { workspace = true }
 async-trait  = { workspace = true }
 tokio        = { workspace = true }
 tracing      = { workspace = true }
-futures      = { workspace = true }
 tokio-util   = { workspace = true }
 parking_lot  = { workspace = true }
 

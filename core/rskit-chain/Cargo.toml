@@ -22,7 +22,6 @@ rustdoc-args = ["--cfg", "docsrs"]
 tokio        = { workspace = true }
 tokio-util   = { workspace = true }
 serde        = { workspace = true }
-tracing      = { workspace = true }
 
 # Internal
 rskit-errors = { workspace = true }
