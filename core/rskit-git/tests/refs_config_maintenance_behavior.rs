@@ -45,7 +45,8 @@ fn create_and_delete_branch_and_tag_updates_refs() {
             .any(|branch| branch.name == "feature")
     );
 
-    r.create_tag("v1.0.0", "HEAD", "release 1.0.0").unwrap();
+    r.create_tag("v1.0.0", "HEAD", Some("release 1.0.0"))
+        .unwrap();
     assert!(
         r.list_tags()
             .unwrap()
@@ -67,6 +68,38 @@ fn create_and_delete_branch_and_tag_updates_refs() {
             .unwrap()
             .iter()
             .any(|tag| tag.name == "v1.0.0")
+    );
+}
+
+#[test]
+fn create_tag_distinguishes_annotated_empty_message_from_lightweight() {
+    let repo = helpers::TestRepo::init();
+    let r = open(repo.path()).unwrap();
+
+    // `Some("")` is the capability the old `&str` API could not express: an
+    // annotated tag (tagger present) whose message happens to be empty.
+    r.create_tag("annotated-empty", "HEAD", Some("")).unwrap();
+    // `None` is a lightweight tag: a plain ref with no tagger.
+    r.create_tag("lightweight", "HEAD", None).unwrap();
+
+    let tags = r.list_tags().unwrap();
+    let annotated = tags
+        .iter()
+        .find(|tag| tag.name == "annotated-empty")
+        .expect("annotated tag present");
+    let lightweight = tags
+        .iter()
+        .find(|tag| tag.name == "lightweight")
+        .expect("lightweight tag present");
+
+    assert!(
+        annotated.tagger.is_some(),
+        "Some(\"\") must create an annotated tag, not a lightweight one"
+    );
+    assert!(annotated.message.is_empty());
+    assert!(
+        lightweight.tagger.is_none(),
+        "None must create a lightweight tag"
     );
 }
 
@@ -275,8 +308,8 @@ fn cli_backend_covers_local_ref_remote_config_and_clean_paths() {
     );
     assert!(cli.list_branches(BranchFilter::Remote).unwrap().is_empty());
 
-    cli.create_tag("cli-lightweight", "HEAD", "").unwrap();
-    cli.create_tag("cli-annotated", "HEAD", "annotated")
+    cli.create_tag("cli-lightweight", "HEAD", None).unwrap();
+    cli.create_tag("cli-annotated", "HEAD", Some("annotated"))
         .unwrap();
 
     cli.config_set("test.cli", "one").unwrap();

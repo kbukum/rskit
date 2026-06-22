@@ -113,14 +113,19 @@ impl RefManager for Git2Repository {
         Ok(())
     }
 
-    fn create_tag(&self, name: &str, target: &str, message: &str) -> AppResult<()> {
+    fn create_tag(&self, name: &str, target: &str, message: Option<&str>) -> AppResult<()> {
         let obj = self
             .repo
             .revparse_single(target)
             .map_err(|_| GitError::RefNotFound {
                 refname: target.to_string(),
             })?;
-        if message.is_empty() {
+        if let Some(message) = message {
+            let signature = self.repo.signature().map_err(GitError::Internal)?;
+            self.repo
+                .tag(name, &obj, &signature, message, false)
+                .map_err(|err| map_exists_error("tag", name, err))?;
+        } else {
             self.repo
                 .reference(
                     &format!("refs/tags/{name}"),
@@ -128,11 +133,6 @@ impl RefManager for Git2Repository {
                     false,
                     "create lightweight tag",
                 )
-                .map_err(|err| map_exists_error("tag", name, err))?;
-        } else {
-            let signature = self.repo.signature().map_err(GitError::Internal)?;
-            self.repo
-                .tag(name, &obj, &signature, message, false)
                 .map_err(|err| map_exists_error("tag", name, err))?;
         }
         Ok(())

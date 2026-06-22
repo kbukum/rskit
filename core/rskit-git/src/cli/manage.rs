@@ -63,11 +63,11 @@ impl RefManager for GitCli {
         )
     }
 
-    fn create_tag(&self, name: &str, target: &str, message: &str) -> AppResult<()> {
-        if message.is_empty() {
-            self.run(&["tag", "--", name, target])?;
-        } else {
+    fn create_tag(&self, name: &str, target: &str, message: Option<&str>) -> AppResult<()> {
+        if let Some(message) = message {
             self.run(&["tag", "-a", "-m", message, "--", name, target])?;
+        } else {
+            self.run(&["tag", "--", name, target])?;
         }
         Ok(())
     }

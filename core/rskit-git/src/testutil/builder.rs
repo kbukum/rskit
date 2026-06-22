@@ -70,9 +70,10 @@ impl RepoBuilder {
         Ok(self)
     }
 
-    /// Creates a tag at HEAD.
+    /// Creates a tag at HEAD. `Some(message)` makes an annotated tag; `None`
+    /// makes a lightweight tag.
     #[must_use = "builder methods return the updated builder; chain or bind the result"]
-    pub fn with_tag(self, name: &str, message: &str) -> AppResult<Self> {
+    pub fn with_tag(self, name: &str, message: Option<&str>) -> AppResult<Self> {
         self.repo.create_tag(name, "HEAD", message)?;
         Ok(self)
     }
@@ -104,7 +105,7 @@ mod tests {
             .unwrap()
             .with_branch("feature")
             .unwrap()
-            .with_tag("v1.0.0", "release")
+            .with_tag("v1.0.0", Some("release"))
             .unwrap()
             .with_checkout("feature")
             .unwrap();
