@@ -174,8 +174,8 @@ mod tests {
     #[test]
     fn guards_serialize_across_threads() {
         use std::sync::Arc;
-        use std::sync::atomic::{AtomicUsize, Ordering};
         use std::sync::Barrier;
+        use std::sync::atomic::{AtomicUsize, Ordering};
 
         // Each thread holds a guard while incrementing a shared counter; if the
         // process-wide lock serializes guards, the counter never exceeds one.
