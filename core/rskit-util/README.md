@@ -31,7 +31,7 @@ Use `rskit-util` for reusable helpers that have no service, transport, config, s
 
 ```toml
 [dependencies]
-rskit-util = "0.1.0-alpha.1"
+rskit-util = "0.1.0-alpha.2"
 ```
 
 ### Secret values

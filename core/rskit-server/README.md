@@ -16,7 +16,7 @@ Service-facing server abstractions for rskit.
 
 ```toml
 [dependencies]
-rskit-server = "0.1.0-alpha.1"
+rskit-server = "0.1.0-alpha.2"
 ```
 
 ```rust,ignore
