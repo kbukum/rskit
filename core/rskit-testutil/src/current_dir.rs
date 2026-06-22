@@ -26,25 +26,31 @@
 
 use std::path::{Path, PathBuf};
 
-use parking_lot::{Mutex, MutexGuard};
+use parking_lot::{ReentrantMutex, ReentrantMutexGuard};
 use rskit_errors::{AppError, AppResult};
 
-/// Serializes every [`CurrentDirGuard`] in the test binary so concurrent tests
-/// cannot interleave process-wide working-directory changes.
-static CWD_LOCK: Mutex<()> = Mutex::new(());
+/// Serializes every [`CurrentDirGuard`] across threads in the test binary so
+/// concurrent tests cannot interleave process-wide working-directory changes.
+///
+/// The lock is reentrant: a single thread may hold nested guards (for example a
+/// helper that calls [`CurrentDirGuard::pin`] inside a test that already holds a
+/// guard) without deadlocking, while guards on *other* threads still block until
+/// every guard on the holding thread is dropped.
+static CWD_LOCK: ReentrantMutex<()> = ReentrantMutex::new(());
 
 /// An RAII guard that pins the process working directory for its lifetime and
 /// restores the previous directory when dropped.
 ///
 /// Construct one with [`CurrentDirGuard::change_to`] (change the directory) or
 /// [`CurrentDirGuard::pin`] (hold the current directory without changing it).
-/// While the guard is alive it owns a process-wide lock, so other
-/// guards block until it drops.
+/// While the guard is alive it owns a process-wide reentrant lock, so guards on
+/// other threads block until it drops; nested guards on the same thread are
+/// allowed.
 #[derive(Debug)]
 #[must_use = "the working directory is restored when the guard is dropped; bind it to a name"]
 pub struct CurrentDirGuard {
     previous: PathBuf,
-    _lock: MutexGuard<'static, ()>,
+    _lock: ReentrantMutexGuard<'static, ()>,
 }
 
 impl CurrentDirGuard {
@@ -153,5 +159,49 @@ mod tests {
                 .to_string()
                 .contains("failed to set current directory")
         );
+    }
+
+    #[test]
+    fn guards_serialize_across_threads() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::time::Duration;
+
+        // Each thread holds a guard while incrementing a shared counter; if the
+        // process-wide lock serializes guards, the counter never exceeds one.
+        let live = Arc::new(AtomicUsize::new(0));
+        let peak = Arc::new(AtomicUsize::new(0));
+
+        let handles: Vec<_> = (0..4)
+            .map(|_| {
+                let live = Arc::clone(&live);
+                let peak = Arc::clone(&peak);
+                std::thread::spawn(move || {
+                    let _guard = CurrentDirGuard::pin().unwrap();
+                    let now = live.fetch_add(1, Ordering::SeqCst) + 1;
+                    peak.fetch_max(now, Ordering::SeqCst);
+                    std::thread::sleep(Duration::from_millis(20));
+                    live.fetch_sub(1, Ordering::SeqCst);
+                })
+            })
+            .collect();
+
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        assert_eq!(
+            peak.load(Ordering::SeqCst),
+            1,
+            "guards must never be held concurrently across threads"
+        );
+    }
+
+    #[test]
+    fn nested_guards_on_one_thread_do_not_deadlock() {
+        // The reentrant lock allows a thread to hold nested guards; a
+        // non-reentrant lock would deadlock here instead.
+        let _outer = CurrentDirGuard::pin().unwrap();
+        let _inner = CurrentDirGuard::pin().unwrap();
     }
 }
