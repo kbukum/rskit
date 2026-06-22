@@ -285,7 +285,7 @@ impl RefManager for Repo {
         self.embedded.delete_branch(name)
     }
 
-    fn create_tag(&self, name: &str, target: &str, message: &str) -> AppResult<()> {
+    fn create_tag(&self, name: &str, target: &str, message: Option<&str>) -> AppResult<()> {
         self.embedded.create_tag(name, target, message)
     }
 

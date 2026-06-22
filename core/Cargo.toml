@@ -212,7 +212,7 @@ rskit-embedding = { path = "rskit-embedding", version = "0.1.0-alpha.1" }
 rskit-encryption = { path = "rskit-encryption", version = "0.1.0-alpha.1" }
 rskit-errors = { path = "rskit-errors", version = "0.1.0-alpha.1" }
 rskit-fs = { path = "rskit-fs", version = "0.1.0-alpha.1", default-features = false }
-rskit-git = { path = "rskit-git", version = "0.1.0-alpha.1" }
+rskit-git = { path = "rskit-git", version = "0.1.0-alpha.2" }
 rskit-grpc = { path = "rskit-grpc", version = "0.1.0-alpha.1", default-features = false }
 rskit-hook = { path = "rskit-hook", version = "0.1.0-alpha.1" }
 rskit-http = { path = "rskit-http", version = "0.1.0-alpha.1" }

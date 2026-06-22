@@ -137,11 +137,11 @@ mod tests {
             .expect("create branch");
         local
             .repo
-            .create_tag("v1.0.0", "HEAD", "release notes")
+            .create_tag("v1.0.0", "HEAD", Some("release notes"))
             .expect("create annotated tag");
         local
             .repo
-            .create_tag("v1.0.1", "HEAD", "")
+            .create_tag("v1.0.1", "HEAD", None)
             .expect("create lightweight tag");
         local
             .repo

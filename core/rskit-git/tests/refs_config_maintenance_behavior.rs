@@ -45,7 +45,8 @@ fn create_and_delete_branch_and_tag_updates_refs() {
             .any(|branch| branch.name == "feature")
     );
 
-    r.create_tag("v1.0.0", "HEAD", "release 1.0.0").unwrap();
+    r.create_tag("v1.0.0", "HEAD", Some("release 1.0.0"))
+        .unwrap();
     assert!(
         r.list_tags()
             .unwrap()
@@ -275,8 +276,8 @@ fn cli_backend_covers_local_ref_remote_config_and_clean_paths() {
     );
     assert!(cli.list_branches(BranchFilter::Remote).unwrap().is_empty());
 
-    cli.create_tag("cli-lightweight", "HEAD", "").unwrap();
-    cli.create_tag("cli-annotated", "HEAD", "annotated")
+    cli.create_tag("cli-lightweight", "HEAD", None).unwrap();
+    cli.create_tag("cli-annotated", "HEAD", Some("annotated"))
         .unwrap();
 
     cli.config_set("test.cli", "one").unwrap();
