@@ -15,6 +15,8 @@ pub mod assertions;
 pub mod component;
 /// Test config helpers.
 pub mod config;
+/// Process working-directory guard for tests.
+pub mod current_dir;
 /// Hook and event-bus test helpers.
 pub mod hook;
 /// Generic mock provider for testing.
@@ -25,6 +27,7 @@ pub mod workspace;
 pub use assertions::{assert_err_code, assert_ok};
 pub use component::FakeComponent;
 pub use config::TestAppConfig;
+pub use current_dir::CurrentDirGuard;
 pub use hook::TestEvent;
 pub use mock_provider::MockProvider;
 pub use workspace::TestWorkspace;
