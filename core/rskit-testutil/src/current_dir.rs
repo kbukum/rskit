@@ -94,9 +94,19 @@ impl CurrentDirGuard {
 
 impl Drop for CurrentDirGuard {
     fn drop(&mut self) {
-        // Best-effort restore: a failure here cannot be surfaced from `drop`,
-        // but the held lock means no other guard runs until this one releases.
-        let _ = std::env::set_current_dir(&self.previous);
+        if let Err(error) = std::env::set_current_dir(&self.previous) {
+            // Restoring the previous directory is the guard's core contract, so a
+            // failure must be loud rather than leaking a broken cwd into later
+            // tests. The lock is still held until this guard finishes dropping, so
+            // no other guard observes the broken directory. Don't panic while
+            // already unwinding — a double panic aborts the process and hides the
+            // original failure.
+            assert!(
+                std::thread::panicking(),
+                "CurrentDirGuard failed to restore the working directory to '{}': {error}",
+                self.previous.display()
+            );
+        }
     }
 }
 
@@ -165,22 +175,33 @@ mod tests {
     fn guards_serialize_across_threads() {
         use std::sync::Arc;
         use std::sync::atomic::{AtomicUsize, Ordering};
-        use std::time::Duration;
+        use std::sync::Barrier;
 
         // Each thread holds a guard while incrementing a shared counter; if the
         // process-wide lock serializes guards, the counter never exceeds one.
+        const THREADS: usize = 8;
+        let barrier = Arc::new(Barrier::new(THREADS));
         let live = Arc::new(AtomicUsize::new(0));
         let peak = Arc::new(AtomicUsize::new(0));
 
-        let handles: Vec<_> = (0..4)
+        let handles: Vec<_> = (0..THREADS)
             .map(|_| {
+                let barrier = Arc::clone(&barrier);
                 let live = Arc::clone(&live);
                 let peak = Arc::clone(&peak);
                 std::thread::spawn(move || {
+                    // Release every thread together to maximize contention
+                    // without depending on wall-clock sleeps.
+                    barrier.wait();
                     let _guard = CurrentDirGuard::pin().unwrap();
                     let now = live.fetch_add(1, Ordering::SeqCst) + 1;
                     peak.fetch_max(now, Ordering::SeqCst);
-                    std::thread::sleep(Duration::from_millis(20));
+                    // Hold the guard across a bounded spin so a missing lock would
+                    // let a sibling observe `live > 1` — deterministic, not
+                    // timing-dependent.
+                    for _ in 0..10_000 {
+                        std::hint::spin_loop();
+                    }
                     live.fetch_sub(1, Ordering::SeqCst);
                 })
             })
