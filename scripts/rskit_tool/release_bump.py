@@ -3,8 +3,9 @@
 Wires the pure helpers in :mod:`rskit_tool.versioning` to the working tree:
 detect crates changed since the last release tag, classify their bump, cascade
 breaking minors to in-workspace dependents, and rewrite manifests (crate
-versions plus caret floors) idempotently. The bump performs **no network
-writes** — it only edits local ``Cargo.toml`` files.
+versions plus caret floors) plus the version pins in install-snippet READMEs,
+idempotently. The bump performs **no network writes** — it only edits local
+``Cargo.toml`` and ``README.md`` files.
 """
 
 from __future__ import annotations
@@ -27,7 +28,9 @@ from .versioning import (
     parse_package_version,
     parse_workspace_dep_floors,
     parse_workspace_package_version,
+    readme_version_diff_only,
     set_package_version,
+    set_readme_dependency_versions,
     set_workspace_dep_version,
     workspace_dep_floor_changes,
 )
@@ -107,9 +110,11 @@ def _detect_changed(members: dict[str, Package], base_ref: str, workspace: str) 
 
     Only paths under a crate root count, so workspace-global and tooling changes
     (``Cargo.toml``, ``scripts/``, ``.github/`` ...) do not over-bump the world.
-    A crate whose *only* change is a version-field-only edit to its own manifest
-    is ignored: the version field is an output of this tool, not a source change
-    (this guards the lock-step de-lockstep and the tool's own prior writes).
+    A crate whose *only* change is a tool-generated version edit is ignored — a
+    version-field-only edit to its own manifest, or a dependency-pin-only edit to
+    its ``README.md`` — because those are outputs of this tool, not source changes
+    (this guards the lock-step de-lockstep and the tool's own prior writes,
+    including the README pin sync). See :func:`_is_tool_generated_change`.
 
     Workspace-global ``[workspace.dependencies]`` floor changes are the one
     exception: a crate that inherits a bumped floor via ``<dep>.workspace = true``
@@ -129,18 +134,47 @@ def _detect_changed(members: dict[str, Package], base_ref: str, workspace: str) 
 
     selected: set[str] = set()
     for name, paths in changed_by_crate.items():
-        manifest = members[name].manifest_path.resolve()
-        if any(path != manifest for path in paths):
-            selected.add(name)
-            continue
-        relative = members[name].manifest_path.relative_to(ROOT).as_posix()
-        base_text = file_at_ref(diff_base, relative)
-        current_text = members[name].manifest_path.read_text(encoding="utf-8")
-        if base_text is None or not package_version_diff_only(base_text, current_text):
+        package = members[name]
+        if any(not _is_tool_generated_change(package, path, diff_base) for path in paths):
             selected.add(name)
 
     selected |= _floor_inheritors(members, workspace, diff_base)
     return selected
+
+
+def _is_tool_generated_change(package: Package, path: Path, diff_base: str) -> bool:
+    """Whether ``path`` is a release-tooling output, not a release-worthy change.
+
+    Two kinds of edits are outputs of this tool rather than source changes, so a
+    crate whose *only* change is one of them must not be bumped:
+
+    * its own ``Cargo.toml`` changed only in the ``[package]`` version line; or
+    * its ``README.md`` changed only in tool-managed dependency-pin versions (the
+      install-snippet floors this command keeps in sync — see
+      :func:`_sync_readme_versions`).
+
+    A path that is neither manifest nor README, or whose diff touches more than the
+    tool-managed version tokens, is a real change. A path with no base revision
+    (added since the tag) is likewise treated as a real change.
+    """
+
+    manifest = package.manifest_path.resolve()
+    readme = (package.root / "README.md").resolve()
+    if path == manifest:
+        return _diff_only(manifest, diff_base, package_version_diff_only)
+    if path == readme:
+        return _diff_only(readme, diff_base, readme_version_diff_only)
+    return False
+
+
+def _diff_only(path: Path, diff_base: str, predicate) -> bool:
+    """Apply a ``(base, current) -> bool`` version-only predicate to ``path``."""
+
+    relative = path.relative_to(ROOT).as_posix()
+    base_text = file_at_ref(diff_base, relative)
+    if base_text is None:
+        return False
+    return predicate(base_text, path.read_text(encoding="utf-8"))
 
 
 def _floor_inheritors(
@@ -268,6 +302,65 @@ def _released_baselines(
     return baselines
 
 
+def _authoritative_versions(plan: BumpPlan) -> dict[str, str]:
+    """Map every publishable crate to its post-bump version.
+
+    Starts from the current on-disk version of each publishable crate across *all*
+    workspaces — README install snippets cross workspace boundaries (a ``contrib``
+    adapter README pins a ``core`` crate; the root README pins the facade) — then
+    overlays this plan's bumps so the map reflects the versions a reader should
+    copy after the release.
+    """
+
+    versions = {pkg.name: pkg.version for pkg in discover_packages() if pkg.publishable}
+    for action in plan.actions:
+        versions[action.name] = str(action.new)
+    return versions
+
+
+def _source_readmes() -> list[Path]:
+    """Every published install-snippet README in the source tree (no build output).
+
+    The root README plus every README under the ``core`` and ``contrib`` workspace
+    trees (core crates sit at ``core/<crate>``; contrib adapters nest a domain
+    level at ``contrib/<domain>/<crate>``). Generated ``target/`` package artifacts
+    are excluded so only source-of-truth files are rewritten.
+    """
+
+    readmes = [ROOT / "README.md"]
+    for workspace_dir in ("core", "contrib"):
+        readmes.extend(
+            path
+            for path in sorted((ROOT / workspace_dir).rglob("README.md"))
+            if "target" not in path.parts
+        )
+    return [path for path in readmes if path.is_file()]
+
+
+def _sync_readme_versions(plan: BumpPlan, *, dry_run: bool) -> list[Path]:
+    """Rewrite stale dependency-pin versions in install-snippet READMEs.
+
+    Resolves the post-bump version of every publishable crate (see
+    :func:`_authoritative_versions`) and rewrites each source README's
+    dependency pins to match. Returns the READMEs that needed a change and writes
+    them unless ``dry_run``. This keeps the published install snippets in
+    lock-step with the versions just bumped; the change-detection guard
+    (:func:`_is_tool_generated_change`) ensures these rewrites never feed back
+    into a future bump.
+    """
+
+    versions = _authoritative_versions(plan)
+    changed: list[Path] = []
+    for readme in _source_readmes():
+        text = readme.read_text(encoding="utf-8")
+        updated, did_change = set_readme_dependency_versions(text, versions)
+        if did_change:
+            changed.append(readme)
+            if not dry_run:
+                readme.write_text(updated, encoding="utf-8")
+    return changed
+
+
 def _apply_plan(plan: BumpPlan, members: dict[str, Package]) -> None:
     """Write crate version bumps and caret-floor rewrites to disk."""
 
@@ -288,7 +381,7 @@ def _apply_plan(plan: BumpPlan, members: dict[str, Package]) -> None:
                 manifest.write_text(updated, encoding="utf-8")
 
 
-def _print_plan(plan: BumpPlan, *, dry_run: bool) -> None:
+def _print_plan(plan: BumpPlan, readmes: list[Path], *, dry_run: bool) -> None:
     """Report the planned or applied changes."""
 
     if not plan.actions and not plan.floor_rewrites:
@@ -301,10 +394,14 @@ def _print_plan(plan: BumpPlan, *, dry_run: bool) -> None:
     for name, new_floor in plan.floor_rewrites:
         rewrite = "Would rewrite" if dry_run else "Rewrote"
         print(f"  {rewrite} caret floor {name} -> {new_floor}")
+    for readme in readmes:
+        sync = "Would sync" if dry_run else "Synced"
+        print(f"  {sync} README pins {readme.relative_to(ROOT).as_posix()}")
     summary = "planned" if dry_run else "applied"
     print(
         f"✓ Bump {summary}: {len(plan.actions)} version change(s), "
-        f"{len(plan.floor_rewrites)} floor rewrite(s)"
+        f"{len(plan.floor_rewrites)} floor rewrite(s), "
+        f"{len(readmes)} README sync(s)"
     )
 
 
@@ -345,5 +442,8 @@ def run_bump(args: argparse.Namespace) -> int:
         print("  No crates changed since base.")
     if not args.dry_run:
         _apply_plan(plan, members)
-    _print_plan(plan, dry_run=args.dry_run)
+    # README pins follow package versions, which only move via plan actions; a
+    # pure floor-rewrite release leaves install snippets untouched.
+    synced = _sync_readme_versions(plan, dry_run=args.dry_run) if plan.actions else []
+    _print_plan(plan, synced, dry_run=args.dry_run)
     return 0

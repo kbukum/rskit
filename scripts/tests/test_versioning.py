@@ -15,7 +15,9 @@ from rskit_tool.versioning import (
     parse_package_version,
     parse_workspace_dep_floors,
     parse_workspace_package_version,
+    readme_version_diff_only,
     set_package_version,
+    set_readme_dependency_versions,
     set_workspace_dep_version,
     transitive_dependents,
     within_caret,
@@ -214,6 +216,65 @@ class VersionOnlyDiffTests(unittest.TestCase):
         old = '[package]\nversion = "0.1.0-alpha.1"\n\n[dependencies]\nserde = { version = "1" }\n'
         new = '[package]\nversion = "0.1.0-alpha.1"\n\n[dependencies]\nserde = { version = "2" }\n'
         self.assertFalse(package_version_diff_only(old, new))
+
+
+class ReadmePinTests(unittest.TestCase):
+    """Rewriting and diff-classifying tool-managed README dependency pins."""
+
+    def test_rewrites_string_and_table_pins(self) -> None:
+        text = (
+            "```toml\n"
+            "[dependencies]\n"
+            'rskit-suite = "0.1.0-alpha.1"\n'
+            'rskit-grpc = { version = "0.1.0-alpha.1", features = ["client"] }\n'
+            'tokio = { version = "1", features = ["full"] }\n'
+            "```\n"
+        )
+        versions = {"rskit-suite": "0.1.0-alpha.5", "rskit-grpc": "0.1.0-alpha.2"}
+        updated, changed = set_readme_dependency_versions(text, versions)
+        self.assertTrue(changed)
+        self.assertIn('rskit-suite = "0.1.0-alpha.5"', updated)
+        self.assertIn('rskit-grpc = { version = "0.1.0-alpha.2", features = ["client"] }', updated)
+        # A non-rskit pin keeps its (non-semver) requirement untouched.
+        self.assertIn('tokio = { version = "1", features = ["full"] }', updated)
+
+    def test_unmapped_crate_is_left_untouched(self) -> None:
+        text = 'rskit-errors = "0.1.0-alpha.1"\n'
+        updated, changed = set_readme_dependency_versions(text, {"rskit-worker": "0.1.0-alpha.2"})
+        self.assertFalse(changed)
+        self.assertEqual(updated, text)
+
+    def test_idempotent_when_already_current(self) -> None:
+        text = 'rskit-worker = "0.1.0-alpha.2"\n'
+        updated, changed = set_readme_dependency_versions(text, {"rskit-worker": "0.1.0-alpha.2"})
+        self.assertFalse(changed)
+        self.assertEqual(updated, text)
+
+    def test_illustrative_strings_are_not_treated_as_pins(self) -> None:
+        # Prose/example version strings never take the `rskit-<name> = "..."`
+        # assignment form, so they must survive a rewrite verbatim.
+        text = (
+            'println!("{}", info.version); // e.g. "0.1.0-alpha.1"\n'
+            'let health = ServiceHealth::new("svc", "0.1.0-alpha.1");\n'
+        )
+        updated, changed = set_readme_dependency_versions(text, {"rskit-suite": "0.1.0-alpha.5"})
+        self.assertFalse(changed)
+        self.assertEqual(updated, text)
+
+    def test_pin_only_bump_is_diff_only(self) -> None:
+        old = 'rskit-worker = "0.1.0-alpha.1"\nrskit-grpc = { version = "0.1.0-alpha.1" }\n'
+        new = 'rskit-worker = "0.1.0-alpha.2"\nrskit-grpc = { version = "0.1.0-alpha.3" }\n'
+        self.assertTrue(readme_version_diff_only(old, new))
+
+    def test_prose_change_is_not_diff_only(self) -> None:
+        old = "Adapter for S3.\nrskit-worker = \"0.1.0-alpha.1\"\n"
+        new = "Adapter for S3 and compatible stores.\nrskit-worker = \"0.1.0-alpha.2\"\n"
+        self.assertFalse(readme_version_diff_only(old, new))
+
+    def test_added_dependency_pin_is_not_diff_only(self) -> None:
+        old = 'rskit-worker = "0.1.0-alpha.1"\n'
+        new = 'rskit-worker = "0.1.0-alpha.1"\nrskit-util = "0.1.0-alpha.2"\n'
+        self.assertFalse(readme_version_diff_only(old, new))
 
 
 class PlanTests(unittest.TestCase):

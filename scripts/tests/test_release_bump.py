@@ -20,7 +20,7 @@ from . import support  # noqa: F401
 from rskit_tool import release_bump as rb
 from rskit_tool.cargo import Package
 from rskit_tool.errors import ToolError
-from rskit_tool.versioning import SemVer
+from rskit_tool.versioning import BumpPlan, SemVer
 
 
 class FakeRegistry:
@@ -132,6 +132,85 @@ class DetectChangedTests(unittest.TestCase):
         with self._patched(changed=changed, at_ref={"contrib/Cargo.toml": "[workspace.dependencies]\n"}):
             selected = rb._detect_changed(self.members, "TAG", "contrib")
         self.assertEqual(selected, {"rskit-storage-s3"})
+
+    def test_readme_pin_only_change_is_skipped(self) -> None:
+        # A README whose sole diff is a tool-managed dependency-pin version (the
+        # bump's own sync write) must not re-select the crate.
+        self.ws_manifest.write_text("[workspace.dependencies]\n", encoding="utf-8")
+        readme = self.crate_manifest.parent / "README.md"
+        readme.write_text('rskit-errors = "0.1.0-alpha.2"\n', encoding="utf-8")
+        changed = [Path("contrib/storage/s3/README.md")]
+        at_ref = {
+            "contrib/Cargo.toml": "[workspace.dependencies]\n",
+            "contrib/storage/s3/README.md": 'rskit-errors = "0.1.0-alpha.1"\n',
+        }
+        with self._patched(changed=changed, at_ref=at_ref):
+            selected = rb._detect_changed(self.members, "TAG", "contrib")
+        self.assertEqual(selected, set())
+
+    def test_readme_prose_change_selects_crate(self) -> None:
+        # A README change beyond the version pins is a real documentation change.
+        self.ws_manifest.write_text("[workspace.dependencies]\n", encoding="utf-8")
+        readme = self.crate_manifest.parent / "README.md"
+        readme.write_text('New intro.\nrskit-errors = "0.1.0-alpha.2"\n', encoding="utf-8")
+        changed = [Path("contrib/storage/s3/README.md")]
+        at_ref = {
+            "contrib/Cargo.toml": "[workspace.dependencies]\n",
+            "contrib/storage/s3/README.md": 'Old intro.\nrskit-errors = "0.1.0-alpha.1"\n',
+        }
+        with self._patched(changed=changed, at_ref=at_ref):
+            selected = rb._detect_changed(self.members, "TAG", "contrib")
+        self.assertEqual(selected, {"rskit-storage-s3"})
+
+
+class SyncReadmeVersionsTests(unittest.TestCase):
+    """``_sync_readme_versions`` rewrites source READMEs to authoritative versions."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name).resolve()
+        (self.root / "core" / "rskit-worker").mkdir(parents=True)
+        (self.root / "contrib" / "storage" / "s3").mkdir(parents=True)
+        self.root_readme = self.root / "README.md"
+        self.core_readme = self.root / "core" / "rskit-worker" / "README.md"
+        self.contrib_readme = self.root / "contrib" / "storage" / "s3" / "README.md"
+        self.root_readme.write_text('rskit-suite = "0.1.0-alpha.1"\n', encoding="utf-8")
+        self.core_readme.write_text('rskit-worker = "0.1.0-alpha.1"\n', encoding="utf-8")
+        # contrib README pins a *core* crate — exercises the cross-workspace sync.
+        self.contrib_readme.write_text('rskit-worker = "0.1.0-alpha.1"\n', encoding="utf-8")
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    @contextlib.contextmanager
+    def _patched(self, versions: dict[str, str]):
+        with (
+            mock.patch.object(rb, "ROOT", self.root),
+            mock.patch.object(rb, "_authoritative_versions", return_value=versions),
+        ):
+            yield
+
+    def test_apply_rewrites_all_source_readmes(self) -> None:
+        plan = BumpPlan(actions=[], floor_rewrites=[])
+        versions = {"rskit-suite": "0.1.0-alpha.5", "rskit-worker": "0.1.0-alpha.2"}
+        with self._patched(versions):
+            changed = rb._sync_readme_versions(plan, dry_run=False)
+        self.assertEqual(
+            set(changed), {self.root_readme, self.core_readme, self.contrib_readme}
+        )
+        self.assertIn('rskit-suite = "0.1.0-alpha.5"', self.root_readme.read_text(encoding="utf-8"))
+        self.assertIn('rskit-worker = "0.1.0-alpha.2"', self.core_readme.read_text(encoding="utf-8"))
+        self.assertIn(
+            'rskit-worker = "0.1.0-alpha.2"', self.contrib_readme.read_text(encoding="utf-8")
+        )
+
+    def test_dry_run_reports_without_writing(self) -> None:
+        plan = BumpPlan(actions=[], floor_rewrites=[])
+        with self._patched({"rskit-worker": "0.1.0-alpha.2"}):
+            changed = rb._sync_readme_versions(plan, dry_run=True)
+        self.assertIn(self.core_readme, changed)
+        # Nothing written: the on-disk pin is unchanged.
+        self.assertIn('rskit-worker = "0.1.0-alpha.1"', self.core_readme.read_text(encoding="utf-8"))
 
 
 class ReleasedBaselinesTests(unittest.TestCase):
@@ -246,6 +325,9 @@ class RunBumpApplyTests(unittest.TestCase):
                 rb, "_released_baselines", return_value={"rskit-storage-s3": SemVer.parse("0.1.0-alpha.1")}
             ),
             mock.patch.object(rb, "_all_workspace_floors", return_value={}),
+            # README sync walks the real source tree; isolate it here so these
+            # apply/dry-run safety tests touch only the temp manifest.
+            mock.patch.object(rb, "_sync_readme_versions", return_value=[]),
         ):
             with contextlib.redirect_stdout(io.StringIO()):
                 yield

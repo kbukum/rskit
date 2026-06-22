@@ -290,6 +290,63 @@ def package_version_diff_only(old_text: str, new_text: str) -> bool:
     return _strip_package_version_line(old_text) == _strip_package_version_line(new_text)
 
 
+# A README dependency pin in tool-managed install snippets, in either form:
+#   rskit-foo = "0.1.0-alpha.2"
+#   rskit-foo = { version = "0.1.0-alpha.2", features = ["x"] }
+# Only the version token is captured; the surrounding crate name and any table
+# attributes are preserved verbatim on rewrite. The version is anchored to a
+# semver-shaped token so prose and illustrative example strings (which never take
+# the ``rskit-<name> = "..."`` assignment form) are left untouched.
+_README_PIN_RE = re.compile(
+    r"(?P<crate>rskit-[a-z0-9-]+)"
+    r"(?P<lead>\s*=\s*(?:\{[^}\n]*?\bversion\s*=\s*)?\")"
+    r"(?P<version>\d+\.\d+\.\d+[0-9A-Za-z.\-+]*)\""
+)
+
+
+def set_readme_dependency_versions(text: str, versions: Mapping[str, str]) -> tuple[str, bool]:
+    """Rewrite tool-managed README dependency pins to authoritative versions.
+
+    Every ``rskit-<name> = "..."`` (or ``{ version = "..." }``) pin whose crate is
+    in ``versions`` is set to that crate's current version; pins for crates absent
+    from the map are left untouched. Returns ``(text, changed)``.
+
+    The version pin shown in a README install snippet is derived from the crate's
+    real version — an output of the release tooling, not hand-authored — so the
+    bump keeps these in sync on every release instead of letting them drift.
+    """
+
+    def replace(match: re.Match[str]) -> str:
+        target = versions.get(match["crate"])
+        if target is None:
+            return match[0]
+        return f"{match['crate']}{match['lead']}{target}\""
+
+    rewritten = _README_PIN_RE.sub(replace, text)
+    return rewritten, rewritten != text
+
+
+def _strip_readme_pin_versions(text: str) -> str:
+    """Neutralize every tool-managed README pin version to a fixed placeholder."""
+
+    return _README_PIN_RE.sub(
+        lambda match: f"{match['crate']}{match['lead']}<version>\"", text
+    )
+
+
+def readme_version_diff_only(old_text: str, new_text: str) -> bool:
+    """Return True when two READMEs differ *only* in tool-managed pin versions.
+
+    The pin version mirrors the crate's released version (a tooling output), so a
+    README whose sole change is a pin bump — e.g. a prior release's own sync write
+    — must not be counted as a release-worthy source change. Any prose, example,
+    or added/removed dependency line makes the normalized texts differ and the
+    README is treated as a real change.
+    """
+
+    return _strip_readme_pin_versions(old_text) == _strip_readme_pin_versions(new_text)
+
+
 def parse_workspace_dep_floors(text: str) -> dict[str, SemVer]:
     """Map crate package-name to its caret floor in ``[workspace.dependencies]``.
 
