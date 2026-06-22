@@ -13,7 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
-- **Breaking (`rskit-git`):** `RefManager::create_tag` now takes `message: Option<&str>` instead of `&str`. `Some(message)` creates an annotated tag (an empty message is preserved as an annotated tag, matching git's `tag -a -m ""`), and `None` creates a lightweight tag. Previously the lightweight-vs-annotated choice was overloaded onto an empty `&str`, so callers could not request an annotated tag with an empty message. `RepoBuilder::with_tag` adopts the same `Option<&str>` signature.
+- **Breaking (`rskit-git`):** `RefManager::create_tag` now takes `message: Option<&str>` instead of `&str`. `Some(message)` creates an annotated tag (an empty message is preserved as an annotated tag, matching git's `git tag -a -m ""`), and `None` creates a lightweight tag. Previously the lightweight-vs-annotated choice was overloaded onto an empty `&str`, so callers could not request an annotated tag with an empty message. `RepoBuilder::with_tag` adopts the same `Option<&str>` signature.
 - **Breaking (`rskit-config`):** `MergeIdentity` no longer exposes `identity_key()`. Custom implementors now provide `label()` (the error-message name) and `identity_of(&Value) -> Option<String>` (the identity token). The built-in `IdentityKey` is unchanged at call sites; only hand-rolled `MergeIdentity` implementations need to migrate.
 
 ## [v0.1.0-alpha.3] - 2026-06-21

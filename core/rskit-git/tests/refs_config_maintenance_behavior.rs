@@ -72,6 +72,38 @@ fn create_and_delete_branch_and_tag_updates_refs() {
 }
 
 #[test]
+fn create_tag_distinguishes_annotated_empty_message_from_lightweight() {
+    let repo = helpers::TestRepo::init();
+    let r = open(repo.path()).unwrap();
+
+    // `Some("")` is the capability the old `&str` API could not express: an
+    // annotated tag (tagger present) whose message happens to be empty.
+    r.create_tag("annotated-empty", "HEAD", Some("")).unwrap();
+    // `None` is a lightweight tag: a plain ref with no tagger.
+    r.create_tag("lightweight", "HEAD", None).unwrap();
+
+    let tags = r.list_tags().unwrap();
+    let annotated = tags
+        .iter()
+        .find(|tag| tag.name == "annotated-empty")
+        .expect("annotated tag present");
+    let lightweight = tags
+        .iter()
+        .find(|tag| tag.name == "lightweight")
+        .expect("lightweight tag present");
+
+    assert!(
+        annotated.tagger.is_some(),
+        "Some(\"\") must create an annotated tag, not a lightweight one"
+    );
+    assert!(annotated.message.is_empty());
+    assert!(
+        lightweight.tagger.is_none(),
+        "None must create a lightweight tag"
+    );
+}
+
+#[test]
 fn list_remotes_returns_fetch_specs() {
     let repo = helpers::TestRepo::init();
     let remote = helpers::TestRepo::init_bare();
