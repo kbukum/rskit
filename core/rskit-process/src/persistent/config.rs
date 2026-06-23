@@ -131,6 +131,10 @@ impl PersistentOutput {
 }
 
 /// Byte observers for persistent process output.
+///
+/// Callbacks run on stdout/stderr reader threads with arbitrary chunk boundaries. Keep them
+/// fast and non-blocking; offload synchronous I/O or heavier processing to another worker so the
+/// child process cannot block on full pipe buffers.
 #[derive(Clone, Default)]
 pub struct PersistentOutputObserver {
     stdout_bytes: Option<OutputBytesCallback>,
@@ -155,6 +159,8 @@ impl PersistentOutputObserver {
     }
 
     /// Observe each stdout byte chunk read from the persistent process.
+    ///
+    /// The callback runs on the stdout reader thread and must be fast/non-blocking.
     #[must_use]
     pub fn with_stdout_bytes(mut self, callback: impl Fn(&[u8]) + Send + Sync + 'static) -> Self {
         self.stdout_bytes = Some(std::sync::Arc::new(callback));
@@ -162,6 +168,8 @@ impl PersistentOutputObserver {
     }
 
     /// Observe each stderr byte chunk read from the persistent process.
+    ///
+    /// The callback runs on the stderr reader thread and must be fast/non-blocking.
     #[must_use]
     pub fn with_stderr_bytes(mut self, callback: impl Fn(&[u8]) + Send + Sync + 'static) -> Self {
         self.stderr_bytes = Some(std::sync::Arc::new(callback));
