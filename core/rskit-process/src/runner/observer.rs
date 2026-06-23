@@ -61,14 +61,6 @@ impl OutputObserver {
         self.stderr_bytes = Some(Arc::new(callback));
         self
     }
-
-    pub(crate) fn stdout_bytes_callback(&self) -> Option<OutputBytesCallback> {
-        self.stdout_bytes.clone()
-    }
-
-    pub(crate) fn stderr_bytes_callback(&self) -> Option<OutputBytesCallback> {
-        self.stderr_bytes.clone()
-    }
 }
 
 #[cfg(test)]

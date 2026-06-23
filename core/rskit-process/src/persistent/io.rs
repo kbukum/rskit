@@ -9,9 +9,7 @@ use parking_lot::Mutex;
 
 use crate::{AppError, AppResult, ErrorCode};
 
-use super::config::{
-    PersistentOutput, PersistentOutputObserver, PersistentOutputStream, PersistentReadiness,
-};
+use super::config::{PersistentConfig, PersistentOutputStream, PersistentReadiness};
 
 pub(in crate::persistent) type Capture = Arc<Mutex<CapturedOutput>>;
 pub(in crate::persistent) type ReaderThread = Option<thread::JoinHandle<AppResult<()>>>;
@@ -28,15 +26,14 @@ pub(in crate::persistent) fn spawn_output_readers(
     stdout: &Capture,
     stderr: &Capture,
     ready_tx: &mpsc::Sender<()>,
-    readiness: &PersistentReadiness,
-    output: PersistentOutput,
-    observer: Option<PersistentOutputObserver>,
-    max_capture_bytes: Option<usize>,
+    config: &PersistentConfig,
 ) -> (ReaderThread, ReaderThread) {
-    let matcher = match readiness {
+    let matcher = match &config.readiness {
         PersistentReadiness::OutputContains(value) => Some(value.clone()),
         PersistentReadiness::Started | PersistentReadiness::Command(_) => None,
     };
+    let output = config.output;
+    let observer = config.output_observer.clone();
     let stdout_thread = child.stdout.take().map(|reader| {
         spawn_reader(
             reader,
@@ -47,7 +44,7 @@ pub(in crate::persistent) fn spawn_output_readers(
             observer
                 .clone()
                 .and_then(|observer| observer.stdout_bytes_callback()),
-            max_capture_bytes,
+            config.max_capture_bytes,
         )
     });
     let stderr_thread = child.stderr.take().map(|reader| {
@@ -58,7 +55,7 @@ pub(in crate::persistent) fn spawn_output_readers(
             ready_tx.clone(),
             output.stderr_stream(),
             observer.and_then(|observer| observer.stderr_bytes_callback()),
-            max_capture_bytes,
+            config.max_capture_bytes,
         )
     });
     (stdout_thread, stderr_thread)

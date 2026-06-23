@@ -110,16 +110,8 @@ pub fn start_persistent_with_cancel(
         }
     };
     let (ready_tx, ready_rx) = mpsc::channel();
-    let (stdout_thread, stderr_thread) = spawn_output_readers(
-        &mut child,
-        &stdout,
-        &stderr,
-        &ready_tx,
-        &persistent_config.readiness,
-        persistent_config.output.clone(),
-        persistent_config.output_observer.clone(),
-        persistent_config.max_capture_bytes,
-    );
+    let (stdout_thread, stderr_thread) =
+        spawn_output_readers(&mut child, &stdout, &stderr, &ready_tx, persistent_config);
     let stdin_thread = spawn_stdin_writer(&mut child, predefined_stdin(input));
 
     match &persistent_config.readiness {
