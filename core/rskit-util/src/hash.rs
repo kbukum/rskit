@@ -66,7 +66,7 @@ impl ContentHasher {
 
     /// Fold a labelled `value` into the digest with unambiguous framing.
     ///
-    /// Writes `label`, [`FIELD_SEPARATOR`], `value`, then [`FIELD_TERMINATOR`],
+    /// Writes `label`, a `:` separator, `value`, then a `NUL` terminator,
     /// so independently-folded fields cannot alias one another. Returns
     /// `&mut Self` so updates can be chained.
     pub fn update_framed(&mut self, label: &[u8], value: &[u8]) -> &mut Self {
