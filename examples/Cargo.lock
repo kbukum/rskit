@@ -1639,7 +1639,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-config"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 dependencies = [
  "config",
  "dotenvy",
@@ -1786,7 +1786,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-process"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 dependencies = [
  "libc",
  "parking_lot",
@@ -1845,7 +1845,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-suite"
-version = "0.1.0-alpha.3"
+version = "0.1.0-alpha.5"
 dependencies = [
  "rskit-bootstrap",
  "rskit-cli",
