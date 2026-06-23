@@ -113,7 +113,7 @@ pub fn start_persistent_with_cancel(
         &stderr,
         &ready_tx,
         &persistent_config.readiness,
-        persistent_config.output,
+        persistent_config.output.clone(),
         persistent_config.max_capture_bytes,
     );
     let stdin_thread = spawn_stdin_writer(&mut child, predefined_stdin(input));

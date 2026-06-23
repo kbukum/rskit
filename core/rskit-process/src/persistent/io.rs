@@ -34,6 +34,7 @@ pub(in crate::persistent) fn spawn_output_readers(
         PersistentReadiness::OutputContains(value) => Some(value.clone()),
         PersistentReadiness::Started | PersistentReadiness::Command(_) => None,
     };
+    let observer = output.observer();
     let stdout_thread = child.stdout.take().map(|reader| {
         spawn_reader(
             reader,
@@ -41,6 +42,9 @@ pub(in crate::persistent) fn spawn_output_readers(
             matcher.clone(),
             ready_tx.clone(),
             output.stdout_stream(),
+            observer
+                .clone()
+                .and_then(|observer| observer.stdout_bytes_callback()),
             max_capture_bytes,
         )
     });
@@ -51,6 +55,7 @@ pub(in crate::persistent) fn spawn_output_readers(
             matcher,
             ready_tx.clone(),
             output.stderr_stream(),
+            observer.and_then(|observer| observer.stderr_bytes_callback()),
             max_capture_bytes,
         )
     });
@@ -87,6 +92,7 @@ fn spawn_reader<R: Read + Send + 'static>(
     matcher: Option<String>,
     ready: mpsc::Sender<()>,
     output: Option<PersistentOutputStream>,
+    observer: Option<crate::runner::OutputBytesCallback>,
     max_capture_bytes: Option<usize>,
 ) -> thread::JoinHandle<AppResult<()>> {
     thread::spawn(move || {
@@ -99,6 +105,9 @@ fn spawn_reader<R: Read + Send + 'static>(
                 break;
             }
             append_capture(&capture, &buffer[..read], max_capture_bytes);
+            if let Some(observer) = &observer {
+                observer(&buffer[..read]);
+            }
             if let Some(output) = output {
                 forward_output(output, &buffer[..read])?;
             }

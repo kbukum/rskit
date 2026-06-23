@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use crate::{ProcessSpec, command::DEFAULT_MAX_OUTPUT_BYTES};
+use crate::{OutputObserver, ProcessSpec, command::DEFAULT_MAX_OUTPUT_BYTES};
 
 /// Persistent process readiness policy.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -86,10 +86,11 @@ impl PersistentConfig {
 }
 
 /// Persistent process output forwarding policy.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct PersistentOutput {
     stdout: Option<PersistentOutputStream>,
     stderr: Option<PersistentOutputStream>,
+    observer: Option<OutputObserver>,
 }
 
 impl PersistentOutput {
@@ -99,6 +100,7 @@ impl PersistentOutput {
         Self {
             stdout: None,
             stderr: None,
+            observer: None,
         }
     }
 
@@ -108,15 +110,30 @@ impl PersistentOutput {
         Self {
             stdout: Some(stdout),
             stderr: Some(stderr),
+            observer: None,
         }
     }
 
-    pub(in crate::persistent) const fn stdout_stream(self) -> Option<PersistentOutputStream> {
+    /// Capture output and observe stdout/stderr bytes through callbacks.
+    #[must_use]
+    pub fn observe(observer: OutputObserver) -> Self {
+        Self {
+            stdout: None,
+            stderr: None,
+            observer: Some(observer),
+        }
+    }
+
+    pub(in crate::persistent) const fn stdout_stream(&self) -> Option<PersistentOutputStream> {
         self.stdout
     }
 
-    pub(in crate::persistent) const fn stderr_stream(self) -> Option<PersistentOutputStream> {
+    pub(in crate::persistent) const fn stderr_stream(&self) -> Option<PersistentOutputStream> {
         self.stderr
+    }
+
+    pub(in crate::persistent) fn observer(&self) -> Option<OutputObserver> {
+        self.observer.clone()
     }
 }
 
@@ -162,5 +179,14 @@ mod tests {
         );
 
         assert_eq!(config.with_unbounded_capture().max_capture_bytes, None);
+    }
+
+    #[test]
+    fn persistent_output_can_observe_without_forwarding() {
+        let output = PersistentOutput::observe(OutputObserver::new());
+
+        assert_eq!(output.stdout_stream(), None);
+        assert_eq!(output.stderr_stream(), None);
+        assert!(output.observer().is_some());
     }
 }

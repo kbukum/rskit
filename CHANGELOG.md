@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Add persistent process output observation in `rskit-process`: `PersistentOutput::observe` now captures persistent stdout/stderr while invoking byte observers, enabling callers to route long-lived process output through their own sinks instead of forwarding directly to parent streams.
 - Add `CurrentDirGuard` to `rskit-testutil`: an RAII guard that serializes process-wide working-directory changes across tests in a binary and restores the previous directory on drop (the working-directory analogue of the env-var mutex pattern), so tests that depend on or mutate the current directory no longer leak global cwd state into later tests.
 - Extend `rskit-config` strict include-merge with richer identity rules and document-driven includes: generalize the `MergeIdentity` trait to a human-facing `label()` plus an `identity_of(&Value)` token extractor; add `CompositeKey` for multi-field and nested (dotted-path) identities encoded injectively so no field value can forge an identity boundary; add `IncludeMerge::with_unique_keys` to hard-error on a map key (`[section.<name>]`) contributed by more than one merged document instead of silently last-wins merging; and add `StrictLoader::load_resolving_includes` / `load_raw_resolving_includes` to read the canonical document once and derive its include list from inside it.
 

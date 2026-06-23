@@ -19,7 +19,7 @@ mod output;
 mod redaction;
 mod spawn;
 
-pub use observer::OutputObserver;
+pub use observer::{OutputBytesCallback, OutputObserver};
 
 use lifecycle::wait_for_completion;
 use output::{append_bounded_stderr, collect_reader, spawn_reader};
