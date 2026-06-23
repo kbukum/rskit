@@ -6005,6 +6005,7 @@ dependencies = [
 name = "rskit-util"
 version = "0.1.0-alpha.2"
 dependencies = [
+ "blake3",
  "serde",
  "serde_json",
  "subtle",

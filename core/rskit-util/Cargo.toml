@@ -19,6 +19,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 # External
+blake3  = { workspace = true }
 serde   = { workspace = true }
 subtle = { workspace = true }
 zeroize = { workspace = true }

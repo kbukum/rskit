@@ -10,6 +10,7 @@
 //! - [`bytes`]: Formatting and parsing human-readable data sizes.
 //! - [`collections`]: Vector grouping, chunking, indexing, and partition helpers.
 //! - [`mod@env`]: Safe environment variable parsing with defaults.
+//! - [`hash`]: Stable BLAKE3 content hashing with optional domain-separated framing.
 //! - [`secret`]: Prevent accidental credential leaks in logs/debug outputs.
 //! - [`sensitive`]: Matching helpers for names that commonly carry secrets.
 //! - [`strings`]: Zero-alloc/low-alloc casing and safe truncation.
@@ -22,6 +23,7 @@ pub mod backoff;
 pub mod bytes;
 pub mod collections;
 pub mod env;
+pub mod hash;
 pub mod secret;
 pub mod sensitive;
 pub mod strings;
