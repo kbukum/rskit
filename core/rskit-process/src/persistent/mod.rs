@@ -24,7 +24,10 @@ mod readiness;
 #[cfg(all(test, unix))]
 mod tests;
 
-pub use config::{PersistentConfig, PersistentOutput, PersistentOutputStream, PersistentReadiness};
+pub use config::{
+    PersistentConfig, PersistentOutput, PersistentOutputObserver, PersistentOutputStream,
+    PersistentReadiness,
+};
 pub use error::{PersistentStartErrorKind, persistent_start_error_kind};
 pub use process::{PersistentProcess, ShutdownOutcome};
 
@@ -114,6 +117,7 @@ pub fn start_persistent_with_cancel(
         &ready_tx,
         &persistent_config.readiness,
         persistent_config.output.clone(),
+        persistent_config.output_observer.clone(),
         persistent_config.max_capture_bytes,
     );
     let stdin_thread = spawn_stdin_writer(&mut child, predefined_stdin(input));

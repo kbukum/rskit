@@ -9,7 +9,9 @@ use parking_lot::Mutex;
 
 use crate::{AppError, AppResult, ErrorCode};
 
-use super::config::{PersistentOutput, PersistentOutputStream, PersistentReadiness};
+use super::config::{
+    PersistentOutput, PersistentOutputObserver, PersistentOutputStream, PersistentReadiness,
+};
 
 pub(in crate::persistent) type Capture = Arc<Mutex<CapturedOutput>>;
 pub(in crate::persistent) type ReaderThread = Option<thread::JoinHandle<AppResult<()>>>;
@@ -28,13 +30,13 @@ pub(in crate::persistent) fn spawn_output_readers(
     ready_tx: &mpsc::Sender<()>,
     readiness: &PersistentReadiness,
     output: PersistentOutput,
+    observer: Option<PersistentOutputObserver>,
     max_capture_bytes: Option<usize>,
 ) -> (ReaderThread, ReaderThread) {
     let matcher = match readiness {
         PersistentReadiness::OutputContains(value) => Some(value.clone()),
         PersistentReadiness::Started | PersistentReadiness::Command(_) => None,
     };
-    let observer = output.observer();
     let stdout_thread = child.stdout.take().map(|reader| {
         spawn_reader(
             reader,
@@ -191,6 +193,7 @@ pub(in crate::persistent) fn join_stdin(handle: StdinThread) -> AppResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Cursor;
 
     #[test]
     fn capture_and_matcher_helpers_cover_truncation_and_cross_chunk_matches() {
@@ -211,5 +214,32 @@ mod tests {
     fn empty_reader_and_stdin_joins_are_ok() {
         join_reader(None).unwrap();
         join_stdin(None).unwrap();
+    }
+
+    #[test]
+    fn reader_observes_bytes_without_changing_capture_bounds() {
+        let capture = Arc::new(Mutex::new(CapturedOutput::default()));
+        let observed = Arc::new(Mutex::new(Vec::new()));
+        let observer = {
+            let observed = Arc::clone(&observed);
+            Arc::new(move |chunk: &[u8]| observed.lock().extend_from_slice(chunk))
+        };
+        let (ready_tx, _ready_rx) = mpsc::channel();
+
+        let reader = spawn_reader(
+            Cursor::new(b"hello world".to_vec()),
+            Arc::clone(&capture),
+            None,
+            ready_tx,
+            None,
+            Some(observer),
+            Some(5),
+        );
+        join_reader(Some(reader)).expect("reader completes");
+
+        let output = take_capture(&capture);
+        assert_eq!(output.bytes, b"hello");
+        assert!(output.truncated);
+        assert_eq!(&*observed.lock(), b"hello world");
     }
 }
