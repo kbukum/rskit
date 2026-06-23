@@ -27,7 +27,7 @@ pub struct PersistentConfig {
     pub max_capture_bytes: Option<usize>,
     /// Output forwarding policy.
     pub output: PersistentOutput,
-    /// Optional byte observers for captured persistent process output.
+    /// Optional byte observers for every persistent process output chunk read.
     pub output_observer: Option<PersistentOutputObserver>,
 }
 
