@@ -9,7 +9,7 @@ use parking_lot::Mutex;
 
 use crate::{AppError, AppResult, ErrorCode};
 
-use super::config::{PersistentOutput, PersistentOutputStream, PersistentReadiness};
+use super::config::{PersistentConfig, PersistentOutputStream, PersistentReadiness};
 
 pub(in crate::persistent) type Capture = Arc<Mutex<CapturedOutput>>;
 pub(in crate::persistent) type ReaderThread = Option<thread::JoinHandle<AppResult<()>>>;
@@ -26,14 +26,14 @@ pub(in crate::persistent) fn spawn_output_readers(
     stdout: &Capture,
     stderr: &Capture,
     ready_tx: &mpsc::Sender<()>,
-    readiness: &PersistentReadiness,
-    output: PersistentOutput,
-    max_capture_bytes: Option<usize>,
+    config: &PersistentConfig,
 ) -> (ReaderThread, ReaderThread) {
-    let matcher = match readiness {
+    let matcher = match &config.readiness {
         PersistentReadiness::OutputContains(value) => Some(value.clone()),
         PersistentReadiness::Started | PersistentReadiness::Command(_) => None,
     };
+    let output = config.output;
+    let observer = config.output_observer.clone();
     let stdout_thread = child.stdout.take().map(|reader| {
         spawn_reader(
             reader,
@@ -41,7 +41,10 @@ pub(in crate::persistent) fn spawn_output_readers(
             matcher.clone(),
             ready_tx.clone(),
             output.stdout_stream(),
-            max_capture_bytes,
+            observer
+                .clone()
+                .and_then(|observer| observer.stdout_bytes_callback()),
+            config.max_capture_bytes,
         )
     });
     let stderr_thread = child.stderr.take().map(|reader| {
@@ -51,7 +54,8 @@ pub(in crate::persistent) fn spawn_output_readers(
             matcher,
             ready_tx.clone(),
             output.stderr_stream(),
-            max_capture_bytes,
+            observer.and_then(|observer| observer.stderr_bytes_callback()),
+            config.max_capture_bytes,
         )
     });
     (stdout_thread, stderr_thread)
@@ -87,6 +91,7 @@ fn spawn_reader<R: Read + Send + 'static>(
     matcher: Option<String>,
     ready: mpsc::Sender<()>,
     output: Option<PersistentOutputStream>,
+    observer: Option<crate::runner::OutputBytesCallback>,
     max_capture_bytes: Option<usize>,
 ) -> thread::JoinHandle<AppResult<()>> {
     thread::spawn(move || {
@@ -99,6 +104,9 @@ fn spawn_reader<R: Read + Send + 'static>(
                 break;
             }
             append_capture(&capture, &buffer[..read], max_capture_bytes);
+            if let Some(observer) = &observer {
+                observer(&buffer[..read]);
+            }
             if let Some(output) = output {
                 forward_output(output, &buffer[..read])?;
             }
@@ -182,6 +190,7 @@ pub(in crate::persistent) fn join_stdin(handle: StdinThread) -> AppResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Cursor;
 
     #[test]
     fn capture_and_matcher_helpers_cover_truncation_and_cross_chunk_matches() {
@@ -202,5 +211,32 @@ mod tests {
     fn empty_reader_and_stdin_joins_are_ok() {
         join_reader(None).unwrap();
         join_stdin(None).unwrap();
+    }
+
+    #[test]
+    fn reader_observes_bytes_without_changing_capture_bounds() {
+        let capture = Arc::new(Mutex::new(CapturedOutput::default()));
+        let observed = Arc::new(Mutex::new(Vec::new()));
+        let observer = {
+            let observed = Arc::clone(&observed);
+            Arc::new(move |chunk: &[u8]| observed.lock().extend_from_slice(chunk))
+        };
+        let (ready_tx, _ready_rx) = mpsc::channel();
+
+        let reader = spawn_reader(
+            Cursor::new(b"hello world".to_vec()),
+            Arc::clone(&capture),
+            None,
+            ready_tx,
+            None,
+            Some(observer),
+            Some(5),
+        );
+        join_reader(Some(reader)).expect("reader completes");
+
+        let output = take_capture(&capture);
+        assert_eq!(output.bytes, b"hello");
+        assert!(output.truncated);
+        assert_eq!(&*observed.lock(), b"hello world");
     }
 }

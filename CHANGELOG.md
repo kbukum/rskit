@@ -8,11 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Add persistent process output observation in `rskit-process`: `PersistentOutputObserver` lets `PersistentConfig` capture persistent stdout/stderr while invoking byte observers, enabling callers to route long-lived process output through their own sinks instead of forwarding directly to parent streams.
 - Add `CurrentDirGuard` to `rskit-testutil`: an RAII guard that serializes process-wide working-directory changes across tests in a binary and restores the previous directory on drop (the working-directory analogue of the env-var mutex pattern), so tests that depend on or mutate the current directory no longer leak global cwd state into later tests.
 - Extend `rskit-config` strict include-merge with richer identity rules and document-driven includes: generalize the `MergeIdentity` trait to a human-facing `label()` plus an `identity_of(&Value)` token extractor; add `CompositeKey` for multi-field and nested (dotted-path) identities encoded injectively so no field value can forge an identity boundary; add `IncludeMerge::with_unique_keys` to hard-error on a map key (`[section.<name>]`) contributed by more than one merged document instead of silently last-wins merging; and add `StrictLoader::load_resolving_includes` / `load_raw_resolving_includes` to read the canonical document once and derive its include list from inside it.
 
 ### Changed
 
+- **Breaking (`rskit-process`):** `PersistentConfig` has a new `output_observer` field. Callers using struct literals must initialize it, typically with `None`; callers using `PersistentConfig::default()` or builder methods are unchanged.
 - **Breaking (`rskit-git`):** `RefManager::create_tag` now takes `message: Option<&str>` instead of `&str`. `Some(message)` creates an annotated tag (an empty message is preserved as an annotated tag, matching git's `git tag -a -m ""`), and `None` creates a lightweight tag. Previously the lightweight-vs-annotated choice was overloaded onto an empty `&str`, so callers could not request an annotated tag with an empty message. `RepoBuilder::with_tag` adopts the same `Option<&str>` signature.
 - **Breaking (`rskit-config`):** `MergeIdentity` no longer exposes `identity_key()`. Custom implementors now provide `label()` (the error-message name) and `identity_of(&Value) -> Option<String>` (the identity token). The built-in `IdentityKey` is unchanged at call sites; only hand-rolled `MergeIdentity` implementations need to migrate.
 

@@ -58,9 +58,9 @@ pub use command::{
     ObservedIo, OutputPolicy, ProcessConfig, ProcessIo, ProcessSpec, SignalPolicy, command,
 };
 pub use persistent::{
-    PersistentConfig, PersistentOutput, PersistentOutputStream, PersistentProcess,
-    PersistentReadiness, PersistentRun, PersistentStartErrorKind, PersistentStartup,
-    ShutdownOutcome, persistent_start_error_kind, start_persistent_with_cancel,
+    PersistentConfig, PersistentOutput, PersistentOutputObserver, PersistentOutputStream,
+    PersistentProcess, PersistentReadiness, PersistentRun, PersistentStartErrorKind,
+    PersistentStartup, ShutdownOutcome, persistent_start_error_kind, start_persistent_with_cancel,
 };
 pub use process_group::{
     interrupt as interrupt_process_group, isolate as isolate_process_group,

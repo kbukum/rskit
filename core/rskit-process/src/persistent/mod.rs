@@ -24,7 +24,10 @@ mod readiness;
 #[cfg(all(test, unix))]
 mod tests;
 
-pub use config::{PersistentConfig, PersistentOutput, PersistentOutputStream, PersistentReadiness};
+pub use config::{
+    PersistentConfig, PersistentOutput, PersistentOutputObserver, PersistentOutputStream,
+    PersistentReadiness,
+};
 pub use error::{PersistentStartErrorKind, persistent_start_error_kind};
 pub use process::{PersistentProcess, ShutdownOutcome};
 
@@ -107,15 +110,8 @@ pub fn start_persistent_with_cancel(
         }
     };
     let (ready_tx, ready_rx) = mpsc::channel();
-    let (stdout_thread, stderr_thread) = spawn_output_readers(
-        &mut child,
-        &stdout,
-        &stderr,
-        &ready_tx,
-        &persistent_config.readiness,
-        persistent_config.output,
-        persistent_config.max_capture_bytes,
-    );
+    let (stdout_thread, stderr_thread) =
+        spawn_output_readers(&mut child, &stdout, &stderr, &ready_tx, persistent_config);
     let stdin_thread = spawn_stdin_writer(&mut child, predefined_stdin(input));
 
     match &persistent_config.readiness {
