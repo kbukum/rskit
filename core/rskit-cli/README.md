@@ -18,7 +18,7 @@ CLI framework: progress bars, structured output, and signal handling.
 
 ```toml
 [dependencies]
-rskit-cli = "0.1.0-alpha.1"
+rskit-cli = "0.1.0-alpha.2"
 ```
 
 ```rust
