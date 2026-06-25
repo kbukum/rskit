@@ -15,4 +15,4 @@ pub mod signal;
 
 pub use output::{ErrorRenderer, ExitCode, OutputFormat, OutputKV, OutputTable};
 pub use progress::{MultiProgress, ProgressBar, ProgressStyle};
-pub use signal::CancellationToken;
+pub use signal::{CancellationToken, on_ctrl_c};

@@ -65,6 +65,31 @@ pub fn absolute(path: &Path) -> AppResult<PathBuf> {
         .map_err(|error| AppError::new(ErrorCode::Internal, format!("failed to read cwd: {error}")))
 }
 
+/// Search `start` and each of its ancestor directories for a regular file named
+/// `file_name`, returning the path to the nearest match.
+///
+/// This is the canonical "find the nearest config file" ascent: a loader locates
+/// a project manifest or dotenv file by walking up from a starting directory
+/// (typically the current working directory) until the file is found or the
+/// filesystem root is reached. The first ancestor that contains a regular file
+/// named `file_name` wins, so a nested directory's file shadows one higher up.
+///
+/// `file_name` is normally a bare filename; a multi-component relative path is
+/// joined to each ancestor as-is. Symlinks are followed (a symlink to a regular
+/// file matches). Returns `None` when no ancestor contains the file.
+#[must_use]
+pub fn find_in_ancestors(start: &Path, file_name: impl AsRef<Path>) -> Option<PathBuf> {
+    let file_name = file_name.as_ref();
+    let mut dir = start;
+    loop {
+        let candidate = dir.join(file_name);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+        dir = dir.parent()?;
+    }
+}
+
 /// Canonicalize a path by resolving symlinks and normalizing components.
 pub fn canonicalize(path: &Path) -> AppResult<PathBuf> {
     std::fs::canonicalize(path).map_err(|error| {
@@ -335,7 +360,8 @@ mod tests {
 
     use super::{
         SafePathError, absolute, append_safe_missing_suffix, canonicalize, confine_existing_path,
-        confine_path, resolve_root_relative_to, safe_join, validate_relative_path,
+        confine_path, find_in_ancestors, resolve_root_relative_to, safe_join,
+        validate_relative_path,
     };
 
     #[test]
@@ -565,5 +591,42 @@ mod tests {
 
         assert_eq!(error.code(), ErrorCode::InvalidInput);
         assert!(error.message().contains("failed to resolve root"));
+    }
+
+    #[test]
+    fn find_in_ancestors_returns_match_in_the_start_directory() {
+        let dir = crate::TempDir::new().unwrap();
+        std::fs::write(dir.path().join("toven.toml"), b"x").unwrap();
+
+        let found = find_in_ancestors(dir.path(), "toven.toml").unwrap();
+
+        assert_eq!(found, dir.path().join("toven.toml"));
+    }
+
+    #[test]
+    fn find_in_ancestors_walks_up_to_the_nearest_ancestor() {
+        let root = crate::TempDir::new().unwrap();
+        std::fs::write(root.path().join(".env"), b"x").unwrap();
+        let nested = root.path().join("a").join("b");
+        std::fs::create_dir_all(&nested).unwrap();
+
+        let found = find_in_ancestors(&nested, ".env").unwrap();
+
+        assert_eq!(found, root.path().join(".env"));
+    }
+
+    #[test]
+    fn find_in_ancestors_returns_none_when_absent() {
+        let dir = crate::TempDir::new().unwrap();
+
+        assert!(find_in_ancestors(dir.path(), "toven.toml").is_none());
+    }
+
+    #[test]
+    fn find_in_ancestors_ignores_a_directory_with_the_target_name() {
+        let dir = crate::TempDir::new().unwrap();
+        std::fs::create_dir(dir.path().join("toven.toml")).unwrap();
+
+        assert!(find_in_ancestors(dir.path(), "toven.toml").is_none());
     }
 }

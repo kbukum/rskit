@@ -108,16 +108,8 @@ pub(crate) fn find_profile_env_file(profile: &str) -> Option<PathBuf> {
 }
 
 pub(crate) fn find_default_env_file() -> Option<PathBuf> {
-    let mut dir = std::env::current_dir().ok()?;
-    loop {
-        let candidate = dir.join(".env");
-        if candidate.exists() {
-            return Some(candidate);
-        }
-        if !dir.pop() {
-            return None;
-        }
-    }
+    let cwd = std::env::current_dir().ok()?;
+    rskit_fs::find_in_ancestors(&cwd, ".env")
 }
 
 fn dotenv_config_from_path(path: &Path, prefix: &str, label: &str) -> AppResult<config::Config> {
