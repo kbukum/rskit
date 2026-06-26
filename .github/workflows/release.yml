@@ -56,11 +56,11 @@ jobs:
             echo "error: release tag ${RELEASE_TAG} must be reachable from origin/main" >&2
             exit 1
           fi
-      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
+      - uses: dtolnay/rust-toolchain@67ef31d5b988238dd797d409d6f9574278e20537  # stable
         with:
           toolchain: "1.95"
           components: clippy,rustfmt,llvm-tools-preview
-      - uses: taiki-e/install-action@b8cecb83565409bcc297b2df6e77f030b2a468d5  # v2
+      - uses: taiki-e/install-action@682e7d9e49c5e653d371fc6adbda67653461378a  # v2
         with:
           tool: cargo-deny,cargo-audit,cargo-nextest,cargo-llvm-cov,cargo-cyclonedx
       - name: Install nightly for rustdoc JSON
