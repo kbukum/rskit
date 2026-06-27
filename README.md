@@ -64,7 +64,7 @@ Or pick only what you need:
 
 ```toml
 [dependencies]
-rskit-errors     = "0.1.0-alpha.1"
+rskit-errors     = "0.1.0-alpha.2"
 rskit-resilience = "0.1.0-alpha.2"
 rskit-worker     = "0.1.0-alpha.2"
 ```

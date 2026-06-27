@@ -60,7 +60,7 @@ Operators available on any `futures::Stream` via `RskitStreamExt`:
 ```toml
 [dependencies]
 rskit-pipeline = "0.1.0-alpha.2"
-rskit-errors = "0.1.0-alpha.1"
+rskit-errors = "0.1.0-alpha.2"
 ```
 
 ```rust
