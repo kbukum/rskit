@@ -123,6 +123,38 @@ impl ErrorCode {
             _ => "UNKNOWN",
         }
     }
+
+    /// Parse the stable string produced by [`as_str`](Self::as_str) back into a
+    /// code — the inverse of `as_str`.
+    ///
+    /// Returns `None` for an unrecognised string (for example a code introduced
+    /// by a newer peer over a versioned wire), letting callers choose a typed
+    /// fallback rather than guessing. The mapping is kept in lock-step with
+    /// `as_str` by a parity test.
+    #[must_use]
+    pub fn from_wire(value: &str) -> Option<Self> {
+        Some(match value {
+            "SERVICE_UNAVAILABLE" => ErrorCode::ServiceUnavailable,
+            "CONNECTION_FAILED" => ErrorCode::ConnectionFailed,
+            "TIMEOUT" => ErrorCode::Timeout,
+            "RATE_LIMITED" => ErrorCode::RateLimited,
+            "NOT_FOUND" => ErrorCode::NotFound,
+            "ALREADY_EXISTS" => ErrorCode::AlreadyExists,
+            "CONFLICT" => ErrorCode::Conflict,
+            "INVALID_INPUT" => ErrorCode::InvalidInput,
+            "MISSING_FIELD" => ErrorCode::MissingField,
+            "INVALID_FORMAT" => ErrorCode::InvalidFormat,
+            "UNAUTHORIZED" => ErrorCode::Unauthorized,
+            "FORBIDDEN" => ErrorCode::Forbidden,
+            "TOKEN_EXPIRED" => ErrorCode::TokenExpired,
+            "INVALID_TOKEN" => ErrorCode::InvalidToken,
+            "INTERNAL_ERROR" => ErrorCode::Internal,
+            "DATABASE_ERROR" => ErrorCode::DatabaseError,
+            "EXTERNAL_SERVICE_ERROR" => ErrorCode::ExternalService,
+            "CANCELLED" => ErrorCode::Cancelled,
+            _ => return None,
+        })
+    }
 }
 
 impl std::fmt::Display for ErrorCode {
@@ -316,6 +348,19 @@ mod tests {
             assert_eq!(wire, code.as_str(), "serde/as_str drift for {code:?}");
             let back: ErrorCode = serde_json::from_str(&json).expect("deserialize");
             assert_eq!(back, *code, "roundtrip drift for {code:?}");
+            assert_eq!(
+                ErrorCode::from_wire(code.as_str()),
+                Some(*code),
+                "from_wire/as_str drift for {code:?}"
+            );
         }
+    }
+
+    #[test]
+    fn from_wire_returns_none_for_unknown_codes() {
+        assert_eq!(ErrorCode::from_wire("NOT_A_REAL_CODE"), None);
+        assert_eq!(ErrorCode::from_wire(""), None);
+        // The `as_str` fallback string is not itself a real code.
+        assert_eq!(ErrorCode::from_wire("UNKNOWN"), None);
     }
 }

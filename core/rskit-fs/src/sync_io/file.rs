@@ -49,6 +49,33 @@ pub fn exists(path: &Path) -> AppResult<bool> {
     }
 }
 
+/// Return true when `path` resolves to a regular file the OS marks executable.
+///
+/// Follows symlinks (so a symlinked launcher on `PATH` resolves to its target),
+/// and reports `false` — rather than erroring — for a missing path, so callers
+/// scanning a search path can simply skip non-executable candidates. On Unix,
+/// "executable" means any of the owner/group/other execute bits is set; on other
+/// platforms the concept is not modeled in the same way, so any regular file is
+/// treated as executable.
+pub fn is_executable(path: &Path) -> AppResult<bool> {
+    match std::fs::metadata(path) {
+        Ok(metadata) => Ok(metadata.is_file() && metadata_has_exec_bit(&metadata)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(inspect_file_error(path, error)),
+    }
+}
+
+#[cfg(unix)]
+fn metadata_has_exec_bit(metadata: &std::fs::Metadata) -> bool {
+    use std::os::unix::fs::PermissionsExt as _;
+    metadata.permissions().mode() & 0o111 != 0
+}
+
+#[cfg(not(unix))]
+fn metadata_has_exec_bit(_metadata: &std::fs::Metadata) -> bool {
+    true
+}
+
 /// Open a regular file without following a final symlink.
 pub fn open_no_follow_regular(path: &Path) -> AppResult<File> {
     let file = open_no_follow(path)?;
@@ -409,12 +436,51 @@ fn sync_file_error(path: &Path, error: std::io::Error) -> AppError {
 #[cfg(test)]
 mod tests {
     use super::{
-        is_file_too_large_error, is_not_regular_file_error, is_symlink_not_allowed_error,
-        persist_temp_file_with_replace, read_bounded, read_string, read_string_bounded,
-        write_atomic_replace,
+        is_executable, is_file_too_large_error, is_not_regular_file_error,
+        is_symlink_not_allowed_error, persist_temp_file_with_replace, read_bounded, read_string,
+        read_string_bounded, write_atomic_replace,
     };
 
     use crate::TempDir;
+
+    #[test]
+    fn is_executable_is_false_for_a_missing_path() {
+        let root = TempDir::new().unwrap();
+        let missing = root.child("missing").unwrap();
+
+        assert!(!is_executable(&missing).unwrap());
+    }
+
+    #[test]
+    fn is_executable_is_false_for_a_directory() {
+        let root = TempDir::new().unwrap();
+
+        assert!(!is_executable(root.path()).unwrap());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn is_executable_tracks_the_unix_execute_bits() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let root = TempDir::new().unwrap();
+        let path = root.write_file("tool", b"#!/bin/sh\n").unwrap();
+
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        assert!(!is_executable(&path).unwrap(), "non-executable file");
+
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(is_executable(&path).unwrap(), "executable file");
+    }
+
+    #[cfg(not(unix))]
+    #[test]
+    fn is_executable_accepts_any_regular_file_off_unix() {
+        let root = TempDir::new().unwrap();
+        let path = root.write_file("tool", b"binary").unwrap();
+
+        assert!(is_executable(&path).unwrap());
+    }
 
     #[test]
     fn bounded_read_accepts_regular_files_within_limit() {
