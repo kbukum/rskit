@@ -248,7 +248,7 @@ mod tests {
     #[test]
     fn version_info_matches_semver_requirement() {
         let info = get_version_info();
-        assert_eq!(info.matches_requirement(">=0.1.0-alpha.1"), Some(true));
+        assert_eq!(info.matches_requirement(">=0.2.0-alpha.1"), Some(true));
         assert_eq!(info.matches_requirement(">=0.1.0"), Some(false));
         assert_eq!(info.matches_requirement("not a requirement"), None);
     }
