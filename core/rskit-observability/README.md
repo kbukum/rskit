@@ -19,7 +19,7 @@ OpenTelemetry tracing, metrics, logs, and context propagation.
 
 ```toml
 [dependencies]
-rskit-observability = "0.1.0-alpha.3"
+rskit-observability = "0.2.0-alpha.1"
 ```
 
 ```rust

@@ -21,7 +21,7 @@ Streaming dataset collection framework: source, transform, target, schema valida
 
 ```toml
 [dependencies]
-rskit-dataset = "0.1.0-alpha.3"
+rskit-dataset = "0.2.0-alpha.1"
 ```
 
 ```rust

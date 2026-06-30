@@ -20,7 +20,7 @@ JWT signing/verification, OIDC validation, password hashing, API-key helpers, an
 
 ```toml
 [dependencies]
-rskit-auth = "0.1.0-alpha.3"
+rskit-auth = "0.2.0-alpha.1"
 ```
 
 ```rust

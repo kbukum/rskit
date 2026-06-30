@@ -6,7 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [v0.2.0-alpha.1] - 2026-06-29
+
 ### Added
+
+- Add coordinated workspace-wide version bumps to `release bump`: `--all-minor` / `--all-major` (exposed as `make release-bump W=<ws> ALL=minor|major`) re-seed **every** crate in a workspace onto a single next-minor/next-major version, rewriting internal caret floors and README install-snippet pins to match. Crates with no released anchor yet (added since the last tag) are stamped to the shared target instead of being skipped, and the operation stays idempotent against the released baseline.
 
 - Add the `rskit-stream` foundation crate as the single home for the async stream toolkit: the `Broadcaster`/`BroadcastStream` fan-out bus and source builders (relocated from `rskit-pipeline`), `SpawnedTask`/`TaskGroup` (the canonical cancellable-task primitive — cancel + join-handle with a bounded drain-then-abort `shutdown`), and the `futures::Stream` extension operators (`RskitStreamExt`: map/filter/fan-out/parallel/windowing/throttle) plus terminal sinks (`collect`/`drain`/`for_each`). Messaging, discovery, and server consume `SpawnedTask` instead of hand-rolled `cancel + handle` pairs.
 - Add `rskit_util::hash::sha256` (`Sha256Hasher` / `sha256_hex`) for SHA-256 wire-format/interop digests, and `rskit_util::template::DynamicTemplate` for open-set `{{var}}` brace templates resolved against a caller-supplied lookup at render time.
@@ -28,6 +32,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Remove the `rskit-pipeline` crate entirely. Its `futures::Stream` operators and sinks moved into `rskit-stream` (the operator/primitive split was an internal concern, not a crate boundary), and its `StepExecutor` is dropped as a redundant, untyped subset of `rskit-chain` (the canonical owner of sequential, named-step execution with progress and cancellation). Consumers of `rskit_pipeline::RskitStreamExt` now import `rskit_stream::RskitStreamExt`; the `rskit` facade exposes operators via `rskit::stream` and no longer has a `pipeline` module.
 - Remove the back-compat `rskit-observability::init_tracer` alias (use `tracer_provider`) and the legacy `rskit-bench` `report`/`metrics` modules superseded by `metric/` + `report_gen/`. Drop dormant direct `reqwest` dependencies from the contrib llm/inference adapters (HTTP goes through `rskit-httpclient`).
+
+### Fixed
+
+- Restore the full-coverage gate on `main`: `rskit-bench` now exercises the previously-uncovered `metric::weighted` composite and `metric::as_run_metric`/`as_run_metrics` adapter APIs, raising line coverage above the 90% push-to-main threshold (no library behavior change).
 
 ## [v0.1.0-alpha.3] - 2026-06-21
 
@@ -99,7 +107,8 @@ Initial alpha release of rskit, a Rust infrastructure toolkit for building servi
 
 This is an **alpha preview** intended for early evaluation. APIs may change before the first stable release, especially while rskit is still aligning its foundational crates and adapter boundaries.
 
-[Unreleased]: https://github.com/kbukum/rskit/compare/v0.1.0-alpha.3...HEAD
+[Unreleased]: https://github.com/kbukum/rskit/compare/v0.2.0-alpha.1...HEAD
+[v0.2.0-alpha.1]: https://github.com/kbukum/rskit/compare/v0.1.0-alpha.3...v0.2.0-alpha.1
 [v0.1.0-alpha.3]: https://github.com/kbukum/rskit/compare/v0.1.0-alpha.2...v0.1.0-alpha.3
 [v0.1.0-alpha.2]: https://github.com/kbukum/rskit/compare/v0.1.0-alpha.1...v0.1.0-alpha.2
 [v0.1.0-alpha.1]: https://github.com/kbukum/rskit/releases/tag/v0.1.0-alpha.1

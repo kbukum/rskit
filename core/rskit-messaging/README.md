@@ -32,7 +32,7 @@ DLQ routing is opt-in at the middleware/adapter path. Adapter configs disable ad
 
 ```toml
 [dependencies]
-rskit-messaging = "0.1.0-alpha.3"
+rskit-messaging = "0.2.0-alpha.1"
 ```
 
 ```rust

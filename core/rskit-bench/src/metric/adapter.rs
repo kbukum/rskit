@@ -32,3 +32,68 @@ impl<L: Send + Sync + 'static> RunMetric<L> for RunMetricAdapter<L> {
         self.0.compute(scored)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::{BenchSample, Prediction};
+    use std::collections::HashMap;
+
+    struct Stub;
+
+    impl Metric<String> for Stub {
+        fn name(&self) -> &str {
+            "stub"
+        }
+
+        fn compute(&self, scored: &[ScoredSample<String>]) -> MetricResult {
+            MetricResult {
+                name: "stub".into(),
+                value: scored.len() as f64,
+                values: HashMap::new(),
+                detail: None,
+            }
+        }
+    }
+
+    fn sample() -> ScoredSample<String> {
+        ScoredSample {
+            sample: BenchSample {
+                id: "s1".into(),
+                input: vec![],
+                label: "a".into(),
+                source: String::new(),
+                metadata: HashMap::new(),
+            },
+            prediction: Prediction {
+                sample_id: "s1".into(),
+                label: "a".into(),
+                score: 1.0,
+                scores: HashMap::new(),
+                metadata: HashMap::new(),
+            },
+        }
+    }
+
+    #[test]
+    fn as_run_metric_delegates_name_and_compute() {
+        let run_metric = as_run_metric(Box::new(Stub));
+        let result = run_metric.compute(&[sample(), sample()]);
+
+        assert_eq!(run_metric.name(), "stub");
+        assert_eq!(result.name, "stub");
+        assert_eq!(result.value, 2.0);
+    }
+
+    #[test]
+    fn as_run_metrics_adapts_every_metric() {
+        let metrics: Vec<Box<dyn Metric<String>>> = vec![Box::new(Stub), Box::new(Stub)];
+        let run_metrics = as_run_metrics(metrics);
+
+        assert_eq!(run_metrics.len(), 2);
+        for run_metric in &run_metrics {
+            assert_eq!(run_metric.name(), "stub");
+            assert_eq!(run_metric.compute(&[sample()]).value, 1.0);
+        }
+    }
+}

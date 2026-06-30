@@ -32,13 +32,13 @@ without linking the subscriber stack.
 
 ```toml
 [dependencies]
-rskit-logging = "0.1.0-alpha.2"
+rskit-logging = "0.2.0-alpha.1"
 
 # Vocabulary only — no tracing subscriber stack
-rskit-logging = { version = "0.1.0-alpha.2", default-features = false }
+rskit-logging = { version = "0.2.0-alpha.1", default-features = false }
 
 # With OTLP export support
-rskit-logging = { version = "0.1.0-alpha.2", features = ["otlp"] }
+rskit-logging = { version = "0.2.0-alpha.1", features = ["otlp"] }
 ```
 
 ## Quick Start
@@ -271,7 +271,7 @@ The OpenTelemetry Logs bridge sends tracing events to an OTLP collector. It uses
 
 ```toml
 [dependencies]
-rskit-logging = { version = "0.1.0-alpha.2", features = ["otlp"] }
+rskit-logging = { version = "0.2.0-alpha.1", features = ["otlp"] }
 ```
 
 ### Setup

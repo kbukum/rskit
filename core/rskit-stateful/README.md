@@ -18,7 +18,7 @@ Stateful accumulation primitives with pluggable stores, configurable flush trigg
 
 ```toml
 [dependencies]
-rskit-stateful = "0.1.0-alpha.1"
+rskit-stateful = "0.2.0-alpha.1"
 ```
 
 ```rust
