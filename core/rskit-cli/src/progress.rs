@@ -12,6 +12,7 @@ use std::time::Duration;
 pub use indicatif::MultiProgress as RawMultiProgress;
 
 /// Preset progress bar styles.
+#[derive(Clone, Copy)]
 pub enum ProgressStyle {
     /// Standard bar with count and percentage.
     Bar,
@@ -24,26 +25,26 @@ pub enum ProgressStyle {
 }
 
 impl ProgressStyle {
-    fn to_indicatif(&self) -> IndicatifStyle {
+    fn to_indicatif(self) -> IndicatifStyle {
         match self {
-            ProgressStyle::Bar => style_or_default(
+            Self::Bar => style_or_default(
                 "{prefix:.bold} {wide_bar:.cyan/dim} {pos}/{len} {percent}% {elapsed}",
                 IndicatifStyle::default_bar,
             )
             .progress_chars("━╸─"),
 
-            ProgressStyle::Spinner => style_or_default(
+            Self::Spinner => style_or_default(
                 "{spinner:.green} {prefix} {wide_msg}",
                 IndicatifStyle::default_spinner,
             ),
 
-            ProgressStyle::Download => style_or_default(
+            Self::Download => style_or_default(
                 "{prefix:.bold} {wide_bar:.green/dim} {bytes}/{total_bytes} {bytes_per_sec} {eta}",
                 IndicatifStyle::default_bar,
             )
             .progress_chars("━╸─"),
 
-            ProgressStyle::Finished => {
+            Self::Finished => {
                 style_or_default("{prefix} {wide_msg}", IndicatifStyle::default_spinner)
             }
         }
@@ -137,7 +138,7 @@ impl ProgressBar {
     }
 
     /// Access the underlying indicatif bar.
-    pub fn inner(&self) -> &IndicatifBar {
+    pub const fn inner(&self) -> &IndicatifBar {
         &self.inner
     }
 }
@@ -148,6 +149,7 @@ pub struct MultiProgress {
 }
 
 impl MultiProgress {
+    /// Create an empty multi-progress manager.
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -157,12 +159,12 @@ impl MultiProgress {
 
     /// Wrap an existing `indicatif::MultiProgress`.
     #[must_use]
-    pub fn from_raw(mp: IndicatifMultiProgress) -> Self {
+    pub const fn from_raw(mp: IndicatifMultiProgress) -> Self {
         Self { inner: mp }
     }
 
     /// Access the underlying `indicatif::MultiProgress`.
-    pub fn raw(&self) -> &IndicatifMultiProgress {
+    pub const fn raw(&self) -> &IndicatifMultiProgress {
         &self.inner
     }
 

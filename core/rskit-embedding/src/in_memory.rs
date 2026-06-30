@@ -18,7 +18,7 @@ pub struct InMemoryProvider {
 impl InMemoryProvider {
     /// Create a deterministic provider with fixed vector dimensions.
     #[must_use]
-    pub fn new(dimensions: usize) -> Self {
+    pub const fn new(dimensions: usize) -> Self {
         Self { dimensions }
     }
 
@@ -31,13 +31,12 @@ impl InMemoryProvider {
         };
         (0..self.dimensions)
             .map(|idx| {
-                let sum = bytes
-                    .iter()
-                    .enumerate()
-                    .fold(idx as u32, |acc, (pos, byte)| {
-                        acc.wrapping_add(u32::from(*byte) * ((pos + idx + 1) as u32))
-                    });
-                (sum % 1000) as f32 / 1000.0
+                let seed = u32::try_from(idx).unwrap_or(u32::MAX);
+                let sum = bytes.iter().enumerate().fold(seed, |acc, (pos, byte)| {
+                    let factor = u32::try_from(pos + idx + 1).unwrap_or(u32::MAX);
+                    acc.wrapping_add(u32::from(*byte) * factor)
+                });
+                f32::from(u16::try_from(sum % 1000).unwrap_or(0)) / 1000.0
             })
             .collect()
     }
@@ -104,7 +103,7 @@ impl rskit_provider::RequestResponse<EmbedRequest, EmbedResponse> for InMemoryPr
 
 #[async_trait]
 impl Component for InMemoryProvider {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "rskit-embedding.in_memory"
     }
 

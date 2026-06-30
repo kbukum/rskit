@@ -4855,7 +4855,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-agent"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "async-stream",
  "async-trait",
@@ -4879,9 +4879,10 @@ dependencies = [
 
 [[package]]
 name = "rskit-ai"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "rskit-errors",
+ "rskit-util",
  "rskit-version",
  "semver",
  "serde",
@@ -4932,7 +4933,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-bench"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "async-trait",
  "criterion",
@@ -4977,13 +4978,13 @@ dependencies = [
 
 [[package]]
 name = "rskit-cache"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 dependencies = [
  "async-trait",
- "blake3",
  "parking_lot",
  "rskit-errors",
  "rskit-fs",
+ "rskit-util",
  "serde",
  "serde_json",
  "tokio",
@@ -5029,7 +5030,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-codec"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "rskit-errors",
  "serde",
@@ -5062,7 +5063,7 @@ dependencies = [
  "rskit-errors",
  "rskit-fs",
  "rskit-logging",
- "rskit-pipeline",
+ "rskit-stream",
  "rskit-util",
  "rskit-validation",
  "rskit-version",
@@ -5077,7 +5078,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-dag"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 dependencies = [
  "async-trait",
  "parking_lot",
@@ -5107,7 +5108,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-dataset"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 dependencies = [
  "async-trait",
  "csv",
@@ -5116,8 +5117,8 @@ dependencies = [
  "image",
  "parking_lot",
  "rskit-errors",
- "rskit-pipeline",
  "rskit-schema",
+ "rskit-stream",
  "rskit-validation",
  "serde",
  "serde_json",
@@ -5129,7 +5130,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-di"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "async-trait",
  "parking_lot",
@@ -5139,7 +5140,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-discovery"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 dependencies = [
  "async-trait",
  "dashmap",
@@ -5149,6 +5150,7 @@ dependencies = [
  "rskit-errors",
  "rskit-httpclient",
  "rskit-resilience",
+ "rskit-stream",
  "rskit-util",
  "serde",
  "serde_json",
@@ -5159,7 +5161,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-embedding"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "async-trait",
  "rskit-ai",
@@ -5222,7 +5224,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-grpc"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 dependencies = [
  "async-trait",
  "http 1.4.1",
@@ -5269,7 +5271,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-httpclient"
-version = "0.1.0-alpha.3"
+version = "0.1.0-alpha.4"
 dependencies = [
  "base64",
  "bytes",
@@ -5310,10 +5312,9 @@ dependencies = [
 
 [[package]]
 name = "rskit-inference-tgi"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "async-trait",
- "reqwest",
  "rskit-ai",
  "rskit-component",
  "rskit-errors",
@@ -5329,12 +5330,11 @@ dependencies = [
 
 [[package]]
 name = "rskit-inference-triton"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "async-trait",
  "base64",
  "bytes",
- "reqwest",
  "rskit-ai",
  "rskit-authz",
  "rskit-component",
@@ -5355,10 +5355,9 @@ dependencies = [
 
 [[package]]
 name = "rskit-inference-vllm"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "async-trait",
- "reqwest",
  "rskit-ai",
  "rskit-component",
  "rskit-errors",
@@ -5374,7 +5373,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-llm"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 dependencies = [
  "async-trait",
  "futures",
@@ -5391,10 +5390,9 @@ dependencies = [
 
 [[package]]
 name = "rskit-llm-anthropic"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "async-trait",
- "reqwest",
  "rskit-ai",
  "rskit-component",
  "rskit-errors",
@@ -5427,10 +5425,9 @@ dependencies = [
 
 [[package]]
 name = "rskit-llm-gemini"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "async-trait",
- "reqwest",
  "rskit-ai",
  "rskit-component",
  "rskit-errors",
@@ -5448,10 +5445,9 @@ dependencies = [
 
 [[package]]
 name = "rskit-llm-ollama"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "async-trait",
- "reqwest",
  "rskit-ai",
  "rskit-component",
  "rskit-errors",
@@ -5469,10 +5465,9 @@ dependencies = [
 
 [[package]]
 name = "rskit-llm-openai"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "async-trait",
- "reqwest",
  "rskit-ai",
  "rskit-component",
  "rskit-embedding",
@@ -5510,7 +5505,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-mcp"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 dependencies = [
  "async-trait",
  "parking_lot",
@@ -5597,7 +5592,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-messaging"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 dependencies = [
  "async-stream",
  "async-trait",
@@ -5607,10 +5602,10 @@ dependencies = [
  "rskit-errors",
  "rskit-provider",
  "rskit-resilience",
+ "rskit-stream",
  "serde",
  "serde_json",
  "tokio",
- "tokio-util",
  "tracing",
  "uuid",
 ]
@@ -5630,7 +5625,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-messaging-nats"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "async-nats",
  "async-trait",
@@ -5639,15 +5634,15 @@ dependencies = [
  "parking_lot",
  "rskit-errors",
  "rskit-messaging",
+ "rskit-stream",
  "serde",
  "tokio",
- "tokio-util",
  "tracing",
 ]
 
 [[package]]
 name = "rskit-messaging-rabbitmq"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "async-trait",
  "futures-util",
@@ -5655,15 +5650,15 @@ dependencies = [
  "parking_lot",
  "rskit-errors",
  "rskit-messaging",
+ "rskit-stream",
  "serde",
  "tokio",
- "tokio-util",
  "tracing",
 ]
 
 [[package]]
 name = "rskit-observability"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 dependencies = [
  "http 1.4.1",
  "opentelemetry",
@@ -5676,20 +5671,6 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-opentelemetry",
-]
-
-[[package]]
-name = "rskit-pipeline"
-version = "0.1.0-alpha.2"
-dependencies = [
- "async-stream",
- "futures",
- "futures-util",
- "parking_lot",
- "rskit-errors",
- "tokio",
- "tokio-stream",
- "tokio-util",
 ]
 
 [[package]]
@@ -5720,7 +5701,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-resilience"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 dependencies = [
  "governor",
  "parking_lot",
@@ -5756,7 +5737,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-server"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 dependencies = [
  "async-trait",
  "axum",
@@ -5772,6 +5753,7 @@ dependencies = [
  "rskit-grpc",
  "rskit-http",
  "rskit-security",
+ "rskit-stream",
  "rskit-validation",
  "rskit-version",
  "rustls",
@@ -5790,24 +5772,24 @@ dependencies = [
 
 [[package]]
 name = "rskit-skill"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 dependencies = [
  "libc",
  "parking_lot",
  "rskit-config",
  "rskit-errors",
  "rskit-fs",
+ "rskit-util",
  "rskit-validation",
  "serde",
  "serde_norway",
- "sha2 0.11.0",
  "thiserror",
  "tracing",
 ]
 
 [[package]]
 name = "rskit-sse"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 dependencies = [
  "axum",
  "futures-util",
@@ -5884,6 +5866,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "rskit-stream"
+version = "0.1.0-alpha.2"
+dependencies = [
+ "async-stream",
+ "futures",
+ "futures-util",
+ "parking_lot",
+ "rskit-errors",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+]
+
+[[package]]
 name = "rskit-suite"
 version = "0.1.0-alpha.5"
 dependencies = [
@@ -5937,7 +5933,6 @@ dependencies = [
  "rskit-messaging-nats",
  "rskit-messaging-rabbitmq",
  "rskit-observability",
- "rskit-pipeline",
  "rskit-process",
  "rskit-provider",
  "rskit-resilience",
@@ -5950,6 +5945,7 @@ dependencies = [
  "rskit-storage",
  "rskit-storage-gcs",
  "rskit-storage-s3",
+ "rskit-stream",
  "rskit-tool",
  "rskit-util",
  "rskit-validation",
@@ -5984,7 +5980,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-tool"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "async-trait",
  "parking_lot",
@@ -6008,6 +6004,7 @@ dependencies = [
  "blake3",
  "serde",
  "serde_json",
+ "sha2 0.11.0",
  "subtle",
  "zeroize",
 ]
@@ -6066,7 +6063,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-worker"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 dependencies = [
  "async-trait",
  "chrono",

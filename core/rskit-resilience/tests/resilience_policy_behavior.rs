@@ -154,7 +154,7 @@ fn retry_public_builders_presets_error_and_layer_accessors() {
 // 1. Circuit Breaker Integration
 // ═══════════════════════════════════════════════════════════════════════════
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn circuit_breaker_full_state_machine_cycle() {
     let cb = CircuitBreaker::new(
         CbConfig::new("cycle")
@@ -172,7 +172,7 @@ async fn circuit_breaker_full_state_machine_cycle() {
     assert_eq!(cb.state(), CbState::Open);
 
     // Wait for timeout → HalfOpen on next execute
-    tokio::time::sleep(Duration::from_millis(60)).await;
+    tokio::time::advance(Duration::from_millis(60)).await;
 
     // Succeed enough probes to close
     let r = cb.execute(|| async { Ok::<i32, AppError>(1) }).await;
@@ -184,7 +184,7 @@ async fn circuit_breaker_full_state_machine_cycle() {
     assert_eq!(cb.state(), CbState::Closed);
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn circuit_breaker_half_open_allows_only_max_probe_calls() {
     let cb = CircuitBreaker::new(
         CbConfig::new("ho-probe")
@@ -198,40 +198,41 @@ async fn circuit_breaker_half_open_allows_only_max_probe_calls() {
     let _ = cb.execute(|| async { Err::<i32, _>(fail_err()) }).await;
     assert_eq!(cb.state(), CbState::Open);
 
-    tokio::time::sleep(Duration::from_millis(30)).await;
+    tokio::time::advance(Duration::from_millis(30)).await;
 
     // The first call triggers Open→HalfOpen transition and consumes a probe slot.
     // half_open_max_calls=2 allows two total concurrent probes.
-    let barrier = Arc::new(tokio::sync::Notify::new());
+    let entered = Arc::new(tokio::sync::Barrier::new(3));
+    let release = Arc::new(tokio::sync::Barrier::new(3));
 
     let mut handles = Vec::new();
     for _ in 0..2 {
         let cb = cb.clone();
-        let b = barrier.clone();
+        let entered = entered.clone();
+        let release = release.clone();
         handles.push(tokio::spawn(async move {
             cb.execute(|| async move {
-                b.notified().await;
+                entered.wait().await;
+                release.wait().await;
                 Ok::<i32, AppError>(1)
             })
             .await
         }));
     }
 
-    // Give probes time to enter execute
-    tokio::time::sleep(Duration::from_millis(10)).await;
+    entered.wait().await;
 
     // Third call should be rejected (half-open slots exhausted)
     let overflow = cb.execute(|| async { Ok::<i32, AppError>(99) }).await;
     assert!(overflow.is_err());
 
-    // Release probes
-    barrier.notify_waiters();
+    release.wait().await;
     for h in handles {
         assert!(h.await.unwrap().is_ok());
     }
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn circuit_breaker_half_open_failure_reopens() {
     let cb = CircuitBreaker::new(
         CbConfig::new("ho-fail")
@@ -243,7 +244,7 @@ async fn circuit_breaker_half_open_failure_reopens() {
 
     // Trip to Open
     let _ = cb.execute(|| async { Err::<i32, _>(fail_err()) }).await;
-    tokio::time::sleep(Duration::from_millis(30)).await;
+    tokio::time::advance(Duration::from_millis(30)).await;
 
     // Trigger transition to HalfOpen, then fail
     let r = cb.execute(|| async { Err::<i32, _>(fail_err()) }).await;
@@ -251,7 +252,7 @@ async fn circuit_breaker_half_open_failure_reopens() {
     assert_eq!(cb.state(), CbState::Open);
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn circuit_breaker_on_state_change_callback() {
     let transitions: Arc<parking_lot::Mutex<Vec<(CbState, CbState)>>> =
         Arc::new(parking_lot::Mutex::new(Vec::new()));
@@ -271,7 +272,7 @@ async fn circuit_breaker_on_state_change_callback() {
     let _ = cb.execute(|| async { Err::<i32, _>(fail_err()) }).await;
     assert_eq!(cb.state(), CbState::Open);
 
-    tokio::time::sleep(Duration::from_millis(30)).await;
+    tokio::time::advance(Duration::from_millis(30)).await;
 
     // Open → HalfOpen (triggered inside execute)
     let _ = cb.execute(|| async { Ok::<i32, AppError>(1) }).await;
@@ -309,7 +310,7 @@ async fn circuit_breaker_allows_concurrent_calls_while_closed() {
     assert_eq!(cb.state(), CbState::Closed);
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn circuit_breaker_reset_during_half_open_returns_to_closed() {
     let cb = CircuitBreaker::new(
         CbConfig::new("reset-ho")
@@ -320,7 +321,7 @@ async fn circuit_breaker_reset_during_half_open_returns_to_closed() {
     .unwrap();
 
     let _ = cb.execute(|| async { Err::<i32, _>(fail_err()) }).await;
-    tokio::time::sleep(Duration::from_millis(30)).await;
+    tokio::time::advance(Duration::from_millis(30)).await;
 
     // Trigger HalfOpen
     let _ = cb.execute(|| async { Ok::<i32, AppError>(1) }).await;
@@ -331,7 +332,7 @@ async fn circuit_breaker_reset_during_half_open_returns_to_closed() {
     assert_eq!(cb.failures(), 0);
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn circuit_breaker_short_timeout_allows_recovery_probe() {
     let cb = CircuitBreaker::new(
         CbConfig::new("short")
@@ -344,7 +345,7 @@ async fn circuit_breaker_short_timeout_allows_recovery_probe() {
     let _ = cb.execute(|| async { Err::<i32, _>(fail_err()) }).await;
     assert_eq!(cb.state(), CbState::Open);
 
-    tokio::time::sleep(Duration::from_millis(15)).await;
+    tokio::time::advance(Duration::from_millis(15)).await;
 
     let r = cb.execute(|| async { Ok::<i32, AppError>(42) }).await;
     assert!(r.is_ok());

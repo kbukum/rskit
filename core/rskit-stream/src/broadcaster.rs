@@ -25,7 +25,7 @@ use tokio_util::sync::CancellationToken;
 /// A bounded, owned, cancellable stream of broadcast events.
 ///
 /// Yielded by [`Broadcaster::subscribe`]; terminates when the originating
-/// [`CancellationToken`] fires or the broadcaster is dropped.
+/// `CancellationToken` fires or the broadcaster is dropped.
 pub type BroadcastStream<T> = Pin<Box<dyn Stream<Item = T> + Send + 'static>>;
 
 /// Default per-subscriber buffer used by [`Broadcaster::new`].
@@ -59,7 +59,7 @@ impl<T> fmt::Debug for Broadcaster<T> {
         f.debug_struct("Broadcaster")
             .field("buffer", &self.buffer)
             .field("subscribers", &self.subscriber_count())
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -99,7 +99,7 @@ where
 impl<T> Broadcaster<T> {
     /// The per-subscriber buffer capacity.
     #[must_use]
-    pub fn buffer(&self) -> usize {
+    pub const fn buffer(&self) -> usize {
         self.buffer
     }
 
@@ -117,7 +117,7 @@ impl<T> Broadcaster<T> {
     ///
     /// The returned stream yields events broadcast after subscription and
     /// terminates once `cancel` fires or the broadcaster is dropped. Pass a
-    /// fresh [`CancellationToken`] when no external cancellation is required.
+    /// fresh `CancellationToken` when no external cancellation is required.
     pub fn subscribe(&self, cancel: CancellationToken) -> BroadcastStream<T>
     where
         T: Send + 'static,
@@ -141,8 +141,7 @@ impl<T> Broadcaster<T> {
         self.senders
             .lock()
             .retain(|tx| match tx.try_send(item.clone()) {
-                Ok(()) => true,
-                Err(mpsc::error::TrySendError::Full(_)) => true,
+                Ok(()) | Err(mpsc::error::TrySendError::Full(_)) => true,
                 Err(mpsc::error::TrySendError::Closed(_)) => false,
             });
     }
@@ -183,7 +182,7 @@ mod tests {
     async fn dropped_subscriber_is_pruned() {
         let bc = Broadcaster::<u32>::new();
         let cancel = CancellationToken::new();
-        let sub = bc.subscribe(cancel.clone());
+        let sub = bc.subscribe(cancel);
         assert_eq!(bc.subscriber_count(), 1);
 
         drop(sub);

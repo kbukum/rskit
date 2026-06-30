@@ -22,7 +22,7 @@ Each layer is opt-in, so a consumer links only what it needs:
 | Feature | Default | Enables |
 |---------|---------|---------|
 | `validate` | on | `ServiceConfig`, `AppConfig`, `load_validated*`, `load_app`, `load_config` (pulls `validator`) |
-| `watch` | off | `ConfigWatch` dynamic-reload contract + in-memory watch source (pulls `rskit-pipeline` for the bounded fan-out `Broadcaster`, `tokio-util` for cancellation) |
+| `watch` | off | `ConfigWatch` dynamic-reload contract + in-memory watch source (pulls `rskit-stream` for the bounded fan-out `Broadcaster`, `tokio-util` for cancellation) |
 
 Apps, CLIs, tools, and libraries that load plain serde types should set `default-features = false` to drop the `validator` dependency.
 
@@ -166,7 +166,7 @@ sink.set("api_token", SecretString::new("s3cret"))?;
 sink.remove("stale_key")?;
 ```
 
-**Watch** — `ConfigWatch` yields a bounded change stream (the `rskit-pipeline` `Broadcaster` specialized to typed change events) so a long-running consumer re-runs the pipeline and re-decodes. Behind the `watch` feature; cancellation via `CancellationToken`:
+**Watch** — `ConfigWatch` yields a bounded change stream (the `rskit-stream` `Broadcaster` specialized to typed change events) so a long-running consumer re-runs the pipeline and re-decodes. Behind the `watch` feature; cancellation via `CancellationToken`:
 
 ```rust,ignore
 use futures::StreamExt;

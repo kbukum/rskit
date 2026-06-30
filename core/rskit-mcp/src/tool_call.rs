@@ -34,6 +34,7 @@ impl RegistryHandler {
                 .any(|allowed| allowed == name)
     }
 
+    #[allow(clippy::too_many_lines)]
     pub(crate) async fn handle_call_tool(&self, request: CallToolRequestParams) -> CallToolResult {
         let tool_name = self.strip_prefix(&request.name);
         let span = tracing::info_span!(
@@ -84,16 +85,13 @@ impl RegistryHandler {
                 ))]);
             }
 
-            let tool = match self.registry.get(tool_name) {
-                Some(tool) => tool,
-                None => {
-                    event.outcome = String::from("not_found");
-                    event.error = format!("tool not found: {tool_name}");
-                    self.audit_tool_call(event).await;
-                    return CallToolResult::error(vec![rmcp::model::Content::text(format!(
-                        "tool not found: {tool_name}"
-                    ))]);
-                }
+            let Some(tool) = self.registry.get(tool_name) else {
+                event.outcome = String::from("not_found");
+                event.error = format!("tool not found: {tool_name}");
+                self.audit_tool_call(event).await;
+                return CallToolResult::error(vec![rmcp::model::Content::text(format!(
+                    "tool not found: {tool_name}"
+                ))]);
             };
 
             let validation = tool.validate(&input);
@@ -244,7 +242,7 @@ mod tests {
             "test",
             "0.1.0",
             Arc::new(Registry::new()),
-            Default::default(),
+            ServerConfig::default(),
         );
         assert_eq!(open.strip_prefix("echo"), "echo");
         assert!(open.allows_tool("anything"));
@@ -365,6 +363,7 @@ mod tests {
         let captured = events.lock();
         assert_eq!(captured[0].outcome, "denied");
         assert_eq!(captured[0].reason, "not in allow-list");
+        drop(captured);
     }
 
     #[tokio::test]
@@ -409,6 +408,7 @@ mod tests {
         let captured = events.lock();
         assert_eq!(captured[0].outcome, "authorization_error");
         assert_eq!(captured[0].error, "authorizer backend unavailable");
+        drop(captured);
     }
 
     #[tokio::test]
@@ -507,5 +507,6 @@ mod tests {
         let captured = events.lock();
         assert_eq!(captured[0].outcome, "tool_error");
         assert_eq!(captured[0].error, "boom from tool body");
+        drop(captured);
     }
 }

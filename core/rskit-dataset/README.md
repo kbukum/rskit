@@ -12,7 +12,7 @@ Streaming dataset collection framework: source, transform, target, schema valida
 - `Manifest` — incremental build cache for resumable collection
 - `DatasetLimits` — configurable memory threshold and bounded stream buffers
 - Schema validation delegated to `rskit-schema`
-- Stream adapters for `rskit-pipeline`
+- Stream adapters for `rskit-stream`
 - Streaming `DatasetRecord` readers/writers with JSON Lines and CSV support plus filter/column-selection operators
 - Bounded JSON record size, nesting depth, field count, array length, and string length for untrusted records
 - Progress callback support via `ProgressCallback`
@@ -21,7 +21,7 @@ Streaming dataset collection framework: source, transform, target, schema valida
 
 ```toml
 [dependencies]
-rskit-dataset = "0.1.0-alpha.2"
+rskit-dataset = "0.1.0-alpha.3"
 ```
 
 ```rust

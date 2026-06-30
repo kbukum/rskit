@@ -80,7 +80,7 @@ mod tests {
     fn test_truncate_strategy_no_truncation_needed() {
         let strategy = TruncateStrategy { keep_last: 10 };
         let msgs = vec![types::user("a"), types::assistant("b")];
-        let result = strategy.compact(msgs.clone(), 100).unwrap();
+        let result = strategy.compact(msgs, 100).unwrap();
         assert_eq!(result.len(), 2);
     }
 

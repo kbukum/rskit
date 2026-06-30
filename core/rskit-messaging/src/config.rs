@@ -70,7 +70,7 @@ impl BrokerConfig {
 
     /// Return retry backoff as a [`Duration`].
     #[must_use]
-    pub fn retry_backoff_duration(&self) -> Duration {
+    pub const fn retry_backoff_duration(&self) -> Duration {
         Duration::from_millis(self.retry_backoff)
     }
 
@@ -219,11 +219,11 @@ pub trait BrokerConfigExt {
     fn validate(&self) -> AppResult<()>;
 }
 
-fn default_retries() -> u32 {
+const fn default_retries() -> u32 {
     3
 }
 
-fn default_retry_backoff() -> u64 {
+const fn default_retry_backoff() -> u64 {
     100
 }
 
@@ -231,7 +231,7 @@ fn default_adapter() -> String {
     "memory".to_string()
 }
 
-fn default_max_in_flight() -> usize {
+const fn default_max_in_flight() -> usize {
     1
 }
 
@@ -311,7 +311,7 @@ impl DlqPolicy {
     }
 }
 
-fn default_enabled() -> bool {
+const fn default_enabled() -> bool {
     true
 }
 

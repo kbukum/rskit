@@ -66,7 +66,7 @@ impl FileCache {
     }
 
     fn entry_path(&self, key: &str) -> PathBuf {
-        let hash = blake3::hash(key.as_bytes()).to_hex().to_string();
+        let hash = rskit_util::hash::hash_hex(key.as_bytes());
         self.config.root.join(&hash[..2]).join(hash)
     }
 

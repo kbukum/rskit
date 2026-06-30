@@ -98,8 +98,8 @@ impl Validate for ToolConfig {
 }
 
 // `SecretConfig` and `NameOnlyConfig` intentionally do NOT implement `Validate`:
-// they load through the validation-free `load()` path, proving the typed loader
-// no longer requires `rskit_validation::Validate`.
+// they load through the validation-free `load()` path, proving the typed load() path
+// does not require `rskit_validation::Validate`.
 
 fn set_required_env() {
     set_env("ADDRESS", "127.0.0.1");

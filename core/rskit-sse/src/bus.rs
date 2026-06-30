@@ -91,7 +91,7 @@ impl<T: Clone + Send + Sync + Serialize + 'static> SseBus<T> {
 
     /// Configure the retry interval attached to subsequently published events.
     #[must_use]
-    pub fn with_retry(mut self, retry: Duration) -> Self {
+    pub const fn with_retry(mut self, retry: Duration) -> Self {
         self.retry = Some(retry);
         self
     }
@@ -110,6 +110,7 @@ impl<T: Clone + Send + Sync + Serialize + 'static> SseBus<T> {
         };
         state.next_id += 1;
         push_replay(&mut state.replay, self.capacity, event.clone());
+        drop(state);
         let _ = self.tx.send(event.clone());
         Ok(event)
     }
@@ -130,6 +131,7 @@ impl<T: Clone + Send + Sync + Serialize + 'static> SseBus<T> {
             // published between replay collection and live receiver creation.
             let replay = replay_after(&state.replay, last_event_id);
             let rx = self.tx.subscribe();
+            drop(state);
             (replay, rx)
         };
         stream::iter(replay.into_iter().map(Ok)).chain(live_stream_from(rx))

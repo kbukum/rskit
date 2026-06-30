@@ -18,7 +18,7 @@ struct CapturingDecider {
 }
 
 impl CapturingDecider {
-    fn new(decision: AuthzDecision) -> Self {
+    const fn new(decision: AuthzDecision) -> Self {
         Self {
             decision,
             seen: Mutex::new(Vec::new()),
@@ -101,6 +101,7 @@ async fn decider_authorizer_maps_requests_and_decisions() {
     assert_eq!(seen[0].resource, "mcp:tool:lookup");
     assert_eq!(seen[0].attributes["mcp_name"], "kb.lookup");
     assert_eq!(seen[0].attributes["arguments"], json!({"q":"rust"}));
+    drop(seen);
 }
 
 #[tokio::test]

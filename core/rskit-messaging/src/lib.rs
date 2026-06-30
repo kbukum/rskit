@@ -25,6 +25,7 @@
 
 pub mod batch;
 pub mod bridge;
+/// Broker configuration types and policy enums.
 pub mod config;
 pub mod errors;
 pub mod event;
@@ -33,12 +34,14 @@ pub mod handler;
 pub mod managed_consumer;
 pub mod managed_producer;
 pub mod memory;
+/// Message envelope and metadata types.
 pub mod message;
 pub mod metrics;
 pub mod middleware;
 pub mod registry;
 pub mod router;
 pub mod runner;
+/// Core producer, consumer, and broker traits.
 pub mod traits;
 pub mod translator;
 

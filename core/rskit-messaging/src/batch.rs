@@ -4,8 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
-use tokio::task::JoinHandle;
-use tokio_util::sync::CancellationToken;
+use rskit_stream::SpawnedTask;
 
 use crate::message::Message;
 use crate::traits::MessageProducer;
@@ -63,8 +62,7 @@ pub struct BatchProducer<T: Send + Sync + Clone + 'static> {
     producer: Arc<dyn MessageProducer<T>>,
     config: BatchConfig,
     buffer: Arc<tokio::sync::Mutex<Vec<Message<T>>>>,
-    cancel: CancellationToken,
-    flush_handle: Arc<tokio::sync::Mutex<Option<JoinHandle<()>>>>,
+    flush_task: Arc<tokio::sync::Mutex<Option<SpawnedTask>>>,
 }
 
 impl<T: Send + Sync + Clone + 'static> BatchProducer<T> {
@@ -85,20 +83,18 @@ impl<T: Send + Sync + Clone + 'static> BatchProducer<T> {
         config.validate()?;
         let buffer: Arc<tokio::sync::Mutex<Vec<Message<T>>>> =
             Arc::new(tokio::sync::Mutex::new(Vec::new()));
-        let cancel = CancellationToken::new();
 
         let flush_buffer = buffer.clone();
         let flush_producer = producer.clone();
-        let flush_cancel = cancel.clone();
         let max_wait = config.max_wait;
 
-        let handle = tokio::spawn(async move {
+        let task = SpawnedTask::spawn(move |cancel| async move {
             let mut interval = tokio::time::interval(max_wait);
             // Consume the immediate first tick.
             interval.tick().await;
             loop {
                 tokio::select! {
-                    _ = flush_cancel.cancelled() => break,
+                    () = cancel.cancelled() => break,
                     _ = interval.tick() => {
                         let msgs = {
                             let mut buf = flush_buffer.lock().await;
@@ -117,8 +113,7 @@ impl<T: Send + Sync + Clone + 'static> BatchProducer<T> {
             producer,
             config,
             buffer,
-            cancel,
-            flush_handle: Arc::new(tokio::sync::Mutex::new(Some(handle))),
+            flush_task: Arc::new(tokio::sync::Mutex::new(Some(task))),
         })
     }
 
@@ -149,14 +144,13 @@ impl<T: Send + Sync + Clone + 'static> BatchProducer<T> {
 
     /// Flush remaining messages and shut down the background flush task.
     pub async fn close(&self) -> AppResult<()> {
-        self.cancel.cancel();
         self.flush().await?;
-        let handle = {
-            let mut h = self.flush_handle.lock().await;
-            h.take()
+        let task = {
+            let mut t = self.flush_task.lock().await;
+            t.take()
         };
-        if let Some(h) = handle {
-            let _ = h.await;
+        if let Some(task) = task {
+            task.shutdown(Duration::from_secs(10)).await;
         }
         Ok(())
     }
@@ -204,7 +198,7 @@ mod tests {
             "topic".to_string(),
             BatchConfig {
                 max_size: 3,
-                max_wait: Duration::from_secs(60),
+                max_wait: Duration::from_mins(1),
                 max_bytes: None,
             },
         )
@@ -267,7 +261,7 @@ mod tests {
             "topic".to_string(),
             BatchConfig {
                 max_size: 100,
-                max_wait: Duration::from_secs(60),
+                max_wait: Duration::from_mins(1),
                 max_bytes: None,
             },
         )

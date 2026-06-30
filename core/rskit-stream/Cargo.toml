@@ -1,0 +1,37 @@
+[package]
+name        = "rskit-stream"
+description = "Foundational async stream toolkit: bounded fan-out broadcaster, sources, cancellable tasks, and futures::Stream extension operators"
+version = "0.1.0-alpha.2"
+edition.workspace      = true
+license.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+documentation = "https://docs.rs/rskit-stream"
+readme = "README.md"
+categories = ["asynchronous"]
+keywords   = ["stream", "broadcast", "task", "async", "cancellation"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+# External
+tokio        = { workspace = true }
+tokio-util   = { workspace = true, features = ["rt"] }
+futures      = { workspace = true }
+futures-util = { workspace = true }
+async-stream = { workspace = true }
+tokio-stream = { workspace = true }
+parking_lot  = { workspace = true }
+
+# Internal
+rskit-errors = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full", "test-util"] }
+
+[lints]
+workspace = true

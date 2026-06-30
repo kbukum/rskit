@@ -31,3 +31,6 @@ tokio = { workspace = true, features = ["test-util", "full"] }
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

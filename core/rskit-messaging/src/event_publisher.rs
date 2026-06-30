@@ -71,7 +71,7 @@ impl<P: EventProducer> EventPublisher<P> {
     /// - the configured `source`
     /// - `event_type` as the event type
     /// - `data` serialized into the payload
-    pub async fn publish<T: Serialize + Send>(
+    pub async fn publish<T: Serialize + Send + Sync>(
         &self,
         topic: &str,
         event_type: &str,
@@ -86,7 +86,7 @@ impl<P: EventProducer> EventPublisher<P> {
     /// Same as [`publish`](Self::publish) but also sets `Event::subject`
     /// to the given `key`, which messaging adapters typically use as the
     /// partition key for ordering guarantees.
-    pub async fn publish_keyed<T: Serialize + Send>(
+    pub async fn publish_keyed<T: Serialize + Send + Sync>(
         &self,
         topic: &str,
         event_type: &str,
@@ -102,7 +102,7 @@ impl<P: EventProducer> EventPublisher<P> {
     /// Publish a batch of typed payloads as domain events.
     ///
     /// Each item is wrapped in its own [`Event`] envelope.
-    pub async fn publish_batch<T: Serialize + Send>(
+    pub async fn publish_batch<T: Serialize + Send + Sync>(
         &self,
         topic: &str,
         event_type: &str,
@@ -121,7 +121,7 @@ impl<P: EventProducer> EventPublisher<P> {
     }
 
     /// Returns a reference to the underlying producer.
-    pub fn producer(&self) -> &P {
+    pub const fn producer(&self) -> &P {
         &self.producer
     }
 }
@@ -168,9 +168,11 @@ mod tests {
         }
 
         async fn publish_batch(&self, topic: &str, events: Vec<Event>) -> AppResult<()> {
-            let mut guard = self.published.lock();
-            for event in events {
-                guard.push((topic.to_string(), event));
+            {
+                let mut guard = self.published.lock();
+                for event in events {
+                    guard.push((topic.to_string(), event));
+                }
             }
             Ok(())
         }
@@ -178,7 +180,7 @@ mod tests {
 
     #[tokio::test]
     async fn publish_creates_envelope() {
-        let (mock, published) = MockEventProducer::new();
+        let (mock, sink) = MockEventProducer::new();
         let publisher = EventPublisher::new(mock, "test-service");
 
         let payload = TestPayload {
@@ -191,9 +193,9 @@ mod tests {
             .await
             .unwrap();
 
-        let guard = published.lock();
-        assert_eq!(guard.len(), 1);
-        let (topic, event) = &guard[0];
+        let recorded = sink.lock().clone();
+        assert_eq!(recorded.len(), 1);
+        let (topic, event) = &recorded[0];
         assert_eq!(topic, "my.topic");
         assert_eq!(event.event_type, "payload.created");
         assert_eq!(event.source, "test-service");
@@ -206,7 +208,7 @@ mod tests {
 
     #[tokio::test]
     async fn publish_keyed_sets_subject() {
-        let (mock, published) = MockEventProducer::new();
+        let (mock, sink) = MockEventProducer::new();
         let publisher = EventPublisher::new(mock, "order-svc");
 
         publisher
@@ -219,8 +221,8 @@ mod tests {
             .await
             .unwrap();
 
-        let guard = published.lock();
-        let (_, event) = &guard[0];
+        let recorded = sink.lock().clone();
+        let (_, event) = &recorded[0];
         assert_eq!(event.subject, "order-123");
         assert_eq!(event.event_type, "order.placed");
         assert_eq!(event.source, "order-svc");
@@ -228,7 +230,7 @@ mod tests {
 
     #[tokio::test]
     async fn publish_batch_creates_multiple_envelopes() {
-        let (mock, published) = MockEventProducer::new();
+        let (mock, sink) = MockEventProducer::new();
         let publisher = EventPublisher::new(mock, "batch-svc");
 
         let items = vec![
@@ -251,16 +253,16 @@ mod tests {
             .await
             .unwrap();
 
-        let guard = published.lock();
-        assert_eq!(guard.len(), 3);
-        for (topic, event) in guard.iter() {
+        let recorded = sink.lock().clone();
+        assert_eq!(recorded.len(), 3);
+        for (topic, event) in &recorded {
             assert_eq!(topic, "items");
             assert_eq!(event.event_type, "item.created");
             assert_eq!(event.source, "batch-svc");
         }
 
         // Verify each has unique ID
-        let ids: Vec<&str> = guard.iter().map(|(_, e)| e.id.as_str()).collect();
+        let ids: Vec<&str> = recorded.iter().map(|(_, e)| e.id.as_str()).collect();
         let unique: std::collections::HashSet<&str> = ids.iter().copied().collect();
         assert_eq!(unique.len(), 3);
     }

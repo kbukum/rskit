@@ -91,7 +91,7 @@ impl Agent {
     }
 }
 
-fn usage_delta(before: Usage, after: Usage) -> Usage {
+const fn usage_delta(before: Usage, after: Usage) -> Usage {
     Usage {
         input_tokens: after.input_tokens.saturating_sub(before.input_tokens),
         output_tokens: after.output_tokens.saturating_sub(before.output_tokens),

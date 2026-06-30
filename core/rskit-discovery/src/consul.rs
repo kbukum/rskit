@@ -1,8 +1,11 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
+use parking_lot::Mutex;
 use rskit_httpclient::{DestinationPolicy, ErrorResponse, HttpClient, HttpClientConfig, Request};
+use rskit_stream::{SpawnedTask, TaskGroup};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use tracing::{debug, warn};
@@ -66,6 +69,8 @@ struct ConsulService {
 /// discovery.
 pub struct ConsulDiscovery {
     client: HttpClient,
+    /// Owns spawned watch tasks so they are cancelled and drained on drop.
+    watch_tasks: Arc<Mutex<TaskGroup>>,
 }
 
 const CONSUL_BLOCKING_WAIT_SECS: u64 = 30;
@@ -91,7 +96,16 @@ impl ConsulDiscovery {
 
         Ok(Self {
             client: HttpClient::new(config)?,
+            watch_tasks: Arc::new(Mutex::new(TaskGroup::new())),
         })
+    }
+}
+
+impl Drop for ConsulDiscovery {
+    fn drop(&mut self) {
+        // Stop long-poll watch tasks promptly rather than letting them block
+        // on Consul until the next observed change.
+        self.watch_tasks.lock().cancel_all();
     }
 }
 
@@ -212,7 +226,7 @@ impl Watcher for ConsulDiscovery {
         let client = self.client.clone();
         let service = service.to_owned();
 
-        tokio::spawn(async move {
+        let task = SpawnedTask::spawn(move |cancel| async move {
             let mut last_index: u64 = 0;
             let mut last_endpoints: Vec<String> = Vec::new();
 
@@ -222,7 +236,15 @@ impl Watcher for ConsulDiscovery {
                     .query_param("index", last_index.to_string())
                     .query_param("wait", consul_blocking_wait_query());
 
-                match client.send(request).await {
+                let resp = tokio::select! {
+                    () = cancel.cancelled() => {
+                        debug!(service = %service, "watch cancelled, stopping");
+                        return;
+                    }
+                    result = client.send(request) => result,
+                };
+
+                match resp {
                     Ok(resp) if resp.is_success() => {
                         // Extract the X-Consul-Index header for long-polling
                         let new_index = resp
@@ -281,6 +303,7 @@ impl Watcher for ConsulDiscovery {
             }
         });
 
+        self.watch_tasks.lock().push(task);
         Ok(rx)
     }
 }

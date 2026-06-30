@@ -24,9 +24,8 @@ use rskit_messaging::{
     BrokerConfigExt, Event, EventConsumer, EventProducer, Message, MessageConsumer,
     MessageProducer, MessagingFactory, MessagingRegistry,
 };
+use rskit_stream::SpawnedTask;
 use tokio::sync::{Mutex, mpsc};
-use tokio::task::JoinHandle;
-use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
 
 mod config;
@@ -168,12 +167,7 @@ pub(crate) struct RabbitMqConsumer {
 struct RabbitMqSubscription {
     _connection: Connection,
     _channels: Vec<Channel>,
-    tasks: Vec<ConsumerTask>,
-}
-
-struct ConsumerTask {
-    cancellation: CancellationToken,
-    handle: JoinHandle<()>,
+    tasks: Vec<SpawnedTask>,
 }
 
 impl RabbitMqConsumer {
@@ -346,7 +340,7 @@ fn spawn_consumer_task(
     sender: mpsc::Sender<Message<Vec<u8>>>,
     active_tasks: Arc<AtomicUsize>,
     task_finished: Arc<tokio::sync::Notify>,
-) -> ConsumerTask {
+) -> SpawnedTask {
     let deliveries = consumer
         .map(|delivery| delivery.map(|delivery| (delivery.routing_key.to_string(), delivery.data)));
     spawn_forwarding_task(topic, deliveries, sender, active_tasks, task_finished)
@@ -358,15 +352,13 @@ fn spawn_forwarding_task<S, E>(
     sender: mpsc::Sender<Message<Vec<u8>>>,
     active_tasks: Arc<AtomicUsize>,
     task_finished: Arc<tokio::sync::Notify>,
-) -> ConsumerTask
+) -> SpawnedTask
 where
     S: futures_util::Stream<Item = Result<(String, Vec<u8>), E>> + Unpin + Send + 'static,
     E: fmt::Display + Send + 'static,
 {
-    let cancellation = CancellationToken::new();
-    let task_cancellation = cancellation.clone();
     active_tasks.fetch_add(1, Ordering::SeqCst);
-    let handle = tokio::spawn(async move {
+    SpawnedTask::spawn(move |task_cancellation| async move {
         loop {
             tokio::select! {
                 () = task_cancellation.cancelled() => {
@@ -402,11 +394,7 @@ where
         }
         active_tasks.fetch_sub(1, Ordering::SeqCst);
         task_finished.notify_waiters();
-    });
-    ConsumerTask {
-        cancellation,
-        handle,
-    }
+    })
 }
 
 async fn connect(config: &Config) -> AppResult<Connection> {
@@ -488,35 +476,24 @@ fn queue_declare_failed(error: lapin::Error) -> AppError {
     rabbitmq_external_error("queue declare failed", error)
 }
 
-fn shutdown_consumer_tasks(tasks: Vec<ConsumerTask>) {
+fn shutdown_consumer_tasks(tasks: Vec<SpawnedTask>) {
     if tasks.is_empty() {
         return;
     }
 
     for task in &tasks {
-        task.cancellation.cancel();
+        task.cancel();
     }
 
     if tokio::runtime::Handle::try_current().is_ok() {
         tokio::spawn(async move {
-            for mut task in tasks {
-                if task.handle.is_finished() {
-                    let _ = task.handle.await;
-                    continue;
-                }
-
-                if tokio::time::timeout(Duration::from_millis(100), &mut task.handle)
-                    .await
-                    .is_err()
-                {
-                    task.handle.abort();
-                    let _ = task.handle.await;
-                }
+            for task in tasks {
+                task.shutdown(Duration::from_millis(100)).await;
             }
         });
     } else {
         for task in tasks {
-            task.handle.abort();
+            task.abort();
         }
     }
 }
@@ -824,18 +801,13 @@ mod tests {
 
     #[tokio::test]
     async fn shutdown_consumer_tasks_requests_cancellation() {
-        let cancellation = CancellationToken::new();
-        let task_cancellation = cancellation.clone();
         let (sender, receiver) = tokio::sync::oneshot::channel();
-        let handle = tokio::spawn(async move {
-            task_cancellation.cancelled().await;
+        let task = SpawnedTask::spawn(move |cancel| async move {
+            cancel.cancelled().await;
             let _ = sender.send(());
         });
 
-        shutdown_consumer_tasks(vec![ConsumerTask {
-            cancellation,
-            handle,
-        }]);
+        shutdown_consumer_tasks(vec![task]);
 
         tokio::time::timeout(Duration::from_secs(1), receiver)
             .await
@@ -847,11 +819,7 @@ mod tests {
     async fn shutdown_consumer_tasks_handles_empty_and_already_finished_tasks() {
         shutdown_consumer_tasks(Vec::new());
 
-        let handle = tokio::spawn(async {});
-        let task = ConsumerTask {
-            cancellation: CancellationToken::new(),
-            handle,
-        };
+        let task = SpawnedTask::spawn(|_cancel| async {});
         tokio::task::yield_now().await;
 
         shutdown_consumer_tasks(vec![task]);
@@ -859,11 +827,7 @@ mod tests {
 
     #[tokio::test(start_paused = true)]
     async fn shutdown_consumer_tasks_aborts_tasks_that_ignore_cancellation() {
-        let handle = tokio::spawn(futures_util::future::pending::<()>());
-        let task = ConsumerTask {
-            cancellation: CancellationToken::new(),
-            handle,
-        };
+        let task = SpawnedTask::spawn(|_cancel| futures_util::future::pending::<()>());
 
         shutdown_consumer_tasks(vec![task]);
         tokio::time::advance(Duration::from_millis(101)).await;
@@ -931,7 +895,7 @@ mod tests {
         let message = receiver.recv().await.unwrap();
         assert_eq!(message.topic, "events");
         assert_eq!(message.payload, b"payload");
-        task.handle.await.unwrap();
+        task.join().await;
         assert_eq!(active_tasks.load(Ordering::SeqCst), 0);
     }
 
@@ -952,7 +916,7 @@ mod tests {
             active_tasks.clone(),
             task_finished.clone(),
         );
-        task.handle.await.unwrap();
+        task.join().await;
 
         let (sender, _receiver) = mpsc::channel(1);
         let stream = futures_util::stream::iter(vec![Err::<(String, Vec<u8>), _>(
@@ -965,7 +929,7 @@ mod tests {
             active_tasks.clone(),
             task_finished.clone(),
         );
-        task.handle.await.unwrap();
+        task.join().await;
 
         let (sender, _receiver) = mpsc::channel(1);
         let stream = futures_util::stream::pending::<Result<(String, Vec<u8>), std::io::Error>>();
@@ -976,8 +940,8 @@ mod tests {
             active_tasks,
             task_finished.clone(),
         );
-        task.cancellation.cancel();
-        task.handle.await.unwrap();
+        task.cancel();
+        task.join().await;
     }
     #[test]
     fn rabbitmq_queue_prefix_validates_combined_queue() {

@@ -26,23 +26,20 @@ where
         loop {
             tokio::select! {
                 item = stream.next() => {
-                    match item {
-                        Some(v) => {
-                            buf.push(v);
-                            if buf.len() >= max_items {
-                                yield take_window(&mut buf, initial_capacity);
-                                deadline = tokio::time::Instant::now() + duration;
-                            }
+                    if let Some(v) = item {
+                        buf.push(v);
+                        if buf.len() >= max_items {
+                            yield take_window(&mut buf, initial_capacity);
+                            deadline = tokio::time::Instant::now() + duration;
                         }
-                        None => {
-                            if !buf.is_empty() {
-                                yield take_window(&mut buf, initial_capacity);
-                            }
-                            break;
+                    } else {
+                        if !buf.is_empty() {
+                            yield take_window(&mut buf, initial_capacity);
                         }
+                        break;
                     }
                 }
-                _ = tokio::time::sleep_until(deadline) => {
+                () = tokio::time::sleep_until(deadline) => {
                     if !buf.is_empty() {
                         yield take_window(&mut buf, initial_capacity);
                     }
@@ -79,26 +76,23 @@ where
         loop {
             tokio::select! {
                 item = stream.next() => {
-                    match item {
-                        Some(v) => {
-                            if buf.is_empty() {
-                                deadline = Some(tokio::time::Instant::now() + timeout);
-                            }
-                            buf.push(v);
-                            if buf.len() >= size {
-                                deadline = None;
-                                yield std::mem::take(&mut buf);
-                            }
+                    if let Some(v) = item {
+                        if buf.is_empty() {
+                            deadline = Some(tokio::time::Instant::now() + timeout);
                         }
-                        None => {
-                            if !buf.is_empty() {
-                                yield std::mem::take(&mut buf);
-                            }
-                            break;
+                        buf.push(v);
+                        if buf.len() >= size {
+                            deadline = None;
+                            yield std::mem::take(&mut buf);
                         }
+                    } else {
+                        if !buf.is_empty() {
+                            yield std::mem::take(&mut buf);
+                        }
+                        break;
                     }
                 }
-                _ = async {
+                () = async {
                     match deadline {
                         Some(d) => tokio::time::sleep_until(d).await,
                         None => std::future::pending::<()>().await,
@@ -130,15 +124,14 @@ where
             let has_pending = pending.is_some();
             tokio::select! {
                 item = stream.next() => {
-                    match item {
-                        Some(v) => { pending = Some(v); }
-                        None => {
-                            if let Some(v) = pending.take() { yield v; }
-                            break;
-                        }
+                    if let Some(v) = item {
+                        pending = Some(v);
+                    } else {
+                        if let Some(v) = pending.take() { yield v; }
+                        break;
                     }
                 }
-                _ = async move {
+                () = async move {
                     if has_pending {
                         tokio::time::sleep(delay).await;
                     } else {

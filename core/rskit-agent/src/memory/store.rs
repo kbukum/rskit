@@ -16,6 +16,7 @@ pub struct InMemoryStore {
 }
 
 impl InMemoryStore {
+    /// Create an empty in-memory message store.
     pub fn new() -> Self {
         Self::default()
     }
@@ -31,6 +32,7 @@ impl Memory for InMemoryStore {
     async fn save(&self, session_id: &str, messages: &[Message]) -> Result<(), AppError> {
         let mut guard = self.store.write();
         guard.insert(session_id.to_string(), messages.to_vec());
+        drop(guard);
         Ok(())
     }
 
@@ -40,12 +42,14 @@ impl Memory for InMemoryStore {
             .entry(session_id.to_string())
             .or_default()
             .extend_from_slice(messages);
+        drop(guard);
         Ok(())
     }
 
     async fn clear(&self, session_id: &str) -> Result<(), AppError> {
         let mut guard = self.store.write();
         guard.remove(session_id);
+        drop(guard);
         Ok(())
     }
 }

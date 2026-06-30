@@ -1,3 +1,5 @@
+//! Integration for `rskit-messaging`.
+
 use rskit_messaging::{InMemoryBroker, Message, MessageConsumer, MessageProducer};
 use std::time::Duration;
 

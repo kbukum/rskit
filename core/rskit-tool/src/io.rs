@@ -8,7 +8,7 @@ use rskit_schema::Json;
 use serde::{Deserialize, Deserializer, Serialize, de};
 
 /// Machine-validatable JSON Schema for tool input or output.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(transparent)]
 pub struct ToolSchema(Json);
 
@@ -33,7 +33,7 @@ impl ToolSchema {
 
     /// Borrow the underlying JSON Schema document.
     #[must_use]
-    pub fn as_json(&self) -> &Json {
+    pub const fn as_json(&self) -> &Json {
         &self.0
     }
 
@@ -80,7 +80,7 @@ impl<'de> Deserialize<'de> for ToolSchema {
 }
 
 /// Validated tool invocation input.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(transparent)]
 pub struct ToolInput(Json);
 
@@ -105,13 +105,13 @@ impl ToolInput {
 
     /// Create tool input from a JSON object map.
     #[must_use]
-    pub fn from_object(object: serde_json::Map<String, Json>) -> Self {
+    pub const fn from_object(object: serde_json::Map<String, Json>) -> Self {
         Self(Json::Object(object))
     }
 
     /// Borrow the JSON object payload.
     #[must_use]
-    pub fn as_json(&self) -> &Json {
+    pub const fn as_json(&self) -> &Json {
         &self.0
     }
 
@@ -146,7 +146,7 @@ impl<'de> Deserialize<'de> for ToolInput {
 }
 
 /// Structured tool output or metadata value.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ToolOutput(Json);
 
@@ -164,7 +164,7 @@ impl ToolOutput {
 
     /// Borrow the structured JSON output.
     #[must_use]
-    pub fn as_json(&self) -> &Json {
+    pub const fn as_json(&self) -> &Json {
         &self.0
     }
 
@@ -284,7 +284,7 @@ mod tests {
     fn output_helpers_expose_and_consume_json() {
         let output = ToolOutput::from(serde_json::json!({"ok": true}));
         assert_eq!(output.as_json()["ok"], true);
-        assert_eq!(output.clone()["ok"], true);
+        assert_eq!(output["ok"], true);
         assert_eq!(output.into_json(), serde_json::json!({"ok": true}));
     }
 }

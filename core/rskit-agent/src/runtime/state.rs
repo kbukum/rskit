@@ -58,7 +58,12 @@ impl RunState {
     }
 
     pub(crate) fn total_tokens(&self) -> usize {
-        (self.total_usage.input_tokens + self.total_usage.output_tokens) as usize
+        usize::try_from(
+            self.total_usage
+                .input_tokens
+                .saturating_add(self.total_usage.output_tokens),
+        )
+        .unwrap_or(usize::MAX)
     }
 
     pub(crate) fn compact_context(

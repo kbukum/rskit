@@ -1,7 +1,7 @@
 [package]
 name        = "rskit-dag"
 description = "DAG task orchestrator with parallel execution"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 edition.workspace     = true
 license.workspace     = true
 rust-version.workspace = true
@@ -30,3 +30,6 @@ parking_lot  = { workspace = true }
 # Internal
 rskit-errors = { workspace = true }
 rskit-provider = { workspace = true }
+
+[lints]
+workspace = true

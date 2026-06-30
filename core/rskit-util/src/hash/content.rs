@@ -1,10 +1,10 @@
-//! Stable content hashing with optional domain-separated framing.
+//! BLAKE3 content hashing with optional domain-separated framing.
 //!
-//! This module provides one canonical content-hash implementation (BLAKE3)
-//! behind a small, allocation-light API so callers depend on the concept of a
-//! "content hash" rather than on a specific hashing crate. Digests are rendered
-//! as lowercase hexadecimal, giving a stable, comparable identity for cache
-//! keys, change detection, and deduplication.
+//! Provides one canonical content-hash implementation (BLAKE3) behind a small,
+//! allocation-light API so callers depend on the concept of a "content hash"
+//! rather than on a specific hashing crate. Digests are rendered as lowercase
+//! hexadecimal, giving a stable, comparable identity for cache keys, change
+//! detection, and deduplication.
 //!
 //! [`ContentHasher::update_framed`] applies unambiguous, length-prefixed domain
 //! separation (each of `label` and `value` is preceded by its length) so

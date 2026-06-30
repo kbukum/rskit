@@ -34,7 +34,7 @@
 //!     retries: u8,
 //! }
 //!
-//! let codec = JsonCodec;
+//! let codec = JsonCodec::default();
 //! let parsed: Settings = decode(&codec, r#"{ "name": "svc", "retries": 3 }"#).unwrap();
 //! assert_eq!(parsed, Settings { name: "svc".into(), retries: 3 });
 //!
@@ -45,6 +45,7 @@
 #![warn(missing_docs)]
 
 mod codec;
+pub mod framing;
 mod json;
 pub mod select;
 #[cfg(feature = "toml")]
@@ -52,7 +53,7 @@ mod toml;
 pub mod value;
 
 pub use codec::{Codec, decode, encode};
-pub use json::JsonCodec;
+pub use json::{JsonCodec, JsonStyle};
 #[cfg(feature = "toml")]
 pub use toml::TomlCodec;
 

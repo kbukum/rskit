@@ -1,3 +1,5 @@
+//! Integration for `rskit-dag`.
+
 use rskit_dag::{Dag, DagNode, TypedDagNode};
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use serde_json::{Value, json};
@@ -30,7 +32,7 @@ impl DagNode for TestNode {
         inputs: HashMap<String, Value>,
         _cancel: CancellationToken,
     ) -> Pin<Box<dyn Future<Output = AppResult<Value>> + Send + '_>> {
-        let input_sum: i64 = inputs.values().filter_map(|v| v.as_i64()).sum();
+        let input_sum: i64 = inputs.values().filter_map(serde_json::Value::as_i64).sum();
         let result = self.value + input_sum;
         Box::pin(async move { Ok(json!(result)) })
     }
@@ -226,7 +228,7 @@ async fn typed_node_surfaces_input_mapping_errors() {
 struct PanicNode;
 
 impl DagNode for PanicNode {
-    fn id(&self) -> &str {
+    fn id(&self) -> &'static str {
         "panic"
     }
 

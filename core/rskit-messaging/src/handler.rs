@@ -118,7 +118,7 @@ where
     Fut: std::future::Future<Output = AppResult<()>> + Send + 'static,
 {
     /// Create a new function handler from the given closure.
-    pub fn new(func: F) -> Self {
+    pub const fn new(func: F) -> Self {
         Self {
             func,
             _marker: std::marker::PhantomData,

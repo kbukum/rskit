@@ -6,7 +6,7 @@ OpenTelemetry tracing, metrics, logs, and context propagation.
 
 ## Features
 
-- `tracer_provider()` / `init_tracer()` — injectable OTLP trace provider with configurable sampling via `TracingConfig`
+- `tracer_provider()` — injectable OTLP trace provider with configurable sampling via `TracingConfig`
 - `init_metrics()` — injectable OTLP metrics pipeline via `MetricsConfig`
 - `init_logs()` — injectable OTLP log provider via `LogsConfig`
 - `OperationContext` — tracks service, operation, request ID, and elapsed time
@@ -19,7 +19,7 @@ OpenTelemetry tracing, metrics, logs, and context propagation.
 
 ```toml
 [dependencies]
-rskit-observability = "0.1.0-alpha.2"
+rskit-observability = "0.1.0-alpha.3"
 ```
 
 ```rust

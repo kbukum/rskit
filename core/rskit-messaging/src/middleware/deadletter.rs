@@ -172,12 +172,11 @@ fn sanitize_summary(value: &str) -> String {
 }
 
 fn binary_payload_summary(value: &[u8]) -> String {
-    let preview = value
-        .iter()
-        .take(MAX_BINARY_PREVIEW_BYTES)
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<Vec<_>>()
-        .join("");
+    use std::fmt::Write as _;
+    let mut preview = String::new();
+    for byte in value.iter().take(MAX_BINARY_PREVIEW_BYTES) {
+        let _ = write!(preview, "{byte:02x}");
+    }
     if value.len() > MAX_BINARY_PREVIEW_BYTES {
         format!(
             "binary payload: {} bytes, hex preview: {preview}…",

@@ -30,6 +30,6 @@ pub use logs::{LogsConfig, LogsHandle, init_logs};
 pub use metrics::{MetricsConfig, MetricsHandle, init_metrics, init_metrics_with_protocol};
 pub use propagation::{extract_trace_context, inject_trace_context};
 pub use tracer::{
-    OtlpProtocol, SERVICE_NAME, TracerGuard, TracingConfig, init_tracer, set_operation_attributes,
+    OtlpProtocol, SERVICE_NAME, TracerGuard, TracingConfig, set_operation_attributes,
     tracer_provider, tracer_provider_with_protocol,
 };

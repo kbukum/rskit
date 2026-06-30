@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Add the `rskit-stream` foundation crate as the single home for the async stream toolkit: the `Broadcaster`/`BroadcastStream` fan-out bus and source builders (relocated from `rskit-pipeline`), `SpawnedTask`/`TaskGroup` (the canonical cancellable-task primitive — cancel + join-handle with a bounded drain-then-abort `shutdown`), and the `futures::Stream` extension operators (`RskitStreamExt`: map/filter/fan-out/parallel/windowing/throttle) plus terminal sinks (`collect`/`drain`/`for_each`). Messaging, discovery, and server consume `SpawnedTask` instead of hand-rolled `cancel + handle` pairs.
+- Add `rskit_util::hash::sha256` (`Sha256Hasher` / `sha256_hex`) for SHA-256 wire-format/interop digests, and `rskit_util::template::DynamicTemplate` for open-set `{{var}}` brace templates resolved against a caller-supplied lookup at render time.
 - Add `rskit_util::hash`: a domain-free BLAKE3 content-hashing helper (`ContentHasher` plus the one-shot `hash_hex`) rendering a stable lowercase-hex digest, with `update_framed` applying length-prefixed domain separation so independently folded fields cannot collide for arbitrary byte inputs.
 - Add persistent process output observation in `rskit-process`: `PersistentOutputObserver` lets `PersistentConfig` capture persistent stdout/stderr while invoking byte observers, enabling callers to route long-lived process output through their own sinks instead of forwarding directly to parent streams.
 - Add `CurrentDirGuard` to `rskit-testutil`: an RAII guard that serializes process-wide working-directory changes across tests in a binary and restores the previous directory on drop (the working-directory analogue of the env-var mutex pattern), so tests that depend on or mutate the current directory no longer leak global cwd state into later tests.
@@ -18,6 +20,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **Breaking (`rskit-process`):** `PersistentConfig` has a new `output_observer` field. Callers using struct literals must initialize it, typically with `None`; callers using `PersistentConfig::default()` or builder methods are unchanged.
 - **Breaking (`rskit-git`):** `RefManager::create_tag` now takes `message: Option<&str>` instead of `&str`. `Some(message)` creates an annotated tag (an empty message is preserved as an annotated tag, matching git's `git tag -a -m ""`), and `None` creates a lightweight tag. Previously the lightweight-vs-annotated choice was overloaded onto an empty `&str`, so callers could not request an annotated tag with an empty message. `RepoBuilder::with_tag` adopts the same `Option<&str>` signature.
 - **Breaking (`rskit-config`):** `MergeIdentity` no longer exposes `identity_key()`. Custom implementors now provide `label()` (the error-message name) and `identity_of(&Value) -> Option<String>` (the identity token). The built-in `IdentityKey` is unchanged at call sites; only hand-rolled `MergeIdentity` implementations need to migrate.
+- Restore downward layering for `rskit-config`: its `watch` feature now consumes broadcast primitives from `rskit-stream` (foundation) instead of `rskit-pipeline`, removing a foundation→composition upward dependency.
+- `rskit-cache` fs adapter hashes entry paths via `rskit_util::hash::hash_hex` (byte-for-byte identical to its former direct `blake3` use); `rskit-skill` uses `rskit_util::hash::sha256_hex`; `rskit-ai` prompt rendering uses `rskit_util::template::DynamicTemplate` — dropping forked hashing/template engines.
+- Enforce `missing_docs` and other workspace lints on `rskit-{agent,bench,cli,dag,embedding,llm,mcp,messaging,sse,tool}` via `[lints] workspace = true`, with documentation added for newly-surfaced public items.
+
+### Removed
+
+- Remove the `rskit-pipeline` crate entirely. Its `futures::Stream` operators and sinks moved into `rskit-stream` (the operator/primitive split was an internal concern, not a crate boundary), and its `StepExecutor` is dropped as a redundant, untyped subset of `rskit-chain` (the canonical owner of sequential, named-step execution with progress and cancellation). Consumers of `rskit_pipeline::RskitStreamExt` now import `rskit_stream::RskitStreamExt`; the `rskit` facade exposes operators via `rskit::stream` and no longer has a `pipeline` module.
+- Remove the back-compat `rskit-observability::init_tracer` alias (use `tracer_provider`) and the legacy `rskit-bench` `report`/`metrics` modules superseded by `metric/` + `report_gen/`. Drop dormant direct `reqwest` dependencies from the contrib llm/inference adapters (HTTP goes through `rskit-httpclient`).
 
 ## [v0.1.0-alpha.3] - 2026-06-21
 

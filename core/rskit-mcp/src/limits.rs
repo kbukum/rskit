@@ -33,11 +33,10 @@ pub(crate) fn validate_tool_output(
     if result.is_error {
         return None;
     }
-    let candidate = result
-        .output
-        .clone()
-        .map(rskit_tool::ToolOutput::into_json)
-        .unwrap_or_else(|| serde_json::Value::String(result.content.clone()));
+    let candidate = result.output.clone().map_or_else(
+        || serde_json::Value::String(result.content.clone()),
+        rskit_tool::ToolOutput::into_json,
+    );
     let validation = rskit_schema::validate(schema.as_json(), &candidate);
     if validation.valid {
         return None;

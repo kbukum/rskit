@@ -38,14 +38,18 @@ async fn concurrent_singleton_init_returns_same_instance() {
     let c = Arc::new(Container::new());
     c.register_singleton(|| {
         let id = INIT_COUNT.fetch_add(1, Ordering::SeqCst);
-        std::thread::sleep(std::time::Duration::from_millis(10));
         Ok(Arc::new(SlowSvc { id }))
     });
 
+    let barrier = Arc::new(tokio::sync::Barrier::new(20));
     let mut handles = vec![];
     for _ in 0..20 {
         let c2 = Arc::clone(&c);
-        handles.push(tokio::spawn(async move { c2.resolve::<SlowSvc>() }));
+        let barrier = barrier.clone();
+        handles.push(tokio::spawn(async move {
+            barrier.wait().await;
+            c2.resolve::<SlowSvc>()
+        }));
     }
 
     let mut ids = vec![];

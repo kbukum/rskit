@@ -149,9 +149,7 @@ impl<S: Component + ?Sized + 'static> Component for DiscoveryServer<S> {
     }
 
     fn health(&self) -> Health {
-        // Combine health of discovery registration status
-        // For now, delegate to inner component
-        // In a real implementation, you might check if the service is still registered
+        // Report the inner component's health, tagged with the registration status.
         let inner_health = self.inner.health();
         if inner_health.is_healthy() {
             Health::healthy(format!("{} (registered)", self.name))

@@ -3,8 +3,6 @@ use std::path::PathBuf;
 
 use rskit_bench::dataset::{load_content, load_manifest};
 use rskit_bench::dataset_loader::DatasetLoader;
-use rskit_bench::metrics::{ConfusionMatrix, ThresholdMetrics};
-use rskit_bench::report::{RunResult, SampleResult, json_report, markdown_report};
 use rskit_bench::report_gen::{
     CsvReporter, JUnitReporter, JsonReporter, MarkdownReporter, Reporter, TableReporter,
     VegaLiteReporter, vegalite_specs,
@@ -197,87 +195,6 @@ fn dataset_manifest_and_content_report_missing_or_malformed_inputs() {
 }
 
 #[test]
-fn legacy_report_helpers_render_empty_branch_and_per_branch_cases() {
-    let mut per_branch = HashMap::new();
-    per_branch.insert(
-        "branch-b".to_owned(),
-        ThresholdMetrics {
-            threshold: 0.5,
-            precision: 0.5,
-            recall: 1.0,
-            f1: 0.667,
-            accuracy: 0.5,
-            fpr: 1.0,
-            confusion: ConfusionMatrix {
-                tp: 1,
-                fp: 1,
-                tn: 0,
-                fn_count: 0,
-            },
-        },
-    );
-
-    let result = RunResult {
-        run_id: "legacy-run".to_owned(),
-        timestamp: "2026-06-07T00:00:00Z".to_owned(),
-        tag: "candidate".to_owned(),
-        dataset_name: "fixture".to_owned(),
-        sample_results: vec![
-            SampleResult {
-                sample_id: "s1".to_owned(),
-                label: "yes".to_owned(),
-                is_positive: true,
-                overall_score: 0.9,
-                branch_scores: HashMap::from([("branch-b".to_owned(), 0.9)]),
-                processing_ms: 12,
-            },
-            SampleResult {
-                sample_id: "s2".to_owned(),
-                label: "no".to_owned(),
-                is_positive: false,
-                overall_score: 0.6,
-                branch_scores: HashMap::new(),
-                processing_ms: 15,
-            },
-        ],
-        metrics: ThresholdMetrics {
-            threshold: 0.5,
-            precision: 0.5,
-            recall: 1.0,
-            f1: 0.667,
-            accuracy: 0.5,
-            fpr: 1.0,
-            confusion: ConfusionMatrix {
-                tp: 1,
-                fp: 1,
-                tn: 0,
-                fn_count: 0,
-            },
-        },
-        per_branch,
-    };
-
-    let report = markdown_report(&result);
-    assert!(report.contains("BENCH RUN: legacy-run"));
-    assert!(report.contains("Tag: candidate"));
-    assert!(report.contains("PER-BRANCH BREAKDOWN"));
-    assert!(report.contains("branch-b"));
-
-    let json = json_report(&result);
-    assert_eq!(json["run_id"], "legacy-run");
-    assert_eq!(json["per_branch"]["branch-b"]["f1"], 0.667);
-
-    let without_branches = RunResult {
-        tag: String::new(),
-        per_branch: HashMap::new(),
-        ..result
-    };
-    let report = markdown_report(&without_branches);
-    assert!(!report.contains("PER-BRANCH BREAKDOWN"));
-    assert!(!report.contains("Tag:"));
-}
-
-#[test]
 fn report_generators_emit_all_supported_formats_and_escape_special_values() {
     let result = bench_result();
     let reporters: Vec<Box<dyn Reporter>> = vec![
@@ -304,6 +221,10 @@ fn report_generators_emit_all_supported_formats_and_escape_special_values() {
                 let json: serde_json::Value = serde_json::from_str(&rendered).unwrap();
                 assert_eq!(json["id"], "run-1");
                 assert_eq!(json["metrics"][0]["values"]["precision"], 0.8);
+                assert_eq!(
+                    json["branches"]["very-long-branch-name-that-needs-truncation"]["metrics"]["f1"],
+                    0.75
+                );
             }
             "csv" => {
                 assert!(rendered.contains("metric_name,value,details"));
@@ -316,7 +237,10 @@ fn report_generators_emit_all_supported_formats_and_escape_special_values() {
             }
             "markdown" => {
                 assert!(rendered.contains("# Bench Run: run-1"));
+                assert!(rendered.contains("| **Tag** | release |"));
                 assert!(rendered.contains("## Confusion Matrix"));
+                assert!(rendered.contains("## Branches"));
+                assert!(rendered.contains("very-long-branch-name-that-needs-truncation"));
                 assert!(rendered.contains("### Incorrect Predictions"));
             }
             "table" => {

@@ -176,6 +176,7 @@ impl OutputTable {
         self
     }
 
+    /// Append a row of cell values.
     pub fn add_row(&mut self, row: Vec<impl Into<String>>) {
         self.rows.push(row.into_iter().map(Into::into).collect());
     }
@@ -183,7 +184,7 @@ impl OutputTable {
 
 impl fmt::Display for OutputTable {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut widths: Vec<usize> = self.columns.iter().map(|c| c.len()).collect();
+        let mut widths: Vec<usize> = self.columns.iter().map(String::len).collect();
         for row in &self.rows {
             for (i, cell) in row.iter().enumerate() {
                 if i < widths.len() {
@@ -251,10 +252,11 @@ pub struct OutputKV {
 impl OutputKV {
     /// Create an empty key-value output block.
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self { pairs: Vec::new() }
     }
 
+    /// Add a key-value pair to the output block.
     pub fn add(&mut self, key: impl Into<String>, value: impl Into<String>) -> &mut Self {
         self.pairs.push((key.into(), value.into()));
         self

@@ -1,4 +1,5 @@
 //! Private runtime helpers for the agent loop.
+#![allow(clippy::redundant_pub_crate)]
 
 pub(crate) mod hook_dispatch;
 pub(crate) mod llm;

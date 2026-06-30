@@ -1,3 +1,5 @@
+//! Integration for `rskit-llm`.
+
 use rskit_llm::{CompletionRequest, Message, assistant, system, user};
 
 // ── Message enum ────────────────────────────────────────────────────────────

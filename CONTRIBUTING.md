@@ -206,7 +206,7 @@ Version bumps and release preparation are maintainer-only work. Contributors sho
 | Async locks | Only when lock ownership must cross `.await` or coordinate async waiters |
 | No `unsafe` without a `// SAFETY:` comment | All crates |
 | No `unwrap()` / `expect()` in library code | All crates (tests are fine) |
-| `tokio::time::pause()` for time-based tests | `rskit-pipeline`, `rskit-resilience` |
+| `tokio::time::pause()` for time-based tests | `rskit-stream`, `rskit-resilience` |
 | `#[allow(async_fn_in_trait)]` for public traits with default impls | As needed |
 
 Prefer synchronous `parking_lot` locks for in-memory state that is accessed and released within a synchronous critical section. Never hold any lock across unrelated I/O; document the reason when an async lock is intentionally required.

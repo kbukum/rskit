@@ -23,7 +23,7 @@ impl Default for DedupConfig {
     fn default() -> Self {
         Self {
             window_size: 10_000,
-            ttl: Duration::from_secs(300),
+            ttl: Duration::from_mins(5),
         }
     }
 }
@@ -182,7 +182,7 @@ mod tests {
         let mw = DedupMiddleware {
             config: DedupConfig {
                 window_size: 2,
-                ttl: Duration::from_secs(300),
+                ttl: Duration::from_mins(5),
             },
             seen: Arc::new(parking_lot::Mutex::new(HashMap::new())),
         };

@@ -5,10 +5,10 @@ use std::path::{Path, PathBuf};
 use rskit_config::{AppConfig, ConfigLoader, ServiceConfig};
 use rskit_errors::{AppError, ErrorCode};
 use rskit_fs::{path as fs_path, sync_io};
+use rskit_util::hash::sha256::sha256_hex;
 use rskit_validation::Validate;
 use rskit_validation::validator::{ValidationError, ValidationErrors};
 use serde::Deserialize;
-use sha2::{Digest, Sha256};
 
 use crate::{
     MANIFEST_FILE_NAME, Manifest, SKILL_MD_FILE_NAME, SkillError, VerificationOutcome, Verifier,
@@ -244,7 +244,7 @@ fn collect_assets(
             let digest = hash_file_bounded(&path, total_asset_bytes)?;
             assets.push(Asset {
                 path,
-                sha256: hex_lower(&digest),
+                sha256: digest,
             });
         } else {
             return Err(invalid_pack_file(
@@ -265,10 +265,7 @@ fn read_utf8_bounded(path: &Path, max_bytes: u64) -> Result<String, SkillError> 
     })
 }
 
-fn hash_file_bounded(
-    path: &Path,
-    total_asset_bytes: &mut u64,
-) -> Result<sha2::digest::Output<Sha256>, SkillError> {
+fn hash_file_bounded(path: &Path, total_asset_bytes: &mut u64) -> Result<String, SkillError> {
     let bytes = sync_io::file::read_bounded(path, MAX_ASSET_BYTES)
         .map_err(|error| bounded_read_error(path, MAX_ASSET_BYTES, error))?;
     *total_asset_bytes += bytes.len() as u64;
@@ -280,9 +277,7 @@ fn hash_file_bounded(
         });
     }
 
-    let mut hasher = Sha256::new();
-    hasher.update(&bytes);
-    Ok(hasher.finalize())
+    Ok(sha256_hex(&bytes))
 }
 
 fn ensure_under_root(pack_root: &Path, path: &Path) -> Result<(), SkillError> {
@@ -303,16 +298,6 @@ fn invalid_pack_file(path: &Path, reason: impl Into<String>) -> SkillError {
         path: path.to_path_buf(),
         reason: reason.into(),
     }
-}
-
-fn hex_lower(bytes: &[u8]) -> String {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    let mut out = String::with_capacity(bytes.len() * 2);
-    for &byte in bytes {
-        out.push(HEX[(byte >> 4) as usize] as char);
-        out.push(HEX[(byte & 0x0f) as usize] as char);
-    }
-    out
 }
 
 fn bounded_read_error(path: &Path, limit_bytes: u64, error: AppError) -> SkillError {

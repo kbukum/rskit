@@ -10,7 +10,7 @@
 //! - [`bytes`]: Formatting and parsing human-readable data sizes.
 //! - [`collections`]: Vector grouping, chunking, indexing, and partition helpers.
 //! - [`mod@env`]: Safe environment variable parsing with defaults.
-//! - [`hash`]: Stable BLAKE3 content hashing with optional domain-separated framing.
+//! - [`hash`]: Content/interop hashing — BLAKE3 and SHA-256.
 //! - [`secret`]: Prevent accidental credential leaks in logs/debug outputs.
 //! - [`sensitive`]: Matching helpers for names that commonly carry secrets.
 //! - [`strings`]: Zero-alloc/low-alloc casing and safe truncation.

@@ -254,14 +254,16 @@ def run_public_api(args: argparse.Namespace) -> int:
     crate = args.package
     manifest = package_manifest(crate)
     toolchain = os.environ.get("RUSTDOC_JSON_TOOLCHAIN", "nightly")
-    command = ["cargo", f"+{toolchain}", "public-api", "--manifest-path", str(manifest), "-p", crate]
+    command = ["cargo", f"+{toolchain}", "public-api"]
+    diff_command = [*command, "diff", "--manifest-path", str(manifest), "-p", crate]
+    list_command = [*command, "--manifest-path", str(manifest), "-p", crate]
     print(f"Checking public API for {crate} using {manifest.relative_to(ROOT)}...")
-    completed = run([*command, "diff"], capture=True, check=False)
+    completed = run(diff_command, capture=True, check=False)
     if completed.returncode != 0:
         output = f"{completed.stdout}{completed.stderr}"
         if f"Could not find crate `{crate}`" in output:
             print(f"No published baseline found for {crate}; validating current public API generation instead.")
-            run(command)
+            run(list_command)
             return 0
         print(output, file=os.sys.stderr, end="")
         return 1

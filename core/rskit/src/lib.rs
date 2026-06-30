@@ -14,7 +14,7 @@
 //! | `logging` | `rskit-logging` (`tracing` subscriber setup) |
 //! | `resilience` | `rskit-resilience` (retry, timeout, circuit breaker) |
 //! | `provider` | `rskit-provider` (provider traits and tower bridge) |
-//! | `pipeline` | `rskit-pipeline` (stream operators) |
+//! | `stream` | `rskit-stream` (broadcaster, sources, tasks, stream operators) |
 //! | `bootstrap` | `rskit-bootstrap` (app lifecycle orchestration) |
 //! | `component` | `rskit-component` (component lifecycle primitives) |
 //! | `worker` | `rskit-worker` (worker pools and typed events) |
@@ -120,8 +120,8 @@ pub use rskit_resilience as resilience;
 /// Provider traits + tower bridge.
 pub use rskit_provider as provider;
 
-/// `futures::Stream` extension trait + operators.
-pub use rskit_pipeline as pipeline;
+/// `futures::Stream` extension operators, broadcaster, sources, cancellable tasks.
+pub use rskit_stream as stream;
 
 /// App lifecycle orchestration.
 pub use rskit_bootstrap as bootstrap;

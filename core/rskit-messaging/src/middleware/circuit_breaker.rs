@@ -11,7 +11,7 @@ use crate::handler::{HandlerMiddleware, MessageHandler};
 use crate::message::Message;
 
 /// Configuration for the circuit breaker middleware.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct CircuitBreakerConfig {
     /// Number of consecutive failures that trip the breaker.
     pub threshold: u32,
@@ -143,7 +143,7 @@ mod tests {
         let cb = CircuitBreaker::new(
             CbConfig::new("test")
                 .with_max_failures(3)
-                .with_timeout(Duration::from_secs(60)),
+                .with_timeout(Duration::from_mins(1)),
         )
         .unwrap();
         let cb_mw = CircuitBreakerMiddleware {

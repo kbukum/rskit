@@ -1,0 +1,154 @@
+//! Raw byte-frame transport: a 4-byte big-endian length prefix plus payload.
+
+use std::io::{Read, Write};
+
+use rskit_errors::{AppError, AppResult, ErrorCode};
+
+/// Default maximum accepted payload size for a single frame (16 MiB).
+///
+/// Generous enough for large structured payloads yet bounded so a corrupt
+/// length prefix cannot trigger an unbounded allocation. Callers may pass a
+/// tighter cap to [`read_frame`].
+pub const DEFAULT_MAX_FRAME_BYTES: usize = 16 * 1024 * 1024;
+
+/// Width of the big-endian length prefix that precedes every payload.
+const LEN_PREFIX_BYTES: usize = 4;
+
+/// Write one length-delimited frame carrying `payload`, flushing on completion.
+///
+/// # Errors
+///
+/// Returns a typed [`AppError`] if `payload` exceeds `max_bytes` or the
+/// underlying writer fails (cause preserved).
+pub fn write_frame<W: Write>(writer: &mut W, payload: &[u8], max_bytes: usize) -> AppResult<()> {
+    if payload.len() > max_bytes {
+        return Err(AppError::invalid_input(
+            "frame",
+            format!(
+                "payload of {} bytes exceeds the {max_bytes}-byte frame limit",
+                payload.len()
+            ),
+        ));
+    }
+    let len = u32::try_from(payload.len())
+        .map_err(|_| AppError::invalid_input("frame", "payload length exceeds u32 range"))?;
+    writer
+        .write_all(&len.to_be_bytes())
+        .map_err(|error| transport_error("write frame length", &error))?;
+    writer
+        .write_all(payload)
+        .map_err(|error| transport_error("write frame payload", &error))?;
+    writer
+        .flush()
+        .map_err(|error| transport_error("flush frame", &error))?;
+    Ok(())
+}
+
+/// Read one length-delimited frame, bounded by `max_bytes`.
+///
+/// Returns `Ok(None)` on a clean end-of-stream observed *before* any length
+/// byte (the peer closed the connection between frames). A partial prefix or
+/// payload is a hard transport error.
+///
+/// # Errors
+///
+/// Returns a typed [`AppError`] on a truncated frame, a length above
+/// `max_bytes`, or any underlying read failure (cause preserved).
+pub fn read_frame<R: Read>(reader: &mut R, max_bytes: usize) -> AppResult<Option<Vec<u8>>> {
+    let mut prefix = [0u8; LEN_PREFIX_BYTES];
+    match read_exact_or_eof(reader, &mut prefix)? {
+        ReadEnd::Eof => return Ok(None),
+        ReadEnd::Filled => {}
+    }
+    let len = u32::from_be_bytes(prefix) as usize;
+    if len > max_bytes {
+        return Err(AppError::invalid_input(
+            "frame",
+            format!("incoming frame length {len} exceeds the {max_bytes}-byte limit"),
+        ));
+    }
+    let mut payload = vec![0u8; len];
+    reader
+        .read_exact(&mut payload)
+        .map_err(|error| transport_error("read frame payload", &error))?;
+    Ok(Some(payload))
+}
+
+/// Whether a fixed-size read filled the buffer or hit a clean EOF first.
+enum ReadEnd {
+    /// The buffer was completely filled.
+    Filled,
+    /// End-of-stream was reached before any byte was read.
+    Eof,
+}
+
+/// Fill `buf` exactly, distinguishing a clean leading EOF from a truncated read.
+fn read_exact_or_eof<R: Read>(reader: &mut R, buf: &mut [u8]) -> AppResult<ReadEnd> {
+    let mut read = 0;
+    while read < buf.len() {
+        match reader.read(&mut buf[read..]) {
+            Ok(0) => {
+                if read == 0 {
+                    return Ok(ReadEnd::Eof);
+                }
+                return Err(AppError::new(
+                    ErrorCode::ServiceUnavailable,
+                    "framed transport: stream ended mid-frame (truncated length prefix)",
+                ));
+            }
+            Ok(count) => read += count,
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(error) => return Err(transport_error("read frame length", &error)),
+        }
+    }
+    Ok(ReadEnd::Filled)
+}
+
+/// Build a typed transport error preserving the underlying I/O cause.
+fn transport_error(context: &str, error: &std::io::Error) -> AppError {
+    AppError::new(
+        ErrorCode::ServiceUnavailable,
+        format!("framed transport: {context}"),
+    )
+    .with_cause(std::io::Error::new(error.kind(), error.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{DEFAULT_MAX_FRAME_BYTES, read_frame, write_frame};
+
+    #[test]
+    fn round_trips_a_frame() {
+        let mut buffer = Vec::new();
+        write_frame(&mut buffer, b"hello", DEFAULT_MAX_FRAME_BYTES).expect("write");
+        let mut cursor = std::io::Cursor::new(buffer);
+        let frame = read_frame(&mut cursor, DEFAULT_MAX_FRAME_BYTES)
+            .expect("read")
+            .expect("frame present");
+        assert_eq!(frame, b"hello");
+    }
+
+    #[test]
+    fn clean_eof_between_frames_is_none() {
+        let mut cursor = std::io::Cursor::new(Vec::new());
+        assert!(
+            read_frame(&mut cursor, DEFAULT_MAX_FRAME_BYTES)
+                .expect("read")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn truncated_prefix_is_a_transport_error() {
+        let mut cursor = std::io::Cursor::new(vec![0u8, 0u8]);
+        let error = read_frame(&mut cursor, DEFAULT_MAX_FRAME_BYTES).expect_err("truncated errors");
+        assert_eq!(error.code(), rskit_errors::ErrorCode::ServiceUnavailable);
+    }
+
+    #[test]
+    fn oversized_frame_is_rejected() {
+        let mut buffer = Vec::new();
+        write_frame(&mut buffer, &[0u8; 8], DEFAULT_MAX_FRAME_BYTES).expect("write");
+        assert!(read_frame(&mut std::io::Cursor::new(buffer), 4).is_err());
+    }
+}

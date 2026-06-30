@@ -115,9 +115,8 @@ fn wildcard_match(pattern: &[u8], text: &[u8]) -> bool {
                 || (!text.is_empty() && wildcard_match(pattern, &text[1..]))
         }
         (Some(p), Some(t)) if p == t => wildcard_match(&pattern[1..], &text[1..]),
-        (None, Some(_)) => false,
         (Some(_), None) => pattern.iter().all(|&b| b == b'*'),
-        (Some(_), Some(_)) => false,
+        (_, Some(_)) => false,
     }
 }
 

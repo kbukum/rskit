@@ -109,17 +109,15 @@ pub fn denied_error(reason: impl Into<String>) -> AppError {
 }
 
 fn predicate_matches(input: &ToolInput, predicate: &SensitivePredicate) -> bool {
-    let value = match select_jsonpath(input.as_json(), &predicate.jsonpath) {
-        Some(v) => v,
-        None => return false,
+    let Some(value) = select_jsonpath(input.as_json(), &predicate.jsonpath) else {
+        return false;
     };
     match &predicate.matcher {
         SensitiveMatcher::Exists => true,
         SensitiveMatcher::Equals(expected) => value == expected,
-        SensitiveMatcher::Regex(pattern) => match value.as_str() {
-            Some(text) => regex_matches(pattern, text),
-            None => false,
-        },
+        SensitiveMatcher::Regex(pattern) => value
+            .as_str()
+            .is_some_and(|text| regex_matches(pattern, text)),
         SensitiveMatcher::Gt(threshold) => value.as_f64().is_some_and(|n| n > *threshold),
         SensitiveMatcher::Lt(threshold) => value.as_f64().is_some_and(|n| n < *threshold),
     }
@@ -154,27 +152,29 @@ fn regex_matches(pattern: &str, text: &str) -> bool {
     glob_like_match(pattern, text)
 }
 
-fn glob_like_match(pattern: &str, text: &str) -> bool {
-    let pat: Vec<char> = pattern.chars().collect();
-    let txt: Vec<char> = text.chars().collect();
-    fn rec(p: &[char], t: &[char]) -> bool {
-        match (p.first(), t.first()) {
-            (None, None) => true,
-            (None, Some(_)) => false,
-            (Some('.'), Some(_)) if p.get(1) == Some(&'*') => {
-                for split in 0..=t.len() {
-                    if rec(&p[2..], &t[split..]) {
-                        return true;
-                    }
+fn glob_match_rec(pattern: &[char], text: &[char]) -> bool {
+    match (pattern.first(), text.first()) {
+        (None, None) => true,
+        (Some('.'), Some(_)) if pattern.get(1) == Some(&'*') => {
+            for split in 0..=text.len() {
+                if glob_match_rec(&pattern[2..], &text[split..]) {
+                    return true;
                 }
-                false
             }
-            (Some('.'), Some(_)) => rec(&p[1..], &t[1..]),
-            (Some(pc), Some(tc)) if pc == tc => rec(&p[1..], &t[1..]),
-            _ => false,
+            false
         }
+        (Some('.'), Some(_)) => glob_match_rec(&pattern[1..], &text[1..]),
+        (Some(pattern_char), Some(text_char)) if pattern_char == text_char => {
+            glob_match_rec(&pattern[1..], &text[1..])
+        }
+        _ => false,
     }
-    rec(&pat, &txt)
+}
+
+fn glob_like_match(pattern: &str, text: &str) -> bool {
+    let pattern_chars: Vec<char> = pattern.chars().collect();
+    let text_chars: Vec<char> = text.chars().collect();
+    glob_match_rec(&pattern_chars, &text_chars)
 }
 
 #[cfg(test)]

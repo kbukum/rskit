@@ -1,7 +1,7 @@
 [package]
 name        = "rskit-server"
 description = "Service-facing server abstractions and lifecycle-managed transports for rskit"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 edition.workspace     = true
 license.workspace     = true
 rust-version.workspace = true
@@ -43,6 +43,7 @@ tokio-rustls     = { workspace = true, optional = true }
 rskit-errors = { workspace = true }
 rskit-fs = { workspace = true, features = ["async"] }
 rskit-bootstrap = { workspace = true }
+rskit-stream = { workspace = true }
 rskit-grpc = { workspace = true, optional = true }
 rskit-http = { workspace = true, optional = true }
 rskit-security = { workspace = true, optional = true }

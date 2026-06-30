@@ -36,7 +36,7 @@ impl RetryConfig {
 
     /// Wrap an explicit resilience retry policy.
     #[must_use]
-    pub fn from_policy(policy: RetryPolicy) -> Self {
+    pub const fn from_policy(policy: RetryPolicy) -> Self {
         Self { policy }
     }
 
@@ -111,7 +111,7 @@ impl RetryConfig {
 
     /// Borrow the underlying resilience policy.
     #[must_use]
-    pub fn policy(&self) -> &RetryPolicy {
+    pub const fn policy(&self) -> &RetryPolicy {
         &self.policy
     }
 

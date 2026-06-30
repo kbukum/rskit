@@ -143,6 +143,7 @@ mod tests {
     use super::*;
     use crate::{self as llm, types};
     use futures::StreamExt;
+    use rskit_provider::RequestResponse;
 
     #[test]
     fn test_capabilities_default() {
@@ -168,7 +169,7 @@ mod tests {
     }
 
     /// `MockProvider` only implements `complete` to verify default impls
-    /// (stream, capabilities, count_tokens) compose correctly.
+    /// (stream, capabilities, `count_tokens`) compose correctly.
     struct MockProvider;
 
     #[async_trait]
@@ -259,7 +260,6 @@ mod tests {
     async fn test_llm_request_response_adapter() {
         let provider = Arc::new(MockProvider);
         let adapter = LlmRequestResponse(provider);
-        use rskit_provider::RequestResponse;
         let request = CompletionRequest {
             model: "mock".to_string(),
             messages: vec![types::user("hi")],

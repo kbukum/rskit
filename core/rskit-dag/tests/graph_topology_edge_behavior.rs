@@ -1,3 +1,5 @@
+//! Graph topology edge behavior for `rskit-dag`.
+
 use rskit_dag::{Dag, DagNode};
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use serde_json::{Value, json};
@@ -39,7 +41,7 @@ impl DagNode for TestNode {
         inputs: HashMap<String, Value>,
         _cancel: CancellationToken,
     ) -> Pin<Box<dyn Future<Output = AppResult<Value>> + Send + '_>> {
-        let input_sum: i64 = inputs.values().filter_map(|v| v.as_i64()).sum();
+        let input_sum: i64 = inputs.values().filter_map(serde_json::Value::as_i64).sum();
         let result = self.value + input_sum;
         Box::pin(async move { Ok(json!(result)) })
     }
@@ -99,7 +101,7 @@ impl DagNode for SlowNode {
         inputs: HashMap<String, Value>,
         _cancel: CancellationToken,
     ) -> Pin<Box<dyn Future<Output = AppResult<Value>> + Send + '_>> {
-        let input_sum: i64 = inputs.values().filter_map(|v| v.as_i64()).sum();
+        let input_sum: i64 = inputs.values().filter_map(serde_json::Value::as_i64).sum();
         let result = self.value + input_sum;
         let delay = self.delay;
         Box::pin(async move {
@@ -136,15 +138,15 @@ impl DagNode for CancelAwareNode {
         inputs: HashMap<String, Value>,
         cancel: CancellationToken,
     ) -> Pin<Box<dyn Future<Output = AppResult<Value>> + Send + '_>> {
-        let input_sum: i64 = inputs.values().filter_map(|v| v.as_i64()).sum();
+        let input_sum: i64 = inputs.values().filter_map(serde_json::Value::as_i64).sum();
         let result = self.value + input_sum;
         let dur = self.work_duration;
         Box::pin(async move {
             tokio::select! {
-                _ = cancel.cancelled() => {
+                () = cancel.cancelled() => {
                     Err(AppError::new(ErrorCode::Internal, "cancelled"))
                 }
-                _ = tokio::time::sleep(dur) => {
+                () = tokio::time::sleep(dur) => {
                     Ok(json!(result))
                 }
             }
@@ -171,10 +173,10 @@ async fn deep_chain_20_levels_executes_in_order() {
 
     let outputs = dag.execute(CancellationToken::new()).await.unwrap();
     // n0=1, n1=1+1=2, …, n19=20
-    for i in 0..20u64 {
+    for i in 0..20i64 {
         assert_eq!(
             outputs[&format!("n{i}")],
-            json!(i as i64 + 1),
+            json!(i + 1),
             "node n{i} mismatch"
         );
     }

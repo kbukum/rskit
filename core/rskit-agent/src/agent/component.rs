@@ -5,7 +5,7 @@ use super::Agent;
 
 #[async_trait::async_trait]
 impl Component for Agent {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "rskit-agent"
     }
 

@@ -1,3 +1,5 @@
+//! Cli behavior for `rskit-cli`.
+
 use std::time::Duration;
 
 use rskit_cli::{

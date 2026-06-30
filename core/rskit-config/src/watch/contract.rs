@@ -1,7 +1,7 @@
 use std::fmt;
 
 use rskit_errors::AppResult;
-use rskit_pipeline::BroadcastStream;
+use rskit_stream::BroadcastStream;
 use tokio_util::sync::CancellationToken;
 
 /// A typed configuration change emitted by a [`ConfigWatch`] source.
@@ -28,7 +28,7 @@ pub enum ConfigChange {
 /// A bounded stream of [`ConfigChange`] events.
 ///
 /// The stream terminates when the originating [`CancellationToken`] fires or the
-/// source is dropped. It is the [`Broadcaster`](rskit_pipeline::Broadcaster)
+/// source is dropped. It is the [`Broadcaster`](rskit_stream::Broadcaster)
 /// stream specialized to config change events.
 pub type ConfigChangeStream = BroadcastStream<ConfigChange>;
 

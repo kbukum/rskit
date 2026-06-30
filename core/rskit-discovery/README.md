@@ -17,7 +17,7 @@ Service discovery with registry and load balancing strategies.
 
 ```toml
 [dependencies]
-rskit-discovery = "0.1.0-alpha.2"
+rskit-discovery = "0.1.0-alpha.3"
 ```
 
 ```rust

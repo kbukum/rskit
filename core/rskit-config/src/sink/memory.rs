@@ -33,7 +33,7 @@ struct State {
 pub struct InMemoryConfigSink {
     state: Arc<Mutex<State>>,
     #[cfg(feature = "watch")]
-    broadcaster: rskit_pipeline::Broadcaster<crate::watch::ConfigChange>,
+    broadcaster: rskit_stream::Broadcaster<crate::watch::ConfigChange>,
 }
 
 impl InMemoryConfigSink {

@@ -3,7 +3,7 @@
 
 [domains.core]
 description = "Foundation types, config, logging, validation, encryption, filesystem utilities"
-modules = ["errors", "config", "logging", "validation", "encryption", "util", "fs", "version", "schema"]
+modules = ["errors", "config", "logging", "validation", "encryption", "util", "fs", "version", "schema", "codec", "stream"]
 
 [domains.patterns]
 description = "Component lifecycle, provider shapes, DI, hooks"
@@ -16,8 +16,8 @@ modules = ["observability", "resilience", "security"]
 depends_on = ["core", "patterns"]
 
 [domains.composition]
-description = "Bootstrap, pipeline, DAG, chain, worker, process, stateful"
-modules = ["bootstrap", "pipeline", "dag", "chain", "worker", "process", "stateful"]
+description = "Bootstrap, DAG, chain, worker, process, stateful"
+modules = ["bootstrap", "dag", "chain", "worker", "process", "stateful"]
 depends_on = ["core", "patterns", "crosscutting"]
 
 [domains.transport]

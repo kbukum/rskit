@@ -5,8 +5,9 @@ use std::collections::HashMap;
 use std::hint::black_box;
 use std::io::Cursor;
 
-use rskit_bench::metric::{Metric, binary_classification, mae, mse, r_squared, rmse};
-use rskit_bench::metrics::compute_metrics;
+use rskit_bench::metric::{
+    Metric, binary_classification, mae, mse, r_squared, rmse, threshold_sweep,
+};
 use rskit_bench::report_gen::{JsonReporter, MarkdownReporter, Reporter};
 use rskit_bench::result::{BenchRunResult, BenchSampleResult, DatasetInfo, MetricResult};
 use rskit_bench::types::{BenchSample, Prediction, ScoredSample};
@@ -69,12 +70,6 @@ fn gen_regression_samples(n: usize) -> Vec<ScoredSample<f64>> {
             }
         })
         .collect()
-}
-
-fn gen_scored_arrays(n: usize) -> (Vec<f64>, Vec<bool>) {
-    let scores: Vec<f64> = (0..n).map(|i| (i as f64) / (n as f64)).collect();
-    let labels: Vec<bool> = (0..n).map(|i| i % 3 != 0).collect();
-    (scores, labels)
 }
 
 fn make_bench_run_result(n_samples: usize) -> BenchRunResult {
@@ -177,12 +172,13 @@ fn bench_regression(c: &mut Criterion) {
 fn bench_threshold_metrics(c: &mut Criterion) {
     let mut group = c.benchmark_group("threshold_metrics");
     for size in [1_000, 10_000] {
-        let (scores, labels) = gen_scored_arrays(size);
+        let data = gen_classification_samples(size);
+        let metric = threshold_sweep("pos".to_string(), Some(vec![0.5]));
         group.bench_with_input(
-            BenchmarkId::new("compute_metrics", size),
-            &(scores.clone(), labels.clone()),
-            |b, (s, l)| {
-                b.iter(|| compute_metrics(black_box(s), black_box(l), 0.5));
+            BenchmarkId::new("threshold_sweep", size),
+            &data,
+            |b, data| {
+                b.iter(|| metric.compute(black_box(data)));
             },
         );
     }

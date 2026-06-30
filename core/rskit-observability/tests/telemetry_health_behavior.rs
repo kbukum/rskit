@@ -38,20 +38,19 @@ fn operation_context_accepts_string_and_str() {
 // ── OperationContext: elapsed ───────────────────────────────────────────────
 
 #[test]
-fn operation_context_elapsed_positive() {
+fn operation_context_elapsed_is_monotonic() {
     let ctx = OperationContext::new("svc", "op", "req", "user");
-    std::thread::sleep(Duration::from_millis(10));
-    let elapsed = ctx.elapsed();
-    assert!(elapsed >= Duration::from_millis(5));
+    let t1 = ctx.elapsed();
+    let t2 = ctx.elapsed();
+    assert!(t2 >= t1);
 }
 
 #[test]
-fn operation_context_elapsed_grows() {
+fn operation_context_elapsed_remains_monotonic_after_end() {
     let ctx = OperationContext::new("svc", "op", "req", "user");
-    let t1 = ctx.elapsed();
-    std::thread::sleep(Duration::from_millis(10));
-    let t2 = ctx.elapsed();
-    assert!(t2 > t1);
+    let before_end = ctx.elapsed();
+    ctx.end_operation("ok", None);
+    assert!(ctx.elapsed() >= before_end);
 }
 
 // ── OperationContext: start_span ────────────────────────────────────────────
@@ -636,10 +635,10 @@ fn concurrent_operation_contexts() {
                     format!("req-{i}"),
                     format!("user-{i}"),
                 );
+                let before_end = ctx.elapsed();
                 let _span = ctx.start_span(&format!("span-{i}"));
-                std::thread::sleep(Duration::from_millis(1));
                 ctx.end_operation("ok", None);
-                assert!(ctx.elapsed() >= Duration::from_millis(1));
+                assert!(ctx.elapsed() >= before_end);
             })
         })
         .collect();

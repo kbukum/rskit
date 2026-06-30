@@ -14,6 +14,8 @@ pub enum TemplateError {
     UnknownPlaceholder(String),
     /// A custom error returned by the renderer callback.
     Render(String),
+    /// A dynamic variable required by the template had no value.
+    MissingVariable(String),
 }
 
 impl fmt::Display for TemplateError {
@@ -26,6 +28,7 @@ impl fmt::Display for TemplateError {
             Self::EmptyPlaceholder => write!(f, "placeholder cannot be empty"),
             Self::UnknownPlaceholder(p) => write!(f, "unknown placeholder '{p}'"),
             Self::Render(err) => write!(f, "template render failed: {err}"),
+            Self::MissingVariable(name) => write!(f, "missing template variable {name:?}"),
         }
     }
 }

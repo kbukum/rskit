@@ -5,7 +5,7 @@ use rskit_errors::{AppError, AppResult, ErrorCode};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-/// A structured event envelope following CloudEvents conventions.
+/// A structured event envelope following `CloudEvents` conventions.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Event {
     /// Unique event identifier.
@@ -50,6 +50,7 @@ impl Event {
     }
 
     /// Set the subject.
+    #[must_use]
     pub fn with_subject(mut self, subject: impl Into<String>) -> Self {
         self.subject = subject.into();
         self
@@ -67,12 +68,14 @@ impl Event {
     }
 
     /// Set the schema version.
+    #[must_use]
     pub fn with_version(mut self, version: impl Into<String>) -> Self {
         self.version = version.into();
         self
     }
 
     /// Set the content type.
+    #[must_use]
     pub fn with_content_type(mut self, content_type: impl Into<String>) -> Self {
         self.content_type = content_type.into();
         self
