@@ -5,4 +5,11 @@ ignore = [
     # feature-aware dependency graph does not enable that path; cargo-deny
     # remains the advisory gate for enabled dependency graphs.
     "RUSTSEC-2024-0436",
+    # RUSTSEC-2026-0190: "unsound" advisory for anyhow's `Error::downcast_mut()`
+    # (UB only when calling `downcast_mut` on a `.context()`-wrapped error). anyhow
+    # is a transitive build-time proc-macro dep (prost-derive via tonic-reflection);
+    # rskit never calls `downcast_mut`, and no patched anyhow release exists yet.
+    # cargo-deny does not flag this informational advisory; only lockfile-based
+    # cargo-audit does. Revisit once a fixed anyhow ships.
+    "RUSTSEC-2026-0190",
 ]

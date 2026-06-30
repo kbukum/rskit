@@ -98,7 +98,6 @@ validator = "0.20"
 
 # Error handling
 thiserror = "2"
-anyhow = "1"
 
 # Logging / tracing
 tracing = "0.1"

@@ -4436,7 +4436,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-ai"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "rskit-errors",
  "rskit-util",
@@ -4460,7 +4460,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-cache"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 dependencies = [
  "async-trait",
  "parking_lot",
@@ -4500,7 +4500,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-embedding"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "async-trait",
  "rskit-ai",
@@ -4534,7 +4534,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-httpclient"
-version = "0.1.0-alpha.3"
+version = "0.1.0-alpha.4"
 dependencies = [
  "base64",
  "bytes",
@@ -4569,7 +4569,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-inference-tgi"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "async-trait",
  "rskit-ai",
@@ -4588,7 +4588,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-inference-triton"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "async-trait",
  "base64",
@@ -4614,7 +4614,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-inference-vllm"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "async-trait",
  "rskit-ai",
@@ -4633,7 +4633,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-llm"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 dependencies = [
  "async-trait",
  "futures",
@@ -4649,7 +4649,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-llm-anthropic"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "async-trait",
  "rskit-ai",
@@ -4685,7 +4685,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-llm-gemini"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "async-trait",
  "rskit-ai",
@@ -4705,7 +4705,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-llm-ollama"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "async-trait",
  "rskit-ai",
@@ -4725,7 +4725,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-llm-openai"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "async-trait",
  "rskit-ai",
@@ -4815,7 +4815,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-messaging"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 dependencies = [
  "async-stream",
  "async-trait",
@@ -4849,7 +4849,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-messaging-nats"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "async-nats",
  "async-trait",
@@ -4867,7 +4867,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-messaging-rabbitmq"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "async-trait",
  "futures-util",
@@ -4884,7 +4884,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-observability"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 dependencies = [
  "http 1.4.1",
  "opentelemetry",
@@ -4924,7 +4924,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-resilience"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 dependencies = [
  "governor",
  "parking_lot",
@@ -5017,11 +5017,13 @@ dependencies = [
 
 [[package]]
 name = "rskit-stream"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
+ "async-stream",
  "futures",
  "futures-util",
  "parking_lot",
+ "rskit-errors",
  "tokio",
  "tokio-stream",
  "tokio-util",
@@ -5029,7 +5031,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-tool"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "async-trait",
  "parking_lot",
