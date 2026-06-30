@@ -12,7 +12,7 @@ use crate::operators::{concurrent, transform, windowing};
 
 /// Extension trait adding rskit-specific operators to any [`Stream`].
 ///
-/// Imported with `use rskit_pipeline::RskitStreamExt;`.
+/// Imported with `use rskit_stream::RskitStreamExt;`.
 #[allow(async_fn_in_trait)]
 pub trait RskitStreamExt: Stream + Sized + Send + 'static
 where

@@ -20,7 +20,7 @@ pub fn codec_for_name(name: &str) -> Option<Arc<dyn Codec>> {
     match name.to_ascii_lowercase().as_str() {
         #[cfg(feature = "toml")]
         "toml" => Some(Arc::new(TomlCodec)),
-        "json" => Some(Arc::new(JsonCodec)),
+        "json" => Some(Arc::new(JsonCodec::default())),
         _ => None,
     }
 }

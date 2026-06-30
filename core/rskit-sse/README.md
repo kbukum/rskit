@@ -24,7 +24,7 @@ Server-Sent Events broadcast bus with bounded replay and Axum adapters.
 
 ```toml
 [dependencies]
-rskit-sse = "0.1.0-alpha.2"
+rskit-sse = "0.1.0-alpha.3"
 ```
 
 ```rust

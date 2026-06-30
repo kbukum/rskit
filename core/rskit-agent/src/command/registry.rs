@@ -25,9 +25,13 @@ where
 
 /// A registered slash command.
 pub struct Command {
+    /// Command name without the leading slash.
     pub name: String,
+    /// Short human-readable description shown in command listings.
     pub description: String,
+    /// Usage string showing accepted arguments.
     pub usage: String,
+    /// Handler invoked when the command is executed.
     pub handler: Box<dyn CommandHandler>,
 }
 
@@ -96,14 +100,12 @@ impl CommandRegistry {
         }
 
         let without_slash = &trimmed[1..];
-        match without_slash.find(|c: char| c.is_whitespace()) {
-            Some(pos) => {
-                let name = &without_slash[..pos];
-                let args = without_slash[pos..].trim_start();
-                Some((name, args))
-            }
-            None => Some((without_slash, "")),
-        }
+        let Some(pos) = without_slash.find(|c: char| c.is_whitespace()) else {
+            return Some((without_slash, ""));
+        };
+        let name = &without_slash[..pos];
+        let args = without_slash[pos..].trim_start();
+        Some((name, args))
     }
 
     /// Execute a slash-command input string.

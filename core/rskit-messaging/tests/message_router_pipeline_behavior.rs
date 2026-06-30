@@ -249,8 +249,8 @@ async fn chain_handlers_multiple_middleware_ordering() {
         .await
         .unwrap();
 
-    let recorded = order.lock().await;
-    assert_eq!(*recorded, vec!["A", "B", "BASE"]);
+    let recorded = order.lock().await.clone();
+    assert_eq!(recorded, vec!["A", "B", "BASE"]);
 }
 
 #[tokio::test]
@@ -363,7 +363,7 @@ async fn batch_manual_flush() {
         "batch-topic".to_string(),
         BatchConfig {
             max_size: 100,
-            max_wait: Duration::from_secs(60),
+            max_wait: Duration::from_mins(1),
             max_bytes: None,
         },
     )
@@ -399,7 +399,7 @@ async fn batch_multiple_size_flushes() {
         "batch-topic".to_string(),
         BatchConfig {
             max_size: 2,
-            max_wait: Duration::from_secs(60),
+            max_wait: Duration::from_mins(1),
             max_bytes: None,
         },
     )
@@ -441,7 +441,7 @@ async fn batch_close_is_idempotent() {
         "batch-topic".to_string(),
         BatchConfig {
             max_size: 100,
-            max_wait: Duration::from_secs(60),
+            max_wait: Duration::from_mins(1),
             max_bytes: None,
         },
     )
@@ -504,9 +504,11 @@ fn error_classifier_trait_is_object_safe() {
 
 #[test]
 fn noop_error_classifier_default() {
-    let _classifier = NoopErrorClassifier;
-    // Verify Default trait works via the type system
-    let classifier: NoopErrorClassifier = Default::default();
+    // Verify the `Default` impl is usable by exercising it through a trait bound.
+    fn make_default<T: Default>() -> T {
+        T::default()
+    }
+    let classifier: NoopErrorClassifier = make_default();
     let err = rskit_errors::AppError::new(rskit_errors::ErrorCode::Internal, "test");
     assert!(!classifier.is_connection_error(&err));
     assert!(!classifier.is_retryable_error(&err));

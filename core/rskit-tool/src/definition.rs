@@ -35,7 +35,7 @@ impl Serialize for ExecutionHint {
 impl ExecutionHint {
     /// Return the effective hint, mapping Unknown → Backend.
     #[must_use]
-    pub fn effective(self) -> Self {
+    pub const fn effective(self) -> Self {
         match self {
             Self::Unknown => Self::Backend,
             other => other,
@@ -44,7 +44,7 @@ impl ExecutionHint {
 }
 
 /// Optional hints about tool behavior (MCP-aligned).
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Annotations {
     /// Human-readable title.
     #[serde(skip_serializing_if = "String::is_empty", default)]

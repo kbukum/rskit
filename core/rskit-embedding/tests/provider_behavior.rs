@@ -21,7 +21,7 @@ fn model() -> Model {
 fn embedding_options_require_json_objects_and_round_trip() {
     let options = EmbeddingOptions::new(json!({"dimensions": 3})).unwrap();
     assert_eq!(options.as_json()["dimensions"], 3);
-    assert_eq!(options.clone().into_json(), json!({"dimensions": 3}));
+    assert_eq!(options.into_json(), json!({"dimensions": 3}));
     assert!(EmbeddingOptions::new(json!(["not", "object"])).is_err());
     assert!(serde_json::from_value::<EmbeddingOptions>(json!(false)).is_err());
 }

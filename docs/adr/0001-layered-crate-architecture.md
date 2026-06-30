@@ -14,11 +14,11 @@ We need a stable rule that engineers can apply without case-by-case debate, enfo
 
 We will organize rskit crates into the following layers (lowest depends on nothing higher):
 
-1. **Foundation** — `rskit-util`, `rskit-fs`, `rskit-errors`, `rskit-config`, `rskit-logging`, `rskit-validation`, `rskit-version`
+1. **Foundation** — `rskit-util`, `rskit-fs`, `rskit-errors`, `rskit-config`, `rskit-logging`, `rskit-validation`, `rskit-version`, `rskit-codec`, `rskit-stream`
 2. **Utilities** — `rskit-encryption`, `rskit-schema`, `rskit-storage`, `rskit-media`, `rskit-process`
 3. **Patterns** — `rskit-component`, `rskit-provider`, `rskit-resilience`, `rskit-hook`, `rskit-chain`, `rskit-stateful`
 4. **Frameworks** — `rskit-di`, `rskit-bootstrap`, `rskit-observability`
-5. **Data & Flow** — `rskit-pipeline`, `rskit-dag`, `rskit-worker`, `rskit-sse`, `rskit-cache`, `rskit-database`, `rskit-messaging`
+5. **Data & Flow** — `rskit-dag`, `rskit-worker`, `rskit-sse`, `rskit-cache`, `rskit-database`, `rskit-messaging`
 6. **Security** — `rskit-auth`, `rskit-authz`, `rskit-security`
 7. **Transport** — `rskit-http`, `rskit-httpclient`, `rskit-grpc`, `rskit-server`, `rskit-discovery`
 8. **Infrastructure adapters** — `rskit-storage-s3`, `rskit-storage-gcs`, `rskit-cache-redis`, `rskit-messaging-kafka`, `rskit-messaging-nats`, `rskit-messaging-rabbitmq`

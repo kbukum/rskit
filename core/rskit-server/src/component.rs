@@ -7,6 +7,7 @@ use tokio_util::sync::CancellationToken;
 
 use rskit_bootstrap::{Component, Health};
 use rskit_errors::{AppError, AppResult};
+use rskit_stream::SpawnedTask;
 
 use crate::config::GrpcServerConfig;
 
@@ -23,8 +24,7 @@ pub struct GrpcServer {
     config: GrpcServerConfig,
     start_fn:
         Arc<dyn Fn(SocketAddr, CancellationToken) -> tokio::task::JoinHandle<()> + Send + Sync>,
-    cancel: CancellationToken,
-    handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    task: Mutex<Option<SpawnedTask>>,
 }
 
 impl GrpcServer {
@@ -39,8 +39,7 @@ impl GrpcServer {
             name,
             config,
             start_fn,
-            cancel: CancellationToken::new(),
-            handle: Mutex::new(None),
+            task: Mutex::new(None),
         }
     }
 }
@@ -65,21 +64,20 @@ impl Component for GrpcServer {
 
         tracing::info!(component = %self.name, addr = %addr, "starting gRPC server");
 
-        let cancel = self.cancel.clone();
-        let jh = (self.start_fn)(addr, cancel);
+        let cancel = CancellationToken::new();
+        let jh = (self.start_fn)(addr, cancel.clone());
 
-        *self.handle.lock() = Some(jh);
+        *self.task.lock() = Some(SpawnedTask::from_parts(cancel, jh));
 
         Ok(())
     }
 
     async fn stop(&self) -> AppResult<()> {
         tracing::info!(component = %self.name, "stopping gRPC server");
-        self.cancel.cancel();
 
-        let handle = self.handle.lock().take();
-        if let Some(jh) = handle {
-            let _ = tokio::time::timeout(Duration::from_secs(10), jh).await;
+        let task = self.task.lock().take();
+        if let Some(task) = task {
+            task.shutdown(Duration::from_secs(10)).await;
         }
 
         Ok(())
@@ -87,10 +85,10 @@ impl Component for GrpcServer {
 
     fn health(&self) -> Health {
         let running = self
-            .handle
+            .task
             .lock()
             .as_ref()
-            .map(|h| !h.is_finished())
+            .map(|t| !t.is_finished())
             .unwrap_or(false);
         if running {
             Health::healthy(&self.name)

@@ -47,7 +47,7 @@ impl Default for ClientConfig {
 impl ClientConfig {
     /// Set the per-request timeout for remote MCP calls.
     #[must_use]
-    pub fn with_request_timeout(mut self, timeout: Duration) -> Self {
+    pub const fn with_request_timeout(mut self, timeout: Duration) -> Self {
         self.request_timeout = timeout;
         self
     }
@@ -130,7 +130,7 @@ impl Callable for RemoteTool {
 /// boxed `Callable`s ready for registration in a [`rskit_tool::Registry`].
 pub fn wrap_tools(
     tools: &[Tool],
-    peer: Arc<Peer<RoleClient>>,
+    peer: &Arc<Peer<RoleClient>>,
     config: &ClientConfig,
 ) -> AppResult<Vec<Box<dyn Callable>>> {
     tools
@@ -138,7 +138,7 @@ pub fn wrap_tools(
         .map(|tool| {
             let def = convert::tool_to_definition(tool, &config.prefix)?;
             let input_validator = rskit_schema::compile(def.input_schema.as_json())
-                .map_err(validation_result_from_error);
+                .map_err(|err| validation_result_from_error(&err));
             let mcp_name = tool.name.to_string();
             Ok(Box::new(RemoteTool {
                 definition: def,
@@ -151,7 +151,7 @@ pub fn wrap_tools(
         .collect()
 }
 
-fn validation_result_from_error(err: AppError) -> ValidationResult {
+fn validation_result_from_error(err: &AppError) -> ValidationResult {
     ValidationResult {
         valid: false,
         errors: vec![rskit_schema::ValidationError {
@@ -200,7 +200,7 @@ where
         })?;
 
     let peer = Arc::new(client.peer().clone());
-    wrap_tools(&result.tools, peer, config)
+    wrap_tools(&result.tools, &peer, config)
 }
 
 #[cfg(test)]
@@ -208,7 +208,7 @@ mod tests {
     use rskit_tool::{Registry, ToolInput, context::Context, from_fn, text_result};
     use serde::Deserialize;
 
-    use crate::server::create_server;
+    use crate::{ServerConfig, server::create_server};
 
     use super::*;
 
@@ -227,7 +227,7 @@ mod tests {
 
     #[test]
     fn validation_result_from_error_preserves_message() {
-        let result = validation_result_from_error(AppError::new(
+        let result = validation_result_from_error(&AppError::new(
             ErrorCode::InvalidInput,
             "schema is invalid",
         ));
@@ -270,7 +270,12 @@ mod tests {
                 .unwrap(),
             )
             .unwrap();
-        let server = create_server("server", "0.1.0", Arc::new(registry), Default::default());
+        let server = create_server(
+            "server",
+            "0.1.0",
+            Arc::new(registry),
+            ServerConfig::default(),
+        );
         let (client_io, server_io) = tokio::io::duplex(16 * 1024);
         let server_task = tokio::spawn(async move {
             let running = rmcp::serve_server(server, server_io).await.unwrap();

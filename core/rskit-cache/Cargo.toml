@@ -1,7 +1,7 @@
 [package]
 name        = "rskit-cache"
 description = "Cache abstraction with explicit store registration and local adapters"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 edition.workspace     = true
 license.workspace     = true
 rust-version.workspace = true
@@ -19,7 +19,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 default = []
-fs = ["dep:blake3", "dep:rskit-fs", "rskit-fs/async"]
+fs = ["dep:rskit-util", "dep:rskit-fs", "rskit-fs/async"]
 
 [dependencies]
 # External
@@ -28,11 +28,11 @@ serde_json      = { workspace = true }
 async-trait     = { workspace = true }
 tokio           = { workspace = true }
 parking_lot     = { workspace = true }
-blake3 = { workspace = true, optional = true }
 
 # Internal
 rskit-errors = { workspace = true }
 rskit-fs = { workspace = true, optional = true }
+rskit-util = { workspace = true, optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

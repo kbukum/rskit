@@ -1,14 +1,14 @@
-//! Stream adapters for composing dataset items with `rskit-pipeline`.
+//! Stream adapters for composing dataset items with `rskit-stream`.
 
 use futures::Stream;
 use rskit_errors::AppResult;
-use rskit_pipeline::RskitStreamExt;
+use rskit_stream::RskitStreamExt;
 
 use crate::{DataItem, DatasetLimits, Transform};
 
 /// Extension methods for streams of dataset items.
 pub trait DatasetStreamExt: Stream<Item = AppResult<DataItem>> + Sized + Send + 'static {
-    /// Apply a fallible dataset transform inside a canonical `rskit-pipeline` stream.
+    /// Apply a fallible dataset transform inside a canonical `rskit-stream` stream.
     fn apply_dataset_transform<T>(
         self,
         transform: T,

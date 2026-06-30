@@ -17,6 +17,8 @@ pub enum SafePathError {
     ParentDir,
     /// Platform-specific path prefixes are not accepted for root-relative operations.
     Prefix,
+    /// The path is empty (has no components).
+    Empty,
 }
 
 impl fmt::Display for SafePathError {
@@ -25,6 +27,7 @@ impl fmt::Display for SafePathError {
             Self::Absolute => f.write_str("path must be relative, not absolute"),
             Self::ParentDir => f.write_str("path must not contain '..' segments"),
             Self::Prefix => f.write_str("path must not contain a platform path prefix"),
+            Self::Empty => f.write_str("path must not be empty"),
         }
     }
 }
@@ -53,6 +56,41 @@ pub fn safe_join(root: &Path, rel_path: impl AsRef<Path>) -> Result<PathBuf, Saf
     let rel_path = rel_path.as_ref();
     validate_relative_path(rel_path)?;
     Ok(root.join(rel_path))
+}
+
+/// Normalize a repo-relative path to a canonical form, rejecting traversal.
+///
+/// Strips `.` (current-directory) components so semantically equal inputs
+/// (`a/b` and `a/./b`) share one canonical value, while rejecting absolute,
+/// `..`, prefixed, or empty paths. A path consisting solely of `.` components
+/// collapses to the repo root `.`. Use this for identity-bearing repo-relative
+/// paths (module roots, manifests) that must be canonical and confined before
+/// being joined to a root.
+///
+/// # Errors
+///
+/// Returns [`SafePathError`] when the path is empty, absolute, prefixed, or
+/// contains a `..` segment.
+pub fn normalize_repo_relative_path(path: impl AsRef<Path>) -> Result<PathBuf, SafePathError> {
+    let path = path.as_ref();
+    if path.as_os_str().is_empty() {
+        return Err(SafePathError::Empty);
+    }
+    validate_relative_path(path)?;
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::Normal(part) => normalized.push(part),
+            Component::CurDir => {}
+            Component::ParentDir => return Err(SafePathError::ParentDir),
+            Component::RootDir => return Err(SafePathError::Absolute),
+            Component::Prefix(_) => return Err(SafePathError::Prefix),
+        }
+    }
+    if normalized.as_os_str().is_empty() {
+        normalized.push(".");
+    }
+    Ok(normalized)
 }
 
 /// Return an absolute path without requiring the path to exist.
@@ -360,9 +398,31 @@ mod tests {
 
     use super::{
         SafePathError, absolute, append_safe_missing_suffix, canonicalize, confine_existing_path,
-        confine_path, find_in_ancestors, resolve_root_relative_to, safe_join,
-        validate_relative_path,
+        confine_path, find_in_ancestors, normalize_repo_relative_path, resolve_root_relative_to,
+        safe_join, validate_relative_path,
     };
+
+    #[test]
+    fn normalize_repo_relative_strips_curdir_and_rejects_traversal() {
+        assert_eq!(
+            normalize_repo_relative_path("core/./errors").unwrap(),
+            Path::new("core/errors")
+        );
+        assert_eq!(normalize_repo_relative_path(".").unwrap(), Path::new("."));
+        assert_eq!(
+            normalize_repo_relative_path("").unwrap_err(),
+            SafePathError::Empty
+        );
+        assert_eq!(
+            normalize_repo_relative_path("core/../etc").unwrap_err(),
+            SafePathError::ParentDir
+        );
+        #[cfg(unix)]
+        assert_eq!(
+            normalize_repo_relative_path("/abs").unwrap_err(),
+            SafePathError::Absolute
+        );
+    }
 
     #[test]
     fn validates_safe_relative_paths() {

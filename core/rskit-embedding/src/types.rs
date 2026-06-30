@@ -4,7 +4,7 @@ use rskit_errors::{AppError, AppResult, ErrorCode};
 use serde::{Deserialize, Deserializer, Serialize, de};
 
 /// Provider-specific embedding options.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(transparent)]
 pub struct EmbeddingOptions(serde_json::Value);
 
@@ -23,7 +23,7 @@ impl EmbeddingOptions {
 
     /// Borrow the structured options.
     #[must_use]
-    pub fn as_json(&self) -> &serde_json::Value {
+    pub const fn as_json(&self) -> &serde_json::Value {
         &self.0
     }
 
@@ -112,7 +112,7 @@ pub struct Embedding {
 impl Embedding {
     /// Create a new embedding from a vector and input index.
     #[must_use]
-    pub fn new(vector: Vec<f32>, index: usize) -> Self {
+    pub const fn new(vector: Vec<f32>, index: usize) -> Self {
         let dimensions = vector.len();
         Self {
             vector,

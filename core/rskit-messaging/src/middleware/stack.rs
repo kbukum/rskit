@@ -50,6 +50,7 @@ impl<T: Send + Sync + Clone + 'static> StackBuilder<T> {
     ///
     /// Middleware is applied in the order added — the first middleware
     /// added becomes the outermost wrapper.
+    #[must_use]
     pub fn with<M: HandlerMiddleware<T> + 'static>(mut self, mw: M) -> Self {
         self.middlewares.push(Arc::new(mw));
         self

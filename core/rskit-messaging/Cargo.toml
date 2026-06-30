@@ -1,7 +1,7 @@
 [package]
 name        = "rskit-messaging"
 description = "Message broker abstractions, registry, middleware, and in-memory adapter"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 edition.workspace     = true
 license.workspace     = true
 rust-version.workspace = true
@@ -29,7 +29,6 @@ serde_json      = { workspace = true }
 async-trait     = { workspace = true }
 async-stream    = { workspace = true }
 tokio           = { workspace = true }
-tokio-util      = { workspace = true }
 futures         = { workspace = true }
 tracing         = { workspace = true }
 parking_lot     = { workspace = true }
@@ -39,7 +38,11 @@ uuid            = { workspace = true }
 # Internal
 rskit-errors = { workspace = true }
 rskit-resilience = { workspace = true }
+rskit-stream = { workspace = true }
 rskit-provider = { workspace = true, optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
+
+[lints]
+workspace = true

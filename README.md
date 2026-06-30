@@ -65,8 +65,8 @@ Or pick only what you need:
 ```toml
 [dependencies]
 rskit-errors     = "0.1.0-alpha.2"
-rskit-resilience = "0.1.0-alpha.2"
-rskit-worker     = "0.1.0-alpha.2"
+rskit-resilience = "0.1.0-alpha.3"
+rskit-worker     = "0.1.0-alpha.3"
 ```
 
 Requires **Rust 1.91+** (declared by workspace `rust-version`). The pinned development and CI toolchain in `rust-toolchain.toml` may be newer. See [`docs/VERSIONING.md`](docs/VERSIONING.md) for the split-workspace versioning policy.

@@ -257,9 +257,8 @@ async fn pool_shutdown_fails_dequeued_but_unscheduled_task() {
     assert_eq!(err.code(), ErrorCode::ServiceUnavailable);
 }
 
-// Regression: passing size=0 to the config used to silently install a
-// zero-permit semaphore so submissions could never run. Pool::new now clamps
-// to at least 1 so the pool still makes progress.
+// A configured size of 0 would create a zero-permit semaphore that blocks
+// every submission, so Pool::new clamps the size up to at least 1.
 #[tokio::test]
 async fn pool_with_zero_size_clamps_to_one() {
     let pool = Pool::new(

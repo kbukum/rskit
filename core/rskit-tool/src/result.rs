@@ -28,7 +28,7 @@ impl ToolResult {
         &self.content
     }
 
-    /// Build the GenAI tool-result block for sending to the model.
+    /// Build the `GenAI` tool-result block for sending to the model.
     pub fn to_block(&self, id: &str) -> ToolResultBlock {
         ToolResultBlock {
             id: id.to_string(),

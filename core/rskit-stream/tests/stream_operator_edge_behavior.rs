@@ -1,10 +1,13 @@
+//! Edge-case behavioral tests for `rskit-stream` operators: empty streams,
+//! error propagation, backpressure, and operator composition.
+
 use parking_lot::Mutex;
 use std::sync::Arc;
 use std::time::Duration;
 
 use futures_util::StreamExt;
 use rskit_errors::{AppError, AppResult, ErrorCode};
-use rskit_pipeline::{RskitStreamExt, concat, from_slice, merge};
+use rskit_stream::{RskitStreamExt, concat, from_slice, merge};
 
 // ── 1. Empty stream through rmap ──────────────────────────────────────────
 
@@ -60,7 +63,7 @@ async fn large_stream_rmap_processes_all_items() {
 
     assert_eq!(results.len(), 10_000);
     for (i, r) in results.iter().enumerate() {
-        assert_eq!(*r.as_ref().unwrap(), (i as u32) * 2);
+        assert_eq!(*r.as_ref().unwrap(), u32::try_from(i).unwrap() * 2);
     }
 }
 
@@ -77,7 +80,7 @@ async fn large_stream_rparallel_processes_all_items() {
         .map(|r| r.unwrap())
         .collect();
 
-    results.sort();
+    results.sort_unstable();
     let expected: Vec<u32> = (0..10_000).map(|x| x * 3).collect();
     assert_eq!(results, expected);
 }
@@ -223,7 +226,7 @@ async fn merge_combines_multiple_streams() {
     let s2 = from_slice(vec![2u32, 4, 6]);
 
     let mut combined: Vec<u32> = merge(s1, s2).collect::<Vec<_>>().await;
-    combined.sort();
+    combined.sort_unstable();
     assert_eq!(combined, vec![1, 2, 3, 4, 5, 6]);
 }
 
@@ -308,7 +311,7 @@ async fn rfilter_then_rparallel_processes_filtered_values() {
         .map(|r| r.unwrap())
         .collect();
 
-    results.sort();
+    results.sort_unstable();
     assert_eq!(results, vec![300, 600, 900]);
 }
 
@@ -347,6 +350,6 @@ async fn pipeline_composition_can_be_reused() {
         .into_iter()
         .map(|r| r.unwrap())
         .collect();
-    chain_c.sort();
+    chain_c.sort_unstable();
     assert_eq!(chain_c, vec![22, 24, 26, 28, 30]);
 }

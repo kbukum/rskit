@@ -2,10 +2,12 @@
 
 use std::fmt;
 
+mod dynamic;
 mod error;
 mod parser;
 mod renderer;
 
+pub use dynamic::DynamicTemplate;
 pub use error::TemplateError;
 
 /// A placeholder token that can be parsed from a template.

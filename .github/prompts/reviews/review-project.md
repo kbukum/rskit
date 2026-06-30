@@ -1,6 +1,6 @@
 # Review project
 
-Standing, re-runnable **whole-toolkit audit**, independent of any diff. Use it periodically, before a release, when onboarding to a crate, or whenever you want assurance the tree as a whole still honors the baseline. It sequences the same seven focused passes in [`reviews/`](./) but over the existing code rather than a change set.
+Standing, re-runnable **whole-toolkit audit**, independent of any diff. Use it periodically, before a release, when onboarding to a crate, or whenever you want assurance the tree as a whole still honors the baseline. It sequences the same eight focused passes in [`reviews/`](./) but over the existing code rather than a change set.
 
 ## Run this in a separate, clean-context agent
 
@@ -41,6 +41,7 @@ Work the focused files top to bottom; each carries a "Project mode" scope note d
 5. [`04-quality.md`](./04-quality.md) — root-cause over patches, dead code, outdated patterns, style gates.
 6. [`05-tests-tdd.md`](./05-tests-tdd.md) — coverage of behavior and failure paths, determinism, time/env-var discipline, fixtures.
 7. [`06-docs-supply-chain.md`](./06-docs-supply-chain.md) — `///` docs, Conventional Commits, `Cargo.lock`, `cargo-deny`, SHA-pinned actions, SBOM/provenance.
+8. [`07-comments-rustdoc.md`](./07-comments-rustdoc.md) — sweep all source prose: comments and `///` docs describe the current code, not plans/history; rewrite or delete the rest.
 
 When you only need one lens across the project (e.g. a standalone security or TDD sweep), run that focused file directly with its "Project mode" note.
 

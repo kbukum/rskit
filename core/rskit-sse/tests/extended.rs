@@ -1,3 +1,5 @@
+//! Extended for `rskit-sse`.
+
 use std::collections::HashSet;
 use std::time::Duration;
 

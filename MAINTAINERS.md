@@ -14,7 +14,7 @@ rskit currently has a **single core maintainer**. This is a known sustainability
 
 - **Foundation**: `rskit-errors`, `rskit-config`, `rskit-logging`, `rskit-validation`
 - **Patterns**: `rskit-provider`, `rskit-resilience`, `rskit-di`, `rskit-bootstrap`, `rskit-observability`
-- **Data & Flow**: `rskit-pipeline`, `rskit-dag`, `rskit-worker`, `rskit-sse`, `rskit-chain`
+- **Data & Flow**: `rskit-stream`, `rskit-dag`, `rskit-worker`, `rskit-sse`, `rskit-chain`
 - **Transport**: `rskit-server`, `rskit-grpc`, `rskit-http`, `rskit-httpclient`
 - **Storage / Infra**: `rskit-database`, `rskit-cache`, `rskit-storage`, `rskit-storage-s3`, `rskit-storage-gcs`, `rskit-messaging`
 - **AI/ML**: `rskit-ai`, `rskit-llm`, `rskit-llm-openai`, `rskit-llm-anthropic`, `rskit-llm-gemini`, `rskit-llm-ollama`, `rskit-bench`, `rskit-dataset`, `rskit-embedding`, `rskit-inference`, `rskit-vectorstore`, `rskit-agent`, `rskit-tool`, `rskit-mcp`

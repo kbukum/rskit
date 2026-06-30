@@ -96,7 +96,7 @@ mod tests {
             .await
             .unwrap();
 
-        let recorded = calls.lock();
+        let recorded = calls.lock().clone();
         assert_eq!(recorded.len(), 1);
         assert_eq!(recorded[0].0, "test");
         assert!(recorded[0].2); // success = true
@@ -124,7 +124,7 @@ mod tests {
             .handle(Message::new("test", "fail".to_string()))
             .await;
 
-        let recorded = calls.lock();
+        let recorded = calls.lock().clone();
         assert_eq!(recorded.len(), 1);
         assert!(!recorded[0].2); // success = false
     }

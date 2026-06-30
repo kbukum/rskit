@@ -12,9 +12,9 @@
 <!-- core -->
 <g id="node1" class="node">
 <title>core</title>
-<path fill="#eef3fb" stroke="#5b6b7f" d="M189.75,-38C189.75,-38 125.75,-38 125.75,-38 119.75,-38 113.75,-32 113.75,-26 113.75,-26 113.75,-12 113.75,-12 113.75,-6 119.75,0 125.75,0 125.75,0 189.75,0 189.75,0 195.75,0 201.75,-6 201.75,-12 201.75,-12 201.75,-26 201.75,-26 201.75,-32 195.75,-38 189.75,-38"/>
+<path fill="#eef3fb" stroke="#5b6b7f" d="M193.5,-38C193.5,-38 122,-38 122,-38 116,-38 110,-32 110,-26 110,-26 110,-12 110,-12 110,-6 116,0 122,0 122,0 193.5,0 193.5,0 199.5,0 205.5,-6 205.5,-12 205.5,-12 205.5,-26 205.5,-26 205.5,-32 199.5,-38 193.5,-38"/>
 <text xml:space="preserve" text-anchor="middle" x="157.75" y="-20.7" font-family="Helvetica,sans-Serif" font-size="14.00">Core</text>
-<text xml:space="preserve" text-anchor="middle" x="157.75" y="-5.7" font-family="Helvetica,sans-Serif" font-size="14.00">(9 modules)</text>
+<text xml:space="preserve" text-anchor="middle" x="157.75" y="-5.7" font-family="Helvetica,sans-Serif" font-size="14.00">(11 modules)</text>
 </g>
 <!-- patterns -->
 <g id="node2" class="node">

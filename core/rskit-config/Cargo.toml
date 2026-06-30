@@ -25,9 +25,9 @@ default = ["validate"]
 validate = ["dep:validator", "dep:rskit-validation", "dep:rskit-logging"]
 # Opt-in dynamic-reload contract (`ConfigWatch`) and the in-memory watch
 # reference impl. One-shot tools and CLIs leave this off. The bounded fan-out
-# mechanism is owned by `rskit-pipeline::Broadcaster`; `tokio-util` supplies the
+# mechanism is owned by `rskit-stream::Broadcaster`; `tokio-util` supplies the
 # `CancellationToken` at the watch boundary.
-watch = ["dep:rskit-pipeline", "dep:tokio-util"]
+watch = ["dep:rskit-stream", "dep:tokio-util"]
 
 [dependencies]
 # External
@@ -46,7 +46,7 @@ rskit-version = { workspace = true }
 rskit-fs = { workspace = true }
 rskit-util = { workspace = true }
 rskit-codec = { workspace = true }
-rskit-pipeline = { workspace = true, optional = true }
+rskit-stream = { workspace = true, optional = true }
 rskit-validation = { workspace = true, optional = true }
 rskit-logging = { workspace = true, optional = true }
 

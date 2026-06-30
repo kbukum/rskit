@@ -1,7 +1,7 @@
 [package]
 name        = "rskit-worker"
 description = "Task worker pool with JoinSet, typed events, and provider bridges"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 edition.workspace     = true
 license.workspace     = true
 rust-version.workspace = true

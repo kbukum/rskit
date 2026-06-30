@@ -6,12 +6,13 @@ rskit is shared foundation infrastructure: a defect in a core crate propagates t
 
 ## What is here
 
-Two orchestrators that run the full review:
+Three orchestrators that run the full review:
 
-- [`review-changes.md`](./review-changes.md) — review a diff (a branch, commit, or `HEAD~1`). Use after every change set, especially fast/"vibe-coded" work.
+- [`review-changes.md`](./review-changes.md) — review a diff (a branch, commit, or `HEAD~1`) by sequencing the focused passes. Use after every change set, especially fast/"vibe-coded" work.
 - [`review-project.md`](./review-project.md) — audit the whole tree, independent of any diff. Use periodically, before a release, or when onboarding to a crate.
+- [`review-details.md`](./review-details.md) — an alternative driver that fans the review out into **parallel subagent passes by Rust concern** (mechanical, correctness, concurrency, composition, security, API, tests) and then plans and applies fixes. Use when one driver should take a change from review through to merged fixes.
 
-Seven focused passes, each runnable on its own when you only need one lens:
+Eight focused passes, each runnable on its own when you only need one lens:
 
 - [`00-structure-placement.md`](./00-structure-placement.md) — crate placement (`core`/`contrib`/`examples`), acyclic layering, facade discipline, new-crate wiring.
 - [`01-canonical-reuse.md`](./01-canonical-reuse.md) — did the code reimplement a concern an existing core crate (or std) already owns?
@@ -20,6 +21,7 @@ Seven focused passes, each runnable on its own when you only need one lens:
 - [`04-quality.md`](./04-quality.md) — root-cause over patches, dead code, maintainability, style gates.
 - [`05-tests-tdd.md`](./05-tests-tdd.md) — TDD, determinism under race/shuffle/parallel, time/env-var test discipline, fixtures.
 - [`06-docs-supply-chain.md`](./06-docs-supply-chain.md) — `///` docs, Conventional Commits, `Cargo.lock`, `cargo-deny`, SHA-pinned actions, SBOM/provenance.
+- [`07-comments-rustdoc.md`](./07-comments-rustdoc.md) — comments and `///` docs explain the code as it is, not plans/history/process; rewrite or delete the rest. Standalone, runnable any time over the whole tree.
 
 The orchestrators sequence these passes and add scope handling; the focused files hold the actual checks. Read the focused file you need and run it directly when a full review is overkill.
 
@@ -32,7 +34,7 @@ A plan, spec, issue, or roadmap (e.g. an ADR under `docs/adr/`) may be passed in
 ## How to run any prompt
 
 1. **Pick scope.** Changes review: set a base ref and get the diff (`git diff <base>...HEAD --stat`, then per file). Project review: pick the crate(s)/domain or the whole workspace.
-2. **Work passes in order** (00 → 06). Stop and reject as soon as a change fails pass `00` or `01` — misplaced or duplicated code makes every later pass moot.
+2. **Work passes in order** (00 → 07). Stop and reject as soon as a change fails pass `00` or `01` — misplaced or duplicated code makes every later pass moot.
 3. **Run the validation commands** (below). Treat green `make check` as necessary but not sufficient: it does not catch unbounded concurrency, missing timeouts/cancellation, global-registry composition smells, duplicated owners, or boundary-validation gaps. Those are on the reviewer.
 
 ## Severity and finding format

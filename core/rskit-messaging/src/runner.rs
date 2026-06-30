@@ -4,8 +4,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
-use tokio::task::JoinHandle;
-use tokio_util::sync::CancellationToken;
+use rskit_stream::SpawnedTask;
 use tracing;
 
 use crate::handler::MessageHandler;
@@ -21,8 +20,7 @@ pub struct ConsumerRunner<T: Send + Sync + Clone + 'static> {
     consumer: Arc<dyn MessageConsumer<T>>,
     handler: Arc<dyn MessageHandler<T>>,
     metrics: Arc<dyn MetricsCollector>,
-    cancel: CancellationToken,
-    handle: parking_lot::Mutex<Option<JoinHandle<()>>>,
+    task: parking_lot::Mutex<Option<SpawnedTask>>,
     shutdown_timeout: Duration,
 }
 
@@ -33,8 +31,7 @@ impl<T: Send + Sync + Clone + 'static> ConsumerRunner<T> {
             consumer,
             handler,
             metrics: Arc::new(NoopMetrics),
-            cancel: CancellationToken::new(),
-            handle: parking_lot::Mutex::new(None),
+            task: parking_lot::Mutex::new(None),
             shutdown_timeout: Duration::from_secs(10),
         }
     }
@@ -48,22 +45,22 @@ impl<T: Send + Sync + Clone + 'static> ConsumerRunner<T> {
 
     /// Set the graceful shutdown timeout.
     #[must_use]
-    pub fn with_shutdown_timeout(mut self, timeout: Duration) -> Self {
+    pub const fn with_shutdown_timeout(mut self, timeout: Duration) -> Self {
         self.shutdown_timeout = timeout;
         self
     }
 
     /// Returns `true` when the consumption loop is running.
     pub fn is_running(&self) -> bool {
-        let guard = self.handle.lock();
-        guard.as_ref().is_some_and(|h| !h.is_finished())
+        let guard = self.task.lock();
+        guard.as_ref().is_some_and(|t| !t.is_finished())
     }
 
     /// Start the consumption loop.
     pub fn run(&self) -> AppResult<()> {
         {
-            let guard = self.handle.lock();
-            if guard.as_ref().is_some_and(|h| !h.is_finished()) {
+            let guard = self.task.lock();
+            if guard.as_ref().is_some_and(|t| !t.is_finished()) {
                 return Err(AppError::new(
                     ErrorCode::InvalidInput,
                     "runner is already running",
@@ -74,13 +71,12 @@ impl<T: Send + Sync + Clone + 'static> ConsumerRunner<T> {
         let consumer = self.consumer.clone();
         let handler = self.handler.clone();
         let metrics = self.metrics.clone();
-        let cancel = self.cancel.clone();
 
-        let task = tokio::spawn(async move {
+        let task = SpawnedTask::spawn(move |cancel| async move {
             tracing::info!("consumer runner started");
             loop {
                 tokio::select! {
-                    _ = cancel.cancelled() => {
+                    () = cancel.cancelled() => {
                         tracing::info!("consumer runner cancelled");
                         break;
                     }
@@ -113,40 +109,27 @@ impl<T: Send + Sync + Clone + 'static> ConsumerRunner<T> {
             tracing::info!("consumer runner exited");
         });
 
-        let mut guard = self.handle.lock();
-        *guard = Some(task);
+        *self.task.lock() = Some(task);
 
         Ok(())
     }
 
     /// Stop the consumption loop and wait for it to finish.
     pub async fn stop(&self) -> AppResult<()> {
-        let handle = {
-            let mut guard = self.handle.lock();
+        let task = {
+            let mut guard = self.task.lock();
             guard.take()
         };
 
-        let Some(h) = handle else {
+        let Some(task) = task else {
             return Err(AppError::new(
                 ErrorCode::InvalidInput,
                 "runner is not running",
             ));
         };
 
-        self.cancel.cancel();
-
-        match tokio::time::timeout(self.shutdown_timeout, h).await {
-            Ok(Ok(())) => {
-                tracing::info!("consumer runner stopped");
-            }
-            Ok(Err(e)) => {
-                tracing::warn!(error = %e, "runner task join error");
-            }
-            Err(_) => {
-                tracing::warn!("runner shutdown timed out");
-            }
-        }
-
+        task.shutdown(self.shutdown_timeout).await;
+        tracing::info!("consumer runner stopped");
         Ok(())
     }
 }

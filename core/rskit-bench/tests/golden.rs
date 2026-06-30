@@ -33,7 +33,6 @@ use rskit_bench::metric::{
     rmse,
     threshold_sweep,
 };
-use rskit_bench::metrics::compute_metrics;
 use rskit_bench::report_gen::{JsonReporter, MarkdownReporter, Reporter};
 use rskit_bench::result::{BenchRunResult, BenchSampleResult, DatasetInfo, MetricResult};
 use rskit_bench::types::{BenchSample, Prediction, ScoredSample};
@@ -474,30 +473,39 @@ fn golden_fuzzy_match() {
 }
 
 // ---------------------------------------------------------------------------
-// 6. ThresholdMetrics (legacy metrics.rs)
+// 6. Classification threshold compatibility
 // ---------------------------------------------------------------------------
 
 #[test]
-fn golden_compute_metrics() {
-    // 10 scores and labels
-    let scores = vec![0.9, 0.8, 0.7, 0.6, 0.55, 0.45, 0.35, 0.25, 0.15, 0.05];
-    let labels = vec![
+fn classification_metric_matches_legacy_threshold_formula() {
+    let scores = [0.9, 0.8, 0.7, 0.6, 0.55, 0.45, 0.35, 0.25, 0.15, 0.05];
+    let labels = [
         true, true, true, true, false, true, false, false, false, false,
     ];
+    let data: Vec<_> = scores
+        .iter()
+        .zip(labels.iter())
+        .enumerate()
+        .map(|(idx, (score, positive))| {
+            let label = if *positive { "pos" } else { "neg" };
+            let pred = if *score >= 0.5 { "pos" } else { "neg" };
+            binary_sample(&format!("threshold-{idx}"), label, pred, *score)
+        })
+        .collect();
 
-    let result = compute_metrics(&scores, &labels, 0.5);
-    insta::assert_json_snapshot!("compute_metrics_0.5", &result);
-}
+    let metric = binary_classification("pos".to_owned(), 0.5);
+    let result = metric.compute(&data);
 
-#[test]
-fn golden_threshold_sweep_legacy() {
-    let scores = vec![0.9, 0.8, 0.7, 0.6, 0.55, 0.45, 0.35, 0.25, 0.15, 0.05];
-    let labels = vec![
-        true, true, true, true, false, true, false, false, false, false,
-    ];
-
-    let results = rskit_bench::metrics::threshold_sweep(&scores, &labels);
-    insta::assert_json_snapshot!("threshold_sweep_legacy", &results);
+    assert_eq!(result.values["tp"], 4.0);
+    assert_eq!(result.values["fp"], 1.0);
+    assert_eq!(result.values["tn"], 4.0);
+    assert_eq!(result.values["fn"], 1.0);
+    assert_eq!(round(result.values["precision"], 4), 0.8);
+    assert_eq!(round(result.values["recall"], 4), 0.8);
+    assert_eq!(round(result.values["f1"], 4), 0.8);
+    assert_eq!(round(result.values["accuracy"], 4), 0.8);
+    assert_eq!(round(result.values["fpr"], 4), 0.2);
+    assert_eq!(result.values["threshold"], 0.5);
 }
 
 // ---------------------------------------------------------------------------

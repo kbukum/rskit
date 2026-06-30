@@ -9,7 +9,7 @@ use std::pin::Pin;
 use futures::{Stream, stream};
 use futures_util::StreamExt as _;
 use rskit_errors::{AppError, AppResult, ErrorCode};
-use rskit_pipeline::RskitStreamExt;
+use rskit_stream::RskitStreamExt;
 use serde_json::Value;
 use tokio::sync::mpsc;
 

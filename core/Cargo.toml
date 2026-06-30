@@ -12,7 +12,7 @@ members = [
     "rskit-bootstrap",
     "rskit-component",
     "rskit-provider",
-    "rskit-pipeline",
+    "rskit-stream",
     "rskit-resilience",
     "rskit-process",
     "rskit-worker",
@@ -98,7 +98,6 @@ validator = "0.20"
 
 # Error handling
 thiserror = "2"
-anyhow = "1"
 
 # Logging / tracing
 tracing = "0.1"
@@ -237,7 +236,6 @@ rskit-messaging-kafka = { path = "../contrib/messaging/kafka", version = "0.1.0-
 rskit-messaging-nats = { path = "../contrib/messaging/nats", version = "0.1.0-alpha.1" }
 rskit-messaging-rabbitmq = { path = "../contrib/messaging/rabbitmq", version = "0.1.0-alpha.1" }
 rskit-observability = { path = "rskit-observability", version = "0.1.0-alpha.1" }
-rskit-pipeline = { path = "rskit-pipeline", version = "0.1.0-alpha.1" }
 rskit-process = { path = "rskit-process", version = "0.1.0-alpha.1" }
 rskit-provider = { path = "rskit-provider", version = "0.1.0-alpha.1" }
 rskit-resilience = { path = "rskit-resilience", version = "0.1.0-alpha.1" }
@@ -250,6 +248,7 @@ rskit-stateful = { path = "rskit-stateful", version = "0.1.0-alpha.1" }
 rskit-storage = { path = "rskit-storage", version = "0.1.0-alpha.1" }
 rskit-storage-gcs = { path = "../contrib/storage/gcs", version = "0.1.0-alpha.1" }
 rskit-storage-s3 = { path = "../contrib/storage/s3", version = "0.1.0-alpha.1" }
+rskit-stream = { path = "rskit-stream", version = "0.1.0-alpha.1" }
 rskit-testutil = { path = "rskit-testutil", version = "0.1.0-alpha.1" }
 rskit-tool = { path = "rskit-tool", version = "0.1.0-alpha.1" }
 rskit-util = { path = "rskit-util", version = "0.1.0-alpha.1" }

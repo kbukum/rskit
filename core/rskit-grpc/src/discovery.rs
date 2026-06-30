@@ -35,6 +35,7 @@ impl DiscoveryChannelConfig {
     }
 
     /// Set the resolve polling interval.
+    #[must_use]
     pub fn with_resolve_interval(mut self, interval: Duration) -> Self {
         self.resolve_interval = interval;
         self
@@ -317,7 +318,7 @@ impl DiscoveryChannel {
             ));
         }
 
-        // Pick first available instance (in production, could implement load balancing)
+        // Pick first available instance.
         let instance = &instances[0];
         let target = instance.endpoint();
 

@@ -138,7 +138,9 @@ impl Event for OnMCPResult {
 /// Fired before a tool call is executed.
 #[derive(Debug, Clone)]
 pub struct PreToolCall {
+    /// Tool name requested by the model.
     pub name: String,
+    /// Tool input payload passed to the executor.
     pub input: ToolInput,
 }
 
@@ -151,9 +153,13 @@ impl Event for PreToolCall {
 /// Fired after a tool call completes.
 #[derive(Debug, Clone)]
 pub struct PostToolCall {
+    /// Tool name requested by the model.
     pub name: String,
+    /// Tool input payload passed to the executor.
     pub input: ToolInput,
+    /// Successful tool result, when execution completed.
     pub result: Option<ToolResult>,
+    /// Error text, when execution failed.
     pub error: Option<String>,
 }
 
@@ -166,6 +172,7 @@ impl Event for PostToolCall {
 /// Fired before an LLM completion request is sent.
 #[derive(Debug, Clone)]
 pub struct PreLLMCall {
+    /// Completion request that will be sent to the provider.
     pub request: CompletionRequest,
 }
 
@@ -178,7 +185,9 @@ impl Event for PreLLMCall {
 /// Fired after an LLM completion response is received.
 #[derive(Debug, Clone)]
 pub struct PostLLMCall {
+    /// Completion response returned by the provider.
     pub response: CompletionResponse,
+    /// Error text, when the provider call failed.
     pub error: Option<String>,
 }
 
@@ -191,7 +200,9 @@ impl Event for PostLLMCall {
 /// Fired when an error occurs anywhere in the pipeline.
 #[derive(Debug, Clone)]
 pub struct OnError {
+    /// Error message reported by the failing operation.
     pub error: String,
+    /// Pipeline stage or component that reported the error.
     pub source: String,
 }
 
@@ -204,6 +215,7 @@ impl Event for OnError {
 /// Fired at the start of an agent turn.
 #[derive(Debug, Clone)]
 pub struct TurnStart {
+    /// Turn number being started.
     pub turn: u32,
 }
 
@@ -216,7 +228,9 @@ impl Event for TurnStart {
 /// Fired at the end of an agent turn.
 #[derive(Debug, Clone)]
 pub struct TurnEnd {
+    /// Turn number that completed.
     pub turn: u32,
+    /// Assistant message produced during the turn.
     pub message: AssistantMessage,
 }
 

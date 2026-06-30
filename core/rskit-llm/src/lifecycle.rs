@@ -28,7 +28,7 @@ struct LifecycleInner {
 impl Lifecycle {
     /// Create a new lifecycle with the given component name.
     #[must_use]
-    pub fn new(name: &'static str) -> Self {
+    pub const fn new(name: &'static str) -> Self {
         Self {
             name,
             inner: Mutex::new(LifecycleInner {
@@ -63,17 +63,21 @@ impl Lifecycle {
     #[must_use]
     pub fn health(&self) -> Health {
         let inner = self.inner.lock();
-        if !inner.ready {
+        let ready = inner.ready;
+        let last_call = inner.last_call;
+        drop(inner);
+
+        if !ready {
             return Health {
                 name: self.name.to_owned(),
                 status: HealthStatus::Degraded,
                 message: Some(format!("{}: not ready", self.name)),
             };
         }
-        let msg = match inner.last_call {
-            Some(t) => format!("{}: healthy, last_call={:?} ago", self.name, t.elapsed()),
-            None => format!("{}: healthy, no calls yet", self.name),
-        };
+        let msg = last_call.map_or_else(
+            || format!("{}: healthy, no calls yet", self.name),
+            |t| format!("{}: healthy, last_call={:?} ago", self.name, t.elapsed()),
+        );
         Health {
             name: self.name.to_owned(),
             status: HealthStatus::Healthy,

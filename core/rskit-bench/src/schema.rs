@@ -1,6 +1,6 @@
 //! Schema version constants for bench result serialization.
 
-/// Schema version for RunResult JSON format.
+/// Schema version for `BenchRunResult` JSON format.
 pub const SCHEMA_VERSION: &str = "1.0";
 
 /// Schema URL for JSON validation.

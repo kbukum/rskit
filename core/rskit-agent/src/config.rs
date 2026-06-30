@@ -38,7 +38,7 @@ pub struct AgentConfig {
 }
 
 impl AgentConfig {
-    /// Return this configuration as shared GenAI budget vocabulary.
+    /// Return this configuration as shared `GenAI` budget vocabulary.
     #[must_use]
     pub fn budget(&self) -> rskit_ai::Budget {
         rskit_ai::Budget {
@@ -58,7 +58,7 @@ impl Default for AgentConfig {
             system_prompt: String::new(),
             max_turns: 10,
             max_tokens: 100_000,
-            wall_clock: Duration::from_secs(60),
+            wall_clock: Duration::from_mins(1),
             max_tool_calls: 50,
             tool_concurrency: 4,
             tool_timeout: Duration::from_secs(30),

@@ -163,7 +163,7 @@ Examples:
 
 ```
 feat(resilience): add sliding-window rate limiter variant
-fix(pipeline): prevent debounce from emitting stale item on cancel
+fix(stream): prevent debounce from emitting stale item on cancel
 docs(worker): document EventKind variants
 chore(ci): pin cargo-deny to 0.16
 ```
@@ -206,7 +206,7 @@ Version bumps and release preparation are maintainer-only work. Contributors sho
 | Async locks | Only when lock ownership must cross `.await` or coordinate async waiters |
 | No `unsafe` without a `// SAFETY:` comment | All crates |
 | No `unwrap()` / `expect()` in library code | All crates (tests are fine) |
-| `tokio::time::pause()` for time-based tests | `rskit-pipeline`, `rskit-resilience` |
+| `tokio::time::pause()` for time-based tests | `rskit-stream`, `rskit-resilience` |
 | `#[allow(async_fn_in_trait)]` for public traits with default impls | As needed |
 
 Prefer synchronous `parking_lot` locks for in-memory state that is accessed and released within a synchronous critical section. Never hold any lock across unrelated I/O; document the reason when an async lock is intentionally required.
@@ -227,4 +227,4 @@ Prefer synchronous `parking_lot` locks for in-memory state that is accessed and 
 
 ### Sibling-parity reminder
 
-Public abstractions (`AppError`, `Component`, `Provider`, `Pipeline`, lifecycle hooks) are mirrored across [gokit](https://github.com/kbukum/gokit), [rskit](https://github.com/kbukum/rskit), and [pykit](https://github.com/kbukum/pykit). When you change one of these surfaces here, please open tracking issues in the sibling repos so the change can be evaluated for parity.
+Public abstractions (`AppError`, `Component`, `Provider`, lifecycle hooks) are mirrored across [gokit](https://github.com/kbukum/gokit), [rskit](https://github.com/kbukum/rskit), and [pykit](https://github.com/kbukum/pykit). When you change one of these surfaces here, please open tracking issues in the sibling repos so the change can be evaluated for parity.

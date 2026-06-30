@@ -20,9 +20,8 @@ use rskit_messaging::{
     BrokerConfigExt, Event, EventConsumer, EventProducer, Message, MessageConsumer,
     MessageProducer, MessagingFactory, MessagingRegistry,
 };
+use rskit_stream::SpawnedTask;
 use tokio::sync::{Mutex, mpsc};
-use tokio::task::JoinHandle;
-use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
 
 mod config;
@@ -133,15 +132,10 @@ pub(crate) struct NatsConsumer {
     client: Mutex<Option<Client>>,
     sender: mpsc::Sender<Message<Vec<u8>>>,
     receiver: Mutex<mpsc::Receiver<Message<Vec<u8>>>>,
-    tasks: SyncMutex<Vec<ConsumerTask>>,
+    tasks: SyncMutex<Vec<SpawnedTask>>,
     active_tasks: Arc<AtomicUsize>,
     subscribed: AtomicBool,
     task_finished: Arc<tokio::sync::Notify>,
-}
-
-struct ConsumerTask {
-    cancellation: CancellationToken,
-    handle: JoinHandle<()>,
 }
 
 impl NatsConsumer {
@@ -209,13 +203,11 @@ impl MessageConsumer<Vec<u8>> for NatsConsumer {
                     )
                 })?;
             let sender = self.sender.clone();
-            let cancellation = CancellationToken::new();
-            let task_cancellation = cancellation.clone();
             let active_tasks = self.active_tasks.clone();
             let task_finished = self.task_finished.clone();
             active_tasks.fetch_add(1, Ordering::SeqCst);
             let topic_name = (*topic).to_string();
-            let handle = tokio::spawn(async move {
+            let task = SpawnedTask::spawn(move |task_cancellation| async move {
                 loop {
                     tokio::select! {
                         () = task_cancellation.cancelled() => {
@@ -247,10 +239,7 @@ impl MessageConsumer<Vec<u8>> for NatsConsumer {
                 active_tasks.fetch_sub(1, Ordering::SeqCst);
                 task_finished.notify_waiters();
             });
-            self.tasks.lock().push(ConsumerTask {
-                cancellation,
-                handle,
-            });
+            self.tasks.lock().push(task);
         }
         Ok(())
     }
@@ -364,35 +353,24 @@ fn connect_options(config: &Config) -> ConnectOptions {
     options
 }
 
-fn shutdown_consumer_tasks(tasks: Vec<ConsumerTask>) {
+fn shutdown_consumer_tasks(tasks: Vec<SpawnedTask>) {
     if tasks.is_empty() {
         return;
     }
 
     for task in &tasks {
-        task.cancellation.cancel();
+        task.cancel();
     }
 
     if tokio::runtime::Handle::try_current().is_ok() {
         tokio::spawn(async move {
-            for mut task in tasks {
-                if task.handle.is_finished() {
-                    let _ = task.handle.await;
-                    continue;
-                }
-
-                if tokio::time::timeout(Duration::from_millis(100), &mut task.handle)
-                    .await
-                    .is_err()
-                {
-                    task.handle.abort();
-                    let _ = task.handle.await;
-                }
+            for task in tasks {
+                task.shutdown(Duration::from_millis(100)).await;
             }
         });
     } else {
         for task in tasks {
-            task.handle.abort();
+            task.abort();
         }
     }
 }
@@ -625,18 +603,13 @@ mod tests {
 
     #[tokio::test]
     async fn shutdown_consumer_tasks_requests_cancellation() {
-        let cancellation = CancellationToken::new();
-        let task_cancellation = cancellation.clone();
         let (sender, receiver) = tokio::sync::oneshot::channel();
-        let handle = tokio::spawn(async move {
-            task_cancellation.cancelled().await;
+        let task = SpawnedTask::spawn(move |cancel| async move {
+            cancel.cancelled().await;
             let _ = sender.send(());
         });
 
-        shutdown_consumer_tasks(vec![ConsumerTask {
-            cancellation,
-            handle,
-        }]);
+        shutdown_consumer_tasks(vec![task]);
 
         tokio::time::timeout(Duration::from_secs(1), receiver)
             .await
@@ -646,15 +619,11 @@ mod tests {
 
     #[tokio::test]
     async fn shutdown_consumer_tasks_aborts_tasks_that_ignore_cancellation() {
-        let cancellation = CancellationToken::new();
-        let handle = tokio::spawn(async move {
+        let task = SpawnedTask::spawn(|_cancel| async move {
             futures_util::future::pending::<()>().await;
         });
 
-        shutdown_consumer_tasks(vec![ConsumerTask {
-            cancellation,
-            handle,
-        }]);
+        shutdown_consumer_tasks(vec![task]);
 
         tokio::time::sleep(Duration::from_millis(150)).await;
     }

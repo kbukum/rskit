@@ -1,7 +1,7 @@
 [package]
 name        = "rskit-mcp"
 description = "Bridge between rskit tool registry and Model Context Protocol (MCP)"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 edition.workspace      = true
 license.workspace      = true
 rust-version.workspace = true
@@ -47,3 +47,6 @@ rskit-authz = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 schemars = { workspace = true }
 tempfile = { workspace = true }
+
+[lints]
+workspace = true

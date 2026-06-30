@@ -39,7 +39,7 @@ rskit-logging = { workspace = true, features = ["setup"] }
 rskit-bootstrap = { workspace = true }
 rskit-component = { workspace = true }
 rskit-provider = { workspace = true }
-rskit-pipeline = { workspace = true }
+rskit-stream = { workspace = true }
 rskit-resilience = { workspace = true }
 rskit-worker = { workspace = true }
 rskit-validation = { workspace = true }

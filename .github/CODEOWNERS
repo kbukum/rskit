@@ -30,7 +30,7 @@
 /crates/rskit-observability/ @kbukum
 
 # Data & Flow
-/crates/rskit-pipeline/ @kbukum
+/crates/rskit-stream/   @kbukum
 /crates/rskit-dag/      @kbukum
 /crates/rskit-worker/   @kbukum
 /crates/rskit-sse/      @kbukum

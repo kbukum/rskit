@@ -8,9 +8,15 @@ use super::AgentResult;
 #[non_exhaustive]
 pub enum AgentEvent {
     /// A new turn is starting.
-    TurnStart { turn: u32 },
+    TurnStart {
+        /// Turn number being started.
+        turn: u32,
+    },
     /// An LLM streaming event was received.
-    LlmStreamEvent { event: StreamEventRef },
+    LlmStreamEvent {
+        /// Streaming event received from the LLM provider.
+        event: StreamEventRef,
+    },
     /// A tool is about to be executed.
     ToolExecuting {
         /// Provider tool-use identifier.
@@ -48,5 +54,8 @@ pub enum AgentEvent {
         usage: Usage,
     },
     /// The agent run is complete.
-    Complete { result: AgentResult },
+    Complete {
+        /// Final agent result.
+        result: AgentResult,
+    },
 }

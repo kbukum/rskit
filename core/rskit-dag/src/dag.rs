@@ -70,7 +70,7 @@ impl Dag {
 
     /// Set the failure handling policy.
     #[must_use]
-    pub fn with_failure_policy(mut self, policy: FailurePolicy) -> Self {
+    pub const fn with_failure_policy(mut self, policy: FailurePolicy) -> Self {
         self.failure_policy = policy;
         self
     }
@@ -438,7 +438,11 @@ mod tests {
             _cancel: CancellationToken,
         ) -> Pin<Box<dyn Future<Output = AppResult<serde_json::Value>> + Send + '_>> {
             Box::pin(async move {
-                let sum: i64 = inputs.values().filter_map(|v| v.as_i64()).sum::<i64>() + self.value;
+                let sum: i64 = inputs
+                    .values()
+                    .filter_map(serde_json::Value::as_i64)
+                    .sum::<i64>()
+                    + self.value;
                 Ok(serde_json::json!(sum))
             })
         }
@@ -480,7 +484,11 @@ mod tests {
         ) -> Pin<Box<dyn Future<Output = AppResult<serde_json::Value>> + Send + '_>> {
             Box::pin(async move {
                 self.counter.fetch_add(1, Ordering::SeqCst);
-                let sum = inputs.values().filter_map(|v| v.as_i64()).sum::<i64>() + self.value;
+                let sum = inputs
+                    .values()
+                    .filter_map(serde_json::Value::as_i64)
+                    .sum::<i64>()
+                    + self.value;
                 Ok(serde_json::json!(sum))
             })
         }

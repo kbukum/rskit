@@ -77,7 +77,7 @@ async fn main() -> AppResult<()> {
 
 ```rust
 use futures::StreamExt;
-use rskit_pipeline::{RskitStreamExt, from_slice};
+use rskit_stream::{RskitStreamExt, from_slice};
 
 #[tokio::main]
 async fn main() {

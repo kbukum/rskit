@@ -10,7 +10,7 @@ pub use rskit_ai::{
 };
 
 /// LLM-visible tool schema included with a completion request.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ToolDefinition {
     /// Stable tool identifier.
     pub name: String,
@@ -24,14 +24,17 @@ pub struct ToolDefinition {
 }
 
 /// Controls how the model selects tools.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ToolChoice {
+    /// Selection mode understood by the provider, such as `auto`, `none`, `required`, or `specific`.
     pub mode: String,
+    /// Tool name to force when `mode` is `specific`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub function: Option<String>,
 }
 
 impl ToolChoice {
+    /// Let the model decide whether to call a tool.
     #[must_use]
     pub fn auto() -> Self {
         Self {
@@ -40,6 +43,7 @@ impl ToolChoice {
         }
     }
 
+    /// Disable tool calls for the request.
     #[must_use]
     pub fn none() -> Self {
         Self {
@@ -48,6 +52,7 @@ impl ToolChoice {
         }
     }
 
+    /// Require the model to call at least one available tool.
     #[must_use]
     pub fn required() -> Self {
         Self {
@@ -56,6 +61,7 @@ impl ToolChoice {
         }
     }
 
+    /// Require the model to call the named tool.
     #[must_use]
     pub fn specific(name: &str) -> Self {
         Self {
@@ -68,13 +74,20 @@ impl ToolChoice {
 /// Request to generate a chat completion.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CompletionRequest {
+    /// Provider model identifier to use for generation.
     pub model: String,
+    /// Conversation messages sent to the provider.
     pub messages: Vec<Message>,
+    /// Optional cap on generated tokens.
     pub max_tokens: Option<u32>,
+    /// Optional sampling temperature.
     pub temperature: Option<f32>,
+    /// Whether the provider should stream response events.
     pub stream: bool,
+    /// Tools made available to the model for this request.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tools: Option<Vec<ToolDefinition>>,
+    /// Optional policy controlling how the model may select tools.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_choice: Option<ToolChoice>,
 }
@@ -82,9 +95,13 @@ pub struct CompletionRequest {
 /// Response from a chat completion.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CompletionResponse {
+    /// Assistant message produced by the provider.
     pub message: AssistantMessage,
+    /// Provider model identifier that generated the response.
     pub model: String,
+    /// Token usage reported by the provider.
     pub usage: Usage,
+    /// Provider finish reason, when supplied.
     pub stop_reason: Option<FinishReason>,
 }
 

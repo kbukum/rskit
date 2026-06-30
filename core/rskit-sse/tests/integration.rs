@@ -1,3 +1,5 @@
+//! Integration for `rskit-sse`.
+
 use futures_util::StreamExt;
 use rskit_sse::SseBus;
 use serde::Serialize;

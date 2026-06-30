@@ -14,9 +14,9 @@ use async_trait::async_trait;
 use rskit::auth::{JwtConfig, JwtService, TokenGenerator, TokenValidator};
 use rskit::authz::{Checker, Effect, Engine, Permission, Policy, Request, Resource, Role, Subject};
 use rskit::di::Container;
-use rskit::pipeline::{RskitStreamExt, from_slice};
 use rskit::provider::{Provider, RequestResponse, request_response_fn};
 use rskit::resilience::{CbConfig, CbState, CircuitBreaker};
+use rskit::stream::{RskitStreamExt, from_slice};
 use rskit::{
     AppBuilder, AppError, AppResult, Component, ErrorCode, Health, HealthStatus, Registry,
 };

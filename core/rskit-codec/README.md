@@ -14,7 +14,7 @@ One consequence: types without a JSON equivalent (notably TOML datetimes) are no
 
 | Codec | Feature | Notes |
 | --- | --- | --- |
-| `JsonCodec` | always on | `serde_json` backs the value model |
+| `JsonCodec` | always on | `serde_json` backs the value model; `JsonCodec::compact()` for single-line machine output |
 | `TomlCodec` | `toml` (default) | top-level value must be a table |
 
 [`Codec`] is object-safe, so a codec can be held as `Arc<dyn Codec>` and chosen at runtime — see [`select::codec_for_path`] for extension-based selection. The generic conveniences [`encode`] / [`decode`] take `&dyn Codec` and work with any `#[derive(Serialize, Deserialize)]` type; `decode::<T>` honors `#[serde(deny_unknown_fields)]`.
@@ -47,3 +47,8 @@ let merged = merge_with(
 ```
 
 YAML and other formats drop in as additional `Codec` implementations behind their own features without changing the contract or the merge.
+
+## Length-delimited framing
+
+[`framing`] carries one codec-encoded value per bounded length-delimited frame over any blocking `Read`/`Write` transport (a pipe, a socket, a subprocess's stdio). Each frame is a 4-byte big-endian length prefix plus payload; reads are bounded so a corrupt prefix can never trigger an unbounded allocation. [`framing::write_value`] / [`framing::read_value`] move typed values through an injected codec; [`framing::write_frame`] / [`framing::read_frame`] move raw bytes.
+

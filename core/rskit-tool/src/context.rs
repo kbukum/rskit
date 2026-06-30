@@ -18,6 +18,7 @@ pub struct Context {
 }
 
 impl Context {
+    /// Create a context with empty identifiers, no result-size limit, and a fresh cancellation token.
     pub fn new() -> Self {
         Self {
             request_id: String::new(),
@@ -28,6 +29,7 @@ impl Context {
         }
     }
 
+    /// Create a context that observes the provided cancellation token.
     pub fn with_cancellation(token: CancellationToken) -> Self {
         Self {
             cancel_token: token,
@@ -35,18 +37,22 @@ impl Context {
         }
     }
 
+    /// Store metadata for the current tool call under `key`.
     pub fn set(&mut self, key: &str, value: ToolOutput) {
         self.metadata.insert(key.to_string(), value);
     }
 
+    /// Return metadata previously stored under `key`, if present.
     pub fn get(&self, key: &str) -> Option<&ToolOutput> {
         self.metadata.get(key)
     }
 
-    pub fn cancel_token(&self) -> &CancellationToken {
+    /// Return the cancellation token associated with this tool call.
+    pub const fn cancel_token(&self) -> &CancellationToken {
         &self.cancel_token
     }
 
+    /// Return whether cancellation has been requested for this tool call.
     pub fn is_cancelled(&self) -> bool {
         self.cancel_token.is_cancelled()
     }
@@ -66,6 +72,6 @@ impl std::fmt::Debug for Context {
             .field("max_result_size", &self.max_result_size)
             .field("metadata_keys", &self.metadata.keys().collect::<Vec<_>>())
             .field("cancelled", &self.is_cancelled())
-            .finish()
+            .finish_non_exhaustive()
     }
 }

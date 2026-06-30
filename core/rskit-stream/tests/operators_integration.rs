@@ -1,5 +1,7 @@
+//! Integration tests for `rskit-stream` operators applied via `RskitStreamExt`.
+
 use futures_util::StreamExt;
-use rskit_pipeline::{RskitStreamExt, from_slice};
+use rskit_stream::{RskitStreamExt, from_slice};
 use std::time::Duration;
 
 #[tokio::test]

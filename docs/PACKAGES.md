@@ -21,7 +21,7 @@ All publishable crates currently use the same pre-1.0 version from their owning 
 | Lifecycle-managed services | `rskit-bootstrap`, `rskit-component`, `rskit-server` |
 | HTTP/gRPC/SSE transport | `rskit-http`, `rskit-httpclient`, `rskit-grpc`, `rskit-sse` |
 | Fault tolerance | `rskit-resilience` |
-| Async streams and workers | `rskit-pipeline`, `rskit-worker`, `rskit-dag` |
+| Async streams and workers | `rskit-stream`, `rskit-worker`, `rskit-dag` |
 | Data abstractions | `rskit-database`, `rskit-cache`, `rskit-storage`, `rskit-messaging` |
 | AI/model infrastructure | `rskit-ai`, `rskit-llm`, `rskit-embedding`, `rskit-inference`, `rskit-vectorstore`, `rskit-agent`, `rskit-tool`, `rskit-mcp` |
 | Media processing | `rskit-media` plus `rskit-media-*` adapters |
@@ -41,7 +41,7 @@ All publishable crates currently use the same pre-1.0 version from their owning 
 | [`rskit-component`](../core/rskit-component/README.md) | Component lifecycle primitives: `Component`, `Registry`, health, and state. |
 | [`rskit-bootstrap`](../core/rskit-bootstrap/README.md) | Typestate application lifecycle orchestration with component registry and hooks. |
 | [`rskit-provider`](../core/rskit-provider/README.md) | Request/response, stream, sink, duplex provider traits and a Tower bridge. |
-| [`rskit-pipeline`](../core/rskit-pipeline/README.md) | Composable async data pipelines through `futures::Stream` extension operators. |
+| [`rskit-stream`](../core/rskit-stream/README.md) | Foundational async stream toolkit: bounded fan-out broadcaster, sources, cancellable tasks, and `futures::Stream` extension operators. |
 | [`rskit-resilience`](../core/rskit-resilience/README.md) | Retry, circuit breaker, bulkhead, rate limiter, timeout, and Tower layers. |
 | [`rskit-process`](../core/rskit-process/README.md) | Subprocess execution with cancellation, timeout, process-group isolation, and bounded output. |
 | [`rskit-worker`](../core/rskit-worker/README.md) | Task worker pools with `JoinSet`, typed events, provider bridges, and backpressure. |

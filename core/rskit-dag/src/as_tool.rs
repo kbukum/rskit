@@ -105,7 +105,11 @@ mod tests {
             _cancel: CancellationToken,
         ) -> Pin<Box<dyn Future<Output = AppResult<serde_json::Value>> + Send + '_>> {
             Box::pin(async move {
-                let sum: i64 = inputs.values().filter_map(|v| v.as_i64()).sum::<i64>() + self.value;
+                let sum: i64 = inputs
+                    .values()
+                    .filter_map(serde_json::Value::as_i64)
+                    .sum::<i64>()
+                    + self.value;
                 Ok(serde_json::json!(sum))
             })
         }
@@ -189,7 +193,7 @@ mod tests {
             dag,
             ToolConfig {
                 name: "my-tool",
-                input_fn: Box::new(|_| HashMap::new()),
+                input_fn: Box::new(|()| HashMap::new()),
                 output_fn: Box::new(|_| Ok(())),
             },
         );
@@ -205,7 +209,7 @@ mod tests {
             dag,
             ToolConfig {
                 name: "failing",
-                input_fn: Box::new(|_: ()| HashMap::new()),
+                input_fn: Box::new(|()| HashMap::new()),
                 output_fn: Box::new(|_| Ok(())),
             },
         );

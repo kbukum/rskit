@@ -1,4 +1,4 @@
-//! LLM provider abstractions for OpenAI, Anthropic, and other backends.
+//! LLM provider abstractions for `OpenAI`, `Anthropic`, and other backends.
 //!
 //! Defines request/response structs, stream helpers, and the canonical
 //! [`Provider`] trait shared across LLM provider implementations.

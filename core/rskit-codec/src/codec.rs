@@ -91,8 +91,8 @@ mod tests {
             retries: 3,
         };
 
-        let encoded = encode(&JsonCodec, &settings).unwrap();
-        let decoded: Settings = decode(&JsonCodec, &encoded).unwrap();
+        let encoded = encode(&JsonCodec::default(), &settings).unwrap();
+        let decoded: Settings = decode(&JsonCodec::default(), &encoded).unwrap();
 
         assert_eq!(decoded, settings);
     }
@@ -104,7 +104,7 @@ mod tests {
         // A map keyed by a non-string type cannot be represented in the JSON
         // value model, so conversion fails before the codec is invoked.
         let map: HashMap<(i32, i32), i32> = HashMap::from([((1, 2), 3)]);
-        let err = encode(&JsonCodec, &map).unwrap_err();
+        let err = encode(&JsonCodec::default(), &map).unwrap_err();
 
         assert!(err.to_string().contains("value model"));
     }
@@ -112,14 +112,14 @@ mod tests {
     #[test]
     fn decode_reports_type_mismatches() {
         // Valid JSON, but the shape does not match the target type.
-        let err = decode::<Settings>(&JsonCodec, "[1, 2, 3]").unwrap_err();
+        let err = decode::<Settings>(&JsonCodec::default(), "[1, 2, 3]").unwrap_err();
 
         assert!(err.to_string().contains("deserialize"));
     }
 
     #[test]
     fn decode_propagates_codec_parse_errors() {
-        let err = decode::<Settings>(&JsonCodec, "{ not json").unwrap_err();
+        let err = decode::<Settings>(&JsonCodec::default(), "{ not json").unwrap_err();
 
         assert!(err.to_string().contains("parse"));
     }

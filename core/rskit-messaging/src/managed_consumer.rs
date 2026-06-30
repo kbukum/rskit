@@ -7,7 +7,7 @@ use std::time::Instant;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_resilience::{LinearBackoff, RetryPolicy};
-use tokio_util::sync::CancellationToken;
+use rskit_stream::SpawnedTask;
 use tracing;
 
 use crate::handler::MessageHandler;
@@ -24,9 +24,8 @@ pub struct ManagedConsumer<T: Send + Sync + Clone + 'static> {
     metrics: Arc<dyn MetricsCollector>,
     recv_backoff: RetryPolicy,
     name: String,
-    cancel: CancellationToken,
     running: Arc<AtomicBool>,
-    handle: parking_lot::Mutex<Option<tokio::task::JoinHandle<()>>>,
+    task: parking_lot::Mutex<Option<SpawnedTask>>,
 }
 
 impl<T: Send + Sync + Clone + 'static> ManagedConsumer<T> {
@@ -53,18 +52,17 @@ impl<T: Send + Sync + Clone + 'static> ManagedConsumer<T> {
         let handler = self.handler.clone();
         let metrics = self.metrics.clone();
         let recv_backoff = self.recv_backoff.clone();
-        let cancel = self.cancel.clone();
         let running = self.running.clone();
         let name = self.name.clone();
 
         running.store(true, Ordering::SeqCst);
 
-        let task = tokio::spawn(async move {
+        let task = SpawnedTask::spawn(move |cancel| async move {
             tracing::debug!(consumer = %name, "managed consumer loop started");
             let mut consecutive_errors: u32 = 0;
             loop {
                 tokio::select! {
-                    _ = cancel.cancelled() => {
+                    () = cancel.cancelled() => {
                         tracing::info!(consumer = %name, "managed consumer cancelled");
                         break;
                     }
@@ -135,8 +133,7 @@ impl<T: Send + Sync + Clone + 'static> ManagedConsumer<T> {
             tracing::debug!(consumer = %name, "managed consumer loop exited");
         });
 
-        let mut guard = self.handle.lock();
-        *guard = Some(task);
+        *self.task.lock() = Some(task);
 
         Ok(())
     }
@@ -150,24 +147,13 @@ impl<T: Send + Sync + Clone + 'static> ManagedConsumer<T> {
             ));
         }
 
-        self.cancel.cancel();
-
-        let handle = {
-            let mut guard = self.handle.lock();
+        let task = {
+            let mut guard = self.task.lock();
             guard.take()
         };
 
-        if let Some(h) = handle {
-            let timeout = tokio::time::timeout(std::time::Duration::from_secs(10), h);
-            match timeout.await {
-                Ok(Ok(())) => {}
-                Ok(Err(e)) => {
-                    tracing::warn!(consumer = %self.name, error = %e, "task join error");
-                }
-                Err(_) => {
-                    tracing::warn!(consumer = %self.name, "shutdown timed out");
-                }
-            }
+        if let Some(task) = task {
+            task.shutdown(std::time::Duration::from_secs(10)).await;
         }
 
         // Call close() to release broker connections and resources.
@@ -234,9 +220,8 @@ impl<T: Send + Sync + Clone + 'static> ManagedConsumerBuilder<T> {
             metrics: self.metrics,
             recv_backoff: self.recv_backoff,
             name: self.name,
-            cancel: CancellationToken::new(),
             running: Arc::new(AtomicBool::new(false)),
-            handle: parking_lot::Mutex::new(None),
+            task: parking_lot::Mutex::new(None),
         }
     }
 }

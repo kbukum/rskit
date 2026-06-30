@@ -25,6 +25,7 @@ rskit-errors = { path = "../core/rskit-errors", version = "0.1.0-alpha.1" }
 rskit-storage = { path = "../core/rskit-storage", version = "0.1.0-alpha.1" }
 rskit-cache = { path = "../core/rskit-cache", version = "0.1.0-alpha.1" }
 rskit-messaging = { path = "../core/rskit-messaging", version = "0.1.0-alpha.1" }
+rskit-stream = { path = "../core/rskit-stream", version = "0.1.0-alpha.1" }
 rskit-llm = { path = "../core/rskit-llm", version = "0.1.0-alpha.1" }
 rskit-ai = { path = "../core/rskit-ai", version = "0.1.0-alpha.1" }
 rskit-inference = { path = "../core/rskit-inference", version = "0.1.0-alpha.1" }

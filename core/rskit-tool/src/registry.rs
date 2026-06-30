@@ -89,6 +89,7 @@ impl Registry {
             ));
         }
         tools.insert(name, Arc::from(tool));
+        drop(tools);
         Ok(())
     }
 
@@ -216,7 +217,7 @@ impl Registry {
             .collect()
     }
 
-    /// Filter tools by execution_hint annotation.
+    /// Filter tools by `execution_hint` annotation.
     pub fn filter_by_execution_hint(&self, hint: ExecutionHint) -> Vec<Definition> {
         self.tools
             .read()
@@ -364,7 +365,7 @@ fn validate_tool_input(tool: &dyn Callable, input: &ToolInput) -> AppResult<()> 
 
 #[async_trait::async_trait]
 impl Component for Registry {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "rskit-tool.registry"
     }
 

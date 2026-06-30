@@ -219,16 +219,15 @@ pub fn call_result_to_tool_result(result: &CallToolResult) -> ToolResult {
 
 /// Convert a `serde_json::Value` to an MCP `JsonObject` (`Map<String, Value>`).
 fn value_to_json_object(value: &serde_json::Value) -> serde_json::Map<String, serde_json::Value> {
-    match value {
-        serde_json::Value::Object(map) => map.clone(),
-        _ => {
-            let mut map = serde_json::Map::new();
-            map.insert(
-                "type".to_string(),
-                serde_json::Value::String("object".to_string()),
-            );
-            map
-        }
+    if let serde_json::Value::Object(map) = value {
+        map.clone()
+    } else {
+        let mut map = serde_json::Map::new();
+        map.insert(
+            "type".to_string(),
+            serde_json::Value::String("object".to_string()),
+        );
+        map
     }
 }
 

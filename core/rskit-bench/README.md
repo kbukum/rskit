@@ -21,7 +21,7 @@ Benchmark orchestration accepts injected clock and storage implementations. Prod
 
 ```toml
 [dependencies]
-rskit-bench = "0.1.0-alpha.1"
+rskit-bench = "0.1.0-alpha.2"
 ```
 
 ```rust

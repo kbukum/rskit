@@ -123,11 +123,12 @@ impl<T: Clone + Send + Sync + 'static> InMemoryBroker<T> {
 
     /// Return the sorted set of topic names that have been created or published to.
     pub async fn topic_names(&self) -> Vec<String> {
-        let explicit = self.topics.lock().await;
-        let hist = self.history.lock().await;
-        let mut set: HashSet<String> = explicit.clone();
-        for m in hist.iter() {
-            set.insert(m.topic.clone());
+        let mut set: HashSet<String> = self.topics.lock().await.clone();
+        {
+            let hist = self.history.lock().await;
+            for m in hist.iter() {
+                set.insert(m.topic.clone());
+            }
         }
         let mut out: Vec<String> = set.into_iter().collect();
         out.sort();
@@ -232,9 +233,11 @@ impl<T: Clone + Send + Sync + 'static> Clone for InMemoryConsumer<T> {
 #[async_trait]
 impl<T: Clone + Send + Sync + 'static> MessageConsumer<T> for InMemoryConsumer<T> {
     async fn subscribe(&self, topics: &[&str]) -> AppResult<()> {
-        let mut set = self.topics.lock().await;
-        for t in topics {
-            set.insert((*t).to_string());
+        {
+            let mut set = self.topics.lock().await;
+            for t in topics {
+                set.insert((*t).to_string());
+            }
         }
         Ok(())
     }
@@ -350,8 +353,8 @@ pub async fn wait_for_message<T: Clone + Send + Sync + 'static>(
             return m;
         }
         tokio::select! {
-            _ = broker.notify.notified() => { /* re-check */ }
-            _ = tokio::time::sleep_until(deadline) => {
+            () = broker.notify.notified() => { /* re-check */ }
+            () = tokio::time::sleep_until(deadline) => {
                 panic!("wait_for_message: timed out after {timeout:?} waiting for message on topic {topic:?}");
             }
         }

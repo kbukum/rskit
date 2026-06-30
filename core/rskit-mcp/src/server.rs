@@ -85,7 +85,7 @@ impl RegistryHandler {
         &self,
         request: ReadResourceRequestParams,
     ) -> Result<ReadResourceResult, rmcp::ErrorData> {
-        let uri = request.uri.to_string();
+        let uri = request.uri.clone();
         if let Some(entry) = self
             .config
             .resources
@@ -96,8 +96,7 @@ impl RegistryHandler {
         }
         if let Some(entry) = self.config.resource_templates.iter().find(|entry| {
             resource_template_uri(&entry.resource_template)
-                .map(|template| resource_template_matches(&template, &uri))
-                .unwrap_or(false)
+                .is_some_and(|template| resource_template_matches(&template, &uri))
         }) {
             return (entry.handler)(request).await;
         }
@@ -287,7 +286,12 @@ mod tests {
 
     #[test]
     fn test_get_info() {
-        let handler = create_server("test-server", "0.1.0", test_registry(), Default::default());
+        let handler = create_server(
+            "test-server",
+            "0.1.0",
+            test_registry(),
+            ServerConfig::default(),
+        );
         let info = handler.get_info();
         assert_eq!(info.server_info.name, "test-server");
         assert_eq!(info.server_info.version, "0.1.0");
@@ -295,7 +299,7 @@ mod tests {
 
     #[test]
     fn test_get_tool_found() {
-        let handler = create_server("test", "0.1.0", test_registry(), Default::default());
+        let handler = create_server("test", "0.1.0", test_registry(), ServerConfig::default());
         let tool = handler.get_tool("echo");
         assert!(tool.is_some());
         assert_eq!(tool.unwrap().name.as_ref(), "echo");
@@ -303,7 +307,7 @@ mod tests {
 
     #[test]
     fn test_get_tool_not_found() {
-        let handler = create_server("test", "0.1.0", test_registry(), Default::default());
+        let handler = create_server("test", "0.1.0", test_registry(), ServerConfig::default());
         assert!(handler.get_tool("nonexistent").is_none());
     }
 
@@ -321,7 +325,7 @@ mod tests {
 
     #[test]
     fn test_mcp_tools_lists_all() {
-        let handler = create_server("test", "0.1.0", test_registry(), Default::default());
+        let handler = create_server("test", "0.1.0", test_registry(), ServerConfig::default());
         let tools = handler.mcp_tools();
         assert_eq!(tools.len(), 1);
         assert_eq!(tools[0].name.as_ref(), "echo");
@@ -431,6 +435,7 @@ mod tests {
         assert_eq!(captured.len(), 1);
         assert_eq!(captured[0].tool_name, "echo");
         assert_eq!(captured[0].outcome, "denied");
+        drop(captured);
     }
 
     #[tokio::test]
@@ -573,7 +578,7 @@ mod tests {
                 },
             }))
             .unwrap();
-        let handler = create_server("test", "0.1.0", Arc::new(registry), Default::default());
+        let handler = create_server("test", "0.1.0", Arc::new(registry), ServerConfig::default());
 
         let request: CallToolRequestParams = serde_json::from_value(json!({
             "name": "bad_output",
@@ -632,7 +637,7 @@ mod tests {
             resources: vec![ResourceEntry::new(resource, |request| async move {
                 serde_json::from_value(json!({
                     "contents": [{
-                        "uri": request.uri.to_string(),
+                        "uri": request.uri.clone(),
                         "mimeType": "text/plain",
                         "text": "info"
                     }]
@@ -642,7 +647,7 @@ mod tests {
             resource_templates: vec![ResourceTemplateEntry::new(template, |request| async move {
                 serde_json::from_value(json!({
                     "contents": [{
-                        "uri": request.uri.to_string(),
+                        "uri": request.uri.clone(),
                         "mimeType": "text/plain",
                         "text": format!("templated:{}", request.uri)
                     }]
@@ -703,7 +708,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_prompt_and_resource_not_found_errors() {
-        let handler = create_server("test", "0.1.0", test_registry(), Default::default());
+        let handler = create_server("test", "0.1.0", test_registry(), ServerConfig::default());
 
         let prompt_error = handler
             .handle_get_prompt(serde_json::from_value(json!({"name": "missing"})).unwrap())

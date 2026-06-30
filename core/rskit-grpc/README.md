@@ -15,7 +15,7 @@ gRPC transport and status mapping entrypoint for rskit.
 
 ```toml
 [dependencies]
-rskit-grpc = { version = "0.1.0-alpha.2", features = ["client", "discovery"] }
+rskit-grpc = { version = "0.1.0-alpha.3", features = ["client", "discovery"] }
 ```
 
 ```rust,ignore

@@ -7,7 +7,7 @@ use rskit_llm::{
 };
 
 const _: fn() = || {
-    fn assert_copy<T: Copy>() {}
+    const fn assert_copy<T: Copy>() {}
     assert_copy::<Usage>();
 };
 
@@ -49,7 +49,7 @@ fn message_serde_roundtrip_preserves_content() {
 #[test]
 fn message_debug_format() {
     let msg = system("debug");
-    let dbg = format!("{:?}", msg);
+    let dbg = format!("{msg:?}");
     assert!(
         dbg.contains("System") || dbg.contains("system"),
         "Debug format = {dbg}"
@@ -436,9 +436,9 @@ fn usage_debug() {
         cached_tokens: 0,
         reasoning_tokens: 0,
     };
-    let dbg = format!("{:?}", usage);
+    let dbg = format!("{usage:?}");
     assert!(dbg.contains("10"));
-    assert!(dbg.contains("5"));
+    assert!(dbg.contains('5'));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -456,7 +456,7 @@ fn stop_reason_variants() {
     for r in &reasons {
         let json = serde_json::to_value(r).unwrap();
         let back: FinishReason = serde_json::from_value(json).unwrap();
-        assert_eq!(format!("{:?}", r), format!("{:?}", back));
+        assert_eq!(format!("{r:?}"), format!("{back:?}"));
     }
 }
 

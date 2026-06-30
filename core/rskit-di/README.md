@@ -17,7 +17,7 @@ Lightweight `Arc`-based runtime dependency injection container.
 
 ```toml
 [dependencies]
-rskit-di = "0.1.0-alpha.1"
+rskit-di = "0.1.0-alpha.2"
 ```
 
 ```rust

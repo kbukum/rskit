@@ -12,7 +12,7 @@ pub(crate) fn compact_if_needed(
     strategy: Option<&dyn ContextStrategy>,
 ) -> AppResult<Vec<Message>> {
     if let Some(max_input_tokens) = max_input_tokens {
-        let limit = max_input_tokens as usize;
+        let limit = usize::try_from(max_input_tokens).unwrap_or(usize::MAX);
         if count_tokens_approx(&messages) > limit {
             let strategy = strategy.unwrap_or(&FailStrategy);
             messages = strategy.compact(messages, limit)?;

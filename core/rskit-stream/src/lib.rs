@@ -1,11 +1,20 @@
-//! Composable async data pipelines built on `futures::Stream`.
+//! Foundational async stream toolkit.
+//!
+//! `rskit-stream` owns the opinion-free, layer-zero building blocks for the
+//! "observe → fan-out → consume" graph that recurs across config reloads,
+//! service discovery, cache invalidation, secret rotation, and message
+//! consumers. Sources, the bounded fan-out bus, cancellable consumer tasks,
+//! and the `futures::Stream` extension operators that chain them all live
+//! together at the foundation where any higher layer can reuse them without
+//! inverting the layer order.
+//!
+//! Sequential, named-step workflows (run N steps, report progress, cancel)
+//! are a different concern and live in `rskit-chain`.
 
 #![warn(missing_docs)]
 
 /// Bounded fan-out broadcaster source (`Broadcaster<T>`).
 pub mod broadcaster;
-/// Sequential step-based executor with progress and cancellation.
-pub mod executor;
 /// Extension trait adding `rskit` operators to any `Stream`.
 pub mod ext;
 /// Higher-level stream operators (map, filter, fan-out, windowing, etc.).
@@ -14,13 +23,17 @@ pub mod operators;
 pub mod sink;
 /// Stream source constructors (`from_slice`, `from_fn`, `from_channel`).
 pub mod source;
+/// Cancellable owned tasks (`SpawnedTask`, `TaskGroup`).
+pub mod task;
 
 pub use broadcaster::{BroadcastStream, Broadcaster, DEFAULT_BROADCAST_BUFFER};
-pub use executor::{Step, StepExecutor, StepStatus};
 pub use ext::RskitStreamExt;
 pub use operators::combine::{concat, merge};
 pub use sink::{collect, drain, for_each};
 pub use source::{from_channel, from_fn, from_slice};
+pub use task::{SpawnedTask, TaskGroup};
+
+pub use tokio_util::sync::CancellationToken;
 
 #[cfg(test)]
 mod tests {
@@ -59,14 +72,16 @@ mod tests {
         let stream = from_fn(move || {
             let c = c.clone();
             async move {
-                let mut n = c.lock();
-                if *n < 5 {
-                    let val = *n;
-                    *n += 1;
+                let mut guard = c.lock();
+                let next = if *guard < 5 {
+                    let val = *guard;
+                    *guard += 1;
                     Some(val)
                 } else {
                     None
-                }
+                };
+                drop(guard);
+                next
             }
         });
         let collected: Vec<u32> = stream.collect().await;
@@ -87,7 +102,7 @@ mod tests {
         let s1 = from_slice(vec![1u32, 3, 5]);
         let s2 = from_slice(vec![2u32, 4, 6]);
         let mut combined: Vec<u32> = merge(s1, s2).collect().await;
-        combined.sort();
+        combined.sort_unstable();
         assert_eq!(combined, vec![1, 2, 3, 4, 5, 6]);
     }
 
@@ -212,7 +227,7 @@ mod tests {
             .into_iter()
             .map(|r| r.unwrap())
             .collect();
-        results.sort();
+        results.sort_unstable();
         assert_eq!(results, vec![2, 4, 6, 8, 10]);
     }
 
@@ -233,8 +248,8 @@ mod tests {
             })
             .collect()
             .await;
-        let errors: Vec<_> = results.iter().filter(|r| r.is_err()).collect();
-        assert_eq!(errors.len(), 1);
+        let error_count = results.iter().filter(|r| r.is_err()).count();
+        assert_eq!(error_count, 1);
     }
 
     // ── RskitStreamExt::rfan_out ──────────────────────────────────────────
@@ -418,8 +433,8 @@ mod tests {
 
         assert!(!windows.is_empty());
         let all_items: Vec<u32> = windows.into_iter().flatten().collect();
-        let mut sorted = all_items.clone();
-        sorted.sort();
+        let mut sorted = all_items;
+        sorted.sort_unstable();
         assert_eq!(sorted, vec![10, 20, 30]);
     }
 

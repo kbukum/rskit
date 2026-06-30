@@ -37,18 +37,21 @@ impl<T> Message<T> {
     }
 
     /// Set the partitioning key.
+    #[must_use]
     pub fn with_key(mut self, key: impl Into<String>) -> Self {
         self.key = Some(key.into());
         self
     }
 
     /// Attach a single header.
+    #[must_use]
     pub fn with_header(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.headers.insert(key.into(), value.into());
         self
     }
 
     /// Attach a unique message-id header.
+    #[must_use]
     pub fn with_message_id(self) -> Self {
         self.with_header("message-id", Uuid::new_v4().to_string())
     }

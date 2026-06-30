@@ -70,14 +70,6 @@ pub fn tracer_provider(cfg: &TracingConfig) -> AppResult<TracerGuard> {
     tracer_provider_with_protocol(cfg, OtlpProtocol::Grpc)
 }
 
-/// Build an injectable OpenTelemetry tracer provider without touching global state.
-///
-/// This legacy name does not install a process-global subscriber; callers inject
-/// [`TracerGuard::tracer`] into their own `tracing_opentelemetry` layer.
-pub fn init_tracer(cfg: &TracingConfig) -> AppResult<TracerGuard> {
-    tracer_provider(cfg)
-}
-
 /// Build an injectable OpenTelemetry tracer provider with an explicit OTLP protocol.
 pub fn tracer_provider_with_protocol(
     cfg: &TracingConfig,
