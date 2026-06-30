@@ -91,8 +91,20 @@ mod tests {
     #[test]
     fn weighted_average_combines_constituent_metrics() {
         let metric = weighted::<String>(vec![
-            (Box::new(Constant { name: "p", value: 1.0 }), 3.0),
-            (Box::new(Constant { name: "r", value: 0.0 }), 1.0),
+            (
+                Box::new(Constant {
+                    name: "p",
+                    value: 1.0,
+                }),
+                3.0,
+            ),
+            (
+                Box::new(Constant {
+                    name: "r",
+                    value: 0.0,
+                }),
+                1.0,
+            ),
         ]);
         let result = metric.compute(&[sample()]);
 
@@ -107,7 +119,10 @@ mod tests {
     #[test]
     fn zero_total_weight_yields_zero_without_dividing() {
         let metric = weighted::<String>(vec![(
-            Box::new(Constant { name: "p", value: 0.9 }),
+            Box::new(Constant {
+                name: "p",
+                value: 0.9,
+            }),
             0.0,
         )]);
         let result = metric.compute(&[sample()]);
