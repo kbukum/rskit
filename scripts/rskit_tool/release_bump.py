@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 from collections import defaultdict
+from collections.abc import Mapping
 from pathlib import Path
 
 from .cargo import Package, discover_packages, is_relative_to, metadata
@@ -59,6 +60,25 @@ def add_bump_parser(release_sub: argparse._SubParsersAction[argparse.ArgumentPar
         default=[],
         metavar="CRATE",
         help="Mark a crate's change as breaking (minor bump). Repeatable.",
+    )
+    bump.add_argument(
+        "--all-minor",
+        action="store_true",
+        help=(
+            "Coordinated workspace-wide MINOR bump: re-seed EVERY crate to the "
+            "next minor (e.g. 0.1.x -> 0.2.0[-pre]), regardless of what changed. "
+            "Realigns the whole workspace onto one version; rewrites internal "
+            "caret floors and README pins to match. Cannot be combined with "
+            "--minor or --all-major."
+        ),
+    )
+    bump.add_argument(
+        "--all-major",
+        action="store_true",
+        help=(
+            "Coordinated workspace-wide MAJOR bump: re-seed EVERY crate to the "
+            "next major. Cannot be combined with --minor or --all-minor."
+        ),
     )
     bump.add_argument(
         "--base",
@@ -389,7 +409,7 @@ def _print_plan(plan: BumpPlan, readmes: list[Path], *, dry_run: bool) -> None:
         return
     verb = "Would bump" if dry_run else "Bumped"
     for action in plan.actions:
-        tag = "breaking" if action.kind == "minor" else action.reason
+        tag = "breaking" if action.kind in ("minor", "major") else action.reason
         print(f"  {verb} {action.name}: {action.old} -> {action.new} ({action.kind}, {tag})")
     for name, new_floor in plan.floor_rewrites:
         rewrite = "Would rewrite" if dry_run else "Rewrote"
@@ -405,8 +425,40 @@ def _print_plan(plan: BumpPlan, readmes: list[Path], *, dry_run: bool) -> None:
     )
 
 
+def _release_anchor(base_ref: str, baselines: Mapping[str, SemVer]) -> SemVer | None:
+    """Resolve a single released anchor for a coordinated ``--all-*`` bump.
+
+    A coordinated bump must compute its uniform target from a fixed released
+    version (so re-running is idempotent rather than advancing every run). Prefer
+    the ``base_ref`` when it is a ``vX.Y.Z`` release tag; otherwise fall back to
+    the highest per-crate baseline (max of crates.io and the tag manifests). When
+    nothing has ever been released there is no anchor to advance from.
+    """
+
+    candidate = base_ref[1:] if base_ref.startswith("v") else base_ref
+    try:
+        return SemVer.parse(candidate)
+    except ValueError:
+        pass
+    if baselines:
+        return max(baselines.values())
+    return None
+
+
 def run_bump(args: argparse.Namespace) -> int:
     """Run ``release bump`` for one workspace."""
+
+    if getattr(args, "all_minor", False) and getattr(args, "all_major", False):
+        raise ToolError("--all-minor and --all-major are mutually exclusive")
+    all_kind = (
+        "major"
+        if getattr(args, "all_major", False)
+        else "minor"
+        if getattr(args, "all_minor", False)
+        else None
+    )
+    if all_kind and args.minor:
+        raise ToolError("--minor cannot be combined with --all-minor/--all-major")
 
     base_ref = args.base or latest_tag()
     if base_ref is None:
@@ -422,15 +474,36 @@ def run_bump(args: argparse.Namespace) -> int:
             f"--minor crate(s) not in workspace '{args.workspace}': {', '.join(sorted(unknown))}"
         )
 
-    changed = _detect_changed(members, base_ref, args.workspace)
-    changed = _umbrella_selection(members, changed)
     registry = None if args.offline else CratesIoRegistry()
     baselines = _released_baselines(members, base_ref, registry=registry)
     current_versions = {name: SemVer.parse(package.version) for name, package in members.items()}
 
+    if all_kind:
+        # Coordinated workspace-wide bump: select every crate and apply the same
+        # breaking kind. Crates never released (no tag/crates.io anchor, e.g. a
+        # crate added since the last tag) get the shared release anchor so they
+        # land on the same uniform target instead of being skipped.
+        changed: set[str] = set(members)
+        anchor = _release_anchor(base_ref, baselines)
+        if anchor is None:
+            raise ToolError(
+                "coordinated --all-minor/--all-major needs a released anchor; "
+                "pass --base <vX.Y.Z tag>"
+            )
+        for name in members:
+            baselines.setdefault(name, anchor)
+        minor_arg = list(members) if all_kind == "minor" else []
+        major_arg = list(members) if all_kind == "major" else []
+    else:
+        changed = _detect_changed(members, base_ref, args.workspace)
+        changed = _umbrella_selection(members, changed)
+        minor_arg = args.minor
+        major_arg = []
+
     plan = compute_bump_plan(
         changed=changed,
-        minor=args.minor,
+        minor=minor_arg,
+        major=major_arg,
         dependents=dependents,
         current_versions=current_versions,
         baselines=baselines,

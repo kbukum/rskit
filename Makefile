@@ -239,6 +239,7 @@ release-publish:
 release-bump:
 	@$(RSKIT_TOOL) release bump --workspace $(W) \
 		$(foreach crate,$(MINOR),--minor $(crate)) \
+		$(if $(filter minor,$(ALL)),--all-minor,) $(if $(filter major,$(ALL)),--all-major,) \
 		$(if $(DRY),--dry-run,) $(if $(OFFLINE),--offline,)
 
 ## Generate CycloneDX SBOMs under target/sbom

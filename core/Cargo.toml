@@ -188,75 +188,75 @@ image = { version = "0.25", default-features = false, features = ["bmp", "gif", 
 rmcp = { version = "1.5", default-features = false }
 
 # Internal
-rskit = { package = "rskit-suite", path = "rskit", version = "0.1.0-alpha.1" }
-rskit-agent = { path = "rskit-agent", version = "0.1.0-alpha.1" }
-rskit-ai = { path = "rskit-ai", version = "0.1.0-alpha.1" }
-rskit-auth = { path = "rskit-auth", version = "0.1.0-alpha.1" }
-rskit-authz = { path = "rskit-authz", version = "0.1.0-alpha.1" }
-rskit-bench = { path = "rskit-bench", version = "0.1.0-alpha.1" }
-rskit-bootstrap = { path = "rskit-bootstrap", version = "0.1.0-alpha.1" }
-rskit-cache = { path = "rskit-cache", version = "0.1.0-alpha.1" }
-rskit-cache-redis = { path = "../contrib/cache/redis", version = "0.1.0-alpha.1" }
-rskit-chain = { path = "rskit-chain", version = "0.1.0-alpha.1" }
-rskit-cli = { path = "rskit-cli", version = "0.1.0-alpha.1" }
-rskit-component = { path = "rskit-component", version = "0.1.0-alpha.1" }
-rskit-config = { path = "rskit-config", version = "0.1.0-alpha.1" }
-rskit-codec = { path = "rskit-codec", version = "0.1.0-alpha.1" }
-rskit-dag = { path = "rskit-dag", version = "0.1.0-alpha.1" }
-rskit-database = { path = "rskit-database", version = "0.1.0-alpha.1" }
-rskit-dataset = { path = "rskit-dataset", version = "0.1.0-alpha.1" }
-rskit-di = { path = "rskit-di", version = "0.1.0-alpha.1" }
-rskit-discovery = { path = "rskit-discovery", version = "0.1.0-alpha.1" }
-rskit-embedding = { path = "rskit-embedding", version = "0.1.0-alpha.1" }
-rskit-encryption = { path = "rskit-encryption", version = "0.1.0-alpha.1" }
-rskit-errors = { path = "rskit-errors", version = "0.1.0-alpha.1" }
-rskit-fs = { path = "rskit-fs", version = "0.1.0-alpha.1", default-features = false }
-rskit-git = { path = "rskit-git", version = "0.1.0-alpha.2" }
-rskit-grpc = { path = "rskit-grpc", version = "0.1.0-alpha.1", default-features = false }
-rskit-hook = { path = "rskit-hook", version = "0.1.0-alpha.1" }
-rskit-http = { path = "rskit-http", version = "0.1.0-alpha.1" }
-rskit-httpclient = { path = "rskit-httpclient", version = "0.1.0-alpha.1" }
-rskit-inference = { path = "rskit-inference", version = "0.1.0-alpha.1" }
-rskit-inference-tgi = { path = "../contrib/inference/tgi", version = "0.1.0-alpha.1" }
-rskit-inference-triton = { path = "../contrib/inference/triton", version = "0.1.0-alpha.1" }
-rskit-inference-vllm = { path = "../contrib/inference/vllm", version = "0.1.0-alpha.1" }
-rskit-llm = { path = "rskit-llm", version = "0.1.0-alpha.1" }
-rskit-llm-anthropic = { path = "../contrib/llm/anthropic", version = "0.1.0-alpha.1" }
-rskit-llm-gemini = { path = "../contrib/llm/gemini", version = "0.1.0-alpha.1" }
-rskit-llm-ollama = { path = "../contrib/llm/ollama", version = "0.1.0-alpha.1" }
-rskit-llm-openai = { path = "../contrib/llm/openai", version = "0.1.0-alpha.1" }
-rskit-logging = { path = "rskit-logging", version = "0.1.0-alpha.1", default-features = false }
-rskit-mcp = { path = "rskit-mcp", version = "0.1.0-alpha.1" }
-rskit-media = { path = "rskit-media", version = "0.1.0-alpha.1" }
-rskit-media-audio = { path = "../contrib/media/audio", version = "0.1.0-alpha.1" }
-rskit-media-ffmpeg = { path = "../contrib/media/ffmpeg", version = "0.1.0-alpha.1" }
-rskit-media-image = { path = "../contrib/media/image", version = "0.1.0-alpha.1" }
-rskit-messaging = { path = "rskit-messaging", version = "0.1.0-alpha.1" }
-rskit-messaging-kafka = { path = "../contrib/messaging/kafka", version = "0.1.0-alpha.1" }
-rskit-messaging-nats = { path = "../contrib/messaging/nats", version = "0.1.0-alpha.1" }
-rskit-messaging-rabbitmq = { path = "../contrib/messaging/rabbitmq", version = "0.1.0-alpha.1" }
-rskit-observability = { path = "rskit-observability", version = "0.1.0-alpha.1" }
-rskit-process = { path = "rskit-process", version = "0.1.0-alpha.1" }
-rskit-provider = { path = "rskit-provider", version = "0.1.0-alpha.1" }
-rskit-resilience = { path = "rskit-resilience", version = "0.1.0-alpha.1" }
-rskit-schema = { path = "rskit-schema", version = "0.1.0-alpha.1" }
-rskit-security = { path = "rskit-security", version = "0.1.0-alpha.1" }
-rskit-server = { path = "rskit-server", version = "0.1.0-alpha.1" }
-rskit-skill = { path = "rskit-skill", version = "0.1.0-alpha.1" }
-rskit-sse = { path = "rskit-sse", version = "0.1.0-alpha.1" }
-rskit-stateful = { path = "rskit-stateful", version = "0.1.0-alpha.1" }
-rskit-storage = { path = "rskit-storage", version = "0.1.0-alpha.1" }
-rskit-storage-gcs = { path = "../contrib/storage/gcs", version = "0.1.0-alpha.1" }
-rskit-storage-s3 = { path = "../contrib/storage/s3", version = "0.1.0-alpha.1" }
-rskit-stream = { path = "rskit-stream", version = "0.1.0-alpha.1" }
-rskit-testutil = { path = "rskit-testutil", version = "0.1.0-alpha.1" }
-rskit-tool = { path = "rskit-tool", version = "0.1.0-alpha.1" }
-rskit-util = { path = "rskit-util", version = "0.1.0-alpha.1" }
-rskit-validation = { path = "rskit-validation", version = "0.1.0-alpha.1" }
-rskit-vectorstore = { path = "rskit-vectorstore", version = "0.1.0-alpha.1" }
-rskit-vectorstore-qdrant = { path = "../contrib/vectorstore/qdrant", version = "0.1.0-alpha.1" }
-rskit-version = { path = "rskit-version", version = "0.1.0-alpha.1" }
-rskit-worker = { path = "rskit-worker", version = "0.1.0-alpha.1" }
+rskit = { package = "rskit-suite", path = "rskit", version = "0.2.0-alpha.1" }
+rskit-agent = { path = "rskit-agent", version = "0.2.0-alpha.1" }
+rskit-ai = { path = "rskit-ai", version = "0.2.0-alpha.1" }
+rskit-auth = { path = "rskit-auth", version = "0.2.0-alpha.1" }
+rskit-authz = { path = "rskit-authz", version = "0.2.0-alpha.1" }
+rskit-bench = { path = "rskit-bench", version = "0.2.0-alpha.1" }
+rskit-bootstrap = { path = "rskit-bootstrap", version = "0.2.0-alpha.1" }
+rskit-cache = { path = "rskit-cache", version = "0.2.0-alpha.1" }
+rskit-cache-redis = { path = "../contrib/cache/redis", version = "0.2.0-alpha.1" }
+rskit-chain = { path = "rskit-chain", version = "0.2.0-alpha.1" }
+rskit-cli = { path = "rskit-cli", version = "0.2.0-alpha.1" }
+rskit-component = { path = "rskit-component", version = "0.2.0-alpha.1" }
+rskit-config = { path = "rskit-config", version = "0.2.0-alpha.1" }
+rskit-codec = { path = "rskit-codec", version = "0.2.0-alpha.1" }
+rskit-dag = { path = "rskit-dag", version = "0.2.0-alpha.1" }
+rskit-database = { path = "rskit-database", version = "0.2.0-alpha.1" }
+rskit-dataset = { path = "rskit-dataset", version = "0.2.0-alpha.1" }
+rskit-di = { path = "rskit-di", version = "0.2.0-alpha.1" }
+rskit-discovery = { path = "rskit-discovery", version = "0.2.0-alpha.1" }
+rskit-embedding = { path = "rskit-embedding", version = "0.2.0-alpha.1" }
+rskit-encryption = { path = "rskit-encryption", version = "0.2.0-alpha.1" }
+rskit-errors = { path = "rskit-errors", version = "0.2.0-alpha.1" }
+rskit-fs = { path = "rskit-fs", version = "0.2.0-alpha.1", default-features = false }
+rskit-git = { path = "rskit-git", version = "0.2.0-alpha.1" }
+rskit-grpc = { path = "rskit-grpc", version = "0.2.0-alpha.1", default-features = false }
+rskit-hook = { path = "rskit-hook", version = "0.2.0-alpha.1" }
+rskit-http = { path = "rskit-http", version = "0.2.0-alpha.1" }
+rskit-httpclient = { path = "rskit-httpclient", version = "0.2.0-alpha.1" }
+rskit-inference = { path = "rskit-inference", version = "0.2.0-alpha.1" }
+rskit-inference-tgi = { path = "../contrib/inference/tgi", version = "0.2.0-alpha.1" }
+rskit-inference-triton = { path = "../contrib/inference/triton", version = "0.2.0-alpha.1" }
+rskit-inference-vllm = { path = "../contrib/inference/vllm", version = "0.2.0-alpha.1" }
+rskit-llm = { path = "rskit-llm", version = "0.2.0-alpha.1" }
+rskit-llm-anthropic = { path = "../contrib/llm/anthropic", version = "0.2.0-alpha.1" }
+rskit-llm-gemini = { path = "../contrib/llm/gemini", version = "0.2.0-alpha.1" }
+rskit-llm-ollama = { path = "../contrib/llm/ollama", version = "0.2.0-alpha.1" }
+rskit-llm-openai = { path = "../contrib/llm/openai", version = "0.2.0-alpha.1" }
+rskit-logging = { path = "rskit-logging", version = "0.2.0-alpha.1", default-features = false }
+rskit-mcp = { path = "rskit-mcp", version = "0.2.0-alpha.1" }
+rskit-media = { path = "rskit-media", version = "0.2.0-alpha.1" }
+rskit-media-audio = { path = "../contrib/media/audio", version = "0.2.0-alpha.1" }
+rskit-media-ffmpeg = { path = "../contrib/media/ffmpeg", version = "0.2.0-alpha.1" }
+rskit-media-image = { path = "../contrib/media/image", version = "0.2.0-alpha.1" }
+rskit-messaging = { path = "rskit-messaging", version = "0.2.0-alpha.1" }
+rskit-messaging-kafka = { path = "../contrib/messaging/kafka", version = "0.2.0-alpha.1" }
+rskit-messaging-nats = { path = "../contrib/messaging/nats", version = "0.2.0-alpha.1" }
+rskit-messaging-rabbitmq = { path = "../contrib/messaging/rabbitmq", version = "0.2.0-alpha.1" }
+rskit-observability = { path = "rskit-observability", version = "0.2.0-alpha.1" }
+rskit-process = { path = "rskit-process", version = "0.2.0-alpha.1" }
+rskit-provider = { path = "rskit-provider", version = "0.2.0-alpha.1" }
+rskit-resilience = { path = "rskit-resilience", version = "0.2.0-alpha.1" }
+rskit-schema = { path = "rskit-schema", version = "0.2.0-alpha.1" }
+rskit-security = { path = "rskit-security", version = "0.2.0-alpha.1" }
+rskit-server = { path = "rskit-server", version = "0.2.0-alpha.1" }
+rskit-skill = { path = "rskit-skill", version = "0.2.0-alpha.1" }
+rskit-sse = { path = "rskit-sse", version = "0.2.0-alpha.1" }
+rskit-stateful = { path = "rskit-stateful", version = "0.2.0-alpha.1" }
+rskit-storage = { path = "rskit-storage", version = "0.2.0-alpha.1" }
+rskit-storage-gcs = { path = "../contrib/storage/gcs", version = "0.2.0-alpha.1" }
+rskit-storage-s3 = { path = "../contrib/storage/s3", version = "0.2.0-alpha.1" }
+rskit-stream = { path = "rskit-stream", version = "0.2.0-alpha.1" }
+rskit-testutil = { path = "rskit-testutil", version = "0.2.0-alpha.1" }
+rskit-tool = { path = "rskit-tool", version = "0.2.0-alpha.1" }
+rskit-util = { path = "rskit-util", version = "0.2.0-alpha.1" }
+rskit-validation = { path = "rskit-validation", version = "0.2.0-alpha.1" }
+rskit-vectorstore = { path = "rskit-vectorstore", version = "0.2.0-alpha.1" }
+rskit-vectorstore-qdrant = { path = "../contrib/vectorstore/qdrant", version = "0.2.0-alpha.1" }
+rskit-version = { path = "rskit-version", version = "0.2.0-alpha.1" }
+rskit-worker = { path = "rskit-worker", version = "0.2.0-alpha.1" }
 semver = { version = "1" }
 subtle = "2.6"
 url = "2"

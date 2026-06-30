@@ -8,8 +8,8 @@ Amazon S3 and S3-compatible storage adapter for `rskit-storage`.
 
 ```toml
 [dependencies]
-rskit-storage = "0.1.0-alpha.2"
-rskit-storage-s3 = "0.1.0-alpha.1"
+rskit-storage = "0.2.0-alpha.1"
+rskit-storage-s3 = "0.2.0-alpha.1"
 ```
 
 ## Usage

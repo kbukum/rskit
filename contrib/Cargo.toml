@@ -21,34 +21,34 @@ documentation = "https://docs.rs/rskit-suite"
 
 [workspace.dependencies]
 # Internal
-rskit-errors = { path = "../core/rskit-errors", version = "0.1.0-alpha.1" }
-rskit-storage = { path = "../core/rskit-storage", version = "0.1.0-alpha.1" }
-rskit-cache = { path = "../core/rskit-cache", version = "0.1.0-alpha.1" }
-rskit-messaging = { path = "../core/rskit-messaging", version = "0.1.0-alpha.1" }
-rskit-stream = { path = "../core/rskit-stream", version = "0.1.0-alpha.1" }
-rskit-llm = { path = "../core/rskit-llm", version = "0.1.0-alpha.1" }
-rskit-ai = { path = "../core/rskit-ai", version = "0.1.0-alpha.1" }
-rskit-inference = { path = "../core/rskit-inference", version = "0.1.0-alpha.1" }
-rskit-media = { path = "../core/rskit-media", version = "0.1.0-alpha.1" }
-rskit-process = { path = "../core/rskit-process", version = "0.1.0-alpha.1" }
-rskit-vectorstore = { path = "../core/rskit-vectorstore", version = "0.1.0-alpha.1" }
-rskit-config = { path = "../core/rskit-config", version = "0.1.0-alpha.1" }
-rskit-logging = { path = "../core/rskit-logging", version = "0.1.0-alpha.1", default-features = false }
-rskit-component = { path = "../core/rskit-component", version = "0.1.0-alpha.1" }
-rskit-provider = { path = "../core/rskit-provider", version = "0.1.0-alpha.1" }
-rskit-httpclient = { path = "../core/rskit-httpclient", version = "0.1.0-alpha.1" }
-rskit-resilience = { path = "../core/rskit-resilience", version = "0.1.0-alpha.1" }
-rskit-embedding = { path = "../core/rskit-embedding", version = "0.1.0-alpha.1" }
-rskit-observability = { path = "../core/rskit-observability", version = "0.1.0-alpha.1" }
-rskit-util = { path = "../core/rskit-util", version = "0.1.0-alpha.1" }
-rskit-version = { path = "../core/rskit-version", version = "0.1.0-alpha.1" }
-rskit-validation = { path = "../core/rskit-validation", version = "0.1.0-alpha.1" }
-rskit-testutil = { path = "../core/rskit-testutil", version = "0.1.0-alpha.1" }
-rskit-server = { path = "../core/rskit-server", version = "0.1.0-alpha.1" }
-rskit-authz = { path = "../core/rskit-authz", version = "0.1.0-alpha.1" }
-rskit-tool = { path = "../core/rskit-tool", version = "0.1.0-alpha.1" }
-rskit-fs = { path = "../core/rskit-fs", version = "0.1.0-alpha.1" }
-rskit-llm-common = { path = "./llm/common", version = "0.1.0-alpha.1" }
+rskit-errors = { path = "../core/rskit-errors", version = "0.2.0-alpha.1" }
+rskit-storage = { path = "../core/rskit-storage", version = "0.2.0-alpha.1" }
+rskit-cache = { path = "../core/rskit-cache", version = "0.2.0-alpha.1" }
+rskit-messaging = { path = "../core/rskit-messaging", version = "0.2.0-alpha.1" }
+rskit-stream = { path = "../core/rskit-stream", version = "0.2.0-alpha.1" }
+rskit-llm = { path = "../core/rskit-llm", version = "0.2.0-alpha.1" }
+rskit-ai = { path = "../core/rskit-ai", version = "0.2.0-alpha.1" }
+rskit-inference = { path = "../core/rskit-inference", version = "0.2.0-alpha.1" }
+rskit-media = { path = "../core/rskit-media", version = "0.2.0-alpha.1" }
+rskit-process = { path = "../core/rskit-process", version = "0.2.0-alpha.1" }
+rskit-vectorstore = { path = "../core/rskit-vectorstore", version = "0.2.0-alpha.1" }
+rskit-config = { path = "../core/rskit-config", version = "0.2.0-alpha.1" }
+rskit-logging = { path = "../core/rskit-logging", version = "0.2.0-alpha.1", default-features = false }
+rskit-component = { path = "../core/rskit-component", version = "0.2.0-alpha.1" }
+rskit-provider = { path = "../core/rskit-provider", version = "0.2.0-alpha.1" }
+rskit-httpclient = { path = "../core/rskit-httpclient", version = "0.2.0-alpha.1" }
+rskit-resilience = { path = "../core/rskit-resilience", version = "0.2.0-alpha.1" }
+rskit-embedding = { path = "../core/rskit-embedding", version = "0.2.0-alpha.1" }
+rskit-observability = { path = "../core/rskit-observability", version = "0.2.0-alpha.1" }
+rskit-util = { path = "../core/rskit-util", version = "0.2.0-alpha.1" }
+rskit-version = { path = "../core/rskit-version", version = "0.2.0-alpha.1" }
+rskit-validation = { path = "../core/rskit-validation", version = "0.2.0-alpha.1" }
+rskit-testutil = { path = "../core/rskit-testutil", version = "0.2.0-alpha.1" }
+rskit-server = { path = "../core/rskit-server", version = "0.2.0-alpha.1" }
+rskit-authz = { path = "../core/rskit-authz", version = "0.2.0-alpha.1" }
+rskit-tool = { path = "../core/rskit-tool", version = "0.2.0-alpha.1" }
+rskit-fs = { path = "../core/rskit-fs", version = "0.2.0-alpha.1" }
+rskit-llm-common = { path = "./llm/common", version = "0.2.0-alpha.1" }
 
 # External
 tokio = { version = "1", features = ["full"] }

@@ -27,7 +27,7 @@ Adapter crates register through an application-owned `StorageRegistry`; importin
 
 ```toml
 [dependencies]
-rskit-storage = "0.1.0-alpha.2"
+rskit-storage = "0.2.0-alpha.1"
 ```
 
 ```rust
