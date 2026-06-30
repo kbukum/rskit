@@ -1,7 +1,7 @@
 //! SHA-256 digests for wire-format and interop use cases.
 //!
 //! The canonical content hash for cache keys, change detection, and
-//! deduplication is BLAKE3 (see [`super::hash_hex`]). SHA-256 lives here only
+//! deduplication is BLAKE3 (see [`crate::hash::hash_hex`]). SHA-256 lives here only
 //! for **interop**: manifests, packs, and protocols that mandate a SHA-256
 //! field on the wire. Digests are rendered as lowercase hexadecimal. Do not
 //! reach for this when a stable internal identity is all that's needed —
