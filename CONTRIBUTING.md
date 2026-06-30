@@ -163,7 +163,7 @@ Examples:
 
 ```
 feat(resilience): add sliding-window rate limiter variant
-fix(pipeline): prevent debounce from emitting stale item on cancel
+fix(stream): prevent debounce from emitting stale item on cancel
 docs(worker): document EventKind variants
 chore(ci): pin cargo-deny to 0.16
 ```
@@ -227,4 +227,4 @@ Prefer synchronous `parking_lot` locks for in-memory state that is accessed and 
 
 ### Sibling-parity reminder
 
-Public abstractions (`AppError`, `Component`, `Provider`, `Pipeline`, lifecycle hooks) are mirrored across [gokit](https://github.com/kbukum/gokit), [rskit](https://github.com/kbukum/rskit), and [pykit](https://github.com/kbukum/pykit). When you change one of these surfaces here, please open tracking issues in the sibling repos so the change can be evaluated for parity.
+Public abstractions (`AppError`, `Component`, `Provider`, lifecycle hooks) are mirrored across [gokit](https://github.com/kbukum/gokit), [rskit](https://github.com/kbukum/rskit), and [pykit](https://github.com/kbukum/pykit). When you change one of these surfaces here, please open tracking issues in the sibling repos so the change can be evaluated for parity.
