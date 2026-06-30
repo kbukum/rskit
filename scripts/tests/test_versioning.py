@@ -311,6 +311,22 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(actions["top"], ("0.1.0-alpha.2", "patch", "cascade"))
         self.assertEqual(plan.floor_rewrites, (("leaf", SemVer.parse("0.2.0-alpha.1")),))
 
+    def test_major_bump_reseeds_and_cascades(self) -> None:
+        names = ["leaf", "top"]
+        plan = compute_bump_plan(
+            changed=["leaf"],
+            minor=[],
+            major=["leaf"],
+            dependents={"leaf": {"top"}},
+            current_versions=self._versions(names),
+            baselines=self._versions(names),
+            current_floors={"leaf": SemVer.parse("0.1.0-alpha.1")},
+        )
+        actions = {a.name: (str(a.new), a.kind, a.reason) for a in plan.actions}
+        self.assertEqual(actions["leaf"], ("1.0.0-alpha.1", "major", "changed"))
+        self.assertEqual(actions["top"], ("0.1.0-alpha.2", "patch", "cascade"))
+        self.assertEqual(plan.floor_rewrites, (("leaf", SemVer.parse("1.0.0-alpha.1")),))
+
     def test_patch_does_not_cascade_or_rewrite_floor(self) -> None:
         names = ["leaf", "top"]
         plan = compute_bump_plan(

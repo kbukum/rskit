@@ -59,6 +59,8 @@ def _args(**overrides: object) -> argparse.Namespace:
         "base": None,
         "offline": False,
         "dry_run": True,
+        "all_minor": False,
+        "all_major": False,
     }
     base.update(overrides)
     return argparse.Namespace(**base)
@@ -341,6 +343,100 @@ class RunBumpApplyTests(unittest.TestCase):
         with self._patched():
             rb.run_bump(_args(dry_run=False, offline=True))
         self.assertIn('version = "0.1.0-alpha.2"', self.manifest.read_text(encoding="utf-8"))
+
+
+class RunBumpAllModeTests(unittest.TestCase):
+    """Coordinated ``--all-minor`` / ``--all-major`` workspace-wide bumps."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name).resolve()
+        # Two crates: one released at the tag, one added since (no baseline).
+        self.released_dir = self.root / "core" / "rskit-config"
+        self.fresh_dir = self.root / "core" / "rskit-stream"
+        for crate_dir, name, version in (
+            (self.released_dir, "rskit-config", "0.1.0-alpha.4"),
+            (self.fresh_dir, "rskit-stream", "0.1.0-alpha.2"),
+        ):
+            crate_dir.mkdir(parents=True)
+            (crate_dir / "Cargo.toml").write_text(
+                f'[package]\nname = "{name}"\nversion = "{version}"\n', encoding="utf-8"
+            )
+        self.members = {
+            "rskit-config": _pkg(self.released_dir, "rskit-config", "core", "0.1.0-alpha.4"),
+            "rskit-stream": _pkg(self.fresh_dir, "rskit-stream", "core", "0.1.0-alpha.2"),
+        }
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    @contextlib.contextmanager
+    def _patched(self):
+        with (
+            mock.patch.object(rb, "_workspace_graph", return_value=(self.members, {})),
+            # Only rskit-config existed at the tag; rskit-stream has no baseline.
+            mock.patch.object(
+                rb,
+                "_released_baselines",
+                return_value={"rskit-config": SemVer.parse("0.1.0-alpha.4")},
+            ),
+            mock.patch.object(rb, "_all_workspace_floors", return_value={}),
+            mock.patch.object(rb, "_sync_readme_versions", return_value=[]),
+            # _detect_changed must never run in all-mode.
+            mock.patch.object(rb, "_detect_changed", side_effect=AssertionError),
+        ):
+            with contextlib.redirect_stdout(io.StringIO()):
+                yield
+
+    def _version(self, crate_dir: Path) -> str:
+        return (crate_dir / "Cargo.toml").read_text(encoding="utf-8")
+
+    def test_all_minor_reseeds_every_crate_uniformly(self) -> None:
+        with self._patched():
+            rb.run_bump(_args(workspace="core", base="v0.1.0-alpha.5", all_minor=True, dry_run=False))
+        # Both the released and the brand-new crate land on the same minor seed.
+        self.assertIn('version = "0.2.0-alpha.1"', self._version(self.released_dir))
+        self.assertIn('version = "0.2.0-alpha.1"', self._version(self.fresh_dir))
+
+    def test_all_major_reseeds_every_crate_uniformly(self) -> None:
+        with self._patched():
+            rb.run_bump(_args(workspace="core", base="v0.1.0-alpha.5", all_major=True, dry_run=False))
+        self.assertIn('version = "1.0.0-alpha.1"', self._version(self.released_dir))
+        self.assertIn('version = "1.0.0-alpha.1"', self._version(self.fresh_dir))
+
+    def test_all_minor_is_idempotent(self) -> None:
+        with self._patched():
+            rb.run_bump(_args(workspace="core", base="v0.1.0-alpha.5", all_minor=True, dry_run=False))
+        # Re-run against the same released baseline must not advance past 0.2.0-alpha.1.
+        self.members["rskit-config"] = _pkg(
+            self.released_dir, "rskit-config", "core", "0.2.0-alpha.1"
+        )
+        self.members["rskit-stream"] = _pkg(
+            self.fresh_dir, "rskit-stream", "core", "0.2.0-alpha.1"
+        )
+        with self._patched():
+            rb.run_bump(_args(workspace="core", base="v0.1.0-alpha.5", all_minor=True, dry_run=False))
+        self.assertIn('version = "0.2.0-alpha.1"', self._version(self.released_dir))
+        self.assertIn('version = "0.2.0-alpha.1"', self._version(self.fresh_dir))
+
+    def test_all_minor_and_all_major_are_mutually_exclusive(self) -> None:
+        with self.assertRaises(ToolError):
+            rb.run_bump(_args(workspace="core", all_minor=True, all_major=True))
+
+    def test_all_mode_rejects_explicit_minor(self) -> None:
+        with self.assertRaises(ToolError):
+            rb.run_bump(_args(workspace="core", all_minor=True, minor=["rskit-config"]))
+
+    def test_all_mode_without_anchor_raises(self) -> None:
+        with (
+            mock.patch.object(rb, "latest_tag", return_value="deadbeef"),
+            mock.patch.object(rb, "_workspace_graph", return_value=(self.members, {})),
+            mock.patch.object(rb, "_released_baselines", return_value={}),
+            mock.patch.object(rb, "_all_workspace_floors", return_value={}),
+        ):
+            with self.assertRaises(ToolError) as ctx:
+                rb.run_bump(_args(workspace="core", base=None, all_minor=True))
+        self.assertIn("anchor", str(ctx.exception))
 
 
 class AllWorkspaceFloorsTests(unittest.TestCase):

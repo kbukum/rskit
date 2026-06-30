@@ -577,27 +577,35 @@ def compute_bump_plan(
     current_versions: Mapping[str, SemVer],
     baselines: Mapping[str, SemVer],
     current_floors: Mapping[str, SemVer],
+    major: Iterable[str] = (),
 ) -> BumpPlan:
     """Plan version bumps and caret-floor rewrites for one workspace.
 
     ``changed`` crates default to a **patch** bump; those also listed in
-    ``minor`` take a breaking **minor** bump and cascade a patch to their
-    in-workspace transitive dependents. Each target is computed against the
-    released ``baselines`` (max of crates.io and the last tag) so re-running is a
-    no-op once the local manifest already carries the bumped version.
+    ``minor`` (or ``major``) take a breaking **minor** (or **major**) bump and
+    cascade a patch to their in-workspace transitive dependents. Each target is
+    computed against the released ``baselines`` (max of crates.io and the last
+    tag) so re-running is a no-op once the local manifest already carries the
+    bumped version.
 
     Floor rewrites are emitted for any dependency whose final version no longer
-    satisfies its current caret floor — exactly the breaking-minor case — which
+    satisfies its current caret floor — exactly the breaking-bump case — which
     keeps path-based resolution valid and is itself idempotent.
     """
 
     minor_set = set(minor)
+    major_set = set(major)
     decided: dict[str, tuple[str, str]] = {}  # name -> (kind, reason)
     for name in changed:
-        kind = "minor" if name in minor_set else "patch"
+        if name in major_set:
+            kind = "major"
+        elif name in minor_set:
+            kind = "minor"
+        else:
+            kind = "patch"
         decided[name] = (kind, "changed")
 
-    breaking = [name for name, (kind, _) in decided.items() if kind == "minor"]
+    breaking = [name for name, (kind, _) in decided.items() if kind in ("minor", "major")]
     for dependent in transitive_dependents(breaking, dependents):
         decided.setdefault(dependent, ("patch", "cascade"))
 
