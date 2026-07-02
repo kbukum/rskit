@@ -177,7 +177,6 @@ fn watch_error_code(error: &notify::Error) -> ErrorCode {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
     use std::time::Duration;
 
     use futures::StreamExt as _;
@@ -207,7 +206,8 @@ mod tests {
             .build()
             .unwrap();
         runtime.block_on(async {
-            let missing = PathBuf::from("/definitely/not/a/real/path/xyzzy");
+            let dir = TempDir::new().unwrap();
+            let missing = dir.path().join("does-not-exist");
             let result = FsWatcher::new(Duration::from_millis(50))
                 .watch(std::slice::from_ref(&missing), CancellationToken::new());
             let error = result.err().expect("missing root must error");
