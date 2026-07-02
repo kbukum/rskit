@@ -113,6 +113,7 @@ serde       = { workspace = true }
 [features]
 default       = []
 config-watch  = ["rskit-config/watch"]
+fs-watch      = ["rskit-fs/watch"]
 server        = ["dep:rskit-server"]
 grpc          = ["dep:rskit-grpc"]
 encryption    = ["dep:rskit-encryption"]

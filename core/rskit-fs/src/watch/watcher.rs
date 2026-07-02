@@ -1,0 +1,230 @@
+//! [`FsWatcher`]: the `notify`-backed source that produces a debounced stream.
+
+use std::collections::BTreeSet;
+use std::path::{Path, PathBuf};
+use std::pin::Pin;
+use std::task::{Context, Poll};
+use std::time::Duration;
+
+use futures::{Stream, StreamExt as _};
+use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+use rskit_errors::{AppError, AppResult, ErrorCode};
+use rskit_stream::{CancellationToken, RskitStreamExt as _, from_channel};
+use tokio::sync::mpsc;
+
+use super::change::FsChangeBatch;
+
+/// Default bounded capacity for the internal raw-event channel.
+///
+/// Backpressure is intentional: a slow consumer stalls the platform watcher
+/// thread rather than growing an unbounded queue.
+const DEFAULT_BUFFER: usize = 1024;
+
+/// Safety cap on the number of raw paths coalesced into one debounced batch.
+///
+/// The debounce timer resets on every event, so a sustained change rate faster
+/// than the debounce window (e.g. a large checkout) would otherwise accumulate
+/// unboundedly; reaching this many paths force-flushes an early batch. It is
+/// generous so ordinary edit bursts still coalesce into a single batch.
+const MAX_BATCH_PATHS: usize = 65_536;
+
+/// An owned, bounded stream of debounced [`FsChangeBatch`]es.
+///
+/// Boxed so the concrete `notify`/channel machinery stays private and callers
+/// (including trait-object ports) depend only on `Stream<Item = FsChangeBatch>`.
+pub type FsChangeStream = Pin<Box<dyn Stream<Item = FsChangeBatch> + Send>>;
+
+/// A recursive, debounced filesystem-tree watcher.
+///
+/// Construct with a debounce window, then call [`watch`](Self::watch) with the
+/// roots to observe and a [`CancellationToken`]. Each call is independent: it
+/// installs its own platform watcher, kept alive for exactly as long as the
+/// returned stream — dropping the stream (or firing the token) tears the OS
+/// watch down.
+#[derive(Debug, Clone)]
+pub struct FsWatcher {
+    debounce: Duration,
+    buffer: usize,
+}
+
+impl FsWatcher {
+    /// Create a watcher with the given trailing-edge debounce window.
+    #[must_use]
+    pub const fn new(debounce: Duration) -> Self {
+        Self {
+            debounce,
+            buffer: DEFAULT_BUFFER,
+        }
+    }
+
+    /// Override the bounded channel capacity (clamped to at least 1).
+    #[must_use]
+    pub fn with_buffer(mut self, buffer: usize) -> Self {
+        self.buffer = buffer.max(1);
+        self
+    }
+
+    /// Watch `roots` recursively, yielding a debounced [`FsChangeStream`].
+    ///
+    /// Raw platform events are bridged onto a bounded channel, made cancellable
+    /// with `cancel`, coalesced by [`rdebounce_batch`](rskit_stream::RskitStreamExt::rdebounce_batch)
+    /// over the debounce window, and mapped to sorted, deduplicated
+    /// [`FsChangeBatch`]es. The stream is lazy — no task is spawned; it is driven
+    /// by whoever polls it — and completes when `cancel` fires or the platform
+    /// watcher stops. Dropping the returned stream stops the OS watcher.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ErrorCode::InvalidInput`] when `roots` is empty, or a typed
+    /// error (cause preserved) when the platform watcher cannot be created or a
+    /// root cannot be watched (e.g. it does not exist).
+    pub fn watch(&self, roots: &[PathBuf], cancel: CancellationToken) -> AppResult<FsChangeStream> {
+        if roots.is_empty() {
+            return Err(AppError::invalid_input(
+                "roots",
+                "filesystem watch requires at least one root path",
+            ));
+        }
+
+        let (raw_tx, raw_rx) = mpsc::channel::<PathBuf>(self.buffer);
+        let mut watcher =
+            notify::recommended_watcher(move |result: notify::Result<notify::Event>| {
+                // A transient per-event error (e.g. an overflow notice) carries no
+                // path to act on; the next real event re-establishes the change set,
+                // so it is skipped rather than surfaced mid-stream.
+                if let Ok(event) = result {
+                    for path in event.paths {
+                        // The platform callback runs on `notify`'s own OS thread, not
+                        // a runtime worker, so a blocking send is the correct
+                        // backpressure primitive here.
+                        if raw_tx.blocking_send(path).is_err() {
+                            break;
+                        }
+                    }
+                }
+            })
+            .map_err(|error| watch_error("create filesystem watcher", None, error))?;
+
+        for root in roots {
+            watcher
+                .watch(root, RecursiveMode::Recursive)
+                .map_err(|error| watch_error("watch path", Some(root), error))?;
+        }
+
+        // Lazy pipeline: bounded raw source → cancellation → trailing-edge debounce
+        // → dedup into a batch. No spawned task owns the watcher; the wrapper below
+        // keeps it alive for the stream's lifetime and drops it on teardown.
+        let batches = from_channel(raw_rx)
+            .take_until(cancel.cancelled_owned())
+            .rdebounce_batch(self.debounce, MAX_BATCH_PATHS)
+            .map(|paths| FsChangeBatch::new(paths.into_iter().collect::<BTreeSet<_>>()));
+
+        Ok(Box::pin(WatchedStream {
+            batches: Box::pin(batches),
+            _watcher: watcher,
+        }))
+    }
+}
+
+/// Couples the platform watcher's lifetime to the debounced stream.
+///
+/// Field order is a correctness requirement, not cosmetic: Rust drops fields in
+/// declaration order, so `batches` (which owns the raw-event receiver) must drop
+/// **before** `_watcher`. On macOS the fsevent backend's `Drop` joins the runloop
+/// thread that invokes our `blocking_send`; if that send is parked on a full
+/// bounded channel, closing the receiver first releases it so the join can
+/// complete. Dropping the watcher first would leave the send blocked and hang
+/// teardown.
+struct WatchedStream {
+    batches: FsChangeStream,
+    _watcher: RecommendedWatcher,
+}
+
+impl Stream for WatchedStream {
+    type Item = FsChangeBatch;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        self.batches.as_mut().poll_next(cx)
+    }
+}
+
+/// Map a `notify` error to a typed [`AppError`], preserving the cause and path.
+fn watch_error(action: &str, path: Option<&Path>, error: notify::Error) -> AppError {
+    let message = path.map_or_else(
+        || format!("failed to {action}"),
+        |path| format!("failed to {action} '{}'", path.display()),
+    );
+    AppError::new(ErrorCode::Internal, message).with_cause(error)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+    use std::time::Duration;
+
+    use futures::StreamExt as _;
+    use rskit_stream::CancellationToken;
+
+    use super::FsWatcher;
+    use crate::TempDir;
+
+    #[test]
+    fn empty_roots_is_a_typed_input_error() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let result =
+                FsWatcher::new(Duration::from_millis(50)).watch(&[], CancellationToken::new());
+            let error = result.err().expect("empty roots must error");
+            assert!(error.to_string().contains("at least one root"));
+        });
+    }
+
+    #[test]
+    fn watching_a_missing_root_is_a_typed_error() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let missing = PathBuf::from("/definitely/not/a/real/path/xyzzy");
+            let result = FsWatcher::new(Duration::from_millis(50))
+                .watch(std::slice::from_ref(&missing), CancellationToken::new());
+            let error = result.err().expect("missing root must error");
+            assert!(!error.to_string().is_empty());
+        });
+    }
+
+    // Real-filesystem wiring smoke test: a write under a watched root surfaces as
+    // a batch. Uses a multi-thread runtime (the `notify` callback blocking-sends
+    // from its own thread) and a generous timeout rather than asserting timing.
+    #[test]
+    fn a_write_under_a_watched_root_yields_a_batch() {
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let dir = TempDir::new().unwrap();
+            let root = dir.path().to_path_buf();
+            let cancel = CancellationToken::new();
+            let mut stream = FsWatcher::new(Duration::from_millis(50))
+                .watch(std::slice::from_ref(&root), cancel.clone())
+                .unwrap();
+
+            let file = dir.child("touched.txt").unwrap();
+            tokio::fs::write(&file, b"hello").await.unwrap();
+
+            let batch = tokio::time::timeout(Duration::from_secs(5), stream.next())
+                .await
+                .expect("a change batch should arrive")
+                .expect("stream should yield a batch");
+            assert!(batch.any(|path| path.ends_with("touched.txt")));
+
+            cancel.cancel();
+        });
+    }
+}

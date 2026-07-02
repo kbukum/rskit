@@ -38,6 +38,9 @@ pub mod sync_io;
 /// Temporary file and path helpers.
 pub mod temp;
 mod types;
+/// Recursive, debounced filesystem-tree change watching.
+#[cfg(feature = "watch")]
+pub mod watch;
 
 pub use app_dirs::app_cache_dir;
 pub use path::{

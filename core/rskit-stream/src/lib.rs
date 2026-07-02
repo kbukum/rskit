@@ -347,7 +347,7 @@ mod tests {
         assert_eq!(batches[0], vec![1, 2]);
     }
 
-    // ── Windowing: rdebounce ──────────────────────────────────────────────
+    // ── Rate: rdebounce ───────────────────────────────────────────────────
 
     /// `rdebounce` only emits the last item when the quiet window expires.
     #[tokio::test]
@@ -378,7 +378,90 @@ mod tests {
         assert_eq!(*result.last().unwrap(), 3u32);
     }
 
-    // ── Windowing: rthrottle ──────────────────────────────────────────────
+    // ── Rate: rdebounce_batch ─────────────────────────────────────────────
+
+    /// A burst of items with no quiet gap collapses into one trailing-edge
+    /// batch, in arrival order. Delays live inside the source so `start_paused`
+    /// auto-advances the clock deterministically.
+    #[tokio::test(start_paused = true)]
+    async fn test_rdebounce_batch_collapses_a_burst() {
+        let source = async_stream::stream! {
+            yield 1u32;
+            yield 2u32;
+            // Still inside the 100ms window: only pushes the deadline out.
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            yield 3u32;
+        };
+        let result: Vec<Vec<u32>> = source
+            .rdebounce_batch(Duration::from_millis(100), 1024)
+            .collect()
+            .await;
+        assert_eq!(result, vec![vec![1u32, 2, 3]]);
+    }
+
+    /// Items separated by a quiet gap wider than the window land in separate
+    /// batches.
+    #[tokio::test(start_paused = true)]
+    async fn test_rdebounce_batch_splits_separate_windows() {
+        let source = async_stream::stream! {
+            yield 1u32;
+            tokio::time::sleep(Duration::from_millis(150)).await;
+            yield 2u32;
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        };
+        let result: Vec<Vec<u32>> = source
+            .rdebounce_batch(Duration::from_millis(100), 1024)
+            .collect()
+            .await;
+        assert_eq!(result, vec![vec![1u32], vec![2u32]]);
+    }
+
+    /// The source closing before the quiet window elapses still flushes the
+    /// pending, not-yet-emitted window.
+    #[tokio::test(start_paused = true)]
+    async fn test_rdebounce_batch_flushes_pending_on_close() {
+        let source = async_stream::stream! { yield 7u32; };
+        let result: Vec<Vec<u32>> = source
+            .rdebounce_batch(Duration::from_millis(100), 1024)
+            .collect()
+            .await;
+        assert_eq!(result, vec![vec![7u32]]);
+    }
+
+    /// The `max_items` safety cap force-flushes mid-burst so a sustained input
+    /// rate faster than the quiet window cannot grow the buffer without bound.
+    #[tokio::test(start_paused = true)]
+    async fn test_rdebounce_batch_force_flushes_at_cap() {
+        // A burst of 5 items with no quiet gap: a cap of 2 must split it into
+        // [1,2], [3,4], then flush the trailing [5] on close.
+        let source = async_stream::stream! {
+            for value in 1u32..=5 {
+                yield value;
+            }
+        };
+        let result: Vec<Vec<u32>> = source
+            .rdebounce_batch(Duration::from_millis(100), 2)
+            .collect()
+            .await;
+        assert_eq!(result, vec![vec![1u32, 2], vec![3u32, 4], vec![5u32]]);
+    }
+
+    /// Dropping the consumer (the debounced stream) tears the pipeline down: it
+    /// owns the source, so the source receiver is dropped and further sends fail.
+    #[tokio::test]
+    async fn test_rdebounce_batch_consumer_drop_ends_pipeline() {
+        let (tx, rx) = tokio::sync::mpsc::channel::<u32>(16);
+        let batched =
+            crate::source::from_channel(rx).rdebounce_batch(Duration::from_millis(100), 1024);
+        drop(batched); // Consumer gone before any window is emitted.
+
+        assert!(
+            tx.send(0).await.is_err(),
+            "dropping the debounced stream must close the source"
+        );
+    }
+
+    // ── Rate: rthrottle ───────────────────────────────────────────────────
 
     /// `rthrottle` drops items arriving faster than the interval.
     #[tokio::test]
