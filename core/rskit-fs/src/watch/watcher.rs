@@ -75,9 +75,11 @@ impl FsWatcher {
     ///
     /// # Errors
     ///
-    /// Returns [`ErrorCode::InvalidInput`] when `roots` is empty, or a typed
-    /// error (cause preserved) when the platform watcher cannot be created or a
-    /// root cannot be watched (e.g. it does not exist).
+    /// Returns [`ErrorCode::InvalidInput`] when `roots` is empty; otherwise a
+    /// typed error (cause preserved) classified from the platform failure —
+    /// [`ErrorCode::NotFound`] when a root does not exist, [`ErrorCode::Forbidden`]
+    /// when it cannot be accessed, [`ErrorCode::ServiceUnavailable`] when the OS
+    /// watch limit is reached, or [`ErrorCode::Internal`] for other failures.
     pub fn watch(&self, roots: &[PathBuf], cancel: CancellationToken) -> AppResult<FsChangeStream> {
         if roots.is_empty() {
             return Err(AppError::invalid_input(
@@ -154,7 +156,23 @@ fn watch_error(action: &str, path: Option<&Path>, error: notify::Error) -> AppEr
         || format!("failed to {action}"),
         |path| format!("failed to {action} '{}'", path.display()),
     );
-    AppError::new(ErrorCode::Internal, message).with_cause(error)
+    AppError::new(watch_error_code(&error), message).with_cause(error)
+}
+
+/// Classify a `notify` error into a typed [`ErrorCode`] so watch failures carry
+/// a meaningful status (and HTTP mapping) instead of a blanket `Internal`/500.
+fn watch_error_code(error: &notify::Error) -> ErrorCode {
+    match &error.kind {
+        notify::ErrorKind::PathNotFound | notify::ErrorKind::WatchNotFound => ErrorCode::NotFound,
+        notify::ErrorKind::InvalidConfig(_) => ErrorCode::InvalidInput,
+        notify::ErrorKind::MaxFilesWatch => ErrorCode::ServiceUnavailable,
+        notify::ErrorKind::Io(io) => match io.kind() {
+            std::io::ErrorKind::NotFound => ErrorCode::NotFound,
+            std::io::ErrorKind::PermissionDenied => ErrorCode::Forbidden,
+            _ => ErrorCode::Internal,
+        },
+        notify::ErrorKind::Generic(_) => ErrorCode::Internal,
+    }
 }
 
 #[cfg(test)]
@@ -195,6 +213,41 @@ mod tests {
             let error = result.err().expect("missing root must error");
             assert!(!error.to_string().is_empty());
         });
+    }
+
+    #[test]
+    fn notify_errors_map_to_meaningful_codes() {
+        use super::watch_error_code;
+        use rskit_errors::ErrorCode;
+
+        assert_eq!(
+            watch_error_code(&notify::Error::path_not_found()),
+            ErrorCode::NotFound
+        );
+        assert_eq!(
+            watch_error_code(&notify::Error::watch_not_found()),
+            ErrorCode::NotFound
+        );
+        assert_eq!(
+            watch_error_code(&notify::Error::new(notify::ErrorKind::MaxFilesWatch)),
+            ErrorCode::ServiceUnavailable,
+        );
+        assert_eq!(
+            watch_error_code(&notify::Error::io(std::io::Error::from(
+                std::io::ErrorKind::NotFound
+            ))),
+            ErrorCode::NotFound,
+        );
+        assert_eq!(
+            watch_error_code(&notify::Error::io(std::io::Error::from(
+                std::io::ErrorKind::PermissionDenied
+            ))),
+            ErrorCode::Forbidden,
+        );
+        assert_eq!(
+            watch_error_code(&notify::Error::generic("boom")),
+            ErrorCode::Internal
+        );
     }
 
     // Real-filesystem wiring smoke test: a write under a watched root surfaces as

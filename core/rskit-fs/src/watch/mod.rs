@@ -1,12 +1,12 @@
 //! Recursive, debounced filesystem-tree change watching.
 //!
-//! [`FsWatcher`] observes one or more directory trees and yields
-//! [`FsChangeBatch`]es of changed paths, collapsing bursts of raw events with a
+//! [`FsWatcher`](crate::watch::FsWatcher) observes one or more directory trees and yields
+//! [`FsChangeBatch`](crate::watch::FsChangeBatch)es of changed paths, collapsing bursts of raw events with a
 //! trailing-edge debounce window. It is the generic, project-agnostic primitive
 //! behind edit→rebuild loops (test watchers, hot-reload tools, incremental
 //! planners): the caller supplies the roots, a debounce duration, and a
 //! [`CancellationToken`](rskit_stream::CancellationToken), and consumes an owned,
-//! bounded [`FsChangeStream`].
+//! bounded [`FsChangeStream`](crate::watch::FsChangeStream).
 //!
 //! This is distinct from `rskit-config`'s reload watch, which observes a config
 //! *backend* and emits keyed changes; this module observes a *path tree* and
