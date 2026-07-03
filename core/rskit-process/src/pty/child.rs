@@ -17,8 +17,12 @@ use tokio::process::Command as TokioCommand;
 ///
 /// Because `setsid` establishes the process group, this hook intentionally
 /// replaces the plain `setpgid` isolation used for pipe-backed modes; the
-/// resulting group id still equals the child pid, so group-targeted termination
-/// continues to work.
+/// resulting group id still equals the child pid. This preserves the same group
+/// layout the pipe-backed path relies on, so when [`SignalPolicy`] is configured
+/// to target the process group, group-targeted termination behaves identically
+/// to the non-PTY modes; it does not change or override `SignalPolicy`.
+///
+/// [`SignalPolicy`]: crate::SignalPolicy
 pub(crate) fn install_controlling_tty(cmd: &mut TokioCommand) {
     // SAFETY: the closure runs in the forked child before `exec`. It calls only
     // async-signal-safe syscalls (`setsid`, `ioctl`) and returns an `io::Error`

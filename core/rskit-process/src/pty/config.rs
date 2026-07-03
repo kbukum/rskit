@@ -20,9 +20,13 @@ pub struct PtyIo {
     /// Standard input policy. Only [`InputPolicy::Closed`] and
     /// [`InputPolicy::Bytes`] are supported; inherited stdin is rejected.
     ///
-    /// [`InputPolicy::Bytes`] are delivered as terminal input (as if typed)
-    /// through the PTY's line discipline; there is no pipe-style EOF-on-close,
-    /// so a reader returns on a newline rather than on the writer closing.
+    /// Terminal stdin cannot be half-closed, so [`InputPolicy::Closed`] does not
+    /// deliver a pipe-style EOF here: it simply means no bytes are ever written
+    /// to the child's terminal (the child keeps reading from a live tty that
+    /// stays open until the PTY is torn down), not that the child sees stdin
+    /// closed. Likewise [`InputPolicy::Bytes`] are delivered as terminal input
+    /// (as if typed) through the PTY's line discipline, so a reader returns on a
+    /// newline rather than on the writer closing.
     pub input: InputPolicy,
     /// Capture policy for the merged output stream (applied to stdout).
     pub output: OutputPolicy,
