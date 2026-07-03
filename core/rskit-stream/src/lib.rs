@@ -488,6 +488,21 @@ mod tests {
         assert!(result.len() < 5);
     }
 
+    /// `rthrottle` with an extreme interval still emits the first item without
+    /// panicking (guards against an underflowing `now - interval` seed).
+    #[tokio::test]
+    async fn test_rthrottle_huge_interval_emits_first_without_panic() {
+        tokio::time::pause();
+
+        let stream = from_slice(vec![1u32, 2, 3]);
+        let result = stream
+            .rthrottle(Duration::from_secs(u64::MAX))
+            .collect::<Vec<_>>()
+            .await;
+
+        assert_eq!(result, vec![1u32]);
+    }
+
     // ── Windowing: rtumbling_window ───────────────────────────────────────
 
     /// `rtumbling_window` emits a non-empty window when the timer fires.

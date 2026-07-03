@@ -125,11 +125,14 @@ where
 {
     async_stream::stream! {
         tokio::pin!(stream);
-        let mut last_emit = tokio::time::Instant::now() - interval;
+        // `None` until the first item is emitted, so the first arrival is always
+        // yielded without a potentially-underflowing `now - interval`.
+        let mut last_emit: Option<tokio::time::Instant> = None;
         while let Some(item) = stream.next().await {
             let now = tokio::time::Instant::now();
-            if now.duration_since(last_emit) >= interval {
-                last_emit = now;
+            let due = last_emit.is_none_or(|prev| now.duration_since(prev) >= interval);
+            if due {
+                last_emit = Some(now);
                 yield item;
             }
         }
