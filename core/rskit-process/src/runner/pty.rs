@@ -87,13 +87,15 @@ pub(in crate::runner) async fn run_pty_mode(
 
     // The child's merged stdout+stderr arrives on the master; route it through
     // the stdout observer callbacks and (optionally) capture it as stdout.
+    // Because the two streams are merged here, either capture flag opts the
+    // caller into retaining the combined output.
     let reader = PtyMaster::new(master).map_err(AppError::internal)?;
     let reader_task = spawn_reader(
         Some(reader),
         io.output.max_output_bytes,
         io.observer.stdout_line.clone(),
         io.observer.stdout_bytes.clone(),
-        io.output.capture_stdout,
+        io.output.capture_stdout || io.output.capture_stderr,
     );
 
     let completion = wait_for_completion(&mut child, spec, config, cancel).await?;

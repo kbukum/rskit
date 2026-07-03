@@ -13,11 +13,12 @@ use super::size::PtySize;
 /// single stream: the child's stdout and stderr are merged in emission order.
 ///
 /// The merged stream is delivered through the observer's **stdout** callbacks
-/// and, when the output policy captures stdout, retained as the result's stdout.
-/// The child never writes to the result's stderr in this mode; the only bytes
-/// that can appear there are synthetic termination diagnostics injected by the
-/// lifecycle layer (for example a note that the child was killed after a timeout
-/// or cancellation).
+/// and, when the output policy captures either stdout or stderr, retained as the
+/// result's stdout (the two streams are merged, so either capture flag opts into
+/// keeping the combined output). The child never writes to the result's stderr
+/// in this mode; the only bytes that can appear there are synthetic termination
+/// diagnostics injected by the lifecycle layer (for example a note that the
+/// child was killed after a timeout or cancellation).
 #[derive(Clone, Default)]
 pub struct PtyIo {
     /// Standard input policy. Only [`InputPolicy::Closed`] and
@@ -31,7 +32,9 @@ pub struct PtyIo {
     /// (as if typed) through the PTY's line discipline, so a reader returns on a
     /// newline rather than on the writer closing.
     pub input: InputPolicy,
-    /// Capture policy for the merged output stream (applied to stdout).
+    /// Capture policy for the merged output stream. Either `capture_stdout` or
+    /// `capture_stderr` retains the combined stream (surfaced as the result's
+    /// stdout); `max_output_bytes` bounds it.
     pub output: OutputPolicy,
     /// Observer callbacks for the merged output stream (delivered via stdout).
     pub observer: OutputObserver,

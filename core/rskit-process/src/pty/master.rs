@@ -35,24 +35,38 @@ impl PtyMaster {
 }
 
 fn read_fd(fd: RawFd, buf: &mut [u8]) -> io::Result<usize> {
-    // SAFETY: `read` writes at most `buf.len()` bytes into `buf`'s valid,
-    // uniquely-borrowed backing store and reports the count (or an error).
-    let count = unsafe { libc::read(fd, buf.as_mut_ptr().cast::<libc::c_void>(), buf.len()) };
-    if count < 0 {
-        return Err(io::Error::last_os_error());
+    loop {
+        // SAFETY: `read` writes at most `buf.len()` bytes into `buf`'s valid,
+        // uniquely-borrowed backing store and reports the count (or an error).
+        let count = unsafe { libc::read(fd, buf.as_mut_ptr().cast::<libc::c_void>(), buf.len()) };
+        if count < 0 {
+            let error = io::Error::last_os_error();
+            // A signal interrupted the syscall before any transfer; retry.
+            if error.kind() == io::ErrorKind::Interrupted {
+                continue;
+            }
+            return Err(error);
+        }
+        // A non-negative `count` fits `usize` because it is bounded by `buf.len()`.
+        return Ok(count as usize);
     }
-    // A non-negative `count` fits `usize` because it is bounded by `buf.len()`.
-    Ok(count as usize)
 }
 
 fn write_fd(fd: RawFd, buf: &[u8]) -> io::Result<usize> {
-    // SAFETY: `write` reads at most `buf.len()` bytes from `buf`'s valid,
-    // shared-borrowed backing store and reports the count (or an error).
-    let count = unsafe { libc::write(fd, buf.as_ptr().cast::<libc::c_void>(), buf.len()) };
-    if count < 0 {
-        return Err(io::Error::last_os_error());
+    loop {
+        // SAFETY: `write` reads at most `buf.len()` bytes from `buf`'s valid,
+        // shared-borrowed backing store and reports the count (or an error).
+        let count = unsafe { libc::write(fd, buf.as_ptr().cast::<libc::c_void>(), buf.len()) };
+        if count < 0 {
+            let error = io::Error::last_os_error();
+            // A signal interrupted the syscall before any transfer; retry.
+            if error.kind() == io::ErrorKind::Interrupted {
+                continue;
+            }
+            return Err(error);
+        }
+        return Ok(count as usize);
     }
-    Ok(count as usize)
 }
 
 impl AsyncRead for PtyMaster {

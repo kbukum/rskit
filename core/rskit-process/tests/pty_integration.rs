@@ -176,3 +176,19 @@ async fn disabling_the_process_group_is_rejected_for_pty_mode() {
 
     assert_eq!(error.code(), rskit_process::ErrorCode::InvalidInput);
 }
+
+#[tokio::test]
+async fn capturing_only_stderr_still_retains_the_merged_stream() {
+    // stdout and stderr are one stream on a PTY, so requesting stderr capture
+    // (with stdout capture off) must still retain the combined output.
+    let mut policy = OutputPolicy::observe_only();
+    policy.capture_stderr = true;
+    let io = PtyIo::default().with_output(policy);
+    let spec = ProcessSpec::new("/bin/sh").args(["-c", "printf out; printf err 1>&2"]);
+    let result = run_with_cancel(&spec, &pty_config(io), CancellationToken::new())
+        .await
+        .expect("run");
+
+    assert!(result.stdout.contains("out"));
+    assert!(result.stdout.contains("err"));
+}

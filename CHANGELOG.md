@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 
 - Add `rskit-fs::watch` (behind the `watch` feature): `FsWatcher`, a recursive, `notify`-backed filesystem-tree change watcher that bridges raw platform events onto a bounded channel and yields cancellable, trailing-edge-debounced `FsChangeBatch`es (sorted, deduplicated changed paths) as an owned `FsChangeStream`. Surfaced through the `rskit-suite` facade as the `fs-watch` feature. Watch failures are classified into typed `ErrorCode`s (`NotFound`, `Forbidden`, `InvalidInput`, `ServiceUnavailable`) rather than a blanket `Internal`.
+- Add a Unix pseudoterminal (PTY) I/O mode to `rskit-process` (`ProcessIo::Pty(PtyIo)`, plus `PtySize` and `terminal_size`): runs the child attached to a real controlling terminal so tty-gated rendering (colors, progress bars, width-dependent formatting) is preserved verbatim, while the parent still observes and optionally captures the merged stdout/stderr stream. Unix-only; the sync and persistent runners reject PTY mode with typed `InvalidInput` errors, as does disabling `SignalPolicy::create_process_group` (PTY setup must `setsid` to own the terminal).
 - Add the `debounce_batch` operator to `rskit-stream` (`RskitStreamExt::rdebounce_batch(quiet, max_items)`): a trailing-edge debounce that accumulates *every* item seen during a burst — resetting the quiet-window timer on each arrival — and emits the whole window as one `Vec<T>`, with a `max_items` safety cap that force-flushes to bound the buffer under sustained input.
 
 ### Changed
