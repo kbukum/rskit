@@ -37,6 +37,16 @@ pub(in crate::runner) async fn run_pty_mode(
             "inherited stdin requires inherited I/O mode; PTY mode owns the child's terminal",
         ));
     }
+    if !config.signal.create_process_group {
+        // Acquiring a controlling terminal requires the child to be a session
+        // leader, so PTY setup unconditionally calls `setsid()` (a new session,
+        // hence a new process group). `create_process_group = false` therefore
+        // cannot be honored here; reject it rather than silently ignoring it.
+        return Err(AppError::invalid_input(
+            "process.signal.create_process_group",
+            "PTY mode always starts a new session (setsid) to own the terminal, so create_process_group cannot be disabled",
+        ));
+    }
 
     let start = Instant::now();
     let PtyPair { master, slave } = open_pty(io.size)?;

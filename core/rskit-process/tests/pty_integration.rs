@@ -10,7 +10,7 @@ use std::time::Duration;
 use parking_lot::Mutex;
 use rskit_process::{
     InputPolicy, OutputObserver, OutputPolicy, ProcessConfig, ProcessIo, ProcessSpec, PtyIo,
-    PtySize, run_with_cancel,
+    PtySize, SignalPolicy, run_with_cancel,
 };
 use tokio_util::sync::CancellationToken;
 
@@ -158,6 +158,21 @@ async fn inherited_stdin_is_rejected_for_pty_mode() {
     let error = run_with_cancel(&spec, &pty_config(io), CancellationToken::new())
         .await
         .expect_err("inherited stdin must be rejected");
+
+    assert_eq!(error.code(), rskit_process::ErrorCode::InvalidInput);
+}
+
+#[tokio::test]
+async fn disabling_the_process_group_is_rejected_for_pty_mode() {
+    // PTY setup must call `setsid()` to own the terminal, which always starts a
+    // new session/process group; `create_process_group = false` cannot be
+    // honored and must be rejected rather than silently ignored.
+    let spec = ProcessSpec::new("/bin/cat");
+    let config = pty_config(PtyIo::default())
+        .with_signal_policy(SignalPolicy::default().with_create_process_group(false));
+    let error = run_with_cancel(&spec, &config, CancellationToken::new())
+        .await
+        .expect_err("disabling the process group must be rejected in PTY mode");
 
     assert_eq!(error.code(), rskit_process::ErrorCode::InvalidInput);
 }

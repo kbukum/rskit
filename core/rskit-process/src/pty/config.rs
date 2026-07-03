@@ -13,8 +13,11 @@ use super::size::PtySize;
 /// single stream: the child's stdout and stderr are merged in emission order.
 ///
 /// The merged stream is delivered through the observer's **stdout** callbacks
-/// and, when the output policy captures stdout, retained as the result's stdout;
-/// stderr is always empty in this mode.
+/// and, when the output policy captures stdout, retained as the result's stdout.
+/// The child never writes to the result's stderr in this mode; the only bytes
+/// that can appear there are synthetic termination diagnostics injected by the
+/// lifecycle layer (for example a note that the child was killed after a timeout
+/// or cancellation).
 #[derive(Clone, Default)]
 pub struct PtyIo {
     /// Standard input policy. Only [`InputPolicy::Closed`] and
