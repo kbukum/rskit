@@ -31,6 +31,7 @@ watch = [
     "dep:rskit-stream",
     "dep:futures",
     "tokio/sync",
+    "tokio/time",
 ]
 
 [dependencies]
