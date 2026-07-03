@@ -108,9 +108,16 @@ impl FsWatcher {
             .map_err(|error| watch_error("create filesystem watcher", None, error))?;
 
         for root in roots {
-            watcher
-                .watch(root, RecursiveMode::Recursive)
-                .map_err(|error| watch_error("watch path", Some(root), error))?;
+            if let Err(error) = watcher.watch(root, RecursiveMode::Recursive) {
+                // Reverse binding-order would drop `watcher` before `raw_rx` on this
+                // early return, re-opening the macOS fsevent teardown deadlock that
+                // `WatchedStream`'s field order guards against: dropping the watcher
+                // joins the runloop thread, which may be parked in `blocking_send` on
+                // a full channel. Close the receiver first so any parked send unblocks
+                // (returns `Err`) before the watcher is dropped.
+                drop(raw_rx);
+                return Err(watch_error("watch path", Some(root), error));
+            }
         }
 
         // Lazy pipeline: bounded raw source → cancellation → trailing-edge debounce
@@ -212,6 +219,32 @@ mod tests {
                 .watch(std::slice::from_ref(&missing), CancellationToken::new());
             let error = result.err().expect("missing root must error");
             assert!(!error.to_string().is_empty());
+        });
+    }
+
+    // A valid root followed by a missing one must error on setup and return
+    // promptly — the missing-root error path drops the raw receiver before the
+    // watcher, so watcher teardown never deadlocks on a parked `blocking_send`.
+    // A multi-thread runtime + timeout turns a hang into a test failure.
+    #[test]
+    fn a_missing_root_after_a_valid_one_errors_without_hanging() {
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let dir = TempDir::new().unwrap();
+            let valid = dir.path().to_path_buf();
+            let missing = dir.path().join("does-not-exist");
+            let watch = || {
+                FsWatcher::new(Duration::from_millis(50))
+                    .watch(&[valid.clone(), missing.clone()], CancellationToken::new())
+            };
+            let result = tokio::time::timeout(Duration::from_secs(5), async { watch() })
+                .await
+                .expect("watch setup must not hang");
+            assert!(result.is_err(), "a missing root must fail setup");
         });
     }
 
