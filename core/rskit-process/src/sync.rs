@@ -35,6 +35,11 @@ pub fn run(spec: &ProcessSpec, config: &ProcessConfig) -> AppResult<ProcessResul
             "process.io",
             "observed mode requires async run_with_cancel",
         )),
+        #[cfg(unix)]
+        ProcessIo::Pty(_) => Err(AppError::invalid_input(
+            "process.io",
+            "pty mode requires async run_with_cancel",
+        )),
     }
 }
 

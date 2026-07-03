@@ -19,7 +19,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 # External
-tokio      = { workspace = true, features = ["process", "time", "signal", "sync"] }
+tokio      = { workspace = true, features = ["process", "time", "signal", "sync", "net"] }
 tokio-util = { workspace = true }
 tracing    = { workspace = true }
 libc       = { workspace = true }

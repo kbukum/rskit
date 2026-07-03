@@ -48,6 +48,8 @@
 mod command;
 mod persistent;
 mod process_group;
+#[cfg(unix)]
+mod pty;
 mod result;
 mod runner;
 mod signal;
@@ -66,6 +68,8 @@ pub use process_group::{
     interrupt as interrupt_process_group, isolate as isolate_process_group,
     kill as kill_process_group, terminate as terminate_process_group,
 };
+#[cfg(unix)]
+pub use pty::{PtyIo, PtySize, terminal_size};
 pub use result::ProcessResult;
 pub use runner::{OutputObserver, run_with_cancel};
 pub use sync::run;

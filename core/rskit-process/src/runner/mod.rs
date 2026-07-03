@@ -16,6 +16,8 @@ use crate::{
 mod lifecycle;
 mod observer;
 mod output;
+#[cfg(unix)]
+mod pty;
 mod redaction;
 mod spawn;
 
@@ -23,6 +25,8 @@ pub use observer::{OutputBytesCallback, OutputObserver};
 
 use lifecycle::wait_for_completion;
 use output::{append_bounded_stderr, collect_reader, spawn_reader};
+#[cfg(unix)]
+use pty::run_pty_mode;
 use redaction::RedactedArgs;
 use spawn::configure_command;
 
@@ -38,6 +42,8 @@ pub async fn run_with_cancel(
             run_pipe_mode(spec, config, cancel, io, Some(io.observer.clone())).await
         }
         ProcessIo::Inherited(io) => run_inherited_mode(spec, config, cancel, io).await,
+        #[cfg(unix)]
+        ProcessIo::Pty(io) => run_pty_mode(spec, config, cancel, io).await,
     }
 }
 

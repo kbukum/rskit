@@ -224,6 +224,11 @@ fn process_input(config: &ProcessConfig) -> AppResult<&InputPolicy> {
             "process.io",
             "persistent processes use PersistentOutput for observation; observed mode is not supported",
         )),
+        #[cfg(unix)]
+        ProcessIo::Pty(_) => Err(AppError::invalid_input(
+            "process.io",
+            "persistent processes use PersistentOutput for output handling; pty mode is not supported",
+        )),
     }
 }
 
