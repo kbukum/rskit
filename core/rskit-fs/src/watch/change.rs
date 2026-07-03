@@ -6,9 +6,11 @@ use std::path::{Path, PathBuf};
 /// A debounced batch of filesystem paths that changed within one window.
 ///
 /// Paths are deduplicated and kept in sorted order so a batch is deterministic
-/// regardless of the order the underlying OS events arrived. The paths are
-/// absolute (as reported by the platform watcher); callers relativize them
-/// against their own roots.
+/// regardless of the order the underlying OS events arrived. Each path is
+/// reported by the platform watcher as-is — typically matching the form of the
+/// root it was registered under (so absolute roots yield absolute paths) — and
+/// is *not* normalized or absolutized here; callers relativize or canonicalize
+/// them against their own roots as needed.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct FsChangeBatch {
     paths: BTreeSet<PathBuf>,
