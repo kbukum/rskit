@@ -51,6 +51,7 @@
 //! | `dag`    | `rskit-dag` (DAG orchestration) |
 //! | `chain`  | `rskit-chain` (sequential execution) |
 //! | `process` | `rskit-process` (subprocess execution) |
+//! | `fs-watch` | Recursive filesystem change watching (`rskit-fs::watch`, `FsWatcher`) |
 //! | `stateful` | `rskit-stateful` (stateful accumulators) |
 //! | `version` | `rskit-version` (build metadata) |
 //! | `schema` | `rskit-schema` (JSON Schema generation/validation) |
@@ -92,7 +93,15 @@
 //!
 //! ```toml
 //! [dependencies]
-//! rskit-suite = { version = "0.2.0-alpha.1", features = ["full"] }
+//! rskit-suite = { version = "0.2.0-alpha.2", features = ["full"] }
+//! ```
+//!
+//! Or enable only the optional modules you need — for example recursive,
+//! debounced filesystem-tree change watching:
+//!
+//! ```toml
+//! [dependencies]
+//! rskit-suite = { version = "0.2.0-alpha.2", features = ["fs-watch"] }
 //! ```
 
 #![warn(missing_docs)]

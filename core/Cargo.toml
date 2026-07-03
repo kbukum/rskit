@@ -77,6 +77,9 @@ tower = { version = "0.5", features = ["full"] }
 tower-layer = "0.3"
 tower-service = "0.3"
 
+# Filesystem notifications
+notify = "8"
+
 # Futures / streams
 futures = "0.3"
 futures-util = "0.3"

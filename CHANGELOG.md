@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Add `rskit-fs::watch` (behind the `watch` feature): `FsWatcher`, a recursive, `notify`-backed filesystem-tree change watcher that bridges raw platform events onto a bounded channel and yields cancellable, trailing-edge-debounced `FsChangeBatch`es (sorted, deduplicated changed paths) as an owned `FsChangeStream`. Surfaced through the `rskit-suite` facade as the `fs-watch` feature. Watch failures are classified into typed `ErrorCode`s (`NotFound`, `Forbidden`, `InvalidInput`, `ServiceUnavailable`) rather than a blanket `Internal`.
+- Add the `debounce_batch` operator to `rskit-stream` (`RskitStreamExt::rdebounce_batch(quiet, max_items)`): a trailing-edge debounce that accumulates *every* item seen during a burst — resetting the quiet-window timer on each arrival — and emits the whole window as one `Vec<T>`, with a `max_items` safety cap that force-flushes to bound the buffer under sustained input.
+
+### Changed
+
+- Split the `rskit-stream` operators module into leading-edge windowing (`tumbling_window`, `batch`, `sliding_window`) and trailing-edge rate limiting (`debounce`, `debounce_batch`, `throttle`), hoisting the shared accumulation-buffer helpers into a private `operators::buffer` module. `RskitStreamExt` method signatures are unchanged.
+- Surface a rescan signal on `rskit-fs::watch`: when the platform watcher reports an error (typically a queue overflow) during a debounce window — meaning some change notifications may have been dropped — the resulting `FsChangeBatch` sets `rescan_requested()`, so consumers re-evaluate the watched tree instead of silently missing changes. A rescan-only batch has empty `paths()` but is not `is_empty()`.
+
 ## [v0.2.0-alpha.1] - 2026-06-29
 
 ### Added

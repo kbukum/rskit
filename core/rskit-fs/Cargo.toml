@@ -1,7 +1,7 @@
 [package]
 name        = "rskit-fs"
 description = "Local filesystem primitives for paths, files, directories, temp files, and atomic writes"
-version = "0.2.0-alpha.1"
+version = "0.2.0-alpha.2"
 edition.workspace      = true
 license.workspace      = true
 rust-version.workspace = true
@@ -20,18 +20,35 @@ rustdoc-args = ["--cfg", "docsrs"]
 [features]
 default = ["async"]
 async = ["dep:tokio"]
+# Opt-in recursive, debounced filesystem-tree change watching (`FsWatcher`).
+# One-shot tools leave this off; it pulls in `notify` and a bounded channel to
+# bridge the platform callback thread. Debouncing (`rdebounce_batch`) and
+# cancellation (`CancellationToken`) come from `rskit-stream`, mirroring
+# `rskit-config`'s reload watch.
+watch = [
+    "async",
+    "dep:notify",
+    "dep:rskit-stream",
+    "dep:futures",
+    "tokio/sync",
+    "tokio/time",
+]
 
 [dependencies]
 tokio = { workspace = true, features = ["fs", "io-util"], optional = true }
 tempfile = { workspace = true }
+notify = { workspace = true, optional = true }
+futures = { workspace = true, optional = true }
 
 rskit-errors = { workspace = true }
+rskit-stream = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["macros", "rt"] }
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "time", "test-util"] }
+futures = { workspace = true }
 
 [lints]
 workspace = true

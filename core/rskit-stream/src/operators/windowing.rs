@@ -1,9 +1,17 @@
+//! Leading-edge windowing and batching operators.
+//!
+//! These operators partition a stream into `Vec<T>` windows whose timers run
+//! **leading-edge**, from the first buffered item (`tumbling_window`, `batch`),
+//! or by item count (`sliding_window`). Contrast the trailing-edge rate
+//! operators in [`crate::operators::rate`], whose timers are driven by quiet gaps between
+//! arrivals.
+
 use std::collections::VecDeque;
 use std::time::Duration;
 
 use futures::{Stream, StreamExt as _};
 
-const TUMBLING_WINDOW_INITIAL_CAPACITY_LIMIT: usize = 1024;
+use super::buffer::{take_window, window_capacity};
 
 /// Collect items into non-overlapping time windows.
 ///
@@ -19,8 +27,7 @@ where
 {
     async_stream::stream! {
         tokio::pin!(stream);
-        let max_items = max_items.max(1);
-        let initial_capacity = max_items.min(TUMBLING_WINDOW_INITIAL_CAPACITY_LIMIT);
+        let (max_items, initial_capacity) = window_capacity(max_items);
         let mut buf: Vec<T> = Vec::with_capacity(initial_capacity);
         let mut deadline = tokio::time::Instant::now() + duration;
         loop {
@@ -48,10 +55,6 @@ where
             }
         }
     }
-}
-
-fn take_window<T>(buf: &mut Vec<T>, next_capacity: usize) -> Vec<T> {
-    std::mem::replace(buf, Vec::with_capacity(next_capacity))
 }
 
 /// Collect up to `size` items into a batch.
@@ -103,62 +106,6 @@ where
                         yield std::mem::take(&mut buf);
                     }
                 }
-            }
-        }
-    }
-}
-
-/// Emit only when no new item arrives within `delay`.
-///
-/// Useful for rate-limiting high-frequency event streams.
-pub fn debounce<S, T>(stream: S, delay: Duration) -> impl Stream<Item = T> + Send + 'static
-where
-    S: Stream<Item = T> + Send + 'static,
-    T: Send + 'static,
-{
-    async_stream::stream! {
-        tokio::pin!(stream);
-        let mut pending: Option<T> = None;
-
-        loop {
-            let has_pending = pending.is_some();
-            tokio::select! {
-                item = stream.next() => {
-                    if let Some(v) = item {
-                        pending = Some(v);
-                    } else {
-                        if let Some(v) = pending.take() { yield v; }
-                        break;
-                    }
-                }
-                () = async move {
-                    if has_pending {
-                        tokio::time::sleep(delay).await;
-                    } else {
-                        std::future::pending::<()>().await;
-                    }
-                } => {
-                    if let Some(v) = pending.take() { yield v; }
-                }
-            }
-        }
-    }
-}
-
-/// Emit at most one item per `interval`, dropping faster arrivals.
-pub fn throttle<S, T>(stream: S, interval: Duration) -> impl Stream<Item = T> + Send + 'static
-where
-    S: Stream<Item = T> + Send + 'static,
-    T: Send + 'static,
-{
-    async_stream::stream! {
-        tokio::pin!(stream);
-        let mut last_emit = tokio::time::Instant::now() - interval;
-        while let Some(item) = stream.next().await {
-            let now = tokio::time::Instant::now();
-            if now.duration_since(last_emit) >= interval {
-                last_emit = now;
-                yield item;
             }
         }
     }

@@ -8,7 +8,7 @@ use futures::Stream;
 use futures::StreamExt as _;
 use rskit_errors::AppResult;
 
-use crate::operators::{concurrent, transform, windowing};
+use crate::operators::{concurrent, rate, transform, windowing};
 
 /// Extension trait adding rskit-specific operators to any [`Stream`].
 ///
@@ -176,12 +176,23 @@ where
 
     /// Emit only when no new item arrives within `delay`.
     fn rdebounce(self, delay: Duration) -> impl Stream<Item = Self::Item> + Send + 'static {
-        windowing::debounce(self, delay)
+        rate::debounce(self, delay)
+    }
+
+    /// Accumulate items into a batch, emitting it once `quiet` elapses with no
+    /// new item (trailing-edge debounce that keeps every item, not just the last)
+    /// or early once `max_items` accumulate.
+    fn rdebounce_batch(
+        self,
+        quiet: Duration,
+        max_items: usize,
+    ) -> impl Stream<Item = Vec<Self::Item>> + Send + 'static {
+        rate::debounce_batch(self, quiet, max_items)
     }
 
     /// Emit at most one item per `interval`.
     fn rthrottle(self, interval: Duration) -> impl Stream<Item = Self::Item> + Send + 'static {
-        windowing::throttle(self, interval)
+        rate::throttle(self, interval)
     }
 
     /// Merge this stream with another, yielding items from whichever is ready first.
