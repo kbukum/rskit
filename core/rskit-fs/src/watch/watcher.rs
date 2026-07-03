@@ -20,13 +20,39 @@ use super::change::FsChangeBatch;
 /// thread rather than growing an unbounded queue.
 const DEFAULT_BUFFER: usize = 1024;
 
-/// Safety cap on the number of raw paths coalesced into one debounced batch.
+/// Safety cap on the number of raw events coalesced into one debounced batch.
 ///
 /// The debounce timer resets on every event, so a sustained change rate faster
 /// than the debounce window (e.g. a large checkout) would otherwise accumulate
-/// unboundedly; reaching this many paths force-flushes an early batch. It is
+/// unboundedly; reaching this many events force-flushes an early batch. It is
 /// generous so ordinary edit bursts still coalesce into a single batch.
-const MAX_BATCH_PATHS: usize = 65_536;
+const MAX_BATCH_EVENTS: usize = 65_536;
+
+/// A single raw watcher event bridged from the platform callback onto the
+/// internal channel, before debouncing and coalescing into an [`FsChangeBatch`].
+enum RawEvent {
+    /// A path the watcher reported as changed.
+    Changed(PathBuf),
+    /// The watcher reported an error (typically a queue overflow), so some
+    /// notifications may have been dropped and the tree should be rescanned.
+    Rescan,
+}
+
+/// Coalesce a debounce window's worth of [`RawEvent`]s into one [`FsChangeBatch`]:
+/// deduplicate changed paths and set the rescan flag if any overflow was seen.
+fn batch_from_raw(events: Vec<RawEvent>) -> FsChangeBatch {
+    let mut paths = BTreeSet::new();
+    let mut rescan = false;
+    for event in events {
+        match event {
+            RawEvent::Changed(path) => {
+                paths.insert(path);
+            }
+            RawEvent::Rescan => rescan = true,
+        }
+    }
+    FsChangeBatch::new(paths).with_rescan(rescan)
+}
 
 /// An owned, bounded stream of debounced [`FsChangeBatch`]es.
 ///
@@ -69,9 +95,13 @@ impl FsWatcher {
     /// Raw platform events are bridged onto a bounded channel, made cancellable
     /// with `cancel`, coalesced by [`rdebounce_batch`](rskit_stream::RskitStreamExt::rdebounce_batch)
     /// over the debounce window, and mapped to sorted, deduplicated
-    /// [`FsChangeBatch`]es. The stream is lazy — no task is spawned; it is driven
-    /// by whoever polls it — and completes when `cancel` fires or the platform
-    /// watcher stops. Dropping the returned stream stops the OS watcher.
+    /// [`FsChangeBatch`]es. If the platform watcher reports an error (typically a
+    /// queue overflow) during a window, the resulting batch carries a rescan
+    /// signal ([`FsChangeBatch::rescan_requested`]) so consumers can re-evaluate
+    /// the tree instead of silently missing dropped changes. The stream is lazy —
+    /// no task is spawned; it is driven by whoever polls it — and completes when
+    /// `cancel` fires or the platform watcher stops. Dropping the returned stream
+    /// stops the OS watcher.
     ///
     /// # Errors
     ///
@@ -88,20 +118,26 @@ impl FsWatcher {
             ));
         }
 
-        let (raw_tx, raw_rx) = mpsc::channel::<PathBuf>(self.buffer);
+        let (raw_tx, raw_rx) = mpsc::channel::<RawEvent>(self.buffer);
         let mut watcher =
             notify::recommended_watcher(move |result: notify::Result<notify::Event>| {
-                // A transient per-event error (e.g. an overflow notice) carries no
-                // path to act on; the next real event re-establishes the change set,
-                // so it is skipped rather than surfaced mid-stream.
-                if let Ok(event) = result {
-                    for path in event.paths {
-                        // The platform callback runs on `notify`'s own OS thread, not
-                        // a runtime worker, so a blocking send is the correct
-                        // backpressure primitive here.
-                        if raw_tx.blocking_send(path).is_err() {
-                            break;
+                // The platform callback runs on `notify`'s own OS thread, not a
+                // runtime worker, so a blocking send is the correct backpressure
+                // primitive here.
+                match result {
+                    Ok(event) => {
+                        for path in event.paths {
+                            if raw_tx.blocking_send(RawEvent::Changed(path)).is_err() {
+                                break;
+                            }
                         }
+                    }
+                    // A watcher error (typically a queue overflow) means change
+                    // notifications may have been dropped; signal a rescan so the
+                    // consumer re-evaluates the tree instead of silently missing
+                    // changes.
+                    Err(_) => {
+                        let _ = raw_tx.blocking_send(RawEvent::Rescan);
                     }
                 }
             })
@@ -121,12 +157,12 @@ impl FsWatcher {
         }
 
         // Lazy pipeline: bounded raw source → cancellation → trailing-edge debounce
-        // → dedup into a batch. No spawned task owns the watcher; the wrapper below
-        // keeps it alive for the stream's lifetime and drops it on teardown.
+        // → coalesce into a batch. No spawned task owns the watcher; the wrapper
+        // below keeps it alive for the stream's lifetime and drops it on teardown.
         let batches = from_channel(raw_rx)
             .take_until(cancel.cancelled_owned())
-            .rdebounce_batch(self.debounce, MAX_BATCH_PATHS)
-            .map(|paths| FsChangeBatch::new(paths.into_iter().collect::<BTreeSet<_>>()));
+            .rdebounce_batch(self.debounce, MAX_BATCH_EVENTS)
+            .map(batch_from_raw);
 
         Ok(Box::pin(WatchedStream {
             batches: Box::pin(batches),
@@ -184,6 +220,7 @@ fn watch_error_code(error: &notify::Error) -> ErrorCode {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
     use std::time::Duration;
 
     use futures::StreamExt as _;
@@ -252,7 +289,6 @@ mod tests {
     fn notify_errors_map_to_meaningful_codes() {
         use super::watch_error_code;
         use rskit_errors::ErrorCode;
-
         assert_eq!(
             watch_error_code(&notify::Error::path_not_found()),
             ErrorCode::NotFound
@@ -281,6 +317,41 @@ mod tests {
             watch_error_code(&notify::Error::generic("boom")),
             ErrorCode::Internal
         );
+    }
+
+    #[test]
+    fn batch_from_raw_dedups_paths_and_flags_rescan() {
+        use super::{RawEvent, batch_from_raw};
+        let a = PathBuf::from("/repo/a.rs");
+        let b = PathBuf::from("/repo/b.rs");
+        let batch = batch_from_raw(vec![
+            RawEvent::Changed(a.clone()),
+            RawEvent::Changed(b.clone()),
+            RawEvent::Changed(a.clone()),
+            RawEvent::Rescan,
+        ]);
+        assert!(batch.rescan_requested());
+        assert_eq!(
+            batch.paths().iter().cloned().collect::<Vec<_>>(),
+            vec![a, b]
+        );
+    }
+
+    #[test]
+    fn batch_from_raw_without_errors_does_not_request_rescan() {
+        use super::{RawEvent, batch_from_raw};
+        let batch = batch_from_raw(vec![RawEvent::Changed(PathBuf::from("/repo/a.rs"))]);
+        assert!(!batch.rescan_requested());
+        assert_eq!(batch.len(), 1);
+    }
+
+    #[test]
+    fn batch_from_raw_rescan_only_is_not_empty() {
+        use super::{RawEvent, batch_from_raw};
+        let batch = batch_from_raw(vec![RawEvent::Rescan]);
+        assert!(batch.rescan_requested());
+        assert!(batch.paths().is_empty());
+        assert!(!batch.is_empty());
     }
 
     // Real-filesystem wiring smoke test: a write under a watched root surfaces as
