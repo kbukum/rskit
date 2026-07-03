@@ -61,11 +61,12 @@ fn signal_target(pid: u32, signal: ProcessSignal, process_group: bool) -> bool {
 
     #[cfg(unix)]
     {
-        let target = if process_group {
-            -(pid as i32)
-        } else {
-            pid as i32
+        // A live Unix PID always fits in `i32`; a value that does not cannot
+        // name a real process, so there is nothing to signal.
+        let Ok(pid) = i32::try_from(pid) else {
+            return false;
         };
+        let target = if process_group { -pid } else { pid };
         // SAFETY: `kill` targets either the child pid or the negated
         // process-group id created by [`isolate`]. ESRCH means the target has
         // already exited.

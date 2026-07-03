@@ -16,6 +16,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Split the `rskit-stream` operators module into leading-edge windowing (`tumbling_window`, `batch`, `sliding_window`) and trailing-edge rate limiting (`debounce`, `debounce_batch`, `throttle`), hoisting the shared accumulation-buffer helpers into a private `operators::buffer` module. `RskitStreamExt` method signatures are unchanged.
 - Surface a rescan signal on `rskit-fs::watch`: when the platform watcher reports an error (typically a queue overflow) during a debounce window — meaning some change notifications may have been dropped — the resulting `FsChangeBatch` sets `rescan_requested()`, so consumers re-evaluate the watched tree instead of silently missing changes. A rescan-only batch has empty `paths()` but is not `is_empty()`.
+- Bound output draining in every `rskit-process` runner (async, blocking, and persistent): once the child exits, reader threads/tasks are joined only within the signal grace period, so a surviving descendant that inherited and still holds an output pipe open can no longer hang the runner forever. Whatever was captured before the grace period elapsed is returned, and the straggling reader is aborted/detached with its capture buffer already bounded.
+- Consolidate `rskit-process` internals so the three runtimes share one implementation of each cross-cutting concern: bounded output capture (`capture`), blocking `SIGTERM`→grace→`SIGKILL` termination (`terminate`), and bounded worker-thread joins (`worker`). All subprocess signalling now routes through `process_group`, removing the duplicated inline `libc::kill` copies (and their `pid as i32` casts) from the sync, async-lifecycle, and persistent paths. The persistent cancel watcher is now a plain poll thread instead of standing up a per-process Tokio current-thread runtime.
+
+### Fixed
+
+- Fix `rskit-process` failing to compile for non-Unix targets: the blocking runner referenced `libc::SIGTERM`/`libc::SIGKILL` unconditionally. Signalling now goes through the already-`cfg`-gated `process_group` helpers, so the crate compiles on non-Unix targets (where signalling is a typed no-op) as the async path already did.
+- Fix a resource leak in the blocking `rskit-process` runner: if waiting on the child errored after the reader/stdin threads were spawned, the child was orphaned and the threads were left blocked on their pipes. The runner now owns the child and its worker threads in an RAII guard that kills the child and reaps the threads on any early return, mirroring the async `ChildScope`.
 
 ## [v0.2.0-alpha.1] - 2026-06-29
 

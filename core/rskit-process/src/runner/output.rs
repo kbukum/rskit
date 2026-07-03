@@ -1,34 +1,36 @@
-use std::io;
+use std::time::Duration;
 
 use tokio::{
     io::{AsyncRead, AsyncReadExt},
     task::JoinHandle,
 };
 
+use crate::capture::{BoundedOutput, SharedOutput, take_shared};
 use crate::{AppError, AppResult, command::DEFAULT_MAX_OUTPUT_BYTES};
 
 use super::observer::{OutputBytesCallback, OutputLineCallback};
 
-#[derive(Debug)]
-pub(in crate::runner) struct CapturedOutput {
-    pub(in crate::runner) bytes: Vec<u8>,
-    pub(in crate::runner) truncated: bool,
-}
-
 pub(in crate::runner) fn spawn_reader<R>(
     reader: Option<R>,
+    capture: SharedOutput,
     max_output_bytes: Option<usize>,
     line_callback: Option<OutputLineCallback>,
     bytes_callback: Option<OutputBytesCallback>,
     retain_output: bool,
-) -> Option<JoinHandle<io::Result<CapturedOutput>>>
+) -> Option<JoinHandle<AppResult<()>>>
 where
     R: AsyncRead + Unpin + Send + 'static,
 {
     reader.map(|reader| match (line_callback, bytes_callback) {
-        (None, None) => tokio::spawn(read_output(reader, max_output_bytes, retain_output)),
+        (None, None) => tokio::spawn(read_output(
+            reader,
+            capture,
+            max_output_bytes,
+            retain_output,
+        )),
         (line_callback, bytes_callback) => tokio::spawn(read_observed_output(
             reader,
+            capture,
             max_output_bytes,
             line_callback,
             bytes_callback,
@@ -37,79 +39,82 @@ where
     })
 }
 
-pub(in crate::runner) async fn collect_reader(
-    task: Option<JoinHandle<io::Result<CapturedOutput>>>,
-) -> AppResult<CapturedOutput> {
-    match task {
-        Some(task) => task
-            .await
-            .map_err(AppError::internal)?
-            .map_err(AppError::internal),
-        None => Ok(CapturedOutput {
-            bytes: Vec::new(),
-            truncated: false,
-        }),
+/// Await a reader/stdin task, bounding the wait by `grace`.
+///
+/// On the normal path the child has already exited, so the pipe reaches EOF and
+/// the task finishes well within `grace`. A task still running after `grace` —
+/// a reader blocked because a surviving descendant inherited and holds the pipe
+/// open — is aborted (dropping our read end) rather than awaited forever. The
+/// bytes it captured before being abandoned remain available through the shared
+/// buffer, so the caller still recovers partial output.
+pub(in crate::runner) async fn join_within(
+    task: Option<JoinHandle<AppResult<()>>>,
+    grace: Duration,
+) -> AppResult<()> {
+    let Some(task) = task else {
+        return Ok(());
+    };
+    let abort = task.abort_handle();
+    match tokio::time::timeout(grace, task).await {
+        Ok(Ok(result)) => result,
+        Ok(Err(join_error)) if join_error.is_cancelled() => Ok(()),
+        Ok(Err(join_error)) => Err(AppError::internal(join_error)),
+        Err(_elapsed) => {
+            abort.abort();
+            Ok(())
+        }
     }
+}
+
+/// Snapshot the captured output for a reader after [`join_within`] drained it.
+pub(in crate::runner) fn captured(capture: &SharedOutput) -> BoundedOutput {
+    take_shared(capture)
 }
 
 async fn read_output<R>(
     mut reader: R,
+    capture: SharedOutput,
     max_output_bytes: Option<usize>,
     retain_output: bool,
-) -> io::Result<CapturedOutput>
+) -> AppResult<()>
 where
     R: AsyncRead + Unpin,
 {
-    let mut captured = Vec::new();
     let mut buffer = [0_u8; 4096];
-    let mut remaining = max_output_bytes.unwrap_or(usize::MAX);
-    let mut truncated = false;
 
     loop {
-        let read = reader.read(&mut buffer).await?;
+        let read = reader.read(&mut buffer).await.map_err(AppError::internal)?;
         if read == 0 {
             break;
         }
-        if retain_output && remaining > 0 {
-            let to_copy = remaining.min(read);
-            captured.extend_from_slice(&buffer[..to_copy]);
-            remaining -= to_copy;
-            if to_copy < read {
-                truncated = true;
-            }
-        } else if retain_output {
-            truncated = true;
+        if retain_output {
+            capture.lock().push(&buffer[..read], max_output_bytes);
         }
     }
 
-    Ok(CapturedOutput {
-        bytes: captured,
-        truncated,
-    })
+    Ok(())
 }
 
 async fn read_observed_output<R>(
     reader: R,
+    capture: SharedOutput,
     max_output_bytes: Option<usize>,
     line_callback: Option<OutputLineCallback>,
     bytes_callback: Option<OutputBytesCallback>,
     retain_output: bool,
-) -> io::Result<CapturedOutput>
+) -> AppResult<()>
 where
     R: AsyncRead + Unpin,
 {
     let mut reader = tokio::io::BufReader::new(reader);
-    let mut captured = Vec::new();
-    let mut remaining = max_output_bytes.unwrap_or(usize::MAX);
     let mut line = Vec::new();
     let max_line_bytes = max_output_bytes.unwrap_or(DEFAULT_MAX_OUTPUT_BYTES);
     let mut line_truncated = false;
     let mut skip_lf_after_cr = false;
     let mut buffer = [0_u8; 4096];
-    let mut capture_truncated = false;
 
     loop {
-        let read = reader.read(&mut buffer).await?;
+        let read = reader.read(&mut buffer).await.map_err(AppError::internal)?;
         if read == 0 {
             if !line.is_empty()
                 && !line_truncated
@@ -124,15 +129,8 @@ where
             callback(&buffer[..read]);
         }
 
-        if retain_output && remaining > 0 {
-            let to_copy = remaining.min(read);
-            captured.extend_from_slice(&buffer[..to_copy]);
-            remaining -= to_copy;
-            if to_copy < read {
-                capture_truncated = true;
-            }
-        } else if retain_output {
-            capture_truncated = true;
+        if retain_output {
+            capture.lock().push(&buffer[..read], max_output_bytes);
         }
 
         let Some(line_callback) = line_callback.as_ref() else {
@@ -171,48 +169,13 @@ where
         }
     }
 
-    Ok(CapturedOutput {
-        bytes: captured,
-        truncated: capture_truncated,
-    })
+    Ok(())
 }
 
 fn emit_observed_line(line: &[u8], line_callback: &OutputLineCallback) {
     let observed = String::from_utf8_lossy(line);
     let observed = observed.trim_end_matches(['\r', '\n']);
     line_callback(observed);
-}
-
-pub(in crate::runner) fn append_bounded_stderr(
-    stderr: &mut Vec<u8>,
-    extra: &[u8],
-    max_output_bytes: Option<usize>,
-) -> bool {
-    let Some(limit) = max_output_bytes else {
-        if !stderr.is_empty() {
-            stderr.push(b'\n');
-        }
-        stderr.extend_from_slice(extra);
-        return false;
-    };
-
-    if stderr.len() >= limit {
-        return true;
-    }
-
-    let mut truncated = false;
-    if !stderr.is_empty() && stderr.len() + 1 < limit {
-        stderr.push(b'\n');
-    }
-
-    let remaining = limit.saturating_sub(stderr.len());
-    if extra.len() > remaining {
-        stderr.extend_from_slice(&extra[..remaining]);
-        truncated = true;
-    } else {
-        stderr.extend_from_slice(extra);
-    }
-    truncated
 }
 
 #[cfg(test)]
@@ -225,57 +188,60 @@ mod tests {
     use tokio::io::AsyncWriteExt;
 
     use super::*;
+    use crate::capture::shared_output;
+
+    async fn read_to_end<R>(
+        reader: R,
+        max_output_bytes: Option<usize>,
+        line_callback: Option<OutputLineCallback>,
+        bytes_callback: Option<OutputBytesCallback>,
+        retain_output: bool,
+    ) -> AppResult<BoundedOutput>
+    where
+        R: AsyncRead + Unpin + Send + 'static,
+    {
+        let capture = shared_output();
+        let task = spawn_reader(
+            Some(reader),
+            capture.clone(),
+            max_output_bytes,
+            line_callback,
+            bytes_callback,
+            retain_output,
+        );
+        join_within(task, Duration::from_secs(5)).await?;
+        Ok(captured(&capture))
+    }
 
     #[tokio::test]
-    async fn collect_reader_returns_empty_capture_when_no_task_is_present() {
-        let captured = collect_reader(None).await.unwrap();
-        assert!(captured.bytes.is_empty());
-        assert!(!captured.truncated);
+    async fn join_within_returns_when_no_task_is_present() {
+        join_within(None, Duration::from_millis(10)).await.unwrap();
     }
 
     #[tokio::test]
     async fn spawned_reader_captures_with_bounds_and_without_retention() {
-        let retained = spawn_reader(
-            Some(tokio::io::BufReader::new(std::io::Cursor::new(b"abcdef"))),
-            Some(3),
-            None,
-            None,
-            true,
-        );
-        let retained = collect_reader(retained).await.unwrap();
+        let retained = read_to_end(std::io::Cursor::new(b"abcdef"), Some(3), None, None, true)
+            .await
+            .unwrap();
         assert_eq!(retained.bytes, b"abc");
         assert!(retained.truncated);
 
-        let observed_only = spawn_reader(
-            Some(tokio::io::BufReader::new(std::io::Cursor::new(b"abcdef"))),
-            Some(3),
-            None,
-            None,
-            false,
-        );
-        let observed_only = collect_reader(observed_only).await.unwrap();
+        let observed_only =
+            read_to_end(std::io::Cursor::new(b"abcdef"), Some(3), None, None, false)
+                .await
+                .unwrap();
         assert!(observed_only.bytes.is_empty());
         assert!(!observed_only.truncated);
 
-        let zero_limit = spawn_reader(
-            Some(tokio::io::BufReader::new(std::io::Cursor::new(b"abcdef"))),
-            Some(0),
-            None,
-            None,
-            true,
-        );
-        let zero_limit = collect_reader(zero_limit).await.unwrap();
+        let zero_limit = read_to_end(std::io::Cursor::new(b"abcdef"), Some(0), None, None, true)
+            .await
+            .unwrap();
         assert!(zero_limit.bytes.is_empty());
         assert!(zero_limit.truncated);
 
-        let unbounded = spawn_reader(
-            Some(tokio::io::BufReader::new(std::io::Cursor::new(b"abcdef"))),
-            None,
-            None,
-            None,
-            true,
-        );
-        let unbounded = collect_reader(unbounded).await.unwrap();
+        let unbounded = read_to_end(std::io::Cursor::new(b"abcdef"), None, None, None, true)
+            .await
+            .unwrap();
         assert_eq!(unbounded.bytes, b"abcdef");
         assert!(!unbounded.truncated);
     }
@@ -295,16 +261,15 @@ mod tests {
             })
         };
 
-        let task = spawn_reader(
-            Some(tokio::io::BufReader::new(std::io::Cursor::new(
-                b"one\r\ntwo\nthree",
-            ))),
+        let captured = read_to_end(
+            std::io::Cursor::new(b"one\r\ntwo\nthree"),
             Some(64),
             Some(line_callback),
             Some(bytes_callback),
             true,
-        );
-        let captured = collect_reader(task).await.unwrap();
+        )
+        .await
+        .unwrap();
 
         assert_eq!(captured.bytes, b"one\r\ntwo\nthree");
         assert_eq!(lines.lock().as_slice(), ["one", "two", "three"]);
@@ -319,16 +284,15 @@ mod tests {
             Arc::new(move |line| lines.lock().push(line.to_string()))
         };
 
-        let task = spawn_reader(
-            Some(tokio::io::BufReader::new(std::io::Cursor::new(
-                b"abcdef\nok",
-            ))),
+        let captured = read_to_end(
+            std::io::Cursor::new(b"abcdef\nok"),
             Some(3),
             Some(callback),
             None,
             true,
-        );
-        let captured = collect_reader(task).await.unwrap();
+        )
+        .await
+        .unwrap();
 
         assert_eq!(captured.bytes, b"abc");
         assert!(captured.truncated);
@@ -337,45 +301,28 @@ mod tests {
 
     #[tokio::test]
     async fn observed_reader_without_line_callback_only_retains_output() {
-        let task = spawn_reader(
-            Some(tokio::io::BufReader::new(std::io::Cursor::new(b"abcdef"))),
+        let captured = read_to_end(
+            std::io::Cursor::new(b"abcdef"),
             Some(0),
             None,
             Some(Arc::new(|_| {})),
             true,
-        );
-        let captured = collect_reader(task).await.unwrap();
+        )
+        .await
+        .unwrap();
 
         assert!(captured.bytes.is_empty());
         assert!(captured.truncated);
     }
 
     #[tokio::test]
-    async fn collect_reader_maps_reader_errors() {
+    async fn reader_errors_surface_through_join() {
         let (mut writer, reader) = tokio::io::duplex(8);
         writer.shutdown().await.unwrap();
         drop(writer);
 
-        let task = spawn_reader(Some(reader), Some(8), None, None, true);
-        assert!(collect_reader(task).await.is_ok());
-    }
-
-    #[test]
-    fn bounded_stderr_appends_separator_and_reports_truncation() {
-        let mut stderr = b"err".to_vec();
-        assert!(!append_bounded_stderr(&mut stderr, b"tail", None));
-        assert_eq!(stderr, b"err\ntail");
-
-        let mut full = b"abc".to_vec();
-        assert!(append_bounded_stderr(&mut full, b"tail", Some(3)));
-        assert_eq!(full, b"abc");
-
-        let mut partial = b"a".to_vec();
-        assert!(append_bounded_stderr(&mut partial, b"bcdef", Some(4)));
-        assert_eq!(partial, b"a\nbc");
-
-        let mut fits = b"a".to_vec();
-        assert!(!append_bounded_stderr(&mut fits, b"b", Some(4)));
-        assert_eq!(fits, b"a\nb");
+        let capture = shared_output();
+        let task = spawn_reader(Some(reader), capture, Some(8), None, None, true);
+        assert!(join_within(task, Duration::from_secs(5)).await.is_ok());
     }
 }

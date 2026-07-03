@@ -45,6 +45,7 @@
 
 #![warn(missing_docs)]
 
+mod capture;
 mod command;
 mod persistent;
 mod process_group;
@@ -54,6 +55,8 @@ mod result;
 mod runner;
 mod signal;
 mod sync;
+mod terminate;
+mod worker;
 
 pub use command::{
     ArgRedaction, CapturedIo, DEFAULT_MAX_OUTPUT_BYTES, EnvPolicy, InheritedIo, InputPolicy,

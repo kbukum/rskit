@@ -19,8 +19,10 @@ use crate::{
 };
 
 use super::lifecycle::wait_for_completion;
-use super::output::{append_bounded_stderr, collect_reader, spawn_reader};
+use super::output::{captured, join_within, spawn_reader};
 use super::redaction::RedactedArgs;
+use super::scope::ChildScope;
+use crate::capture::{append_line_bounded, shared_output};
 
 pub(in crate::runner) async fn run_pty_mode(
     spec: &ProcessSpec,
@@ -67,7 +69,7 @@ pub(in crate::runner) async fn run_pty_mode(
         args = ?RedactedArgs::new(&spec.args, &config.arg_redaction),
         "spawning process on pseudoterminal"
     );
-    let mut child = cmd.spawn().map_err(|error| {
+    let child = cmd.spawn().map_err(|error| {
         AppError::new(
             ErrorCode::Internal,
             format!("failed to spawn process: {error}"),
@@ -77,6 +79,13 @@ pub(in crate::runner) async fn run_pty_mode(
     // slave open or the master read would never observe EOF.
     drop(slave);
 
+    // Own the child and the spawned I/O tasks in a scope guard so any early
+    // return below — a stdin/reader setup failure, a wait error, or a task join
+    // error — aborts the background tasks and best-effort kills the child rather
+    // than detaching them. A dropped Tokio `JoinHandle` is detached, so an
+    // un-guarded early return would leak the task and keep the PTY fds alive.
+    let mut scope = ChildScope::new(child);
+
     // Optional input writer: a second handle onto the master so writes and reads
     // proceed independently. Built before the reader takes ownership of `master`.
     let stdin_writer = match &io.input {
@@ -84,31 +93,45 @@ pub(in crate::runner) async fn run_pty_mode(
         InputPolicy::Closed | InputPolicy::Inherit => None,
     };
     let stdin_task = spawn_pty_stdin(stdin_writer, &io.input);
+    scope.register(&stdin_task);
 
     // The child's merged stdout+stderr arrives on the master; route it through
     // the stdout observer callbacks and (optionally) capture it as stdout.
     // Because the two streams are merged here, either capture flag opts the
     // caller into retaining the combined output.
     let reader = PtyMaster::new(master).map_err(AppError::internal)?;
+    let reader_capture = shared_output();
     let reader_task = spawn_reader(
         Some(reader),
+        reader_capture.clone(),
         io.output.max_output_bytes,
         io.observer.stdout_line.clone(),
         io.observer.stdout_bytes.clone(),
         io.output.capture_stdout || io.output.capture_stderr,
     );
+    scope.register(&reader_task);
 
-    let completion = wait_for_completion(&mut child, spec, config, cancel).await?;
-    collect_stdin(stdin_task).await?;
+    let completion = wait_for_completion(scope.child_mut(), spec, config, cancel).await?;
 
-    let captured = collect_reader(reader_task).await?;
+    // The child has exited; drain the workers within the grace period. A reader
+    // still blocked because a surviving descendant holds the PTY open is aborted
+    // rather than awaited forever, and the partial bytes it captured are still
+    // recovered from the shared buffer.
+    let grace = config.signal.grace_period;
+    join_within(stdin_task, grace).await?;
+    join_within(reader_task, grace).await?;
+    let captured_output = captured(&reader_capture);
+
+    // The run completed normally: the tasks are joined and the child is reaped,
+    // so hand ownership back instead of aborting/killing on drop.
+    scope.disarm();
 
     // A PTY has no separate stderr stream; the only "stderr" is any synthetic
     // termination diagnostic from the lifecycle layer.
     let mut stderr_bytes = Vec::new();
     let mut stderr_truncated = false;
     if let Some(extra_stderr) = completion.synthetic_stderr {
-        stderr_truncated |= append_bounded_stderr(
+        stderr_truncated |= append_line_bounded(
             &mut stderr_bytes,
             extra_stderr.as_bytes(),
             io.output.max_output_bytes,
@@ -117,9 +140,9 @@ pub(in crate::runner) async fn run_pty_mode(
 
     let result = ProcessResult::completed(
         completion.exit_code,
-        captured.bytes,
+        captured_output.bytes,
         stderr_bytes,
-        captured.truncated,
+        captured_output.truncated,
         stderr_truncated,
         start.elapsed(),
         completion.timed_out,
@@ -194,11 +217,4 @@ fn spawn_pty_stdin(
         }
         // Dropping `master` closes the input handle.
     }))
-}
-
-async fn collect_stdin(task: Option<JoinHandle<AppResult<()>>>) -> AppResult<()> {
-    match task {
-        Some(task) => task.await.map_err(AppError::internal)?,
-        None => Ok(()),
-    }
 }

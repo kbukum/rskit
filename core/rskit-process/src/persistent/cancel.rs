@@ -1,19 +1,20 @@
 use std::{
     sync::{Arc, atomic::AtomicBool, atomic::Ordering},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use tokio_util::sync::CancellationToken;
 
-use crate::{
-    AppError, AppResult, ErrorCode, SignalPolicy,
-    process_group::{kill_target, terminate_target},
-};
+use crate::process_group::{kill_target, terminate_target};
+use crate::terminate::targets_group;
+use crate::{AppError, AppResult, ErrorCode, SignalPolicy};
+
+const POLL_INTERVAL: Duration = Duration::from_millis(10);
 
 #[derive(Debug)]
 pub(in crate::persistent) struct CancelThread {
-    stop: CancellationToken,
+    stop: Arc<AtomicBool>,
     cancel: CancellationToken,
     cancelled: Arc<AtomicBool>,
     thread: thread::JoinHandle<AppResult<()>>,
@@ -28,13 +29,20 @@ impl CancelThread {
         if self.is_cancel_requested() {
             self.cancelled.store(true, Ordering::SeqCst);
         }
-        self.stop.cancel();
+        self.stop.store(true, Ordering::SeqCst);
         self.thread
             .join()
             .map_err(|_| AppError::new(ErrorCode::Internal, "process cancel thread panicked"))?
     }
 }
 
+/// Spawn a plain OS thread that watches the caller's cancellation token and, on
+/// cancellation, escalates `SIGTERM` → grace → `SIGKILL` against the child.
+///
+/// This is a std-thread poll loop rather than a per-process Tokio runtime: the
+/// only asynchronous input is the caller's [`CancellationToken`], which exposes
+/// a non-blocking `is_cancelled()`, so a lightweight poll avoids standing up a
+/// whole runtime (and its worker thread) for every persistent process.
 pub(in crate::persistent) fn spawn_cancel_thread(
     pid: u32,
     cancel: CancellationToken,
@@ -42,39 +50,22 @@ pub(in crate::persistent) fn spawn_cancel_thread(
     signal: SignalPolicy,
     grace_period: Duration,
 ) -> AppResult<CancelThread> {
-    let stop = CancellationToken::new();
-    let wait_stop = stop.clone();
-    let wait_cancel = cancel.clone();
-    let wait_cancelled = Arc::clone(&cancelled);
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .map_err(|error| {
-            AppError::new(
-                ErrorCode::Internal,
-                "failed to create process cancel runtime",
-            )
-            .with_cause(error)
-        })?;
+    let stop = Arc::new(AtomicBool::new(false));
+    let thread_stop = Arc::clone(&stop);
+    let thread_cancel = cancel.clone();
+    let thread_cancelled = Arc::clone(&cancelled);
+    let group = targets_group(signal);
     let thread = thread::spawn(move || {
-        runtime.block_on(async move {
-            tokio::select! {
-                biased;
-                () = wait_cancel.cancelled() => {
-                    wait_cancelled.store(true, Ordering::SeqCst);
-                    let terminate_group = signal.create_process_group && signal.terminate_descendants;
-                    let _ = terminate_target(pid, terminate_group);
-                    tokio::select! {
-                        () = wait_stop.cancelled() => Ok(()),
-                        () = tokio::time::sleep(grace_period) => {
-                            let _ = kill_target(pid, terminate_group);
-                            Ok(())
-                        }
-                    }
-                }
-                () = wait_stop.cancelled() => Ok(()),
+        while !thread_stop.load(Ordering::SeqCst) {
+            if thread_cancel.is_cancelled() {
+                thread_cancelled.store(true, Ordering::SeqCst);
+                let _ = terminate_target(pid, group);
+                escalate_after_grace(&thread_stop, pid, group, grace_period);
+                return Ok(());
             }
-        })
+            thread::sleep(POLL_INTERVAL);
+        }
+        Ok(())
     });
     Ok(CancelThread {
         stop,
@@ -82,6 +73,19 @@ pub(in crate::persistent) fn spawn_cancel_thread(
         cancelled,
         thread,
     })
+}
+
+/// Wait up to `grace_period` for a stop signal after `SIGTERM`; escalate to
+/// `SIGKILL` if the owning thread has not reaped the child in time.
+fn escalate_after_grace(stop: &AtomicBool, pid: u32, group: bool, grace_period: Duration) {
+    let deadline = Instant::now() + grace_period;
+    while !stop.load(Ordering::SeqCst) {
+        if Instant::now() >= deadline {
+            let _ = kill_target(pid, group);
+            return;
+        }
+        thread::sleep(POLL_INTERVAL);
+    }
 }
 
 #[cfg(test)]
@@ -102,7 +106,9 @@ mod tests {
         .unwrap();
 
         cancel.cancel();
-        std::thread::sleep(Duration::from_millis(5));
+        while !thread.is_cancel_requested() {
+            std::thread::sleep(Duration::from_millis(1));
+        }
 
         assert!(thread.is_cancel_requested());
         thread.stop().unwrap();

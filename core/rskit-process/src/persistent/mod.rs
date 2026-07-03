@@ -6,7 +6,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-use parking_lot::Mutex;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
@@ -35,8 +34,7 @@ use cancel::spawn_cancel_thread;
 use config::PersistentReadiness::{Command as CommandReadiness, OutputContains, Started};
 use error::persistent_start_error;
 use io::{
-    CapturedOutput, ReaderThread, StdinThread, spawn_output_readers, spawn_stdin_writer,
-    take_capture,
+    ReaderThread, StdinThread, new_capture, spawn_output_readers, spawn_stdin_writer, take_capture,
 };
 use process::{cleanup_spawned_child, new_process};
 use readiness::{
@@ -89,8 +87,8 @@ pub fn start_persistent_with_cancel(
     let start = Instant::now();
     let input = process_input(process_config)?;
     let mut child = spawn_child(spec, process_config, input)?;
-    let stdout = Arc::new(Mutex::new(CapturedOutput::default()));
-    let stderr = Arc::new(Mutex::new(CapturedOutput::default()));
+    let stdout = new_capture();
+    let stderr = new_capture();
     let cancelled = Arc::new(AtomicBool::new(false));
     let cancel_thread = match spawn_cancel_thread(
         child.id(),

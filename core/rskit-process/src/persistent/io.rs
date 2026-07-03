@@ -5,20 +5,18 @@ use std::{
     thread,
 };
 
-use parking_lot::Mutex;
-
+use crate::capture::{BoundedOutput, SharedOutput, shared_output, take_shared};
 use crate::{AppError, AppResult, ErrorCode};
 
 use super::config::{PersistentConfig, PersistentOutputStream, PersistentReadiness};
 
-pub(in crate::persistent) type Capture = Arc<Mutex<CapturedOutput>>;
+pub(in crate::persistent) type Capture = SharedOutput;
+pub(in crate::persistent) type CapturedOutput = BoundedOutput;
 pub(in crate::persistent) type ReaderThread = Option<thread::JoinHandle<AppResult<()>>>;
 pub(in crate::persistent) type StdinThread = Option<thread::JoinHandle<AppResult<()>>>;
 
-#[derive(Debug, Default, Clone)]
-pub(in crate::persistent) struct CapturedOutput {
-    pub(in crate::persistent) bytes: Vec<u8>,
-    pub(in crate::persistent) truncated: bool,
+pub(in crate::persistent) fn new_capture() -> Capture {
+    shared_output()
 }
 
 pub(in crate::persistent) fn spawn_output_readers(
@@ -71,7 +69,7 @@ pub(in crate::persistent) fn spawn_stdin_writer(
 }
 
 pub(in crate::persistent) fn take_capture(capture: &Capture) -> CapturedOutput {
-    capture.lock().clone()
+    take_shared(capture)
 }
 
 fn write_stdin(mut stream: ChildStdin, bytes: Vec<u8>) -> AppResult<()> {
@@ -103,7 +101,7 @@ fn spawn_reader<R: Read + Send + 'static>(
             if read == 0 {
                 break;
             }
-            append_capture(&capture, &buffer[..read], max_capture_bytes);
+            capture.lock().push(&buffer[..read], max_capture_bytes);
             if let Some(observer) = &observer {
                 observer(&buffer[..read]);
             }
@@ -137,20 +135,6 @@ fn forward_output(stream: PersistentOutputStream, bytes: &[u8]) -> AppResult<()>
     .map_err(AppError::internal)
 }
 
-fn append_capture(capture: &Capture, bytes: &[u8], max_bytes: Option<usize>) {
-    let mut capture = capture.lock();
-    let Some(limit) = max_bytes else {
-        capture.bytes.extend_from_slice(bytes);
-        return;
-    };
-    let remaining = limit.saturating_sub(capture.bytes.len());
-    let kept = remaining.min(bytes.len());
-    capture.bytes.extend_from_slice(&bytes[..kept]);
-    if kept < bytes.len() {
-        capture.truncated = true;
-    }
-}
-
 fn update_match_buffer(match_buffer: &mut Vec<u8>, bytes: &[u8], matcher: &str) -> bool {
     let needle = matcher.as_bytes();
     if needle.is_empty() {
@@ -167,36 +151,18 @@ fn update_match_buffer(match_buffer: &mut Vec<u8>, bytes: &[u8], matcher: &str) 
     ready_found
 }
 
-pub(in crate::persistent) fn join_reader(handle: ReaderThread) -> AppResult<()> {
-    if let Some(handle) = handle {
-        handle
-            .join()
-            .map_err(|_| AppError::new(ErrorCode::Internal, "process output reader panicked"))?
-    } else {
-        Ok(())
-    }
-}
-
-pub(in crate::persistent) fn join_stdin(handle: StdinThread) -> AppResult<()> {
-    if let Some(handle) = handle {
-        handle
-            .join()
-            .map_err(|_| AppError::new(ErrorCode::Internal, "process stdin writer panicked"))?
-    } else {
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::worker::join_within;
     use std::io::Cursor;
+    use std::time::Duration;
 
     #[test]
     fn capture_and_matcher_helpers_cover_truncation_and_cross_chunk_matches() {
-        let capture = Arc::new(Mutex::new(CapturedOutput::default()));
-        append_capture(&capture, b"hello", Some(7));
-        append_capture(&capture, b" world", Some(7));
+        let capture = new_capture();
+        capture.lock().push(b"hello", Some(7));
+        capture.lock().push(b" world", Some(7));
         let output = take_capture(&capture);
         assert_eq!(output.bytes, b"hello w");
         assert!(output.truncated);
@@ -208,15 +174,9 @@ mod tests {
     }
 
     #[test]
-    fn empty_reader_and_stdin_joins_are_ok() {
-        join_reader(None).unwrap();
-        join_stdin(None).unwrap();
-    }
-
-    #[test]
     fn reader_observes_bytes_without_changing_capture_bounds() {
-        let capture = Arc::new(Mutex::new(CapturedOutput::default()));
-        let observed = Arc::new(Mutex::new(Vec::new()));
+        let capture = new_capture();
+        let observed = Arc::new(parking_lot::Mutex::new(Vec::new()));
         let observer = {
             let observed = Arc::clone(&observed);
             Arc::new(move |chunk: &[u8]| observed.lock().extend_from_slice(chunk))
@@ -232,7 +192,7 @@ mod tests {
             Some(observer),
             Some(5),
         );
-        join_reader(Some(reader)).expect("reader completes");
+        join_within(Some(reader), Duration::from_secs(1)).expect("reader completes");
 
         let output = take_capture(&capture);
         assert_eq!(output.bytes, b"hello");
