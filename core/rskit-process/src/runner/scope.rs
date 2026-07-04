@@ -2,6 +2,7 @@
 //! tasks so an early return abandons them cleanly instead of leaking them.
 
 use tokio::process::Child;
+use tokio::runtime::Handle;
 use tokio::task::{AbortHandle, JoinHandle};
 
 /// Owns a spawned child and the run's I/O tasks' abort handles so an early return
@@ -13,10 +14,10 @@ use tokio::task::{AbortHandle, JoinHandle};
 /// [`JoinHandle`] is *detached*, not cancelled, so returning an error out of one
 /// of those points without this guard would leak the tasks and keep the child's
 /// pipes (or PTY fds) alive. While armed, dropping the scope aborts every
-/// registered task and best-effort kills the child; [`disarm`](Self::disarm)
+/// registered task and kills **and reaps** the child; [`disarm`](Self::disarm)
 /// after a normal completion hands ownership back to the joined results.
 pub(super) struct ChildScope {
-    child: Child,
+    child: Option<Child>,
     aborts: Vec<AbortHandle>,
     armed: bool,
 }
@@ -25,7 +26,7 @@ impl ChildScope {
     /// Take ownership of the spawned child, armed by default.
     pub(super) fn new(child: Child) -> Self {
         Self {
-            child,
+            child: Some(child),
             aborts: Vec::new(),
             armed: true,
         }
@@ -39,8 +40,17 @@ impl ChildScope {
     }
 
     /// Borrow the owned child for the completion wait.
+    ///
+    /// The child is present for the scope's whole life; it is taken only while
+    /// dropping the scope, after which no method is invoked.
     pub(super) fn child_mut(&mut self) -> &mut Child {
-        &mut self.child
+        match &mut self.child {
+            Some(child) => child,
+            // The child is removed only in `Drop`, and no method runs after the
+            // scope is dropped. A `&mut Child` cannot be conjured, so there is
+            // no graceful value to return for this structurally-unreachable arm.
+            None => unreachable!("ChildScope::child_mut called after the child was taken"),
+        }
     }
 
     /// Mark the run as completed normally so drop neither aborts nor kills.
@@ -57,9 +67,20 @@ impl Drop for ChildScope {
         for abort in &self.aborts {
             abort.abort();
         }
-        // Best-effort: the child may already have exited, in which case this is a
-        // harmless no-op.
-        let _ = self.child.start_kill();
+        // Kill *and reap* the child so an early error after spawn — e.g. an I/O
+        // task setup failure (PTY fd clone / `AsyncFd` registration) before the
+        // completion wait ever ran — cannot leave a zombie on Unix. `Drop` is
+        // synchronous, so the async reap is handed to a detached task on the
+        // current runtime; `start_kill` already fired, so even without a running
+        // runtime the child is killed and Tokio's orphan reaper collects it.
+        if let Some(mut child) = self.child.take() {
+            let _ = child.start_kill();
+            if let Ok(handle) = Handle::try_current() {
+                handle.spawn(async move {
+                    let _ = child.wait().await;
+                });
+            }
+        }
     }
 }
 
@@ -92,8 +113,8 @@ mod tests {
         drop(scope);
 
         // The registered task is aborted (its join resolves as cancelled), and
-        // the child is killed rather than detached — proving the error-path guard
-        // reaps both.
+        // the child is killed and reaped by the detached reaper task the guard
+        // spawns on drop — proving the error path abandons neither.
         let Some(task) = some_task else {
             unreachable!("task was just registered")
         };
