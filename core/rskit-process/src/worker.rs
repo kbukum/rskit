@@ -8,17 +8,26 @@
 //! hanging the runner. The straggler's bounded capture buffer caps its memory
 //! and it exits on its own once the pipe finally closes.
 
-use std::sync::mpsc;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::{AppError, AppResult, ErrorCode};
+
+/// How often [`join_within`] re-checks whether the worker has finished while
+/// waiting out the grace period.
+const POLL_INTERVAL: Duration = Duration::from_millis(5);
 
 /// Join `handle` within `grace`, surfacing worker errors and mapping panics.
 ///
 /// Returns `Ok(())` when there is no handle or the worker finishes within
-/// `grace`. A worker still running after `grace` is detached via a watchdog
-/// thread rather than joined forever.
+/// `grace`. A worker still running after `grace` is detached (its handle is
+/// dropped) rather than joined forever.
+///
+/// The wait polls [`JoinHandle::is_finished`] instead of spawning a watchdog
+/// thread that blocks on `join()`: a detached straggler must not leave a second
+/// thread parked in `join()` behind it, or repeated runs would accumulate idle
+/// joiner threads. Once `is_finished()` reports `true`, the `join()` below
+/// returns without blocking.
 pub(crate) fn join_within(
     handle: Option<thread::JoinHandle<AppResult<()>>>,
     grace: Duration,
@@ -26,22 +35,30 @@ pub(crate) fn join_within(
     let Some(handle) = handle else {
         return Ok(());
     };
-    let (tx, rx) = mpsc::channel();
-    thread::spawn(move || {
-        let _ = tx.send(handle.join());
-    });
-    match rx.recv_timeout(grace) {
-        Ok(Ok(result)) => result,
-        Ok(Err(_panic)) => Err(AppError::new(
+    let deadline = Instant::now() + grace;
+    while !handle.is_finished() {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            // Detach the straggler: dropping the handle leaves the worker
+            // running, and its bounded capture buffer caps memory until it
+            // exits once the pipe finally closes.
+            return Ok(());
+        }
+        thread::sleep(remaining.min(POLL_INTERVAL));
+    }
+    match handle.join() {
+        Ok(result) => result,
+        Err(_panic) => Err(AppError::new(
             ErrorCode::Internal,
             "process worker thread panicked",
         )),
-        Err(_timeout) => Ok(()),
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::sync::mpsc;
+
     use super::*;
 
     #[test]

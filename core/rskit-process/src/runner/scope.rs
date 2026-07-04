@@ -102,7 +102,6 @@ mod tests {
 
     #[tokio::test]
     async fn disarming_the_scope_leaves_the_child_and_tasks_alone() {
-        let mut child = spawn_sleeper();
         let some_task = Some(tokio::spawn(async {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }));
@@ -110,16 +109,21 @@ mod tests {
         let mut scope = ChildScope::new(spawn_sleeper());
         scope.register(&some_task);
         scope.disarm();
-        drop(scope);
 
-        // A disarmed scope neither aborts the task nor kills the caller-owned
-        // child: the task runs to completion and the child is still alive until
-        // the test explicitly reaps it.
+        // A disarmed scope neither aborts the task nor kills the child: the task
+        // runs to completion and the child is still alive after disarming.
         let Some(task) = some_task else {
             unreachable!("task was just registered")
         };
         task.await.expect("task completed");
-        assert!(child.try_wait().expect("try_wait").is_none());
-        let _ = child.start_kill();
+        assert!(
+            scope.child_mut().try_wait().expect("try_wait").is_none(),
+            "a disarmed scope must not kill the child"
+        );
+
+        // Explicitly reap the child through the still-owning scope so the test
+        // leaves no long-lived subprocess behind.
+        scope.child_mut().start_kill().expect("kill child");
+        scope.child_mut().wait().await.expect("reap child");
     }
 }
