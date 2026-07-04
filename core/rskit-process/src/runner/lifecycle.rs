@@ -2,7 +2,10 @@ use tokio::{process::Child, time::timeout};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
 
-use crate::{AppError, AppResult, ErrorCode, ProcessConfig, ProcessSpec, signal::ProcessSignal};
+use crate::process_group::{kill_target, terminate_target};
+use crate::{
+    AppError, AppResult, ErrorCode, ProcessConfig, ProcessSpec, signal::ProcessSignal, terminate,
+};
 
 pub(in crate::runner) struct Completion {
     pub(in crate::runner) exit_code: Option<i32>,
@@ -79,7 +82,8 @@ async fn terminate_and_wait(
     config: &ProcessConfig,
     reason: &str,
 ) -> (Option<i32>, Option<String>) {
-    if !terminate_process(pid, config, ProcessSignal::Terminate) {
+    let group = terminate::targets_group(config.signal);
+    if !pid.is_some_and(|pid| terminate_target(pid, group)) {
         let _ = child.start_kill();
     }
     match timeout(config.signal.grace_period, child.wait()).await {
@@ -89,7 +93,7 @@ async fn terminate_and_wait(
                 signal = ProcessSignal::Terminate.name(),
                 "error waiting for process after signal: {error}"
             );
-            if !terminate_process(pid, config, ProcessSignal::Kill) {
+            if !pid.is_some_and(|pid| kill_target(pid, group)) {
                 let _ = child.start_kill();
             }
             (
@@ -104,7 +108,7 @@ async fn terminate_and_wait(
                 signal = ProcessSignal::Kill.name(),
                 "grace period expired, sending signal"
             );
-            if !terminate_process(pid, config, ProcessSignal::Kill) {
+            if !pid.is_some_and(|pid| kill_target(pid, group)) {
                 let _ = child.start_kill();
             }
             let _ = child.wait().await;
@@ -114,31 +118,4 @@ async fn terminate_and_wait(
             )
         }
     }
-}
-
-fn terminate_process(pid: Option<u32>, config: &ProcessConfig, signal: ProcessSignal) -> bool {
-    if let Some(pid) = pid {
-        #[cfg(unix)]
-        // SAFETY: `kill` targets either the child pid or the negated
-        // process-group id created by the `pre_exec` hook. ESRCH means the
-        // process already exited.
-        unsafe {
-            let target =
-                if config.signal.create_process_group && config.signal.terminate_descendants {
-                    -(pid as i32)
-                } else {
-                    pid as i32
-                };
-            let result = libc::kill(target, signal.as_raw());
-            if result != 0 {
-                let error = std::io::Error::last_os_error();
-                if error.raw_os_error() != Some(libc::ESRCH) {
-                    warn!(signal = signal.name(), "failed to send signal: {error}");
-                    return false;
-                }
-            }
-            return true;
-        }
-    }
-    false
 }

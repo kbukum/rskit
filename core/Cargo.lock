@@ -5278,7 +5278,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-fs"
-version = "0.2.0-alpha.2"
+version = "0.2.0-alpha.3"
 dependencies = [
  "futures",
  "libc",
@@ -5755,7 +5755,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-process"
-version = "0.2.0-alpha.1"
+version = "0.2.0-alpha.3"
 dependencies = [
  "libc",
  "parking_lot",
@@ -5947,7 +5947,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-stream"
-version = "0.2.0-alpha.2"
+version = "0.2.0-alpha.3"
 dependencies = [
  "async-stream",
  "futures",
@@ -5961,7 +5961,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-suite"
-version = "0.2.0-alpha.2"
+version = "0.2.0-alpha.3"
 dependencies = [
  "async-trait",
  "futures",

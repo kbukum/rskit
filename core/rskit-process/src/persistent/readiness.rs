@@ -31,7 +31,7 @@ pub(in crate::persistent) fn readiness_wait_error(
     error: mpsc::RecvTimeoutError,
     cancelled: &AtomicBool,
 ) -> AppResult<AppError> {
-    if let Some(status) = child.try_wait().map_err(AppError::internal)? {
+    if let Some(status) = observe_exit_for(child, error)? {
         if cancelled.load(Ordering::SeqCst) {
             return Ok(AppError::cancelled("persistent process startup"));
         }
@@ -52,6 +52,42 @@ pub(in crate::persistent) fn readiness_wait_error(
             "persistent process output ended before readiness was observed",
         )),
     }
+}
+
+/// Grace window over which [`observe_exit_for`] polls a child whose readiness
+/// output just ended, before concluding it is still running.
+const EXIT_OBSERVE_WINDOW: Duration = Duration::from_millis(200);
+/// Poll cadence within [`EXIT_OBSERVE_WINDOW`].
+const EXIT_OBSERVE_POLL: Duration = Duration::from_millis(5);
+
+/// Observe whether `child` has exited, tolerating the exit/output-EOF race.
+///
+/// A child closes its stdout/stderr as it exits, so the reader thread can report
+/// the readiness channel `Disconnected` a hair *before* the OS makes the exit
+/// visible to `try_wait`. Taking that first `None` at face value would classify
+/// a process that plainly ended as the weaker `OutputEndedBeforeReadiness`. When
+/// the output ended we therefore poll briefly for the exit — the overwhelmingly
+/// common reason the output stopped — so the classification is deterministic
+/// under load. A plain readiness `Timeout` means the child is expected to still
+/// be running, so that path returns immediately without polling.
+fn observe_exit_for(
+    child: &mut Child,
+    error: mpsc::RecvTimeoutError,
+) -> AppResult<Option<ExitStatus>> {
+    if let Some(status) = child.try_wait().map_err(AppError::internal)? {
+        return Ok(Some(status));
+    }
+    if !matches!(error, mpsc::RecvTimeoutError::Disconnected) {
+        return Ok(None);
+    }
+    let deadline = Instant::now() + EXIT_OBSERVE_WINDOW;
+    while Instant::now() < deadline {
+        thread::sleep(EXIT_OBSERVE_POLL);
+        if let Some(status) = child.try_wait().map_err(AppError::internal)? {
+            return Ok(Some(status));
+        }
+    }
+    Ok(None)
 }
 
 pub(in crate::persistent) fn wait_for_readiness(
@@ -242,5 +278,75 @@ mod tests {
         let _ = child.wait();
 
         assert_eq!(error.code(), ErrorCode::Cancelled);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn readiness_wait_error_classifies_a_finished_child_as_exited_before_readiness() {
+        // Regression: the readiness output channel can report `Disconnected` a
+        // moment before `try_wait` observes the exit. The bounded exit poll must
+        // still classify the ended child as `ExitedBeforeReadiness` rather than
+        // the weaker `OutputEndedBeforeReadiness`.
+        let mut child = std::process::Command::new("/bin/sh")
+            .arg("-c")
+            .arg("printf not-ready; exit 13")
+            .stdout(std::process::Stdio::null())
+            .spawn()
+            .expect("child process starts");
+        let cancelled = AtomicBool::new(false);
+
+        let error =
+            readiness_wait_error(&mut child, mpsc::RecvTimeoutError::Disconnected, &cancelled)
+                .expect("readiness wait error maps to app error");
+
+        assert_eq!(
+            crate::persistent_start_error_kind(&error),
+            Some(PersistentStartErrorKind::ExitedBeforeReadiness)
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn readiness_wait_error_classifies_a_running_child_by_the_wait_reason() {
+        let spawn_sleeper = || {
+            std::process::Command::new("/bin/sh")
+                .arg("-c")
+                .arg("sleep 30")
+                .spawn()
+                .expect("child process starts")
+        };
+        let cancelled = AtomicBool::new(false);
+
+        // Output ended but the child is still alive: once the bounded exit-observe
+        // window elapses, the reason is the closed output stream.
+        let mut ended = spawn_sleeper();
+        let ended_error =
+            readiness_wait_error(&mut ended, mpsc::RecvTimeoutError::Disconnected, &cancelled)
+                .expect("readiness wait error maps to app error");
+        let _ = ended.kill();
+        let _ = ended.wait();
+        assert_eq!(
+            crate::persistent_start_error_kind(&ended_error),
+            Some(PersistentStartErrorKind::OutputEndedBeforeReadiness)
+        );
+
+        // A plain readiness timeout on a live child must return promptly without
+        // spending the exit-observe grace, and classify as a readiness timeout.
+        let mut slow = spawn_sleeper();
+        let start = Instant::now();
+        let slow_error =
+            readiness_wait_error(&mut slow, mpsc::RecvTimeoutError::Timeout, &cancelled)
+                .expect("readiness wait error maps to app error");
+        let elapsed = start.elapsed();
+        let _ = slow.kill();
+        let _ = slow.wait();
+        assert_eq!(
+            crate::persistent_start_error_kind(&slow_error),
+            Some(PersistentStartErrorKind::ReadinessTimedOut)
+        );
+        assert!(
+            elapsed < EXIT_OBSERVE_WINDOW,
+            "the timeout path must not wait out the exit-observe window"
+        );
     }
 }

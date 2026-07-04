@@ -5,6 +5,8 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 use std::time::Duration;
 
+#[cfg(unix)]
+use crate::pty::PtyIo;
 use crate::runner::OutputObserver;
 use rskit_util::SecretKeyMatcher;
 
@@ -287,6 +289,11 @@ pub enum ProcessIo {
     Observed(ObservedIo),
     /// Inherit parent terminal stdio.
     Inherited(InheritedIo),
+    /// Run the child on a pseudoterminal so it renders as in a real terminal.
+    ///
+    /// stdout and stderr are merged into one stream; see [`PtyIo`]. Unix-only.
+    #[cfg(unix)]
+    Pty(PtyIo),
 }
 
 impl Default for ProcessIo {
@@ -312,6 +319,13 @@ impl ProcessIo {
     #[must_use]
     pub fn inherited(io: InheritedIo) -> Self {
         Self::Inherited(io)
+    }
+
+    /// Create pseudoterminal I/O mode.
+    #[cfg(unix)]
+    #[must_use]
+    pub fn pty(io: PtyIo) -> Self {
+        Self::Pty(io)
     }
 }
 
@@ -469,6 +483,8 @@ impl ProcessConfig {
         match &mut self.io {
             ProcessIo::Captured(io) => io.output.max_output_bytes = Some(bytes),
             ProcessIo::Observed(io) => io.output.max_output_bytes = Some(bytes),
+            #[cfg(unix)]
+            ProcessIo::Pty(io) => io.output.max_output_bytes = Some(bytes),
             ProcessIo::Inherited(_) => {}
         }
         self
@@ -480,6 +496,8 @@ impl ProcessConfig {
         match &mut self.io {
             ProcessIo::Captured(io) => io.output.max_output_bytes = None,
             ProcessIo::Observed(io) => io.output.max_output_bytes = None,
+            #[cfg(unix)]
+            ProcessIo::Pty(io) => io.output.max_output_bytes = None,
             ProcessIo::Inherited(_) => {}
         }
         self
@@ -491,6 +509,8 @@ impl ProcessConfig {
         match &mut self.io {
             ProcessIo::Captured(io) => io.input = input,
             ProcessIo::Observed(io) => io.input = input,
+            #[cfg(unix)]
+            ProcessIo::Pty(io) => io.input = input,
             ProcessIo::Inherited(io) => io.input = input,
         }
         self
@@ -609,6 +629,8 @@ mod tests {
             ProcessIo::Observed(_) | ProcessIo::Inherited(_) => {
                 panic!("default process config should use captured I/O")
             }
+            #[cfg(unix)]
+            ProcessIo::Pty(_) => panic!("default process config should use captured I/O"),
         }
     }
 
@@ -627,6 +649,8 @@ mod tests {
             ProcessIo::Captured(_) | ProcessIo::Inherited(_) => {
                 panic!("expected observed I/O")
             }
+            #[cfg(unix)]
+            ProcessIo::Pty(_) => panic!("expected observed I/O"),
         }
 
         let inherited = ProcessConfig::default()
@@ -639,6 +663,8 @@ mod tests {
             ProcessIo::Captured(_) | ProcessIo::Observed(_) => {
                 panic!("expected inherited I/O")
             }
+            #[cfg(unix)]
+            ProcessIo::Pty(_) => panic!("expected inherited I/O"),
         }
     }
 }

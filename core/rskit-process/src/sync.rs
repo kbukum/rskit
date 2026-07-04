@@ -1,14 +1,19 @@
 //! Blocking subprocess execution.
 
 use std::io::{ErrorKind, Read, Write};
-use std::process::{ChildStdin, Command as StdCommand, Stdio};
+use std::process::{Child, ChildStdin, Command as StdCommand, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use crate::capture::{SharedOutput, append_line_bounded, shared_output, take_shared};
+use crate::process_group::kill_target;
+use crate::worker::join_within;
 use crate::{
     AppError, AppResult, EnvPolicy, ErrorCode, InputPolicy, OutputPolicy, ProcessConfig, ProcessIo,
-    ProcessResult, ProcessSpec,
+    ProcessResult, ProcessSpec, SignalPolicy, terminate,
 };
+
+const POLL_INTERVAL: Duration = Duration::from_millis(10);
 
 /// Execute a subprocess on the current thread using captured or inherited I/O mode.
 pub fn run(spec: &ProcessSpec, config: &ProcessConfig) -> AppResult<ProcessResult> {
@@ -34,6 +39,11 @@ pub fn run(spec: &ProcessSpec, config: &ProcessConfig) -> AppResult<ProcessResul
         ProcessIo::Observed(_) => Err(AppError::invalid_input(
             "process.io",
             "observed mode requires async run_with_cancel",
+        )),
+        #[cfg(unix)]
+        ProcessIo::Pty(_) => Err(AppError::invalid_input(
+            "process.io",
+            "pty mode requires async run_with_cancel",
         )),
     }
 }
@@ -73,49 +83,45 @@ fn run_blocking(
             format!("failed to spawn process: {error}"),
         )
     })?;
-    let pid = Some(child.id());
 
     let max_output_bytes = output.and_then(|output| output.max_output_bytes);
-    let stdout = child
+    let stdout_capture = shared_output();
+    let stderr_capture = shared_output();
+    let stdout_thread = child
         .stdout
         .take()
-        .map(|stream| spawn_reader(stream, max_output_bytes));
-    let stderr = child
+        .map(|stream| spawn_reader(stream, stdout_capture.clone(), max_output_bytes));
+    let stderr_thread = child
         .stderr
         .take()
-        .map(|stream| spawn_reader(stream, max_output_bytes));
-    let stdin = spawn_stdin_writer(child.stdin.take(), input);
+        .map(|stream| spawn_reader(stream, stderr_capture.clone(), max_output_bytes));
+    let stdin_thread = spawn_stdin_writer(child.stdin.take(), input);
 
+    // Own the child and its worker threads in a guard so any early return below
+    // (a wait error, for example) kills the child and reaps the threads rather
+    // than orphaning the child and detaching the readers, which would keep the
+    // pipes open and leak the threads.
+    let mut scope = BlockingChildScope::new(child, config.signal, config.signal.grace_period);
+    scope.attach(stdout_thread, stderr_thread, stdin_thread);
+
+    let pid = scope.child_mut().id();
     let (exit_code, timed_out, synthetic_stderr) =
-        wait_with_timeout(&mut child, pid, config.timeout, config)?;
-    join_stdin(stdin)?;
-    let stdout_output = join_reader(stdout)?;
-    let mut stderr_output = join_reader(stderr)?;
+        wait_with_timeout(scope.child_mut(), pid, config.timeout, config)?;
+
+    // The child has exited; drain the workers within the grace period. A worker
+    // still blocked because a surviving descendant holds the pipe open is
+    // detached rather than joined forever.
+    scope.drain()?;
+    scope.disarm();
+
+    let stdout_output = take_shared(&stdout_capture);
+    let mut stderr_output = take_shared(&stderr_capture);
     if let Some(extra_stderr) = synthetic_stderr {
-        stderr_output.truncated |= append_bounded(
+        stderr_output.truncated |= append_line_bounded(
             &mut stderr_output.bytes,
             extra_stderr.as_bytes(),
             max_output_bytes,
         );
-    }
-
-    fn spawn_stdin_writer(
-        stdin: Option<ChildStdin>,
-        input: &InputPolicy,
-    ) -> Option<thread::JoinHandle<AppResult<()>>> {
-        let InputPolicy::Bytes(bytes) = input else {
-            return None;
-        };
-        let mut stdin = stdin?;
-        let bytes = bytes.clone();
-        Some(thread::spawn(move || match stdin.write_all(&bytes) {
-            Ok(()) => Ok(()),
-            Err(error) if error.kind() == ErrorKind::BrokenPipe => Ok(()),
-            Err(error) => Err(AppError::new(
-                ErrorCode::Internal,
-                format!("failed to write to stdin: {error}"),
-            )),
-        }))
     }
 
     Ok(ProcessResult::completed(
@@ -128,6 +134,120 @@ fn run_blocking(
         timed_out,
         false,
     ))
+}
+
+/// Owns a spawned child and its capture/stdin worker threads so an early return
+/// or panic kills the child and reaps the threads instead of leaking them.
+///
+/// While armed, dropping the guard best-effort kills the child (closing the
+/// pipes so the readers observe EOF) and then joins each worker within the grace
+/// period. [`disarm`](Self::disarm) after a normal drain hands ownership back to
+/// the already-captured shared output.
+struct BlockingChildScope {
+    child: Child,
+    stdout: Option<thread::JoinHandle<AppResult<()>>>,
+    stderr: Option<thread::JoinHandle<AppResult<()>>>,
+    stdin: Option<thread::JoinHandle<AppResult<()>>>,
+    signal: SignalPolicy,
+    grace: Duration,
+    armed: bool,
+}
+
+impl BlockingChildScope {
+    fn new(child: Child, signal: SignalPolicy, grace: Duration) -> Self {
+        Self {
+            child,
+            stdout: None,
+            stderr: None,
+            stdin: None,
+            signal,
+            grace,
+            armed: true,
+        }
+    }
+
+    fn attach(
+        &mut self,
+        stdout: Option<thread::JoinHandle<AppResult<()>>>,
+        stderr: Option<thread::JoinHandle<AppResult<()>>>,
+        stdin: Option<thread::JoinHandle<AppResult<()>>>,
+    ) {
+        self.stdout = stdout;
+        self.stderr = stderr;
+        self.stdin = stdin;
+    }
+
+    fn child_mut(&mut self) -> &mut Child {
+        &mut self.child
+    }
+
+    /// Join every worker thread within the grace period, surfacing worker
+    /// errors. A worker that outlives the grace period is detached.
+    fn drain(&mut self) -> AppResult<()> {
+        join_within(self.stdin.take(), self.grace)?;
+        join_within(self.stdout.take(), self.grace)?;
+        join_within(self.stderr.take(), self.grace)
+    }
+
+    fn disarm(&mut self) {
+        self.armed = false;
+    }
+}
+
+impl Drop for BlockingChildScope {
+    fn drop(&mut self) {
+        if !self.armed {
+            return;
+        }
+        let group = terminate::targets_group(self.signal);
+        if !kill_target(self.child.id(), group) {
+            let _ = self.child.kill();
+        }
+        let _ = self.child.wait();
+        let _ = join_within(self.stdout.take(), self.grace);
+        let _ = join_within(self.stderr.take(), self.grace);
+        let _ = join_within(self.stdin.take(), self.grace);
+    }
+}
+
+fn spawn_reader<R>(
+    mut reader: R,
+    capture: SharedOutput,
+    max_bytes: Option<usize>,
+) -> thread::JoinHandle<AppResult<()>>
+where
+    R: Read + Send + 'static,
+{
+    thread::spawn(move || {
+        let mut buffer = [0_u8; 4096];
+        loop {
+            let read = reader.read(&mut buffer).map_err(AppError::internal)?;
+            if read == 0 {
+                break;
+            }
+            capture.lock().push(&buffer[..read], max_bytes);
+        }
+        Ok(())
+    })
+}
+
+fn spawn_stdin_writer(
+    stdin: Option<ChildStdin>,
+    input: &InputPolicy,
+) -> Option<thread::JoinHandle<AppResult<()>>> {
+    let InputPolicy::Bytes(bytes) = input else {
+        return None;
+    };
+    let mut stdin = stdin?;
+    let bytes = bytes.clone();
+    Some(thread::spawn(move || match stdin.write_all(&bytes) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == ErrorKind::BrokenPipe => Ok(()),
+        Err(error) => Err(AppError::new(
+            ErrorCode::Internal,
+            format!("failed to write to stdin: {error}"),
+        )),
+    }))
 }
 
 fn stdin_stdio(input: &InputPolicy) -> Stdio {
@@ -175,8 +295,8 @@ fn stderr_stdio(output: Option<&OutputPolicy>) -> Stdio {
 }
 
 fn wait_with_timeout(
-    child: &mut std::process::Child,
-    pid: Option<u32>,
+    child: &mut Child,
+    pid: u32,
     timeout: Option<Duration>,
     config: &ProcessConfig,
 ) -> AppResult<(Option<i32>, bool, Option<String>)> {
@@ -201,172 +321,18 @@ fn wait_with_timeout(
             return Ok((status.code(), false, None));
         }
         if Instant::now() >= deadline {
-            return terminate_and_wait(child, pid, config);
+            let (status, escalated) = terminate::terminate_and_reap(
+                child,
+                pid,
+                config.signal,
+                config.signal.grace_period,
+            )?;
+            let synthetic =
+                escalated.then(|| "process killed by SIGKILL after timeout".to_string());
+            return Ok((status.code(), true, synthetic));
         }
-        thread::sleep(Duration::from_millis(10));
+        thread::sleep(POLL_INTERVAL);
     }
-}
-
-fn terminate_and_wait(
-    child: &mut std::process::Child,
-    pid: Option<u32>,
-    config: &ProcessConfig,
-) -> AppResult<(Option<i32>, bool, Option<String>)> {
-    if !terminate_process(pid, config, libc::SIGTERM) {
-        child.kill().map_err(|error| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!("failed to terminate process after timeout: {error}"),
-            )
-        })?;
-    }
-
-    let deadline = Instant::now() + config.signal.grace_period;
-    loop {
-        if let Some(status) = child.try_wait().map_err(|error| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!("process execution error after timeout: {error}"),
-            )
-        })? {
-            return Ok((status.code(), true, None));
-        }
-        if Instant::now() >= deadline {
-            if !terminate_process(pid, config, libc::SIGKILL) {
-                child.kill().map_err(|error| {
-                    AppError::new(
-                        ErrorCode::Internal,
-                        format!("failed to kill process after timeout: {error}"),
-                    )
-                })?;
-            }
-            let status = child.wait().map_err(|error| {
-                AppError::new(
-                    ErrorCode::Internal,
-                    format!("process execution error after kill: {error}"),
-                )
-            })?;
-            return Ok((
-                status.code(),
-                true,
-                Some("process killed by SIGKILL after timeout".to_string()),
-            ));
-        }
-        thread::sleep(Duration::from_millis(10));
-    }
-}
-
-struct ReaderOutput {
-    bytes: Vec<u8>,
-    truncated: bool,
-}
-
-fn spawn_reader<R>(
-    mut reader: R,
-    max_bytes: Option<usize>,
-) -> thread::JoinHandle<std::io::Result<ReaderOutput>>
-where
-    R: Read + Send + 'static,
-{
-    thread::spawn(move || {
-        let mut bytes = Vec::new();
-        let mut buffer = [0_u8; 4096];
-        let mut remaining = max_bytes.unwrap_or(usize::MAX);
-        let mut truncated = false;
-        loop {
-            let read = reader.read(&mut buffer)?;
-            if read == 0 {
-                break;
-            }
-            if remaining > 0 {
-                let to_copy = remaining.min(read);
-                bytes.extend_from_slice(&buffer[..to_copy]);
-                remaining -= to_copy;
-                if to_copy < read {
-                    truncated = true;
-                }
-            } else {
-                truncated = true;
-            }
-        }
-        Ok(ReaderOutput { bytes, truncated })
-    })
-}
-
-fn join_reader(
-    handle: Option<thread::JoinHandle<std::io::Result<ReaderOutput>>>,
-) -> AppResult<ReaderOutput> {
-    match handle {
-        Some(handle) => handle
-            .join()
-            .map_err(|_| {
-                AppError::new(ErrorCode::Internal, "process output reader thread panicked")
-            })?
-            .map_err(AppError::internal),
-        None => Ok(ReaderOutput {
-            bytes: Vec::new(),
-            truncated: false,
-        }),
-    }
-}
-
-fn join_stdin(handle: Option<thread::JoinHandle<AppResult<()>>>) -> AppResult<()> {
-    match handle {
-        Some(handle) => handle
-            .join()
-            .map_err(|_| AppError::new(ErrorCode::Internal, "process stdin writer panicked"))?,
-        None => Ok(()),
-    }
-}
-
-fn append_bounded(target: &mut Vec<u8>, extra: &[u8], max_bytes: Option<usize>) -> bool {
-    let Some(limit) = max_bytes else {
-        if !target.is_empty() {
-            target.push(b'\n');
-        }
-        target.extend_from_slice(extra);
-        return false;
-    };
-    if target.len() >= limit {
-        return true;
-    }
-    if !target.is_empty() && target.len() + 1 < limit {
-        target.push(b'\n');
-    }
-    let remaining = limit.saturating_sub(target.len());
-    if extra.len() > remaining {
-        target.extend_from_slice(&extra[..remaining]);
-        true
-    } else {
-        target.extend_from_slice(extra);
-        false
-    }
-}
-
-fn terminate_process(pid: Option<u32>, config: &ProcessConfig, signal: i32) -> bool {
-    if let Some(pid) = pid {
-        #[cfg(unix)]
-        // SAFETY: `kill` targets either the child pid or the negated
-        // process-group id created by the `pre_exec` hook. ESRCH means it
-        // already exited.
-        unsafe {
-            let target =
-                if config.signal.create_process_group && config.signal.terminate_descendants {
-                    -(pid as i32)
-                } else {
-                    pid as i32
-                };
-            let result = libc::kill(target, signal);
-            if result != 0 {
-                let error = std::io::Error::last_os_error();
-                if error.raw_os_error() != Some(libc::ESRCH) {
-                    return false;
-                }
-            }
-            return true;
-        }
-    }
-    false
 }
 
 #[cfg(test)]
@@ -397,7 +363,7 @@ mod tests {
     }
 
     #[test]
-    fn inherited_config_disables_descendant_signalling_and_join_none_is_ok() {
+    fn inherited_config_disables_descendant_signalling() {
         let config = ProcessConfig::default()
             .with_io(ProcessIo::captured(CapturedIo::new()))
             .with_timeout(None);
@@ -406,67 +372,55 @@ mod tests {
         assert!(!inherited.signal.create_process_group);
         assert!(!inherited.signal.terminate_descendants);
         assert_eq!(inherited.timeout, None);
-        join_stdin(None).unwrap();
-        let output = join_reader(None).unwrap();
-        assert!(output.bytes.is_empty());
-        assert!(!output.truncated);
-        assert!(!terminate_process(None, &config, libc::SIGTERM));
     }
 
     #[test]
-    fn append_bounded_preserves_separator_and_reports_truncation() {
-        let mut bytes = b"abc".to_vec();
-        assert!(!append_bounded(&mut bytes, b"def", None));
-        assert_eq!(bytes, b"abc\ndef");
+    fn join_within_reports_none_and_worker_errors() {
+        join_within(None, Duration::from_millis(10)).unwrap();
 
-        let mut limited = b"abc".to_vec();
-        assert!(!append_bounded(&mut limited, b"de", Some(6)));
-        assert_eq!(limited, b"abc\nde");
-        assert!(append_bounded(&mut limited, b"f", Some(6)));
+        let ok = thread::spawn(|| Ok(()));
+        join_within(Some(ok), Duration::from_millis(500)).unwrap();
 
-        let mut already_full = b"abcdef".to_vec();
-        assert!(append_bounded(&mut already_full, b"g", Some(6)));
-        assert_eq!(already_full, b"abcdef");
-    }
-
-    #[test]
-    fn join_helpers_report_panicked_threads() {
-        let reader = std::thread::spawn(|| -> std::io::Result<ReaderOutput> {
-            panic!("reader panic");
-        });
-        let stdin = std::thread::spawn(|| -> AppResult<()> {
-            panic!("stdin panic");
-        });
-
-        let reader_error = match join_reader(Some(reader)) {
-            Ok(_) => panic!("reader panic should map to error"),
-            Err(error) => error,
-        };
-        let stdin_error = match join_stdin(Some(stdin)) {
-            Ok(_) => panic!("stdin panic should map to error"),
-            Err(error) => error,
-        };
-
-        assert_eq!(reader_error.code(), ErrorCode::Internal);
-        assert_eq!(stdin_error.code(), ErrorCode::Internal);
+        let failed = thread::spawn(|| Err(AppError::new(ErrorCode::Internal, "reader failed")));
+        assert_eq!(
+            join_within(Some(failed), Duration::from_millis(500))
+                .unwrap_err()
+                .code(),
+            ErrorCode::Internal
+        );
     }
 
     #[cfg(unix)]
     #[test]
-    fn terminate_process_treats_esrch_as_already_exited() {
-        // Spawn and reap a short-lived child so the PID is guaranteed dead,
-        // then probe with signal 0 (existence check) instead of SIGTERM so
-        // PID-reuse cannot cause this test to deliver a real signal to an
-        // unrelated process.
-        let mut child = std::process::Command::new("/usr/bin/true")
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
+    fn dropping_an_armed_scope_kills_the_child_and_reaps_workers() {
+        let child = StdCommand::new("/bin/sleep")
+            .arg("30")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
             .spawn()
-            .expect("spawning /usr/bin/true succeeds");
+            .expect("spawn sleep");
         let pid = child.id();
-        child.wait().expect("child exits and is reaped");
 
-        let config = ProcessConfig::default();
-        assert!(terminate_process(Some(pid), &config, 0));
+        let worker = thread::spawn(|| {
+            thread::sleep(Duration::from_millis(20));
+            Ok(())
+        });
+        let mut scope = BlockingChildScope::new(
+            child,
+            SignalPolicy::default()
+                .with_create_process_group(false)
+                .with_terminate_descendants(false),
+            Duration::from_millis(500),
+        );
+        scope.attach(Some(worker), None, None);
+        drop(scope);
+
+        // The guard killed and reaped the child, so a fresh existence probe must
+        // fail with ESRCH.
+        // SAFETY: signal 0 performs an existence check without delivering a
+        // signal.
+        let alive = unsafe { libc::kill(i32::try_from(pid).unwrap(), 0) };
+        assert_eq!(alive, -1, "guard drop must kill the child");
     }
 }

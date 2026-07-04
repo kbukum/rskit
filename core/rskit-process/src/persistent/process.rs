@@ -5,14 +5,14 @@ use std::{
     time::{Duration, Instant},
 };
 
+use crate::worker::join_within;
 use crate::{
-    AppError, AppResult, ErrorCode, ProcessResult, SignalPolicy,
-    process_group::{kill_target, terminate_target},
+    AppError, AppResult, ErrorCode, ProcessResult, SignalPolicy, terminate::terminate_and_reap,
 };
 
 use super::{
     cancel::CancelThread,
-    io::{Capture, ReaderThread, StdinThread, join_reader, join_stdin, take_capture},
+    io::{Capture, ReaderThread, StdinThread, take_capture},
 };
 
 /// Outcome of requesting persistent process shutdown.
@@ -91,10 +91,7 @@ impl PersistentProcess {
 
         self.stop_cancel_thread()?;
         let pid = self.child.id();
-        if !terminate_target(pid, terminate_group(self.signal)) {
-            let _ = self.child.kill();
-        }
-        let status = wait_for_shutdown(
+        let (status, _escalated) = terminate_and_reap(
             &mut self.child,
             pid,
             self.signal,
@@ -112,9 +109,10 @@ impl PersistentProcess {
         timed_out: bool,
         cancelled: bool,
     ) -> AppResult<ProcessResult> {
-        join_stdin(self.stdin_thread.take())?;
-        join_reader(self.stdout_thread.take())?;
-        join_reader(self.stderr_thread.take())?;
+        let grace = self.shutdown_grace_period;
+        join_within(self.stdin_thread.take(), grace)?;
+        join_within(self.stdout_thread.take(), grace)?;
+        join_within(self.stderr_thread.take(), grace)?;
         let stdout = take_capture(&self.stdout);
         let stderr = take_capture(&self.stderr);
         Ok(ProcessResult::completed(
@@ -182,31 +180,7 @@ pub(in crate::persistent) fn cleanup_spawned_child(
     grace_period: Duration,
 ) -> AppResult<()> {
     let pid = child.id();
-    if !terminate_target(pid, terminate_group(signal)) {
-        let _ = child.kill();
-    }
-    wait_for_shutdown(child, pid, signal, grace_period).map(|_| ())
-}
-
-fn wait_for_shutdown(
-    child: &mut Child,
-    pid: u32,
-    signal: SignalPolicy,
-    grace_period: Duration,
-) -> AppResult<ExitStatus> {
-    let deadline = Instant::now() + grace_period;
-    loop {
-        if let Some(status) = child.try_wait().map_err(AppError::internal)? {
-            return Ok(status);
-        }
-        if Instant::now() >= deadline {
-            if !kill_target(pid, terminate_group(signal)) {
-                let _ = child.kill();
-            }
-            return child.wait().map_err(AppError::internal);
-        }
-        thread::sleep(Duration::from_millis(10));
-    }
+    terminate_and_reap(child, pid, signal, grace_period).map(|_| ())
 }
 
 fn wait_for_exit(
@@ -224,17 +198,10 @@ fn wait_for_exit(
             .is_some_and(CancelThread::is_cancel_requested)
         {
             let pid = child.id();
-            if !terminate_target(pid, terminate_group(signal)) {
-                let _ = child.kill();
-            }
-            return wait_for_shutdown(child, pid, signal, grace_period);
+            return terminate_and_reap(child, pid, signal, grace_period).map(|(status, _)| status);
         }
         thread::sleep(Duration::from_millis(10));
     }
-}
-
-fn terminate_group(signal: SignalPolicy) -> bool {
-    signal.create_process_group && signal.terminate_descendants
 }
 
 #[cfg(all(test, unix))]

@@ -28,9 +28,9 @@ Optional modules are enabled with Cargo features. Adapter features also enable t
 
 ```toml
 [dependencies]
-rskit-suite = "0.2.0-alpha.2"
+rskit-suite = "0.2.0-alpha.3"
 # or opt into higher-level modules/adapters:
-# rskit-suite = { version = "0.2.0-alpha.2", features = ["server", "cli", "storage-s3"] }
+# rskit-suite = { version = "0.2.0-alpha.3", features = ["server", "cli", "storage-s3"] }
 ```
 
 ```rust

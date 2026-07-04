@@ -631,3 +631,51 @@ async fn cancellation_terminates_process() {
         .unwrap();
     assert!(result.cancelled);
 }
+
+#[tokio::test]
+async fn async_drain_does_not_hang_when_a_descendant_holds_the_pipe() {
+    // The shell prints `hello`, backgrounds a long `sleep` that inherits the
+    // stdout pipe, then exits 0. The parent exits immediately but the write end
+    // of the pipe stays open because the grandchild holds it. Without a bounded
+    // drain the reader would block for the grandchild's whole lifetime; the
+    // bounded drain must abort the reader after the grace period and still
+    // return the `hello` that was captured before the child exited.
+    let command = ProcessSpec::new("/bin/sh").args(["-c", "sleep 30 & printf hello; exit 0"]);
+    let config = ProcessConfig::default().with_signal_policy(
+        rskit_process::SignalPolicy::default().with_grace_period(Duration::from_millis(200)),
+    );
+
+    let start = std::time::Instant::now();
+    let result = tokio::time::timeout(
+        Duration::from_secs(5),
+        run_with_cancel(&command, &config, CancellationToken::new()),
+    )
+    .await
+    .expect("bounded drain must not hang on a surviving descendant")
+    .unwrap();
+
+    assert!(
+        start.elapsed() < Duration::from_secs(3),
+        "drain returned promptly instead of waiting for the grandchild"
+    );
+    assert_eq!(result.stdout, "hello");
+    assert_eq!(result.exit_code, Some(0));
+}
+
+#[test]
+fn blocking_drain_does_not_hang_when_a_descendant_holds_the_pipe() {
+    let command = ProcessSpec::new("/bin/sh").args(["-c", "sleep 30 & printf hello; exit 0"]);
+    let config = ProcessConfig::default().with_signal_policy(
+        rskit_process::SignalPolicy::default().with_grace_period(Duration::from_millis(200)),
+    );
+
+    let start = std::time::Instant::now();
+    let result = run(&command, &config).unwrap();
+
+    assert!(
+        start.elapsed() < Duration::from_secs(3),
+        "blocking drain returned promptly instead of waiting for the grandchild"
+    );
+    assert_eq!(result.stdout, "hello");
+    assert_eq!(result.exit_code, Some(0));
+}
