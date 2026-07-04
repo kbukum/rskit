@@ -28,6 +28,8 @@ const POLL_INTERVAL: Duration = Duration::from_millis(5);
 /// thread parked in `join()` behind it, or repeated runs would accumulate idle
 /// joiner threads. Once `is_finished()` reports `true`, the `join()` below
 /// returns without blocking.
+///
+/// [`JoinHandle::is_finished`]: std::thread::JoinHandle::is_finished
 pub(crate) fn join_within(
     handle: Option<thread::JoinHandle<AppResult<()>>>,
     grace: Duration,
