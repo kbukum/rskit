@@ -263,6 +263,11 @@ impl AppError {
     /// "did you mean …?" suggestion) as a new sentence, preserving the code,
     /// cause, structured details, and retryability of the original error.
     ///
+    /// An empty hint is a no-op, so an optional or derived suggestion can be
+    /// threaded through without a conditional at the call site. The hint is
+    /// appended in place (separated by a single space when the message is
+    /// non-empty), avoiding a full re-allocation of the message.
+    ///
     /// # Examples
     ///
     /// ```rust
@@ -276,7 +281,14 @@ impl AppError {
     /// ```
     #[must_use]
     pub fn hint(mut self, hint: impl Into<String>) -> Self {
-        self.message = format!("{} {}", self.message, hint.into());
+        let hint = hint.into();
+        if hint.is_empty() {
+            return self;
+        }
+        if !self.message.is_empty() {
+            self.message.push(' ');
+        }
+        self.message.push_str(&hint);
         self
     }
 
@@ -450,6 +462,12 @@ mod tests {
             err.details.get("field").and_then(|v| v.as_str()),
             Some("task")
         );
+    }
+
+    #[test]
+    fn hint_is_a_no_op_for_an_empty_hint() {
+        let err = AppError::invalid_input("task", "no such task 'buld'").hint("");
+        assert_eq!(err.message, "invalid task: no such task 'buld'");
     }
 
     #[test]
