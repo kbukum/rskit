@@ -37,8 +37,9 @@ where
 /// Matching is case-insensitive. A candidate qualifies either by an Optimal
 /// String Alignment (restricted Damerau-Levenshtein) edit distance within
 /// `max_distance` — counting an adjacent transposition as a single edit — or, as
-/// a fallback, by being an abbreviation of `input` (see [`match_score`] for the
-/// exact abbreviation rule). Among qualifying candidates the smallest score
+/// a fallback, by being an abbreviation of `input` — `input` (of at least two
+/// characters) is a subsequence of a candidate no more than four times its
+/// length, e.g. `fmt` → `format`. Among qualifying candidates the smallest score
 /// wins; ties break first toward a candidate whose leading character matches
 /// `input`'s, then lexicographically, so the result is deterministic regardless
 /// of iteration order. Returns `None` when no candidate is close enough, so a
