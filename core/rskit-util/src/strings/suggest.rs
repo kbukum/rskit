@@ -113,13 +113,21 @@ fn is_subsequence(needle: &str, haystack: &str) -> bool {
 /// even when `input` is empty, so the result never depends on iteration order).
 fn prefers(candidate: &str, incumbent: &str, lower_input: &str) -> bool {
     let leading = lower_input.chars().next();
-    let candidate_prefix = leading.is_some_and(|c| candidate.to_lowercase().starts_with(c));
-    let incumbent_prefix = leading.is_some_and(|c| incumbent.to_lowercase().starts_with(c));
+    let candidate_prefix = leading.is_some_and(|c| leading_char_matches(candidate, c));
+    let incumbent_prefix = leading.is_some_and(|c| leading_char_matches(incumbent, c));
     match (candidate_prefix, incumbent_prefix) {
         (true, false) => true,
         (false, true) => false,
         _ => candidate < incumbent,
     }
+}
+
+/// Whether `s`'s first character equals `leading` case-insensitively, without
+/// allocating a lowercased copy of the whole string.
+fn leading_char_matches(s: &str, leading: char) -> bool {
+    s.chars()
+        .next()
+        .is_some_and(|first| first.to_lowercase().eq(leading.to_lowercase()))
 }
 
 /// Optimal String Alignment distance between two strings (adjacent
