@@ -256,6 +256,44 @@ impl AppError {
         self
     }
 
+    /// Append a trailing hint after the existing error message.
+    ///
+    /// The counterpart to [`context`](Self::context): where `context` prepends
+    /// call-site context, `hint` appends advisory guidance (for example a
+    /// "did you mean …?" suggestion) as a new sentence, preserving the code,
+    /// cause, structured details, and retryability of the original error.
+    ///
+    /// An empty or whitespace-only hint is a no-op, so an optional or derived
+    /// suggestion can be threaded through without a conditional at the call
+    /// site. The hint is trimmed of surrounding whitespace and appended onto the
+    /// existing message (separated by a single space when the message is
+    /// non-empty); the caller supplies any punctuation within the `hint` itself.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use rskit_errors::{AppError, ErrorCode};
+    /// let err = AppError::invalid_input("task", "no such task 'buld'")
+    ///     .hint("Did you mean 'build'?");
+    /// assert_eq!(
+    ///     err.message(),
+    ///     "invalid task: no such task 'buld' Did you mean 'build'?"
+    /// );
+    /// ```
+    #[must_use]
+    pub fn hint(mut self, hint: impl Into<String>) -> Self {
+        let hint = hint.into();
+        let hint = hint.trim();
+        if hint.is_empty() {
+            return self;
+        }
+        if !self.message.is_empty() {
+            self.message.push(' ');
+        }
+        self.message.push_str(hint);
+        self
+    }
+
     // ── Query helpers ───────────────────────────────────────────────────
 
     /// Returns `true` if the operation that produced this error is safe to retry.
@@ -400,6 +438,54 @@ mod tests {
     }
 
     // ── Convenience constructors ──────────────────────────────────────────────
+
+    #[test]
+    fn hint_appends_after_message_preserving_code() {
+        let err =
+            AppError::invalid_input("task", "no such task 'buld'").hint("Did you mean 'build'?");
+        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert_eq!(
+            err.message,
+            "invalid task: no such task 'buld' Did you mean 'build'?"
+        );
+    }
+
+    #[test]
+    fn hint_preserves_cause_and_details() {
+        use std::io;
+        let io_err = io::Error::new(io::ErrorKind::NotFound, "missing");
+        let err = AppError::new(ErrorCode::InvalidInput, "bad")
+            .with_detail("field", "task")
+            .with_cause(io_err)
+            .hint("try again");
+        assert_eq!(err.message, "bad try again");
+        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert_eq!(err.retryable, ErrorCode::InvalidInput.is_retryable());
+        assert_eq!(err.http_status, ErrorCode::InvalidInput.http_status());
+        assert!(err.cause.is_some());
+        assert_eq!(
+            err.details.get("field").and_then(|v| v.as_str()),
+            Some("task")
+        );
+    }
+
+    #[test]
+    fn hint_is_a_no_op_for_an_empty_hint() {
+        let err = AppError::invalid_input("task", "no such task 'buld'").hint("");
+        assert_eq!(err.message, "invalid task: no such task 'buld'");
+    }
+
+    #[test]
+    fn hint_is_a_no_op_for_a_whitespace_only_hint() {
+        let err = AppError::invalid_input("task", "no such task 'buld'").hint("   \t");
+        assert_eq!(err.message, "invalid task: no such task 'buld'");
+    }
+
+    #[test]
+    fn hint_trims_surrounding_whitespace_to_a_single_separator() {
+        let err = AppError::new(ErrorCode::InvalidInput, "bad").hint("  try again  ");
+        assert_eq!(err.message, "bad try again");
+    }
 
     #[test]
     fn not_found_without_id() {
