@@ -263,11 +263,11 @@ impl AppError {
     /// "did you mean …?" suggestion) as a new sentence, preserving the code,
     /// cause, structured details, and retryability of the original error.
     ///
-    /// An empty hint is a no-op, so an optional or derived suggestion can be
-    /// threaded through without a conditional at the call site. The hint is
-    /// appended onto the existing message (separated by a single space when the
-    /// message is non-empty); the caller supplies any punctuation within the
-    /// `hint` itself.
+    /// An empty or whitespace-only hint is a no-op, so an optional or derived
+    /// suggestion can be threaded through without a conditional at the call
+    /// site. The hint is trimmed of surrounding whitespace and appended onto the
+    /// existing message (separated by a single space when the message is
+    /// non-empty); the caller supplies any punctuation within the `hint` itself.
     ///
     /// # Examples
     ///
@@ -283,13 +283,14 @@ impl AppError {
     #[must_use]
     pub fn hint(mut self, hint: impl Into<String>) -> Self {
         let hint = hint.into();
+        let hint = hint.trim();
         if hint.is_empty() {
             return self;
         }
         if !self.message.is_empty() {
             self.message.push(' ');
         }
-        self.message.push_str(&hint);
+        self.message.push_str(hint);
         self
     }
 
@@ -472,6 +473,18 @@ mod tests {
     fn hint_is_a_no_op_for_an_empty_hint() {
         let err = AppError::invalid_input("task", "no such task 'buld'").hint("");
         assert_eq!(err.message, "invalid task: no such task 'buld'");
+    }
+
+    #[test]
+    fn hint_is_a_no_op_for_a_whitespace_only_hint() {
+        let err = AppError::invalid_input("task", "no such task 'buld'").hint("   \t");
+        assert_eq!(err.message, "invalid task: no such task 'buld'");
+    }
+
+    #[test]
+    fn hint_trims_surrounding_whitespace_to_a_single_separator() {
+        let err = AppError::new(ErrorCode::InvalidInput, "bad").hint("  try again  ");
+        assert_eq!(err.message, "bad try again");
     }
 
     #[test]
