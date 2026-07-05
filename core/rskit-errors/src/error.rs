@@ -256,6 +256,30 @@ impl AppError {
         self
     }
 
+    /// Append a trailing hint after the existing error message.
+    ///
+    /// The counterpart to [`context`](Self::context): where `context` prepends
+    /// call-site context, `hint` appends advisory guidance (for example a
+    /// "did you mean …?" suggestion) as a new sentence, preserving the code,
+    /// cause, structured details, and retryability of the original error.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use rskit_errors::{AppError, ErrorCode};
+    /// let err = AppError::invalid_input("task", "no such task 'buld'")
+    ///     .hint("Did you mean 'build'?");
+    /// assert_eq!(
+    ///     err.message(),
+    ///     "invalid task: no such task 'buld' Did you mean 'build'?"
+    /// );
+    /// ```
+    #[must_use]
+    pub fn hint(mut self, hint: impl Into<String>) -> Self {
+        self.message = format!("{} {}", self.message, hint.into());
+        self
+    }
+
     // ── Query helpers ───────────────────────────────────────────────────
 
     /// Returns `true` if the operation that produced this error is safe to retry.
@@ -400,6 +424,33 @@ mod tests {
     }
 
     // ── Convenience constructors ──────────────────────────────────────────────
+
+    #[test]
+    fn hint_appends_after_message_preserving_code() {
+        let err =
+            AppError::invalid_input("task", "no such task 'buld'").hint("Did you mean 'build'?");
+        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert_eq!(
+            err.message,
+            "invalid task: no such task 'buld' Did you mean 'build'?"
+        );
+    }
+
+    #[test]
+    fn hint_preserves_cause_and_details() {
+        use std::io;
+        let io_err = io::Error::new(io::ErrorKind::NotFound, "missing");
+        let err = AppError::new(ErrorCode::InvalidInput, "bad")
+            .with_detail("field", "task")
+            .with_cause(io_err)
+            .hint("try again");
+        assert_eq!(err.message, "bad try again");
+        assert!(err.cause.is_some());
+        assert_eq!(
+            err.details.get("field").and_then(|v| v.as_str()),
+            Some("task")
+        );
+    }
 
     #[test]
     fn not_found_without_id() {
