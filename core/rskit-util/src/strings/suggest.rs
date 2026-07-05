@@ -86,13 +86,18 @@ where
 /// at `max_distance`, the worst still-eligible edit, so a genuine short-hand
 /// resolves only when no closer edit exists rather than swamping close matches.
 fn match_score(input: &str, candidate: &str, max_distance: usize) -> Option<usize> {
-    let distance = osa_distance(input, candidate);
-    if distance <= max_distance {
-        return Some(distance);
-    }
     let input_len = input.chars().count();
+    let candidate_len = candidate.chars().count();
+    // A length gap wider than `max_distance` cannot be an edit match, so skip the
+    // (quadratic) OSA computation for obviously-distant candidates.
+    if input_len.abs_diff(candidate_len) <= max_distance {
+        let distance = osa_distance(input, candidate);
+        if distance <= max_distance {
+            return Some(distance);
+        }
+    }
     if input_len >= 2
-        && candidate.chars().count() <= input_len.saturating_mul(4)
+        && candidate_len <= input_len.saturating_mul(4)
         && is_subsequence(input, candidate)
     {
         return Some(max_distance);

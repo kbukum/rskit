@@ -9,6 +9,7 @@
 //!
 //! [`NO_COLOR`]: https://no-color.org
 
+use std::borrow::Cow;
 use std::io::IsTerminal;
 
 /// The environment variable that, when present (regardless of value), disables
@@ -126,46 +127,49 @@ impl Palette {
 
     /// Green — successful/complete status.
     #[must_use]
-    pub fn success(self, text: &str) -> String {
+    pub fn success(self, text: &str) -> Cow<'_, str> {
         self.paint("32", text)
     }
 
     /// Red — failure/error status.
     #[must_use]
-    pub fn error(self, text: &str) -> String {
+    pub fn error(self, text: &str) -> Cow<'_, str> {
         self.paint("31", text)
     }
 
     /// Yellow — warnings and attention.
     #[must_use]
-    pub fn warn(self, text: &str) -> String {
+    pub fn warn(self, text: &str) -> Cow<'_, str> {
         self.paint("33", text)
     }
 
     /// Cyan — informational/neutral highlight.
     #[must_use]
-    pub fn info(self, text: &str) -> String {
+    pub fn info(self, text: &str) -> Cow<'_, str> {
         self.paint("36", text)
     }
 
     /// Dimmed — secondary detail (cache/skip).
     #[must_use]
-    pub fn dim(self, text: &str) -> String {
+    pub fn dim(self, text: &str) -> Cow<'_, str> {
         self.paint("2", text)
     }
 
     /// Bold — emphasis (headings, totals).
     #[must_use]
-    pub fn bold(self, text: &str) -> String {
+    pub fn bold(self, text: &str) -> Cow<'_, str> {
         self.paint("1", text)
     }
 
-    /// Wrap `text` in an SGR code + reset when enabled, else return it verbatim.
-    fn paint(self, code: &str, text: &str) -> String {
+    /// Wrap `text` in an SGR code + reset when enabled, else borrow it verbatim.
+    ///
+    /// The disabled path returns a [`Cow::Borrowed`], so callers on pipes or
+    /// redirects render without any allocation.
+    fn paint<'a>(self, code: &str, text: &'a str) -> Cow<'a, str> {
         if self.enabled {
-            format!("\u{1b}[{code}m{text}\u{1b}[0m")
+            Cow::Owned(format!("\u{1b}[{code}m{text}\u{1b}[0m"))
         } else {
-            text.to_string()
+            Cow::Borrowed(text)
         }
     }
 }
@@ -173,6 +177,7 @@ impl Palette {
 #[cfg(test)]
 mod tests {
     use super::{ColorChoice, Palette, resolve_color_with};
+    use std::borrow::Cow;
 
     #[test]
     fn no_color_overrides_always() {
@@ -203,8 +208,9 @@ mod tests {
     #[test]
     fn disabled_palette_is_the_identity() {
         let plain = Palette::new(false);
-        assert_eq!(plain.success("ok"), "ok");
-        assert_eq!(plain.error("boom"), "boom");
+        assert_eq!(plain.success("ok"), Cow::Borrowed("ok"));
+        assert_eq!(plain.error("boom"), Cow::Borrowed("boom"));
+        assert!(matches!(plain.success("ok"), Cow::Borrowed(_)));
         assert!(!plain.enabled());
     }
 
