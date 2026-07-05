@@ -11,8 +11,8 @@
 
 use std::io::IsTerminal;
 
-/// The environment variable that, when present and non-empty, disables color
-/// regardless of any explicit choice ([the `NO_COLOR` standard](https://no-color.org)).
+/// The environment variable that, when present (regardless of value), disables
+/// color regardless of any explicit choice ([the `NO_COLOR` standard](https://no-color.org)).
 pub const NO_COLOR_ENV: &str = "NO_COLOR";
 
 /// A user's requested color policy, before environment/TTY resolution.
@@ -82,10 +82,13 @@ pub const fn resolve_color_with(choice: ColorChoice, no_color: bool, is_terminal
     }
 }
 
-/// Whether the `NO_COLOR` environment variable is present and non-empty.
+/// Whether the `NO_COLOR` environment variable is present.
+///
+/// Per [the `NO_COLOR` standard](https://no-color.org) any presence disables
+/// color, so an empty value (`NO_COLOR=`) still counts.
 #[must_use]
 pub fn no_color_env_set() -> bool {
-    std::env::var_os(NO_COLOR_ENV).is_some_and(|value| !value.is_empty())
+    std::env::var_os(NO_COLOR_ENV).is_some()
 }
 
 /// A resolved, semantic color palette.

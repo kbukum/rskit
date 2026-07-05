@@ -34,12 +34,15 @@ where
 
 /// Return the candidate nearest to `input` within `max_distance` edits.
 ///
-/// Matching is case-insensitive. Distance is the Optimal String Alignment
-/// (restricted Damerau-Levenshtein) edit distance, which counts an adjacent
-/// transposition as a single edit. Among candidates within `max_distance`, the
-/// one with the smallest distance wins; ties break toward a shared prefix and
-/// then lexicographically, so the result is deterministic. Returns `None` when
-/// no candidate is close enough, so a far-off token yields no misleading hint.
+/// Matching is case-insensitive. A candidate qualifies either by an Optimal
+/// String Alignment (restricted Damerau-Levenshtein) edit distance within
+/// `max_distance` — counting an adjacent transposition as a single edit — or, as
+/// a fallback, by being an abbreviation of `input` (see [`match_score`] for the
+/// exact abbreviation rule). Among qualifying candidates the smallest score
+/// wins; ties break first toward a candidate whose leading character matches
+/// `input`'s, then lexicographically, so the result is deterministic regardless
+/// of iteration order. Returns `None` when no candidate is close enough, so a
+/// far-off token yields no misleading hint.
 ///
 /// # Examples
 /// ```
@@ -63,7 +66,7 @@ where
         };
         if let Some((best_candidate, best_score)) = best {
             if score < best_score
-                || (score == best_score && prefers(input, candidate, best_candidate, &lower_input))
+                || (score == best_score && prefers(candidate, best_candidate, &lower_input))
             {
                 best = Some((candidate, score));
             }
@@ -79,8 +82,8 @@ where
 /// A direct edit within `max_distance` scores by that distance. Failing that, an
 /// *abbreviation* — `input` (of at least two characters) is a subsequence of a
 /// candidate no more than four times its length, e.g. `fmt` → `format` — scores
-/// just above an exact typo so a genuine short-hand still resolves without
-/// swamping close edits.
+/// at `max_distance`, the worst still-eligible edit, so a genuine short-hand
+/// resolves only when no closer edit exists rather than swamping close matches.
 fn match_score(input: &str, candidate: &str, max_distance: usize) -> Option<usize> {
     let distance = osa_distance(input, candidate);
     if distance <= max_distance {
@@ -106,15 +109,16 @@ fn is_subsequence(needle: &str, haystack: &str) -> bool {
 }
 
 /// Tie-break preference: favor a candidate that shares `input`'s leading
-/// character, then the lexicographically smaller name for determinism.
-fn prefers(input: &str, candidate: &str, incumbent: &str, lower_input: &str) -> bool {
+/// character, then the lexicographically smaller name for determinism (applied
+/// even when `input` is empty, so the result never depends on iteration order).
+fn prefers(candidate: &str, incumbent: &str, lower_input: &str) -> bool {
     let leading = lower_input.chars().next();
     let candidate_prefix = leading.is_some_and(|c| candidate.to_lowercase().starts_with(c));
     let incumbent_prefix = leading.is_some_and(|c| incumbent.to_lowercase().starts_with(c));
     match (candidate_prefix, incumbent_prefix) {
         (true, false) => true,
         (false, true) => false,
-        _ => candidate < incumbent && !input.is_empty(),
+        _ => candidate < incumbent,
     }
 }
 
@@ -192,6 +196,19 @@ mod tests {
         // Both `cat` and `bar` are distance 2 from `car`; the shared leading
         // `c` wins deterministically.
         assert_eq!(nearest_within("car", ["bar", "cat"], 2), Some("cat"));
+    }
+
+    #[test]
+    fn empty_input_tie_break_is_deterministic() {
+        // No leading character to prefer, so ties fall to lexicographic order
+        // regardless of iteration order.
+        assert_eq!(nearest_within("", ["bb", "aa"], 2), Some("aa"));
+        assert_eq!(nearest_within("", ["aa", "bb"], 2), Some("aa"));
+    }
+
+    #[test]
+    fn abbreviation_resolves_short_hand() {
+        assert_eq!(nearest("cfg", ["config", "check"]), Some("config"));
     }
 
     #[test]
