@@ -3,31 +3,40 @@
 use std::io::{self, IsTerminal};
 
 /// How the prompter sources answers, resolved once up front.
+///
+/// The decision models *interactive stdio*: prompts are read from stdin but
+/// rendered to stderr, so a session is only interactive when **both** streams
+/// are terminals. If stderr is redirected (`cmd 2>log`) the user would never
+/// see the question, so the mode falls back to [`NonInteractive`] even when
+/// stdin is a TTY.
+///
+/// [`NonInteractive`]: PromptMode::NonInteractive
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum PromptMode {
-    /// The prompter renders prompts and reads live, typed answers. Callers
-    /// resolve this when the relevant streams are terminals (e.g.
-    /// [`Prompter::from_env`](crate::prompt::Prompter::from_env) requires both
-    /// stdin and stderr to be terminals, so a redirected prompt sink cannot
-    /// leave the user blocked on an invisible question).
+    /// Interactive stdio (both stdin and stderr are terminals): render prompts
+    /// and read live, typed answers.
     Interactive,
-    /// The prompter never blocks (CI, piped, or a redirected prompt sink) and
-    /// resolves each question to its declared default instead of reading input.
+    /// Non-interactive stdio (CI, piped, or a redirected prompt sink): never
+    /// block; resolve each question to its declared default.
     NonInteractive,
 }
 
 impl PromptMode {
-    /// Resolve the mode from the current process stdin's TTY status.
+    /// Resolve the mode from the current process's stdin and stderr TTY status.
     #[must_use]
-    pub fn from_stdin() -> Self {
-        Self::from_terminal(io::stdin().is_terminal())
+    pub fn from_env() -> Self {
+        Self::from_stdio(io::stdin().is_terminal(), io::stderr().is_terminal())
     }
 
-    /// Resolve the mode from an already-known terminal status (env-free, testable).
+    /// Resolve the mode from already-known stream TTY statuses (env-free, testable).
+    ///
+    /// Interactive only when both the input (stdin) and the prompt sink (stderr)
+    /// are terminals, so a redirected sink never leaves the user blocked behind
+    /// an invisible prompt.
     #[must_use]
-    pub const fn from_terminal(is_terminal: bool) -> Self {
-        if is_terminal {
+    pub const fn from_stdio(stdin_is_tty: bool, stderr_is_tty: bool) -> Self {
+        if stdin_is_tty && stderr_is_tty {
             Self::Interactive
         } else {
             Self::NonInteractive
@@ -46,9 +55,20 @@ mod tests {
     use super::PromptMode;
 
     #[test]
-    fn mode_resolves_from_terminal_status() {
-        assert_eq!(PromptMode::from_terminal(true), PromptMode::Interactive);
-        assert_eq!(PromptMode::from_terminal(false), PromptMode::NonInteractive);
+    fn interactive_requires_both_stdin_and_stderr_terminals() {
+        assert_eq!(PromptMode::from_stdio(true, true), PromptMode::Interactive);
+        assert_eq!(
+            PromptMode::from_stdio(true, false),
+            PromptMode::NonInteractive
+        );
+        assert_eq!(
+            PromptMode::from_stdio(false, true),
+            PromptMode::NonInteractive
+        );
+        assert_eq!(
+            PromptMode::from_stdio(false, false),
+            PromptMode::NonInteractive
+        );
         assert!(PromptMode::Interactive.is_interactive());
         assert!(!PromptMode::NonInteractive.is_interactive());
     }

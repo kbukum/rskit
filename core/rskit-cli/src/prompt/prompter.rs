@@ -47,13 +47,11 @@ impl Prompter<Box<dyn Terminal>> {
     /// terminal is used.
     #[must_use]
     pub fn from_env(color: ColorChoice) -> Self {
-        let stdin = std::io::stdin();
         let stderr = std::io::stderr();
-        let interactive = stdin.is_terminal() && stderr.is_terminal();
-        let mode = PromptMode::from_terminal(interactive);
+        let mode = PromptMode::from_stdio(std::io::stdin().is_terminal(), stderr.is_terminal());
         let palette = Palette::for_stream(color, &stderr);
         let glyphs = Glyphs::from_env();
-        let terminal = resolve_terminal(interactive);
+        let terminal = resolve_terminal(mode.is_interactive());
         Self {
             terminal,
             mode,

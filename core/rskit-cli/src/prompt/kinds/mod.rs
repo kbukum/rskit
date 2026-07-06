@@ -76,11 +76,16 @@ struct RawModeGuard<'a, T: Terminal + ?Sized> {
 }
 
 impl<T: Terminal + ?Sized> RawModeGuard<'_, T> {
-    /// Run teardown once on the normal path and stop the `Drop` net from
-    /// repeating it, returning the teardown result so callers can surface it.
+    /// Run teardown on the normal path, returning its result so callers can
+    /// surface it. Only disarms the `Drop` net when teardown *succeeds*, so a
+    /// failed teardown leaves the guard armed and `Drop` retries as a
+    /// best-effort net rather than leaving the terminal stuck in raw mode.
     fn disarm(&mut self) -> rskit_errors::AppResult<()> {
-        self.armed = false;
-        self.terminal.end_interactive()
+        let result = self.terminal.end_interactive();
+        if result.is_ok() {
+            self.armed = false;
+        }
+        result
     }
 }
 
@@ -130,8 +135,69 @@ fn parse_index(input: &str, len: usize) -> Option<usize> {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::Cell;
+
+    use rskit_errors::{AppError, AppResult};
+
     use super::{focus_down, focus_up, with_raw_mode};
-    use crate::prompt::terminal::ScriptedTerminal;
+    use crate::prompt::terminal::{Capabilities, ScriptedTerminal, Terminal};
+
+    /// A terminal whose `end_interactive` fails a fixed number of times before
+    /// succeeding, and that counts every teardown attempt, so tests can prove
+    /// the `Drop` net retries after an explicit teardown fails.
+    struct FlakyTeardown {
+        fail_remaining: Cell<u32>,
+        teardown_calls: Cell<u32>,
+        raw: Cell<bool>,
+    }
+
+    impl FlakyTeardown {
+        fn failing(times: u32) -> Self {
+            Self {
+                fail_remaining: Cell::new(times),
+                teardown_calls: Cell::new(0),
+                raw: Cell::new(false),
+            }
+        }
+    }
+
+    impl Terminal for FlakyTeardown {
+        fn capabilities(&self) -> Capabilities {
+            Capabilities::key_driven()
+        }
+        fn read_line(&mut self) -> AppResult<Option<String>> {
+            Ok(None)
+        }
+        fn read_key(&mut self) -> AppResult<crate::prompt::Key> {
+            Err(AppError::invalid_input("terminal", "no keys scripted"))
+        }
+        fn write(&mut self, _text: &str) -> AppResult<()> {
+            Ok(())
+        }
+        fn write_line(&mut self, _text: &str) -> AppResult<()> {
+            Ok(())
+        }
+        fn flush(&mut self) -> AppResult<()> {
+            Ok(())
+        }
+        fn clear_last_lines(&mut self, _count: u16) -> AppResult<()> {
+            Ok(())
+        }
+        fn begin_interactive(&mut self) -> AppResult<()> {
+            self.raw.set(true);
+            Ok(())
+        }
+        fn end_interactive(&mut self) -> AppResult<()> {
+            self.teardown_calls.set(self.teardown_calls.get() + 1);
+            let remaining = self.fail_remaining.get();
+            if remaining > 0 {
+                self.fail_remaining.set(remaining - 1);
+                return Err(AppError::invalid_input("terminal", "teardown failed"));
+            }
+            self.raw.set(false);
+            Ok(())
+        }
+    }
 
     #[test]
     fn focus_wraps_both_ends() {
@@ -165,5 +231,18 @@ mod tests {
         }));
         assert!(unwound.is_err());
         assert!(!term.is_interactive());
+    }
+
+    #[test]
+    fn failed_teardown_is_retried_by_drop_net() {
+        // The explicit teardown on the normal path fails once; the guard must
+        // stay armed so Drop retries, ultimately restoring cooked mode.
+        let mut term = FlakyTeardown::failing(1);
+        let out = with_raw_mode(&mut term, |_| Ok(()));
+        // The failed explicit teardown surfaces on the Ok path.
+        assert!(out.is_err());
+        // Called twice: the failing explicit attempt plus the successful retry.
+        assert_eq!(term.teardown_calls.get(), 2);
+        assert!(!term.raw.get());
     }
 }
