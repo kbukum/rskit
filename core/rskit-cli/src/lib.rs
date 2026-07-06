@@ -1,21 +1,40 @@
-//! CLI framework: progress bars, structured output, signal handling.
+//! CLI framework: theming, structured output, progress, prompts, and signals.
 //!
-//! Provides terminal progress bars (over indicatif), structured output
-//! formatting, and Ctrl+C cancellation via [`CancellationToken`].
+//! A parser-agnostic toolkit for building consistent command-line UX: it owns
+//! the terminal *presentation* concerns (color, glyphs, tables, status lines,
+//! progress bars), *input* (interactive prompts with a non-interactive
+//! fallback), and cooperative *cancellation*, so every rskit CLI renders and
+//! behaves the same way.
 //!
 //! # Modules
 //!
-//! - [`signal`] — Ctrl+C / graceful shutdown via `CancellationToken`
-//! - [`progress`] — Progress bar abstractions over `indicatif`
-//! - [`output`] — Structured terminal output (tables, key-value)
-//! - [`color`] — Semantic terminal color with `NO_COLOR`/TTY resolution
+//! - [`theme`] — visual vocabulary: semantic [`Palette`] color and [`Glyphs`]
+//!   symbols, both honouring `NO_COLOR`, TTY, and UTF-8 capability.
+//! - [`render`] — structured, non-interactive display: [`OutputTable`],
+//!   [`OutputKV`], the [`ErrorRenderer`]/[`ExitCode`] convention, and one-off
+//!   [`StatusReporter`] feedback lines.
+//! - [`progress`] — progress bar and spinner abstractions over `indicatif`.
+//! - [`prompt`] — interactive prompts (line, rich raw-mode, and scripted media)
+//!   with a non-interactive fallback.
+//! - [`signal`] — Ctrl+C / graceful shutdown via [`CancellationToken`].
 
-pub mod color;
-pub mod output;
 pub mod progress;
+pub mod prompt;
+pub mod render;
 pub mod signal;
+pub mod theme;
 
-pub use color::{ColorChoice, NO_COLOR_ENV, Palette, resolve_color, resolve_color_with};
-pub use output::{ErrorRenderer, ExitCode, OutputFormat, OutputKV, OutputTable};
 pub use progress::{MultiProgress, ProgressBar, ProgressStyle};
+pub use prompt::{
+    Capabilities, Choice, ChoiceId, Key, LineTerminal, PromptMode, Prompter, ScriptedTerminal,
+    Terminal, Validation, Validator, non_empty,
+};
+pub use render::{ErrorRenderer, ExitCode, OutputFormat, OutputKV, OutputTable, StatusReporter};
 pub use signal::{CancellationToken, on_ctrl_c};
+pub use theme::{
+    ColorChoice, Glyphs, NO_COLOR_ENV, Palette, resolve_color, resolve_color_with,
+    unicode_env_enabled,
+};
+
+#[cfg(feature = "interactive")]
+pub use prompt::RichTerminal;
