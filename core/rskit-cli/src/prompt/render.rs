@@ -10,6 +10,8 @@ use crate::theme::{Glyphs, Palette};
 
 use super::choice::Choice;
 
+use std::collections::HashSet;
+
 /// Styling context shared by every rendered frame: color [`Palette`] and the
 /// resolved [`Glyphs`] set.
 #[derive(Debug, Clone, Copy)]
@@ -112,6 +114,11 @@ pub fn frame_rows(
 ) -> Vec<String> {
     let multi = selected.is_some();
     let glyphs = style.glyphs();
+    // Precompute selected membership once so redraws stay O(n) rather than
+    // O(n^2) over the choice list (key-driven prompts redraw on every keypress).
+    let chosen: HashSet<usize> = selected
+        .map(|s| s.iter().copied().collect())
+        .unwrap_or_default();
     choices
         .iter()
         .enumerate()
@@ -119,7 +126,7 @@ pub fn frame_rows(
             let focused = index == cursor;
             let pointer = if focused { glyphs.pointer() } else { " " };
             let marker = match selected {
-                Some(chosen) if chosen.contains(&index) => "[x]".to_string(),
+                Some(_) if chosen.contains(&index) => "[x]".to_string(),
                 Some(_) => "[ ]".to_string(),
                 None if focused => glyphs.radio_on().to_string(),
                 None => glyphs.radio_off().to_string(),

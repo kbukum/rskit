@@ -110,7 +110,10 @@ fn draw(
     buffer: &str,
     error: Option<&str>,
 ) -> AppResult<u16> {
-    terminal.write_line(&format!("  {} {buffer}", style.palette().dim("»")))?;
+    terminal.write_line(&format!(
+        "  {} {buffer}",
+        style.palette().dim(style.glyphs().answer())
+    ))?;
     let mut lines = 1;
     if let Some(message) = error {
         terminal.write_line(&format!("  {}", style.palette().warn(message)))?;

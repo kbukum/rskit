@@ -112,7 +112,11 @@ impl Terminal for RichTerminal {
     }
 
     fn write_line(&mut self, text: &str) -> AppResult<()> {
-        write!(self.writer, "{text}\r\n").map_err(AppError::internal)
+        // Raw mode disables the kernel's LF->CRLF translation, so emit an
+        // explicit carriage return; in cooked mode a bare LF is correct (and a
+        // stray CR would misplace the cursor).
+        let newline = if self.raw { "\r\n" } else { "\n" };
+        write!(self.writer, "{text}{newline}").map_err(AppError::internal)
     }
 
     fn flush(&mut self) -> AppResult<()> {

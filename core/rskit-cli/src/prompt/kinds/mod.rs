@@ -107,12 +107,18 @@ const fn focus_down(cursor: usize, len: usize) -> usize {
     if cursor + 1 >= len { 0 } else { cursor + 1 }
 }
 
-/// Write the inline answer marker (`» [hint]: `) and flush, for line prompts.
+/// Write the inline answer marker (`» [hint]: `, ASCII-safe via [`Glyphs`]) and
+/// flush, for line prompts.
 fn write_answer(
     terminal: &mut (impl Terminal + ?Sized),
+    style: Style,
     hint: Option<&str>,
 ) -> rskit_errors::AppResult<()> {
-    let text = hint.map_or_else(|| "  » ".to_string(), |hint| format!("  » {hint}: "));
+    let marker = style.glyphs().answer();
+    let text = hint.map_or_else(
+        || format!("  {marker} "),
+        |hint| format!("  {marker} {hint}: "),
+    );
     terminal.write(&text)?;
     terminal.flush()
 }

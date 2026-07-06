@@ -103,7 +103,7 @@ fn line_driven(
     }
     loop {
         let hint = default.map(|index| format!("[{}]", index + 1));
-        write_answer(terminal, hint.as_deref())?;
+        write_answer(terminal, style, hint.as_deref())?;
         let Some(line) = terminal.read_line()? else {
             return Err(closed_input(prompt));
         };

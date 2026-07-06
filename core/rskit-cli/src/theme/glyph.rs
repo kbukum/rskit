@@ -102,6 +102,12 @@ impl Glyphs {
         self.pick("❯", ">")
     }
 
+    /// Inline answer/input marker — `»` (ASCII `>`).
+    #[must_use]
+    pub const fn answer(self) -> &'static str {
+        self.pick("»", ">")
+    }
+
     /// Selected radio option — `◉` (ASCII `(*)`).
     #[must_use]
     pub const fn radio_on(self) -> &'static str {
@@ -153,6 +159,7 @@ mod tests {
         assert_eq!(glyphs.bullet(), "•");
         assert_eq!(glyphs.arrow(), "→");
         assert_eq!(glyphs.pointer(), "❯");
+        assert_eq!(glyphs.answer(), "»");
         assert_eq!(glyphs.radio_on(), "◉");
         assert_eq!(glyphs.radio_off(), "○");
         assert_eq!(glyphs.arrow_up(), "↑");
@@ -172,6 +179,7 @@ mod tests {
             glyphs.bullet(),
             glyphs.arrow(),
             glyphs.pointer(),
+            glyphs.answer(),
             glyphs.radio_on(),
             glyphs.radio_off(),
             glyphs.arrow_up(),

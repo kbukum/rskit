@@ -118,7 +118,7 @@ fn line_driven(
         terminal.write_line(&row)?;
     }
     loop {
-        write_answer(terminal, Some(&default_hint(defaults)))?;
+        write_answer(terminal, style, Some(&default_hint(defaults)))?;
         let Some(line) = terminal.read_line()? else {
             return Err(closed_input(prompt));
         };
