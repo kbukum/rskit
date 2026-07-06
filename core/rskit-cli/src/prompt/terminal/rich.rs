@@ -34,14 +34,21 @@ impl RichTerminal {
     ///
     /// # Errors
     ///
-    /// Returns an error when stderr is not a terminal, since raw-mode key input
-    /// requires a real TTY.
+    /// Returns an error unless both stderr and stdin are terminals: frames are
+    /// drawn to stderr, while raw-mode key input is read from stdin, so both
+    /// streams must be a real TTY.
     pub fn stderr() -> AppResult<Self> {
         let writer = io::stderr();
         if !writer.is_terminal() {
             return Err(AppError::invalid_input(
                 "prompt",
                 "rich terminal requires an interactive stderr",
+            ));
+        }
+        if !io::stdin().is_terminal() {
+            return Err(AppError::invalid_input(
+                "prompt",
+                "rich terminal requires an interactive stdin for key input",
             ));
         }
         Ok(Self { writer, raw: false })
