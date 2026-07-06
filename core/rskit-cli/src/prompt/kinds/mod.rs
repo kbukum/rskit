@@ -107,8 +107,8 @@ const fn focus_down(cursor: usize, len: usize) -> usize {
     if cursor + 1 >= len { 0 } else { cursor + 1 }
 }
 
-/// Write the inline answer marker (`» [hint]: `, ASCII-safe via [`Glyphs`]) and
-/// flush, for line prompts.
+/// Write the inline answer marker (`» [hint]: `, ASCII-safe via
+/// [`Glyphs`](crate::theme::Glyphs)) and flush, for line prompts.
 fn write_answer(
     terminal: &mut (impl Terminal + ?Sized),
     style: Style,

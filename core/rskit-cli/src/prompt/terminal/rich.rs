@@ -153,7 +153,7 @@ impl Terminal for RichTerminal {
         }
         disable_raw_mode().map_err(AppError::internal)?;
         self.raw = false;
-        execute!(self.writer, Clear(ClearType::UntilNewLine)).map_err(AppError::internal)
+        execute!(self.writer, Clear(ClearType::CurrentLine)).map_err(AppError::internal)
     }
 }
 
