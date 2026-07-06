@@ -37,19 +37,23 @@ pub struct Prompter<T> {
 impl Prompter<Box<dyn Terminal>> {
     /// Build a prompter bound to the process environment.
     ///
-    /// The [`PromptMode`] follows stdin's TTY status and the [`Palette`] follows
-    /// `color` against stderr, so interactivity and styling both honour
-    /// redirection and `NO_COLOR`. When the `interactive` feature is compiled and
-    /// both stdin and stderr are terminals, a rich raw-mode terminal is selected
-    /// for arrow-key navigation; otherwise a line terminal is used.
+    /// The [`PromptMode`] follows whether both stdin and stderr are terminals,
+    /// and the [`Palette`] follows `color` against stderr, so interactivity and
+    /// styling both honour redirection and `NO_COLOR`. Prompts render to stderr,
+    /// so a redirected stderr (e.g. `cmd 2>log`) forces [`PromptMode::NonInteractive`]
+    /// rather than blocking on input behind an invisible prompt. When the
+    /// `interactive` feature is compiled and both streams are terminals, a rich
+    /// raw-mode terminal is selected for arrow-key navigation; otherwise a line
+    /// terminal is used.
     #[must_use]
     pub fn from_env(color: ColorChoice) -> Self {
         let stdin = std::io::stdin();
         let stderr = std::io::stderr();
-        let mode = PromptMode::from_terminal(stdin.is_terminal());
+        let interactive = stdin.is_terminal() && stderr.is_terminal();
+        let mode = PromptMode::from_terminal(interactive);
         let palette = Palette::for_stream(color, &stderr);
         let glyphs = Glyphs::from_env();
-        let terminal = resolve_terminal(stdin.is_terminal() && stderr.is_terminal());
+        let terminal = resolve_terminal(interactive);
         Self {
             terminal,
             mode,
