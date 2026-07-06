@@ -42,8 +42,10 @@ fn cancelled(prompt: &str) -> AppError {
 }
 
 /// Run `body` between [`Terminal::begin_interactive`] and
-/// [`Terminal::end_interactive`], always restoring cooked mode even when `body`
-/// fails, and preferring `body`'s error over a teardown error.
+/// [`Terminal::end_interactive`], attempting to restore cooked mode even when
+/// `body` fails, and preferring `body`'s error over a teardown error. If
+/// teardown itself errors the restoration is best-effort; `RichTerminal`'s
+/// `Drop` net is the final guarantee that raw mode is disabled.
 fn with_raw_mode<T, R>(
     terminal: &mut T,
     body: impl FnOnce(&mut T) -> rskit_errors::AppResult<R>,

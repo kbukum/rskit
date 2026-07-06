@@ -6,9 +6,10 @@
 //! redraws frames in place via cursor movement. Raw mode is restored on
 //! [`Terminal::end_interactive`] and, as a panic-safety net, on drop.
 //!
-//! It is not unit-tested (it needs a real TTY); the shared prompt-kind logic is
-//! covered through [`ScriptedTerminal`](super::ScriptedTerminal), and a PTY smoke
-//! test exercises the raw-mode path end to end.
+//! Its raw-mode I/O path needs a real TTY, so that path is not exercised by
+//! unit tests; the shared prompt-kind logic is covered through
+//! [`ScriptedTerminal`](super::ScriptedTerminal). The pure key decoder is
+//! unit-tested at its boundary (see the `map_key` tests below).
 
 use std::io::{self, IsTerminal, Write};
 
