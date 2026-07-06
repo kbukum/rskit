@@ -71,10 +71,10 @@ fn table_and_key_value_outputs_handle_empty_and_wide_rows() {
     assert!(empty.contains("Status"));
 
     let mut table = OutputTable::new(vec!["Name"]);
-    table.add_row(vec!["short", "extra cell ignored by width calculation"]);
+    table.add_row(vec!["short", "extra cell dropped to match column count"]);
     let output = table.to_string();
     assert!(output.contains("short"));
-    assert!(output.contains("extra cell ignored by width calculation"));
+    assert!(!output.contains("extra cell dropped to match column count"));
 
     assert_eq!(OutputKV::default().to_string(), "");
     let mut kv = OutputKV::new();

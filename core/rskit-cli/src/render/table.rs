@@ -28,8 +28,15 @@ impl OutputTable {
     }
 
     /// Append a row of cell values.
+    ///
+    /// The row is normalized to the column count: extra cells are dropped and
+    /// missing cells are padded with empty strings, so every rendered row lines
+    /// up with the header and borders regardless of the caller's cell count.
     pub fn add_row(&mut self, row: Vec<impl Into<String>>) {
-        self.rows.push(row.into_iter().map(Into::into).collect());
+        let mut cells: Vec<String> = row.into_iter().map(Into::into).collect();
+        cells.truncate(self.columns.len());
+        cells.resize(self.columns.len(), String::new());
+        self.rows.push(cells);
     }
 }
 
@@ -107,5 +114,23 @@ mod tests {
         let output = table.to_string();
         assert!(output.contains("Name"));
         assert!(output.contains("500"));
+    }
+
+    #[test]
+    fn rows_are_normalized_to_column_count() {
+        // Rows with too few or too many cells must not desync from the borders:
+        // short rows are padded and long rows are truncated to the column count.
+        let mut table = OutputTable::new(vec!["A", "B"]);
+        table.add_row(vec!["only-one"]);
+        table.add_row(vec!["x", "y", "extra"]);
+        let output = table.to_string();
+
+        // Every rendered line (borders and rows alike) shares one width.
+        let widths: Vec<usize> = output.lines().map(|l| l.chars().count()).collect();
+        assert!(
+            widths.windows(2).all(|w| w[0] == w[1]),
+            "ragged lines: {output}"
+        );
+        assert!(!output.contains("extra"));
     }
 }

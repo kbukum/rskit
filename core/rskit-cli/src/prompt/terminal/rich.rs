@@ -154,9 +154,18 @@ mod tests {
 
     #[test]
     fn requires_a_terminal_stderr() {
-        // Under the test harness stderr is not a TTY, so construction is refused
-        // rather than putting a non-terminal into raw mode.
-        assert!(RichTerminal::stderr().is_err());
+        // RichTerminal needs both stdin (key input) and stderr (rendering) to be
+        // a TTY. The test harness usually redirects both, but under --nocapture
+        // or some CI runners they can be real terminals, so gate the assertion on
+        // the actual stream status to stay deterministic.
+        use std::io::{IsTerminal, stderr, stdin};
+
+        let result = RichTerminal::stderr();
+        if stdin().is_terminal() && stderr().is_terminal() {
+            assert!(result.is_ok());
+        } else {
+            assert!(result.is_err());
+        }
     }
 
     #[test]
