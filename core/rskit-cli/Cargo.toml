@@ -21,9 +21,15 @@ tokio-util      = { workspace = true }
 serde           = { workspace = true }
 serde_json      = { workspace = true }
 serde_norway    = { workspace = true }
+crossterm       = { workspace = true, optional = true }
 
 # Internal
 rskit-errors = { workspace = true }
+
+[features]
+# Rich, raw-mode interactive prompts (arrow-key radio/checkbox lists) via crossterm.
+# Off by default: the line-driven prompt path is always available and dependency-free.
+interactive = ["dep:crossterm"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "full"] }
