@@ -141,10 +141,14 @@ impl Terminal for RichTerminal {
     }
 
     fn end_interactive(&mut self) -> AppResult<()> {
-        if self.raw {
-            disable_raw_mode().map_err(AppError::internal)?;
-            self.raw = false;
+        // Idempotent: only tear down (and clear the current line) when we were
+        // actually in raw mode, so a stray or repeated call can't clobber
+        // terminal output that we never rendered over.
+        if !self.raw {
+            return Ok(());
         }
+        disable_raw_mode().map_err(AppError::internal)?;
+        self.raw = false;
         execute!(self.writer, Clear(ClearType::UntilNewLine)).map_err(AppError::internal)
     }
 }
