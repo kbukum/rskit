@@ -6,9 +6,14 @@ use std::io::{self, IsTerminal};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum PromptMode {
-    /// stdin is a terminal: render prompts and read typed answers.
+    /// The prompter renders prompts and reads live, typed answers. Callers
+    /// resolve this when the relevant streams are terminals (e.g.
+    /// [`Prompter::from_env`](crate::prompt::Prompter::from_env) requires both
+    /// stdin and stderr to be terminals, so a redirected prompt sink cannot
+    /// leave the user blocked on an invisible question).
     Interactive,
-    /// stdin is not a terminal (CI, piped): never block; resolve to defaults.
+    /// The prompter never blocks (CI, piped, or a redirected prompt sink) and
+    /// resolves each question to its declared default instead of reading input.
     NonInteractive,
 }
 
