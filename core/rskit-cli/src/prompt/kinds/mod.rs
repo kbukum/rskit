@@ -42,10 +42,11 @@ fn cancelled(prompt: &str) -> AppError {
 }
 
 /// Run `body` between [`Terminal::begin_interactive`] and
-/// [`Terminal::end_interactive`], attempting to restore cooked mode even when
-/// `body` fails, and preferring `body`'s error over a teardown error. If
-/// teardown itself errors the restoration is best-effort; `RichTerminal`'s
-/// `Drop` net is the final guarantee that raw mode is disabled.
+/// [`Terminal::end_interactive`], restoring cooked mode on every exit path —
+/// normal return, error, or an unwinding panic — via an RAII guard. On the
+/// normal path teardown runs explicitly so `body`'s error is preferred over a
+/// teardown error; if `body` panics the guard runs teardown during unwind so
+/// the terminal is never left in raw mode.
 fn with_raw_mode<T, R>(
     terminal: &mut T,
     body: impl FnOnce(&mut T) -> rskit_errors::AppResult<R>,
@@ -54,11 +55,40 @@ where
     T: Terminal + ?Sized,
 {
     terminal.begin_interactive()?;
-    let result = body(terminal);
-    let teardown = terminal.end_interactive();
+    let mut guard = RawModeGuard {
+        terminal,
+        armed: true,
+    };
+    let result = body(&mut *guard.terminal);
+    // Disarm and capture teardown so its error can be surfaced on the Ok path;
+    // if `body` panicked instead, the guard's Drop restores cooked mode.
+    let teardown = guard.disarm();
     match result {
         Ok(value) => teardown.map(|()| value),
         Err(error) => Err(error),
+    }
+}
+
+/// RAII guard that restores cooked mode on drop unless explicitly disarmed.
+struct RawModeGuard<'a, T: Terminal + ?Sized> {
+    terminal: &'a mut T,
+    armed: bool,
+}
+
+impl<T: Terminal + ?Sized> RawModeGuard<'_, T> {
+    /// Run teardown once on the normal path and stop the `Drop` net from
+    /// repeating it, returning the teardown result so callers can surface it.
+    fn disarm(&mut self) -> rskit_errors::AppResult<()> {
+        self.armed = false;
+        self.terminal.end_interactive()
+    }
+}
+
+impl<T: Terminal + ?Sized> Drop for RawModeGuard<'_, T> {
+    fn drop(&mut self) {
+        if self.armed {
+            let _ = self.terminal.end_interactive();
+        }
     }
 }
 
@@ -100,7 +130,8 @@ fn parse_index(input: &str, len: usize) -> Option<usize> {
 
 #[cfg(test)]
 mod tests {
-    use super::{focus_down, focus_up};
+    use super::{focus_down, focus_up, with_raw_mode};
+    use crate::prompt::terminal::ScriptedTerminal;
 
     #[test]
     fn focus_wraps_both_ends() {
@@ -108,5 +139,31 @@ mod tests {
         assert_eq!(focus_up(2, 3), 1);
         assert_eq!(focus_down(2, 3), 0);
         assert_eq!(focus_down(0, 3), 1);
+    }
+
+    #[test]
+    fn raw_mode_restored_on_normal_return() {
+        let mut term = ScriptedTerminal::key_driven();
+        let out = with_raw_mode(&mut term, |t| {
+            assert!(t.is_interactive());
+            Ok(7)
+        });
+        assert_eq!(out.expect("ok"), 7);
+        assert!(!term.is_interactive());
+    }
+
+    #[test]
+    fn raw_mode_restored_when_body_panics() {
+        // A caller may catch the unwind and keep the terminal alive; the RAII
+        // guard must still have run end_interactive() during unwinding so the
+        // terminal is not stranded in raw mode.
+        let mut term = ScriptedTerminal::key_driven();
+        let unwound = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            with_raw_mode(&mut term, |_| -> rskit_errors::AppResult<()> {
+                panic!("body blew up mid-prompt");
+            })
+        }));
+        assert!(unwound.is_err());
+        assert!(!term.is_interactive());
     }
 }
