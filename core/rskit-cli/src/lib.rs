@@ -27,7 +27,7 @@ pub mod theme;
 pub use progress::{MultiProgress, ProgressBar, ProgressStyle};
 pub use prompt::{
     Capabilities, Choice, ChoiceId, Key, LineTerminal, PromptMode, Prompter, ScriptedTerminal,
-    Terminal, Validation, Validator,
+    Terminal, Validation, Validator, non_empty,
 };
 pub use render::{ErrorRenderer, ExitCode, OutputFormat, OutputKV, OutputTable, StatusReporter};
 pub use signal::{CancellationToken, on_ctrl_c};
