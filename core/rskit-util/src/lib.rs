@@ -14,7 +14,7 @@
 //! - [`hash`]: Content/interop hashing — BLAKE3 and SHA-256.
 //! - [`secret`]: Prevent accidental credential leaks in logs/debug outputs.
 //! - [`sensitive`]: Matching helpers for names that commonly carry secrets.
-//! - [`strings`]: Zero-alloc/low-alloc casing and safe truncation.
+//! - [`strings`]: Casing, safe truncation, unique-shorthand resolution, and "did you mean?" suggestions.
 //! - [`template`]: Lightweight template engine (`{name}` interpolation).
 //! - [`time`]: Duration parsing, UTC date/time conversion, RFC 3339 helpers, and timing wrappers.
 
