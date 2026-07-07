@@ -74,8 +74,8 @@ impl Glob {
     #[must_use]
     pub fn new(pattern: impl Into<String>) -> Self {
         let pattern = pattern.into();
+        let literal = !has_wildcard(&pattern);
         let chars: Vec<char> = pattern.chars().collect();
-        let literal = !chars.iter().any(|&ch| ch == '*' || ch == '?');
         Self {
             pattern,
             chars,
