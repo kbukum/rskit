@@ -57,16 +57,17 @@ pub fn has_wildcard(pattern: &str) -> bool {
 
 /// A compiled glob pattern that can be matched against many candidates.
 ///
-/// Parses the source pattern into its character sequence once and remembers
-/// whether it is a plain literal, so reusing one pattern across a candidate set
-/// neither re-scans for wildcards nor re-parses the pattern per call — only each
-/// candidate's own characters are walked. Matching semantics are identical to
+/// Scans the source pattern for wildcards once. A wildcard pattern is parsed into
+/// its character sequence so reuse across a candidate set neither re-scans for
+/// wildcards nor re-parses the pattern per call — only each candidate's own
+/// characters are walked. A plain literal keeps no parsed form and compares
+/// directly, allocating nothing per match. Matching semantics are identical to
 /// [`glob_match`].
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Glob {
     pattern: String,
-    chars: Vec<char>,
-    literal: bool,
+    /// Parsed characters for a wildcard pattern; `None` for a plain literal.
+    parsed: Option<Vec<char>>,
 }
 
 impl Glob {
@@ -74,19 +75,14 @@ impl Glob {
     #[must_use]
     pub fn new(pattern: impl Into<String>) -> Self {
         let pattern = pattern.into();
-        let literal = !has_wildcard(&pattern);
-        let chars: Vec<char> = pattern.chars().collect();
-        Self {
-            pattern,
-            chars,
-            literal,
-        }
+        let parsed = has_wildcard(&pattern).then(|| pattern.chars().collect());
+        Self { pattern, parsed }
     }
 
     /// Whether the pattern is a plain literal with no wildcards.
     #[must_use]
     pub const fn is_literal(&self) -> bool {
-        self.literal
+        self.parsed.is_none()
     }
 
     /// The source pattern string.
@@ -98,12 +94,13 @@ impl Glob {
     /// Whether this pattern matches `text`.
     #[must_use]
     pub fn matches(&self, text: &str) -> bool {
-        if self.literal {
-            self.pattern == text
-        } else {
-            let text: Vec<char> = text.chars().collect();
-            wildcard(&self.chars, &text)
-        }
+        self.parsed.as_ref().map_or_else(
+            || self.pattern == text,
+            |chars| {
+                let text: Vec<char> = text.chars().collect();
+                wildcard(chars, &text)
+            },
+        )
     }
 }
 
