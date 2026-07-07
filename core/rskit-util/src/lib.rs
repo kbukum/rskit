@@ -10,6 +10,7 @@
 //! - [`bytes`]: Formatting and parsing human-readable data sizes.
 //! - [`collections`]: Vector grouping, chunking, indexing, and partition helpers.
 //! - [`mod@env`]: Safe environment variable parsing with defaults.
+//! - [`glob`]: Shell-style `*`/`?` matching over single string segments.
 //! - [`hash`]: Content/interop hashing — BLAKE3 and SHA-256.
 //! - [`secret`]: Prevent accidental credential leaks in logs/debug outputs.
 //! - [`sensitive`]: Matching helpers for names that commonly carry secrets.
@@ -23,6 +24,7 @@ pub mod backoff;
 pub mod bytes;
 pub mod collections;
 pub mod env;
+pub mod glob;
 pub mod hash;
 pub mod secret;
 pub mod sensitive;
