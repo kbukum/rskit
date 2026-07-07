@@ -22,8 +22,9 @@ Use `rskit-util` for reusable helpers that have no service, transport, config, s
 | `bytes` | Human-readable byte size formatting and parsing |
 | `collections` | `chunk`, `group_by`, `index_by`, and `partition` helpers |
 | `env` | Environment variable lookup, non-empty filtering, parsing, and defaults |
+| `glob` | Shell-style `*`/`?` matching over single string segments (no path semantics) |
 | `secret` | Secret string masking for logs, debug output, and serialization |
-| `strings` | Case conversion and UTF-8-safe truncation |
+| `strings` | Case conversion, UTF-8-safe truncation, unique-shorthand resolution, and "did you mean?" suggestions |
 | `template` | Typed `{placeholder}` template parsing and rendering |
 | `time` | Duration formatting/parsing, UTC civil date/time conversion, RFC 3339/compact UTC helpers, injectable clocks, and timing helpers |
 
