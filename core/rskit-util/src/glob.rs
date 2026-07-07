@@ -30,6 +30,9 @@
 /// ```
 #[must_use]
 pub fn glob_match(pattern: &str, text: &str) -> bool {
+    if !has_wildcard(pattern) {
+        return pattern == text;
+    }
     let pattern: Vec<char> = pattern.chars().collect();
     let text: Vec<char> = text.chars().collect();
     wildcard(&pattern, &text)
