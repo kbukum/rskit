@@ -8,9 +8,10 @@
 //! set without smuggling in filesystem assumptions.
 //!
 //! Matching is Unicode-`char`-oriented and case-sensitive: `?` matches exactly one
-//! Unicode scalar value, not one byte. The two-pointer algorithm runs in linear
-//! time with constant backtracking state, so it is safe on untrusted input without
-//! the pathological blow-up a naive recursive matcher can exhibit.
+//! Unicode scalar value, not one byte. The two-pointer algorithm uses constant
+//! backtracking state — worst case `O(pattern_len * text_len)`, never the
+//! exponential blow-up a naive recursive matcher can exhibit — so it stays bounded
+//! on untrusted input.
 
 /// Whether `pattern` matches `text`, treating `*` and `?` as wildcards.
 ///
@@ -105,9 +106,9 @@ impl Glob {
 
 /// Two-pointer wildcard matcher supporting `*` (any run) and `?` (one char).
 ///
-/// Linear-time with constant backtracking state: on a mismatch after a `*` it
-/// rewinds the text pointer one character past the last `*` rather than recursing,
-/// so adversarial patterns cannot trigger exponential blow-up.
+/// Uses constant backtracking state — worst case `O(pattern_len * text_len)`,
+/// never exponential: on a mismatch after a `*` it rewinds the text pointer one
+/// character past the last `*` rather than recursing.
 fn wildcard(pattern: &[char], text: &[char]) -> bool {
     let (mut p, mut t) = (0, 0);
     let (mut star, mut mark) = (None, 0);
