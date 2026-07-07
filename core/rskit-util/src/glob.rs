@@ -29,7 +29,9 @@
 /// ```
 #[must_use]
 pub fn glob_match(pattern: &str, text: &str) -> bool {
-    wildcard(pattern, text)
+    let pattern: Vec<char> = pattern.chars().collect();
+    let text: Vec<char> = text.chars().collect();
+    wildcard(&pattern, &text)
 }
 
 /// Whether `pattern` contains any wildcard metacharacter (`*` or `?`).
@@ -51,13 +53,15 @@ pub fn has_wildcard(pattern: &str) -> bool {
 
 /// A compiled glob pattern that can be matched against many candidates.
 ///
-/// Holds the source pattern and remembers whether it is a plain literal, so a
-/// caller can reuse one pattern across a candidate set and branch on
-/// [`is_literal`](Glob::is_literal) without re-scanning. Matching semantics are
-/// identical to [`glob_match`].
+/// Parses the source pattern into its character sequence once and remembers
+/// whether it is a plain literal, so reusing one pattern across a candidate set
+/// neither re-scans for wildcards nor re-parses the pattern per call — only each
+/// candidate's own characters are walked. Matching semantics are identical to
+/// [`glob_match`].
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Glob {
     pattern: String,
+    chars: Vec<char>,
     literal: bool,
 }
 
@@ -66,8 +70,13 @@ impl Glob {
     #[must_use]
     pub fn new(pattern: impl Into<String>) -> Self {
         let pattern = pattern.into();
-        let literal = !has_wildcard(&pattern);
-        Self { pattern, literal }
+        let chars: Vec<char> = pattern.chars().collect();
+        let literal = !chars.iter().any(|&ch| ch == '*' || ch == '?');
+        Self {
+            pattern,
+            chars,
+            literal,
+        }
     }
 
     /// Whether the pattern is a plain literal with no wildcards.
@@ -88,7 +97,8 @@ impl Glob {
         if self.literal {
             self.pattern == text
         } else {
-            wildcard(&self.pattern, text)
+            let text: Vec<char> = text.chars().collect();
+            wildcard(&self.chars, &text)
         }
     }
 }
@@ -98,9 +108,7 @@ impl Glob {
 /// Linear-time with constant backtracking state: on a mismatch after a `*` it
 /// rewinds the text pointer one character past the last `*` rather than recursing,
 /// so adversarial patterns cannot trigger exponential blow-up.
-fn wildcard(pattern: &str, text: &str) -> bool {
-    let pattern: Vec<char> = pattern.chars().collect();
-    let text: Vec<char> = text.chars().collect();
+fn wildcard(pattern: &[char], text: &[char]) -> bool {
     let (mut p, mut t) = (0, 0);
     let (mut star, mut mark) = (None, 0);
     while t < text.len() {
