@@ -72,18 +72,21 @@ where
     I: IntoIterator<Item = T>,
     F: Fn(&T) -> &str,
 {
-    let mut matches: Vec<T> = candidates
+    let mut hits = candidates
         .into_iter()
-        .filter(|candidate| key_of(candidate) == input)
-        .collect();
-    match matches.len() {
-        0 => Ok(None),
-        1 => Ok(matches.pop()),
-        _ => Err(Ambiguity {
-            input: input.to_owned(),
-            matches,
-        }),
-    }
+        .filter(|candidate| key_of(candidate) == input);
+    let Some(first) = hits.next() else {
+        return Ok(None);
+    };
+    let Some(second) = hits.next() else {
+        return Ok(Some(first));
+    };
+    let mut matches = vec![first, second];
+    matches.extend(hits);
+    Err(Ambiguity {
+        input: input.to_owned(),
+        matches,
+    })
 }
 
 #[cfg(test)]
