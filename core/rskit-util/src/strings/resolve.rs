@@ -37,6 +37,8 @@ impl<T: fmt::Display> fmt::Display for Ambiguity<T> {
     }
 }
 
+impl<T: fmt::Debug + fmt::Display> std::error::Error for Ambiguity<T> {}
+
 /// Resolve `input` to the unique candidate whose key equals it.
 ///
 /// `key_of` projects each candidate to the string compared against `input`.
@@ -131,6 +133,19 @@ mod tests {
         let error = resolve_unique("report", candidates, tail).unwrap_err();
         assert_eq!(
             error.to_string(),
+            "'report' is ambiguous; matched service/report, job/report"
+        );
+    }
+
+    #[test]
+    fn ambiguity_is_a_standard_error() {
+        fn wrap(error: impl std::error::Error) -> String {
+            error.to_string()
+        }
+        let candidates = ["service/report", "job/report"];
+        let error = resolve_unique("report", candidates, tail).unwrap_err();
+        assert_eq!(
+            wrap(error),
             "'report' is ambiguous; matched service/report, job/report"
         );
     }
