@@ -193,4 +193,18 @@ mod tests {
         term.end_interactive().expect("end");
         assert!(!term.is_interactive());
     }
+
+    #[test]
+    fn reading_a_line_when_a_key_is_queued_is_an_error() {
+        let mut term = ScriptedTerminal::line_driven().with_key(Key::Enter);
+        let err = term.read_line().expect_err("mismatched input");
+        assert!(err.message().contains("expected a line"));
+    }
+
+    #[test]
+    fn reading_a_key_when_a_line_is_queued_is_an_error() {
+        let mut term = ScriptedTerminal::key_driven().with_line("typed");
+        let err = term.read_key().expect_err("mismatched input");
+        assert!(err.message().contains("expected a key"));
+    }
 }

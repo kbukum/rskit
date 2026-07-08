@@ -176,7 +176,7 @@ impl Palette {
 
 #[cfg(test)]
 mod tests {
-    use super::{ColorChoice, Palette, resolve_color_with};
+    use super::{ColorChoice, Palette, no_color_env_set, resolve_color, resolve_color_with};
     use std::borrow::Cow;
 
     #[test]
@@ -220,5 +220,20 @@ mod tests {
         assert_eq!(color.success("ok"), "\u{1b}[32mok\u{1b}[0m");
         assert_eq!(color.error("boom"), "\u{1b}[31mboom\u{1b}[0m");
         assert!(color.enabled());
+    }
+
+    #[test]
+    fn never_choice_stays_disabled_through_the_env_aware_resolver() {
+        // `Never` is absolute regardless of `NO_COLOR` or TTY, so the env-reading
+        // resolver is deterministic here while still exercising the env probe.
+        assert!(!resolve_color(ColorChoice::Never, true));
+        let _ = no_color_env_set();
+    }
+
+    #[test]
+    fn for_stream_resolves_a_palette_against_a_real_stream() {
+        // stderr under a test harness is not a TTY; `Never` keeps it disabled.
+        let palette = Palette::for_stream(ColorChoice::Never, &std::io::stderr());
+        assert!(!palette.enabled());
     }
 }

@@ -144,6 +144,9 @@ fn spinner_and_multi_progress_cover_ordering_static_lines_and_removal() {
     let wrapped = MultiProgress::from_raw(raw);
     wrapped.clear().unwrap();
     let _ = wrapped.raw();
+
+    let default_multi = MultiProgress::default();
+    default_multi.clear().unwrap();
 }
 
 #[tokio::test]

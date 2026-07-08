@@ -209,4 +209,23 @@ mod tests {
         let out = rendered(buffer);
         assert!(out.contains('\u{1b}'), "color must emit SGR escapes");
     }
+
+    #[test]
+    fn bullet_line_is_indented_with_its_glyph() {
+        let mut buffer = Vec::new();
+        reporter(&mut buffer, false, true)
+            .bullet("cached crate")
+            .expect("write");
+        let out = rendered(buffer);
+        assert!(out.starts_with("  "));
+        assert!(out.contains('•'));
+        assert!(out.contains("cached crate"));
+    }
+
+    #[test]
+    fn from_env_binds_to_stderr_without_writing() {
+        // Constructing over the process stderr must succeed regardless of TTY or
+        // NO_COLOR state; it resolves the palette and glyphs but emits nothing.
+        let _reporter = StatusReporter::from_env(crate::theme::ColorChoice::Never);
+    }
 }

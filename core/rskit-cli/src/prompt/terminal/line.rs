@@ -115,4 +115,22 @@ mod tests {
         }
         assert_eq!(String::from_utf8(out).expect("utf8"), "ab\n");
     }
+
+    #[test]
+    fn line_control_operations_are_no_ops_over_cooked_stdio() {
+        let mut out = Vec::new();
+        let mut term = LineTerminal::new(&b""[..], &mut out);
+        term.flush().expect("flush");
+        term.clear_last_lines(3).expect("clear is a no-op");
+        term.begin_interactive().expect("begin is a no-op");
+        term.end_interactive().expect("end is a no-op");
+    }
+
+    #[test]
+    fn stdio_binds_to_process_streams() {
+        // Constructing over the real process streams must succeed; capabilities
+        // stay line-driven without touching stdin/stderr.
+        let term = LineTerminal::stdio();
+        assert_eq!(term.capabilities(), Capabilities::line_driven());
+    }
 }

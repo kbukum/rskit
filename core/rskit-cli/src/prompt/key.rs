@@ -51,3 +51,22 @@ impl Key {
         matches!(self, Self::Interrupt)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Key;
+
+    #[test]
+    fn only_interrupt_reports_as_interrupt() {
+        assert!(Key::Interrupt.is_interrupt());
+        for key in [
+            Key::Enter,
+            Key::Escape,
+            Key::Char('a'),
+            Key::Space,
+            Key::Unknown,
+        ] {
+            assert!(!key.is_interrupt());
+        }
+    }
+}
