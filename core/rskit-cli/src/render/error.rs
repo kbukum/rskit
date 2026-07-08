@@ -163,4 +163,24 @@ mod tests {
             assert!(rendered.contains("not found"));
         }
     }
+
+    #[test]
+    fn json_fallback_stays_valid_and_escapes_the_message() {
+        let err = AppError::new(rskit_errors::ErrorCode::Internal, "boom \"quoted\"");
+        let rendered = super::fallback_json(&err, ExitCode::Failure);
+        let payload: serde_json::Value = serde_json::from_str(&rendered).expect("valid json");
+        assert_eq!(payload["code"], "INTERNAL_ERROR");
+        assert_eq!(payload["message"], "boom \"quoted\"");
+        assert_eq!(payload["exit_code"], 1);
+    }
+
+    #[test]
+    fn yaml_fallback_carries_code_message_and_exit_code() {
+        let err = AppError::new(rskit_errors::ErrorCode::Internal, "boom");
+        let rendered = super::fallback_yaml(&err, ExitCode::Failure);
+        assert!(rendered.contains("code: INTERNAL_ERROR"));
+        assert!(rendered.contains("exit_code: 1"));
+        let payload: serde_json::Value = serde_norway::from_str(&rendered).expect("valid yaml");
+        assert_eq!(payload["message"], "boom");
+    }
 }

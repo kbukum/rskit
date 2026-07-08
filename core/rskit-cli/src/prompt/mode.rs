@@ -72,4 +72,11 @@ mod tests {
         assert!(PromptMode::Interactive.is_interactive());
         assert!(!PromptMode::NonInteractive.is_interactive());
     }
+
+    #[test]
+    fn from_env_resolves_against_the_process_stdio() {
+        // Under a test harness stdin/stderr are not TTYs, so the mode resolves
+        // to NonInteractive; the assertion also proves `from_env` is callable.
+        assert_eq!(PromptMode::from_env(), PromptMode::NonInteractive);
+    }
 }

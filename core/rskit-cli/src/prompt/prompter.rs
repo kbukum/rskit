@@ -196,6 +196,7 @@ mod tests {
     use crate::prompt::key::Key;
     use crate::prompt::terminal::ScriptedTerminal;
     use crate::prompt::validate::non_empty;
+    use crate::theme::{ColorChoice, Glyphs};
 
     fn plain_choices() -> Vec<Choice> {
         vec![
@@ -203,6 +204,10 @@ mod tests {
             Choice::new("rust", "Rust").recommended(),
             Choice::new("node", "Node.js"),
         ]
+    }
+
+    fn no_default_choices() -> Vec<Choice> {
+        vec![Choice::new("go", "Go"), Choice::new("rust", "Rust")]
     }
 
     fn line_prompter(
@@ -645,5 +650,302 @@ mod tests {
         .select("Ecosystem?", &[])
         .expect_err("empty choices rejected");
         assert!(err.message().contains("at least one choice"));
+    }
+
+    #[test]
+    fn multi_select_empty_choice_set_is_rejected() {
+        let err = line_prompter(
+            ScriptedTerminal::line_driven(),
+            PromptMode::Interactive,
+            false,
+        )
+        .multi_select("Tasks?", &[])
+        .expect_err("empty choices rejected");
+        assert!(err.message().contains("at least one choice"));
+    }
+
+    // ── Confirm: key- and line-driven branches ──────────────────────────
+
+    #[test]
+    fn key_confirm_enter_default_letter_no_and_escape() {
+        // Enter accepts the default.
+        assert!(
+            line_prompter(
+                ScriptedTerminal::key_driven().with_key(Key::Enter),
+                PromptMode::Interactive,
+                false
+            )
+            .confirm("Proceed?", true)
+            .expect("enter accepts default")
+        );
+        // 'n' declines.
+        assert!(
+            !line_prompter(
+                ScriptedTerminal::key_driven().with_key(Key::Char('n')),
+                PromptMode::Interactive,
+                false
+            )
+            .confirm("Proceed?", true)
+            .expect("n declines")
+        );
+        // An unrelated key is ignored before 'Y' confirms.
+        assert!(
+            line_prompter(
+                ScriptedTerminal::key_driven().with_keys([Key::Left, Key::Char('Y')]),
+                PromptMode::Interactive,
+                false
+            )
+            .confirm("Proceed?", false)
+            .expect("Y confirms after an ignored key")
+        );
+        // Escape cancels.
+        let err = line_prompter(
+            ScriptedTerminal::key_driven().with_key(Key::Escape),
+            PromptMode::Interactive,
+            false,
+        )
+        .confirm("Proceed?", true)
+        .expect_err("escape cancels");
+        assert!(err.message().contains("cancelled"));
+    }
+
+    #[test]
+    fn line_confirm_reprompts_on_invalid_and_errors_on_close() {
+        let mut prompter = line_prompter(
+            ScriptedTerminal::line_driven().with_lines(["maybe", "yes"]),
+            PromptMode::Interactive,
+            false,
+        );
+        assert!(
+            prompter
+                .confirm("Proceed?", false)
+                .expect("yes after retry")
+        );
+        assert!(prompter.terminal().output().contains("'y' or 'n'"));
+
+        let err = line_prompter(
+            ScriptedTerminal::line_driven(),
+            PromptMode::Interactive,
+            false,
+        )
+        .confirm("Proceed?", true)
+        .expect_err("closed input must error");
+        assert!(err.message().contains("input closed"));
+    }
+
+    // ── Select: extra key navigation and line branches ──────────────────
+
+    #[test]
+    fn key_select_home_end_and_up_navigate_and_ignore_unrelated_keys() {
+        // Start on the recommended default (Rust, index 1): End→node(2),
+        // Home→go(0), Down→rust(1), Up→go(0), Tab→rust(1), Left is ignored,
+        // Enter confirms Rust.
+        let choice = line_prompter(
+            ScriptedTerminal::key_driven().with_keys([
+                Key::End,
+                Key::Home,
+                Key::Down,
+                Key::Up,
+                Key::Tab,
+                Key::Left,
+                Key::Enter,
+            ]),
+            PromptMode::Interactive,
+            false,
+        )
+        .select("Ecosystem?", &plain_choices())
+        .expect("navigation resolves");
+        assert_eq!(choice, ChoiceId::new("rust"));
+    }
+
+    #[test]
+    fn line_select_empty_without_default_requires_a_choice() {
+        let mut prompter = line_prompter(
+            ScriptedTerminal::line_driven().with_lines(["", "2"]),
+            PromptMode::Interactive,
+            false,
+        );
+        let choice = prompter
+            .select("Ecosystem?", &no_default_choices())
+            .expect("valid choice after the required notice");
+        assert_eq!(choice, ChoiceId::new("rust"));
+        assert!(
+            prompter
+                .terminal()
+                .output()
+                .contains("a choice is required")
+        );
+    }
+
+    // ── Multi-select: extra key navigation and line branches ────────────
+
+    #[test]
+    fn key_multi_select_escape_cancels_and_navigation_wraps() {
+        let err = line_prompter(
+            ScriptedTerminal::key_driven().with_key(Key::Escape),
+            PromptMode::Interactive,
+            false,
+        )
+        .multi_select("Tasks?", &plain_choices())
+        .expect_err("escape cancels");
+        assert!(err.message().contains("cancelled"));
+
+        // End→2, Home→0, Up→2, Tab→0, Left ignored, Space toggles Go on, Enter.
+        let selected = line_prompter(
+            ScriptedTerminal::key_driven().with_keys([
+                Key::End,
+                Key::Home,
+                Key::Up,
+                Key::Tab,
+                Key::Left,
+                Key::Space,
+                Key::Enter,
+            ]),
+            PromptMode::Interactive,
+            false,
+        )
+        .multi_select("Tasks?", &plain_choices())
+        .expect("navigation and toggle resolve");
+        assert_eq!(selected, vec![ChoiceId::new("go"), ChoiceId::new("rust")]);
+    }
+
+    #[test]
+    fn line_multi_select_notice_none_hint_and_close() {
+        // No recommended choice → the default hint reads `[none]`; an invalid
+        // answer shows a notice before a valid comma list is accepted.
+        let mut prompter = line_prompter(
+            ScriptedTerminal::line_driven().with_lines(["x", "1,2"]),
+            PromptMode::Interactive,
+            false,
+        );
+        let selected = prompter
+            .multi_select("Tasks?", &no_default_choices())
+            .expect("valid list after the notice");
+        assert_eq!(selected, vec![ChoiceId::new("go"), ChoiceId::new("rust")]);
+        let out = prompter.terminal().output();
+        assert!(out.contains("[none]"));
+        assert!(out.contains("comma-separated"));
+
+        let err = line_prompter(
+            ScriptedTerminal::line_driven(),
+            PromptMode::Interactive,
+            false,
+        )
+        .multi_select("Tasks?", &no_default_choices())
+        .expect_err("closed input must error");
+        assert!(err.message().contains("input closed"));
+    }
+
+    // ── Text: required, validator-reason, and cancellation branches ─────
+
+    #[test]
+    fn key_text_required_then_validator_reason_then_value() {
+        let reject_short = |value: &str| {
+            if value.len() >= 2 {
+                Ok(())
+            } else {
+                Err("too short".to_string())
+            }
+        };
+
+        // Enter on an empty buffer with no default surfaces the required notice,
+        // then a typed value is accepted.
+        let value = line_prompter(
+            ScriptedTerminal::key_driven().with_keys([
+                Key::Enter,
+                Key::Char('h'),
+                Key::Char('i'),
+                Key::Enter,
+            ]),
+            PromptMode::Interactive,
+            false,
+        )
+        .text("Name?", None)
+        .expect("value after the required notice");
+        assert_eq!(value, "hi");
+
+        // A rejected value shows the validator reason, then a valid value passes.
+        let mut prompter = line_prompter(
+            ScriptedTerminal::key_driven().with_keys([
+                Key::Char('a'),
+                Key::Enter,
+                Key::Char('b'),
+                Key::Enter,
+            ]),
+            PromptMode::Interactive,
+            false,
+        );
+        let value = prompter
+            .text_with("Name?", None, &reject_short)
+            .expect("valid after the reason");
+        assert_eq!(value, "ab");
+        assert!(prompter.terminal().output().contains("too short"));
+    }
+
+    #[test]
+    fn key_text_ignores_unrelated_keys_and_escape_cancels() {
+        let err = line_prompter(
+            ScriptedTerminal::key_driven().with_keys([Key::Left, Key::Escape]),
+            PromptMode::Interactive,
+            false,
+        )
+        .text("Name?", None)
+        .expect_err("escape cancels");
+        assert!(err.message().contains("cancelled"));
+    }
+
+    #[test]
+    fn line_text_errors_when_input_closes() {
+        let err = line_prompter(
+            ScriptedTerminal::line_driven(),
+            PromptMode::Interactive,
+            false,
+        )
+        .text("Name?", None)
+        .expect_err("closed input must error");
+        assert!(err.message().contains("input closed"));
+    }
+
+    #[test]
+    fn line_text_with_shows_validator_reason_before_accepting() {
+        let reject_short = |value: &str| {
+            if value.len() >= 2 {
+                Ok(())
+            } else {
+                Err("too short".to_string())
+            }
+        };
+        let mut prompter = line_prompter(
+            ScriptedTerminal::line_driven().with_lines(["a", "ok"]),
+            PromptMode::Interactive,
+            false,
+        );
+        let value = prompter
+            .text_with("Name?", None, &reject_short)
+            .expect("valid after the reason");
+        assert_eq!(value, "ok");
+        assert!(prompter.terminal().output().contains("too short"));
+    }
+
+    // ── Construction & metadata accessors ───────────────────────────────
+
+    #[test]
+    fn from_env_builds_a_prompter_and_reports_its_mode() {
+        // Under a test harness neither stream is a TTY, so the environment
+        // prompter is non-interactive; building it also exercises terminal
+        // selection over the process streams.
+        let prompter = Prompter::from_env(ColorChoice::Never);
+        assert_eq!(prompter.mode(), PromptMode::NonInteractive);
+    }
+
+    #[test]
+    fn with_glyphs_overrides_symbols_and_preserves_mode() {
+        let prompter = line_prompter(
+            ScriptedTerminal::line_driven(),
+            PromptMode::NonInteractive,
+            false,
+        )
+        .with_glyphs(Glyphs::new(true));
+        assert_eq!(prompter.mode(), PromptMode::NonInteractive);
     }
 }

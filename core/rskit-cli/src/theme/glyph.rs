@@ -146,7 +146,15 @@ impl Glyphs {
 
 #[cfg(test)]
 mod tests {
-    use super::Glyphs;
+    use super::{Glyphs, unicode_env_enabled};
+
+    #[test]
+    fn env_probe_and_from_env_agree_and_are_callable() {
+        // `unicode_env_enabled` reads the process locale; `from_env` must mirror
+        // it. Both are exercised here without mutating the (forbidden-unsafe)
+        // environment, so the result tracks whatever locale the runner exposes.
+        assert_eq!(Glyphs::from_env().unicode(), unicode_env_enabled());
+    }
 
     #[test]
     fn unicode_set_emits_symbols() {

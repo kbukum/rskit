@@ -113,3 +113,41 @@ impl Choice {
         self.recommended
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{Choice, ChoiceId};
+
+    #[test]
+    fn choice_id_borrows_and_consumes_its_string() {
+        let id = ChoiceId::new("rust");
+        assert_eq!(id.as_str(), "rust");
+        assert_eq!(id.into_string(), "rust");
+    }
+
+    #[test]
+    fn choice_id_converts_from_owned_and_borrowed_strings() {
+        assert_eq!(ChoiceId::from("go").as_str(), "go");
+        assert_eq!(ChoiceId::from("node".to_string()).as_str(), "node");
+    }
+
+    #[test]
+    fn choice_id_displays_its_inner_value() {
+        assert_eq!(ChoiceId::new("rust").to_string(), "rust");
+    }
+
+    #[test]
+    fn choice_accessors_expose_metadata() {
+        let choice = Choice::new("rust", "Rust")
+            .with_annotation("detected in dev-deps")
+            .recommended();
+        assert_eq!(choice.id(), &ChoiceId::new("rust"));
+        assert_eq!(choice.label(), "Rust");
+        assert_eq!(choice.annotation(), Some("detected in dev-deps"));
+        assert!(choice.is_recommended());
+
+        let plain = Choice::new("go", "Go");
+        assert_eq!(plain.annotation(), None);
+        assert!(!plain.is_recommended());
+    }
+}

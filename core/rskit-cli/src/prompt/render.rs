@@ -167,6 +167,16 @@ mod tests {
     }
 
     #[test]
+    fn numbered_rows_mark_a_non_recommended_default() {
+        // A single-select fallback default that is not the recommended choice is
+        // annotated `(default)` rather than `(recommended)`.
+        let plain = vec![Choice::new("a", "Alpha"), Choice::new("b", "Beta")];
+        let rows = numbered_rows(style(), &plain, false, Some(0));
+        assert!(rows[0].contains("(default)"));
+        assert!(!rows[1].contains("(default)"));
+    }
+
+    #[test]
     fn frame_rows_show_radio_for_single_select() {
         let rows = frame_rows(style(), &choices(), 0, None, None);
         assert!(rows[0].starts_with("❯ ◉ "));

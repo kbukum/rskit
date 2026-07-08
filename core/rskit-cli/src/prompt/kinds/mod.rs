@@ -244,7 +244,18 @@ mod tests {
         // The explicit teardown on the normal path fails once; the guard must
         // stay armed so Drop retries, ultimately restoring cooked mode.
         let mut term = FlakyTeardown::failing(1);
-        let out = with_raw_mode(&mut term, |_| Ok(()));
+        let out = with_raw_mode(&mut term, |t| {
+            // Exercise the full terminal surface so the double is covered end to
+            // end: capabilities, both reads, both writes, flush, and clear.
+            assert!(t.capabilities().is_key_driven());
+            t.write("x")?;
+            t.write_line("y")?;
+            t.flush()?;
+            t.clear_last_lines(1)?;
+            assert_eq!(t.read_line()?, None);
+            assert!(t.read_key().is_err());
+            Ok(())
+        });
         // The failed explicit teardown surfaces on the Ok path.
         assert!(out.is_err());
         // Called twice: the failing explicit attempt plus the successful retry.
