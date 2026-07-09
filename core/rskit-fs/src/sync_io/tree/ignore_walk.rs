@@ -243,6 +243,29 @@ mod tests {
         assert_eq!(visited, 1);
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn follow_symlinks_controls_symlinked_file_inclusion() {
+        let dir = TempDir::new().unwrap();
+        dir.write_file("real.txt", b"data").unwrap();
+        let link = dir.child("link.txt").unwrap();
+        std::os::unix::fs::symlink(dir.child("real.txt").unwrap(), &link).unwrap();
+
+        let excluded = collect(dir.path(), IgnoreWalkOptions::default());
+        assert!(excluded.contains(&PathBuf::from("real.txt")));
+        assert!(!excluded.contains(&PathBuf::from("link.txt")));
+
+        let followed = collect(
+            dir.path(),
+            IgnoreWalkOptions {
+                follow_symlinks: true,
+                ..IgnoreWalkOptions::default()
+            },
+        );
+        assert!(followed.contains(&PathBuf::from("real.txt")));
+        assert!(followed.contains(&PathBuf::from("link.txt")));
+    }
+
     #[test]
     fn rejects_non_directory_root() {
         let dir = TempDir::new().unwrap();
