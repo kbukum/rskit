@@ -7,6 +7,7 @@
 //! source-relevant files — content hashing, indexing, or packaging — rather
 //! than the raw on-disk tree that [`super::walk_tree`] yields.
 
+use std::ffi::OsStr;
 use std::path::Path;
 
 use ignore::WalkBuilder;
@@ -72,7 +73,7 @@ pub fn walk_tree_ignoring(
         .follow_links(options.follow_symlinks);
     // `.git` metadata is never source content; drop it even when git ignore
     // handling is off so a digest cannot churn on repository state.
-    builder.filter_entry(|entry| entry.file_name() != ".git");
+    builder.filter_entry(|entry| entry.file_name() != OsStr::new(".git"));
 
     for result in builder.build() {
         let entry = result.map_err(|error| walk_ignore_error(&error))?;

@@ -75,7 +75,10 @@ impl LiveConsole {
         Self::with_target(ProgressDrawTarget::hidden(), config)
     }
 
-    fn with_target(target: ProgressDrawTarget, config: LiveConfig) -> Self {
+    fn with_target(target: ProgressDrawTarget, mut config: LiveConfig) -> Self {
+        // Keep the tail buffer and the renderer consistent: a tile always shows
+        // at least one content line.
+        config.tail_lines = config.tail_lines.max(1);
         let multi = MultiProgress::with_draw_target(target);
         let header = multi.add(ProgressBar::new(0));
         header.set_style(message_style());
@@ -261,6 +264,17 @@ mod tests {
         console.set_header("second pass");
         console.begin("u1", "task");
         console.feed("u1", b"more\n");
+        console.finish("u1", "ok");
+    }
+
+    #[test]
+    fn zero_tail_lines_still_renders_content() {
+        let mut console = LiveConsole::hidden(LiveConfig {
+            tail_lines: 0,
+            width: 0,
+        });
+        console.begin("u1", "task");
+        console.feed("u1", b"visible line\n");
         console.finish("u1", "ok");
     }
 
