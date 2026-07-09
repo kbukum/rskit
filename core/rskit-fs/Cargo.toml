@@ -37,6 +37,7 @@ watch = [
 [dependencies]
 tokio = { workspace = true, features = ["fs", "io-util"], optional = true }
 tempfile = { workspace = true }
+ignore = { workspace = true }
 notify = { workspace = true, optional = true }
 futures = { workspace = true, optional = true }
 
