@@ -17,8 +17,11 @@ use super::{TreeEntry, ensure_directory};
 /// Options controlling a VCS-ignore-aware walk.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IgnoreWalkOptions {
-    /// Honour `.gitignore`, `.ignore`, and nested ignore files discovered along
-    /// the walk. When `false` only the built-in and explicit skips apply.
+    /// Honour versioned ignore files — `.gitignore`, `.ignore`, and nested or
+    /// parent ignore files discovered along the walk. When `false` only the
+    /// built-in and explicit skips apply. Per-machine, non-versioned sources
+    /// (the global gitignore and `.git/info/exclude`) are never consulted, so
+    /// results stay reproducible across developers and CI.
     pub respect_gitignore: bool,
     /// Skip dot-prefixed files and directories (e.g. `.git`, `.cache`).
     pub skip_hidden: bool,
@@ -59,9 +62,12 @@ pub fn walk_tree_ignoring(
         .hidden(options.skip_hidden)
         .parents(options.respect_gitignore)
         .ignore(options.respect_gitignore)
-        .git_global(options.respect_gitignore)
         .git_ignore(options.respect_gitignore)
-        .git_exclude(options.respect_gitignore)
+        // The global gitignore (`core.excludesfile`) and `.git/info/exclude` are
+        // per-machine, non-versioned state; excluding them keeps digests
+        // reproducible regardless of who runs the walk.
+        .git_global(false)
+        .git_exclude(false)
         .require_git(false)
         .follow_links(options.follow_symlinks);
     // `.git` metadata is never source content; drop it even when git ignore
@@ -194,6 +200,20 @@ mod tests {
 
         assert!(seen.contains(&PathBuf::from("crate/src/main.rs")));
         assert!(!seen.iter().any(|p| p.starts_with("crate/generated")));
+    }
+
+    #[test]
+    fn ignores_non_versioned_git_exclude() {
+        // `.git/info/exclude` is per-repo, non-versioned state; honouring it
+        // would make digests depend on local machine state, so it must not
+        // filter the walk.
+        let dir = TempDir::new().unwrap();
+        dir.write_file(".git/info/exclude", b"secret.rs\n").unwrap();
+        dir.write_file("secret.rs", b"fn s() {}").unwrap();
+
+        let seen = collect(dir.path(), IgnoreWalkOptions::default());
+
+        assert!(seen.contains(&PathBuf::from("secret.rs")));
     }
 
     #[test]
