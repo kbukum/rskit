@@ -100,11 +100,17 @@ impl LiveConsole {
     /// A duplicate `id` retires the existing region first — flushing its
     /// remaining lines to scrollback — so a re-used key neither leaks a stale
     /// tile nor drops its transcript.
-    pub fn begin(&mut self, id: impl Into<String>, label: impl Into<String>) {
+    ///
+    /// Returns any I/O error from flushing a replaced region to scrollback.
+    pub fn begin(
+        &mut self,
+        id: impl Into<String>,
+        label: impl Into<String>,
+    ) -> std::io::Result<()> {
         let id = id.into();
         let label = label.into();
         if let Some(old) = self.regions.remove(&id) {
-            self.retire(old);
+            self.retire(old)?;
         }
         let bar = self.multi.add(ProgressBar::new(0));
         bar.set_style(message_style());
@@ -120,22 +126,21 @@ impl LiveConsole {
             self.config.tail_lines,
         ));
         self.regions.insert(id, region);
+        Ok(())
     }
 
     /// Feed raw output bytes to region `id`, updating its tile.
     ///
     /// Lines evicted from the tile are flushed to scrollback immediately. A feed
     /// for an unknown `id` is ignored, so late output after a finish cannot
-    /// panic.
-    pub fn feed(&mut self, id: &str, bytes: &[u8]) {
+    /// panic. Returns any I/O error from the scrollback flush.
+    pub fn feed(&mut self, id: &str, bytes: &[u8]) -> std::io::Result<()> {
         let Some(region) = self.regions.get_mut(id) else {
-            return;
+            return Ok(());
         };
         let evicted = region.tail.push_bytes(bytes);
         for line in evicted {
-            self.multi
-                .println(scrollback_line(&region.label, &line))
-                .ok();
+            self.multi.println(scrollback_line(&region.label, &line))?;
         }
         let visible = region.tail.visible();
         region.bar.set_message(render_tile(
@@ -144,51 +149,53 @@ impl LiveConsole {
             self.config.width,
             self.config.tail_lines,
         ));
+        Ok(())
     }
 
     /// Finish region `id`, flushing its remaining lines to scrollback, removing
     /// the tile, and printing `verdict` as a final status line.
     ///
-    /// A finish for an unknown `id` prints only the verdict.
-    pub fn finish(&mut self, id: &str, verdict: impl AsRef<str>) {
+    /// A finish for an unknown `id` prints only the verdict. Returns any I/O
+    /// error from the scrollback flush.
+    pub fn finish(&mut self, id: &str, verdict: impl AsRef<str>) -> std::io::Result<()> {
         if let Some(region) = self.regions.remove(id) {
-            self.retire(region);
+            self.retire(region)?;
         }
-        self.multi.println(verdict.as_ref()).ok();
+        self.multi.println(verdict.as_ref())
     }
 
     /// Flush a retired region's remaining tail to scrollback and drop its tile.
-    fn retire(&self, region: Region) {
+    fn retire(&self, region: Region) -> std::io::Result<()> {
         for line in region.tail.drain() {
-            self.multi
-                .println(scrollback_line(&region.label, &line))
-                .ok();
+            self.multi.println(scrollback_line(&region.label, &line))?;
         }
         region.bar.finish_and_clear();
         self.multi.remove(&region.bar);
+        Ok(())
     }
 
     /// Print `line` to scrollback above the live area, without touching any tile.
     ///
     /// For output that is not tied to a live region — a header banner, or a
     /// completed unit's buffered block on the rare path where a unit is not
-    /// live-tailed.
-    pub fn note(&self, line: impl AsRef<str>) {
-        self.multi.println(line.as_ref()).ok();
+    /// live-tailed. Returns any I/O error from the write.
+    pub fn note(&self, line: impl AsRef<str>) -> std::io::Result<()> {
+        self.multi.println(line.as_ref())
     }
 
     /// Retire every remaining region — flushing each tail to scrollback — then
     /// clear the live area and blank the header, leaving the console reusable.
     ///
     /// Regions are retired in id order so the flushed scrollback is deterministic.
-    pub fn clear(&mut self) {
+    /// Returns any I/O error from the flush or terminal clear.
+    pub fn clear(&mut self) -> std::io::Result<()> {
         let mut regions: Vec<(String, Region)> = self.regions.drain().collect();
         regions.sort_by(|(a, _), (b, _)| a.cmp(b));
         for (_, region) in regions {
-            self.retire(region);
+            self.retire(region)?;
         }
         self.header.set_message("");
-        self.multi.clear().ok();
+        self.multi.clear()
     }
 }
 
@@ -231,64 +238,64 @@ mod tests {
     use super::{LiveConfig, LiveConsole, render_tile, scrollback_line, truncate};
 
     #[test]
-    fn drives_full_region_lifecycle_without_panicking() {
+    fn drives_full_region_lifecycle_without_panicking() -> std::io::Result<()> {
         let mut console = LiveConsole::hidden(LiveConfig {
             tail_lines: 2,
             width: 40,
         });
         console.set_header("wave 1/2 · running 1");
-        console.begin("u1", "rust:core#test");
-        console.feed("u1", b"compiling\n");
-        console.feed("u1", b"running 3 tests\nok\nok\n");
-        console.finish("u1", "ok rust:core#test");
-        console.clear();
+        console.begin("u1", "rust:core#test")?;
+        console.feed("u1", b"compiling\n")?;
+        console.feed("u1", b"running 3 tests\nok\nok\n")?;
+        console.finish("u1", "ok rust:core#test")?;
+        console.clear()
     }
 
     #[test]
-    fn reused_id_replaces_region_without_leaking() {
+    fn reused_id_replaces_region_without_leaking() -> std::io::Result<()> {
         let mut console = LiveConsole::hidden(LiveConfig::default());
-        console.begin("u1", "first");
-        console.feed("u1", b"old\n");
-        console.begin("u1", "second");
-        console.feed("u1", b"new\n");
-        console.finish("u1", "ok");
+        console.begin("u1", "first")?;
+        console.feed("u1", b"old\n")?;
+        console.begin("u1", "second")?;
+        console.feed("u1", b"new\n")?;
+        console.finish("u1", "ok")
     }
 
     #[test]
-    fn console_is_reusable_after_clear() {
+    fn console_is_reusable_after_clear() -> std::io::Result<()> {
         let mut console = LiveConsole::hidden(LiveConfig::default());
         console.set_header("first pass");
-        console.begin("u1", "task");
-        console.feed("u1", b"partial output\n");
-        console.clear();
+        console.begin("u1", "task")?;
+        console.feed("u1", b"partial output\n")?;
+        console.clear()?;
         console.set_header("second pass");
-        console.begin("u1", "task");
-        console.feed("u1", b"more\n");
-        console.finish("u1", "ok");
+        console.begin("u1", "task")?;
+        console.feed("u1", b"more\n")?;
+        console.finish("u1", "ok")
     }
 
     #[test]
-    fn zero_tail_lines_still_renders_content() {
+    fn zero_tail_lines_still_renders_content() -> std::io::Result<()> {
         let mut console = LiveConsole::hidden(LiveConfig {
             tail_lines: 0,
             width: 0,
         });
-        console.begin("u1", "task");
-        console.feed("u1", b"visible line\n");
-        console.finish("u1", "ok");
+        console.begin("u1", "task")?;
+        console.feed("u1", b"visible line\n")?;
+        console.finish("u1", "ok")
     }
 
     #[test]
-    fn feed_and_finish_for_unknown_region_are_ignored() {
+    fn feed_and_finish_for_unknown_region_are_ignored() -> std::io::Result<()> {
         let mut console = LiveConsole::hidden(LiveConfig::default());
-        console.feed("ghost", b"noise\n");
-        console.finish("ghost", "done");
+        console.feed("ghost", b"noise\n")?;
+        console.finish("ghost", "done")
     }
 
     #[test]
-    fn note_prints_to_scrollback_without_a_region() {
+    fn note_prints_to_scrollback_without_a_region() -> std::io::Result<()> {
         let console = LiveConsole::hidden(LiveConfig::default());
-        console.note("standalone line");
+        console.note("standalone line")
     }
 
     #[test]

@@ -13,7 +13,7 @@ use std::path::Path;
 use ignore::WalkBuilder;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 
-use super::{TreeEntry, ensure_directory};
+use super::{TreeEntry, WalkControl, ensure_directory};
 
 /// Options controlling a VCS-ignore-aware walk.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -48,13 +48,18 @@ impl Default for IgnoreWalkOptions {
 /// this. Entries are yielded in the `ignore` crate's traversal order, so a
 /// caller that needs a stable identity must sort by [`TreeEntry::relative_path`].
 ///
+/// The visitor returns a [`WalkControl`], matching [`super::walk_tree`], so a
+/// consumer can stop early with [`WalkControl::Stop`]. Because only leaf files
+/// are visited, [`WalkControl::SkipSubtree`] has nothing to prune and behaves
+/// like [`WalkControl::Continue`].
+///
 /// This helper uses blocking `std::fs` I/O. Run it through
 /// `tokio::task::spawn_blocking` or an equivalent blocking boundary when
 /// calling from async code.
 pub fn walk_tree_ignoring(
     root: &Path,
     options: IgnoreWalkOptions,
-    mut visitor: impl FnMut(&TreeEntry) -> AppResult<()>,
+    mut visitor: impl FnMut(&TreeEntry) -> AppResult<WalkControl>,
 ) -> AppResult<()> {
     ensure_directory(root, options.follow_symlinks)?;
 
@@ -99,7 +104,10 @@ pub fn walk_tree_ignoring(
             is_dir: false,
             is_symlink: false,
         };
-        visitor(&tree_entry)?;
+        match visitor(&tree_entry)? {
+            WalkControl::Stop => break,
+            WalkControl::Continue | WalkControl::SkipSubtree => {}
+        }
     }
 
     Ok(())
@@ -119,12 +127,13 @@ mod tests {
 
     use super::{IgnoreWalkOptions, walk_tree_ignoring};
     use crate::TempDir;
+    use crate::sync_io::tree::WalkControl;
 
     fn collect(root: &std::path::Path, options: IgnoreWalkOptions) -> BTreeSet<PathBuf> {
         let mut seen = BTreeSet::new();
         walk_tree_ignoring(root, options, |entry| {
             seen.insert(entry.relative_path.clone());
-            Ok(())
+            Ok(WalkControl::Continue)
         })
         .unwrap();
         seen
@@ -218,9 +227,29 @@ mod tests {
     }
 
     #[test]
+    fn stops_early_on_walk_control_stop() {
+        let dir = TempDir::new().unwrap();
+        for index in 0..5 {
+            dir.write_file(format!("f{index}.txt"), b"x").unwrap();
+        }
+
+        let mut visited = 0usize;
+        walk_tree_ignoring(dir.path(), IgnoreWalkOptions::default(), |_| {
+            visited += 1;
+            Ok(WalkControl::Stop)
+        })
+        .unwrap();
+
+        assert_eq!(visited, 1);
+    }
+
+    #[test]
     fn rejects_non_directory_root() {
         let dir = TempDir::new().unwrap();
         let file = dir.write_file("file.txt", b"hi").unwrap();
-        assert!(walk_tree_ignoring(&file, IgnoreWalkOptions::default(), |_| Ok(())).is_err());
+        let result = walk_tree_ignoring(&file, IgnoreWalkOptions::default(), |_| {
+            Ok(WalkControl::Continue)
+        });
+        assert!(result.is_err());
     }
 }
