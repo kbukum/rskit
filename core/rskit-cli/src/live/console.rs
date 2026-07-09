@@ -94,14 +94,14 @@ impl LiveConsole {
 
     /// Start a new region tile labeled `label`, keyed by `id`.
     ///
-    /// A duplicate `id` replaces the existing region's label and resets its
-    /// tail, so a re-used key never leaks a stale tile.
+    /// A duplicate `id` retires the existing region first — flushing its
+    /// remaining lines to scrollback — so a re-used key neither leaks a stale
+    /// tile nor drops its transcript.
     pub fn begin(&mut self, id: impl Into<String>, label: impl Into<String>) {
         let id = id.into();
         let label = label.into();
         if let Some(old) = self.regions.remove(&id) {
-            old.bar.finish_and_clear();
-            self.multi.remove(&old.bar);
+            self.retire(old);
         }
         let bar = self.multi.add(ProgressBar::new(0));
         bar.set_style(message_style());
@@ -110,7 +110,9 @@ impl LiveConsole {
             tail: RegionTail::new(self.config.tail_lines),
             label,
         };
-        region.bar.set_message(render_tile(&region.label, &[]));
+        region
+            .bar
+            .set_message(render_tile(&region.label, &[], self.config.width));
         self.regions.insert(id, region);
     }
 
@@ -129,13 +131,10 @@ impl LiveConsole {
                 .println(scrollback_line(&region.label, &line))
                 .ok();
         }
-        let visible: Vec<String> = region
-            .tail
-            .visible()
-            .iter()
-            .map(|line| truncate(line, self.config.width))
-            .collect();
-        region.bar.set_message(render_tile(&region.label, &visible));
+        let visible = region.tail.visible();
+        region
+            .bar
+            .set_message(render_tile(&region.label, &visible, self.config.width));
     }
 
     /// Finish region `id`, flushing its remaining lines to scrollback, removing
@@ -144,15 +143,20 @@ impl LiveConsole {
     /// A finish for an unknown `id` prints only the verdict.
     pub fn finish(&mut self, id: &str, verdict: impl AsRef<str>) {
         if let Some(region) = self.regions.remove(id) {
-            for line in region.tail.drain() {
-                self.multi
-                    .println(scrollback_line(&region.label, &line))
-                    .ok();
-            }
-            region.bar.finish_and_clear();
-            self.multi.remove(&region.bar);
+            self.retire(region);
         }
         self.multi.println(verdict.as_ref()).ok();
+    }
+
+    /// Flush a retired region's remaining tail to scrollback and drop its tile.
+    fn retire(&self, region: Region) {
+        for line in region.tail.drain() {
+            self.multi
+                .println(scrollback_line(&region.label, &line))
+                .ok();
+        }
+        region.bar.finish_and_clear();
+        self.multi.remove(&region.bar);
     }
 
     /// Print `line` to scrollback above the live area, without touching any tile.
@@ -180,13 +184,15 @@ fn message_style() -> ProgressStyle {
     ProgressStyle::with_template("{msg}").unwrap_or_else(|_| ProgressStyle::default_spinner())
 }
 
-/// Render one tile as a labeled header line plus indented content lines.
-fn render_tile(label: &str, lines: &[String]) -> String {
-    let mut out = format!("{}", console::style(format!("• {label}")).bold());
+/// Render one tile as a labeled header line plus indented content lines, each
+/// truncated to `width` display columns so no line can wrap and break the fixed
+/// tile height.
+fn render_tile(label: &str, lines: &[&str], width: usize) -> String {
+    let header = format!("{}", console::style(format!("• {label}")).bold());
+    let mut out = truncate(&header, width);
     for line in lines {
         out.push('\n');
-        out.push_str("  ");
-        out.push_str(line);
+        out.push_str(&truncate(&format!("  {line}"), width));
     }
     out
 }
@@ -248,9 +254,17 @@ mod tests {
 
     #[test]
     fn render_tile_labels_and_indents_lines() {
-        let tile = render_tile("core", &["a".to_string(), "b".to_string()]);
+        let tile = render_tile("core", &["a", "b"], 0);
         let stripped = console::strip_ansi_codes(&tile);
         assert_eq!(stripped, "• core\n  a\n  b");
+    }
+
+    #[test]
+    fn render_tile_truncates_header_and_content_to_width() {
+        let tile = render_tile("a-very-long-label", &["a-very-long-content-line"], 8);
+        for line in console::strip_ansi_codes(&tile).lines() {
+            assert!(console::measure_text_width(line) <= 8);
+        }
     }
 
     #[test]
