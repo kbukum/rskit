@@ -90,7 +90,7 @@ pub fn walk_tree_ignoring(
             relative_path: relative_path.to_path_buf(),
             is_file: true,
             is_dir: false,
-            is_symlink: file_type.is_symlink(),
+            is_symlink: false,
         };
         visitor(&tree_entry)?;
     }

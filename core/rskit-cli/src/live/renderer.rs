@@ -176,9 +176,12 @@ impl LiveConsole {
 
     /// Retire every remaining region — flushing each tail to scrollback — then
     /// clear the live area and blank the header, leaving the console reusable.
+    ///
+    /// Regions are retired in id order so the flushed scrollback is deterministic.
     pub fn clear(&mut self) {
-        let regions: Vec<Region> = self.regions.drain().map(|(_, region)| region).collect();
-        for region in regions {
+        let mut regions: Vec<(String, Region)> = self.regions.drain().collect();
+        regions.sort_by(|(a, _), (b, _)| a.cmp(b));
+        for (_, region) in regions {
             self.retire(region);
         }
         self.header.set_message("");
