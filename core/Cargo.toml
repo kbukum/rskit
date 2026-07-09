@@ -80,6 +80,9 @@ tower-service = "0.3"
 # Filesystem notifications
 notify = "8"
 
+# VCS-ignore-aware tree traversal (.gitignore semantics for walk_tree)
+ignore = "0.4"
+
 # Futures / streams
 futures = "0.3"
 futures-util = "0.3"
@@ -171,6 +174,8 @@ sha2 = "0.11"
 # CLI progress bars (rskit-cli)
 indicatif = "0.18"
 crossterm = "0.29"
+# Terminal width measurement + ANSI-aware truncation for the live console.
+console = "0.16"
 
 # Benchmarking & snapshot testing
 criterion = { version = "0.8", features = ["html_reports", "async_tokio"] }

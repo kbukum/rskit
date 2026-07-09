@@ -14,16 +14,20 @@
 //!   [`OutputKV`], the [`ErrorRenderer`]/[`ExitCode`] convention, and one-off
 //!   [`StatusReporter`] feedback lines.
 //! - [`progress`] — progress bar and spinner abstractions over `indicatif`.
+//! - [`live`] — multi-region live terminal rendering ([`LiveConsole`]) for
+//!   streaming several concurrent outputs as bounded tiles.
 //! - [`prompt`] — interactive prompts (line, rich raw-mode, and scripted media)
 //!   with a non-interactive fallback.
 //! - [`signal`] — Ctrl+C / graceful shutdown via [`CancellationToken`].
 
+pub mod live;
 pub mod progress;
 pub mod prompt;
 pub mod render;
 pub mod signal;
 pub mod theme;
 
+pub use live::{LiveConfig, LiveConsole, RegionTail};
 pub use progress::{MultiProgress, ProgressBar, ProgressStyle};
 pub use prompt::{
     Capabilities, Choice, ChoiceId, Key, LineTerminal, PromptMode, Prompter, ScriptedTerminal,
