@@ -110,9 +110,12 @@ impl LiveConsole {
             tail: RegionTail::new(self.config.tail_lines),
             label,
         };
-        region
-            .bar
-            .set_message(render_tile(&region.label, &[], self.config.width));
+        region.bar.set_message(render_tile(
+            &region.label,
+            &[],
+            self.config.width,
+            self.config.tail_lines,
+        ));
         self.regions.insert(id, region);
     }
 
@@ -132,9 +135,12 @@ impl LiveConsole {
                 .ok();
         }
         let visible = region.tail.visible();
-        region
-            .bar
-            .set_message(render_tile(&region.label, &visible, self.config.width));
+        region.bar.set_message(render_tile(
+            &region.label,
+            &visible,
+            self.config.width,
+            self.config.tail_lines,
+        ));
     }
 
     /// Finish region `id`, flushing its remaining lines to scrollback, removing
@@ -184,14 +190,16 @@ fn message_style() -> ProgressStyle {
     ProgressStyle::with_template("{msg}").unwrap_or_else(|_| ProgressStyle::default_spinner())
 }
 
-/// Render one tile as a labeled header line plus indented content lines, each
-/// truncated to `width` display columns so no line can wrap and break the fixed
-/// tile height.
-fn render_tile(label: &str, lines: &[&str], width: usize) -> String {
+/// Render one tile as a labeled header line plus exactly `tail_lines` indented
+/// content lines (padded with blanks), each truncated to `width` display
+/// columns. The fixed line count keeps every tile a constant height so the live
+/// area does not reflow as streams emit output.
+fn render_tile(label: &str, lines: &[&str], width: usize, tail_lines: usize) -> String {
     let header = format!("{}", console::style(format!("• {label}")).bold());
     let mut out = truncate(&header, width);
-    for line in lines {
+    for index in 0..tail_lines {
         out.push('\n');
+        let line = lines.get(index).copied().unwrap_or("");
         out.push_str(&truncate(&format!("  {line}"), width));
     }
     out
@@ -254,14 +262,21 @@ mod tests {
 
     #[test]
     fn render_tile_labels_and_indents_lines() {
-        let tile = render_tile("core", &["a", "b"], 0);
+        let tile = render_tile("core", &["a", "b"], 0, 2);
         let stripped = console::strip_ansi_codes(&tile);
         assert_eq!(stripped, "• core\n  a\n  b");
     }
 
     #[test]
+    fn render_tile_pads_to_fixed_height() {
+        let tile = render_tile("core", &["only"], 0, 3);
+        let stripped = console::strip_ansi_codes(&tile);
+        assert_eq!(stripped, "• core\n  only\n  \n  ");
+    }
+
+    #[test]
     fn render_tile_truncates_header_and_content_to_width() {
-        let tile = render_tile("a-very-long-label", &["a-very-long-content-line"], 8);
+        let tile = render_tile("a-very-long-label", &["a-very-long-content-line"], 8, 1);
         for line in console::strip_ansi_codes(&tile).lines() {
             assert!(console::measure_text_width(line) <= 8);
         }
