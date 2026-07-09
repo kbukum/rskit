@@ -24,6 +24,9 @@ pub struct RegionTail {
     completed: VecDeque<String>,
     /// The in-progress line (no trailing newline yet).
     current: String,
+    /// Raw bytes not yet decodable — an incomplete trailing UTF-8 sequence held
+    /// until the next chunk completes it. Bounded to at most three bytes.
+    pending: Vec<u8>,
     /// Maximum number of visible lines (completed + the in-progress line).
     height: usize,
 }
@@ -35,17 +38,21 @@ impl RegionTail {
         Self {
             completed: VecDeque::new(),
             current: String::new(),
+            pending: Vec::new(),
             height: height.max(1),
         }
     }
 
     /// Append raw bytes, returning any lines evicted from the visible window.
     ///
-    /// Bytes are decoded lossily so invalid UTF-8 never aborts rendering; ANSI
-    /// styling bytes pass through untouched. Evicted lines are returned oldest
-    /// first so the caller can print them into scrollback in order.
+    /// UTF-8 sequences split across calls are buffered until complete, so
+    /// streaming chunk boundaries never corrupt text; genuinely invalid bytes
+    /// become U+FFFD. ANSI styling bytes pass through untouched. Evicted lines
+    /// are returned oldest first so the caller can print them into scrollback in
+    /// order.
     pub fn push_bytes(&mut self, bytes: &[u8]) -> Vec<String> {
-        let text = String::from_utf8_lossy(bytes);
+        self.pending.extend_from_slice(bytes);
+        let text = self.take_decoded();
         let mut evicted = Vec::new();
         for ch in text.chars() {
             match ch {
@@ -61,7 +68,35 @@ impl RegionTail {
         evicted
     }
 
-    /// The lines currently visible in the tile, oldest first.
+    /// Decode as much of the pending buffer as forms complete UTF-8, retaining
+    /// an incomplete trailing sequence for the next call. Genuinely invalid
+    /// bytes are replaced with U+FFFD so decoding always makes progress.
+    fn take_decoded(&mut self) -> String {
+        let mut out = String::new();
+        loop {
+            match std::str::from_utf8(&self.pending) {
+                Ok(valid) => {
+                    out.push_str(valid);
+                    self.pending.clear();
+                    return out;
+                }
+                Err(error) => {
+                    let valid_up_to = error.valid_up_to();
+                    out.push_str(&String::from_utf8_lossy(&self.pending[..valid_up_to]));
+                    match error.error_len() {
+                        None => {
+                            self.pending.drain(..valid_up_to);
+                            return out;
+                        }
+                        Some(bad) => {
+                            out.push('\u{FFFD}');
+                            self.pending.drain(..valid_up_to + bad);
+                        }
+                    }
+                }
+            }
+        }
+    }
     ///
     /// This is the completed lines still in the window followed by the
     /// in-progress line, capped at the configured height.
@@ -150,6 +185,16 @@ mod tests {
         all.extend(tail.push_bytes(b"l1\nl2\nl3\nl4\n"));
         all.extend(tail.drain());
         assert_eq!(all, vec!["l1", "l2", "l3", "l4"]);
+    }
+
+    #[test]
+    fn buffers_utf8_sequence_split_across_chunks() {
+        let mut tail = RegionTail::new(2);
+        // "é" is 0xC3 0xA9; feeding the two bytes separately must not corrupt it.
+        assert!(tail.push_bytes(&[0xC3]).is_empty());
+        assert_eq!(tail.visible(), vec![""]);
+        assert!(tail.push_bytes(&[0xA9]).is_empty());
+        assert_eq!(tail.visible(), vec!["é"]);
     }
 
     #[test]

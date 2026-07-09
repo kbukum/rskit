@@ -99,6 +99,10 @@ impl LiveConsole {
     pub fn begin(&mut self, id: impl Into<String>, label: impl Into<String>) {
         let id = id.into();
         let label = label.into();
+        if let Some(old) = self.regions.remove(&id) {
+            old.bar.finish_and_clear();
+            self.multi.remove(&old.bar);
+        }
         let bar = self.multi.add(ProgressBar::new(0));
         bar.set_style(message_style());
         let region = Region {
@@ -217,6 +221,16 @@ mod tests {
         console.feed("u1", b"running 3 tests\nok\nok\n");
         console.finish("u1", "ok rust:core#test");
         console.clear();
+    }
+
+    #[test]
+    fn reused_id_replaces_region_without_leaking() {
+        let mut console = LiveConsole::hidden(LiveConfig::default());
+        console.begin("u1", "first");
+        console.feed("u1", b"old\n");
+        console.begin("u1", "second");
+        console.feed("u1", b"new\n");
+        console.finish("u1", "ok");
     }
 
     #[test]
