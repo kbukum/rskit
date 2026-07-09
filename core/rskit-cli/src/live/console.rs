@@ -174,13 +174,14 @@ impl LiveConsole {
         self.multi.println(line.as_ref()).ok();
     }
 
-    /// Clear the header and every remaining tile from the terminal.
+    /// Retire every remaining region — flushing each tail to scrollback — then
+    /// clear the live area and blank the header, leaving the console reusable.
     pub fn clear(&mut self) {
-        for (_, region) in self.regions.drain() {
-            region.bar.finish_and_clear();
-            self.multi.remove(&region.bar);
+        let regions: Vec<Region> = self.regions.drain().map(|(_, region)| region).collect();
+        for region in regions {
+            self.retire(region);
         }
-        self.header.finish_and_clear();
+        self.header.set_message("");
         self.multi.clear().ok();
     }
 }
@@ -244,6 +245,19 @@ mod tests {
         console.feed("u1", b"old\n");
         console.begin("u1", "second");
         console.feed("u1", b"new\n");
+        console.finish("u1", "ok");
+    }
+
+    #[test]
+    fn console_is_reusable_after_clear() {
+        let mut console = LiveConsole::hidden(LiveConfig::default());
+        console.set_header("first pass");
+        console.begin("u1", "task");
+        console.feed("u1", b"partial output\n");
+        console.clear();
+        console.set_header("second pass");
+        console.begin("u1", "task");
+        console.feed("u1", b"more\n");
         console.finish("u1", "ok");
     }
 
