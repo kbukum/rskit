@@ -5,8 +5,8 @@
 //! per-stream viewport, [`RegionTail`], is reusable on its own for any
 //! last-*k*-lines accounting over a byte stream.
 
-mod console;
 mod region;
+mod renderer;
 
-pub use console::{LiveConfig, LiveConsole};
 pub use region::RegionTail;
+pub use renderer::{LiveConfig, LiveConsole};
