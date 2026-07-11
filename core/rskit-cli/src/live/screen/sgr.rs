@@ -36,7 +36,8 @@ pub(super) struct Sgr {
     reverse: bool,
 }
 
-/// The SGR reset sequence, emitted at the end of every non-empty rendered row.
+/// The SGR reset sequence, emitted to close a rendered row only when styling is
+/// still active at its end (a row ending in default state needs no reset).
 const RESET: &str = "\x1b[0m";
 
 /// Narrow an SGR parameter to a byte, saturating out-of-range values.
@@ -182,7 +183,8 @@ fn extended_color<'a>(param: &[u16], iter: &mut impl Iterator<Item = &'a [u16]>)
 ///
 /// Trailing default cells are trimmed so blank tail space carries no styling,
 /// an SGR sequence is emitted only where a cell's state differs from the
-/// previous one, and a single reset closes any row that emitted styling.
+/// previous one, and a single reset closes the row only when styling is still
+/// active at its end — a row that returns to default state needs no reset.
 pub(super) fn render_row(cells: &[Cell]) -> String {
     let end = cells
         .iter()
@@ -190,16 +192,14 @@ pub(super) fn render_row(cells: &[Cell]) -> String {
         .map_or(0, |index| index + 1);
     let mut out = String::new();
     let mut current = Sgr::default();
-    let mut styled = false;
     for cell in &cells[..end] {
         if cell.sgr != current {
             out.push_str(&cell.sgr.escape());
             current = cell.sgr;
-            styled = true;
         }
         out.push(cell.ch);
     }
-    if styled {
+    if current != Sgr::default() {
         out.push_str(RESET);
     }
     out
@@ -273,10 +273,17 @@ mod tests {
     }
 
     #[test]
-    fn render_row_emits_minimal_transitions_and_trailing_reset() {
+    fn render_row_emits_minimal_transitions_and_no_redundant_reset() {
+        // Styling returns to default before the row ends, so no trailing reset.
         let cells = styled_cells(b"\x1b[31mAB\x1b[0mC");
-        let rendered = render_row(&cells);
-        assert_eq!(rendered, "\x1b[0;31mAB\x1b[0mC\x1b[0m");
+        assert_eq!(render_row(&cells), "\x1b[0;31mAB\x1b[0mC");
+    }
+
+    #[test]
+    fn render_row_closes_row_when_styling_remains_active() {
+        // Styling is still active at the last cell, so a reset closes the row.
+        let cells = styled_cells(b"\x1b[31mAB");
+        assert_eq!(render_row(&cells), "\x1b[0;31mAB\x1b[0m");
     }
 
     #[test]

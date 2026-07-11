@@ -223,13 +223,11 @@ fn message_style() -> ProgressStyle {
 fn render_tile(label: &str, lines: &[&str], cols: usize, rows: usize) -> String {
     let header = format!("{}", console::style(format!("• {label}")).bold());
     let mut out = truncate(&header, cols);
+    let indent = " ".repeat(TILE_INDENT);
     for index in 0..rows {
         out.push('\n');
         let line = lines.get(index).copied().unwrap_or("");
-        out.push_str(&truncate(
-            &format!("{}{line}", " ".repeat(TILE_INDENT)),
-            cols,
-        ));
+        out.push_str(&truncate(&format!("{indent}{line}"), cols));
     }
     out
 }
