@@ -37,7 +37,7 @@ impl RegionScreen {
     pub fn new(rows: usize, cols: usize) -> Self {
         Self {
             parser: vte::Parser::new(),
-            performer: Performer::new(rows, cols),
+            performer: Performer::new(rows.max(1), cols.max(1)),
         }
     }
 

@@ -223,8 +223,10 @@ fn message_style() -> ProgressStyle {
 
 /// Render one tile as a labeled header line plus exactly `rows` indented
 /// content lines (padded with blanks), each truncated to `cols` display
-/// columns. The fixed line count keeps every tile a constant height so the live
-/// area does not reflow as streams emit output.
+/// columns. As with [`truncate`], `cols == 0` disables truncation (used only by
+/// tests; the live console always resolves `cols` to at least 1). The fixed
+/// line count keeps every tile a constant height so the live area does not
+/// reflow as streams emit output.
 fn render_tile(label: &str, lines: &[&str], cols: usize, rows: usize) -> String {
     let header = format!("{}", console::style(format!("• {label}")).bold());
     let mut out = truncate(&header, cols);
