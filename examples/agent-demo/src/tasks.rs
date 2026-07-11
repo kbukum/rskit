@@ -181,10 +181,7 @@ impl Handler<AgentTask, TaskOutput> for AgentHandler {
                 // Verify output using the same temp file
                 let out_source = FileSource::from_path(&sink_path);
                 let out_meta = file_meta(&out_source).await.ok();
-                let out_size = out_meta
-                    .and_then(|m| m.size)
-                    .map(format_size)
-                    .unwrap_or_else(|| "unknown".into());
+                let out_size = optional_size_label(out_meta.and_then(|m| m.size));
 
                 emit_progress(&emit, task_id, wid, total, total, "Done").await;
 
@@ -311,9 +308,7 @@ impl Handler<AgentTask, TaskOutput> for AgentHandler {
 
                 // Real file analysis mixed in
                 let source = FileSource::from_path(&path);
-                let mime = detect_mime(&source)
-                    .await
-                    .unwrap_or_else(|_| "unknown".into());
+                let mime = fallback_mime(detect_mime(&source).await);
                 let meta = file_meta(&source).await.ok();
 
                 for (i, &(msg, delay_ms)) in steps.iter().enumerate() {
@@ -346,6 +341,14 @@ impl Handler<AgentTask, TaskOutput> for AgentHandler {
             }
         }
     }
+}
+
+fn optional_size_label(size: Option<u64>) -> String {
+    size.map(format_size).unwrap_or_else(|| "unknown".into())
+}
+
+fn fallback_mime(result: AppResult<String>) -> String {
+    result.unwrap_or_else(|_| "unknown".into())
 }
 
 pub fn format_size(bytes: u64) -> String {
@@ -417,10 +420,23 @@ mod tests {
     }
 
     #[test]
+    fn optional_size_label_falls_back_to_unknown() {
+        assert_eq!(optional_size_label(None), "unknown");
+        assert_eq!(optional_size_label(Some(1_500)), "1.5 KB");
+    }
+
+    #[test]
     fn format_size_units() {
         assert_eq!(format_size(500), "500 B");
         assert_eq!(format_size(35_300), "35.3 KB");
         assert_eq!(format_size(2_500_000), "2.5 MB");
+    }
+
+    #[test]
+    fn fallback_mime_uses_unknown_on_error() {
+        let err = AppError::new(ErrorCode::Internal, "mime failed");
+        assert_eq!(fallback_mime(Err(err)), "unknown");
+        assert_eq!(fallback_mime(Ok("image/png".into())), "image/png");
     }
 
     #[test]

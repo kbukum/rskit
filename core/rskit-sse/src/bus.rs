@@ -331,4 +331,21 @@ mod tests {
         let event = stream.next().await.expect("axum replay").unwrap();
         drop(event);
     }
+
+    #[tokio::test]
+    async fn axum_live_stream_and_serialization_skip_paths_are_exercised() {
+        let bus = SseBus::new(4).unwrap();
+        let mut stream = std::pin::pin!(bus.subscribe_axum());
+        bus.publish(TestEvent { msg: "live".into() }).unwrap();
+        let event = stream.next().await.expect("live event").unwrap();
+        drop(event);
+
+        let skipped = axum_event(Ok(SseEvent {
+            id: "bad".to_string(),
+            event: None,
+            retry: None,
+            data: FailingEvent,
+        }));
+        assert!(skipped.is_none());
+    }
 }

@@ -303,4 +303,37 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(counter.load(Ordering::SeqCst), 2);
     }
+
+    #[tokio::test]
+    async fn public_retry_constructor_and_config_builders_wrap_handler() {
+        let callback_count = Arc::new(AtomicU32::new(0));
+        let callback_seen = callback_count.clone();
+        let config = RetryConfig::from_policy(RetryPolicy::new())
+            .with_max_attempts(1)
+            .with_max_backoff(Duration::from_millis(5))
+            .with_backoff_factor(1.0)
+            .with_constant_backoff(ConstantBackoff::new(Duration::from_millis(1)))
+            .with_linear_backoff(LinearBackoff::new(
+                Duration::from_millis(1),
+                Duration::from_millis(1),
+                Duration::from_millis(5),
+            ))
+            .with_retry_if(|_| false)
+            .with_on_retry(move |_, _| {
+                callback_seen.fetch_add(1, Ordering::SeqCst);
+            });
+        let _policy = config.clone().into_policy();
+        let _borrowed = config.policy();
+
+        let base: Arc<dyn MessageHandler<String>> =
+            Arc::new(FnHandler::new(|_msg: Message<String>| async { Ok(()) }));
+        let middleware: Arc<dyn HandlerMiddleware<String>> = Arc::new(retry(config));
+        let handler = chain_handlers(base, &[middleware]);
+
+        handler
+            .handle(Message::new("t", "ok".to_string()))
+            .await
+            .unwrap();
+        assert_eq!(callback_count.load(Ordering::SeqCst), 0);
+    }
 }

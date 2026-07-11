@@ -33,9 +33,8 @@ impl ImageProcessor {
     fn save_image(img: &DynamicImage, format: ImageFormat) -> AppResult<Vec<u8>> {
         let mut buf = Vec::new();
         let mut cursor = Cursor::new(&mut buf);
-        img.write_to(&mut cursor, format).map_err(|e| {
-            AppError::new(ErrorCode::Internal, format!("failed to encode image: {e}"))
-        })?;
+        img.write_to(&mut cursor, format)
+            .map_err(encode_image_error)?;
         Ok(buf)
     }
 
@@ -71,6 +70,13 @@ impl Default for ImageProcessor {
     fn default() -> Self {
         Self::new(Arc::new(Config::default()))
     }
+}
+
+fn encode_image_error(error: image::ImageError) -> AppError {
+    AppError::new(
+        ErrorCode::Internal,
+        format!("failed to encode image: {error}"),
+    )
 }
 
 #[async_trait::async_trait]
@@ -380,5 +386,54 @@ impl MediaExecutor for ImageProcessor {
 
     fn preview(&self, _source: &FileSource, ops: &[MediaOp]) -> AppResult<Vec<String>> {
         Ok(vec![format!("ImageProcessor: {} operations", ops.len())])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_constructs_with_default_config() {
+        let _processor = ImageProcessor::default();
+    }
+
+    #[test]
+    fn source_extensions_and_format_names_map_to_image_formats() {
+        for (path, expected) in [
+            ("image.jpg", ImageFormat::Jpeg),
+            ("image.gif", ImageFormat::Gif),
+            ("image.bmp", ImageFormat::Bmp),
+            ("image.tif", ImageFormat::Tiff),
+            ("image.avif", ImageFormat::Avif),
+            ("image.unknown", ImageFormat::Png),
+        ] {
+            assert_eq!(
+                ImageProcessor::detect_format(&FileSource::from_path(path)),
+                expected
+            );
+        }
+
+        for (name, expected) in [
+            ("jpg", ImageFormat::Jpeg),
+            ("gif", ImageFormat::Gif),
+            ("bmp", ImageFormat::Bmp),
+            ("tif", ImageFormat::Tiff),
+            ("webp", ImageFormat::WebP),
+            ("avif", ImageFormat::Avif),
+            ("unknown", ImageFormat::Png),
+        ] {
+            assert_eq!(ImageProcessor::format_from_name(name), expected);
+        }
+    }
+
+    #[test]
+    fn encode_image_error_reports_internal_failure() {
+        let error = encode_image_error(image::ImageError::IoError(std::io::Error::other(
+            "encode failed",
+        )));
+
+        assert_eq!(error.code(), ErrorCode::Internal);
+        assert!(error.to_string().contains("failed to encode image"));
     }
 }

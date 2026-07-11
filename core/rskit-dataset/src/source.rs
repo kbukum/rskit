@@ -105,5 +105,9 @@ mod tests {
         let mut default_resume = DefaultResumeSource;
         default_resume.set_resume_state(1, 1);
         assert_eq!(default_resume.display_name(), "default");
+        assert_eq!(default_resume.cache_key(), json!("default"));
+        assert_eq!(default_resume.max_items(), None);
+        let stream = Box::new(default_resume).stream(CancellationToken::new());
+        drop(stream);
     }
 }

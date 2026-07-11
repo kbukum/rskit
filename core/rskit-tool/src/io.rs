@@ -228,18 +228,8 @@ mod tests {
                 S: serde::Serializer,
             {
                 let mut state = serializer.serialize_struct("FailingOutput", 1)?;
-                state.serialize_field("bad", &FailingField)?;
-                state.end()
-            }
-        }
-
-        struct FailingField;
-
-        impl Serialize for FailingField {
-            fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
-            where
-                S: serde::Serializer,
-            {
+                state.serialize_field("bad", &"ok")?;
+                state.end()?;
                 Err(S::Error::custom("boom"))
             }
         }
@@ -285,6 +275,12 @@ mod tests {
         let output = ToolOutput::from(serde_json::json!({"ok": true}));
         assert_eq!(output.as_json()["ok"], true);
         assert_eq!(output["ok"], true);
+        assert_eq!(output, serde_json::json!({"ok": true}));
         assert_eq!(output.into_json(), serde_json::json!({"ok": true}));
+    }
+
+    #[test]
+    fn tool_input_default_is_empty_object() {
+        assert_eq!(ToolInput::default().into_json(), serde_json::json!({}));
     }
 }

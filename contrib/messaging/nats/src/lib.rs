@@ -50,12 +50,7 @@ impl NatsProducer {
         if let Some(client) = guard.as_ref() {
             return Ok(client.clone());
         }
-        let client = connect(&self.config).await.map_err(|e| {
-            AppError::new(
-                ErrorCode::ExternalService,
-                format!("NATS connect failed: {e}"),
-            )
-        })?;
+        let client = connect(&self.config).await.map_err(nats_connect_error)?;
         *guard = Some(client.clone());
         drop(guard);
         Ok(client)
@@ -71,12 +66,7 @@ impl MessageProducer<Vec<u8>> for NatsProducer {
         client
             .publish(subject, Bytes::from(msg.payload))
             .await
-            .map_err(|e| {
-                AppError::new(
-                    ErrorCode::ExternalService,
-                    format!("NATS publish failed: {e}"),
-                )
-            })?;
+            .map_err(nats_publish_error)?;
         debug!(topic = %msg.topic, "message sent to NATS");
         Ok(())
     }
@@ -90,23 +80,13 @@ impl MessageProducer<Vec<u8>> for NatsProducer {
 
     async fn flush(&self, _timeout: Duration) -> AppResult<()> {
         let client = self.client().await?;
-        client.flush().await.map_err(|e| {
-            AppError::new(
-                ErrorCode::ExternalService,
-                format!("NATS flush failed: {e}"),
-            )
-        })
+        client.flush().await.map_err(nats_flush_error)
     }
 
     async fn close(&self) -> AppResult<()> {
         let client = self.client.lock().await.take();
         if let Some(client) = client {
-            client.flush().await.map_err(|e| {
-                AppError::new(
-                    ErrorCode::ExternalService,
-                    format!("NATS flush before close failed: {e}"),
-                )
-            })?;
+            client.flush().await.map_err(nats_close_flush_error)?;
         }
         Ok(())
     }
@@ -124,6 +104,41 @@ impl EventProducer for NatsProducer {
         }
         Ok(())
     }
+}
+
+fn nats_connect_error(error: impl std::fmt::Display) -> AppError {
+    AppError::new(
+        ErrorCode::ExternalService,
+        format!("NATS connect failed: {error}"),
+    )
+}
+
+fn nats_publish_error(error: impl std::fmt::Display) -> AppError {
+    AppError::new(
+        ErrorCode::ExternalService,
+        format!("NATS publish failed: {error}"),
+    )
+}
+
+fn nats_flush_error(error: impl std::fmt::Display) -> AppError {
+    AppError::new(
+        ErrorCode::ExternalService,
+        format!("NATS flush failed: {error}"),
+    )
+}
+
+fn nats_close_flush_error(error: impl std::fmt::Display) -> AppError {
+    AppError::new(
+        ErrorCode::ExternalService,
+        format!("NATS flush before close failed: {error}"),
+    )
+}
+
+fn nats_subscribe_error(error: impl std::fmt::Display) -> AppError {
+    AppError::new(
+        ErrorCode::ExternalService,
+        format!("NATS subscribe failed: {error}"),
+    )
 }
 
 /// NATS-backed message consumer.
@@ -161,12 +176,7 @@ impl NatsConsumer {
         if let Some(client) = guard.as_ref() {
             return Ok(client.clone());
         }
-        let client = connect(&self.config).await.map_err(|e| {
-            AppError::new(
-                ErrorCode::ExternalService,
-                format!("NATS connect failed: {e}"),
-            )
-        })?;
+        let client = connect(&self.config).await.map_err(nats_connect_error)?;
         *guard = Some(client.clone());
         drop(guard);
         Ok(client)
@@ -196,12 +206,7 @@ impl MessageConsumer<Vec<u8>> for NatsConsumer {
                 } else {
                     client.subscribe(subject).await
                 }
-                .map_err(|e| {
-                    AppError::new(
-                        ErrorCode::ExternalService,
-                        format!("NATS subscribe failed: {e}"),
-                    )
-                })?;
+                .map_err(nats_subscribe_error)?;
             let sender = self.sender.clone();
             let active_tasks = self.active_tasks.clone();
             let task_finished = self.task_finished.clone();
@@ -627,6 +632,24 @@ mod tests {
 
         tokio::time::sleep(Duration::from_millis(150)).await;
     }
+
+    #[test]
+    fn shutdown_consumer_tasks_aborts_without_runtime_handle() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .unwrap();
+        let task = {
+            let _guard = runtime.enter();
+            SpawnedTask::spawn(|_cancel| async move {
+                futures_util::future::pending::<()>().await;
+            })
+        };
+        drop(runtime);
+
+        shutdown_consumer_tasks(vec![task]);
+    }
+
     #[test]
     fn nats_subject_prefix_validates_combined_subject() {
         let config = Config {
@@ -713,5 +736,43 @@ mod tests {
             .await
             .unwrap_err();
         assert_eq!(err.code(), ErrorCode::ExternalService);
+    }
+
+    #[tokio::test]
+    async fn producer_flush_reports_fast_connection_failures() {
+        let producer = NatsProducer::new(Config {
+            servers: vec!["nats://127.0.0.1:1".to_string()],
+            allow_insecure_dev: true,
+            connection_timeout: 1,
+            max_reconnects: Some(0),
+            ..Config::default()
+        })
+        .unwrap();
+
+        let err = producer.flush(Duration::ZERO).await.unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::ExternalService);
+    }
+
+    #[test]
+    fn nats_error_helpers_preserve_external_service_context() {
+        let errors = [
+            (nats_connect_error("connect failed"), "NATS connect failed"),
+            (nats_publish_error("publish failed"), "NATS publish failed"),
+            (nats_flush_error("flush failed"), "NATS flush failed"),
+            (
+                nats_close_flush_error("close flush failed"),
+                "NATS flush before close failed",
+            ),
+            (
+                nats_subscribe_error("subscribe failed"),
+                "NATS subscribe failed",
+            ),
+        ];
+
+        for (error, message) in errors {
+            assert_eq!(error.code(), ErrorCode::ExternalService);
+            assert!(error.to_string().contains(message));
+        }
     }
 }

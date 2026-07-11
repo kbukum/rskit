@@ -87,3 +87,38 @@ where
         self.step_count == 0
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rskit_errors::ErrorCode;
+
+    #[tokio::test]
+    async fn run_cleanups_collects_multiple_failures_in_lifo_order() {
+        let cleanups: Vec<CleanupAction> = vec![
+            Box::new(|| {
+                Box::pin(async { Err(AppError::new(ErrorCode::Internal, "cleanup one failed")) })
+            }),
+            Box::new(|| {
+                Box::pin(async { Err(AppError::new(ErrorCode::Internal, "cleanup two failed")) })
+            }),
+        ];
+
+        let error = run_cleanups(cleanups)
+            .await
+            .expect_err("cleanup failures should be reported");
+
+        assert_eq!(error.code(), ErrorCode::Internal);
+        assert!(error.message().contains("cleanup two failed"));
+        assert!(error.message().contains("cleanup one failed"));
+    }
+
+    #[tokio::test]
+    async fn run_cleanups_succeeds_when_all_actions_succeed() {
+        let cleanups: Vec<CleanupAction> = vec![Box::new(|| Box::pin(async { Ok(()) }))];
+
+        run_cleanups(cleanups)
+            .await
+            .expect("successful cleanups should pass");
+    }
+}

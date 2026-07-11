@@ -227,6 +227,22 @@ mod tests {
     }
 
     #[test]
+    fn operation_kind_defaults_cover_all_variants() {
+        let cases = [
+            (OperationKind::ThumbnailExtract, 0.1, 30),
+            (OperationKind::AudioProcess, 0.5, 60),
+            (OperationKind::SceneDetect, 1.5, 120),
+            (OperationKind::Filter, 2.0, 120),
+            (OperationKind::SubtitleBurn, 3.0, 120),
+        ];
+
+        for (kind, multiplier, base_secs) in cases {
+            assert_eq!(kind.default_multiplier(), multiplier);
+            assert_eq!(kind.default_base_timeout(), Duration::from_secs(base_secs));
+        }
+    }
+
+    #[test]
     fn max_timeout_is_respected() {
         let calc = TimeoutCalculator::default().with_max_timeout(Duration::from_secs(600));
         let t = calc.calculate(Duration::from_secs(3600), OperationKind::Transcode);

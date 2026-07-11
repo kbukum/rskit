@@ -191,11 +191,25 @@ mod tests {
         let dir = tempdir().unwrap();
         let path = dir.path().join("absent.toml");
         let sink = FileConfigSink::new(&path);
+        assert_eq!(sink.path(), path.as_path());
+        assert_eq!(sink.codec().name(), "toml");
         assert!(sink.read_table().unwrap().is_empty());
         // Removing from an absent file is a no-op success that does not create
         // the backing file.
         sink.remove("anything").unwrap();
         assert!(!path.exists());
+    }
+
+    #[test]
+    fn invalid_backing_files_are_rejected() {
+        let dir = tempdir().unwrap();
+        let malformed = dir.path().join("malformed.toml");
+        std::fs::write(&malformed, "not = [").unwrap();
+        assert!(FileConfigSink::new(&malformed).read_table().is_err());
+
+        let non_table = dir.path().join("array.toml");
+        std::fs::write(&non_table, "[[items]]\nname = 'x'\n").unwrap();
+        assert!(FileConfigSink::new(&non_table).read_table().is_err());
     }
 
     #[test]

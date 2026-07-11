@@ -494,6 +494,7 @@ mod tests {
     #[tokio::test]
     async fn audio_analysis_runner_formats_generated_wav() {
         let path = temp_wav_path();
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(&path, silent_wav()).unwrap();
 
         let output = run_audio_analysis(&AudioAnalysisArgs {
@@ -585,8 +586,8 @@ mod tests {
 
     fn temp_wav_path() -> PathBuf {
         static NEXT_ID: AtomicU64 = AtomicU64::new(0);
-        std::env::temp_dir().join(format!(
-            "rskit-media-demo-{}-{}.wav",
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!(
+            "target/rskit-media-demo-{}-{}.wav",
             std::process::id(),
             NEXT_ID.fetch_add(1, Ordering::Relaxed)
         ))

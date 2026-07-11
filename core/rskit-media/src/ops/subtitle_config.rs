@@ -49,3 +49,15 @@ impl SubtitleFormat {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn subtitle_formats_report_extensions() {
+        assert_eq!(SubtitleFormat::Srt.extension(), "srt");
+        assert_eq!(SubtitleFormat::Vtt.extension(), "vtt");
+        assert_eq!(SubtitleFormat::Ass.extension(), "ass");
+    }
+}

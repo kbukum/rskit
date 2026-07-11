@@ -31,26 +31,9 @@ impl CorsPolicy {
     /// # Errors
     /// Returns an error when an origin, method, or header is invalid.
     pub fn validate(&self) -> AppResult<()> {
-        for origin in &self.allowed_origins {
-            validate_allowed_origin(origin)?;
-        }
-        if self.allow_credentials && self.allowed_origins.is_empty() {
-            return Err(AppError::invalid_input(
-                "allowed_origins",
-                "credentials require an explicit origin allow-list",
-            ));
-        }
-
-        for method in &self.allowed_methods {
-            method.parse::<Method>().map_err(|error| {
-                AppError::invalid_input("allowed_methods", format!("invalid method: {error}"))
-            })?;
-        }
-        for header in &self.allowed_headers {
-            HeaderName::from_bytes(header.as_bytes()).map_err(|error| {
-                AppError::invalid_input("allowed_headers", format!("invalid header: {error}"))
-            })?;
-        }
+        self.build_origins()?;
+        self.build_methods()?;
+        self.build_headers()?;
         Ok(())
     }
 
@@ -59,35 +42,9 @@ impl CorsPolicy {
     /// # Errors
     /// Returns an error when an origin, method, or header is invalid.
     pub fn layer(&self) -> AppResult<CorsLayer> {
-        self.validate()?;
-
-        let origins = self
-            .allowed_origins
-            .iter()
-            .map(|origin| {
-                HeaderValue::from_str(origin).map_err(|error| {
-                    AppError::invalid_input("allowed_origins", format!("invalid origin: {error}"))
-                })
-            })
-            .collect::<AppResult<Vec<_>>>()?;
-        let methods = self
-            .allowed_methods
-            .iter()
-            .map(|method| {
-                method.parse::<Method>().map_err(|error| {
-                    AppError::invalid_input("allowed_methods", format!("invalid method: {error}"))
-                })
-            })
-            .collect::<AppResult<Vec<_>>>()?;
-        let headers = self
-            .allowed_headers
-            .iter()
-            .map(|header| {
-                HeaderName::from_bytes(header.as_bytes()).map_err(|error| {
-                    AppError::invalid_input("allowed_headers", format!("invalid header: {error}"))
-                })
-            })
-            .collect::<AppResult<Vec<_>>>()?;
+        let origins = self.build_origins()?;
+        let methods = self.build_methods()?;
+        let headers = self.build_headers()?;
 
         let mut layer = CorsLayer::new()
             .allow_origin(AllowOrigin::list(origins))
@@ -100,6 +57,46 @@ impl CorsPolicy {
         }
 
         Ok(layer)
+    }
+
+    fn build_origins(&self) -> AppResult<Vec<HeaderValue>> {
+        if self.allow_credentials && self.allowed_origins.is_empty() {
+            return Err(AppError::invalid_input(
+                "allowed_origins",
+                "credentials require an explicit origin allow-list",
+            ));
+        }
+        self.allowed_origins
+            .iter()
+            .map(|origin| {
+                validate_allowed_origin(origin)?;
+                HeaderValue::from_str(origin).map_err(|error| {
+                    AppError::invalid_input("allowed_origins", format!("invalid origin: {error}"))
+                })
+            })
+            .collect()
+    }
+
+    fn build_methods(&self) -> AppResult<Vec<Method>> {
+        self.allowed_methods
+            .iter()
+            .map(|method| {
+                method.parse::<Method>().map_err(|error| {
+                    AppError::invalid_input("allowed_methods", format!("invalid method: {error}"))
+                })
+            })
+            .collect()
+    }
+
+    fn build_headers(&self) -> AppResult<Vec<HeaderName>> {
+        self.allowed_headers
+            .iter()
+            .map(|header| {
+                HeaderName::from_bytes(header.as_bytes()).map_err(|error| {
+                    AppError::invalid_input("allowed_headers", format!("invalid header: {error}"))
+                })
+            })
+            .collect()
     }
 }
 
@@ -216,5 +213,65 @@ mod tests {
             max_age: Duration::from_mins(1),
         };
         assert!(policy.validate().is_err());
+    }
+
+    #[test]
+    fn rejects_malformed_and_hostless_origins() {
+        for origin in ["http://[", "https:"] {
+            let policy = CorsPolicy {
+                allowed_origins: vec![origin.to_string()],
+                allowed_methods: vec!["GET".to_string()],
+                allowed_headers: vec!["authorization".to_string()],
+                allow_credentials: false,
+                max_age: Duration::from_secs(0),
+            };
+            assert!(policy.validate().is_err());
+        }
+    }
+
+    #[test]
+    fn layer_builds_with_and_without_max_age() {
+        let policy = CorsPolicy {
+            allowed_origins: vec!["https://example.com".to_string()],
+            allowed_methods: vec!["GET".to_string(), "POST".to_string()],
+            allowed_headers: vec!["authorization".to_string()],
+            allow_credentials: true,
+            max_age: Duration::from_mins(5),
+        };
+        assert!(policy.layer().is_ok());
+
+        let policy = CorsPolicy {
+            max_age: Duration::from_secs(0),
+            ..policy
+        };
+        assert!(policy.layer().is_ok());
+    }
+
+    #[test]
+    fn layer_surfaces_invalid_method() {
+        let policy = CorsPolicy {
+            allowed_origins: vec!["https://example.com".to_string()],
+            allowed_methods: vec!["bad method".to_string()],
+            allowed_headers: vec![],
+            allow_credentials: false,
+            max_age: Duration::from_secs(0),
+        };
+        assert!(policy.layer().is_err());
+    }
+
+    #[test]
+    fn credentials_require_explicit_origin() {
+        let policy = CorsPolicy {
+            allowed_origins: vec![],
+            allowed_methods: vec!["GET".to_string()],
+            allowed_headers: vec![],
+            allow_credentials: true,
+            max_age: Duration::from_secs(0),
+        };
+        let err = policy.validate().unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("credentials require an explicit origin allow-list")
+        );
     }
 }

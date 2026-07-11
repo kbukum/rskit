@@ -55,3 +55,37 @@ pub fn register_builtins(registry: &mut CommandRegistry) -> Result<(), AppError>
 }
 
 // ── Tests ───────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn builtins_register_and_execute_expected_responses() {
+        let mut registry = CommandRegistry::new();
+        register_builtins(&mut registry).unwrap();
+
+        assert!(
+            registry
+                .execute("/help")
+                .unwrap()
+                .contains("Available commands")
+        );
+        assert_eq!(
+            registry.execute("/clear").unwrap(),
+            "Conversation history cleared."
+        );
+        assert!(
+            registry
+                .execute("/model")
+                .unwrap()
+                .contains("Usage: /model")
+        );
+        assert_eq!(
+            registry.execute("/model claude").unwrap(),
+            "Model switched to: claude"
+        );
+        assert_eq!(registry.execute("/compact").unwrap(), "Context compacted.");
+        assert_eq!(registry.list().len(), 4);
+    }
+}

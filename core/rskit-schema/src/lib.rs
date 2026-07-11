@@ -110,6 +110,24 @@ mod tests {
     }
 
     #[test]
+    fn generate_document_helpers_return_schema_documents() {
+        let document = generate_document::<Simple>().unwrap();
+        assert!(document.as_json().is_object());
+
+        let document = generate_with_options::<Simple>(Options {
+            title: Some("Override".to_string()),
+            description: Some("Generated document".to_string()),
+        })
+        .unwrap();
+        let obj = document.as_json().as_object().unwrap();
+        assert_eq!(obj.get("title").and_then(|v| v.as_str()), Some("Override"));
+        assert_eq!(
+            obj.get("description").and_then(|v| v.as_str()),
+            Some("Generated document")
+        );
+    }
+
+    #[test]
     fn test_string_type_properties() {
         let schema = generate::<Simple>().unwrap();
         let props = schema
@@ -320,6 +338,13 @@ mod tests {
     }
 
     #[test]
+    fn validation_result_valid_constructor_is_empty_success() {
+        let result = ValidationResult::valid();
+        assert!(result.valid);
+        assert!(result.errors.is_empty());
+    }
+
+    #[test]
     fn validate_invalid_schema_returns_error_result() {
         let schema = json!({"type": "not-a-json-schema-type"});
         let result = validate(&schema, &json!("value"));
@@ -368,6 +393,18 @@ mod tests {
         let value = json!("abcdef");
         let options = ValidationOptions {
             limits: ValidationLimits::new(10, 100).with_max_string_bytes(5),
+        };
+
+        let err = validate_with_options(&schema, &value, options).unwrap_err();
+        assert_eq!(err.code(), rskit_errors::ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn validate_with_options_rejects_excessive_node_count() {
+        let schema = json!({});
+        let value = json!({"a": [1, 2, 3]});
+        let options = ValidationOptions {
+            limits: ValidationLimits::new(10, 3),
         };
 
         let err = validate_with_options(&schema, &value, options).unwrap_err();

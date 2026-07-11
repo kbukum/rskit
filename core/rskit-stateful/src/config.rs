@@ -112,3 +112,26 @@ where
         self
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ByteSizeTrigger;
+
+    #[test]
+    fn config_debug_clone_and_builders_preserve_fields() {
+        let config = AccumulatorConfig::<Vec<u8>>::new()
+            .with_ttl(Duration::from_secs(2))
+            .without_keep_alive()
+            .with_max_size(10)
+            .with_trigger(Arc::new(ByteSizeTrigger::new(4)))
+            .with_measurer(Arc::new(CountMeasurer));
+        let cloned = config.clone();
+
+        assert_eq!(cloned.ttl, Some(Duration::from_secs(2)));
+        assert!(!cloned.keep_alive);
+        assert_eq!(cloned.max_size, Some(10));
+        assert_eq!(cloned.triggers.len(), 1);
+        assert!(format!("{cloned:?}").contains("AccumulatorConfig"));
+    }
+}

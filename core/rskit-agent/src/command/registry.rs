@@ -121,3 +121,56 @@ impl CommandRegistry {
         cmd.handler.execute(args)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn command(name: &str) -> Command {
+        Command {
+            name: name.to_string(),
+            description: format!("{name} command"),
+            usage: format!("/{name}"),
+            handler: Box::new(|args: &str| Ok(format!("ran {args}"))),
+        }
+    }
+
+    #[test]
+    fn registry_registers_lists_parses_and_executes_commands() {
+        let mut registry = CommandRegistry::default();
+        registry.register(command("zeta")).unwrap();
+        registry.register(command("alpha")).unwrap();
+
+        let names = registry
+            .list()
+            .into_iter()
+            .map(|cmd| cmd.name.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(names, vec!["alpha", "zeta"]);
+        assert_eq!(
+            CommandRegistry::parse_command(" /alpha  beta "),
+            Some(("alpha", "beta"))
+        );
+        assert_eq!(registry.execute("/alpha payload").unwrap(), "ran payload");
+    }
+
+    #[test]
+    fn registry_rejects_invalid_or_unknown_commands() {
+        let mut registry = CommandRegistry::new();
+        assert_eq!(
+            registry.register(command(" ")).unwrap_err().code(),
+            ErrorCode::InvalidInput
+        );
+
+        assert!(!CommandRegistry::is_command("hello"));
+        assert!(!CommandRegistry::is_command("/1"));
+        assert_eq!(
+            registry.execute("hello").unwrap_err().code(),
+            ErrorCode::InvalidInput
+        );
+        assert_eq!(
+            registry.execute("/missing").unwrap_err().code(),
+            ErrorCode::InvalidInput
+        );
+    }
+}

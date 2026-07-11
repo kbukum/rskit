@@ -139,3 +139,44 @@ fn dotenv_config_from_path(path: &Path, prefix: &str, label: &str) -> AppResult<
         .build()
         .map_err(|e| AppError::invalid_input("config", e.to_string()))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn profile_name_resolution_rejects_empty_names() {
+        assert_eq!(Profile::Name("dev".to_string()).resolve().unwrap(), "dev");
+        assert!(Profile::Name("  ".to_string()).resolve().is_err());
+    }
+
+    #[test]
+    fn dotenv_constructors_load_prefixes_and_ignore_auto_discovered_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        let env_file = dir.path().join(".env");
+        std::fs::write(
+            &env_file,
+            "APP__SERVICE__PORT=8080\nAPP__SERVICE__DEBUG=true\nOTHER__VALUE=ignored\n",
+        )
+        .unwrap();
+
+        let required = DotenvFileSource::required(&env_file, "APP")
+            .collect()
+            .unwrap();
+        assert_eq!(required.get_int("service.port").unwrap(), 8080);
+        assert!(required.get_bool("service.debug").unwrap());
+        assert!(required.get_string("other.value").is_err());
+
+        let profile = DotenvFileSource::profile(&env_file, "APP")
+            .collect()
+            .unwrap();
+        assert_eq!(profile.get_int("service.port").unwrap(), 8080);
+
+        let malformed = dir.path().join("bad.env");
+        std::fs::write(&malformed, "not valid dotenv '").unwrap();
+        let ignored = DotenvFileSource::auto_discovered(&malformed, "")
+            .collect()
+            .unwrap();
+        assert!(ignored.get_string("anything").is_err());
+    }
+}

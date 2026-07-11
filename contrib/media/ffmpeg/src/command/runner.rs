@@ -198,6 +198,37 @@ mod tests {
         assert!(!error.stderr.contains("first line"));
     }
 
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn runner_reports_cancelled_and_timed_out_processes() {
+        let output = rskit_storage::TempFile::with_extension("mp4").unwrap();
+
+        let cancel_script = write_script("while true; do :; done");
+        let cancel_config = FfmpegConfig::default().with_ffmpeg_path(cancel_script.path());
+        let cancel = CancellationToken::new();
+        cancel.cancel();
+        let cancelled = command()
+            .run_with_cancel(&cancel_config, None, output.path(), cancel)
+            .await
+            .unwrap_err();
+        assert_eq!(cancelled.kind, crate::error::FfmpegErrorKind::Cancelled);
+
+        let timeout_script = write_script("echo 'still running' >&2\nwhile true; do :; done");
+        let timeout_config = FfmpegConfig::default()
+            .with_ffmpeg_path(timeout_script.path())
+            .with_timeout(std::time::Duration::from_millis(1));
+        let timed_out = command()
+            .run_with_cancel(
+                &timeout_config,
+                None,
+                output.path(),
+                CancellationToken::new(),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(timed_out.kind, crate::error::FfmpegErrorKind::Timeout);
+    }
+
     #[test]
     fn stderr_ring_buffer_keeps_last_lines() {
         let lines = Mutex::new(VecDeque::with_capacity(2));

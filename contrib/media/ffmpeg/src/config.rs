@@ -494,4 +494,15 @@ mod tests {
             assert_eq!(level.as_ffmpeg_arg(), expected);
         }
     }
+
+    #[test]
+    fn serde_defaults_fill_retry_and_stderr_limits() {
+        let config: FfmpegConfig =
+            serde_json::from_str(r#"{"overwrite":true,"log_level":"Warning"}"#).unwrap();
+
+        assert!(config.hw_accel_fallback);
+        assert_eq!(config.max_retries, 1);
+        assert_eq!(config.max_stderr_lines, 100);
+        assert!(config.input_video_decoder.is_none());
+    }
 }

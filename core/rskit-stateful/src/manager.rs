@@ -176,4 +176,18 @@ mod tests {
             assert!(Arc::ptr_eq(&accumulators[0], accumulator));
         }
     }
+
+    #[test]
+    fn flush_size_and_keys_handle_missing_and_existing_keys() {
+        let manager = Manager::new(AccumulatorConfig::new(), || {
+            Box::new(MemoryStore::<i32>::new())
+        });
+
+        assert_eq!(manager.flush(&"missing").unwrap(), None);
+        assert_eq!(manager.size(&"missing").unwrap(), 0);
+        manager.append("a", 1).unwrap();
+
+        assert_eq!(manager.keys(), vec!["a"]);
+        assert_eq!(manager.flush(&"a").unwrap(), Some(vec![1]));
+    }
 }

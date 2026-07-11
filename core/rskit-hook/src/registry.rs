@@ -194,7 +194,7 @@ mod tests {
 
     use tokio_util::sync::CancellationToken;
 
-    use super::HookRegistry;
+    use super::{HookRegistry, LifecycleHookRegistry, panic_message};
     use crate::{Event, EventType, HookError};
 
     struct Ping;
@@ -259,11 +259,8 @@ mod tests {
         let counter = Arc::new(AtomicU32::new(0));
         let _unsubscribe1 =
             registry.on::<Ping>(ping_type(), |_, _| Err(HookError::fatal("blocked")));
-        let cloned = Arc::clone(&counter);
-        let _unsubscribe2 = registry.on::<Ping>(ping_type(), move |_, _| {
-            cloned.fetch_add(1, Ordering::SeqCst);
-            Ok(())
-        });
+        let _unsubscribe2 =
+            registry.on::<Ping>(ping_type(), |_, _| unreachable!("short-circuited"));
         assert!(
             registry
                 .emit(&Ping, CancellationToken::new())
@@ -277,11 +274,7 @@ mod tests {
     fn cancelled_emit_errors_before_dispatch() {
         let registry = HookRegistry::new();
         let counter = Arc::new(AtomicU32::new(0));
-        let cloned = Arc::clone(&counter);
-        let _unsubscribe = registry.on::<Ping>(ping_type(), move |_, _| {
-            cloned.fetch_add(1, Ordering::SeqCst);
-            Ok(())
-        });
+        let _unsubscribe = registry.on::<Ping>(ping_type(), |_, _| unreachable!("cancelled"));
         let token = CancellationToken::new();
         token.cancel();
         assert!(
@@ -310,21 +303,18 @@ mod tests {
     #[test]
     fn unsubscribe_removes_handler() {
         let registry = HookRegistry::new();
-        let counter = Arc::new(AtomicU32::new(0));
-        let cloned = Arc::clone(&counter);
         struct ErrorEvent;
         impl Event for ErrorEvent {
             fn event_type(&self) -> EventType {
                 EventType::new("error")
             }
         }
-        let unsubscribe = registry.on::<ErrorEvent>(EventType::new("error"), move |_, _| {
-            cloned.fetch_add(1, Ordering::SeqCst);
-            Ok(())
-        });
+        let unsubscribe =
+            registry.on::<ErrorEvent>(EventType::new("error"), |_, _| unreachable!("unsubscribed"));
         unsubscribe();
-        let _ = registry.emit(&ErrorEvent, CancellationToken::new());
-        assert_eq!(counter.load(Ordering::SeqCst), 0);
+        registry
+            .emit(&ErrorEvent, CancellationToken::new())
+            .unwrap();
     }
 
     #[test]
@@ -391,5 +381,31 @@ mod tests {
 
         assert_eq!(counter.load(Ordering::SeqCst), 1);
         assert!(!registry.has_handlers::<Ping>(&ping_type()));
+    }
+
+    #[test]
+    fn default_and_lifecycle_registry_are_empty() {
+        let registry = LifecycleHookRegistry::default();
+
+        assert!(!registry.has_handlers::<Ping>(&ping_type()));
+        assert!(format!("{registry:?}").contains("handler_counts"));
+    }
+
+    #[test]
+    fn debug_reports_registered_event_type_counts() {
+        let registry = HookRegistry::new();
+        let _unsubscribe = registry.on::<Ping>(ping_type(), |_, _| Ok(()));
+
+        let debug = format!("{registry:?}");
+
+        assert!(debug.contains("ping"));
+        assert!(debug.contains('1'));
+    }
+
+    #[test]
+    fn panic_message_handles_all_payload_shapes() {
+        assert_eq!(panic_message(Box::new("borrowed")), "borrowed");
+        assert_eq!(panic_message(Box::new(String::from("owned"))), "owned");
+        assert_eq!(panic_message(Box::new(123_u32)), "unknown panic payload");
     }
 }

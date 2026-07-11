@@ -123,3 +123,43 @@ impl AsyncWrite for PtyMaster {
         Poll::Ready(Ok(()))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::io::Write as _;
+    use std::os::fd::AsRawFd as _;
+
+    use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+
+    use super::*;
+    use crate::pty::{PtySize, open_pty};
+
+    #[tokio::test]
+    async fn pty_master_reads_writes_flushes_and_shutdowns() {
+        let pair = open_pty(PtySize::default()).unwrap();
+        let slave = pair.slave;
+        let mut master = PtyMaster::new(pair.master).unwrap();
+
+        let mut slave_writer = std::fs::File::from(slave.try_clone().unwrap());
+        slave_writer.write_all(b"from-slave\n").unwrap();
+        let mut bytes = [0_u8; 32];
+        let read = master.read(&mut bytes).await.unwrap();
+        assert!(String::from_utf8_lossy(&bytes[..read]).contains("from-slave"));
+
+        master.write_all(b"from-master\n").await.unwrap();
+        master.flush().await.unwrap();
+        master.shutdown().await.unwrap();
+
+        let mut slave_reader = std::fs::File::from(slave);
+        let mut input = [0_u8; 32];
+        let read = std::io::Read::read(&mut slave_reader, &mut input).unwrap();
+        assert!(String::from_utf8_lossy(&input[..read]).contains("from-master"));
+    }
+
+    #[test]
+    fn direct_fd_helpers_report_zero_length_operations() {
+        let pair = open_pty(PtySize::default()).unwrap();
+        assert_eq!(read_fd(pair.master.as_raw_fd(), &mut []).unwrap(), 0);
+        assert_eq!(write_fd(pair.master.as_raw_fd(), &[]).unwrap(), 0);
+    }
+}

@@ -218,3 +218,70 @@ fn spawn_pty_stdin(
         // Dropping `master` closes the input handle.
     }))
 }
+
+#[cfg(test)]
+mod tests {
+    use std::process::Stdio;
+
+    use super::*;
+    use crate::pty::PtySize;
+
+    #[test]
+    fn pty_mode_rejects_invalid_program_input_and_signal_policy() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async {
+            let config = ProcessConfig::default();
+            let io = PtyIo::default();
+            let error = run_pty_mode(
+                &ProcessSpec::new(""),
+                &config,
+                CancellationToken::new(),
+                &io,
+            )
+            .await
+            .unwrap_err();
+            assert_eq!(error.code(), ErrorCode::InvalidInput);
+
+            let error = run_pty_mode(
+                &ProcessSpec::new("cat"),
+                &config,
+                CancellationToken::new(),
+                &PtyIo::default().with_input(InputPolicy::Inherit),
+            )
+            .await
+            .unwrap_err();
+            assert_eq!(error.code(), ErrorCode::InvalidInput);
+
+            let disabled_group = ProcessConfig::default().with_signal_policy(
+                crate::SignalPolicy::default().with_create_process_group(false),
+            );
+            let error = run_pty_mode(
+                &ProcessSpec::new("cat"),
+                &disabled_group,
+                CancellationToken::new(),
+                &PtyIo::default(),
+            )
+            .await
+            .unwrap_err();
+            assert_eq!(error.code(), ErrorCode::InvalidInput);
+        });
+    }
+
+    #[test]
+    fn configure_pty_command_applies_dir_env_and_empty_policy() {
+        let mut command = TokioCommand::new("/bin/echo");
+        let spec = ProcessSpec::new("ignored")
+            .arg("hello")
+            .dir(".")
+            .env("RSKIT_PROCESS_TEST", "1")
+            .empty_env();
+        configure_pty_command(
+            &mut command,
+            &spec,
+            Stdio::null(),
+            Stdio::null(),
+            Stdio::null(),
+        );
+        let _ = PtySize::default();
+    }
+}

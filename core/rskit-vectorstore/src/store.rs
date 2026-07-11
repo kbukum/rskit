@@ -412,6 +412,25 @@ mod tests {
     }
 
     #[test]
+    fn payload_values_and_payload_defaults_expose_helpers() {
+        assert_eq!(PayloadValue::String("doc".to_owned()).as_str(), Some("doc"));
+        assert_eq!(PayloadValue::Integer(1).as_str(), None);
+        assert_eq!(
+            PayloadValue::Integer(1).encoded_len(),
+            std::mem::size_of::<i64>()
+        );
+        assert_eq!(
+            PayloadValue::Float(1.0).encoded_len(),
+            std::mem::size_of::<f64>()
+        );
+        assert_eq!(
+            PayloadValue::Bool(true).encoded_len(),
+            std::mem::size_of::<bool>()
+        );
+        assert!(PointPayload::default().fields.is_empty());
+    }
+
+    #[test]
     fn payload_value_rejects_unsigned_integer_over_i64_max() {
         let value = serde_json::Value::Number(serde_json::Number::from(u64::MAX));
 

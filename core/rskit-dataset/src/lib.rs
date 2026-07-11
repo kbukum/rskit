@@ -540,7 +540,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let source = dir.path().join("source.bin");
         let copy = dir.path().join("copy.bin");
+        let missing = dir.path().join("missing.bin");
+        let blocked_destination = dir.path().join("blocked");
         std::fs::write(&source, b"payload").unwrap();
+        std::fs::create_dir(&blocked_destination).unwrap();
         let limits = DatasetLimits {
             max_in_memory_bytes: 7,
             stream_buffer: 1,
@@ -562,6 +565,21 @@ mod tests {
         assert_eq!(
             payload.read_bytes_bounded(&too_small).unwrap_err().code(),
             ErrorCode::InvalidInput
+        );
+
+        assert_eq!(
+            DataPayload::file(&missing)
+                .write_to_path(&copy, &limits)
+                .unwrap_err()
+                .code(),
+            ErrorCode::Internal
+        );
+        assert_eq!(
+            payload
+                .write_to_path(&blocked_destination, &limits)
+                .unwrap_err()
+                .code(),
+            ErrorCode::Internal
         );
     }
 
@@ -647,6 +665,28 @@ mod tests {
                 .unwrap_err()
                 .code(),
             ErrorCode::InvalidInput
+        );
+    }
+
+    #[test]
+    fn data_item_validate_rejects_oversized_existing_payload_and_directory_reads() {
+        let dir = tempfile::tempdir().unwrap();
+        let limits = DatasetLimits {
+            max_in_memory_bytes: 2,
+            stream_buffer: 1,
+        };
+        let item = DataItem::new(b"abc".to_vec(), Label::Real, MediaType::Text, "unit").unwrap();
+
+        assert_eq!(
+            item.validate(&limits).unwrap_err().code(),
+            ErrorCode::InvalidInput
+        );
+        assert_eq!(
+            DataPayload::file(dir.path())
+                .read_bytes_bounded(&limits)
+                .unwrap_err()
+                .code(),
+            ErrorCode::Internal
         );
     }
 }

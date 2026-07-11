@@ -436,12 +436,18 @@ fn sync_file_error(path: &Path, error: std::io::Error) -> AppError {
 #[cfg(test)]
 mod tests {
     use super::{
-        is_executable, is_file_too_large_error, is_not_regular_file_error,
-        is_symlink_not_allowed_error, persist_temp_file_with_replace, read_bounded, read_string,
-        read_string_bounded, write_atomic_replace,
+        canonicalize, copy, create, create_file_error, create_parent_dir, create_parent_dirs_error,
+        inspect_file_error, is_cross_device_error, is_executable, is_file_too_large_error,
+        is_not_regular_file_error, is_symlink_not_allowed_error, move_file_error, open_file_error,
+        persist_temp_file_with_replace, read_bounded, read_file_error, read_string,
+        read_string_bounded, remove, remove_file_error, remove_if_exists, rename_file_error,
+        sync_file_error, write, write_atomic, write_atomic_replace, write_file_error,
     };
 
     use crate::TempDir;
+    use rskit_errors::ErrorCode;
+    use std::io;
+    use std::path::Path;
 
     #[test]
     fn is_executable_is_false_for_a_missing_path() {
@@ -541,5 +547,65 @@ mod tests {
         std::fs::create_dir_all(&dest).unwrap();
 
         assert!(persist_temp_file_with_replace(&temp, &dest, true).is_err());
+    }
+
+    #[test]
+    fn file_helpers_cover_regular_success_and_missing_paths() {
+        let root = TempDir::new().unwrap();
+        let path = root.child("nested/file.txt").unwrap();
+        create_parent_dir(&path).unwrap();
+        write(&path, b"hello").unwrap();
+        assert_eq!(read_string(&path).unwrap(), "hello");
+        let copy_path = root.child("copy.txt").unwrap();
+        assert_eq!(copy(&path, &copy_path).unwrap(), 5);
+        let moved = root.child("moved.txt").unwrap();
+        super::rename(&copy_path, &moved).unwrap();
+        assert!(super::metadata(&moved).unwrap().is_file);
+        assert!(remove_if_exists(&moved).unwrap());
+        assert!(!remove_if_exists(&moved).unwrap());
+        assert!(canonicalize(&path).unwrap().is_absolute());
+
+        let created = root.child("created.txt").unwrap();
+        drop(create(&created).unwrap());
+        write_atomic(&created, b"atomic", "test").unwrap();
+        assert_eq!(read_string(&created).unwrap(), "atomic");
+        remove(&created).unwrap();
+    }
+
+    #[test]
+    fn file_error_helpers_preserve_context() {
+        let path = Path::new("file");
+        let other = || io::Error::other("boom");
+        let errors = [
+            create_parent_dirs_error(other()),
+            inspect_file_error(path, other()),
+            open_file_error(path, other()),
+            create_file_error(path, other()),
+            read_file_error(path, other()),
+            write_file_error(path, other()),
+            super::copy_file_error(path, Path::new("to"), other()),
+            rename_file_error(path, Path::new("to"), other()),
+            move_file_error(path, Path::new("to"), other()),
+            remove_file_error(path, other()),
+            sync_file_error(path, other()),
+        ];
+
+        for error in errors {
+            assert_eq!(error.code(), ErrorCode::Internal);
+            assert!(error.cause().is_some());
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlink_open_and_cross_device_errors_are_detected() {
+        let symlink_error = io::Error::from_raw_os_error(libc::ELOOP);
+        assert!(is_symlink_not_allowed_error(&open_file_error(
+            Path::new("link"),
+            symlink_error
+        )));
+        assert!(is_cross_device_error(&io::Error::from_raw_os_error(
+            libc::EXDEV
+        )));
     }
 }

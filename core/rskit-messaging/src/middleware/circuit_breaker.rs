@@ -164,4 +164,38 @@ mod tests {
         let result = handler.handle(Message::new("t", "data".to_string())).await;
         assert!(result.is_err());
     }
+
+    #[tokio::test]
+    async fn public_circuit_breaker_constructor_validates_and_wraps_handler() {
+        assert!(
+            circuit_breaker::<String>(CircuitBreakerConfig {
+                threshold: 0,
+                timeout: Duration::from_secs(1),
+                half_open_max: 1,
+            })
+            .is_err()
+        );
+
+        let counter = Arc::new(AtomicU32::new(0));
+        let c = counter.clone();
+        let base: Arc<dyn MessageHandler<String>> =
+            Arc::new(FnHandler::new(move |_msg: Message<String>| {
+                let c = c.clone();
+                async move {
+                    c.fetch_add(1, Ordering::SeqCst);
+                    Ok(())
+                }
+            }));
+        let middleware = circuit_breaker(CircuitBreakerConfig::default()).unwrap();
+        let handler = chain_handlers(
+            base,
+            &[Arc::new(middleware) as Arc<dyn HandlerMiddleware<String>>],
+        );
+
+        handler
+            .handle(Message::new("t", "ok".to_string()))
+            .await
+            .unwrap();
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
+    }
 }

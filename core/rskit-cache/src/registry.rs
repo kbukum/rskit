@@ -111,12 +111,34 @@ mod tests {
     use super::*;
 
     #[derive(Default)]
+    struct DummyStore;
+
+    #[async_trait::async_trait]
+    impl CacheStore for DummyStore {
+        async fn get(&self, _key: &str) -> AppResult<Option<String>> {
+            Ok(None)
+        }
+
+        async fn set(&self, _key: &str, _val: &str, _ttl: Option<Duration>) -> AppResult<()> {
+            Ok(())
+        }
+
+        async fn delete(&self, _key: &str) -> AppResult<bool> {
+            Ok(false)
+        }
+
+        async fn exists(&self, _key: &str) -> AppResult<bool> {
+            Ok(false)
+        }
+    }
+
+    #[derive(Default)]
     struct DummyFactory;
 
     #[async_trait::async_trait]
     impl CacheStoreFactory for DummyFactory {
         async fn create(&self, _config: &CacheConfig) -> AppResult<Arc<dyn CacheStore>> {
-            Err(AppError::new(ErrorCode::Internal, "not used"))
+            Ok(Arc::new(DummyStore))
         }
     }
 
@@ -168,5 +190,32 @@ mod tests {
             panic!("unregistered stores must be rejected");
         };
         assert_eq!(err.code(), ErrorCode::NotFound);
+    }
+
+    #[tokio::test]
+    async fn build_uses_registered_factory() {
+        let mut registry = CacheRegistry::new();
+        registry
+            .register("memory", Arc::new(DummyFactory))
+            .expect("registration should succeed");
+        assert!(registry.contains("memory"));
+        assert_eq!(registry.len(), 1);
+        assert!(!registry.is_empty());
+
+        let config = CacheConfig {
+            store: " memory ".into(),
+            ..CacheConfig::default()
+        };
+
+        let store = registry
+            .build(&config)
+            .await
+            .expect("registered store should build");
+        assert!(
+            !store
+                .exists("missing")
+                .await
+                .expect("exists should succeed")
+        );
     }
 }

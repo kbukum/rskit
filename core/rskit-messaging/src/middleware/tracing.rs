@@ -65,9 +65,7 @@ mod tests {
                 }
             }));
 
-        let mw: Arc<dyn HandlerMiddleware<String>> = Arc::new(TracingMiddleware {
-            _marker: std::marker::PhantomData::<String>,
-        });
+        let mw: Arc<dyn HandlerMiddleware<String>> = Arc::new(tracing_middleware());
         let handler = chain_handlers(base, &[mw]);
 
         handler

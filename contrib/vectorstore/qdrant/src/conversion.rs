@@ -1,7 +1,7 @@
 //! Conversion helpers between rskit vector types and Qdrant REST payloads.
 
 use serde::{Deserialize, Serialize};
-use serde_json::{Number, Value};
+use serde_json::Value;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_vectorstore::{PayloadValue, SimilarityMetric};
@@ -34,11 +34,7 @@ pub(crate) fn payload_to_qdrant_value(v: PayloadValue) -> AppResult<Value> {
     match v {
         PayloadValue::String(s) => Ok(Value::String(s)),
         PayloadValue::Integer(n) => Ok(Value::Number(n.into())),
-        PayloadValue::Float(n) => Number::from_f64(finite_qdrant_float(n, "payload")?)
-            .map(Value::Number)
-            .ok_or_else(|| {
-                AppError::new(ErrorCode::InvalidInput, "Qdrant payload float is invalid")
-            }),
+        PayloadValue::Float(n) => Ok(Value::from(finite_qdrant_float(n, "payload")?)),
         PayloadValue::Bool(b) => Ok(Value::Bool(b)),
         _ => Err(AppError::new(
             ErrorCode::InvalidInput,
@@ -248,7 +244,7 @@ mod tests {
 
     #[test]
     fn qdrant_value_to_payload_preserves_unsigned_integer_contract() {
-        let value = Value::Number(Number::from(i64::MAX as u64));
+        let value = Value::Number(serde_json::Number::from(i64::MAX as u64));
 
         assert_eq!(
             qdrant_value_to_payload("count", value).unwrap(),
@@ -258,7 +254,7 @@ mod tests {
 
     #[test]
     fn qdrant_value_to_payload_rejects_unsigned_integer_overflow() {
-        let value = Value::Number(Number::from(i64::MAX as u64 + 1));
+        let value = Value::Number(serde_json::Number::from(i64::MAX as u64 + 1));
 
         let err = qdrant_value_to_payload("count", value).unwrap_err();
 
@@ -313,6 +309,14 @@ mod tests {
             qdrant_point_id_from_string("0").unwrap(),
             QdrantPointId::Num(0)
         );
+    }
+
+    #[test]
+    fn qdrant_point_id_from_string_rejects_numeric_overflow() {
+        let err = qdrant_point_id_from_string("18446744073709551616").unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+        assert!(err.message().contains("outside u64 bounds"));
     }
 
     #[test]

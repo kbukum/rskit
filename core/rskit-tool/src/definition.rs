@@ -86,3 +86,19 @@ pub struct Definition {
     #[serde(default)]
     pub envelope: Envelope,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unknown_execution_hint_effectively_serializes_as_backend() {
+        let hint: ExecutionHint = serde_json::from_str(r#""future""#).expect("unknown maps");
+
+        assert_eq!(hint.effective(), ExecutionHint::Backend);
+        assert_eq!(
+            serde_json::to_value(hint).expect("hint serialises"),
+            serde_json::json!("backend")
+        );
+    }
+}

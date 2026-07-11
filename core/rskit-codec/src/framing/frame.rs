@@ -115,6 +115,8 @@ fn transport_error(context: &str, error: &std::io::Error) -> AppError {
 
 #[cfg(test)]
 mod tests {
+    use std::io::{Read, Write};
+
     use super::{DEFAULT_MAX_FRAME_BYTES, read_frame, write_frame};
 
     #[test]
@@ -150,5 +152,64 @@ mod tests {
         let mut buffer = Vec::new();
         write_frame(&mut buffer, &[0u8; 8], DEFAULT_MAX_FRAME_BYTES).expect("write");
         assert!(read_frame(&mut std::io::Cursor::new(buffer), 4).is_err());
+    }
+
+    #[test]
+    fn write_frame_rejects_oversized_payload_and_preserves_io_errors() {
+        struct FailingWriter;
+
+        impl Write for FailingWriter {
+            fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::other("boom"))
+            }
+
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+
+        let mut buffer = Vec::new();
+        assert!(write_frame(&mut buffer, b"too large", 1).is_err());
+        assert!(write_frame(&mut FailingWriter, b"ok", DEFAULT_MAX_FRAME_BYTES).is_err());
+    }
+
+    #[test]
+    fn read_frame_retries_interrupted_prefix_reads_and_reports_io_errors() {
+        struct InterruptedThenData {
+            data: std::io::Cursor<Vec<u8>>,
+            interrupted: bool,
+        }
+
+        impl Read for InterruptedThenData {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                if !self.interrupted {
+                    self.interrupted = true;
+                    return Err(std::io::Error::from(std::io::ErrorKind::Interrupted));
+                }
+                self.data.read(buf)
+            }
+        }
+
+        struct FailingReader;
+        impl Read for FailingReader {
+            fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::other("boom"))
+            }
+        }
+
+        let mut framed = Vec::new();
+        write_frame(&mut framed, b"x", DEFAULT_MAX_FRAME_BYTES).unwrap();
+        let mut reader = InterruptedThenData {
+            data: std::io::Cursor::new(framed),
+            interrupted: false,
+        };
+        assert_eq!(
+            read_frame(&mut reader, DEFAULT_MAX_FRAME_BYTES)
+                .unwrap()
+                .unwrap(),
+            b"x"
+        );
+
+        assert!(read_frame(&mut FailingReader, DEFAULT_MAX_FRAME_BYTES).is_err());
     }
 }

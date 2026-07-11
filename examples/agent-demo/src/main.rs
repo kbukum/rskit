@@ -8,7 +8,6 @@
 #[cfg(not(test))]
 mod interactive {
     use std::io::{self, BufRead, Write};
-    use std::path::PathBuf;
     use std::sync::Arc;
     use std::time::{Duration, Instant};
 
@@ -18,6 +17,7 @@ mod interactive {
     use rskit::worker::{EventKind, Pool, PoolConfig};
 
     use agent_demo::dashboard::{self, TaskStatus, TrackedTask};
+    use agent_demo::shell::{BANNER, fixture_dir, format_help, parse_dimensions, resolve_path};
     use agent_demo::tasks::{AgentHandler, AgentTask, TaskOutput};
 
     // ── Channel message types ─────────────────────────────────────────────
@@ -302,23 +302,7 @@ mod interactive {
                 Some(comp) = done_rx.recv() => {
                     if let Some(t) = tasks.iter_mut().find(|t| t.id == comp.id)
                         && t.status == TaskStatus::Running {
-                            match comp.result {
-                                Ok(output) => {
-                                    t.status = TaskStatus::Done;
-                                    t.result = Some(output);
-                                }
-                                Err(err) => {
-                                    if err.contains("cancelled") {
-                                        t.status = TaskStatus::Cancelled;
-                                    } else {
-                                        t.status = TaskStatus::Failed;
-                                    }
-                                    t.result = Some(TaskOutput {
-                                        summary: err,
-                                        details: vec![],
-                                    });
-                                }
-                            }
+                            dashboard::record_completion(t, comp.result);
                             multi.println(dashboard::log_result(t)).ok();
                         }
                     // Clean up spinner for completed task
@@ -482,23 +466,7 @@ mod interactive {
             if let Some(t) = tasks.iter_mut().find(|t| t.id == comp.id)
                 && t.status == TaskStatus::Running
             {
-                match comp.result {
-                    Ok(output) => {
-                        t.status = TaskStatus::Done;
-                        t.result = Some(output);
-                    }
-                    Err(err) => {
-                        if err.contains("cancelled") {
-                            t.status = TaskStatus::Cancelled;
-                        } else {
-                            t.status = TaskStatus::Failed;
-                        }
-                        t.result = Some(TaskOutput {
-                            summary: err,
-                            details: vec![],
-                        });
-                    }
-                }
+                dashboard::record_completion(t, comp.result);
                 multi.println(dashboard::log_result(t)).ok();
             }
             if let Some(pos) = handles.iter().position(|h| h.id == comp.id) {
@@ -523,64 +491,6 @@ mod interactive {
             dashboard::format_status_bar(tasks, st.running, st.capacity, start_time.elapsed());
         println!("  {bar}");
     }
-
-    fn format_help() -> String {
-        let mut s = String::new();
-        s.push_str("\n  \x1b[1;36m┌─────────────────────────────────────────────────┐\x1b[0m\n");
-        s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[1mAgent Commands\x1b[0m                                 \x1b[1;36m│\x1b[0m\n");
-        s.push_str("  \x1b[1;36m├─────────────────────────────────────────────────┤\x1b[0m\n");
-        s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[36m/demo\x1b[0m                Launch 4 parallel agents  \x1b[1;36m│\x1b[0m\n");
-        s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[36m/analyze\x1b[0m <file>      Detect MIME & metadata    \x1b[1;36m│\x1b[0m\n");
-        s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[36m/resize\x1b[0m  <file> [WxH] Resize image             \x1b[1;36m│\x1b[0m\n");
-        s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[36m/pipeline\x1b[0m <file>     Resize → crop → rotate    \x1b[1;36m│\x1b[0m\n");
-        s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[36m/review\x1b[0m  <file>      Code review simulation    \x1b[1;36m│\x1b[0m\n");
-        s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[36m/batch\x1b[0m   [count]     Batch processing (×30)    \x1b[1;36m│\x1b[0m\n");
-        s.push_str("  \x1b[1;36m├─────────────────────────────────────────────────┤\x1b[0m\n");
-        s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[36m/status\x1b[0m              Show all tasks             \x1b[1;36m│\x1b[0m\n");
-        s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[36m/detail\x1b[0m  <id>        Task details               \x1b[1;36m│\x1b[0m\n");
-        s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[36m/cancel\x1b[0m  <id>        Cancel running task        \x1b[1;36m│\x1b[0m\n");
-        s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[36m/stats\x1b[0m               Worker pool stats          \x1b[1;36m│\x1b[0m\n");
-        s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[36m/clear\x1b[0m               Clear completed tasks      \x1b[1;36m│\x1b[0m\n");
-        s.push_str("  \x1b[1;36m│\x1b[0m  \x1b[36m/quit\x1b[0m                Exit                       \x1b[1;36m│\x1b[0m\n");
-        s.push_str("  \x1b[1;36m└─────────────────────────────────────────────────┘\x1b[0m\n");
-        s
-    }
-
-    pub fn resolve_path(input: &str) -> PathBuf {
-        let p = PathBuf::from(input);
-        if p.is_absolute() || p.exists() {
-            p
-        } else {
-            fixture_dir().join(input)
-        }
-    }
-
-    pub fn fixture_dir() -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("tests/fixtures")
-    }
-
-    pub fn parse_dimensions(s: &str) -> Option<(u32, u32)> {
-        let parts: Vec<&str> = s.split('x').collect();
-        if parts.len() == 2 {
-            let w = parts[0].parse().ok()?;
-            let h = parts[1].parse().ok()?;
-            Some((w, h))
-        } else {
-            None
-        }
-    }
-
-    const BANNER: &str = concat!(
-        "\n",
-        "  \x1b[1;36m🚀 rskit Agent Demo\x1b[0m — Media Processing Pipeline\n",
-        "  \x1b[2mShowcasing background workers, progress tracking, and stream processing\x1b[0m\n",
-        "  \x1b[2mrskit::worker │ rskit::cli │ rskit::storage │ rskit::media_image\x1b[0m\n",
-    );
 }
 
 #[cfg(not(test))]

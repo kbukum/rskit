@@ -321,47 +321,22 @@ impl Collector {
                 tokio::select! {
                     event = event_rx.recv() => {
                         match event {
-                            Some(WorkerEvent::Started { index, ref name, max_items }) => {
-                                self.progress.on_source_start(index, name, max_items);
-                            }
-                            Some(WorkerEvent::Progress { index, count }) => {
-                                self.progress.on_source_progress(index, count);
-                            }
-                            Some(WorkerEvent::Completed { index, ref name, ref stats, ref cache_key, outcome }) => {
-                                result.total_items += stats.total;
-                                result.real_count += stats.real;
-                                result.ai_count += stats.ai;
-                                result.source_stats.insert(name.clone(), stats.clone());
-
-                                match outcome {
-                                    SourceOutcome::Done => {
-                                        manifest.mark_done(name.clone(), cache_key.clone(), stats.clone());
-                                    }
-                                    SourceOutcome::TimedOut | SourceOutcome::Cancelled => {
-                                        manifest.mark_partial(name.clone(), cache_key.clone(), stats.clone());
-                                    }
-                                }
-                                if let Err(e) = save_manifest(out.to_path_buf(), manifest.clone()).await {
+                            Some(event) => {
+                                let (completed, should_save) = handle_worker_event(
+                                    event,
+                                    &mut result,
+                                    &mut manifest,
+                                    self.progress.as_ref(),
+                                );
+                                if should_save
+                                    && let Err(e) =
+                                        save_manifest(out.to_path_buf(), manifest.clone()).await
+                                {
                                     tracing::warn!(error = %e, "failed to save manifest");
                                 }
-
-                                self.progress.on_source_done(index, name, stats);
-                                completed_count += 1;
-                            }
-                            Some(WorkerEvent::Failed { index, ref name, ref error, ref stats, ref cache_key }) => {
-                                result.source_stats.insert(name.clone(), stats.clone());
-                                // Cache partial results so next run skips re-downloading
-                                if stats.total > 0 {
-                                    result.total_items += stats.total;
-                                    result.real_count += stats.real;
-                                    result.ai_count += stats.ai;
-                                    manifest.mark_partial(name.clone(), cache_key.clone(), stats.clone());
-                                    if let Err(e) = save_manifest(out.to_path_buf(), manifest.clone()).await {
-                                        tracing::warn!(error = %e, "failed to save manifest");
-                                    }
+                                if completed {
+                                    completed_count += 1;
                                 }
-                                self.progress.on_source_error(index, name, error);
-                                completed_count += 1;
                             }
                             None => break, // All workers done, channel closed
                         }
@@ -380,48 +355,12 @@ impl Collector {
 
             // Drain any remaining events after cancellation
             while let Ok(event) = event_rx.try_recv() {
-                match event {
-                    WorkerEvent::Completed {
-                        ref name,
-                        ref stats,
-                        ref cache_key,
-                        outcome,
-                        index,
-                    } => {
-                        result.total_items += stats.total;
-                        result.real_count += stats.real;
-                        result.ai_count += stats.ai;
-                        result.source_stats.insert(name.clone(), stats.clone());
-                        match outcome {
-                            SourceOutcome::Done => {
-                                manifest.mark_done(name.clone(), cache_key.clone(), stats.clone())
-                            }
-                            _ => manifest.mark_partial(
-                                name.clone(),
-                                cache_key.clone(),
-                                stats.clone(),
-                            ),
-                        }
-                        self.progress.on_source_done(index, name, stats);
-                    }
-                    WorkerEvent::Failed {
-                        ref name,
-                        ref error,
-                        ref stats,
-                        index,
-                        ref cache_key,
-                    } => {
-                        result.source_stats.insert(name.clone(), stats.clone());
-                        if stats.total > 0 {
-                            result.total_items += stats.total;
-                            result.real_count += stats.real;
-                            result.ai_count += stats.ai;
-                            manifest.mark_partial(name.clone(), cache_key.clone(), stats.clone());
-                        }
-                        self.progress.on_source_error(index, name, error);
-                    }
-                    _ => {}
-                }
+                handle_drained_worker_event(
+                    event,
+                    &mut result,
+                    &mut manifest,
+                    self.progress.as_ref(),
+                );
             }
         }
 
@@ -460,6 +399,188 @@ impl Collector {
 
         Ok(result)
     }
+}
+
+fn handle_worker_event(
+    event: WorkerEvent,
+    result: &mut CollectorResult,
+    manifest: &mut Manifest,
+    progress: &dyn ProgressCallback,
+) -> (bool, bool) {
+    match event {
+        WorkerEvent::Started {
+            index,
+            ref name,
+            max_items,
+        } => {
+            progress.on_source_start(index, name, max_items);
+            (false, false)
+        }
+        WorkerEvent::Progress { index, count } => {
+            progress.on_source_progress(index, count);
+            (false, false)
+        }
+        WorkerEvent::Completed {
+            index,
+            ref name,
+            ref stats,
+            ref cache_key,
+            outcome,
+        } => {
+            record_completed_event(
+                result,
+                manifest,
+                CompletedEventRef {
+                    index,
+                    name,
+                    stats,
+                    cache_key,
+                    outcome,
+                },
+                progress,
+            );
+            (true, true)
+        }
+        WorkerEvent::Failed {
+            index,
+            ref name,
+            ref error,
+            ref stats,
+            ref cache_key,
+        } => {
+            let saved = record_failed_event(
+                result,
+                manifest,
+                FailedEventRef {
+                    index,
+                    name,
+                    error,
+                    stats,
+                    cache_key,
+                },
+                progress,
+            );
+            (true, saved)
+        }
+    }
+}
+
+fn handle_drained_worker_event(
+    event: WorkerEvent,
+    result: &mut CollectorResult,
+    manifest: &mut Manifest,
+    progress: &dyn ProgressCallback,
+) {
+    match event {
+        WorkerEvent::Completed {
+            index,
+            ref name,
+            ref stats,
+            ref cache_key,
+            outcome,
+        } => record_completed_event(
+            result,
+            manifest,
+            CompletedEventRef {
+                index,
+                name,
+                stats,
+                cache_key,
+                outcome,
+            },
+            progress,
+        ),
+        WorkerEvent::Failed {
+            index,
+            ref name,
+            ref error,
+            ref stats,
+            ref cache_key,
+        } => {
+            record_failed_event(
+                result,
+                manifest,
+                FailedEventRef {
+                    index,
+                    name,
+                    error,
+                    stats,
+                    cache_key,
+                },
+                progress,
+            );
+        }
+        WorkerEvent::Started { .. } | WorkerEvent::Progress { .. } => {}
+    }
+}
+
+struct CompletedEventRef<'a> {
+    index: usize,
+    name: &'a str,
+    stats: &'a SourceStats,
+    cache_key: &'a serde_json::Value,
+    outcome: SourceOutcome,
+}
+
+struct FailedEventRef<'a> {
+    index: usize,
+    name: &'a str,
+    error: &'a str,
+    stats: &'a SourceStats,
+    cache_key: &'a serde_json::Value,
+}
+
+fn record_completed_event(
+    result: &mut CollectorResult,
+    manifest: &mut Manifest,
+    event: CompletedEventRef<'_>,
+    progress: &dyn ProgressCallback,
+) {
+    let CompletedEventRef {
+        index,
+        name,
+        stats,
+        cache_key,
+        outcome,
+    } = event;
+    result.total_items += stats.total;
+    result.real_count += stats.real;
+    result.ai_count += stats.ai;
+    result.source_stats.insert(name.to_string(), stats.clone());
+    match outcome {
+        SourceOutcome::Done => {
+            manifest.mark_done(name.to_string(), cache_key.clone(), stats.clone())
+        }
+        SourceOutcome::TimedOut | SourceOutcome::Cancelled => {
+            manifest.mark_partial(name.to_string(), cache_key.clone(), stats.clone());
+        }
+    }
+    progress.on_source_done(index, name, stats);
+}
+
+fn record_failed_event(
+    result: &mut CollectorResult,
+    manifest: &mut Manifest,
+    event: FailedEventRef<'_>,
+    progress: &dyn ProgressCallback,
+) -> bool {
+    let FailedEventRef {
+        index,
+        name,
+        error,
+        stats,
+        cache_key,
+    } = event;
+    result.source_stats.insert(name.to_string(), stats.clone());
+    let saved = stats.total > 0;
+    if saved {
+        result.total_items += stats.total;
+        result.real_count += stats.real;
+        result.ai_count += stats.ai;
+        manifest.mark_partial(name.to_string(), cache_key.clone(), stats.clone());
+    }
+    progress.on_source_error(index, name, error);
+    saved
 }
 
 // ── Worker implementation ────────────────────────────────────────────────
@@ -813,6 +934,26 @@ mod focused_tests {
         }
     }
 
+    struct PendingSource;
+
+    impl Source for PendingSource {
+        fn name(&self) -> &str {
+            "pending"
+        }
+
+        fn stream(self: Box<Self>, _cancel: CancellationToken) -> crate::BoxDataStream {
+            Box::pin(futures_util::stream::pending())
+        }
+
+        fn cache_key(&self) -> serde_json::Value {
+            serde_json::json!("pending")
+        }
+
+        fn max_items(&self) -> Option<usize> {
+            None
+        }
+    }
+
     struct CountingTarget;
 
     #[async_trait::async_trait]
@@ -854,7 +995,10 @@ mod focused_tests {
             }),
             Box::new(StaticSource {
                 name: "bad",
-                items: vec![Err(AppError::new(ErrorCode::InvalidInput, "bad item"))],
+                items: vec![Err(AppError::new(
+                    ErrorCode::InvalidInput,
+                    "bad item ".repeat(20),
+                ))],
                 resume: None,
                 max_items: None,
             }),
@@ -970,5 +1114,175 @@ mod focused_tests {
         assert_eq!(result.ai_count, 2);
         assert!(result.source_stats.contains_key("cached"));
         assert!(result.source_stats.contains_key("partial"));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn collector_marks_hung_sources_partial_on_timeout() {
+        let out = tempfile::tempdir().unwrap();
+        let collector = Collector::new(
+            vec![Box::new(PendingSource)],
+            Vec::new(),
+            Vec::new(),
+            CollectorConfig {
+                output_dir: out.path().to_path_buf(),
+                concurrency: 1,
+                source_timeout_secs: 1.0,
+                force: true,
+                limits: DatasetLimits {
+                    max_in_memory_bytes: 1024,
+                    stream_buffer: 1,
+                },
+            },
+            Box::new(NullProgress),
+        );
+        let cancel = CancellationToken::new();
+        let run = tokio::spawn(async move { collector.run(&cancel).await });
+
+        tokio::time::advance(Duration::from_secs(1)).await;
+        let result = run.await.unwrap().unwrap();
+
+        assert_eq!(result.total_items, 0);
+        let manifest = Manifest::load(out.path()).unwrap();
+        assert!(matches!(
+            manifest.cache_status("pending", &serde_json::json!("pending"), None),
+            CacheStatus::NotCached
+        ));
+        assert!(result.source_stats.contains_key("pending"));
+    }
+
+    #[tokio::test]
+    async fn worker_event_helpers_update_results_manifest_and_progress() {
+        let mut result = CollectorResult::default();
+        let mut manifest = Manifest::default();
+        let progress = NullProgress;
+        let cache_key = serde_json::json!({"source": "unit"});
+        let stats = SourceStats {
+            total: 3,
+            real: 2,
+            ai: 1,
+            fetched_offset: 4,
+        };
+
+        assert_eq!(
+            handle_worker_event(
+                WorkerEvent::Started {
+                    index: 0,
+                    name: "unit".to_string(),
+                    max_items: Some(10),
+                },
+                &mut result,
+                &mut manifest,
+                &progress,
+            ),
+            (false, false)
+        );
+        assert_eq!(
+            handle_worker_event(
+                WorkerEvent::Progress { index: 0, count: 2 },
+                &mut result,
+                &mut manifest,
+                &progress,
+            ),
+            (false, false)
+        );
+        assert_eq!(
+            handle_worker_event(
+                WorkerEvent::Completed {
+                    index: 0,
+                    name: "unit".to_string(),
+                    stats: stats.clone(),
+                    cache_key: cache_key.clone(),
+                    outcome: SourceOutcome::Done,
+                },
+                &mut result,
+                &mut manifest,
+                &progress,
+            ),
+            (true, true)
+        );
+
+        assert_eq!(result.total_items, 3);
+        assert!(matches!(
+            manifest.cache_status("unit", &cache_key, Some(3)),
+            CacheStatus::Done(_)
+        ));
+
+        handle_drained_worker_event(
+            WorkerEvent::Completed {
+                index: 1,
+                name: "cancelled".to_string(),
+                stats: stats.clone(),
+                cache_key: serde_json::json!("cancelled"),
+                outcome: SourceOutcome::Cancelled,
+            },
+            &mut result,
+            &mut manifest,
+            &progress,
+        );
+        assert_eq!(result.total_items, 6);
+        assert!(matches!(
+            manifest.cache_status("cancelled", &serde_json::json!("cancelled"), Some(20)),
+            CacheStatus::Partial(_)
+        ));
+
+        assert_eq!(
+            handle_worker_event(
+                WorkerEvent::Failed {
+                    index: 2,
+                    name: "failed".to_string(),
+                    error: "boom".to_string(),
+                    stats,
+                    cache_key: serde_json::json!("failed"),
+                },
+                &mut result,
+                &mut manifest,
+                &progress,
+            ),
+            (true, true)
+        );
+        assert_eq!(result.total_items, 9);
+        assert!(matches!(
+            manifest.cache_status("failed", &serde_json::json!("failed"), Some(20)),
+            CacheStatus::Partial(_)
+        ));
+
+        handle_drained_worker_event(
+            WorkerEvent::Failed {
+                index: 3,
+                name: "empty-failed".to_string(),
+                error: "empty".to_string(),
+                stats: SourceStats::default(),
+                cache_key: serde_json::json!("empty-failed"),
+            },
+            &mut result,
+            &mut manifest,
+            &progress,
+        );
+        assert_eq!(result.total_items, 9);
+        assert!(result.source_stats.contains_key("empty-failed"));
+    }
+
+    #[tokio::test]
+    async fn prepare_output_dirs_reports_real_and_ai_creation_errors() {
+        let out = tempfile::tempdir().unwrap();
+        let real_blocker = out.path().join("real-blocker");
+        let ai_blocker = out.path().join("ai-blocker");
+        std::fs::write(&real_blocker, b"x").unwrap();
+        std::fs::write(&ai_blocker, b"x").unwrap();
+
+        assert_eq!(
+            prepare_output_dirs(real_blocker.join("child"), out.path().join("ai-ok"))
+                .await
+                .unwrap_err()
+                .code(),
+            ErrorCode::Internal
+        );
+        assert_eq!(
+            prepare_output_dirs(out.path().join("real-ok"), ai_blocker.join("child"))
+                .await
+                .unwrap_err()
+                .code(),
+            ErrorCode::Internal
+        );
     }
 }

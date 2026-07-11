@@ -69,36 +69,22 @@ impl GcsStore {
                         .with_credentials(AnonymousCredentials::new().build())
                         .build()
                         .await
-                        .map_err(|e| {
-                            AppError::new(
-                                ErrorCode::Internal,
-                                format!("GCS anonymous storage client configuration failed: {e}"),
-                            )
-                        })?;
+                        .map_err(|e| config_err("anonymous storage client", e))?;
                     let control = StorageControl::builder()
                         .with_credentials(AnonymousCredentials::new().build())
                         .build()
                         .await
-                        .map_err(|e| {
-                            AppError::new(
-                                ErrorCode::Internal,
-                                format!("GCS anonymous control client configuration failed: {e}"),
-                            )
-                        })?;
+                        .map_err(|e| config_err("anonymous control client", e))?;
                     (storage, control)
                 } else {
-                    let storage = Storage::builder().build().await.map_err(|e| {
-                        AppError::new(
-                            ErrorCode::Internal,
-                            format!("GCS storage client configuration failed: {e}"),
-                        )
-                    })?;
-                    let control = StorageControl::builder().build().await.map_err(|e| {
-                        AppError::new(
-                            ErrorCode::Internal,
-                            format!("GCS control client configuration failed: {e}"),
-                        )
-                    })?;
+                    let storage = Storage::builder()
+                        .build()
+                        .await
+                        .map_err(|e| config_err("storage client", e))?;
+                    let control = StorageControl::builder()
+                        .build()
+                        .await
+                        .map_err(|e| config_err("control client", e))?;
                     (storage, control)
                 };
 
@@ -119,6 +105,13 @@ fn install_rustls_crypto_provider() {
     INSTALL.call_once(|| {
         let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
     });
+}
+
+fn config_err(stage: &str, e: impl std::fmt::Display) -> AppError {
+    AppError::new(
+        ErrorCode::Internal,
+        format!("GCS {stage} configuration failed: {e}"),
+    )
 }
 
 impl<S> GcsStore<S>
@@ -457,26 +450,41 @@ mod tests {
             )
     }
 
-    fn test_store() -> GcsStore<MockStorage> {
+    fn unused_builder<S>() -> GcsClientBuilder<S>
+    where
+        S: google_cloud_storage::stub::Storage + 'static,
+    {
+        Box::new(|| {
+            Box::pin(async {
+                Err(AppError::new(
+                    ErrorCode::Internal,
+                    "test GCS client builder must not be called",
+                ))
+            })
+        })
+    }
+
+    fn store_with<St, Ct>(storage: St, control: Ct) -> GcsStore<St>
+    where
+        St: google_cloud_storage::stub::Storage + 'static,
+        Ct: google_cloud_storage::stub::StorageControl + 'static,
+    {
         GcsStore {
             clients: OnceCell::new_with(Some(GcsClients {
-                storage: Storage::from_stub(MockStorage),
-                control: StorageControl::from_stub(MockControl),
+                storage: Storage::from_stub(storage),
+                control: StorageControl::from_stub(control),
             })),
-            builder: Box::new(|| {
-                Box::pin(async {
-                    Err(AppError::new(
-                        ErrorCode::Internal,
-                        "test GCS client builder should not be called",
-                    ))
-                })
-            }),
+            builder: unused_builder(),
             config: Config {
                 bucket: "test-bucket".into(),
                 prefix: Some("assets".into()),
                 anonymous: true,
             },
         }
+    }
+
+    fn test_store() -> GcsStore<MockStorage> {
+        store_with(MockStorage, MockControl)
     }
 
     #[test]
@@ -702,5 +710,210 @@ mod tests {
         };
 
         factory.create(&StorageConfig::default()).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn new_builds_anonymous_clients_lazily() {
+        let store = GcsStore::new(Config {
+            bucket: "public-assets".into(),
+            prefix: None,
+            anonymous: true,
+        });
+
+        assert!(store.clients().await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn new_builds_authenticated_clients_lazily() {
+        let store = GcsStore::new(Config {
+            bucket: "private-assets".into(),
+            prefix: Some("uploads".into()),
+            anonymous: false,
+        });
+
+        assert!(store.clients().await.is_ok());
+    }
+
+    fn transport_error() -> google_cloud_storage::Error {
+        google_cloud_gax::error::Error::io(std::io::Error::other("boom"))
+    }
+
+    struct FailingSource;
+
+    impl StreamingSource for FailingSource {
+        type Error = std::io::Error;
+
+        async fn next(&mut self) -> Option<Result<bytes::Bytes, Self::Error>> {
+            Some(Err(std::io::Error::other("chunk boom")))
+        }
+    }
+
+    #[derive(Debug, Default)]
+    struct StreamFailingStorage;
+
+    impl google_cloud_storage::stub::Storage for StreamFailingStorage {
+        async fn read_object(
+            &self,
+            _req: ReadObjectRequest,
+            _options: StorageRequestOptions,
+        ) -> google_cloud_storage::Result<ReadObjectResponse> {
+            Ok(ReadObjectResponse::from_source(
+                ObjectHighlights::default(),
+                FailingSource,
+            ))
+        }
+
+        async fn write_object_buffered<P>(
+            &self,
+            _payload: P,
+            _req: WriteObjectRequest,
+            _options: StorageRequestOptions,
+        ) -> google_cloud_storage::Result<Object>
+        where
+            P: StreamingSource + Send + Sync + 'static,
+        {
+            Err(transport_error())
+        }
+    }
+
+    #[derive(Debug, Default)]
+    struct FailingStorage;
+
+    impl google_cloud_storage::stub::Storage for FailingStorage {
+        async fn read_object(
+            &self,
+            _req: ReadObjectRequest,
+            _options: StorageRequestOptions,
+        ) -> google_cloud_storage::Result<ReadObjectResponse> {
+            Err(transport_error())
+        }
+
+        async fn write_object_buffered<P>(
+            &self,
+            _payload: P,
+            _req: WriteObjectRequest,
+            _options: StorageRequestOptions,
+        ) -> google_cloud_storage::Result<Object>
+        where
+            P: StreamingSource + Send + Sync + 'static,
+        {
+            Err(transport_error())
+        }
+    }
+
+    #[derive(Debug, Default)]
+    struct FailingControl;
+
+    impl google_cloud_storage::stub::StorageControl for FailingControl {
+        async fn delete_object(
+            &self,
+            _req: DeleteObjectRequest,
+            _options: GaxRequestOptions,
+        ) -> google_cloud_storage::Result<Response<()>> {
+            Err(transport_error())
+        }
+
+        async fn get_object(
+            &self,
+            _req: GetObjectRequest,
+            _options: GaxRequestOptions,
+        ) -> google_cloud_storage::Result<Response<Object>> {
+            Err(transport_error())
+        }
+
+        async fn list_objects(
+            &self,
+            _req: ListObjectsRequest,
+            _options: GaxRequestOptions,
+        ) -> google_cloud_storage::Result<Response<ListObjectsResponse>> {
+            Err(transport_error())
+        }
+    }
+
+    fn failing_store() -> GcsStore<FailingStorage> {
+        store_with(FailingStorage, FailingControl)
+    }
+
+    #[tokio::test]
+    async fn upload_maps_transport_failure_to_internal_error() {
+        let err = failing_store()
+            .upload(
+                &FileSource::Bytes(bytes::Bytes::from_static(b"payload")),
+                "output.txt",
+                Some("text/plain"),
+                None,
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::Internal);
+        assert!(err.message().contains("GCS upload failed"));
+    }
+
+    #[tokio::test]
+    async fn download_maps_transport_failure_to_not_found_error() {
+        let err = failing_store().download("input.txt").await.unwrap_err();
+        assert_eq!(err.code(), ErrorCode::NotFound);
+        assert!(err.message().contains("GCS download failed"));
+    }
+
+    #[tokio::test]
+    async fn download_maps_stream_failure_to_internal_error() {
+        let store = store_with(StreamFailingStorage, MockControl);
+
+        let err = store.download("input.txt").await.unwrap_err();
+        assert_eq!(err.code(), ErrorCode::Internal);
+        assert!(err.message().contains("GCS download stream failed"));
+    }
+
+    #[tokio::test]
+    async fn delete_maps_transport_failure_to_internal_error() {
+        let err = failing_store().delete("input.txt").await.unwrap_err();
+        assert_eq!(err.code(), ErrorCode::Internal);
+        assert!(err.message().contains("GCS delete failed"));
+    }
+
+    #[tokio::test]
+    async fn head_maps_transport_failure_to_not_found_error() {
+        let err = failing_store().head("input.txt").await.unwrap_err();
+        assert_eq!(err.code(), ErrorCode::NotFound);
+        assert!(err.message().contains("GCS head failed"));
+        // `exists` swallows the head error and reports absence.
+        assert!(!failing_store().exists("input.txt").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn list_maps_transport_failure_to_internal_error() {
+        let err = failing_store().list("logs", Some(2)).await.unwrap_err();
+        assert_eq!(err.code(), ErrorCode::Internal);
+        assert!(err.message().contains("GCS list failed"));
+    }
+
+    #[tokio::test]
+    async fn operations_propagate_client_builder_failure() {
+        let store: GcsStore<MockStorage> = GcsStore {
+            clients: OnceCell::new(),
+            builder: Box::new(|| {
+                Box::pin(async { Err(AppError::new(ErrorCode::Internal, "builder unavailable")) })
+            }),
+            config: Config {
+                bucket: "test-bucket".into(),
+                prefix: Some("assets".into()),
+                anonymous: true,
+            },
+        };
+
+        let err = store.head("input.txt").await.unwrap_err();
+        assert_eq!(err.code(), ErrorCode::Internal);
+        assert!(err.message().contains("builder unavailable"));
+    }
+
+    #[test]
+    fn config_err_formats_stage_and_source() {
+        let err = config_err("storage client", "no credentials");
+        assert_eq!(err.code(), ErrorCode::Internal);
+        assert_eq!(
+            err.message(),
+            "GCS storage client configuration failed: no credentials"
+        );
     }
 }

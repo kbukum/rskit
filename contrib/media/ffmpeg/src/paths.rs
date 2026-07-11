@@ -242,6 +242,19 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn create_output_parent_reports_plain_create_dir_errors() {
+        let temp = rskit_storage::TempDir::new().unwrap();
+        let file_parent = temp.path().join("file-parent");
+        std::fs::write(&file_parent, b"file").unwrap();
+
+        let err = create_output_parent(&FfmpegConfig::default(), &file_parent.join("out.mp4"))
+            .await
+            .unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::Internal);
+    }
+
+    #[tokio::test]
     async fn create_output_parent_rejects_existing_file_as_parent() {
         let root = rskit_storage::TempDir::new().unwrap();
         let file_parent = root.path().join("not-a-dir");
@@ -295,6 +308,21 @@ mod tests {
         create_output_parent(&config, &output).await.unwrap();
 
         assert!(root.path().join("a/b").is_dir());
+    }
+
+    #[tokio::test]
+    async fn confined_dir_creation_accepts_relative_paths_and_rejects_unsafe_components() {
+        let root = rskit_storage::TempDir::new().unwrap();
+
+        create_confined_dir_all(root.path(), Path::new("relative/a"))
+            .await
+            .unwrap();
+        assert!(root.path().join("relative/a").is_dir());
+
+        let err = create_confined_dir_all(root.path(), Path::new("../escape"))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
     }
 
     #[tokio::test]

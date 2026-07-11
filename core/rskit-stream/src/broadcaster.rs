@@ -229,4 +229,12 @@ mod tests {
 
         assert_eq!(sub.next().await, Some(42));
     }
+
+    #[test]
+    fn default_and_debug_report_buffer_and_subscribers() {
+        let bc = Broadcaster::<u32>::default();
+
+        assert_eq!(bc.buffer(), DEFAULT_BROADCAST_BUFFER);
+        assert!(format!("{bc:?}").contains("Broadcaster"));
+    }
 }

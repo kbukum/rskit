@@ -158,6 +158,11 @@ mod tests {
         assert_eq!(cfg.target, "localhost:50051");
         assert!(cfg.tls.is_none());
         assert_eq!(cfg.timeout, Duration::from_secs(30));
+        assert_eq!(cfg.address(), "localhost:50051");
+        assert!(
+            format!("{:?}", cfg.with_resilience_policy(Policy::new()))
+                .contains("has_resilience_policy")
+        );
     }
 
     #[test]
@@ -187,6 +192,16 @@ mod tests {
         });
 
         assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn validate_rejects_incomplete_client_identity() {
+        let cfg = GrpcClientConfig::new("example.com:443").with_tls(TlsConfig {
+            cert_file: Some("client.pem".to_string()),
+            ..Default::default()
+        });
+
+        assert_eq!(cfg.validate().unwrap_err().code(), ErrorCode::InvalidInput);
     }
 
     #[test]

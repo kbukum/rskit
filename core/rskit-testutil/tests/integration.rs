@@ -30,3 +30,14 @@ fn mock_provider_returns_configured_response() {
     assert_eq!(mock.call_count(), 1);
     assert_eq!(mock.calls(), vec!["hello".to_string()]);
 }
+
+#[test]
+fn mock_provider_can_fail_and_default() {
+    let mock = MockProvider::<String, u64>::default();
+    mock.will_fail(AppError::new(ErrorCode::Internal, "boom"));
+
+    let err = mock.execute("fail".to_string()).unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::Internal);
+    assert_eq!(mock.call_count(), 1);
+}

@@ -589,3 +589,92 @@ where
     let _ = env.events_bcast.send(final_event);
     let _ = env.result_tx.send(result);
 }
+
+#[cfg(test)]
+mod tests {
+    use tokio::sync::mpsc;
+
+    use super::*;
+
+    struct EchoHandler;
+
+    #[async_trait::async_trait]
+    impl Handler<u32, u32> for EchoHandler {
+        async fn handle(
+            &self,
+            task: u32,
+            _emit: mpsc::Sender<Event<u32>>,
+            _cancel: CancellationToken,
+        ) -> AppResult<u32> {
+            Ok(task)
+        }
+    }
+
+    #[tokio::test]
+    async fn queue_rejects_when_full_and_closed_and_receives_until_closed() {
+        let (queue, receiver) = SubmitQueue::new(1);
+        let cloned = queue.clone();
+
+        assert!(cloned.push_reject(1).is_ok());
+        assert!(matches!(
+            queue.push_reject(2),
+            Err(PushRejectError::Full(2))
+        ));
+        assert_eq!(receiver.recv().await, Some(1));
+        queue.close();
+        assert!(matches!(
+            queue.push_reject(3),
+            Err(PushRejectError::Closed(3))
+        ));
+        assert_eq!(receiver.recv().await, None);
+        assert_eq!(queue.push_drop_oldest(4), Err(4));
+        assert_eq!(queue.push_block(5).await, Err(5));
+    }
+
+    #[tokio::test]
+    async fn closed_pool_submit_reports_service_unavailable_for_each_policy() {
+        for overflow_policy in [
+            OverflowPolicy::Block,
+            OverflowPolicy::Reject,
+            OverflowPolicy::DropOldest,
+        ] {
+            let pool = Pool::new(
+                Arc::new(EchoHandler),
+                PoolConfig::new("closed")
+                    .with_queue_size(1)
+                    .with_overflow_policy(overflow_policy),
+            );
+            pool.close();
+
+            let error = match pool.submit(1).await {
+                Ok(handle) => handle.result().await.unwrap_err(),
+                Err(error) => error,
+            };
+
+            assert_eq!(error.code(), ErrorCode::ServiceUnavailable);
+        }
+    }
+
+    #[tokio::test]
+    async fn pool_stats_and_successful_result_are_reported() {
+        let pool = Pool::new(
+            Arc::new(EchoHandler),
+            PoolConfig::new("echo")
+                .with_size(0)
+                .with_grace_period(Duration::from_millis(50)),
+        );
+
+        let stats = pool.stats();
+        assert_eq!(stats.name, "echo");
+        assert_eq!(stats.capacity, 1);
+        assert!(pool.available_permits() <= 1);
+
+        let handle = pool.submit(7).await.unwrap();
+        let mut events = handle.events();
+        assert_eq!(handle.result().await.unwrap(), 7);
+        let event = events.try_recv().unwrap();
+        assert_eq!(event.data, Some(7));
+
+        pool.shutdown().await.unwrap();
+    }
+}

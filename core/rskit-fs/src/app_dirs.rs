@@ -183,4 +183,20 @@ mod tests {
 
         assert!(app_cache_dir_from_env("toven", |key| env.get(key).cloned()).is_err());
     }
+
+    #[test]
+    fn public_cache_dir_and_missing_or_empty_home_errors_are_mapped() {
+        let mut env = BTreeMap::new();
+        assert!(app_cache_dir_from_env("toven", |key| env.get(key).cloned()).is_err());
+
+        #[cfg(target_os = "macos")]
+        env.insert("HOME", OsString::from(""));
+        #[cfg(all(unix, not(target_os = "macos")))]
+        env.insert("HOME", OsString::from(""));
+        #[cfg(windows)]
+        env.insert("USERPROFILE", OsString::from(""));
+
+        assert!(app_cache_dir_from_env("toven", |key| env.get(key).cloned()).is_err());
+        let _ = super::app_cache_dir("toven");
+    }
 }

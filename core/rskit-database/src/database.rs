@@ -226,3 +226,122 @@ impl DatabaseTransaction for InMemoryTransaction {
 pub(crate) fn memory_from_config(config: &DatabaseConfig) -> InMemoryDatabase {
     InMemoryDatabase::new(config.memory.clone())
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::AtomicBool;
+
+    use parking_lot::Mutex;
+    use rskit_bootstrap::Component;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn in_memory_database_records_bounded_history_and_component_state() {
+        let database = InMemoryDatabase::new(MemoryDatabaseConfig {
+            name: "test".to_owned(),
+            statement_history: 1,
+        });
+
+        assert_eq!(database.name(), "database");
+        database
+            .execute(DatabaseQuery::new("select 1").with_parameter(1))
+            .await
+            .unwrap();
+        database
+            .execute(DatabaseQuery::new("select 2"))
+            .await
+            .unwrap();
+        let recorded = database.recorded_queries();
+        assert_eq!(recorded.len(), 1);
+        assert_eq!(recorded[0].statement, "select 2");
+        assert!(database.health().is_healthy());
+
+        database.stop().await.unwrap();
+        assert_eq!(
+            database.ping().await.unwrap_err().code(),
+            ErrorCode::ConnectionFailed
+        );
+        assert_eq!(
+            database
+                .execute(DatabaseQuery::new("select 3"))
+                .await
+                .unwrap_err()
+                .code(),
+            ErrorCode::ConnectionFailed
+        );
+        assert!(!database.health().is_healthy());
+
+        database.start().await.unwrap();
+        assert_eq!(
+            database
+                .execute(DatabaseQuery::new("   "))
+                .await
+                .unwrap_err()
+                .code(),
+            ErrorCode::InvalidInput
+        );
+    }
+
+    #[tokio::test]
+    async fn in_memory_transactions_validate_execute_and_guard_terminal_state() {
+        let tx = InMemoryDatabase::default().begin().await.unwrap();
+        assert_eq!(
+            tx.execute(DatabaseQuery::new(" "))
+                .await
+                .unwrap_err()
+                .code(),
+            ErrorCode::InvalidInput
+        );
+        assert_eq!(
+            tx.execute(DatabaseQuery::new("insert"))
+                .await
+                .unwrap()
+                .rows_affected,
+            1
+        );
+        tx.commit().await.unwrap();
+
+        let committed = Box::new(InMemoryTransaction {
+            started_at: Instant::now(),
+            queries: Mutex::new(Vec::new()),
+            committed: AtomicBool::new(true),
+            rolled_back: AtomicBool::new(false),
+        });
+        assert_eq!(
+            committed.rollback().await.unwrap_err().code(),
+            ErrorCode::InvalidInput
+        );
+
+        let rolled_back = Box::new(InMemoryTransaction {
+            started_at: Instant::now(),
+            queries: Mutex::new(Vec::new()),
+            committed: AtomicBool::new(false),
+            rolled_back: AtomicBool::new(true),
+        });
+        assert_eq!(
+            rolled_back.commit().await.unwrap_err().code(),
+            ErrorCode::InvalidInput
+        );
+
+        InMemoryDatabase::default()
+            .begin()
+            .await
+            .unwrap()
+            .rollback()
+            .await
+            .unwrap();
+    }
+
+    #[test]
+    fn zero_statement_history_disables_recording() {
+        let database = InMemoryDatabase::new(MemoryDatabaseConfig {
+            name: "test".to_owned(),
+            statement_history: 0,
+        });
+
+        database.record(DatabaseQuery::new("select"));
+
+        assert!(database.recorded_queries().is_empty());
+    }
+}

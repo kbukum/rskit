@@ -228,7 +228,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires native TLS certificates; run with --include-ignored in a configured environment"]
     async fn build_endpoint_uses_https_when_tls_is_enabled() {
         let ca_cert_path = concat!(env!("CARGO_MANIFEST_DIR"), "/testdata/ca.pem").to_string();
         let endpoint = build_endpoint(&GrpcClientConfig::new("example.com:443").with_tls(
@@ -379,5 +378,27 @@ mod tests {
         assert_eq!(err.code(), ErrorCode::InvalidInput);
         assert!(err.to_string().contains("failed to read gRPC client key"));
         let _ = std::fs::remove_dir_all(&workspace);
+    }
+
+    #[tokio::test]
+    async fn clone_shares_cached_channel_and_missing_client_cert_is_mapped() {
+        let channel = GrpcChannel::new(GrpcClientConfig::new("localhost:50051"));
+        let mut cloned = channel.clone();
+        cloned.close().await.unwrap();
+        assert_eq!(cloned.config().address(), "localhost:50051");
+
+        let tls = TlsConfig {
+            cert_file: Some("missing/client.pem".to_string()),
+            key_file: Some("missing/client.key".to_string()),
+            ..Default::default()
+        };
+        let config = GrpcClientConfig::new("example.com:443").with_tls(tls.clone());
+        let err = build_tls_config(&config, &tls).await.unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+        assert!(
+            err.to_string()
+                .contains("failed to read gRPC client certificate")
+        );
     }
 }

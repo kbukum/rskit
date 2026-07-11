@@ -60,6 +60,10 @@ mod tests {
     fn hardware_variants_emit_flags() {
         assert_eq!(HwAccel::VideoToolbox.ffmpeg_arg(), Some("videotoolbox"));
         assert_eq!(HwAccel::Cuda.ffmpeg_arg(), Some("cuda"));
+        assert_eq!(HwAccel::Qsv.ffmpeg_arg(), Some("qsv"));
+        assert_eq!(HwAccel::Vaapi.ffmpeg_arg(), Some("vaapi"));
+        assert_eq!(HwAccel::Vulkan.ffmpeg_arg(), Some("vulkan"));
+        assert_eq!(HwAccel::D3d11va.ffmpeg_arg(), Some("d3d11va"));
         assert_eq!(HwAccel::Auto.ffmpeg_arg(), Some("auto"));
     }
 

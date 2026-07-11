@@ -417,3 +417,62 @@ fn validate_adapter(adapter: &str) -> AppResult<()> {
 fn invalid(message: impl Into<String>) -> AppResult<()> {
     Err(AppError::new(ErrorCode::InvalidInput, message.into()))
 }
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use rskit_messaging::BrokerConfigExt;
+    use serde::Deserialize;
+
+    use super::*;
+
+    #[test]
+    fn base_trait_method_returns_embedded_broker_config() {
+        let config = KafkaConfig::default();
+
+        assert_eq!(config.base().adapter, ADAPTER_NAME);
+    }
+
+    #[test]
+    fn validate_topic_rejects_empty_long_and_invalid_values() {
+        let long = "a".repeat(250);
+
+        assert_eq!(
+            validate_topic("topic", " \t").unwrap_err().code(),
+            ErrorCode::InvalidInput
+        );
+        assert_eq!(
+            validate_topic("topic", &long).unwrap_err().code(),
+            ErrorCode::InvalidInput
+        );
+        assert_eq!(
+            validate_topic("topic", "bad/topic").unwrap_err().code(),
+            ErrorCode::InvalidInput
+        );
+        validate_topic("topic", "good.topic_1-2:3").unwrap();
+    }
+
+    #[test]
+    fn uri_redaction_leaves_values_without_credentials_unchanged() {
+        assert_eq!(redact_uri_credentials("broker:9092"), "broker:9092");
+        assert_eq!(
+            redact_uri_credentials("kafka://broker.example.test:9092/topic"),
+            "kafka://broker.example.test:9092/topic"
+        );
+        assert!(!has_url_credentials("broker:9092"));
+    }
+
+    #[test]
+    fn duration_seconds_deserializes_from_integer_seconds() {
+        #[derive(Deserialize)]
+        struct Wrapper {
+            #[serde(deserialize_with = "duration_seconds::deserialize")]
+            value: Duration,
+        }
+
+        let parsed: Wrapper = serde_json::from_str(r#"{"value":7}"#).unwrap();
+
+        assert_eq!(parsed.value, Duration::from_secs(7));
+    }
+}

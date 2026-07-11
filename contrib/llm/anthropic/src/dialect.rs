@@ -289,6 +289,37 @@ mod tests {
     }
 
     #[test]
+    fn build_body_serializes_assistant_and_tool_messages() {
+        let req = CompletionRequest {
+            model: "claude-sonnet-4-20250514".to_string(),
+            messages: vec![
+                Message::Assistant(AssistantMessage {
+                    content: vec![ContentPart::Text {
+                        text: "use the tool".to_string(),
+                    }],
+                    tool_calls: Vec::new(),
+                    usage: None,
+                }),
+                types::tool_result_msg("toolu_1", "forecast", false),
+            ],
+            max_tokens: None,
+            temperature: Some(0.4),
+            stream: false,
+            tools: None,
+            tool_choice: None,
+        };
+
+        let body = AnthropicDialect::build_body(&req).unwrap();
+
+        assert_eq!(body["max_tokens"], 1024);
+        assert!((body["temperature"].as_f64().unwrap() - 0.4).abs() < 0.000_001);
+        assert_eq!(body["messages"][0]["role"], "assistant");
+        assert_eq!(body["messages"][0]["content"], "use the tool");
+        assert_eq!(body["messages"][1]["role"], "user");
+        assert_eq!(body["messages"][1]["content"], "forecast");
+    }
+
+    #[test]
     fn parse_response_extracts_content() {
         let body = r#"{
             "id": "msg-1",
@@ -301,6 +332,60 @@ mod tests {
         assert_eq!(resp.text(), "Hello!");
         assert_eq!(resp.usage.input_tokens, 8);
         assert_eq!(resp.stop_reason, Some(FinishReason::Stop));
+    }
+
+    #[test]
+    fn parse_response_extracts_tool_calls_and_stop_reasons() {
+        let body = r#"{
+            "model": "claude-sonnet-4-20250514",
+            "content": [
+                {"type": "tool_use", "id": "toolu_1", "name": "lookup", "input": {"q": "rust"}},
+                {"type": "tool_use"},
+                {"type": "unknown"}
+            ],
+            "usage": {"input_tokens": 1, "output_tokens": 2},
+            "stop_reason": "tool_use"
+        }"#;
+
+        let resp = AnthropicDialect::parse_response(body).unwrap();
+
+        assert_eq!(resp.message.tool_calls.len(), 2);
+        assert_eq!(resp.message.tool_calls[0].id, "toolu_1");
+        assert_eq!(resp.message.tool_calls[0].name, "lookup");
+        assert_eq!(resp.message.tool_calls[0].input["q"], "rust");
+        assert_eq!(resp.message.tool_calls[1].id, "tool_call_1");
+        assert_eq!(resp.stop_reason, Some(FinishReason::ToolUse));
+    }
+
+    #[test]
+    fn parse_response_maps_all_known_stop_reasons() {
+        for (reason, expected) in [
+            ("max_tokens", FinishReason::Length),
+            ("content_filter", FinishReason::ContentFilter),
+            ("error", FinishReason::Error),
+            ("cancelled", FinishReason::Cancelled),
+        ] {
+            let body = format!(
+                r#"{{
+                    "model": "claude-sonnet",
+                    "content": [],
+                    "usage": {{"input_tokens": 1, "output_tokens": 2}},
+                    "stop_reason": "{reason}"
+                }}"#
+            );
+
+            assert_eq!(
+                AnthropicDialect::parse_response(&body).unwrap().stop_reason,
+                Some(expected)
+            );
+        }
+    }
+
+    #[test]
+    fn parse_response_rejects_invalid_json() {
+        let err = AnthropicDialect::parse_response("not json").unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::ExternalService);
     }
 
     #[test]
@@ -351,5 +436,35 @@ mod tests {
         assert!(chunk.content.is_empty());
         assert!(chunk.tool_calls.is_empty());
         assert!(!chunk.done);
+    }
+
+    #[test]
+    fn stream_chunk_rejects_invalid_payloads() {
+        let utf8_err = AnthropicDialect::parse_stream_chunk(&[0xff]).unwrap_err();
+        let json_err = AnthropicDialect::parse_stream_chunk(b"not json").unwrap_err();
+
+        assert_eq!(utf8_err.code(), ErrorCode::InvalidFormat);
+        assert_eq!(json_err.code(), ErrorCode::ExternalService);
+    }
+
+    #[test]
+    fn stream_chunk_ignores_unknown_delta_and_non_tool_start() {
+        let delta = br#"{"type":"content_block_delta","delta":{"type":"signature_delta"}}"#;
+        let start = br#"{"type":"content_block_start","content_block":{"type":"text"}}"#;
+
+        assert_eq!(
+            AnthropicDialect::parse_stream_chunk(delta)
+                .unwrap()
+                .tool_calls
+                .len(),
+            0
+        );
+        assert_eq!(
+            AnthropicDialect::parse_stream_chunk(start)
+                .unwrap()
+                .tool_calls
+                .len(),
+            0
+        );
     }
 }

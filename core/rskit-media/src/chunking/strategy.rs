@@ -549,6 +549,21 @@ mod tests {
     }
 
     #[test]
+    fn fixed_duration_builders_and_min_duration_are_reported() {
+        let strategy = FixedDurationStrategy::default()
+            .with_chunk_duration(Duration::from_secs(120))
+            .with_snap_tolerance(Duration::from_secs(3))
+            .with_reassembly(ReassemblyPlan::MergeText {
+                separator: "\n".to_string(),
+            })
+            .with_timeout_multiplier(2.0);
+
+        assert_eq!(strategy.min_duration(), Some(Duration::from_secs(180)));
+        assert_eq!(strategy.snap_tolerance, Duration::from_secs(3));
+        assert_eq!(strategy.timeout_multiplier, 2.0);
+    }
+
+    #[test]
     fn keyframe_strategy_creates_target_chunks() {
         let strategy = KeyframeStrategy {
             target_chunks: 4,
@@ -560,6 +575,29 @@ mod tests {
         // Should create roughly 4-5 chunks (exact count depends on keyframe alignment)
         assert!(result.chunk_count() >= 3);
         assert!(result.chunk_count() <= 6);
+    }
+
+    #[test]
+    fn keyframe_strategy_handles_zero_duration_and_fallback() {
+        let zero = make_metadata(0.0);
+        assert!(KeyframeStrategy::default().plan(&zero, &[]).is_err());
+
+        let strategy = KeyframeStrategy::default().with_target_chunks(0);
+        assert_eq!(strategy.target_chunks, 1);
+
+        let metadata = make_metadata(1200.0);
+        let sparse = vec![ChunkBoundary {
+            timestamp: Timestamp::from_seconds(60.0),
+            is_keyframe: true,
+            quality: 1.0,
+        }];
+        let plan = KeyframeStrategy {
+            target_chunks: 4,
+            ..Default::default()
+        }
+        .plan(&metadata, &sparse)
+        .unwrap();
+        assert_eq!(plan.strategy_name, "fixed_duration");
     }
 
     #[test]
@@ -605,6 +643,17 @@ mod tests {
     }
 
     #[test]
+    fn silence_strategy_builders_zero_duration_and_no_boundary_fallback() {
+        let strategy = SilenceStrategy::default().with_target_duration(Duration::from_secs(120));
+        assert_eq!(strategy.min_duration(), Some(Duration::from_secs(180)));
+        assert!(strategy.plan(&make_metadata(0.0), &[]).is_err());
+
+        let plan = strategy.plan(&make_metadata(600.0), &[]).unwrap();
+        assert!(plan.chunk_count() > 1);
+        assert_eq!(plan.chunks[0].range.end, Timestamp::from_seconds(120.0));
+    }
+
+    #[test]
     fn snap_to_boundary_prefers_keyframe() {
         let boundaries = vec![
             ChunkBoundary {
@@ -629,5 +678,22 @@ mod tests {
             2_000_000, // 2 second tolerance
         );
         assert_eq!(result.as_millis(), 10500); // Prefers the keyframe
+    }
+
+    #[test]
+    fn snap_to_boundary_handles_empty_and_any_boundary_fallback() {
+        let ideal = Timestamp::from_seconds(10.0);
+        assert_eq!(snap_to_boundary(ideal, &[], 1_000_000), ideal);
+
+        let boundaries = [ChunkBoundary {
+            timestamp: Timestamp::from_seconds(9.8),
+            is_keyframe: false,
+            quality: 0.7,
+        }];
+        assert_eq!(
+            snap_to_boundary(ideal, &boundaries, 1_000_000),
+            Timestamp::from_seconds(9.8)
+        );
+        assert_eq!(snap_to_boundary(ideal, &boundaries, 10), ideal);
     }
 }

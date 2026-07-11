@@ -145,4 +145,18 @@ mod tests {
         assert_eq!(cfg.memory.name, "testdb");
         assert_eq!(cfg.memory.statement_history, 32);
     }
+
+    #[test]
+    fn validation_and_duration_deserialization_are_exercised() {
+        let json = r#"{
+            "connect_timeout": 7,
+            "slow_query_threshold": 3
+        }"#;
+        let cfg: DatabaseConfig = serde_json::from_str(json).unwrap();
+
+        cfg.validate().unwrap();
+        cfg.memory.validate().unwrap();
+        assert_eq!(cfg.connect_timeout, Duration::from_secs(7));
+        assert_eq!(cfg.slow_query_threshold, Duration::from_secs(3));
+    }
 }

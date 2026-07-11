@@ -310,3 +310,41 @@ impl ConfigLoader {
 pub fn load_config<T: AppConfig>() -> AppResult<T> {
     ConfigLoader::app().load_app()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn policy_sources_cover_toml_errors_and_app_env_paths() {
+        let missing_toml = ConfigLoader {
+            policy: LoaderPolicy::Toml,
+            defaults: Vec::new(),
+            config_file: None,
+            env_file: None,
+            env_prefix: String::new(),
+            profile: None,
+            sources: Vec::new(),
+            overrides: Vec::new(),
+        };
+        assert!(missing_toml.policy_sources().is_err());
+
+        let dir = tempfile::tempdir().unwrap();
+        let config_file = dir.path().join("config.toml");
+        let env_file = dir.path().join(".env");
+        std::fs::write(&config_file, "service.name = 'unit'").unwrap();
+        std::fs::write(&env_file, "SERVICE__PORT=8080").unwrap();
+        let sources = ConfigLoader::app()
+            .with_config_file(&config_file)
+            .with_env_file(&env_file)
+            .app_policy_sources()
+            .unwrap();
+        assert_eq!(sources.len(), 2);
+
+        let err = ConfigLoader::app()
+            .with_profile("missing-profile")
+            .app_policy_sources()
+            .unwrap_err();
+        assert!(err.to_string().contains("profile env file not found"));
+    }
+}

@@ -8,6 +8,8 @@ use std::{
 use tokio_util::sync::CancellationToken;
 
 use super::{PersistentConfig, PersistentReadiness, ShutdownOutcome, start_persistent_with_cancel};
+#[cfg(unix)]
+use crate::pty::PtyIo;
 use crate::{
     ErrorCode, InheritedIo, InputPolicy, ObservedIo, OutputObserver, ProcessConfig, ProcessIo,
     ProcessSpec, SignalPolicy,
@@ -371,6 +373,23 @@ fn persistent_rejects_observed_io_mode() {
         CancellationToken::new(),
     )
     .expect_err("persistent startup should reject observed mode");
+
+    assert_eq!(error.code(), ErrorCode::InvalidInput);
+}
+
+#[cfg(unix)]
+#[test]
+fn persistent_rejects_pty_io_mode() {
+    let command = ProcessSpec::new("sh").arg("-c").arg("sleep 10");
+    let process_config = ProcessConfig::default().with_io(ProcessIo::pty(PtyIo::default()));
+
+    let error = start_persistent_with_cancel(
+        &command,
+        &process_config,
+        &PersistentConfig::default(),
+        CancellationToken::new(),
+    )
+    .expect_err("persistent startup should reject pty mode");
 
     assert_eq!(error.code(), ErrorCode::InvalidInput);
 }
