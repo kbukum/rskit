@@ -19,6 +19,11 @@ use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
 
 use super::screen::RegionScreen;
 
+/// Columns each tile indents its content beneath the region header. The virtual
+/// terminal grid is sized to the tile width minus this indent so a child's
+/// output fills the visible content area exactly, without being chopped.
+const TILE_INDENT: usize = 2;
+
 /// How the live console lays out and truncates tiles.
 #[derive(Debug, Clone, Copy)]
 pub struct LiveConfig {
@@ -89,6 +94,12 @@ impl LiveConsole {
         }
     }
 
+    /// The virtual terminal grid width: the tile width minus the content
+    /// indent, so a child fills the visible content area without being chopped.
+    fn content_cols(&self) -> usize {
+        self.config.cols.saturating_sub(TILE_INDENT).max(1)
+    }
+
     /// Set the status line shown above the tiles.
     pub fn set_header(&self, text: impl Into<String>) {
         self.header.set_message(text.into());
@@ -115,7 +126,7 @@ impl LiveConsole {
         bar.set_style(message_style());
         let region = Region {
             bar,
-            screen: RegionScreen::new(self.config.rows, self.config.cols),
+            screen: RegionScreen::new(self.config.rows, self.content_cols()),
             label,
         };
         region.bar.set_message(render_tile(
