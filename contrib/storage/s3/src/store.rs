@@ -2,6 +2,8 @@
 
 use std::collections::HashMap;
 use std::fmt;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -13,6 +15,7 @@ use rskit_storage::store::{
 };
 use rskit_util::env;
 use serde::{Deserialize, Serialize};
+use tokio::sync::OnceCell;
 
 /// Configuration for the S3 store.
 ///
@@ -66,22 +69,39 @@ impl fmt::Debug for Config {
 /// Created by registering [`Config`] with the storage registry.
 /// Implements [`FileStore`] for use with any rskit-storage consumer.
 struct S3Store {
-    client: aws_sdk_s3::Client,
+    client: OnceCell<aws_sdk_s3::Client>,
+    builder: S3ClientBuilder,
     config: Config,
 }
+
+type S3ClientFuture = Pin<Box<dyn Future<Output = AppResult<aws_sdk_s3::Client>> + Send>>;
+type S3ClientBuilder = Box<dyn Fn() -> S3ClientFuture + Send + Sync>;
 
 impl S3Store {
     /// Create a new S3 store from config.
     ///
     /// Resolves credentials from config fields, then env vars.
-    /// The client is synchronously constructed and reused for all operations.
+    /// The client is lazily constructed and reused for all operations.
     fn new(config: Config) -> AppResult<Self> {
-        let client = aws_sdk_s3::Client::from_conf(client_config_builder(&config)?.build());
-        Ok(Self { client, config })
+        let client_config = client_config_builder(&config)?.build();
+        let builder = Box::new(move || {
+            let client_config = client_config.clone();
+            Box::pin(async move { Ok(aws_sdk_s3::Client::from_conf(client_config)) })
+                as S3ClientFuture
+        });
+        Ok(Self {
+            client: OnceCell::new(),
+            builder,
+            config,
+        })
     }
 
     fn full_key(&self, key: &str) -> String {
         prefixed_key(self.config.prefix.as_deref(), key)
+    }
+
+    async fn client(&self) -> AppResult<&aws_sdk_s3::Client> {
+        self.client.get_or_try_init(|| (self.builder)()).await
     }
 }
 
@@ -136,9 +156,9 @@ impl FileStore for S3Store {
         let data = source.read_all().await?;
         let size = data.len() as u64;
         let full_key = self.full_key(key);
+        let client = self.client().await?;
 
-        let mut req = self
-            .client
+        let mut req = client
             .put_object()
             .bucket(&self.config.bucket)
             .key(&full_key)
@@ -170,8 +190,8 @@ impl FileStore for S3Store {
 
     async fn download(&self, key: &str) -> AppResult<FileSource> {
         let full_key = self.full_key(key);
-        let resp = self
-            .client
+        let client = self.client().await?;
+        let resp = client
             .get_object()
             .bucket(&self.config.bucket)
             .key(&full_key)
@@ -189,7 +209,8 @@ impl FileStore for S3Store {
 
     async fn delete(&self, key: &str) -> AppResult<()> {
         let full_key = self.full_key(key);
-        self.client
+        let client = self.client().await?;
+        client
             .delete_object()
             .bucket(&self.config.bucket)
             .key(&full_key)
@@ -201,8 +222,8 @@ impl FileStore for S3Store {
 
     async fn exists(&self, key: &str) -> AppResult<bool> {
         let full_key = self.full_key(key);
-        match self
-            .client
+        let client = self.client().await?;
+        match client
             .head_object()
             .bucket(&self.config.bucket)
             .key(&full_key)
@@ -216,8 +237,8 @@ impl FileStore for S3Store {
 
     async fn head(&self, key: &str) -> AppResult<StoredFile> {
         let full_key = self.full_key(key);
-        let resp = self
-            .client
+        let client = self.client().await?;
+        let resp = client
             .head_object()
             .bucket(&self.config.bucket)
             .key(&full_key)
@@ -230,8 +251,8 @@ impl FileStore for S3Store {
 
     async fn list(&self, prefix: &str, limit: Option<usize>) -> AppResult<Vec<StoredFile>> {
         let full_prefix = self.full_key(prefix);
-        let mut req = self
-            .client
+        let client = self.client().await?;
+        let mut req = client
             .list_objects_v2()
             .bucket(&self.config.bucket)
             .prefix(&full_prefix);
@@ -265,7 +286,8 @@ impl FileStore for S3Store {
             })?;
 
         let presigned = self
-            .client
+            .client()
+            .await?
             .get_object()
             .bucket(&self.config.bucket)
             .key(&full_key)
@@ -284,8 +306,9 @@ impl FileStore for S3Store {
     async fn copy(&self, from_key: &str, to_key: &str) -> AppResult<StoredFile> {
         let full_from = self.full_key(from_key);
         let full_to = self.full_key(to_key);
+        let client = self.client().await?;
 
-        self.client
+        client
             .copy_object()
             .bucket(&self.config.bucket)
             .copy_source(format!("{}/{}", self.config.bucket, full_from))
@@ -607,6 +630,22 @@ mod tests {
         assert_eq!(store.full_key("file.txt"), "uploads/file.txt");
     }
 
+    #[test]
+    fn constructs_offline_without_building_client() {
+        let store = S3Store::new(Config {
+            bucket: "b".into(),
+            region: Some("us-east-1".into()),
+            endpoint: Some("http://127.0.0.1:9000".into()),
+            prefix: Some("uploads".into()),
+            force_path_style: true,
+            access_key_id: Some("k".into()),
+            secret_access_key: Some("s".into()),
+        })
+        .unwrap();
+
+        assert_eq!(store.full_key("file.txt"), "uploads/file.txt");
+    }
+
     #[tokio::test]
     async fn factory_creates_store_from_explicit_credentials() {
         let factory = S3Factory {
@@ -718,7 +757,15 @@ mod tests {
             .build();
         (
             S3Store {
-                client: aws_sdk_s3::Client::from_conf(conf),
+                client: OnceCell::new_with(Some(aws_sdk_s3::Client::from_conf(conf))),
+                builder: Box::new(|| {
+                    Box::pin(async {
+                        Err(AppError::new(
+                            ErrorCode::Internal,
+                            "test S3 client builder should not be called",
+                        ))
+                    })
+                }),
                 config,
             },
             http,

@@ -2,18 +2,21 @@
 //!
 //! Renders several concurrent output streams as fixed-height "tiles" stacked in
 //! a live area at the bottom of the terminal, each showing a bounded virtual
-//! terminal of one stream (via [`RegionScreen`]). Rows that scroll out of a tile
-//! — and a region's remaining rows when it finishes — are flushed into normal
-//! scrollback above the live area, so the transcript stays complete while the
-//! live area keeps a bounded height.
+//! terminal of one stream (via [`RegionScreen`]). The tiles are an ephemeral
+//! progress peek: rows that scroll off the top are dropped from the live view,
+//! not flushed to scrollback, so a chatty stream does not flood the transcript.
+//! Durable signal is emitted only at [`finish`](LiveConsole::finish) time — a
+//! one-line verdict — and, for a failed region, a bounded replay of its retained
+//! tail via [`finish_with_replay`](LiveConsole::finish_with_replay).
 //!
 //! The terminal mechanics (cursor positioning, redraw rate-limiting, width
 //! handling, resize) are delegated to `indicatif`'s multi-progress engine, so
-//! this type only owns the tile layout and the scrollback flush. It is generic:
-//! callers feed labeled byte streams and get terminal rendering out, with no
-//! domain types involved.
+//! this type only owns the tile layout, the bounded failure ring, and the
+//! verdict flush. It is generic: callers feed labeled byte streams and get
+//! terminal rendering out, with no domain types involved.
 
 use std::collections::HashMap;
+use std::collections::VecDeque;
 
 use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
 
@@ -40,19 +43,48 @@ pub struct LiveConfig {
     /// so a real width must be passed (unlike the old truncation width, `0` is
     /// not "disable").
     pub cols: usize,
+    /// How many rows that scroll off a tile are retained per region for a
+    /// failure replay. The live tile stays a bounded peek; on failure this many
+    /// of the most-recent scrolled-off rows (plus the final on-screen rows) are
+    /// flushed to scrollback as the failure block. `0` retains nothing, so a
+    /// failure replays only the rows still on screen.
+    pub scrollback: usize,
 }
 
 impl Default for LiveConfig {
     fn default() -> Self {
-        Self { rows: 5, cols: 80 }
+        Self {
+            rows: 5,
+            cols: 80,
+            scrollback: 200,
+        }
     }
 }
 
-/// One in-flight region: its virtual terminal, label, and backing progress line.
+impl LiveConfig {
+    /// The inner virtual-terminal grid width: the tile width minus the content
+    /// indent rendered under each region header.
+    ///
+    /// A child whose output is fed to the tile must be told its terminal is this
+    /// wide (not the full tile width), so its own line wrapping matches the grid.
+    /// Otherwise a full-width in-place progress redraw wraps at the grid edge,
+    /// scrolls the short grid, and churns the retained failure tail with stale
+    /// half-frames on every tick — which then surface in the bounded replay when
+    /// a region fails.
+    #[must_use]
+    pub fn content_cols(&self) -> usize {
+        self.cols.saturating_sub(TILE_INDENT.len()).max(1)
+    }
+}
+
+/// One in-flight region: its virtual terminal, label, backing progress line,
+/// and a bounded ring of the rows that have scrolled off its tile — kept only
+/// so a failure can replay recent context.
 struct Region {
     bar: ProgressBar,
     screen: RegionScreen,
     label: String,
+    retained: VecDeque<String>,
 }
 
 /// A live, multi-region terminal renderer.
@@ -103,8 +135,11 @@ impl LiveConsole {
 
     /// The virtual terminal grid width: the tile width minus the content
     /// indent, so a child fills the visible content area without being chopped.
-    fn content_cols(&self) -> usize {
-        self.config.cols.saturating_sub(TILE_INDENT.len()).max(1)
+    /// Children feeding a tile should be sized to this; see
+    /// [`LiveConfig::content_cols`].
+    #[must_use]
+    pub fn content_cols(&self) -> usize {
+        self.config.content_cols()
     }
 
     /// Set the status line shown above the tiles.
@@ -114,20 +149,15 @@ impl LiveConsole {
 
     /// Start a new region tile labeled `label`, keyed by `id`.
     ///
-    /// A duplicate `id` retires the existing region first — flushing its
-    /// remaining lines to scrollback — so a re-used key neither leaks a stale
-    /// tile nor drops its transcript.
-    ///
-    /// Returns any I/O error from flushing a replaced region to scrollback.
-    pub fn begin(
-        &mut self,
-        id: impl Into<String>,
-        label: impl Into<String>,
-    ) -> std::io::Result<()> {
+    /// A duplicate `id` discards the existing region first — dropping its tile
+    /// and retained tail — so a re-used key neither leaks a stale tile nor
+    /// double-reports.
+    pub fn begin(&mut self, id: impl Into<String>, label: impl Into<String>) {
         let id = id.into();
         let label = label.into();
         if let Some(old) = self.regions.remove(&id) {
-            self.retire(old)?;
+            old.bar.finish_and_clear();
+            self.multi.remove(&old.bar);
         }
         let bar = self.multi.add(ProgressBar::new(0));
         bar.set_style(message_style());
@@ -135,6 +165,7 @@ impl LiveConsole {
             bar,
             screen: RegionScreen::new(self.config.rows, self.content_cols()),
             label,
+            retained: VecDeque::new(),
         };
         region.bar.set_message(render_tile(
             &region.label,
@@ -143,21 +174,24 @@ impl LiveConsole {
             self.config.rows,
         ));
         self.regions.insert(id, region);
-        Ok(())
     }
 
     /// Feed raw output bytes to region `id`, updating its tile.
     ///
-    /// Rows evicted from the tile are flushed to scrollback immediately. A feed
-    /// for an unknown `id` is ignored, so late output after a finish cannot
-    /// panic. Returns any I/O error from the scrollback flush.
-    pub fn feed(&mut self, id: &str, bytes: &[u8]) -> std::io::Result<()> {
+    /// Rows evicted from the tile are dropped from the live view but appended to
+    /// the region's bounded retention ring, so a later failure can replay recent
+    /// context. A feed for an unknown `id` is ignored, so late output after a
+    /// finish cannot panic.
+    pub fn feed(&mut self, id: &str, bytes: &[u8]) {
+        let scrollback = self.config.scrollback;
         let Some(region) = self.regions.get_mut(id) else {
-            return Ok(());
+            return;
         };
-        let evicted = region.screen.feed(bytes);
-        for line in evicted {
-            self.multi.println(scrollback_line(&region.label, &line))?;
+        for line in region.screen.feed(bytes) {
+            region.retained.push_back(line);
+            while region.retained.len() > scrollback {
+                region.retained.pop_front();
+            }
         }
         let visible = region.screen.render();
         region.bar.set_message(render_tile(
@@ -166,29 +200,50 @@ impl LiveConsole {
             self.config.cols,
             self.config.rows,
         ));
-        Ok(())
     }
 
-    /// Finish region `id`, flushing its remaining lines to scrollback, removing
-    /// the tile, and printing `verdict` as a final status line.
+    /// Finish region `id`, removing its tile and printing `verdict` as the only
+    /// scrollback line — the collapsed signal for a succeeding unit.
     ///
-    /// A finish for an unknown `id` prints only the verdict. Returns any I/O
-    /// error from the scrollback flush.
+    /// The region's peeked output is discarded, not flushed: on success the
+    /// verdict (which the caller may enrich with a run summary) is the whole
+    /// story. A finish for an unknown `id` prints only the verdict. Returns any
+    /// I/O error from the verdict write.
     pub fn finish(&mut self, id: &str, verdict: impl AsRef<str>) -> std::io::Result<()> {
         if let Some(region) = self.regions.remove(id) {
-            self.retire(region)?;
+            region.bar.finish_and_clear();
+            self.multi.remove(&region.bar);
         }
         self.multi.println(verdict.as_ref())
     }
 
-    /// Flush a retired region's remaining rows to scrollback and drop its tile.
-    fn retire(&self, region: Region) -> std::io::Result<()> {
-        for line in region.screen.drain() {
-            self.multi.println(scrollback_line(&region.label, &line))?;
+    /// Finish a failed region `id`, replaying its retained tail to scrollback as
+    /// one contiguous, label-prefixed block, then printing `verdict`.
+    ///
+    /// The replay is the region's retention ring (rows that scrolled off the
+    /// tile, oldest first) followed by the rows still on screen — a bounded,
+    /// un-interleaved failure transcript. A finish for an unknown `id` prints
+    /// only the verdict. Returns any I/O error from the flush or verdict write.
+    pub fn finish_with_replay(
+        &mut self,
+        id: &str,
+        verdict: impl AsRef<str>,
+    ) -> std::io::Result<()> {
+        if let Some(region) = self.regions.remove(id) {
+            let Region {
+                bar,
+                screen,
+                label,
+                retained,
+            } = region;
+            for line in replay_body(&retained, screen.drain()) {
+                let prefixed = scrollback_line(&label, &line);
+                self.multi.println(truncate(&prefixed, self.config.cols))?;
+            }
+            bar.finish_and_clear();
+            self.multi.remove(&bar);
         }
-        region.bar.finish_and_clear();
-        self.multi.remove(&region.bar);
-        Ok(())
+        self.multi.println(verdict.as_ref())
     }
 
     /// Print `line` to scrollback above the live area, without touching any tile.
@@ -200,19 +255,27 @@ impl LiveConsole {
         self.multi.println(line.as_ref())
     }
 
-    /// Retire every remaining region — flushing each tail to scrollback — then
-    /// clear the live area and blank the header, leaving the console reusable.
+    /// Drop every remaining region, then clear the live area and blank the
+    /// header, leaving the console reusable.
     ///
-    /// Regions are retired in id order so the flushed scrollback is deterministic.
-    /// Returns any I/O error from the flush or terminal clear.
+    /// Remaining regions are units that never finished; their peeked output is
+    /// discarded (durable signal is emitted at finish time). Returns any I/O
+    /// error from the terminal clear.
     pub fn clear(&mut self) -> std::io::Result<()> {
-        let mut regions: Vec<(String, Region)> = self.regions.drain().collect();
-        regions.sort_by(|(a, _), (b, _)| a.cmp(b));
-        for (_, region) in regions {
-            self.retire(region)?;
+        for (_, region) in self.regions.drain() {
+            region.bar.finish_and_clear();
+            self.multi.remove(&region.bar);
         }
         self.header.set_message("");
         self.multi.clear()
+    }
+
+    /// The rows a region has retained for a failure replay (oldest first).
+    #[cfg(test)]
+    fn retained(&self, id: &str) -> Option<Vec<String>> {
+        self.regions
+            .get(id)
+            .map(|region| region.retained.iter().cloned().collect())
     }
 }
 
@@ -243,6 +306,18 @@ fn scrollback_line(label: &str, line: &str) -> String {
     format!("{} {line}", console::style(format!("{label} │")).dim())
 }
 
+/// Build a failed region's replay body: its retained scrolled-off rows (oldest
+/// first) followed by the rows still on screen, with trailing blank rows
+/// trimmed. The caller label-prefixes each line for scrollback attribution.
+fn replay_body(retained: &VecDeque<String>, on_screen: Vec<String>) -> Vec<String> {
+    let mut lines: Vec<String> = retained.iter().cloned().collect();
+    lines.extend(on_screen);
+    while lines.last().is_some_and(String::is_empty) {
+        lines.pop();
+    }
+    lines
+}
+
 /// Truncate `line` to `width` display columns (ANSI- and width-aware), leaving
 /// it untouched when `width` is `0`.
 fn truncate(line: &str, width: usize) -> String {
@@ -254,15 +329,33 @@ fn truncate(line: &str, width: usize) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{LiveConfig, LiveConsole, render_tile, scrollback_line, truncate};
+    use std::collections::VecDeque;
+
+    use super::{LiveConfig, LiveConsole, render_tile, replay_body, scrollback_line, truncate};
+
+    fn config(rows: usize, cols: usize) -> LiveConfig {
+        LiveConfig {
+            rows,
+            cols,
+            ..LiveConfig::default()
+        }
+    }
+
+    #[test]
+    fn content_cols_reserves_the_indent_and_never_underflows() {
+        assert_eq!(config(6, 80).content_cols(), 78);
+        // Degenerate widths clamp to a usable grid rather than underflowing.
+        assert_eq!(config(6, 1).content_cols(), 1);
+        assert_eq!(config(6, 0).content_cols(), 1);
+    }
 
     #[test]
     fn drives_full_region_lifecycle_without_panicking() -> std::io::Result<()> {
-        let mut console = LiveConsole::hidden(LiveConfig { rows: 2, cols: 40 });
+        let mut console = LiveConsole::hidden(config(2, 40));
         console.set_header("wave 1/2 · running 1");
-        console.begin("u1", "rust:core#test")?;
-        console.feed("u1", b"compiling\r\n")?;
-        console.feed("u1", b"running 3 tests\r\nok\r\nok\r\n")?;
+        console.begin("u1", "rust:core#test");
+        console.feed("u1", b"compiling\r\n");
+        console.feed("u1", b"running 3 tests\r\nok\r\nok\r\n");
         console.finish("u1", "ok rust:core#test")?;
         console.clear()
     }
@@ -270,10 +363,10 @@ mod tests {
     #[test]
     fn reused_id_replaces_region_without_leaking() -> std::io::Result<()> {
         let mut console = LiveConsole::hidden(LiveConfig::default());
-        console.begin("u1", "first")?;
-        console.feed("u1", b"old\n")?;
-        console.begin("u1", "second")?;
-        console.feed("u1", b"new\n")?;
+        console.begin("u1", "first");
+        console.feed("u1", b"old\n");
+        console.begin("u1", "second");
+        console.feed("u1", b"new\n");
         console.finish("u1", "ok")
     }
 
@@ -281,27 +374,27 @@ mod tests {
     fn console_is_reusable_after_clear() -> std::io::Result<()> {
         let mut console = LiveConsole::hidden(LiveConfig::default());
         console.set_header("first pass");
-        console.begin("u1", "task")?;
-        console.feed("u1", b"partial output\n")?;
+        console.begin("u1", "task");
+        console.feed("u1", b"partial output\n");
         console.clear()?;
         console.set_header("second pass");
-        console.begin("u1", "task")?;
-        console.feed("u1", b"more\n")?;
+        console.begin("u1", "task");
+        console.feed("u1", b"more\n");
         console.finish("u1", "ok")
     }
 
     #[test]
     fn zero_rows_still_renders_content() -> std::io::Result<()> {
-        let mut console = LiveConsole::hidden(LiveConfig { rows: 0, cols: 40 });
-        console.begin("u1", "task")?;
-        console.feed("u1", b"visible line\r\n")?;
+        let mut console = LiveConsole::hidden(config(0, 40));
+        console.begin("u1", "task");
+        console.feed("u1", b"visible line\r\n");
         console.finish("u1", "ok")
     }
 
     #[test]
     fn feed_and_finish_for_unknown_region_are_ignored() -> std::io::Result<()> {
         let mut console = LiveConsole::hidden(LiveConfig::default());
-        console.feed("ghost", b"noise\n")?;
+        console.feed("ghost", b"noise\n");
         console.finish("ghost", "done")
     }
 
@@ -309,6 +402,59 @@ mod tests {
     fn note_prints_to_scrollback_without_a_region() -> std::io::Result<()> {
         let console = LiveConsole::hidden(LiveConfig::default());
         console.note("standalone line")
+    }
+
+    #[test]
+    fn scrolled_rows_are_retained_for_replay_not_lost() {
+        let mut console = LiveConsole::hidden(LiveConfig {
+            rows: 2,
+            cols: 20,
+            scrollback: 200,
+        });
+        console.begin("u1", "task");
+        console.feed("u1", b"l1\nl2\nl3\nl4\n");
+        // Only the last row stays on screen; the earlier rows scrolled off but
+        // are retained for a possible failure replay.
+        assert_eq!(
+            console.retained("u1"),
+            Some(vec!["l1".into(), "l2".into(), "l3".into()])
+        );
+    }
+
+    #[test]
+    fn retention_ring_is_bounded_under_a_long_feed() {
+        let mut console = LiveConsole::hidden(LiveConfig {
+            rows: 2,
+            cols: 20,
+            scrollback: 3,
+        });
+        console.begin("u1", "task");
+        for _ in 0..50 {
+            console.feed("u1", b"line\n");
+        }
+        assert!(console.retained("u1").is_some_and(|rows| rows.len() <= 3));
+    }
+
+    #[test]
+    fn replay_body_orders_retained_then_on_screen_and_trims_blanks() {
+        let retained = VecDeque::from(vec!["a".to_string(), "b".to_string()]);
+        let on_screen = vec!["c".to_string(), "d".to_string(), String::new()];
+        assert_eq!(replay_body(&retained, on_screen), vec!["a", "b", "c", "d"]);
+    }
+
+    #[test]
+    fn failure_replay_and_success_finish_both_drop_the_region() -> std::io::Result<()> {
+        let mut console = LiveConsole::hidden(config(2, 20));
+        console.begin("ok", "task");
+        console.feed("ok", b"noise\n");
+        console.finish("ok", "ok task")?;
+        assert!(console.retained("ok").is_none());
+
+        console.begin("bad", "task");
+        console.feed("bad", b"panic!\n");
+        console.finish_with_replay("bad", "failed task")?;
+        assert!(console.retained("bad").is_none());
+        Ok(())
     }
 
     #[test]
@@ -338,6 +484,17 @@ mod tests {
         let line = scrollback_line("core", "hello");
         let stripped = console::strip_ansi_codes(&line);
         assert_eq!(stripped, "core │ hello");
+    }
+
+    #[test]
+    fn replay_line_clamped_to_width_never_wraps() {
+        // A content row is sized to the tile's content area, but the scrollback
+        // replay prefixes it with the full unit label — the composed line must be
+        // clamped to the console width so it never wraps into an orphan fragment.
+        let content = "x".repeat(200);
+        let composed = scrollback_line("rust@rust:core#test", &content);
+        let clamped = truncate(&composed, 140);
+        assert!(console::measure_text_width(&clamped) <= 140);
     }
 
     #[test]

@@ -7,7 +7,7 @@
 ```toml
 [dependencies]
 rskit-agent = "0.2.0-alpha.1"
-rskit-errors = "0.2.0-alpha.1"
+rskit-errors = "0.2.0-alpha.2"
 rskit-llm = "0.2.0-alpha.1"
 rskit-tool = "0.2.0-alpha.1"
 ```

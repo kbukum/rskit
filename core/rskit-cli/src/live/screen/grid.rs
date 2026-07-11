@@ -2,7 +2,7 @@
 //!
 //! This is pure data and geometry: it holds the cell matrix, writes cells,
 //! erases spans, and scrolls. Scrolling off the top emits the evicted row as a
-//! styled string so the region can flush the complete transcript to scrollback.
+//! styled string so the region can retain a bounded tail for a failure replay.
 //! It knows nothing about ANSI parsing or I/O, which keeps it the most heavily
 //! unit-tested unit of the virtual terminal.
 

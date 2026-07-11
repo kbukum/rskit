@@ -5206,7 +5206,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-cli"
-version = "0.2.0-alpha.1"
+version = "0.2.0-alpha.2"
 dependencies = [
  "console",
  "crossterm",
@@ -5384,7 +5384,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-errors"
-version = "0.2.0-alpha.1"
+version = "0.2.0-alpha.2"
 dependencies = [
  "http 1.4.1",
  "serde",
@@ -5393,7 +5393,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-fs"
-version = "0.2.0-alpha.3"
+version = "0.2.0-alpha.4"
 dependencies = [
  "futures",
  "ignore",
@@ -6031,7 +6031,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-storage-gcs"
-version = "0.2.0-alpha.1"
+version = "0.2.0-alpha.2"
 dependencies = [
  "async-trait",
  "bytes",
@@ -6043,11 +6043,12 @@ dependencies = [
  "rustls",
  "serde",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]
 name = "rskit-storage-s3"
-version = "0.2.0-alpha.1"
+version = "0.2.0-alpha.2"
 dependencies = [
  "async-trait",
  "aws-sdk-s3",
@@ -6058,6 +6059,7 @@ dependencies = [
  "rskit-util",
  "serde",
  "serde_json",
+ "tokio",
  "tracing",
 ]
 
@@ -6077,7 +6079,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-suite"
-version = "0.2.0-alpha.3"
+version = "0.2.0-alpha.4"
 dependencies = [
  "async-trait",
  "futures",
@@ -6195,7 +6197,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-util"
-version = "0.2.0-alpha.1"
+version = "0.2.0-alpha.2"
 dependencies = [
  "blake3",
  "serde",

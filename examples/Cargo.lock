@@ -1722,7 +1722,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-cli"
-version = "0.2.0-alpha.1"
+version = "0.2.0-alpha.2"
 dependencies = [
  "console",
  "indicatif",
@@ -1790,7 +1790,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-errors"
-version = "0.2.0-alpha.1"
+version = "0.2.0-alpha.2"
 dependencies = [
  "http",
  "serde",
@@ -1799,7 +1799,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-fs"
-version = "0.2.0-alpha.3"
+version = "0.2.0-alpha.4"
 dependencies = [
  "ignore",
  "libc",
@@ -1967,7 +1967,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-suite"
-version = "0.2.0-alpha.3"
+version = "0.2.0-alpha.4"
 dependencies = [
  "rskit-bootstrap",
  "rskit-cli",
@@ -1992,7 +1992,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-util"
-version = "0.2.0-alpha.1"
+version = "0.2.0-alpha.2"
 dependencies = [
  "blake3",
  "serde",

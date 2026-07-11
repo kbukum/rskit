@@ -2,10 +2,10 @@
 //!
 //! It owns a [`vte::Parser`] and the applied [`Performer`] state and exposes the
 //! whole virtual terminal through three methods: [`feed`](RegionScreen::feed)
-//! raw bytes and get back the rows that scrolled into scrollback,
+//! raw bytes and get back the rows that scrolled off the top,
 //! [`render`](RegionScreen::render) the current tile, and
-//! [`drain`](RegionScreen::drain) the remainder when the stream ends. The grid,
-//! cursor, and SGR internals stay private behind it.
+//! [`drain`](RegionScreen::drain) the rows still on screen when the stream ends.
+//! The grid, cursor, and SGR internals stay private behind it.
 
 use super::perform::Performer;
 
@@ -14,9 +14,10 @@ use super::perform::Performer;
 /// Feed a child's raw output bytes with [`feed`](Self::feed); ANSI cursor,
 /// erase, scroll, and color sequences are applied to a fixed `rows × cols` cell
 /// grid rather than passed through, so a child that redraws in place renders
-/// correctly and can never move the host terminal's cursor. Rows that scroll off
-/// the top are returned for the caller to flush to scrollback, preserving the
-/// complete transcript.
+/// correctly and can never move the host terminal's cursor. Content past the
+/// last column truncates (the region does not auto-wrap). Rows that scroll off
+/// the top are returned so the caller can retain a bounded tail for a failure
+/// replay; on success they are simply dropped.
 pub struct RegionScreen {
     parser: vte::Parser,
     performer: Performer,
@@ -45,8 +46,8 @@ impl RegionScreen {
     ///
     /// Bytes are parsed as a VT stream and applied to the grid; multi-byte and
     /// split UTF-8 sequences are reassembled across calls by the parser. Evicted
-    /// rows are returned oldest first, already styled, so the caller can print
-    /// them into scrollback in order.
+    /// rows are returned oldest first, already styled, so the caller can retain
+    /// a bounded tail in order (for a failure replay) or drop them.
     pub fn feed(&mut self, bytes: &[u8]) -> Vec<String> {
         self.parser.advance(&mut self.performer, bytes);
         self.performer.take_evicted()
