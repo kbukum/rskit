@@ -82,7 +82,13 @@ impl vte::Perform for Performer {
 
     fn execute(&mut self, byte: u8) {
         match byte {
-            b'\n' => self.line_feed(),
+            // Region output arrives over a pipe, so the terminal's ONLCR
+            // translation never runs: cook a bare `\n` into carriage-return +
+            // line-feed so plain `\n`-terminated output does not staircase.
+            b'\n' => {
+                self.cursor.carriage_return();
+                self.line_feed();
+            }
             b'\r' => self.cursor.carriage_return(),
             b'\t' => self.cursor.tab(self.grid.cols()),
             0x08 => self.cursor.backspace(),
@@ -187,6 +193,17 @@ mod tests {
             !rendered
                 .iter()
                 .any(|line| line.contains("[2K") || line.contains("[1A"))
+        );
+    }
+
+    #[test]
+    fn bare_line_feed_returns_to_column_zero() {
+        // Piped output has no ONLCR, so a bare `\n` must not staircase.
+        let mut performer = Performer::new(2, 6);
+        feed(&mut performer, b"one\ntwo");
+        assert_eq!(
+            performer.render(),
+            vec!["one".to_string(), "two".to_string()]
         );
     }
 
