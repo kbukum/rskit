@@ -1,12 +1,12 @@
 //! Multi-region live terminal rendering.
 //!
 //! [`LiveConsole`] stacks several concurrent output streams as fixed-height
-//! tiles in a live area, flushing scrolled-out lines into scrollback. Its pure
-//! per-stream viewport, [`RegionTail`], is reusable on its own for any
-//! last-*k*-lines accounting over a byte stream.
+//! tiles in a live area, flushing scrolled-out rows into scrollback. Each tile
+//! is backed by a [`RegionScreen`] — a bounded virtual terminal — so a child
+//! that redraws in place renders faithfully without corrupting the host.
 
-mod region;
 mod renderer;
+mod screen;
 
-pub use region::RegionTail;
 pub use renderer::{LiveConfig, LiveConsole};
+pub use screen::RegionScreen;

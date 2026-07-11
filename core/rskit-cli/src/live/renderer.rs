@@ -1,9 +1,9 @@
 //! [`LiveConsole`] — a multi-region live terminal renderer.
 //!
 //! Renders several concurrent output streams as fixed-height "tiles" stacked in
-//! a live area at the bottom of the terminal, each showing the last few lines of
-//! one stream (via [`RegionTail`]). Lines that scroll out of a tile — and a
-//! region's remaining lines when it finishes — are flushed into normal
+//! a live area at the bottom of the terminal, each showing a bounded virtual
+//! terminal of one stream (via [`RegionScreen`]). Rows that scroll out of a tile
+//! — and a region's remaining rows when it finishes — are flushed into normal
 //! scrollback above the live area, so the transcript stays complete while the
 //! live area keeps a bounded height.
 //!
@@ -17,31 +17,29 @@ use std::collections::HashMap;
 
 use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
 
-use super::region::RegionTail;
+use super::screen::RegionScreen;
 
 /// How the live console lays out and truncates tiles.
 #[derive(Debug, Clone, Copy)]
 pub struct LiveConfig {
-    /// Maximum content lines shown per region tile.
-    pub tail_lines: usize,
-    /// Terminal width used to truncate tile lines so a long line cannot wrap and
-    /// break the fixed tile height. `0` disables truncation.
-    pub width: usize,
+    /// Content rows shown per region tile — the height of its virtual terminal.
+    pub rows: usize,
+    /// Terminal columns: the tile width and the virtual terminal's grid width.
+    /// A child's output is applied to a grid this wide, so a real width must be
+    /// passed (unlike the old truncation width, `0` is not "disable").
+    pub cols: usize,
 }
 
 impl Default for LiveConfig {
     fn default() -> Self {
-        Self {
-            tail_lines: 5,
-            width: 0,
-        }
+        Self { rows: 5, cols: 80 }
     }
 }
 
-/// One in-flight region: its tail buffer, label, and backing progress line.
+/// One in-flight region: its virtual terminal, label, and backing progress line.
 struct Region {
     bar: ProgressBar,
-    tail: RegionTail,
+    screen: RegionScreen,
     label: String,
 }
 
@@ -76,9 +74,10 @@ impl LiveConsole {
     }
 
     fn with_target(target: ProgressDrawTarget, mut config: LiveConfig) -> Self {
-        // Keep the tail buffer and the renderer consistent: a tile always shows
-        // at least one content line.
-        config.tail_lines = config.tail_lines.max(1);
+        // Keep the grid and the renderer consistent: a tile always shows at
+        // least one content row and its virtual terminal needs a real width.
+        config.rows = config.rows.max(1);
+        config.cols = config.cols.max(1);
         let multi = MultiProgress::with_draw_target(target);
         let header = multi.add(ProgressBar::new(0));
         header.set_style(message_style());
@@ -116,14 +115,14 @@ impl LiveConsole {
         bar.set_style(message_style());
         let region = Region {
             bar,
-            tail: RegionTail::new(self.config.tail_lines),
+            screen: RegionScreen::new(self.config.rows, self.config.cols),
             label,
         };
         region.bar.set_message(render_tile(
             &region.label,
             &[],
-            self.config.width,
-            self.config.tail_lines,
+            self.config.cols,
+            self.config.rows,
         ));
         self.regions.insert(id, region);
         Ok(())
@@ -131,23 +130,24 @@ impl LiveConsole {
 
     /// Feed raw output bytes to region `id`, updating its tile.
     ///
-    /// Lines evicted from the tile are flushed to scrollback immediately. A feed
+    /// Rows evicted from the tile are flushed to scrollback immediately. A feed
     /// for an unknown `id` is ignored, so late output after a finish cannot
     /// panic. Returns any I/O error from the scrollback flush.
     pub fn feed(&mut self, id: &str, bytes: &[u8]) -> std::io::Result<()> {
         let Some(region) = self.regions.get_mut(id) else {
             return Ok(());
         };
-        let evicted = region.tail.push_bytes(bytes);
+        let evicted = region.screen.feed(bytes);
         for line in evicted {
             self.multi.println(scrollback_line(&region.label, &line))?;
         }
-        let visible = region.tail.visible();
+        let visible = region.screen.render();
+        let visible: Vec<&str> = visible.iter().map(String::as_str).collect();
         region.bar.set_message(render_tile(
             &region.label,
             &visible,
-            self.config.width,
-            self.config.tail_lines,
+            self.config.cols,
+            self.config.rows,
         ));
         Ok(())
     }
@@ -164,9 +164,9 @@ impl LiveConsole {
         self.multi.println(verdict.as_ref())
     }
 
-    /// Flush a retired region's remaining tail to scrollback and drop its tile.
+    /// Flush a retired region's remaining rows to scrollback and drop its tile.
     fn retire(&self, region: Region) -> std::io::Result<()> {
-        for line in region.tail.drain() {
+        for line in region.screen.drain() {
             self.multi.println(scrollback_line(&region.label, &line))?;
         }
         region.bar.finish_and_clear();
@@ -204,17 +204,17 @@ fn message_style() -> ProgressStyle {
     ProgressStyle::with_template("{msg}").unwrap_or_else(|_| ProgressStyle::default_spinner())
 }
 
-/// Render one tile as a labeled header line plus exactly `tail_lines` indented
-/// content lines (padded with blanks), each truncated to `width` display
+/// Render one tile as a labeled header line plus exactly `rows` indented
+/// content lines (padded with blanks), each truncated to `cols` display
 /// columns. The fixed line count keeps every tile a constant height so the live
 /// area does not reflow as streams emit output.
-fn render_tile(label: &str, lines: &[&str], width: usize, tail_lines: usize) -> String {
+fn render_tile(label: &str, lines: &[&str], cols: usize, rows: usize) -> String {
     let header = format!("{}", console::style(format!("• {label}")).bold());
-    let mut out = truncate(&header, width);
-    for index in 0..tail_lines {
+    let mut out = truncate(&header, cols);
+    for index in 0..rows {
         out.push('\n');
         let line = lines.get(index).copied().unwrap_or("");
-        out.push_str(&truncate(&format!("  {line}"), width));
+        out.push_str(&truncate(&format!("  {line}"), cols));
     }
     out
 }
@@ -239,14 +239,11 @@ mod tests {
 
     #[test]
     fn drives_full_region_lifecycle_without_panicking() -> std::io::Result<()> {
-        let mut console = LiveConsole::hidden(LiveConfig {
-            tail_lines: 2,
-            width: 40,
-        });
+        let mut console = LiveConsole::hidden(LiveConfig { rows: 2, cols: 40 });
         console.set_header("wave 1/2 · running 1");
         console.begin("u1", "rust:core#test")?;
-        console.feed("u1", b"compiling\n")?;
-        console.feed("u1", b"running 3 tests\nok\nok\n")?;
+        console.feed("u1", b"compiling\r\n")?;
+        console.feed("u1", b"running 3 tests\r\nok\r\nok\r\n")?;
         console.finish("u1", "ok rust:core#test")?;
         console.clear()
     }
@@ -275,13 +272,10 @@ mod tests {
     }
 
     #[test]
-    fn zero_tail_lines_still_renders_content() -> std::io::Result<()> {
-        let mut console = LiveConsole::hidden(LiveConfig {
-            tail_lines: 0,
-            width: 0,
-        });
+    fn zero_rows_still_renders_content() -> std::io::Result<()> {
+        let mut console = LiveConsole::hidden(LiveConfig { rows: 0, cols: 40 });
         console.begin("u1", "task")?;
-        console.feed("u1", b"visible line\n")?;
+        console.feed("u1", b"visible line\r\n")?;
         console.finish("u1", "ok")
     }
 
