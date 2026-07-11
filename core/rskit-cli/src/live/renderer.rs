@@ -48,6 +48,21 @@ impl Default for LiveConfig {
     }
 }
 
+impl LiveConfig {
+    /// The inner virtual-terminal grid width: the tile width minus the content
+    /// indent rendered under each region header.
+    ///
+    /// A child whose output is fed to the tile must be told its terminal is this
+    /// wide (not the full tile width), so its own line wrapping matches the grid.
+    /// Otherwise a full-width in-place progress redraw wraps at the grid edge,
+    /// scrolls the short grid, and leaks a stale frame into scrollback on every
+    /// tick.
+    #[must_use]
+    pub fn content_cols(&self) -> usize {
+        self.cols.saturating_sub(TILE_INDENT.len()).max(1)
+    }
+}
+
 /// One in-flight region: its virtual terminal, label, and backing progress line.
 struct Region {
     bar: ProgressBar,
@@ -103,8 +118,11 @@ impl LiveConsole {
 
     /// The virtual terminal grid width: the tile width minus the content
     /// indent, so a child fills the visible content area without being chopped.
-    fn content_cols(&self) -> usize {
-        self.config.cols.saturating_sub(TILE_INDENT.len()).max(1)
+    /// Children feeding a tile should be sized to this; see
+    /// [`LiveConfig::content_cols`].
+    #[must_use]
+    pub fn content_cols(&self) -> usize {
+        self.config.content_cols()
     }
 
     /// Set the status line shown above the tiles.
@@ -255,6 +273,14 @@ fn truncate(line: &str, width: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::{LiveConfig, LiveConsole, render_tile, scrollback_line, truncate};
+
+    #[test]
+    fn content_cols_reserves_the_indent_and_never_underflows() {
+        assert_eq!(LiveConfig { rows: 6, cols: 80 }.content_cols(), 78);
+        // Degenerate widths clamp to a usable grid rather than underflowing.
+        assert_eq!(LiveConfig { rows: 6, cols: 1 }.content_cols(), 1);
+        assert_eq!(LiveConfig { rows: 6, cols: 0 }.content_cols(), 1);
+    }
 
     #[test]
     fn drives_full_region_lifecycle_without_panicking() -> std::io::Result<()> {
