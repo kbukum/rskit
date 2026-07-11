@@ -161,14 +161,8 @@ mod tests {
         assert!(entries[0].is_file);
         assert!(!is_empty(&dir).unwrap());
 
-        assert_eq!(
-            remove_if_exists(&root.child("missing").unwrap()).unwrap(),
-            false
-        );
-        assert_eq!(
-            remove_all_if_exists(&root.child("missing-tree").unwrap()).unwrap(),
-            false
-        );
+        assert!(!remove_if_exists(&root.child("missing").unwrap()).unwrap());
+        assert!(!remove_all_if_exists(&root.child("missing-tree").unwrap()).unwrap());
         remove(&dir).unwrap_err();
         remove_all(&dir).unwrap();
         assert!(!exists(&dir).unwrap());

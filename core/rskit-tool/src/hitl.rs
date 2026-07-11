@@ -381,11 +381,11 @@ mod tests {
     #[tokio::test]
     async fn deny_human_approval_and_denied_error_are_safe_defaults() {
         let approver = DenyHumanApproval;
-        let approved = approver
+        let decision = approver
             .approve(&Context::new(), &call(json!({})), "reason")
             .await
             .expect("default approval should be infallible");
-        assert!(!approved);
+        assert!(!decision);
         assert_eq!(
             denied_error("no").code(),
             rskit_errors::ErrorCode::Forbidden

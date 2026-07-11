@@ -561,8 +561,8 @@ mod tests {
         let moved = root.child("moved.txt").unwrap();
         super::rename(&copy_path, &moved).unwrap();
         assert!(super::metadata(&moved).unwrap().is_file);
-        assert_eq!(remove_if_exists(&moved).unwrap(), true);
-        assert_eq!(remove_if_exists(&moved).unwrap(), false);
+        assert!(remove_if_exists(&moved).unwrap());
+        assert!(!remove_if_exists(&moved).unwrap());
         assert!(canonicalize(&path).unwrap().is_absolute());
 
         let created = root.child("created.txt").unwrap();
