@@ -72,9 +72,20 @@ impl Performer {
 
 impl vte::Perform for Performer {
     fn print(&mut self, c: char) {
-        if self.cursor.col >= self.grid.cols() {
-            self.cursor.carriage_return();
-            self.line_feed();
+        let cols = self.grid.cols();
+        if self.cursor.col >= cols {
+            // DECAWM-off for the bounded peek: content past the last column marks
+            // the row truncated with an ellipsis instead of wrapping to a new
+            // grid row (which would fragment the tile and evict a partial line).
+            self.grid.set(
+                self.cursor.row,
+                cols - 1,
+                Cell {
+                    ch: '…',
+                    sgr: self.sgr,
+                },
+            );
+            return;
         }
         self.grid.set(
             self.cursor.row,
@@ -164,10 +175,22 @@ mod tests {
     }
 
     #[test]
-    fn print_wraps_at_width() {
+    fn print_truncates_at_width_without_wrapping() {
+        // A bounded peek does not auto-wrap: overflow past the last column marks
+        // the row with an ellipsis and never advances to a second grid row.
         let mut performer = Performer::new(2, 3);
         feed(&mut performer, b"abcd");
-        assert_eq!(performer.render(), vec!["abc".to_string(), "d".to_string()]);
+        assert_eq!(performer.render(), vec!["ab…".to_string(), String::new()]);
+        assert!(performer.take_evicted().is_empty());
+    }
+
+    #[test]
+    fn truncated_row_preserves_active_sgr() {
+        // The ellipsis marker carries the current rendition, so a colored
+        // over-long line stays colored through truncation.
+        let mut performer = Performer::new(1, 3);
+        feed(&mut performer, b"\x1b[31mabcd");
+        assert_eq!(performer.render(), vec!["\x1b[0;31mab…\x1b[0m".to_string()]);
     }
 
     #[test]
