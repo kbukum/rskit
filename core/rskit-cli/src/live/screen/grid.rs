@@ -30,6 +30,12 @@ impl Default for Cell {
 }
 
 impl Cell {
+    /// A blank cell (space) carrying `sgr` — the fill an erase leaves behind
+    /// so a background-color erase preserves the active background.
+    pub(super) const fn blank(sgr: Sgr) -> Self {
+        Self { ch: ' ', sgr }
+    }
+
     /// Whether this cell is a blank: a space with default styling.
     pub(super) fn is_blank(&self) -> bool {
         self.ch == ' ' && self.sgr == Sgr::default()
@@ -138,8 +144,9 @@ impl Grid {
         }
     }
 
-    /// Erase within the cursor's row per `mode`.
-    pub(super) fn erase_line(&mut self, cursor: &Cursor, mode: EraseMode) {
+    /// Erase within the cursor's row per `mode`, filling with `blank` (the
+    /// active background-color-erase cell) rather than the terminal default.
+    pub(super) fn erase_line(&mut self, cursor: &Cursor, mode: EraseMode, blank: &Cell) {
         let cols = self.cols;
         let Some(line) = self.lines.get_mut(cursor.row) else {
             return;
@@ -150,31 +157,32 @@ impl Grid {
             EraseMode::All => 0..cols,
         };
         for cell in &mut line[range] {
-            *cell = Cell::default();
+            *cell = blank.clone();
         }
     }
 
-    /// Erase within the whole display per `mode`, relative to the cursor.
-    pub(super) fn erase_display(&mut self, cursor: &Cursor, mode: EraseMode) {
+    /// Erase within the whole display per `mode`, relative to the cursor,
+    /// filling with `blank` (the active background-color-erase cell).
+    pub(super) fn erase_display(&mut self, cursor: &Cursor, mode: EraseMode, blank: &Cell) {
         match mode {
             EraseMode::ToEnd => {
-                self.erase_line(cursor, EraseMode::ToEnd);
-                self.clear_rows(cursor.row + 1..self.rows);
+                self.erase_line(cursor, EraseMode::ToEnd, blank);
+                self.clear_rows(cursor.row + 1..self.rows, blank);
             }
             EraseMode::ToStart => {
-                self.clear_rows(0..cursor.row);
-                self.erase_line(cursor, EraseMode::ToStart);
+                self.clear_rows(0..cursor.row, blank);
+                self.erase_line(cursor, EraseMode::ToStart, blank);
             }
-            EraseMode::All => self.clear_rows(0..self.rows),
+            EraseMode::All => self.clear_rows(0..self.rows, blank),
         }
     }
 
-    /// Reset every cell in the given row range to a blank.
-    fn clear_rows(&mut self, range: std::ops::Range<usize>) {
+    /// Reset every cell in the given row range to `blank`.
+    fn clear_rows(&mut self, range: std::ops::Range<usize>, blank: &Cell) {
         for row in range {
             if let Some(line) = self.lines.get_mut(row) {
                 for cell in line {
-                    *cell = Cell::default();
+                    *cell = blank.clone();
                 }
             }
         }
@@ -231,11 +239,11 @@ mod tests {
         let mut grid = Grid::new(1, 5);
         write(&mut grid, 0, "abcde");
         let cursor = Cursor { row: 0, col: 2 };
-        grid.erase_line(&cursor, EraseMode::ToEnd);
+        grid.erase_line(&cursor, EraseMode::ToEnd, &Cell::default());
         assert_eq!(grid.render(), vec!["ab".to_string()]);
 
         write(&mut grid, 0, "abcde");
-        grid.erase_line(&cursor, EraseMode::ToStart);
+        grid.erase_line(&cursor, EraseMode::ToStart, &Cell::default());
         assert_eq!(grid.render(), vec!["   de".to_string()]);
     }
 
@@ -246,7 +254,7 @@ mod tests {
         write(&mut grid, 1, "bbb");
         write(&mut grid, 2, "ccc");
         let cursor = Cursor { row: 1, col: 1 };
-        grid.erase_display(&cursor, EraseMode::ToEnd);
+        grid.erase_display(&cursor, EraseMode::ToEnd, &Cell::default());
         assert_eq!(
             grid.render(),
             vec!["aaa".to_string(), "b".to_string(), String::new()]

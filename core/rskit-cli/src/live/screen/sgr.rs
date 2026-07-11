@@ -46,6 +46,17 @@ fn byte(value: u16) -> u8 {
 }
 
 impl Sgr {
+    /// The rendition an erase leaves behind: a blank keeps the active
+    /// background (background-color erase, as VT/xterm do) while dropping the
+    /// foreground and attributes, so `EL`/`ED` under a colored background fill
+    /// with that background instead of the terminal default.
+    pub(super) fn erased(self) -> Self {
+        Self {
+            bg: self.bg,
+            ..Self::default()
+        }
+    }
+
     /// Apply an SGR (`CSI … m`) parameter list, mutating this state in place.
     ///
     /// Handles the 16-color, 256-color (`38;5;n` / `38:5:n`), and truecolor

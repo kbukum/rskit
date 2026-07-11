@@ -123,12 +123,14 @@ impl vte::Perform for Performer {
             }
             'K' => {
                 if let Some(mode) = EraseMode::from_param(Self::param(params, 0, 0)) {
-                    self.grid.erase_line(&self.cursor, mode);
+                    self.grid
+                        .erase_line(&self.cursor, mode, &Cell::blank(self.sgr.erased()));
                 }
             }
             'J' => {
                 if let Some(mode) = EraseMode::from_param(Self::param(params, 0, 0)) {
-                    self.grid.erase_display(&self.cursor, mode);
+                    self.grid
+                        .erase_display(&self.cursor, mode, &Cell::blank(self.sgr.erased()));
                 }
             }
             'S' => {
@@ -230,6 +232,17 @@ mod tests {
             "explicit move from pending wrap must not evict rows"
         );
         assert_eq!(performer.render(), vec!["x".to_string(), "abY".to_string()]);
+    }
+
+    #[test]
+    fn erase_preserves_active_background() {
+        // A child sets a background then erases to end of line: the erased span
+        // must keep that background (BCE), not fall back to the default.
+        let mut performer = Performer::new(1, 4);
+        feed(&mut performer, b"\x1b[41mAB\x1b[2K");
+        let rendered = performer.render();
+        // The whole row is the red-background erase fill.
+        assert_eq!(rendered, vec!["\x1b[0;41m    \x1b[0m".to_string()]);
     }
 
     #[test]
