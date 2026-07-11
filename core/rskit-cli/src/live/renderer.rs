@@ -225,7 +225,7 @@ fn render_tile(label: &str, lines: &[&str], cols: usize, rows: usize) -> String 
     for index in 0..rows {
         out.push('\n');
         let line = lines.get(index).copied().unwrap_or("");
-        out.push_str(&truncate(&format!("  {line}"), cols));
+        out.push_str(&truncate(&format!("{}{line}", " ".repeat(TILE_INDENT)), cols));
     }
     out
 }
