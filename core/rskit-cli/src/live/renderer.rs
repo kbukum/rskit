@@ -68,8 +68,9 @@ impl LiveConfig {
     /// A child whose output is fed to the tile must be told its terminal is this
     /// wide (not the full tile width), so its own line wrapping matches the grid.
     /// Otherwise a full-width in-place progress redraw wraps at the grid edge,
-    /// scrolls the short grid, and leaks a stale frame into scrollback on every
-    /// tick.
+    /// scrolls the short grid, and churns the retained failure tail with stale
+    /// half-frames on every tick — which then surface in the bounded replay when
+    /// a region fails.
     #[must_use]
     pub fn content_cols(&self) -> usize {
         self.cols.saturating_sub(TILE_INDENT.len()).max(1)
