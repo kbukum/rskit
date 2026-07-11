@@ -135,7 +135,7 @@ jobs:
           components: clippy
       - name: Install mold linker
         run: sudo apt-get install -y mold
-      - uses: Swatinem/rust-cache@baf1a810e98b6a3001d0d7234864ed75a17c42fb  # v2.7.8
+      - uses: Swatinem/rust-cache@7e35be21c2b94d972b1143087fabc27d7dc881ef  # v2.7.8
         with:
           workspaces: |
             core
@@ -183,14 +183,14 @@ jobs:
       - name: Install mold linker (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get install -y mold
-      - uses: Swatinem/rust-cache@baf1a810e98b6a3001d0d7234864ed75a17c42fb  # v2.7.8
+      - uses: Swatinem/rust-cache@7e35be21c2b94d972b1143087fabc27d7dc881ef  # v2.7.8
         with:
           key: ${{ matrix.os }}-1.95-${{ matrix.feature-mode }}
           workspaces: |
             core
             contrib
             examples
-      - uses: taiki-e/install-action@16b05812d776ae1dfaabc8277e421fb6d2506419  # v2
+      - uses: taiki-e/install-action@c7eb1735f09259a5035e8e5d44b1406b1cddc0fb  # v2
         with:
           tool: cargo-nextest
       - name: Run selected tests
@@ -230,7 +230,7 @@ jobs:
           toolchain: "1.91"
       - name: Install mold linker
         run: sudo apt-get install -y mold
-      - uses: Swatinem/rust-cache@baf1a810e98b6a3001d0d7234864ed75a17c42fb  # v2.7.8
+      - uses: Swatinem/rust-cache@7e35be21c2b94d972b1143087fabc27d7dc881ef  # v2.7.8
         with:
           key: ubuntu-latest-1.91-msrv-${{ matrix.feature-mode }}
           workspaces: |
@@ -268,7 +268,7 @@ jobs:
           toolchain: "1.95"
       - name: Install mold linker
         run: sudo apt-get install -y mold
-      - uses: Swatinem/rust-cache@baf1a810e98b6a3001d0d7234864ed75a17c42fb  # v2.7.8
+      - uses: Swatinem/rust-cache@7e35be21c2b94d972b1143087fabc27d7dc881ef  # v2.7.8
         with:
           workspaces: |
             core
@@ -299,13 +299,13 @@ jobs:
           components: llvm-tools-preview
       - name: Install mold linker
         run: sudo apt-get install -y mold
-      - uses: Swatinem/rust-cache@baf1a810e98b6a3001d0d7234864ed75a17c42fb  # v2.7.8
+      - uses: Swatinem/rust-cache@7e35be21c2b94d972b1143087fabc27d7dc881ef  # v2.7.8
         with:
           workspaces: |
             core
             contrib
             examples
-      - uses: taiki-e/install-action@16b05812d776ae1dfaabc8277e421fb6d2506419  # v2
+      - uses: taiki-e/install-action@c7eb1735f09259a5035e8e5d44b1406b1cddc0fb  # v2
         with:
           tool: cargo-nextest,cargo-llvm-cov
       - name: Run coverage
@@ -366,7 +366,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88  # stable
         with:
           toolchain: "1.95"
-      - uses: taiki-e/install-action@16b05812d776ae1dfaabc8277e421fb6d2506419  # v2
+      - uses: taiki-e/install-action@c7eb1735f09259a5035e8e5d44b1406b1cddc0fb  # v2
         with:
           tool: cargo-deny,cargo-audit
       - name: Install nightly for rustdoc JSON
