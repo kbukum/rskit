@@ -81,6 +81,9 @@ impl vte::Perform for Performer {
     }
 
     fn execute(&mut self, byte: u8) {
+        // Applying a control from the pending-wrap sentinel would make the next
+        // print wrap and possibly scroll; land back inside the grid first.
+        self.cursor.clear_pending_wrap(self.grid.cols());
         match byte {
             // Region output arrives over a pipe, so the terminal's ONLCR
             // translation never runs: cook a bare `\n` into carriage-return +
@@ -105,6 +108,9 @@ impl vte::Perform for Performer {
     ) {
         let rows = self.grid.rows();
         let cols = self.grid.cols();
+        // Explicit moves clear a pending wrap, matching terminal behavior and
+        // preventing a stale `col == cols` from scrolling on the next print.
+        self.cursor.clear_pending_wrap(cols);
         match action {
             'A' => self.cursor.up(Self::param(params, 0, 1)),
             'B' => self.cursor.down(Self::param(params, 0, 1), rows),
@@ -209,6 +215,21 @@ mod tests {
             performer.render(),
             vec!["one".to_string(), "two".to_string()]
         );
+    }
+
+    #[test]
+    fn cursor_move_from_pending_wrap_does_not_scroll() {
+        // At the bottom row with a filled last column (col == cols sentinel), a
+        // cursor-down (clamped to the bottom) must clear the pending wrap so the
+        // next print overwrites in place instead of wrapping and scrolling.
+        let mut performer = Performer::new(2, 3);
+        feed(&mut performer, b"x\r\nabc\x1b[BY");
+        assert_eq!(
+            performer.take_evicted(),
+            Vec::<String>::new(),
+            "explicit move from pending wrap must not evict rows"
+        );
+        assert_eq!(performer.render(), vec!["x".to_string(), "abY".to_string()]);
     }
 
     #[test]
