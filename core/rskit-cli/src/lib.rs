@@ -27,7 +27,7 @@ pub mod render;
 pub mod signal;
 pub mod theme;
 
-pub use live::{LiveConfig, LiveConsole, RegionTail};
+pub use live::{LiveConfig, LiveConsole, RegionScreen};
 pub use progress::{MultiProgress, ProgressBar, ProgressStyle};
 pub use prompt::{
     Capabilities, Choice, ChoiceId, Key, LineTerminal, PromptMode, Prompter, ScriptedTerminal,

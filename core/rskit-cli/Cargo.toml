@@ -17,6 +17,7 @@ keywords               = ["cli", "progress", "signal", "terminal"]
 # External
 indicatif       = { workspace = true }
 console         = { workspace = true }
+vte             = { workspace = true }
 tokio           = { workspace = true }
 tokio-util      = { workspace = true }
 serde           = { workspace = true }
