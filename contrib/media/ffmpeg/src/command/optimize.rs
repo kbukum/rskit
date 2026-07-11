@@ -194,4 +194,82 @@ mod tests {
         .expect_err("replace-audio maps the primary video stream and must not follow StripVideo");
         assert_eq!(err.code(), rskit_errors::ErrorCode::InvalidInput);
     }
+
+    #[test]
+    fn optimize_merges_consecutive_operations() {
+        let ops = FfmpegCommand::optimize_ops(&[
+            MediaOp::Resize(rskit_media::ops::ResizeOp {
+                resolution: rskit_media::spatial::Resolution::new(320, 240),
+                mode: rskit_media::ops::ResizeMode::Exact,
+            }),
+            MediaOp::Resize(rskit_media::ops::ResizeOp {
+                resolution: rskit_media::spatial::Resolution::new(640, 480),
+                mode: rskit_media::ops::ResizeMode::Exact,
+            }),
+            MediaOp::Crop(rskit_media::ops::CropRegion {
+                x: 0,
+                y: 0,
+                width: 10,
+                height: 10,
+            }),
+            MediaOp::Crop(rskit_media::ops::CropRegion {
+                x: 1,
+                y: 2,
+                width: 20,
+                height: 30,
+            }),
+            MediaOp::Volume(0.5),
+            MediaOp::Volume(2.0),
+            MediaOp::Speed(1.0),
+            MediaOp::Speed(2.0),
+            MediaOp::Speed(0.5),
+        ]);
+
+        assert_eq!(ops.len(), 4);
+        assert!(matches!(&ops[0], MediaOp::Resize(op) if op.resolution.width == 640));
+        assert!(matches!(&ops[1], MediaOp::Crop(op) if op.x == 1 && op.height == 30));
+        assert!(matches!(ops[2], MediaOp::Volume(factor) if (factor - 1.0).abs() < f64::EPSILON));
+        assert!(matches!(ops[3], MediaOp::Speed(factor) if (factor - 1.0).abs() < f64::EPSILON));
+    }
+
+    #[test]
+    fn validate_rejects_conflicting_extract_and_overlay_combinations() {
+        let range = rskit_media::time::TimeRange::from_seconds(0.0, 1.0);
+        let segment = rskit_media::time::Segment::new(range);
+        let concat = MediaOp::Concat(rskit_media::ops::ConcatOp {
+            source: rskit_storage::FileSource::from_path("next.mp4"),
+            transition: None,
+        });
+        let overlay = MediaOp::Overlay(rskit_media::ops::OverlayOp {
+            source: rskit_storage::FileSource::from_path("overlay.png"),
+            position: rskit_media::ops::OverlayPosition::Center,
+            opacity: 1.0,
+            time_range: None,
+            scale: None,
+        });
+
+        for ops in [
+            vec![MediaOp::Extract(range), MediaOp::Extract(range)],
+            vec![
+                MediaOp::ExtractMany(vec![segment.clone()]),
+                MediaOp::ExtractMany(vec![segment.clone()]),
+            ],
+            vec![MediaOp::Extract(range), concat.clone()],
+            vec![MediaOp::ExtractMany(vec![segment]), concat.clone()],
+            vec![overlay.clone(), overlay],
+            vec![
+                concat,
+                MediaOp::Overlay(rskit_media::ops::OverlayOp {
+                    source: rskit_storage::FileSource::from_path("overlay.png"),
+                    position: rskit_media::ops::OverlayPosition::Center,
+                    opacity: 1.0,
+                    time_range: None,
+                    scale: None,
+                }),
+            ],
+        ] {
+            let err = FfmpegCommand::validate_ops(&ops).unwrap_err();
+            assert_eq!(err.code(), rskit_errors::ErrorCode::InvalidInput);
+        }
+    }
 }

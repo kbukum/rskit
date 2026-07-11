@@ -12,6 +12,7 @@ use async_trait::async_trait;
 use rdkafka::Message as RdMessage;
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::{Consumer, StreamConsumer};
+use rdkafka::error::KafkaError;
 use rdkafka::producer::{FutureProducer, FutureRecord, Producer};
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_messaging::{
@@ -35,12 +36,9 @@ impl KafkaProducer {
     /// Create a new `KafkaProducer` from the given configuration.
     pub(crate) fn new(config: &Config) -> AppResult<Self> {
         config.validate()?;
-        let producer: FutureProducer = producer_config(config).create().map_err(|e| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!("failed to create Kafka producer: {e}"),
-            )
-        })?;
+        let producer: FutureProducer = producer_config(config)
+            .create()
+            .map_err(|error| kafka_producer_creation_error(&error))?;
         Ok(Self { producer })
     }
 }
@@ -59,12 +57,7 @@ impl MessageProducer<Vec<u8>> for KafkaProducer {
         self.producer
             .send(record, Duration::from_secs(5))
             .await
-            .map_err(|(e, _)| {
-                AppError::new(
-                    ErrorCode::ExternalService,
-                    format!("Kafka send failed: {e}"),
-                )
-            })?;
+            .map_err(|(error, _)| kafka_send_error(&error))?;
 
         debug!(topic = %msg.topic, "message sent to Kafka");
         Ok(())
@@ -78,12 +71,9 @@ impl MessageProducer<Vec<u8>> for KafkaProducer {
     }
 
     async fn flush(&self, timeout: Duration) -> AppResult<()> {
-        self.producer.flush(timeout).map_err(|e| {
-            AppError::new(
-                ErrorCode::ExternalService,
-                format!("Kafka flush failed: {e}"),
-            )
-        })
+        self.producer
+            .flush(timeout)
+            .map_err(|error| kafka_flush_error(&error))
     }
 }
 
@@ -112,12 +102,9 @@ impl KafkaConsumer {
     /// Create a new `KafkaConsumer` from the given configuration.
     pub(crate) fn new(config: &Config) -> AppResult<Self> {
         config.validate()?;
-        let consumer: StreamConsumer = consumer_config(config).create().map_err(|e| {
-            AppError::new(
-                ErrorCode::Internal,
-                format!("failed to create Kafka consumer: {e}"),
-            )
-        })?;
+        let consumer: StreamConsumer = consumer_config(config)
+            .create()
+            .map_err(|error| kafka_consumer_creation_error(&error))?;
         Ok(Self { consumer })
     }
 }
@@ -128,29 +115,16 @@ impl MessageConsumer<Vec<u8>> for KafkaConsumer {
         for topic in topics {
             validate_topic("Kafka topic", topic)?;
         }
-        self.consumer.subscribe(topics).map_err(|e| {
-            AppError::new(
-                ErrorCode::ExternalService,
-                format!("Kafka subscribe failed: {e}"),
-            )
-        })
+        self.consumer
+            .subscribe(topics)
+            .map_err(|error| kafka_subscribe_error(&error))
     }
 
     async fn recv(&self) -> AppResult<Message<Vec<u8>>> {
         let mut stream = self.consumer.stream();
-        let borrowed = stream.next().await.ok_or_else(|| {
-            AppError::new(
-                ErrorCode::ExternalService,
-                "Kafka stream ended unexpectedly",
-            )
-        })?;
+        let borrowed = stream.next().await.ok_or_else(kafka_stream_ended_error)?;
 
-        let borrowed = borrowed.map_err(|e| {
-            AppError::new(
-                ErrorCode::ExternalService,
-                format!("Kafka receive error: {e}"),
-            )
-        })?;
+        let borrowed = borrowed.map_err(|error| kafka_receive_error(&error))?;
 
         let mut msg = Message::new(
             borrowed.topic().to_string(),
@@ -159,12 +133,62 @@ impl MessageConsumer<Vec<u8>> for KafkaConsumer {
         if let Some(key) = borrowed.key() {
             msg = msg.with_key(String::from_utf8_lossy(key).to_string());
         }
+
         msg.partition = Some(borrowed.partition());
         msg.offset = Some(borrowed.offset());
 
         debug!(topic = %msg.topic, partition = ?msg.partition, offset = ?msg.offset, "message received from Kafka");
         Ok(msg)
     }
+}
+
+fn kafka_producer_creation_error(error: &KafkaError) -> AppError {
+    AppError::new(
+        ErrorCode::Internal,
+        format!("failed to create Kafka producer: {error}"),
+    )
+}
+
+fn kafka_send_error(error: &KafkaError) -> AppError {
+    AppError::new(
+        ErrorCode::ExternalService,
+        format!("Kafka send failed: {error}"),
+    )
+}
+
+fn kafka_flush_error(error: &KafkaError) -> AppError {
+    AppError::new(
+        ErrorCode::ExternalService,
+        format!("Kafka flush failed: {error}"),
+    )
+}
+
+fn kafka_consumer_creation_error(error: &KafkaError) -> AppError {
+    AppError::new(
+        ErrorCode::Internal,
+        format!("failed to create Kafka consumer: {error}"),
+    )
+}
+
+fn kafka_subscribe_error(error: &KafkaError) -> AppError {
+    AppError::new(
+        ErrorCode::ExternalService,
+        format!("Kafka subscribe failed: {error}"),
+    )
+}
+
+fn kafka_stream_ended_error() -> AppError {
+    AppError::new(
+        ErrorCode::ExternalService,
+        "Kafka stream ended unexpectedly",
+    )
+}
+
+fn kafka_receive_error(error: &KafkaError) -> AppError {
+    AppError::new(
+        ErrorCode::ExternalService,
+        format!("Kafka receive error: {error}"),
+    )
 }
 
 #[async_trait]
@@ -283,6 +307,7 @@ mod tests {
 
     use super::*;
     use crate::config::SecurityProtocol;
+    use rdkafka::types::RDKafkaErrorCode;
 
     #[test]
     fn kafka_config_default_values() {
@@ -640,5 +665,37 @@ mod tests {
         let producer = KafkaProducer::new(&config).unwrap();
 
         producer.flush(Duration::ZERO).await.unwrap();
+    }
+
+    #[test]
+    fn kafka_error_helpers_preserve_error_codes_and_context() {
+        let producer_error = KafkaError::ClientCreation("producer".to_string());
+        let consumer_error = KafkaError::ClientCreation("consumer".to_string());
+        let creation = kafka_producer_creation_error(&producer_error);
+        let consumer = kafka_consumer_creation_error(&consumer_error);
+        let external = [
+            kafka_send_error(&KafkaError::MessageProduction(RDKafkaErrorCode::QueueFull)),
+            kafka_flush_error(&KafkaError::Flush(RDKafkaErrorCode::QueueFull)),
+            kafka_subscribe_error(&KafkaError::Subscription("bad topic".to_string())),
+            kafka_stream_ended_error(),
+            kafka_receive_error(&KafkaError::MessageConsumption(RDKafkaErrorCode::QueueFull)),
+        ];
+
+        assert_eq!(creation.code(), ErrorCode::Internal);
+        assert!(
+            creation
+                .to_string()
+                .contains("failed to create Kafka producer")
+        );
+        assert_eq!(consumer.code(), ErrorCode::Internal);
+        assert!(
+            consumer
+                .to_string()
+                .contains("failed to create Kafka consumer")
+        );
+        for error in external {
+            assert_eq!(error.code(), ErrorCode::ExternalService);
+            assert!(error.to_string().contains("Kafka"));
+        }
     }
 }

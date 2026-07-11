@@ -344,6 +344,55 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn deny_on_sensitive_supports_root_path_and_non_object_miss() {
+        let evaluator = DenyOnSensitive;
+        let ctx = Context::new();
+
+        let root_env = envelope(vec![SensitivePredicate {
+            jsonpath: "$".to_owned(),
+            matcher: SensitiveMatcher::Exists,
+        }]);
+        let denied = evaluator
+            .evaluate(&ctx, &call(json!({"present": true})), &root_env)
+            .await
+            .expect("root path evaluates");
+        assert!(matches!(denied, Decision::Deny(_)));
+
+        let miss_env = envelope(vec![SensitivePredicate {
+            jsonpath: "$.nested.value".to_owned(),
+            matcher: SensitiveMatcher::Exists,
+        }]);
+        let allowed = evaluator
+            .evaluate(&ctx, &call(json!({"nested": 1})), &miss_env)
+            .await
+            .expect("non-object traversal misses");
+        assert!(matches!(allowed, Decision::Allow));
+    }
+
+    #[test]
+    fn glob_like_match_handles_empty_and_wildcard_cases() {
+        assert!(glob_like_match("", ""));
+        assert!(glob_like_match("a.c", "abc"));
+        assert!(glob_like_match("a.*c", "abbbbbc"));
+        assert!(!glob_like_match("a.*z", "abbbbbc"));
+        assert!(!glob_like_match("abc", ""));
+    }
+
+    #[tokio::test]
+    async fn deny_human_approval_and_denied_error_are_safe_defaults() {
+        let approver = DenyHumanApproval;
+        let approved = approver
+            .approve(&Context::new(), &call(json!({})), "reason")
+            .await
+            .expect("default approval should be infallible");
+        assert!(!approved);
+        assert_eq!(
+            denied_error("no").code(),
+            rskit_errors::ErrorCode::Forbidden
+        );
+    }
+
+    #[tokio::test]
     async fn deny_human_approval_returns_false() {
         let approver = DenyHumanApproval;
         let ctx = Context::new();

@@ -144,6 +144,27 @@ pub fn format_status_bar(
     )
 }
 
+/// Record a completed task result on an existing tracked task.
+pub fn record_completion(task: &mut TrackedTask, result: Result<TaskOutput, String>) {
+    match result {
+        Ok(output) => {
+            task.status = TaskStatus::Done;
+            task.result = Some(output);
+        }
+        Err(err) => {
+            if err.contains("cancelled") {
+                task.status = TaskStatus::Cancelled;
+            } else {
+                task.status = TaskStatus::Failed;
+            }
+            task.result = Some(TaskOutput {
+                summary: err,
+                details: vec![],
+            });
+        }
+    }
+}
+
 // ── Structured Views (/status, /detail) ──────────────────────────────
 
 /// Renders a table of all tracked tasks.
@@ -353,6 +374,42 @@ mod tests {
         assert!(details.contains("image/jpeg, 35 KB"));
         assert!(details.contains("Key"));
         assert!(details.contains("Value"));
+    }
+
+    #[test]
+    fn format_status_bar_shows_failed_count() {
+        let tasks = vec![make_task(1, "A", TaskStatus::Failed)];
+        let bar = format_status_bar(&tasks, 0, 4, Duration::from_secs(1));
+        assert!(bar.contains("1 failed"));
+    }
+
+    #[test]
+    fn record_completion_updates_success_cancel_and_failure() {
+        let mut done = make_task(1, "A", TaskStatus::Running);
+        record_completion(
+            &mut done,
+            Ok(TaskOutput {
+                summary: "ok".into(),
+                details: vec![],
+            }),
+        );
+        assert_eq!(done.status, TaskStatus::Done);
+        assert_eq!(
+            done.result.as_ref().map(|out| out.summary.as_str()),
+            Some("ok")
+        );
+
+        let mut cancelled = make_task(2, "B", TaskStatus::Running);
+        record_completion(&mut cancelled, Err("task cancelled by user".into()));
+        assert_eq!(cancelled.status, TaskStatus::Cancelled);
+
+        let mut failed = make_task(3, "C", TaskStatus::Running);
+        record_completion(&mut failed, Err("boom".into()));
+        assert_eq!(failed.status, TaskStatus::Failed);
+        assert_eq!(
+            failed.result.as_ref().map(|out| out.summary.as_str()),
+            Some("boom")
+        );
     }
 
     #[test]

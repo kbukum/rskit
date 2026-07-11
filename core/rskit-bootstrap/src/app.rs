@@ -518,7 +518,8 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use parking_lot::Mutex;
-    use rskit_config::ServiceConfig;
+    use rskit_config::{AppConfig as _, ServiceConfig};
+    use rskit_provider::Provider;
     use tokio_util::sync::CancellationToken;
 
     use super::AppBuilder;
@@ -540,6 +541,14 @@ mod tests {
 
         fn service_config(&self) -> &ServiceConfig {
             &self.service
+        }
+    }
+
+    struct TestProvider;
+
+    impl Provider for TestProvider {
+        fn name(&self) -> &'static str {
+            "test-provider"
         }
     }
 
@@ -618,6 +627,49 @@ mod tests {
         assert_eq!(after_start.kind(), crate::LifecycleEventType::AfterStart);
         assert_eq!(before_stop.kind(), crate::LifecycleEventType::BeforeStop);
         assert_eq!(after_stop.kind(), crate::LifecycleEventType::AfterStop);
+    }
+
+    #[tokio::test]
+    async fn builder_registers_provider_dependency_and_started_stopped_accessors() {
+        let dependency = Arc::new(7_usize);
+        let provider = Arc::new(TestProvider);
+        let app = AppBuilder::new(TestCfg::default())
+            .with_dependency(Arc::clone(&dependency))
+            .with_provider(Arc::clone(&provider))
+            .after_stop(|_| async { Ok(()) })
+            .build()
+            .expect("build should succeed");
+
+        assert_eq!(*app.container().resolve::<usize>().unwrap(), 7);
+        assert_eq!(
+            app.container().resolve::<TestProvider>().unwrap().name(),
+            "test-provider"
+        );
+        let _built_bus = app.lifecycle_event_bus();
+
+        let started = app.start().await.expect("start should succeed");
+        assert_eq!(started.config().service_config().name, "service");
+        assert_eq!(*started.container().resolve::<usize>().unwrap(), 7);
+        let _started_bus = started.lifecycle_event_bus();
+        let _shutdown = started.shutdown_token();
+
+        let stopped = started.stop().await.expect("stop should succeed");
+        assert_eq!(stopped.config().service_config().name, "service");
+        let _stopped_bus = stopped.lifecycle_event_bus();
+    }
+
+    #[tokio::test]
+    async fn run_task_exits_when_shutdown_token_is_cancelled() {
+        let app = AppBuilder::new(TestCfg::default())
+            .build()
+            .expect("build should succeed");
+
+        app.run_task(|_cfg: Arc<TestCfg>, cancel: CancellationToken| async move {
+            cancel.cancel();
+            std::future::pending::<rskit_errors::AppResult<()>>().await
+        })
+        .await
+        .expect("shutdown cancellation should stop run_task");
     }
 
     #[tokio::test]

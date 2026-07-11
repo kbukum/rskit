@@ -834,6 +834,21 @@ mod tests {
         tokio::task::yield_now().await;
     }
 
+    #[test]
+    fn shutdown_consumer_tasks_aborts_without_runtime_handle() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .unwrap();
+        let task = {
+            let _guard = runtime.enter();
+            SpawnedTask::spawn(|_cancel| futures_util::future::pending::<()>())
+        };
+        drop(runtime);
+
+        shutdown_consumer_tasks(vec![task]);
+    }
+
     fn lapin_io_error() -> lapin::Error {
         io::Error::other("broker failed").into()
     }
@@ -943,6 +958,37 @@ mod tests {
         task.cancel();
         task.join().await;
     }
+
+    #[tokio::test]
+    async fn forwarding_task_stops_when_cancelled_while_send_is_backpressured() {
+        let (sender, mut receiver) = mpsc::channel(1);
+        sender
+            .send(Message::new("filled", b"first".to_vec()))
+            .await
+            .unwrap();
+        let active_tasks = Arc::new(AtomicUsize::new(0));
+        let task_finished = Arc::new(tokio::sync::Notify::new());
+        let stream = futures_util::stream::iter(vec![Ok::<_, std::io::Error>((
+            "events".to_string(),
+            b"payload".to_vec(),
+        ))]);
+        let task = spawn_forwarding_task(
+            "events".to_string(),
+            stream,
+            sender,
+            active_tasks.clone(),
+            task_finished,
+        );
+
+        tokio::task::yield_now().await;
+        task.cancel();
+        task.join().await;
+
+        assert_eq!(active_tasks.load(Ordering::SeqCst), 0);
+        assert_eq!(receiver.recv().await.unwrap().topic, "filled");
+        assert!(receiver.try_recv().is_err());
+    }
+
     #[test]
     fn rabbitmq_queue_prefix_validates_combined_queue() {
         let config = Config {

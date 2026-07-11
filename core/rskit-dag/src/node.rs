@@ -76,3 +76,33 @@ where
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn typed_node_executes_and_serializes_output() {
+        let node = TypedDagNode::new(
+            "typed",
+            |inputs| {
+                Ok(inputs
+                    .get("value")
+                    .and_then(serde_json::Value::as_i64)
+                    .unwrap_or_default())
+            },
+            |value, _cancel| async move { Ok::<_, AppError>(value + 1) },
+        );
+
+        assert_eq!(node.id(), "typed");
+        let output = node
+            .execute(
+                HashMap::from([("value".to_string(), serde_json::json!(41))]),
+                CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(output, serde_json::json!(42));
+    }
+}

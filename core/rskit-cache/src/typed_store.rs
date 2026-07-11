@@ -68,3 +68,105 @@ impl<T: Serialize + DeserializeOwned + Send + Sync> TypedStore<T> {
         self.client.exists(&self.full_key(key)).await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use parking_lot::Mutex;
+    use serde::Serializer;
+    use std::collections::BTreeMap;
+
+    #[derive(Default)]
+    struct MemoryStore {
+        values: Mutex<BTreeMap<String, String>>,
+    }
+
+    #[async_trait::async_trait]
+    impl CacheStore for MemoryStore {
+        async fn get(&self, key: &str) -> AppResult<Option<String>> {
+            Ok(self.values.lock().get(key).cloned())
+        }
+
+        async fn set(&self, key: &str, val: &str, _ttl: Option<Duration>) -> AppResult<()> {
+            self.values.lock().insert(key.to_string(), val.to_string());
+            Ok(())
+        }
+
+        async fn delete(&self, key: &str) -> AppResult<bool> {
+            Ok(self.values.lock().remove(key).is_some())
+        }
+
+        async fn exists(&self, key: &str) -> AppResult<bool> {
+            Ok(self.values.lock().contains_key(key))
+        }
+    }
+
+    struct FailingSerialize;
+
+    impl Serialize for FailingSerialize {
+        fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            Err(serde::ser::Error::custom("boom"))
+        }
+    }
+
+    impl<'de> serde::Deserialize<'de> for FailingSerialize {
+        fn deserialize<D>(_deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+        {
+            Ok(Self)
+        }
+    }
+
+    #[tokio::test]
+    async fn typed_store_round_trips_prefixed_json() {
+        let store = Arc::new(MemoryStore::default());
+        let typed = TypedStore::<u32>::new(store.clone(), "numbers");
+
+        typed
+            .set("answer", &42, None)
+            .await
+            .expect("set should serialise");
+
+        assert!(store.exists("numbers:answer").await.expect("exists works"));
+        assert_eq!(
+            typed.get("answer").await.expect("get should deserialise"),
+            Some(42)
+        );
+        assert!(typed.delete("answer").await.expect("delete should succeed"));
+        assert_eq!(
+            typed.get("answer").await.expect("missing key succeeds"),
+            None
+        );
+    }
+
+    #[tokio::test]
+    async fn get_rejects_invalid_json() {
+        let store = Arc::new(MemoryStore::default());
+        store
+            .set("numbers:bad", "not-json", None)
+            .await
+            .expect("fixture write succeeds");
+        let typed = TypedStore::<u32>::new(store, "numbers");
+
+        let err = typed
+            .get("bad")
+            .await
+            .expect_err("invalid json should fail");
+        assert_eq!(err.code(), ErrorCode::Internal);
+    }
+
+    #[tokio::test]
+    async fn set_rejects_serialisation_errors() {
+        let typed = TypedStore::<FailingSerialize>::new(Arc::new(MemoryStore::default()), "bad");
+
+        let err = typed
+            .set("value", &FailingSerialize, None)
+            .await
+            .expect_err("serialisation errors should surface");
+        assert_eq!(err.code(), ErrorCode::Internal);
+    }
+}

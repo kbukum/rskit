@@ -809,6 +809,43 @@ mod tests {
     }
 
     #[test]
+    fn overlay_positions_compile_all_coordinate_variants() {
+        for (position, expected) in [
+            (OverlayPosition::TopRight(10, 20), "W-w-10:20"),
+            (OverlayPosition::BottomLeft(10, 20), "10:H-h-20"),
+            (OverlayPosition::BottomRight(10, 20), "W-w-10:H-h-20"),
+            (
+                OverlayPosition::Custom {
+                    x: "main_w-overlay_w-5".into(),
+                    y: "main_h-overlay_h-5".into(),
+                },
+                "main_w-overlay_w-5:main_h-overlay_h-5",
+            ),
+        ] {
+            let args = compile_args(&[MediaOp::Overlay(OverlayOp {
+                source: FileSource::from_path("overlay.png"),
+                position,
+                opacity: 1.0,
+                time_range: None,
+                scale: None,
+            })]);
+            assert!(
+                args.iter().any(|arg| arg.contains(expected)),
+                "args: {args:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn audio_filter_targets_audio_filter_chain() {
+        let args = compile_args(&[MediaOp::Filter(rskit_media::filter::filters::high_pass(
+            120,
+        ))]);
+
+        assert!(args.windows(2).any(|w| w == ["-af", "highpass=f=120"]));
+    }
+
+    #[test]
     fn track_selection_maps_indices_and_supported_track_kinds() {
         let args = compile_args(&[
             MediaOp::SelectTracks(vec![0, 2]),
@@ -885,6 +922,39 @@ mod tests {
                 "-vf",
                 "eq=brightness=0.1:contrast=1.2:saturation=0.9:gamma=1.2"
             ]));
+    }
+
+    #[test]
+    fn visual_filter_named_presets_compile() {
+        for (preset, expected) in [
+            (FilterPreset::Cinematic, "brightness=-0.05"),
+            (FilterPreset::Warm, "brightness=0.05"),
+            (FilterPreset::Cool, "brightness=-0.02"),
+            (FilterPreset::Vintage, "saturation=0.7"),
+            (FilterPreset::Dramatic, "contrast=1.3"),
+        ] {
+            let args = compile_args(&[MediaOp::ApplyFilter(FilterConfig {
+                preset,
+                intensity: 1.0,
+                custom_params: None,
+            })]);
+            let vf_idx = args.iter().position(|arg| arg == "-vf").unwrap();
+            assert!(
+                args[vf_idx + 1].contains(expected),
+                "missing {expected}: {args:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn custom_visual_filter_without_params_is_noop() {
+        let args = compile_args(&[MediaOp::ApplyFilter(FilterConfig {
+            preset: FilterPreset::Custom,
+            intensity: 1.0,
+            custom_params: None,
+        })]);
+
+        assert!(!args.contains(&"-vf".to_string()));
     }
 
     #[test]
@@ -1027,6 +1097,50 @@ mod tests {
         assert!(rtmp.windows(2).any(|w| w == ["-f", "flv"]));
         assert!(rtmp.windows(2).any(|w| w == ["-rtmp_live", "live"]));
         assert!(rtmp.contains(&"rtmp://live.example.test/app/key".to_string()));
+    }
+
+    #[test]
+    fn transcode_variable_video_bitrate_and_hls_event_options_compile() {
+        let variable = compile_args(&[MediaOp::Transcode(
+            OutputConfig::new(Format::new("mp4")).with_video(
+                VideoSettings::new(Codec::new(video_codec::H264))
+                    .with_bitrate(Bitrate::Variable(750_000)),
+            ),
+        )]);
+        assert!(variable.windows(2).any(|w| w == ["-b:v", "750000"]));
+
+        let hls = compile_args(&[MediaOp::Transcode(
+            OutputConfig::new(Format::new("m3u8")).with_streaming(StreamingConfig::Hls(
+                rskit_media::output::HlsConfig {
+                    segment_duration: 4,
+                    playlist_size: 3,
+                    playlist_type: rskit_media::output::HlsPlaylistType::Event,
+                    segment_filename: Some("seg-%03d.ts".into()),
+                },
+            )),
+        )]);
+        for expected in [
+            ("-f", "hls"),
+            ("-hls_time", "4"),
+            ("-hls_list_size", "3"),
+            ("-hls_playlist_type", "event"),
+            ("-hls_segment_filename", "seg-%03d.ts"),
+        ] {
+            assert!(
+                hls.windows(2).any(|w| w == [expected.0, expected.1]),
+                "missing {expected:?}: {hls:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn burn_subtitles_operation_compiles_through_command_dispatch() {
+        let subtitles = rskit_media::subtitle::SubtitleTrack::new()
+            .add(TimeRange::from_seconds(0.0, 1.0), "hello");
+        let args = compile_args(&[MediaOp::BurnSubtitles(subtitles)]);
+
+        let vf_idx = args.iter().position(|arg| arg == "-vf").unwrap();
+        assert!(args[vf_idx + 1].contains("subtitles=filename="));
     }
 
     #[test]

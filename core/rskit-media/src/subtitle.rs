@@ -387,3 +387,53 @@ fn decode_html_entities(s: &str) -> String {
         .replace("&nbsp;", " ")
         .replace("&#x200B;", "")
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::time::TimeRange;
+
+    use super::*;
+
+    #[test]
+    fn malformed_srt_and_vtt_blocks_are_skipped_or_rejected() {
+        let srt =
+            "\u{feff}not a number\nno timestamp\n\n3\n00:00:01,000 --> 00:00:02,000\n<b>ok</b>";
+        assert!(SubtitleTrack::from_srt("1\nbad --> 00:00:02,000\nbad").is_err());
+        assert!(SubtitleTrack::from_srt("1\n00:00:01,000 --> bad\nbad").is_err());
+        let track = SubtitleTrack::from_srt(srt).unwrap();
+        assert_eq!(track.entries.len(), 1);
+        assert_eq!(track.entries[0].text, "ok");
+
+        assert!(SubtitleTrack::from_vtt("WEBVTT\n\nbad --> 00:00:02.000\nbad").is_err());
+        assert!(SubtitleTrack::from_vtt("WEBVTT\n\n00:00:01.000 --> bad\nbad").is_err());
+        let vtt = "WEBVTT\n\nNOTE no timestamp\n\ncue\n00:00:01.000 --> 00:00:02.000 align:start\n<c>&amp; hi</c>";
+        let track = SubtitleTrack::from_vtt(vtt).unwrap();
+        assert_eq!(track.entries.len(), 1);
+        assert_eq!(track.entries[0].text, "& hi");
+    }
+
+    #[test]
+    fn subtitle_defaults_formatters_and_helpers_cover_edge_cases() {
+        let mut track = SubtitleTrack::default()
+            .with_language("en")
+            .add(TimeRange::from_millis(1_000, 2_500), "hello");
+        assert_eq!(track.language.as_deref(), Some("en"));
+        assert!(track.default_style.is_none());
+        assert!(track.to_srt().contains("00:00:01,000 --> 00:00:02,500"));
+        assert!(track.to_vtt().contains("00:00:01.000 --> 00:00:02.500"));
+
+        track.shift(-500);
+        assert_eq!(track.entries[0].range.start.as_millis(), 500);
+        assert_eq!(
+            track
+                .in_range(&TimeRange::from_millis(0, 600))
+                .entries
+                .len(),
+            1
+        );
+        assert_eq!(parse_srt_time("00:00:01,250"), Some(1_250));
+        assert_eq!(parse_vtt_time("01:02.003"), Some(62_003));
+        assert_eq!(parse_time_dotted("bad"), None);
+        assert_eq!(strip_html_tags("<b>a</b><i>b</i>"), "ab");
+    }
+}

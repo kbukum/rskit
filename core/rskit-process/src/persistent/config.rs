@@ -253,4 +253,17 @@ mod tests {
         assert!(observer.stdout_bytes_callback().is_some());
         assert!(observer.stderr_bytes_callback().is_some());
     }
+
+    #[test]
+    fn default_and_observer_debug_are_stable() {
+        let config = PersistentConfig::default();
+        assert_eq!(config.readiness, PersistentReadiness::Started);
+        assert_eq!(config.readiness_timeout, Duration::from_secs(30));
+        assert_eq!(config.shutdown_grace_period, Duration::from_secs(5));
+
+        let observer = PersistentOutputObserver::new().with_stdout_bytes(|_| {});
+        let rendered = format!("{observer:?}");
+        assert!(rendered.contains("stdout_bytes: true"));
+        assert!(rendered.contains("stderr_bytes: false"));
+    }
 }

@@ -99,3 +99,65 @@ pub(crate) async fn wait_for_signal(token: CancellationToken) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use rskit_hook::{EventBus, EventBusConfig};
+
+    use super::*;
+
+    #[test]
+    fn lifecycle_phase_metadata_covers_all_variants() {
+        assert_eq!(LifecyclePhase::BeforeStart.label(), "before_start");
+        assert_eq!(LifecyclePhase::AfterStart.label(), "after_start");
+        assert_eq!(LifecyclePhase::BeforeStop.label(), "before_stop");
+        assert_eq!(LifecyclePhase::AfterStop.label(), "after_stop");
+        assert_eq!(
+            LifecyclePhase::AfterStop.event_type(),
+            LifecycleEventType::AfterStop
+        );
+        assert!(LifecyclePhase::BeforeStart.fail_when_cancelled());
+        assert!(!LifecyclePhase::BeforeStop.fail_when_cancelled());
+    }
+
+    #[tokio::test]
+    async fn run_hooks_rejects_cancelled_start_but_allows_cancelled_stop() {
+        let bus = EventBus::new(EventBusConfig::default());
+        let token = CancellationToken::new();
+        token.cancel();
+        let hook = make_hook(|_| async { Ok(()) });
+
+        let err = run_hooks(
+            LifecyclePhase::BeforeStart,
+            std::slice::from_ref(&hook),
+            token.clone(),
+            &bus,
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::Cancelled);
+
+        run_hooks(LifecyclePhase::BeforeStop, &[hook], token, &bus)
+            .await
+            .unwrap();
+    }
+
+    #[test]
+    fn record_stop_error_keeps_first_error_and_adds_context() {
+        let mut stop_error = None;
+        record_stop_error(
+            &mut stop_error,
+            AppError::new(ErrorCode::Internal, "first"),
+            "first context",
+        );
+        record_stop_error(
+            &mut stop_error,
+            AppError::new(ErrorCode::Internal, "second"),
+            "second context",
+        );
+
+        let error = stop_error.unwrap();
+        assert!(error.to_string().contains("first"));
+        assert!(error.to_string().contains("second context"));
+    }
+}

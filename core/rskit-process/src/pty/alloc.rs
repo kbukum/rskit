@@ -145,4 +145,11 @@ mod tests {
             "master must be close-on-exec"
         );
     }
+
+    #[test]
+    fn fcntl_error_uses_internal_code() {
+        let error = fcntl_error("TEST");
+        assert_eq!(error.code(), ErrorCode::Internal);
+        assert!(error.to_string().contains("TEST"));
+    }
 }

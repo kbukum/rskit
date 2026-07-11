@@ -667,4 +667,99 @@ mod tests {
             .unwrap();
         assert!(!result.is_error);
     }
+
+    #[tokio::test]
+    async fn batch_hitl_covers_deny_and_approval_paths() {
+        struct NeedsApproval;
+
+        #[async_trait::async_trait]
+        impl SensitivityEvaluator for NeedsApproval {
+            async fn evaluate(
+                &self,
+                _ctx: &Context,
+                _call: &ToolCall,
+                _envelope: &Envelope,
+            ) -> AppResult<Decision> {
+                Ok(Decision::RequireApproval("batch".to_owned()))
+            }
+        }
+
+        struct AllowApproval;
+
+        #[async_trait::async_trait]
+        impl HumanApproval for AllowApproval {
+            async fn approve(
+                &self,
+                _ctx: &Context,
+                _call: &ToolCall,
+                reason: &str,
+            ) -> AppResult<bool> {
+                Ok(reason == "batch")
+            }
+        }
+
+        let denied = Registry::new().with_sensitivity_evaluator(Arc::new(DenyOnSensitive));
+        denied
+            .register(stub(
+                "danger",
+                Envelope {
+                    sensitive_invocations: vec![SensitivePredicate {
+                        jsonpath: "$.secret".to_owned(),
+                        matcher: SensitiveMatcher::Exists,
+                    }],
+                    ..Envelope::default()
+                },
+            ))
+            .unwrap();
+        let denied_results = denied
+            .call_batch(
+                vec![("danger", ToolInput::new(json!({"secret": true})).unwrap())],
+                &Context::new(),
+                BatchOptions::default(),
+            )
+            .await;
+        assert_eq!(
+            denied_results[0].as_ref().unwrap_err().code(),
+            ErrorCode::Forbidden
+        );
+
+        let missing_approval = Registry::new().with_sensitivity_evaluator(Arc::new(NeedsApproval));
+        missing_approval
+            .register(stub("tool", Envelope::default()))
+            .unwrap();
+        let missing_results = missing_approval
+            .call_batch(
+                vec![("tool", ToolInput::empty())],
+                &Context::new(),
+                BatchOptions::default(),
+            )
+            .await;
+        assert_eq!(
+            missing_results[0].as_ref().unwrap_err().code(),
+            ErrorCode::Forbidden
+        );
+
+        let allowed = Registry::new()
+            .with_sensitivity_evaluator(Arc::new(NeedsApproval))
+            .with_human_approval(Arc::new(AllowApproval));
+        allowed.register(stub("tool", Envelope::default())).unwrap();
+        let allowed_results = allowed
+            .call_batch(
+                vec![("tool", ToolInput::empty())],
+                &Context::new(),
+                BatchOptions::default(),
+            )
+            .await;
+        assert!(!allowed_results[0].as_ref().unwrap().is_error);
+    }
+
+    #[tokio::test]
+    async fn default_registry_component_lifecycle_is_healthy() {
+        let registry = Registry::default();
+
+        assert_eq!(registry.name(), "rskit-tool.registry");
+        registry.start().await.expect("start succeeds");
+        assert_eq!(registry.health().name, "rskit-tool.registry");
+        registry.stop().await.expect("stop succeeds");
+    }
 }

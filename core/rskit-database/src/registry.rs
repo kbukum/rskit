@@ -135,4 +135,36 @@ mod tests {
 
         assert!(Arc::strong_count(&database) >= 1);
     }
+
+    #[tokio::test]
+    async fn registry_rejects_invalid_duplicate_and_missing_backends() {
+        let mut registry = DatabaseRegistry::new();
+        assert!(registry.is_empty());
+        assert_eq!(registry.len(), 0);
+
+        assert_eq!(
+            registry
+                .register(" ", Arc::new(MemoryFactory))
+                .unwrap_err()
+                .code(),
+            ErrorCode::InvalidInput
+        );
+        register_memory(&mut registry).unwrap();
+        assert!(registry.contains("memory"));
+        assert_eq!(registry.len(), 1);
+        assert_eq!(
+            register_memory(&mut registry).unwrap_err().code(),
+            ErrorCode::AlreadyExists
+        );
+
+        let config = DatabaseConfig {
+            backend: "missing".to_owned(),
+            ..DatabaseConfig::default()
+        };
+        let error = match registry.build(&config).await {
+            Ok(_) => panic!("missing backend should fail"),
+            Err(error) => error,
+        };
+        assert_eq!(error.code(), ErrorCode::NotFound);
+    }
 }

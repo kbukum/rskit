@@ -226,4 +226,19 @@ mod tests {
         assert!(err.message().contains("max_search_limit"));
         assert!(!err.message().contains("between 1 and 0"));
     }
+
+    #[test]
+    fn config_defaults_deserialize_through_default_functions() {
+        let config: VectorStoreConfig = serde_json::from_str("{}").unwrap();
+        assert_eq!(config.backend, "memory");
+        assert_eq!(config.memory.metric, SimilarityMetric::Cosine);
+        assert_eq!(config.limits, VectorStoreLimits::default());
+
+        let limits: VectorStoreLimits = serde_json::from_str("{}").unwrap();
+        assert_eq!(limits.max_search_limit, DEFAULT_MAX_SEARCH_LIMIT);
+        assert_eq!(limits.max_vector_dimensions, DEFAULT_MAX_VECTOR_DIMENSIONS);
+        assert_eq!(limits.max_payload_fields, DEFAULT_MAX_PAYLOAD_FIELDS);
+        assert_eq!(limits.max_payload_bytes, DEFAULT_MAX_PAYLOAD_BYTES);
+        assert_eq!(limits.max_filter_conditions, DEFAULT_MAX_FILTER_CONDITIONS);
+    }
 }

@@ -429,6 +429,29 @@ mod tests {
             manifest.cache_status("almost", &serde_json::json!({"other": true}), Some(1000)),
             CacheStatus::NotCached
         ));
+
+        manifest.mark_partial(
+            "unknown-max".to_string(),
+            config.clone(),
+            SourceStats {
+                total: 10,
+                real: 5,
+                ai: 5,
+                fetched_offset: 10,
+            },
+        );
+        assert!(matches!(
+            manifest.cache_status("unknown-max", &config, None),
+            CacheStatus::Partial(_)
+        ));
+    }
+
+    #[test]
+    fn manifest_load_reports_non_directory_output_path() {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        let err = Manifest::load(file.path()).unwrap_err();
+        assert_eq!(err.code(), ErrorCode::Internal);
+        assert!(err.to_string().contains("manifest read failed"));
     }
 
     #[test]
@@ -448,6 +471,11 @@ mod tests {
         let err = Manifest::load(dir.path()).unwrap_err();
         assert_eq!(err.code(), ErrorCode::InvalidInput);
         assert!(err.to_string().contains("exceeded max"));
+
+        let dir = TempDir::new().unwrap();
+        std::fs::create_dir(dir.path().join(MANIFEST_FILE)).unwrap();
+        let err = Manifest::load(dir.path()).unwrap_err();
+        assert_eq!(err.code(), ErrorCode::Internal);
     }
 
     #[test]
@@ -462,6 +490,11 @@ mod tests {
         let file = dir.path().join("not-dir");
         std::fs::write(&file, b"x").unwrap();
         let err = manifest.save(&file).unwrap_err();
+        assert_eq!(err.code(), ErrorCode::Internal);
+
+        let dir = TempDir::new().unwrap();
+        std::fs::create_dir(dir.path().join(MANIFEST_FILE)).unwrap();
+        let err = manifest.save(dir.path()).unwrap_err();
         assert_eq!(err.code(), ErrorCode::Internal);
     }
 }

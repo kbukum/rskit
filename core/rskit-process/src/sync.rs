@@ -338,7 +338,9 @@ fn wait_with_timeout(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{CapturedIo, ProcessIo};
+    #[cfg(unix)]
+    use crate::pty::PtyIo;
+    use crate::{CapturedIo, ObservedIo, OutputObserver, ProcessIo};
 
     #[test]
     fn stdio_helpers_map_input_and_output_policies() {
@@ -372,6 +374,26 @@ mod tests {
         assert!(!inherited.signal.create_process_group);
         assert!(!inherited.signal.terminate_descendants);
         assert_eq!(inherited.timeout, None);
+    }
+
+    #[test]
+    fn blocking_run_rejects_async_only_io_modes() {
+        let spec = ProcessSpec::new("true");
+        let observed = ProcessConfig::default()
+            .with_io(ProcessIo::observed(ObservedIo::new(OutputObserver::new())));
+        assert_eq!(
+            run(&spec, &observed).unwrap_err().code(),
+            ErrorCode::InvalidInput
+        );
+
+        #[cfg(unix)]
+        {
+            let pty = ProcessConfig::default().with_io(ProcessIo::pty(PtyIo::default()));
+            assert_eq!(
+                run(&spec, &pty).unwrap_err().code(),
+                ErrorCode::InvalidInput
+            );
+        }
     }
 
     #[test]

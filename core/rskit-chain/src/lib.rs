@@ -197,5 +197,50 @@ mod tests {
         assert_eq!(events[2].status, StepStatus::Completed);
     }
 
+    #[tokio::test]
+    async fn default_empty_chain_returns_input_and_reports_empty() {
+        let chain = ChainBuilder::<u32, u32>::default().build();
+
+        let output = chain
+            .execute(7, None, CancellationToken::new())
+            .await
+            .expect("empty chain should pass input through");
+
+        assert_eq!(output, 7);
+        assert!(chain.is_empty());
+        assert_eq!(chain.len(), 0);
+        _assert_result_type(Ok(output));
+    }
+
+    #[tokio::test]
+    async fn cancellation_before_step_runs_existing_cleanup_failure() {
+        let cancel = CancellationToken::new();
+        let cancel_for_step = cancel.clone();
+
+        let chain = ChainBuilder::new()
+            .step(
+                Step::from_fn("cancel", move |value: u32, _context| {
+                    let cancel = cancel_for_step.clone();
+                    async move {
+                        cancel.cancel();
+                        Ok::<_, AppError>(value + 1)
+                    }
+                })
+                .with_cleanup(|| async {
+                    Err::<(), AppError>(AppError::new(ErrorCode::Internal, "cleanup failed"))
+                }),
+            )
+            .step(Step::from_fn(
+                "unreached",
+                |value: u32, _context| async move { Ok::<_, AppError>(value + 1) },
+            ))
+            .build();
+
+        let error = chain.execute(1, None, cancel).await.unwrap_err();
+        assert_eq!(error.code(), ErrorCode::Cancelled);
+        assert!(error.message().contains("chain cancelled"));
+        assert!(error.message().contains("cleanup failed"));
+    }
+
     fn _assert_result_type(_: AppResult<u32>) {}
 }

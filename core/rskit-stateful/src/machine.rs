@@ -321,4 +321,22 @@ mod tests {
         assert_eq!(machine.snapshot().version, 0);
         assert!(machine.audit_log().is_empty());
     }
+
+    #[test]
+    fn unregistered_and_wrong_source_transitions_are_rejected() {
+        let transition =
+            Transition::new("submit", OrderState::Submitted).from(OrderState::Submitted);
+        assert_eq!(transition.name(), "submit");
+        let machine =
+            StateMachine::<OrderState, bool>::new(OrderState::Draft).with_transition(transition);
+
+        assert_eq!(
+            machine.apply("missing", true).unwrap_err().code(),
+            ErrorCode::InvalidInput
+        );
+        assert_eq!(
+            machine.apply("submit", true).unwrap_err().code(),
+            ErrorCode::InvalidInput
+        );
+    }
 }

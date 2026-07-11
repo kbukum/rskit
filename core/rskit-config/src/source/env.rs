@@ -64,3 +64,35 @@ pub(crate) fn parse_env_value(value: String) -> config::Value {
     }
     value.into()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_env_key_handles_prefixes_and_nested_keys() {
+        assert_eq!(
+            normalize_env_key("", "SERVICE__PORT").as_deref(),
+            Some("service.port")
+        );
+        assert_eq!(
+            normalize_env_key("APP", "APP__SERVICE__DEBUG").as_deref(),
+            Some("service.debug")
+        );
+        assert_eq!(normalize_env_key("APP", "OTHER__VALUE"), None);
+    }
+
+    #[test]
+    fn parse_env_value_preserves_basic_types() {
+        assert!(parse_env_value("true".to_string()).into_bool().unwrap());
+        assert_eq!(parse_env_value("42".to_string()).into_int().unwrap(), 42);
+        assert_eq!(
+            parse_env_value("1.5".to_string()).into_float().unwrap(),
+            1.5
+        );
+        assert_eq!(
+            parse_env_value("plain".to_string()).into_string().unwrap(),
+            "plain"
+        );
+    }
+}

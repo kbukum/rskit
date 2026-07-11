@@ -677,12 +677,62 @@ mod tests {
         assert!(record_from_json_bytes(b"not-json").is_err());
         assert!(record_from_value(json!([1, 2])).is_err());
         assert!(parse_csv_record(b"").is_err());
+        assert!(parse_csv_record(b"\xff").is_err());
+        assert!(
+            ensure_csv_columns(
+                &["a".to_string()],
+                &DatasetRecord::from_fields([("a", json!(1))])
+            )
+            .is_ok()
+        );
         assert_eq!(value_to_cell(&Value::Null), "");
         assert_eq!(value_to_cell(&json!("text")), "text");
         assert_eq!(value_to_cell(&json!(true)), "true");
         assert_eq!(value_to_cell(&json!(42)), "42");
         assert_eq!(value_to_cell(&json!({"a": 1})), "{\"a\":1}");
         assert_eq!(value_to_cell(&json!([1, 2])), "[1,2]");
+    }
+
+    #[test]
+    fn private_bounded_readers_report_io_errors() {
+        struct FailingRead;
+
+        impl std::io::Read for FailingRead {
+            fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::other("boom"))
+            }
+        }
+
+        impl std::io::BufRead for FailingRead {
+            fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
+                Err(std::io::Error::other("boom"))
+            }
+
+            fn consume(&mut self, _amt: usize) {}
+        }
+
+        let mut reader = FailingRead;
+        assert_eq!(
+            read_json_line_bounded(&mut reader).unwrap_err().code(),
+            ErrorCode::Internal
+        );
+
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(
+            read_bounded_file(dir.path(), 16).unwrap_err().code(),
+            ErrorCode::Internal
+        );
+    }
+
+    #[test]
+    fn blocking_readers_report_missing_tokio_runtime() {
+        let reader = JsonLinesReader::new("unused.jsonl");
+        let mut stream = Box::new(reader).stream();
+        let err = futures::executor::block_on(stream.next())
+            .unwrap()
+            .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::Internal);
+        assert!(err.to_string().contains("Tokio runtime"));
     }
 
     #[tokio::test]
@@ -698,6 +748,21 @@ mod tests {
             let mut stream = reader.stream();
             assert!(stream.next().await.unwrap().is_err());
         }
+    }
+
+    #[tokio::test]
+    async fn writers_reject_directory_destinations() {
+        let dir = tempfile::tempdir().unwrap();
+        let records = || {
+            Box::pin(stream::iter(vec![Ok(DatasetRecord::from_fields([(
+                "name",
+                json!("a"),
+            )]))])) as BoxRecordStream
+        };
+
+        assert!(CsvWriter.write(records(), dir.path()).await.is_err());
+        assert!(JsonLinesWriter.write(records(), dir.path()).await.is_err());
+        assert!(JsonArrayWriter.write(records(), dir.path()).await.is_err());
     }
 
     #[tokio::test]

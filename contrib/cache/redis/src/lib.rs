@@ -235,9 +235,103 @@ mod duration_seconds {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use rskit_cache::CacheConfig;
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+    use tokio::net::{TcpListener, TcpStream};
+    use tokio::task::JoinHandle;
 
     use super::*;
+
+    struct FakeRedis {
+        port: u16,
+        task: JoinHandle<()>,
+    }
+
+    impl FakeRedis {
+        async fn start() -> Self {
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let port = listener.local_addr().unwrap().port();
+            let task = tokio::spawn(async move {
+                let store = Arc::new(tokio::sync::Mutex::new(HashMap::<String, String>::new()));
+                loop {
+                    let Ok((stream, _)) = listener.accept().await else {
+                        break;
+                    };
+                    tokio::spawn(handle_fake_redis(stream, Arc::clone(&store)));
+                }
+            });
+            Self { port, task }
+        }
+    }
+
+    impl Drop for FakeRedis {
+        fn drop(&mut self) {
+            self.task.abort();
+        }
+    }
+
+    async fn handle_fake_redis(
+        stream: TcpStream,
+        store: Arc<tokio::sync::Mutex<HashMap<String, String>>>,
+    ) {
+        let (read, mut write) = stream.into_split();
+        let mut reader = BufReader::new(read);
+        while let Some(command) = read_resp_array(&mut reader).await {
+            let response = fake_redis_response(command, &store).await;
+            write.write_all(response.as_bytes()).await.unwrap();
+        }
+    }
+
+    async fn read_resp_array(
+        reader: &mut BufReader<tokio::net::tcp::OwnedReadHalf>,
+    ) -> Option<Vec<String>> {
+        let mut line = String::new();
+        if reader.read_line(&mut line).await.unwrap() == 0 {
+            return None;
+        }
+        let count = line.trim_end().strip_prefix('*')?.parse::<usize>().ok()?;
+        let mut values = Vec::with_capacity(count);
+        for _ in 0..count {
+            line.clear();
+            reader.read_line(&mut line).await.unwrap();
+            line.clear();
+            reader.read_line(&mut line).await.unwrap();
+            values.push(line.trim_end().to_string());
+        }
+        Some(values)
+    }
+
+    async fn fake_redis_response(
+        command: Vec<String>,
+        store: &tokio::sync::Mutex<HashMap<String, String>>,
+    ) -> String {
+        match command.first().map(String::as_str) {
+            Some("CLIENT" | "PING") => "+OK\r\n".to_string(),
+            Some("GET") => match store.lock().await.get(&command[1]) {
+                Some(value) => format!("${}\r\n{}\r\n", value.len(), value),
+                None => "$-1\r\n".to_string(),
+            },
+            Some("SET") | Some("PSETEX") => {
+                let value_index = if command[0] == "PSETEX" { 3 } else { 2 };
+                store
+                    .lock()
+                    .await
+                    .insert(command[1].clone(), command[value_index].clone());
+                "+OK\r\n".to_string()
+            }
+            Some("DEL") => format!(
+                ":{}\r\n",
+                usize::from(store.lock().await.remove(&command[1]).is_some())
+            ),
+            Some("EXISTS") => format!(
+                ":{}\r\n",
+                usize::from(store.lock().await.contains_key(&command[1]))
+            ),
+            _ => "-ERR unsupported command\r\n".to_string(),
+        }
+    }
 
     #[test]
     fn default_config_targets_local_redis_without_prefix() {
@@ -397,6 +491,48 @@ mod tests {
         };
 
         assert_eq!(err.code(), ErrorCode::ConnectionFailed);
+    }
+
+    #[tokio::test]
+    async fn cache_operations_use_prefixed_keys_against_redis_protocol() {
+        let server = FakeRedis::start().await;
+        let client = RedisClient::new(Config {
+            port: server.port,
+            key_prefix: Some("svc".to_string()),
+            ..Config::default()
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(client.get("missing").await.unwrap(), None);
+        client.set("plain", "value", None).await.unwrap();
+        assert_eq!(client.get("plain").await.unwrap().as_deref(), Some("value"));
+        assert!(client.exists("plain").await.unwrap());
+        assert!(client.delete("plain").await.unwrap());
+        assert!(!client.exists("plain").await.unwrap());
+        assert!(!client.delete("plain").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn cache_set_accepts_positive_ttl_and_rejects_zero_ttl() {
+        let server = FakeRedis::start().await;
+        let client = RedisClient::new(Config {
+            port: server.port,
+            ..Config::default()
+        })
+        .await
+        .unwrap();
+
+        client
+            .set("ttl", "value", Some(Duration::from_millis(1)))
+            .await
+            .unwrap();
+        let err = client
+            .set("ttl", "value", Some(Duration::ZERO))
+            .await
+            .unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
     }
 
     #[tokio::test]

@@ -122,4 +122,13 @@ mod tests {
         let (reader, _writer) = std::io::pipe().expect("pipe");
         assert!(terminal_size(&reader).is_none());
     }
+
+    #[test]
+    fn pty_slave_reports_configured_terminal_size() {
+        let pair = crate::pty::open_pty(PtySize::new(33, 111)).expect("openpty");
+        let size = terminal_size(&pair.slave).expect("pty slave has size");
+
+        assert_eq!(size.rows, 33);
+        assert_eq!(size.cols, 111);
+    }
 }

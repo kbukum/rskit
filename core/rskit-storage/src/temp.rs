@@ -171,12 +171,28 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let named = dir.create_file("named").unwrap();
         let with_ext = dir.create_file_with_extension("bin").unwrap();
+        let in_dir = TempFile::in_dir(dir.path()).unwrap();
+        let in_dir_with_ext = TempFile::in_dir_with_extension(dir.path(), "txt").unwrap();
 
         assert!(named.path().starts_with(dir.path()));
         assert!(with_ext.path().starts_with(dir.path()));
+        assert!(in_dir.path().starts_with(dir.path()));
+        assert_eq!(
+            in_dir_with_ext
+                .path()
+                .extension()
+                .and_then(|ext| ext.to_str()),
+            Some("txt")
+        );
         assert!(
             format!("{dir:?}").contains(dir.path().file_name().unwrap().to_string_lossy().as_ref())
         );
+    }
+
+    #[test]
+    fn temp_file_new_creates_existing_path() {
+        let file = TempFile::new().unwrap();
+        assert!(file.path().exists());
     }
 
     #[test]

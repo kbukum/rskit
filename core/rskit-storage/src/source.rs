@@ -416,4 +416,47 @@ mod tests {
             ErrorCode::NotFound
         );
     }
+
+    #[tokio::test]
+    async fn url_and_bytes_metadata_cover_fallback_mime_paths() {
+        let url = FileSource::from_url("https://example.invalid/archive.tar.gz?token=redacted");
+        let meta = crate::file_meta(&url).await.unwrap();
+        assert_eq!(meta.name.as_deref(), Some("archive.tar.gz"));
+        assert_eq!(meta.extension.as_deref(), Some("gz"));
+        assert_eq!(meta.size, None);
+        assert_eq!(
+            crate::detect_kind(&url).await.unwrap(),
+            crate::FileKind::Archive
+        );
+
+        let bytes = FileSource::from_bytes(Bytes::from_static(b"plain text"));
+        let meta = crate::file_meta(&bytes).await.unwrap();
+        assert_eq!(meta.name, None);
+        assert_eq!(meta.size, Some(10));
+        assert_eq!(meta.mime_type, "application/octet-stream");
+        assert_eq!(bytes.extension(), None);
+    }
+
+    #[tokio::test]
+    async fn path_metadata_uses_filesystem_timestamps_and_extension_mime() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("image.png");
+        tokio::fs::write(&path, b"not a real png").await.unwrap();
+        let source = FileSource::from_path(&path);
+
+        let meta = crate::file_meta(&source).await.unwrap();
+
+        assert_eq!(meta.name.as_deref(), Some("image.png"));
+        assert_eq!(meta.extension.as_deref(), Some("png"));
+        assert_eq!(meta.mime_type, "image/png");
+        assert_eq!(meta.size, Some(14));
+        assert!(meta.modified_at.is_some());
+    }
+
+    #[test]
+    fn extension_filters_overlong_url_suffixes() {
+        let url = FileSource::from_url("https://example.invalid/file.thisextensionistoolong");
+
+        assert_eq!(url.extension(), None);
+    }
 }

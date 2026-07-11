@@ -85,10 +85,7 @@ mod tests {
         let base: Arc<dyn MessageHandler<String>> =
             Arc::new(FnHandler::new(|_msg: Message<String>| async { Ok(()) }));
 
-        let mw: Arc<dyn HandlerMiddleware<String>> = Arc::new(InstrumentMiddleware {
-            metrics,
-            topic: "test".to_string(),
-        });
+        let mw: Arc<dyn HandlerMiddleware<String>> = Arc::new(instrument(metrics, "test".into()));
         let handler = chain_handlers(base, &[mw]);
 
         handler

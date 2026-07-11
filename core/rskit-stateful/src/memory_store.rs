@@ -111,4 +111,19 @@ mod tests {
         assert_eq!(store.pop_oldest().unwrap(), Some(1));
         assert_eq!(store.flush().unwrap(), vec![2]);
     }
+
+    #[test]
+    fn default_store_tracks_activity_size_and_close() {
+        let store = MemoryStore::default();
+        let before = store.last_activity().unwrap();
+        store.append(1).unwrap();
+        assert_eq!(store.size().unwrap(), 1);
+        assert!(store.last_activity().unwrap() >= before);
+        assert_eq!(store.pop_oldest().unwrap(), Some(1));
+        assert_eq!(store.pop_oldest().unwrap(), None);
+        store.touch().unwrap();
+        store.append(2).unwrap();
+        store.close().unwrap();
+        assert_eq!(store.size().unwrap(), 0);
+    }
 }

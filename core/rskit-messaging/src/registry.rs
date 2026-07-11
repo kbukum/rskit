@@ -213,6 +213,66 @@ mod tests {
         assert_eq!(consumer_calls.load(Ordering::SeqCst), 0);
     }
 
+    #[tokio::test]
+    async fn build_constructs_backend_and_consumer_lookup_only_constructs_consumer() {
+        let producer_calls = Arc::new(AtomicUsize::new(0));
+        let consumer_calls = Arc::new(AtomicUsize::new(0));
+        let mut registry = MessagingRegistry::<String>::default();
+        registry
+            .register_backend(
+                "counting",
+                Arc::new(CountingFactory {
+                    producer_calls: Arc::clone(&producer_calls),
+                    consumer_calls: Arc::clone(&consumer_calls),
+                }),
+            )
+            .unwrap();
+
+        assert_eq!(registry.len(), 1);
+        assert_eq!(registry.adapters(), vec!["counting"]);
+        let backend = registry.build(&BrokerConfig::new("counting")).unwrap();
+        let _consumer = registry.consumer(&BrokerConfig::new("counting")).unwrap();
+
+        assert_eq!(producer_calls.load(Ordering::SeqCst), 1);
+        assert_eq!(consumer_calls.load(Ordering::SeqCst), 2);
+        backend
+            .producer
+            .send(Message::new("topic", "payload".to_string()))
+            .await
+            .unwrap();
+        backend
+            .producer
+            .send_batch(vec![Message::new("topic", "payload".to_string())])
+            .await
+            .unwrap();
+        backend.producer.flush(Duration::ZERO).await.unwrap();
+        backend.consumer.subscribe(&["topic"]).await.unwrap();
+        assert_eq!(
+            backend.consumer.recv().await.unwrap_err().code(),
+            ErrorCode::NotFound
+        );
+    }
+
+    #[test]
+    fn build_and_consumer_report_unregistered_adapter() {
+        let registry = MessagingRegistry::<String>::new();
+
+        assert_eq!(
+            registry
+                .build(&BrokerConfig::new("missing"))
+                .err()
+                .map(|error| error.code()),
+            Some(ErrorCode::NotFound)
+        );
+        assert_eq!(
+            registry
+                .consumer(&BrokerConfig::new("missing"))
+                .err()
+                .map(|error| error.code()),
+            Some(ErrorCode::NotFound)
+        );
+    }
+
     struct CountingFactory {
         producer_calls: Arc<AtomicUsize>,
         consumer_calls: Arc<AtomicUsize>,

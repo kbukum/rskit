@@ -365,6 +365,25 @@ mod tests {
     }
 
     #[test]
+    fn build_body_serializes_tool_messages_without_generation_config() {
+        let req = CompletionRequest {
+            model: "gemini-2.5-flash".to_string(),
+            messages: vec![types::tool_result_msg("toolu_1", "forecast", false)],
+            max_tokens: None,
+            temperature: None,
+            stream: false,
+            tools: None,
+            tool_choice: None,
+        };
+
+        let body = GeminiDialect::build_body(&req).unwrap();
+
+        assert!(body.get("generationConfig").is_none());
+        assert_eq!(body["contents"][0]["role"], "user");
+        assert_eq!(body["contents"][0]["parts"][0]["text"], "forecast");
+    }
+
+    #[test]
     fn parse_response_extracts_content() {
         let body = r#"{
             "candidates": [{
@@ -410,6 +429,56 @@ mod tests {
         }"#;
         let resp = GeminiDialect::parse_response(body, "gemini-2.5-flash").unwrap();
         assert_eq!(resp.stop_reason, Some(FinishReason::ContentFilter));
+    }
+
+    #[test]
+    fn parse_response_extracts_function_calls_and_defaults() {
+        let body = r#"{
+            "candidates": [{
+                "content": {"parts": [
+                    {"functionCall": {"name": "lookup", "args": {"q": "rust"}}},
+                    {"functionCall": {"name": "empty"}}
+                ], "role": "model"},
+                "finishReason": "TOOL_USE"
+            }],
+            "usageMetadata": {}
+        }"#;
+
+        let resp = GeminiDialect::parse_response(body, "gemini-2.5-flash").unwrap();
+
+        assert_eq!(resp.message.tool_calls.len(), 2);
+        assert_eq!(resp.message.tool_calls[0].id, "tool_call_0");
+        assert_eq!(resp.message.tool_calls[0].input["q"], "rust");
+        assert!(resp.message.tool_calls[1].input.is_empty());
+        assert_eq!(resp.usage.input_tokens, 0);
+        assert_eq!(resp.stop_reason, Some(FinishReason::ToolUse));
+    }
+
+    #[test]
+    fn parse_response_handles_cancelled_and_empty_candidates() {
+        let cancelled = r#"{"candidates":[{"finishReason":"CANCELLED"}]}"#;
+        let empty = r#"{"candidates":[]}"#;
+
+        assert_eq!(
+            GeminiDialect::parse_response(cancelled, "gemini-2.5-flash")
+                .unwrap()
+                .stop_reason,
+            Some(FinishReason::Cancelled)
+        );
+        assert_eq!(
+            GeminiDialect::parse_response(empty, "gemini-2.5-flash")
+                .unwrap()
+                .usage
+                .output_tokens,
+            0
+        );
+    }
+
+    #[test]
+    fn parse_response_rejects_invalid_json() {
+        let err = GeminiDialect::parse_response("not json", "gemini-2.5-flash").unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::ExternalService);
     }
 
     #[test]
@@ -462,5 +531,25 @@ mod tests {
         let data = br#"{"candidates":[{"content":{"parts":[{"text":"hi"}],"role":"model"},"finishReason":"NONE"}]}"#;
         let chunk = GeminiDialect::parse_stream_chunk(data).unwrap();
         assert!(!chunk.done);
+    }
+
+    #[test]
+    fn stream_chunk_rejects_invalid_payloads() {
+        let utf8_err = GeminiDialect::parse_stream_chunk(&[0xff]).unwrap_err();
+        let json_err = GeminiDialect::parse_stream_chunk(b"not json").unwrap_err();
+
+        assert_eq!(utf8_err.code(), ErrorCode::InvalidFormat);
+        assert_eq!(json_err.code(), ErrorCode::ExternalService);
+    }
+
+    #[test]
+    fn stream_chunk_function_call_defaults_missing_fields() {
+        let data =
+            br#"{"candidates":[{"content":{"parts":[{"functionCall":{}}],"role":"model"}}]}"#;
+        let chunk = GeminiDialect::parse_stream_chunk(data).unwrap();
+
+        assert_eq!(chunk.tool_calls.len(), 1);
+        assert!(chunk.tool_calls[0].name.is_empty());
+        assert_eq!(chunk.tool_calls[0].input_delta, "{}");
     }
 }

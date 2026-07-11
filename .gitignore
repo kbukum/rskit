@@ -1,5 +1,7 @@
 # Rust build artifacts — any depth (covers workspace root, fuzz/, benches/, etc.)
 target/
+# Isolated/auxiliary build dirs (e.g. per-run coverage target dirs like target-cov*)
+target-*/
 **/*.rs.bk
 *.pdb
 

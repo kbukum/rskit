@@ -383,7 +383,7 @@ fn parse_tag(fields: &[&str]) -> AppResult<Tag> {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_tags;
+    use super::{parse_branch, parse_tags};
 
     #[test]
     fn parse_tags_preserves_multiline_contents() {
@@ -407,5 +407,44 @@ mod tests {
             tags[0].target.to_string(),
             "1111111111111111111111111111111111111111"
         );
+    }
+
+    #[test]
+    fn parse_tags_rejects_partial_records_and_accepts_lightweight_tags() {
+        assert!(parse_tags(b"v1\0commit\0").is_err());
+
+        let output = concat!(
+            "v0.1.0\0",
+            "commit\0",
+            "2222222222222222222222222222222222222222\0",
+            "\0",
+            "\0",
+            "\0",
+            "\0",
+            "\0"
+        )
+        .as_bytes();
+        let tags = parse_tags(output).unwrap();
+
+        assert_eq!(tags[0].message, "");
+        assert!(tags[0].tagger.is_none());
+        assert_eq!(
+            tags[0].target.to_string(),
+            "2222222222222222222222222222222222222222"
+        );
+    }
+
+    #[test]
+    fn parse_branch_handles_optional_upstream_and_invalid_oid() {
+        let branch = parse_branch(concat!(
+            "main\0",
+            "1234567890123456789012345678901234567890\0",
+            "origin/main"
+        ))
+        .unwrap();
+        assert_eq!(branch.name, "main");
+        assert_eq!(branch.upstream.as_deref(), Some("origin/main"));
+
+        assert!(parse_branch("bad\0not-an-oid\0").is_err());
     }
 }

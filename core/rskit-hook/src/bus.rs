@@ -189,11 +189,36 @@ mod tests {
         assert_eq!(err.code(), rskit_errors::ErrorCode::RateLimited);
     }
 
+    #[tokio::test]
+    async fn subscriber_reports_closed_publisher() {
+        let mut subscriber = {
+            let bus = EventBus::<Ping>::new(EventBusConfig { capacity: 0 });
+            bus.subscribe()
+        };
+
+        let err = subscriber
+            .recv()
+            .await
+            .expect_err("closed publisher should be reported");
+        assert_eq!(err.code(), rskit_errors::ErrorCode::Cancelled);
+    }
+
     #[test]
     fn event_registry_registers_subscribers_explicitly() {
         let registry = EventRegistry::<Ping>::new(EventBusConfig { capacity: 4 });
         let _subscriber = registry.register_subscriber();
         let publisher = registry.publisher();
         assert_eq!(publisher.publish(Ping(1)).expect("publish"), 1);
+    }
+
+    #[test]
+    fn debug_impls_include_type_names() {
+        let registry = EventRegistry::<Ping>::default();
+        let subscriber = registry.register_subscriber();
+        let publisher = registry.publisher();
+
+        assert!(format!("{publisher:?}").contains("EventBus"));
+        assert!(format!("{registry:?}").contains("EventRegistry"));
+        assert!(format!("{subscriber:?}").contains("Subscriber"));
     }
 }

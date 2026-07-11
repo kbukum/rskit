@@ -337,3 +337,61 @@ fn validate_adapter(adapter: &str) -> AppResult<()> {
 fn invalid(message: impl Into<String>) -> AppResult<()> {
     Err(AppError::new(ErrorCode::InvalidInput, message.into()))
 }
+
+#[cfg(test)]
+mod tests {
+    use rskit_messaging::BrokerConfigExt;
+
+    use super::*;
+
+    #[test]
+    fn base_trait_method_returns_embedded_broker_config() {
+        let config = NatsConfig::default();
+
+        assert_eq!(config.base().adapter, ADAPTER_NAME);
+    }
+
+    #[test]
+    fn validate_subject_rejects_empty_long_and_invalid_values() {
+        let long = "a".repeat(250);
+
+        assert_eq!(
+            validate_subject("subject", " \t").unwrap_err().code(),
+            ErrorCode::InvalidInput
+        );
+        assert_eq!(
+            validate_subject("subject", &long).unwrap_err().code(),
+            ErrorCode::InvalidInput
+        );
+        assert_eq!(
+            validate_subject("subject", "bad..subject")
+                .unwrap_err()
+                .code(),
+            ErrorCode::InvalidInput
+        );
+        validate_subject("subject", "good.subject_1-2:3").unwrap();
+    }
+
+    #[test]
+    fn validate_accepts_valid_consumer_group() {
+        let config = NatsConfig {
+            base: BrokerConfig {
+                consumer_group: Some("workers".to_string()),
+                ..NatsConfig::default().base
+            },
+            ..NatsConfig::default()
+        };
+
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn uri_helpers_handle_values_without_schemes_or_credentials() {
+        assert!(!has_url_credentials("localhost:4222"));
+        assert_eq!(redact_uri_credentials("localhost:4222"), "localhost:4222");
+        assert_eq!(
+            redact_uri_credentials("tls://nats.example.test:4222"),
+            "tls://nats.example.test:4222"
+        );
+    }
+}

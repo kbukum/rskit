@@ -30,6 +30,7 @@ mod tests {
     use std::fs;
     use std::path::{Path, PathBuf};
 
+    use rskit_config::AppConfig;
     use rskit_config::ConfigLoader;
     use rskit_config::ServiceConfig;
 
@@ -578,5 +579,9 @@ safety: read-only
         populated
             .validate()
             .expect("populated root with default service validates");
+
+        let mut configurable = populated.clone();
+        configurable.apply_defaults();
+        assert_eq!(configurable.service_config().name, populated.service.name);
     }
 }

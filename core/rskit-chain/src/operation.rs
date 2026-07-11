@@ -113,3 +113,51 @@ where
         self.cleanup.clone()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use parking_lot::Mutex;
+    use std::sync::Arc;
+
+    #[tokio::test]
+    async fn step_context_reports_cancellation_and_clamps_progress() {
+        let cancel = CancellationToken::new();
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let captured = events.clone();
+        let context = StepContext::new(
+            cancel.clone(),
+            Some(Arc::new(move |percent, message| {
+                captured.lock().push((percent, message));
+            })),
+        );
+
+        assert!(!context.is_cancelled());
+        assert!(!context.cancellation_token().is_cancelled());
+        context.progress(150, Some("too high".into()));
+        cancel.cancel();
+        assert!(context.is_cancelled());
+
+        let events = events.lock();
+        assert_eq!(events.as_slice(), &[(100, Some("too high".to_string()))]);
+    }
+
+    #[tokio::test]
+    async fn step_accessors_execute_and_cleanup_work() {
+        let step = Step::new("id", "display", |value: u32, _context| async move {
+            Ok(value + 1)
+        })
+        .with_cleanup(|| async { Ok(()) });
+
+        assert_eq!(step.id(), "id");
+        assert_eq!(step.name(), "display");
+        let output = step
+            .execute(1, StepContext::new(CancellationToken::new(), None))
+            .await
+            .expect("step should run");
+        assert_eq!(output, 2);
+        step.cleanup().expect("cleanup should be registered")()
+            .await
+            .expect("cleanup should succeed");
+    }
+}

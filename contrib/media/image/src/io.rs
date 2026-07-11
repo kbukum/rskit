@@ -39,12 +39,7 @@ pub(crate) fn decode_image(data: &[u8], config: &Config) -> AppResult<DecodedIma
     let (width, height) = dimensions_for(data, config)?;
     ensure_dimensions(width, height, config)?;
 
-    let image = reader.decode().map_err(|error| {
-        AppError::new(
-            ErrorCode::InvalidFormat,
-            format!("failed to decode image: {error}"),
-        )
-    })?;
+    let image = reader.decode().map_err(decode_image_error)?;
     ensure_decoded_ratio(&image, data.len() as u64, config)?;
     ensure_image_dimensions(&image, config)?;
     Ok(DecodedImage { image, format })
@@ -63,14 +58,23 @@ pub(crate) fn dimensions_for(data: &[u8], config: &Config) -> AppResult<(u32, u3
 fn reader_for<'a>(data: &'a [u8], config: &Config) -> AppResult<ImageReader<Cursor<&'a [u8]>>> {
     let mut reader = ImageReader::new(Cursor::new(data))
         .with_guessed_format()
-        .map_err(|error| {
-            AppError::new(
-                ErrorCode::InvalidFormat,
-                format!("failed to detect image format: {error}"),
-            )
-        })?;
+        .map_err(detect_format_error)?;
     reader.limits(config.image_limits());
     Ok(reader)
+}
+
+fn decode_image_error(error: image::ImageError) -> AppError {
+    AppError::new(
+        ErrorCode::InvalidFormat,
+        format!("failed to decode image: {error}"),
+    )
+}
+
+fn detect_format_error(error: std::io::Error) -> AppError {
+    AppError::new(
+        ErrorCode::InvalidFormat,
+        format!("failed to detect image format: {error}"),
+    )
 }
 
 fn read_path_bounded(path: &std::path::Path, max_bytes: u64) -> AppResult<Vec<u8>> {
@@ -190,7 +194,10 @@ mod tests {
     use rskit_errors::ErrorCode;
     use rskit_media::spatial::Resolution;
 
-    use super::{ensure_resolution, read_path_bounded, scaled_dimension};
+    use super::{
+        decode_image_error, detect_format_error, ensure_resolution, read_path_bounded,
+        scaled_dimension,
+    };
 
     #[test]
     fn read_path_bounded_reports_missing_paths_as_not_found() {
@@ -233,5 +240,18 @@ mod tests {
         assert_eq!(scaled_dimension(10, 10, 0), 1);
         assert_eq!(scaled_dimension(1, 1, 100), 1);
         assert_eq!(scaled_dimension(3, 2, 4), 2);
+    }
+
+    #[test]
+    fn image_format_errors_preserve_invalid_format_code() {
+        let decode = decode_image_error(image::ImageError::IoError(std::io::Error::other(
+            "decode failed",
+        )));
+        let detect = detect_format_error(std::io::Error::other("detect failed"));
+
+        assert_eq!(decode.code(), ErrorCode::InvalidFormat);
+        assert!(decode.to_string().contains("failed to decode image"));
+        assert_eq!(detect.code(), ErrorCode::InvalidFormat);
+        assert!(detect.to_string().contains("failed to detect image format"));
     }
 }

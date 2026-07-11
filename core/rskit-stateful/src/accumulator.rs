@@ -185,4 +185,25 @@ mod tests {
         tokio::time::advance(Duration::from_secs(6)).await;
         assert_eq!(accumulator.append(2).unwrap(), Some(vec![1, 2]));
     }
+
+    #[test]
+    fn max_size_eviction_and_empty_flush_paths_are_reported() {
+        let accumulator = Accumulator::new(
+            Box::new(MemoryStore::new()),
+            AccumulatorConfig::new().with_max_size(1),
+        );
+
+        assert!(!accumulator.is_expired().unwrap());
+        assert_eq!(accumulator.append(1).unwrap(), None);
+        assert_eq!(accumulator.append(2).unwrap(), None);
+        assert_eq!(accumulator.flush().unwrap(), vec![2]);
+
+        let flushing = Accumulator::new(
+            Box::new(MemoryStore::<i32>::new()),
+            AccumulatorConfig::new().with_trigger(Arc::new(SizeTrigger::new(0))),
+        );
+        assert_eq!(flushing.append(1).unwrap(), Some(vec![1]));
+        flushing.touch().unwrap();
+        flushing.close().unwrap();
+    }
 }

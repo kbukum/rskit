@@ -33,6 +33,7 @@ mod tests {
 
     #[test]
     fn rejects_sensitive_url_forms() {
+        assert!(validate_qdrant_url(" \t").is_err());
         assert!(validate_qdrant_url("https://user:pass@qdrant.example.test").is_err());
         assert!(validate_qdrant_url("https://qdrant.example.test?api_key=secret").is_err());
         assert!(validate_qdrant_url("https://qdrant.example.test#token=secret").is_err());

@@ -123,4 +123,14 @@ mod tests {
             MessageTranslator::<Vec<u8>, User>::deserialize(&translator, &bad);
         assert!(result.is_err());
     }
+
+    #[test]
+    fn json_string_translator_bad_input() {
+        let translator = JsonStringTranslator;
+        let bad = "not-json".to_string();
+        let result: AppResult<User> =
+            MessageTranslator::<String, User>::deserialize(&translator, &bad);
+
+        assert!(result.is_err());
+    }
 }

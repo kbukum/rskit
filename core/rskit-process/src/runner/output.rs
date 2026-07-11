@@ -325,4 +325,17 @@ mod tests {
         let task = spawn_reader(Some(reader), capture, Some(8), None, None, true);
         assert!(join_within(task, Duration::from_secs(5)).await.is_ok());
     }
+
+    #[tokio::test]
+    async fn join_within_surfaces_panicked_tasks() {
+        let task = tokio::spawn(async {
+            panic!("reader panic");
+        });
+
+        let error = join_within(Some(task), Duration::from_secs(5))
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.code(), crate::ErrorCode::Internal);
+    }
 }

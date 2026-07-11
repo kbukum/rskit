@@ -255,6 +255,19 @@ impl VectorStore for InMemoryVectorStore {
 mod tests {
     use super::*;
 
+    #[test]
+    fn similarity_helpers_cover_all_metrics_and_zero_vectors() {
+        let default_store = InMemoryVectorStore::default();
+        assert_eq!(default_store.default_metric, SimilarityMetric::Cosine);
+        assert_eq!(cosine_similarity(&[0.0, 0.0], &[1.0, 0.0]), 0.0);
+        assert_eq!(dot_product(&[1.0, 2.0], &[3.0, 4.0]), 11.0);
+        assert_eq!(l2_score(&[1.0, 1.0], &[4.0, 5.0]), -5.0);
+        assert_eq!(
+            similarity_score(SimilarityMetric::L2, &[1.0, 1.0], &[4.0, 5.0]),
+            -5.0
+        );
+    }
+
     #[tokio::test]
     async fn test_ensure_collection_creates_new() {
         let store = InMemoryVectorStore::new();

@@ -54,3 +54,34 @@ impl Event for LifecycleEvent {
         EventType::new(self.kind.as_str())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use rskit_hook::Event as _;
+
+    use super::*;
+
+    #[test]
+    fn lifecycle_event_types_expose_stable_labels_and_event_types() {
+        assert_eq!(
+            LifecycleEventType::BeforeStart.as_str(),
+            "bootstrap:before_start"
+        );
+        assert_eq!(
+            LifecycleEventType::AfterStart.as_str(),
+            "bootstrap:after_start"
+        );
+        assert_eq!(
+            LifecycleEventType::BeforeStop.as_str(),
+            "bootstrap:before_stop"
+        );
+        assert_eq!(
+            LifecycleEventType::AfterStop.as_str(),
+            "bootstrap:after_stop"
+        );
+
+        let event = LifecycleEvent::new(LifecycleEventType::AfterStop);
+        assert_eq!(event.kind(), LifecycleEventType::AfterStop);
+        assert_eq!(event.event_type(), EventType::new("bootstrap:after_stop"));
+    }
+}

@@ -101,3 +101,38 @@ where
         "time"
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use super::*;
+    use crate::{Accumulator, AccumulatorConfig, ByteSizeMeasurer, MemoryStore};
+
+    #[test]
+    fn byte_size_trigger_uses_configured_measurer_and_names_are_stable() {
+        let trigger = ByteSizeTrigger::new(3);
+        let accumulator = Accumulator::new(
+            Box::new(MemoryStore::new()),
+            AccumulatorConfig::new().with_measurer(Arc::new(ByteSizeMeasurer)),
+        );
+
+        accumulator.append(b"ab".to_vec()).unwrap();
+
+        assert_eq!(
+            <SizeTrigger as Trigger<Vec<u8>>>::name(&SizeTrigger::new(1)),
+            "size"
+        );
+        assert_eq!(
+            <ByteSizeTrigger as Trigger<Vec<u8>>>::name(&trigger),
+            "byte_size"
+        );
+        assert_eq!(
+            <TimeTrigger as Trigger<Vec<u8>>>::name(&TimeTrigger::new(Duration::from_secs(1))),
+            "time"
+        );
+        assert!(!trigger.should_flush(&accumulator).unwrap());
+        accumulator.append(b"cd".to_vec()).unwrap();
+        assert!(trigger.should_flush(&accumulator).unwrap());
+    }
+}

@@ -667,4 +667,24 @@ mod tests {
             ProcessIo::Pty(_) => panic!("expected inherited I/O"),
         }
     }
+
+    #[cfg(unix)]
+    #[test]
+    fn config_builders_update_pty_io_mode() {
+        let config = ProcessConfig::default()
+            .with_io(ProcessIo::pty(PtyIo::default()))
+            .with_max_output_bytes(9)
+            .with_unbounded_output()
+            .with_input(InputPolicy::Bytes(b"pty".to_vec()));
+
+        match config.io {
+            ProcessIo::Pty(io) => {
+                assert_eq!(io.input, InputPolicy::Bytes(b"pty".to_vec()));
+                assert_eq!(io.output.max_output_bytes, None);
+            }
+            ProcessIo::Captured(_) | ProcessIo::Observed(_) | ProcessIo::Inherited(_) => {
+                panic!("expected pty I/O")
+            }
+        }
+    }
 }

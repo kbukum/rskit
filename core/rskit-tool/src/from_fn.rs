@@ -168,3 +168,107 @@ where
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use schemars::JsonSchema;
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Deserialize, JsonSchema)]
+    struct Input {
+        value: i32,
+    }
+
+    #[derive(Serialize)]
+    struct Output {
+        value: i32,
+    }
+
+    #[tokio::test]
+    async fn from_fn_exposes_definition_validate_and_call() {
+        let tool = from_fn(
+            "double",
+            "Double",
+            |_ctx: Context, input: Input| async move {
+                Ok(crate::text_result(&(input.value * 2).to_string()))
+            },
+        )
+        .expect("tool should build");
+
+        assert_eq!(tool.definition().name, "double");
+        assert!(
+            tool.validate(&ToolInput::new(serde_json::json!({"value": 2})).unwrap())
+                .valid
+        );
+        let result = tool
+            .call(
+                &Context::new(),
+                ToolInput::new(serde_json::json!({"value": 3})).unwrap(),
+            )
+            .await
+            .expect("call should succeed");
+        assert_eq!(result.text(), "6");
+    }
+
+    #[tokio::test]
+    async fn from_fn_rejects_deserialisation_errors() {
+        let tool = from_fn(
+            "double",
+            "Double",
+            |_ctx: Context, _input: Input| async move { Ok(crate::text_result("unused")) },
+        )
+        .expect("tool should build");
+
+        let err = tool
+            .call(
+                &Context::new(),
+                ToolInput::new(serde_json::json!({"value": "bad"})).unwrap(),
+            )
+            .await
+            .expect_err("invalid input should fail");
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+    }
+
+    #[tokio::test]
+    async fn from_fn_simple_exposes_definition_validate_and_serialises_output() {
+        let tool = from_fn_simple("double", "Double", |input: Input| async move {
+            Ok(Output {
+                value: input.value * 2,
+            })
+        })
+        .expect("tool should build");
+
+        assert_eq!(tool.definition().description, "Double");
+        assert!(
+            tool.validate(&ToolInput::new(serde_json::json!({"value": 1})).unwrap())
+                .valid
+        );
+        let result = tool
+            .call(
+                &Context::new(),
+                ToolInput::new(serde_json::json!({"value": 4})).unwrap(),
+            )
+            .await
+            .expect("call should succeed");
+        assert_eq!(result.output.as_ref().expect("output")["value"], 8);
+        assert_eq!(result.content, r#"{"value":8}"#);
+    }
+
+    #[tokio::test]
+    async fn from_fn_simple_rejects_deserialisation_errors() {
+        let tool = from_fn_simple("double", "Double", |input: Input| async move {
+            Ok(Output { value: input.value })
+        })
+        .expect("tool should build");
+
+        let err = tool
+            .call(
+                &Context::new(),
+                ToolInput::new(serde_json::json!({"value": []})).unwrap(),
+            )
+            .await
+            .expect_err("invalid input should fail");
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+    }
+}

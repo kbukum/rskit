@@ -363,3 +363,64 @@ impl OutputConfig {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        audio::{ChannelLayout, SampleRate},
+        codec::{self, Codec, CodecLevel, CodecProfile},
+        format,
+        spatial::{FrameRate, Resolution},
+    };
+
+    use super::*;
+
+    #[test]
+    fn video_audio_streaming_and_output_builders_set_all_fields() {
+        let video = VideoSettings::new(Codec::new(codec::video::H264))
+            .with_resolution(Resolution::p720())
+            .with_frame_rate(FrameRate::fps(30))
+            .with_quality(Quality::High)
+            .with_bitrate(Bitrate::Constrained {
+                target: 1_000,
+                max: 2_000,
+            })
+            .with_speed(EncodingSpeed::Fast)
+            .with_profile(CodecProfile::H264High)
+            .with_level(CodecLevel::new("4.1"));
+        let audio = AudioSettings::new(Codec::new(codec::audio::AAC))
+            .with_sample_rate(SampleRate::dvd())
+            .with_channels(ChannelLayout::Stereo)
+            .with_bitrate(Bitrate::Variable(128_000));
+        let output = OutputConfig::new(Format::new(format::MP4))
+            .with_video(video)
+            .with_audio(audio)
+            .with_streaming(StreamingConfig::Hls(HlsConfig::default()))
+            .with_strip_metadata()
+            .with_param("movflags", "faststart");
+
+        assert!(output.video.as_ref().unwrap().profile.is_some());
+        assert!(output.video.as_ref().unwrap().level.is_some());
+        assert!(output.audio.as_ref().unwrap().sample_rate.is_some());
+        assert!(matches!(output.streaming, Some(StreamingConfig::Hls(_))));
+        assert!(output.strip_metadata);
+        assert_eq!(
+            output.extra.get("movflags").map(String::as_str),
+            Some("faststart")
+        );
+    }
+
+    #[test]
+    fn streaming_defaults_are_stable() {
+        let hls = HlsConfig::default();
+        assert_eq!(hls.segment_duration, 6);
+        assert_eq!(hls.playlist_size, 0);
+        assert_eq!(hls.playlist_type, HlsPlaylistType::Vod);
+        assert!(hls.segment_filename.is_none());
+
+        let dash = DashConfig::default();
+        assert_eq!(dash.segment_duration, 4);
+        assert!(dash.use_template);
+        assert!(dash.use_timeline);
+    }
+}

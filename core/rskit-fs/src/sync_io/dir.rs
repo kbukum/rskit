@@ -138,3 +138,58 @@ fn remove_tree_error(path: &Path, error: std::io::Error) -> AppError {
     )
     .with_cause(error)
 }
+
+#[cfg(test)]
+mod tests {
+    use std::io;
+
+    use super::*;
+    use crate::TempDir;
+
+    #[test]
+    fn directory_helpers_cover_success_not_found_and_error_mapping() {
+        let root = TempDir::new().unwrap();
+        let dir = root.child("dir").unwrap();
+        create_all(&dir).unwrap();
+        assert!(exists(&dir).unwrap());
+        assert!(is_empty(&dir).unwrap());
+
+        let file = root.write_file("dir/file.txt", b"body").unwrap();
+        let entries = list(&dir).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].path, file);
+        assert!(entries[0].is_file);
+        assert!(!is_empty(&dir).unwrap());
+
+        assert_eq!(
+            remove_if_exists(&root.child("missing").unwrap()).unwrap(),
+            false
+        );
+        assert_eq!(
+            remove_all_if_exists(&root.child("missing-tree").unwrap()).unwrap(),
+            false
+        );
+        remove(&dir).unwrap_err();
+        remove_all(&dir).unwrap();
+        assert!(!exists(&dir).unwrap());
+    }
+
+    #[test]
+    fn directory_error_helpers_preserve_context() {
+        let path = Path::new("dir");
+        let errors = [
+            create_dir_error(path, io::Error::other("create")),
+            inspect_dir_error(path, io::Error::other("inspect")),
+            read_dir_error(path, io::Error::other("read")),
+            read_dir_entry_error(io::Error::other("entry")),
+            inspect_dir_entry_error(path, io::Error::other("inspect entry")),
+            remove_dir_error(path, io::Error::other("remove")),
+            remove_tree_error(path, io::Error::other("tree")),
+        ];
+
+        for error in errors {
+            assert_eq!(error.code(), ErrorCode::Internal);
+            assert!(error.cause().is_some());
+        }
+    }
+}

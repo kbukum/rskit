@@ -215,4 +215,27 @@ mod tests {
 
         assert_eq!(counter.load(Ordering::SeqCst), 4);
     }
+
+    #[tokio::test]
+    async fn public_dedup_constructor_tracks_duplicates() {
+        let counter = Arc::new(AtomicU32::new(0));
+        let handler = chain_handlers(
+            counting_handler(&counter),
+            &[Arc::new(dedup(DedupConfig {
+                window_size: 1,
+                ttl: Duration::from_millis(1),
+            })) as Arc<dyn HandlerMiddleware<String>>],
+        );
+
+        handler
+            .handle(Message::new("t", "a".to_string()).with_header("message-id", "id-1"))
+            .await
+            .unwrap();
+        handler
+            .handle(Message::new("t", "b".to_string()).with_header("message-id", "id-1"))
+            .await
+            .unwrap();
+
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
+    }
 }

@@ -284,6 +284,27 @@ fn parse_pairs(query: &str) -> HashMap<String, String> {
         .collect()
 }
 
+#[cfg(test)]
+mod coverage_tests {
+    use super::*;
+
+    #[test]
+    fn query_params_ignore_blank_sort_and_blank_pair_keys() {
+        let params = parse_query_string(
+            "sort= &order=desc&&=ignored&status=open",
+            &QueryConfig::default(),
+        );
+
+        assert_eq!(params.sort_by, None);
+        assert_eq!(params.sort_order, SortOrder::Desc);
+        assert_eq!(
+            params.filters.get("status").map(String::as_str),
+            Some("open")
+        );
+        assert!(!params.filters.contains_key(""));
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------

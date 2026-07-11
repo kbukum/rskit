@@ -187,4 +187,46 @@ mod tests {
         group.shutdown(Duration::from_secs(1)).await;
         assert!(group.is_empty());
     }
+
+    #[tokio::test]
+    async fn task_constructors_cancel_abort_and_join_paths() {
+        let token = CancellationToken::new();
+        let finished = Arc::new(AtomicBool::new(false));
+        let done = Arc::clone(&finished);
+        let task = SpawnedTask::spawn_with(token.clone(), async move {
+            token.cancelled().await;
+            done.store(true, Ordering::SeqCst);
+        });
+        assert!(!task.is_finished());
+        let cancellation = task.cancellation();
+        task.cancel();
+        task.join().await;
+        assert!(cancellation.is_cancelled());
+        assert!(finished.load(Ordering::SeqCst));
+
+        let token = CancellationToken::new();
+        let handle = tokio::spawn(async move {
+            std::future::pending::<()>().await;
+        });
+        let task = SpawnedTask::from_parts(token, handle);
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn cancel_all_cancels_without_waiting() {
+        let mut group = TaskGroup::new();
+        let token = CancellationToken::new();
+        let task = SpawnedTask::from_parts(
+            token.clone(),
+            tokio::spawn(async move {
+                std::future::pending::<()>().await;
+            }),
+        );
+        group.push(task);
+
+        group.cancel_all();
+
+        assert!(token.is_cancelled());
+        group.shutdown(Duration::from_millis(1)).await;
+    }
 }

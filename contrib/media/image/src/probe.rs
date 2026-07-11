@@ -139,12 +139,7 @@ impl MediaProbe for ImageProbe {
                 &mut std::io::Cursor::new(&mut buf),
                 image::ImageFormat::Jpeg,
             )
-            .map_err(|e| {
-                AppError::new(
-                    ErrorCode::Internal,
-                    format!("failed to encode thumbnail: {e}"),
-                )
-            })?;
+            .map_err(encode_thumbnail_error)?;
 
         Ok(FileSource::Bytes(bytes::Bytes::from(buf)))
     }
@@ -160,5 +155,63 @@ impl MediaProbe for ImageProbe {
             .thumbnail(source, Timestamp::from_millis(0), resolution)
             .await?;
         Ok(vec![thumb])
+    }
+}
+
+fn encode_thumbnail_error(error: image::ImageError) -> AppError {
+    AppError::new(
+        ErrorCode::Internal,
+        format!("failed to encode thumbnail: {error}"),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use image::{ImageFormat, Rgb, RgbImage};
+    use rskit_media::probe::MediaProbe;
+
+    use super::*;
+
+    fn png_bytes() -> Vec<u8> {
+        let image = RgbImage::from_pixel(2, 1, Rgb([10, 20, 30]));
+        let mut bytes = Vec::new();
+        image
+            .write_to(&mut std::io::Cursor::new(&mut bytes), ImageFormat::Png)
+            .unwrap();
+        bytes
+    }
+
+    #[test]
+    fn default_constructs_with_default_config() {
+        let _probe = ImageProbe::default();
+    }
+
+    #[test]
+    fn thumbnail_encode_error_reports_internal_failure() {
+        let error = encode_thumbnail_error(image::ImageError::IoError(std::io::Error::other(
+            "thumbnail failed",
+        )));
+
+        assert_eq!(error.code(), ErrorCode::Internal);
+        assert!(error.to_string().contains("failed to encode thumbnail"));
+    }
+
+    #[tokio::test]
+    async fn thumbnails_returns_single_jpeg_from_memory_source() {
+        let probe = ImageProbe::default();
+        let thumbnails = probe
+            .thumbnails(
+                &FileSource::Bytes(bytes::Bytes::from(png_bytes())),
+                Duration::from_secs(1),
+                Some(Resolution::new(1, 1)),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(thumbnails.len(), 1);
+        let FileSource::Bytes(bytes) = &thumbnails[0] else {
+            panic!("thumbnail should be returned in memory");
+        };
+        assert!(bytes.starts_with(&[0xff, 0xd8]));
     }
 }

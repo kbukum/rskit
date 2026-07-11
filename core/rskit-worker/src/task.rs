@@ -61,3 +61,28 @@ impl<O: Clone + Send + 'static> TaskHandle<O> {
         self.cancel.clone()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use tokio::sync::{broadcast, oneshot};
+
+    use super::*;
+
+    #[tokio::test]
+    async fn dropped_result_sender_maps_to_internal_error() {
+        let (events_tx, events_rx) = broadcast::channel(1);
+        let (result_tx, result_rx) = oneshot::channel();
+        drop(events_tx);
+        drop(result_tx);
+        let handle = TaskHandle::<u32>::new(
+            Uuid::new_v4(),
+            events_rx,
+            result_rx,
+            CancellationToken::new(),
+        );
+
+        let error = handle.result().await.unwrap_err();
+
+        assert_eq!(error.code(), rskit_errors::ErrorCode::Internal);
+    }
+}
