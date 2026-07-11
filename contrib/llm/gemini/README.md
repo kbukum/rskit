@@ -8,7 +8,7 @@
 [dependencies]
 rskit-llm = "0.2.0-alpha.1"
 rskit-llm-gemini = "0.2.0-alpha.1"
-rskit-util = "0.2.0-alpha.1"
+rskit-util = "0.2.0-alpha.2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
