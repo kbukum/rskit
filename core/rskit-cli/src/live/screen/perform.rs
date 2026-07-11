@@ -185,8 +185,12 @@ mod tests {
         // A cargo-style in-place redraw frame: move up, erase, move down.
         feed(&mut performer, b"building\r\n\x1b[1A\r\x1b[2K\x1b[1Bdone");
         let rendered = performer.render();
+        // This frame emits no SGR, so no ESC byte may survive into content.
         for line in &rendered {
-            assert!(!line.contains('\x1b') || line.contains("\x1b["));
+            assert!(
+                !line.contains('\x1b'),
+                "escape leaked into content: {line:?}"
+            );
         }
         // No stray escape control chars beyond well-formed SGR spans.
         assert!(

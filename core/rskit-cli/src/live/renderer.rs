@@ -29,9 +29,10 @@ const TILE_INDENT: usize = 2;
 pub struct LiveConfig {
     /// Content rows shown per region tile — the height of its virtual terminal.
     pub rows: usize,
-    /// Terminal columns: the tile width and the virtual terminal's grid width.
-    /// A child's output is applied to a grid this wide, so a real width must be
-    /// passed (unlike the old truncation width, `0` is not "disable").
+    /// Terminal columns: the tile width. A child's output is applied to a grid
+    /// sized to the visible content area (this width minus the content indent),
+    /// so a real width must be passed (unlike the old truncation width, `0` is
+    /// not "disable").
     pub cols: usize,
 }
 
@@ -225,7 +226,10 @@ fn render_tile(label: &str, lines: &[&str], cols: usize, rows: usize) -> String 
     for index in 0..rows {
         out.push('\n');
         let line = lines.get(index).copied().unwrap_or("");
-        out.push_str(&truncate(&format!("{}{line}", " ".repeat(TILE_INDENT)), cols));
+        out.push_str(&truncate(
+            &format!("{}{line}", " ".repeat(TILE_INDENT)),
+            cols,
+        ));
     }
     out
 }
