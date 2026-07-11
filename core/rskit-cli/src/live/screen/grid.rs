@@ -6,6 +6,8 @@
 //! It knows nothing about ANSI parsing or I/O, which keeps it the most heavily
 //! unit-tested unit of the virtual terminal.
 
+use std::collections::VecDeque;
+
 use super::cursor::Cursor;
 use super::sgr::{Sgr, render_row};
 
@@ -58,11 +60,15 @@ impl EraseMode {
 }
 
 /// A fixed-height cell matrix with erase and scroll operations.
+///
+/// Rows are held in a [`VecDeque`] so scrolling is O(1) at either end
+/// (`pop_front`/`push_back` to scroll up, `pop_back`/`push_front` to scroll
+/// down) rather than shifting every row.
 #[derive(Debug)]
 pub(super) struct Grid {
     rows: usize,
     cols: usize,
-    lines: Vec<Vec<Cell>>,
+    lines: VecDeque<Vec<Cell>>,
 }
 
 impl Grid {
@@ -74,7 +80,9 @@ impl Grid {
         Self {
             rows,
             cols,
-            lines: vec![vec![Cell::default(); cols]; rows],
+            lines: std::iter::repeat_with(|| vec![Cell::default(); cols])
+                .take(rows)
+                .collect(),
         }
     }
 
@@ -112,9 +120,10 @@ impl Grid {
         let n = n.max(1).min(self.rows);
         let mut evicted = Vec::with_capacity(n);
         for _ in 0..n {
-            let line = self.lines.remove(0);
-            evicted.push(render_row(&line));
-            self.lines.push(vec![Cell::default(); self.cols]);
+            if let Some(line) = self.lines.pop_front() {
+                evicted.push(render_row(&line));
+            }
+            self.lines.push_back(vec![Cell::default(); self.cols]);
         }
         evicted
     }
@@ -124,8 +133,8 @@ impl Grid {
     pub(super) fn scroll_down(&mut self, n: usize) {
         let n = n.max(1).min(self.rows);
         for _ in 0..n {
-            self.lines.pop();
-            self.lines.insert(0, vec![Cell::default(); self.cols]);
+            self.lines.pop_back();
+            self.lines.push_front(vec![Cell::default(); self.cols]);
         }
     }
 
