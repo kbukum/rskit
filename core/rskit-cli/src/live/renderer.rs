@@ -25,6 +25,11 @@ use super::screen::RegionScreen;
 const TILE_INDENT: usize = 2;
 
 /// How the live console lays out and truncates tiles.
+///
+/// The console does not auto-detect the terminal width or react to resizes:
+/// `cols` is a fixed tile width the caller supplies once. Passing a value that
+/// does not match the real terminal only over- or under-truncates the tiles; it
+/// never corrupts output, since every tile line is clamped to `cols`.
 #[derive(Debug, Clone, Copy)]
 pub struct LiveConfig {
     /// Content rows shown per region tile — the height of its virtual terminal.

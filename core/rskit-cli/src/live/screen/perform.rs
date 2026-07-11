@@ -43,9 +43,16 @@ impl Performer {
         self.grid.render()
     }
 
+    /// The erase-fill cell for the current rendition: a blank that preserves
+    /// the active background (BCE), used by erases and scroll back-fill.
+    fn blank_cell(&self) -> Cell {
+        Cell::blank(self.sgr.erased())
+    }
+
     /// Line-feed the cursor, capturing any evicted top row.
     fn line_feed(&mut self) {
-        if let Some(row) = self.grid.line_feed(&mut self.cursor) {
+        let blank = self.blank_cell();
+        if let Some(row) = self.grid.line_feed(&mut self.cursor, &blank) {
             self.evicted.push(row);
         }
     }
@@ -123,21 +130,24 @@ impl vte::Perform for Performer {
             }
             'K' => {
                 if let Some(mode) = EraseMode::from_param(Self::param(params, 0, 0)) {
-                    self.grid
-                        .erase_line(&self.cursor, mode, &Cell::blank(self.sgr.erased()));
+                    self.grid.erase_line(&self.cursor, mode, &self.blank_cell());
                 }
             }
             'J' => {
                 if let Some(mode) = EraseMode::from_param(Self::param(params, 0, 0)) {
                     self.grid
-                        .erase_display(&self.cursor, mode, &Cell::blank(self.sgr.erased()));
+                        .erase_display(&self.cursor, mode, &self.blank_cell());
                 }
             }
             'S' => {
-                let evicted = self.grid.scroll_up(Self::param(params, 0, 1));
+                let evicted = self
+                    .grid
+                    .scroll_up(Self::param(params, 0, 1), &self.blank_cell());
                 self.evicted.extend(evicted);
             }
-            'T' => self.grid.scroll_down(Self::param(params, 0, 1)),
+            'T' => self
+                .grid
+                .scroll_down(Self::param(params, 0, 1), &self.blank_cell()),
             'm' => self.sgr.apply(params),
             _ => {}
         }
@@ -232,6 +242,22 @@ mod tests {
             "explicit move from pending wrap must not evict rows"
         );
         assert_eq!(performer.render(), vec!["x".to_string(), "abY".to_string()]);
+    }
+
+    #[test]
+    fn scroll_backfill_preserves_active_background() {
+        // Line-feeding at the bottom under a colored background must fill the
+        // newly exposed row with that background (BCE), not the default.
+        let mut performer = Performer::new(2, 3);
+        feed(&mut performer, b"\x1b[42mab\r\ncd\n");
+        // The exposed bottom row carries the green erase background.
+        assert_eq!(
+            performer.render(),
+            vec![
+                "\x1b[0;42mcd\x1b[0m".to_string(),
+                "\x1b[0;42m   \x1b[0m".to_string()
+            ]
+        );
     }
 
     #[test]

@@ -110,37 +110,40 @@ impl Grid {
     }
 
     /// Line-feed at `cursor`: advance one row, scrolling up (and returning the
-    /// evicted top row) when already on the last row.
-    pub(super) fn line_feed(&mut self, cursor: &mut Cursor) -> Option<String> {
+    /// evicted top row) when already on the last row. New rows are back-filled
+    /// with `blank` so a line-feed under a colored background preserves it.
+    pub(super) fn line_feed(&mut self, cursor: &mut Cursor, blank: &Cell) -> Option<String> {
         if cursor.row + 1 < self.rows {
             cursor.row += 1;
             None
         } else {
-            self.scroll_up(1).into_iter().next()
+            self.scroll_up(1, blank).into_iter().next()
         }
     }
 
     /// Scroll the whole grid up `n` rows, returning the evicted top rows
-    /// (oldest first) as styled strings and back-filling blanks at the bottom.
-    pub(super) fn scroll_up(&mut self, n: usize) -> Vec<String> {
+    /// (oldest first) as styled strings and back-filling `blank` rows at the
+    /// bottom (background-color erase, so scrolling preserves the background).
+    pub(super) fn scroll_up(&mut self, n: usize, blank: &Cell) -> Vec<String> {
         let n = n.max(1).min(self.rows);
         let mut evicted = Vec::with_capacity(n);
         for _ in 0..n {
             if let Some(line) = self.lines.pop_front() {
                 evicted.push(render_row(&line));
             }
-            self.lines.push_back(vec![Cell::default(); self.cols]);
+            self.lines.push_back(vec![blank.clone(); self.cols]);
         }
         evicted
     }
 
-    /// Scroll the whole grid down `n` rows, inserting blanks at the top and
-    /// dropping the bottom rows. Rows pushed off the bottom are not scrollback.
-    pub(super) fn scroll_down(&mut self, n: usize) {
+    /// Scroll the whole grid down `n` rows, inserting `blank` rows at the top
+    /// (background-color erase) and dropping the bottom rows. Rows pushed off
+    /// the bottom are not scrollback.
+    pub(super) fn scroll_down(&mut self, n: usize, blank: &Cell) {
         let n = n.max(1).min(self.rows);
         for _ in 0..n {
             self.lines.pop_back();
-            self.lines.push_front(vec![Cell::default(); self.cols]);
+            self.lines.push_front(vec![blank.clone(); self.cols]);
         }
     }
 
@@ -217,7 +220,7 @@ mod tests {
         let mut grid = Grid::new(2, 4);
         write(&mut grid, 0, "aa");
         write(&mut grid, 1, "bb");
-        let evicted = grid.scroll_up(1);
+        let evicted = grid.scroll_up(1, &Cell::default());
         assert_eq!(evicted, vec!["aa".to_string()]);
         assert_eq!(grid.render(), vec!["bb".to_string(), String::new()]);
     }
@@ -226,10 +229,13 @@ mod tests {
     fn line_feed_scrolls_only_at_the_bottom() {
         let mut grid = Grid::new(2, 4);
         let mut cursor = Cursor::default();
-        assert!(grid.line_feed(&mut cursor).is_none());
+        assert!(grid.line_feed(&mut cursor, &Cell::default()).is_none());
         assert_eq!(cursor.row, 1);
         write(&mut grid, 1, "xx");
-        assert_eq!(grid.line_feed(&mut cursor).as_deref(), Some(""));
+        assert_eq!(
+            grid.line_feed(&mut cursor, &Cell::default()).as_deref(),
+            Some("")
+        );
         assert_eq!(cursor.row, 1);
         assert_eq!(grid.render(), vec!["xx".to_string(), String::new()]);
     }
