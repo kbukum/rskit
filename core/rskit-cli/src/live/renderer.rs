@@ -19,10 +19,11 @@ use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
 
 use super::screen::RegionScreen;
 
-/// Columns each tile indents its content beneath the region header. The virtual
-/// terminal grid is sized to the tile width minus this indent so a child's
-/// output fills the visible content area exactly, without being chopped.
-const TILE_INDENT: usize = 2;
+/// The string each tile indents its content by, beneath the region header. The
+/// virtual terminal grid is sized to the tile width minus this indent's width
+/// so a child's output fills the visible content area exactly, without being
+/// chopped.
+const TILE_INDENT: &str = "  ";
 
 /// How the live console lays out and truncates tiles.
 ///
@@ -103,7 +104,7 @@ impl LiveConsole {
     /// The virtual terminal grid width: the tile width minus the content
     /// indent, so a child fills the visible content area without being chopped.
     fn content_cols(&self) -> usize {
-        self.config.cols.saturating_sub(TILE_INDENT).max(1)
+        self.config.cols.saturating_sub(TILE_INDENT.len()).max(1)
     }
 
     /// Set the status line shown above the tiles.
@@ -137,7 +138,7 @@ impl LiveConsole {
         };
         region.bar.set_message(render_tile(
             &region.label,
-            &[],
+            &[] as &[&str],
             self.config.cols,
             self.config.rows,
         ));
@@ -159,7 +160,6 @@ impl LiveConsole {
             self.multi.println(scrollback_line(&region.label, &line))?;
         }
         let visible = region.screen.render();
-        let visible: Vec<&str> = visible.iter().map(String::as_str).collect();
         region.bar.set_message(render_tile(
             &region.label,
             &visible,
@@ -227,14 +227,13 @@ fn message_style() -> ProgressStyle {
 /// tests; the live console always resolves `cols` to at least 1). The fixed
 /// line count keeps every tile a constant height so the live area does not
 /// reflow as streams emit output.
-fn render_tile(label: &str, lines: &[&str], cols: usize, rows: usize) -> String {
+fn render_tile<S: AsRef<str>>(label: &str, lines: &[S], cols: usize, rows: usize) -> String {
     let header = format!("{}", console::style(format!("• {label}")).bold());
     let mut out = truncate(&header, cols);
-    let indent = " ".repeat(TILE_INDENT);
     for index in 0..rows {
         out.push('\n');
-        let line = lines.get(index).copied().unwrap_or("");
-        out.push_str(&truncate(&format!("{indent}{line}"), cols));
+        let line = lines.get(index).map_or("", AsRef::as_ref);
+        out.push_str(&truncate(&format!("{TILE_INDENT}{line}"), cols));
     }
     out
 }
