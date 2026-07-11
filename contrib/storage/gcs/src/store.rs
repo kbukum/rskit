@@ -1,6 +1,8 @@
 //! Google Cloud Storage backend implementing [`rskit_storage::store::FileStore`].
 
 use std::collections::HashMap;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::Once;
 use std::time::Duration;
@@ -15,6 +17,7 @@ use rskit_storage::store::{
     content_type_or_default, prefixed_key,
 };
 use serde::{Deserialize, Serialize};
+use tokio::sync::OnceCell;
 
 /// Configuration for the Google Cloud Storage backend.
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -36,58 +39,78 @@ struct GcsStore<S = google_cloud_storage::stub::DefaultStorage>
 where
     S: google_cloud_storage::stub::Storage + 'static,
 {
-    storage: Storage<S>,
-    control: StorageControl,
+    clients: OnceCell<GcsClients<S>>,
+    builder: GcsClientBuilder<S>,
     config: Config,
 }
 
+struct GcsClients<S>
+where
+    S: google_cloud_storage::stub::Storage + 'static,
+{
+    storage: Storage<S>,
+    control: StorageControl,
+}
+
+type GcsClientFuture<S> = Pin<Box<dyn Future<Output = AppResult<GcsClients<S>>> + Send>>;
+type GcsClientBuilder<S> = Box<dyn Fn() -> GcsClientFuture<S> + Send + Sync>;
+
 impl GcsStore {
     /// Create a new Google Cloud Storage backend.
-    async fn new(config: Config) -> AppResult<Self> {
-        install_rustls_crypto_provider();
+    fn new(config: Config) -> Self {
+        let builder_config = config.clone();
+        let builder = Box::new(move || {
+            let config = builder_config.clone();
+            Box::pin(async move {
+                install_rustls_crypto_provider();
 
-        let (storage, control) = if config.anonymous {
-            let storage = Storage::builder()
-                .with_credentials(AnonymousCredentials::new().build())
-                .build()
-                .await
-                .map_err(|e| {
-                    AppError::new(
-                        ErrorCode::Internal,
-                        format!("GCS anonymous storage client configuration failed: {e}"),
-                    )
-                })?;
-            let control = StorageControl::builder()
-                .with_credentials(AnonymousCredentials::new().build())
-                .build()
-                .await
-                .map_err(|e| {
-                    AppError::new(
-                        ErrorCode::Internal,
-                        format!("GCS anonymous control client configuration failed: {e}"),
-                    )
-                })?;
-            (storage, control)
-        } else {
-            let storage = Storage::builder().build().await.map_err(|e| {
-                AppError::new(
-                    ErrorCode::Internal,
-                    format!("GCS storage client configuration failed: {e}"),
-                )
-            })?;
-            let control = StorageControl::builder().build().await.map_err(|e| {
-                AppError::new(
-                    ErrorCode::Internal,
-                    format!("GCS control client configuration failed: {e}"),
-                )
-            })?;
-            (storage, control)
-        };
-        Ok(Self {
-            storage,
-            control,
+                let (storage, control) = if config.anonymous {
+                    let storage = Storage::builder()
+                        .with_credentials(AnonymousCredentials::new().build())
+                        .build()
+                        .await
+                        .map_err(|e| {
+                            AppError::new(
+                                ErrorCode::Internal,
+                                format!("GCS anonymous storage client configuration failed: {e}"),
+                            )
+                        })?;
+                    let control = StorageControl::builder()
+                        .with_credentials(AnonymousCredentials::new().build())
+                        .build()
+                        .await
+                        .map_err(|e| {
+                            AppError::new(
+                                ErrorCode::Internal,
+                                format!("GCS anonymous control client configuration failed: {e}"),
+                            )
+                        })?;
+                    (storage, control)
+                } else {
+                    let storage = Storage::builder().build().await.map_err(|e| {
+                        AppError::new(
+                            ErrorCode::Internal,
+                            format!("GCS storage client configuration failed: {e}"),
+                        )
+                    })?;
+                    let control = StorageControl::builder().build().await.map_err(|e| {
+                        AppError::new(
+                            ErrorCode::Internal,
+                            format!("GCS control client configuration failed: {e}"),
+                        )
+                    })?;
+                    (storage, control)
+                };
+
+                Ok(GcsClients { storage, control })
+            }) as GcsClientFuture<google_cloud_storage::stub::DefaultStorage>
+        });
+
+        Self {
+            clients: OnceCell::new(),
+            builder,
             config,
-        })
+        }
     }
 }
 
@@ -108,6 +131,10 @@ where
 
     fn bucket_resource(&self) -> String {
         bucket_resource(&self.config.bucket)
+    }
+
+    async fn clients(&self) -> AppResult<&GcsClients<S>> {
+        self.clients.get_or_try_init(|| (self.builder)()).await
     }
 }
 
@@ -155,8 +182,9 @@ where
         let size = data.len() as u64;
         let full_key = self.full_key(key);
         let bucket = self.bucket_resource();
+        let clients = self.clients().await?;
 
-        let mut request = self
+        let mut request = clients
             .storage
             .write_object(bucket, full_key, data)
             .set_content_type(content_type_or_default(content_type));
@@ -184,7 +212,8 @@ where
     async fn download(&self, key: &str) -> AppResult<FileSource> {
         let full_key = self.full_key(key);
         let bucket = self.bucket_resource();
-        let mut response = self
+        let clients = self.clients().await?;
+        let mut response = clients
             .storage
             .read_object(bucket, full_key)
             .send()
@@ -208,7 +237,9 @@ where
     async fn delete(&self, key: &str) -> AppResult<()> {
         let full_key = self.full_key(key);
         let bucket = self.bucket_resource();
-        self.control
+        let clients = self.clients().await?;
+        clients
+            .control
             .delete_object()
             .set_bucket(bucket)
             .set_object(full_key)
@@ -228,7 +259,8 @@ where
 
     async fn head(&self, key: &str) -> AppResult<StoredFile> {
         let full_key = self.full_key(key);
-        let obj = self
+        let clients = self.clients().await?;
+        let obj = clients
             .control
             .get_object()
             .set_bucket(self.bucket_resource())
@@ -247,7 +279,8 @@ where
             AppError::new(ErrorCode::InvalidInput, "GCS list limit exceeds i32::MAX")
         })?;
 
-        let mut request = self
+        let clients = self.clients().await?;
+        let mut request = clients
             .control
             .list_objects()
             .set_parent(self.bucket_resource())
@@ -295,7 +328,7 @@ struct GcsFactory {
 #[async_trait::async_trait]
 impl StorageFactory for GcsFactory {
     async fn create(&self, _config: &StorageConfig) -> AppResult<Arc<dyn FileStore>> {
-        Ok(Arc::new(GcsStore::new(self.config.clone()).await?))
+        Ok(Arc::new(GcsStore::new(self.config.clone())))
     }
 }
 
@@ -426,8 +459,18 @@ mod tests {
 
     fn test_store() -> GcsStore<MockStorage> {
         GcsStore {
-            storage: Storage::from_stub(MockStorage),
-            control: StorageControl::from_stub(MockControl),
+            clients: OnceCell::new_with(Some(GcsClients {
+                storage: Storage::from_stub(MockStorage),
+                control: StorageControl::from_stub(MockControl),
+            })),
+            builder: Box::new(|| {
+                Box::pin(async {
+                    Err(AppError::new(
+                        ErrorCode::Internal,
+                        "test GCS client builder should not be called",
+                    ))
+                })
+            }),
             config: Config {
                 bucket: "test-bucket".into(),
                 prefix: Some("assets".into()),
@@ -611,28 +654,24 @@ mod tests {
         assert_eq!(renamed.key, "output.txt");
     }
 
-    #[tokio::test]
-    async fn anonymous_store_constructs_without_credentials() {
+    #[test]
+    fn constructs_offline_without_building_transport() {
         let store = GcsStore::new(Config {
             bucket: "public-assets".into(),
             prefix: Some("uploads".into()),
             anonymous: true,
-        })
-        .await
-        .unwrap();
+        });
 
         assert_eq!(store.full_key("image.png"), "uploads/image.png");
     }
 
-    #[tokio::test]
-    async fn slash_only_prefix_is_ignored() {
+    #[test]
+    fn slash_only_prefix_is_ignored() {
         let store = GcsStore::new(Config {
             bucket: "public-assets".into(),
             prefix: Some("///".into()),
             anonymous: true,
-        })
-        .await
-        .unwrap();
+        });
 
         assert_eq!(store.full_key("image.png"), "image.png");
     }

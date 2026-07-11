@@ -6043,6 +6043,7 @@ dependencies = [
  "rustls",
  "serde",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -6058,6 +6059,7 @@ dependencies = [
  "rskit-util",
  "serde",
  "serde_json",
+ "tokio",
  "tracing",
 ]
 
