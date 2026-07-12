@@ -264,11 +264,13 @@ impl Container {
         self.registrations.read().contains_key(&TypeId::of::<T>())
     }
 
-    /// Close every registered closeable once, in reverse registration order
+    /// Close every recorded closeable once, in reverse registration order
     /// (LIFO), so a dependency is released after the resources built on top of
-    /// it. A second call is a no-op. All closeables are closed even if some
-    /// fail; the returned error aggregates every failure. Unresolved singletons
-    /// construct nothing and are skipped.
+    /// it. This drains the recorded closeables, so a second call closes only
+    /// closeables registered since the previous call (a no-op when none were).
+    /// All closeables are closed even if some fail; the returned error
+    /// aggregates every failure. Unresolved singletons construct nothing and
+    /// are skipped.
     pub async fn close(&self) -> AppResult<()> {
         let closeables = std::mem::take(&mut *self.closeables.lock());
         let mut errors: Vec<AppError> = Vec::new();
