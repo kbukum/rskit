@@ -49,10 +49,11 @@ impl SingletonRegistration {
         Ok(any)
     }
 
-    /// Return the singleton's closeable only if it has already been
-    /// constructed. Never triggers construction, so an unresolved singleton
-    /// contributes nothing to [`Container::close`].
-    fn take_closeable_if_resolved(&self) -> Option<CloseableArc> {
+    /// Return a handle to the singleton's closeable only if it has already been
+    /// constructed. Clones the `Arc` (the closeable stays in singleton state)
+    /// and never triggers construction, so an unresolved singleton contributes
+    /// nothing to [`Container::close`].
+    fn closeable_if_resolved(&self) -> Option<CloseableArc> {
         let guard = self.value.lock();
         guard
             .as_ref()
@@ -275,7 +276,7 @@ impl Container {
             let closeable = match entry.registration {
                 CloseableRegistration::Eager(closeable) => Some(closeable),
                 CloseableRegistration::Singleton(registration) => {
-                    registration.take_closeable_if_resolved()
+                    registration.closeable_if_resolved()
                 }
             };
             if let Some(closeable) = closeable
