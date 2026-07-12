@@ -212,7 +212,7 @@ async fn singleton_closeable_closes_when_resolved_before_close() {
 }
 
 #[tokio::test]
-async fn singleton_closeable_close_initializes_once_without_resolve() {
+async fn singleton_closeable_close_does_not_construct_unresolved() {
     let factory_calls = Arc::new(AtomicU32::new(0));
     let c = Container::new();
     c.register_singleton_closeable({
@@ -225,10 +225,73 @@ async fn singleton_closeable_close_initializes_once_without_resolve() {
         }
     });
 
+    // An unresolved singleton is never constructed just to be closed.
     c.close().await.unwrap();
     c.close().await.unwrap();
 
-    assert_eq!(factory_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(factory_calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn close_runs_closeables_in_reverse_registration_order() {
+    #[derive(Debug)]
+    struct Ordered {
+        id: u32,
+        log: Arc<Mutex<Vec<u32>>>,
+    }
+    #[async_trait::async_trait]
+    impl Closeable for Ordered {
+        async fn close(&self) -> AppResult<()> {
+            self.log.lock().push(self.id);
+            Ok(())
+        }
+    }
+
+    let log = Arc::new(Mutex::new(Vec::new()));
+    let c = Container::new();
+    c.register_closeable(Arc::new(Ordered {
+        id: 1,
+        log: log.clone(),
+    }));
+    // Registering a second closeable of the same type keeps the first, so both
+    // are released — the replaced resource is still closed.
+    c.register_closeable(Arc::new(Ordered {
+        id: 2,
+        log: log.clone(),
+    }));
+    c.register_closeable(Arc::new(Ordered {
+        id: 3,
+        log: log.clone(),
+    }));
+
+    c.close().await.unwrap();
+
+    assert_eq!(*log.lock(), vec![3, 2, 1]);
+}
+
+#[tokio::test]
+async fn close_aggregates_errors_without_short_circuiting() {
+    struct Failing {
+        ran: Arc<AtomicU32>,
+    }
+    #[async_trait::async_trait]
+    impl Closeable for Failing {
+        async fn close(&self) -> AppResult<()> {
+            self.ran.fetch_add(1, Ordering::SeqCst);
+            Err(AppError::new(ErrorCode::Internal, "boom"))
+        }
+    }
+
+    let ran = Arc::new(AtomicU32::new(0));
+    let c = Container::new();
+    c.register_closeable(Arc::new(Failing { ran: ran.clone() }));
+    c.register_closeable(Arc::new(Failing { ran: ran.clone() }));
+    c.register_closeable(Arc::new(Failing { ran: ran.clone() }));
+
+    let err = c.close().await.expect_err("close should report failures");
+    assert_eq!(err.code(), ErrorCode::Internal);
+    // Every closeable ran even though the first (in LIFO order) failed.
+    assert_eq!(ran.load(Ordering::SeqCst), 3);
 }
 
 // ── 5. Multiple types in same container ──────────────────────────────────────

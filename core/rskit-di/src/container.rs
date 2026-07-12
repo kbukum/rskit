@@ -49,16 +49,14 @@ impl SingletonRegistration {
         Ok(any)
     }
 
-    fn resolve_closeable(&self) -> AppResult<Option<CloseableArc>> {
-        let mut guard = self.value.lock();
-        if let Some(value) = guard.as_ref() {
-            return Ok(value.closeable.as_ref().map(Arc::clone));
-        }
-
-        let value = (self.factory)()?;
-        let closeable = value.closeable.as_ref().map(Arc::clone);
-        *guard = Some(value);
-        Ok(closeable)
+    /// Return the singleton's closeable only if it has already been
+    /// constructed. Never triggers construction, so an unresolved singleton
+    /// contributes nothing to [`Container::close`].
+    fn take_closeable_if_resolved(&self) -> Option<CloseableArc> {
+        let guard = self.value.lock();
+        guard
+            .as_ref()
+            .and_then(|value| value.closeable.as_ref().map(Arc::clone))
     }
 }
 
@@ -72,6 +70,13 @@ enum Registration {
 enum CloseableRegistration {
     Eager(CloseableArc),
     Singleton(Arc<SingletonRegistration>),
+}
+
+/// One recorded closeable, tracked in registration order so [`Container::close`]
+/// can release resources in reverse (LIFO), mirroring their construction order.
+struct CloseableEntry {
+    type_name: &'static str,
+    registration: CloseableRegistration,
 }
 
 struct ResolutionGuard {
@@ -132,7 +137,7 @@ pub trait Closeable: Send + Sync {
 /// or [`register_singleton_closeable`](Self::register_singleton_closeable) so [`close`](Self::close) can clean them up.
 pub struct Container {
     registrations: RwLock<HashMap<TypeId, Registration>>,
-    closeables: RwLock<HashMap<TypeId, CloseableRegistration>>,
+    closeables: Mutex<Vec<CloseableEntry>>,
 }
 
 impl Default for Container {
@@ -147,28 +152,31 @@ impl Container {
     pub fn new() -> Self {
         Self {
             registrations: RwLock::new(HashMap::new()),
-            closeables: RwLock::new(HashMap::new()),
+            closeables: Mutex::new(Vec::new()),
         }
     }
 
     /// Register a pre-built value.
     pub fn register<T: Send + Sync + 'static>(&self, value: Arc<T>) {
-        let type_id = TypeId::of::<T>();
         self.registrations
             .write()
-            .insert(type_id, Registration::Eager(value as ArcAny));
-        self.closeables.write().remove(&type_id);
+            .insert(TypeId::of::<T>(), Registration::Eager(value as ArcAny));
     }
 
     /// Register a pre-built value that implements [`Closeable`].
+    ///
+    /// The container owns the value's cleanup: [`close`](Self::close) releases it
+    /// in reverse registration order. Re-registering the same type records an
+    /// additional closeable, so a replaced resource is still closed.
     pub fn register_closeable<T: Closeable + Send + Sync + 'static>(&self, value: Arc<T>) {
-        let type_id = TypeId::of::<T>();
-        self.registrations
-            .write()
-            .insert(type_id, Registration::Eager(Arc::clone(&value) as ArcAny));
-        self.closeables
-            .write()
-            .insert(type_id, CloseableRegistration::Eager(value as CloseableArc));
+        self.registrations.write().insert(
+            TypeId::of::<T>(),
+            Registration::Eager(Arc::clone(&value) as ArcAny),
+        );
+        self.closeables.lock().push(CloseableEntry {
+            type_name: std::any::type_name::<T>(),
+            registration: CloseableRegistration::Eager(value as CloseableArc),
+        });
     }
 
     /// Register a factory called fresh on every resolve.
@@ -177,12 +185,10 @@ impl Container {
         T: Send + Sync + 'static,
         F: Fn() -> AppResult<Arc<T>> + Send + Sync + 'static,
     {
-        let type_id = TypeId::of::<T>();
         let factory: Factory = Arc::new(move || factory().map(|value| value as ArcAny));
         self.registrations
             .write()
-            .insert(type_id, Registration::Lazy(factory));
-        self.closeables.write().remove(&type_id);
+            .insert(TypeId::of::<T>(), Registration::Lazy(factory));
     }
 
     /// Register a singleton factory — called once and cached.
@@ -191,7 +197,6 @@ impl Container {
         T: Send + Sync + 'static,
         F: Fn() -> AppResult<Arc<T>> + Send + Sync + 'static,
     {
-        let type_id = TypeId::of::<T>();
         let registration = Arc::new(SingletonRegistration::new(Arc::new(move || {
             factory().map(|value| SingletonValue {
                 any: value as ArcAny,
@@ -200,29 +205,33 @@ impl Container {
         })));
         self.registrations
             .write()
-            .insert(type_id, Registration::Singleton(registration));
-        self.closeables.write().remove(&type_id);
+            .insert(TypeId::of::<T>(), Registration::Singleton(registration));
     }
 
     /// Register a singleton factory for a type that implements [`Closeable`].
+    ///
+    /// The disposer is recorded when the singleton is first resolved, and
+    /// [`close`](Self::close) releases it in reverse construction order. An
+    /// unresolved singleton constructs nothing and is not closed.
     pub fn register_singleton_closeable<T, F>(&self, factory: F)
     where
         T: Closeable + Send + Sync + 'static,
         F: Fn() -> AppResult<Arc<T>> + Send + Sync + 'static,
     {
-        let type_id = TypeId::of::<T>();
         let registration = Arc::new(SingletonRegistration::new(Arc::new(move || {
             factory().map(|value| SingletonValue {
                 any: Arc::clone(&value) as ArcAny,
                 closeable: Some(value as CloseableArc),
             })
         })));
-        self.registrations
-            .write()
-            .insert(type_id, Registration::Singleton(Arc::clone(&registration)));
-        self.closeables
-            .write()
-            .insert(type_id, CloseableRegistration::Singleton(registration));
+        self.registrations.write().insert(
+            TypeId::of::<T>(),
+            Registration::Singleton(Arc::clone(&registration)),
+        );
+        self.closeables.lock().push(CloseableEntry {
+            type_name: std::any::type_name::<T>(),
+            registration: CloseableRegistration::Singleton(registration),
+        });
     }
 
     /// Resolve a registered type, returning `Err(NotFound)` if not registered.
@@ -252,21 +261,50 @@ impl Container {
         self.registrations.read().contains_key(&TypeId::of::<T>())
     }
 
-    /// Call [`Closeable::close`] on all registered closeable values once.
+    /// Close every registered closeable once, in reverse registration order
+    /// (LIFO), so a dependency is released after the resources built on top of
+    /// it. A second call is a no-op. All closeables are closed even if some
+    /// fail; the returned error aggregates every failure. Unresolved singletons
+    /// construct nothing and are skipped.
     pub async fn close(&self) -> AppResult<()> {
-        let closeables = std::mem::take(&mut *self.closeables.write());
-        for registration in closeables.into_values() {
-            match registration {
-                CloseableRegistration::Eager(closeable) => closeable.close().await?,
+        let closeables = std::mem::take(&mut *self.closeables.lock());
+        let mut errors: Vec<AppError> = Vec::new();
+        for entry in closeables.into_iter().rev() {
+            let closeable = match entry.registration {
+                CloseableRegistration::Eager(closeable) => Some(closeable),
                 CloseableRegistration::Singleton(registration) => {
-                    if let Some(closeable) = registration.resolve_closeable()? {
-                        closeable.close().await?;
-                    }
+                    registration.take_closeable_if_resolved()
                 }
+            };
+            if let Some(closeable) = closeable
+                && let Err(err) = closeable.close().await
+            {
+                errors.push(err.with_detail("closeable", entry.type_name));
             }
         }
-        Ok(())
+        match aggregate_close_errors(errors) {
+            Some(err) => Err(err),
+            None => Ok(()),
+        }
     }
+}
+
+/// Combine disposal failures into a single error, preserving the first as the
+/// cause and summarizing the rest, or `None` when nothing failed.
+fn aggregate_close_errors(errors: Vec<AppError>) -> Option<AppError> {
+    let mut iter = errors.into_iter();
+    let first = iter.next()?;
+    let rest: Vec<String> = iter.map(|err| err.message().to_string()).collect();
+    if rest.is_empty() {
+        return Some(first);
+    }
+    let summary = format!(
+        "{} (and {} more error(s) while closing container: {})",
+        first.message(),
+        rest.len(),
+        rest.join("; ")
+    );
+    Some(AppError::new(ErrorCode::Internal, summary).with_cause(first))
 }
 
 #[cfg(test)]
