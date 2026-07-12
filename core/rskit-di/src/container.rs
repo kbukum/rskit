@@ -73,7 +73,8 @@ enum CloseableRegistration {
 }
 
 /// One recorded closeable, tracked in registration order so [`Container::close`]
-/// can release resources in reverse (LIFO), mirroring their construction order.
+/// can release them in reverse (LIFO): a dependency registered before the
+/// resources built on top of it is released after them.
 struct CloseableEntry {
     type_name: &'static str,
     registration: CloseableRegistration,
@@ -210,9 +211,10 @@ impl Container {
 
     /// Register a singleton factory for a type that implements [`Closeable`].
     ///
-    /// The disposer is recorded when the singleton is first resolved, and
-    /// [`close`](Self::close) releases it in reverse construction order. An
-    /// unresolved singleton constructs nothing and is not closed.
+    /// The closeable slot is recorded at registration time and its disposer is
+    /// captured when the singleton is first resolved; [`close`](Self::close)
+    /// releases it in reverse registration order (LIFO). An unresolved singleton
+    /// constructs nothing and is not closed.
     pub fn register_singleton_closeable<T, F>(&self, factory: F)
     where
         T: Closeable + Send + Sync + 'static,
@@ -279,7 +281,10 @@ impl Container {
             if let Some(closeable) = closeable
                 && let Err(err) = closeable.close().await
             {
-                errors.push(err.with_detail("closeable", entry.type_name));
+                errors.push(
+                    err.context(format!("close {}", entry.type_name))
+                        .with_detail("closeable", entry.type_name),
+                );
             }
         }
         match aggregate_close_errors(errors) {
@@ -289,8 +294,10 @@ impl Container {
     }
 }
 
-/// Combine disposal failures into a single error, preserving the first as the
-/// cause and summarizing the rest, or `None` when nothing failed.
+/// Combine disposal failures into a single error. The first failure is returned
+/// as-is — preserving its code, retryability, HTTP status, cause, and structured
+/// details — with a summary of the remaining failures attached. Returns `None`
+/// when nothing failed.
 fn aggregate_close_errors(errors: Vec<AppError>) -> Option<AppError> {
     let mut iter = errors.into_iter();
     let first = iter.next()?;
@@ -299,12 +306,15 @@ fn aggregate_close_errors(errors: Vec<AppError>) -> Option<AppError> {
         return Some(first);
     }
     let summary = format!(
-        "{} (and {} more error(s) while closing container: {})",
-        first.message(),
+        "(and {} more error(s) while closing container: {})",
         rest.len(),
         rest.join("; ")
     );
-    Some(AppError::new(ErrorCode::Internal, summary).with_cause(first))
+    Some(
+        first
+            .with_detail("additional_close_errors", rest)
+            .hint(summary),
+    )
 }
 
 #[cfg(test)]

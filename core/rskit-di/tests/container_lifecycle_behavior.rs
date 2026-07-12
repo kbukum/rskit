@@ -273,25 +273,50 @@ async fn close_runs_closeables_in_reverse_registration_order() {
 async fn close_aggregates_errors_without_short_circuiting() {
     struct Failing {
         ran: Arc<AtomicU32>,
+        code: ErrorCode,
     }
     #[async_trait::async_trait]
     impl Closeable for Failing {
         async fn close(&self) -> AppResult<()> {
             self.ran.fetch_add(1, Ordering::SeqCst);
-            Err(AppError::new(ErrorCode::Internal, "boom"))
+            Err(AppError::new(self.code, "boom"))
         }
     }
 
     let ran = Arc::new(AtomicU32::new(0));
     let c = Container::new();
-    c.register_closeable(Arc::new(Failing { ran: ran.clone() }));
-    c.register_closeable(Arc::new(Failing { ran: ran.clone() }));
-    c.register_closeable(Arc::new(Failing { ran: ran.clone() }));
+    c.register_closeable(Arc::new(Failing {
+        ran: ran.clone(),
+        code: ErrorCode::Internal,
+    }));
+    c.register_closeable(Arc::new(Failing {
+        ran: ran.clone(),
+        code: ErrorCode::Internal,
+    }));
+    // Closed first (LIFO): its code is preserved by the aggregated error.
+    c.register_closeable(Arc::new(Failing {
+        ran: ran.clone(),
+        code: ErrorCode::ServiceUnavailable,
+    }));
 
     let err = c.close().await.expect_err("close should report failures");
-    assert_eq!(err.code(), ErrorCode::Internal);
     // Every closeable ran even though the first (in LIFO order) failed.
     assert_eq!(ran.load(Ordering::SeqCst), 3);
+    // The first failure's code is preserved rather than flattened to Internal.
+    assert_eq!(err.code(), ErrorCode::ServiceUnavailable);
+    // The failing closeable's type survives aggregation via the message...
+    assert!(
+        err.message().contains("Failing"),
+        "message: {}",
+        err.message()
+    );
+    // ...and the remaining failures are attached as structured detail.
+    assert!(err.details().contains_key("additional_close_errors"));
+    assert!(
+        err.message().contains("2 more error(s)"),
+        "message: {}",
+        err.message()
+    );
 }
 
 // ── 5. Multiple types in same container ──────────────────────────────────────
