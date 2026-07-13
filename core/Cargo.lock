@@ -6175,6 +6175,7 @@ dependencies = [
  "reqwest",
  "rskit-errors",
  "rskit-storage",
+ "rskit-util",
  "serde",
  "serde_json",
  "tokio",
