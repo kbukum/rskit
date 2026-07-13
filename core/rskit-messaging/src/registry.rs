@@ -326,7 +326,13 @@ mod tests {
             Ok(())
         }
 
-        async fn recv(&self, _timeout: std::time::Duration) -> AppResult<Message<String>> {
+        async fn recv(&self, timeout: std::time::Duration) -> AppResult<Message<String>> {
+            if timeout.is_zero() {
+                return Err(AppError::new(
+                    ErrorCode::InvalidInput,
+                    "message receive timeout must be greater than zero",
+                ));
+            }
             Err(AppError::timeout("message receive"))
         }
     }

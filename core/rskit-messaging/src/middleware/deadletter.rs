@@ -265,13 +265,10 @@ mod tests {
             .await
             .unwrap();
 
-        let dlq_msg = tokio::time::timeout(
-            Duration::from_millis(200),
-            dlq_consumer.recv(std::time::Duration::from_millis(50)),
-        )
-        .await
-        .expect("should receive DLQ message")
-        .unwrap();
+        let dlq_msg = dlq_consumer
+            .recv(Duration::from_millis(200))
+            .await
+            .expect("should receive DLQ message");
         assert_eq!(dlq_msg.topic, "topic.dlq");
         assert_eq!(dlq_msg.payload.original_topic, "topic");
         assert_eq!(dlq_msg.payload.error, "INTERNAL_ERROR: boom");
@@ -307,13 +304,10 @@ mod tests {
             .await
             .unwrap();
 
-        let dlq_msg = tokio::time::timeout(
-            Duration::from_millis(200),
-            dlq_consumer.recv(std::time::Duration::from_millis(50)),
-        )
-        .await
-        .expect("should receive DLQ message")
-        .unwrap();
+        let dlq_msg = dlq_consumer
+            .recv(Duration::from_millis(200))
+            .await
+            .expect("should receive DLQ message");
         let envelope = dlq_msg.payload;
         assert_eq!(dlq_msg.topic, "orders.dead");
         assert_eq!(envelope.retry_count, 2);
@@ -365,13 +359,10 @@ mod tests {
             .await
             .unwrap();
 
-        let dlq_msg = tokio::time::timeout(
-            Duration::from_millis(200),
-            dlq_consumer.recv(std::time::Duration::from_millis(50)),
-        )
-        .await
-        .expect("should receive DLQ message")
-        .unwrap();
+        let dlq_msg = dlq_consumer
+            .recv(Duration::from_millis(200))
+            .await
+            .expect("should receive DLQ message");
         assert_eq!(dlq_msg.payload.payload, vec![0, 1, 2, 0xff]);
         assert_eq!(
             dlq_msg.payload.payload_summary,
