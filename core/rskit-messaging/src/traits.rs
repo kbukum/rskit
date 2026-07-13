@@ -39,8 +39,8 @@ pub trait MessageConsumer<T: Send + Sync>: Send + Sync {
     /// Subscribe to one or more topics.
     async fn subscribe(&self, topics: &[&str]) -> AppResult<()>;
 
-    /// Receive the next message. Blocks until a message is available.
-    async fn recv(&self) -> AppResult<Message<T>>;
+    /// Receive the next message, waiting no longer than `timeout`.
+    async fn recv(&self, timeout: Duration) -> AppResult<Message<T>>;
 
     /// Close or shut down the consumer. Implementations with no persistent resources may no-op.
     async fn close(&self) -> AppResult<()> {
@@ -74,8 +74,8 @@ pub trait EventConsumer: Send + Sync {
     /// Subscribe to one or more topics.
     async fn subscribe(&self, topics: &[&str]) -> AppResult<()>;
 
-    /// Receive the next event. Blocks until an event is available.
-    async fn recv_event(&self) -> AppResult<Event>;
+    /// Receive the next event, waiting no longer than `timeout`.
+    async fn recv_event(&self, timeout: Duration) -> AppResult<Event>;
 }
 
 // ── Broker lifecycle trait ───────────────────────────────────────────────────

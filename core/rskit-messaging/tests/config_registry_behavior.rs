@@ -259,7 +259,7 @@ impl MessageConsumer<String> for NoopConsumer {
         Ok(())
     }
 
-    async fn recv(&self) -> AppResult<Message<String>> {
+    async fn recv(&self, _timeout: std::time::Duration) -> AppResult<Message<String>> {
         Err(AppError::new(ErrorCode::NotFound, "no messages"))
     }
 }

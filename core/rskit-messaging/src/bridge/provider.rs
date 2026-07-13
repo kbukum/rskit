@@ -6,7 +6,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use rskit_errors::AppResult;
+use rskit_errors::{AppResult, ErrorCode};
 use rskit_provider::traits::{BoxStream, Provider, Sink, Stream};
 
 use crate::message::Message;
@@ -82,14 +82,24 @@ impl<T: Send + Sync + Clone + 'static> Stream<(), Message<T>> for ConsumerStream
         let stream = async_stream::try_stream! {
             match max_messages {
                 Some(max_messages) => {
-                    for _ in 0..max_messages {
-                        let msg = consumer.recv().await?;
-                        yield msg;
+                    let mut delivered = 0;
+                    while delivered < max_messages {
+                        match consumer.recv(std::time::Duration::from_secs(1)).await {
+                            Ok(msg) => {
+                                yield msg;
+                                delivered += 1;
+                            }
+                            Err(e) if e.code() == ErrorCode::Timeout => {}
+                            Err(e) => Err(e)?,
+                        }
                     }
                 }
                 None => loop {
-                    let msg = consumer.recv().await?;
-                    yield msg;
+                    match consumer.recv(std::time::Duration::from_secs(1)).await {
+                        Ok(msg) => yield msg,
+                        Err(e) if e.code() == ErrorCode::Timeout => {}
+                        Err(e) => Err(e)?,
+                    }
                 },
             }
         };
@@ -148,7 +158,10 @@ mod tests {
         let msg = Message::new("sink-topic", "hello".into());
         Sink::send(&sink, msg).await.unwrap();
 
-        let received = consumer.recv().await.unwrap();
+        let received = consumer
+            .recv(std::time::Duration::from_secs(1))
+            .await
+            .unwrap();
         assert_eq!(received.topic, "sink-topic");
         assert_eq!(received.payload, "hello");
     }
@@ -165,7 +178,10 @@ mod tests {
         msg.topic = String::new();
         Sink::send(&sink, msg).await.unwrap();
 
-        let received = consumer.recv().await.unwrap();
+        let received = consumer
+            .recv(std::time::Duration::from_secs(1))
+            .await
+            .unwrap();
         assert_eq!(received.topic, "default-t");
     }
 
@@ -237,6 +253,33 @@ mod tests {
             .unwrap();
 
         assert!(items.is_empty());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn consumer_stream_survives_idle_recv_timeouts() {
+        let broker = InMemoryBroker::<String>::new(16);
+        let producer = broker.producer();
+        let consumer = Arc::new(broker.consumer());
+        consumer.subscribe(&["idle-t"]).await.unwrap();
+
+        let cs = consumer_as_stream("idle-stream", consumer);
+        let stream = cs.execute(()).await.unwrap();
+        let collector = tokio::spawn(async move { stream.take(1).collect::<Vec<_>>().await });
+
+        // Let several per-recv timeouts elapse with no traffic; the stream must
+        // keep polling instead of terminating on the first idle second.
+        tokio::time::sleep(Duration::from_secs(3)).await;
+        producer
+            .send(Message::new("idle-t", "late".into()))
+            .await
+            .unwrap();
+
+        let items = tokio::time::timeout(Duration::from_secs(5), collector)
+            .await
+            .expect("stream terminated instead of surviving idle recv timeouts")
+            .unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].as_ref().unwrap().payload, "late");
     }
 
     #[tokio::test]

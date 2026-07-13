@@ -66,7 +66,7 @@ impl<T: Send + Sync + Clone + 'static> ManagedConsumer<T> {
                         tracing::info!(consumer = %name, "managed consumer cancelled");
                         break;
                     }
-                    result = consumer.recv() => {
+                    result = consumer.recv(std::time::Duration::from_secs(1)) => {
                         match result {
                             Ok(msg) => {
                                 consecutive_errors = 0;
@@ -89,6 +89,9 @@ impl<T: Send + Sync + Clone + 'static> ManagedConsumer<T> {
                             Err(e) => {
                                 if cancel.is_cancelled() {
                                     break;
+                                }
+                                if e.code() == ErrorCode::Timeout {
+                                    continue;
                                 }
                                 consecutive_errors += 1;
 

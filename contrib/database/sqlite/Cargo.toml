@@ -1,0 +1,33 @@
+[package]
+name        = "rskit-database-sqlite"
+description = "SQLite backend for rskit-database"
+version = "0.2.0-alpha.1"
+edition.workspace      = true
+license.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+documentation          = "https://docs.rs/rskit-database-sqlite"
+readme                 = "README.md"
+categories             = ["database"]
+keywords               = ["sqlite", "database", "sqlx"]
+
+[lints]
+workspace = true
+
+[dependencies]
+rskit-database = { workspace = true }
+rskit-errors = { workspace = true }
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sqlx = { workspace = true }
+tokio = { workspace = true, features = ["sync"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

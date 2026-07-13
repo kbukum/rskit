@@ -80,7 +80,7 @@ impl<T: Send + Sync + Clone + 'static> ConsumerRunner<T> {
                         tracing::info!("consumer runner cancelled");
                         break;
                     }
-                    result = consumer.recv() => {
+                    result = consumer.recv(std::time::Duration::from_secs(1)) => {
                         match result {
                             Ok(msg) => {
                                 let topic = msg.topic.clone();
@@ -98,6 +98,9 @@ impl<T: Send + Sync + Clone + 'static> ConsumerRunner<T> {
                             Err(e) => {
                                 if cancel.is_cancelled() {
                                     break;
+                                }
+                                if e.code() == ErrorCode::Timeout {
+                                    continue;
                                 }
                                 tracing::error!(error = %e, "recv error in runner");
                                 tokio::time::sleep(Duration::from_millis(100)).await;

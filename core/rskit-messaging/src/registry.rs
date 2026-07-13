@@ -248,7 +248,12 @@ mod tests {
         backend.producer.flush(Duration::ZERO).await.unwrap();
         backend.consumer.subscribe(&["topic"]).await.unwrap();
         assert_eq!(
-            backend.consumer.recv().await.unwrap_err().code(),
+            backend
+                .consumer
+                .recv(std::time::Duration::from_secs(1))
+                .await
+                .unwrap_err()
+                .code(),
             ErrorCode::NotFound
         );
     }
@@ -321,7 +326,7 @@ mod tests {
             Ok(())
         }
 
-        async fn recv(&self) -> AppResult<Message<String>> {
+        async fn recv(&self, _timeout: std::time::Duration) -> AppResult<Message<String>> {
             Err(AppError::new(ErrorCode::NotFound, "no messages"))
         }
     }

@@ -34,6 +34,7 @@
 //! | `auth-oidc` | OIDC support in `rskit-auth` |
 //! | `di`     | `rskit-di` (dependency injection) |
 //! | `database` | `rskit-database` (core + memory backend) |
+//! | `database-sqlite` | `SQLite` database backend |
 //! | `cache`  | `rskit-cache` (core + memory adapter) |
 //! | `cache-fs` | Filesystem cache adapter in `rskit-cache` |
 //! | `cache-redis` | Redis cache adapter |
@@ -80,6 +81,7 @@
 //! | `media-full` | `FFmpeg` + image + audio backends |
 //! | `storage-s3` | `S3` storage backend |
 //! | `storage-gcs` | GCS storage backend |
+//! | `storage-supabase` | Supabase storage backend |
 //! | `cli`    | `rskit-cli` (CLI helpers) |
 //! | `git`    | `rskit-git` (Git automation) |
 //! | `dataset` | `rskit-dataset` (dataset collection) |
@@ -201,6 +203,10 @@ pub use rskit_di as di;
 /// Database contracts with in-memory default and adapter registry.
 #[cfg(feature = "database")]
 pub use rskit_database as database;
+
+/// `SQLite` database backend.
+#[cfg(feature = "database-sqlite")]
+pub use rskit_database_sqlite as database_sqlite;
 
 /// Cache contracts with in-memory default and adapter registry.
 #[cfg(feature = "cache")]
@@ -325,6 +331,10 @@ pub use rskit_storage_s3 as storage_s3;
 /// Google Cloud Storage backend.
 #[cfg(feature = "storage-gcs")]
 pub use rskit_storage_gcs as storage_gcs;
+
+/// Supabase Storage backend.
+#[cfg(feature = "storage-supabase")]
+pub use rskit_storage_supabase as storage_supabase;
 
 /// Vector store contracts with in-memory default and adapter registry.
 #[cfg(feature = "vectorstore")]
