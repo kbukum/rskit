@@ -250,7 +250,7 @@ mod tests {
         assert_eq!(
             backend
                 .consumer
-                .recv(std::time::Duration::from_secs(1))
+                .recv(std::time::Duration::from_millis(1))
                 .await
                 .unwrap_err()
                 .code(),
