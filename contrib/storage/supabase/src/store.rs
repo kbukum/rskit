@@ -108,7 +108,7 @@ impl SupabaseStore {
     ) -> AppResult<reqwest::Response> {
         let response = request.send().await.map_err(|error| {
             AppError::new(
-                ErrorCode::ExternalService,
+                send_error_code(&error),
                 format!("Supabase {operation} request failed"),
             )
             .with_cause(error)
@@ -118,13 +118,8 @@ impl SupabaseStore {
         }
         let status = response.status();
         let message = response.text().await.unwrap_or_default();
-        let code = if status.as_u16() == 404 {
-            ErrorCode::NotFound
-        } else {
-            ErrorCode::ExternalService
-        };
         Err(AppError::new(
-            code,
+            status_to_error_code(status),
             format!("Supabase {operation} failed with status {status}: {message}"),
         ))
     }
@@ -405,6 +400,36 @@ fn join_segments(base: &Url, segments: &[&str]) -> AppResult<Url> {
     Ok(url)
 }
 
+/// Classify a reqwest transport failure, preserving typed timeout and
+/// connection information instead of flattening everything to
+/// [`ErrorCode::ExternalService`].
+fn send_error_code(error: &reqwest::Error) -> ErrorCode {
+    if error.is_timeout() {
+        ErrorCode::Timeout
+    } else if error.is_connect() {
+        ErrorCode::ConnectionFailed
+    } else {
+        ErrorCode::ExternalService
+    }
+}
+
+/// Map an HTTP response status to an [`ErrorCode`], mirroring the canonical
+/// mapping used across rskit so auth failures stay non-retryable while
+/// genuinely transient statuses remain retryable.
+const fn status_to_error_code(status: reqwest::StatusCode) -> ErrorCode {
+    match status.as_u16() {
+        400 => ErrorCode::InvalidInput,
+        401 => ErrorCode::Unauthorized,
+        403 => ErrorCode::Forbidden,
+        404 => ErrorCode::NotFound,
+        409 => ErrorCode::Conflict,
+        429 => ErrorCode::RateLimited,
+        503 => ErrorCode::ServiceUnavailable,
+        504 => ErrorCode::Timeout,
+        _ => ErrorCode::ExternalService,
+    }
+}
+
 struct SupabaseFactory {
     config: Config,
 }
@@ -568,5 +593,56 @@ mod tests {
             register(&mut registry, cfg).unwrap_err().code(),
             ErrorCode::AlreadyExists
         );
+    }
+
+    #[test]
+    fn status_mapping_keeps_auth_failures_non_retryable() {
+        for (status, expected) in [
+            (400, ErrorCode::InvalidInput),
+            (401, ErrorCode::Unauthorized),
+            (403, ErrorCode::Forbidden),
+            (404, ErrorCode::NotFound),
+            (409, ErrorCode::Conflict),
+            (429, ErrorCode::RateLimited),
+            (503, ErrorCode::ServiceUnavailable),
+            (504, ErrorCode::Timeout),
+            (500, ErrorCode::ExternalService),
+        ] {
+            let code = status_to_error_code(reqwest::StatusCode::from_u16(status).unwrap());
+            assert_eq!(code, expected, "status {status}");
+        }
+        assert!(!status_to_error_code(reqwest::StatusCode::UNAUTHORIZED).is_retryable());
+        assert!(!status_to_error_code(reqwest::StatusCode::FORBIDDEN).is_retryable());
+    }
+
+    #[tokio::test]
+    async fn unauthorized_response_maps_to_non_retryable_error() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/storage/v1/object/assets/uploads/file.txt"))
+            .respond_with(ResponseTemplate::new(401).set_body_string("invalid token"))
+            .mount(&server)
+            .await;
+        let err = test_store(&server).download("file.txt").await.unwrap_err();
+        assert_eq!(err.code(), ErrorCode::Unauthorized);
+        assert!(!err.code().is_retryable());
+    }
+
+    #[tokio::test]
+    async fn connect_failure_maps_to_connection_failed() {
+        // Nothing is listening on this port, so the send fails with a connect error.
+        let store = SupabaseStore::new_with_client(
+            Config {
+                endpoint: "http://127.0.0.1:1".into(),
+                bucket: "assets".into(),
+                prefix: None,
+                token: "token".into(),
+                timeout: Duration::from_secs(5),
+            },
+            reqwest::Client::new(),
+        )
+        .unwrap();
+        let err = store.download("file.txt").await.unwrap_err();
+        assert_eq!(err.code(), ErrorCode::ConnectionFailed);
     }
 }
