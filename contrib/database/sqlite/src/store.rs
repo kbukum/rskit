@@ -185,10 +185,16 @@ fn bind_json_value(
             }
         }
         serde_json::Value::String(value) => Ok(query.bind(value)),
-        serde_json::Value::Array(_) | serde_json::Value::Object(_) => Err(AppError::new(
-            ErrorCode::InvalidInput,
-            "`SQLite` parameters must be null, bool, number, or string",
-        )),
+        value @ (serde_json::Value::Array(_) | serde_json::Value::Object(_)) => {
+            let text = serde_json::to_string(&value).map_err(|error| {
+                AppError::new(
+                    ErrorCode::InvalidInput,
+                    "`SQLite` structured parameter is not serializable to JSON text",
+                )
+                .with_cause(error)
+            })?;
+            Ok(query.bind(text))
+        }
     }
 }
 
@@ -313,15 +319,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn invalid_parameter_types_are_typed_errors() {
+    async fn structured_parameters_bind_as_json_text() {
         let db = SqliteDatabase::connect(config()).await.unwrap();
-        let err = db
-            .execute(
-                DatabaseQuery::new("SELECT ?").with_parameter(serde_json::json!({"bad": true})),
-            )
+        db.execute(DatabaseQuery::new("CREATE TABLE docs (payload TEXT)"))
             .await
-            .unwrap_err();
-        assert_eq!(err.code(), ErrorCode::InvalidInput);
+            .unwrap();
+        db.execute(
+            DatabaseQuery::new("INSERT INTO docs (payload) VALUES (?)")
+                .with_parameter(serde_json::json!({"key": [1, 2, 3]})),
+        )
+        .await
+        .unwrap();
     }
 
     #[test]

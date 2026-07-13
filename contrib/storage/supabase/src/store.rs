@@ -388,7 +388,7 @@ fn join_segments(base: &Url, segments: &[&str]) -> AppResult<Url> {
         let mut path = url.path_segments_mut().map_err(|()| {
             AppError::new(
                 ErrorCode::InvalidInput,
-                "Supabase endpoint cannot be a base URL",
+                "Supabase endpoint must be a base URL",
             )
         })?;
         for segment in segments {
