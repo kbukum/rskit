@@ -154,10 +154,8 @@ impl FileStore for SupabaseStore {
             );
         }
         self.send(self.authed(request), "upload").await?;
-        Ok(
-            StoredFile::new(prefixed_key(None, key), size, content_type)
-                .with_metadata(metadata.unwrap_or_default()),
-        )
+        Ok(StoredFile::new(prefixed_key(None, key), size, content_type)
+            .with_metadata(metadata.unwrap_or_default()))
     }
 
     async fn upload_with_progress(
