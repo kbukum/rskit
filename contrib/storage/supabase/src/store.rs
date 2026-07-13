@@ -255,8 +255,15 @@ impl FileStore for SupabaseStore {
     }
 
     async fn presigned_url(&self, key: &str, expires_in: Duration) -> AppResult<String> {
+        if expires_in.is_zero() {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                "Supabase presign expires_in must be greater than zero",
+            ));
+        }
         let full_key = self.full_key(key);
-        let body = serde_json::json!({ "expiresIn": expires_in.as_secs() });
+        let expires_in_secs = expires_in.as_secs().max(1);
+        let body = serde_json::json!({ "expiresIn": expires_in_secs });
         let response = self
             .send(
                 self.authed(self.client.post(self.signed_url(&full_key)?).json(&body)),
@@ -552,6 +559,17 @@ mod tests {
             "/signed"
         );
         store.delete("file.txt").await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn presign_rejects_zero_duration() {
+        let server = MockServer::start().await;
+        let store = test_store(&server);
+        let err = store
+            .presigned_url("file.txt", Duration::ZERO)
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
     }
 
     #[test]
