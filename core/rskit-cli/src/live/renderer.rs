@@ -241,13 +241,16 @@ impl LiveConsole {
     ///
     /// The replay is the region's retention ring (rows that scrolled off the
     /// tile, oldest first) followed by the rows still on screen — a bounded,
-    /// un-interleaved failure transcript. A finish for an unknown `id` prints
-    /// only the verdict. Returns any I/O error from the flush or verdict write.
+    /// un-interleaved failure transcript. It is returned (un-prefixed, in order)
+    /// so the caller can also retain it for an end-of-run failure epilogue. A
+    /// finish for an unknown `id` prints only the verdict and returns an empty
+    /// body. Returns any I/O error from the flush or verdict write.
     pub fn finish_with_replay(
         &mut self,
         id: &str,
         verdict: impl AsRef<str>,
-    ) -> std::io::Result<()> {
+    ) -> std::io::Result<Vec<String>> {
+        let mut body = Vec::new();
         if let Some(region) = self.regions.remove(id) {
             let Region {
                 bar,
@@ -259,11 +262,13 @@ impl LiveConsole {
             for line in replay_body(&retained, screen.drain()) {
                 let prefixed = scrollback_line(&label, &line);
                 self.multi.println(truncate(&prefixed, self.config.cols))?;
+                body.push(line);
             }
             bar.finish_and_clear();
             self.multi.remove(&bar);
         }
-        self.multi.println(verdict.as_ref())
+        self.multi.println(verdict.as_ref())?;
+        Ok(body)
     }
 
     /// Print `line` to scrollback above the live area, without touching any tile.
