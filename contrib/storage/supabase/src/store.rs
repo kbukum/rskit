@@ -1,7 +1,6 @@
 //! Supabase Storage backend implementing [`rskit_storage::store::FileStore`].
 
 use std::collections::HashMap;
-use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -11,11 +10,12 @@ use rskit_storage::store::{
     FileStore, ProgressCallback, StorageConfig, StorageFactory, StorageRegistry, StoredFile,
     content_type_or_default, prefixed_key,
 };
+use rskit_util::SecretString;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
 /// Configuration for the Supabase Storage REST backend.
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Config {
     /// Supabase project URL or storage API base URL.
     pub endpoint: String,
@@ -23,23 +23,11 @@ pub struct Config {
     pub bucket: String,
     /// Key prefix applied to all objects.
     pub prefix: Option<String>,
-    /// Bearer token or service-role token sent in `Authorization` and `apikey` headers.
-    pub token: String,
+    /// Anon or service-role token sent in `Authorization` and `apikey` headers.
+    pub token: SecretString,
     /// Per-request timeout for every remote call.
     #[serde(default = "default_timeout")]
     pub timeout: Duration,
-}
-
-impl fmt::Debug for Config {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Config")
-            .field("endpoint", &self.endpoint)
-            .field("bucket", &self.bucket)
-            .field("prefix", &self.prefix)
-            .field("token", &"<redacted>")
-            .field("timeout", &self.timeout)
-            .finish()
-    }
 }
 
 const fn default_timeout() -> Duration {
@@ -95,8 +83,8 @@ impl SupabaseStore {
 
     fn authed(&self, request: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
         request
-            .bearer_auth(&self.config.token)
-            .header("apikey", &self.config.token)
+            .bearer_auth(self.config.token.expose())
+            .header("apikey", self.config.token.expose())
             .timeout(self.config.timeout)
     }
 
@@ -116,7 +104,10 @@ impl SupabaseStore {
             return Ok(response);
         }
         let status = response.status();
-        let message = response.text().await.unwrap_or_default();
+        let message = match response.text().await {
+            Ok(body) => body,
+            Err(error) => format!("<failed to read response body: {error}>"),
+        };
         Err(AppError::new(
             status_to_error_code(status),
             format!("Supabase {operation} failed with status {status}: {message}"),
@@ -351,7 +342,7 @@ fn validate_config(config: &Config) -> AppResult<()> {
             "Supabase bucket is required",
         ));
     }
-    if config.token.trim().is_empty() {
+    if config.token.expose().trim().is_empty() {
         return Err(AppError::new(
             ErrorCode::MissingField,
             "Supabase token is required",
@@ -466,7 +457,7 @@ mod tests {
                 endpoint: server.uri(),
                 bucket: "assets".into(),
                 prefix: Some("uploads".into()),
-                token: "service-token".into(),
+                token: SecretString::new("service-token"),
                 timeout: Duration::from_secs(5),
             },
             reqwest::Client::new(),
@@ -578,15 +569,17 @@ mod tests {
             endpoint: "https://example.supabase.co".into(),
             bucket: "assets".into(),
             prefix: None,
-            token: "secret".into(),
+            token: SecretString::new("secret"),
             timeout: Duration::from_secs(1),
         };
         let debug = format!("{cfg:?}");
-        assert!(debug.contains("<redacted>"));
+        assert!(debug.contains("***"));
         assert!(!debug.contains("secret"));
+        let serialized = serde_json::to_string(&cfg).unwrap();
+        assert!(!serialized.contains("secret"));
         assert_eq!(
             validate_config(&Config {
-                token: String::new(),
+                token: SecretString::default(),
                 ..cfg
             })
             .unwrap_err()
@@ -602,7 +595,7 @@ mod tests {
             endpoint: "https://example.supabase.co".into(),
             bucket: "assets".into(),
             prefix: None,
-            token: "token".into(),
+            token: SecretString::new("token"),
             timeout: Duration::from_secs(5),
         };
         register(&mut registry, cfg.clone()).unwrap();
@@ -654,7 +647,7 @@ mod tests {
                 endpoint: "http://127.0.0.1:1".into(),
                 bucket: "assets".into(),
                 prefix: None,
-                token: "token".into(),
+                token: SecretString::new("token"),
                 timeout: Duration::from_secs(5),
             },
             reqwest::Client::new(),

@@ -19,6 +19,7 @@ workspace = true
 [dependencies]
 rskit-errors = { workspace = true }
 rskit-storage = { workspace = true }
+rskit-util = { workspace = true }
 async-trait = { workspace = true }
 bytes = { workspace = true }
 reqwest = { workspace = true }
