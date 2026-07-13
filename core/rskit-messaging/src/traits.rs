@@ -41,6 +41,11 @@ pub trait MessageConsumer<T: Send + Sync>: Send + Sync {
 
     /// Receive the next message, waiting no longer than `timeout`.
     ///
+    /// `timeout` **must** be greater than zero; it bounds a blocking receive
+    /// rather than requesting a non-blocking poll. Implementations reject
+    /// [`Duration::ZERO`](std::time::Duration::ZERO) with
+    /// [`ErrorCode::InvalidInput`].
+    ///
     /// Implementations **must** return [`AppError`] with
     /// [`ErrorCode::Timeout`] when the
     /// deadline elapses before a message arrives. Callers rely on this code to
@@ -80,6 +85,11 @@ pub trait EventConsumer: Send + Sync {
     async fn subscribe(&self, topics: &[&str]) -> AppResult<()>;
 
     /// Receive the next event, waiting no longer than `timeout`.
+    ///
+    /// `timeout` **must** be greater than zero; it bounds a blocking receive
+    /// rather than requesting a non-blocking poll. Implementations reject
+    /// [`Duration::ZERO`](std::time::Duration::ZERO) with
+    /// [`ErrorCode::InvalidInput`].
     ///
     /// Implementations **must** return [`AppError`] with
     /// [`ErrorCode::Timeout`] when the
