@@ -260,6 +260,6 @@ impl MessageConsumer<String> for NoopConsumer {
     }
 
     async fn recv(&self, _timeout: std::time::Duration) -> AppResult<Message<String>> {
-        Err(AppError::new(ErrorCode::NotFound, "no messages"))
+        Err(AppError::timeout("message receive"))
     }
 }

@@ -46,7 +46,6 @@ const fn default_timeout() -> Duration {
     Duration::from_secs(30)
 }
 
-/// Supabase Storage backend.
 /// Supabase Storage REST client implementing [`FileStore`].
 pub struct SupabaseStore {
     config: Config,

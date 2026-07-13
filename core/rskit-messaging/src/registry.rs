@@ -254,7 +254,7 @@ mod tests {
                 .await
                 .unwrap_err()
                 .code(),
-            ErrorCode::NotFound
+            ErrorCode::Timeout
         );
     }
 
@@ -327,7 +327,7 @@ mod tests {
         }
 
         async fn recv(&self, _timeout: std::time::Duration) -> AppResult<Message<String>> {
-            Err(AppError::new(ErrorCode::NotFound, "no messages"))
+            Err(AppError::timeout("message receive"))
         }
     }
 }
