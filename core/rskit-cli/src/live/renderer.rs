@@ -36,7 +36,11 @@ const TILE_INDENT: &str = "  ";
 /// never corrupts output, since every tile line is clamped to `cols`.
 #[derive(Debug, Clone, Copy)]
 pub struct LiveConfig {
-    /// Content rows shown per region tile — the height of its virtual terminal.
+    /// Maximum content rows a region tile may occupy — the height of its virtual
+    /// terminal and the cap a tile grows to. A tile does not reserve this height:
+    /// it starts at just its header and grows with its content up to this many
+    /// rows (see [`LiveConsole::feed`]), so a silent or short-lived region stays
+    /// small instead of padding out a tall empty block.
     pub rows: usize,
     /// Terminal columns: the tile width. A child's output is applied to a grid
     /// sized to the visible content area (this width minus the content indent),
@@ -85,6 +89,11 @@ struct Region {
     screen: RegionScreen,
     label: String,
     retained: VecDeque<String>,
+    /// The tallest content the tile has shown so far, capped at the grid height.
+    /// The tile is rendered to this many rows so it grows with output but never
+    /// shrinks mid-run — output that clears (an in-place progress redraw) leaves
+    /// the tile at its high-water height rather than collapsing and reflowing.
+    high_water: usize,
 }
 
 /// A live, multi-region terminal renderer.
@@ -166,12 +175,16 @@ impl LiveConsole {
             screen: RegionScreen::new(self.config.rows, self.content_cols()),
             label,
             retained: VecDeque::new(),
+            high_water: 0,
         };
+        // A fresh region shows only its header: it grows to fit content as bytes
+        // arrive, so a silent or instantly-finishing unit never paints a tall
+        // block of blank rows.
         region.bar.set_message(render_tile(
             &region.label,
             &[] as &[&str],
             self.config.cols,
-            self.config.rows,
+            0,
         ));
         self.regions.insert(id, region);
     }
@@ -194,11 +207,17 @@ impl LiveConsole {
             }
         }
         let visible = region.screen.render();
+        // Grow the tile to the tallest content it has shown, capped at the grid
+        // height, and render exactly that many rows. `high_water` only rises, so
+        // an in-place redraw that momentarily clears rows does not shrink the
+        // tile and reflow the live area.
+        let filled = content_height(&visible);
+        region.high_water = region.high_water.max(filled).min(self.config.rows);
         region.bar.set_message(render_tile(
             &region.label,
             &visible,
             self.config.cols,
-            self.config.rows,
+            region.high_water,
         ));
     }
 
@@ -235,6 +254,7 @@ impl LiveConsole {
                 screen,
                 label,
                 retained,
+                high_water: _,
             } = region;
             for line in replay_body(&retained, screen.drain()) {
                 let prefixed = scrollback_line(&label, &line);
@@ -277,6 +297,13 @@ impl LiveConsole {
             .get(id)
             .map(|region| region.retained.iter().cloned().collect())
     }
+
+    /// The rendered height of a region's tile in lines: its header plus the
+    /// current high-water content rows.
+    #[cfg(test)]
+    fn tile_height(&self, id: &str) -> Option<usize> {
+        self.regions.get(id).map(|region| region.high_water + 1)
+    }
 }
 
 /// A bar style that renders only its message (no bar, timer, or spinner).
@@ -284,12 +311,22 @@ fn message_style() -> ProgressStyle {
     ProgressStyle::with_template("{msg}").unwrap_or_else(|_| ProgressStyle::default_spinner())
 }
 
+/// The number of rows up to and including the last non-blank one — the height a
+/// tile must render to show all its current content. Trailing blank grid rows
+/// are excluded so a tile grows only to the content it actually holds.
+fn content_height<S: AsRef<str>>(lines: &[S]) -> usize {
+    lines
+        .iter()
+        .rposition(|line| !line.as_ref().is_empty())
+        .map_or(0, |index| index + 1)
+}
+
 /// Render one tile as a labeled header line plus exactly `rows` indented
 /// content lines (padded with blanks), each truncated to `cols` display
 /// columns. As with [`truncate`], `cols == 0` disables truncation (used only by
-/// tests; the live console always resolves `cols` to at least 1). The fixed
-/// line count keeps every tile a constant height so the live area does not
-/// reflow as streams emit output.
+/// tests; the live console always resolves `cols` to at least 1). `rows` is the
+/// caller's chosen tile height (its content high-water mark), so the tile is
+/// exactly as tall as the content it currently holds rather than a fixed block.
 fn render_tile<S: AsRef<str>>(label: &str, lines: &[S], cols: usize, rows: usize) -> String {
     let header = format!("{}", console::style(format!("• {label}")).bold());
     let mut out = truncate(&header, cols);
@@ -462,6 +499,47 @@ mod tests {
         let tile = render_tile("core", &["a", "b"], 0, 2);
         let stripped = console::strip_ansi_codes(&tile);
         assert_eq!(stripped, "• core\n  a\n  b");
+    }
+
+    #[test]
+    fn content_height_counts_up_to_the_last_non_blank_row() {
+        assert_eq!(super::content_height::<&str>(&[]), 0);
+        assert_eq!(super::content_height(&["", "", ""]), 0);
+        assert_eq!(super::content_height(&["a", "", ""]), 1);
+        assert_eq!(super::content_height(&["a", "", "b", ""]), 3);
+    }
+
+    #[test]
+    fn a_silent_region_renders_only_its_header() {
+        let mut console = LiveConsole::hidden(config(12, 40));
+        console.begin("u1", "rust:core#test");
+        // Nothing fed yet: the tile is a single header line, not a block of
+        // reserved blank rows.
+        assert_eq!(console.tile_height("u1"), Some(1));
+    }
+
+    #[test]
+    fn a_tile_grows_with_content_up_to_the_cap() {
+        let mut console = LiveConsole::hidden(config(3, 40));
+        console.begin("u1", "task");
+        console.feed("u1", b"one\n");
+        // header + one content row.
+        assert_eq!(console.tile_height("u1"), Some(2));
+        console.feed("u1", b"two\nthree\nfour\nfive");
+        // Capped at the grid height (3 content rows) + header.
+        assert_eq!(console.tile_height("u1"), Some(4));
+    }
+
+    #[test]
+    fn a_grown_tile_does_not_shrink_when_output_clears() {
+        let mut console = LiveConsole::hidden(config(3, 40));
+        console.begin("u1", "task");
+        console.feed("u1", b"a\r\nb\r\nc");
+        assert_eq!(console.tile_height("u1"), Some(4));
+        // An in-place redraw that collapses to a single line keeps the tile at
+        // its high-water height instead of reflowing the live area.
+        console.feed("u1", b"\x1b[H\x1b[2Jshort");
+        assert_eq!(console.tile_height("u1"), Some(4));
     }
 
     #[test]
