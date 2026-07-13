@@ -500,6 +500,27 @@ mod tests {
     }
 
     #[test]
+    fn finish_with_replay_returns_the_transcript_for_an_end_of_run_epilogue() -> std::io::Result<()>
+    {
+        let mut console = LiveConsole::hidden(config(2, 20));
+        console.begin("bad", "task");
+        console.feed("bad", b"line one\nline two\n");
+        // The replayed body is returned un-prefixed and in order so a caller can
+        // retain it and re-surface all failures together after the run.
+        let body = console.finish_with_replay("bad", "failed task")?;
+        assert_eq!(body, vec!["line one".to_string(), "line two".to_string()]);
+        Ok(())
+    }
+
+    #[test]
+    fn finish_with_replay_for_an_unknown_region_returns_an_empty_body() -> std::io::Result<()> {
+        let mut console = LiveConsole::hidden(config(2, 20));
+        let body = console.finish_with_replay("ghost", "failed")?;
+        assert!(body.is_empty());
+        Ok(())
+    }
+
+    #[test]
     fn render_tile_labels_and_indents_lines() {
         let tile = render_tile("core", &["a", "b"], 0, 2);
         let stripped = console::strip_ansi_codes(&tile);
