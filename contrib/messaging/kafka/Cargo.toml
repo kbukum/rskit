@@ -23,6 +23,7 @@ async-trait     = { workspace = true }
 rdkafka         = { workspace = true }
 serde           = { workspace = true }
 tokio-stream    = { workspace = true }
+tokio           = { workspace = true, features = ["time"] }
 tracing         = { workspace = true }
 
 [dev-dependencies]

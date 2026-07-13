@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "cache/*",
+    "database/*",
     "storage/*",
     "messaging/*",
     "vectorstore/*",
@@ -23,6 +24,7 @@ documentation = "https://docs.rs/rskit-suite"
 # Internal
 rskit-errors = { path = "../core/rskit-errors", version = "0.2.0-alpha.1" }
 rskit-storage = { path = "../core/rskit-storage", version = "0.2.0-alpha.1" }
+rskit-database = { path = "../core/rskit-database", version = "0.2.0-alpha.1" }
 rskit-cache = { path = "../core/rskit-cache", version = "0.2.0-alpha.1" }
 rskit-messaging = { path = "../core/rskit-messaging", version = "0.2.0-alpha.1" }
 rskit-stream = { path = "../core/rskit-stream", version = "0.2.0-alpha.1" }
@@ -96,6 +98,7 @@ rustls = "0.23"
 
 # Inference
 wiremock = "0.6"
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "sqlite", "chrono"] }
 
 # Platform-specific
 libc = "0.2"

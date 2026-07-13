@@ -242,22 +242,32 @@ impl<T: Clone + Send + Sync + 'static> MessageConsumer<T> for InMemoryConsumer<T
         Ok(())
     }
 
-    async fn recv(&self) -> AppResult<Message<T>> {
-        loop {
-            let msg = {
-                let mut rx = self.rx.lock().await;
-                rx.recv().await.map_err(|e| {
-                    AppError::new(ErrorCode::ExternalService, format!("receive failed: {e}"))
-                })?
-            };
-
-            let topics = self.topics.lock().await;
-            // If no explicit subscription, accept all messages.
-            if topics.is_empty() || topics.contains(&msg.topic) {
-                return Ok(msg);
-            }
-            // Otherwise loop to skip messages for other topics.
+    async fn recv(&self, timeout: std::time::Duration) -> AppResult<Message<T>> {
+        if timeout.is_zero() {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                "message receive timeout must be greater than zero",
+            ));
         }
+        tokio::time::timeout(timeout, async {
+            loop {
+                let msg = {
+                    let mut rx = self.rx.lock().await;
+                    rx.recv().await.map_err(|e| {
+                        AppError::new(ErrorCode::ExternalService, format!("receive failed: {e}"))
+                    })?
+                };
+
+                let topics = self.topics.lock().await;
+                // If no explicit subscription, accept all messages.
+                if topics.is_empty() || topics.contains(&msg.topic) {
+                    return Ok(msg);
+                }
+                // Otherwise loop to skip messages for other topics.
+            }
+        })
+        .await
+        .map_err(|error| AppError::timeout("message receive").with_cause(error))?
     }
 }
 
@@ -287,8 +297,8 @@ impl EventConsumer for InMemoryConsumer<serde_json::Value> {
         MessageConsumer::subscribe(self, topics).await
     }
 
-    async fn recv_event(&self) -> AppResult<Event> {
-        let msg = self.recv().await?;
+    async fn recv_event(&self, timeout: std::time::Duration) -> AppResult<Event> {
+        let msg = self.recv(timeout).await?;
         serde_json::from_value(msg.payload).map_err(|e| {
             AppError::new(
                 ErrorCode::Internal,
@@ -392,7 +402,10 @@ mod tests {
         let msg = Message::new("test-topic", "hello".to_string());
         producer.send(msg).await.unwrap();
 
-        let received = consumer.recv().await.unwrap();
+        let received = consumer
+            .recv(std::time::Duration::from_secs(1))
+            .await
+            .unwrap();
         assert_eq!(received.topic, "test-topic");
         assert_eq!(received.payload, "hello");
     }
@@ -413,7 +426,10 @@ mod tests {
             .send(Message::new("events", "registered".to_string()))
             .await
             .unwrap();
-        let received = consumer.recv().await.unwrap();
+        let received = consumer
+            .recv(std::time::Duration::from_secs(1))
+            .await
+            .unwrap();
         assert_eq!(received.payload, "registered");
     }
 
@@ -432,9 +448,18 @@ mod tests {
         ];
         producer.send_batch(msgs).await.unwrap();
 
-        let a = consumer.recv().await.unwrap();
-        let b = consumer.recv().await.unwrap();
-        let c = consumer.recv().await.unwrap();
+        let a = consumer
+            .recv(std::time::Duration::from_secs(1))
+            .await
+            .unwrap();
+        let b = consumer
+            .recv(std::time::Duration::from_secs(1))
+            .await
+            .unwrap();
+        let c = consumer
+            .recv(std::time::Duration::from_secs(1))
+            .await
+            .unwrap();
         assert_eq!(a.payload, 1);
         assert_eq!(b.payload, 2);
         assert_eq!(c.payload, 3);
@@ -457,7 +482,10 @@ mod tests {
             .await
             .unwrap();
 
-        let received = consumer.recv().await.unwrap();
+        let received = consumer
+            .recv(std::time::Duration::from_secs(1))
+            .await
+            .unwrap();
         assert_eq!(received.topic, "wanted");
         assert_eq!(received.payload, "yes");
     }
@@ -487,7 +515,10 @@ mod tests {
 
         producer.publish("events", event).await.unwrap();
 
-        let received = consumer.recv_event().await.unwrap();
+        let received = consumer
+            .recv_event(std::time::Duration::from_secs(1))
+            .await
+            .unwrap();
         assert_eq!(received.id, original_id);
         assert_eq!(received.event_type, "user.created");
         assert_eq!(received.source, "auth-service");
@@ -512,9 +543,18 @@ mod tests {
         ];
         producer.publish_batch("batch", events).await.unwrap();
 
-        let a = consumer.recv_event().await.unwrap();
-        let b = consumer.recv_event().await.unwrap();
-        let c = consumer.recv_event().await.unwrap();
+        let a = consumer
+            .recv_event(std::time::Duration::from_secs(1))
+            .await
+            .unwrap();
+        let b = consumer
+            .recv_event(std::time::Duration::from_secs(1))
+            .await
+            .unwrap();
+        let c = consumer
+            .recv_event(std::time::Duration::from_secs(1))
+            .await
+            .unwrap();
         assert_eq!(a.event_type, "a");
         assert_eq!(b.event_type, "b");
         assert_eq!(c.event_type, "c");

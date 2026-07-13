@@ -46,7 +46,7 @@ async fn example() {
     consumer.subscribe(&["orders"]).await.unwrap();
     producer.send(Message::new("orders", "order_1".into())).await.unwrap();
 
-    let msg = consumer.recv().await.unwrap();
+    let msg = consumer.recv(std::time::Duration::from_secs(1)).await.unwrap();
     assert_eq!(msg.payload, "order_1");
 }
 ```

@@ -36,6 +36,8 @@ pub struct KafkaConfig {
     pub batch_size: usize,
     /// Delay in milliseconds before sending a batch.
     pub linger_ms: u64,
+    /// Maximum number of messages buffered locally before produce applies backpressure.
+    pub queue_capacity: usize,
     /// Security protocol for broker connections.
     pub security_protocol: SecurityProtocol,
     /// Permit plaintext connections for explicit local-development use only.
@@ -64,6 +66,8 @@ struct KafkaConfigSerde {
     batch_size: usize,
     #[serde(default = "default_linger_ms")]
     linger_ms: u64,
+    #[serde(default = "default_queue_capacity")]
+    queue_capacity: usize,
     #[serde(default)]
     security_protocol: SecurityProtocol,
     #[serde(default)]
@@ -92,6 +96,7 @@ impl<'de> Deserialize<'de> for KafkaConfig {
             session_timeout: config.session_timeout,
             batch_size: config.batch_size,
             linger_ms: config.linger_ms,
+            queue_capacity: config.queue_capacity,
             security_protocol: config.security_protocol,
             allow_insecure_dev: config.allow_insecure_dev,
             sasl_mechanism: config.sasl_mechanism,
@@ -129,6 +134,7 @@ impl fmt::Debug for KafkaConfig {
             .field("session_timeout", &self.session_timeout)
             .field("batch_size", &self.batch_size)
             .field("linger_ms", &self.linger_ms)
+            .field("queue_capacity", &self.queue_capacity)
             .field("security_protocol", &self.security_protocol)
             .field("allow_insecure_dev", &self.allow_insecure_dev)
             .field("sasl_mechanism", &self.sasl_mechanism)
@@ -154,6 +160,7 @@ impl Default for KafkaConfig {
             session_timeout: default_session_timeout(),
             batch_size: default_batch_size(),
             linger_ms: default_linger_ms(),
+            queue_capacity: default_queue_capacity(),
             security_protocol: SecurityProtocol::default(),
             allow_insecure_dev: false,
             sasl_mechanism: None,
@@ -219,6 +226,9 @@ impl BrokerConfigExt for KafkaConfig {
         }
         if self.batch_size == 0 {
             return invalid("Kafka batch_size must be greater than zero");
+        }
+        if self.queue_capacity == 0 {
+            return invalid("Kafka queue_capacity must be greater than zero");
         }
         if self.session_timeout.is_zero() {
             return invalid("Kafka session_timeout must be greater than zero");
@@ -391,6 +401,10 @@ const fn default_batch_size() -> usize {
 
 const fn default_linger_ms() -> u64 {
     5
+}
+
+const fn default_queue_capacity() -> usize {
+    10_000
 }
 
 mod duration_seconds {

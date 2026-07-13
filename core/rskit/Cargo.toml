@@ -60,6 +60,7 @@ rskit-httpclient = { workspace = true, optional = true }
 rskit-auth = { workspace = true, optional = true }
 rskit-di = { workspace = true, optional = true }
 rskit-database = { workspace = true, optional = true }
+rskit-database-sqlite = { workspace = true, optional = true }
 rskit-cache = { workspace = true, optional = true }
 rskit-cache-redis = { workspace = true, optional = true }
 rskit-messaging = { workspace = true, optional = true }
@@ -90,6 +91,7 @@ rskit-mcp = { workspace = true, optional = true }
 rskit-storage = { workspace = true, optional = true }
 rskit-storage-s3 = { workspace = true, optional = true }
 rskit-storage-gcs = { workspace = true, optional = true }
+rskit-storage-supabase = { workspace = true, optional = true }
 rskit-media = { workspace = true, optional = true }
 rskit-media-ffmpeg = { workspace = true, optional = true }
 rskit-media-image = { workspace = true, optional = true }
@@ -124,6 +126,7 @@ auth-jwt      = ["auth", "rskit-auth/jwt"]
 auth-oidc     = ["auth", "rskit-auth/oidc"]
 di            = ["dep:rskit-di"]
 database      = ["dep:rskit-database"]
+database-sqlite = ["database", "dep:rskit-database-sqlite"]
 cache         = ["dep:rskit-cache"]
 cache-fs      = ["cache", "rskit-cache/fs"]
 cache-redis   = ["cache", "dep:rskit-cache-redis"]
@@ -161,6 +164,7 @@ media-audio   = ["dep:rskit-media-audio", "media"]
 media-full    = ["media-ffmpeg", "media-image", "media-audio"]
 storage-s3    = ["storage", "dep:rskit-storage-s3"]
 storage-gcs   = ["storage", "dep:rskit-storage-gcs"]
+storage-supabase = ["storage", "dep:rskit-storage-supabase"]
 cli           = ["dep:rskit-cli"]
 cli-interactive = ["cli", "rskit-cli/interactive"]
 git           = ["dep:rskit-git"]
@@ -175,12 +179,12 @@ version       = ["dep:rskit-version"]
 schema        = ["dep:rskit-schema"]
 hook          = ["dep:rskit-hook"]
 full          = [
-    "server", "grpc", "encryption", "http", "httpclient", "auth", "di", "database", "cache", "messaging",
+    "server", "grpc", "encryption", "http", "httpclient", "auth", "di", "database", "database-sqlite", "cache", "messaging",
     "cache-fs", "cache-redis", "messaging-kafka", "messaging-nats", "messaging-rabbitmq",
     "observability", "authz", "security", "discovery", "sse", "dag", "genai", "llm",
     "llm-openai", "llm-anthropic", "llm-ollama", "llm-gemini", "embedding",
     "inference", "inference-triton", "inference-vllm", "inference-tgi",
-    "prompt", "skill", "tool", "agent", "mcp", "media-full", "storage", "storage-s3", "storage-gcs",
+    "prompt", "skill", "tool", "agent", "mcp", "media-full", "storage", "storage-s3", "storage-gcs", "storage-supabase",
     "cli", "git", "dataset", "bench", "vectorstore", "vectorstore-qdrant", "chain", "process", "stateful",
     "version", "schema", "hook",
 ]

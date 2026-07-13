@@ -248,8 +248,13 @@ mod tests {
         backend.producer.flush(Duration::ZERO).await.unwrap();
         backend.consumer.subscribe(&["topic"]).await.unwrap();
         assert_eq!(
-            backend.consumer.recv().await.unwrap_err().code(),
-            ErrorCode::NotFound
+            backend
+                .consumer
+                .recv(std::time::Duration::from_millis(1))
+                .await
+                .unwrap_err()
+                .code(),
+            ErrorCode::Timeout
         );
     }
 
@@ -321,8 +326,14 @@ mod tests {
             Ok(())
         }
 
-        async fn recv(&self) -> AppResult<Message<String>> {
-            Err(AppError::new(ErrorCode::NotFound, "no messages"))
+        async fn recv(&self, timeout: std::time::Duration) -> AppResult<Message<String>> {
+            if timeout.is_zero() {
+                return Err(AppError::new(
+                    ErrorCode::InvalidInput,
+                    "message receive timeout must be greater than zero",
+                ));
+            }
+            Err(AppError::timeout("message receive"))
         }
     }
 }

@@ -17,7 +17,7 @@
 //! consumer.subscribe(&["events"]).await?;
 //! producer.send(Message::new("events", "hello".into())).await?;
 //!
-//! let msg = consumer.recv().await?;
+//! let msg = consumer.recv(std::time::Duration::from_secs(1)).await?;
 //! assert_eq!(msg.payload, "hello");
 //! # Ok(())
 //! # }

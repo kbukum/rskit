@@ -21,7 +21,10 @@ async fn send_and_receive_message() {
     let msg = Message::new("greetings", "hello world".to_string());
     producer.send(msg).await.unwrap();
 
-    let received = consumer.recv().await.unwrap();
+    let received = consumer
+        .recv(std::time::Duration::from_secs(1))
+        .await
+        .unwrap();
     assert_eq!(received.topic, "greetings");
     assert_eq!(received.payload, "hello world");
 }
@@ -61,7 +64,10 @@ async fn multiple_messages_maintain_ordering() {
     }
 
     for i in 0..5 {
-        let received = consumer.recv().await.unwrap();
+        let received = consumer
+            .recv(std::time::Duration::from_secs(1))
+            .await
+            .unwrap();
         assert_eq!(received.payload, format!("msg-{i}"));
     }
 }
@@ -81,9 +87,18 @@ async fn send_batch_delivers_all_messages() {
     ];
     producer.send_batch(msgs).await.unwrap();
 
-    let a = consumer.recv().await.unwrap();
-    let b = consumer.recv().await.unwrap();
-    let c = consumer.recv().await.unwrap();
+    let a = consumer
+        .recv(std::time::Duration::from_secs(1))
+        .await
+        .unwrap();
+    let b = consumer
+        .recv(std::time::Duration::from_secs(1))
+        .await
+        .unwrap();
+    let c = consumer
+        .recv(std::time::Duration::from_secs(1))
+        .await
+        .unwrap();
     assert_eq!(a.payload, "a");
     assert_eq!(b.payload, "b");
     assert_eq!(c.payload, "c");
@@ -113,7 +128,10 @@ async fn consumer_filters_by_subscribed_topic() {
         .await
         .unwrap();
 
-    let received = consumer.recv().await.unwrap();
+    let received = consumer
+        .recv(std::time::Duration::from_secs(1))
+        .await
+        .unwrap();
     assert_eq!(received.topic, "wanted");
     assert_eq!(received.payload, "keep");
 }

@@ -39,8 +39,18 @@ pub trait MessageConsumer<T: Send + Sync>: Send + Sync {
     /// Subscribe to one or more topics.
     async fn subscribe(&self, topics: &[&str]) -> AppResult<()>;
 
-    /// Receive the next message. Blocks until a message is available.
-    async fn recv(&self) -> AppResult<Message<T>>;
+    /// Receive the next message, waiting no longer than `timeout`.
+    ///
+    /// `timeout` **must** be greater than zero; it bounds a blocking receive
+    /// rather than requesting a non-blocking poll. Implementations reject
+    /// [`Duration::ZERO`](std::time::Duration::ZERO) with
+    /// [`ErrorCode::InvalidInput`].
+    ///
+    /// Implementations **must** return [`AppError`] with
+    /// [`ErrorCode::Timeout`] when the
+    /// deadline elapses before a message arrives. Callers rely on this code to
+    /// treat an idle receive as non-fatal and keep the consumer alive.
+    async fn recv(&self, timeout: Duration) -> AppResult<Message<T>>;
 
     /// Close or shut down the consumer. Implementations with no persistent resources may no-op.
     async fn close(&self) -> AppResult<()> {
@@ -74,8 +84,18 @@ pub trait EventConsumer: Send + Sync {
     /// Subscribe to one or more topics.
     async fn subscribe(&self, topics: &[&str]) -> AppResult<()>;
 
-    /// Receive the next event. Blocks until an event is available.
-    async fn recv_event(&self) -> AppResult<Event>;
+    /// Receive the next event, waiting no longer than `timeout`.
+    ///
+    /// `timeout` **must** be greater than zero; it bounds a blocking receive
+    /// rather than requesting a non-blocking poll. Implementations reject
+    /// [`Duration::ZERO`](std::time::Duration::ZERO) with
+    /// [`ErrorCode::InvalidInput`].
+    ///
+    /// Implementations **must** return [`AppError`] with
+    /// [`ErrorCode::Timeout`] when the
+    /// deadline elapses before an event arrives. Callers rely on this code to
+    /// treat an idle receive as non-fatal and keep the consumer alive.
+    async fn recv_event(&self, timeout: Duration) -> AppResult<Event>;
 }
 
 // ── Broker lifecycle trait ───────────────────────────────────────────────────

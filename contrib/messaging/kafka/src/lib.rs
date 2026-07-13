@@ -5,6 +5,7 @@
 
 #![warn(missing_docs)]
 
+use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -26,6 +27,10 @@ mod config;
 
 use crate::config::validate_topic;
 pub use config::{Compression, KafkaConfig as Config, OffsetReset, SecurityProtocol};
+
+/// Wall-clock bound applied to each message delivery so producer sends never
+/// block indefinitely on a stalled broker.
+const SEND_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Kafka-backed message producer wrapping an `rdkafka` `FutureProducer`.
 pub(crate) struct KafkaProducer {
@@ -55,7 +60,7 @@ impl MessageProducer<Vec<u8>> for KafkaProducer {
         }
 
         self.producer
-            .send(record, Duration::from_secs(5))
+            .send(record, SEND_TIMEOUT)
             .await
             .map_err(|(error, _)| kafka_send_error(&error))?;
 
@@ -64,8 +69,33 @@ impl MessageProducer<Vec<u8>> for KafkaProducer {
     }
 
     async fn send_batch(&self, msgs: Vec<Message<Vec<u8>>>) -> AppResult<()> {
-        for msg in msgs {
-            self.send(msg).await?;
+        for msg in &msgs {
+            validate_topic("Kafka topic", &msg.topic)?;
+        }
+        let mut deliveries = Vec::with_capacity(msgs.len());
+        for msg in &msgs {
+            let mut record = FutureRecord::to(&msg.topic).payload(&msg.payload);
+            if let Some(key) = msg.key.as_deref() {
+                record = record.key(key);
+            }
+            let delivery = self
+                .producer
+                .send_result(record)
+                .map_err(|(error, _)| kafka_send_error(&error))?;
+            deliveries.push(delivery);
+        }
+        for delivery in deliveries {
+            tokio::time::timeout(SEND_TIMEOUT, delivery)
+                .await
+                .map_err(|error| AppError::timeout("Kafka delivery").with_cause(error))?
+                .map_err(|error| {
+                    AppError::new(
+                        ErrorCode::ExternalService,
+                        "Kafka delivery future was cancelled",
+                    )
+                    .with_cause(error)
+                })?
+                .map_err(|(error, _)| kafka_send_error(&error))?;
         }
         Ok(())
     }
@@ -86,10 +116,13 @@ impl EventProducer for KafkaProducer {
     }
 
     async fn publish_batch(&self, topic: &str, events: Vec<Event>) -> AppResult<()> {
+        validate_topic("Kafka topic", topic)?;
+        let mut msgs = Vec::with_capacity(events.len());
         for event in events {
-            self.publish(topic, event).await?;
+            let payload = event.to_json()?;
+            msgs.push(Message::new(topic, payload).with_key(&event.id));
         }
-        Ok(())
+        self.send_batch(msgs).await
     }
 }
 
@@ -120,9 +153,17 @@ impl MessageConsumer<Vec<u8>> for KafkaConsumer {
             .map_err(|error| kafka_subscribe_error(&error))
     }
 
-    async fn recv(&self) -> AppResult<Message<Vec<u8>>> {
+    async fn recv(&self, timeout: Duration) -> AppResult<Message<Vec<u8>>> {
+        if timeout.is_zero() {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                "Kafka receive timeout must be greater than zero",
+            ));
+        }
         let mut stream = self.consumer.stream();
-        let borrowed = stream.next().await.ok_or_else(kafka_stream_ended_error)?;
+        let borrowed = recv_next_with_timeout(stream.next(), timeout)
+            .await?
+            .ok_or_else(kafka_stream_ended_error)?;
 
         let borrowed = borrowed.map_err(|error| kafka_receive_error(&error))?;
 
@@ -150,10 +191,15 @@ fn kafka_producer_creation_error(error: &KafkaError) -> AppError {
 }
 
 fn kafka_send_error(error: &KafkaError) -> AppError {
-    AppError::new(
-        ErrorCode::ExternalService,
-        format!("Kafka send failed: {error}"),
-    )
+    let code = if matches!(
+        error,
+        KafkaError::MessageProduction(rdkafka::types::RDKafkaErrorCode::QueueFull)
+    ) {
+        ErrorCode::RateLimited
+    } else {
+        ErrorCode::ExternalService
+    };
+    AppError::new(code, format!("Kafka send failed: {error}"))
 }
 
 fn kafka_flush_error(error: &KafkaError) -> AppError {
@@ -184,6 +230,15 @@ fn kafka_stream_ended_error() -> AppError {
     )
 }
 
+async fn recv_next_with_timeout<F, T>(future: F, timeout: Duration) -> AppResult<T>
+where
+    F: Future<Output = T>,
+{
+    tokio::time::timeout(timeout, future)
+        .await
+        .map_err(|error| AppError::timeout("Kafka receive").with_cause(error))
+}
+
 fn kafka_receive_error(error: &KafkaError) -> AppError {
     AppError::new(
         ErrorCode::ExternalService,
@@ -197,8 +252,8 @@ impl EventConsumer for KafkaConsumer {
         MessageConsumer::subscribe(self, topics).await
     }
 
-    async fn recv_event(&self) -> AppResult<Event> {
-        let msg = MessageConsumer::recv(self).await?;
+    async fn recv_event(&self, timeout: Duration) -> AppResult<Event> {
+        let msg = MessageConsumer::recv(self, timeout).await?;
         Event::from_json(&msg.payload)
     }
 }
@@ -267,6 +322,10 @@ fn producer_config(config: &Config) -> ClientConfig {
     cfg.set("compression.type", compression);
     cfg.set("batch.size", config.batch_size.to_string());
     cfg.set("linger.ms", config.linger_ms.to_string());
+    cfg.set(
+        "queue.buffering.max.messages",
+        config.queue_capacity.to_string(),
+    );
     cfg.set("message.send.max.retries", config.base.retries.to_string());
     cfg.set(
         "acks",
@@ -667,6 +726,53 @@ mod tests {
         producer.flush(Duration::ZERO).await.unwrap();
     }
 
+    #[tokio::test]
+    async fn kafka_recv_returns_timeout_when_no_message_arrives() {
+        let err = recv_next_with_timeout(std::future::pending::<()>(), Duration::from_millis(1))
+            .await
+            .unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::Timeout);
+    }
+
+    #[test]
+    fn kafka_bounded_queue_config_and_backpressure_error_are_typed() {
+        let config = Config {
+            queue_capacity: 17,
+            ..Config::default()
+        };
+
+        assert_eq!(
+            producer_config(&config).get("queue.buffering.max.messages"),
+            Some("17")
+        );
+        assert_eq!(
+            kafka_send_error(&KafkaError::MessageProduction(RDKafkaErrorCode::QueueFull)).code(),
+            ErrorCode::RateLimited
+        );
+    }
+
+    #[tokio::test]
+    async fn kafka_bounded_queue_returns_backpressure_when_full() {
+        let config = Config {
+            security_protocol: SecurityProtocol::Plaintext,
+            allow_insecure_dev: true,
+            queue_capacity: 1,
+            ..Config::default()
+        };
+        let producer = KafkaProducer::new(&config).unwrap();
+
+        let err = producer
+            .send_batch(vec![
+                Message::new("events", b"first".to_vec()),
+                Message::new("events", b"second".to_vec()),
+            ])
+            .await
+            .unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::RateLimited);
+    }
+
     #[test]
     fn kafka_error_helpers_preserve_error_codes_and_context() {
         let producer_error = KafkaError::ClientCreation("producer".to_string());
@@ -674,7 +780,9 @@ mod tests {
         let creation = kafka_producer_creation_error(&producer_error);
         let consumer = kafka_consumer_creation_error(&consumer_error);
         let external = [
-            kafka_send_error(&KafkaError::MessageProduction(RDKafkaErrorCode::QueueFull)),
+            kafka_send_error(&KafkaError::MessageProduction(
+                RDKafkaErrorCode::MessageTimedOut,
+            )),
             kafka_flush_error(&KafkaError::Flush(RDKafkaErrorCode::QueueFull)),
             kafka_subscribe_error(&KafkaError::Subscription("bad topic".to_string())),
             kafka_stream_ended_error(),

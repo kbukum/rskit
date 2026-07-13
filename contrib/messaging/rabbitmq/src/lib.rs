@@ -252,34 +252,44 @@ impl MessageConsumer<Vec<u8>> for RabbitMqConsumer {
     }
 
     #[allow(clippy::significant_drop_tightening)]
-    async fn recv(&self) -> AppResult<Message<Vec<u8>>> {
-        let mut receiver = self.receiver.lock().await;
-        loop {
-            if self.subscribed.load(Ordering::SeqCst)
-                && self.active_tasks.load(Ordering::SeqCst) == 0
-                && receiver.is_empty()
-            {
-                return Err(AppError::new(
-                    ErrorCode::ExternalService,
-                    "RabbitMQ consumer stream closed",
-                ));
-            }
+    async fn recv(&self, timeout: Duration) -> AppResult<Message<Vec<u8>>> {
+        if timeout.is_zero() {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                "RabbitMQ receive timeout must be greater than zero",
+            ));
+        }
+        tokio::time::timeout(timeout, async {
+            let mut receiver = self.receiver.lock().await;
+            loop {
+                if self.subscribed.load(Ordering::SeqCst)
+                    && self.active_tasks.load(Ordering::SeqCst) == 0
+                    && receiver.is_empty()
+                {
+                    return Err(AppError::new(
+                        ErrorCode::ExternalService,
+                        "RabbitMQ consumer stream closed",
+                    ));
+                }
 
-            tokio::select! {
-                message = receiver.recv() => {
-                    match message {
-                        Some(message) => return Ok(message),
-                        None => {
-                            return Err(AppError::new(
-                                ErrorCode::ExternalService,
-                                "RabbitMQ consumer stream closed",
-                            ));
+                tokio::select! {
+                    message = receiver.recv() => {
+                        match message {
+                            Some(message) => return Ok(message),
+                            None => {
+                                return Err(AppError::new(
+                                    ErrorCode::ExternalService,
+                                    "RabbitMQ consumer stream closed",
+                                ));
+                            }
                         }
                     }
+                    () = self.task_finished.notified() => {}
                 }
-                () = self.task_finished.notified() => {}
             }
-        }
+        })
+        .await
+        .map_err(|error| AppError::timeout("RabbitMQ receive").with_cause(error))?
     }
 
     async fn close(&self) -> AppResult<()> {
@@ -298,8 +308,8 @@ impl EventConsumer for RabbitMqConsumer {
         MessageConsumer::subscribe(self, topics).await
     }
 
-    async fn recv_event(&self) -> AppResult<Event> {
-        let msg = MessageConsumer::recv(self).await?;
+    async fn recv_event(&self, timeout: Duration) -> AppResult<Event> {
+        let msg = MessageConsumer::recv(self, timeout).await?;
         Event::from_json(&msg.payload)
     }
 }
@@ -1017,7 +1027,7 @@ mod tests {
         let consumer = RabbitMqConsumer::new(Config::default()).unwrap();
         consumer.subscribed.store(true, Ordering::SeqCst);
 
-        let result = consumer.recv().await;
+        let result = consumer.recv(std::time::Duration::from_secs(1)).await;
 
         assert!(result.is_err());
     }
@@ -1052,7 +1062,10 @@ mod tests {
             .await
             .unwrap();
 
-        let err = consumer.recv_event().await.unwrap_err();
+        let err = consumer
+            .recv_event(Duration::from_secs(1))
+            .await
+            .unwrap_err();
         assert_eq!(err.code(), ErrorCode::Internal);
     }
 
