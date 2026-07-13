@@ -28,6 +28,10 @@ mod config;
 use crate::config::validate_topic;
 pub use config::{Compression, KafkaConfig as Config, OffsetReset, SecurityProtocol};
 
+/// Wall-clock bound applied to each message delivery so producer sends never
+/// block indefinitely on a stalled broker.
+const SEND_TIMEOUT: Duration = Duration::from_secs(5);
+
 /// Kafka-backed message producer wrapping an `rdkafka` `FutureProducer`.
 pub(crate) struct KafkaProducer {
     producer: FutureProducer,
@@ -56,7 +60,7 @@ impl MessageProducer<Vec<u8>> for KafkaProducer {
         }
 
         self.producer
-            .send(record, Duration::from_secs(5))
+            .send(record, SEND_TIMEOUT)
             .await
             .map_err(|(error, _)| kafka_send_error(&error))?;
 
@@ -81,8 +85,9 @@ impl MessageProducer<Vec<u8>> for KafkaProducer {
             deliveries.push(delivery);
         }
         for delivery in deliveries {
-            delivery
+            tokio::time::timeout(SEND_TIMEOUT, delivery)
                 .await
+                .map_err(|error| AppError::timeout("Kafka delivery").with_cause(error))?
                 .map_err(|error| {
                     AppError::new(
                         ErrorCode::ExternalService,

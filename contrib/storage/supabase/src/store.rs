@@ -134,12 +134,13 @@ impl FileStore for SupabaseStore {
         metadata: Option<HashMap<String, String>>,
     ) -> AppResult<StoredFile> {
         let data = source.read_all().await?;
+        let size = data.len() as u64;
         let full_key = self.full_key(key);
         let mut request = self
             .client
             .post(self.object_url(&full_key)?)
             .header("content-type", content_type_or_default(content_type))
-            .body(data.clone());
+            .body(data);
         if let Some(metadata) = &metadata {
             request = request.header(
                 "x-metadata",
@@ -154,7 +155,7 @@ impl FileStore for SupabaseStore {
         }
         self.send(self.authed(request), "upload").await?;
         Ok(
-            StoredFile::new(prefixed_key(None, key), data.len() as u64, content_type)
+            StoredFile::new(prefixed_key(None, key), size, content_type)
                 .with_metadata(metadata.unwrap_or_default()),
         )
     }
@@ -235,8 +236,10 @@ impl FileStore for SupabaseStore {
     }
 
     async fn list(&self, prefix: &str, limit: Option<usize>) -> AppResult<Vec<StoredFile>> {
-        let body =
-            serde_json::json!({ "prefix": self.full_key(prefix), "limit": limit.unwrap_or(100) });
+        let mut body = serde_json::json!({ "prefix": self.full_key(prefix) });
+        if let Some(limit) = limit {
+            body["limit"] = serde_json::json!(limit);
+        }
         let response = self
             .send(
                 self.authed(self.client.post(self.list_url()?).json(&body)),

@@ -17,4 +17,4 @@ Configure broker endpoints, at-most-once or at-least-once delivery semantics, se
 
 ## Timeouts, batching, and backpressure
 
-Consumers require an explicit receive timeout (`recv(timeout)`) so calls are always bounded. `send_batch` and `publish_batch` enqueue the whole batch before awaiting delivery, allowing librdkafka to produce it as a configured batch. Producer buffering is bounded by `Config::queue_capacity` (`queue.buffering.max.messages`); when the queue is full, sends return `ErrorCode::RateLimited` so callers can apply backpressure or retry policy.
+Consumers require an explicit receive timeout (`recv(timeout)`) so calls are always bounded. `send_batch` and `publish_batch` enqueue the whole batch before awaiting delivery, allowing librdkafka to produce it as a configured batch; each delivery is bounded by the same 5s wall-clock timeout as `send`, returning `ErrorCode::Timeout` if the broker never reports delivery. Producer buffering is bounded by `Config::queue_capacity` (`queue.buffering.max.messages`); when the queue is full, sends return `ErrorCode::RateLimited` so callers can apply backpressure or retry policy.
