@@ -12,8 +12,7 @@ use tokio_util::sync::CancellationToken;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_worker::{
     Event, EventKind, Handler, Pool, PoolConfig, Progress, ResourceRequirements,
-    RoundRobinDispatcher, WorkerScheduler, WorkloadBatch, WorkloadConfig, WorkloadScheduler,
-    WorkloadSpec,
+    RoundRobinDispatcher, Scheduler, SchedulerConfig, TaskBatch, TaskSpec, WorkerScheduler,
 };
 
 // ── Shared test handlers ──────────────────────────────────────────────────────
@@ -662,11 +661,11 @@ async fn multiple_handler_events_received() {
     );
 }
 
-// ── 19. Workload config clamps pool limits ─────────────────────────────────────
+// ── 19. Scheduler config clamps pool limits ─────────────────────────────────────
 
 #[test]
-fn workload_config_clamps_zero_limits_for_pool_config() {
-    let config = WorkloadConfig {
+fn scheduler_config_clamps_zero_limits_for_pool_config() {
+    let config = SchedulerConfig {
         max_concurrent: 0,
         queue_size: 0,
     };
@@ -678,11 +677,11 @@ fn workload_config_clamps_zero_limits_for_pool_config() {
     assert_eq!(pool_config.queue_size, 1);
 }
 
-// ── 20. Workload specs preserve resources and labels ──────────────────────────
+// ── 20. Task specs preserve resources and labels ──────────────────────────
 
 #[test]
-fn workload_spec_builders_preserve_resources_and_labels() {
-    let spec = WorkloadSpec::new("ingest")
+fn task_spec_builders_preserve_resources_and_labels() {
+    let spec = TaskSpec::new("ingest")
         .with_resources(ResourceRequirements {
             cpu_units: 4,
             memory_mib: 1024,
@@ -703,7 +702,7 @@ fn workload_spec_builders_preserve_resources_and_labels() {
 async fn worker_scheduler_plans_and_builds_bounded_pool() {
     let scheduler = WorkerScheduler::new(
         "release-workers",
-        WorkloadConfig {
+        SchedulerConfig {
             max_concurrent: 2,
             queue_size: 8,
         },
@@ -711,16 +710,16 @@ async fn worker_scheduler_plans_and_builds_bounded_pool() {
 
     let plan = scheduler
         .plan_batch(
-            WorkloadBatch::new("release")
-                .with_workload(WorkloadSpec::new("lint"))
-                .with_workload(WorkloadSpec::new("test")),
+            TaskBatch::new("release")
+                .with_task(TaskSpec::new("lint"))
+                .with_task(TaskSpec::new("test")),
         )
         .await
         .unwrap();
 
     assert_eq!(plan.batch, "release");
     assert_eq!(plan.decisions.len(), 2);
-    assert_eq!(plan.decisions[0].workload, "lint");
+    assert_eq!(plan.decisions[0].task, "lint");
     assert_eq!(plan.decisions[1].pool, "release-workers");
     assert!(plan.decisions[1].reason.contains("capacity=2"));
     assert!(plan.decisions[1].reason.contains("queue=8"));

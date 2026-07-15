@@ -16,6 +16,7 @@ members = [
     "rskit-resilience",
     "rskit-process",
     "rskit-worker",
+    "rskit-workload",
     "rskit-chain",
     "rskit-stateful",
     "rskit-server",
@@ -269,6 +270,7 @@ rskit-vectorstore = { path = "rskit-vectorstore", version = "0.2.0-alpha.1" }
 rskit-vectorstore-qdrant = { path = "../contrib/vectorstore/qdrant", version = "0.2.0-alpha.1" }
 rskit-version = { path = "rskit-version", version = "0.2.0-alpha.1" }
 rskit-worker = { path = "rskit-worker", version = "0.2.0-alpha.1" }
+rskit-workload = { path = "rskit-workload", version = "0.2.0-alpha.1" }
 semver = { version = "1" }
 subtle = "2.6"
 url = "2"

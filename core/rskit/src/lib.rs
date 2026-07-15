@@ -86,6 +86,7 @@
 //! | `git`    | `rskit-git` (Git automation) |
 //! | `dataset` | `rskit-dataset` (dataset collection) |
 //! | `bench`  | `rskit-bench` (ML benchmarking) |
+//! | `workload` | `rskit-workload` (workload orchestration) |
 //! | `full`   | all features |
 //!
 //! Test helpers live in `rskit-testutil` and should be added directly as a
@@ -375,6 +376,10 @@ pub use rskit_dataset as dataset;
 /// ML benchmarking: evaluators, metrics, reports, visualization.
 #[cfg(feature = "bench")]
 pub use rskit_bench as bench;
+
+/// Provider-based workload orchestration: `Manager`, registry, component.
+#[cfg(feature = "workload")]
+pub use rskit_workload as workload;
 
 // ── Convenience re-exports at root ──────────────────────────────────────────
 

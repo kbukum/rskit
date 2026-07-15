@@ -1,0 +1,40 @@
+[package]
+name        = "rskit-workload"
+description = "Provider-based workload orchestration: lifecycle Manager trait, config, and component"
+version = "0.2.0-alpha.1"
+edition.workspace      = true
+license.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+documentation = "https://docs.rs/rskit-workload"
+readme = "README.md"
+categories = ["development-tools"]
+keywords   = ["workload", "orchestration", "container", "lifecycle"]
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+# External
+tokio        = { workspace = true }
+async-trait  = { workspace = true }
+serde        = { workspace = true }
+chrono       = { workspace = true }
+tracing      = { workspace = true }
+parking_lot  = { workspace = true }
+futures      = { workspace = true }
+
+# Internal
+rskit-errors    = { workspace = true }
+rskit-component = { workspace = true }
+
+[dev-dependencies]
+tokio      = { workspace = true, features = ["full", "test-util"] }
+futures    = { workspace = true }
+serde_json = { workspace = true }

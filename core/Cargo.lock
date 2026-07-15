@@ -6272,6 +6272,7 @@ dependencies = [
  "rskit-vectorstore-qdrant",
  "rskit-version",
  "rskit-worker",
+ "rskit-workload",
  "serde",
  "tokio",
  "tokio-util",
@@ -6395,6 +6396,22 @@ dependencies = [
  "tokio-util",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "rskit-workload"
+version = "0.2.0-alpha.1"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "futures",
+ "parking_lot",
+ "rskit-component",
+ "rskit-errors",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
