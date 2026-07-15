@@ -12,7 +12,7 @@ pub mod event;
 pub mod handler;
 /// [`Pool`] and [`PoolConfig`] for managing concurrent task execution.
 pub mod pool;
-/// Workload specs and scheduler helpers built on the worker pool.
+/// Task specs and scheduling helpers built on the worker pool.
 pub mod scheduler;
 /// [`TaskHandle`] returned to callers after task submission.
 pub mod task;
