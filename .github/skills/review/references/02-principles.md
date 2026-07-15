@@ -1,6 +1,6 @@
 # Pass 02 — Principle conformance
 
-Each item here is a hard principle from [`.github/copilot-instructions.md`](../../copilot-instructions.md), not a preference. This is where vibe coding drifts most — especially around resilience, concurrency, and composition.
+Each item here is a hard principle from [`.github/copilot-instructions.md`](../../../copilot-instructions.md), not a preference. This is where vibe coding drifts most — especially around resilience, concurrency, and composition.
 
 > **Run in a separate, clean-context agent** — never inline in the session that wrote the code. An independent reviewer re-derives every judgment from the code and the principles instead of trusting prior reasoning. A plan/spec may be passed in as a scope checklist only; it never excuses a baseline violation.
 

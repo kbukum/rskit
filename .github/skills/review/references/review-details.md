@@ -16,7 +16,7 @@ Mode is either **changes** (a diff: branch, commit range, `HEAD~1`) or **project
 2. List the surface to review: changed crates (changes mode) or chosen crates/workspace (project mode). Note cross-cutting touches: a core crate's public surface fans out to the `rskit` facade, the other core crates, every `contrib/` adapter, and downstream consumers (pykit/gokit parity, Toven). Also flag workspace-`Cargo.toml` edits, shared error types, public re-exports, `[lints]`.
 3. Determine which passes apply via the triggers below. Skip non-applicable passes explicitly in the final report.
 
-The reviewer judges code as written, against the rules below and the baseline in [`.github/copilot-instructions.md`](../../copilot-instructions.md). PR descriptions, commit messages, or plan/ADR docs are scope hints only — never justifications.
+The reviewer judges code as written, against the rules below and the baseline in [`.github/copilot-instructions.md`](../../../copilot-instructions.md). PR descriptions, commit messages, or plan/ADR docs are scope hints only — never justifications.
 
 ## Phase 2 — Passes
 
@@ -94,7 +94,7 @@ Orchestrator collects findings into one table:
 pass | severity (blocker/should-fix/nit) | file:line | finding | suggested fix
 ```
 
-Severity rule: **blocker** = principle violation, behavior is wrong, or a contract is broken (see [`README.md`](./README.md) for the full definition). Otherwise should-fix or nit.
+Severity rule: **blocker** = principle violation, behavior is wrong, or a contract is broken (see [`SKILL.md`](../SKILL.md) for the full definition). Otherwise should-fix or nit.
 
 Group by file in the final report. State explicitly any pass that was **skipped** (with the trigger that failed) and any pass that was **deferred** (with reason).
 

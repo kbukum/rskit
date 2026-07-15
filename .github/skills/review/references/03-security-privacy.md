@@ -4,7 +4,7 @@ A dedicated pass because a vibe-coded path that "just works" usually skips bound
 
 > **Run in a separate, clean-context agent** — never inline in the session that wrote the code. An independent reviewer re-derives every judgment from the code and the principles instead of trusting prior reasoning. A plan/spec may be passed in as a scope checklist only; it never excuses a baseline violation.
 
-**Scope note.** *Changes mode:* trace each new input path from its trust boundary to its use. *Project mode:* audit the toolkit's external-facing surfaces (HTTP, process, storage/database adapters, auth, crypto) for the invariants below; see also [`docs/security-model.md`](../../../docs/security-model.md).
+**Scope note.** *Changes mode:* trace each new input path from its trust boundary to its use. *Project mode:* audit the toolkit's external-facing surfaces (HTTP, process, storage/database adapters, auth, crypto) for the invariants below; see also [`docs/security-model.md`](../../../../docs/security-model.md).
 
 ## Checks
 
