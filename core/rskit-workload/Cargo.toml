@@ -22,7 +22,6 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 # External
-tokio        = { workspace = true }
 async-trait  = { workspace = true }
 serde        = { workspace = true }
 chrono       = { workspace = true }
@@ -37,5 +36,4 @@ rskit-util      = { workspace = true }
 
 [dev-dependencies]
 tokio      = { workspace = true, features = ["full", "test-util"] }
-futures    = { workspace = true }
 serde_json = { workspace = true }

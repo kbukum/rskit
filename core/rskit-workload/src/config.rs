@@ -39,10 +39,14 @@ impl Default for WorkloadConfig {
 }
 
 impl WorkloadConfig {
-    /// Fill an empty `provider` with the default.
+    /// Normalize `provider` by trimming surrounding whitespace, filling it with
+    /// the default when empty, so stored and logged config is deterministic.
     pub fn apply_defaults(&mut self) {
-        if self.provider.trim().is_empty() {
+        let trimmed = self.provider.trim();
+        if trimmed.is_empty() {
             DEFAULT_PROVIDER.clone_into(&mut self.provider);
+        } else if trimmed.len() != self.provider.len() {
+            self.provider = trimmed.to_owned();
         }
     }
 
@@ -89,6 +93,16 @@ mod tests {
         };
         cfg.apply_defaults();
         assert_eq!(cfg.provider, "kubernetes");
+    }
+
+    #[test]
+    fn apply_defaults_trims_surrounding_whitespace() {
+        let mut cfg = WorkloadConfig {
+            provider: "  docker  ".to_string(),
+            ..Default::default()
+        };
+        cfg.apply_defaults();
+        assert_eq!(cfg.provider, "docker");
     }
 
     #[test]

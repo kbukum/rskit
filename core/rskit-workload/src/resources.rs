@@ -11,6 +11,8 @@ use rskit_errors::{AppError, AppResult};
 const KIB: i64 = 1024;
 const MIB: i64 = 1024 * 1024;
 const GIB: i64 = 1024 * 1024 * 1024;
+const TIB: i64 = 1024 * 1024 * 1024 * 1024;
+const PIB: i64 = 1024 * 1024 * 1024 * 1024 * 1024;
 
 const NANOS_PER_CORE: f64 = 1e9;
 const NANOS_PER_MILLICORE: f64 = 1e6;
@@ -41,7 +43,8 @@ pub fn parse_memory(s: &str) -> AppResult<i64> {
 /// # Errors
 ///
 /// Returns [`rskit_errors::ErrorCode::InvalidFormat`] when the string is empty,
-/// not a valid number, negative, or larger than [`i64::MAX`] nanocores.
+/// not a valid number, negative, or at or above the [`i64::MAX`] nanocore
+/// boundary (values that would saturate a float-to-int cast).
 pub fn parse_cpu(s: &str) -> AppResult<i64> {
     let lower = s.trim().to_lowercase();
     if lower.is_empty() {
@@ -76,9 +79,13 @@ pub fn parse_cpu(s: &str) -> AppResult<i64> {
 }
 
 /// Format a byte count as a human-readable memory string using binary suffixes.
+///
+/// Covers the same unit range [`parse_memory`] accepts, up to PiB.
 #[must_use]
 pub fn format_memory(bytes: i64) -> String {
     match bytes {
+        b if b >= PIB => format!("{}p", b / PIB),
+        b if b >= TIB => format!("{}t", b / TIB),
         b if b >= GIB => format!("{}g", b / GIB),
         b if b >= MIB => format!("{}m", b / MIB),
         b if b >= KIB => format!("{}k", b / KIB),
@@ -172,6 +179,17 @@ mod tests {
         assert_eq!(format_memory(2048), "2k");
         assert_eq!(format_memory(3 * MIB), "3m");
         assert_eq!(format_memory(4 * GIB), "4g");
+        assert_eq!(format_memory(5 * TIB), "5t");
+        assert_eq!(format_memory(6 * PIB), "6p");
+        assert_eq!(format_memory(TIB), "1t");
+    }
+
+    #[test]
+    fn memory_round_trips_through_format_and_parse() {
+        for bytes in [512, 2048, 3 * MIB, 4 * GIB, 5 * TIB, 6 * PIB] {
+            let formatted = format_memory(bytes);
+            assert_eq!(parse_memory(&formatted).unwrap(), bytes, "bytes {bytes}");
+        }
     }
 
     #[test]
