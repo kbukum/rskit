@@ -5,7 +5,6 @@ description: >-
     level, fill the repo PR template honestly, and keep the description a concise, organized,
     developer-friendly summary (no file-by-file dumps, no internal/batch/plan detail). Bound to
     rskit's engineering baseline. Use only when explicitly asked to create or open a PR.
-user-invocable: true
 ---
 
 # Opening a reviewer-friendly pull request

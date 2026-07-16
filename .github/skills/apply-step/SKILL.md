@@ -5,7 +5,6 @@ description: >-
     accumulated context and decisions, then implement the current step test-first against
     rskit's engineering baseline, validate the affected crates, and mark the step done. Use to
     execute one specific plan step, or as the per-step unit that apply-plan drives.
-user-invocable: true
 ---
 
 # Applying one plan step, in context

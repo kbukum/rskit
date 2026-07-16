@@ -5,7 +5,6 @@ description: >-
     CHANGELOG, apply independent per-crate version bumps, run the full pre-release gates and
     supply-chain sweep, and publish to crates.io in dependency order. Use when preparing or
     publishing an rskit release or checking release readiness.
-user-invocable: true
 ---
 
 # Releasing rskit
@@ -14,7 +13,8 @@ rskit has **split Cargo workspaces** (`core/`, `contrib/`, `examples/`) and **no
 `Cargo.toml`**. Crates are versioned **independently** and published to crates.io in dependency
 order via the `rskit_tool` release tooling (driven through `make`). Full details live in
 [`docs/RELEASING.md`](../../../docs/RELEASING.md), [`docs/VERSIONING.md`](../../../docs/VERSIONING.md),
-`policy/SEMVER.md`, and `policy/DEPRECATION.md`.
+[`docs/policy/SEMVER.md`](../../../docs/policy/SEMVER.md), and
+[`docs/policy/DEPRECATION.md`](../../../docs/policy/DEPRECATION.md).
 
 ## Prerequisites
 
@@ -45,7 +45,7 @@ git tag --sort=-v:refname | head -1
 git log --oneline $(git describe --tags --abbrev=0)..HEAD
 ```
 
-Use `policy/SEMVER.md`. While in `0.x`: a breaking change in the `[Unreleased]` CHANGELOG section
+Use [`docs/policy/SEMVER.md`](../../../docs/policy/SEMVER.md). While in `0.x`: a breaking change in the `[Unreleased]` CHANGELOG section
 bumps **MINOR**; otherwise **PATCH**.
 
 ## Step 3 — Update the CHANGELOG

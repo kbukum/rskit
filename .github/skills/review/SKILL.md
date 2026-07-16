@@ -6,7 +6,6 @@ description: >-
     placement, canonical reuse, principles, security & privacy, quality, tests/TDD, docs & supply
     chain, comments & rustdoc. Use before merging a change, when auditing a crate, or before a
     release. Always run it in a fresh, clean-context reviewer.
-user-invocable: true
 ---
 
 # Reviewing rskit against its engineering baseline

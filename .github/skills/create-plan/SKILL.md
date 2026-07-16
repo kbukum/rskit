@@ -6,7 +6,6 @@ description: >-
     that can be applied iteratively. Every plan is bound to rskit's engineering baseline. Use
     when scoping a feature, refactor, parity port, or release, or when asked to plan or break
     down work.
-user-invocable: true
 ---
 
 # Planning rskit work as applyable step files

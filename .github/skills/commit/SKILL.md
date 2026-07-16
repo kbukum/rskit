@@ -4,7 +4,6 @@ description: >-
     Commit staged (or explicitly named) changes with a single compact, developer-friendly commit
     message that states what changed — no Co-authored-by trailer, no plan/batch/PR numbers, no
     tool or review narration. Use when asked to commit work in rskit.
-user-invocable: true
 ---
 
 # Committing with a clean, developer-friendly message

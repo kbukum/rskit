@@ -5,7 +5,6 @@ description: >-
     plan's README for order and dependencies, then apply each remaining step in turn (via the
     apply-step workflow), validating after each. Resumable and idempotent. Use when asked to
     apply, execute, continue, or resume a plan.
-user-invocable: true
 ---
 
 # Applying a plan from its remaining steps

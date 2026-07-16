@@ -5,7 +5,6 @@ description: >-
     core vs contrib, wire the workspace Cargo.toml, inherit workspace metadata, add
     #![warn(missing_docs)], and wire the facade. Use when adding a new capability, foundation
     crate, or adapter to rskit, or when unsure whether new code belongs in core or contrib.
-user-invocable: true
 ---
 
 # Adding a crate to rskit

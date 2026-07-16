@@ -6,7 +6,6 @@ description: >-
     implementing the core trait, selected via config through an explicit typed registration, no
     import-time side effects, with the in-memory/local default kept in core. Use when integrating
     a provider like S3, Kafka, Redis, Qdrant, or an LLM/inference provider.
-user-invocable: true
 ---
 
 # Adding a backend adapter to rskit

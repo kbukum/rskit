@@ -6,7 +6,6 @@ description: >-
     across the whole change set (e.g. one typo comment → sweep every changed file for typos),
     validate, commit the fixes, and resolve the threads. Use when asked to go over, address, or
     act on PR reviews.
-user-invocable: true
 ---
 
 # Evaluating and acting on PR reviews by pattern

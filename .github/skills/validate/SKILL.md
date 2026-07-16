@@ -5,7 +5,6 @@ description: >-
     cargo — scoped to the crates that actually changed. Use whenever you need to validate an
     rskit change, run tests for a crate, reproduce CI locally, or check the blast radius of an
     edit before committing.
-user-invocable: true
 ---
 
 # Validating rskit changes with make/cargo

@@ -5,7 +5,6 @@ description: >-
     main by default (or an explicitly named base branch), and name it by the high-level change
     only, never by internal/local scaffolding like batch numbers, plan numbers, or task IDs. Use
     whenever you start new work, cut a branch, or are unsure what to name a branch.
-user-invocable: true
 ---
 
 # Creating a branch for rskit work

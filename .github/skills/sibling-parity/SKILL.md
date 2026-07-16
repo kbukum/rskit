@@ -5,7 +5,6 @@ description: >-
     parity by capability, keep docs/parity-matrix.md accurate, propagate capability and quality
     changes down to the sibling kits, and improve rskit generically (never consumer-specific). Use
     when touching anything with a cross-kit parity row or aligning a capability across kits.
-user-invocable: true
 ---
 
 # Keeping rskit the reference for its sibling kits
