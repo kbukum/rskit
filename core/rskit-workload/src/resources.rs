@@ -80,9 +80,11 @@ pub fn parse_cpu(s: &str) -> AppResult<i64> {
 
 /// Format a byte count as a human-readable memory string using binary suffixes.
 ///
-/// Picks the largest binary unit that divides the value exactly so the result
-/// round-trips through [`parse_memory`]; a value that is not an exact multiple
-/// of any unit (e.g. `1536`) is rendered as raw bytes rather than truncated.
+/// Picks the largest binary unit that divides the value exactly so a
+/// non-negative result round-trips through [`parse_memory`]; a value that is not
+/// an exact multiple of any unit (e.g. `1536`) is rendered as raw bytes rather
+/// than truncated. Negative inputs (which [`parse_memory`] rejects) render as
+/// raw signed integers.
 #[must_use]
 pub fn format_memory(bytes: i64) -> String {
     for (unit, suffix) in [(PIB, 'p'), (TIB, 't'), (GIB, 'g'), (MIB, 'm'), (KIB, 'k')] {
@@ -97,8 +99,9 @@ pub fn format_memory(bytes: i64) -> String {
 ///
 /// Whole cores and exact millicores use the compact `N`/`Nm` forms; any other
 /// value renders its exact nanocore remainder as fractional cores (up to 9
-/// decimals, trailing zeros trimmed) so the result round-trips through
-/// [`parse_cpu`] instead of collapsing to a truncated `0.000`.
+/// decimals, trailing zeros trimmed), preserving sign, so a non-negative result
+/// round-trips through [`parse_cpu`] instead of collapsing to a truncated
+/// `0.000`. [`parse_cpu`] rejects negative inputs.
 #[must_use]
 pub fn format_cpu(nanocores: i64) -> String {
     if nanocores % 1_000_000_000 == 0 {

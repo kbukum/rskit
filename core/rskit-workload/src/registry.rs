@@ -65,9 +65,12 @@ impl WorkloadRegistry {
     }
 
     /// Return `true` when a provider is registered under `name`.
+    ///
+    /// The name is trimmed before lookup, matching [`register`](Self::register)
+    /// and [`build`](Self::build).
     #[must_use]
     pub fn contains(&self, name: &str) -> bool {
-        self.factories.contains_key(name)
+        self.factories.contains_key(name.trim())
     }
 
     /// Number of registered providers.
@@ -144,6 +147,7 @@ mod tests {
 
         registry.register(" docker ", factory(&calls)).unwrap();
         assert!(registry.contains("docker"));
+        assert!(registry.contains(" docker "));
         assert_eq!(registry.len(), 1);
         assert_eq!(registry.names(), vec!["docker".to_string()]);
 
