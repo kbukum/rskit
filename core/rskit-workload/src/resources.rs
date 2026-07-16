@@ -94,6 +94,11 @@ pub fn format_memory(bytes: i64) -> String {
 }
 
 /// Format a nanocore count as a human-readable CPU string.
+///
+/// Whole cores and exact millicores use the compact `N`/`Nm` forms; any other
+/// value renders its exact nanocore remainder as fractional cores (up to 9
+/// decimals, trailing zeros trimmed) so the result round-trips through
+/// [`parse_cpu`] instead of collapsing to a truncated `0.000`.
 #[must_use]
 pub fn format_cpu(nanocores: i64) -> String {
     if nanocores % 1_000_000_000 == 0 {
@@ -102,9 +107,10 @@ pub fn format_cpu(nanocores: i64) -> String {
     if nanocores % 1_000_000 == 0 {
         return format!("{}m", nanocores / 1_000_000);
     }
-    #[allow(clippy::cast_precision_loss)] // human-readable formatting; precision loss is acceptable
-    let fractional = nanocores as f64 / NANOS_PER_CORE;
-    format!("{fractional:.3}")
+    let whole = nanocores / 1_000_000_000;
+    let frac = (nanocores % 1_000_000_000).unsigned_abs();
+    let decimals = format!("{frac:09}");
+    format!("{whole}.{}", decimals.trim_end_matches('0'))
 }
 
 #[cfg(test)]
@@ -213,7 +219,18 @@ mod tests {
 
     #[test]
     fn format_cpu_falls_back_to_fractional_cores() {
-        assert_eq!(format_cpu(1_500_000), "0.002");
+        assert_eq!(format_cpu(1_500_000), "0.0015");
+        assert_eq!(format_cpu(500), "0.0000005");
+        assert_eq!(format_cpu(1_000_500_000), "1.0005");
+    }
+
+    #[test]
+    fn format_cpu_preserves_sub_millicore_precision() {
+        // A value below the millicore grid must not collapse to "0" on round-trip.
+        for nanos in [500_i64, 1_500_000, 1_250_000_000, 750, 333_000_000] {
+            let formatted = format_cpu(nanos);
+            assert_eq!(parse_cpu(&formatted).unwrap(), nanos, "nanos {nanos}");
+        }
     }
 
     #[test]
