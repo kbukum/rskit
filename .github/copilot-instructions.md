@@ -21,7 +21,7 @@ Shared engineering baseline — apply to all work here:
 Standing, re-runnable development skills encoding this baseline live in
 [`.github/skills/`](skills/README.md) — the `review` skill runs the review passes in a
 fresh, clean-context agent after every change set and before releases; `create-branch`,
-`create-plan`, `apply-plan`, `apply-step`, `commit`, `create-pr`, `evaluate-reviews`, `validate`,
+`create-plan`, `apply-plan`, `apply-step`, `commit`, `create-pr`, `fix-reviews`, `validate`,
 `new-crate`, `new-backend`, `release`, and `sibling-parity` cover the rest of the workflow.
 Validation is driven through `make`/`cargo`, scoped to the changed crate(s).
 
