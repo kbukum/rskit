@@ -18,6 +18,13 @@ Shared engineering baseline — apply to all work here:
 - **Supply chain:** pin CI actions by SHA; scan dependencies (vulnerabilities + licenses); sign release artifacts; attach SBOM and provenance.
 - **Currency:** use current idioms and standards, not folklore — verify the dependency is maintained, the stdlib doesn't already cover it, and no open CVE applies.
 
+Standing, re-runnable development skills encoding this baseline live in
+[`.github/skills/`](skills/README.md) — the `review` skill runs the review passes in a
+fresh, clean-context agent after every change set and before releases; `create-branch`,
+`create-plan`, `apply-plan`, `apply-step`, `commit`, `create-pr`, `evaluate-reviews`, `validate`,
+`new-crate`, `new-backend`, `release`, and `sibling-parity` cover the rest of the workflow.
+Validation is driven through `make`/`cargo`, scoped to the changed crate(s).
+
 ## Build, Test, and Lint
 
 Requires: Rust 1.91+ (declared by workspace `rust-version`; development toolchain pinned via `rust-toolchain.toml`).
