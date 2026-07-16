@@ -18,9 +18,11 @@ use crate::registry::WorkloadRegistry;
 
 /// A lifecycle-managed workload component.
 ///
-/// On start it builds the configured backend from the injected registry; on stop
-/// it releases the manager. When [`WorkloadConfig::enabled`] is `false` the
-/// component is a healthy no-op and never touches the registry.
+/// On start it builds the configured backend from the injected registry and
+/// probes it with a health check so an unreachable backend fails startup rather
+/// than reporting healthy; on stop it releases the manager. When
+/// [`WorkloadConfig::enabled`] is `false` the component is a healthy no-op and
+/// never touches the registry.
 pub struct WorkloadComponent {
     config: WorkloadConfig,
     providers: WorkloadRegistry,
@@ -71,6 +73,7 @@ impl Component for WorkloadComponent {
         }
 
         let manager = self.providers.build(&config).await?;
+        manager.health_check().await?;
         info!(provider = %config.provider, "workload manager initialized");
         *self.manager.lock() = Some(manager);
         Ok(())
@@ -96,7 +99,7 @@ impl Component for WorkloadComponent {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::{FailingFactory, FakeFactory};
+    use crate::test_support::{FailingFactory, FakeFactory, UnhealthyFactory};
     use rskit_errors::ErrorCode;
 
     fn enabled_registry(
@@ -149,6 +152,15 @@ mod tests {
         let component = WorkloadComponent::with_registry(config, registry);
         let err = component.start().await.unwrap_err();
         assert_eq!(err.code(), ErrorCode::Internal);
+        assert!(component.manager().is_none());
+    }
+
+    #[tokio::test]
+    async fn start_fails_when_backend_health_check_fails() {
+        let (config, registry) = enabled_registry(Arc::new(UnhealthyFactory));
+        let component = WorkloadComponent::with_registry(config, registry);
+        let err = component.start().await.unwrap_err();
+        assert_eq!(err.code(), ErrorCode::ServiceUnavailable);
         assert!(component.manager().is_none());
     }
 

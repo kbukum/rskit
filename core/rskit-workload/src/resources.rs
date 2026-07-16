@@ -41,7 +41,7 @@ pub fn parse_memory(s: &str) -> AppResult<i64> {
 /// # Errors
 ///
 /// Returns [`rskit_errors::ErrorCode::InvalidFormat`] when the string is empty,
-/// not a valid number, or negative.
+/// not a valid number, negative, or larger than [`i64::MAX`] nanocores.
 pub fn parse_cpu(s: &str) -> AppResult<i64> {
     let lower = s.trim().to_lowercase();
     if lower.is_empty() {
@@ -61,9 +61,18 @@ pub fn parse_cpu(s: &str) -> AppResult<i64> {
             "non-negative finite quantity",
         ));
     }
+    let nanocores = parsed * scale;
+    // `as i64` saturates silently, so reject out-of-range values before casting.
+    #[allow(clippy::cast_precision_loss)]
+    if nanocores >= i64::MAX as f64 {
+        return Err(AppError::invalid_format(
+            "cpu",
+            "quantity within i64 nanocore range",
+        ));
+    }
     #[allow(clippy::cast_possible_truncation)]
-    // validated finite, fractional nanocores are dropped by design
-    Ok((parsed * scale) as i64)
+    // validated finite and in range; fractional nanocores are dropped by design
+    Ok(nanocores as i64)
 }
 
 /// Format a byte count as a human-readable memory string using binary suffixes.
@@ -145,6 +154,14 @@ mod tests {
         );
         assert_eq!(
             parse_cpu("-1").unwrap_err().code(),
+            ErrorCode::InvalidFormat
+        );
+    }
+
+    #[test]
+    fn parse_cpu_rejects_out_of_range() {
+        assert_eq!(
+            parse_cpu("1e30").unwrap_err().code(),
             ErrorCode::InvalidFormat
         );
     }

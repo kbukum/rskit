@@ -184,3 +184,47 @@ impl ManagerFactory for FailingFactory {
         Err(AppError::new(ErrorCode::Internal, "backend unavailable"))
     }
 }
+
+/// A [`Manager`] that builds successfully but reports its backend unreachable.
+pub(crate) struct UnhealthyManager;
+
+#[async_trait]
+impl Manager for UnhealthyManager {
+    async fn deploy(&self, _request: DeployRequest) -> AppResult<DeployResult> {
+        Err(AppError::service_unavailable("workload"))
+    }
+    async fn stop(&self, _id: &str) -> AppResult<()> {
+        Err(AppError::service_unavailable("workload"))
+    }
+    async fn remove(&self, _id: &str) -> AppResult<()> {
+        Err(AppError::service_unavailable("workload"))
+    }
+    async fn restart(&self, _id: &str) -> AppResult<()> {
+        Err(AppError::service_unavailable("workload"))
+    }
+    async fn status(&self, _id: &str) -> AppResult<WorkloadStatus> {
+        Err(AppError::service_unavailable("workload"))
+    }
+    async fn wait(&self, _id: &str) -> AppResult<WaitResult> {
+        Err(AppError::service_unavailable("workload"))
+    }
+    async fn logs(&self, _id: &str, _options: LogOptions) -> AppResult<Vec<String>> {
+        Err(AppError::service_unavailable("workload"))
+    }
+    async fn list(&self, _filter: ListFilter) -> AppResult<Vec<WorkloadInfo>> {
+        Err(AppError::service_unavailable("workload"))
+    }
+    async fn health_check(&self) -> AppResult<()> {
+        Err(AppError::service_unavailable("workload"))
+    }
+}
+
+/// A [`ManagerFactory`] that yields an [`UnhealthyManager`].
+pub(crate) struct UnhealthyFactory;
+
+#[async_trait]
+impl ManagerFactory for UnhealthyFactory {
+    async fn create(&self, _config: &WorkloadConfig) -> AppResult<Arc<dyn Manager>> {
+        Ok(Arc::new(UnhealthyManager))
+    }
+}

@@ -8,7 +8,11 @@ use std::collections::HashMap;
 use rskit_errors::{AppError, AppResult};
 use serde::{Deserialize, Serialize};
 
-/// Default provider used when [`WorkloadConfig::provider`] is empty.
+/// Provider filled in by [`WorkloadConfig::default`] and
+/// [`WorkloadConfig::apply_defaults`] when [`WorkloadConfig::provider`] is empty.
+///
+/// [`WorkloadConfig::validate`] still rejects an empty provider, so call
+/// `apply_defaults` before validating configs that may omit it.
 pub const DEFAULT_PROVIDER: &str = "docker";
 
 /// Provider-agnostic workload configuration.
