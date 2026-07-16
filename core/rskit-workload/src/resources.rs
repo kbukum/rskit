@@ -107,10 +107,12 @@ pub fn format_cpu(nanocores: i64) -> String {
     if nanocores % 1_000_000 == 0 {
         return format!("{}m", nanocores / 1_000_000);
     }
-    let whole = nanocores / 1_000_000_000;
-    let frac = (nanocores % 1_000_000_000).unsigned_abs();
+    let sign = if nanocores.is_negative() { "-" } else { "" };
+    let magnitude = nanocores.unsigned_abs();
+    let whole = magnitude / 1_000_000_000;
+    let frac = magnitude % 1_000_000_000;
     let decimals = format!("{frac:09}");
-    format!("{whole}.{}", decimals.trim_end_matches('0'))
+    format!("{sign}{whole}.{}", decimals.trim_end_matches('0'))
 }
 
 #[cfg(test)]
@@ -222,6 +224,8 @@ mod tests {
         assert_eq!(format_cpu(1_500_000), "0.0015");
         assert_eq!(format_cpu(500), "0.0000005");
         assert_eq!(format_cpu(1_000_500_000), "1.0005");
+        // Sub-core negative values keep their sign.
+        assert_eq!(format_cpu(-500), "-0.0000005");
     }
 
     #[test]
