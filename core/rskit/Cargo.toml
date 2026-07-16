@@ -100,6 +100,7 @@ rskit-cli = { workspace = true, optional = true }
 rskit-git = { workspace = true, optional = true }
 rskit-dataset = { workspace = true, optional = true }
 rskit-bench = { workspace = true, optional = true }
+rskit-workload = { workspace = true, optional = true }
 rskit-vectorstore = { workspace = true, optional = true }
 rskit-vectorstore-qdrant = { workspace = true, optional = true }
 
@@ -170,6 +171,7 @@ cli-interactive = ["cli", "rskit-cli/interactive"]
 git           = ["dep:rskit-git"]
 dataset       = ["dep:rskit-dataset"]
 bench         = ["dep:rskit-bench"]
+workload      = ["dep:rskit-workload"]
 vectorstore   = ["dep:rskit-vectorstore"]
 vectorstore-qdrant = ["vectorstore", "dep:rskit-vectorstore-qdrant"]
 chain         = ["dep:rskit-chain"]
@@ -186,5 +188,5 @@ full          = [
     "inference", "inference-triton", "inference-vllm", "inference-tgi",
     "prompt", "skill", "tool", "agent", "mcp", "media-full", "storage", "storage-s3", "storage-gcs", "storage-supabase",
     "cli", "git", "dataset", "bench", "vectorstore", "vectorstore-qdrant", "chain", "process", "stateful",
-    "version", "schema", "hook",
+    "version", "schema", "hook", "workload",
 ]

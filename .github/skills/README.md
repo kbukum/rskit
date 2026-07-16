@@ -20,7 +20,7 @@ permanent engineering baseline (see [`../copilot-instructions.md`](../copilot-in
 | [`apply-step`](apply-step/SKILL.md) | Apply one plan step in context (README + prior steps), test-first against the baseline, then mark it done. |
 | [`commit`](commit/SKILL.md) | Commit staged work with one compact, developer-friendly Conventional-Commit message — no co-author trailer or plan/batch/tool narration. |
 | [`create-pr`](create-pr/SKILL.md) | Open a reviewer-friendly PR — high-level summary, honest template sections, bound to the baseline. |
-| [`evaluate-reviews`](evaluate-reviews/SKILL.md) | Act on PR review comments by pattern — fix every instance across the change set, then commit and resolve the threads. |
+| [`fix-reviews`](fix-reviews/SKILL.md) | Act on PR review comments by pattern — fix every instance across the change set, then commit and resolve the threads. |
 | [`validate`](validate/SKILL.md) | Build/test/lint/format-check/doc/deny a change through make/cargo, scoped to the affected crates. |
 | [`review`](review/SKILL.md) | Run the eight-pass engineering-baseline review over a diff, crate, or the tree. |
 | [`new-crate`](new-crate/SKILL.md) | Scaffold a new crate — core vs contrib placement, workspace Cargo.toml, `#![warn(missing_docs)]`, facade wiring. |

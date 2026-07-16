@@ -30,4 +30,4 @@ ai · llm · llm-common · llm-openai · llm-anthropic · llm-ollama · llm-gemi
 media · media-audio · media-ffmpeg · media-image
 
 ## ⚙️ Infra  (`make check-infra`)
-bench · cli · dataset · git · testutil · rskit
+bench · cli · dataset · git · testutil · workload · rskit

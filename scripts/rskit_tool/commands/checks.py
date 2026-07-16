@@ -229,13 +229,7 @@ def run_topology(_args: argparse.Namespace) -> int:
                     if not is_optional(dep):
                         errors.append(f"{rel}: heavy transport dependency {table_name}.{dep_name} must be optional")
 
-        if crate == "rskit":
-            for table_name, _ in dependency_entries(manifest, "rskit-workload"):
-                errors.append(f"{rel}: facade must not depend on removed {table_name}.rskit-workload")
-            if "workload" in features(manifest):
-                errors.append(f"{rel}: facade must not expose removed workload feature")
-
-    for removed in ("core/rskit-workload/Cargo.toml", "core/rskit-integration/Cargo.toml"):
+    for removed in ("core/rskit-integration/Cargo.toml",):
         if (ROOT / removed).exists():
             errors.append(f"{removed}: removed boundary crate still exists")
 

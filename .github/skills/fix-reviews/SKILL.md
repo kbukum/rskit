@@ -1,5 +1,5 @@
 ---
-name: evaluate-reviews
+name: fix-reviews
 description: >-
     Evaluate a pull request's review comments as signals of an underlying pattern, not one-off
     spot fixes — judge each comment against rskit's engineering baseline, then apply the pattern
@@ -8,7 +8,7 @@ description: >-
     act on PR reviews.
 ---
 
-# Evaluating and acting on PR reviews by pattern
+# Fixing PR reviews by pattern
 
 A review comment points at one spot, but it almost always describes a *class* of problem. The
 value of this skill is **generalization**: treat each comment as a probe into a pattern, fix every
