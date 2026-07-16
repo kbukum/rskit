@@ -80,17 +80,17 @@ pub fn parse_cpu(s: &str) -> AppResult<i64> {
 
 /// Format a byte count as a human-readable memory string using binary suffixes.
 ///
-/// Covers the same unit range [`parse_memory`] accepts, up to PiB.
+/// Picks the largest binary unit that divides the value exactly so the result
+/// round-trips through [`parse_memory`]; a value that is not an exact multiple
+/// of any unit (e.g. `1536`) is rendered as raw bytes rather than truncated.
 #[must_use]
 pub fn format_memory(bytes: i64) -> String {
-    match bytes {
-        b if b >= PIB => format!("{}p", b / PIB),
-        b if b >= TIB => format!("{}t", b / TIB),
-        b if b >= GIB => format!("{}g", b / GIB),
-        b if b >= MIB => format!("{}m", b / MIB),
-        b if b >= KIB => format!("{}k", b / KIB),
-        b => b.to_string(),
+    for (unit, suffix) in [(PIB, 'p'), (TIB, 't'), (GIB, 'g'), (MIB, 'm'), (KIB, 'k')] {
+        if bytes >= unit && bytes % unit == 0 {
+            return format!("{}{suffix}", bytes / unit);
+        }
     }
+    bytes.to_string()
 }
 
 /// Format a nanocore count as a human-readable CPU string.
@@ -182,11 +182,23 @@ mod tests {
         assert_eq!(format_memory(5 * TIB), "5t");
         assert_eq!(format_memory(6 * PIB), "6p");
         assert_eq!(format_memory(TIB), "1t");
+        // Non-multiples fall back to raw bytes rather than truncating.
+        assert_eq!(format_memory(1536), "1536");
+        assert_eq!(format_memory(GIB + MIB), "1025m");
     }
 
     #[test]
     fn memory_round_trips_through_format_and_parse() {
-        for bytes in [512, 2048, 3 * MIB, 4 * GIB, 5 * TIB, 6 * PIB] {
+        for bytes in [
+            512,
+            1536,
+            2048,
+            GIB + MIB,
+            3 * MIB,
+            4 * GIB,
+            5 * TIB,
+            6 * PIB,
+        ] {
             let formatted = format_memory(bytes);
             assert_eq!(parse_memory(&formatted).unwrap(), bytes, "bytes {bytes}");
         }
