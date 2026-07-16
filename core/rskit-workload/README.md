@@ -14,7 +14,8 @@ Rust. This crate owns the orchestration contract only — concrete backends
 ## Features
 
 - `Manager` trait: deploy / stop / remove / restart / status / wait / logs / list / health check
-- Optional capability traits: `ExecCapable`, `StatsCapable`, `LogStreamer`, `EventWatcher`
+- Optional capability traits: `ExecCapable`, `StatsCapable`, `LogStreamer`, `EventWatcher`,
+  `SystemInfoCapable`, `DiskUsageCapable`, `ImageInspector`, `ImageEventWatcher`
 - `WorkloadRegistry` — explicit, injected backend selection by provider name
 - `WorkloadComponent` — `rskit-component` lifecycle (start / stop / health)
 - `WorkloadState` / `RestartPolicy` enums and CPU/memory quantity helpers

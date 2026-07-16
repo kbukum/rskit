@@ -116,46 +116,7 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use super::*;
-    use crate::report::{DeployResult, WaitResult, WorkloadInfo, WorkloadStatus};
-    use crate::spec::{DeployRequest, ListFilter, LogOptions};
-    use crate::state::WorkloadState;
-
-    struct NoopManager;
-
-    #[async_trait]
-    impl Manager for NoopManager {
-        async fn deploy(&self, request: DeployRequest) -> AppResult<DeployResult> {
-            Ok(DeployResult {
-                id: request.name.clone(),
-                name: request.name,
-                state: WorkloadState::Created,
-            })
-        }
-        async fn stop(&self, _id: &str) -> AppResult<()> {
-            Ok(())
-        }
-        async fn remove(&self, _id: &str) -> AppResult<()> {
-            Ok(())
-        }
-        async fn restart(&self, _id: &str) -> AppResult<()> {
-            Ok(())
-        }
-        async fn status(&self, _id: &str) -> AppResult<WorkloadStatus> {
-            Ok(WorkloadStatus::default())
-        }
-        async fn wait(&self, _id: &str) -> AppResult<WaitResult> {
-            Ok(WaitResult::default())
-        }
-        async fn logs(&self, _id: &str, _options: LogOptions) -> AppResult<Vec<String>> {
-            Ok(Vec::new())
-        }
-        async fn list(&self, _filter: ListFilter) -> AppResult<Vec<WorkloadInfo>> {
-            Ok(Vec::new())
-        }
-        async fn health_check(&self) -> AppResult<()> {
-            Ok(())
-        }
-    }
+    use crate::test_support::FakeManager;
 
     struct CountingFactory {
         calls: Arc<AtomicUsize>,
@@ -165,7 +126,7 @@ mod tests {
     impl ManagerFactory for CountingFactory {
         async fn create(&self, _config: &WorkloadConfig) -> AppResult<Arc<dyn Manager>> {
             self.calls.fetch_add(1, Ordering::SeqCst);
-            Ok(Arc::new(NoopManager))
+            Ok(Arc::new(FakeManager))
         }
     }
 

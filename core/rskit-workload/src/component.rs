@@ -96,69 +96,12 @@ impl Component for WorkloadComponent {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::manager::Manager;
-    use crate::registry::ManagerFactory;
-    use crate::report::{DeployResult, WaitResult, WorkloadInfo, WorkloadStatus};
-    use crate::spec::{DeployRequest, ListFilter, LogOptions};
-    use crate::state::WorkloadState;
-    use rskit_errors::{AppError, ErrorCode};
+    use crate::test_support::{FailingFactory, FakeFactory};
+    use rskit_errors::ErrorCode;
 
-    struct NoopManager;
-
-    #[async_trait]
-    impl Manager for NoopManager {
-        async fn deploy(&self, request: DeployRequest) -> AppResult<DeployResult> {
-            Ok(DeployResult {
-                id: request.name.clone(),
-                name: request.name,
-                state: WorkloadState::Running,
-            })
-        }
-        async fn stop(&self, _id: &str) -> AppResult<()> {
-            Ok(())
-        }
-        async fn remove(&self, _id: &str) -> AppResult<()> {
-            Ok(())
-        }
-        async fn restart(&self, _id: &str) -> AppResult<()> {
-            Ok(())
-        }
-        async fn status(&self, _id: &str) -> AppResult<WorkloadStatus> {
-            Ok(WorkloadStatus::default())
-        }
-        async fn wait(&self, _id: &str) -> AppResult<WaitResult> {
-            Ok(WaitResult::default())
-        }
-        async fn logs(&self, _id: &str, _options: LogOptions) -> AppResult<Vec<String>> {
-            Ok(Vec::new())
-        }
-        async fn list(&self, _filter: ListFilter) -> AppResult<Vec<WorkloadInfo>> {
-            Ok(Vec::new())
-        }
-        async fn health_check(&self) -> AppResult<()> {
-            Ok(())
-        }
-    }
-
-    struct NoopFactory;
-
-    #[async_trait]
-    impl ManagerFactory for NoopFactory {
-        async fn create(&self, _config: &WorkloadConfig) -> AppResult<Arc<dyn Manager>> {
-            Ok(Arc::new(NoopManager))
-        }
-    }
-
-    struct FailingFactory;
-
-    #[async_trait]
-    impl ManagerFactory for FailingFactory {
-        async fn create(&self, _config: &WorkloadConfig) -> AppResult<Arc<dyn Manager>> {
-            Err(AppError::new(ErrorCode::Internal, "backend unavailable"))
-        }
-    }
-
-    fn enabled_registry(factory: Arc<dyn ManagerFactory>) -> (WorkloadConfig, WorkloadRegistry) {
+    fn enabled_registry(
+        factory: Arc<dyn crate::registry::ManagerFactory>,
+    ) -> (WorkloadConfig, WorkloadRegistry) {
         let mut registry = WorkloadRegistry::new();
         registry.register("docker", factory).unwrap();
         let config = WorkloadConfig {
@@ -181,7 +124,7 @@ mod tests {
 
     #[tokio::test]
     async fn enabled_component_builds_manager_and_releases_on_stop() {
-        let (config, registry) = enabled_registry(Arc::new(NoopFactory));
+        let (config, registry) = enabled_registry(Arc::new(FakeFactory));
         let component = WorkloadComponent::with_registry(config, registry);
 
         component.start().await.unwrap();
@@ -195,7 +138,7 @@ mod tests {
 
     #[tokio::test]
     async fn enabled_component_before_start_is_unhealthy() {
-        let (config, registry) = enabled_registry(Arc::new(NoopFactory));
+        let (config, registry) = enabled_registry(Arc::new(FakeFactory));
         let component = WorkloadComponent::with_registry(config, registry);
         assert!(!component.health().is_healthy());
     }

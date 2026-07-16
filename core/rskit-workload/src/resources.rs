@@ -1,15 +1,16 @@
 //! CPU and memory quantity parsing and formatting.
 //!
-//! Mirrors gokit's `workload` resource helpers: binary memory suffixes
-//! (`k`/`ki` … `t`/`ti`) and CPU expressed in cores or millicores, normalized
-//! to bytes and nanocores respectively.
+//! Mirrors gokit's `workload` resource helpers. Memory parsing is delegated to
+//! the canonical [`rskit_util::bytes`] parser (binary suffixes `k`/`ki` …
+//! `t`/`ti`); CPU is expressed in cores or millicores and normalized to
+//! nanocores. Formatting produces the compact single-letter representation the
+//! workload vocabulary uses (`512m`, `2g`).
 
 use rskit_errors::{AppError, AppResult};
 
 const KIB: i64 = 1024;
 const MIB: i64 = 1024 * 1024;
 const GIB: i64 = 1024 * 1024 * 1024;
-const TIB: i64 = 1024 * 1024 * 1024 * 1024;
 
 const NANOS_PER_CORE: f64 = 1e9;
 const NANOS_PER_MILLICORE: f64 = 1e6;
@@ -17,46 +18,19 @@ const NANOS_PER_MILLICORE: f64 = 1e6;
 /// Parse a human-readable memory string into bytes.
 ///
 /// Supported suffixes (case-insensitive): `k`/`ki` (KiB), `m`/`mi` (MiB),
-/// `g`/`gi` (GiB), `t`/`ti` (TiB). A bare number is treated as bytes.
+/// `g`/`gi` (GiB), `t`/`ti` (TiB), `p`/`pi` (PiB). A bare number is treated as
+/// bytes. All units are binary (1024-based).
 ///
 /// # Errors
 ///
 /// Returns [`rskit_errors::ErrorCode::InvalidFormat`] when the string is empty,
-/// not a valid integer, or negative.
+/// not a valid quantity, negative, or larger than [`i64::MAX`] bytes.
 pub fn parse_memory(s: &str) -> AppResult<i64> {
-    let lower = s.trim().to_lowercase();
-    if lower.is_empty() {
-        return Err(AppError::invalid_format("memory", "non-empty quantity"));
-    }
-
-    let (multiplier, digits) = split_memory_suffix(&lower);
-    let value: i64 = digits
-        .parse()
-        .map_err(|_| AppError::invalid_format("memory", "integer with optional size suffix"))?;
-    if value < 0 {
-        return Err(AppError::invalid_format("memory", "non-negative quantity"));
-    }
-    value
-        .checked_mul(multiplier)
-        .ok_or_else(|| AppError::invalid_format("memory", "quantity within i64 range"))
-}
-
-fn split_memory_suffix(s: &str) -> (i64, &str) {
-    for (suffix, multiplier) in [
-        ("ti", TIB),
-        ("gi", GIB),
-        ("mi", MIB),
-        ("ki", KIB),
-        ("t", TIB),
-        ("g", GIB),
-        ("m", MIB),
-        ("k", KIB),
-    ] {
-        if let Some(rest) = s.strip_suffix(suffix) {
-            return (multiplier, rest);
-        }
-    }
-    (1, s)
+    let bytes = rskit_util::bytes::parse_bytes(s).ok_or_else(|| {
+        AppError::invalid_format("memory", "quantity with optional binary suffix")
+    })?;
+    i64::try_from(bytes)
+        .map_err(|_| AppError::invalid_format("memory", "quantity within i64 range"))
 }
 
 /// Parse a human-readable CPU string into nanocores.
@@ -128,7 +102,7 @@ mod tests {
         assert_eq!(parse_memory("1k").unwrap(), 1024);
         assert_eq!(parse_memory("2Mi").unwrap(), 2 * MIB);
         assert_eq!(parse_memory("1g").unwrap(), GIB);
-        assert_eq!(parse_memory(" 1Ti ").unwrap(), TIB);
+        assert_eq!(parse_memory(" 1Ti ").unwrap(), 1024_i64.pow(4));
     }
 
     #[test]
@@ -188,6 +162,11 @@ mod tests {
         assert_eq!(format_cpu(1_000_000_000), "1");
         assert_eq!(format_cpu(500_000_000), "500m");
         assert_eq!(format_cpu(2_000_000), "2m");
+    }
+
+    #[test]
+    fn format_cpu_falls_back_to_fractional_cores() {
+        assert_eq!(format_cpu(1_500_000), "0.002");
     }
 
     #[test]

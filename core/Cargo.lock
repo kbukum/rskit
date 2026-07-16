@@ -6408,6 +6408,7 @@ dependencies = [
  "parking_lot",
  "rskit-component",
  "rskit-errors",
+ "rskit-util",
  "serde",
  "serde_json",
  "tokio",

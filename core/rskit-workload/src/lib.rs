@@ -47,16 +47,23 @@ pub mod spec;
 /// Workload runtime state and restart policy.
 pub mod state;
 
+#[cfg(test)]
+mod test_support;
+
 pub use component::WorkloadComponent;
 pub use config::WorkloadConfig;
-pub use manager::{EventWatcher, ExecCapable, LogStreamer, Manager, StatsCapable};
+pub use manager::{
+    DiskUsageCapable, EventWatcher, ExecCapable, ImageEventWatcher, ImageInspector, LogStreamer,
+    Manager, StatsCapable, SystemInfoCapable,
+};
 pub use registry::{ManagerFactory, WorkloadRegistry};
 pub use report::{
-    DeployResult, ExecResult, WaitResult, WorkloadEvent, WorkloadInfo, WorkloadStats,
-    WorkloadStatus,
+    DeployResult, DiskUsage, ExecResult, GpuInfo, ImageConfig, ImageDetail, ImageDiskEntry,
+    ImageEvent, SystemInfo, WaitResult, WorkloadEvent, WorkloadInfo, WorkloadStats, WorkloadStatus,
 };
 pub use resources::{format_cpu, format_memory, parse_cpu, parse_memory};
 pub use spec::{
-    DeployRequest, ListFilter, LogOptions, NetworkConfig, PortMapping, ResourceConfig, VolumeMount,
+    DeployRequest, ImageEventFilter, ListFilter, LogOptions, NetworkConfig, PortMapping,
+    ResourceConfig, VolumeMount,
 };
 pub use state::{RestartPolicy, WorkloadState};

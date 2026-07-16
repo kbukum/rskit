@@ -135,6 +135,13 @@ pub struct ListFilter {
     pub namespace: String,
 }
 
+/// Restricts which image events a [`crate::ImageEventWatcher`] returns.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ImageEventFilter {
+    /// Actions to match; empty means all actions.
+    pub actions: Vec<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -163,5 +170,6 @@ mod tests {
         assert!(NetworkConfig::default().dns.is_empty());
         assert!(ListFilter::default().state.is_none());
         assert_eq!(LogOptions::default().tail, 0);
+        assert!(ImageEventFilter::default().actions.is_empty());
     }
 }

@@ -42,6 +42,9 @@ pub fn format_bytes(bytes: u64) -> String {
 /// Parses human-readable sizes (e.g. `"5MB"`, `"10KB"`, `"2GB"`) into a raw byte count (`u64`).
 /// Case-insensitive, supports optional space, and treats unit-less values as bytes.
 ///
+/// All units are binary (1024-based). The two-letter (`kb`), single-letter (`k`), and
+/// binary-explicit (`ki`) spellings are accepted as aliases for the same power of 1024.
+///
 /// # Examples
 ///
 /// ```
@@ -49,6 +52,7 @@ pub fn format_bytes(bytes: u64) -> String {
 /// assert_eq!(parse_bytes("512"), Some(512));
 /// assert_eq!(parse_bytes("1 KB"), Some(1024));
 /// assert_eq!(parse_bytes("5mb"), Some(5242880));
+/// assert_eq!(parse_bytes("2Mi"), Some(2 * 1024 * 1024));
 /// ```
 pub fn parse_bytes(s: &str) -> Option<u64> {
     let s = s.trim().to_lowercase();
@@ -57,11 +61,11 @@ pub fn parse_bytes(s: &str) -> Option<u64> {
 
     let multiplier = match unit {
         "b" | "" => 1_u128,
-        "kb" | "k" => 1024_u128,
-        "mb" | "m" => 1024_u128.pow(2),
-        "gb" | "g" => 1024_u128.pow(3),
-        "tb" | "t" => 1024_u128.pow(4),
-        "pb" | "p" => 1024_u128.pow(5),
+        "kb" | "k" | "ki" => 1024_u128,
+        "mb" | "m" | "mi" => 1024_u128.pow(2),
+        "gb" | "g" | "gi" => 1024_u128.pow(3),
+        "tb" | "t" | "ti" => 1024_u128.pow(4),
+        "pb" | "p" | "pi" => 1024_u128.pow(5),
         _ => return None,
     };
 
@@ -89,6 +93,8 @@ mod tests {
         assert_eq!(parse_bytes("5mb"), Some(5_242_880));
         assert_eq!(parse_bytes("2gb"), Some(2_147_483_648));
         assert_eq!(parse_bytes("1.5 KB"), Some(1536));
+        assert_eq!(parse_bytes("2Mi"), Some(2 * 1024 * 1024));
+        assert_eq!(parse_bytes(" 1Ti "), Some(1024_u64.pow(4)));
         assert_eq!(parse_bytes("-1 KB"), None);
         assert_eq!(parse_bytes("18446744073709551616"), None);
         assert_eq!(parse_bytes("invalid"), None);

@@ -9,10 +9,10 @@ use futures::stream::BoxStream;
 use rskit_errors::AppResult;
 
 use crate::report::{
-    DeployResult, ExecResult, WaitResult, WorkloadEvent, WorkloadInfo, WorkloadStats,
-    WorkloadStatus,
+    DeployResult, DiskUsage, ExecResult, ImageDetail, ImageEvent, SystemInfo, WaitResult,
+    WorkloadEvent, WorkloadInfo, WorkloadStats, WorkloadStatus,
 };
-use crate::spec::{DeployRequest, ListFilter, LogOptions};
+use crate::spec::{DeployRequest, ImageEventFilter, ListFilter, LogOptions};
 
 /// Core workload lifecycle operations. All backends implement this trait.
 ///
@@ -84,100 +84,48 @@ pub trait EventWatcher: Send + Sync {
     ) -> AppResult<BoxStream<'static, AppResult<WorkloadEvent>>>;
 }
 
+/// Implemented by backends that report host-level system information.
+#[async_trait]
+pub trait SystemInfoCapable: Send + Sync {
+    /// Return host information for the backend runtime.
+    async fn system_info(&self) -> AppResult<SystemInfo>;
+}
+
+/// Implemented by backends that report runtime disk usage.
+#[async_trait]
+pub trait DiskUsageCapable: Send + Sync {
+    /// Return disk usage for the backend runtime, broken down by category.
+    async fn disk_usage(&self) -> AppResult<DiskUsage>;
+}
+
+/// Implemented by backends that can inspect image metadata.
+#[async_trait]
+pub trait ImageInspector: Send + Sync {
+    /// Return detailed metadata for the image identified by `reference`.
+    async fn image_inspect(&self, reference: &str) -> AppResult<ImageDetail>;
+}
+
+/// Implemented by backends that can watch image lifecycle events.
+#[async_trait]
+pub trait ImageEventWatcher: Send + Sync {
+    /// Stream image lifecycle events matching `filter`.
+    async fn watch_image_events(
+        &self,
+        filter: ImageEventFilter,
+    ) -> AppResult<BoxStream<'static, AppResult<ImageEvent>>>;
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
 
-    use chrono::Utc;
     use futures::StreamExt;
 
     use super::*;
-    use crate::state::WorkloadState;
-
-    struct FakeManager;
-
-    #[async_trait]
-    impl Manager for FakeManager {
-        async fn deploy(&self, request: DeployRequest) -> AppResult<DeployResult> {
-            Ok(DeployResult {
-                id: format!("{}-1", request.name),
-                name: request.name,
-                state: WorkloadState::Running,
-            })
-        }
-        async fn stop(&self, _id: &str) -> AppResult<()> {
-            Ok(())
-        }
-        async fn remove(&self, _id: &str) -> AppResult<()> {
-            Ok(())
-        }
-        async fn restart(&self, _id: &str) -> AppResult<()> {
-            Ok(())
-        }
-        async fn status(&self, id: &str) -> AppResult<WorkloadStatus> {
-            Ok(WorkloadStatus {
-                id: id.to_string(),
-                state: WorkloadState::Running,
-                running: true,
-                ..Default::default()
-            })
-        }
-        async fn wait(&self, _id: &str) -> AppResult<WaitResult> {
-            Ok(WaitResult::default())
-        }
-        async fn logs(&self, _id: &str, _options: LogOptions) -> AppResult<Vec<String>> {
-            Ok(vec!["line".to_string()])
-        }
-        async fn list(&self, _filter: ListFilter) -> AppResult<Vec<WorkloadInfo>> {
-            Ok(Vec::new())
-        }
-        async fn health_check(&self) -> AppResult<()> {
-            Ok(())
-        }
-    }
-
-    #[async_trait]
-    impl ExecCapable for FakeManager {
-        async fn exec(&self, _id: &str, _command: &[String]) -> AppResult<ExecResult> {
-            Ok(ExecResult {
-                exit_code: 0,
-                stdout: "ok".into(),
-                stderr: String::new(),
-            })
-        }
-    }
-
-    #[async_trait]
-    impl LogStreamer for FakeManager {
-        async fn stream_logs(
-            &self,
-            _id: &str,
-            _options: LogOptions,
-        ) -> AppResult<BoxStream<'static, AppResult<String>>> {
-            let lines = vec![Ok("a".to_string()), Ok("b".to_string())];
-            Ok(futures::stream::iter(lines).boxed())
-        }
-    }
-
-    #[async_trait]
-    impl EventWatcher for FakeManager {
-        async fn watch_events(
-            &self,
-            _filter: ListFilter,
-        ) -> AppResult<BoxStream<'static, AppResult<WorkloadEvent>>> {
-            let event = WorkloadEvent {
-                id: "1".into(),
-                name: "api".into(),
-                event: "start".into(),
-                timestamp: Utc::now(),
-                message: String::new(),
-            };
-            Ok(futures::stream::iter(vec![Ok(event)]).boxed())
-        }
-    }
+    use crate::test_support::FakeManager;
 
     #[tokio::test]
-    async fn manager_is_object_safe_and_drives_lifecycle() {
+    async fn manager_is_object_safe_and_drives_every_method() {
         let manager: Arc<dyn Manager> = Arc::new(FakeManager);
         let result = manager
             .deploy(DeployRequest::new("api", "nginx"))
@@ -186,6 +134,23 @@ mod tests {
         assert_eq!(result.id, "api-1");
         assert!(manager.status(&result.id).await.unwrap().running);
         assert!(manager.health_check().await.is_ok());
+        assert_eq!(
+            manager
+                .logs(&result.id, LogOptions::default())
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(manager.wait(&result.id).await.is_ok());
+        assert!(
+            manager
+                .list(ListFilter::default())
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        manager.restart(&result.id).await.unwrap();
         manager.stop(&result.id).await.unwrap();
         manager.remove(&result.id).await.unwrap();
     }
@@ -201,6 +166,9 @@ mod tests {
             0
         );
 
+        let stats: Arc<dyn StatsCapable> = Arc::new(FakeManager);
+        assert_eq!(stats.stats("id").await.unwrap().pids, 0);
+
         let streamer: Arc<dyn LogStreamer> = Arc::new(FakeManager);
         let lines: Vec<_> = streamer
             .stream_logs("id", LogOptions::default())
@@ -214,6 +182,30 @@ mod tests {
         let watcher: Arc<dyn EventWatcher> = Arc::new(FakeManager);
         let events: Vec<_> = watcher
             .watch_events(ListFilter::default())
+            .await
+            .unwrap()
+            .collect()
+            .await;
+        assert_eq!(events.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn optional_runtime_capabilities_are_usable_as_trait_objects() {
+        let sysinfo: Arc<dyn SystemInfoCapable> = Arc::new(FakeManager);
+        assert_eq!(sysinfo.system_info().await.unwrap().cpus, 8);
+
+        let disk: Arc<dyn DiskUsageCapable> = Arc::new(FakeManager);
+        assert_eq!(disk.disk_usage().await.unwrap().images_size, 1024);
+
+        let inspector: Arc<dyn ImageInspector> = Arc::new(FakeManager);
+        assert_eq!(
+            inspector.image_inspect("nginx:latest").await.unwrap().id,
+            "nginx:latest"
+        );
+
+        let img_watcher: Arc<dyn ImageEventWatcher> = Arc::new(FakeManager);
+        let events: Vec<_> = img_watcher
+            .watch_image_events(ImageEventFilter::default())
             .await
             .unwrap()
             .collect()

@@ -35,7 +35,7 @@ impl Default for WorkloadConfig {
 }
 
 impl WorkloadConfig {
-    /// Fill zero-valued fields with their defaults.
+    /// Fill an empty `provider` with the default.
     pub fn apply_defaults(&mut self) {
         if self.provider.trim().is_empty() {
             DEFAULT_PROVIDER.clone_into(&mut self.provider);

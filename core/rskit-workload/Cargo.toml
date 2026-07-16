@@ -33,6 +33,7 @@ futures      = { workspace = true }
 # Internal
 rskit-errors    = { workspace = true }
 rskit-component = { workspace = true }
+rskit-util      = { workspace = true }
 
 [dev-dependencies]
 tokio      = { workspace = true, features = ["full", "test-util"] }

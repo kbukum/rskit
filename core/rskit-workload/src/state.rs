@@ -118,6 +118,18 @@ mod tests {
     }
 
     #[test]
+    fn state_as_str_covers_every_variant() {
+        assert_eq!(WorkloadState::Created.as_str(), "created");
+        assert_eq!(WorkloadState::Running.as_str(), "running");
+        assert_eq!(WorkloadState::Stopped.as_str(), "stopped");
+        assert_eq!(WorkloadState::Completed.as_str(), "completed");
+        assert_eq!(WorkloadState::Error.as_str(), "error");
+        assert_eq!(WorkloadState::Restarting.as_str(), "restarting");
+        assert_eq!(WorkloadState::Unknown.as_str(), "unknown");
+        assert_eq!(WorkloadState::NotFound.as_str(), "not_found");
+    }
+
+    #[test]
     fn state_display_matches_as_str() {
         assert_eq!(WorkloadState::NotFound.to_string(), "not_found");
         assert_eq!(WorkloadState::Restarting.as_str(), "restarting");
@@ -132,6 +144,14 @@ mod tests {
     #[test]
     fn restart_policy_default_is_no() {
         assert_eq!(RestartPolicy::default(), RestartPolicy::No);
+    }
+
+    #[test]
+    fn restart_policy_as_str_covers_every_variant() {
+        assert_eq!(RestartPolicy::No.as_str(), "no");
+        assert_eq!(RestartPolicy::Always.as_str(), "always");
+        assert_eq!(RestartPolicy::OnFailure.as_str(), "on-failure");
+        assert_eq!(RestartPolicy::UnlessStopped.as_str(), "unless-stopped");
     }
 
     #[test]
