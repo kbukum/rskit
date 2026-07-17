@@ -30,6 +30,7 @@ futures-util = { workspace = true }
 rskit-errors = { workspace = true }
 rskit-schema = { workspace = true }
 rskit-stream = { workspace = true }
+rskit-util = { workspace = true }
 rskit-validation = { workspace = true }
 
 [features]

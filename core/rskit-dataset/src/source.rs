@@ -1,15 +1,18 @@
 //! Source trait — pull data from any origin.
 
-use crate::DataItem;
+use crate::{DataItem, DatasetItem};
 use rskit_errors::AppResult;
 use std::pin::Pin;
 use tokio_util::sync::CancellationToken;
 
-/// Boxed dataset stream emitted by a source.
-pub type BoxDataStream = Pin<Box<dyn futures::Stream<Item = AppResult<DataItem>> + Send + 'static>>;
+/// Boxed stream of items emitted by a source.
+pub type BoxItemStream<T> = Pin<Box<dyn futures::Stream<Item = AppResult<T>> + Send + 'static>>;
 
-/// Protocol for dataset sources.
-pub trait Source: Send + Sync {
+/// Boxed dataset stream of [`DataItem`] samples.
+pub type BoxDataStream = BoxItemStream<DataItem>;
+
+/// Protocol for dataset sources over any [`DatasetItem`] type.
+pub trait Source<T: DatasetItem>: Send + Sync {
     /// Stable source identifier used in manifests.
     fn name(&self) -> &str;
 
@@ -19,7 +22,7 @@ pub trait Source: Send + Sync {
     }
 
     /// Stream items from this source.
-    fn stream(self: Box<Self>, cancel: CancellationToken) -> BoxDataStream;
+    fn stream(self: Box<Self>, cancel: CancellationToken) -> BoxItemStream<T>;
 
     /// Stable cache key describing this source's configured inputs.
     fn cache_key(&self) -> serde_json::Value;
@@ -44,7 +47,7 @@ mod tests {
 
     struct DefaultResumeSource;
 
-    impl Source for DefaultResumeSource {
+    impl Source<DataItem> for DefaultResumeSource {
         fn name(&self) -> &str {
             "default"
         }
@@ -62,7 +65,7 @@ mod tests {
         }
     }
 
-    impl Source for StaticSource {
+    impl Source<DataItem> for StaticSource {
         fn name(&self) -> &str {
             &self.name
         }

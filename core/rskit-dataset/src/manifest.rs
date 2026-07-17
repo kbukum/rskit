@@ -96,19 +96,6 @@ impl Manifest {
         Ok(())
     }
 
-    /// Check if a source has usable cached data (completed or partial with items).
-    pub fn is_cached(&self, source_name: &str, config: &serde_json::Value) -> Option<&SourceStats> {
-        let entry = self.sources.get(source_name)?;
-        if &entry.config != config {
-            return None;
-        }
-        match entry.status.as_str() {
-            "done" => Some(&entry.stats),
-            "partial" if entry.stats.total > 0 => Some(&entry.stats),
-            _ => None,
-        }
-    }
-
     /// Check cache status with distinction between done (skip) and partial (resume).
     pub fn cache_status(
         &self,
@@ -229,18 +216,23 @@ mod tests {
             SourceStats {
                 total: 1000,
                 real: 500,
-                ai: 500,
-                fetched_offset: 1000,
+                ai: 400,
+                fetched_offset: 1200,
             },
         );
 
         manifest.save(dir.path()).unwrap();
         let loaded = Manifest::load(dir.path()).unwrap();
 
-        assert!(loaded.is_cached("hf:org/dataset", &config).is_some());
-        let stats = loaded.is_cached("hf:org/dataset", &config).unwrap();
-        assert_eq!(stats.total, 1000);
-        assert_eq!(stats.real, 500);
+        match loaded.cache_status("hf:org/dataset", &config, Some(1000)) {
+            CacheStatus::Done(stats) => {
+                assert_eq!(stats.total, 1000);
+                assert_eq!(stats.real, 500);
+                assert_eq!(stats.ai, 400);
+                assert_eq!(stats.fetched_offset, 1200);
+            }
+            other => panic!("expected Done, got {other:?}"),
+        }
     }
 
     #[test]
@@ -263,7 +255,10 @@ mod tests {
 
         let loaded = Manifest::load(dir.path()).unwrap();
         let config2 = serde_json::json!({"repo": "org/dataset", "max_items": 500});
-        assert!(loaded.is_cached("source", &config2).is_none());
+        assert!(matches!(
+            loaded.cache_status("source", &config2, Some(500)),
+            CacheStatus::NotCached
+        ));
     }
 
     #[test]
@@ -274,7 +269,7 @@ mod tests {
     }
 
     #[test]
-    fn test_manifest_partial_with_items_is_cached() {
+    fn test_manifest_partial_with_items_resumes() {
         let dir = TempDir::new().unwrap();
         let mut manifest = Manifest::default();
 
@@ -292,9 +287,10 @@ mod tests {
         manifest.save(dir.path()).unwrap();
 
         let loaded = Manifest::load(dir.path()).unwrap();
-        let stats = loaded.is_cached("hf:org/dataset", &config);
-        assert!(stats.is_some(), "partial with items should be cached");
-        assert_eq!(stats.unwrap().total, 500);
+        match loaded.cache_status("hf:org/dataset", &config, Some(1000)) {
+            CacheStatus::Partial(stats) => assert_eq!(stats.total, 500),
+            other => panic!("expected Partial, got {other:?}"),
+        }
     }
 
     #[test]
@@ -316,7 +312,10 @@ mod tests {
         manifest.save(dir.path()).unwrap();
 
         let loaded = Manifest::load(dir.path()).unwrap();
-        assert!(loaded.is_cached("source", &config).is_none());
+        assert!(matches!(
+            loaded.cache_status("source", &config, Some(100)),
+            CacheStatus::NotCached
+        ));
     }
 
     #[test]

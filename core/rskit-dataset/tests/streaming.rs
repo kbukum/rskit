@@ -17,7 +17,7 @@ struct VecSource {
     items: Vec<DataItem>,
 }
 
-impl Source for VecSource {
+impl Source<DataItem> for VecSource {
     fn name(&self) -> &str {
         "vec"
     }
@@ -38,7 +38,7 @@ impl Source for VecSource {
 #[derive(Clone)]
 struct ExtensionTransform;
 
-impl Transform for ExtensionTransform {
+impl Transform<DataItem, DataItem> for ExtensionTransform {
     fn name(&self) -> &str {
         "extension"
     }
