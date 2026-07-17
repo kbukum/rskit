@@ -36,6 +36,7 @@ make coverage-changed                     # coverage for changed crates
 | Doc | `make doc C=<crate>` | `-D warnings` |
 | Doctests | `make test-doc C=<crate>` | doctests only |
 | Deny | `make deny` | cargo-deny: licenses, advisories, sources |
+| Structure | `make structure` | declare-only aggregator guard (`lib.rs`/`mod.rs`) — advisory, not yet gating |
 
 ## Scoping selectors
 

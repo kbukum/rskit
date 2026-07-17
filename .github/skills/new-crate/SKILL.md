@@ -52,8 +52,11 @@ the workspace lints. Every crate carries crate-level docs and:
 Conventions from `.github/copilot-instructions.md`: typed, minimal public API (no broad `Any`);
 `#[must_use]` on `with_*` builders; `#[non_exhaustive]` on public enums that may grow; no
 `unwrap()`/`expect()` in library code; `AppError`/`AppResult` for errors; `parking_lot::Mutex` over
-`std::sync::Mutex`; no `unsafe` without a `// SAFETY:` comment. Organize by focused files (types,
-options, registry, adapter) — never pile unrelated logic into one large file.
+`std::sync::Mutex`; no `unsafe` without a `// SAFETY:` comment. Organize by focused, concern-named
+files (types, options, registry, adapter) from the start — `lib.rs`/`mod.rs` stay declare-only
+(submodule declarations + re-exports, no logic), never a monolithic starter file. Before adding a
+shared helper, check [`docs/CONCERN-OWNERS.md`](../../../docs/CONCERN-OWNERS.md) so the new crate
+does not re-own an existing concern.
 
 ## Step 4 — Wire the workspace and facade
 
@@ -85,7 +88,7 @@ make doc   C=rskit-<name>
 
 - [ ] Placement decided (core / contrib / examples) and justified by real deps
 - [ ] Dependency direction downward-only (`check-topology` clean); facade only re-exports
-- [ ] `#![warn(missing_docs)]` + crate docs; files split by concern
+- [ ] `#![warn(missing_docs)]` + crate docs; files split by concern; `lib.rs`/`mod.rs` declare-only
 - [ ] Public API typed/minimal, builders `#[must_use]`, growable enums `#[non_exhaustive]`
 - [ ] Added to the right workspace `Cargo.toml`; facade wired (feature-gated if an adapter)
 - [ ] Shared dep versions consistent (`check-workspace-deps-sync`)

@@ -1,7 +1,7 @@
 .PHONY: all setup build test test-nextest test-doc test-python test-affected coverage coverage-changed test-coverage test-coverage-html lint fmt fmt-check check check-fast check-facade-features \
        check-core check-patterns check-crosscutting check-composition check-transport check-auth check-data check-ai \
        check-media check-infra doc deny check-l7-edges check-workspace-deps-sync check-topology check-public-api release-readiness release-coverage \
-       publish-dry-run release-publish release-bump release-sbom depgraphs clean help ci ci-test ci-lint ci-fmt ensure-act
+       publish-dry-run release-publish release-bump release-sbom depgraphs clean help ci ci-test ci-lint ci-fmt ensure-act structure
 
 CORE_MANIFEST = core/Cargo.toml
 CONTRIB_MANIFEST = contrib/Cargo.toml
@@ -142,6 +142,11 @@ fmt-check:
 	@echo "==> Checking format..."
 	$(call run_fmt_target,-- --check)
 	@echo "✓ Format OK"
+
+## Declare-only aggregator guard (advisory — not yet wired into `check`; cleanup in progress)
+structure:
+	@echo "==> Checking declare-only aggregators (lib.rs / mod.rs)..."
+	@./scripts/check-structure.sh || echo "structure: offenders above are advisory (not gating yet)"
 
 ## Build documentation
 doc:

@@ -79,13 +79,16 @@ these load-bearing (not decorative):
   acyclic layering (lower crates never depend on higher); every crate carries
   `#![warn(missing_docs)]` and is wired into the workspace + facade.
 - **Canonical reuse.** Reuse or enhance the owning core crate / std before writing new code; never
-  duplicate a shared concern.
+  duplicate a shared concern. Consult
+  [`docs/CONCERN-OWNERS.md`](../../../docs/CONCERN-OWNERS.md) for the canonical owner (formats →
+  `rskit-codec`, helpers → `rskit-util`, paths → `rskit-fs`, …).
 - **Typed & minimal APIs.** No broad `Any`/`Box<dyn Any>` on public surfaces (documented opaque
   exceptions only); typed `AppError`/`AppResult` that preserve cause; timeouts + cancellation on
   remote calls.
 - **Root-cause, no shims.** Pre-stable: redesign cleanly and remove the old path; no compat
   shims or half-migrations.
-- **Readable files.** Split by concern into focused files — never pile into one file.
+- **Readable files.** Split by concern into focused files — never pile into one file. The
+  aggregator is declare-only: `lib.rs`/`mod.rs` declare submodules and re-export, no logic.
 - **Composition.** Injected registries/config; no import-time side effects, no mutable global
   registries; inject logger/tracer/policies.
 

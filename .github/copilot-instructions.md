@@ -7,7 +7,7 @@ Rust infrastructure toolkit providing foundational crates for service developmen
 Shared engineering baseline — apply to all work here:
 
 - **Phases:** discover → decide (Redesign / Align / Enhance / Drop / Leave) → implement completely → validate. Prefer root-cause redesign over symptom patches; no compatibility shims in pre-stable code.
-- **Layering & reuse:** explicit, acyclic dependency direction — lower layers never import higher. Reuse or enhance the canonical owner before writing new code; never duplicate shared concerns (errors, config, logging, auth, retries, observability, HTTP, registries).
+- **Layering & reuse:** explicit, acyclic dependency direction — lower layers never import higher. Reuse or enhance the canonical owner before writing new code; never duplicate shared concerns (errors, config, logging, auth, retries, observability, HTTP, registries). Consult [`docs/CONCERN-OWNERS.md`](../docs/CONCERN-OWNERS.md) for the canonical owner of each shared concern (formats → `rskit-codec`, helpers → `rskit-util`, paths → `rskit-fs`, …) before writing new code.
 - **APIs:** typed and minimal; no broad `Any` / `interface{}` / unchecked `unknown` in public surfaces; actionable typed errors that preserve cause.
 - **Errors & resilience:** no panics / unwrap or swallowed errors on runtime paths; no success-shaped fallbacks; timeout every remote call; bounded jittered retries for idempotent ops only; circuit-break and degrade gracefully.
 - **Concurrency:** every task has ownership, cancellation, timeout, and shutdown; bound queues / buffers / concurrency with documented backpressure; drain on shutdown.
@@ -58,6 +58,9 @@ When adding a new foundation crate: create it under `core/rskit-<name>/`, add it
 ## Code Style
 
 - `cargo fmt` (`rustfmt.toml`: edition 2024, max_width 100) + `cargo clippy` (`clippy.toml`: msrv 1.91)
+- `lib.rs`/`mod.rs` are **declare-only** (submodule declarations + re-exports; no logic or
+  private items) — split crate logic into concern-named modules. Checked (advisory) by
+  `scripts/check-structure.sh` (`make structure`).
 - `#![warn(missing_docs)]` on all crates
 - `#[must_use]` on all `with_*` builder methods
 - `#[non_exhaustive]` on public enums that may grow

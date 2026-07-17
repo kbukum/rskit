@@ -23,6 +23,7 @@ Dependency direction is explicit and acyclic; lower layers never import higher. 
 - **New core crate wiring.** Created under `core/rskit-<name>/`, added to `core/Cargo.toml`, inherits workspace package metadata, carries `#![warn(missing_docs)]`, and is wired into the `rskit` facade as appropriate. Missing any of these is a should-fix.
 - **New adapter wiring.** Under `contrib/<domain>/<name>/`, covered by the matching `contrib/Cargo.toml` member pattern, and exposed through the facade **behind a feature flag** — not unconditionally.
 - **Facade discipline.** The `rskit` facade re-exports; it does not contain logic. Behavior added directly to the facade is misplaced (should-fix).
+- **Declare-only aggregator.** `lib.rs`/`mod.rs` carry only docs + submodule declarations + re-exports (crate-root `#![...]` attributes allowed). Logic or private items in an aggregator is a should-fix. Run `scripts/check-structure.sh` (`make structure`, advisory).
 - **No misplaced concerns.** Each cross-cutting concern stays in its canonical crate — e.g. gRPC status mapping belongs in `rskit-grpc`, not `rskit-errors`. (Reuse of those owners is pass `01`.)
 - **Workspace dep sync.** Shared dependency versions stay consistent across `core`/`contrib`; gated by `make check-workspace-deps-sync`.
 

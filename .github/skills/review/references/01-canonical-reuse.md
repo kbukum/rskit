@@ -12,7 +12,9 @@ Reuse or enhance the canonical owner before writing new code. Never duplicate a 
 
 ## How to check, not just glance
 
-For each candidate, name the concern, locate its owning core crate, and confirm the change calls the owner rather than rewriting it:
+The canonical owner set is documented in
+[`docs/CONCERN-OWNERS.md`](../../../../docs/CONCERN-OWNERS.md) — start there, then reconcile each
+low-level operation against it. For each candidate, name the concern, locate its owning core crate, and confirm the change calls the owner rather than rewriting it:
 
 - **Errors.** rskit `AppError` / `AppResult` with `ErrorCode`, cause preserved. A new error enum, a `thiserror` type, or a `String` error for a shared concern is duplication.
 - **Resilience.** Retries / timeouts / circuit-breaking come from `rskit-resilience`, not hand-rolled loops or ad-hoc `tokio::time::timeout` scattering.

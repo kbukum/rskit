@@ -41,8 +41,10 @@ does not override it, and the authority is [`../../copilot-instructions.md`](../
 - **Placement & layering.** Right crate (`core/rskit-<name>` vs `contrib/<domain>/<name>`); acyclic
   dependencies (lower crates never depend on higher); new crates carry `#![warn(missing_docs)]` and
   are wired into the workspace + facade.
-- **Canonical reuse.** Reuse or extend the owning core crate / std before adding new code; never
-  duplicate a shared concern (errors, config, logging, path safety, retries, HTTP, registries).
+- **Canonical reuse.** Before writing a new type/helper, open
+  [`docs/CONCERN-OWNERS.md`](../../../docs/CONCERN-OWNERS.md), find the concern's owner, and reuse
+  or extend it — never duplicate a shared concern (errors, config, logging, path safety, retries,
+  HTTP, registries). Put new logic in concern-named modules; never in `lib.rs`/`mod.rs`.
 - **Typed & minimal.** No broad `Any` on public surfaces (documented opaque exceptions only);
   typed `AppError`/`AppResult` preserving cause; timeout + cancellation on remote calls.
 - **Root-cause, no shims.** Redesign cleanly; remove the old path completely (pre-stable, no
@@ -56,7 +58,8 @@ report it rather than silently expanding.
 ## 3. Validate, review, and mark done
 
 - **Validate** the affected crates with the `validate` skill (make/cargo, scoped), green under
-  race/shuffle/parallel. A step does not land red.
+  race/shuffle/parallel. A step does not land red. Run `make structure` (declare-only aggregator
+  guard, advisory) and keep new aggregators clean.
 - **Review** the step's diff with the relevant `review` passes (structure/placement, canonical
   reuse, principles, security, quality, tests, docs, comments) — ideally in a fresh agent.
 - Only when acceptance criteria are genuinely met, flip the step's progress signal so `apply-plan`
