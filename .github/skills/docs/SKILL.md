@@ -11,13 +11,13 @@ user-invocable: true
 
 # Reviewing and updating rskit's docs
 
-Documentation rots two ways: it drifts out of **standard** (hard-wrapped prose, history narration, dead links) and it drifts out of **currency** (commands, crate lists, facade wiring, and examples that no longer match the code). This skill sweeps both. rskit is shared foundation infrastructure and the reference kit gokit/pykit mirror, so a stale doc misleads every downstream consumer — the bar is high. Run it over the whole `docs/` tree, a single file, or the docs touched by a change set.
+Documentation can fail two ways: it can fall out of **standard** (hard-wrapped prose, history narration, dead links) and it can become **out of date** (commands, crate lists, facade wiring, and examples that no longer match the code). This skill checks both. rskit is shared foundation infrastructure and the reference kit gokit/pykit mirror, so a stale doc misleads every downstream consumer — the standard is high. Run it over the whole `docs/` tree, a single file, or the docs touched by a change set.
 
 The authoritative doc policy lives in the Documentation section of [`.github/copilot-instructions.md`](../../copilot-instructions.md) (and `docs/DESIGN.md`). The baseline wins over any local habit.
 
-## The doc surface
+## Docs in scope
 
-Sweep every committed prose surface, not just `docs/`:
+Check every committed prose source, not just `docs/`:
 
 - `docs/**` — `DESIGN.md`, `PACKAGES.md`, `MODULE-INDEX.md`, `CONCERN-OWNERS.md`, `CONSUMER-CLASSES.md`, `EXAMPLES.md`, `VERSIONING*.md`, `RELEASING.md`, `security-model.md`, `parity-matrix.md`, the ADRs under `docs/adr/`, and dependency graphs under `docs/depgraphs/`.
 - `README.md`, `CHANGELOG.md`, `MAINTAINERS.md`, and any top-level `*.md`.
@@ -34,7 +34,7 @@ Never touch `tmp/` (gitignored scratch) and never add a committed doc that refer
 - **`tmp/` stays uncommitted.** No committed doc references a `tmp/` plan or handoff note.
 - **Frontmatter exemption.** YAML folded scalars (e.g. a skill's `description: >-`) already collapse to one logical line — leave their wrapping alone.
 
-## Pass 2 — Currency (whether it's still true)
+## Pass 2 — Up-to-date check (whether it's still true)
 
 Verify each doc against the code it describes; a doc that lies is worse than no doc:
 
@@ -47,7 +47,7 @@ Verify each doc against the code it describes; a doc that lies is worse than no 
 
 ## Apply, then validate
 
-Fix every instance of a pattern across the whole surface in scope (a single reflow fix implies sweeping every hard-wrapped file), not just the first hit. Then validate what you touched:
+Fix every instance of a pattern across the whole scope (a single reflow fix implies checking every hard-wrapped file), not just the first hit. Then validate what you touched:
 
 ```bash
 git grep -nP '.{101,}' -- 'docs/**/*.md' '*.md'   # candidates: over-long lines to inspect (code blocks/tables are fine)
@@ -58,4 +58,4 @@ Docs/prose-only changes need no build/test gate beyond `make doc` when rustdoc c
 
 ## Commit
 
-Use the [`commit`](../commit/SKILL.md) skill — one compact `docs:` Conventional-Commit line stating the change (e.g. `docs: reflow prose to one line per paragraph and sync PACKAGES.md`). No `Co-authored-by` trailer, no plan/batch/tool narration. Group by intent when it aids the reader (a standards reflow sweep and a currency update read as separate commits).
+Use the [`commit`](../commit/SKILL.md) skill — one compact `docs:` Conventional-Commit line stating the change (e.g. `docs: reflow prose to one line per paragraph and sync PACKAGES.md`). No `Co-authored-by` trailer, no plan/batch/tool narration. Group by intent when it aids the reader (a standards reflow sweep and an up-to-date content update read as separate commits).

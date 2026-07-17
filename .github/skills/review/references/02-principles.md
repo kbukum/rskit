@@ -1,6 +1,6 @@
 # Pass 02 — Principle conformance
 
-Each item here is a hard principle from [`.github/copilot-instructions.md`](../../../copilot-instructions.md), not a preference. This is where vibe coding drifts most — especially around resilience, concurrency, and composition.
+Each item here is a hard principle from [`.github/copilot-instructions.md`](../../../copilot-instructions.md), not a preference. This is where fast AI-assisted coding drifts most — especially around resilience, concurrency, and composition.
 
 > **Run in a separate, clean-context agent** — never inline in the session that wrote the code. An independent reviewer re-derives every judgment from the code and the principles instead of trusting prior reasoning. A plan/spec may be passed in as a scope checklist only; it never excuses a baseline violation.
 
@@ -31,9 +31,9 @@ No broad `Any` / `Box<dyn Any>` / unchecked escape hatches in public surfaces. A
 - **No import-time side effects, no mutable global registries**, no reaching for a global logger/tracer — inject them.
 - A `lazy_static!` / `static mut` registry or init-on-import is a **blocker**.
 
-## Currency
+## Keep code current
 
-Current idioms and standards, not folklore (also enforced in pass `01`). Flag patterns superseded by edition 2024 / msrv 1.91 idioms.
+Current idioms and standards, not old habits (also enforced in pass `01`). Flag patterns superseded by edition 2024 / msrv 1.91 idioms.
 
 ## AI / model features (only if the change touches them)
 

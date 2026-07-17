@@ -1,19 +1,19 @@
 # Rust Review — Plan, Clarify, Apply
 
-An alternative orchestrator to [`review-changes.md`](./review-changes.md) / [`review-project.md`](./review-project.md): instead of sequencing the 00–07 lenses, it fans the review out into **parallel subagent passes by Rust concern**, then plans and applies fixes. Use it when you want one driver to take a change from review through to merged fixes.
+An alternative orchestrator to [`review-changes.md`](./review-changes.md) / [`review-project.md`](./review-project.md): instead of sequencing the 00–07 passes, it splits the review into **parallel subagent passes by Rust concern**, then plans and applies fixes. Use it when you want one driver to take a change from review through to merged fixes.
 
 Run each pass as a **separate subagent with clean context**. The orchestrator (this file) sequences them and collects findings. Do not concatenate passes into one prompt.
 
 Mode is either **changes** (a diff: branch, commit range, `HEAD~1`) or **project** (whole tree, no diff). State the mode up front.
 
-> The focused 00–07 files hold the canonical, rskit-specific checks (placement, canonical-owner reuse, security/privacy, supply chain, comments). This file is the *driver*; when a pass below needs the full rskit rule for a lens, defer to the matching focused file rather than duplicating it.
+> The focused 00–07 files hold the canonical, rskit-specific checks (placement, canonical-owner reuse, security/privacy, supply chain, comments). This file is the *driver*; when a pass below needs the full rskit rule for a pass, defer to the matching focused file rather than duplicating it.
 
 ---
 
 ## Phase 1 — Scope
 
 1. `git status`, `git diff --stat`, `git diff` (changes mode) or `ls core contrib examples` + dependency map (project mode). Preserve uncommitted changes; integrate on top, never discard.
-2. List the surface to review: changed crates (changes mode) or chosen crates/workspace (project mode). Note cross-cutting touches: a core crate's public surface fans out to the `rskit` facade, the other core crates, every `contrib/` adapter, and downstream consumers (pykit/gokit parity, Toven). Also flag workspace-`Cargo.toml` edits, shared error types, public re-exports, `[lints]`.
+2. List the scope to review: changed crates (changes mode) or chosen crates/workspace (project mode). Note cross-cutting touches: a core crate's public surface affects the `rskit` facade, the other core crates, every `contrib/` adapter, and downstream consumers (pykit/gokit parity, Toven). Also flag workspace-`Cargo.toml` edits, shared error types, public re-exports, `[lints]`.
 3. Determine which passes apply via the triggers below. Skip non-applicable passes explicitly in the final report.
 
 The reviewer judges code as written, against the rules below and the baseline in [`.github/copilot-instructions.md`](../../../copilot-instructions.md). PR descriptions, commit messages, or plan/ADR docs are scope hints only — never justifications.
@@ -52,7 +52,7 @@ Skip if: scope is docs-only or config-only.
 
 Check: every spawned task has clear ownership, cancellation, timeout, and shutdown; no `MutexGuard`/`RefCell` borrow held across `.await`; no `block_on` under tokio; CPU/blocking work uses `spawn_blocking` so draining continues; structured concurrency via `JoinSet`/`rskit-worker` over loose `spawn`; channels/queues/buffers are **bounded with documented backpressure** and components **drain on shutdown** (an unbounded channel or a task with no cancellation path is a **blocker**); `parking_lot::Mutex`, never `std::sync::Mutex`; `Send`/`Sync` not added unsoundly. Time-dependent paths are testable via `tokio::time::pause()`/`advance()`, not wall-clock sleeps.
 
-Skip if: no async/threading surface in scope.
+Skip if: no async/threading code in scope.
 
 ### Pass D — Composition and lifecycle
 
@@ -60,7 +60,7 @@ Skip if: no async/threading surface in scope.
 
 Check: registries and policies are **explicitly injected**, selection is config-driven; **no import-time side effects, no mutable global registry**, no reaching for a global logger/tracer — inject them (a `lazy_static!`/`static mut`/`once_cell::sync::Lazy` registry or init-on-import is a **blocker**); `Component` lifecycle (`start`/`stop`/`health`) is honored with Registry ordering and drain-on-stop; typestate lifecycle ordering (`App<S, C>`) is not bypassed; the `rskit` facade only re-exports — behavior added directly to the facade is misplaced; adapters are exposed behind a feature flag, not unconditionally. *(Placement: pass [`00`](./00-structure-placement.md); composition principle: pass [`02`](./02-principles.md).)*
 
-Skip if: no composition/lifecycle/registry surface in scope.
+Skip if: no composition/lifecycle/registry code in scope.
 
 ### Pass E — Security, config, and boundaries
 
@@ -74,7 +74,7 @@ Skip if: no security-sensitive, config, env, path, or cross-platform code in sco
 
 **Scope:** `lib.rs`, `mod.rs`, `Cargo.toml`, anything changing `pub` items.
 
-Check: new `pub` items intentional (prefer `pub(crate)`; `make check-public-api` backs this); no broad `Any`/`Box<dyn Any>`/stringly-typed escape hatch on a public surface; `&str` over `String`, `&[T]` over `Vec<T>` in parameters where ownership isn't needed; `#[non_exhaustive]` on public enums/structs that may grow; `#[must_use]` on `with_*` builders and result-like types; new deps justified (maintained, no open CVE, not duplicating a core crate or std — currency, pass [`01`](./01-canonical-reuse.md)), `default-features = false` where applicable, shared versions consistent across workspaces (`make check-workspace-deps-sync`); `Cargo.lock` committed and consistent; `rust-version`/MSRV 1.91 declared; `edition = "2024"`; lints live in the `[lints]` table; a new crate is wired into `core/Cargo.toml` (or the `contrib/Cargo.toml` member pattern), inherits workspace metadata, and carries `#![warn(missing_docs)]`.
+Check: new `pub` items intentional (prefer `pub(crate)`; `make check-public-api` backs this); no broad `Any`/`Box<dyn Any>`/stringly-typed escape hatch on a public surface; `&str` over `String`, `&[T]` over `Vec<T>` in parameters where ownership isn't needed; `#[non_exhaustive]` on public enums/structs that may grow; `#[must_use]` on `with_*` builders and result-like types; new deps justified (maintained, no open CVE, not duplicating a core crate or std — current-code check, pass [`01`](./01-canonical-reuse.md)), `default-features = false` where applicable, shared versions consistent across workspaces (`make check-workspace-deps-sync`); `Cargo.lock` committed and consistent; `rust-version`/MSRV 1.91 declared; `edition = "2024"`; lints live in the `[lints]` table; a new crate is wired into `core/Cargo.toml` (or the `contrib/Cargo.toml` member pattern), inherits workspace metadata, and carries `#![warn(missing_docs)]`.
 
 Skip if: no public items, deps, or `Cargo.toml` in scope.
 
@@ -82,7 +82,7 @@ Skip if: no public items, deps, or `Cargo.toml` in scope.
 
 **Scope:** the in-scope code plus findings from A–F.
 
-Check: behavioral code in scope has tests covering it (changes mode: in the same diff; project mode: anywhere in the tree); bug fixes have a regression test that fails without the fix; failure paths asserted, not just happy paths; tests are **green under race / shuffle / parallel** and depend on no wall clock, network, or working directory unless intentional (time uses `tokio::time::pause()`/`advance()`; env-var tests hold the `parking_lot::Mutex<()>` guard; cwd tests use `rskit-testutil`'s `CurrentDirGuard`); fixtures over large inline config; an operation does what its name implies; `#![warn(missing_docs)]` satisfied with `//!` crate docs and `///` item docs (incl. `# Errors`/`# Panics`) that match implemented behavior; doc examples compile; comments describe the code as it is, not plans/history. *(Full rules: passes [`05`](./05-tests-tdd.md) and [`06`](./06-docs-supply-chain.md); comment hygiene: pass [`07`](./07-comments-rustdoc.md).)*
+Check: behavioral code in scope has tests covering it (changes mode: in the same diff; project mode: anywhere in the tree); bug fixes have a regression test that fails without the fix; failure paths asserted, not just happy paths; tests are **green under race / shuffle / parallel** and depend on no wall clock, network, or working directory unless intentional (time uses `tokio::time::pause()`/`advance()`; env-var tests hold the `parking_lot::Mutex<()>` guard; cwd tests use `rskit-testutil`'s `CurrentDirGuard`); fixtures over large inline config; an operation does what its name implies; `#![warn(missing_docs)]` satisfied with `//!` crate docs and `///` item docs (incl. `# Errors`/`# Panics`) that match implemented behavior; doc examples compile; comments describe the code as it is, not plans/history. *(Full rules: passes [`05`](./05-tests-tdd.md) and [`06`](./06-docs-supply-chain.md); comment rules: pass [`07`](./07-comments-rustdoc.md).)*
 
 Always runs.
 

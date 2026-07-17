@@ -27,6 +27,7 @@ permanent engineering baseline (see [`../copilot-instructions.md`](../copilot-in
 | [`new-backend`](new-backend/SKILL.md) | Add a storage/cache/messaging/inference/llm/media/vectorstore adapter as a typed-registration contrib crate. |
 | [`release`](release/SKILL.md) | Cut a release — semver bump, CHANGELOG, per-crate bumps, full gates, crates.io publish in dependency order. |
 | [`sibling-parity`](sibling-parity/SKILL.md) | Keep rskit the reference kit gokit/pykit mirror — propagate changes down, keep the parity matrix accurate. |
+| [`docs`](docs/SKILL.md) | Review/update docs to the repo's standards (one line per paragraph) and keep them up to date (commands, crate structure, examples match the code). |
 
 ## Conventions
 

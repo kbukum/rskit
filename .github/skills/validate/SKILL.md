@@ -3,7 +3,7 @@ name: validate
 description: >-
     Build, test, lint, format-check, doc, and vuln/license-scan rskit changes through make and
     cargo — scoped to the crates that actually changed. Use whenever you need to validate an
-    rskit change, run tests for a crate, reproduce CI locally, or check the blast radius of an
+    rskit change, run tests for a crate, reproduce CI locally, or check the affected area of an
     edit before committing.
 ---
 
@@ -17,7 +17,7 @@ placement/supply-chain guards. Prefer it over raw `cargo` for anything with a `m
 ## Golden rule: scope to what changed
 
 Never run the whole tree for a small change. Scope by crate (`C=`), by workspace
-(`W=core|contrib|examples`), or let the affected-set targets compute the blast radius.
+(`W=core|contrib|examples`), or let the affected-set targets compute the affected area.
 
 ```bash
 make test-affected                        # only crates the diff touches (+ reverse-deps)
@@ -73,7 +73,7 @@ Per-domain gates aggregate the above for a slice of the tree:
 
 ## Before you hand work off
 
-For a self-contained change, the minimum green bar is: `fmt-check`, `lint C=<crate>`,
+For a self-contained change, the minimum passing standard is: `fmt-check`, `lint C=<crate>`,
 `test C=<crate>` (green under race/shuffle/parallel), `doc C=<crate>` if docs changed, and
 `check-topology` on any structural change. Escalate to the full canonical gate only for audits or
 a release:
@@ -85,7 +85,7 @@ make release-readiness         # supply-chain + API sweep before a release
 ```
 
 Treat a green run as **necessary but not sufficient**: it does not catch unbounded concurrency,
-missing timeouts/cancellation, global-registry composition smells, duplicated owners, or
+missing timeouts/cancellation, global-registry composition issues, duplicated owners, or
 boundary-validation gaps. Those are on the reviewer.
 
 Per repo workflow, **create the branch and make edits only** — the maintainer commits and pushes.

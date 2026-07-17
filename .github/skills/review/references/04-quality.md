@@ -1,6 +1,6 @@
-# Pass 04 — Quality: simplicity, maintainability, freshness
+# Pass 04 — Quality: simplicity, maintainability, current patterns
 
-Catch debt and drift that compiles cleanly but should not land. None of this is style-bikeshedding — it maps to rskit's pre-stable, redesign-first stance.
+Catch debt and drift that compiles cleanly but should not land. None of this is style nitpicking — it maps to rskit's pre-stable, redesign-first stance.
 
 > **Run in a separate, clean-context agent** — never inline in the session that wrote the code. An independent reviewer re-derives every judgment from the code and the principles instead of trusting prior reasoning. A plan/spec may be passed in as a scope checklist only; it never excuses a baseline violation.
 

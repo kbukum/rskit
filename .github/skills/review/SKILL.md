@@ -13,8 +13,8 @@ description: >-
 rskit is shared foundation infrastructure and the **reference kit** that gokit and pykit mirror: a
 defect in a core crate propagates to the `rskit` facade, the other core crates, every `contrib/`
 adapter, and every downstream consumer (the parity kits, Toven, and services that depend on
-rskit). The bar is correspondingly high — security, concurrency, and composition each get their
-own lens. This skill encodes rskit's permanent review baseline as eight focused passes plus three
+rskit). The standard is correspondingly high — security, concurrency, and composition each get their
+own pass. This skill encodes rskit's permanent review baseline as eight focused passes plus three
 orchestrators.
 
 The authoritative baseline lives in
@@ -33,26 +33,26 @@ scope (diff or crate/domain) and this skill.
 ## Pick a driver
 
 - **Change set** → [`references/review-changes.md`](references/review-changes.md). A diff (branch,
-  commit range, or `HEAD~1`). Use after every change set, especially fast/"vibe-coded" work.
+  commit range, or `HEAD~1`). Use after every change set, especially fast AI-assisted work.
 - **Whole tree / crate** → [`references/review-project.md`](references/review-project.md). A
   standing audit independent of any diff. Use periodically, before a release, or when onboarding.
 - **Review → fix in one pass** → [`references/review-details.md`](references/review-details.md).
-  Fans the review into parallel subagent passes by Rust concern, then plans and applies fixes.
+  Splits the review into parallel subagent passes by Rust concern, then plans and applies fixes.
 
 ## The eight focused passes (run in order)
 
 Stop and reject as soon as a change fails pass `00` or `01` — misplaced or duplicated code makes
-every later pass moot. Each file also carries a "Project mode" note for tree-wide sweeps and can
-be run standalone when you need only one lens.
+every later pass unreliable. Each file also carries a "Project mode" note for tree-wide sweeps and can
+be run standalone when you need only one pass.
 
 1. [`references/00-structure-placement.md`](references/00-structure-placement.md) — crate
    placement (`core`/`contrib`/`examples`), acyclic layering, facade discipline, new-crate wiring.
 2. [`references/01-canonical-reuse.md`](references/01-canonical-reuse.md) — did the code
    reimplement a concern an existing core crate (or std) already owns? *(blocker class)*
 3. [`references/02-principles.md`](references/02-principles.md) — typed/minimal APIs, errors &
-   resilience, concurrency, composition, currency, AI/model features.
+   resilience, concurrency, composition, current idioms, AI/model features.
 4. [`references/03-security-privacy.md`](references/03-security-privacy.md) — trust-boundary
-   validation, injection safety, token hygiene, crypto, data minimization.
+   validation, injection safety, token handling, crypto, data minimization.
 5. [`references/04-quality.md`](references/04-quality.md) — root-cause over patches, dead code,
    maintainability, style gates.
 6. [`references/05-tests-tdd.md`](references/05-tests-tdd.md) — TDD, determinism under
@@ -96,5 +96,5 @@ make deny                            # cargo-deny + workspace-dep-sync + topolog
 ```
 
 Treat a green run as **necessary but not sufficient**: it does not catch unbounded concurrency,
-missing timeouts/cancellation, global-registry composition smells, duplicated owners, or
+missing timeouts/cancellation, global-registry composition issues, duplicated owners, or
 boundary-validation gaps. Those are on the reviewer.

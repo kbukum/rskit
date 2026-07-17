@@ -1,6 +1,6 @@
 # Review changes
 
-Standing, re-runnable review of a **change set** in this repository — a branch, a commit range, or `HEAD~1`. Use it after every change set, especially fast/"vibe-coded" work. It sequences the eight focused passes in [`references/`](./) over a diff and adds scope handling; the actual checks live in the focused files.
+Standing, re-runnable review of a **change set** in this repository — a branch, a commit range, or `HEAD~1`. Use it after every change set, especially fast AI-assisted work. It sequences the eight focused passes in [`references/`](./) over a diff and adds scope handling; the actual checks live in the focused files.
 
 ## Run this in a separate, clean-context agent
 
@@ -12,24 +12,24 @@ Standing, re-runnable review of a **change set** in this repository — a branch
 
 ## Pass 0 — Scope and context
 
-- Get the actual diff: `git diff <base>...HEAD --stat`, then per file. Review only what changed plus its blast radius; do not audit the whole repo (that is [`review-project.md`](./review-project.md)).
-- rskit is a foundation toolkit: a change to a core crate's public surface fans out to the facade, other core crates, `contrib/` adapters, and downstream repos (pykit/gokit parity, Toven). List that blast radius before reviewing.
+- Get the actual diff: `git diff <base>...HEAD --stat`, then per file. Review only what changed plus its affected area; do not audit the whole repo (that is [`review-project.md`](./review-project.md)).
+- rskit is a foundation toolkit: a change to a core crate's public surface affects the facade, other core crates, `contrib/` adapters, and downstream repos (pykit/gokit parity, Toven). List the affected area before reviewing.
 - Note whether the change belongs in `core/`, `contrib/`, or `examples/`, and whether it belongs in *this* crate at all.
 
 ## Passes — run in order, stop early on a structural failure
 
-Work the focused files top to bottom. **Stop and reject as soon as a change fails pass `00` or `01`** — misplaced or duplicated code makes every later pass moot.
+Work the focused files top to bottom. **Stop and reject as soon as a change fails pass `00` or `01`** — misplaced or duplicated code makes every later pass unreliable.
 
 1. [`00-structure-placement.md`](./00-structure-placement.md) — crate placement, acyclic layering, facade discipline, new-crate wiring.
 2. [`01-canonical-reuse.md`](./01-canonical-reuse.md) — reuse vs. reimplementation of a core-crate/std-owned concern. *(blocker class)*
-3. [`02-principles.md`](./02-principles.md) — typed/minimal APIs, errors & resilience, concurrency, composition, currency, AI features.
-4. [`03-security-privacy.md`](./03-security-privacy.md) — trust-boundary validation, injection safety, token hygiene, crypto, data minimization.
+3. [`02-principles.md`](./02-principles.md) — typed/minimal APIs, errors & resilience, concurrency, composition, current idioms, AI features.
+4. [`03-security-privacy.md`](./03-security-privacy.md) — trust-boundary validation, injection safety, token handling, crypto, data minimization.
 5. [`04-quality.md`](./04-quality.md) — root-cause over patches, dead code, maintainability, style gates.
 6. [`05-tests-tdd.md`](./05-tests-tdd.md) — TDD, race/shuffle/parallel determinism, time/env-var discipline, fixtures.
 7. [`06-docs-supply-chain.md`](./06-docs-supply-chain.md) — `///` docs, Conventional Commits, `Cargo.lock`, `cargo-deny`, SHA-pinned actions, SBOM.
 8. [`07-comments-rustdoc.md`](./07-comments-rustdoc.md) — comments and `///` docs explain the code as it is; rewrite or delete plan/history/process prose.
 
-Each focused file carries a "Changes mode" scope note — follow that mode here. When you only need one lens (e.g. just security, just TDD), run that focused file directly instead of this orchestrator.
+Each focused file carries a "Changes mode" scope note — follow that mode here. When you only need one pass (e.g. just security, just TDD), run that focused file directly instead of this orchestrator.
 
 ## Findings
 
@@ -65,4 +65,4 @@ make check-core                      # per-domain gate: check-core|check-data|ch
                                      #   check-ai|check-media|check-infra|check-crosscutting|check-composition|...
 ```
 
-Prefer `make test-affected` / `make coverage-changed` over the unscoped targets — they run only the crates impacted by the current changes. Step up to `W=<workspace>` or a per-domain `make check-<domain>` when the change spans a workspace/domain. Run the full `make check` / `make deny` only when the change is genuinely workspace-wide, or leave it to CI for sign-off. A green scoped run is necessary but **not sufficient** — it will not catch unbounded concurrency, missing timeouts/cancellation, global-registry composition smells, duplicated owners, or boundary-validation gaps. Those are on the reviewer.
+Prefer `make test-affected` / `make coverage-changed` over the unscoped targets — they run only the crates impacted by the current changes. Step up to `W=<workspace>` or a per-domain `make check-<domain>` when the change spans a workspace/domain. Run the full `make check` / `make deny` only when the change is genuinely workspace-wide, or leave it to CI for sign-off. A green scoped run is necessary but **not sufficient** — it will not catch unbounded concurrency, missing timeouts/cancellation, global-registry composition issues, duplicated owners, or boundary-validation gaps. Those are on the reviewer.

@@ -1,10 +1,10 @@
 # Pass 00 — Structure and placement
 
-Confirm every touched (or, in project mode, every existing) item lives in the right workspace, crate, and layer, and that the dependency direction stays acyclic. This is the first gate: misplaced code makes every later pass moot, so reject on failure here before going further.
+Confirm every touched (or, in project mode, every existing) item lives in the right workspace, crate, and layer, and that the dependency direction stays acyclic. This is the first gate: misplaced code makes every later pass unreliable, so reject on failure here before going further.
 
 > **Run in a separate, clean-context agent** — never inline in the session that wrote the code. An independent reviewer re-derives every judgment from the code and the principles instead of trusting prior reasoning. A plan/spec may be passed in as a scope checklist only; it never excuses a baseline violation.
 
-**Scope note.** *Changes mode:* check the crates the diff touches plus the blast radius — a change to a core crate's public surface fans out to the facade, other core crates, every `contrib/` adapter, and downstream consumers. *Project mode:* sweep each workspace's members and dependency edges; the placement and acyclicity rules below are invariants for the whole toolkit.
+**Scope note.** *Changes mode:* check the crates the diff touches plus the affected area — a change to a core crate's public surface affects the facade, other core crates, every `contrib/` adapter, and downstream consumers. *Project mode:* sweep each workspace's members and dependency edges; the placement and acyclicity rules below are invariants for the whole toolkit.
 
 ## The layering invariant
 

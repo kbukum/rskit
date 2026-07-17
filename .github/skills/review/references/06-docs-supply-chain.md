@@ -1,10 +1,10 @@
 # Pass 06 — Documentation and supply chain
 
-The last gate: public surfaces are documented, and the supply chain stays scanned, pinned, and clean. rskit ships to downstream consumers, so dependency and release hygiene are first-class.
+The last gate: public surfaces are documented, and the supply chain stays scanned, pinned, and clean. rskit ships to downstream consumers, so dependency and release handling are first-class.
 
 > **Run in a separate, clean-context agent** — never inline in the session that wrote the code. An independent reviewer re-derives every judgment from the code and the principles instead of trusting prior reasoning. A plan/spec may be passed in as a scope checklist only; it never excuses a baseline violation.
 
-**Scope note.** *Changes mode:* check the docs touched by (or owed by) the diff, plus any dependency or CI-action it introduces. *Project mode:* audit the whole CI/supply-chain surface (`cargo-deny` config, action pins, `Cargo.lock`, SBOM tooling) and confirm every crate carries crate-level docs.
+**Scope note.** *Changes mode:* check the docs touched by (or owed by) the diff, plus any dependency or CI-action it introduces. *Project mode:* audit the whole CI/supply-chain setup (`cargo-deny` config, action pins, `Cargo.lock`, SBOM tooling) and confirm every crate carries crate-level docs.
 
 ## Documentation
 
@@ -16,7 +16,7 @@ The last gate: public surfaces are documented, and the supply chain stays scanne
 
 - **`Cargo.lock` committed.** And updated with any dependency change, consistent with the manifests (`make check-workspace-deps-sync` for shared-version drift).
 - **Dependencies scanned.** Vulnerabilities *and* licenses — `cargo-deny` clean (`make deny`, which also runs the L7-edge, workspace-dep-sync, topology, and public-API checks).
-- **New dependency justified.** Maintained, no open CVE, not duplicating a core crate or std (ties back to pass `01` currency). Reinventing a std facility or re-pulling a concern an owner already covers is a should-fix.
+- **New dependency justified.** Maintained, no open CVE, not duplicating a core crate or std (ties back to pass `01` current-code check). Reinventing a std facility or re-pulling a concern an owner already covers is a should-fix.
 - **CI actions pinned by SHA.** Any new or changed GitHub Actions step is pinned to a commit SHA, not a floating tag.
 - **Release artifacts.** When the change touches release tooling: artifacts signed, SBOM/provenance attached (`make release-sbom`, `make release-readiness`).
 

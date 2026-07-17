@@ -16,7 +16,7 @@ Shared engineering baseline — apply to all work here:
 - **Tests:** behavioral and deterministic; race / shuffle / parallel green; cover failure paths; fixtures over embedded config; regression-test every fix.
 - **AI / model features:** treat model output and retrieved context as untrusted; enforce structured outputs; least-privilege tool calls with a human gate on destructive actions; version prompts / models and gate changes on evals.
 - **Supply chain:** pin CI actions by SHA; scan dependencies (vulnerabilities + licenses); sign release artifacts; attach SBOM and provenance.
-- **Currency:** use current idioms and standards, not folklore — verify the dependency is maintained, the stdlib doesn't already cover it, and no open CVE applies.
+- **Keep code current:** use current idioms and standards, not old habits — verify the dependency is maintained, the stdlib doesn't already cover it, and no open CVE applies.
 
 Standing, re-runnable development skills encoding this baseline live in
 [`.github/skills/`](skills/README.md) — the `review` skill runs the review passes in a
