@@ -6,46 +6,12 @@ mod adapter;
 mod config;
 mod embedding;
 
-pub(crate) const PROVIDER_ID: &str = "openai";
-
 #[cfg(test)]
 mod fixture_tests;
+#[cfg(test)]
+mod tests;
 
+pub(crate) use adapter::PROVIDER_ID;
 pub use adapter::register;
 pub use config::Config;
-pub use embedding::EmbeddingProvider;
-
-/// Build an OpenAI-compatible embedding provider from adapter configuration.
-pub fn embedding_provider(config: &Config) -> rskit_errors::AppResult<EmbeddingProvider> {
-    embedding::EmbeddingProvider::new(config)
-}
-
-/// Build an OpenAI-compatible embedding provider with a resilience policy.
-pub fn embedding_provider_with_policy(
-    config: &Config,
-    policy: rskit_resilience::Policy,
-) -> rskit_errors::AppResult<EmbeddingProvider> {
-    Ok(embedding::EmbeddingProvider::new(config)?.with_policy(policy))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn config() -> Config {
-        Config {
-            api_key: rskit_util::SecretString::new("sk-test"),
-            base_url: "https://api.openai.com/v1".into(),
-            model: "gpt-4o".into(),
-            embedding_model: "text-embedding-3-small".into(),
-            embedding_dimensions: Some(1536),
-        }
-    }
-
-    #[test]
-    fn embedding_provider_builders_construct_providers() {
-        let cfg = config();
-        embedding_provider(&cfg).unwrap();
-        embedding_provider_with_policy(&cfg, rskit_resilience::Policy::default()).unwrap();
-    }
-}
+pub use embedding::{EmbeddingProvider, embedding_provider, embedding_provider_with_policy};

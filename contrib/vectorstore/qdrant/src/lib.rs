@@ -4,15 +4,9 @@
 
 mod config;
 mod conversion;
+mod registration;
 mod store;
 mod url;
 
-use rskit_errors::AppResult;
-use rskit_vectorstore::VectorStoreRegistry;
-
 pub use config::Config;
-
-/// Explicitly register a configured Qdrant backend.
-pub fn register(registry: &mut VectorStoreRegistry, config: Config) -> AppResult<()> {
-    store::register_qdrant(registry, config)
-}
+pub use registration::register;

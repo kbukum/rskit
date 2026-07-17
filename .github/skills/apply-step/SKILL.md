@@ -59,7 +59,7 @@ report it rather than silently expanding.
 
 - **Validate** the affected crates with the `validate` skill (make/cargo, scoped), green under
   race/shuffle/parallel. A step does not land red. Run `make structure` (declare-only aggregator
-  guard, advisory) and keep new aggregators clean.
+  guard) and keep new aggregators clean.
 - **Review** the step's diff with the relevant `review` passes (structure/placement, canonical
   reuse, principles, security, quality, tests, docs, comments) — ideally in a fresh agent.
 - Only when acceptance criteria are genuinely met, flip the step's progress signal so `apply-plan`

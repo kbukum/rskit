@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// Path to the compiled `core-cli` binary, provided by Cargo at build time.
-fn binary() -> &'static str {
+const fn binary() -> &'static str {
     env!("CARGO_BIN_EXE_core-cli")
 }
 

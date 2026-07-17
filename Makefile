@@ -143,10 +143,11 @@ fmt-check:
 	$(call run_fmt_target,-- --check)
 	@echo "✓ Format OK"
 
-## Declare-only aggregator guard (advisory — not yet wired into `check`; cleanup in progress)
+## Declare-only aggregator guard (lib.rs / mod.rs)
 structure:
 	@echo "==> Checking declare-only aggregators (lib.rs / mod.rs)..."
-	@./scripts/check-structure.sh || echo "structure: offenders above are advisory (not gating yet)"
+	@./scripts/ensure-ast-grep.sh
+	@ast-grep scan
 
 ## Build documentation
 doc:
@@ -261,7 +262,7 @@ depgraphs:
 check-fast: fmt-check lint build
 
 ## Run all checks (fmt + lint + build + test)
-check: fmt-check lint build test-nextest test-doc test-python
+check: fmt-check structure lint build test-nextest test-doc test-python
 
 ## Check only core domain modules
 check-core:

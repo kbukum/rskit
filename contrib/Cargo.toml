@@ -122,6 +122,9 @@ must_use_candidate = "allow"
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 wildcard_imports = "allow"
+# Conflicts with the explicitly enabled `unreachable_pub`: crate-internal items in
+# private modules are kept `pub(crate)` to document intent, not widened to `pub`.
+redundant_pub_crate = "allow"
 
 [profile.release]
 lto = true

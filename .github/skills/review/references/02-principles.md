@@ -10,6 +10,9 @@ Each item here is a hard principle from [`.github/copilot-instructions.md`](../.
 
 No broad `Any` / `Box<dyn Any>` / unchecked escape hatches in public surfaces. Actionable typed errors that preserve cause. Minimal public surface — no incidental `pub` (the public-API guardrail `make check-public-api` backs this; an unintended surface change shows up there).
 
+- **Narrowest visibility that works.** Internal helpers stay private; items shared only within the crate are `pub(crate)`, items shared only with the parent module are `pub(super)`. Reserve `pub` for the intended external API and re-export it flatly from the crate root (`pub use`) rather than exposing deep module paths. `unreachable_pub` (enabled in every workspace's `[lints]`) flags `pub` that can't be reached externally — treat a hit as "should be `pub(crate)`".
+- **Struct fields are private by default.** A `pub` struct does not imply `pub` fields — keep fields private and expose a constructor (`new` / `with_*` builder) plus getters where consumers need read access. Public fields are justified only for plain data (`#[non_exhaustive]`) holders with no invariant to uphold; an incidental `pub` field that leaks a representation detail is a should-fix.
+
 ## Errors & resilience
 
 - No panics / `unwrap()` / `expect()` / swallowed errors on runtime paths (tests excepted).
@@ -46,6 +49,7 @@ rg 'dyn Any|Box<dyn Any>' core/ contrib/
 rg 'lazy_static|static mut|once_cell::sync::Lazy' core/ contrib/    # global-registry / import-time smell
 rg 'unbounded_channel|channel\(\)|spawn\(' core/ contrib/          # check for bounded + cancellation
 rg 'tokio::spawn' core/ contrib/                                    # each needs ownership/cancellation/shutdown
+rg 'pub [a-z_]+:' core/*/src contrib/*/*/src                       # pub struct fields — justify or make private
 ```
 
 Then `make check-public-api` for the minimal-surface guardrail.

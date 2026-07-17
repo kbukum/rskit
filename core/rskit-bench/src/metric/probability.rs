@@ -1,5 +1,6 @@
-use super::{Metric, MetricResult, ScoredSample};
+use super::Metric;
 use crate::curves::{CalibrationCurve, RocCurve};
+use crate::{MetricResult, ScoredSample};
 use std::collections::HashMap;
 
 fn empty_result(name: &str) -> MetricResult {

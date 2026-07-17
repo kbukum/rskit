@@ -21,9 +21,7 @@ pub mod registry;
 pub mod typed_store;
 
 /// Compatibility exports for the original in-memory adapter module path.
-pub mod memory {
-    pub use crate::adapters::memory::{MemoryCache, register_memory};
-}
+pub mod memory;
 
 #[cfg(feature = "fs")]
 pub use adapters::fs::{FileCache, FileCacheConfig, register_file_cache};

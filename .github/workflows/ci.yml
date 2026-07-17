@@ -350,6 +350,8 @@ jobs:
       - run: ./scripts/rskit_tool.py check topology
       - run: ./scripts/rskit_tool.py check l7-edges
       - run: ./scripts/rskit_tool.py check public-api
+      - name: Declare-only aggregator guard
+        run: make structure
 
   # ---------------------------------------------------------------------------
   # Supply-chain audit (cargo-deny + cargo-audit)

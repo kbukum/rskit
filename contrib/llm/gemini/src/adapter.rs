@@ -10,10 +10,11 @@ use rskit_httpclient::{Auth, HttpClient, HttpClientConfig, Request};
 use rskit_llm::Provider;
 use rskit_llm::types::{CompletionRequest, CompletionResponse};
 
-use super::PROVIDER_ID;
 use super::config::Config;
 use super::dialect::GeminiDialect;
 use rskit_llm_common::{ChatRunner, send_text};
+
+pub(crate) const PROVIDER_ID: &str = "gemini";
 
 const API_KEY_HEADER: &str = "x-goog-api-key";
 

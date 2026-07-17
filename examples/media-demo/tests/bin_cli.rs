@@ -1,3 +1,5 @@
+//! Binary CLI tests for the media demo examples.
+
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;

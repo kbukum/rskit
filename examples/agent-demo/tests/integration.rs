@@ -237,7 +237,7 @@ async fn tasks_emit_progress_events() -> AppResult<()> {
                     assert!(event.progress.is_some());
                 }
             }
-            _ = &mut timeout => break,
+            () = &mut timeout => break,
         }
         // Got enough progress events
         if progress_count >= 5 {

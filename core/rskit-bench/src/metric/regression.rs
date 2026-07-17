@@ -1,4 +1,5 @@
-use super::{Metric, MetricResult, ScoredSample};
+use super::Metric;
+use crate::{MetricResult, ScoredSample};
 use std::collections::HashMap;
 
 fn safe_divide(a: f64, b: f64) -> f64 {

@@ -7,7 +7,7 @@
 //! - [`mod@line`] — [`LineTerminal`]: plain cooked stdio (type a line, press Enter);
 //!   no raw mode, works over pipes, dependency-free. The always-available default.
 //! - `rich` — `RichTerminal`: a raw-mode terminal (behind the `interactive`
-//!   feature) that reads individual [`Key`]s so widgets can offer arrow-key
+//!   feature) that reads individual [`Key`](crate::prompt::Key)s so widgets can offer arrow-key
 //!   navigation with live-highlighted radio and checkbox lists.
 //! - [`mod@scripted`] — [`ScriptedTerminal`]: a deterministic test double that feeds
 //!   canned keys or lines and captures rendered output, so both the key-driven
@@ -16,192 +16,20 @@
 //! A terminal advertises whether it is key-driven via [`Capabilities`]; prompt
 //! kinds branch on that once and never touch a concrete terminal type.
 
+mod capabilities;
 pub mod line;
-pub mod scripted;
 
 #[cfg(feature = "interactive")]
 pub mod rich;
 
-use rskit_errors::AppResult;
+pub mod scripted;
+#[cfg(test)]
+mod tests;
+mod traits;
 
-use super::key::Key;
-
+pub use capabilities::Capabilities;
 pub use line::LineTerminal;
-pub use scripted::ScriptedTerminal;
-
 #[cfg(feature = "interactive")]
 pub use rich::RichTerminal;
-
-/// What interaction model a [`Terminal`] supports.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Capabilities {
-    keys: bool,
-}
-
-impl Default for Capabilities {
-    /// Line-driven, matching the default (cooked-stdio) terminal.
-    fn default() -> Self {
-        Self::line_driven()
-    }
-}
-
-impl Capabilities {
-    /// A key-driven terminal: reads individual [`Key`]s and can redraw frames,
-    /// enabling live arrow-key navigation.
-    #[must_use]
-    pub const fn key_driven() -> Self {
-        Self { keys: true }
-    }
-
-    /// A line-driven terminal: reads a whole line at a time (cooked stdio).
-    #[must_use]
-    pub const fn line_driven() -> Self {
-        Self { keys: false }
-    }
-
-    /// Whether the terminal reads individual keys (live widgets) rather than
-    /// whole lines.
-    #[must_use]
-    pub const fn is_key_driven(self) -> bool {
-        self.keys
-    }
-}
-
-/// The interactive medium a prompter reads from and renders to.
-///
-/// Implementations own the I/O device and, for key-driven terminals, the
-/// raw-mode lifecycle and cursor movement needed to redraw a live frame. The
-/// prompter builds already-styled strings; the terminal only writes them and,
-/// between frames, clears the lines it previously drew.
-pub trait Terminal {
-    /// The interaction model this terminal supports.
-    fn capabilities(&self) -> Capabilities;
-
-    /// Read one whole line (line-driven terminals).
-    ///
-    /// Returns `Ok(None)` at end of input so callers surface a typed "input
-    /// closed" error instead of hanging.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when the underlying reader fails, or when the terminal
-    /// is key-driven and does not support line reads.
-    fn read_line(&mut self) -> AppResult<Option<String>>;
-
-    /// Read one decoded keystroke (key-driven terminals).
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when the underlying device fails, at end of input, or
-    /// when the terminal is line-driven and does not support key reads.
-    fn read_key(&mut self) -> AppResult<Key>;
-
-    /// Write `text` verbatim (no trailing newline).
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when the underlying writer fails.
-    fn write(&mut self, text: &str) -> AppResult<()>;
-
-    /// Write `text` followed by a newline (a carriage return + line feed in raw
-    /// mode).
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when the underlying writer fails.
-    fn write_line(&mut self, text: &str) -> AppResult<()>;
-
-    /// Flush any buffered output.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when the underlying writer fails.
-    fn flush(&mut self) -> AppResult<()>;
-
-    /// Move the cursor up `count` lines and clear from there down, so the next
-    /// frame overwrites the previous one. A no-op for line-driven terminals.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when the underlying device fails.
-    fn clear_last_lines(&mut self, count: u16) -> AppResult<()>;
-
-    /// Enter interactive (raw) mode before a key-driven loop. A no-op for
-    /// line-driven terminals.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when raw mode cannot be entered.
-    fn begin_interactive(&mut self) -> AppResult<()>;
-
-    /// Leave interactive (raw) mode after a key-driven loop. A no-op for
-    /// line-driven terminals.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when raw mode cannot be restored.
-    fn end_interactive(&mut self) -> AppResult<()>;
-}
-
-impl Terminal for Box<dyn Terminal> {
-    fn capabilities(&self) -> Capabilities {
-        (**self).capabilities()
-    }
-
-    fn read_line(&mut self) -> AppResult<Option<String>> {
-        (**self).read_line()
-    }
-
-    fn read_key(&mut self) -> AppResult<Key> {
-        (**self).read_key()
-    }
-
-    fn write(&mut self, text: &str) -> AppResult<()> {
-        (**self).write(text)
-    }
-
-    fn write_line(&mut self, text: &str) -> AppResult<()> {
-        (**self).write_line(text)
-    }
-
-    fn flush(&mut self) -> AppResult<()> {
-        (**self).flush()
-    }
-
-    fn clear_last_lines(&mut self, count: u16) -> AppResult<()> {
-        (**self).clear_last_lines(count)
-    }
-
-    fn begin_interactive(&mut self) -> AppResult<()> {
-        (**self).begin_interactive()
-    }
-
-    fn end_interactive(&mut self) -> AppResult<()> {
-        (**self).end_interactive()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{Capabilities, Terminal};
-    use crate::prompt::key::Key;
-    use crate::prompt::terminal::ScriptedTerminal;
-
-    #[test]
-    fn boxed_terminal_forwards_every_method_to_the_inner_terminal() {
-        let scripted = ScriptedTerminal::key_driven()
-            .with_line("typed")
-            .with_key(Key::Enter);
-        let mut boxed: Box<dyn Terminal> = Box::new(scripted);
-
-        assert_eq!(boxed.capabilities(), Capabilities::key_driven());
-        boxed.write("prompt").expect("write");
-        boxed.write_line("line").expect("write_line");
-        boxed.flush().expect("flush");
-        boxed.begin_interactive().expect("begin");
-        boxed.clear_last_lines(1).expect("clear");
-        assert_eq!(boxed.read_line().expect("line"), Some("typed".to_string()));
-        assert_eq!(boxed.read_key().expect("key"), Key::Enter);
-        boxed.end_interactive().expect("end");
-    }
-}
+pub use scripted::ScriptedTerminal;
+pub use traits::Terminal;
