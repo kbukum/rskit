@@ -656,4 +656,214 @@ mod tests {
         let err = store.download("file.txt").await.unwrap_err();
         assert_eq!(err.code(), ErrorCode::ConnectionFailed);
     }
+
+    #[test]
+    fn config_applies_default_timeout_when_omitted() {
+        let config: Config = serde_json::from_value(serde_json::json!({
+            "endpoint": "https://example.supabase.co",
+            "bucket": "assets",
+            "prefix": null,
+            "token": "token",
+        }))
+        .unwrap();
+        assert_eq!(config.timeout, default_timeout());
+    }
+
+    #[test]
+    fn new_builds_store_with_default_client() {
+        let store = SupabaseStore::new(Config {
+            endpoint: "https://example.supabase.co".into(),
+            bucket: "assets".into(),
+            prefix: None,
+            token: SecretString::new("token"),
+            timeout: Duration::from_secs(5),
+        });
+        assert!(store.is_ok());
+    }
+
+    #[test]
+    fn new_rejects_invalid_endpoint_url() {
+        let result = SupabaseStore::new(Config {
+            endpoint: "not a url".into(),
+            bucket: "assets".into(),
+            prefix: None,
+            token: SecretString::new("token"),
+            timeout: Duration::from_secs(5),
+        });
+        assert_eq!(
+            result.err().map(|error| error.code()),
+            Some(ErrorCode::InvalidInput)
+        );
+    }
+
+    #[test]
+    fn validate_rejects_empty_bucket_and_zero_timeout() {
+        let base = Config {
+            endpoint: "https://example.supabase.co".into(),
+            bucket: "assets".into(),
+            prefix: None,
+            token: SecretString::new("token"),
+            timeout: Duration::from_secs(5),
+        };
+        assert_eq!(
+            validate_config(&Config {
+                bucket: "  ".into(),
+                ..base.clone()
+            })
+            .unwrap_err()
+            .code(),
+            ErrorCode::MissingField
+        );
+        assert_eq!(
+            validate_config(&Config {
+                timeout: Duration::ZERO,
+                ..base
+            })
+            .unwrap_err()
+            .code(),
+            ErrorCode::InvalidInput
+        );
+    }
+
+    #[tokio::test]
+    async fn upload_with_progress_delegates_to_upload() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/storage/v1/object/assets/uploads/file.txt"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+        let stored = test_store(&server)
+            .upload_with_progress(
+                &FileSource::from_bytes(bytes::Bytes::from_static(b"payload")),
+                "file.txt",
+                Some("text/plain"),
+                std::sync::Arc::new(|_| {}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(stored.size, 7);
+    }
+
+    #[tokio::test]
+    async fn upload_sends_metadata_header() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/storage/v1/object/assets/uploads/file.txt"))
+            .and(header("x-metadata", "{\"owner\":\"alice\"}"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+        let mut metadata = HashMap::new();
+        metadata.insert("owner".to_owned(), "alice".to_owned());
+        let stored = test_store(&server)
+            .upload(
+                &FileSource::from_bytes(bytes::Bytes::from_static(b"payload")),
+                "file.txt",
+                None,
+                Some(metadata),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            stored.metadata.get("owner").map(String::as_str),
+            Some("alice")
+        );
+    }
+
+    #[tokio::test]
+    async fn copy_and_rename_use_rest_api() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/storage/v1/object/copy"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/storage/v1/object/move"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+        Mock::given(method("HEAD"))
+            .and(path("/storage/v1/object/assets/uploads/dest.txt"))
+            .respond_with(ResponseTemplate::new(200).insert_header("content-length", "3"))
+            .mount(&server)
+            .await;
+        let store = test_store(&server);
+        assert_eq!(store.copy("src.txt", "dest.txt").await.unwrap().size, 3);
+        assert_eq!(store.rename("src.txt", "dest.txt").await.unwrap().size, 3);
+    }
+
+    #[tokio::test]
+    async fn list_decode_failure_maps_to_external_service() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/storage/v1/object/list/assets"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("not json"))
+            .mount(&server)
+            .await;
+        let err = test_store(&server).list("", None).await.unwrap_err();
+        assert_eq!(err.code(), ErrorCode::ExternalService);
+    }
+
+    #[tokio::test]
+    async fn presign_decode_failure_maps_to_external_service() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/storage/v1/object/sign/assets/uploads/file.txt"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("not json"))
+            .mount(&server)
+            .await;
+        let err = test_store(&server)
+            .presigned_url("file.txt", Duration::from_mins(1))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::ExternalService);
+    }
+
+    #[tokio::test]
+    async fn slow_response_maps_to_timeout_error() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/storage/v1/object/assets/uploads/file.txt"))
+            .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_millis(500)))
+            .mount(&server)
+            .await;
+        let store = SupabaseStore::new_with_client(
+            Config {
+                endpoint: server.uri(),
+                bucket: "assets".into(),
+                prefix: Some("uploads".into()),
+                token: SecretString::new("token"),
+                timeout: Duration::from_millis(20),
+            },
+            reqwest::Client::new(),
+        )
+        .unwrap();
+        let err = store.download("file.txt").await.unwrap_err();
+        assert_eq!(err.code(), ErrorCode::Timeout);
+    }
+
+    #[tokio::test]
+    async fn factory_builds_store_through_registry() {
+        let mut registry = StorageRegistry::new();
+        register(
+            &mut registry,
+            Config {
+                endpoint: "https://example.supabase.co".into(),
+                bucket: "assets".into(),
+                prefix: None,
+                token: SecretString::new("token"),
+                timeout: Duration::from_secs(5),
+            },
+        )
+        .unwrap();
+        let built = registry
+            .build(&StorageConfig {
+                backend: "supabase".into(),
+                ..StorageConfig::default()
+            })
+            .await;
+        assert!(built.is_ok());
+    }
 }

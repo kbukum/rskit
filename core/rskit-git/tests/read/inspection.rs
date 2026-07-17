@@ -1,4 +1,4 @@
-mod helpers;
+use crate::helpers;
 
 use std::time::{Duration, SystemTime};
 

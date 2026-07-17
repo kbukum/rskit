@@ -41,3 +41,12 @@ line = 80.0
 # real regressions (coverage is a signal, not a target).
 [packages.rskit-process]
 line = 85.0
+
+# rskit-messaging-rabbitmq is gated below the workspace default because its
+# remaining uncovered logic is live-broker lapin code (connect, create_channel,
+# basic_qos, queue_declare, and consumer task delivery) that cannot be exercised
+# without a real RabbitMQ broker, which the no-network unit-test policy forbids.
+# All broker-independent logic (config validation, routing, lazy factory wiring,
+# receive timeout, event decode) is covered.
+[packages.rskit-messaging-rabbitmq]
+line = 85.0

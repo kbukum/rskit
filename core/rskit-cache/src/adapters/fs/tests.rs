@@ -226,9 +226,108 @@ async fn cleanup_expired_returns_zero_when_cache_root_is_missing() {
     assert_eq!(cache.cleanup_expired(16).await.unwrap(), 0);
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn cleanup_expired_surfaces_delete_errors() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = temp_root();
+    let cache = FileCache::new(FileCacheConfig::new(&root));
+    let key = cache.prefixed_key("expired");
+    let path = cache.entry_path(&key);
+    write_entry(&path, &expired_entry(key, "expired")).await;
+
+    let shard = path.parent().unwrap().to_path_buf();
+    let original = tokio::fs::metadata(&shard).await.unwrap().permissions();
+    // A read-only shard directory lets the entry be read but blocks unlinking,
+    // exercising the non-`NotFound` delete failure path.
+    tokio::fs::set_permissions(&shard, std::fs::Permissions::from_mode(0o500))
+        .await
+        .unwrap();
+
+    let result = cache.cleanup_expired(16).await;
+
+    tokio::fs::set_permissions(&shard, original).await.unwrap();
+    let _ = tokio::fs::remove_dir_all(&root).await;
+
+    // A privileged user bypasses directory permissions, so the delete succeeds
+    // and the error path is unreachable; only assert it when the block held.
+    if let Err(error) = result {
+        assert_eq!(error.code(), ErrorCode::Internal);
+    }
+}
+
 #[test]
 fn positive_sub_millisecond_ttl_rounds_up() {
     assert_eq!(ttl_millis(Duration::from_nanos(1)).unwrap(), 1);
+}
+
+#[test]
+fn ttl_millis_rejects_zero_duration() {
+    assert_eq!(
+        ttl_millis(Duration::ZERO).unwrap_err().code(),
+        ErrorCode::InvalidInput
+    );
+}
+
+#[test]
+fn config_applies_default_entry_size_limit_when_omitted() {
+    let config: FileCacheConfig =
+        serde_json::from_value(serde_json::json!({ "root": "cache", "key_prefix": null })).unwrap();
+    assert_eq!(config.max_entry_bytes, DEFAULT_MAX_ENTRY_BYTES);
+}
+
+#[tokio::test]
+async fn get_reports_key_collision() {
+    let root = temp_root();
+    let cache = FileCache::new(FileCacheConfig::new(&root));
+    let key = cache.prefixed_key("key");
+    let path = cache.entry_path(&key);
+    write_entry(
+        &path,
+        &Entry {
+            key: "different".to_owned(),
+            value: "value".to_owned(),
+            expires_at_millis: None,
+        },
+    )
+    .await;
+
+    let err = cache
+        .get("key")
+        .await
+        .expect_err("colliding keys must be rejected");
+    assert_eq!(err.code(), ErrorCode::Conflict);
+    let _ = tokio::fs::remove_dir_all(root).await;
+}
+
+#[tokio::test]
+async fn get_rejects_corrupt_entry_file() {
+    let root = temp_root();
+    let cache = FileCache::new(FileCacheConfig::new(&root));
+    let key = cache.prefixed_key("key");
+    let path = cache.entry_path(&key);
+    rskit_fs::async_io::file::write_atomic_replace(&path, b"{not valid json", "rskit-cache-test")
+        .await
+        .unwrap();
+
+    let err = cache
+        .get("key")
+        .await
+        .expect_err("corrupt entry files must be rejected");
+    assert_eq!(err.code(), ErrorCode::Internal);
+    let _ = tokio::fs::remove_dir_all(root).await;
+}
+
+#[tokio::test]
+async fn cleanup_expired_returns_zero_when_limit_is_zero() {
+    let root = temp_root();
+    let cache = FileCache::new(FileCacheConfig::new(&root));
+    let key = cache.prefixed_key("expired");
+    write_entry(&cache.entry_path(&key), &expired_entry(key, "expired")).await;
+
+    assert_eq!(cache.cleanup_expired(0).await.unwrap(), 0);
+    let _ = tokio::fs::remove_dir_all(root).await;
 }
 
 #[test]

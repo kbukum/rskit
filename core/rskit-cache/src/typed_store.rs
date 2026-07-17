@@ -113,10 +113,11 @@ mod tests {
     }
 
     impl<'de> serde::Deserialize<'de> for FailingSerialize {
-        fn deserialize<D>(_deserializer: D) -> Result<Self, D::Error>
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
         where
             D: serde::Deserializer<'de>,
         {
+            serde::de::IgnoredAny::deserialize(deserializer)?;
             Ok(Self)
         }
     }
@@ -161,12 +162,25 @@ mod tests {
 
     #[tokio::test]
     async fn set_rejects_serialisation_errors() {
-        let typed = TypedStore::<FailingSerialize>::new(Arc::new(MemoryStore::default()), "bad");
+        let store = Arc::new(MemoryStore::default());
+        let typed = TypedStore::<FailingSerialize>::new(store.clone(), "bad");
 
         let err = typed
             .set("value", &FailingSerialize, None)
             .await
             .expect_err("serialisation errors should surface");
         assert_eq!(err.code(), ErrorCode::Internal);
+
+        store
+            .set("bad:value", "null", None)
+            .await
+            .expect("fixture write succeeds");
+        assert!(
+            typed
+                .get("value")
+                .await
+                .expect("deserialise should succeed")
+                .is_some()
+        );
     }
 }

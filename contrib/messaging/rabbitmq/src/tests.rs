@@ -531,6 +531,26 @@ async fn recv_returns_when_subscribed_tasks_have_closed() {
     assert!(result.is_err());
 }
 
+#[tokio::test(start_paused = true)]
+async fn recv_times_out_when_no_messages_arrive() {
+    let consumer = Arc::new(RabbitMqConsumer::new(Config::default()).unwrap());
+    let waiter = consumer.clone();
+    let handle = tokio::spawn(async move { waiter.recv(Duration::from_secs(5)).await });
+
+    tokio::time::advance(Duration::from_secs(6)).await;
+
+    let err = handle.await.unwrap().unwrap_err();
+    assert_eq!(err.code(), ErrorCode::Timeout);
+}
+
+#[test]
+fn rabbitmq_config_rejects_at_least_once_delivery() {
+    let mut config = Config::default();
+    config.base.delivery_guarantee = DeliveryGuarantee::AtLeastOnce;
+    let err = config.validate().unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidInput);
+}
+
 #[test]
 fn rabbitmq_factory_creates_lazy_producer_and_consumer() {
     let factory = RabbitMqFactory {

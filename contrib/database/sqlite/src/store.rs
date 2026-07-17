@@ -77,9 +77,7 @@ impl DatabaseClient for SqliteDatabase {
             .begin()
             .await
             .map_err(database_error("begin `SQLite` transaction"))?;
-        Ok(Box::new(SqliteTransaction {
-            tx: Mutex::new(Some(tx)),
-        }))
+        Ok(Box::new(SqliteTransaction { tx: Mutex::new(tx) }))
     }
 
     async fn ping(&self) -> AppResult<()> {
@@ -92,7 +90,7 @@ impl DatabaseClient for SqliteDatabase {
 }
 
 struct SqliteTransaction {
-    tx: Mutex<Option<sqlx::Transaction<'static, Sqlite>>>,
+    tx: Mutex<sqlx::Transaction<'static, Sqlite>>,
 }
 
 #[async_trait::async_trait]
@@ -100,35 +98,21 @@ impl DatabaseTransaction for SqliteTransaction {
     #[allow(clippy::significant_drop_tightening)]
     async fn execute(&self, query: DatabaseQuery) -> AppResult<DatabaseResult> {
         let mut guard = self.tx.lock().await;
-        let tx = guard.as_mut().ok_or_else(|| {
-            AppError::new(
-                ErrorCode::InvalidInput,
-                "`SQLite` transaction is already closed",
-            )
-        })?;
-        execute_on(&mut **tx, query).await
+        execute_on(&mut **guard, query).await
     }
 
     async fn commit(self: Box<Self>) -> AppResult<()> {
-        let tx = self.tx.into_inner().ok_or_else(|| {
-            AppError::new(
-                ErrorCode::InvalidInput,
-                "`SQLite` transaction is already closed",
-            )
-        })?;
-        tx.commit()
+        self.tx
+            .into_inner()
+            .commit()
             .await
             .map_err(database_error("commit `SQLite` transaction"))
     }
 
     async fn rollback(self: Box<Self>) -> AppResult<()> {
-        let tx = self.tx.into_inner().ok_or_else(|| {
-            AppError::new(
-                ErrorCode::InvalidInput,
-                "`SQLite` transaction is already closed",
-            )
-        })?;
-        tx.rollback()
+        self.tx
+            .into_inner()
+            .rollback()
             .await
             .map_err(database_error("rollback `SQLite` transaction"))
     }
@@ -361,6 +345,127 @@ mod tests {
             .code(),
             ErrorCode::InvalidInput
         );
+    }
+
+    #[test]
+    fn config_defaults_apply_when_fields_are_omitted() {
+        let config: Config =
+            serde_json::from_value(serde_json::json!({ "database_url": "sqlite::memory:" }))
+                .unwrap();
+        assert_eq!(config.max_connections, default_max_connections());
+        assert_eq!(config.min_connections, 0);
+        assert_eq!(config.connect_timeout, default_connect_timeout());
+    }
+
+    #[test]
+    fn config_validation_rejects_zero_connect_timeout() {
+        assert_eq!(
+            validate_config(&Config {
+                connect_timeout: Duration::ZERO,
+                ..config()
+            })
+            .unwrap_err()
+            .code(),
+            ErrorCode::InvalidInput
+        );
+    }
+
+    #[tokio::test]
+    async fn connect_rejects_invalid_database_url() {
+        let result = SqliteDatabase::connect(Config {
+            database_url: "sqlite://foo?mode=bogus".into(),
+            ..config()
+        })
+        .await;
+        assert_eq!(
+            result.err().map(|error| error.code()),
+            Some(ErrorCode::InvalidInput)
+        );
+    }
+
+    #[tokio::test]
+    async fn execute_rejects_empty_statement() {
+        let db = SqliteDatabase::connect(config()).await.unwrap();
+        assert_eq!(
+            db.execute(DatabaseQuery::new("   "))
+                .await
+                .unwrap_err()
+                .code(),
+            ErrorCode::InvalidInput
+        );
+    }
+
+    #[tokio::test]
+    async fn execute_maps_sqlx_errors_to_database_error() {
+        let db = SqliteDatabase::connect(config()).await.unwrap();
+        assert_eq!(
+            db.execute(DatabaseQuery::new("SELECT * FROM missing_table"))
+                .await
+                .unwrap_err()
+                .code(),
+            ErrorCode::DatabaseError
+        );
+    }
+
+    #[tokio::test]
+    async fn ping_acquires_a_connection() {
+        let db = SqliteDatabase::connect(config()).await.unwrap();
+        db.ping().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn binds_every_json_scalar_variant() {
+        let db = SqliteDatabase::connect(config()).await.unwrap();
+        db.execute(DatabaseQuery::new(
+            "CREATE TABLE values_table (flag INTEGER, signed INTEGER, real REAL, text TEXT)",
+        ))
+        .await
+        .unwrap();
+        let result = db
+            .execute(
+                DatabaseQuery::new(
+                    "INSERT INTO values_table (flag, signed, real, text) VALUES (?, ?, ?, ?)",
+                )
+                .with_parameter(true)
+                .with_parameter(-7_i64)
+                .with_parameter(1.5_f64)
+                .with_parameter("hello"),
+            )
+            .await
+            .unwrap();
+        assert_eq!(result.rows_affected, 1);
+    }
+
+    #[tokio::test]
+    async fn unsigned_integer_above_i64_max_is_rejected() {
+        let db = SqliteDatabase::connect(config()).await.unwrap();
+        db.execute(DatabaseQuery::new("CREATE TABLE big (value INTEGER)"))
+            .await
+            .unwrap();
+        assert_eq!(
+            db.execute(
+                DatabaseQuery::new("INSERT INTO big (value) VALUES (?)")
+                    .with_parameter(serde_json::json!(u64::MAX)),
+            )
+            .await
+            .unwrap_err()
+            .code(),
+            ErrorCode::InvalidInput
+        );
+    }
+
+    #[tokio::test]
+    async fn transaction_execute_maps_errors() {
+        let db = SqliteDatabase::connect(config()).await.unwrap();
+        let tx = db.begin().await.unwrap();
+        assert_eq!(
+            tx.execute(DatabaseQuery::new("   "))
+                .await
+                .unwrap_err()
+                .code(),
+            ErrorCode::InvalidInput
+        );
+        tx.rollback().await.unwrap();
     }
 
     #[tokio::test]

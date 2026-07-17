@@ -172,10 +172,10 @@ mod tests {
             ..CacheConfig::default()
         };
 
-        let Err(err) = registry.build(&config).await else {
-            panic!("empty selected stores must be rejected");
-        };
-        assert_eq!(err.code(), ErrorCode::InvalidInput);
+        assert_eq!(
+            registry.build(&config).await.err().map(|err| err.code()),
+            Some(ErrorCode::InvalidInput)
+        );
     }
 
     #[tokio::test]
@@ -186,10 +186,10 @@ mod tests {
             ..CacheConfig::default()
         };
 
-        let Err(err) = registry.build(&config).await else {
-            panic!("unregistered stores must be rejected");
-        };
-        assert_eq!(err.code(), ErrorCode::NotFound);
+        assert_eq!(
+            registry.build(&config).await.err().map(|err| err.code()),
+            Some(ErrorCode::NotFound)
+        );
     }
 
     #[tokio::test]
@@ -211,6 +211,15 @@ mod tests {
             .build(&config)
             .await
             .expect("registered store should build");
+        assert!(
+            store
+                .get("missing")
+                .await
+                .expect("get should succeed")
+                .is_none()
+        );
+        store.set("k", "v", None).await.expect("set should succeed");
+        assert!(!store.delete("k").await.expect("delete should succeed"));
         assert!(
             !store
                 .exists("missing")
