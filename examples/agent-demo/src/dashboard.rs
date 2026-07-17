@@ -7,6 +7,7 @@
 use crate::tasks::TaskOutput;
 use rskit::cli::{OutputKV, OutputTable};
 use rskit::util::time::format_duration;
+use std::fmt::Write as _;
 use std::time::{Duration, Instant};
 
 /// Tracks the state of a submitted task.
@@ -21,7 +22,7 @@ pub struct TrackedTask {
     pub result: Option<TaskOutput>,
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum TaskStatus {
     Running,
     Done,
@@ -58,8 +59,7 @@ pub fn log_complete(task: &TrackedTask) -> String {
     let summary = task
         .result
         .as_ref()
-        .map(|r| r.summary.as_str())
-        .unwrap_or("completed");
+        .map_or("completed", |r| r.summary.as_str());
     format!(
         "  \x1b[32m✓\x1b[0m \x1b[1mAgent #{}\x1b[0m ({})\n    \x1b[2m└ Completed\x1b[0m — {} \x1b[2m({})\x1b[0m",
         task.id, task.label, summary, dur
@@ -72,8 +72,7 @@ pub fn log_fail(task: &TrackedTask) -> String {
     let msg = task
         .result
         .as_ref()
-        .map(|r| r.summary.as_str())
-        .unwrap_or("unknown error");
+        .map_or("unknown error", |r| r.summary.as_str());
     format!(
         "  \x1b[31m✗\x1b[0m \x1b[1mAgent #{}\x1b[0m ({})\n    \x1b[2m└ Failed\x1b[0m — {} \x1b[2m({})\x1b[0m",
         task.id, task.label, msg, dur
@@ -95,7 +94,7 @@ pub fn log_result(task: &TrackedTask) -> String {
         TaskStatus::Done => log_complete(task),
         TaskStatus::Failed => log_fail(task),
         TaskStatus::Cancelled => log_cancel(task),
-        _ => String::new(),
+        TaskStatus::Running => String::new(),
     }
 }
 
@@ -203,26 +202,28 @@ pub fn render_status_table(tasks: &[TrackedTask]) -> String {
 /// Render details of a specific task.
 pub fn render_task_details(task: &TrackedTask) -> String {
     let mut out = String::new();
-    out.push_str(&format!(
+    let _ = write!(
+        out,
         "\n  \x1b[1mAgent #{}\x1b[0m — {}\n",
         task.id, task.label
-    ));
-    out.push_str(&format!("  Status: {}\n", task.status));
-    out.push_str(&format!(
-        "  Duration: {}\n",
+    );
+    let _ = writeln!(out, "  Status: {}", task.status);
+    let _ = writeln!(
+        out,
+        "  Duration: {}",
         format_duration(task.started.elapsed())
-    ));
+    );
     if !task.message.is_empty() {
-        out.push_str(&format!("  Current step: {}\n", task.message));
+        let _ = writeln!(out, "  Current step: {}", task.message);
     }
     if let Some(ref output) = task.result {
-        out.push_str(&format!("  Summary: {}\n", output.summary));
+        let _ = writeln!(out, "  Summary: {}", output.summary);
         if !output.details.is_empty() {
             let mut kv = OutputKV::new();
             for (k, v) in &output.details {
                 kv.add(k, v);
             }
-            out.push_str(&format!("{kv}"));
+            let _ = write!(out, "{kv}");
         }
     }
     out

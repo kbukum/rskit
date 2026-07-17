@@ -1,6 +1,6 @@
 # Pass 05 — TDD and tests
 
-rskit's bar: behavioral, deterministic, failure paths covered, **green under race / shuffle / parallel**, a regression test for every fix, tests in the **same** change. This pass catches the classic vibe-coding tell — tests written after the fact that only assert the happy path the author already saw working.
+rskit's standard: behavioral, deterministic, failure paths covered, **green under race / shuffle / parallel**, a regression test for every fix, tests in the **same** change. This pass catches the classic late-test signal — tests written after the fact that only assert the happy path the author already saw working.
 
 > **Run in a separate, clean-context agent** — never inline in the session that wrote the code. An independent reviewer re-derives every judgment from the code and the principles instead of trusting prior reasoning. A plan/spec may be passed in as a scope checklist only; it never excuses a baseline violation.
 
@@ -17,7 +17,7 @@ rskit's bar: behavioral, deterministic, failure paths covered, **green under rac
 - **Fixtures over embedded config.** No large inline config strings — move them to fixtures.
 - **No real network access.**
 
-## The vibe-coding tell
+## The late-test signal
 
 If tests were clearly written *after* the implementation and only assert the happy path the author already saw working — no failure-path assertions, no regression case, no concurrency coverage on a concurrent path — call it out. That is the signal that TDD was not followed, even when coverage numbers look fine.
 
@@ -27,7 +27,7 @@ If tests were clearly written *after* the implementation and only assert the hap
 # real sleeps and unguarded env-var mutation in tests
 rg 'std::thread::sleep|thread::sleep' core/ contrib/
 rg 'set_var|remove_var|env::set_var' core/*/tests core/*/src contrib/*/*/tests
-# bespoke mocks / inline config that should be fixtures
+# custom mocks / inline config that should be fixtures
 rg 'struct .*(Fake|Mock|Stub|Dummy)' core/ contrib/
 rg 'r#"|toml::from_str|json!\(' core/*/tests contrib/*/*/tests
 ```

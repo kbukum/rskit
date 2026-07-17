@@ -7,9 +7,10 @@ use rskit_httpclient::{Auth, HttpClient, HttpClientConfig, Request};
 use rskit_llm::Provider;
 use rskit_llm::types::{CompletionRequest, CompletionResponse};
 
-use super::PROVIDER_ID;
 use super::config::Config;
 use rskit_llm_common::{ChatRunner, OpenAiDialect, send_text};
+
+pub(crate) const PROVIDER_ID: &str = "openai";
 
 /// A [`Provider`] backed by the `OpenAI` chat-completions API.
 struct OpenAiAdapter {

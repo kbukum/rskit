@@ -1,6 +1,6 @@
 //! Shared helpers for media demo binaries.
 
-use std::fmt::Debug;
+use std::fmt::{Debug, Write as _};
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -112,9 +112,9 @@ impl AudioAnalysisArgs {
     }
 }
 
-/// Build FFmpeg demo configuration with local paths confined to the current directory.
+/// Build `FFmpeg` demo configuration with local paths confined to the current directory.
 ///
-/// The examples accept CLI file paths and pass them to FFmpeg subprocesses. Confining
+/// The examples accept `CLI` file paths and pass them to `FFmpeg` subprocesses. Confining
 /// those paths to the invocation directory demonstrates the secure-by-default adapter
 /// configuration while still keeping the examples easy to run from a media workspace.
 pub fn ffmpeg_config() -> AppResult<FfmpegConfig> {
@@ -192,34 +192,32 @@ pub async fn run_audio_analysis(args: &AudioAnalysisArgs) -> AppResult<String> {
 /// Format media probe metadata for terminal output.
 pub fn format_probe_output(path: &str, info: &MediaMetadata) -> String {
     let mut output = String::new();
-    output.push_str(&format!("=== Media Info: {path} ===\n"));
-    output.push_str(&format!("Duration : {:?}\n", info.duration));
-    output.push_str(&format!("Format   : {:?}\n", info.format));
-    output.push_str(&format!("Tracks   : {}\n", info.tracks.len()));
+    let _ = writeln!(output, "=== Media Info: {path} ===");
+    let _ = writeln!(output, "Duration : {:?}", info.duration);
+    let _ = writeln!(output, "Format   : {:?}", info.format);
+    let _ = writeln!(output, "Tracks   : {}", info.tracks.len());
 
     for track in &info.tracks {
-        output.push_str(&format!("  [{:?}] codec={:?}\n", track.kind, track.codec));
+        let _ = writeln!(output, "  [{:?}] codec={:?}", track.kind, track.codec);
         match track.kind {
             TrackKind::Video => {
                 if let Some(video) = &track.video {
-                    output.push_str(&format!(
-                        "    {}×{} @ {:?} fps, bit_depth={:?}\n",
+                    let _ = writeln!(
+                        output,
+                        "    {}×{} @ {:?} fps, bit_depth={:?}",
                         video.resolution.width,
                         video.resolution.height,
                         video.frame_rate,
                         video.bit_depth,
-                    ));
+                    );
                 }
             }
             TrackKind::Audio => {
                 if let Some(audio) = &track.audio {
-                    output.push_str(&format!(
-                        "    {:?}, {:?}\n",
-                        audio.sample_rate, audio.channels
-                    ));
+                    let _ = writeln!(output, "    {:?}, {:?}", audio.sample_rate, audio.channels);
                 }
             }
-            _ => {}
+            TrackKind::Subtitle | TrackKind::Data | TrackKind::Attachment => {}
         }
     }
 
@@ -243,58 +241,59 @@ pub fn format_audio_analysis_output(
     silences: &[SilenceInterval],
 ) -> String {
     let mut output = String::new();
-    output.push_str(&format!("=== WAV Info: {path} ===\n"));
+    let _ = writeln!(output, "=== WAV Info: {path} ===");
     if let Some(track) = metadata
         .audio_track()
         .and_then(|track| track.audio.as_ref())
     {
-        output.push_str(&format!(
-            "Channels     : {}\n",
-            track.channels.channel_count()
-        ));
-        output.push_str(&format!("Sample rate  : {} Hz\n", track.sample_rate.0));
+        let _ = writeln!(output, "Channels     : {}", track.channels.channel_count());
+        let _ = writeln!(output, "Sample rate  : {} Hz", track.sample_rate.0);
         if let Some(bit_depth) = track.bit_depth {
-            output.push_str(&format!("Bits/sample  : {bit_depth}\n"));
+            let _ = writeln!(output, "Bits/sample  : {bit_depth}");
         }
     }
     if let Some(duration) = metadata.duration {
-        output.push_str(&format!("Duration     : {:.2} s\n", duration.as_secs_f64()));
+        let _ = writeln!(output, "Duration     : {:.2} s", duration.as_secs_f64());
     }
     if let Some(bitrate) = metadata.bitrate {
-        output.push_str(&format!("Bitrate      : {bitrate} bps\n"));
+        let _ = writeln!(output, "Bitrate      : {bitrate} bps");
     }
 
     output.push_str("\n=== Loudness ===\n");
-    output.push_str(&format!(
-        "Peak    : {} dBFS\n",
+    let _ = writeln!(
+        output,
+        "Peak    : {} dBFS",
         metadata
             .tags
             .get("audio.peak_db")
             .map_or("unknown", String::as_str)
-    ));
-    output.push_str(&format!(
-        "RMS     : {} dBFS\n",
+    );
+    let _ = writeln!(
+        output,
+        "RMS     : {} dBFS",
         metadata
             .tags
             .get("audio.rms_db")
             .map_or("unknown", String::as_str)
-    ));
-    output.push_str(&format!(
-        "LUFS    : {}\n",
+    );
+    let _ = writeln!(
+        output,
+        "LUFS    : {}",
         metadata
             .tags
             .get("audio.lufs")
             .map_or("unknown", String::as_str)
-    ));
+    );
 
-    output.push_str(&format!("\n=== Silence regions ({}) ===\n", silences.len()));
+    let _ = writeln!(output, "\n=== Silence regions ({}) ===", silences.len());
     for (index, silence) in silences.iter().enumerate() {
-        output.push_str(&format!(
-            "  {index}: {:.2}s - {:.2}s ({:.2}s)\n",
+        let _ = writeln!(
+            output,
+            "  {index}: {:.2}s - {:.2}s ({:.2}s)",
             silence.start.as_seconds(),
             silence.end.as_seconds(),
             silence.duration.as_secs_f64()
-        ));
+        );
     }
 
     output
@@ -351,7 +350,7 @@ mod tests {
     #[test]
     fn thumbnail_args_invalid_timestamp_falls_back_to_default() {
         let args = ThumbnailArgs::parse(["in.mp4", "out.jpg", "later"]);
-        assert_eq!(args.timestamp_secs, 5.0);
+        assert!((args.timestamp_secs - 5.0).abs() < f64::EPSILON);
     }
 
     #[test]

@@ -25,7 +25,7 @@ Flag and fix every comment that documents the *process* rather than the *code*:
 - **Plan / roadmap / process artifacts.** References to plan ordinals or design-doc bookkeeping: "Decision N", "step N", "phase N"/"phases N–M" as plan numbering, "slice N", "the Nth seam", "review pass NN", "self-audit gap #N", "as landed in PR #…", ADR/design-doc filenames used as a back-reference (`0001-*.md`, `*-design.md`). Keep the underlying rationale as plain prose; drop the numbering and the back-reference. (Real domain phase/strategy/port *names* stay — it is the plan-ordinal bookkeeping that goes.)
 - **Drifting cross-references.** Numeric section refs ("principles §4", "see §3.2"), line numbers, or "see the doc above/below" that silently rot. Restate the actual rule or point at a stable, named anchor instead.
 - **Temporal / narrative phrasing.** "now", "new", "newly added", "recently changed", "as of this PR", "previously we…", "used to…", "for now", "temporary", "TODO from the old design". Either the statement is a durable fact (rephrase it as one) or it is process noise (delete it). A genuine, actionable `TODO`/`FIXME` stays only if it names what and why — ideally with a tracked issue link — otherwise remove it.
-- **Restating the code.** Comments that paraphrase the next line (`// increment i`), obvious getters/setters, or type signatures already visible. Delete them; they only add drift surface.
+- **Restating the code.** Comments that paraphrase the next line (`// increment i`), obvious getters/setters, or type signatures already visible. Delete them; they only add more text that can go stale.
 - **Commented-out code and dead prose.** Old implementations left in comments, scaffolding notes, "left here in case", debug breadcrumbs. Delete — version control is the history.
 - **Stale or contradicted comments.** Any comment the current code no longer matches. Correct it to the code, or remove it. A comment that disagrees with the code is a blocker — the reader can no longer trust either.
 - **Apology / chatter / attribution.** "hacky", "not sure why this works", "sorry", banner art, author names, dates, changelog lines inside source. Replace genuine uncertainty with a precise statement of the invariant, or remove.
@@ -34,7 +34,7 @@ Flag and fix every comment that documents the *process* rather than the *code*:
 
 This is a refactor pass, not just a report: **fix what you find** in the same change.
 
-1. Sweep the in-scope prose (use the starters below to surface the usual offenders, then read for the subtler cases — staleness and code-restating do not grep).
+1. Sweep the in-scope prose (use the starters below to find the usual offenders, then read for the subtler cases — staleness and code-restating cannot be found by grep alone).
 2. For each finding, decide: **rewrite** (the rationale is worth keeping — restate it as a durable, code-grounded statement) or **delete** (it is process noise, dead, or redundant).
 3. Preserve correct domain vocabulary and real rationale. When in doubt about an invariant the comment claims, verify it against the code before rewriting — never launder a wrong comment into a confident-sounding wrong comment.
 4. Keep prose style consistent with the crate: complete sentences, present tense, describing the code as it is. Markdown in docs stays one line per paragraph (no hard-wrapping); preserve code blocks, lists, and tables.
@@ -42,7 +42,7 @@ This is a refactor pass, not just a report: **fix what you find** in the same ch
 
 ## Detection starters
 
-These surface the mechanical offenders; the judgment calls (stale, redundant, narrative) still need a human/agent read.
+These reveal the mechanical offenders; the judgment calls (stale, redundant, narrative) still need a human/agent read.
 
 ```bash
 # plan/roadmap bookkeeping in source prose

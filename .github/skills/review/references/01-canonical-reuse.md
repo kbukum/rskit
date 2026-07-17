@@ -1,6 +1,6 @@
 # Pass 01 — Canonical-owner reuse
 
-rskit *is* the canonical toolkit, so the duplication risk is internal: **did the change reimplement something an existing core crate (or the standard library) already owns?** Vibe-coded code reaches for a fresh local helper instead of the owner — assume duplication until proven otherwise. Treat findings here as a blocker class.
+rskit *is* the canonical toolkit, so the duplication risk is internal: **did the change reimplement something an existing core crate (or the standard library) already owns?** Fast AI-assisted code often reaches for a fresh local helper instead of the owner — assume duplication until proven otherwise. Treat findings here as a blocker class.
 
 > **Run in a separate, clean-context agent** — never inline in the session that wrote the code. An independent reviewer re-derives every judgment from the code and the principles instead of trusting prior reasoning. A plan/spec may be passed in as a scope checklist only; it never excuses a baseline violation.
 
@@ -10,7 +10,7 @@ rskit *is* the canonical toolkit, so the duplication risk is internal: **did the
 
 Reuse or enhance the canonical owner before writing new code. Never duplicate a shared concern — **errors, config, logging, auth, retries/resilience, observability, HTTP, registries, validation, process, di**. If the owner is inadequate, enhance it *generically* rather than forking a copy in another crate. rskit must stay foundational and multi-purpose: a fix belongs in the owner so every consumer benefits.
 
-## How to check, not just glance
+## How to check thoroughly
 
 The canonical owner set is documented in
 [`docs/CONCERN-OWNERS.md`](../../../../docs/CONCERN-OWNERS.md) — start there, then reconcile each
@@ -20,8 +20,8 @@ low-level operation against it. For each candidate, name the concern, locate its
 - **Resilience.** Retries / timeouts / circuit-breaking come from `rskit-resilience`, not hand-rolled loops or ad-hoc `tokio::time::timeout` scattering.
 - **Config / logging / di / observability.** Route through the owning core crate; no parallel re-implementation, no second logger/tracer setup.
 - **HTTP / transport.** Reuse `rskit-http` / `rskit-httpclient`; a raw `reqwest` / `hyper::Client` / `TcpStream` in an adapter is duplication.
-- **Concurrency primitives.** `parking_lot::Mutex`, never `std::sync::Mutex`. Worker/queue patterns come from `rskit-worker`, not bespoke task loops.
-- **Currency (part of reuse).** Before adding a dependency or helper, verify the standard library does not already cover it, the dependency is maintained, and no open CVE applies. Reinventing a std facility is a should-fix.
+- **Concurrency primitives.** `parking_lot::Mutex`, never `std::sync::Mutex`. Worker/queue patterns come from `rskit-worker`, not custom task loops.
+- **Keep code current (part of reuse).** Before adding a dependency or helper, verify the standard library does not already cover it, the dependency is maintained, and no open CVE applies. Reinventing a std facility is a should-fix.
 - **"Almost the same" counts.** A near-copy with one tweaked line is still a fork — enhance the owner to cover the new case.
 
 ## Detection starters

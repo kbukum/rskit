@@ -16,7 +16,7 @@ Shared engineering baseline — apply to all work here:
 - **Tests:** behavioral and deterministic; race / shuffle / parallel green; cover failure paths; fixtures over embedded config; regression-test every fix.
 - **AI / model features:** treat model output and retrieved context as untrusted; enforce structured outputs; least-privilege tool calls with a human gate on destructive actions; version prompts / models and gate changes on evals.
 - **Supply chain:** pin CI actions by SHA; scan dependencies (vulnerabilities + licenses); sign release artifacts; attach SBOM and provenance.
-- **Currency:** use current idioms and standards, not folklore — verify the dependency is maintained, the stdlib doesn't already cover it, and no open CVE applies.
+- **Keep code current:** use current idioms and standards, not old habits — verify the dependency is maintained, the stdlib doesn't already cover it, and no open CVE applies.
 
 Standing, re-runnable development skills encoding this baseline live in
 [`.github/skills/`](skills/README.md) — the `review` skill runs the review passes in a
@@ -59,8 +59,8 @@ When adding a new foundation crate: create it under `core/rskit-<name>/`, add it
 
 - `cargo fmt` (`rustfmt.toml`: edition 2024, max_width 100) + `cargo clippy` (`clippy.toml`: msrv 1.91)
 - `lib.rs`/`mod.rs` are **declare-only** (submodule declarations + re-exports; no logic or
-  private items) — split crate logic into concern-named modules. Checked (advisory) by
-  `scripts/check-structure.sh` (`make structure`).
+  private items) — split crate logic into concern-named modules. Enforced by the
+  `ast-grep` rule `scripts/sg-rules/declare-only-aggregator.yml` (`make structure`).
 - `#![warn(missing_docs)]` on all crates
 - `#[must_use]` on all `with_*` builder methods
 - `#[non_exhaustive]` on public enums that may grow
@@ -69,6 +69,11 @@ When adding a new foundation crate: create it under `core/rskit-<name>/`, add it
 - No `unwrap()` / `expect()` in library code (tests OK)
 - `AppResult<T>` alias for error handling throughout
 - Conventional Commits: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`
+
+## Documentation
+
+- Prose is never hard-wrapped. Write **one line per paragraph** — in Markdown, `///` rustdoc, and `//` code comments — and never insert a line break in the middle of a sentence to hit a column width; let the editor soft-wrap. The `rustfmt` `max_width` limit is for *code*, not prose. Preserve code blocks, tables, and lists as-is. (YAML folded scalars like a skill's frontmatter `description` are exempt — they already collapse to one logical line.)
+- Comments and `///` docs describe the code as it is now — not history, plans, or the process that produced it.
 
 ## Key Patterns
 

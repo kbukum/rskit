@@ -25,10 +25,10 @@ pub mod convert;
 pub mod error;
 /// RFC 9457 Problem Details response type.
 pub mod response;
+/// Convenience `Result` alias.
+pub mod result;
 
 pub use code::ErrorCode;
 pub use error::AppError;
 pub use response::{ProblemDetail, type_base_uri};
-
-/// Convenience alias used throughout rskit crates.
-pub type AppResult<T> = Result<T, AppError>;
+pub use result::AppResult;

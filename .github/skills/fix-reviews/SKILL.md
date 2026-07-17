@@ -114,5 +114,5 @@ maintainer decision; briefly report those back rather than resolving them silent
 
 Every fix must still satisfy rskit's engineering baseline
 ([`../../copilot-instructions.md`](../../copilot-instructions.md)) — a review-driven change is
-held to the same bar as any other. If acting on a comment would push code below the baseline,
+held to the same standard as any other. If acting on a comment would push code below the baseline,
 reject the comment instead.

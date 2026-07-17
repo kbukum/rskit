@@ -1,4 +1,5 @@
-use super::{Metric, MetricResult, ScoredSample};
+use super::Metric;
+use crate::{MetricResult, ScoredSample};
 use std::collections::HashMap;
 
 pub fn weighted<L>(metrics: Vec<(Box<dyn Metric<L>>, f64)>) -> Box<dyn Metric<L>>

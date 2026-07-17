@@ -3,6 +3,7 @@
 pub(crate) mod ai;
 pub(crate) mod audio;
 pub(crate) mod compose;
+pub(crate) mod context;
 pub(crate) mod extract;
 pub(crate) mod filter;
 pub(crate) mod overlay;
@@ -15,16 +16,4 @@ pub(crate) mod tracks;
 pub(crate) mod transcode;
 pub(crate) mod visual;
 
-use crate::{
-    command::{FfmpegCommand, SourceHints},
-    config::FfmpegConfig,
-};
-use rskit_media::registry::Registry;
-
-/// Context passed to each per-operation compiler.
-pub(crate) struct CompileContext<'a> {
-    pub cmd: &'a mut FfmpegCommand,
-    pub config: &'a FfmpegConfig,
-    pub hints: &'a SourceHints,
-    pub registry: &'a Registry,
-}
+pub(crate) use context::CompileContext;

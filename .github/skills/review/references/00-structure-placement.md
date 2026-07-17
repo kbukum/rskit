@@ -1,10 +1,10 @@
 # Pass 00 — Structure and placement
 
-Confirm every touched (or, in project mode, every existing) item lives in the right workspace, crate, and layer, and that the dependency direction stays acyclic. This is the first gate: misplaced code makes every later pass moot, so reject on failure here before going further.
+Confirm every touched (or, in project mode, every existing) item lives in the right workspace, crate, and layer, and that the dependency direction stays acyclic. This is the first gate: misplaced code makes every later pass unreliable, so reject on failure here before going further.
 
 > **Run in a separate, clean-context agent** — never inline in the session that wrote the code. An independent reviewer re-derives every judgment from the code and the principles instead of trusting prior reasoning. A plan/spec may be passed in as a scope checklist only; it never excuses a baseline violation.
 
-**Scope note.** *Changes mode:* check the crates the diff touches plus the blast radius — a change to a core crate's public surface fans out to the facade, other core crates, every `contrib/` adapter, and downstream consumers. *Project mode:* sweep each workspace's members and dependency edges; the placement and acyclicity rules below are invariants for the whole toolkit.
+**Scope note.** *Changes mode:* check the crates the diff touches plus the affected area — a change to a core crate's public surface affects the facade, other core crates, every `contrib/` adapter, and downstream consumers. *Project mode:* sweep each workspace's members and dependency edges; the placement and acyclicity rules below are invariants for the whole toolkit.
 
 ## The layering invariant
 
@@ -23,7 +23,7 @@ Dependency direction is explicit and acyclic; lower layers never import higher. 
 - **New core crate wiring.** Created under `core/rskit-<name>/`, added to `core/Cargo.toml`, inherits workspace package metadata, carries `#![warn(missing_docs)]`, and is wired into the `rskit` facade as appropriate. Missing any of these is a should-fix.
 - **New adapter wiring.** Under `contrib/<domain>/<name>/`, covered by the matching `contrib/Cargo.toml` member pattern, and exposed through the facade **behind a feature flag** — not unconditionally.
 - **Facade discipline.** The `rskit` facade re-exports; it does not contain logic. Behavior added directly to the facade is misplaced (should-fix).
-- **Declare-only aggregator.** `lib.rs`/`mod.rs` carry only docs + submodule declarations + re-exports (crate-root `#![...]` attributes allowed). Logic or private items in an aggregator is a should-fix. Run `scripts/check-structure.sh` (`make structure`, advisory).
+- **Declare-only aggregator.** `lib.rs`/`mod.rs` carry only docs + submodule declarations + re-exports (crate-root `#![...]` attributes allowed). Logic or private items in an aggregator is a should-fix. Run `ast-grep scan` (`make structure`).
 - **No misplaced concerns.** Each cross-cutting concern stays in its canonical crate — e.g. gRPC status mapping belongs in `rskit-grpc`, not `rskit-errors`. (Reuse of those owners is pass `01`.)
 - **Workspace dep sync.** Shared dependency versions stay consistent across `core`/`contrib`; gated by `make check-workspace-deps-sync`.
 

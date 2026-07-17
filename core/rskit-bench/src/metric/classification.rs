@@ -1,5 +1,6 @@
-use super::{Metric, MetricResult, ScoredSample};
+use super::Metric;
 use crate::curves::{ConfusionMatrixDetail, ThresholdPoint};
+use crate::{MetricResult, ScoredSample};
 use std::collections::HashMap;
 use std::fmt::Display;
 

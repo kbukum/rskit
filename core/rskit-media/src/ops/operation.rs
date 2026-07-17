@@ -1,0 +1,242 @@
+use std::time::Duration;
+
+use serde::{Deserialize, Serialize};
+
+use crate::{
+    filter::{Filter, FilterTarget},
+    output::OutputConfig,
+    subtitle::SubtitleTrack,
+    time::{Segment, TimeRange},
+    timeout::OperationKind,
+    types::TrackKind,
+};
+
+use super::{
+    ConcatOp, CropRegion, FilterConfig, FlipDirection, InterpolateConfig, MixAudioOp,
+    OverlayConfig, OverlayOp, PadOp, ReplaceAudioOp, ResizeOp, Rotation, SceneDetectConfig,
+    SubtitleConfig, ThumbnailConfig, UpscaleConfig,
+};
+
+/// A single media operation in a pipeline.
+///
+/// Each variant is a data-only description — no execution logic.
+/// The pipeline records these and a backend executor compiles them.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
+pub enum MediaOp {
+    // ── Temporal ─────────────────────────────────────────────────────
+    /// Extract a time range from the source.
+    Extract(TimeRange),
+    /// Extract multiple segments and concatenate them.
+    ExtractMany(Vec<Segment>),
+
+    // ── Spatial (video/image) ────────────────────────────────────────
+    /// Resize the video/image.
+    Resize(ResizeOp),
+    /// Crop the video/image.
+    Crop(CropRegion),
+    /// Rotate the video/image.
+    Rotate(Rotation),
+    /// Flip the video/image.
+    Flip(FlipDirection),
+    /// Pad the video/image to a target size.
+    Pad(PadOp),
+
+    // ── Speed / Time ─────────────────────────────────────────────────
+    /// Change playback speed (e.g., 2.0 = double speed).
+    Speed(f64),
+    /// Reverse the media.
+    Reverse,
+
+    // ── Audio ────────────────────────────────────────────────────────
+    /// Adjust volume (1.0 = unchanged, 0.5 = half, 2.0 = double).
+    Volume(f64),
+    /// Normalize audio loudness.
+    NormalizeAudio,
+    /// Fade in over the given duration.
+    FadeIn(Duration),
+    /// Fade out over the given duration.
+    FadeOut(Duration),
+    /// Remove the audio track.
+    StripAudio,
+    /// Remove the video track.
+    StripVideo,
+
+    // ── Filter (extensible) ──────────────────────────────────────────
+    /// Apply a named filter.
+    Filter(Filter),
+
+    // ── Composition ──────────────────────────────────────────────────
+    /// Overlay another source on top.
+    Overlay(OverlayOp),
+    /// Concatenate another source after this one.
+    Concat(ConcatOp),
+    /// Replace the audio track with another source.
+    ReplaceAudio(ReplaceAudioOp),
+    /// Mix another audio source on top.
+    MixAudio(MixAudioOp),
+    /// Burn subtitles into the video.
+    BurnSubtitles(SubtitleTrack),
+
+    // ── Track selection ──────────────────────────────────────────────
+    /// Select specific tracks by index.
+    SelectTracks(Vec<usize>),
+    /// Select tracks by kind.
+    SelectTracksByKind(Vec<TrackKind>),
+
+    // ── Output ───────────────────────────────────────────────────────
+    /// Transcode to a different format/codec.
+    Transcode(OutputConfig),
+
+    // ── Advanced filter / effects ────────────────────────────────────
+    /// Apply a color grading or visual filter preset.
+    ApplyFilter(FilterConfig),
+    /// Add a text or image overlay on video.
+    AddOverlay(OverlayConfig),
+    /// Extract a single frame at a timestamp as an image.
+    GenerateThumbnail(ThumbnailConfig),
+    /// Detect scene boundaries and return timestamps.
+    DetectScenes(SceneDetectConfig),
+    /// Burn subtitles from an SRT/VTT/ASS source.
+    AddSubtitles(SubtitleConfig),
+
+    // ── AI-powered (external tools, not FFmpeg) ──────────────────────
+    /// AI upscale using Real-ESRGAN.
+    Upscale(UpscaleConfig),
+    /// AI frame interpolation using RIFE.
+    Interpolate(InterpolateConfig),
+}
+
+impl MediaOp {
+    /// Classify this operation for duration-aware timeout calculation.
+    #[must_use]
+    pub fn timeout_kind(&self) -> OperationKind {
+        match self {
+            // Temporal / track selection — typically stream copy, fast.
+            Self::Extract(_)
+            | Self::StripAudio
+            | Self::StripVideo
+            | Self::SelectTracks(_)
+            | Self::SelectTracksByKind(_) => OperationKind::StreamCopy,
+
+            Self::GenerateThumbnail(_) => OperationKind::ThumbnailExtract,
+            Self::ExtractMany(_) => OperationKind::Filter,
+            Self::DetectScenes(_) => OperationKind::SceneDetect,
+            Self::Resize(_) | Self::Transcode(_) | Self::Concat(_) => OperationKind::Transcode,
+
+            Self::Crop(_)
+            | Self::Rotate(_)
+            | Self::Flip(_)
+            | Self::Pad(_)
+            | Self::Speed(_)
+            | Self::Reverse
+            | Self::Volume(_)
+            | Self::NormalizeAudio
+            | Self::FadeIn(_)
+            | Self::FadeOut(_)
+            | Self::Filter(_)
+            | Self::Overlay(_)
+            | Self::ReplaceAudio(_)
+            | Self::MixAudio(_)
+            | Self::ApplyFilter(_)
+            | Self::AddOverlay(_) => OperationKind::Filter,
+
+            Self::BurnSubtitles(_) | Self::AddSubtitles(_) => OperationKind::SubtitleBurn,
+            Self::Upscale(_) | Self::Interpolate(_) => OperationKind::MlInference,
+        }
+    }
+
+    /// Return whether this operation needs an audio track to be present.
+    #[must_use]
+    pub fn requires_audio_track(&self) -> bool {
+        match self {
+            Self::Speed(_)
+            | Self::Reverse
+            | Self::FadeIn(_)
+            | Self::FadeOut(_)
+            | Self::Volume(_)
+            | Self::NormalizeAudio
+            | Self::ReplaceAudio(_)
+            | Self::MixAudio(_) => true,
+            Self::Filter(filter) => filter.target == FilterTarget::Audio,
+            _ => false,
+        }
+    }
+
+    /// Return whether this operation needs a video/image track to be present.
+    #[must_use]
+    pub fn requires_video_track(&self) -> bool {
+        match self {
+            Self::ExtractMany(_)
+            | Self::Resize(_)
+            | Self::Crop(_)
+            | Self::Rotate(_)
+            | Self::Flip(_)
+            | Self::Pad(_)
+            | Self::Speed(_)
+            | Self::Reverse
+            | Self::FadeIn(_)
+            | Self::FadeOut(_)
+            | Self::Overlay(_)
+            | Self::Concat(_)
+            | Self::ReplaceAudio(_)
+            | Self::BurnSubtitles(_)
+            | Self::ApplyFilter(_)
+            | Self::AddOverlay(_)
+            | Self::GenerateThumbnail(_)
+            | Self::DetectScenes(_)
+            | Self::AddSubtitles(_) => true,
+            Self::Filter(filter) => filter.target == FilterTarget::Video,
+            _ => false,
+        }
+    }
+
+    /// Return whether this operation needs source stream hints before compilation.
+    #[must_use]
+    pub fn needs_stream_hints(&self) -> bool {
+        matches!(self, Self::ExtractMany(_) | Self::Concat(_))
+    }
+
+    /// Return whether this operation is delegated to an external non-FFmpeg tool.
+    #[must_use]
+    pub fn requires_external_tool(&self) -> bool {
+        matches!(self, Self::Upscale(_) | Self::Interpolate(_))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use super::*;
+
+    #[test]
+    fn dual_track_operations_require_both_audio_and_video_tracks() {
+        for op in [
+            MediaOp::Speed(2.0),
+            MediaOp::Reverse,
+            MediaOp::FadeIn(Duration::from_secs(1)),
+            MediaOp::FadeOut(Duration::from_secs(1)),
+        ] {
+            assert!(op.requires_audio_track(), "{op:?} should require audio");
+            assert!(op.requires_video_track(), "{op:?} should require video");
+        }
+    }
+
+    #[test]
+    fn video_graph_operations_require_video_tracks() {
+        for op in [
+            MediaOp::ExtractMany(vec![Segment::new(TimeRange::from_seconds(0.0, 1.0))]),
+            MediaOp::Concat(ConcatOp {
+                source: rskit_storage::FileSource::from_path("next.mp4"),
+                transition: None,
+            }),
+            MediaOp::ReplaceAudio(ReplaceAudioOp {
+                audio_source: rskit_storage::FileSource::from_path("audio.wav"),
+                offset: None,
+            }),
+        ] {
+            assert!(op.requires_video_track(), "{op:?} should require video");
+        }
+    }
+}

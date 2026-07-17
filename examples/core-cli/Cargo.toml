@@ -20,3 +20,6 @@ rskit-version = { path = "../../core/rskit-version" }
 
 serde = { version = "1", features = ["derive"] }
 tokio = { workspace = true, features = ["full"] }
+
+[lints]
+workspace = true

@@ -16,12 +16,12 @@ Start here, then reconcile each low-level operation against that pass.
 | Data formats (JSON/TOML/…) | `rskit-codec` | hand-rolled `serde_json` / `toml` wrappers, per-crate ser/de helpers | |
 | Generic helpers (slices/maps/clock/copy/ensure-dir) | `rskit-util` + std | a fresh local helper | scoped foundation owner, not a dumping ground |
 | Filesystem / path safety / atomic writes | `rskit-fs` | raw `std::fs` + manual canonicalize/escape checks | path confinement, atomic writes |
-| Config loading / precedence | `rskit-config` | bespoke env/flag/file precedence logic | |
+| Config loading / precedence | `rskit-config` | custom env/flag/file precedence logic | |
 | Schema validation | `rskit-schema` | hand-rolled validation walks | |
 | Errors | `rskit-errors` | ad-hoc error enums for shared concerns, `Box<dyn Error>` in public APIs | typed error enums, cause preserved |
 | Logging / tracing | `rskit-logging` / `rskit-observability` | `println!`, direct exporter wiring | `tracing`, injected subscriber/meter |
-| Resilience (retry/timeout/circuit-break) | `rskit-resilience` | hand-rolled loops, scattered timeouts + bespoke backoff | idempotent ops only, bounded + jittered |
-| HTTP client / server | `rskit-httpclient` / `rskit-server` / `rskit-http` | raw client with bespoke retry/timeout | |
+| Resilience (retry/timeout/circuit-break) | `rskit-resilience` | hand-rolled loops, scattered timeouts + custom backoff | idempotent ops only, bounded + jittered |
+| HTTP client / server | `rskit-httpclient` / `rskit-server` / `rskit-http` | raw client with custom retry/timeout | |
 | Subprocess | `rskit-process` | bare `std::process::Command` | argv-only, no shell |
 | Dependency injection | `rskit-di` | service-locator / string-keyed resolution | typed resolution |
 | Encryption / security | `rskit-encryption` / `rskit-security` | ad-hoc crypto, custom header sets | current algorithms only |

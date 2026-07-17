@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -7,7 +8,13 @@ use rskit_errors::{AppError, AppResult};
 use rskit_fs::sync_io::file;
 use rskit_util::SecretString;
 
-use super::{ConfigSink, ConfigTable};
+use super::ConfigSink;
+
+/// Flat `key -> value` table that backs a [`FileConfigSink`].
+///
+/// Keys are opaque strings (dots are not nesting); values are plaintext secret
+/// material persisted verbatim by the sink.
+pub type ConfigTable = BTreeMap<String, String>;
 
 /// Upper bound on the backing file size accepted on read (1 MiB).
 ///

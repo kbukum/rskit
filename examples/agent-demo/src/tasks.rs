@@ -5,8 +5,8 @@
 //! - Analyze:     ~12s  (12 steps)
 //! - Resize:      ~10s  (12 steps)
 //! - Pipeline:    ~15s  (16 steps)
-//! - CodeReview:  ~20s  (16 steps)
-//! - BatchProcess: ~12s (30 items × ~400ms)
+//! - `CodeReview`:  ~20s  (16 steps)
+//! - `BatchProcess`: ~12s (30 items × ~400ms)
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -61,9 +61,10 @@ impl std::fmt::Display for AgentTask {
 }
 
 fn short_name(p: &Path) -> String {
-    p.file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| p.display().to_string())
+    p.file_name().map_or_else(
+        || p.display().to_string(),
+        |n| n.to_string_lossy().to_string(),
+    )
 }
 
 /// Result from a completed agent task.
@@ -88,263 +89,256 @@ impl Handler<AgentTask, TaskOutput> for AgentHandler {
         let wid = "agent";
 
         match task {
-            // ── Analyze (~12s) ────────────────────────────────────
-            AgentTask::Analyze { path } => {
-                let steps: &[(&str, u64)] = &[
-                    ("Opening file handle...", 600),
-                    ("Computing SHA-256 hash...", 1200),
-                    ("Reading magic bytes...", 800),
-                    ("Detecting MIME type...", 0), // actual work
-                    ("Parsing file headers...", 1000),
-                    ("Extracting EXIF metadata...", 1200),
-                    ("Analyzing color histogram...", 1500),
-                    ("Detecting color profile...", 800),
-                    ("Gathering filesystem metadata...", 0), // actual work
-                    ("Analyzing structural properties...", 1200),
-                    ("Computing quality metrics...", 1000),
-                    ("Building analysis report...", 800),
-                ];
-                let total = steps.len() as u64;
-
-                for (i, &(msg, delay_ms)) in steps.iter().enumerate() {
-                    emit_progress(&emit, task_id, wid, i as u64, total, msg).await;
-                    check_cancelled(&cancel)?;
-                    if delay_ms > 0 {
-                        tokio::time::sleep(Duration::from_millis(delay_ms)).await;
-                    }
-                }
-
-                let source = FileSource::from_path(&path);
-                let mime = detect_mime(&source).await?;
-                let meta = file_meta(&source).await?;
-
-                let size = meta.size.unwrap_or(0);
-                let size_str = format_size(size);
-                let ext = meta.extension.clone().unwrap_or_default();
-
-                emit_progress(&emit, task_id, wid, total, total, "Done").await;
-
-                Ok(TaskOutput {
-                    summary: format!("{} — {} ({})", short_name(&path), mime, size_str),
-                    details: vec![
-                        ("MIME".into(), mime),
-                        ("Size".into(), size_str),
-                        ("Extension".into(), ext),
-                    ],
-                })
-            }
-
-            // ── Resize (~10s) ─────────────────────────────────────
+            AgentTask::Analyze { path } => handle_analyze(&emit, task_id, wid, &cancel, path).await,
             AgentTask::Resize {
                 path,
                 width,
                 height,
-            } => {
-                let steps: &[(&str, u64)] = &[
-                    ("Loading source image...", 800),
-                    ("Decoding pixel data...", 1200),
-                    ("Analyzing source dimensions...", 600),
-                    ("Computing target aspect ratio...", 500),
-                    ("Selecting resampling filter...", 800),
-                    ("Allocating output buffer...", 600),
-                    ("Applying resize transformation...", 0), // actual work at i==6
-                    ("Post-processing pixels...", 1000),
-                    ("Encoding output format...", 1200),
-                    ("Writing to output file...", 800),
-                    ("Verifying output integrity...", 0), // verify at i==10
-                    ("Cleaning up temporary data...", 500),
-                ];
-                let total = steps.len() as u64;
-
-                let tmp = TempFile::with_extension("jpg")?;
-                let sink_path = tmp.path().to_path_buf();
-
-                for (i, &(msg, delay_ms)) in steps.iter().enumerate() {
-                    emit_progress(&emit, task_id, wid, i as u64, total, msg).await;
-                    check_cancelled(&cancel)?;
-                    if delay_ms > 0 {
-                        tokio::time::sleep(Duration::from_millis(delay_ms)).await;
-                    }
-                    // Actual resize at step 6
-                    if i == 6 {
-                        let source = FileSource::from_path(&path);
-                        let processor = image_executor()?;
-                        let ops = vec![MediaOp::Resize(ResizeOp {
-                            resolution: Resolution::new(width, height),
-                            mode: ResizeMode::Fit,
-                        })];
-                        let sink = FileSink::Path(sink_path.clone());
-                        let _result = processor.execute(&source, &ops, Some(&sink)).await?;
-                    }
-                }
-
-                // Verify output using the same temp file
-                let out_source = FileSource::from_path(&sink_path);
-                let out_meta = file_meta(&out_source).await.ok();
-                let out_size = optional_size_label(out_meta.and_then(|m| m.size));
-
-                emit_progress(&emit, task_id, wid, total, total, "Done").await;
-
-                Ok(TaskOutput {
-                    summary: format!("Resized to {width}×{height} ({out_size})"),
-                    details: vec![
-                        ("Target".into(), format!("{width}×{height}")),
-                        ("Mode".into(), "Fit".into()),
-                        ("Output size".into(), out_size),
-                    ],
-                })
-            }
-
-            // ── Pipeline (~15s) ───────────────────────────────────
+            } => handle_resize(&emit, task_id, wid, &cancel, path, width, height).await,
             AgentTask::Pipeline { path } => {
-                let steps: &[(&str, u64)] = &[
-                    ("Loading source image...", 800),
-                    ("Analyzing input properties...", 1000),
-                    ("Planning pipeline execution...", 1200),
-                    ("[Step 1/3] Resize → Initializing...", 600),
-                    ("[Step 1/3] Resize → Applying filter...", 0), // actual at i==4
-                    ("[Step 1/3] Resize → Validating...", 800),
-                    ("[Step 2/3] Crop → Computing region...", 1000),
-                    ("[Step 2/3] Crop → Extracting pixels...", 0), // included in pipeline
-                    ("[Step 2/3] Crop → Validating...", 800),
-                    ("[Step 3/3] Rotate → Transforming...", 0), // included in pipeline
-                    ("[Step 3/3] Rotate → Resampling...", 1200),
-                    ("[Step 3/3] Rotate → Validating...", 800),
-                    ("Merging pipeline outputs...", 1000),
-                    ("Optimizing final image...", 1200),
-                    ("Verifying pipeline integrity...", 800),
-                    ("Generating pipeline report...", 600),
-                ];
-                let total = steps.len() as u64;
-
-                let source = FileSource::from_path(&path);
-                let processor = image_executor()?;
-                let ops = vec![
-                    MediaOp::Resize(ResizeOp {
-                        resolution: Resolution::new(400, 400),
-                        mode: ResizeMode::Fit,
-                    }),
-                    MediaOp::Crop(CropRegion::new(100, 100, 200, 200)),
-                    MediaOp::Rotate(Rotation::Degrees90),
-                ];
-
-                for (i, &(msg, delay_ms)) in steps.iter().enumerate() {
-                    emit_progress(&emit, task_id, wid, i as u64, total, msg).await;
-                    check_cancelled(&cancel)?;
-                    if delay_ms > 0 {
-                        tokio::time::sleep(Duration::from_millis(delay_ms)).await;
-                    }
-
-                    // Execute full pipeline at step 4
-                    if i == 4 {
-                        let _result = processor.execute(&source, &ops, None).await?;
-                    }
-                }
-
-                emit_progress(&emit, task_id, wid, total, total, "Done").await;
-
-                Ok(TaskOutput {
-                    summary: "Pipeline complete: resize → crop → rotate".into(),
-                    details: vec![
-                        (
-                            "Steps".into(),
-                            "Resize 400×400 → Crop 200×200 → Rotate 90°".into(),
-                        ),
-                        ("Status".into(), "All 3 operations succeeded".into()),
-                    ],
-                })
+                handle_pipeline(&emit, task_id, wid, &cancel, path).await
             }
-
-            // ── BatchProcess (~12s for 30 items) ─────────────────
             AgentTask::BatchProcess { count } => {
-                for i in 0..count {
-                    check_cancelled(&cancel)?;
-                    emit_progress(
-                        &emit,
-                        task_id,
-                        wid,
-                        i as u64,
-                        count as u64,
-                        &format!("Processing item {}/{count}", i + 1),
-                    )
-                    .await;
-                    // Vary delays (300-500ms per item) for realism
-                    let delay = 300 + (i % 5) * 50;
-                    tokio::time::sleep(Duration::from_millis(delay as u64)).await;
-                }
-
-                emit_progress(&emit, task_id, wid, count as u64, count as u64, "Done").await;
-
-                Ok(TaskOutput {
-                    summary: format!("Processed {count} items"),
-                    details: vec![
-                        ("Items".into(), count.to_string()),
-                        ("Status".into(), "All succeeded".into()),
-                    ],
-                })
+                handle_batch_process(&emit, task_id, wid, &cancel, count).await
             }
-
-            // ── CodeReview (~20s) ─────────────────────────────────
             AgentTask::CodeReview { path } => {
-                let steps: &[(&str, u64)] = &[
-                    ("Loading repository structure...", 1000),
-                    ("Scanning file tree...", 1200),
-                    ("Identifying source files...", 800),
-                    ("Parsing source code...", 1500),
-                    ("Building AST representation...", 1800),
-                    ("Analyzing cyclomatic complexity...", 1200),
-                    ("Checking code style rules...", 1000),
-                    ("Scanning for common bugs...", 1500),
-                    ("Reviewing security patterns...", 1800),
-                    ("Detecting dead code paths...", 1000),
-                    ("Computing code metrics...", 1200),
-                    ("Analyzing dependency graph...", 1500),
-                    ("Checking test coverage...", 1000),
-                    ("Generating improvement suggestions...", 1200),
-                    ("Prioritizing findings...", 800),
-                    ("Building review report...", 1000),
-                ];
-                let total = steps.len() as u64;
-
-                // Real file analysis mixed in
-                let source = FileSource::from_path(&path);
-                let mime = fallback_mime(detect_mime(&source).await);
-                let meta = file_meta(&source).await.ok();
-
-                for (i, &(msg, delay_ms)) in steps.iter().enumerate() {
-                    emit_progress(&emit, task_id, wid, i as u64, total, msg).await;
-                    check_cancelled(&cancel)?;
-                    tokio::time::sleep(Duration::from_millis(delay_ms)).await;
-                }
-
-                let size = meta.and_then(|m| m.size).unwrap_or(0);
-                emit_progress(&emit, task_id, wid, total, total, "Done").await;
-
-                Ok(TaskOutput {
-                    summary: format!(
-                        "Review complete — {} ({}, {})",
-                        short_name(&path),
-                        mime,
-                        format_size(size)
-                    ),
-                    details: vec![
-                        ("File".into(), short_name(&path)),
-                        ("Type".into(), mime),
-                        ("Size".into(), format_size(size)),
-                        (
-                            "Issues".into(),
-                            "0 critical, 2 warnings, 5 suggestions".into(),
-                        ),
-                        ("Complexity".into(), "Medium (cyclomatic: 12)".into()),
-                    ],
-                })
+                handle_code_review(&emit, task_id, wid, &cancel, path).await
             }
         }
     }
 }
 
+async fn handle_analyze(
+    emit: &mpsc::Sender<Event<TaskOutput>>,
+    task_id: uuid::Uuid,
+    worker_id: &str,
+    cancel: &CancellationToken,
+    path: PathBuf,
+) -> AppResult<TaskOutput> {
+    let steps: &[(&str, u64)] = &[
+        ("Opening file handle...", 600),
+        ("Computing SHA-256 hash...", 1200),
+        ("Reading magic bytes...", 800),
+        ("Detecting MIME type...", 0),
+        ("Parsing file headers...", 1000),
+        ("Extracting EXIF metadata...", 1200),
+        ("Analyzing color histogram...", 1500),
+        ("Detecting color profile...", 800),
+        ("Gathering filesystem metadata...", 0),
+        ("Analyzing structural properties...", 1200),
+        ("Computing quality metrics...", 1000),
+        ("Building analysis report...", 800),
+    ];
+    run_steps(emit, task_id, worker_id, cancel, steps, None).await?;
+
+    let source = FileSource::from_path(&path);
+    let mime = detect_mime(&source).await?;
+    let meta = file_meta(&source).await?;
+    let size_str = format_size(meta.size.unwrap_or(0));
+    let ext = meta.extension.unwrap_or_default();
+
+    emit_done(emit, task_id, worker_id, steps).await;
+    Ok(TaskOutput {
+        summary: format!("{} — {} ({})", short_name(&path), mime, size_str),
+        details: vec![
+            ("MIME".into(), mime),
+            ("Size".into(), size_str),
+            ("Extension".into(), ext),
+        ],
+    })
+}
+
+async fn handle_resize(
+    emit: &mpsc::Sender<Event<TaskOutput>>,
+    task_id: uuid::Uuid,
+    worker_id: &str,
+    cancel: &CancellationToken,
+    path: PathBuf,
+    width: u32,
+    height: u32,
+) -> AppResult<TaskOutput> {
+    let steps: &[(&str, u64)] = &[
+        ("Loading source image...", 800),
+        ("Decoding pixel data...", 1200),
+        ("Analyzing source dimensions...", 600),
+        ("Computing target aspect ratio...", 500),
+        ("Selecting resampling filter...", 800),
+        ("Allocating output buffer...", 600),
+        ("Applying resize transformation...", 0),
+        ("Post-processing pixels...", 1000),
+        ("Encoding output format...", 1200),
+        ("Writing to output file...", 800),
+        ("Verifying output integrity...", 0),
+        ("Cleaning up temporary data...", 500),
+    ];
+    let tmp = TempFile::with_extension("jpg")?;
+    let sink_path = tmp.path().to_path_buf();
+
+    let source = FileSource::from_path(&path);
+    let processor = image_executor()?;
+    let ops = vec![MediaOp::Resize(ResizeOp {
+        resolution: Resolution::new(width, height),
+        mode: ResizeMode::Fit,
+    })];
+    let sink = FileSink::Path(sink_path.clone());
+
+    for (index, &(message, delay_ms)) in steps.iter().enumerate() {
+        emit_progress(
+            emit,
+            task_id,
+            worker_id,
+            index as u64,
+            steps.len() as u64,
+            message,
+        )
+        .await;
+        check_cancelled(cancel)?;
+        if delay_ms > 0 {
+            tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+        }
+        if index == 6 {
+            let _result = processor.execute(&source, &ops, Some(&sink)).await?;
+        }
+    }
+
+    let out_source = FileSource::from_path(&sink_path);
+    let out_meta = file_meta(&out_source).await.ok();
+    let out_size = optional_size_label(out_meta.and_then(|m| m.size));
+
+    emit_done(emit, task_id, worker_id, steps).await;
+    Ok(TaskOutput {
+        summary: format!("Resized to {width}×{height} ({out_size})"),
+        details: vec![
+            ("Target".into(), format!("{width}×{height}")),
+            ("Mode".into(), "Fit".into()),
+            ("Output size".into(), out_size),
+        ],
+    })
+}
+
+async fn handle_pipeline(
+    emit: &mpsc::Sender<Event<TaskOutput>>,
+    task_id: uuid::Uuid,
+    worker_id: &str,
+    cancel: &CancellationToken,
+    path: PathBuf,
+) -> AppResult<TaskOutput> {
+    let steps = pipeline_steps();
+    let source = FileSource::from_path(&path);
+    let processor = image_executor()?;
+    let ops = pipeline_ops();
+
+    for (index, &(message, delay_ms)) in steps.iter().enumerate() {
+        emit_progress(
+            emit,
+            task_id,
+            worker_id,
+            index as u64,
+            steps.len() as u64,
+            message,
+        )
+        .await;
+        check_cancelled(cancel)?;
+        if delay_ms > 0 {
+            tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+        }
+        if index == 4 {
+            let _result = processor.execute(&source, &ops, None).await?;
+        }
+    }
+
+    emit_done(emit, task_id, worker_id, steps).await;
+    Ok(TaskOutput {
+        summary: "Pipeline complete: resize → crop → rotate".into(),
+        details: vec![
+            (
+                "Steps".into(),
+                "Resize 400×400 → Crop 200×200 → Rotate 90°".into(),
+            ),
+            ("Status".into(), "All 3 operations succeeded".into()),
+        ],
+    })
+}
+
+async fn handle_batch_process(
+    emit: &mpsc::Sender<Event<TaskOutput>>,
+    task_id: uuid::Uuid,
+    worker_id: &str,
+    cancel: &CancellationToken,
+    count: u32,
+) -> AppResult<TaskOutput> {
+    for index in 0..count {
+        check_cancelled(cancel)?;
+        emit_progress(
+            emit,
+            task_id,
+            worker_id,
+            u64::from(index),
+            u64::from(count),
+            &format!("Processing item {}/{count}", index + 1),
+        )
+        .await;
+        let delay = 300 + (index % 5) * 50;
+        tokio::time::sleep(Duration::from_millis(u64::from(delay))).await;
+    }
+
+    emit_progress(
+        emit,
+        task_id,
+        worker_id,
+        u64::from(count),
+        u64::from(count),
+        "Done",
+    )
+    .await;
+
+    Ok(TaskOutput {
+        summary: format!("Processed {count} items"),
+        details: vec![
+            ("Items".into(), count.to_string()),
+            ("Status".into(), "All succeeded".into()),
+        ],
+    })
+}
+
+async fn handle_code_review(
+    emit: &mpsc::Sender<Event<TaskOutput>>,
+    task_id: uuid::Uuid,
+    worker_id: &str,
+    cancel: &CancellationToken,
+    path: PathBuf,
+) -> AppResult<TaskOutput> {
+    let steps = code_review_steps();
+    let source = FileSource::from_path(&path);
+    let mime = fallback_mime(detect_mime(&source).await);
+    let meta = file_meta(&source).await.ok();
+
+    run_steps(emit, task_id, worker_id, cancel, steps, None).await?;
+    let size = meta.and_then(|m| m.size).unwrap_or(0);
+    emit_done(emit, task_id, worker_id, steps).await;
+
+    Ok(TaskOutput {
+        summary: format!(
+            "Review complete — {} ({}, {})",
+            short_name(&path),
+            mime,
+            format_size(size)
+        ),
+        details: vec![
+            ("File".into(), short_name(&path)),
+            ("Type".into(), mime),
+            ("Size".into(), format_size(size)),
+            (
+                "Issues".into(),
+                "0 critical, 2 warnings, 5 suggestions".into(),
+            ),
+            ("Complexity".into(), "Medium (cyclomatic: 12)".into()),
+        ],
+    })
+}
+
 fn optional_size_label(size: Option<u64>) -> String {
-    size.map(format_size).unwrap_or_else(|| "unknown".into())
+    size.map_or_else(|| "unknown".into(), format_size)
 }
 
 fn fallback_mime(result: AppResult<String>) -> String {
@@ -353,12 +347,119 @@ fn fallback_mime(result: AppResult<String>) -> String {
 
 pub fn format_size(bytes: u64) -> String {
     if bytes > 1_000_000 {
-        format!("{:.1} MB", bytes as f64 / 1_000_000.0)
+        format_decimal_unit(bytes, 1_000_000, "MB")
     } else if bytes > 1_000 {
-        format!("{:.1} KB", bytes as f64 / 1_000.0)
+        format_decimal_unit(bytes, 1_000, "KB")
     } else {
         format!("{bytes} B")
     }
+}
+
+fn format_decimal_unit(bytes: u64, unit: u64, suffix: &str) -> String {
+    let numerator = u128::from(bytes) * 10;
+    let denominator = u128::from(unit);
+    let quotient = numerator / denominator;
+    let remainder = numerator % denominator;
+    let twice_remainder = remainder * 2;
+    let scaled =
+        if twice_remainder > denominator || (twice_remainder == denominator && quotient % 2 == 1) {
+            quotient + 1
+        } else {
+            quotient
+        };
+    format!("{}.{:01} {suffix}", scaled / 10, scaled % 10)
+}
+
+async fn run_steps(
+    emit: &mpsc::Sender<Event<TaskOutput>>,
+    task_id: uuid::Uuid,
+    worker_id: &str,
+    cancel: &CancellationToken,
+    steps: &[(&str, u64)],
+    skip_step: Option<usize>,
+) -> AppResult<()> {
+    for (index, &(message, delay_ms)) in steps.iter().enumerate() {
+        if skip_step == Some(index) {
+            continue;
+        }
+        emit_progress(
+            emit,
+            task_id,
+            worker_id,
+            index as u64,
+            steps.len() as u64,
+            message,
+        )
+        .await;
+        check_cancelled(cancel)?;
+        if delay_ms > 0 {
+            tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+        }
+    }
+    Ok(())
+}
+
+async fn emit_done(
+    emit: &mpsc::Sender<Event<TaskOutput>>,
+    task_id: uuid::Uuid,
+    worker_id: &str,
+    steps: &[(&str, u64)],
+) {
+    let total = steps.len() as u64;
+    emit_progress(emit, task_id, worker_id, total, total, "Done").await;
+}
+
+const fn pipeline_steps() -> &'static [(&'static str, u64)] {
+    &[
+        ("Loading source image...", 800),
+        ("Analyzing input properties...", 1000),
+        ("Planning pipeline execution...", 1200),
+        ("[Step 1/3] Resize → Initializing...", 600),
+        ("[Step 1/3] Resize → Applying filter...", 0),
+        ("[Step 1/3] Resize → Validating...", 800),
+        ("[Step 2/3] Crop → Computing region...", 1000),
+        ("[Step 2/3] Crop → Extracting pixels...", 0),
+        ("[Step 2/3] Crop → Validating...", 800),
+        ("[Step 3/3] Rotate → Transforming...", 0),
+        ("[Step 3/3] Rotate → Resampling...", 1200),
+        ("[Step 3/3] Rotate → Validating...", 800),
+        ("Merging pipeline outputs...", 1000),
+        ("Optimizing final image...", 1200),
+        ("Verifying pipeline integrity...", 800),
+        ("Generating pipeline report...", 600),
+    ]
+}
+
+fn pipeline_ops() -> Vec<MediaOp> {
+    vec![
+        MediaOp::Resize(ResizeOp {
+            resolution: Resolution::new(400, 400),
+            mode: ResizeMode::Fit,
+        }),
+        MediaOp::Crop(CropRegion::new(100, 100, 200, 200)),
+        MediaOp::Rotate(Rotation::Degrees90),
+    ]
+}
+
+const fn code_review_steps() -> &'static [(&'static str, u64)] {
+    &[
+        ("Loading repository structure...", 1000),
+        ("Scanning file tree...", 1200),
+        ("Identifying source files...", 800),
+        ("Parsing source code...", 1500),
+        ("Building AST representation...", 1800),
+        ("Analyzing cyclomatic complexity...", 1200),
+        ("Checking code style rules...", 1000),
+        ("Scanning for common bugs...", 1500),
+        ("Reviewing security patterns...", 1800),
+        ("Detecting dead code paths...", 1000),
+        ("Computing code metrics...", 1200),
+        ("Analyzing dependency graph...", 1500),
+        ("Checking test coverage...", 1000),
+        ("Generating improvement suggestions...", 1200),
+        ("Prioritizing findings...", 800),
+        ("Building review report...", 1000),
+    ]
 }
 
 fn image_executor() -> AppResult<std::sync::Arc<dyn MediaExecutor>> {
@@ -393,30 +494,30 @@ mod tests {
 
     #[test]
     fn task_display_formats_correctly() {
-        let a = AgentTask::Analyze {
+        let analyze = AgentTask::Analyze {
             path: PathBuf::from("/data/photo.jpg"),
         };
-        assert_eq!(a.to_string(), "Analyze photo.jpg");
+        assert_eq!(analyze.to_string(), "Analyze photo.jpg");
 
-        let r = AgentTask::Resize {
+        let resize = AgentTask::Resize {
             path: PathBuf::from("/data/img.png"),
             width: 200,
             height: 150,
         };
-        assert_eq!(r.to_string(), "Resize img.png → 200×150");
+        assert_eq!(resize.to_string(), "Resize img.png → 200×150");
 
-        let p = AgentTask::Pipeline {
+        let pipeline = AgentTask::Pipeline {
             path: PathBuf::from("/data/test.jpg"),
         };
-        assert_eq!(p.to_string(), "Pipeline test.jpg");
+        assert_eq!(pipeline.to_string(), "Pipeline test.jpg");
 
-        let b = AgentTask::BatchProcess { count: 50 };
-        assert_eq!(b.to_string(), "Batch (50 items)");
+        let batch = AgentTask::BatchProcess { count: 50 };
+        assert_eq!(batch.to_string(), "Batch (50 items)");
 
-        let c = AgentTask::CodeReview {
+        let code_review = AgentTask::CodeReview {
             path: PathBuf::from("/src/main.rs"),
         };
-        assert_eq!(c.to_string(), "CodeReview main.rs");
+        assert_eq!(code_review.to_string(), "CodeReview main.rs");
     }
 
     #[test]

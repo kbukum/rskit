@@ -15,7 +15,7 @@ Large multi-crate Rust workspaces converge on one of two versioning models. Both
 | **Lock-step (unified)** | Every publishable crate shares one version and is released together. | Tokio family, Bevy |
 | **Independent (per-crate)** | Each crate bumps only when it changes; dependents cascade. | serde / serde_derive, clap, prost, tracing |
 
-**Lock-step** optimizes for a simple compatibility story and minimal release machinery, at the cost of republishing unchanged crates on every release.
+**Lock-step** optimizes for a simple compatibility story and minimal release tooling, at the cost of republishing unchanged crates on every release.
 
 **Independent** optimizes for meaningful per-crate history and minimal churn, at the cost of managing a compatibility matrix and internal dependency pins — which is only sustainable with automation.
 
@@ -44,7 +44,7 @@ Modern multi-crate workspaces automate releases from **Conventional Commits** ra
 | [`cargo-release`](https://crates.io/crates/cargo-release) | CLI-first, local | Good for small teams / infrequent manual releases. Flexible but someone must drive it. |
 | [`cargo-smart-release`](https://github.com/GitoxideLabs/gitoxide) | CLI, change-aware | "Release only what changed + dependents"; less widely adopted than release-plz. |
 
-The current rskit release flow is a bespoke `scripts/rskit_tool` publisher plus Make targets. That is appropriate for the first releases, but is not where the ecosystem keeps long-lived multi-crate projects.
+The current rskit release flow is a custom `scripts/rskit_tool` publisher plus Make targets. That is appropriate for the first releases, but is not where the ecosystem keeps long-lived multi-crate projects.
 
 ## The roadmap
 
@@ -72,7 +72,7 @@ pins — caret pins already absorb patches.
   and the follow-up `release bump` for the dependent workspace selects the crates
   that inherit the changed floor and republishes them — there is no single
   combined pass that bumps both workspaces at once.
-- Bumps are computed by `make release-bump W=<workspace>` (the bespoke
+- Bumps are computed by `make release-bump W=<workspace>` (the custom
   `rskit_tool release bump`): patch by default, `MINOR="<crate>"` for breaking
   changes, idempotent against the crates.io max published version. The existing
   idempotent publisher then republishes only the new `name@version`s.
@@ -83,7 +83,7 @@ low — drift lives in patch, not in major/minor. This is the serde / clap /
 tracing model, applied early because the crate count makes full-suite republish
 the dominant cost even in 0.x.
 
-#### Where major breaks come from (why low machinery suffices)
+#### Where major breaks come from (why simple tooling suffices)
 
 The common case is **patch-local** (absorbed by carets), so the tooling needs no
 heavy cascade engine:
@@ -106,31 +106,31 @@ discipline:
 - `rskit-git` (libgit2 / git2)
 - `rskit-httpclient` (reqwest, if exposed)
 
-### Stage 3 — Sever core and contrib into separate repos (future)
+### Stage 3 — Split core and contrib into separate repos (future)
 
 - Core has **zero references to contrib** and the dependency direction is strictly
-  `contrib -> core` (acyclic), so severing is architecturally trivial.
-- After severing, contrib consumes core like any external user (crates.io
+  `contrib -> core` (acyclic), so splitting them is architecturally simple.
+- After the split, contrib consumes core like any external user (crates.io
   versioned deps), so the cross-workspace concern disappears entirely.
 - Prep is already in place: `contrib -> core` deps carry a real caret version with
-  `path` as local-only convenience, so the sever is a no-op on published artifacts
+  `path` as local-only convenience, so the split is a no-op on published artifacts
   (delete the `path =` lines or swap to a submodule).
-- Wrinkles to handle at sever time (not now): local dev of contrib against
+- Details to handle at split time (not now): local dev of contrib against
   unreleased core needs `[patch.crates-io]` or a git submodule; any future
   adapter-surfacing facade belongs on the **contrib** side, not core.
 
 ### Optional later — adopt `release-plz`
 
-The bespoke `release bump` + idempotent publisher covers current needs. If
+The custom `release bump` + idempotent publisher covers current needs. If
 Conventional-Commit-driven bumps, automated changelogs, and Release-PR flows
 become worthwhile, `release-plz` supports per-crate mode and can replace the
-bespoke bump without changing the publishing model.
+custom bump without changing the publishing model.
 
 ## Decision points to revisit
 
 - **Tag `1.0`:** the model works in `0.x`; `1.0` is a separate stability commitment
   that only changes whether additive growth lives in patch (`0.x`) or minor (`1.x`).
-- **When to sever (Stage 3):** when contrib's cadence clearly diverges from core or
+- **When to split repos (Stage 3):** when contrib's cadence clearly diverges from core or
   the repo size warrants independent CI/release.
 - **When to adopt `release-plz`:** when manual changelog/commit classification
   becomes a recurring source of release friction.

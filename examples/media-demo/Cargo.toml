@@ -9,3 +9,6 @@ publish               = false
 [dependencies]
 rskit = { workspace = true, features = ["media-full"] }
 tokio = { workspace = true, features = ["full"] }
+
+[lints]
+workspace = true

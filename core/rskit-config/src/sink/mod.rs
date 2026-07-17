@@ -19,18 +19,10 @@
 //! Values flow as [`SecretString`](rskit_util::SecretString) end-to-end and are
 //! never logged.
 
-use std::collections::BTreeMap;
-
 mod contract;
 mod file;
 mod memory;
 
 pub use contract::ConfigSink;
-pub use file::FileConfigSink;
+pub use file::{ConfigTable, FileConfigSink};
 pub use memory::InMemoryConfigSink;
-
-/// Flat `key -> value` table that backs a [`FileConfigSink`].
-///
-/// Keys are opaque strings (dots are not nesting); values are plaintext secret
-/// material persisted verbatim by the sink.
-pub type ConfigTable = BTreeMap<String, String>;

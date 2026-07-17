@@ -46,6 +46,19 @@ impl EmbeddingProvider {
     }
 }
 
+/// Build an OpenAI-compatible embedding provider from adapter configuration.
+pub fn embedding_provider(config: &Config) -> AppResult<EmbeddingProvider> {
+    EmbeddingProvider::new(config)
+}
+
+/// Build an OpenAI-compatible embedding provider with a resilience policy.
+pub fn embedding_provider_with_policy(
+    config: &Config,
+    policy: rskit_resilience::Policy,
+) -> AppResult<EmbeddingProvider> {
+    Ok(EmbeddingProvider::new(config)?.with_policy(policy))
+}
+
 #[derive(Serialize)]
 struct EmbeddingRequest {
     model: String,

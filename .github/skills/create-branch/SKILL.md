@@ -35,7 +35,7 @@ Before switching, check the working tree with `git status`. Uncommitted changes 
 the new branch — that is usually what you want when you have already started editing, but confirm
 it is intentional rather than dragging along unrelated edits.
 
-## Naming: describe the change, not the plumbing
+## Naming: describe the change, not internal details
 
 The branch name captures **what the change does at a high level** — the capability, fix, or
 refactor a reviewer will see. It must not leak how the work was organized internally.
