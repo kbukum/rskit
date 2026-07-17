@@ -5,6 +5,23 @@ use rskit_errors::{AppError, AppResult, ErrorCode};
 
 use crate::{DataPayload, DatasetLimits, Label, MediaType};
 
+/// Capability an item must provide to flow through the generic collection engine.
+///
+/// The engine stays item-agnostic: it routes and counts items by [`label`](DatasetItem::label) and
+/// resumes sources from [`source_offset`](DatasetItem::source_offset), without knowing the concrete
+/// item type. Both blob samples ([`DataItem`]) and tabular records implement this trait.
+pub trait DatasetItem: Send + 'static {
+    /// Classification label used to route and count the item. Defaults to [`Label::Real`].
+    fn label(&self) -> Label {
+        Label::Real
+    }
+
+    /// Source-provided resume cursor observed after this item, if any.
+    fn source_offset(&self) -> Option<usize> {
+        None
+    }
+}
+
 /// A single data sample flowing through the dataset pipeline.
 #[derive(Debug, Clone)]
 pub struct DataItem {
@@ -179,4 +196,14 @@ fn validate_extension(extension: &str) -> AppResult<()> {
         ));
     }
     rskit_validation::input::validate_safe_path(extension)
+}
+
+impl crate::DatasetItem for DataItem {
+    fn label(&self) -> Label {
+        self.label
+    }
+
+    fn source_offset(&self) -> Option<usize> {
+        self.source_offset
+    }
 }

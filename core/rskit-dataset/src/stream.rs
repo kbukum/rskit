@@ -15,7 +15,7 @@ pub trait DatasetStreamExt: Stream<Item = AppResult<DataItem>> + Sized + Send + 
         limits: DatasetLimits,
     ) -> impl Stream<Item = AppResult<Option<DataItem>>> + Send + 'static
     where
-        T: Transform + Clone + Send + Sync + 'static,
+        T: Transform<DataItem, DataItem> + Clone + Send + Sync + 'static,
     {
         self.rmap(move |item| {
             let transform = transform.clone();
@@ -42,7 +42,7 @@ mod tests {
         allowed: &'static str,
     }
 
-    impl Transform for FilterBySource {
+    impl Transform<DataItem, DataItem> for FilterBySource {
         fn name(&self) -> &str {
             "filter-by-source"
         }

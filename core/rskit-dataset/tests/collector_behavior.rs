@@ -5,8 +5,8 @@ use std::sync::Arc;
 use futures::stream;
 use parking_lot::Mutex;
 use rskit_dataset::{
-    BoxDataStream, Collector, CollectorConfig, DataItem, DatasetLimits, Label, MediaType,
-    ProgressCallback, PublishResult, Source, SourceStats, Target, Transform,
+    BoxDataStream, Collector, CollectorConfig, DataItem, DatasetLimits, Label, LocalBlobSink,
+    MediaType, ProgressCallback, PublishResult, Source, SourceStats, Target, Transform,
 };
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use serde_json::json;
@@ -44,7 +44,7 @@ impl FixtureSource {
     }
 }
 
-impl Source for FixtureSource {
+impl Source<DataItem> for FixtureSource {
     fn name(&self) -> &str {
         &self.name
     }
@@ -75,7 +75,7 @@ impl Source for FixtureSource {
 
 struct ExtensionAndFilterTransform;
 
-impl Transform for ExtensionAndFilterTransform {
+impl Transform<DataItem, DataItem> for ExtensionAndFilterTransform {
     fn name(&self) -> &str {
         "extension-filter"
     }
@@ -166,7 +166,7 @@ struct CountingTarget {
 
 struct DefaultResumeSource;
 
-impl Source for DefaultResumeSource {
+impl Source<DataItem> for DefaultResumeSource {
     fn name(&self) -> &str {
         "default-resume"
     }
@@ -252,6 +252,13 @@ async fn collector_runs_transforms_publishes_targets_and_reuses_done_cache() {
     let result = Collector::new(
         vec![Box::new(source.clone())],
         vec![Box::new(ExtensionAndFilterTransform)],
+        Arc::new(LocalBlobSink::new(
+            dir.path(),
+            DatasetLimits {
+                stream_buffer: 1,
+                ..DatasetLimits::default()
+            },
+        )),
         vec![
             Box::new(CountingTarget {
                 name: "counting",
@@ -322,6 +329,7 @@ async fn collector_runs_transforms_publishes_targets_and_reuses_done_cache() {
     let cached_result = Collector::new(
         vec![Box::new(source)],
         Vec::new(),
+        Arc::new(LocalBlobSink::new(dir.path(), DatasetLimits::default())),
         Vec::new(),
         CollectorConfig {
             output_dir: dir.path().to_path_buf(),
@@ -364,6 +372,7 @@ async fn collector_records_partial_stats_for_source_and_transform_failures() {
     let result = Collector::new(
         vec![Box::new(source.clone())],
         vec![Box::new(ExtensionAndFilterTransform)],
+        Arc::new(LocalBlobSink::new(dir.path(), DatasetLimits::default())),
         Vec::new(),
         CollectorConfig {
             output_dir: dir.path().to_path_buf(),
@@ -395,6 +404,7 @@ async fn collector_records_partial_stats_for_source_and_transform_failures() {
     let _ = Collector::new(
         vec![Box::new(resume_source)],
         Vec::new(),
+        Arc::new(LocalBlobSink::new(dir.path(), DatasetLimits::default())),
         Vec::new(),
         CollectorConfig {
             output_dir: dir.path().to_path_buf(),

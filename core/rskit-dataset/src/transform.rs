@@ -1,6 +1,6 @@
 //! Transform trait and built-in transforms.
 
-use crate::{DataItem, DatasetLimits};
+use crate::{DataItem, DatasetItem, DatasetLimits};
 use rskit_errors::AppResult;
 
 #[cfg(feature = "image-transform")]
@@ -10,12 +10,12 @@ use rskit_errors::{AppError, ErrorCode};
 #[cfg(feature = "image-transform")]
 use rskit_validation::Validator;
 
-/// Protocol for data transforms.
-pub trait Transform: Send + Sync {
+/// Protocol for data transforms from item type `I` to item type `O`.
+pub trait Transform<I: DatasetItem, O: DatasetItem>: Send + Sync {
     /// Stable transform name.
     fn name(&self) -> &str;
     /// Apply the transform, returning `Ok(None)` when the item is filtered out.
-    fn apply(&self, item: DataItem, limits: &DatasetLimits) -> AppResult<Option<DataItem>>;
+    fn apply(&self, item: I, limits: &DatasetLimits) -> AppResult<Option<O>>;
 }
 
 /// Resize images to a fixed size and re-encode as JPEG.
@@ -56,7 +56,7 @@ impl ResizeTransform {
 }
 
 #[cfg(feature = "image-transform")]
-impl Transform for ResizeTransform {
+impl Transform<DataItem, DataItem> for ResizeTransform {
     fn name(&self) -> &str {
         &self.name
     }
