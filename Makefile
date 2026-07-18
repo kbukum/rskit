@@ -209,15 +209,15 @@ deny: check-l7-edges check-workspace-deps-sync check-topology check-public-api
 	@echo "==> Running cargo-deny..."
 	@if [ -n "$(W)" ]; then \
 		case "$(W)" in \
-			core) cargo deny --manifest-path core/Cargo.toml check --config deny.toml licenses advisories sources bans ;; \
-			contrib) cargo deny --manifest-path contrib/Cargo.toml check --config deny.contrib.toml licenses advisories sources bans ;; \
-			examples) cargo deny --manifest-path examples/Cargo.toml check --config deny.examples.toml licenses advisories sources bans ;; \
+			core) cargo deny --manifest-path core/Cargo.toml --config deny.toml check licenses advisories sources bans ;; \
+			contrib) cargo deny --manifest-path contrib/Cargo.toml --config deny.contrib.toml check licenses advisories sources bans ;; \
+			examples) cargo deny --manifest-path examples/Cargo.toml --config deny.examples.toml check licenses advisories sources bans ;; \
 			*) echo "error: make deny supports W=core, W=contrib, or W=examples" >&2; exit 2 ;; \
 		esac; \
 	else \
-		cargo deny --manifest-path core/Cargo.toml check --config deny.toml licenses advisories sources bans && \
-		cargo deny --manifest-path contrib/Cargo.toml check --config deny.contrib.toml licenses advisories sources bans && \
-		cargo deny --manifest-path examples/Cargo.toml check --config deny.examples.toml licenses advisories sources bans; \
+		cargo deny --manifest-path core/Cargo.toml --config deny.toml check licenses advisories sources bans && \
+		cargo deny --manifest-path contrib/Cargo.toml --config deny.contrib.toml check licenses advisories sources bans && \
+		cargo deny --manifest-path examples/Cargo.toml --config deny.examples.toml check licenses advisories sources bans; \
 	fi
 	@echo "✓ cargo-deny passed"
 

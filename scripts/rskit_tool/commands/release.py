@@ -109,9 +109,9 @@ def run_readiness(args: argparse.Namespace) -> int:
     print("==> Running cargo-deny...")
     if run_workspace_deps_sync(args) != 0:
         return 1
-    run(["cargo", "deny", "--manifest-path", "core/Cargo.toml", "check", "--config", "deny.toml", "licenses", "advisories", "sources", "bans"])
-    run(["cargo", "deny", "--manifest-path", "contrib/Cargo.toml", "check", "--config", "deny.contrib.toml", "licenses", "advisories", "sources", "bans"])
-    run(["cargo", "deny", "--manifest-path", "examples/Cargo.toml", "check", "--config", "deny.examples.toml", "licenses", "advisories", "sources", "bans"])
+    run(["cargo", "deny", "--manifest-path", "core/Cargo.toml", "--config", "deny.toml", "check", "licenses", "advisories", "sources", "bans"])
+    run(["cargo", "deny", "--manifest-path", "contrib/Cargo.toml", "--config", "deny.contrib.toml", "check", "licenses", "advisories", "sources", "bans"])
+    run(["cargo", "deny", "--manifest-path", "examples/Cargo.toml", "--config", "deny.examples.toml", "check", "licenses", "advisories", "sources", "bans"])
 
     print("==> Running cargo-audit...")
     run(["cargo", "audit", "--deny", "warnings", "--file", "core/Cargo.lock"])
