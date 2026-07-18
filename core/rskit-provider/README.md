@@ -20,7 +20,7 @@ Cross-cutting behavior such as retry, rate limiting, circuit breaking, logging, 
 
 ```toml
 [dependencies]
-rskit-provider = "0.2.0-alpha.1"
+rskit-provider = "0.2.0-alpha.2"
 async-trait = "0.1"
 ```
 

@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [v0.2.0-alpha.5] - 2026-07-18
+
 ### Added
 
 - Add `rskit-workload`, a provider-based container/pod **orchestration** layer (facade feature `workload`): a minimal typed `Manager` trait (`deploy`/`stop`/`remove`/`restart`/`status`/`wait`/`logs`/`list`/`health_check`) with opt-in `ExecCapable`/`StatsCapable`/`LogStreamer`/`EventWatcher`/`SystemInfoCapable`/`DiskUsageCapable`/`ImageInspector`/`ImageEventWatcher` capability traits, `DeployRequest`/`ResourceConfig`/`NetworkConfig` specs, `WorkloadState`/`RestartPolicy` state, and typed `WorkloadStatus`/`WorkloadStats`/`WorkloadEvent` reports. Backend selection is config-driven through `WorkloadConfig::provider` and an injected `WorkloadRegistry`/`ManagerFactory`; no backend is registered by default and importing the crate has no side effects. `WorkloadComponent` binds the resolved manager to the `rskit-component` lifecycle. This is distinct from `rskit-worker` (in-process pools/scheduling) — it orchestrates external workloads such as containers.
@@ -143,7 +145,8 @@ Initial alpha release of rskit, a Rust infrastructure toolkit for building servi
 
 This is an **alpha preview** intended for early evaluation. APIs may change before the first stable release, especially while rskit is still aligning its foundational crates and adapter boundaries.
 
-[Unreleased]: https://github.com/kbukum/rskit/compare/v0.2.0-alpha.1...HEAD
+[Unreleased]: https://github.com/kbukum/rskit/compare/v0.2.0-alpha.5...HEAD
+[v0.2.0-alpha.5]: https://github.com/kbukum/rskit/compare/v0.2.0-alpha.4...v0.2.0-alpha.5
 [v0.2.0-alpha.1]: https://github.com/kbukum/rskit/compare/v0.1.0-alpha.3...v0.2.0-alpha.1
 [v0.1.0-alpha.3]: https://github.com/kbukum/rskit/compare/v0.1.0-alpha.2...v0.1.0-alpha.3
 [v0.1.0-alpha.2]: https://github.com/kbukum/rskit/compare/v0.1.0-alpha.1...v0.1.0-alpha.2

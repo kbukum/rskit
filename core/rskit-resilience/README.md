@@ -17,7 +17,7 @@ Production-grade resilience primitives with Tower layer integration.
 ```toml
 [dependencies]
 rskit-resilience = "0.2.0-alpha.1"
-rskit-errors = "0.2.0-alpha.2"
+rskit-errors = "0.2.0-alpha.3"
 ```
 
 ```rust

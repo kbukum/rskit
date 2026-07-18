@@ -7,7 +7,7 @@
 ```toml
 [dependencies]
 rskit-mcp = "0.2.0-alpha.1"
-rskit-tool = "0.2.0-alpha.1"
+rskit-tool = "0.2.0-alpha.2"
 ```
 
 ## Architecture
