@@ -251,7 +251,7 @@ rskit-observability = { path = "rskit-observability", version = "0.2.0-alpha.1" 
 rskit-process = { path = "rskit-process", version = "0.2.0-alpha.1" }
 rskit-provider = { path = "rskit-provider", version = "0.2.0-alpha.1" }
 rskit-resilience = { path = "rskit-resilience", version = "0.2.0-alpha.1" }
-rskit-schema = { path = "rskit-schema", version = "0.2.0-alpha.1" }
+rskit-schema = { path = "rskit-schema", version = "0.2.0-alpha.1", default-features = false }
 rskit-security = { path = "rskit-security", version = "0.2.0-alpha.1" }
 rskit-server = { path = "rskit-server", version = "0.2.0-alpha.1" }
 rskit-skill = { path = "rskit-skill", version = "0.2.0-alpha.1" }
@@ -263,7 +263,7 @@ rskit-storage-supabase = { path = "../contrib/storage/supabase", version = "0.2.
 rskit-storage-s3 = { path = "../contrib/storage/s3", version = "0.2.0-alpha.1" }
 rskit-stream = { path = "rskit-stream", version = "0.2.0-alpha.1" }
 rskit-testutil = { path = "rskit-testutil", version = "0.2.0-alpha.1" }
-rskit-tool = { path = "rskit-tool", version = "0.2.0-alpha.1" }
+rskit-tool = { path = "rskit-tool", version = "0.2.0-alpha.1", default-features = false }
 rskit-util = { path = "rskit-util", version = "0.2.0-alpha.1" }
 rskit-validation = { path = "rskit-validation", version = "0.2.0-alpha.1" }
 rskit-vectorstore = { path = "rskit-vectorstore", version = "0.2.0-alpha.1" }

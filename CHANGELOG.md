@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- Trim the dependency/build footprint by feature-gating non-essential cross-cutting deps so unrelated crates no longer compile them:
+  - `rskit-schema` now gates JSON Schema *validation* (the heavy `jsonschema` tree — num-bigint/complex/rational, fraction, fancy-regex, referencing) behind a `validation` feature (on by default for the crate). Plain result types (`ValidationOptions`/`ValidationError`/`ValidationResult`) and schema *generation* stay dependency-free. `rskit-tool` forwards this as its own `validation` feature. At the workspace root both crates are pulled with `default-features = false`, so thin consumers that only need tool/schema *types* (e.g. `rskit-inference`, `rskit-llm`, and the TGI/vLLM/Triton/OpenAI clients) no longer compile `jsonschema`; `rskit-mcp`, `rskit-agent`, `rskit-dataset`, and the facade opt back into `validation`.
+  - `rskit-config` now depends on `rskit-logging` with `default-features = false`, so config consumers no longer pull the `tracing-subscriber` stack (nu-ansi-term, sharded-slab, thread_local, matchers, tracing-log) transitively.
+  - `rskit-dataset` no longer enables image codecs by default: the `image` crate and its codec tree (png/gif/tiff/webp/jpeg, rayon, moxcms) are now behind the opt-in `image-transform` feature, so record/tabular dataset users skip them. The facade exposes it as the `dataset-image` feature.
+- Harden the release publisher (`scripts/rskit_tool/publish.py`): crates.io existence lookups now retry transient network faults (TLS handshake timeouts, dropped connections) with bounded exponential backoff instead of aborting the whole `make release-publish` run on the first blip. Definitive outcomes (404, other HTTP statuses) are still returned immediately without retry.
+
 ## [v0.2.0-alpha.5] - 2026-07-18
 
 ### Added

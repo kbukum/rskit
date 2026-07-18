@@ -48,7 +48,7 @@ rskit-util = { workspace = true }
 rskit-codec = { workspace = true }
 rskit-stream = { workspace = true, optional = true }
 rskit-validation = { workspace = true, optional = true }
-rskit-logging = { workspace = true, optional = true }
+rskit-logging = { workspace = true, optional = true, default-features = false }
 
 [dev-dependencies]
 tempfile = { workspace = true }

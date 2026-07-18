@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 import unittest
+import urllib.error
 from email.utils import formatdate
 
 from . import support  # noqa: F401
+from rskit_tool import publish as publish_module
 from rskit_tool.errors import ToolError
 from rskit_tool.publish import (
+    LOOKUP_MAX_RETRIES,
     NEW_CRATE_REFILL_SECONDS,
     UPDATE_REFILL_SECONDS,
     CommandResult,
     CratePlan,
     RateAwarePublisher,
+    _get_json,
     is_rate_limited,
     parse_retry_after,
 )
@@ -312,6 +316,105 @@ class RateAwarePublisherTests(unittest.TestCase):
                 self._publisher(registry, publish_crate, clock, poll_interval=invalid)
             with self.assertRaises(ValueError):
                 self._publisher(registry, publish_crate, clock, probe_interval=invalid)
+
+
+class GetJsonRetryTests(unittest.TestCase):
+    """Transient network faults on crates.io lookups retry before failing."""
+
+    class _FakeResponse:
+        def __init__(self, payload: bytes) -> None:
+            self._payload = payload
+
+        def __enter__(self) -> "GetJsonRetryTests._FakeResponse":
+            return self
+
+        def __exit__(self, *exc: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return self._payload
+
+    def _patch_urlopen(self, behaviors) -> list[float]:
+        """Patch urlopen to replay ``behaviors`` (exceptions or payload bytes)."""
+
+        calls = iter(behaviors)
+
+        def fake_urlopen(_request, timeout=None):  # noqa: ANN001 - test stub signature.
+            outcome = next(calls)
+            if isinstance(outcome, Exception):
+                raise outcome
+            return self._FakeResponse(outcome)
+
+        self._original_urlopen = publish_module.urllib.request.urlopen
+        publish_module.urllib.request.urlopen = fake_urlopen
+        self.addCleanup(
+            setattr, publish_module.urllib.request, "urlopen", self._original_urlopen
+        )
+        return []
+
+    def test_retries_transient_error_then_succeeds(self) -> None:
+        self._patch_urlopen(
+            [OSError("handshake timed out"), OSError("connection reset"), b'{"ok": true}']
+        )
+        sleeps: list[float] = []
+
+        data = _get_json(
+            "https://crates.io/api/v1/crates/x",
+            "lookup for x",
+            sleep=sleeps.append,
+            log=lambda _m: None,
+        )
+
+        self.assertEqual(data, {"ok": True})
+        # Two transient failures -> two backoff sleeps with exponential growth.
+        self.assertEqual(len(sleeps), 2)
+        self.assertLess(sleeps[0], sleeps[1])
+
+    def test_gives_up_after_max_retries(self) -> None:
+        self._patch_urlopen([OSError("timeout")] * LOOKUP_MAX_RETRIES)
+        sleeps: list[float] = []
+
+        with self.assertRaises(ToolError) as caught:
+            _get_json(
+                "https://crates.io/api/v1/crates/x",
+                "lookup for x",
+                sleep=sleeps.append,
+                log=lambda _m: None,
+            )
+
+        self.assertIn("after", str(caught.exception))
+        # One sleep between each of the LOOKUP_MAX_RETRIES attempts, minus the last.
+        self.assertEqual(len(sleeps), LOOKUP_MAX_RETRIES - 1)
+
+    def test_404_is_definitive_and_not_retried(self) -> None:
+        error = urllib.error.HTTPError("url", 404, "Not Found", {}, None)  # type: ignore[arg-type]
+        self._patch_urlopen([error])
+        sleeps: list[float] = []
+
+        data = _get_json(
+            "https://crates.io/api/v1/crates/x",
+            "lookup for x",
+            sleep=sleeps.append,
+            log=lambda _m: None,
+        )
+
+        self.assertIsNone(data)
+        self.assertEqual(sleeps, [])
+
+    def test_non_404_http_status_is_definitive_and_not_retried(self) -> None:
+        error = urllib.error.HTTPError("url", 500, "Server Error", {}, None)  # type: ignore[arg-type]
+        self._patch_urlopen([error])
+        sleeps: list[float] = []
+
+        with self.assertRaises(ToolError):
+            _get_json(
+                "https://crates.io/api/v1/crates/x",
+                "lookup for x",
+                sleep=sleeps.append,
+                log=lambda _m: None,
+            )
+
+        self.assertEqual(sleeps, [])
 
 
 if __name__ == "__main__":

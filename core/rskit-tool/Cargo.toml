@@ -17,6 +17,16 @@ keywords   = ["tool", "agent", "mcp", "function-calling"]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[features]
+# Runtime input validation via `rskit-schema` (`from_fn`/`from_fn_simple`
+# auto-compile a JSON Schema validator for tool inputs). Default-on because
+# validating untrusted tool inputs is a security control. Disable with
+# `default-features = false` for consumers that only build tool *definitions*
+# (e.g. inference/LLM transports) and never auto-wire validating tools — this
+# drops the `jsonschema` runtime validator and its dependency tree.
+default = ["validation"]
+validation = ["rskit-schema/validation"]
+
 [dependencies]
 # External
 serde          = { workspace = true }

@@ -28,13 +28,17 @@ futures-util = { workspace = true }
 
 # Internal
 rskit-errors = { workspace = true }
-rskit-schema = { workspace = true }
+rskit-schema = { workspace = true, features = ["validation"] }
 rskit-stream = { workspace = true }
 rskit-util = { workspace = true }
 rskit-validation = { workspace = true }
 
 [features]
-default = ["image-transform"]
+# Image decoding/transform support (`image` crate + codecs). Opt-in: the core
+# dataset abstractions (records, collection, targets, CSV/JSON) carry no image
+# dependency, so record/tabular consumers don't compile image codecs. Enable for
+# image-sample datasets.
+default = []
 image-transform = ["dep:image"]
 
 [dev-dependencies]

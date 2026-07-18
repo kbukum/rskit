@@ -1,8 +1,10 @@
 //! Transform trait and built-in transforms.
 
-use crate::{DataItem, DatasetItem, DatasetLimits};
+use crate::{DatasetItem, DatasetLimits};
 use rskit_errors::AppResult;
 
+#[cfg(feature = "image-transform")]
+use crate::DataItem;
 #[cfg(feature = "image-transform")]
 use crate::DataPayload;
 #[cfg(feature = "image-transform")]

@@ -1,9 +1,12 @@
 //! JSON Schema compilation and validation.
 
+use crate::ValidationLimits;
+#[cfg(feature = "validation")]
+use crate::limits::check_json_limits;
+#[cfg(feature = "validation")]
 use rskit_errors::{AppError, AppResult, ErrorCode};
+#[cfg(feature = "validation")]
 use serde_json::Value;
-
-use crate::{ValidationLimits, limits::check_json_limits};
 
 /// Options for schema compilation and value validation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -64,11 +67,13 @@ impl ValidationResult {
 }
 
 /// Reusable compiled JSON Schema validator.
+#[cfg(feature = "validation")]
 pub struct CompiledSchema {
     validator: jsonschema::Validator,
     options: ValidationOptions,
 }
 
+#[cfg(feature = "validation")]
 impl CompiledSchema {
     /// Validate a JSON value against this compiled schema.
     pub fn validate(&self, value: &Value) -> ValidationResult {
@@ -86,11 +91,13 @@ impl CompiledSchema {
 }
 
 /// Compile a JSON Schema once for repeated validation.
+#[cfg(feature = "validation")]
 pub fn compile(schema: &Value) -> AppResult<CompiledSchema> {
     compile_with_options(schema, ValidationOptions::default())
 }
 
 /// Compile a JSON Schema once with explicit validation options.
+#[cfg(feature = "validation")]
 pub fn compile_with_options(
     schema: &Value,
     options: ValidationOptions,
@@ -112,6 +119,7 @@ pub fn compile_with_options(
 /// Invalid schemas and structural-limit violations are converted to a
 /// `ValidationResult` for compatibility with callers that expect validation
 /// failures rather than hard errors.
+#[cfg(feature = "validation")]
 pub fn validate(schema: &Value, value: &Value) -> ValidationResult {
     match validate_with_options(schema, value, ValidationOptions::default()) {
         Ok(result) => result,
@@ -120,6 +128,7 @@ pub fn validate(schema: &Value, value: &Value) -> ValidationResult {
 }
 
 /// Validate a JSON value against a JSON Schema and return hard setup errors.
+#[cfg(feature = "validation")]
 pub fn validate_with_options(
     schema: &Value,
     value: &Value,
@@ -129,6 +138,7 @@ pub fn validate_with_options(
     validator.try_validate(value)
 }
 
+#[cfg(feature = "validation")]
 fn validation_result(validator: &jsonschema::Validator, value: &Value) -> ValidationResult {
     let errors = validator
         .iter_errors(value)
@@ -145,6 +155,7 @@ fn validation_result(validator: &jsonschema::Validator, value: &Value) -> Valida
 }
 
 /// Validate structured model output against a JSON Schema 2020-12-compatible schema subset.
+#[cfg(feature = "validation")]
 pub fn validate_structured_output(schema: &Value, value: &Value) -> ValidationResult {
     validate(schema, value)
 }

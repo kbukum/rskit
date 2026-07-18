@@ -7,6 +7,7 @@ mod callable;
 pub mod context;
 mod definition;
 pub mod envelope;
+#[cfg(feature = "validation")]
 mod from_fn;
 pub mod hitl;
 pub mod io;
@@ -20,6 +21,7 @@ pub use envelope::{
     DataClassification, Envelope, FilesystemMode, FilesystemRule, NetworkPolicy, NetworkRule,
     Safety, SensitiveMatcher, SensitivePredicate, SubprocessRule,
 };
+#[cfg(feature = "validation")]
 pub use from_fn::{from_fn, from_fn_simple};
 pub use hitl::{
     Decision, DenyHumanApproval, DenyOnSensitive, HumanApproval, SensitivityEvaluator, ToolCall,
