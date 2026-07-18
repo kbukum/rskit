@@ -134,12 +134,20 @@ def package_thresholds(
     config: CoverageConfig,
     explicit_line_threshold: float | None,
 ) -> dict[str, CoveragePackageConfig]:
-    """Return package thresholds after applying explicit global line override."""
+    """Return package thresholds after applying an explicit global line override.
+
+    An explicit global line threshold only ever *relaxes* a per-package override — it lowers a package's line gate but never raises it above the documented-achievable level the override declares. So a package pinned below the workspace default (e.g. live-broker code that cannot be unit-tested) stays at its override on the strict main-branch run, while the relaxed PR gate still lowers every package uniformly.
+    """
 
     if explicit_line_threshold is None:
         return config.packages
     return {
-        package: dataclasses.replace(override, line=explicit_line_threshold)
+        package: dataclasses.replace(
+            override,
+            line=explicit_line_threshold
+            if override.line is None
+            else min(override.line, explicit_line_threshold),
+        )
         for package, override in config.packages.items()
     }
 
