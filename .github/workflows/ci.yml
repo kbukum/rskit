@@ -370,7 +370,7 @@ jobs:
           toolchain: "1.95"
       - uses: taiki-e/install-action@c7eb1735f09259a5035e8e5d44b1406b1cddc0fb  # v2
         with:
-          tool: cargo-deny,cargo-audit
+          tool: cargo-deny@0.20.2,cargo-audit
       - name: Install nightly for rustdoc JSON
         run: rustup toolchain install nightly --profile minimal
       - name: Install cargo-public-api
