@@ -40,6 +40,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Fix `rskit-process` failing to compile for non-Unix targets: the blocking runner referenced `libc::SIGTERM`/`libc::SIGKILL` unconditionally. Signalling now goes through the already-`cfg`-gated `process_group` helpers, so the crate compiles on non-Unix targets (where signalling is a typed no-op) as the async path already did.
 - Fix a resource leak in the blocking `rskit-process` runner: if waiting on the child errored after the reader/stdin threads were spawned, the child was orphaned and the threads were left blocked on their pipes. The runner now owns the child and its worker threads in an RAII guard that kills the child and reaps the threads on any early return, mirroring the async `ChildScope`.
+- Fix the supply-chain audit (`make deny` / `release readiness`) failing under cargo-deny 0.20, whose CLI refactor moved `--config` from the `check` subcommand to the root command. All invocations now pass `--config` before `check`, so the `deny` target and release-readiness pass again on 0.20+.
 
 ## [v0.2.0-alpha.1] - 2026-06-29
 
