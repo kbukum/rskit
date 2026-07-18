@@ -44,6 +44,12 @@ class CoverageConfigTests(unittest.TestCase):
         self.assertEqual(args.security_line_threshold, 0.0)
         self.assertEqual(args.package_thresholds["rskit-suite"].line, 0.0)
 
+    def test_explicit_line_threshold_does_not_raise_lower_package_override(self) -> None:
+        args = apply_config_defaults(coverage_args(line_threshold=90.0), load_coverage_config(COVERAGE_CONFIG))
+
+        self.assertEqual(args.package_thresholds["rskit-messaging-rabbitmq"].line, 85.0)
+        self.assertEqual(args.package_thresholds["rskit-process"].line, 85.0)
+
     def test_explicit_security_threshold_is_preserved(self) -> None:
         args = apply_config_defaults(
             coverage_args(line_threshold=0.0, security_line_threshold=95.0),
