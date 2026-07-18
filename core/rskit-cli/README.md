@@ -20,7 +20,7 @@ Parser-agnostic CLI UX toolkit: theming, structured output, progress, interactiv
 
 ```toml
 [dependencies]
-rskit-cli = "0.2.0-alpha.2"
+rskit-cli = "0.2.0-alpha.3"
 ```
 
 ```rust

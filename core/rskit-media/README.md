@@ -17,7 +17,7 @@ Media types, codec/format registry, pipeline builder, and processing traits.
 
 ```toml
 [dependencies]
-rskit-media = "0.2.0-alpha.1"
+rskit-media = "0.2.0-alpha.2"
 ```
 
 ```rust

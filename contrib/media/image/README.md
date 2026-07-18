@@ -17,7 +17,7 @@ Native image processing backend using the `image` crate.
 
 ```toml
 [dependencies]
-rskit-media-image = "0.2.0-alpha.1"
+rskit-media-image = "0.2.0-alpha.2"
 ```
 
 ```rust

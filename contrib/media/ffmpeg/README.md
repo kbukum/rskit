@@ -17,7 +17,7 @@ FFmpeg CLI backend for video/audio processing.
 
 ```toml
 [dependencies]
-rskit-media-ffmpeg = "0.2.0-alpha.1"
+rskit-media-ffmpeg = "0.2.0-alpha.2"
 ```
 
 ```rust
