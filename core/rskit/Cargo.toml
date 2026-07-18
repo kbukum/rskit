@@ -48,7 +48,7 @@ rskit-chain = { workspace = true, optional = true }
 rskit-process = { workspace = true, optional = true }
 rskit-stateful = { workspace = true, optional = true }
 rskit-version = { workspace = true, optional = true }
-rskit-schema = { workspace = true, optional = true }
+rskit-schema = { workspace = true, optional = true, features = ["validation"] }
 rskit-hook = { workspace = true, optional = true }
 
 # Feature-gated crates
@@ -85,7 +85,7 @@ rskit-inference-triton = { workspace = true, optional = true }
 rskit-inference-vllm = { workspace = true, optional = true }
 rskit-inference-tgi = { workspace = true, optional = true }
 rskit-skill = { workspace = true, optional = true }
-rskit-tool = { workspace = true, optional = true }
+rskit-tool = { workspace = true, optional = true, features = ["validation"] }
 rskit-agent = { workspace = true, optional = true }
 rskit-mcp = { workspace = true, optional = true }
 rskit-storage = { workspace = true, optional = true }
@@ -170,6 +170,7 @@ cli           = ["dep:rskit-cli"]
 cli-interactive = ["cli", "rskit-cli/interactive"]
 git           = ["dep:rskit-git"]
 dataset       = ["dep:rskit-dataset"]
+dataset-image = ["dataset", "rskit-dataset/image-transform"]
 bench         = ["dep:rskit-bench"]
 workload      = ["dep:rskit-workload"]
 vectorstore   = ["dep:rskit-vectorstore"]
@@ -187,6 +188,6 @@ full          = [
     "llm-openai", "llm-anthropic", "llm-ollama", "llm-gemini", "embedding",
     "inference", "inference-triton", "inference-vllm", "inference-tgi",
     "prompt", "skill", "tool", "agent", "mcp", "media-full", "storage", "storage-s3", "storage-gcs", "storage-supabase",
-    "cli", "git", "dataset", "bench", "vectorstore", "vectorstore-qdrant", "chain", "process", "stateful",
+    "cli", "git", "dataset", "dataset-image", "bench", "vectorstore", "vectorstore-qdrant", "chain", "process", "stateful",
     "version", "schema", "hook", "workload",
 ]

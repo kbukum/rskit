@@ -17,11 +17,20 @@ keywords   = ["json-schema", "schemars", "schema", "validation"]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[features]
+# Runtime JSON Schema validation (`compile`, `validate`, `CompiledSchema`, …).
+# Default-on because validating untrusted tool inputs and structured model
+# output is a security control for the tool/mcp/agent stack. Disable with
+# `default-features = false` to keep only tracing-free schema *generation*
+# (schemars) and drop the `jsonschema` runtime validator and its dependency tree.
+default = ["validation"]
+validation = ["dep:jsonschema"]
+
 [dependencies]
 # External dependencies
 schemars   = { workspace = true }
 serde_json = { workspace = true }
-jsonschema = { workspace = true }
+jsonschema = { workspace = true, optional = true }
 
 # Internal dependencies
 rskit-errors = { workspace = true }

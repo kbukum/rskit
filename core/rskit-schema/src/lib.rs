@@ -18,10 +18,12 @@ pub use document::SchemaDocument;
 pub use generation::{Options, generate, generate_document, generate_with, generate_with_options};
 pub use json::Json;
 pub use limits::ValidationLimits;
+#[cfg(feature = "validation")]
 pub use validation::{
-    CompiledSchema, ValidationError, ValidationOptions, ValidationResult, compile,
-    compile_with_options, validate, validate_structured_output, validate_with_options,
+    CompiledSchema, compile, compile_with_options, validate, validate_structured_output,
+    validate_with_options,
 };
+pub use validation::{ValidationError, ValidationOptions, ValidationResult};
 
-#[cfg(test)]
+#[cfg(all(test, feature = "validation"))]
 mod tests;

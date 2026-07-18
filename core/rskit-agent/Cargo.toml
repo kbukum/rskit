@@ -36,7 +36,7 @@ rskit-llm = { workspace = true }
 rskit-observability = { workspace = true }
 rskit-provider = { workspace = true }
 rskit-resilience = { workspace = true }
-rskit-tool = { workspace = true }
+rskit-tool = { workspace = true, features = ["validation"] }
 rskit-hook = { workspace = true }
 
 [dev-dependencies]

@@ -45,6 +45,14 @@ from .versioning import SemVer
 NEW_CRATE_REFILL_SECONDS = 600.0  # 1 token per 10 minutes
 UPDATE_REFILL_SECONDS = 60.0  # 1 token per minute
 
+# crates.io JSON lookups race against transient network faults (DNS blips, TLS
+# handshake timeouts, dropped connections). These are not authoritative answers,
+# so a lookup retries them a bounded number of times with exponential backoff
+# before surfacing a ToolError, instead of aborting an in-flight release.
+LOOKUP_MAX_RETRIES = 5
+LOOKUP_BACKOFF_BASE_SECONDS = 2.0
+LOOKUP_BACKOFF_CAP_SECONDS = 30.0
+
 # Cargo surfaces a crates.io rate-limit rejection in its error output; these
 # markers let the publisher detect a 429 so its reactive-first loop can wait.
 # A bare "429" is intentionally excluded — it collides with unrelated numbers in
@@ -130,19 +138,48 @@ def max_published_version(crate: str) -> str | None:
     return str(max(candidates))
 
 
-def _get_json(url: str, context: str) -> dict | None:
-    """GET a crates.io JSON resource, returning None on 404."""
+def _get_json(
+    url: str,
+    context: str,
+    *,
+    sleep: Callable[[float], None] = time.sleep,
+    log: Callable[[str], None] = print,
+) -> dict | None:
+    """GET a crates.io JSON resource, returning None on 404.
+
+    Transient network faults (timeouts, dropped connections, DNS blips) are
+    retried with bounded exponential backoff — they carry no authoritative
+    answer, so aborting the release on the first blip would be needlessly
+    fragile. A 404 is a definitive "absent" and any other HTTP status is a
+    definitive failure; neither is retried.
+    """
 
     request = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
-    try:
-        with urllib.request.urlopen(request, timeout=10) as response:
-            return json.load(response)
-    except urllib.error.HTTPError as error:
-        if error.code == 404:
-            return None
-        raise ToolError(f"{context} failed: HTTP {error.code}") from error
-    except Exception as error:  # noqa: BLE001 - network/JSON errors share one failure path.
-        raise ToolError(f"{context} failed: {error}") from error
+    last_error: Exception | None = None
+    for attempt in range(LOOKUP_MAX_RETRIES):
+        try:
+            with urllib.request.urlopen(request, timeout=10) as response:
+                return json.load(response)
+        except urllib.error.HTTPError as error:
+            if error.code == 404:
+                return None
+            raise ToolError(f"{context} failed: HTTP {error.code}") from error
+        except Exception as error:  # noqa: BLE001 - network/JSON errors share one transient path.
+            last_error = error
+            if attempt < LOOKUP_MAX_RETRIES - 1:
+                backoff = min(
+                    LOOKUP_BACKOFF_BASE_SECONDS * (2**attempt),
+                    LOOKUP_BACKOFF_CAP_SECONDS,
+                )
+                log(
+                    f"==> {context} failed: {error}; "
+                    f"retrying in {backoff:.0f}s "
+                    f"({attempt + 1}/{LOOKUP_MAX_RETRIES - 1})"
+                )
+                sleep(backoff)
+    raise ToolError(
+        f"{context} failed after {LOOKUP_MAX_RETRIES} attempts: {last_error}"
+    ) from last_error
 
 
 class CratesIoRegistry:

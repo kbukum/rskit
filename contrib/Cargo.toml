@@ -48,7 +48,7 @@ rskit-validation = { path = "../core/rskit-validation", version = "0.2.0-alpha.1
 rskit-testutil = { path = "../core/rskit-testutil", version = "0.2.0-alpha.1" }
 rskit-server = { path = "../core/rskit-server", version = "0.2.0-alpha.1" }
 rskit-authz = { path = "../core/rskit-authz", version = "0.2.0-alpha.1" }
-rskit-tool = { path = "../core/rskit-tool", version = "0.2.0-alpha.1" }
+rskit-tool = { path = "../core/rskit-tool", version = "0.2.0-alpha.1", default-features = false }
 rskit-fs = { path = "../core/rskit-fs", version = "0.2.0-alpha.1" }
 rskit-llm-common = { path = "./llm/common", version = "0.2.0-alpha.1" }
 

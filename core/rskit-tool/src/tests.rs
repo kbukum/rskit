@@ -1,236 +1,5 @@
 use super::*;
-use rskit_errors::{AppResult, ErrorCode};
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
-
-#[derive(Deserialize, JsonSchema)]
-struct AddInput {
-    a: i32,
-    b: i32,
-}
-
-#[derive(Serialize)]
-struct AddOutput {
-    sum: i32,
-}
-
-#[tokio::test]
-async fn test_from_fn_basic() {
-    let tool = from_fn(
-        "add",
-        "Add two numbers",
-        |_ctx: Context, input: AddInput| async move {
-            Ok(text_result(&format!("{}", input.a + input.b)))
-        },
-    )
-    .unwrap();
-
-    assert_eq!(tool.definition().name, "add");
-    assert_eq!(tool.definition().description, "Add two numbers");
-
-    let ctx = Context::new();
-    let result = tool
-        .call(
-            &ctx,
-            ToolInput::new(serde_json::json!({"a": 1, "b": 2})).unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(result.text(), "3");
-}
-
-#[tokio::test]
-async fn test_from_fn_simple_basic() {
-    let tool = from_fn_simple("add", "Add", |input: AddInput| async move {
-        Ok(AddOutput {
-            sum: input.a + input.b,
-        })
-    })
-    .unwrap();
-
-    let ctx = Context::new();
-    let result = tool
-        .call(
-            &ctx,
-            ToolInput::new(serde_json::json!({"a": 1, "b": 2})).unwrap(),
-        )
-        .await
-        .unwrap();
-    assert!(result.output.is_some());
-    assert_eq!(result.output.unwrap()["sum"], 3);
-}
-
-#[tokio::test]
-async fn from_fn_simple_rejects_schema_invalid_input_before_handler_runs() {
-    use std::sync::Arc;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-
-    let calls = Arc::new(AtomicUsize::new(0));
-    let handler_calls = Arc::clone(&calls);
-    let tool = from_fn_simple("add", "Add", move |input: AddInput| {
-        let handler_calls = Arc::clone(&handler_calls);
-        async move {
-            handler_calls.fetch_add(1, Ordering::SeqCst);
-            Ok(AddOutput {
-                sum: input.a + input.b,
-            })
-        }
-    })
-    .unwrap();
-
-    let ctx = Context::new();
-    let err = tool
-        .call(
-            &ctx,
-            ToolInput::new(serde_json::json!({"a": "not-an-int", "b": 2})).unwrap(),
-        )
-        .await
-        .expect_err("untrusted input that violates the schema must fail closed");
-    assert_eq!(err.code(), ErrorCode::InvalidInput);
-    assert!(err.message().contains("invalid tool input"));
-    assert_eq!(
-        calls.load(Ordering::SeqCst),
-        0,
-        "handler must not run on schema-invalid input",
-    );
-}
-
-#[tokio::test]
-async fn from_fn_simple_validate_reports_schema_conformance() {
-    let tool = from_fn_simple("add", "Add", |input: AddInput| async move {
-        Ok(AddOutput {
-            sum: input.a + input.b,
-        })
-    })
-    .unwrap();
-
-    assert!(
-        tool.validate(&ToolInput::new(serde_json::json!({"a": 1, "b": 2})).unwrap())
-            .valid
-    );
-    assert!(
-        !tool
-            .validate(&ToolInput::new(serde_json::json!({"a": "bad", "b": 2})).unwrap())
-            .valid
-    );
-}
-
-#[tokio::test]
-async fn test_from_fn_schema_generated() {
-    let tool = from_fn("add", "Add", |_ctx: Context, _input: AddInput| async move {
-        Ok(text_result("0"))
-    })
-    .unwrap();
-
-    let schema = &tool.definition().input_schema;
-    assert!(schema.is_object());
-    let obj = schema.as_object().unwrap();
-    let props = obj.get("properties").unwrap().as_object().unwrap();
-    assert!(props.contains_key("a"));
-    assert!(props.contains_key("b"));
-}
-
-#[tokio::test]
-async fn test_from_fn_invalid_input() {
-    let tool = from_fn("add", "Add", |_ctx: Context, _input: AddInput| async move {
-        Ok(text_result("0"))
-    })
-    .unwrap();
-
-    let ctx = Context::new();
-    let result = tool
-        .call(&ctx, ToolInput::new(serde_json::json!({"x": 1})).unwrap())
-        .await;
-    assert!(result.is_err());
-}
-
-#[tokio::test]
-async fn test_validate() {
-    let tool = from_fn("add", "Add", |_ctx: Context, _input: AddInput| async move {
-        Ok(text_result("0"))
-    })
-    .unwrap();
-
-    let valid = tool.validate(&ToolInput::new(serde_json::json!({"a": 1, "b": 2})).unwrap());
-    assert!(valid.valid);
-
-    let invalid = tool.validate(&ToolInput::new(serde_json::json!({"a": "bad", "b": 2})).unwrap());
-    assert!(!invalid.valid);
-}
-
-#[tokio::test]
-async fn test_registry_operations() {
-    let registry = Registry::new();
-    assert!(registry.is_empty());
-
-    let tool = from_fn(
-        "add",
-        "Add two numbers",
-        |_ctx: Context, input: AddInput| async move {
-            Ok(text_result(&format!("{}", input.a + input.b)))
-        },
-    )
-    .unwrap();
-
-    registry.register(tool).unwrap();
-    assert_eq!(registry.len(), 1);
-    assert!(registry.contains("add"));
-    assert!(!registry.contains("missing"));
-
-    let ctx = Context::new();
-    let result = registry
-        .call(
-            "add",
-            &ctx,
-            ToolInput::new(serde_json::json!({"a": 3, "b": 4})).unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(result.text(), "7");
-}
-
-#[tokio::test]
-async fn test_registry_rejects_schema_invalid_input() {
-    let registry = Registry::new();
-    let tool = from_fn(
-        "add",
-        "Add two numbers",
-        |_ctx: Context, input: AddInput| async move {
-            Ok(text_result(&format!("{}", input.a + input.b)))
-        },
-    )
-    .unwrap();
-    registry.register(tool).unwrap();
-
-    let err = registry
-        .call(
-            "add",
-            &Context::new(),
-            ToolInput::new(serde_json::json!({"a": "bad", "b": 2})).unwrap(),
-        )
-        .await
-        .unwrap_err();
-
-    assert_eq!(err.code(), ErrorCode::InvalidInput);
-    assert!(err.message().contains("invalid tool input"));
-}
-
-#[tokio::test]
-async fn test_registry_duplicate() {
-    let registry = Registry::new();
-
-    let t1 = from_fn("dup", "First", |_ctx: Context, _: AddInput| async move {
-        Ok(text_result("1"))
-    })
-    .unwrap();
-    let t2 = from_fn("dup", "Second", |_ctx: Context, _: AddInput| async move {
-        Ok(text_result("2"))
-    })
-    .unwrap();
-
-    registry.register(t1).unwrap();
-    assert!(registry.register(t2).is_err());
-}
+use rskit_errors::AppResult;
 
 #[tokio::test]
 async fn test_registry_not_found() {
@@ -244,63 +13,6 @@ async fn test_registry_not_found() {
         )
         .await;
     assert!(result.is_err());
-}
-
-#[tokio::test]
-async fn test_registry_list() {
-    let registry = Registry::new();
-
-    let t1 = from_fn("alpha", "A tool", |_ctx: Context, _: AddInput| async move {
-        Ok(text_result("a"))
-    })
-    .unwrap();
-    let t2 = from_fn("beta", "B tool", |_ctx: Context, _: AddInput| async move {
-        Ok(text_result("b"))
-    })
-    .unwrap();
-
-    registry.register(t1).unwrap();
-    registry.register(t2).unwrap();
-
-    let defs = registry.list();
-    assert_eq!(defs.len(), 2);
-
-    let mut names: Vec<_> = registry.names();
-    names.sort();
-    assert_eq!(names, vec!["alpha", "beta"]);
-}
-
-#[tokio::test]
-async fn test_registry_search() {
-    let registry = Registry::new();
-    registry
-        .register(
-            from_fn(
-                "file_read",
-                "Read a file",
-                |_ctx: Context, _: AddInput| async move { Ok(text_result("")) },
-            )
-            .unwrap(),
-        )
-        .unwrap();
-    registry
-        .register(
-            from_fn(
-                "web_search",
-                "Search the web",
-                |_ctx: Context, _: AddInput| async move { Ok(text_result("")) },
-            )
-            .unwrap(),
-        )
-        .unwrap();
-
-    let results = registry.search("file");
-    assert_eq!(results.len(), 1);
-    assert_eq!(results[0].name, "file_read");
-
-    let results = registry.search("search");
-    assert_eq!(results.len(), 1);
-    assert_eq!(results[0].name, "web_search");
 }
 
 #[test]
@@ -512,4 +224,299 @@ fn test_tool_result_metadata() {
     let mut r = text_result("hi");
     r.set_meta("timing_ms", serde_json::json!(42).into());
     assert_eq!(r.metadata.get("timing_ms").unwrap(), &serde_json::json!(42));
+}
+
+#[cfg(feature = "validation")]
+mod validation {
+    use super::*;
+    use rskit_errors::ErrorCode;
+    use schemars::JsonSchema;
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Deserialize, JsonSchema)]
+    struct AddInput {
+        a: i32,
+        b: i32,
+    }
+
+    #[derive(Serialize)]
+    struct AddOutput {
+        sum: i32,
+    }
+
+    #[tokio::test]
+    async fn test_from_fn_basic() {
+        let tool = from_fn(
+            "add",
+            "Add two numbers",
+            |_ctx: Context, input: AddInput| async move {
+                Ok(text_result(&format!("{}", input.a + input.b)))
+            },
+        )
+        .unwrap();
+
+        assert_eq!(tool.definition().name, "add");
+        assert_eq!(tool.definition().description, "Add two numbers");
+
+        let ctx = Context::new();
+        let result = tool
+            .call(
+                &ctx,
+                ToolInput::new(serde_json::json!({"a": 1, "b": 2})).unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(result.text(), "3");
+    }
+
+    #[tokio::test]
+    async fn test_from_fn_simple_basic() {
+        let tool = from_fn_simple("add", "Add", |input: AddInput| async move {
+            Ok(AddOutput {
+                sum: input.a + input.b,
+            })
+        })
+        .unwrap();
+
+        let ctx = Context::new();
+        let result = tool
+            .call(
+                &ctx,
+                ToolInput::new(serde_json::json!({"a": 1, "b": 2})).unwrap(),
+            )
+            .await
+            .unwrap();
+        assert!(result.output.is_some());
+        assert_eq!(result.output.unwrap()["sum"], 3);
+    }
+
+    #[tokio::test]
+    async fn from_fn_simple_rejects_schema_invalid_input_before_handler_runs() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let handler_calls = Arc::clone(&calls);
+        let tool = from_fn_simple("add", "Add", move |input: AddInput| {
+            let handler_calls = Arc::clone(&handler_calls);
+            async move {
+                handler_calls.fetch_add(1, Ordering::SeqCst);
+                Ok(AddOutput {
+                    sum: input.a + input.b,
+                })
+            }
+        })
+        .unwrap();
+
+        let ctx = Context::new();
+        let err = tool
+            .call(
+                &ctx,
+                ToolInput::new(serde_json::json!({"a": "not-an-int", "b": 2})).unwrap(),
+            )
+            .await
+            .expect_err("untrusted input that violates the schema must fail closed");
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+        assert!(err.message().contains("invalid tool input"));
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            0,
+            "handler must not run on schema-invalid input",
+        );
+    }
+
+    #[tokio::test]
+    async fn from_fn_simple_validate_reports_schema_conformance() {
+        let tool = from_fn_simple("add", "Add", |input: AddInput| async move {
+            Ok(AddOutput {
+                sum: input.a + input.b,
+            })
+        })
+        .unwrap();
+
+        assert!(
+            tool.validate(&ToolInput::new(serde_json::json!({"a": 1, "b": 2})).unwrap())
+                .valid
+        );
+        assert!(
+            !tool
+                .validate(&ToolInput::new(serde_json::json!({"a": "bad", "b": 2})).unwrap())
+                .valid
+        );
+    }
+
+    #[tokio::test]
+    async fn test_from_fn_schema_generated() {
+        let tool = from_fn("add", "Add", |_ctx: Context, _input: AddInput| async move {
+            Ok(text_result("0"))
+        })
+        .unwrap();
+
+        let schema = &tool.definition().input_schema;
+        assert!(schema.is_object());
+        let obj = schema.as_object().unwrap();
+        let props = obj.get("properties").unwrap().as_object().unwrap();
+        assert!(props.contains_key("a"));
+        assert!(props.contains_key("b"));
+    }
+
+    #[tokio::test]
+    async fn test_from_fn_invalid_input() {
+        let tool = from_fn("add", "Add", |_ctx: Context, _input: AddInput| async move {
+            Ok(text_result("0"))
+        })
+        .unwrap();
+
+        let ctx = Context::new();
+        let result = tool
+            .call(&ctx, ToolInput::new(serde_json::json!({"x": 1})).unwrap())
+            .await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_validate() {
+        let tool = from_fn("add", "Add", |_ctx: Context, _input: AddInput| async move {
+            Ok(text_result("0"))
+        })
+        .unwrap();
+
+        let valid = tool.validate(&ToolInput::new(serde_json::json!({"a": 1, "b": 2})).unwrap());
+        assert!(valid.valid);
+
+        let invalid =
+            tool.validate(&ToolInput::new(serde_json::json!({"a": "bad", "b": 2})).unwrap());
+        assert!(!invalid.valid);
+    }
+
+    #[tokio::test]
+    async fn test_registry_operations() {
+        let registry = Registry::new();
+        assert!(registry.is_empty());
+
+        let tool = from_fn(
+            "add",
+            "Add two numbers",
+            |_ctx: Context, input: AddInput| async move {
+                Ok(text_result(&format!("{}", input.a + input.b)))
+            },
+        )
+        .unwrap();
+
+        registry.register(tool).unwrap();
+        assert_eq!(registry.len(), 1);
+        assert!(registry.contains("add"));
+        assert!(!registry.contains("missing"));
+
+        let ctx = Context::new();
+        let result = registry
+            .call(
+                "add",
+                &ctx,
+                ToolInput::new(serde_json::json!({"a": 3, "b": 4})).unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(result.text(), "7");
+    }
+
+    #[tokio::test]
+    async fn test_registry_rejects_schema_invalid_input() {
+        let registry = Registry::new();
+        let tool = from_fn(
+            "add",
+            "Add two numbers",
+            |_ctx: Context, input: AddInput| async move {
+                Ok(text_result(&format!("{}", input.a + input.b)))
+            },
+        )
+        .unwrap();
+        registry.register(tool).unwrap();
+
+        let err = registry
+            .call(
+                "add",
+                &Context::new(),
+                ToolInput::new(serde_json::json!({"a": "bad", "b": 2})).unwrap(),
+            )
+            .await
+            .unwrap_err();
+
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+        assert!(err.message().contains("invalid tool input"));
+    }
+
+    #[tokio::test]
+    async fn test_registry_duplicate() {
+        let registry = Registry::new();
+
+        let t1 = from_fn("dup", "First", |_ctx: Context, _: AddInput| async move {
+            Ok(text_result("1"))
+        })
+        .unwrap();
+        let t2 = from_fn("dup", "Second", |_ctx: Context, _: AddInput| async move {
+            Ok(text_result("2"))
+        })
+        .unwrap();
+
+        registry.register(t1).unwrap();
+        assert!(registry.register(t2).is_err());
+    }
+
+    #[tokio::test]
+    async fn test_registry_list() {
+        let registry = Registry::new();
+
+        let t1 = from_fn("alpha", "A tool", |_ctx: Context, _: AddInput| async move {
+            Ok(text_result("a"))
+        })
+        .unwrap();
+        let t2 = from_fn("beta", "B tool", |_ctx: Context, _: AddInput| async move {
+            Ok(text_result("b"))
+        })
+        .unwrap();
+
+        registry.register(t1).unwrap();
+        registry.register(t2).unwrap();
+
+        let defs = registry.list();
+        assert_eq!(defs.len(), 2);
+
+        let mut names: Vec<_> = registry.names();
+        names.sort();
+        assert_eq!(names, vec!["alpha", "beta"]);
+    }
+
+    #[tokio::test]
+    async fn test_registry_search() {
+        let registry = Registry::new();
+        registry
+            .register(
+                from_fn(
+                    "file_read",
+                    "Read a file",
+                    |_ctx: Context, _: AddInput| async move { Ok(text_result("")) },
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        registry
+            .register(
+                from_fn(
+                    "web_search",
+                    "Search the web",
+                    |_ctx: Context, _: AddInput| async move { Ok(text_result("")) },
+                )
+                .unwrap(),
+            )
+            .unwrap();
+
+        let results = registry.search("file");
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].name, "file_read");
+
+        let results = registry.search("search");
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].name, "web_search");
+    }
 }

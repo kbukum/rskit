@@ -38,8 +38,8 @@ url = { workspace = true }
 rskit-ai = { workspace = true }
 rskit-component = { workspace = true }
 rskit-observability = { workspace = true }
-rskit-tool = { workspace = true }
-rskit-schema = { workspace = true }
+rskit-tool = { workspace = true, features = ["validation"] }
+rskit-schema = { workspace = true, features = ["validation"] }
 rskit-errors = { workspace = true }
 rskit-authz = { workspace = true }
 

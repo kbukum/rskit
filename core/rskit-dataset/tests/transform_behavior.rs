@@ -1,3 +1,5 @@
+#![cfg(feature = "image-transform")]
+
 use std::io::Cursor;
 
 use image::{DynamicImage, ImageFormat, Rgb, RgbImage};
