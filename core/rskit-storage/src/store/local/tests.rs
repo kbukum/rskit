@@ -6,7 +6,7 @@ use bytes::Bytes;
 use rskit_errors::ErrorCode;
 
 use crate::FileSource;
-use crate::store::FileStore;
+use crate::store::{FileStore, UploadOptions};
 
 use super::path::{
     canonicalize_confined, ensure_target_parent_confined, file_not_found_error,
@@ -74,7 +74,7 @@ async fn traversal_keys_are_rejected_for_local_store_operations() {
 
     assert!(
         store
-            .upload(&source, "../escape.txt", None, None)
+            .upload(&source, "../escape.txt", UploadOptions::new())
             .await
             .is_err()
     );
@@ -100,14 +100,14 @@ async fn local_store_rejects_intermediate_symlink_escape() {
 
     assert!(
         store
-            .upload(&source, "linked/escape.txt", None, None)
+            .upload(&source, "linked/escape.txt", UploadOptions::new())
             .await
             .is_err()
     );
     assert!(!outside.path().join("escape.txt").exists());
     assert!(
         store
-            .upload(&source, "linked/nested/escape.txt", None, None)
+            .upload(&source, "linked/nested/escape.txt", UploadOptions::new())
             .await
             .is_err()
     );
@@ -202,7 +202,7 @@ async fn local_store_lists_file_prefix_as_empty_and_rejects_directory_presign() 
     .unwrap();
     let source = FileSource::from_bytes(Bytes::from_static(b"content"));
     store
-        .upload(&source, "dir/file.txt", None, None)
+        .upload(&source, "dir/file.txt", UploadOptions::new())
         .await
         .unwrap();
 

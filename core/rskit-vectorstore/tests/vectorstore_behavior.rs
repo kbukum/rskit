@@ -2,8 +2,8 @@
 
 use rskit_errors::ErrorCode;
 use rskit_vectorstore::{
-    InMemoryVectorStore, PayloadValue, PointPayload, SearchFilter, SimilarityMetric, VectorStore,
-    VectorStoreConfig, VectorStoreLimits,
+    InMemoryVectorStore, PayloadValue, Point, PointPayload, SearchFilter, SearchQuery,
+    SimilarityMetric, VectorStore, VectorStoreConfig, VectorStoreLimits,
 };
 use serde_json::json;
 
@@ -147,27 +147,33 @@ async fn in_memory_store_searches_filters_updates_deletes_and_reports_errors() {
     store
         .upsert(
             "docs",
-            "a",
-            vec![1.0, 0.0],
-            PointPayload::new().with_field("kind", "guide"),
+            Point::new(
+                "a",
+                vec![1.0, 0.0],
+                PointPayload::new().with_field("kind", "guide"),
+            ),
         )
         .await
         .unwrap();
     store
         .upsert(
             "docs",
-            "b",
-            vec![0.0, 2.0],
-            PointPayload::new().with_field("kind", "api"),
+            Point::new(
+                "b",
+                vec![0.0, 2.0],
+                PointPayload::new().with_field("kind", "api"),
+            ),
         )
         .await
         .unwrap();
     store
         .upsert(
             "docs",
-            "a",
-            vec![0.0, 3.0],
-            PointPayload::new().with_field("kind", "guide"),
+            Point::new(
+                "a",
+                vec![0.0, 3.0],
+                PointPayload::new().with_field("kind", "guide"),
+            ),
         )
         .await
         .unwrap();
@@ -175,9 +181,8 @@ async fn in_memory_store_searches_filters_updates_deletes_and_reports_errors() {
     let filtered = store
         .search(
             "docs",
-            vec![0.0, 1.0],
-            10,
-            Some(SearchFilter::new().must_match("kind", "guide")),
+            SearchQuery::new(vec![0.0, 1.0], 10)
+                .with_filter(SearchFilter::new().must_match("kind", "guide")),
         )
         .await
         .unwrap();
@@ -188,7 +193,7 @@ async fn in_memory_store_searches_filters_updates_deletes_and_reports_errors() {
     store.delete("docs", "a").await.unwrap();
     assert!(
         store
-            .search("docs", vec![0.0, 1.0], 10, None)
+            .search("docs", SearchQuery::new(vec![0.0, 1.0], 10))
             .await
             .unwrap()
             .iter()
@@ -196,7 +201,10 @@ async fn in_memory_store_searches_filters_updates_deletes_and_reports_errors() {
     );
     assert_eq!(
         store
-            .upsert("missing", "x", vec![1.0, 0.0], PointPayload::new())
+            .upsert(
+                "missing",
+                Point::new("x", vec![1.0, 0.0], PointPayload::new())
+            )
             .await
             .unwrap_err()
             .code(),
@@ -204,7 +212,7 @@ async fn in_memory_store_searches_filters_updates_deletes_and_reports_errors() {
     );
     assert_eq!(
         store
-            .search("docs", vec![1.0], 1, None)
+            .search("docs", SearchQuery::new(vec![1.0], 1))
             .await
             .unwrap_err()
             .code(),

@@ -1,9 +1,8 @@
-//! Vector store trait definition.
+//! Point data model: scalar payload values, payloads, and the upsert point.
 
 use std::collections::HashMap;
 use std::fmt;
 
-use async_trait::async_trait;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use serde::de::Visitor;
 use serde::{Deserialize, Serialize};
@@ -235,136 +234,27 @@ impl Default for PointPayload {
     }
 }
 
-/// A single search result from the vector store.
-#[derive(Debug, Clone)]
-pub struct SearchResult {
-    /// Point identifier.
+/// A vector point to insert or update in a collection.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Point {
+    /// Point identifier, unique within the collection.
     pub id: String,
-    /// Backend-specific similarity score.
-    pub score: f32,
-    /// Payload attached to the point.
+    /// Dense embedding vector.
+    pub vector: Vec<f32>,
+    /// Metadata payload stored alongside the vector.
     pub payload: PointPayload,
 }
 
-/// Canonical vector distance/similarity metrics.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[non_exhaustive]
-#[serde(rename_all = "lowercase")]
-pub enum SimilarityMetric {
-    /// Cosine similarity.
-    #[default]
-    Cosine,
-    /// Dot product.
-    Dot,
-    /// Euclidean L2 distance.
-    L2,
-}
-
-/// Exact-match metadata filter condition.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct FilterCondition {
-    /// Payload field path.
-    pub field: String,
-    /// Exact value to match.
-    pub equals: PayloadValue,
-}
-
-/// Optional filters for search queries.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SearchFilter {
-    /// Filter by exact field match (e.g., platform = "youtube").
-    #[serde(default)]
-    pub must: Vec<FilterCondition>,
-}
-
-impl SearchFilter {
-    /// Create an empty filter.
+impl Point {
+    /// Create a point from its identifier, vector, and payload.
     #[must_use]
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Add an exact-match condition to the `must` list.
-    #[must_use]
-    pub fn must_match(mut self, field: impl Into<String>, value: impl Into<PayloadValue>) -> Self {
-        self.must.push(FilterCondition {
-            field: field.into(),
-            equals: value.into(),
-        });
-        self
-    }
-
-    /// Validate filter condition count and approximate scalar bytes against limits.
-    pub fn validate_limits(&self, limits: &VectorStoreLimits) -> AppResult<()> {
-        if self.must.len() > limits.max_filter_conditions {
-            return Err(AppError::new(
-                ErrorCode::InvalidInput,
-                format!(
-                    "vector search filter has {} conditions, exceeding max_filter_conditions {}",
-                    self.must.len(),
-                    limits.max_filter_conditions
-                ),
-            ));
+    pub fn new(id: impl Into<String>, vector: Vec<f32>, payload: PointPayload) -> Self {
+        Self {
+            id: id.into(),
+            vector,
+            payload,
         }
-        let mut total_bytes = 0usize;
-        for condition in &self.must {
-            if let PayloadValue::Float(float_value) = &condition.equals
-                && !float_value.is_finite()
-            {
-                return Err(AppError::new(
-                    ErrorCode::InvalidInput,
-                    "vector filter float values must be finite",
-                ));
-            }
-            total_bytes = total_bytes
-                .checked_add(condition.field.len())
-                .and_then(|bytes| bytes.checked_add(condition.equals.encoded_len()))
-                .ok_or_else(|| {
-                    AppError::new(
-                        ErrorCode::InvalidInput,
-                        "vector filter byte size overflowed validation bounds",
-                    )
-                })?;
-        }
-        if total_bytes > limits.max_payload_bytes {
-            return Err(AppError::new(
-                ErrorCode::InvalidInput,
-                format!(
-                    "vector search filter is {total_bytes} bytes, exceeding max_payload_bytes {}",
-                    limits.max_payload_bytes
-                ),
-            ));
-        }
-        Ok(())
     }
-}
-
-/// Trait for vector similarity search stores.
-#[async_trait]
-pub trait VectorStore: Send + Sync {
-    /// Ensure a collection exists, creating it if necessary.
-    async fn ensure_collection(&self, collection: &str, dimensions: usize) -> AppResult<()>;
-
-    /// Insert or update a vector point.
-    async fn upsert(
-        &self,
-        collection: &str,
-        id: &str,
-        vector: Vec<f32>,
-        payload: PointPayload,
-    ) -> AppResult<()>;
-
-    /// Search for similar vectors.
-    async fn search(
-        &self,
-        collection: &str,
-        vector: Vec<f32>,
-        limit: usize,
-        filter: Option<SearchFilter>,
-    ) -> AppResult<Vec<SearchResult>>;
-
-    /// Delete a point by ID.
-    async fn delete(&self, collection: &str, id: &str) -> AppResult<()>;
 }
 
 #[cfg(test)]

@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import io
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
 from . import support  # noqa: F401
 from rskit_tool.cargo import Package, packages_for_paths
 from rskit_tool.cli import build_parser
+from rskit_tool.commands.checks import find_crowded_modules
 from rskit_tool.commands.ci import feature_arg_sets, group_by_workspace, run_lint, run_test
 from rskit_tool.commands.domains import DOMAIN_ORDER, affected_domains, load_domains, resolve_crate_name
 from rskit_tool.commands.release import (
@@ -135,6 +137,37 @@ class ToolingCommandTests(unittest.TestCase):
 
         self.assertEqual(list(grouped), ["core", "contrib"])
         self.assertEqual([package.name for package in grouped["core"]], ["rskit-config", "rskit-errors"])
+
+    def test_crowded_modules_counts_non_aggregator_files_above_threshold(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "core" / "rskit-demo" / "src"
+            src.mkdir(parents=True)
+            (src / "lib.rs").write_text("")
+            for index in range(4):
+                (src / f"concern_{index}.rs").write_text("")
+
+            # Aggregators and small modules stay below the threshold.
+            self.assertEqual(find_crowded_modules([src], threshold=4), [])
+            # A fifth concern file crosses a threshold of 4.
+            (src / "concern_4.rs").write_text("")
+            findings = find_crowded_modules([src], threshold=4)
+            self.assertEqual(len(findings), 1)
+            self.assertEqual(findings[0][1], 5)
+
+    def test_crowded_modules_excludes_tests_and_test_support(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "src"
+            (src / "tests").mkdir(parents=True)
+            (src / "test_support").mkdir()
+            (src / "mod.rs").write_text("")
+            (src / "test_support.rs").write_text("")
+            (src / "real.rs").write_text("")
+            for index in range(10):
+                (src / "tests" / f"case_{index}.rs").write_text("")
+                (src / "test_support" / f"fixture_{index}.rs").write_text("")
+
+            # Only `real.rs` counts: mod.rs, test_support.rs, tests/ and test_support/ are excluded.
+            self.assertEqual(find_crowded_modules([src], threshold=0), [(src.as_posix(), 1)])
 
     def test_run_parallel_preserves_none_results(self) -> None:
         self.assertEqual(run_parallel([ParallelTask("none-result", lambda: None)]), [None])

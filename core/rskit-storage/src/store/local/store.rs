@@ -1,6 +1,5 @@
 //! Local [`FileStore`] implementation.
 
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -9,7 +8,7 @@ use rskit_fs::{async_io, sync_io};
 
 use crate::FileSource;
 
-use super::super::{FileStore, ProgressCallback, StoredFile, prefixed_key};
+use super::super::{FileStore, StoredFile, UploadOptions, prefixed_key};
 use super::config::LocalStoreConfig;
 use super::path::{
     canonicalize_confined, ensure_target_parent_confined, file_not_found_error,
@@ -229,8 +228,7 @@ impl FileStore for LocalStore {
         &self,
         source: &FileSource,
         key: &str,
-        content_type: Option<&str>,
-        metadata: Option<HashMap<String, String>>,
+        options: UploadOptions,
     ) -> AppResult<StoredFile> {
         let key = normalize_local_key(key)?;
         let target = self.resolve_normalized_path(&key)?;
@@ -238,17 +236,7 @@ impl FileStore for LocalStore {
         let mut reader = source.reader().await?;
         let size = self.stream_to_target(&mut reader, &target).await?;
 
-        Ok(StoredFile::new(key, size, content_type).with_metadata(metadata.unwrap_or_default()))
-    }
-
-    async fn upload_with_progress(
-        &self,
-        source: &FileSource,
-        key: &str,
-        content_type: Option<&str>,
-        _on_progress: ProgressCallback,
-    ) -> AppResult<StoredFile> {
-        self.upload(source, key, content_type, None).await
+        Ok(StoredFile::new(key, size, options.content_type()).with_metadata(options.metadata))
     }
 
     async fn download(&self, key: &str) -> AppResult<FileSource> {
@@ -495,8 +483,9 @@ mod focused_tests {
             .upload(
                 &source,
                 "/nested/item.txt",
-                Some("text/plain"),
-                Some(metadata),
+                UploadOptions::new()
+                    .with_content_type("text/plain")
+                    .with_metadata(metadata),
             )
             .await
             .unwrap();
@@ -520,11 +509,12 @@ mod focused_tests {
         let source = FileSource::from_bytes(bytes::Bytes::from_static(b"hello"));
 
         let uploaded = store
-            .upload_with_progress(
+            .upload(
                 &source,
                 "dir/hello.txt",
-                Some("text/plain"),
-                std::sync::Arc::new(|_| {}),
+                UploadOptions::new()
+                    .with_content_type("text/plain")
+                    .with_progress(std::sync::Arc::new(|_| {})),
             )
             .await
             .unwrap();

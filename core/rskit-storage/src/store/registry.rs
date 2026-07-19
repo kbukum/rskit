@@ -137,6 +137,7 @@ mod tests {
 
     use super::*;
     use crate::FileSource;
+    use crate::store::UploadOptions;
 
     struct CountingFactory {
         calls: Arc<AtomicUsize>,
@@ -179,8 +180,7 @@ mod tests {
             .upload(
                 &FileSource::from_bytes(Bytes::from_static(b"data")),
                 "item.bin",
-                None,
-                None,
+                UploadOptions::new(),
             )
             .await
             .unwrap();
@@ -250,8 +250,7 @@ mod tests {
             .upload(
                 &FileSource::from_bytes(Bytes::from_static(b"local")),
                 "local.bin",
-                None,
-                None,
+                UploadOptions::new(),
             )
             .await
             .unwrap();

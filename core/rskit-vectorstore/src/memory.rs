@@ -8,7 +8,9 @@ use rskit_errors::{AppError, AppResult, ErrorCode};
 use tracing::debug;
 
 use crate::config::VectorStoreLimits;
-use crate::store::{PointPayload, SearchFilter, SearchResult, SimilarityMetric, VectorStore};
+use crate::store::{
+    Point, PointPayload, SearchFilter, SearchQuery, SearchResult, SimilarityMetric, VectorStore,
+};
 
 struct StoredPoint {
     id: String,
@@ -122,13 +124,12 @@ impl VectorStore for InMemoryVectorStore {
         Ok(())
     }
 
-    async fn upsert(
-        &self,
-        collection: &str,
-        id: &str,
-        vector: Vec<f32>,
-        payload: PointPayload,
-    ) -> AppResult<()> {
+    async fn upsert(&self, collection: &str, point: Point) -> AppResult<()> {
+        let Point {
+            id,
+            vector,
+            payload,
+        } = point;
         debug!(collection, id, "InMemory: upserting vector point");
 
         self.limits.validate_dimensions(vector.len())?;
@@ -160,7 +161,7 @@ impl VectorStore for InMemoryVectorStore {
             point.payload = payload;
         } else {
             col.points.push(StoredPoint {
-                id: id.to_string(),
+                id,
                 vector,
                 payload,
             });
@@ -169,13 +170,12 @@ impl VectorStore for InMemoryVectorStore {
         Ok(())
     }
 
-    async fn search(
-        &self,
-        collection: &str,
-        vector: Vec<f32>,
-        limit: usize,
-        filter: Option<SearchFilter>,
-    ) -> AppResult<Vec<SearchResult>> {
+    async fn search(&self, collection: &str, query: SearchQuery) -> AppResult<Vec<SearchResult>> {
+        let SearchQuery {
+            vector,
+            limit,
+            filter,
+        } = query;
         debug!(collection, limit, "InMemory: searching vectors");
 
         validate_search(limit, filter.as_ref(), &self.limits)?;
@@ -283,18 +283,18 @@ mod tests {
 
         let payload = PointPayload::new().with_field("name", "doc1");
         store
-            .upsert("test", "1", vec![1.0, 0.0, 0.0], payload)
+            .upsert("test", Point::new("1", vec![1.0, 0.0, 0.0], payload))
             .await
             .unwrap();
 
         let payload = PointPayload::new().with_field("name", "doc2");
         store
-            .upsert("test", "2", vec![0.0, 1.0, 0.0], payload)
+            .upsert("test", Point::new("2", vec![0.0, 1.0, 0.0], payload))
             .await
             .unwrap();
 
         let results = store
-            .search("test", vec![1.0, 0.0, 0.0], 10, None)
+            .search("test", SearchQuery::new(vec![1.0, 0.0, 0.0], 10))
             .await
             .unwrap();
 
@@ -309,16 +309,22 @@ mod tests {
         store.ensure_collection("test", 2).await.unwrap();
 
         store
-            .upsert("test", "long", vec![10.0, 0.0], PointPayload::new())
+            .upsert(
+                "test",
+                Point::new("long", vec![10.0, 0.0], PointPayload::new()),
+            )
             .await
             .unwrap();
         store
-            .upsert("test", "unit", vec![1.0, 0.0], PointPayload::new())
+            .upsert(
+                "test",
+                Point::new("unit", vec![1.0, 0.0], PointPayload::new()),
+            )
             .await
             .unwrap();
 
         let results = store
-            .search("test", vec![1.0, 0.0], 10, None)
+            .search("test", SearchQuery::new(vec![1.0, 0.0], 10))
             .await
             .unwrap();
 
@@ -333,18 +339,18 @@ mod tests {
 
         let payload = PointPayload::new().with_field("v", "old");
         store
-            .upsert("test", "1", vec![1.0, 0.0], payload)
+            .upsert("test", Point::new("1", vec![1.0, 0.0], payload))
             .await
             .unwrap();
 
         let payload = PointPayload::new().with_field("v", "new");
         store
-            .upsert("test", "1", vec![0.0, 1.0], payload)
+            .upsert("test", Point::new("1", vec![0.0, 1.0], payload))
             .await
             .unwrap();
 
         let results = store
-            .search("test", vec![0.0, 1.0], 10, None)
+            .search("test", SearchQuery::new(vec![0.0, 1.0], 10))
             .await
             .unwrap();
 
@@ -364,9 +370,11 @@ mod tests {
         store
             .upsert(
                 "test",
-                "1",
-                vec![1.0, 0.0],
-                PointPayload::new().with_field("type", "a"),
+                Point::new(
+                    "1",
+                    vec![1.0, 0.0],
+                    PointPayload::new().with_field("type", "a"),
+                ),
             )
             .await
             .unwrap();
@@ -374,16 +382,21 @@ mod tests {
         store
             .upsert(
                 "test",
-                "2",
-                vec![1.0, 0.0],
-                PointPayload::new().with_field("type", "b"),
+                Point::new(
+                    "2",
+                    vec![1.0, 0.0],
+                    PointPayload::new().with_field("type", "b"),
+                ),
             )
             .await
             .unwrap();
 
         let filter = SearchFilter::new().must_match("type", "a");
         let results = store
-            .search("test", vec![1.0, 0.0], 10, Some(filter))
+            .search(
+                "test",
+                SearchQuery::new(vec![1.0, 0.0], 10).with_filter(filter),
+            )
             .await
             .unwrap();
 
@@ -397,14 +410,14 @@ mod tests {
         store.ensure_collection("test", 2).await.unwrap();
 
         store
-            .upsert("test", "1", vec![1.0, 0.0], PointPayload::new())
+            .upsert("test", Point::new("1", vec![1.0, 0.0], PointPayload::new()))
             .await
             .unwrap();
 
         store.delete("test", "1").await.unwrap();
 
         let results = store
-            .search("test", vec![1.0, 0.0], 10, None)
+            .search("test", SearchQuery::new(vec![1.0, 0.0], 10))
             .await
             .unwrap();
         assert!(results.is_empty());
@@ -416,7 +429,7 @@ mod tests {
         store.ensure_collection("test", 3).await.unwrap();
 
         let result = store
-            .upsert("test", "1", vec![1.0, 0.0], PointPayload::new())
+            .upsert("test", Point::new("1", vec![1.0, 0.0], PointPayload::new()))
             .await;
 
         assert!(result.is_err());
@@ -428,7 +441,7 @@ mod tests {
         store.ensure_collection("test", 3).await.unwrap();
 
         let err = store
-            .search("test", vec![1.0, 0.0], 10, None)
+            .search("test", SearchQuery::new(vec![1.0, 0.0], 10))
             .await
             .expect_err("dimension mismatch must fail");
 
@@ -444,7 +457,7 @@ mod tests {
         store.ensure_collection("test", 2).await.unwrap();
 
         let err = store
-            .search("test", vec![1.0, 0.0], 2, None)
+            .search("test", SearchQuery::new(vec![1.0, 0.0], 2))
             .await
             .expect_err("search limit above configured bound must fail");
 
@@ -462,9 +475,11 @@ mod tests {
         let err = store
             .upsert(
                 "test",
-                "1",
-                vec![1.0, 0.0],
-                PointPayload::new().with_field("name", "too-large"),
+                Point::new(
+                    "1",
+                    vec![1.0, 0.0],
+                    PointPayload::new().with_field("name", "too-large"),
+                ),
             )
             .await
             .expect_err("payload above configured bound must fail");
@@ -482,7 +497,10 @@ mod tests {
 
         let filter = SearchFilter::new().must_match("name", "too-large");
         let err = store
-            .search("test", vec![1.0, 0.0], 1, Some(filter))
+            .search(
+                "test",
+                SearchQuery::new(vec![1.0, 0.0], 1).with_filter(filter),
+            )
             .await
             .expect_err("filter above configured bound must fail");
 
@@ -496,7 +514,10 @@ mod tests {
 
         let filter = SearchFilter::new().must_match("score", f64::NAN);
         let err = store
-            .search("test", vec![1.0, 0.0], 1, Some(filter))
+            .search(
+                "test",
+                SearchQuery::new(vec![1.0, 0.0], 1).with_filter(filter),
+            )
             .await
             .expect_err("non-finite filter float must fail");
 
@@ -507,7 +528,10 @@ mod tests {
     async fn test_upsert_missing_collection() {
         let store = InMemoryVectorStore::new();
         let result = store
-            .upsert("nonexistent", "1", vec![1.0], PointPayload::new())
+            .upsert(
+                "nonexistent",
+                Point::new("1", vec![1.0], PointPayload::new()),
+            )
             .await;
 
         assert!(result.is_err());

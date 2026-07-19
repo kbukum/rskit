@@ -143,11 +143,13 @@ fmt-check:
 	$(call run_fmt_target,-- --check)
 	@echo "✓ Format OK"
 
-## Declare-only aggregator guard (lib.rs / mod.rs)
+## Declare-only aggregator guard (lib.rs / mod.rs) + crowded-module advisory
 structure:
 	@echo "==> Checking declare-only aggregators (lib.rs / mod.rs)..."
 	@./scripts/ensure-ast-grep.sh
 	@ast-grep scan
+	@echo "==> Scanning for crowded modules (advisory)..."
+	@$(RSKIT_TOOL) check crowded-modules
 
 ## Build documentation
 doc:
@@ -357,6 +359,7 @@ help:
 	@echo "  make lint               [C=] [W=] [FEATURES=]                 Run clippy; defaults to --all-features"
 	@echo "  make fmt                [W=]               Format code"
 	@echo "  make fmt-check          [W=]               Check formatting"
+	@echo "  make structure                            Declare-only aggregator guard + crowded-module advisory (CROWDED_MODULE_FILES=15)"
 	@echo "  make doc                [C=] [W=]          Build documentation"
 	@echo "  make check-l7-edges                       Check L7 dependency edges"
 	@echo "  make check-workspace-deps-sync            Check shared core/contrib/examples dependency versions"

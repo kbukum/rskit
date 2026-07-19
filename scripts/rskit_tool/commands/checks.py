@@ -55,6 +55,10 @@ def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) 
     check_sub.add_parser("l7-edges", help="Check disallowed L7 dependency edges").set_defaults(func=run_l7_edges)
     check_sub.add_parser("workspace-deps-sync", help="Check workspace dependency version sync").set_defaults(func=run_workspace_deps_sync)
     check_sub.add_parser("topology", help="Check module topology guardrails").set_defaults(func=run_topology)
+    check_sub.add_parser(
+        "crowded-modules",
+        help="Advisory: flag module directories with many separable files (CROWDED_MODULE_FILES)",
+    ).set_defaults(func=run_crowded_modules)
 
     public_api = check_sub.add_parser("public-api", help="Check public API diff/generation")
     public_api.add_argument("package", nargs="?", default="rskit-suite")
@@ -239,6 +243,56 @@ def run_topology(_args: argparse.Namespace) -> int:
             print(f"  - {error}", file=os.sys.stderr)
         return 1
     print("Topology check passed")
+    return 0
+
+
+def find_crowded_modules(roots: list[Path], threshold: int) -> list[tuple[str, int]]:
+    """Return ``(relative_path, count)`` for module dirs whose non-aggregator file count exceeds
+    ``threshold``.
+
+    Counts ``.rs`` files directly in each directory, excluding the ``mod.rs``/``lib.rs``
+    aggregators and ``test_support.rs``; ``tests/`` and ``test_support`` subtrees are not walked.
+    """
+
+    findings: list[tuple[str, int]] = []
+    for root in roots:
+        for dirpath, dirnames, filenames in os.walk(root):
+            dirnames[:] = sorted(d for d in dirnames if d not in ("tests", "test_support"))
+            count = sum(
+                1
+                for name in filenames
+                if name.endswith(".rs") and name not in ("mod.rs", "lib.rs", "test_support.rs")
+            )
+            if count > threshold:
+                try:
+                    rel = Path(dirpath).relative_to(ROOT).as_posix()
+                except ValueError:
+                    rel = Path(dirpath).as_posix()
+                findings.append((rel, count))
+    return sorted(findings)
+
+
+def run_crowded_modules(_args: argparse.Namespace) -> int:
+    """Advisory: surface module directories that have accumulated many separable files.
+
+    A directory under ``core/**/src`` or ``contrib/**/src`` that holds many non-aggregator
+    ``.rs`` files (excluding ``mod.rs``/``lib.rs``, ``tests/`` trees, and ``test_support``) is a
+    candidate for lifting cohesive groups into concern-named submodule folders (nested
+    ``mod.rs``). File count alone is not a verdict — a flat set of files that all serve one tightly
+    coupled concern is legitimate; this only surfaces the candidate to judge. The
+    ``CROWDED_MODULE_FILES`` default (15) is a deliberately conservative backstop above the
+    "roughly >5-10" judgment range in the docs, to avoid flagging legitimate modules;
+    author/reviewer judgment stays the primary signal. Advisory only — never gating.
+    """
+
+    threshold = int(os.environ.get("CROWDED_MODULE_FILES", "15"))
+    roots = [*sorted((ROOT / "core").glob("*/src")), *sorted((ROOT / "contrib").glob("*/*/src"))]
+    for rel, count in find_crowded_modules(roots, threshold):
+        print(
+            f"warning: crowded module ({count} non-aggregator files) — consider grouping "
+            f"separable concerns into a concern-named submodule folder: {rel}",
+            file=os.sys.stderr,
+        )
     return 0
 
 

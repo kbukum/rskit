@@ -7,8 +7,8 @@ use async_trait::async_trait;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_httpclient::{Auth, HttpClient, HttpClientConfig, Request};
 use rskit_vectorstore::{
-    PointPayload, SearchFilter, SearchResult, SimilarityMetric, VectorFactory, VectorStore,
-    VectorStoreConfig, VectorStoreLimits, VectorStoreRegistry,
+    Point, PointPayload, SearchFilter, SearchQuery, SearchResult, SimilarityMetric, VectorFactory,
+    VectorStore, VectorStoreConfig, VectorStoreLimits, VectorStoreRegistry,
 };
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
@@ -99,18 +99,17 @@ impl VectorStore for QdrantVectorStore {
         Ok(())
     }
 
-    async fn upsert(
-        &self,
-        collection: &str,
-        id: &str,
-        vector: Vec<f32>,
-        payload: PointPayload,
-    ) -> AppResult<()> {
+    async fn upsert(&self, collection: &str, point: Point) -> AppResult<()> {
+        let Point {
+            id,
+            vector,
+            payload,
+        } = point;
         self.limits.validate_dimensions(vector.len())?;
         let collection_path = qdrant_collection_path(collection)?;
         payload.validate_limits(&self.limits)?;
         debug!(collection, id, "upserting vector point");
-        let body = qdrant_upsert_body(id, vector, payload)?;
+        let body = qdrant_upsert_body(&id, vector, payload)?;
         self.send_json(
             Request::put(format!("/collections/{collection_path}/points"))
                 .query_param("wait", "true"),
@@ -121,13 +120,12 @@ impl VectorStore for QdrantVectorStore {
         Ok(())
     }
 
-    async fn search(
-        &self,
-        collection: &str,
-        vector: Vec<f32>,
-        limit: usize,
-        filter: Option<SearchFilter>,
-    ) -> AppResult<Vec<SearchResult>> {
+    async fn search(&self, collection: &str, query: SearchQuery) -> AppResult<Vec<SearchResult>> {
+        let SearchQuery {
+            vector,
+            limit,
+            filter,
+        } = query;
         self.limits.validate_dimensions(vector.len())?;
         self.limits.validate_search_limit(limit)?;
         if let Some(filter) = filter.as_ref() {
@@ -440,7 +438,7 @@ mod tests {
         .unwrap();
 
         let err = store
-            .search("test", vec![1.0], 2, None)
+            .search("test", SearchQuery::new(vec![1.0], 2))
             .await
             .expect_err("search limit above configured limit must fail");
 
@@ -460,7 +458,7 @@ mod tests {
         let store = registry.build(&config).unwrap();
 
         let err = store
-            .search("test", vec![1.0], 2, None)
+            .search("test", SearchQuery::new(vec![1.0], 2))
             .await
             .expect_err("registry Qdrant limit must be enforced before network");
 
@@ -526,18 +524,19 @@ mod tests {
         store
             .upsert(
                 "tenant_vectors",
-                "42",
-                vec![0.1, 0.2],
-                PointPayload::new().with_field("tag", "blue"),
+                Point::new(
+                    "42",
+                    vec![0.1, 0.2],
+                    PointPayload::new().with_field("tag", "blue"),
+                ),
             )
             .await
             .unwrap();
         let results = store
             .search(
                 "tenant_vectors",
-                vec![0.1, 0.2],
-                1,
-                Some(SearchFilter::new().must_match("tag", "blue")),
+                SearchQuery::new(vec![0.1, 0.2], 1)
+                    .with_filter(SearchFilter::new().must_match("tag", "blue")),
             )
             .await
             .unwrap();
@@ -565,7 +564,7 @@ mod tests {
         .unwrap();
 
         let err = store
-            .search("tenant_vectors", vec![0.1, 0.2], 1, None)
+            .search("tenant_vectors", SearchQuery::new(vec![0.1, 0.2], 1))
             .await
             .expect_err("unsupported upstream payload must fail");
 

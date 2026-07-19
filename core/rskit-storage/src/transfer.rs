@@ -2,7 +2,9 @@
 
 use rskit_errors::AppResult;
 
-use crate::{FileSink, FileSource, ProgressCallback, store::FileStore, store::StoredFile};
+use crate::{
+    FileSink, FileSource, ProgressCallback, UploadOptions, store::FileStore, store::StoredFile,
+};
 
 /// Copy a file from source to sink, optionally reporting progress.
 pub async fn copy_file(
@@ -26,7 +28,11 @@ pub async fn transfer(
     let source = from_store.download(from_key).await?;
     let meta = from_store.head(from_key).await?;
     to_store
-        .upload(&source, to_key, Some(&meta.content_type), None)
+        .upload(
+            &source,
+            to_key,
+            UploadOptions::new().with_content_type(&meta.content_type),
+        )
         .await
 }
 
@@ -81,8 +87,7 @@ mod tests {
             .upload(
                 &FileSource::from_bytes(Bytes::from_static(b"transfer-data")),
                 "source.bin",
-                Some("application/custom"),
-                None,
+                UploadOptions::new().with_content_type("application/custom"),
             )
             .await
             .unwrap();
