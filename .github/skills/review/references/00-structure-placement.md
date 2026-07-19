@@ -44,6 +44,18 @@ or an upward import is a **blocker**. The workspaces are split by role:
   Behavior added directly to the facade is misplaced (should-fix).
 - **Declare-only aggregator.** `lib.rs`/`mod.rs` carry only docs + submodule declarations + re-exports (crate-root `#![...]` attributes allowed).
   Logic or private items in an aggregator is a should-fix. Run `ast-grep scan` (`make structure`).
+- **Module cohesion & file-level structuring.** The inverse of the aggregator rule:
+  a single file that has grown **over-long
+  or mixes several distinct concerns** should be promoted to a folder —
+  a declare-only `mod.rs` plus concern-named submodules (the `http/`, `discovery/`, `apikey/` shape),
+  with shared test fixtures in a `#[cfg(test)] test_support` module. This is **criteria-driven,
+  not a line count**: reorganize only where the split genuinely improves discoverability
+  and maintainability (the reader can surf the folder to the right place instead of scanning one large file),
+  or where a parent already holds many organizable sibling files. A cohesive,
+  single-concern file is fine at any length — do not split for the sake of it.
+  When a change touches such a file,
+  restructure it **in the same change** rather than deferring the reorg (deferred reorg is how structure debt accumulates).
+  Flag an over-long, concern-mixed file left un-split as a should-fix.
 - **No misplaced concerns.** Each cross-cutting concern stays in its canonical crate —
   e.g. gRPC status mapping belongs in `rskit-grpc`, not `rskit-errors`.
   (Reuse of those owners is pass `01`.)
@@ -61,6 +73,8 @@ rg 'use rskit::' core/rskit-*/src
 rg 'use rskit::' contrib/*/*/src
 # what each crate actually depends on
 for c in core/rskit-*/Cargo.toml contrib/*/*/Cargo.toml; do echo "== $c =="; rg '^rskit-' "$c"; done
+# over-long single files that may want promoting to a concern-split folder (judge each, not a verdict)
+find core contrib -name '*.rs' -not -path '*/tests/*' | xargs wc -l | sort -rn | awk '$1 > 500' | head -30
 ```
 
 Then run `make check-topology check-l7-edges check-workspace-deps-sync` for the placement/acyclicity guards.

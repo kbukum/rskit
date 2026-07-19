@@ -1,10 +1,8 @@
-#[cfg(feature = "discovery")]
-use std::sync::Arc;
-use std::time::Duration;
+//! Discovery-enabled gRPC channel with dynamic resolution.
 
-use async_trait::async_trait;
+use std::sync::Arc;
+
 use rskit_discovery::Discovery;
-#[cfg(feature = "discovery")]
 use rskit_discovery::Watcher;
 use rskit_errors::AppResult;
 use tokio::sync::RwLock;
@@ -12,57 +10,13 @@ use tokio::task::JoinHandle;
 use tonic::transport::Channel;
 use tracing::{debug, warn};
 
+use super::config::DiscoveryChannelConfig;
+use super::connector::{
+    ChannelConnector, DefaultChannelConnector, config_for_target, connect_grpc_channel,
+};
+use super::reconnect::ReconnectContext;
 use crate::channel::GrpcChannel;
 use crate::config::GrpcClientConfig;
-
-/// Configuration for a [`DiscoveryChannel`].
-#[derive(Clone, Debug)]
-pub struct DiscoveryChannelConfig {
-    /// Base gRPC client configuration.
-    pub grpc: GrpcClientConfig,
-    /// How often to poll for changes when no watcher is available. Defaults to 10 seconds.
-    pub resolve_interval: Duration,
-}
-
-impl DiscoveryChannelConfig {
-    /// Create a config with defaults and the given gRPC settings.
-    pub fn new(grpc: GrpcClientConfig) -> Self {
-        Self {
-            grpc,
-            resolve_interval: Duration::from_secs(10),
-        }
-    }
-
-    /// Set the resolve polling interval.
-    #[must_use]
-    pub fn with_resolve_interval(mut self, interval: Duration) -> Self {
-        self.resolve_interval = interval;
-        self
-    }
-}
-
-impl From<GrpcClientConfig> for DiscoveryChannelConfig {
-    fn from(grpc: GrpcClientConfig) -> Self {
-        Self::new(grpc)
-    }
-}
-
-#[async_trait]
-trait ChannelConnector: Send + Sync {
-    async fn connect(&self, config: GrpcClientConfig) -> AppResult<GrpcChannel>;
-}
-
-#[derive(Default)]
-struct DefaultChannelConnector;
-
-#[async_trait]
-impl ChannelConnector for DefaultChannelConnector {
-    async fn connect(&self, config: GrpcClientConfig) -> AppResult<GrpcChannel> {
-        let channel = GrpcChannel::new(config);
-        channel.connect().await?;
-        Ok(channel)
-    }
-}
 
 /// Discovery-enabled gRPC channel that resolves service instances dynamically.
 ///
@@ -174,12 +128,14 @@ impl DiscoveryChannel {
         }
 
         let discovery = Arc::clone(&self.discovery);
-        let service_name = self.service_name.clone();
-        let grpc_config = self.config.grpc.clone();
-        let connector = Arc::clone(&self.connector);
-        let current_target = Arc::clone(&self.current_target);
-        let channel = Arc::clone(&self.channel);
         let resolve_interval = self.config.resolve_interval;
+        let context = ReconnectContext {
+            service_name: self.service_name.clone(),
+            config: self.config.grpc.clone(),
+            connector: Arc::clone(&self.connector),
+            current_target: Arc::clone(&self.current_target),
+            channel: Arc::clone(&self.channel),
+        };
 
         let handle = if let Some(watcher) = &self.watcher {
             // ── Watcher path ────────────────────────────────────────────
@@ -189,24 +145,16 @@ impl DiscoveryChannel {
                 while let Some(instances) = rx.recv().await {
                     if instances.is_empty() {
                         debug!(
-                            service = %service_name,
+                            service = %context.service_name,
                             "watcher: received empty instance list, skipping"
                         );
                         continue;
                     }
                     let new_target = instances[0].endpoint();
-                    Self::maybe_reconnect(
-                        &service_name,
-                        &grpc_config,
-                        &new_target,
-                        &connector,
-                        &current_target,
-                        &channel,
-                    )
-                    .await;
+                    context.maybe_reconnect(&new_target).await;
                 }
                 debug!(
-                    service = %service_name,
+                    service = %context.service_name,
                     "watcher channel closed, background task exiting"
                 );
             })
@@ -216,28 +164,20 @@ impl DiscoveryChannel {
                 loop {
                     tokio::time::sleep(resolve_interval).await;
 
-                    match discovery.resolve(&service_name).await {
+                    match discovery.resolve(&context.service_name).await {
                         Ok(instances) if !instances.is_empty() => {
                             let new_target = instances[0].endpoint();
-                            Self::maybe_reconnect(
-                                &service_name,
-                                &grpc_config,
-                                &new_target,
-                                &connector,
-                                &current_target,
-                                &channel,
-                            )
-                            .await;
+                            context.maybe_reconnect(&new_target).await;
                         }
                         Ok(_) => {
                             debug!(
-                                service = %service_name,
+                                service = %context.service_name,
                                 "poll: no instances found"
                             );
                         }
                         Err(e) => {
                             warn!(
-                                service = %service_name,
+                                service = %context.service_name,
                                 error = %e,
                                 "poll: resolve failed"
                             );
@@ -249,44 +189,6 @@ impl DiscoveryChannel {
 
         *self.bg_handle.write().await = Some(handle);
         Ok(())
-    }
-
-    /// Compare `new_target` with the cached target and, if different, create a new underlying gRPC channel.
-    async fn maybe_reconnect(
-        service_name: &str,
-        base_config: &GrpcClientConfig,
-        new_target: &str,
-        connector: &Arc<dyn ChannelConnector>,
-        current_target: &Arc<RwLock<Option<String>>>,
-        channel: &Arc<RwLock<Option<GrpcChannel>>>,
-    ) {
-        let old_target = current_target.read().await.clone();
-        if old_target.as_deref() == Some(new_target) {
-            return;
-        }
-
-        debug!(
-            service = %service_name,
-            old_target = ?old_target,
-            new_target = %new_target,
-            "target changed, reconnecting"
-        );
-
-        let gc = match connect_grpc_channel(connector, base_config, new_target).await {
-            Ok(gc) => gc,
-            Err(e) => {
-                warn!(
-                    service = %service_name,
-                    target = %new_target,
-                    error = %e,
-                    "background reconnect failed"
-                );
-                return;
-            }
-        };
-
-        *current_target.write().await = Some(new_target.to_owned());
-        *channel.write().await = Some(gc);
     }
 
     /// Resolve the service to a target address using discovery.
@@ -471,25 +373,10 @@ impl DiscoveryChannel {
     }
 }
 
-fn config_for_target(base_config: &GrpcClientConfig, target: &str) -> GrpcClientConfig {
-    let mut config = base_config.clone();
-    config.target = target.to_string();
-    config
-}
-
-async fn connect_grpc_channel(
-    connector: &Arc<dyn ChannelConnector>,
-    base_config: &GrpcClientConfig,
-    target: &str,
-) -> AppResult<GrpcChannel> {
-    connector
-        .connect(config_for_target(base_config, target))
-        .await
-}
-
 #[cfg(test)]
 mod tests {
     use std::collections::VecDeque;
+    use std::time::Duration;
 
     use super::*;
     use async_trait::async_trait;
