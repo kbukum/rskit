@@ -22,6 +22,12 @@ pub(crate) async fn execute_requested_tools(
         return Ok(None);
     };
 
+    let execution = tool_runtime::ToolExecution {
+        tools,
+        policy: config.policy.clone(),
+        timeout: config.tool_timeout,
+    };
+
     let tool_calls = state.last_assistant.tool_calls.clone();
     for tool_call in &tool_calls {
         if let Some(stop_reason) = stop::tool_budget_stop(state, config) {
@@ -44,16 +50,10 @@ pub(crate) async fn execute_requested_tools(
             return Ok(Some(StopReason::Aborted));
         }
 
-        let tool_result = tool_runtime::execute_tool_call(
-            tools,
-            config.policy.clone(),
-            config.tool_timeout,
-            &tool_call.id,
-            &tool_call.name,
-            input.clone(),
-        )
-        .instrument(turn_span.clone())
-        .await;
+        let tool_result = execution
+            .execute(&tool_call.id, &tool_call.name, input.clone())
+            .instrument(turn_span.clone())
+            .await;
 
         emit_tool_result_hook(
             config,
