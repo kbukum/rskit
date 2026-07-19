@@ -1,31 +1,23 @@
-use std::collections::HashMap;
 use std::time::Duration;
 
 use rskit_errors::AppResult;
 
 use crate::FileSource;
 
-use super::{ProgressCallback, StoredFile};
+use super::{StoredFile, UploadOptions};
 
 /// Trait for file storage backends.
 #[async_trait::async_trait]
 pub trait FileStore: Send + Sync {
     /// Upload a file to the store.
+    ///
+    /// `options` carries the content type, user metadata, and an optional
+    /// progress callback; use [`UploadOptions::new`] for store defaults.
     async fn upload(
         &self,
         source: &FileSource,
         key: &str,
-        content_type: Option<&str>,
-        metadata: Option<HashMap<String, String>>,
-    ) -> AppResult<StoredFile>;
-
-    /// Upload a file with progress reporting.
-    async fn upload_with_progress(
-        &self,
-        source: &FileSource,
-        key: &str,
-        content_type: Option<&str>,
-        on_progress: ProgressCallback,
+        options: UploadOptions,
     ) -> AppResult<StoredFile>;
 
     /// Download a file from the store.

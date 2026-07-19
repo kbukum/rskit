@@ -1,13 +1,12 @@
 //! Supabase Storage backend implementing [`rskit_storage::store::FileStore`].
 
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_storage::FileSource;
 use rskit_storage::store::{
-    FileStore, ProgressCallback, StorageConfig, StorageFactory, StorageRegistry, StoredFile,
+    FileStore, StorageConfig, StorageFactory, StorageRegistry, StoredFile, UploadOptions,
     content_type_or_default, prefixed_key,
 };
 use rskit_util::SecretString;
@@ -121,8 +120,7 @@ impl FileStore for SupabaseStore {
         &self,
         source: &FileSource,
         key: &str,
-        content_type: Option<&str>,
-        metadata: Option<HashMap<String, String>>,
+        options: UploadOptions,
     ) -> AppResult<StoredFile> {
         let data = source.read_all().await?;
         let size = data.len() as u64;
@@ -130,12 +128,12 @@ impl FileStore for SupabaseStore {
         let mut request = self
             .client
             .post(self.object_url(&full_key)?)
-            .header("content-type", content_type_or_default(content_type))
+            .header("content-type", content_type_or_default(options.content_type()))
             .body(data);
-        if let Some(metadata) = &metadata {
+        if !options.metadata.is_empty() {
             request = request.header(
                 "x-metadata",
-                serde_json::to_string(metadata).map_err(|error| {
+                serde_json::to_string(&options.metadata).map_err(|error| {
                     AppError::new(
                         ErrorCode::InvalidInput,
                         "Supabase metadata must be JSON serializable",
@@ -145,18 +143,8 @@ impl FileStore for SupabaseStore {
             );
         }
         self.send(self.authed(request), "upload").await?;
-        Ok(StoredFile::new(prefixed_key(None, key), size, content_type)
-            .with_metadata(metadata.unwrap_or_default()))
-    }
-
-    async fn upload_with_progress(
-        &self,
-        source: &FileSource,
-        key: &str,
-        content_type: Option<&str>,
-        _on_progress: ProgressCallback,
-    ) -> AppResult<StoredFile> {
-        self.upload(source, key, content_type, None).await
+        Ok(StoredFile::new(prefixed_key(None, key), size, options.content_type())
+            .with_metadata(options.metadata))
     }
 
     async fn download(&self, key: &str) -> AppResult<FileSource> {
@@ -445,6 +433,7 @@ pub fn register(registry: &mut StorageRegistry, config: Config) -> AppResult<()>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
     use rskit_storage::store::StorageRegistry;
     use wiremock::matchers::{header, method, path, query_param_is_missing};
     use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -481,8 +470,7 @@ mod tests {
             .upload(
                 &FileSource::from_bytes(bytes::Bytes::from_static(b"payload")),
                 "file.txt",
-                Some("text/plain"),
-                None,
+                UploadOptions::new().with_content_type("text/plain"),
             )
             .await
             .unwrap();
@@ -724,7 +712,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn upload_with_progress_delegates_to_upload() {
+    async fn upload_accepts_progress_callback() {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .and(path("/storage/v1/object/assets/uploads/file.txt"))
@@ -732,11 +720,12 @@ mod tests {
             .mount(&server)
             .await;
         let stored = test_store(&server)
-            .upload_with_progress(
+            .upload(
                 &FileSource::from_bytes(bytes::Bytes::from_static(b"payload")),
                 "file.txt",
-                Some("text/plain"),
-                std::sync::Arc::new(|_| {}),
+                UploadOptions::new()
+                    .with_content_type("text/plain")
+                    .with_progress(std::sync::Arc::new(|_| {})),
             )
             .await
             .unwrap();
@@ -758,8 +747,7 @@ mod tests {
             .upload(
                 &FileSource::from_bytes(bytes::Bytes::from_static(b"payload")),
                 "file.txt",
-                None,
-                Some(metadata),
+                UploadOptions::new().with_metadata(metadata),
             )
             .await
             .unwrap();

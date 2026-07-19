@@ -246,7 +246,7 @@ async fn local_store_upload_download() {
     let data = bytes::Bytes::from_static(b"store test content");
     let source = FileSource::from_bytes(data.clone());
     let stored = store
-        .upload(&source, "test/file.txt", Some("text/plain"), None)
+        .upload(&source, "test/file.txt", UploadOptions::new().with_content_type("text/plain"))
         .await
         .expect("upload");
 
@@ -272,7 +272,7 @@ async fn local_store_exists() {
 
     let source = FileSource::from_bytes(bytes::Bytes::from_static(b"hi"));
     store
-        .upload(&source, "yes.txt", None, None)
+        .upload(&source, "yes.txt", UploadOptions::new())
         .await
         .expect("upload");
 
@@ -290,7 +290,7 @@ async fn local_store_delete() {
 
     let source = FileSource::from_bytes(bytes::Bytes::from_static(b"delete me"));
     store
-        .upload(&source, "del.txt", None, None)
+        .upload(&source, "del.txt", UploadOptions::new())
         .await
         .expect("upload");
     assert!(store.exists("del.txt").await.unwrap());
@@ -311,7 +311,7 @@ async fn local_store_list() {
     for name in &["a.txt", "b.txt", "c.txt"] {
         let source = FileSource::from_bytes(bytes::Bytes::from_static(b"x"));
         store
-            .upload(&source, name, None, None)
+            .upload(&source, name, UploadOptions::new())
             .await
             .expect("upload");
     }
@@ -335,7 +335,7 @@ async fn local_store_copy() {
 
     let source = FileSource::from_bytes(bytes::Bytes::from_static(b"copy me"));
     store
-        .upload(&source, "original.txt", None, None)
+        .upload(&source, "original.txt", UploadOptions::new())
         .await
         .expect("upload");
 
@@ -367,7 +367,7 @@ async fn local_store_rename() {
 
     let source = FileSource::from_bytes(bytes::Bytes::from_static(b"rename me"));
     store
-        .upload(&source, "old.txt", None, None)
+        .upload(&source, "old.txt", UploadOptions::new())
         .await
         .expect("upload");
 

@@ -1,6 +1,5 @@
 //! Google Cloud Storage backend implementing [`rskit_storage::store::FileStore`].
 
-use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -13,7 +12,7 @@ use google_cloud_storage::model::Object;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_storage::FileSource;
 use rskit_storage::store::{
-    FileStore, ProgressCallback, StorageConfig, StorageFactory, StorageRegistry, StoredFile,
+    FileStore, StorageConfig, StorageFactory, StorageRegistry, StoredFile, UploadOptions,
     content_type_or_default, prefixed_key,
 };
 use serde::{Deserialize, Serialize};
@@ -168,8 +167,7 @@ where
         &self,
         source: &FileSource,
         key: &str,
-        content_type: Option<&str>,
-        metadata: Option<HashMap<String, String>>,
+        options: UploadOptions,
     ) -> AppResult<StoredFile> {
         let data = source.read_all().await?;
         let size = data.len() as u64;
@@ -180,26 +178,16 @@ where
         let mut request = clients
             .storage
             .write_object(bucket, full_key, data)
-            .set_content_type(content_type_or_default(content_type));
-        if let Some(metadata) = metadata.clone() {
-            request = request.set_metadata(metadata);
+            .set_content_type(content_type_or_default(options.content_type()));
+        if !options.metadata.is_empty() {
+            request = request.set_metadata(options.metadata.clone());
         }
         Box::pin(request.send_buffered())
             .await
             .map_err(|e| AppError::new(ErrorCode::Internal, format!("GCS upload failed: {e}")))?;
 
-        Ok(StoredFile::new(prefixed_key(None, key), size, content_type)
-            .with_metadata(metadata.unwrap_or_default()))
-    }
-
-    async fn upload_with_progress(
-        &self,
-        source: &FileSource,
-        key: &str,
-        content_type: Option<&str>,
-        _on_progress: ProgressCallback,
-    ) -> AppResult<StoredFile> {
-        self.upload(source, key, content_type, None).await
+        Ok(StoredFile::new(prefixed_key(None, key), size, options.content_type())
+            .with_metadata(options.metadata))
     }
 
     async fn download(&self, key: &str) -> AppResult<FileSource> {
@@ -304,7 +292,7 @@ where
 
     async fn copy(&self, from_key: &str, to_key: &str) -> AppResult<StoredFile> {
         let source = self.download(from_key).await?;
-        self.upload(&source, to_key, None, None).await
+        self.upload(&source, to_key, UploadOptions::new()).await
     }
 
     async fn rename(&self, from_key: &str, to_key: &str) -> AppResult<StoredFile> {
@@ -333,6 +321,7 @@ pub fn register(registry: &mut StorageRegistry, config: Config) -> AppResult<()>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
     use google_cloud_gax::options::RequestOptions as GaxRequestOptions;
     use google_cloud_gax::response::Response;
     use google_cloud_storage::model::{
@@ -552,8 +541,9 @@ mod tests {
             .upload(
                 &FileSource::Bytes(bytes::Bytes::from_static(b"payload")),
                 "output.txt",
-                Some("text/plain"),
-                Some(metadata),
+                UploadOptions::new()
+                    .with_content_type("text/plain")
+                    .with_metadata(metadata),
             )
             .await
             .unwrap();
@@ -574,8 +564,7 @@ mod tests {
             .upload(
                 &FileSource::Bytes(bytes::Bytes::from_static(b"payload")),
                 "output.txt",
-                None,
-                None,
+                UploadOptions::new(),
             )
             .await
             .unwrap();
@@ -587,14 +576,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn upload_with_progress_delegates_to_upload() {
+    async fn upload_accepts_progress_callback() {
         let store = test_store();
         let stored = store
-            .upload_with_progress(
+            .upload(
                 &FileSource::Bytes(bytes::Bytes::from_static(b"payload")),
                 "output.txt",
-                Some("text/plain"),
-                Arc::new(|_| {}),
+                UploadOptions::new()
+                    .with_content_type("text/plain")
+                    .with_progress(Arc::new(|_| {})),
             )
             .await
             .unwrap();
@@ -840,8 +830,7 @@ mod tests {
             .upload(
                 &FileSource::Bytes(bytes::Bytes::from_static(b"payload")),
                 "output.txt",
-                Some("text/plain"),
-                None,
+                UploadOptions::new().with_content_type("text/plain"),
             )
             .await
             .unwrap_err();

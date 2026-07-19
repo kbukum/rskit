@@ -3,7 +3,7 @@ use std::sync::Arc;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_storage::{
     FileSource, FileStore, LocalStoreConfig, StorageConfig, StorageFactory, StorageRegistry,
-    TempDir, register_local,
+    TempDir, UploadOptions, register_local,
 };
 
 struct FailingFactory;
@@ -77,8 +77,7 @@ async fn explicit_local_registration_builds_store_from_config() {
         .upload(
             &FileSource::Bytes(bytes::Bytes::from_static(b"hello")),
             "hello.txt",
-            Some("text/plain"),
-            None,
+            UploadOptions::new().with_content_type("text/plain"),
         )
         .await
         .unwrap();

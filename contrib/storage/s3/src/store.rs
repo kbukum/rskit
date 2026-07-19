@@ -10,7 +10,7 @@ use std::time::Duration;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_storage::FileSource;
 use rskit_storage::store::{
-    FileStore, ProgressCallback, StorageConfig, StorageFactory, StorageRegistry, StoredFile,
+    FileStore, StorageConfig, StorageFactory, StorageRegistry, StoredFile, UploadOptions,
     content_type_or_default, prefixed_key,
 };
 use rskit_util::env;
@@ -148,8 +148,7 @@ impl FileStore for S3Store {
         &self,
         source: &FileSource,
         key: &str,
-        content_type: Option<&str>,
-        metadata: Option<HashMap<String, String>>,
+        options: UploadOptions,
     ) -> AppResult<StoredFile> {
         let data = source.read_all().await?;
         let size = data.len() as u64;
@@ -162,28 +161,22 @@ impl FileStore for S3Store {
             .key(&full_key)
             .body(data.to_vec().into());
 
-        req = req.content_type(content_type_or_default(content_type));
-        if let Some(meta) = &metadata {
-            for (k, v) in meta {
-                req = req.metadata(k, v);
-            }
+        req = req.content_type(content_type_or_default(options.content_type()));
+        for (k, v) in &options.metadata {
+            req = req.metadata(k, v);
         }
 
         req.send()
             .await
             .map_err(|e| AppError::new(ErrorCode::Internal, format!("S3 upload failed: {e}")))?;
 
-        Ok(uploaded_file(key, size, content_type, metadata))
-    }
-
-    async fn upload_with_progress(
-        &self,
-        source: &FileSource,
-        key: &str,
-        content_type: Option<&str>,
-        _on_progress: ProgressCallback,
-    ) -> AppResult<StoredFile> {
-        self.upload(source, key, content_type, None).await
+        let content_type = options.content_type().map(str::to_owned);
+        Ok(uploaded_file(
+            key,
+            size,
+            content_type.as_deref(),
+            options.metadata,
+        ))
     }
 
     async fn download(&self, key: &str) -> AppResult<FileSource> {
@@ -329,10 +322,9 @@ fn uploaded_file(
     key: &str,
     size: u64,
     content_type: Option<&str>,
-    metadata: Option<HashMap<String, String>>,
+    metadata: HashMap<String, String>,
 ) -> StoredFile {
-    StoredFile::new(prefixed_key(None, key), size, content_type)
-        .with_metadata(metadata.unwrap_or_default())
+    StoredFile::new(prefixed_key(None, key), size, content_type).with_metadata(metadata)
 }
 
 fn stored_file_from_head(
@@ -691,7 +683,7 @@ mod tests {
     fn stored_file_mappers_preserve_keys_sizes_content_types_and_metadata() {
         let mut metadata = HashMap::new();
         metadata.insert("owner".to_string(), "media".to_string());
-        let uploaded = uploaded_file("file.txt", 4, Some("text/plain"), Some(metadata.clone()));
+        let uploaded = uploaded_file("file.txt", 4, Some("text/plain"), metadata.clone());
         assert_eq!(uploaded.key, "file.txt");
         assert_eq!(uploaded.size, 4);
         assert_eq!(uploaded.content_type, "text/plain");
@@ -799,8 +791,9 @@ mod tests {
             .upload(
                 &FileSource::Bytes(bytes::Bytes::from_static(b"payload")),
                 "file.txt",
-                Some("text/plain"),
-                Some(metadata),
+                UploadOptions::new()
+                    .with_content_type("text/plain")
+                    .with_metadata(metadata),
             )
             .await
             .unwrap();
@@ -833,8 +826,7 @@ mod tests {
             .upload(
                 &FileSource::Bytes(bytes::Bytes::from_static(b"x")),
                 "file.txt",
-                None,
-                None,
+                UploadOptions::new(),
             )
             .await
             .unwrap_err();

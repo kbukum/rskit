@@ -15,6 +15,6 @@ pub use config::{
 pub use memory::InMemoryVectorStore;
 pub use registry::{VectorFactory, VectorStoreRegistry, register_memory};
 pub use store::{
-    FilterCondition, PayloadValue, PointPayload, SearchFilter, SearchResult, SimilarityMetric,
-    VectorStore,
+    FilterCondition, PayloadValue, Point, PointPayload, SearchFilter, SearchQuery, SearchResult,
+    SimilarityMetric, VectorStore,
 };

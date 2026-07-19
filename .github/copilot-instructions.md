@@ -56,7 +56,7 @@ When adding a new foundation crate: create it under `core/rskit-<name>/`, add it
 ## Code Style
 
 - `cargo fmt` (`rustfmt.toml`: edition 2024, max_width 100) + `cargo clippy` (`clippy.toml`: msrv 1.91)
-- `lib.rs`/`mod.rs` are **declare-only** (submodule declarations + re-exports; no logic or private items) — split crate logic into concern-named modules. Enforced by the `ast-grep` rule `scripts/sg-rules/declare-only-aggregator.yml` (`make structure`).
+- `lib.rs`/`mod.rs` are **declare-only** (submodule declarations + re-exports; no logic or private items) — split crate logic into concern-named modules. Enforced by the `ast-grep` rule `scripts/sg-rules/declare-only-aggregator.yml` (`make structure`). Reorg is not only about one over-long file: when a single module/crate accumulates many loosely-related files (roughly >5–10, excluding `test_support`/`tests`) that fall into groups which are not tightly coupled, lift each cohesive group into its own concern-named submodule folder (nested `mod.rs`), so a reader lands in the right file *and folder* from the layout alone. Keep it criteria-driven — only where the groups are genuinely separable and it improves maintainability.
 - `#![warn(missing_docs)]` on all crates
 - `#[must_use]` on all `with_*` builder methods
 - `#[non_exhaustive]` on public enums that may grow
