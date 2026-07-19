@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 /// # Examples
 ///
 /// ```rust
-/// use rskit_media::filter::{self, filters};
+/// use rskit_media::filter::filters;
 ///
 /// let denoise = filters::denoise(3);
 /// let sharpen = filters::sharpen(1.5);
