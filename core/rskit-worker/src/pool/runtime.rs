@@ -1,122 +1,21 @@
-use std::collections::VecDeque;
+//! The worker pool runtime: submission, the runner loop, and task execution.
+
 use std::sync::Arc;
 use std::time::Duration;
 
-use parking_lot::Mutex;
-use tokio::sync::{Notify, Semaphore, broadcast, mpsc, oneshot};
+use tokio::sync::{Semaphore, broadcast, mpsc, oneshot};
 use tokio::task::{JoinHandle, JoinSet};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
 
-use crate::dispatch::DispatchStrategy;
 use crate::event::Event;
 use crate::handler::Handler;
 use crate::task::TaskHandle;
 
-/// Statistics snapshot for the pool.
-#[derive(Debug, Clone)]
-pub struct PoolStats {
-    /// Human-readable name of the pool.
-    pub name: String,
-    /// Number of tasks currently executing.
-    pub running: usize,
-    /// Maximum concurrent tasks the pool allows.
-    pub capacity: usize,
-}
-
-/// Overflow behavior applied when the submission queue is full.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum OverflowPolicy {
-    /// Wait until queue capacity becomes available.
-    #[default]
-    Block,
-    /// Reject the new submission immediately.
-    Reject,
-    /// Drop the oldest queued task and enqueue the new submission.
-    DropOldest,
-}
-
-/// Configuration for a [`Pool`].
-pub struct PoolConfig {
-    /// Human-readable name used in tracing.
-    pub name: String,
-    /// Maximum concurrent tasks (semaphore permits).
-    pub size: usize,
-    /// Capacity of the internal submit queue.
-    pub queue_size: usize,
-    /// Broadcast channel capacity for events per task.
-    pub event_buffer: usize,
-    /// Grace period given to in-flight tasks on shutdown.
-    pub grace_period: Duration,
-    /// Dispatch strategy (reserved for future multi-queue extensions).
-    pub dispatch: DispatchStrategy,
-    /// Queue overflow behavior.
-    pub overflow_policy: OverflowPolicy,
-}
-
-impl Default for PoolConfig {
-    fn default() -> Self {
-        Self {
-            name: "pool".into(),
-            size: available_parallelism(),
-            queue_size: 256,
-            event_buffer: 64,
-            grace_period: Duration::from_secs(30),
-            dispatch: DispatchStrategy::RoundRobin,
-            overflow_policy: OverflowPolicy::Block,
-        }
-    }
-}
-
-impl PoolConfig {
-    /// Create a named pool configuration with sensible defaults.
-    #[must_use]
-    pub fn new(name: impl Into<String>) -> Self {
-        Self {
-            name: name.into(),
-            ..Default::default()
-        }
-    }
-
-    /// Set the maximum number of concurrent tasks.
-    /// Values below 1 are clamped to 1 inside `Pool::new` (with a tracing warning),
-    /// since a zero-sized pool can never execute tasks.
-    #[must_use]
-    pub fn with_size(mut self, size: usize) -> Self {
-        self.size = size;
-        self
-    }
-
-    /// Set the capacity of the internal submit queue.
-    #[must_use]
-    pub fn with_queue_size(mut self, queue_size: usize) -> Self {
-        self.queue_size = queue_size;
-        self
-    }
-
-    /// Set the grace period given to in-flight tasks during shutdown.
-    #[must_use]
-    pub fn with_grace_period(mut self, d: Duration) -> Self {
-        self.grace_period = d;
-        self
-    }
-
-    /// Set the queue overflow policy.
-    #[must_use]
-    pub fn with_overflow_policy(mut self, overflow_policy: OverflowPolicy) -> Self {
-        self.overflow_policy = overflow_policy;
-        self
-    }
-}
-
-fn available_parallelism() -> usize {
-    std::thread::available_parallelism()
-        .map(|n| n.get())
-        .unwrap_or(4)
-}
+use super::config::{OverflowPolicy, PoolConfig, PoolStats};
+use super::queue::{PushRejectError, QueueReceiver, SubmitQueue};
 
 struct Envelope<I, O: Clone + Send + 'static> {
     id: Uuid,
@@ -126,135 +25,6 @@ struct Envelope<I, O: Clone + Send + 'static> {
     cancel: CancellationToken,
     event_buffer: usize,
 }
-
-struct QueueInner<T> {
-    items: VecDeque<T>,
-    capacity: usize,
-    closed: bool,
-}
-
-struct QueueState<T> {
-    inner: Mutex<QueueInner<T>>,
-    not_empty: Notify,
-    not_full: Notify,
-}
-
-struct SubmitQueue<T> {
-    state: Arc<QueueState<T>>,
-}
-
-enum PushRejectError<T> {
-    Closed(T),
-    Full(T),
-}
-
-struct QueueReceiver<T> {
-    state: Arc<QueueState<T>>,
-}
-
-impl<T> SubmitQueue<T> {
-    fn new(capacity: usize) -> (Self, QueueReceiver<T>) {
-        let state = Arc::new(QueueState {
-            inner: Mutex::new(QueueInner {
-                items: VecDeque::with_capacity(capacity.max(1)),
-                capacity: capacity.max(1),
-                closed: false,
-            }),
-            not_empty: Notify::new(),
-            not_full: Notify::new(),
-        });
-        (
-            Self {
-                state: Arc::clone(&state),
-            },
-            QueueReceiver { state },
-        )
-    }
-
-    async fn push_block(&self, item: T) -> Result<(), T> {
-        let mut item = Some(item);
-        loop {
-            let notified = {
-                let mut inner = self.state.inner.lock();
-                if inner.closed {
-                    return Err(item.take().unwrap_or_else(|| unreachable!("item present")));
-                }
-                if inner.items.len() < inner.capacity {
-                    inner
-                        .items
-                        .push_back(item.take().unwrap_or_else(|| unreachable!("item present")));
-                    self.state.not_empty.notify_one();
-                    return Ok(());
-                }
-                self.state.not_full.notified()
-            };
-            notified.await;
-        }
-    }
-
-    fn push_reject(&self, item: T) -> Result<(), PushRejectError<T>> {
-        let mut inner = self.state.inner.lock();
-        if inner.closed {
-            return Err(PushRejectError::Closed(item));
-        }
-        if inner.items.len() >= inner.capacity {
-            return Err(PushRejectError::Full(item));
-        }
-        inner.items.push_back(item);
-        self.state.not_empty.notify_one();
-        Ok(())
-    }
-
-    fn push_drop_oldest(&self, item: T) -> Result<Option<T>, T> {
-        let mut inner = self.state.inner.lock();
-        if inner.closed {
-            return Err(item);
-        }
-        let dropped = if inner.items.len() >= inner.capacity {
-            inner.items.pop_front()
-        } else {
-            None
-        };
-        inner.items.push_back(item);
-        self.state.not_empty.notify_one();
-        Ok(dropped)
-    }
-
-    fn close(&self) {
-        let mut inner = self.state.inner.lock();
-        inner.closed = true;
-        self.state.not_empty.notify_waiters();
-        self.state.not_full.notify_waiters();
-    }
-}
-
-impl<T> Clone for SubmitQueue<T> {
-    fn clone(&self) -> Self {
-        Self {
-            state: Arc::clone(&self.state),
-        }
-    }
-}
-
-impl<T> QueueReceiver<T> {
-    async fn recv(&self) -> Option<T> {
-        loop {
-            let notified = {
-                let mut inner = self.state.inner.lock();
-                if let Some(item) = inner.items.pop_front() {
-                    self.state.not_full.notify_one();
-                    return Some(item);
-                }
-                if inner.closed {
-                    return None;
-                }
-                self.state.not_empty.notified()
-            };
-            notified.await;
-        }
-    }
-}
-
 /// A bounded async worker pool.
 pub struct Pool<I, O>
 where
@@ -606,28 +376,6 @@ mod tests {
             Ok(task)
         }
     }
-
-    #[tokio::test]
-    async fn queue_rejects_when_full_and_closed_and_receives_until_closed() {
-        let (queue, receiver) = SubmitQueue::new(1);
-        let cloned = queue.clone();
-
-        assert!(cloned.push_reject(1).is_ok());
-        assert!(matches!(
-            queue.push_reject(2),
-            Err(PushRejectError::Full(2))
-        ));
-        assert_eq!(receiver.recv().await, Some(1));
-        queue.close();
-        assert!(matches!(
-            queue.push_reject(3),
-            Err(PushRejectError::Closed(3))
-        ));
-        assert_eq!(receiver.recv().await, None);
-        assert_eq!(queue.push_drop_oldest(4), Err(4));
-        assert_eq!(queue.push_block(5).await, Err(5));
-    }
-
     #[tokio::test]
     async fn closed_pool_submit_reports_service_unavailable_for_each_policy() {
         for overflow_policy in [

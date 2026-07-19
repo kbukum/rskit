@@ -16,14 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ProcessResult::completed` keeps its distinct public primitive fields
   and now documents that choice with an explicit `reason`. Internal refactor only; no behavior
   or public-surface change.
-- Adopt **semantic line breaks at a 100-column soft ceiling** as the prose standard for Markdown,
-  `//!`/`///` rustdoc, and `//` comments, replacing the previous "one line per paragraph,
-  never hard-wrapped" rule.
-  A new `scripts/check-prose.py` (built on `scripts/wrap_semantic.py`) checks and fixes the standard
-  and preserves code blocks, tables, lists, and frontmatter verbatim;
-  `make prose` / `make prose-fix` drive it and `make check` includes it. The engineering baseline
-  and `docs` / `review` skills are updated accordingly,
-  and the signature convention is reworded as a design-signal guideline (no enforced Clippy `too-many-arguments` threshold).
+- Keep Markdown paragraphs and Rust documentation prose as natural continuous source lines, leaving viewport-aware wrapping to renderers instead of inserting fixed-column breaks. The engineering baseline and `docs` / `review` skills now direct coding agents to preserve intentional Markdown and rustdoc structure while repairing AI-generated hard wraps; the mechanical prose formatter, its tests, and the `make prose` / `make prose-fix` gates are removed. The signature convention remains a design-signal guideline with no enforced Clippy `too-many-arguments` threshold.
 - Trim the dependency/build footprint by feature-gating non-essential cross-cutting deps
   so unrelated crates no longer compile them:
   - `rskit-schema` now gates JSON Schema *validation* (the heavy `jsonschema` tree — num-bigint/complex/rational, fraction, fancy-regex, referencing) behind a `validation` feature (on by default for the crate).
