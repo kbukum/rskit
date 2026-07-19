@@ -1,8 +1,6 @@
 # Cross-Kit Parity Matrix — rskit
 
-This matrix records the rskit side of reusable infrastructure and pattern parity.
-The module-presence table is a shared cross-kit source (identical in `gokit/docs/parity-matrix.md`),
-seeded from `../gokit/tmp/gokit-rskit-parity-review.md` §2; the capability tables below are rskit-specific.
+This matrix records the rskit side of reusable infrastructure and pattern parity. The module-presence table is kept identical to gokit's counterpart at https://github.com/kbukum/gokit/blob/main/docs/PARITY-MATRIX.md; the capability tables below are rskit-specific.
 
 ## Module presence & naming (shared cross-kit)
 
