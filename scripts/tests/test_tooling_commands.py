@@ -169,7 +169,7 @@ class ToolingCommandTests(unittest.TestCase):
             # Only `real.rs` counts: mod.rs, test_support.rs, tests/ and test_support/ are excluded.
             self.assertEqual(find_crowded_modules([src], threshold=0), [(src.as_posix(), 1)])
 
-
+    def test_run_parallel_preserves_none_results(self) -> None:
         self.assertEqual(run_parallel([ParallelTask("none-result", lambda: None)]), [None])
 
     def test_run_rejects_capture_with_explicit_stdout(self) -> None:

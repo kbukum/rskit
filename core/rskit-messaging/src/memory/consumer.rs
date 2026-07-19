@@ -28,7 +28,8 @@ impl<T: Clone + Send + Sync + 'static> InMemoryConsumer<T> {
     }
 }
 
-// Manual Clone because broadcast::Receiver is not Clone but we can resubscribe.
+// Manual Clone because broadcast::Receiver is not Clone; clones share the same
+// receiver and topic set via Arc.
 impl<T: Clone + Send + Sync + 'static> Clone for InMemoryConsumer<T> {
     fn clone(&self) -> Self {
         Self {
