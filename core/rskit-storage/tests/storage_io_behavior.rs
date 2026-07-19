@@ -792,7 +792,13 @@ async fn store_upload_with_metadata() {
 
     let source = FileSource::from_bytes(Bytes::from_static(b"with meta"));
     let stored = store
-        .upload(&source, "meta.txt", UploadOptions::new().with_content_type("text/plain").with_metadata(meta.clone()))
+        .upload(
+            &source,
+            "meta.txt",
+            UploadOptions::new()
+                .with_content_type("text/plain")
+                .with_metadata(meta.clone()),
+        )
         .await
         .unwrap();
     assert_eq!(stored.key, "meta.txt");
@@ -806,7 +812,10 @@ async fn store_upload_default_content_type() {
     let store = make_store(dir.path());
 
     let source = FileSource::from_bytes(Bytes::from_static(b"data"));
-    let stored = store.upload(&source, "file.bin", UploadOptions::new()).await.unwrap();
+    let stored = store
+        .upload(&source, "file.bin", UploadOptions::new())
+        .await
+        .unwrap();
     assert_eq!(stored.content_type, "application/octet-stream");
 }
 
@@ -818,7 +827,11 @@ async fn store_head_returns_correct_metadata() {
     let data = Bytes::from_static(b"head test content");
     let source = FileSource::from_bytes(data.clone());
     store
-        .upload(&source, "head.txt", UploadOptions::new().with_content_type("text/plain"))
+        .upload(
+            &source,
+            "head.txt",
+            UploadOptions::new().with_content_type("text/plain"),
+        )
         .await
         .unwrap();
 
@@ -912,7 +925,10 @@ async fn store_list_empty_prefix_returns_root_files() {
     let store = make_store(dir.path());
 
     let source = FileSource::from_bytes(Bytes::from_static(b"root"));
-    store.upload(&source, "root.txt", UploadOptions::new()).await.unwrap();
+    store
+        .upload(&source, "root.txt", UploadOptions::new())
+        .await
+        .unwrap();
 
     // List with empty prefix — lists the root dir
     let items = store.list("", None).await.unwrap();
@@ -986,7 +1002,10 @@ async fn store_rejects_path_traversal_keys() {
             .is_err()
     );
 
-    store.upload(&source, "safe.txt", UploadOptions::new()).await.unwrap();
+    store
+        .upload(&source, "safe.txt", UploadOptions::new())
+        .await
+        .unwrap();
     assert!(store.copy("../escape.txt", "copy.txt").await.is_err());
     assert!(store.copy("safe.txt", "../copy.txt").await.is_err());
     assert!(store.rename("../escape.txt", "renamed.txt").await.is_err());
@@ -1038,7 +1057,11 @@ async fn store_copy_preserves_content() {
     let data = Bytes::from_static(b"copy preserve content");
     let source = FileSource::from_bytes(data.clone());
     store
-        .upload(&source, "orig.txt", UploadOptions::new().with_content_type("text/plain"))
+        .upload(
+            &source,
+            "orig.txt",
+            UploadOptions::new().with_content_type("text/plain"),
+        )
         .await
         .unwrap();
 
@@ -1070,7 +1093,10 @@ async fn store_copy_to_nested_dir() {
     let store = make_store(dir.path());
 
     let source = FileSource::from_bytes(Bytes::from_static(b"nested copy"));
-    store.upload(&source, "flat.txt", UploadOptions::new()).await.unwrap();
+    store
+        .upload(&source, "flat.txt", UploadOptions::new())
+        .await
+        .unwrap();
 
     store
         .copy("flat.txt", "deep/nested/copy.txt")
@@ -1111,7 +1137,10 @@ async fn store_rename_to_nested() {
     let store = make_store(dir.path());
 
     let source = FileSource::from_bytes(Bytes::from_static(b"nested rename"));
-    store.upload(&source, "old.txt", UploadOptions::new()).await.unwrap();
+    store
+        .upload(&source, "old.txt", UploadOptions::new())
+        .await
+        .unwrap();
     store.rename("old.txt", "sub/dir/new.txt").await.unwrap();
     assert!(store.exists("sub/dir/new.txt").await.unwrap());
 }
@@ -1169,7 +1198,11 @@ async fn concurrent_store_uploads() {
             let data = format!("data-{i}");
             let source = FileSource::from_bytes(Bytes::from(data.clone()));
             store
-                .upload(&source, &format!("concurrent/{i}.txt"), UploadOptions::new())
+                .upload(
+                    &source,
+                    &format!("concurrent/{i}.txt"),
+                    UploadOptions::new(),
+                )
                 .await
                 .unwrap();
             let downloaded = store
@@ -1384,7 +1417,11 @@ async fn transfer_between_local_stores_copies_content_and_detected_content_type(
     let to_store = make_store(to_dir.path());
     let source = FileSource::from_bytes(Bytes::from_static(b"transfer content"));
     from_store
-        .upload(&source, "input.txt", UploadOptions::new().with_content_type("text/plain"))
+        .upload(
+            &source,
+            "input.txt",
+            UploadOptions::new().with_content_type("text/plain"),
+        )
         .await
         .unwrap();
 

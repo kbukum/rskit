@@ -186,8 +186,10 @@ where
             .await
             .map_err(|e| AppError::new(ErrorCode::Internal, format!("GCS upload failed: {e}")))?;
 
-        Ok(StoredFile::new(prefixed_key(None, key), size, options.content_type())
-            .with_metadata(options.metadata))
+        Ok(
+            StoredFile::new(prefixed_key(None, key), size, options.content_type())
+                .with_metadata(options.metadata),
+        )
     }
 
     async fn download(&self, key: &str) -> AppResult<FileSource> {
@@ -321,7 +323,6 @@ pub fn register(registry: &mut StorageRegistry, config: Config) -> AppResult<()>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
     use google_cloud_gax::options::RequestOptions as GaxRequestOptions;
     use google_cloud_gax::response::Response;
     use google_cloud_storage::model::{
@@ -332,6 +333,7 @@ mod tests {
     use google_cloud_storage::read_object::ReadObjectResponse;
     use google_cloud_storage::request_options::RequestOptions as StorageRequestOptions;
     use google_cloud_storage::streaming_source::StreamingSource;
+    use std::collections::HashMap;
 
     #[derive(Debug, Default)]
     struct MockStorage;

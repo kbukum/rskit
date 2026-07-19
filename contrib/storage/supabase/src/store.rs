@@ -128,7 +128,10 @@ impl FileStore for SupabaseStore {
         let mut request = self
             .client
             .post(self.object_url(&full_key)?)
-            .header("content-type", content_type_or_default(options.content_type()))
+            .header(
+                "content-type",
+                content_type_or_default(options.content_type()),
+            )
             .body(data);
         if !options.metadata.is_empty() {
             request = request.header(
@@ -143,8 +146,10 @@ impl FileStore for SupabaseStore {
             );
         }
         self.send(self.authed(request), "upload").await?;
-        Ok(StoredFile::new(prefixed_key(None, key), size, options.content_type())
-            .with_metadata(options.metadata))
+        Ok(
+            StoredFile::new(prefixed_key(None, key), size, options.content_type())
+                .with_metadata(options.metadata),
+        )
     }
 
     async fn download(&self, key: &str) -> AppResult<FileSource> {
@@ -433,8 +438,8 @@ pub fn register(registry: &mut StorageRegistry, config: Config) -> AppResult<()>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
     use rskit_storage::store::StorageRegistry;
+    use std::collections::HashMap;
     use wiremock::matchers::{header, method, path, query_param_is_missing};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 

@@ -246,7 +246,11 @@ async fn local_store_upload_download() {
     let data = bytes::Bytes::from_static(b"store test content");
     let source = FileSource::from_bytes(data.clone());
     let stored = store
-        .upload(&source, "test/file.txt", UploadOptions::new().with_content_type("text/plain"))
+        .upload(
+            &source,
+            "test/file.txt",
+            UploadOptions::new().with_content_type("text/plain"),
+        )
         .await
         .expect("upload");
 

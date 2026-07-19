@@ -2,7 +2,9 @@
 
 use rskit_errors::AppResult;
 
-use crate::{FileSink, FileSource, ProgressCallback, UploadOptions, store::FileStore, store::StoredFile};
+use crate::{
+    FileSink, FileSource, ProgressCallback, UploadOptions, store::FileStore, store::StoredFile,
+};
 
 /// Copy a file from source to sink, optionally reporting progress.
 pub async fn copy_file(
