@@ -15,15 +15,12 @@ use super::cancel::spawn_cancel_thread;
 use super::config::PersistentConfig;
 use super::config::PersistentReadiness::{Command as CommandReadiness, OutputContains, Started};
 use super::error::{PersistentStartErrorKind, persistent_start_error};
-use super::io::{
-    ReaderThread, StdinThread, new_capture, spawn_output_readers, spawn_stdin_writer, take_capture,
-};
-use super::process::{PersistentProcess, cleanup_spawned_child, new_process};
+use super::io::{new_capture, spawn_output_readers, spawn_stdin_writer, take_capture};
+use super::process::{PersistentProcess, SpawnedProcess, cleanup_spawned_child, new_process};
 use super::readiness::{
     readiness_wait_error, run_readiness_command, validate_readiness, wait_for_readiness,
 };
 use super::types::{PersistentRun, PersistentStartup};
-use super::{cancel, io};
 
 /// Start a persistent process and wait for its readiness policy.
 pub fn start_persistent_with_cancel(
@@ -68,6 +65,18 @@ pub fn start_persistent_with_cancel(
         spawn_output_readers(&mut child, &stdout, &stderr, &ready_tx, persistent_config);
     let stdin_thread = spawn_stdin_writer(&mut child, predefined_stdin(input));
 
+    let mut spawned = SpawnedProcess {
+        child,
+        stdin_thread,
+        stdout_thread,
+        stderr_thread,
+        cancel_thread,
+        cancelled,
+        stdout,
+        stderr,
+        start,
+    };
+
     match &persistent_config.readiness {
         Started => {
             let _ = ready_tx.send(());
@@ -80,19 +89,8 @@ pub fn start_persistent_with_cancel(
                 persistent_config.shutdown_grace_period,
                 cancel.clone(),
             ) {
-                let mut process = persistent_process(
-                    child,
-                    stdin_thread,
-                    stdout_thread,
-                    stderr_thread,
-                    cancel_thread,
-                    cancelled,
-                    stdout,
-                    stderr,
-                    start,
-                    process_config.signal,
-                    persistent_config,
-                );
+                let mut process =
+                    persistent_process(spawned, process_config.signal, persistent_config);
                 // Reuse the normal lifecycle cleanup
                 // so partially-started processes are terminated the same way as explicit shutdown.
                 let _ = process.shutdown_inner();
@@ -108,42 +106,18 @@ pub fn start_persistent_with_cancel(
         &ready_rx,
         persistent_config.readiness_timeout,
         &cancel,
-        &cancelled,
+        &spawned.cancelled,
     ) {
-        let readiness_error = readiness_wait_error(&mut child, error, &cancelled)?;
-        let mut process = persistent_process(
-            child,
-            stdin_thread,
-            stdout_thread,
-            stderr_thread,
-            cancel_thread,
-            cancelled,
-            stdout,
-            stderr,
-            start,
-            process_config.signal,
-            persistent_config,
-        );
+        let readiness_error = readiness_wait_error(&mut spawned.child, error, &spawned.cancelled)?;
+        let mut process = persistent_process(spawned, process_config.signal, persistent_config);
         // Reuse the normal lifecycle cleanup so readiness failures do not leak the child.
         let _ = process.shutdown_inner();
         return Err(readiness_error);
     }
 
-    let stdout_startup = take_capture(&stdout);
-    let stderr_startup = take_capture(&stderr);
-    let process = persistent_process(
-        child,
-        stdin_thread,
-        stdout_thread,
-        stderr_thread,
-        cancel_thread,
-        cancelled,
-        stdout,
-        stderr,
-        start,
-        process_config.signal,
-        persistent_config,
-    );
+    let stdout_startup = take_capture(&spawned.stdout);
+    let stderr_startup = take_capture(&spawned.stderr);
+    let process = persistent_process(spawned, process_config.signal, persistent_config);
 
     Ok(PersistentRun {
         startup: PersistentStartup {
@@ -231,31 +205,10 @@ fn spawn_child(
     })
 }
 
-#[allow(clippy::too_many_arguments)]
 fn persistent_process(
-    child: Child,
-    stdin_thread: StdinThread,
-    stdout_thread: ReaderThread,
-    stderr_thread: ReaderThread,
-    cancel_thread: Option<cancel::CancelThread>,
-    cancelled: Arc<AtomicBool>,
-    stdout: io::Capture,
-    stderr: io::Capture,
-    start: Instant,
+    spawned: SpawnedProcess,
     signal: SignalPolicy,
     config: &PersistentConfig,
 ) -> PersistentProcess {
-    new_process(
-        child,
-        stdin_thread,
-        stdout_thread,
-        stderr_thread,
-        cancel_thread,
-        cancelled,
-        stdout,
-        stderr,
-        start,
-        signal,
-        config.shutdown_grace_period,
-    )
+    new_process(spawned, signal, config.shutdown_grace_period)
 }

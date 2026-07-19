@@ -24,6 +24,20 @@ struct NodeExecution {
     result: AppResult<serde_json::Value>,
 }
 
+/// Mutable scheduler state threaded through a single DAG execution run.
+struct ExecutionRun {
+    initial_inputs: HashMap<String, serde_json::Value>,
+    outputs: Arc<Mutex<HashMap<String, serde_json::Value>>>,
+    semaphore: Arc<tokio::sync::Semaphore>,
+    cancel: CancellationToken,
+    join_set: JoinSet<NodeExecution>,
+    remaining_in_degree: HashMap<String, usize>,
+    pending: HashSet<String>,
+    completed: HashSet<String>,
+    failed: HashSet<String>,
+    skipped: HashSet<String>,
+}
+
 /// A directed acyclic graph of executable nodes.
 ///
 /// Nodes are executed in topological order with maximum parallelism:
@@ -176,10 +190,7 @@ impl Dag {
     ) -> AppResult<HashMap<String, serde_json::Value>> {
         let _ = self.topological_sort()?;
 
-        let outputs = Arc::new(Mutex::new(HashMap::<String, serde_json::Value>::new()));
-        let semaphore = Arc::new(tokio::sync::Semaphore::new(self.max_parallelism));
-
-        let mut remaining_in_degree: HashMap<String, usize> = self
+        let remaining_in_degree: HashMap<String, usize> = self
             .nodes
             .keys()
             .map(|id| {
@@ -190,123 +201,92 @@ impl Dag {
             })
             .collect();
 
-        let mut join_set: JoinSet<NodeExecution> = JoinSet::new();
-        let mut pending = HashSet::new();
-        let mut completed = HashSet::new();
-        let mut failed = HashSet::new();
-        let mut skipped = HashSet::new();
+        let mut run = ExecutionRun {
+            initial_inputs,
+            outputs: Arc::new(Mutex::new(HashMap::new())),
+            semaphore: Arc::new(tokio::sync::Semaphore::new(self.max_parallelism)),
+            cancel,
+            join_set: JoinSet::new(),
+            remaining_in_degree,
+            pending: HashSet::new(),
+            completed: HashSet::new(),
+            failed: HashSet::new(),
+            skipped: HashSet::new(),
+        };
 
-        for (id, degree) in &remaining_in_degree {
-            if *degree == 0 {
-                self.spawn_node(
-                    id.clone(),
-                    initial_inputs.clone(),
-                    cancel.clone(),
-                    Arc::clone(&semaphore),
-                    &mut join_set,
-                    &mut pending,
-                )?;
-            }
+        let roots: Vec<String> = run
+            .remaining_in_degree
+            .iter()
+            .filter(|(_, degree)| **degree == 0)
+            .map(|(id, _)| id.clone())
+            .collect();
+        for id in roots {
+            let inputs = run.initial_inputs.clone();
+            self.spawn_node(id, inputs, &mut run)?;
         }
 
-        while let Some(joined) = join_set.join_next().await {
+        while let Some(joined) = run.join_set.join_next().await {
             let execution = joined.map_err(|error| {
                 AppError::new(ErrorCode::Internal, format!("DAG task panicked: {error}"))
             })?;
-            pending.remove(&execution.node_id);
+            run.pending.remove(&execution.node_id);
 
             match execution.result {
                 Ok(value) => {
-                    outputs.lock().insert(execution.node_id.clone(), value);
-                    completed.insert(execution.node_id.clone());
-                    self.schedule_dependents(
-                        &execution.node_id,
-                        &cancel,
-                        &initial_inputs,
-                        &outputs,
-                        &semaphore,
-                        &mut join_set,
-                        &mut remaining_in_degree,
-                        &mut pending,
-                        &completed,
-                        &failed,
-                        &skipped,
-                    )?;
+                    run.outputs.lock().insert(execution.node_id.clone(), value);
+                    run.completed.insert(execution.node_id.clone());
+                    self.schedule_dependents(&execution.node_id, &mut run)?;
                 }
                 Err(error) => match self.failure_policy {
                     FailurePolicy::FailFast => return Err(error),
                     FailurePolicy::Continue => {
-                        failed.insert(execution.node_id.clone());
-                        completed.insert(execution.node_id.clone());
-                        self.schedule_dependents(
-                            &execution.node_id,
-                            &cancel,
-                            &initial_inputs,
-                            &outputs,
-                            &semaphore,
-                            &mut join_set,
-                            &mut remaining_in_degree,
-                            &mut pending,
-                            &completed,
-                            &failed,
-                            &skipped,
-                        )?;
+                        run.failed.insert(execution.node_id.clone());
+                        run.completed.insert(execution.node_id.clone());
+                        self.schedule_dependents(&execution.node_id, &mut run)?;
                     }
                     FailurePolicy::SkipDependents => {
-                        failed.insert(execution.node_id.clone());
-                        completed.insert(execution.node_id.clone());
+                        run.failed.insert(execution.node_id.clone());
+                        run.completed.insert(execution.node_id.clone());
                         mark_skipped_dependents(
                             &self.edges,
                             &execution.node_id,
-                            &mut skipped,
-                            &pending,
+                            &mut run.skipped,
+                            &run.pending,
                         );
                     }
                 },
             }
         }
 
-        Ok(outputs.lock().clone())
+        Ok(run.outputs.lock().clone())
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn schedule_dependents(
-        &self,
-        finished_id: &str,
-        cancel: &CancellationToken,
-        initial_inputs: &HashMap<String, serde_json::Value>,
-        outputs: &Arc<Mutex<HashMap<String, serde_json::Value>>>,
-        semaphore: &Arc<tokio::sync::Semaphore>,
-        join_set: &mut JoinSet<NodeExecution>,
-        remaining_in_degree: &mut HashMap<String, usize>,
-        pending: &mut HashSet<String>,
-        completed: &HashSet<String>,
-        failed: &HashSet<String>,
-        skipped: &HashSet<String>,
-    ) -> AppResult<()> {
-        if let Some(dependents) = self.edges.get(finished_id) {
-            for dependent_id in dependents {
-                if completed.contains(dependent_id)
-                    || pending.contains(dependent_id)
-                    || skipped.contains(dependent_id)
-                {
-                    continue;
-                }
-                if let Some(degree) = remaining_in_degree.get_mut(dependent_id) {
+    fn schedule_dependents(&self, finished_id: &str, run: &mut ExecutionRun) -> AppResult<()> {
+        let Some(dependents) = self.edges.get(finished_id) else {
+            return Ok(());
+        };
+        for dependent_id in dependents {
+            if run.completed.contains(dependent_id)
+                || run.pending.contains(dependent_id)
+                || run.skipped.contains(dependent_id)
+            {
+                continue;
+            }
+            let ready = run
+                .remaining_in_degree
+                .get_mut(dependent_id)
+                .is_some_and(|degree| {
                     *degree = degree.saturating_sub(1);
-                    if *degree == 0 {
-                        let inputs =
-                            self.collect_inputs(dependent_id, outputs, failed, initial_inputs);
-                        self.spawn_node(
-                            dependent_id.clone(),
-                            inputs,
-                            cancel.clone(),
-                            Arc::clone(semaphore),
-                            join_set,
-                            pending,
-                        )?;
-                    }
-                }
+                    *degree == 0
+                });
+            if ready {
+                let inputs = self.collect_inputs(
+                    dependent_id,
+                    &run.outputs,
+                    &run.failed,
+                    &run.initial_inputs,
+                );
+                self.spawn_node(dependent_id.clone(), inputs, run)?;
             }
         }
         Ok(())
@@ -340,10 +320,7 @@ impl Dag {
         &self,
         node_id: String,
         inputs: HashMap<String, serde_json::Value>,
-        cancel: CancellationToken,
-        semaphore: Arc<tokio::sync::Semaphore>,
-        join_set: &mut JoinSet<NodeExecution>,
-        pending: &mut HashSet<String>,
+        run: &mut ExecutionRun,
     ) -> AppResult<()> {
         let node = Arc::clone(self.nodes.get(&node_id).ok_or_else(|| {
             AppError::new(
@@ -351,8 +328,10 @@ impl Dag {
                 format!("DAG node '{node_id}' not found in node map"),
             )
         })?);
-        pending.insert(node_id.clone());
-        join_set.spawn(async move {
+        run.pending.insert(node_id.clone());
+        let cancel = run.cancel.clone();
+        let semaphore = Arc::clone(&run.semaphore);
+        run.join_set.spawn(async move {
             let permit_result = semaphore
                 .acquire()
                 .await

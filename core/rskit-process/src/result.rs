@@ -31,7 +31,11 @@ pub struct ProcessResult {
 impl ProcessResult {
     /// Build a process result from captured output bytes.
     #[must_use]
-    #[allow(clippy::too_many_arguments)]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "distinct primitive completion fields of a public result; a parameter struct would \
+                  leak the crate-internal capture buffers into the public API"
+    )]
     pub fn completed(
         exit_code: Option<i32>,
         stdout_bytes: Vec<u8>,
