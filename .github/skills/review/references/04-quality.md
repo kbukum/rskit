@@ -19,7 +19,7 @@ Catch debt and drift that compiles cleanly but should not land. None of this is 
   - `parking_lot::Mutex`, never `std::sync::Mutex`.
   - No `unsafe` without a `// SAFETY:` comment (and justify it).
   - `AppResult<T>` for error handling throughout.
-- **Signature shape.** A long positional argument list is a design signal — when several arguments form a cohesive group (a request context, options, run state, …), prefer a builder or parameter struct (`#[derive(Default)]`) for call-site clarity and non-breaking extension. Treat it as guidance, not a mechanical limit: only flag a signature when grouping genuinely improves the code, and never split distinct arguments or force artificial structs where that would hurt readability or maintainability.
+- **Signature shape.** A long positional argument list is a design signal — when several arguments form a cohesive group (a request context, options, run state, …), prefer a builder or parameter struct (`#[derive(Default)]`) for call-site clarity, non-breaking extension, and mis-order safety among same-typed arguments. `rustfmt` already wraps long signatures (`max_width = 100`), so this is not a line-wrap argument; the real reason is that Rust has **no named, default, or optional arguments**, so a struct or builder is the idiom for optional-input or many-input calls. Treat it as guidance, not a mechanical limit: only flag a signature when grouping genuinely improves the code, and never split distinct arguments or force artificial structs where that would hurt readability or maintainability.
 
 ## Detection starters
 
