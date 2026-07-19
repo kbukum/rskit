@@ -84,6 +84,12 @@ impl ChunkStrategy for FixedDurationStrategy {
                 "cannot chunk media with zero duration",
             ));
         }
+        if self.chunk_duration.is_zero() {
+            return Err(rskit_errors::AppError::new(
+                rskit_errors::ErrorCode::InvalidInput,
+                "chunk_duration must be greater than zero",
+            ));
+        }
 
         // If duration is less than 1.5x chunk size, don't bother splitting
         let threshold = self.chunk_duration.mul_f64(1.5);
@@ -204,6 +210,13 @@ mod tests {
         let strategy = FixedDurationStrategy::default();
         let metadata = make_metadata(0.0);
         assert!(strategy.plan(&metadata, &[]).is_err());
+    }
+
+    #[test]
+    fn fixed_duration_rejects_zero_chunk_duration() {
+        let strategy = FixedDurationStrategy::default().with_chunk_duration(Duration::ZERO);
+        let err = strategy.plan(&make_metadata(300.0), &[]).unwrap_err();
+        assert_eq!(err.code(), rskit_errors::ErrorCode::InvalidInput);
     }
 
     #[test]

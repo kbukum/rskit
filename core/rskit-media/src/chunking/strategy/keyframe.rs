@@ -59,6 +59,12 @@ impl ChunkStrategy for KeyframeStrategy {
                 "cannot chunk media with zero duration",
             ));
         }
+        if self.target_chunks == 0 {
+            return Err(rskit_errors::AppError::new(
+                rskit_errors::ErrorCode::InvalidInput,
+                "target_chunks must be greater than zero",
+            ));
+        }
 
         // Filter to keyframe-only boundaries
         let keyframes: Vec<&ChunkBoundary> = boundaries.iter().filter(|b| b.is_keyframe).collect();
@@ -181,5 +187,15 @@ mod tests {
         .plan(&metadata, &sparse)
         .unwrap();
         assert_eq!(plan.strategy_name, "fixed_duration");
+    }
+
+    #[test]
+    fn keyframe_strategy_rejects_zero_target_chunks() {
+        let strategy = KeyframeStrategy {
+            target_chunks: 0,
+            ..Default::default()
+        };
+        let err = strategy.plan(&make_metadata(1200.0), &[]).unwrap_err();
+        assert_eq!(err.code(), rskit_errors::ErrorCode::InvalidInput);
     }
 }

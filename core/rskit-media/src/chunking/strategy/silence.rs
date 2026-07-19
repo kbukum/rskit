@@ -58,6 +58,12 @@ impl ChunkStrategy for SilenceStrategy {
                 "cannot chunk media with zero duration",
             ));
         }
+        if self.target_chunk_duration.is_zero() {
+            return Err(rskit_errors::AppError::new(
+                rskit_errors::ErrorCode::InvalidInput,
+                "target_chunk_duration must be greater than zero",
+            ));
+        }
 
         let total_us = total_duration.as_micros() as u64;
         let target_us = self.target_chunk_duration.as_micros() as u64;
@@ -190,5 +196,12 @@ mod tests {
         let plan = strategy.plan(&make_metadata(600.0), &[]).unwrap();
         assert!(plan.chunk_count() > 1);
         assert_eq!(plan.chunks[0].range.end, Timestamp::from_seconds(120.0));
+    }
+
+    #[test]
+    fn silence_strategy_rejects_zero_target_duration() {
+        let strategy = SilenceStrategy::default().with_target_duration(Duration::ZERO);
+        let err = strategy.plan(&make_metadata(600.0), &[]).unwrap_err();
+        assert_eq!(err.code(), rskit_errors::ErrorCode::InvalidInput);
     }
 }
