@@ -85,10 +85,7 @@ This is a refactor pass, not just a report: **fix what you find** in the same ch
 3. Preserve correct domain vocabulary and real rationale.
    When in doubt about an invariant the comment claims, verify it against the code before rewriting
    — never launder a wrong comment into a confident-sounding wrong comment.
-4. Keep prose style consistent with the crate: complete sentences, present tense,
-   describing the code as it is. Markdown
-   and rustdoc prose use semantic line breaks at a 100-column soft ceiling (break at sentence then clause boundaries, never mid-clause);
-   preserve code blocks, lists, and tables.
+4. Keep prose style consistent with the crate: complete sentences, present tense, and describing the code as it is. Markdown and rustdoc paragraphs flow continuously without arbitrary column-based breaks; preserve intentional paragraph boundaries, code blocks, lists, and tables.
 5. Re-run the doc gate so nothing breaks: rustdoc intra-doc links still resolve
    and `make doc` (`-D warnings`) passes.
 

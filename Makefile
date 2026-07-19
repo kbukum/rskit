@@ -1,7 +1,7 @@
 .PHONY: all setup build test test-nextest test-doc test-python test-affected coverage coverage-changed test-coverage test-coverage-html lint fmt fmt-check check check-fast check-facade-features \
        check-core check-patterns check-crosscutting check-composition check-transport check-auth check-data check-ai \
        check-media check-infra doc deny check-l7-edges check-workspace-deps-sync check-topology check-public-api release-readiness release-coverage \
-       publish-dry-run release-publish release-bump release-sbom depgraphs clean help ci ci-test ci-lint ci-fmt ensure-act structure prose prose-fix
+       publish-dry-run release-publish release-bump release-sbom depgraphs clean help ci ci-test ci-lint ci-fmt ensure-act structure
 
 CORE_MANIFEST = core/Cargo.toml
 CONTRIB_MANIFEST = contrib/Cargo.toml
@@ -149,16 +149,6 @@ structure:
 	@./scripts/ensure-ast-grep.sh
 	@ast-grep scan
 
-## Check prose uses semantic line breaks across Markdown and Rust comments
-prose:
-	@echo "==> Checking prose semantic line breaks..."
-	@$(PYTHON) scripts/check-prose.py
-	@echo "✓ Prose OK"
-
-## Reflow prose to semantic line breaks in Markdown and Rust comments in place
-prose-fix:
-	@$(PYTHON) scripts/check-prose.py --fix
-
 ## Build documentation
 doc:
 	@echo "==> Building docs..."
@@ -272,7 +262,7 @@ depgraphs:
 check-fast: fmt-check lint build
 
 ## Run all checks (fmt + lint + build + test)
-check: fmt-check structure prose lint build test-nextest test-doc test-python
+check: fmt-check structure lint build test-nextest test-doc test-python
 
 ## Check only core domain modules
 check-core:
@@ -368,8 +358,6 @@ help:
 	@echo "  make fmt                [W=]               Format code"
 	@echo "  make fmt-check          [W=]               Check formatting"
 	@echo "  make doc                [C=] [W=]          Build documentation"
-	@echo "  make prose                                Check prose semantic line breaks"
-	@echo "  make prose-fix                            Reflow prose to semantic line breaks in place"
 	@echo "  make check-l7-edges                       Check L7 dependency edges"
 	@echo "  make check-workspace-deps-sync            Check shared core/contrib/examples dependency versions"
 	@echo "  make check-topology                       Check module topology"

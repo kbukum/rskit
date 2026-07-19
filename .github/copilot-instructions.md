@@ -108,18 +108,9 @@ and make sure it is covered by the matching `contrib/Cargo.toml` workspace membe
 
 ## Documentation
 
-- Prose uses **semantic line breaks at a 100-column soft ceiling**.
-  Break only at meaningful boundaries: at **sentence boundaries first**,
-  then at **clause boundaries** (after a comma/semicolon/colon, around an em or en dash, or before a coordinating conjunction) when a single sentence still exceeds 100 columns.
-  **Never break inside a clause** to hit a column —
-  a clause with no legal break point may exceed 100 rather than break mid-clause.
-  The 100 columns is a *soft ceiling*, not a hard wrap.
-  This applies identically to **Markdown prose, `//!`/`///` rustdoc, and `//` comments**;
-  fenced/indented code blocks, tables, mermaid diagrams, lists, blockquotes, YAML frontmatter,
-  decorative dividers, and in-comment code examples are preserved verbatim.
-  The `rustfmt` `max_width` limit is for *code*, not prose.
-- Comments and `///` docs describe the code as it is now — not history, plans,
-  or the process that produced it.
+- Write Markdown paragraphs as natural, continuous source lines. Do not hard-wrap prose to a column limit or insert source newlines for visual presentation; Markdown renderers handle viewport-aware wrapping. Keep intentional structure such as paragraph breaks, headings, lists, blockquotes, tables, mermaid diagrams, and fenced or indented code blocks.
+- Apply the same rule to prose in `//!`/`///` rustdoc and `//` comments: do not introduce arbitrary column-based breaks. Preserve rustdoc formatting conventions for code examples, directives, lists, and tables. The `rustfmt` `max_width` limit is for code, not prose.
+- Comments and rustdoc describe the code as it is now — not history, plans, or the process that produced it.
 
 ## Key Patterns
 
