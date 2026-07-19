@@ -1,15 +1,8 @@
 # rskit development skills
 
-[Agent Skills](https://docs.github.com/copilot/concepts/agents/about-agent-skills) for developing **rskit itself**
-—
-loaded on demand by GitHub Copilot (CLI, coding agent, code review, IDEs) when a task matches a skill's description.
-These are **project skills** for contributors;
-they do not affect anyone who consumes rskit as a dependency.
+[Agent Skills](https://docs.github.com/copilot/concepts/agents/about-agent-skills) for developing **rskit itself** — loaded on demand by GitHub Copilot (CLI, coding agent, code review, IDEs) when a task matches a skill's description. These are **project skills** for contributors; they do not affect anyone who consumes rskit as a dependency.
 
-Each skill is a folder with a `SKILL.md` (YAML frontmatter + workflow)
-and optional bundled reference files loaded only when the skill activates (progressive disclosure).
-They encode rskit's permanent engineering baseline (see [`../copilot-instructions.md`](../copilot-instructions.md) and `docs/DESIGN.md`)
-and drive tasks through the repo's `make`/`cargo` gates.
+Each skill is a folder with a `SKILL.md` (YAML frontmatter + workflow) and optional bundled reference files loaded only when the skill activates (progressive disclosure). They encode rskit's permanent engineering baseline (see [`../copilot-instructions.md`](../copilot-instructions.md) and `docs/DESIGN.md`) and drive tasks through the repo's `make`/`cargo` gates.
 
 ## Skills
 
@@ -32,11 +25,6 @@ and drive tasks through the repo's `make`/`cargo` gates.
 
 ## Conventions
 
-- Skills are discoverable in Copilot CLI via `/skills`;
-  project skills live under `.github/skills/` (also `.claude/skills` / `.agents/skills` are honored),
-  personal skills under `~/.copilot/skills`.
-- Run reviews (`review`) in a **fresh, clean-context agent**,
-  never inline in the session that wrote the code.
-- Validation is `make`/`cargo`-first,
-  scoped to the changed crate(s) (`make lint C=<crate>`, `make test C=<crate> T=<pattern>`, `make test-affected`);
-  full-tree gates are for audits and releases.
+- Skills are discoverable in Copilot CLI via `/skills`; project skills live under `.github/skills/` (also `.claude/skills` / `.agents/skills` are honored), personal skills under `~/.copilot/skills`.
+- Run reviews (`review`) in a **fresh, clean-context agent**, never inline in the session that wrote the code.
+- Validation is `make`/`cargo`-first, scoped to the changed crate(s) (`make lint C=<crate>`, `make test C=<crate> T=<pattern>`, `make test-affected`); full-tree gates are for audits and releases.

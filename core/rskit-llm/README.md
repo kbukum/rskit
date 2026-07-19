@@ -1,8 +1,6 @@
 # rskit-llm — LLM provider abstractions
 
-`rskit-llm` owns the SDK-free completion contract for chat models: requests, responses,
-canonical tool-use blocks, capability metadata,
-and the single `Provider` trait used across the Rust kit.
+`rskit-llm` owns the SDK-free completion contract for chat models: requests, responses, canonical tool-use blocks, capability metadata, and the single `Provider` trait used across the Rust kit.
 
 ## Install
 

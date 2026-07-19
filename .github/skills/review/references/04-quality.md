@@ -1,28 +1,17 @@
 # Pass 04 — Quality: simplicity, maintainability, current patterns
 
-Catch debt and drift that compiles cleanly but should not land. None of this is style nitpicking —
-it maps to rskit's pre-stable, redesign-first stance.
+Catch debt and drift that compiles cleanly but should not land. None of this is style nitpicking — it maps to rskit's pre-stable, redesign-first stance.
 
-> **Run in a separate, clean-context agent** — never inline in the session that wrote the code.
-> An independent reviewer re-derives every judgment from the code
-> and the principles instead of trusting prior reasoning.
-> A plan/spec may be passed in as a scope checklist only; it never excuses a baseline violation.
+> **Run in a separate, clean-context agent** — never inline in the session that wrote the code. An independent reviewer re-derives every judgment from the code and the principles instead of trusting prior reasoning. A plan/spec may be passed in as a scope checklist only; it never excuses a baseline violation.
 
-**Scope note.** *Changes mode:* judge the diff against simpler alternatives
-and check the style gates on touched public items. *Project mode:* hunt for dead code,
-lingering compatibility shims, and outdated patterns across the crate(s).
+**Scope note.** *Changes mode:* judge the diff against simpler alternatives and check the style gates on touched public items. *Project mode:* hunt for dead code, lingering compatibility shims, and outdated patterns across the crate(s).
 
 ## Checks
 
-- **Root-cause over patches.** Pre-stable: no compatibility shims.
-  Prefer a clean redesign over a symptom patch; flag shims as should-fix with a redesign suggestion.
-- **Dead / useless code.** No-caller code, speculative generality (one impl, no near-term second),
-  commented-out blocks, leftover scaffolding. Remove.
-- **Maintainability.** Obvious to the next reader without the author?
-  Do names match rskit vocabulary? No hidden coupling across crates? Prefer focused,
-  well-named modules/files over piling logic into one large file.
-- **Outdated patterns.** Edition 2024 / msrv 1.91 is the floor —
-  flag patterns superseded by current idioms (manual impls where `derive` suffices, needless clones clippy-pedantic would catch).
+- **Root-cause over patches.** Pre-stable: no compatibility shims. Prefer a clean redesign over a symptom patch; flag shims as should-fix with a redesign suggestion.
+- **Dead / useless code.** No-caller code, speculative generality (one impl, no near-term second), commented-out blocks, leftover scaffolding. Remove.
+- **Maintainability.** Obvious to the next reader without the author? Do names match rskit vocabulary? No hidden coupling across crates? Prefer focused, well-named modules/files over piling logic into one large file.
+- **Outdated patterns.** Edition 2024 / msrv 1.91 is the floor — flag patterns superseded by current idioms (manual impls where `derive` suffices, needless clones clippy-pedantic would catch).
 - **Style gates.**
   - `cargo fmt` (edition 2024, max_width 100) and clippy clean (`-D warnings`, msrv 1.91).
   - `#![warn(missing_docs)]` satisfied — all public items documented.
@@ -30,13 +19,7 @@ lingering compatibility shims, and outdated patterns across the crate(s).
   - `parking_lot::Mutex`, never `std::sync::Mutex`.
   - No `unsafe` without a `// SAFETY:` comment (and justify it).
   - `AppResult<T>` for error handling throughout.
-- **Signature shape.** A long positional argument list is a design signal —
-  when several arguments form a cohesive group (a request context, options, run state, …),
-  prefer a builder or parameter struct (`#[derive(Default)]`) for call-site clarity
-  and non-breaking extension. Treat it as guidance, not a mechanical limit:
-  only flag a signature when grouping genuinely improves the code,
-  and never split distinct arguments or force artificial structs where that would hurt readability
-  or maintainability.
+- **Signature shape.** A long positional argument list is a design signal — when several arguments form a cohesive group (a request context, options, run state, …), prefer a builder or parameter struct (`#[derive(Default)]`) for call-site clarity and non-breaking extension. Treat it as guidance, not a mechanical limit: only flag a signature when grouping genuinely improves the code, and never split distinct arguments or force artificial structs where that would hurt readability or maintainability.
 
 ## Detection starters
 

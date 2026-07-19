@@ -1,8 +1,6 @@
 # rskit-llm-ollama — Ollama provider adapter
 
-`rskit-llm-ollama` registers a local
-or remote Ollama provider for the canonical `rskit-llm` registry.
-Ollama exposes an OpenAI-compatible chat-completions endpoint at `<base_url>/v1/chat/completions`.
+`rskit-llm-ollama` registers a local or remote Ollama provider for the canonical `rskit-llm` registry. Ollama exposes an OpenAI-compatible chat-completions endpoint at `<base_url>/v1/chat/completions`.
 
 ## Install
 
@@ -48,5 +46,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## When to use
 
-Use this adapter for local development, private model hosting,
-or remote Ollama deployments that should still use the shared `rskit-llm::Provider` contract.
+Use this adapter for local development, private model hosting, or remote Ollama deployments that should still use the shared `rskit-llm::Provider` contract.

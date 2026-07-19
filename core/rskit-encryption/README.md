@@ -56,8 +56,7 @@ Keys are derived from passphrases using **PBKDF2-SHA256** with:
 base64(version[1] || algorithm[1] || salt[16] || nonce[12] || ciphertext)
 ```
 
-The version and algorithm header is authenticated as AEAD associated data,
-so tampering with envelope metadata fails decryption.
+The version and algorithm header is authenticated as AEAD associated data, so tampering with envelope metadata fails decryption.
 
 ## Error Handling
 

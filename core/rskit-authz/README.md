@@ -51,5 +51,4 @@ assert!(allowed);
 # Ok::<(), rskit_errors::AppError>(())
 ```
 
-Object-level constraints that limit a role grant should be attached to the `Permission::conditions` for that grant.
-Use explicit deny policies for constraints that must override every broad role or policy allow.
+Object-level constraints that limit a role grant should be attached to the `Permission::conditions` for that grant. Use explicit deny policies for constraints that must override every broad role or policy allow.

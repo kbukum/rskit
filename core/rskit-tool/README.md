@@ -5,10 +5,7 @@ and executable permission envelopes.
 
 ## Middleware ownership
 
-`rskit-tool` intentionally does not expose local `with_logging`, `with_timeout`, `with_recover`,
-retry, metrics, validation, or result-limit middleware.
-Compose those concerns with their canonical owners: `tracing`/`rskit-observability`,
-`tower`/`rskit-resilience`, and `rskit-schema`/`rskit-validation`.
+`rskit-tool` intentionally does not expose local `with_logging`, `with_timeout`, `with_recover`, retry, metrics, validation, or result-limit middleware. Compose those concerns with their canonical owners: `tracing`/`rskit-observability`, `tower`/`rskit-resilience`, and `rskit-schema`/`rskit-validation`.
 
 ## Envelope
 

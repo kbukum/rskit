@@ -9,15 +9,11 @@ description: >-
 
 # Validating rskit changes with make/cargo
 
-rskit is a multi-workspace Rust monorepo (`core/`, `contrib/`, `examples/`) with 50+ crates.
-The `Makefile` is the canonical task runner: it wraps `cargo` with crate/workspace scoping
-and the placement/supply-chain guards. Prefer it over raw `cargo` for anything with a `make` target,
-and **always scope to what changed** — full-tree gates are slow and belong to audits/CI sign-off.
+rskit is a multi-workspace Rust monorepo (`core/`, `contrib/`, `examples/`) with 50+ crates. The `Makefile` is the canonical task runner: it wraps `cargo` with crate/workspace scoping and the placement/supply-chain guards. Prefer it over raw `cargo` for anything with a `make` target, and **always scope to what changed** — full-tree gates are slow and belong to audits/CI sign-off.
 
 ## Golden rule: scope to what changed
 
-Never run the whole tree for a small change. Scope by crate (`C=`),
-by workspace (`W=core|contrib|examples`), or let the affected-set targets compute the affected area.
+Never run the whole tree for a small change. Scope by crate (`C=`), by workspace (`W=core|contrib|examples`), or let the affected-set targets compute the affected area.
 
 ```bash
 make test-affected                        # only crates the diff touches (+ reverse-deps)
@@ -68,15 +64,11 @@ make check-workspace-deps-sync # shared dep versions consistent across workspace
 make check-facade-features     # facade feature wiring
 ```
 
-Per-domain gates aggregate the above for a slice of the tree:
-`make check-core|check-data|check-transport|check-auth|check-ai|check-media|check-infra|check-crosscutting|check-composition|check-patterns`.
+Per-domain gates aggregate the above for a slice of the tree: `make check-core|check-data|check-transport|check-auth|check-ai|check-media|check-infra|check-crosscutting|check-composition|check-patterns`.
 
 ## Before you hand work off
 
-For a self-contained change, the minimum passing standard is: `fmt-check`, `lint C=<crate>`,
-`test C=<crate>` (green under race/shuffle/parallel), `doc C=<crate>` if docs changed,
-and `check-topology` on any structural change. Escalate to the full canonical gate only for audits
-or a release:
+For a self-contained change, the minimum passing standard is: `fmt-check`, `lint C=<crate>`, `test C=<crate>` (green under race/shuffle/parallel), `doc C=<crate>` if docs changed, and `check-topology` on any structural change. Escalate to the full canonical gate only for audits or a release:
 
 ```bash
 make check                     # full canonical gate — fmt-check + lint + build + test
@@ -84,8 +76,6 @@ make deny                      # + supply-chain / topology / public-api / dep-sy
 make release-readiness         # supply-chain + API sweep before a release
 ```
 
-Treat a green run as **necessary but not sufficient**: it does not catch unbounded concurrency,
-missing timeouts/cancellation, global-registry composition issues, duplicated owners,
-or boundary-validation gaps. Those are on the reviewer.
+Treat a green run as **necessary but not sufficient**: it does not catch unbounded concurrency, missing timeouts/cancellation, global-registry composition issues, duplicated owners, or boundary-validation gaps. Those are on the reviewer.
 
 Per repo workflow, **create the branch and make edits only** — the maintainer commits and pushes.

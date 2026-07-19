@@ -13,8 +13,7 @@ user-invocable: true
 
 Documentation can fail two ways: it can fall out of **standard** (arbitrary source line breaks, history narration, dead links), and it can become **out of date** (commands, crate lists, facade wiring, and examples that no longer match the code). This skill checks both. rskit is shared foundation infrastructure and the reference kit gokit/pykit mirror, so a stale doc misleads every downstream consumer — the standard is high. Run it over the whole `docs/` tree, a single file, or the docs touched by a change set.
 
-The authoritative doc policy lives in the Documentation section of [`.github/copilot-instructions.md`](../../copilot-instructions.md) (and `docs/DESIGN.md`).
-The baseline wins over any local habit.
+The authoritative doc policy lives in the Documentation section of [`.github/copilot-instructions.md`](../../copilot-instructions.md) (and `docs/DESIGN.md`). The baseline wins over any local habit.
 
 ## Docs in scope
 

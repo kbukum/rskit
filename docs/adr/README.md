@@ -1,7 +1,6 @@
 # Architecture Decision Records (ADR)
 
-ADRs document **significant** architectural choices: tradeoffs considered, why we picked one option,
-and the consequences. They are immutable — superseded ADRs are kept and linked from the replacement.
+ADRs document **significant** architectural choices: tradeoffs considered, why we picked one option, and the consequences. They are immutable — superseded ADRs are kept and linked from the replacement.
 
 ## When to write an ADR
 

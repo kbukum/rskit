@@ -17,9 +17,7 @@ rskit is part of a sibling trio that intentionally mirrors module structure, nam
 - [`kbukum/rskit`](https://github.com/kbukum/rskit) — Rust (this repo)
 - [`kbukum/pykit`](https://github.com/kbukum/pykit) — Python
 
-When a public abstraction (`AppError`, `Component`, `Provider`, `Pipeline`, lifecycle hooks, error codes, configuration semantics) is changed in one sibling,
-the same change should be evaluated for the other two. Drift is treated as a finding
-and tracked in cross-sibling issues.
+When a public abstraction (`AppError`, `Component`, `Provider`, `Pipeline`, lifecycle hooks, error codes, configuration semantics) is changed in one sibling, the same change should be evaluated for the other two. Drift is treated as a finding and tracked in cross-sibling issues.
 
 ## Roles
 
@@ -42,21 +40,14 @@ The current list is in [MAINTAINERS.md](MAINTAINERS.md).
 
 ## Decision Making
 
-For routine changes (bug fixes, small features), a single maintainer approval is sufficient.
-For changes that affect multiple crates or change a public API,
-the contributor is encouraged to open a discussion or RFC issue first.
+For routine changes (bug fixes, small features), a single maintainer approval is sufficient. For changes that affect multiple crates or change a public API, the contributor is encouraged to open a discussion or RFC issue first.
 
-For significant architectural changes (e.g. introducing a new sub-crate, removing a public crate, changing the layering rules, changing the release process),
-at least two maintainers must approve. If maintainers disagree,
-the proposal is deferred until consensus is reached
-or a clear path forward is documented in an [ADR](docs/adr/).
+For significant architectural changes (e.g. introducing a new sub-crate, removing a public crate, changing the layering rules, changing the release process), at least two maintainers must approve. If maintainers disagree, the proposal is deferred until consensus is reached or a clear path forward is documented in an [ADR](docs/adr/).
 
 ## Release Process
 
 Releases are cut by maintainers following [docs/RELEASING.md](docs/RELEASING.md).
-Each release MUST be accompanied by a CHANGELOG entry that follows the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
-Maintainers keep a single `[Unreleased]` heading
-and rotate it on release per [docs/RELEASING.md](docs/RELEASING.md).
+Each release MUST be accompanied by a CHANGELOG entry that follows the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format. Maintainers keep a single `[Unreleased]` heading and rotate it on release per [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Security Issues
 

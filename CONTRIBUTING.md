@@ -1,7 +1,6 @@
 # Contributing to rskit
 
-Thank you for your interest in contributing! This document explains how to get started,
-what we expect from contributors, and how the review process works.
+Thank you for your interest in contributing! This document explains how to get started, what we expect from contributors, and how the review process works.
 
 ---
 
@@ -23,8 +22,7 @@ what we expect from contributors, and how the review process works.
 
 ## Code of Conduct
 
-Be respectful, constructive, and patient.
-We follow the [Contributor Covenant v2.1](https://www.contributor-covenant.org/version/2/1/code_of_conduct/).
+Be respectful, constructive, and patient. We follow the [Contributor Covenant v2.1](https://www.contributor-covenant.org/version/2/1/code_of_conduct/).
 
 ---
 
@@ -48,9 +46,7 @@ We follow the [Contributor Covenant v2.1](https://www.contributor-covenant.org/v
 
 ## Prerequisites
 
-- Install Rust via [rustup](https://rustup.rs/).
-  The repo is pinned to a specific toolchain via `rust-toolchain.toml` —
-  rustup will automatically download and use the correct version.
+- Install Rust via [rustup](https://rustup.rs/). The repo is pinned to a specific toolchain via `rust-toolchain.toml` — rustup will automatically download and use the correct version.
 - Install Python 3.11+ for repository automation, then run `make setup` to install
   or verify local Cargo tooling.
 - **Linux:** Install `mold` linker for faster builds: `sudo apt install mold`
@@ -91,8 +87,7 @@ scripts/setup.sh --system --release
 make doc
 ```
 
-If you use Cargo directly,
-pass the owning manifest because the repository intentionally has no root `Cargo.toml`:
+If you use Cargo directly, pass the owning manifest because the repository intentionally has no root `Cargo.toml`:
 
 ```sh
 cargo test --manifest-path core/Cargo.toml -p rskit-errors
@@ -110,14 +105,11 @@ cargo test --manifest-path examples/Cargo.toml --workspace
    git checkout -b feat/my-feature
    ```
 
-2. Make the smallest change that achieves the goal. Avoid unrelated clean-up in the same PR —
-   file a separate issue/PR for it.
+2. Make the smallest change that achieves the goal. Avoid unrelated clean-up in the same PR — file a separate issue/PR for it.
 
-3. Keep public APIs additive
-   and backward-compatible unless the change is intentionally breaking (discuss first).
+3. Keep public APIs additive and backward-compatible unless the change is intentionally breaking (discuss first).
 
-4. Update `CHANGELOG.md` under `## [Unreleased]` with a brief description of what you added,
-   changed, or fixed.
+4. Update `CHANGELOG.md` under `## [Unreleased]` with a brief description of what you added, changed, or fixed.
 
 ---
 
@@ -144,9 +136,7 @@ PROFILE=ci make test-nextest  # with CI profile (retries, no fail-fast)
 - Time-dependent tests **must** use `tokio::time::pause()` / `tokio::time::advance()` —
   never `std::thread::sleep`.
 - Env-var tests must hold a `static parking_lot::Mutex<()>` guard to prevent cross-test pollution (see `rskit-config/src/loader.rs` for the pattern).
-- Tests that require a live service (e.g., gRPC integration tests) go in the crate-local `tests/` directory under `core/rskit-<name>/tests/` for foundation crates
-  or `contrib/<domain>/<name>/tests/` for adapters,
-  and are gated with `#[ignore]` plus a doc comment explaining what service is needed.
+- Tests that require a live service (e.g., gRPC integration tests) go in the crate-local `tests/` directory under `core/rskit-<name>/tests/` for foundation crates or `contrib/<domain>/<name>/tests/` for adapters, and are gated with `#[ignore]` plus a doc comment explaining what service is needed.
 
 Run the full suite before submitting:
 
@@ -198,11 +188,8 @@ chore(ci): pin cargo-deny to 0.16
 
 1. Create foundation crates under `core/rskit-<name>/` with `cargo new --lib`,
    or adapter crates under `contrib/<domain>/<name>/`.
-2. Add foundation crates to `core/Cargo.toml`
-   or adapter crates to the matching `contrib/<domain>/*` workspace pattern in `contrib/Cargo.toml`.
-3. Give the crate its own `version` (seeded from the current alpha, e.g. `version = "0.1.0-alpha.1"`),
-   inherit the remaining workspace metadata (`edition.workspace = true`, etc.),
-   and add any shared dependencies through the owning workspace manifest.
+2. Add foundation crates to `core/Cargo.toml` or adapter crates to the matching `contrib/<domain>/*` workspace pattern in `contrib/Cargo.toml`.
+3. Give the crate its own `version` (seeded from the current alpha, e.g. `version = "0.1.0-alpha.1"`), inherit the remaining workspace metadata (`edition.workspace = true`, etc.), and add any shared dependencies through the owning workspace manifest.
 4. Add `#![warn(missing_docs)]` to `src/lib.rs`.
 5. Wire it into the `rskit` facade crate.
 6. Add or update package documentation in `docs/PACKAGES.md`
@@ -210,10 +197,7 @@ chore(ci): pin cargo-deny to 0.16
 7. Open a tracking issue describing the API surface before implementing,
    so the design can be discussed early.
 
-Version bumps and release preparation are maintainer-only work.
-Contributors should add `CHANGELOG.md` entries under `[Unreleased]`;
-maintainers follow [`docs/VERSIONING.md`](docs/VERSIONING.md)
-and [`docs/RELEASING.md`](docs/RELEASING.md) when cutting a release.
+Version bumps and release preparation are maintainer-only work. Contributors should add `CHANGELOG.md` entries under `[Unreleased]`; maintainers follow [`docs/VERSIONING.md`](docs/VERSIONING.md) and [`docs/RELEASING.md`](docs/RELEASING.md) when cutting a release.
 
 ---
 
@@ -231,9 +215,7 @@ and [`docs/RELEASING.md`](docs/RELEASING.md) when cutting a release.
 | `tokio::time::pause()` for time-based tests | `rskit-stream`, `rskit-resilience` |
 | `#[allow(async_fn_in_trait)]` for public traits with default impls | As needed |
 
-Prefer synchronous `parking_lot` locks for in-memory state that is accessed
-and released within a synchronous critical section. Never hold any lock across unrelated I/O;
-document the reason when an async lock is intentionally required.
+Prefer synchronous `parking_lot` locks for in-memory state that is accessed and released within a synchronous critical section. Never hold any lock across unrelated I/O; document the reason when an async lock is intentionally required.
 
 ---
 
@@ -251,7 +233,4 @@ document the reason when an async lock is intentionally required.
 
 ### Sibling-parity reminder
 
-Public abstractions (`AppError`, `Component`, `Provider`, lifecycle hooks) are mirrored across [gokit](https://github.com/kbukum/gokit),
-[rskit](https://github.com/kbukum/rskit), and [pykit](https://github.com/kbukum/pykit).
-When you change one of these surfaces here, please open tracking issues in the sibling repos
-so the change can be evaluated for parity.
+Public abstractions (`AppError`, `Component`, `Provider`, lifecycle hooks) are mirrored across [gokit](https://github.com/kbukum/gokit), [rskit](https://github.com/kbukum/rskit), and [pykit](https://github.com/kbukum/pykit). When you change one of these surfaces here, please open tracking issues in the sibling repos so the change can be evaluated for parity.

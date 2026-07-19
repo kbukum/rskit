@@ -33,9 +33,7 @@ let server = HttpServerBuilder::new(HttpServerConfig::default(), CancellationTok
 
 ## TLS policy
 
-`HttpServerConfig::tls` uses `rskit_security::TlsConfig` with `cert_file`
-and `key_file` required for direct HTTPS serving. Client-only settings such as `skip_verify`,
-`ca_file`, and `server_name` are rejected for server TLS.
+`HttpServerConfig::tls` uses `rskit_security::TlsConfig` with `cert_file` and `key_file` required for direct HTTPS serving. Client-only settings such as `skip_verify`, `ca_file`, and `server_name` are rejected for server TLS.
 
 `GrpcServerConfig::tls` uses tonic/rustls modern defaults. Server TLS prefers TLS 1.3,
 permits TLS 1.2 as the compatibility floor, and does not enable legacy protocols.

@@ -30,12 +30,9 @@ Start here, then reconcile each low-level operation against that pass.
 ## How to use this map
 
 1. Name the concern before writing the code.
-2. Find its owner above; **consume it
-   or implement its trait** (see the [reuse review pass](../.github/skills/review/references/01-canonical-reuse.md)).
+2. Find its owner above; **consume it or implement its trait** (see the [reuse review pass](../.github/skills/review/references/01-canonical-reuse.md)).
 3. If the owner is close but inadequate, enhance it generically, then consume — never fork.
-4. If a concern has genuinely no owner and is foundational,
-   add it to the correct owning crate (or a new correctly-layered one), with tests and docs —
-   not locally.
+4. If a concern has genuinely no owner and is foundational, add it to the correct owning crate (or a new correctly-layered one), with tests and docs — not locally.
 
 The list is illustrative, not exhaustive: **any** rskit crate is a potential owner,
 so a capability that maps to an owner not named here still counts.

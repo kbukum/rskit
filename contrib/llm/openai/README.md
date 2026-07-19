@@ -1,8 +1,6 @@
 # rskit-llm-openai — OpenAI provider adapter
 
-`rskit-llm-openai` registers an OpenAI-compatible chat provider for the canonical `rskit-llm` registry.
-It uses `rskit-httpclient` for outbound transport
-and redacts API keys through `rskit-util::SecretString`.
+`rskit-llm-openai` registers an OpenAI-compatible chat provider for the canonical `rskit-llm` registry. It uses `rskit-httpclient` for outbound transport and redacts API keys through `rskit-util::SecretString`.
 
 ## Install
 
@@ -52,6 +50,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## When to use
 
-Use this adapter when you want the canonical `rskit-llm::Provider` API backed by OpenAI
-or an OpenAI-compatible endpoint. Use `rskit-llm` directly for provider-agnostic contracts
-and `rskit-embedding` plus `embedding_provider` when you need embeddings.
+Use this adapter when you want the canonical `rskit-llm::Provider` API backed by OpenAI or an OpenAI-compatible endpoint. Use `rskit-llm` directly for provider-agnostic contracts and `rskit-embedding` plus `embedding_provider` when you need embeddings.

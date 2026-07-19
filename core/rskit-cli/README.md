@@ -1,32 +1,20 @@
 # rskit-cli — CLI Framework
 
-Parser-agnostic CLI UX toolkit: theming, structured output, progress, interactive prompts,
-and signal handling.
+Parser-agnostic CLI UX toolkit: theming, structured output, progress, interactive prompts, and signal handling.
 
 [![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/rskit-cli.svg)](https://crates.io/crates/rskit-cli) [![docs.rs](https://docs.rs/rskit-cli/badge.svg)](https://docs.rs/rskit-cli) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/kbukum/rskit/blob/main/LICENSE) [![MSRV: 1.91](https://img.shields.io/badge/MSRV-1.91-orange.svg)](https://www.rust-lang.org/)
 
 ## Modules
 
-- `theme` — visual vocabulary: `Palette` semantic color and `Glyphs` status symbols (✓ ✗ ⚠ ℹ • → …),
-  both honouring `NO_COLOR`, TTY detection, and UTF-8 capability (with a pure-ASCII glyph fallback).
-- `render` — structured, non-interactive display: `OutputTable`, `OutputKV`,
-  the `ErrorRenderer`/`ExitCode` convention,
-  and one-off `StatusReporter` feedback lines (success/warn/step/heading) for guided flows.
-- `progress` —
-  `ProgressBar` / `MultiProgress` preset styles (Bar, Spinner, Download, Finished) over `indicatif`.
-- `prompt` —
-  interactive prompts (`select`, `multi_select`, `confirm`, `text`/`text_with`) that speak through a `Terminal` seam:
-  a line-driven numbered list over pipes,
-  a rich raw-mode arrow-key widget on a TTY (radio `◉`/`○` and checkbox `[x]`/`[ ]` lists, behind the `interactive` feature),
-  or a scripted double in tests — with a non-interactive fallback that resolves to declared defaults
-  and never hangs.
+- `theme` — visual vocabulary: `Palette` semantic color and `Glyphs` status symbols (✓ ✗ ⚠ ℹ • → …), both honouring `NO_COLOR`, TTY detection, and UTF-8 capability (with a pure-ASCII glyph fallback).
+- `render` — structured, non-interactive display: `OutputTable`, `OutputKV`, the `ErrorRenderer`/`ExitCode` convention, and one-off `StatusReporter` feedback lines (success/warn/step/heading) for guided flows.
+- `progress` — `ProgressBar` / `MultiProgress` preset styles (Bar, Spinner, Download, Finished) over `indicatif`.
+- `prompt` — interactive prompts (`select`, `multi_select`, `confirm`, `text`/`text_with`) that speak through a `Terminal` seam: a line-driven numbered list over pipes, a rich raw-mode arrow-key widget on a TTY (radio `◉`/`○` and checkbox `[x]`/`[ ]` lists, behind the `interactive` feature), or a scripted double in tests — with a non-interactive fallback that resolves to declared defaults and never hangs.
 - `signal` — `CancellationToken` cooperative Ctrl+C handling for async tasks.
 
 ## Features
 
-- `interactive` (off by default) — rich, raw-mode prompts with arrow-key navigation via `crossterm`.
-  The line-driven prompt path is always available and dependency-free,
-  so enable this only when you want the live TUI experience.
+- `interactive` (off by default) — rich, raw-mode prompts with arrow-key navigation via `crossterm`. The line-driven prompt path is always available and dependency-free, so enable this only when you want the live TUI experience.
 
 ## Usage
 

@@ -6,8 +6,7 @@
 
 ## Context
 
-What is the issue we're seeing that motivates this decision?
-Include the forces at play (technical, organizational, social).
+What is the issue we're seeing that motivates this decision? Include the forces at play (technical, organizational, social).
 
 ## Decision
 

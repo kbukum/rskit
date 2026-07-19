@@ -1,12 +1,10 @@
 # rskit: Integration Patterns
 
-This document shows how rskit modules compose together to solve common microservice challenges.
-Each pattern demonstrates a practical workflow combining multiple crates using Rust's trait-based abstractions.
+This document shows how rskit modules compose together to solve common microservice challenges. Each pattern demonstrates a practical workflow combining multiple crates using Rust's trait-based abstractions.
 
 ## Pattern 1: Server + Discovery
 
-**Problem**: Start an HTTP or gRPC server
-and automatically register it with a discovery service (Consul, etcd, etc.) for automatic deregistration on shutdown.
+**Problem**: Start an HTTP or gRPC server and automatically register it with a discovery service (Consul, etcd, etc.) for automatic deregistration on shutdown.
 
 **Solution**: Use `DiscoveryServer<T>` from `rskit-discovery::server` to wrap your `HttpServer`
 or `GrpcServer` and handle automatic registration/deregistration via the component lifecycle.
@@ -71,11 +69,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Pattern 2: Messaging + Middleware Stack
 
-**Problem**: Process messages from a topic with automatic retry, metrics tracking, tracing,
-circuit breaker protection, and dead-letter handling without manually nesting middleware.
+**Problem**: Process messages from a topic with automatic retry, metrics tracking, tracing, circuit breaker protection, and dead-letter handling without manually nesting middleware.
 
-**Solution**: Use trait-based middleware composition from `rskit-messaging` with a builder pattern.
-Stack retry, circuit breaker, and metrics middleware in a predictable order.
+**Solution**: Use trait-based middleware composition from `rskit-messaging` with a builder pattern. Stack retry, circuit breaker, and metrics middleware in a predictable order.
 
 **Code example**:
 
@@ -176,12 +172,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Pattern 3: gRPC Client + Discovery
 
-**Problem**: Create a gRPC client that dynamically discovers
-and connects to a remote service with automatic load balancing and connection pooling.
+**Problem**: Create a gRPC client that dynamically discovers and connects to a remote service with automatic load balancing and connection pooling.
 
-**Solution**: Use `rskit-grpc` with discovery integration.
-`DiscoveryChannel` resolves service endpoints via `rskit-discovery`,
-then hands the connected tonic `Channel` to your generated client.
+**Solution**: Use `rskit-grpc` with discovery integration. `DiscoveryChannel` resolves service endpoints via `rskit-discovery`, then hands the connected tonic `Channel` to your generated client.
 
 **Code example**:
 
@@ -235,11 +228,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Pattern 4: HTTP Client + Resilience
 
-**Problem**: Make HTTP calls to external APIs with retry logic, timeout handling,
-and circuit breaker protection.
+**Problem**: Make HTTP calls to external APIs with retry logic, timeout handling, and circuit breaker protection.
 
-**Solution**:
-Use `rskit-httpclient` paired with `rskit-resilience` for a resilient HTTP client that automatically handles transient failures.
+**Solution**: Use `rskit-httpclient` paired with `rskit-resilience` for a resilient HTTP client that automatically handles transient failures.
 
 **Code example**:
 
@@ -287,8 +278,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Pattern 5: EventPublisher + Messaging
 
-**Problem**: Publish domain events with automatic envelope construction
-and routing without manually handling serialization and envelope metadata.
+**Problem**: Publish domain events with automatic envelope construction and routing without manually handling serialization and envelope metadata.
 
 **Solution**: Use `rskit-messaging::EventPublisher` to wrap a Kafka producer.
 The facade handles event envelope creation (ID, timestamp, source) automatically.
@@ -354,12 +344,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Pattern 6: Process + Error Handling
 
-**Problem**: Execute external processes (shell commands, FFmpeg, etc.) with timeout,
-signal handling, and comprehensive error classification.
+**Problem**: Execute external processes (shell commands, FFmpeg, etc.) with timeout, signal handling, and comprehensive error classification.
 
-**Solution**:
-Use `rskit-process` with error mapping from `rskit-errors` to handle subprocesses safely
-and classify failures uniformly.
+**Solution**: Use `rskit-process` with error mapping from `rskit-errors` to handle subprocesses safely and classify failures uniformly.
 
 **Code example**:
 
@@ -498,14 +485,9 @@ This architecture provides:
 
 ## Best Practices
 
-1. **Use trait-based abstractions** — implement `Discovery`, `Registry`, `MessageHandler`,
-   `Producer` to swap implementations easily.
+1. **Use trait-based abstractions** — implement `Discovery`, `Registry`, `MessageHandler`, `Producer` to swap implementations easily.
 2. **Prefer DiscoveryChannel** for gRPC to enable dynamic service discovery without hardcoding addresses.
-3. **Stack middleware in a predictable order** —
-   retry → circuit breaker → metrics → tracing (inner to outer).
-4. **Use EventPublisher for consistency** — ensures all events have proper envelopes with IDs,
-   timestamps, and source.
-5. **Handle process timeouts** —
-   always set `timeout` in `ProcessConfig` to prevent hanging subprocesses.
-6. **Classify errors with AppError** —
-   use `rskit-errors::ErrorCode` for uniform error handling across services.
+3. **Stack middleware in a predictable order** — retry → circuit breaker → metrics → tracing (inner to outer).
+4. **Use EventPublisher for consistency** — ensures all events have proper envelopes with IDs, timestamps, and source.
+5. **Handle process timeouts** — always set `timeout` in `ProcessConfig` to prevent hanging subprocesses.
+6. **Classify errors with AppError** — use `rskit-errors::ErrorCode` for uniform error handling across services.

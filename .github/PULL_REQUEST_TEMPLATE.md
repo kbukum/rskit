@@ -4,8 +4,7 @@
 
 ## Motivation
 
-<!-- Why is this change needed? What problem does it solve? --> <!-- Link to related issues:
-Fixes #123 or Closes #456 -->
+<!-- Why is this change needed? What problem does it solve? Link to related issues: Fixes #123 or Closes #456 -->
 
 ## Type of Change
 

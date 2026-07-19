@@ -2,9 +2,7 @@
 
 Pure Rust audio processing backend for rskit media.
 
-`rskit-media-audio` provides WAV probing and lightweight analysis without an FFmpeg dependency.
-It integrates with `rskit-media` through the media registry and is intended for bounded,
-in-process audio inspection tasks.
+`rskit-media-audio` provides WAV probing and lightweight analysis without an FFmpeg dependency. It integrates with `rskit-media` through the media registry and is intended for bounded, in-process audio inspection tasks.
 
 ## Features
 

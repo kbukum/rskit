@@ -1,9 +1,6 @@
 # rskit Developer Documentation
 
-This is the documentation hub for developers using or contributing to rskit.
-The repository is organized as split Cargo workspaces: `core/Cargo.toml` owns foundation crates
-and the `rskit-suite` facade package, `contrib/Cargo.toml` owns adapter crates,
-and `examples/Cargo.toml` validates demos. There is intentionally no root `Cargo.toml`.
+This is the documentation hub for developers using or contributing to rskit. The repository is organized as split Cargo workspaces: `core/Cargo.toml` owns foundation crates and the `rskit-suite` facade package, `contrib/Cargo.toml` owns adapter crates, and `examples/Cargo.toml` validates demos. There is intentionally no root `Cargo.toml`.
 
 ## Start here
 

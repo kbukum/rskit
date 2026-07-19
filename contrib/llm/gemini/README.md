@@ -1,7 +1,6 @@
 # rskit-llm-gemini — Gemini provider adapter
 
-`rskit-llm-gemini` registers a Google Gemini chat provider for the canonical `rskit-llm` registry.
-It translates the shared completion contract into the Gemini Generative Language API shape.
+`rskit-llm-gemini` registers a Google Gemini chat provider for the canonical `rskit-llm` registry. It translates the shared completion contract into the Gemini Generative Language API shape.
 
 ## Install
 
@@ -49,5 +48,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## When to use
 
-Use this adapter when an application should talk to Gemini through the provider-agnostic `rskit-llm` API.
-Use `rskit-ai` vocabulary and `rskit-observability` GenAI attributes for cross-provider telemetry.
+Use this adapter when an application should talk to Gemini through the provider-agnostic `rskit-llm` API. Use `rskit-ai` vocabulary and `rskit-observability` GenAI attributes for cross-provider telemetry.

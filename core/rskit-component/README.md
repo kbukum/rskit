@@ -1,8 +1,6 @@
 # rskit-component — component lifecycle primitives
 
-`rskit-component` defines the shared lifecycle contract used by services
-and infrastructure components: `Component`, ordered `Registry`, health reports, state tracking,
-registry configuration, and shutdown results.
+`rskit-component` defines the shared lifecycle contract used by services and infrastructure components: `Component`, ordered `Registry`, health reports, state tracking, registry configuration, and shutdown results.
 
 ## Install
 
@@ -56,5 +54,4 @@ async fn main() -> AppResult<()> {
 
 ## When to use
 
-Use `rskit-component` when a type has explicit start, stop, and health semantics.
-Use `rskit-bootstrap` when you need full application lifecycle orchestration around a component registry.
+Use `rskit-component` when a type has explicit start, stop, and health semantics. Use `rskit-bootstrap` when you need full application lifecycle orchestration around a component registry.

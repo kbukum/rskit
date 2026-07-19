@@ -12,13 +12,9 @@ Typed async interaction traits (`Provider`, `RequestResponse`, `Stream`, `Sink`,
 - `Duplex<I,O>` — bidirectional streaming
 - Tower bridge for adapting `tower::Service` to `RequestResponse`
 
-The provider traits intentionally remain object-safe via `async-trait` because some downstream adapters store them behind `dyn` trait objects.
-Stream, sink, and duplex implementations must use bounded queues or downstream backpressure
-and surface saturation as typed `AppError` values.
+The provider traits intentionally remain object-safe via `async-trait` because some downstream adapters store them behind `dyn` trait objects. Stream, sink, and duplex implementations must use bounded queues or downstream backpressure and surface saturation as typed `AppError` values.
 
-Cross-cutting behavior such as retry, rate limiting, circuit breaking, logging,
-and tracing belongs above these L2 contracts.
-Compose those concerns with `rskit-resilience` tower layers before wrapping a service with `TowerProvider`.
+Cross-cutting behavior such as retry, rate limiting, circuit breaking, logging, and tracing belongs above these L2 contracts. Compose those concerns with `rskit-resilience` tower layers before wrapping a service with `TowerProvider`.
 
 ## Usage
 

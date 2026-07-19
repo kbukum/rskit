@@ -6,8 +6,7 @@ Production-ready structured logging built on the [tracing](https://docs.rs/traci
 
 ## Features
 
-- Owns its configuration vocabulary —
-  `LoggingConfig` / `LogFormat` / `LogOutput` are plain `serde` data with no `tracing` dependency
+- Owns its configuration vocabulary — `LoggingConfig` / `LogFormat` / `LogOutput` are plain `serde` data with no `tracing` dependency
 - Structured JSON / pretty console output
 - Sensitive data masking (**on by default**)
 - Rate-based log sampling (burst + thereafter)
@@ -24,8 +23,7 @@ Production-ready structured logging built on the [tracing](https://docs.rs/traci
 | `setup` | ✅ | The subscriber-building layer: `init_logging*`, `LoggingGuard`, masking, sampling, per-module levels, and context helpers. Pulls in the `tracing`/`tracing-subscriber` stack. |
 | `otlp` | | OpenTelemetry Logs bridge with OTLP export (implies `setup`). |
 
-Disable default features (`default-features = false`) to depend on only the tracing-free configuration vocabulary (`LoggingConfig` / `LogFormat` / `LogOutput`)
-— useful for configuration crates that compose the vocabulary without linking the subscriber stack.
+Disable default features (`default-features = false`) to depend on only the tracing-free configuration vocabulary (`LoggingConfig` / `LogFormat` / `LogOutput`) — useful for configuration crates that compose the vocabulary without linking the subscriber stack.
 
 ## Installation
 
@@ -204,11 +202,7 @@ let _guard = init_logging_with_masking(&cfg, &masking)?;
 
 ### Output-Level Masking
 
-Unlike gokit and pykit (which mask at the field level), rskit masks at the **output writer** level.
-The `MaskingMakeWriter` wraps the underlying `io::Write`
-and applies both field-name regex patterns (matching JSON `"field":"value"` and text `field=value` formats)
-and value-pattern regexes to complete log lines.
-This ensures nothing leaks regardless of how fields are formatted.
+Unlike gokit and pykit (which mask at the field level), rskit masks at the **output writer** level. The `MaskingMakeWriter` wraps the underlying `io::Write` and applies both field-name regex patterns (matching JSON `"field":"value"` and text `field=value` formats) and value-pattern regexes to complete log lines. This ensures nothing leaks regardless of how fields are formatted.
 
 ```rust
 use std::sync::Arc;
@@ -220,8 +214,7 @@ let writer = MaskingMakeWriter::new(std::io::stdout, masker);
 
 ## Sampling
 
-Sampling reduces log volume in high-throughput services. When enabled,
-each log level gets an independent counter per one-second window:
+Sampling reduces log volume in high-throughput services. When enabled, each log level gets an independent counter per one-second window:
 
 1. **Burst** — the first `initial_rate` events per second per level pass through unconditionally.
 2. **Thereafter** — after the burst, only every `thereafter_rate`-th event is kept.
@@ -239,9 +232,7 @@ let sampling = SamplingConfig {
 > **When to use:** Enable sampling on hot-path services producing thousands of log events per second.
 > Leave disabled for low-volume services or during debugging.
 
-The `SamplingLayer` implements `tracing_subscriber::Layer`
-and uses `event_enabled()` to drop excess events.
-Counters are protected by `parking_lot::Mutex` for minimal contention.
+The `SamplingLayer` implements `tracing_subscriber::Layer` and uses `event_enabled()` to drop excess events. Counters are protected by `parking_lot::Mutex` for minimal contention.
 
 ## Module Levels
 
@@ -320,9 +311,7 @@ When using `init_logging_full`, the subscriber layers are composed as:
 
 ### Graceful Shutdown
 
-The `LoggingGuard` must be held for the lifetime of your service. When dropped,
-it restores the previous subscriber. When OTLP is enabled,
-the `OtlpProvider::shutdown()` method flushes pending records:
+The `LoggingGuard` must be held for the lifetime of your service. When dropped, it restores the previous subscriber. When OTLP is enabled, the `OtlpProvider::shutdown()` method flushes pending records:
 
 ```rust
 fn main() -> rskit_logging::LoggingResult<()> {
@@ -339,8 +328,7 @@ fn main() -> rskit_logging::LoggingResult<()> {
 
 ## Unified Schema
 
-All three kits (gokit, pykit, rskit) share the same structured field names,
-defined in `rskit_logging::fields::names`:
+All three kits (gokit, pykit, rskit) share the same structured field names, defined in `rskit_logging::fields::names`:
 
 | Field | Constant | Description |
 |-------|----------|-------------|

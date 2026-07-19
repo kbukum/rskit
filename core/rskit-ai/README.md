@@ -1,7 +1,6 @@
 # rskit-ai
 
-Shared AI vocabulary for rskit AI/ML crates: messages, multimodal content, tool-use blocks, usage,
-models, stream events, prompt helpers, and vector math.
+Shared AI vocabulary for rskit AI/ML crates: messages, multimodal content, tool-use blocks, usage, models, stream events, prompt helpers, and vector math.
 
 ## Architecture
 

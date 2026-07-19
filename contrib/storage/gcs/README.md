@@ -2,16 +2,11 @@
 
 Google Cloud Storage adapter for `rskit-storage`.
 
-`rskit-storage-gcs` is an opt-in backend crate.
-The core `rskit-storage` crate contains the `FileStore` trait, `StorageRegistry`,
-and local filesystem backend; this crate owns the Google Cloud Storage client dependency
-and registers itself only when the application explicitly calls `register`.
+`rskit-storage-gcs` is an opt-in backend crate. The core `rskit-storage` crate contains the `FileStore` trait, `StorageRegistry`, and local filesystem backend; this crate owns the Google Cloud Storage client dependency and registers itself only when the application explicitly calls `register`.
 
 ## Authentication
 
-The registered adapter uses Google application default credentials by default.
-It reads the standard `GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_APPLICATION_CREDENTIALS_JSON`,
-or metadata-server sources supported by `google-cloud-storage`.
+The registered adapter uses Google application default credentials by default. It reads the standard `GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_APPLICATION_CREDENTIALS_JSON`, or metadata-server sources supported by `google-cloud-storage`.
 
 Set `Config::anonymous` only for explicitly public buckets that require unsigned requests.
 
@@ -50,5 +45,4 @@ let store = registry
 # }
 ```
 
-Importing this crate has no side effects. Applications own the registry
-and choose the backend through configuration.
+Importing this crate has no side effects. Applications own the registry and choose the backend through configuration.

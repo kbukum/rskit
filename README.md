@@ -6,21 +6,13 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![MSRV: 1.91](https://img.shields.io/badge/MSRV-1.91-orange.svg)](core/Cargo.toml)
 
-**A production-grade Rust toolkit for building scalable, resilient services.** Structured errors,
-layered config, OpenTelemetry observability, typestate lifecycle, tower-based resilience,
-async pipelines, worker pools, security policy, and tonic gRPC —
-composable building blocks built on the standard Rust async ecosystem.
+**A production-grade Rust toolkit for building scalable, resilient services.** Structured errors, layered config, OpenTelemetry observability, typestate lifecycle, tower-based resilience, async pipelines, worker pools, security policy, and tonic gRPC — composable building blocks built on the standard Rust async ecosystem.
 
-> **Status — pre-1.0.** Crates are versioned independently per crate.
-> Breaking changes are allowed before `1.0`, documented in [`CHANGELOG.md`](CHANGELOG.md),
-> and governed by [`docs/policy/SEMVER.md`](docs/policy/SEMVER.md).
-> MSRV bumps are minor version changes during `0.x`.
+> **Status — pre-1.0.** Crates are versioned independently per crate. Breaking changes are allowed before `1.0`, documented in [`CHANGELOG.md`](CHANGELOG.md), and governed by [`docs/policy/SEMVER.md`](docs/policy/SEMVER.md). MSRV bumps are minor version changes during `0.x`.
 
-> **Sibling projects.** [**gokit**](https://github.com/kbukum/gokit) (Go) · rskit (Rust, this repo) · [**pykit**](https://github.com/kbukum/pykit) (Python).
-> Public abstractions (`AppError`, `Component`, `Provider`, `Pipeline`, lifecycle hooks) are evaluated for parity across all three.
+> **Sibling projects.** [**gokit**](https://github.com/kbukum/gokit) (Go) · rskit (Rust, this repo) · [**pykit**](https://github.com/kbukum/pykit) (Python). Public abstractions (`AppError`, `Component`, `Provider`, `Pipeline`, lifecycle hooks) are evaluated for parity across all three.
 
-> **Tooling requirements.** Rust uses the pinned workspace toolchain/MSRV,
-> and repository automation is invoked through `scripts/rskit_tool.py`, which requires Python 3.11+.
+> **Tooling requirements.** Rust uses the pinned workspace toolchain/MSRV, and repository automation is invoked through `scripts/rskit_tool.py`, which requires Python 3.11+.
 
 Run `make setup` to install or verify the local Rust/Python tooling used by the Make targets.
 Use `scripts/setup.sh --system --release` when you also want it to try system/release tool setup.
@@ -43,9 +35,7 @@ See [Module Index](docs/MODULE-INDEX.md) for the full breakdown.
 | media | Media processing, transcription | `make check-media` |
 | infra | Workload, CLI, benchmarks, testing | `make check-infra` |
 
-CI still runs the full workspace;
-on pull requests the `changes` job also publishes an `affected` domain list from `./scripts/rskit_tool.py domains affected`
-so future workflow steps can inspect the same domains developers target locally with `make check-<domain>`.
+CI still runs the full workspace; on pull requests the `changes` job also publishes an `affected` domain list from `./scripts/rskit_tool.py domains affected` so future workflow steps can inspect the same domains developers target locally with `make check-<domain>`.
 
 ## Highlights
 
@@ -90,8 +80,7 @@ rskit-resilience = "0.2.0-alpha.1"
 rskit-worker     = "0.2.0-alpha.2"
 ```
 
-Requires **Rust 1.91+** (declared by workspace `rust-version`). The pinned development
-and CI toolchain in `rust-toolchain.toml` may be newer.
+Requires **Rust 1.91+** (declared by workspace `rust-version`). The pinned development and CI toolchain in `rust-toolchain.toml` may be newer.
 See [`docs/VERSIONING.md`](docs/VERSIONING.md) for the split-workspace versioning policy.
 
 ## Quickstart
@@ -140,8 +129,7 @@ Start with the [`developer documentation hub`](docs/README.md) if you are not su
 
 ## Contributing
 
-We welcome contributions. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for setup, testing conventions,
-commit style, and the PR process.
+We welcome contributions. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for setup, testing conventions, commit style, and the PR process.
 By participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 Other community docs:

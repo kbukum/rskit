@@ -46,9 +46,7 @@ async fn example() {
 
 ## Consul transport behavior
 
-The optional Consul backend builds on `rskit-httpclient`.
-Consul requests use a bounded timeout that exceeds the blocking-query wait interval,
-do not follow redirects, and allow-list only the configured Consul host.
+The optional Consul backend builds on `rskit-httpclient`. Consul requests use a bounded timeout that exceeds the blocking-query wait interval, do not follow redirects, and allow-list only the configured Consul host.
 
 ## See Also
 

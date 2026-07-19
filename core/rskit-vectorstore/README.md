@@ -1,9 +1,6 @@
 # rskit-vectorstore
 
-Vector similarity abstraction with an in-memory default, explicit backend registry,
-canonical metrics, typed scalar metadata filters, and configurable limits for search size,
-vector dimensions, payload/filter scalar byte size, and filter complexity.
-The registry-level `VectorStoreConfig::limits` are the authoritative request bounds for every backend.
+Vector similarity abstraction with an in-memory default, explicit backend registry, canonical metrics, typed scalar metadata filters, and configurable limits for search size, vector dimensions, payload/filter scalar byte size, and filter complexity. The registry-level `VectorStoreConfig::limits` are the authoritative request bounds for every backend.
 External backends live in `contrib/` adapter crates.
 
 ```rust,no_run

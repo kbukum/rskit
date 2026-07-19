@@ -11,8 +11,7 @@ and process-tree termination.
 | `ProcessIo::Observed` | Live output observation with optional capture | Raw-byte and line callbacks for stdout/stderr; optional bounded capture | Not a TTY and no exact cross-stream ordering |
 | `ProcessIo::Inherited` | Normal terminal commands | Child inherits parent stdout/stderr and, by default, stdin; process-group isolation is disabled so terminal job-control behavior follows OS defaults | No structured output capture or descendant termination |
 
-PTY-backed terminal fidelity
-and live parent-stdin forwarding are intentionally not exposed until those modes are implemented with documented platform guarantees.
+PTY-backed terminal fidelity and live parent-stdin forwarding are intentionally not exposed until those modes are implemented with documented platform guarantees.
 
 Line observers split deterministically on `\n`, `\r`, and `\r\n`.
 Invalid UTF-8 is passed to line observers lossily; use raw-byte observers for binary output.
@@ -93,19 +92,11 @@ assert!(result.stdout.is_empty());
 
 ## Timeout and process groups
 
-By default, rskit-process creates an isolated process group where the platform supports it.
-On timeout or cancellation, it sends a graceful termination signal,
-waits for `SignalPolicy::grace_period`, then escalates to kill. `Inherited` mode is the exception:
-it does not create a new process group,
-because terminal-native commands should remain in the parent's foreground terminal context unless a future terminal-control mode provides stronger guarantees.
+By default, rskit-process creates an isolated process group where the platform supports it. On timeout or cancellation, it sends a graceful termination signal, waits for `SignalPolicy::grace_period`, then escalates to kill. `Inherited` mode is the exception: it does not create a new process group, because terminal-native commands should remain in the parent's foreground terminal context unless a future terminal-control mode provides stronger guarantees.
 
-Separate stdout and stderr pipes are read concurrently, so each stream is ordered internally,
-but exact ordering across streams is not guaranteed.
+Separate stdout and stderr pipes are read concurrently, so each stream is ordered internally, but exact ordering across streams is not guaranteed.
 
-Process start logs redact secret-looking argument values,
-but argv is still visible to operating-system process inspection on many platforms. Prefer stdin,
-files with restricted permissions,
-or environment-specific secret mechanisms for sensitive values instead of command-line arguments.
+Process start logs redact secret-looking argument values, but argv is still visible to operating-system process inspection on many platforms. Prefer stdin, files with restricted permissions, or environment-specific secret mechanisms for sensitive values instead of command-line arguments.
 
 Custom secret-bearing argument names can be added to the spawn-log redaction policy:
 

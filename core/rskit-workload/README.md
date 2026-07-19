@@ -1,15 +1,10 @@
 # rskit-workload — Provider-Based Workload Orchestration
 
-Provider-agnostic contract for deploying
-and managing long-running workloads (containers, pods, or any runtime unit) with an explicit backend registry
-and a lifecycle-managed component.
+Provider-agnostic contract for deploying and managing long-running workloads (containers, pods, or any runtime unit) with an explicit backend registry and a lifecycle-managed component.
 
 [![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/rskit-workload.svg)](https://crates.io/crates/rskit-workload) [![docs.rs](https://docs.rs/rskit-workload/badge.svg)](https://docs.rs/rskit-workload) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/kbukum/rskit/blob/main/LICENSE)
 
-Mirrors gokit's `workload` package: the same concept and vocabulary, in idiomatic Rust.
-This crate owns the orchestration contract only —
-concrete backends (Docker, Kubernetes, …) live in separate adapter crates that register a `ManagerFactory`;
-no backend is wired in implicitly.
+Mirrors gokit's `workload` package: the same concept and vocabulary, in idiomatic Rust. This crate owns the orchestration contract only — concrete backends (Docker, Kubernetes, …) live in separate adapter crates that register a `ManagerFactory`; no backend is wired in implicitly.
 
 ## Features
 
@@ -41,8 +36,7 @@ component.stop().await?;
 # }
 ```
 
-Register a backend factory into a `WorkloadRegistry`,
-then pass it to `WorkloadComponent::with_registry` with an enabled `WorkloadConfig` to run a real provider.
+Register a backend factory into a `WorkloadRegistry`, then pass it to `WorkloadComponent::with_registry` with an enabled `WorkloadConfig` to run a real provider.
 
 ## License
 

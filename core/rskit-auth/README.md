@@ -1,7 +1,6 @@
 # rskit-auth — Authentication Helpers
 
-JWT signing/verification, OIDC validation, password hashing, API-key helpers,
-and request-context auth extractors.
+JWT signing/verification, OIDC validation, password hashing, API-key helpers, and request-context auth extractors.
 
 [![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/rskit-auth.svg)](https://crates.io/crates/rskit-auth) [![docs.rs](https://docs.rs/rskit-auth/badge.svg)](https://docs.rs/rskit-auth) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/kbukum/rskit/blob/main/LICENSE) [![MSRV: 1.91](https://img.shields.io/badge/MSRV-1.91-orange.svg)](https://github.com/kbukum/rskit/blob/main/core/Cargo.toml)
 
@@ -62,16 +61,11 @@ let codec = JwtCodec::new(JwtConfig::hs256_internal(
 
 - Public-key algorithms are preferred: `RS256`, `ES256`, `EdDSA`
 - `HS256` remains available only through the explicit `JwtConfig::hs256_internal(...)` constructor
-- Verifiers require `sub`, `iss`, `aud`, `exp`, `nbf`, and `iat`; issuer
-  and audience configuration must not be blank
-- OIDC enforces authorization-code flow, exact redirect URIs, state, nonce,
-  and PKCE for public clients
-- Request middleware extracts credentials from headers only, rejects missing credentials by default,
-  and requires explicit `accept_missing()` for optional authentication
-- `BearerAuthLayer` returns a neutral `WWW-Authenticate: Bearer` challenge on rejected requests;
-  downstream applications can add app-specific realm/scope policy at their HTTP boundary if needed
-- Credential-bearing Debug output masks bearer/API keys, key digests, PKCE verifiers,
-  authorization codes, and callback secrets
+- Verifiers require `sub`, `iss`, `aud`, `exp`, `nbf`, and `iat`; issuer and audience configuration must not be blank
+- OIDC enforces authorization-code flow, exact redirect URIs, state, nonce, and PKCE for public clients
+- Request middleware extracts credentials from headers only, rejects missing credentials by default, and requires explicit `accept_missing()` for optional authentication
+- `BearerAuthLayer` returns a neutral `WWW-Authenticate: Bearer` challenge on rejected requests; downstream applications can add app-specific realm/scope policy at their HTTP boundary if needed
+- Credential-bearing Debug output masks bearer/API keys, key digests, PKCE verifiers, authorization codes, and callback secrets
 
 ## See Also
 

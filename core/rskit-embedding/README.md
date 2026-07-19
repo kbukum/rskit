@@ -1,7 +1,6 @@
 # rskit-embedding — canonical embedding abstraction
 
-`rskit-embedding` owns the SDK-free embedding contract plus deterministic test adapter.
-Provider backends live in focused adapter crates and register explicitly during composition.
+`rskit-embedding` owns the SDK-free embedding contract plus deterministic test adapter. Provider backends live in focused adapter crates and register explicitly during composition.
 
 ## Install
 
@@ -44,5 +43,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## When to use
 
-Use `rskit-embedding` for canonical embedding contracts and deterministic tests.
-Provider-specific backends belong in the module that naturally owns the backend integration.
+Use `rskit-embedding` for canonical embedding contracts and deterministic tests. Provider-specific backends belong in the module that naturally owns the backend integration.
