@@ -105,12 +105,6 @@ impl HttpServerBuilder {
         Ok(self)
     }
 
-    /// Add automatic `X-Request-Id` injection.
-    #[must_use]
-    pub fn with_request_id(self) -> Self {
-        self
-    }
-
     /// Add secure response headers using the default security policy.
     ///
     /// # Errors
@@ -132,14 +126,6 @@ impl HttpServerBuilder {
         let _ = SecurityHeadersLayer::new(&config)?;
         self.security_headers = Some(config);
         Ok(self)
-    }
-
-    /// Add the canonical tracing phase.
-    ///
-    /// Tracing is owned by [`build`](Self::build) so this remains a compatibility no-op.
-    #[must_use]
-    pub fn with_tracing(self) -> Self {
-        self
     }
 
     /// Consume the builder and produce an [`HttpServer`].
@@ -166,18 +152,6 @@ impl HttpServerBuilder {
             router: Arc::new(tokio::sync::Mutex::new(Some(router))),
             local_addr: Arc::new(Mutex::new(None)),
         })
-    }
-
-    /// Add the configured request body limit.
-    #[must_use]
-    pub fn with_body_limit(self) -> Self {
-        self
-    }
-
-    /// Add the configured request timeout.
-    #[must_use]
-    pub fn with_timeout(self) -> Self {
-        self
     }
 }
 
@@ -249,10 +223,6 @@ mod tests {
                     .with_transport_security(TransportSecurity::AllowInsecureLocal),
             )
             .expect("configure security headers")
-            .with_request_id()
-            .with_tracing()
-            .with_body_limit()
-            .with_timeout()
             .build()
             .expect("build server");
         let router = server

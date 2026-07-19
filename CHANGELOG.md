@@ -50,6 +50,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `rskit-auth` replaces the six positional `Manager::issue_key` arguments with a `KeySpec`
   (`#[derive(Default)]`) — a **breaking** change to the crate's public API,
   though key-issuing behavior is unchanged.
+  `rskit-server`'s `HttpServerBuilder` also drops the vestigial no-op
+  `with_request_id`/`with_tracing`/`with_body_limit`/`with_timeout` methods —
+  another **breaking** change with no behavior impact,
+  since those transport layers are always applied when the server is built.
   The reshaped `rskit-server` HTTP server, `rskit-grpc` discovery channel,
   and `rskit-auth` API-key modules are also split into concern-named submodules (declare-only `mod.rs` aggregators) to keep files focused;
   the split preserves the existing public paths. Completing the transport + auth reorg sweep,

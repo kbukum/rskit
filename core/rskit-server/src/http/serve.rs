@@ -73,7 +73,10 @@ pub(super) async fn serve_tls_listener(
                     Err(error) if is_connection_accept_error(&error) => {}
                     Err(error) => {
                         tracing::error!(error = ?error, "HTTP TLS accept failed");
-                        tokio::time::sleep(Duration::from_secs(1)).await;
+                        tokio::select! {
+                            () = cancel.cancelled() => break,
+                            () = tokio::time::sleep(Duration::from_secs(1)) => {}
+                        }
                     }
                 }
             }
