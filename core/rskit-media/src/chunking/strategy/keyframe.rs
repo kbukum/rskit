@@ -123,10 +123,7 @@ impl ChunkStrategy for KeyframeStrategy {
         }
 
         // Final chunk
-        let final_range = TimeRange::new(
-            current_start,
-            Timestamp::from_seconds(total_duration.as_secs_f64()),
-        );
+        let final_range = TimeRange::new(current_start, Timestamp(total_us));
         let final_dur = final_range.duration();
         chunks.push(ChunkPlan {
             id: ChunkId::from_index(split_points.len()),

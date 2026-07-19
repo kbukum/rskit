@@ -97,10 +97,7 @@ impl ChunkStrategy for FixedDurationStrategy {
             let plan = ChunkPlan {
                 id: ChunkId::from_index(0),
                 index: 0,
-                range: TimeRange::new(
-                    Timestamp(0),
-                    Timestamp::from_seconds(total_duration.as_secs_f64()),
-                ),
+                range: TimeRange::new(Timestamp(0), Timestamp(total_duration.as_micros() as u64)),
                 start_is_keyframe: true,
                 suggested_timeout: Duration::from_secs_f64(
                     total_duration.as_secs_f64() * self.timeout_multiplier,
