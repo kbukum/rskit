@@ -15,7 +15,10 @@ ML benchmarking framework: evaluators, metrics, reports, and visualization.
 - ROC curves, confusion matrices, score distribution charts
 - `BenchClock` / `FixedClock` for deterministic timestamps and durations in tests
 
-Benchmark orchestration accepts injected clock and storage implementations. Production CLIs can choose `SystemClock` and `FileRunStorage`; tests and reproducible harnesses should inject `FixedClock` and an in-memory or tempdir storage implementation.
+Benchmark orchestration accepts injected clock and storage implementations.
+Production CLIs can choose `SystemClock` and `FileRunStorage`; tests
+and reproducible harnesses should inject `FixedClock` and an in-memory
+or tempdir storage implementation.
 
 ## Usage
 

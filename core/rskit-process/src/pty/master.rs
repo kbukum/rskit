@@ -10,14 +10,14 @@ use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 /// Async wrapper over the PTY master fd.
 ///
-/// Reads deliver the child's merged stdout/stderr stream; writes deliver input
-/// to the child's terminal. The fd is registered with the reactor so reads and
-/// writes are readiness-driven and never block the runtime thread.
+/// Reads deliver the child's merged stdout/stderr stream; writes deliver input to the child's terminal.
+/// The fd is registered with the reactor so reads and writes are readiness-driven
+/// and never block the runtime thread.
 ///
-/// When the child closes the slave side, a master read yields `EIO` on Linux
-/// (and, depending on timing, on other platforms); this is the terminal's
-/// end-of-stream signal and is surfaced as a normal `Ok(0)` EOF so the reader
-/// loop terminates cleanly rather than erroring.
+/// When the child closes the slave side,
+/// a master read yields `EIO` on Linux (and, depending on timing, on other platforms);
+/// this is the terminal's end-of-stream signal and is surfaced as a normal `Ok(0)` EOF
+/// so the reader loop terminates cleanly rather than erroring.
 pub(crate) struct PtyMaster {
     inner: AsyncFd<OwnedFd>,
 }
@@ -118,8 +118,8 @@ impl AsyncWrite for PtyMaster {
     }
 
     fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        // Closing the write half is expressed by dropping the fd; there is no
-        // half-close on a PTY master, so shutdown is a no-op.
+        // Closing the write half is expressed by dropping the fd;
+        // there is no half-close on a PTY master, so shutdown is a no-op.
         Poll::Ready(Ok(()))
     }
 }

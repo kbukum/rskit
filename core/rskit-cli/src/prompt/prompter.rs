@@ -1,15 +1,15 @@
 //! The [`Prompter`]: a terminal-agnostic driver for every prompt kind.
 //!
 //! A `Prompter` binds three things — a [`Terminal`], a resolved [`PromptMode`],
-//! and a rendering [`Style`] — and exposes one method per question type. The
-//! prompt-kind logic lives in [`super::kinds`]; the prompter only wires the
-//! shared state through to it, so the same call works over cooked stdio, a
-//! raw-mode TTY, or a scripted test double.
+//! and a rendering [`Style`] — and exposes one method per question type.
+//! The prompt-kind logic lives in [`super::kinds`];
+//! the prompter only wires the shared state through to it, so the same call works over cooked stdio,
+//! a raw-mode TTY, or a scripted test double.
 //!
-//! Build one from the environment with [`Prompter::from_env`] — which auto-selects
-//! a rich raw-mode terminal when one is available and the `interactive` feature
-//! is compiled, else a line terminal — or from explicit parts with
-//! [`Prompter::new`] for deterministic tests.
+//! Build one from the environment with [`Prompter::from_env`] —
+//! which auto-selects a rich raw-mode terminal when one is available
+//! and the `interactive` feature is compiled, else a line terminal —
+//! or from explicit parts with [`Prompter::new`] for deterministic tests.
 
 use std::io::IsTerminal;
 
@@ -25,9 +25,8 @@ use crate::theme::{ColorChoice, Glyphs, Palette};
 
 /// A terminal-agnostic prompt driver.
 ///
-/// Generic over its [`Terminal`] so tests can bind a
-/// [`ScriptedTerminal`](super::terminal::ScriptedTerminal) directly while
-/// [`Prompter::from_env`] erases the concrete terminal behind a `Box<dyn Terminal>`.
+/// Generic over its [`Terminal`]
+/// so tests can bind a [`ScriptedTerminal`](super::terminal::ScriptedTerminal) directly while [`Prompter::from_env`] erases the concrete terminal behind a `Box<dyn Terminal>`.
 pub struct Prompter<T> {
     terminal: T,
     mode: PromptMode,
@@ -38,13 +37,11 @@ impl Prompter<Box<dyn Terminal>> {
     /// Build a prompter bound to the process environment.
     ///
     /// The [`PromptMode`] follows whether both stdin and stderr are terminals,
-    /// and the [`Palette`] follows `color` against stderr, so interactivity and
-    /// styling both honour redirection and `NO_COLOR`. Prompts render to stderr,
-    /// so a redirected stderr (e.g. `cmd 2>log`) forces [`PromptMode::NonInteractive`]
-    /// rather than blocking on input behind an invisible prompt. When the
-    /// `interactive` feature is compiled and both streams are terminals, a rich
-    /// raw-mode terminal is selected for arrow-key navigation; otherwise a line
-    /// terminal is used.
+    /// and the [`Palette`] follows `color` against stderr, so interactivity
+    /// and styling both honour redirection and `NO_COLOR`. Prompts render to stderr,
+    /// so a redirected stderr (e.g. `cmd 2>log`) forces [`PromptMode::NonInteractive`] rather than blocking on input behind an invisible prompt.
+    /// When the `interactive` feature is compiled and both streams are terminals,
+    /// a rich raw-mode terminal is selected for arrow-key navigation; otherwise a line terminal is used.
     #[must_use]
     pub fn from_env(color: ColorChoice) -> Self {
         let stderr = std::io::stderr();
@@ -96,13 +93,13 @@ impl<T: Terminal> Prompter<T> {
     /// Ask for exactly one choice.
     ///
     /// In [`PromptMode::NonInteractive`] this resolves to the recommended choice;
-    /// with none it is a typed error. A key-driven terminal shows an arrow-key
-    /// radio list; a line-driven terminal shows a numbered list.
+    /// with none it is a typed error. A key-driven terminal shows an arrow-key radio list;
+    /// a line-driven terminal shows a numbered list.
     ///
     /// # Errors
     ///
-    /// Returns an error when `choices` is empty, when a non-interactive prompt has
-    /// no recommended default, when the user cancels, or when input closes early.
+    /// Returns an error when `choices` is empty, when a non-interactive prompt has no recommended default,
+    /// when the user cancels, or when input closes early.
     pub fn select(&mut self, prompt: &str, choices: &[Choice]) -> AppResult<ChoiceId> {
         kinds::select::run(&mut self.terminal, self.style, self.mode, prompt, choices)
     }
@@ -110,13 +107,12 @@ impl<T: Terminal> Prompter<T> {
     /// Ask for zero or more choices.
     ///
     /// The default answer is the set of recommended choices, which may be empty.
-    /// A key-driven terminal shows an arrow-key checkbox list; a line-driven
-    /// terminal accepts a comma-separated list of numbers.
+    /// A key-driven terminal shows an arrow-key checkbox list;
+    /// a line-driven terminal accepts a comma-separated list of numbers.
     ///
     /// # Errors
     ///
-    /// Returns an error when `choices` is empty, when the user cancels, or when
-    /// input closes early.
+    /// Returns an error when `choices` is empty, when the user cancels, or when input closes early.
     pub fn multi_select(&mut self, prompt: &str, choices: &[Choice]) -> AppResult<Vec<ChoiceId>> {
         kinds::multi_select::run(&mut self.terminal, self.style, self.mode, prompt, choices)
     }
@@ -132,13 +128,12 @@ impl<T: Terminal> Prompter<T> {
 
     /// Ask for freeform text with an optional default.
     ///
-    /// In [`PromptMode::NonInteractive`] this resolves to `default`; with none it
-    /// is a typed error.
+    /// In [`PromptMode::NonInteractive`] this resolves to `default`; with none it is a typed error.
     ///
     /// # Errors
     ///
-    /// Returns an error when a non-interactive prompt has no default, when the
-    /// user cancels, or when input closes early.
+    /// Returns an error when a non-interactive prompt has no default, when the user cancels,
+    /// or when input closes early.
     pub fn text(&mut self, prompt: &str, default: Option<&str>) -> AppResult<String> {
         kinds::text::run(
             &mut self.terminal,
@@ -152,13 +147,12 @@ impl<T: Terminal> Prompter<T> {
 
     /// Ask for freeform text validated by `validator`, re-asking on rejection.
     ///
-    /// In [`PromptMode::NonInteractive`] a rejected default is a typed error
-    /// rather than a silent bad value.
+    /// In [`PromptMode::NonInteractive`] a rejected default is a typed error rather than a silent bad value.
     ///
     /// # Errors
     ///
-    /// Returns an error when a non-interactive prompt has no default or a rejected
-    /// default, when the user cancels, or when input closes early.
+    /// Returns an error when a non-interactive prompt has no default or a rejected default,
+    /// when the user cancels, or when input closes early.
     pub fn text_with(
         &mut self,
         prompt: &str,
@@ -176,8 +170,8 @@ impl<T: Terminal> Prompter<T> {
     }
 }
 
-/// Select the concrete terminal for [`Prompter::from_env`]: rich when a TTY is
-/// present and the `interactive` feature is compiled, else line.
+/// Select the concrete terminal for [`Prompter::from_env`]: rich when a TTY is present
+/// and the `interactive` feature is compiled, else line.
 fn resolve_terminal(is_tty: bool) -> Box<dyn Terminal> {
     #[cfg(feature = "interactive")]
     {
@@ -498,8 +492,8 @@ mod tests {
 
     #[test]
     fn key_multi_select_toggles_selection() {
-        // Recommended (Rust, index 1) starts selected; toggle Go on, Rust off,
-        // Node on, to exercise toggling in both directions.
+        // Recommended (Rust, index 1) starts selected; toggle Go on, Rust off, Node on,
+        // to exercise toggling in both directions.
         let selected = line_prompter(
             ScriptedTerminal::key_driven().with_keys([
                 Key::Space, // Go on
@@ -550,9 +544,9 @@ mod tests {
 
     #[test]
     fn key_text_inserts_literal_space() {
-        // The space bar decodes to Key::Space (not Key::Char(' ')), so text entry
-        // must treat it as a literal space — otherwise multi-word answers are
-        // impossible on a real rich terminal.
+        // The space bar decodes to Key::Space (not Key::Char(' ')),
+        // so text entry must treat it as a literal space —
+        // otherwise multi-word answers are impossible on a real rich terminal.
         let value = line_prompter(
             ScriptedTerminal::key_driven().with_keys([
                 Key::Char('h'),
@@ -737,9 +731,8 @@ mod tests {
 
     #[test]
     fn key_select_home_end_and_up_navigate_and_ignore_unrelated_keys() {
-        // Start on the recommended default (Rust, index 1): End→node(2),
-        // Home→go(0), Down→rust(1), Up→go(0), Tab→rust(1), Left is ignored,
-        // Enter confirms Rust.
+        // Start on the recommended default (Rust, index 1): End→node(2), Home→go(0), Down→rust(1),
+        // Up→go(0), Tab→rust(1), Left is ignored, Enter confirms Rust.
         let choice = line_prompter(
             ScriptedTerminal::key_driven().with_keys([
                 Key::End,
@@ -811,8 +804,8 @@ mod tests {
 
     #[test]
     fn line_multi_select_notice_none_hint_and_close() {
-        // No recommended choice → the default hint reads `[none]`; an invalid
-        // answer shows a notice before a valid comma list is accepted.
+        // No recommended choice → the default hint reads `[none]`;
+        // an invalid answer shows a notice before a valid comma list is accepted.
         let mut prompter = line_prompter(
             ScriptedTerminal::line_driven().with_lines(["x", "1,2"]),
             PromptMode::Interactive,
@@ -931,9 +924,9 @@ mod tests {
 
     #[test]
     fn from_env_builds_a_prompter_and_reports_its_mode() {
-        // Under a test harness neither stream is a TTY, so the environment
-        // prompter is non-interactive; building it also exercises terminal
-        // selection over the process streams.
+        // Under a test harness neither stream is a TTY,
+        // so the environment prompter is non-interactive;
+        // building it also exercises terminal selection over the process streams.
         let prompter = Prompter::from_env(ColorChoice::Never);
         assert_eq!(prompter.mode(), PromptMode::NonInteractive);
     }

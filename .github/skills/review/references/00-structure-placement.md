@@ -1,14 +1,23 @@
 # Pass 00 — Structure and placement
 
-Confirm every touched (or, in project mode, every existing) item lives in the right workspace, crate, and layer, and that the dependency direction stays acyclic. This is the first gate: misplaced code makes every later pass unreliable, so reject on failure here before going further.
+Confirm every touched (or, in project mode, every existing) item lives in the right workspace,
+crate, and layer, and that the dependency direction stays acyclic. This is the first gate:
+misplaced code makes every later pass unreliable, so reject on failure here before going further.
 
-> **Run in a separate, clean-context agent** — never inline in the session that wrote the code. An independent reviewer re-derives every judgment from the code and the principles instead of trusting prior reasoning. A plan/spec may be passed in as a scope checklist only; it never excuses a baseline violation.
+> **Run in a separate, clean-context agent** — never inline in the session that wrote the code.
+> An independent reviewer re-derives every judgment from the code
+> and the principles instead of trusting prior reasoning.
+> A plan/spec may be passed in as a scope checklist only; it never excuses a baseline violation.
 
-**Scope note.** *Changes mode:* check the crates the diff touches plus the affected area — a change to a core crate's public surface affects the facade, other core crates, every `contrib/` adapter, and downstream consumers. *Project mode:* sweep each workspace's members and dependency edges; the placement and acyclicity rules below are invariants for the whole toolkit.
+**Scope note.** *Changes mode:* check the crates the diff touches plus the affected area —
+a change to a core crate's public surface affects the facade, other core crates,
+every `contrib/` adapter, and downstream consumers. *Project mode:* sweep each workspace's members
+and dependency edges; the placement and acyclicity rules below are invariants for the whole toolkit.
 
 ## The layering invariant
 
-Dependency direction is explicit and acyclic; lower layers never import higher. A cycle or an upward import is a **blocker**. The workspaces are split by role:
+Dependency direction is explicit and acyclic; lower layers never import higher. A cycle
+or an upward import is a **blocker**. The workspaces are split by role:
 
 | Workspace | Path | Owns |
 |-----------|------|------|
@@ -18,14 +27,28 @@ Dependency direction is explicit and acyclic; lower layers never import higher. 
 
 ## Checks
 
-- **Crate placement.** Foundation/cross-cutting code → `core/rskit-<name>/`. Domain adapter → `contrib/<domain>/<name>/`. Demo → `examples/<name>/`. A foundation concern living under `contrib/`, or an adapter under `core/`, is a structure violation (blocker).
-- **Acyclic, downward-only edges.** No core crate imports the facade; no lower crate imports a higher one; no cycle between crates. This is gated by `make check-topology` and `make check-l7-edges` — run them.
-- **New core crate wiring.** Created under `core/rskit-<name>/`, added to `core/Cargo.toml`, inherits workspace package metadata, carries `#![warn(missing_docs)]`, and is wired into the `rskit` facade as appropriate. Missing any of these is a should-fix.
-- **New adapter wiring.** Under `contrib/<domain>/<name>/`, covered by the matching `contrib/Cargo.toml` member pattern, and exposed through the facade **behind a feature flag** — not unconditionally.
-- **Facade discipline.** The `rskit` facade re-exports; it does not contain logic. Behavior added directly to the facade is misplaced (should-fix).
-- **Declare-only aggregator.** `lib.rs`/`mod.rs` carry only docs + submodule declarations + re-exports (crate-root `#![...]` attributes allowed). Logic or private items in an aggregator is a should-fix. Run `ast-grep scan` (`make structure`).
-- **No misplaced concerns.** Each cross-cutting concern stays in its canonical crate — e.g. gRPC status mapping belongs in `rskit-grpc`, not `rskit-errors`. (Reuse of those owners is pass `01`.)
-- **Workspace dep sync.** Shared dependency versions stay consistent across `core`/`contrib`; gated by `make check-workspace-deps-sync`.
+- **Crate placement.** Foundation/cross-cutting code → `core/rskit-<name>/`.
+  Domain adapter → `contrib/<domain>/<name>/`. Demo → `examples/<name>/`.
+  A foundation concern living under `contrib/`, or an adapter under `core/`,
+  is a structure violation (blocker).
+- **Acyclic, downward-only edges.** No core crate imports the facade;
+  no lower crate imports a higher one; no cycle between crates.
+  This is gated by `make check-topology` and `make check-l7-edges` — run them.
+- **New core crate wiring.** Created under `core/rskit-<name>/`, added to `core/Cargo.toml`,
+  inherits workspace package metadata, carries `#![warn(missing_docs)]`,
+  and is wired into the `rskit` facade as appropriate. Missing any of these is a should-fix.
+- **New adapter wiring.** Under `contrib/<domain>/<name>/`,
+  covered by the matching `contrib/Cargo.toml` member pattern,
+  and exposed through the facade **behind a feature flag** — not unconditionally.
+- **Facade discipline.** The `rskit` facade re-exports; it does not contain logic.
+  Behavior added directly to the facade is misplaced (should-fix).
+- **Declare-only aggregator.** `lib.rs`/`mod.rs` carry only docs + submodule declarations + re-exports (crate-root `#![...]` attributes allowed).
+  Logic or private items in an aggregator is a should-fix. Run `ast-grep scan` (`make structure`).
+- **No misplaced concerns.** Each cross-cutting concern stays in its canonical crate —
+  e.g. gRPC status mapping belongs in `rskit-grpc`, not `rskit-errors`.
+  (Reuse of those owners is pass `01`.)
+- **Workspace dep sync.** Shared dependency versions stay consistent across `core`/`contrib`;
+  gated by `make check-workspace-deps-sync`.
 
 ## Detection starters
 

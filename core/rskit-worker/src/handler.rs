@@ -15,8 +15,8 @@ where
     I: Send + 'static,
     O: Send + Clone + 'static,
 {
-    /// Execute the task, emitting intermediate events via `emit` and
-    /// honouring cancellation requests via `cancel`.
+    /// Execute the task, emitting intermediate events via `emit`
+    /// and honouring cancellation requests via `cancel`.
     async fn handle(
         &self,
         task: I,

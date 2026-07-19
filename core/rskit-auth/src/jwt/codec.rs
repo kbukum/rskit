@@ -34,8 +34,7 @@ impl TryFrom<Header> for JwtHeader {
 /// Reusable JWT codec for safe token encoding, header inspection, and validation.
 ///
 /// This is the rskit-owned primitive used by [`JwtService`](super::JwtService).
-/// Application code can use it when it needs direct JWT operations without
-/// depending on the underlying JWT library.
+/// Application code can use it when it needs direct JWT operations without depending on the underlying JWT library.
 pub struct JwtCodec {
     config: JwtConfig,
     encoding_key: EncodingKey,
@@ -65,9 +64,8 @@ impl JwtCodec {
 
     /// Sign claims using the configured algorithm and key material.
     ///
-    /// This method does not synthesize or mutate registered claims; callers own
-    /// claim construction, while [`decode`](Self::decode) enforces the configured
-    /// validation policy.
+    /// This method does not synthesize or mutate registered claims; callers own claim construction,
+    /// while [`decode`](Self::decode) enforces the configured validation policy.
     ///
     /// # Errors
     /// Returns an error when claim serialization or signing fails.
@@ -88,8 +86,8 @@ impl JwtCodec {
     /// Decode and validate a token using the configured validation policy.
     ///
     /// # Errors
-    /// Returns an authentication error when the token is malformed, signed with
-    /// the wrong algorithm/key, expired, immature, or missing required claims.
+    /// Returns an authentication error when the token is malformed, signed with the wrong algorithm/key,
+    /// expired, immature, or missing required claims.
     pub fn decode<C: DeserializeOwned>(&self, token: &str) -> AppResult<C> {
         let header =
             jsonwebtoken::decode_header(token).map_err(|error| map_validation_error(&error))?;
@@ -107,8 +105,7 @@ impl JwtCodec {
     /// Decode JWT header metadata without validating the token signature.
     ///
     /// # Errors
-    /// Returns an error when the token header is malformed or uses an unsupported
-    /// algorithm.
+    /// Returns an error when the token header is malformed or uses an unsupported algorithm.
     pub fn decode_header(token: &str) -> AppResult<JwtHeader> {
         jsonwebtoken::decode_header(token)
             .map_err(|error| map_validation_error(&error))

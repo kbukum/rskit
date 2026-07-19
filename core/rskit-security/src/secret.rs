@@ -5,9 +5,8 @@ use subtle::ConstantTimeEq;
 
 /// Compare equal-length byte slices in constant time.
 ///
-/// Length mismatches return `false`; callers should still treat secret lengths
-/// as externally observable and prefer fixed-length encodings for sensitive
-/// tokens.
+/// Length mismatches return `false`; callers should still treat secret lengths as externally observable
+/// and prefer fixed-length encodings for sensitive tokens.
 #[must_use]
 pub fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
     left.ct_eq(right).into()

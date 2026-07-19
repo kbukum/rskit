@@ -10,8 +10,8 @@ use serde::{Deserialize, Serialize};
 use crate as common;
 use crate::{StreamChunk, StreamToolCall};
 
-/// Converts an rskit [`CompletionRequest`] into the `OpenAI` wire format and
-/// parses the response back into an rskit [`CompletionResponse`].
+/// Converts an rskit [`CompletionRequest`] into the `OpenAI` wire format
+/// and parses the response back into an rskit [`CompletionResponse`].
 pub struct OpenAiDialect;
 
 // --- Wire types ---

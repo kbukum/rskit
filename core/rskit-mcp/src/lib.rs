@@ -1,14 +1,15 @@
 //! Bridge between rskit tool registry and Model Context Protocol (MCP).
 //!
-//! This crate connects rskit's tool system to the MCP protocol using the
-//! official Rust MCP SDK (`rmcp`). It provides:
+//! This crate connects rskit's tool system to the MCP protocol using the official Rust MCP SDK (`rmcp`).
+//! It provides:
 //!
 //! - **Server**: expose an rskit [`Registry`](rskit_tool::Registry) as an MCP server
-//! - **Client**: connect to an MCP server and wrap remote tools as rskit [`Callable`](rskit_tool::Callable)
+//! - **Client**: connect to an MCP server
+//!   and wrap remote tools as rskit [`Callable`](rskit_tool::Callable)
 //! - **Convert**: bidirectional type conversions between rskit and MCP types
 //! - **Skill integration**: consumes top-level `rskit-skill`; remote MCP servers are tool sources
-//! - **Transport helpers**: validate canonical transport names and build localhost-only
-//!   Streamable HTTP configuration defaults
+//! - **Transport helpers**: validate canonical transport names
+//!   and build localhost-only Streamable HTTP configuration defaults
 
 #[cfg(feature = "protocol")]
 pub mod convert;

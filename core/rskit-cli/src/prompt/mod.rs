@@ -1,14 +1,13 @@
 //! Interactive prompts for guided CLI flows.
 //!
-//! A cohesive input layer beside [`crate::render`] and [`crate::theme`]: it asks
-//! a question plus a fixed set of [`Choice`]s and returns a typed answer, reusing
-//! the resolved [`Palette`](crate::theme::Palette) and [`Glyphs`](crate::theme::Glyphs)
-//! so styling honours `NO_COLOR`, TTY, and UTF-8 detection exactly like the rest
-//! of the CLI layer.
+//! A cohesive input layer beside [`crate::render`] and [`crate::theme`]:
+//! it asks a question plus a fixed set of [`Choice`]s and returns a typed answer,
+//! reusing the resolved [`Palette`](crate::theme::Palette) and [`Glyphs`](crate::theme::Glyphs)
+//! so styling honours `NO_COLOR`, TTY, and UTF-8 detection exactly like the rest of the CLI layer.
 //!
-//! Prompts speak through a [`Terminal`] seam rather than raw stdio, so the same
-//! question renders as a numbered list over a pipe, as a live arrow-key widget on
-//! a TTY, or as a scripted sequence in a test — without the calling code changing.
+//! Prompts speak through a [`Terminal`] seam rather than raw stdio,
+//! so the same question renders as a numbered list over a pipe, as a live arrow-key widget on a TTY,
+//! or as a scripted sequence in a test — without the calling code changing.
 //!
 //! # Modules
 //!
@@ -25,25 +24,24 @@
 //!
 //! One set of prompt-kind logic drives three realities, chosen automatically:
 //!
-//! - a **line** terminal (cooked stdio) prints a numbered list and reads a typed
-//!   answer — always available, dependency-free, and pipe-friendly;
-//! - a **rich** terminal (raw mode, behind the `interactive` feature) reads
-//!   arrow keys and space to drive live radio and checkbox lists;
+//! - a **line** terminal (cooked stdio) prints a numbered list and reads a typed answer —
+//!   always available, dependency-free, and pipe-friendly;
+//! - a **rich** terminal (raw mode, behind the `interactive` feature) reads arrow keys
+//!   and space to drive live radio and checkbox lists;
 //! - a **scripted** terminal replays canned keys or lines for deterministic tests.
 //!
-//! [`Prompter::from_env`] selects rich when a TTY is present and the feature is
-//! compiled, else line; tests bind a
-//! [`ScriptedTerminal`] directly.
+//! [`Prompter::from_env`] selects rich when a TTY is present and the feature is compiled, else line;
+//! tests bind a [`ScriptedTerminal`] directly.
 //!
 //! # Non-interactive fallback
 //!
 //! The driver resolves its behaviour once, up front, from a [`PromptMode`]:
 //!
 //! - [`PromptMode::Interactive`] — render prompts and read answers.
-//! - [`PromptMode::NonInteractive`] — never block: each question resolves to its
-//!   declared default (the `recommended` [`Choice`] for a selection, the supplied
-//!   default for a confirm/text). A required question with no default is a typed
-//!   [`AppError`](rskit_errors::AppError) rather than an invented answer or a hang.
+//! - [`PromptMode::NonInteractive`] — never block:
+//!   each question resolves to its declared default (the `recommended` [`Choice`] for a selection, the supplied default for a confirm/text).
+//!   A required question with no default is a typed [`AppError`](rskit_errors::AppError) rather than an invented answer
+//!   or a hang.
 
 pub mod choice;
 pub mod key;

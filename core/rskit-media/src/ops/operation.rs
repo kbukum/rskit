@@ -19,8 +19,8 @@ use super::{
 
 /// A single media operation in a pipeline.
 ///
-/// Each variant is a data-only description — no execution logic.
-/// The pipeline records these and a backend executor compiles them.
+/// Each variant is a data-only description — no execution logic. The pipeline records these
+/// and a backend executor compiles them.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum MediaOp {

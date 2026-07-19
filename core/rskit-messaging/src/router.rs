@@ -10,8 +10,7 @@ use crate::message::Message;
 
 /// Routes incoming messages to handlers based on topic patterns.
 ///
-/// Supports exact-match and simple wildcard patterns where `*` matches
-/// any sequence of characters.
+/// Supports exact-match and simple wildcard patterns where `*` matches any sequence of characters.
 ///
 /// # Example
 ///
@@ -40,9 +39,9 @@ impl<T: Send + Sync + 'static> MessageRouter<T> {
 
     /// Register a handler for the given topic pattern.
     ///
-    /// Patterns support `*` as a wildcard that matches any sequence of
-    /// characters. For example, `"content.*"` matches `"content.discovered"`.
-    /// Patterns are evaluated in registration order; the first match wins.
+    /// Patterns support `*` as a wildcard that matches any sequence of characters. For example,
+    /// `"content.*"` matches `"content.discovered"`. Patterns are evaluated in registration order;
+    /// the first match wins.
     #[must_use]
     pub fn handle(mut self, pattern: &str, handler: Arc<dyn MessageHandler<T>>) -> Self {
         self.routes.push((pattern.to_string(), handler));
@@ -56,8 +55,7 @@ impl<T: Send + Sync + 'static> MessageRouter<T> {
         self
     }
 
-    /// Build an [`Arc<dyn MessageHandler<T>>`] that dispatches messages
-    /// according to the registered patterns.
+    /// Build an [`Arc<dyn MessageHandler<T>>`] that dispatches messages according to the registered patterns.
     pub fn build(self) -> Arc<dyn MessageHandler<T>> {
         Arc::new(RouterHandler {
             routes: self.routes,

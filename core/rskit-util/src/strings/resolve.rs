@@ -1,21 +1,19 @@
 //! Resolve a user shorthand to the unique candidate it names.
 //!
-//! A recurring command-line need: the user types a short token (`core`,
-//! `billing`) and the tool must map it to exactly one item from a known set,
-//! erroring rather than guessing when the token is ambiguous. This mirrors how
-//! `git`, `cargo -p`, and `kubectl` accept a shorthand only when it is
-//! unambiguous. The helper is error-policy-neutral — it distinguishes "no match"
-//! (returned as `None`) from "several matches" (returned as a typed
-//! [`Ambiguity`]) so the caller wraps each outcome in whatever domain error
-//! carries the right context.
+//! A recurring command-line need: the user types a short token (`core`, `billing`)
+//! and the tool must map it to exactly one item from a known set,
+//! erroring rather than guessing when the token is ambiguous. This mirrors how `git`, `cargo -p`,
+//! and `kubectl` accept a shorthand only when it is unambiguous. The helper is error-policy-neutral —
+//! it distinguishes "no match" (returned as `None`) from "several matches" (returned as a typed [`Ambiguity`])
+//! so the caller wraps each outcome in whatever domain error carries the right context.
 
 use std::fmt;
 
 /// The candidates a shorthand matched when more than one qualified.
 ///
-/// Carries the offending `input` and every matching candidate in the order they
-/// were encountered, so the caller can render an actionable "did you mean one of
-/// …?" diagnostic. Held by value so it outlives the borrowed candidate iterator.
+/// Carries the offending `input` and every matching candidate in the order they were encountered,
+/// so the caller can render an actionable "did you mean one of …?" diagnostic. Held by value
+/// so it outlives the borrowed candidate iterator.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Ambiguity<T> {
     /// The shorthand that matched more than one candidate.
@@ -43,11 +41,9 @@ impl<T: fmt::Debug + fmt::Display> std::error::Error for Ambiguity<T> {}
 ///
 /// `key_of` projects each candidate to the string compared against `input`.
 /// Returns `Ok(Some(candidate))` when exactly one candidate's key equals `input`,
-/// `Ok(None)` when none do (the caller decides whether an empty match is an error
-/// and how to list the alternatives), and an [`Ambiguity`] error listing the
-/// matches when two or more share the key. Comparison is exact and
-/// case-sensitive; callers wanting fuzzy resolution use
-/// [`nearest`](super::nearest) instead.
+/// `Ok(None)` when none do (the caller decides whether an empty match is an error and how to list the alternatives),
+/// and an [`Ambiguity`] error listing the matches when two or more share the key. Comparison is exact
+/// and case-sensitive; callers wanting fuzzy resolution use [`nearest`](super::nearest) instead.
 ///
 /// # Examples
 /// ```

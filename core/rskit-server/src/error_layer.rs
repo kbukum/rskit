@@ -1,9 +1,9 @@
-//! Tower layer that intercepts gRPC responses and enriches error statuses
-//! with structured [`rskit_errors::AppError`] details.
+//! Tower layer that intercepts gRPC responses
+//! and enriches error statuses with structured [`rskit_errors::AppError`] details.
 //!
-//! Applied automatically by [`GrpcServerBuilder`] so service implementations
-//! can use `rskit_grpc::app_error_to_status` and the canonical RFC 9457 JSON
-//! error body is always present in the status details.
+//! Applied automatically by [`GrpcServerBuilder`]
+//! so service implementations can use `rskit_grpc::app_error_to_status`
+//! and the canonical RFC 9457 JSON error body is always present in the status details.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -18,8 +18,7 @@ use rskit_grpc::grpc_code_to_error_code;
 
 // ── Layer ────────────────────────────────────────────────────────────────────
 
-/// A [`Layer`] that wraps each gRPC service to ensure every error
-/// `tonic::Status` carries structured RFC 9457 JSON details.
+/// A [`Layer`] that wraps each gRPC service to ensure every error `tonic::Status` carries structured RFC 9457 JSON details.
 #[derive(Debug, Clone, Default)]
 pub struct ErrorLayer;
 
@@ -42,9 +41,9 @@ impl<S> Layer<S> for ErrorLayer {
 
 /// The [`Service`] produced by [`ErrorLayer`].
 ///
-/// It forwards requests to the inner service and, if the response indicates a
-/// gRPC error (via the `grpc-status` header) without structured details, it
-/// enriches the trailers with canonical RFC 9457 error JSON.
+/// It forwards requests to the inner service and,
+/// if the response indicates a gRPC error (via the `grpc-status` header) without structured details,
+/// it enriches the trailers with canonical RFC 9457 error JSON.
 #[derive(Debug, Clone)]
 pub struct ErrorService<S> {
     inner: S,
@@ -77,9 +76,9 @@ where
     }
 }
 
-/// If the response carries a `grpc-status` header indicating an error but no
-/// structured details in `grpc-status-details-bin`, synthesise them from the
-/// status code and message.
+/// If the response carries a `grpc-status` header indicating an error
+/// but no structured details in `grpc-status-details-bin`, synthesise them from the status code
+/// and message.
 fn enrich_error_response(response: Response<Body>) -> Response<Body> {
     // Only process error responses (grpc-status != 0)
     let status_code = response
@@ -93,8 +92,8 @@ fn enrich_error_response(response: Response<Body>) -> Response<Body> {
         return response;
     }
 
-    // If details are already present, leave the response as-is — the service
-    // already attached them through rskit-grpc status mapping.
+    // If details are already present, leave the response as-is —
+    // the service already attached them through rskit-grpc status mapping.
     if response.headers().contains_key("grpc-status-details-bin") {
         return response;
     }

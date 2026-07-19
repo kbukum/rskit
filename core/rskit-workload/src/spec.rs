@@ -106,8 +106,7 @@ pub struct VolumeMount {
     pub target: String,
     /// Whether the mount is read-only.
     pub read_only: bool,
-    /// Mount kind: `"bind"`, `"volume"`, `"configmap"`, `"secret"`, `"pvc"`
-    /// (`"bind"` when empty).
+    /// Mount kind: `"bind"`, `"volume"`, `"configmap"`, `"secret"`, `"pvc"` (`"bind"` when empty).
     pub kind: String,
 }
 

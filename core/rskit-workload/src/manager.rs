@@ -1,8 +1,8 @@
 //! Workload lifecycle manager and optional capability traits.
 //!
-//! Every backend implements [`Manager`]. Backends opt into extra capabilities
-//! (exec, stats, log streaming, event watching) by implementing the focused
-//! capability traits, mirroring gokit's optional provider interfaces.
+//! Every backend implements [`Manager`].
+//! Backends opt into extra capabilities (exec, stats, log streaming, event watching) by implementing the focused capability traits,
+//! mirroring gokit's optional provider interfaces.
 
 use async_trait::async_trait;
 use futures::stream::BoxStream;
@@ -16,9 +16,9 @@ use crate::spec::{DeployRequest, ImageEventFilter, ListFilter, LogOptions};
 
 /// Core workload lifecycle operations. All backends implement this trait.
 ///
-/// Every method takes an explicit workload identifier and is cancellation-aware
-/// through the caller's async runtime; backends must apply their own timeouts to
-/// remote calls.
+/// Every method takes an explicit workload identifier
+/// and is cancellation-aware through the caller's async runtime;
+/// backends must apply their own timeouts to remote calls.
 #[async_trait]
 pub trait Manager: Send + Sync {
     /// Create and start a workload.

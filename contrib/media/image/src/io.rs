@@ -1,7 +1,7 @@
 //! Bounded image source loading and decoding.
 //!
-//! The image adapter intentionally centralizes all read/decode limits here so
-//! probe and executor paths cannot drift in how they handle untrusted media.
+//! The image adapter intentionally centralizes all read/decode limits here so probe
+//! and executor paths cannot drift in how they handle untrusted media.
 
 use std::io::{Cursor, ErrorKind, Read as _};
 

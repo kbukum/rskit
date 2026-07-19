@@ -15,8 +15,7 @@ const DEFAULT_MAX_RESPONSE_BODY_BYTES: usize = 10 * 1024 * 1024;
 #[derive(Clone)]
 #[non_exhaustive]
 pub struct HttpClientConfig {
-    /// Base URL for requests (e.g., `https://api.example.com/v1`).
-    /// Paths are appended to this URL.
+    /// Base URL for requests (e.g., `https://api.example.com/v1`). Paths are appended to this URL.
     pub base_url: Option<String>,
 
     /// Request timeout. Defaults to 30 seconds.

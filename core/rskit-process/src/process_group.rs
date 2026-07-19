@@ -11,8 +11,8 @@ pub fn isolate(command: &mut StdCommand) {
         use std::os::unix::process::CommandExt;
 
         // SAFETY: `pre_exec` runs in the child process after fork and before exec.
-        // The closure only calls the async-signal-safe `setpgid` libc function and
-        // returns an `io::Error` on failure, which is the supported usage pattern.
+        // The closure only calls the async-signal-safe `setpgid` libc function
+        // and returns an `io::Error` on failure, which is the supported usage pattern.
         unsafe {
             command.pre_exec(|| {
                 if libc::setpgid(0, 0) != 0 {
@@ -61,15 +61,15 @@ fn signal_target(pid: u32, signal: ProcessSignal, process_group: bool) -> bool {
 
     #[cfg(unix)]
     {
-        // A live Unix PID always fits in `i32`; a value that does not cannot
-        // name a real process, so there is nothing to signal.
+        // A live Unix PID always fits in `i32`; a value that does not cannot name a real process,
+        // so there is nothing to signal.
         let Ok(pid) = i32::try_from(pid) else {
             return false;
         };
         let target = if process_group { -pid } else { pid };
-        // SAFETY: `kill` targets either the child pid or the negated
-        // process-group id created by [`isolate`]. ESRCH means the target has
-        // already exited.
+        // SAFETY: `kill` targets either the child pid
+        // or the negated process-group id created by [`isolate`].
+        // ESRCH means the target has already exited.
         unsafe {
             let result = libc::kill(target, signal.as_raw());
             if result != 0 {
@@ -102,9 +102,8 @@ mod tests {
     fn public_helpers_signal_a_real_process_group_leader() {
         use std::os::unix::process::ExitStatusExt;
 
-        // Spawn a child that becomes its own process-group leader via
-        // `isolate`, so the public `terminate(pid)` helper (which targets the
-        // negated process-group id) reaches it.
+        // Spawn a child that becomes its own process-group leader via `isolate`,
+        // so the public `terminate(pid)` helper (which targets the negated process-group id) reaches it.
         let mut command = StdCommand::new("/bin/sh");
         command
             .args(["-c", "sleep 30"])

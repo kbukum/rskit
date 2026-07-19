@@ -1,8 +1,8 @@
 //! Rate-based log sampling layer.
 //!
 //! Limits log throughput per level to prevent log storms in production.
-//! After an initial burst of messages the layer drops a configurable
-//! fraction of events, keeping resource usage predictable.
+//! After an initial burst of messages the layer drops a configurable fraction of events,
+//! keeping resource usage predictable.
 //!
 //! # Example
 //!
@@ -66,12 +66,10 @@ impl LevelCounter {
 
 // ── Layer ───────────────────────────────────────────────────────────────────
 
-/// A [`tracing_subscriber::Layer`] that drops events exceeding per-level rate
-/// limits.
+/// A [`tracing_subscriber::Layer`] that drops events exceeding per-level rate limits.
 ///
-/// Events within the initial burst (`initial_rate` per second per level) are
-/// always passed through. After the burst, only every `thereafter_rate`-th
-/// event is kept.
+/// Events within the initial burst (`initial_rate` per second per level) are always passed through.
+/// After the burst, only every `thereafter_rate`-th event is kept.
 pub struct SamplingLayer {
     initial_rate: u32,
     thereafter_rate: u32,
@@ -182,8 +180,7 @@ mod tests {
         assert!(layer.should_keep(Level::INFO));
         assert!(layer.should_keep(Level::WARN));
 
-        // Second event per level — exceeds burst.
-        // excess=1 → 1%2==1 ✓
+        // Second event per level — exceeds burst. excess=1 → 1%2==1 ✓
         assert!(layer.should_keep(Level::INFO));
         assert!(layer.should_keep(Level::WARN));
 
@@ -201,11 +198,11 @@ mod tests {
         });
 
         assert!(layer.should_keep(Level::ERROR));
-        // excess=1 → 1%1==0, not ==1, so this is dropped
-        // But thereafter_rate 0 → max(1) → every 1st event → excess%1 always 0,
-        // so nothing after burst matches excess%1==1; keep-all via 0 remainder.
-        // Actually: excess%1 is always 0, never 1. So nothing passes.
-        // That's fine — a thereafter_rate of 0 means "drop everything after burst".
+        // excess=1 → 1%1==0, not ==1,
+        // so this is dropped But thereafter_rate 0 → max(1) → every 1st event → excess%1 always 0,
+        // so nothing after burst matches excess%1==1; keep-all via 0 remainder. Actually:
+        // excess%1 is always 0, never 1. So nothing passes. That's fine —
+        // a thereafter_rate of 0 means "drop everything after burst".
         assert!(!layer.should_keep(Level::ERROR));
     }
 }

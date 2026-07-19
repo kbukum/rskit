@@ -327,8 +327,7 @@ impl MediaPipeline {
 
     /// Configure streaming output (HLS, DASH, or RTMP).
     ///
-    /// This is a convenience wrapper around `transcode()` that configures
-    /// the output for streaming.
+    /// This is a convenience wrapper around `transcode()` that configures the output for streaming.
     #[must_use]
     pub fn stream_to(mut self, config: OutputConfig) -> Self {
         self.ops.push(MediaOp::Transcode(config));
@@ -346,8 +345,8 @@ impl MediaPipeline {
 
     /// Validate the pipeline without executing it.
     ///
-    /// Checks operation compatibility, ordering conflicts, and whether
-    /// the executor supports all operations.
+    /// Checks operation compatibility, ordering conflicts,
+    /// and whether the executor supports all operations.
     pub fn validate(&self, executor: &dyn MediaExecutor) -> AppResult<()> {
         // Check that all ops are supported by the executor
         for op in &self.ops {

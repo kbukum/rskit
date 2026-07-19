@@ -1,7 +1,7 @@
 //! Amazon S3 and S3-compatible (MinIO, LocalStack) storage backend.
 //!
-//! Registers a [`rskit_storage::FileStore`] implementation for Amazon S3 and any
-//! S3-compatible object store (MinIO, LocalStack, Ceph, etc.).
+//! Registers a [`rskit_storage::FileStore`] implementation for Amazon S3
+//! and any S3-compatible object store (MinIO, LocalStack, Ceph, etc.).
 //!
 //! # Features
 //!

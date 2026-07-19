@@ -470,8 +470,8 @@ async fn collector_runs_a_single_worker_when_concurrency_is_zero() {
 #[tokio::test]
 async fn collector_truncates_multibyte_source_errors_without_panicking() {
     let out = tempfile::tempdir().unwrap();
-    // An error whose 120th byte falls in the middle of a multi-byte codepoint would panic a
-    // byte-index slice; the source must still be recorded as failed.
+    // An error whose 120th byte falls in the middle of a multi-byte codepoint would panic a byte-index slice;
+    // the source must still be recorded as failed.
     let message = format!("x{}", "€".repeat(60));
     assert!(message.len() > 120 && !message.is_char_boundary(120));
     let limits = DatasetLimits {

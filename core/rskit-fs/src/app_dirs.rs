@@ -6,8 +6,7 @@ use rskit_errors::{AppError, AppResult, ErrorCode};
 
 /// Return the platform cache directory for `app_name`.
 ///
-/// The returned directory is not created. Callers own creation and cleanup
-/// policy.
+/// The returned directory is not created. Callers own creation and cleanup policy.
 ///
 /// Platform behavior:
 /// - macOS: `$HOME/Library/Caches/<app_name>`

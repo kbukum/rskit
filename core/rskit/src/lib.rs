@@ -1,7 +1,7 @@
 //! `rskit` — production Rust toolkit.
 //!
-//! This crate is a pure facade that re-exports `rskit-*` sub-crates from a
-//! single namespace. It contains no implementation logic.
+//! This crate is a pure facade that re-exports `rskit-*` sub-crates from a single namespace.
+//! It contains no implementation logic.
 //!
 //! Always-on foundation crates:
 //!
@@ -89,8 +89,8 @@
 //! | `workload` | `rskit-workload` (workload orchestration) |
 //! | `full`   | all features |
 //!
-//! Test helpers live in `rskit-testutil` and should be added directly as a
-//! `dev-dependency`; they are intentionally not part of this production facade.
+//! Test helpers live in `rskit-testutil` and should be added directly as a `dev-dependency`;
+//! they are intentionally not part of this production facade.
 //!
 //! # Quick start
 //!

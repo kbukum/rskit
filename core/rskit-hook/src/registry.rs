@@ -16,10 +16,9 @@ type HandlerMap = Arc<RwLock<HashMap<HandlerKey, Vec<(usize, ErasedHandler)>>>>;
 /// A thread-safe registry that maps typed events to ordered observe-only handlers.
 ///
 /// Registration and emission are constructor-injected through registry values;
-/// there is no global hook registry. Handlers for the same event type run in
-/// registration order. A fatal [`HookError`] short-circuits the remaining
-/// handlers for that event type; non-fatal errors are collected and the first
-/// non-fatal error is returned after all handlers run.
+/// there is no global hook registry. Handlers for the same event type run in registration order.
+/// A fatal [`HookError`] short-circuits the remaining handlers for that event type;
+/// non-fatal errors are collected and the first non-fatal error is returned after all handlers run.
 pub struct HookRegistry {
     handlers: HandlerMap,
     event_types: Arc<RwLock<HashMap<TypeId, EventType>>>,
@@ -97,8 +96,8 @@ impl HookRegistry {
 
     /// Emit an event to all registered handlers for its concrete type.
     ///
-    /// Dispatch uses snapshot semantics: handlers registered or removed during an
-    /// in-flight emit do not affect that emit, but apply to subsequent emits.
+    /// Dispatch uses snapshot semantics: handlers registered
+    /// or removed during an in-flight emit do not affect that emit, but apply to subsequent emits.
     pub fn emit<E>(&self, event: &E, cancel: CancellationToken) -> HookResult
     where
         E: Event,
@@ -172,9 +171,8 @@ impl HookRegistry {
 
 /// Typed lifecycle hook registry.
 ///
-/// Lifecycle hooks use the same ordered synchronous dispatch semantics as
-/// [`HookRegistry`]; the alias exists to make lifecycle-specific injection
-/// points self-documenting.
+/// Lifecycle hooks use the same ordered synchronous dispatch semantics as [`HookRegistry`];
+/// the alias exists to make lifecycle-specific injection points self-documenting.
 pub type LifecycleHookRegistry = HookRegistry;
 
 fn panic_message(payload: Box<dyn std::any::Any + Send>) -> String {

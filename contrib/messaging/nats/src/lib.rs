@@ -1,7 +1,7 @@
 //! NATS adapter for `rskit-messaging`.
 //!
-//! Connections are established lazily by producer/consumer operations; explicit
-//! registration itself has no network side effects.
+//! Connections are established lazily by producer/consumer operations;
+//! explicit registration itself has no network side effects.
 
 #![warn(missing_docs)]
 

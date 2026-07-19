@@ -7,17 +7,17 @@ use crate::code::ErrorCode;
 /// Application-level structured error.
 ///
 /// Carries a machine-readable [`ErrorCode`], a human-readable message,
-/// optional key→value details for rich error responses, and an optional
-/// cause chain compatible with `std::error::Error`.
+/// optional key→value details for rich error responses,
+/// and an optional cause chain compatible with `std::error::Error`.
 ///
-/// Fields are private to preserve the error's invariants. `http_status` is
-/// fully determined by `code` and can never drift from it. `retryable` is
-/// seeded from `code`'s default but may be intentionally overridden via the
-/// [`AppError::retryable`] builder; read access is via the getter methods and
-/// mutation via the builder methods (`with_*`, `retryable`, `context`).
+/// Fields are private to preserve the error's invariants. `http_status` is fully determined by `code`
+/// and can never drift from it. `retryable` is seeded from `code`'s default
+/// but may be intentionally overridden via the [`AppError::retryable`] builder;
+/// read access is via the getter methods
+/// and mutation via the builder methods (`with_*`, `retryable`, `context`).
 ///
-/// `details` deliberately uses [`serde_json::Value`]: it models RFC 9457
-/// problem-detail *extension members*, which are by definition arbitrary JSON
+/// `details` deliberately uses [`serde_json::Value`]:
+/// it models RFC 9457 problem-detail *extension members*, which are by definition arbitrary JSON
 /// and cannot be given a closed type without losing that openness.
 #[derive(Debug)]
 pub struct AppError {
@@ -197,24 +197,24 @@ impl AppError {
 
     /// Wrap an arbitrary error as an `Internal` application error.
     ///
-    /// The cause is stored internally for logging but is NOT included in the serialized
-    /// response — callers receive a generic "internal server error" message.
+    /// The cause is stored internally for logging but is NOT included in the serialized response —
+    /// callers receive a generic "internal server error" message.
     pub fn internal(cause: impl std::error::Error + Send + Sync + 'static) -> Self {
         Self::new(ErrorCode::Internal, "internal server error").with_cause(cause)
     }
 
     /// Wrap a database error.
     ///
-    /// The cause is stored internally for logging but is NOT included in the serialized
-    /// response — callers receive a generic "database error" message.
+    /// The cause is stored internally for logging but is NOT included in the serialized response —
+    /// callers receive a generic "database error" message.
     pub fn database_error(cause: impl std::error::Error + Send + Sync + 'static) -> Self {
         Self::new(ErrorCode::DatabaseError, "database error").with_cause(cause)
     }
 
     /// Wrap an external service error, naming the dependency.
     ///
-    /// The cause is stored internally for logging but is NOT included in the serialized
-    /// response — callers receive a generic message naming only the service.
+    /// The cause is stored internally for logging but is NOT included in the serialized response —
+    /// callers receive a generic message naming only the service.
     pub fn external_service(
         service: impl Into<String>,
         cause: impl std::error::Error + Send + Sync + 'static,
@@ -238,8 +238,8 @@ impl AppError {
 
     /// Add human-readable context to this error.
     ///
-    /// Prepends `msg` to the existing error message so call-site context is
-    /// preserved in logs and error responses without losing the original cause.
+    /// Prepends `msg` to the existing error message so call-site context is preserved in logs
+    /// and error responses without losing the original cause.
     ///
     /// # Examples
     ///
@@ -258,16 +258,15 @@ impl AppError {
 
     /// Append a trailing hint after the existing error message.
     ///
-    /// The counterpart to [`context`](Self::context): where `context` prepends
-    /// call-site context, `hint` appends advisory guidance (for example a
-    /// "did you mean …?" suggestion) as a new sentence, preserving the code,
-    /// cause, structured details, and retryability of the original error.
+    /// The counterpart to [`context`](Self::context): where `context` prepends call-site context,
+    /// `hint` appends advisory guidance (for example a "did you mean …?" suggestion) as a new sentence,
+    /// preserving the code, cause, structured details, and retryability of the original error.
     ///
-    /// An empty or whitespace-only hint is a no-op, so an optional or derived
-    /// suggestion can be threaded through without a conditional at the call
-    /// site. The hint is trimmed of surrounding whitespace and appended onto the
-    /// existing message (separated by a single space when the message is
-    /// non-empty); the caller supplies any punctuation within the `hint` itself.
+    /// An empty or whitespace-only hint is a no-op, so an optional
+    /// or derived suggestion can be threaded through without a conditional at the call site.
+    /// The hint is trimmed of surrounding whitespace
+    /// and appended onto the existing message (separated by a single space when the message is non-empty);
+    /// the caller supplies any punctuation within the `hint` itself.
     ///
     /// # Examples
     ///

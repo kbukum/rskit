@@ -8,8 +8,8 @@ use serde::Deserialize;
 
 /// Top-level configuration for `core-cli`.
 ///
-/// `deny_unknown_fields` makes the strict loader reject typos and stray keys
-/// instead of silently ignoring them — the "strict config" consumer story.
+/// `deny_unknown_fields` makes the strict loader reject typos
+/// and stray keys instead of silently ignoring them — the "strict config" consumer story.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Settings {
@@ -24,14 +24,14 @@ pub struct Settings {
 
 /// Load [`Settings`] from a single strict TOML file at `path`.
 ///
-/// Uses `rskit-config`'s strict loader, so unknown keys are rejected rather
-/// than silently ignored. Accepts anything convertible to a [`PathBuf`] so
-/// callers can pass portable [`std::path::Path`] values.
+/// Uses `rskit-config`'s strict loader, so unknown keys are rejected rather than silently ignored.
+/// Accepts anything convertible to a [`PathBuf`]
+/// so callers can pass portable [`std::path::Path`] values.
 ///
 /// # Errors
 ///
-/// Returns a typed [`rskit_errors::AppError`] when the file is missing,
-/// malformed, or contains unknown fields.
+/// Returns a typed [`rskit_errors::AppError`] when the file is missing, malformed,
+/// or contains unknown fields.
 pub fn load(path: impl Into<PathBuf>) -> AppResult<Settings> {
     rskit_config::load_strict(path.into())
 }

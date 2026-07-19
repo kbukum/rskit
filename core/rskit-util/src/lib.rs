@@ -1,8 +1,8 @@
 //! Minimal domain-free utility crate for the rskit ecosystem.
 //!
-//! Provides fundamental helper modules for string casing, safe truncation,
-//! collection transformation, safe environment variable parsing, duration/byte
-//! size parsing, and stateless mathematical exponential backoff.
+//! Provides fundamental helper modules for string casing, safe truncation, collection transformation,
+//! safe environment variable parsing, duration/byte size parsing,
+//! and stateless mathematical exponential backoff.
 //!
 //! # Modules
 //!
@@ -14,7 +14,8 @@
 //! - [`hash`]: Content/interop hashing — BLAKE3 and SHA-256.
 //! - [`secret`]: Prevent accidental credential leaks in logs/debug outputs.
 //! - [`sensitive`]: Matching helpers for names that commonly carry secrets.
-//! - [`strings`]: Casing, safe truncation, unique-shorthand resolution, and "did you mean?" suggestions.
+//! - [`strings`]: Casing, safe truncation, unique-shorthand resolution, and "did you mean?"
+//!   suggestions.
 //! - [`template`]: Lightweight template engine (`{name}` interpolation).
 //! - [`time`]: Duration parsing, UTC date/time conversion, RFC 3339 helpers, and timing wrappers.
 

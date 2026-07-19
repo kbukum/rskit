@@ -41,8 +41,8 @@ pub struct HttpServerConfig {
 
     /// Optional direct HTTPS serving configuration.
     ///
-    /// When configured, rustls is used with TLS 1.3 preferred and TLS 1.2 as
-    /// the minimum protocol floor unless a stricter minimum is configured.
+    /// When configured, rustls is used with TLS 1.3 preferred
+    /// and TLS 1.2 as the minimum protocol floor unless a stricter minimum is configured.
     pub tls: Option<TlsConfig>,
 }
 

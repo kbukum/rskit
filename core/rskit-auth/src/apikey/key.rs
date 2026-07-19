@@ -155,8 +155,8 @@ impl fmt::Debug for GenerateResult {
 
 /// API key hasher and issuer.
 ///
-/// The HMAC key is validated and pre-initialized at construction time so that
-/// `digest` and `compare` are fully infallible at call time.
+/// The HMAC key is validated and pre-initialized at construction time so that `digest`
+/// and `compare` are fully infallible at call time.
 #[derive(Clone)]
 pub struct Hasher {
     config: HashingConfig,

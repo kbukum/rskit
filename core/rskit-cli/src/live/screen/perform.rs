@@ -1,8 +1,8 @@
 //! [`Performer`] — maps the parsed VT stream onto the grid, cursor, and SGR.
 //!
-//! This is the only file that depends on [`vte`]: it implements
-//! [`vte::Perform`], translating each parsed print, C0 control, and CSI dispatch
-//! into a grid write, a cursor move, an erase, a scroll, or an SGR update.
+//! This is the only file that depends on [`vte`]: it implements [`vte::Perform`],
+//! translating each parsed print, C0 control, and CSI dispatch into a grid write, a cursor move,
+//! an erase, a scroll, or an SGR update.
 //! Swapping the parser (or a hand-rolled fallback) touches this file alone.
 
 use super::cursor::Cursor;
@@ -11,9 +11,9 @@ use super::sgr::Sgr;
 
 /// The applied state of a region's virtual terminal.
 ///
-/// Holds the cell grid, the write cursor, the current SGR, and the rows evicted
-/// by scrolling since the last drain. It is driven by a [`vte::Parser`] and read
-/// back through the grid.
+/// Holds the cell grid, the write cursor, the current SGR,
+/// and the rows evicted by scrolling since the last drain. It is driven by a [`vte::Parser`]
+/// and read back through the grid.
 #[derive(Debug)]
 pub(super) struct Performer {
     grid: Grid,
@@ -43,8 +43,8 @@ impl Performer {
         self.grid.render()
     }
 
-    /// The erase-fill cell for the current rendition: a blank that preserves
-    /// the active background (BCE), used by erases and scroll back-fill.
+    /// The erase-fill cell for the current rendition: a blank that preserves the active background (BCE),
+    /// used by erases and scroll back-fill.
     fn blank_cell(&self) -> Cell {
         Cell::blank(self.sgr.erased())
     }
@@ -57,8 +57,8 @@ impl Performer {
         }
     }
 
-    /// Read the `index`-th CSI parameter (zero-based), falling back to `default`
-    /// when it is absent or explicitly zero.
+    /// Read the `index`-th CSI parameter (zero-based), falling back to `default` when it is absent
+    /// or explicitly zero.
     fn param(params: &vte::Params, index: usize, default: usize) -> usize {
         params
             .iter()
@@ -74,9 +74,8 @@ impl vte::Perform for Performer {
     fn print(&mut self, c: char) {
         let cols = self.grid.cols();
         if self.cursor.col >= cols {
-            // DECAWM-off for the bounded peek: content past the last column marks
-            // the row truncated with an ellipsis instead of wrapping to a new
-            // grid row (which would fragment the tile and evict a partial line).
+            // DECAWM-off for the bounded peek:
+            // content past the last column marks the row truncated with an ellipsis instead of wrapping to a new grid row (which would fragment the tile and evict a partial line).
             self.grid.set(
                 self.cursor.row,
                 cols - 1,
@@ -99,13 +98,13 @@ impl vte::Perform for Performer {
     }
 
     fn execute(&mut self, byte: u8) {
-        // Applying a control from the pending-wrap sentinel would make the next
-        // print wrap and possibly scroll; land back inside the grid first.
+        // Applying a control from the pending-wrap sentinel would make the next print wrap
+        // and possibly scroll; land back inside the grid first.
         self.cursor.clear_pending_wrap(self.grid.cols());
         match byte {
-            // Region output arrives over a pipe, so the terminal's ONLCR
-            // translation never runs: cook a bare `\n` into carriage-return +
-            // line-feed so plain `\n`-terminated output does not staircase.
+            // Region output arrives over a pipe, so the terminal's ONLCR translation never runs:
+            // cook a bare `\n` into carriage-return + line-feed
+            // so plain `\n`-terminated output does not staircase.
             b'\n' => {
                 self.cursor.carriage_return();
                 self.line_feed();
@@ -126,8 +125,8 @@ impl vte::Perform for Performer {
     ) {
         let rows = self.grid.rows();
         let cols = self.grid.cols();
-        // Explicit moves clear a pending wrap, matching terminal behavior and
-        // preventing a stale `col == cols` from scrolling on the next print.
+        // Explicit moves clear a pending wrap, matching terminal behavior
+        // and preventing a stale `col == cols` from scrolling on the next print.
         self.cursor.clear_pending_wrap(cols);
         match action {
             'A' => self.cursor.up(Self::param(params, 0, 1)),
@@ -176,8 +175,9 @@ mod tests {
 
     #[test]
     fn print_truncates_at_width_without_wrapping() {
-        // A bounded peek does not auto-wrap: overflow past the last column marks
-        // the row with an ellipsis and never advances to a second grid row.
+        // A bounded peek does not auto-wrap:
+        // overflow past the last column marks the row with an ellipsis
+        // and never advances to a second grid row.
         let mut performer = Performer::new(2, 3);
         feed(&mut performer, b"abcd");
         assert_eq!(performer.render(), vec!["ab…".to_string(), String::new()]);
@@ -186,8 +186,8 @@ mod tests {
 
     #[test]
     fn truncated_row_preserves_active_sgr() {
-        // The ellipsis marker carries the current rendition, so a colored
-        // over-long line stays colored through truncation.
+        // The ellipsis marker carries the current rendition,
+        // so a colored over-long line stays colored through truncation.
         let mut performer = Performer::new(1, 3);
         feed(&mut performer, b"\x1b[31mabcd");
         assert_eq!(performer.render(), vec!["\x1b[0;31mab…\x1b[0m".to_string()]);
@@ -254,9 +254,9 @@ mod tests {
 
     #[test]
     fn cursor_move_from_pending_wrap_does_not_scroll() {
-        // At the bottom row with a filled last column (col == cols sentinel), a
-        // cursor-down (clamped to the bottom) must clear the pending wrap so the
-        // next print overwrites in place instead of wrapping and scrolling.
+        // At the bottom row with a filled last column (col == cols sentinel),
+        // a cursor-down (clamped to the bottom) must clear the pending wrap
+        // so the next print overwrites in place instead of wrapping and scrolling.
         let mut performer = Performer::new(2, 3);
         feed(&mut performer, b"x\r\nabc\x1b[BY");
         assert_eq!(
@@ -269,8 +269,8 @@ mod tests {
 
     #[test]
     fn scroll_backfill_preserves_active_background() {
-        // Line-feeding at the bottom under a colored background must fill the
-        // newly exposed row with that background (BCE), not the default.
+        // Line-feeding at the bottom under a colored background must fill the newly exposed row with that background (BCE),
+        // not the default.
         let mut performer = Performer::new(2, 3);
         feed(&mut performer, b"\x1b[42mab\r\ncd\n");
         // The exposed bottom row carries the green erase background.
@@ -285,8 +285,8 @@ mod tests {
 
     #[test]
     fn erase_preserves_active_background() {
-        // A child sets a background then erases to end of line: the erased span
-        // must keep that background (BCE), not fall back to the default.
+        // A child sets a background then erases to end of line:
+        // the erased span must keep that background (BCE), not fall back to the default.
         let mut performer = Performer::new(1, 4);
         feed(&mut performer, b"\x1b[41mAB\x1b[2K");
         let rendered = performer.render();

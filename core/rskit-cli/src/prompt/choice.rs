@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 
 /// The stable identifier a caller uses to recognise a chosen [`Choice`].
 ///
-/// A `ChoiceId` is opaque data (not a closure): the caller maps it back to
-/// domain meaning after the prompt returns.
+/// A `ChoiceId` is opaque data (not a closure):
+/// the caller maps it back to domain meaning after the prompt returns.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct ChoiceId(String);
 
@@ -49,8 +49,8 @@ impl fmt::Display for ChoiceId {
     }
 }
 
-/// A single selectable option: pure data carrying an id, a human label, an
-/// optional annotation line, and whether it is the recommended default.
+/// A single selectable option: pure data carrying an id, a human label, an optional annotation line,
+/// and whether it is the recommended default.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Choice {
     id: ChoiceId,
@@ -80,9 +80,8 @@ impl Choice {
 
     /// Mark this choice as the recommended default.
     ///
-    /// In [`PromptMode::NonInteractive`](crate::prompt::PromptMode::NonInteractive)
-    /// a `select` resolves to the recommended choice, and an interactive prompt
-    /// offers it when the answer is left blank.
+    /// In [`PromptMode::NonInteractive`](crate::prompt::PromptMode::NonInteractive) a `select` resolves to the recommended choice,
+    /// and an interactive prompt offers it when the answer is left blank.
     #[must_use]
     pub const fn recommended(mut self) -> Self {
         self.recommended = true;

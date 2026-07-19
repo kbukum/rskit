@@ -1,9 +1,10 @@
 //! Per-item materialization seam — where the generic engine hands each collected item to storage.
 //!
-//! The engine counts and routes items via [`DatasetItem`], but never writes them itself. A
-//! [`ItemSink`] owns all item-specific materialization: [`LocalBlobSink`] writes [`DataItem`]
-//! samples to `real/` and `ai/` directories with offset filenames, exactly as the collector did
-//! before the engine was generalized.
+//! The engine counts and routes items via [`DatasetItem`], but never writes them itself.
+//! A [`ItemSink`] owns all item-specific materialization:
+//! [`LocalBlobSink`] writes [`DataItem`] samples to `real/`
+//! and `ai/` directories with offset filenames,
+//! exactly as the collector did before the engine was generalized.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -34,8 +35,9 @@ pub trait ItemSink<T: DatasetItem>: Send + Sync {
 
 /// Local filesystem sink for [`DataItem`] samples.
 ///
-/// Writes real samples to `<output>/real` and AI-generated samples to `<output>/ai`, naming files
-/// by a shared, monotonically increasing counter that resumes past any files already on disk.
+/// Writes real samples to `<output>/real` and AI-generated samples to `<output>/ai`,
+/// naming files by a shared,
+/// monotonically increasing counter that resumes past any files already on disk.
 pub struct LocalBlobSink {
     real_dir: PathBuf,
     ai_dir: PathBuf,

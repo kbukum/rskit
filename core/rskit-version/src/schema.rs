@@ -1,11 +1,11 @@
 //! Schema-version compatibility gating.
 //!
-//! A small, general-purpose helper for versioned documents (config files,
-//! manifests, on-disk formats) that declare a `schema` field and must reject any
-//! version the current code does not understand. This is distinct from
-//! [`crate::semver`] (which parses semantic-version strings): a schema version is
-//! typically a small monotonic integer, so the gate is generic over any
-//! `Copy + Eq + Display` value.
+//! A small,
+//! general-purpose helper for versioned documents (config files, manifests, on-disk formats) that declare a `schema` field
+//! and must reject any version the current code does not understand.
+//! This is distinct from [`crate::semver`] (which parses semantic-version strings):
+//! a schema version is typically a small monotonic integer,
+//! so the gate is generic over any `Copy + Eq + Display` value.
 
 use std::fmt::Display;
 
@@ -14,15 +14,14 @@ use rskit_errors::{AppError, AppResult};
 /// Return the configured schema version, or the supported default when absent,
 /// rejecting any value the current code does not support.
 ///
-/// `field` names the schema field for error reporting. A `None` `configured`
-/// value defaults to `supported`. A `configured` value that differs from
-/// `supported` is a typed [`AppError::invalid_input`] — the caller cannot safely
-/// interpret a document written for a different schema version.
+/// `field` names the schema field for error reporting.
+/// A `None` `configured` value defaults to `supported`.
+/// A `configured` value that differs from `supported` is a typed [`AppError::invalid_input`] —
+/// the caller cannot safely interpret a document written for a different schema version.
 ///
 /// # Errors
 ///
-/// Returns [`AppError::invalid_input`] when `configured` is present and not equal
-/// to `supported`.
+/// Returns [`AppError::invalid_input`] when `configured` is present and not equal to `supported`.
 ///
 /// # Examples
 ///

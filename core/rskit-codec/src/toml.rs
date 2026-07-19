@@ -5,10 +5,9 @@ use crate::codec::Codec;
 
 /// Built-in TOML codec.
 ///
-/// Decodes TOML into the canonical [`Value`] tree and encodes a value tree back
-/// to TOML. The top-level value must be a table (TOML has no top-level scalar or
-/// array document), and JSON `null` has no TOML representation — both surface as
-/// typed errors rather than panics.
+/// Decodes TOML into the canonical [`Value`] tree and encodes a value tree back to TOML.
+/// The top-level value must be a table (TOML has no top-level scalar or array document),
+/// and JSON `null` has no TOML representation — both surface as typed errors rather than panics.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct TomlCodec;
 
@@ -57,8 +56,8 @@ mod tests {
 
     #[test]
     fn rejects_unrepresentable_values() {
-        // JSON `null` has no TOML representation; this must surface as a typed
-        // error rather than a panic.
+        // JSON `null` has no TOML representation;
+        // this must surface as a typed error rather than a panic.
         let err = TomlCodec.encode_value(&Value::Null).unwrap_err();
         assert!(err.to_string().contains("serialize"));
     }

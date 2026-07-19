@@ -81,9 +81,9 @@ impl PoolConfig {
         }
     }
 
-    /// Set the maximum number of concurrent tasks. Values below 1 are clamped
-    /// to 1 inside `Pool::new` (with a tracing warning), since a zero-sized
-    /// pool can never execute tasks.
+    /// Set the maximum number of concurrent tasks.
+    /// Values below 1 are clamped to 1 inside `Pool::new` (with a tracing warning),
+    /// since a zero-sized pool can never execute tasks.
     #[must_use]
     pub fn with_size(mut self, size: usize) -> Self {
         self.size = size;
@@ -279,9 +279,8 @@ where
 {
     /// Create a new pool backed by `handler`.
     ///
-    /// `config.size` is clamped to a minimum of 1 (a zero-sized pool can never
-    /// execute tasks because no permits would be available); a `tracing` warn
-    /// is emitted when this clamp engages.
+    /// `config.size` is clamped to a minimum of 1 (a zero-sized pool can never execute tasks because no permits would be available);
+    /// a `tracing` warn is emitted when this clamp engages.
     pub fn new(handler: Arc<dyn Handler<I, O>>, config: PoolConfig) -> Self {
         let size = if config.size == 0 {
             tracing::warn!(
@@ -451,11 +450,9 @@ where
     let _ = envelope.result_tx.send(Err(error));
 }
 
-/// Complete a dequeued envelope with a `ServiceUnavailable` error when the
-/// pool is shutting down before the task could be dispatched. Without this
-/// the envelope's `result_tx` would simply be dropped, leaving any awaiting
-/// `TaskHandle::result()` to surface the resulting `RecvError` as a generic
-/// channel-closed error rather than a meaningful "pool is shutting down".
+/// Complete a dequeued envelope with a `ServiceUnavailable` error when the pool is shutting down before the task could be dispatched.
+/// Without this the envelope's `result_tx` would simply be dropped,
+/// leaving any awaiting `TaskHandle::result()` to surface the resulting `RecvError` as a generic channel-closed error rather than a meaningful "pool is shutting down".
 fn fail_envelope_shutdown<I, O>(envelope: Envelope<I, O>, pool_name: &str)
 where
     O: Clone + Send + 'static,

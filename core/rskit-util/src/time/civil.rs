@@ -4,8 +4,8 @@ const SECONDS_PER_DAY: i64 = 86_400;
 
 /// A proleptic Gregorian calendar date.
 ///
-/// Fields are public for lightweight utility use. Conversion functions validate
-/// dates before mapping them into epoch-based values.
+/// Fields are public for lightweight utility use.
+/// Conversion functions validate dates before mapping them into epoch-based values.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct CivilDate {
     /// Calendar year, using astronomical numbering.
@@ -34,8 +34,8 @@ impl CivilDate {
 
 /// A UTC civil date and wall-clock time with whole-second precision.
 ///
-/// Fields are public for lightweight utility use. Conversion functions validate
-/// date and time ranges before mapping them into epoch-based values.
+/// Fields are public for lightweight utility use. Conversion functions validate date
+/// and time ranges before mapping them into epoch-based values.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct CivilDateTime {
     /// UTC calendar date.

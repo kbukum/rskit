@@ -1,15 +1,13 @@
 //! Foundational async stream toolkit.
 //!
-//! `rskit-stream` owns the opinion-free, layer-zero building blocks for the
-//! "observe → fan-out → consume" graph that recurs across config reloads,
-//! service discovery, cache invalidation, secret rotation, and message
-//! consumers. Sources, the bounded fan-out bus, cancellable consumer tasks,
-//! and the `futures::Stream` extension operators that chain them all live
-//! together at the foundation where any higher layer can reuse them without
-//! inverting the layer order.
+//! `rskit-stream` owns the opinion-free,
+//! layer-zero building blocks for the "observe → fan-out → consume" graph that recurs across config reloads,
+//! service discovery, cache invalidation, secret rotation, and message consumers. Sources,
+//! the bounded fan-out bus, cancellable consumer tasks,
+//! and the `futures::Stream` extension operators that chain them all live together at the foundation where any higher layer can reuse them without inverting the layer order.
 //!
-//! Sequential, named-step workflows (run N steps, report progress, cancel)
-//! are a different concern and live in `rskit-chain`.
+//! Sequential, named-step workflows (run N steps, report progress, cancel) are a different concern
+//! and live in `rskit-chain`.
 
 #![warn(missing_docs)]
 

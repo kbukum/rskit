@@ -1,8 +1,7 @@
 //! Extended probe analysis types — keyframes, silence, chapters.
 //!
-//! These types represent structural information about media that goes beyond
-//! basic metadata. They power chunking strategies, timeline UIs, and
-//! intelligent splitting.
+//! These types represent structural information about media that goes beyond basic metadata.
+//! They power chunking strategies, timeline UIs, and intelligent splitting.
 
 use std::time::Duration;
 
@@ -13,8 +12,7 @@ use crate::time::{TimeRange, Timestamp};
 /// A keyframe (I-frame) position within a video stream.
 ///
 /// Keyframes are the only safe points to split video without re-encoding.
-/// Used by [`ChunkStrategy`](crate::chunking::ChunkStrategy) implementations
-/// to plan efficient parallel processing boundaries.
+/// Used by [`ChunkStrategy`](crate::chunking::ChunkStrategy) implementations to plan efficient parallel processing boundaries.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct KeyframeInfo {
     /// Position in the stream.
@@ -65,8 +63,8 @@ impl PictureType {
 
 /// A detected silence interval within an audio stream.
 ///
-/// Silence intervals are optimal split points for audio-centric operations
-/// like transcription — splitting at silence avoids cutting words.
+/// Silence intervals are optimal split points for audio-centric operations like transcription —
+/// splitting at silence avoids cutting words.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct SilenceInterval {
     /// Start of the silence.
@@ -94,8 +92,8 @@ impl SilenceInterval {
 
 /// A chapter marker embedded in the media container.
 ///
-/// Chapters provide semantic structure (intro, verse, chorus, etc.)
-/// and are common in podcasts, audiobooks, and long-form video.
+/// Chapters provide semantic structure (intro, verse, chorus, etc.) and are common in podcasts,
+/// audiobooks, and long-form video.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Chapter {
     /// Chapter index (zero-based).

@@ -1,8 +1,8 @@
 //! Adapter factory: bridges Ollama [`Config`] → [`Provider`] via the `OpenAI` dialect.
 //!
-//! Ollama exposes an `OpenAI`-compatible chat-completions API. This adapter
-//! delegates to [`OpenAiDialect`] for wire-format conversion — no second
-//! dialect implementation is needed.
+//! Ollama exposes an `OpenAI`-compatible chat-completions API.
+//! This adapter delegates to [`OpenAiDialect`] for wire-format conversion —
+//! no second dialect implementation is needed.
 
 use async_trait::async_trait;
 use rskit_component::{Component, Health};
@@ -18,8 +18,8 @@ pub(crate) const PROVIDER_ID: &str = "ollama";
 
 /// A [`Provider`] backed by a local or remote Ollama instance.
 ///
-/// Ollama mirrors the `OpenAI` `/v1/chat/completions` API, so this adapter
-/// reuses [`OpenAiDialect`] for all wire-format conversion.
+/// Ollama mirrors the `OpenAI` `/v1/chat/completions` API,
+/// so this adapter reuses [`OpenAiDialect`] for all wire-format conversion.
 struct OllamaAdapter {
     client: HttpClient,
     runner: ChatRunner,

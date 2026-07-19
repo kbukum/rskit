@@ -71,8 +71,8 @@ pub enum RegistryError {
 
 /// Create an empty registry.
 ///
-/// Backends are intentionally not auto-registered. Consumers opt in by calling
-/// adapter crate `register(&mut Registry, Config)` functions during composition.
+/// Backends are intentionally not auto-registered.
+/// Consumers opt in by calling adapter crate `register(&mut Registry, Config)` functions during composition.
 #[must_use]
 pub fn default_registry() -> Registry {
     Registry::new()

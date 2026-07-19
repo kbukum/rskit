@@ -63,8 +63,8 @@ impl FfmpegCommand {
 
     /// Pre-flight validation of operations before spawning FFmpeg.
     ///
-    /// Catches invalid combinations that would cause FFmpeg to fail with
-    /// cryptic errors or produce incorrect output.
+    /// Catches invalid combinations that would cause FFmpeg to fail with cryptic errors
+    /// or produce incorrect output.
     pub(crate) fn validate_ops(ops: &[MediaOp]) -> AppResult<()> {
         let mut has_strip_audio = false;
         let mut has_strip_video = false;

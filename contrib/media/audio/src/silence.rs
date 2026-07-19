@@ -1,18 +1,17 @@
 //! Silence detection in audio data.
 //!
-//! Scans decoded samples and emits regions whose amplitude stays below a
-//! configurable threshold for a minimum duration.
+//! Scans decoded samples
+//! and emits regions whose amplitude stays below a configurable threshold for a minimum duration.
 
 use crate::wav::WavReader;
 
 /// Configuration for silence detection.
 #[derive(Debug, Clone)]
 pub struct SilenceConfig {
-    /// Amplitude threshold — samples with `|s| ≤ threshold` are considered silent.
-    /// Range: `0.0..=1.0`. Default: `0.01` (~-40 dB).
+    /// Amplitude threshold — samples with `|s| ≤ threshold` are considered silent. Range: `0.0..=1.0`.
+    /// Default: `0.01` (~-40 dB).
     pub threshold: f32,
-    /// Minimum silence duration in seconds. Regions shorter than this are ignored.
-    /// Default: `0.5`.
+    /// Minimum silence duration in seconds. Regions shorter than this are ignored. Default: `0.5`.
     pub min_duration_secs: f64,
 }
 

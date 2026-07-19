@@ -1,6 +1,8 @@
 # rskit-agent — turn-based agent loop
 
-`rskit-agent` runs a bounded agent loop over an injected LLM provider, optional tool registry, and hook registry. It owns turn limits, token budgets, wall-clock budgets, tool-call limits, and context compaction.
+`rskit-agent` runs a bounded agent loop over an injected LLM provider, optional tool registry,
+and hook registry. It owns turn limits, token budgets, wall-clock budgets, tool-call limits,
+and context compaction.
 
 ## Install
 
@@ -75,4 +77,5 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## When to use
 
-Use `rskit-agent` when you want the bounded turn loop, tool execution, hook points, and context-budget logic without rebuilding orchestration yourself.
+Use `rskit-agent` when you want the bounded turn loop, tool execution, hook points,
+and context-budget logic without rebuilding orchestration yourself.

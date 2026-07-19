@@ -1,25 +1,24 @@
 //! Semantic status glyphs with a pure-ASCII fallback.
 //!
-//! A small companion to [`crate::theme::color`]: where the palette resolves
-//! *color*, this resolves the small set of *symbols* CLIs use as status markers
-//! (a success check, an error cross, a bullet, an arrow…). Unicode glyphs render
-//! on modern UTF-8 terminals; a legacy or mis-encoded terminal falls back to a
-//! pure-ASCII stand-in so output never turns into replacement characters.
+//! A small companion to [`crate::theme::color`]: where the palette resolves *color*,
+//! this resolves the small set of *symbols* CLIs use as status markers (a success check, an error cross, a bullet, an arrow…).
+//! Unicode glyphs render on modern UTF-8 terminals; a legacy
+//! or mis-encoded terminal falls back to a pure-ASCII stand-in
+//! so output never turns into replacement characters.
 //!
-//! Like [`Palette`](crate::theme::Palette), a [`Glyphs`] value resolves from a
-//! single boolean, so callers render identically regardless of capability, and
-//! it exposes an env-free constructor ([`Glyphs::new`]) for deterministic tests
-//! alongside the environment-driven [`Glyphs::from_env`].
+//! Like [`Palette`](crate::theme::Palette), a [`Glyphs`] value resolves from a single boolean,
+//! so callers render identically regardless of capability,
+//! and it exposes an env-free constructor ([`Glyphs::new`]) for deterministic tests alongside the environment-driven [`Glyphs::from_env`].
 
-/// The locale environment variables consulted, in precedence order, to decide
-/// whether the terminal encoding is UTF-8.
+/// The locale environment variables consulted, in precedence order,
+/// to decide whether the terminal encoding is UTF-8.
 pub const UTF8_LOCALE_ENVS: [&str; 3] = ["LC_ALL", "LC_CTYPE", "LANG"];
 
 /// Whether the process locale advertises a UTF-8 encoding.
 ///
-/// Consults [`UTF8_LOCALE_ENVS`] in order and reports `true` when any is set to
-/// a value naming UTF-8 (case-insensitive, `utf-8` or `utf8`). When none is set
-/// the result is `false`, so the ASCII fallback is the safe default.
+/// Consults [`UTF8_LOCALE_ENVS`] in order
+/// and reports `true` when any is set to a value naming UTF-8 (case-insensitive, `utf-8` or `utf8`).
+/// When none is set the result is `false`, so the ASCII fallback is the safe default.
 #[must_use]
 pub fn unicode_env_enabled() -> bool {
     UTF8_LOCALE_ENVS.iter().any(|key| {
@@ -32,10 +31,10 @@ pub fn unicode_env_enabled() -> bool {
 
 /// A resolved set of semantic status glyphs.
 ///
-/// When Unicode is disabled every accessor returns its ASCII fallback, so the
-/// same rendering code stays byte-clean on terminals that cannot display the
-/// Unicode symbols. Construct it from a resolved boolean via [`Glyphs::new`], or
-/// from the process locale via [`Glyphs::from_env`].
+/// When Unicode is disabled every accessor returns its ASCII fallback,
+/// so the same rendering code stays byte-clean on terminals that cannot display the Unicode symbols.
+/// Construct it from a resolved boolean via [`Glyphs::new`],
+/// or from the process locale via [`Glyphs::from_env`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Glyphs {
     unicode: bool,
@@ -150,9 +149,9 @@ mod tests {
 
     #[test]
     fn env_probe_and_from_env_agree_and_are_callable() {
-        // `unicode_env_enabled` reads the process locale; `from_env` must mirror
-        // it. Both are exercised here without mutating the (forbidden-unsafe)
-        // environment, so the result tracks whatever locale the runner exposes.
+        // `unicode_env_enabled` reads the process locale; `from_env` must mirror it.
+        // Both are exercised here without mutating the (forbidden-unsafe) environment,
+        // so the result tracks whatever locale the runner exposes.
         assert_eq!(Glyphs::from_env().unicode(), unicode_env_enabled());
     }
 

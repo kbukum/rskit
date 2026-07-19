@@ -1,6 +1,8 @@
 # rskit-llm — LLM provider abstractions
 
-`rskit-llm` owns the SDK-free completion contract for chat models: requests, responses, canonical tool-use blocks, capability metadata, and the single `Provider` trait used across the Rust kit.
+`rskit-llm` owns the SDK-free completion contract for chat models: requests, responses,
+canonical tool-use blocks, capability metadata,
+and the single `Provider` trait used across the Rust kit.
 
 ## Install
 
@@ -53,4 +55,5 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## When to use
 
-Use `rskit-llm` for canonical chat completions and stream events. Use `rskit-inference` for serving-runtime protocols such as Triton, vLLM, and TGI.
+Use `rskit-llm` for canonical chat completions and stream events.
+Use `rskit-inference` for serving-runtime protocols such as Triton, vLLM, and TGI.

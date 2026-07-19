@@ -54,10 +54,9 @@ impl<T> SseEvent<T> {
 
 /// A bounded Server-Sent Events bus.
 ///
-/// Live subscriber fan-out is bounded by the configured broadcast capacity. A
-/// bounded replay buffer of the same size stores recent events for
-/// `Last-Event-ID` resume. Slow live subscribers skip lagged events and receive
-/// the newest available events.
+/// Live subscriber fan-out is bounded by the configured broadcast capacity.
+/// A bounded replay buffer of the same size stores recent events for `Last-Event-ID` resume.
+/// Slow live subscribers skip lagged events and receive the newest available events.
 pub struct SseBus<T: Clone + Send + Sync + 'static> {
     tx: broadcast::Sender<SseEvent<T>>,
     state: Arc<Mutex<SseState<T>>>,
@@ -98,8 +97,8 @@ impl<T: Clone + Send + Sync + Serialize + 'static> SseBus<T> {
 
     /// Publish an event to the replay buffer and all active subscribers.
     ///
-    /// Publishing without subscribers is successful; the event remains available
-    /// for bounded replay until it is evicted by newer events.
+    /// Publishing without subscribers is successful;
+    /// the event remains available for bounded replay until it is evicted by newer events.
     pub fn publish(&self, data: T) -> AppResult<SseEvent<T>> {
         let mut state = self.state.lock();
         let event = SseEvent {
@@ -127,8 +126,8 @@ impl<T: Clone + Send + Sync + Serialize + 'static> SseBus<T> {
     ) -> impl Stream<Item = Result<SseEvent<T>, Infallible>> {
         let (replay, rx) = {
             let state = self.state.lock();
-            // Hold the publish state lock across snapshot + subscribe so no event can be
-            // published between replay collection and live receiver creation.
+            // Hold the publish state lock across snapshot + subscribe
+            // so no event can be published between replay collection and live receiver creation.
             let replay = replay_after(&state.replay, last_event_id);
             let rx = self.tx.subscribe();
             drop(state);

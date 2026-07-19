@@ -1,7 +1,7 @@
 //! [`tower::Layer`] adapters for resilience capabilities.
 //!
-//! Each adapter lives with the capability it wraps, while this module remains
-//! the stable aggregation point for Tower integration:
+//! Each adapter lives with the capability it wraps,
+//! while this module remains the stable aggregation point for Tower integration:
 //!
 //! ```ignore
 //! use tower::ServiceBuilder;

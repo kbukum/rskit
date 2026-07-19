@@ -1,7 +1,7 @@
 //! Agent Demo — Interactive media processing agent built with rskit.
 //!
-//! Demonstrates the public `rskit` facade modules: `worker` background tasks,
-//! `cli` output helpers, `storage` I/O, and `media` + `media_image` processing.
+//! Demonstrates the public `rskit` facade modules: `worker` background tasks, `cli` output helpers,
+//! `storage` I/O, and `media` + `media_image` processing.
 //!
 //! Run: cargo run -p agent-demo
 

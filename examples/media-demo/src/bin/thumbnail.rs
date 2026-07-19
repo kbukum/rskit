@@ -1,7 +1,6 @@
 //! Extract a thumbnail from a video at a given timestamp.
 //!
-//! Usage:
-//!   cargo run --bin thumbnail -- input.mp4 thumb.jpg 5.0
+//! Usage: cargo run --bin thumbnail -- input.mp4 thumb.jpg 5.0
 //!
 //! File paths are confined to the current working directory.
 

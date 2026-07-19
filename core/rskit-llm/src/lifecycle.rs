@@ -1,8 +1,9 @@
 //! Component lifecycle support for LLM providers.
 //!
-//! Per locked decision D12, every AI plug (including LLM providers) natively
-//! implements `component::Component`. This module provides [`Lifecycle`] — a
-//! lightweight mixin that concrete providers embed to satisfy the trait.
+//! Per locked decision D12,
+//! every AI plug (including LLM providers) natively implements `component::Component`.
+//! This module provides [`Lifecycle`] —
+//! a lightweight mixin that concrete providers embed to satisfy the trait.
 
 use std::time::Instant;
 
@@ -11,8 +12,7 @@ use rskit_component::{Health, HealthStatus};
 
 /// Shared lifecycle state for LLM provider Component impls.
 ///
-/// Embed as a field and delegate `start`/`stop`/`health` to the corresponding
-/// methods here.
+/// Embed as a field and delegate `start`/`stop`/`health` to the corresponding methods here.
 #[derive(Debug)]
 pub struct Lifecycle {
     name: &'static str,

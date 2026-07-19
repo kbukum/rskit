@@ -1,10 +1,9 @@
 //! Logging configuration vocabulary.
 //!
-//! These are plain `serde` data types describing *what* logging should do —
-//! the level, output format, and sink. They carry no `tracing` dependency and
-//! are always available, even when the `setup` feature (the subscriber-building
-//! layer) is disabled. This lets configuration crates compose the logging
-//! vocabulary without linking the `tracing` subscriber stack.
+//! These are plain `serde` data types describing *what* logging should do — the level, output format,
+//! and sink. They carry no `tracing` dependency and are always available,
+//! even when the `setup` feature (the subscriber-building layer) is disabled.
+//! This lets configuration crates compose the logging vocabulary without linking the `tracing` subscriber stack.
 
 use serde::Deserialize;
 

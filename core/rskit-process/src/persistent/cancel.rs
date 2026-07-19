@@ -36,13 +36,13 @@ impl CancelThread {
     }
 }
 
-/// Spawn a plain OS thread that watches the caller's cancellation token and, on
-/// cancellation, escalates `SIGTERM` → grace → `SIGKILL` against the child.
+/// Spawn a plain OS thread that watches the caller's cancellation token and, on cancellation,
+/// escalates `SIGTERM` → grace → `SIGKILL` against the child.
 ///
-/// This is a std-thread poll loop rather than a per-process Tokio runtime: the
-/// only asynchronous input is the caller's [`CancellationToken`], which exposes
-/// a non-blocking `is_cancelled()`, so a lightweight poll avoids standing up a
-/// whole runtime (and its worker thread) for every persistent process.
+/// This is a std-thread poll loop rather than a per-process Tokio runtime:
+/// the only asynchronous input is the caller's [`CancellationToken`],
+/// which exposes a non-blocking `is_cancelled()`,
+/// so a lightweight poll avoids standing up a whole runtime (and its worker thread) for every persistent process.
 pub(in crate::persistent) fn spawn_cancel_thread(
     pid: u32,
     cancel: CancellationToken,
@@ -75,8 +75,8 @@ pub(in crate::persistent) fn spawn_cancel_thread(
     })
 }
 
-/// Wait up to `grace_period` for a stop signal after `SIGTERM`; escalate to
-/// `SIGKILL` if the owning thread has not reaped the child in time.
+/// Wait up to `grace_period` for a stop signal after `SIGTERM`;
+/// escalate to `SIGKILL` if the owning thread has not reaped the child in time.
 fn escalate_after_grace(stop: &AtomicBool, pid: u32, group: bool, grace_period: Duration) {
     let deadline = Instant::now() + grace_period;
     while !stop.load(Ordering::SeqCst) {

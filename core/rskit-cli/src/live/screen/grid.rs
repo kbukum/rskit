@@ -1,10 +1,9 @@
 //! [`Grid`] — the fixed `rows × cols` cell store behind a region tile.
 //!
-//! This is pure data and geometry: it holds the cell matrix, writes cells,
-//! erases spans, and scrolls. Scrolling off the top emits the evicted row as a
-//! styled string so the region can retain a bounded tail for a failure replay.
-//! It knows nothing about ANSI parsing or I/O, which keeps it the most heavily
-//! unit-tested unit of the virtual terminal.
+//! This is pure data and geometry: it holds the cell matrix, writes cells, erases spans, and scrolls.
+//! Scrolling off the top emits the evicted row as a styled string
+//! so the region can retain a bounded tail for a failure replay. It knows nothing about ANSI parsing
+//! or I/O, which keeps it the most heavily unit-tested unit of the virtual terminal.
 
 use std::collections::VecDeque;
 
@@ -67,9 +66,8 @@ impl EraseMode {
 
 /// A fixed-height cell matrix with erase and scroll operations.
 ///
-/// Rows are held in a [`VecDeque`] so scrolling is O(1) at either end
-/// (`pop_front`/`push_back` to scroll up, `pop_back`/`push_front` to scroll
-/// down) rather than shifting every row.
+/// Rows are held in a [`VecDeque`]
+/// so scrolling is O(1) at either end (`pop_front`/`push_back` to scroll up, `pop_back`/`push_front` to scroll down) rather than shifting every row.
 #[derive(Debug)]
 pub(super) struct Grid {
     rows: usize,
@@ -78,8 +76,8 @@ pub(super) struct Grid {
 }
 
 impl Grid {
-    /// Create a blank grid of `rows × cols`, each dimension clamped to at least
-    /// one so geometry math never underflows.
+    /// Create a blank grid of `rows × cols`, each dimension clamped to at least one
+    /// so geometry math never underflows.
     pub(super) fn new(rows: usize, cols: usize) -> Self {
         let rows = rows.max(1);
         let cols = cols.max(1);
@@ -109,9 +107,9 @@ impl Grid {
         }
     }
 
-    /// Line-feed at `cursor`: advance one row, scrolling up (and returning the
-    /// evicted top row) when already on the last row. New rows are back-filled
-    /// with `blank` so a line-feed under a colored background preserves it.
+    /// Line-feed at `cursor`: advance one row,
+    /// scrolling up (and returning the evicted top row) when already on the last row.
+    /// New rows are back-filled with `blank` so a line-feed under a colored background preserves it.
     pub(super) fn line_feed(&mut self, cursor: &mut Cursor, blank: &Cell) -> Option<String> {
         if cursor.row + 1 < self.rows {
             cursor.row += 1;
@@ -121,9 +119,8 @@ impl Grid {
         }
     }
 
-    /// Scroll the whole grid up `n` rows, returning the evicted top rows
-    /// (oldest first) as styled strings and back-filling `blank` rows at the
-    /// bottom (background-color erase, so scrolling preserves the background).
+    /// Scroll the whole grid up `n` rows, returning the evicted top rows (oldest first) as styled strings
+    /// and back-filling `blank` rows at the bottom (background-color erase, so scrolling preserves the background).
     pub(super) fn scroll_up(&mut self, n: usize, blank: &Cell) -> Vec<String> {
         let n = n.max(1).min(self.rows);
         let mut evicted = Vec::with_capacity(n);
@@ -136,9 +133,8 @@ impl Grid {
         evicted
     }
 
-    /// Scroll the whole grid down `n` rows, inserting `blank` rows at the top
-    /// (background-color erase) and dropping the bottom rows. Rows pushed off
-    /// the bottom are not scrollback.
+    /// Scroll the whole grid down `n` rows, inserting `blank` rows at the top (background-color erase)
+    /// and dropping the bottom rows. Rows pushed off the bottom are not scrollback.
     pub(super) fn scroll_down(&mut self, n: usize, blank: &Cell) {
         let n = n.max(1).min(self.rows);
         for _ in 0..n {
@@ -147,8 +143,8 @@ impl Grid {
         }
     }
 
-    /// Erase within the cursor's row per `mode`, filling with `blank` (the
-    /// active background-color-erase cell) rather than the terminal default.
+    /// Erase within the cursor's row per `mode`,
+    /// filling with `blank` (the active background-color-erase cell) rather than the terminal default.
     pub(super) fn erase_line(&mut self, cursor: &Cursor, mode: EraseMode, blank: &Cell) {
         let cols = self.cols;
         let Some(line) = self.lines.get_mut(cursor.row) else {

@@ -6,7 +6,8 @@ OpenTelemetry tracing, metrics, logs, and context propagation.
 
 ## Features
 
-- `tracer_provider()` — injectable OTLP trace provider with configurable sampling via `TracingConfig`
+- `tracer_provider()` —
+  injectable OTLP trace provider with configurable sampling via `TracingConfig`
 - `init_metrics()` — injectable OTLP metrics pipeline via `MetricsConfig`
 - `init_logs()` — injectable OTLP log provider via `LogsConfig`
 - `OperationContext` — tracks service, operation, request ID, and elapsed time

@@ -8,8 +8,8 @@ use serde::Deserialize;
 pub struct Config {
     /// Anthropic API key.
     ///
-    /// The value is redacted in debug/display output, and adapters pass it to
-    /// `rskit-httpclient` as redacting auth state.
+    /// The value is redacted in debug/display output,
+    /// and adapters pass it to `rskit-httpclient` as redacting auth state.
     pub api_key: SecretString,
 
     /// Base URL (default: `https://api.anthropic.com`).

@@ -93,8 +93,8 @@ pub fn start_persistent_with_cancel(
                     process_config.signal,
                     persistent_config,
                 );
-                // Reuse the normal lifecycle cleanup so partially-started processes
-                // are terminated the same way as explicit shutdown.
+                // Reuse the normal lifecycle cleanup
+                // so partially-started processes are terminated the same way as explicit shutdown.
                 let _ = process.shutdown_inner();
                 return Err(error);
             }

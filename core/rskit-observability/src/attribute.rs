@@ -90,9 +90,8 @@ pub fn set_span_attribute(span: &Span, key: &'static str, value: impl Into<SpanA
 
 /// Record a tracing span field and set the same OpenTelemetry span attribute.
 ///
-/// `tracing` can only record fields declared when the span was created. If the
-/// field was not declared, the tracing record is ignored while the OpenTelemetry
-/// attribute is still set.
+/// `tracing` can only record fields declared when the span was created. If the field was not declared,
+/// the tracing record is ignored while the OpenTelemetry attribute is still set.
 pub fn record_span_attribute(span: &Span, key: &'static str, value: impl Into<SpanAttributeValue>) {
     let value = value.into();
     record_tracing_field(span, key, &value);

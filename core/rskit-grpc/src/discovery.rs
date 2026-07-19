@@ -20,8 +20,7 @@ use crate::config::GrpcClientConfig;
 pub struct DiscoveryChannelConfig {
     /// Base gRPC client configuration.
     pub grpc: GrpcClientConfig,
-    /// How often to poll for changes when no watcher is available.
-    /// Defaults to 10 seconds.
+    /// How often to poll for changes when no watcher is available. Defaults to 10 seconds.
     pub resolve_interval: Duration,
 }
 
@@ -68,8 +67,8 @@ impl ChannelConnector for DefaultChannelConnector {
 /// Discovery-enabled gRPC channel that resolves service instances dynamically.
 ///
 /// Maintains a gRPC channel to a service discovered via the [`Discovery`] trait.
-/// When an optional [`Watcher`] is provided the channel reacts to instance-set
-/// changes in real-time; otherwise it falls back to periodic polling.
+/// When an optional [`Watcher`] is provided the channel reacts to instance-set changes in real-time;
+/// otherwise it falls back to periodic polling.
 ///
 /// Mirrors `DiscoveryChannel` from pykit-grpc.
 pub struct DiscoveryChannel {
@@ -89,8 +88,8 @@ pub struct DiscoveryChannel {
 impl DiscoveryChannel {
     /// Create a new [`DiscoveryChannel`] from a Discovery provider and service name.
     ///
-    /// This constructor preserves the original API: no watcher, no background
-    /// task. Call [`Self::start_background`] to begin automatic resolution.
+    /// This constructor preserves the original API: no watcher, no background task.
+    /// Call [`Self::start_background`] to begin automatic resolution.
     pub fn new(
         discovery: Arc<dyn Discovery>,
         service_name: impl Into<String>,
@@ -105,8 +104,7 @@ impl DiscoveryChannel {
         )
     }
 
-    /// Create a [`DiscoveryChannel`] with an optional [`Watcher`] and richer
-    /// configuration.
+    /// Create a [`DiscoveryChannel`] with an optional [`Watcher`] and richer configuration.
     pub fn with_watcher(
         discovery: Arc<dyn Discovery>,
         watcher: Option<Arc<dyn Watcher>>,
@@ -164,8 +162,8 @@ impl DiscoveryChannel {
     /// - If a [`Watcher`] was provided, listens on the watch channel.
     /// - Otherwise, periodically calls `resolve()` and reconnects on change.
     ///
-    /// This is intentionally *not* called from `new()` to keep the constructor
-    /// synchronous and to let callers decide when the task starts.
+    /// This is intentionally *not* called from `new()` to keep the constructor synchronous
+    /// and to let callers decide when the task starts.
     pub async fn start_background(&self) -> AppResult<()> {
         // Don't double-start
         {
@@ -253,8 +251,7 @@ impl DiscoveryChannel {
         Ok(())
     }
 
-    /// Compare `new_target` with the cached target and, if different, create a
-    /// new underlying gRPC channel.
+    /// Compare `new_target` with the cached target and, if different, create a new underlying gRPC channel.
     async fn maybe_reconnect(
         service_name: &str,
         base_config: &GrpcClientConfig,
@@ -333,9 +330,9 @@ impl DiscoveryChannel {
 
     /// Get a connected channel to the resolved service.
     ///
-    /// Performs discovery and connection if needed.  On connection failure the
-    /// method triggers an immediate re-resolve before returning the error so
-    /// that the next call can benefit from an updated target.
+    /// Performs discovery and connection if needed.
+    /// On connection failure the method triggers an immediate re-resolve before returning the error
+    /// so that the next call can benefit from an updated target.
     pub async fn channel(&self) -> AppResult<Channel> {
         // Check if we have a cached channel
         {
@@ -366,8 +363,8 @@ impl DiscoveryChannel {
         let gc = match self.connector.connect(config).await {
             Ok(gc) => gc,
             Err(e) => {
-                // Trigger an immediate re-resolve so the *next* call can
-                // benefit from an updated target.
+                // Trigger an immediate re-resolve
+                // so the *next* call can benefit from an updated target.
                 warn!(
                     service = %self.service_name,
                     target = %target,

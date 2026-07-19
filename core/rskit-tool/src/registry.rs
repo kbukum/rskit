@@ -37,9 +37,9 @@ impl Default for BatchOptions {
 /// Thread-safe registry of callable tools.
 ///
 /// Optionally wires the HITL stages (per locked decision D10):
-/// `sensitivity → (if RequireApproval) human approval → invoke`. The
-/// authorization stage is owned by the boundary (`rskit-mcp`, etc.) and is
-/// not enforced here; this preserves module layering.
+/// `sensitivity → (if RequireApproval) human approval → invoke`.
+/// The authorization stage is owned by the boundary (`rskit-mcp`, etc.) and is not enforced here;
+/// this preserves module layering.
 pub struct Registry {
     tools: RwLock<HashMap<String, Arc<dyn Callable>>>,
     sensitivity: Option<Arc<dyn SensitivityEvaluator>>,
@@ -64,8 +64,7 @@ impl Registry {
         self
     }
 
-    /// Inject a human-approval gate. When unset, `RequireApproval` decisions
-    /// are treated as denials.
+    /// Inject a human-approval gate. When unset, `RequireApproval` decisions are treated as denials.
     #[must_use]
     pub fn with_human_approval(mut self, approval: Arc<dyn HumanApproval>) -> Self {
         self.approval = Some(approval);
@@ -112,16 +111,16 @@ impl Registry {
         self.tools.read().keys().cloned().collect()
     }
 
-    /// Call a tool by name with a context. Runs the HITL stages (sensitivity
-    /// → human approval) if configured before invoking the tool.
+    /// Call a tool by name with a context.
+    /// Runs the HITL stages (sensitivity → human approval) if configured before invoking the tool.
     pub async fn call(&self, name: &str, ctx: &Context, input: ToolInput) -> AppResult<ToolResult> {
         self.call_inner(name, ctx, input, true).await
     }
 
     /// Call a tool after the caller has already validated the input schema.
     ///
-    /// This still runs HITL stages before invoking the tool, but skips the
-    /// schema validation pass performed by [`Registry::call`].
+    /// This still runs HITL stages before invoking the tool,
+    /// but skips the schema validation pass performed by [`Registry::call`].
     pub async fn call_validated(
         &self,
         name: &str,
@@ -230,8 +229,8 @@ impl Registry {
             .collect()
     }
 
-    /// Call multiple tools with caller-supplied concurrency policy. Each call
-    /// goes through the same HITL stages as [`Registry::call`].
+    /// Call multiple tools with caller-supplied concurrency policy.
+    /// Each call goes through the same HITL stages as [`Registry::call`].
     pub async fn call_batch(
         &self,
         calls: Vec<(&str, ToolInput)>,

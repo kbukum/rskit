@@ -1,8 +1,7 @@
 //! JSON Schema generation and validation from Rust types.
 //!
-//! Thin wrapper around [`schemars`] providing a consistent API for generating
-//! JSON Schema documents from any type implementing `JsonSchema`, plus a
-//! runtime validator for checking JSON values against schemas.
+//! Thin wrapper around [`schemars`] providing a consistent API for generating JSON Schema documents from any type implementing `JsonSchema`,
+//! plus a runtime validator for checking JSON values against schemas.
 
 #![warn(missing_docs)]
 

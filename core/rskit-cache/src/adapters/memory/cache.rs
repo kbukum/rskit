@@ -36,8 +36,8 @@ impl MemoryCache {
 
     /// Create an in-memory cache with an injected clock.
     ///
-    /// This is primarily useful for deterministic tests and simulations that
-    /// need to advance cache expiry without sleeping.
+    /// This is primarily useful for deterministic tests
+    /// and simulations that need to advance cache expiry without sleeping.
     #[must_use]
     pub fn new_with_clock(
         prefix: Option<String>,

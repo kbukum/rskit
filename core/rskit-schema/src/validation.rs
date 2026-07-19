@@ -116,9 +116,8 @@ pub fn compile_with_options(
 
 /// Validate a JSON value against a JSON Schema.
 ///
-/// Invalid schemas and structural-limit violations are converted to a
-/// `ValidationResult` for compatibility with callers that expect validation
-/// failures rather than hard errors.
+/// Invalid schemas
+/// and structural-limit violations are converted to a `ValidationResult` for compatibility with callers that expect validation failures rather than hard errors.
 #[cfg(feature = "validation")]
 pub fn validate(schema: &Value, value: &Value) -> ValidationResult {
     match validate_with_options(schema, value, ValidationOptions::default()) {

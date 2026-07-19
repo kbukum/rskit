@@ -1,17 +1,23 @@
 # Releasing
 
-The mechanical steps to cut a release of `rskit`. For *what* counts as a breaking change vs a feature vs a fix, see [`policy/SEMVER.md`](policy/SEMVER.md) and [`policy/DEPRECATION.md`](policy/DEPRECATION.md).
+The mechanical steps to cut a release of `rskit`.
+For *what* counts as a breaking change vs a feature vs a fix,
+see [`policy/SEMVER.md`](policy/SEMVER.md) and [`policy/DEPRECATION.md`](policy/DEPRECATION.md).
 
 ## Prerequisites
 
 - You are listed in `MAINTAINERS.md` and have push access to `kbukum/rskit`.
 - Your local clone is on `main` with no uncommitted changes.
-- Run `make setup` first; for local release pre-flight checks, also run `scripts/setup.sh --release` and ensure `git`, `gh`, `cargo`, `cargo-nextest`, `cargo-deny`, `cargo-audit`, `cargo-llvm-cov`, `cargo-cyclonedx`, and `cosign` are on your `$PATH`.
-- A repository Actions secret named `CARGO_REGISTRY_TOKEN` is configured for crates.io publishing. The release workflow skips crates.io publishing when this secret is absent.
+- Run `make setup` first; for local release pre-flight checks, also run `scripts/setup.sh --release`
+  and ensure `git`, `gh`, `cargo`, `cargo-nextest`, `cargo-deny`, `cargo-audit`, `cargo-llvm-cov`,
+  `cargo-cyclonedx`, and `cosign` are on your `$PATH`.
+- A repository Actions secret named `CARGO_REGISTRY_TOKEN` is configured for crates.io publishing.
+  The release workflow skips crates.io publishing when this secret is absent.
 
 This repository has split Cargo workspaces:
 
-- `core/Cargo.toml` for foundation crates and the `rskit-suite` facade package, whose Rust crate name remains `rskit`.
+- `core/Cargo.toml` for foundation crates and the `rskit-suite` facade package,
+  whose Rust crate name remains `rskit`.
 - `contrib/Cargo.toml` for adapter crates.
 - `examples/Cargo.toml` for demos; examples are validated but not published.
 
@@ -27,22 +33,26 @@ git tag --sort=-v:refname | head -1
 git log --oneline $(git describe --tags --abbrev=0)..HEAD
 ```
 
-Use the [SEMVER policy](./policy/SEMVER.md) to pick the next version. While in `0.x`, every release with a breaking change in the `[Unreleased]` CHANGELOG section bumps MINOR; otherwise PATCH.
+Use the [SEMVER policy](./policy/SEMVER.md) to pick the next version. While in `0.x`,
+every release with a breaking change in the `[Unreleased]` CHANGELOG section bumps MINOR;
+otherwise PATCH.
 
 ## 2. Update the CHANGELOG
 
 1. Open `CHANGELOG.md`.
 2. Replace `## [Unreleased]` with `## [vX.Y.Z] - YYYY-MM-DD`.
 3. Add a fresh empty `## [Unreleased]` section above it.
-4. If the newly created `[vX.Y.Z]` release section is empty, refuse to release — there is nothing to ship.
+4. If the newly created `[vX.Y.Z]` release section is empty, refuse to release —
+   there is nothing to ship.
 5. Update the link reference at the bottom of the file (if present).
 
-As a maintainer rule, do not cut the release if `[Unreleased]` is the only populated section, or if `[vX.Y.Z]` for the version you're cutting doesn't exist in the file.
+As a maintainer rule, do not cut the release if `[Unreleased]` is the only populated section,
+or if `[vX.Y.Z]` for the version you're cutting doesn't exist in the file.
 
 ## 3. Bump versions across the workspaces
 
-Crates are versioned **independently**: each bumps only when it changes, plus the
-correct cascade. Use the bump tooling rather than hand-editing manifests.
+Crates are versioned **independently**: each bumps only when it changes, plus the correct cascade.
+Use the bump tooling rather than hand-editing manifests.
 
 ```sh
 # Preview the plan for a workspace (no writes):
@@ -52,12 +62,12 @@ make release-bump W=core MINOR="rskit-httpclient"
 make release-bump W=contrib
 ```
 
-The tool detects crates changed since the last release tag, applies a **patch**
-bump by default and a **minor** bump for crates listed in `MINOR`, cascades a
-breaking minor to its in-workspace dependents, and rewrites caret floors. It is
-idempotent against the crates.io max published version, so re-running is a no-op
-once manifests are up to date. It performs **no network writes** — manifest edits
-only.
+The tool detects crates changed since the last release tag, applies a **patch** bump by default
+and a **minor** bump for crates listed in `MINOR`,
+cascades a breaking minor to its in-workspace dependents, and rewrites caret floors.
+It is idempotent against the crates.io max published version,
+so re-running is a no-op once manifests are up to date. It performs **no network writes** —
+manifest edits only.
 
 Then refresh the split lockfiles:
 
@@ -84,13 +94,22 @@ If any check fails, fix it before publishing the GitHub Release.
 
 ### First-release publish rehearsal
 
-`cargo publish --dry-run` resolves registry dependencies from crates.io; it does not simulate publishing an unpublished internal dependency chain. When internal crates depend on a same-version sibling that is not yet on crates.io (e.g. the first release, where every crate is new), `make publish-dry-run` therefore:
+`cargo publish --dry-run` resolves registry dependencies from crates.io;
+it does not simulate publishing an unpublished internal dependency chain.
+When internal crates depend on a same-version sibling that is not
+yet on crates.io (e.g. the first release, where every crate is new),
+`make publish-dry-run` therefore:
 
 1. Runs `cargo publish --dry-run --locked` for crates whose internal same-version dependencies already exist on crates.io.
-2. Explicitly skips crates blocked by unpublished internal same-version dependencies and runs `cargo package --locked --list` as a packaging sanity check for each skipped crate.
-3. Prints a notice listing the skipped crates, so the rehearsal does not claim full crates.io dependency-chain validation.
+2. Explicitly skips crates blocked by unpublished internal same-version dependencies
+   and runs `cargo package --locked --list` as a packaging sanity check for each skipped crate.
+3. Prints a notice listing the skipped crates,
+   so the rehearsal does not claim full crates.io dependency-chain validation.
 
-The reliable first-release gate is the combination of full workspace build/test/docs/audit/coverage, generated publish order, package-list sanity checks for blocked crates, and the GitHub Release workflow publishing crates in dependency order. If any real publish step fails, stop and fix forward before continuing the chain.
+The reliable first-release gate is the combination of full workspace build/test/docs/audit/coverage,
+generated publish order, package-list sanity checks for blocked crates,
+and the GitHub Release workflow publishing crates in dependency order.
+If any real publish step fails, stop and fix forward before continuing the chain.
 
 ## 5. Publish the GitHub Release
 
@@ -103,13 +122,21 @@ Use the GitHub Release UI as the publishing entrypoint:
 5. For pre-releases such as `v0.1.0-alpha.1`, check **Set as a pre-release**.
 6. Publish the release.
 
-Publishing the GitHub Release creates the `v*` tag and triggers `.github/workflows/release.yml` from the `release.published` event. The workflow verifies that the tag starts with `v` and is reachable from `main`, then runs the release gates, publishes crates, signs SBOMs, and uploads generated assets back to the same GitHub Release.
+Publishing the GitHub Release creates the `v*` tag
+and triggers `.github/workflows/release.yml` from the `release.published` event.
+The workflow verifies that the tag starts with `v` and is reachable from `main`,
+then runs the release gates, publishes crates, signs SBOMs,
+and uploads generated assets back to the same GitHub Release.
 
-Directly pushing a `v*` tag does not trigger publishing. The release workflow (`.github/workflows/release.yml`) is triggered by publishing a GitHub Release and will:
+Directly pushing a `v*` tag does not trigger publishing.
+The release workflow (`.github/workflows/release.yml`) is triggered by publishing a GitHub Release
+and will:
 
 - Re-run the full test + lint + audit suite on the tagged commit.
 - Generate release coverage reports and enforce release coverage thresholds.
-- Dry-run publishing where same-version internal dependencies already exist on crates.io, package-list crates blocked by unpublished internal dependencies, then publish every publishable workspace crate to crates.io in dependency order when `CARGO_REGISTRY_TOKEN` is configured.
+- Dry-run publishing where same-version internal dependencies already exist on crates.io,
+  package-list crates blocked by unpublished internal dependencies,
+  then publish every publishable workspace crate to crates.io in dependency order when `CARGO_REGISTRY_TOKEN` is configured.
 - Generate and attach a CycloneDX SBOM (`cargo-cyclonedx`).
 - Sign the release SBOMs with [cosign](https://github.com/sigstore/cosign).
 - Upload generated assets to the GitHub Release that triggered the workflow.
@@ -123,7 +150,8 @@ RUN_ID=$(gh run list --workflow Release --limit 1 --json databaseId --jq '.[0].d
 gh run view "$RUN_ID" --log-failed
 ```
 
-If publishing fails after some crates were uploaded, do not delete or force-push the tag. Fix forward with a new version because crates.io versions are immutable.
+If publishing fails after some crates were uploaded, do not delete or force-push the tag.
+Fix forward with a new version because crates.io versions are immutable.
 
 ## 7. Verify on crates.io and docs.rs
 
@@ -133,7 +161,8 @@ cargo search rskit
 # Check https://docs.rs/rskit-suite/X.Y.Z
 ```
 
-If `docs.rs` fails to build, investigate the build log on `https://docs.rs/crate/rskit-suite/X.Y.Z/builds`.
+If `docs.rs` fails to build,
+investigate the build log on `https://docs.rs/crate/rskit-suite/X.Y.Z/builds`.
 
 ## 8. Announce
 
@@ -143,8 +172,14 @@ If `docs.rs` fails to build, investigate the build log on `https://docs.rs/crate
 
 ## Hotfix releases
 
-Hotfixes follow the same GitHub Release flow but skip the `[Unreleased]` rotation if the fix is targeted at an older line. Prepare the hotfix commit, add a `## [vX.Y.Z] - YYYY-MM-DD` section to `CHANGELOG.md`, merge the hotfix line, then publish the GitHub Release from the Releases UI.
+Hotfixes follow the same GitHub Release flow
+but skip the `[Unreleased]` rotation if the fix is targeted at an older line.
+Prepare the hotfix commit, add a `## [vX.Y.Z] - YYYY-MM-DD` section to `CHANGELOG.md`,
+merge the hotfix line, then publish the GitHub Release from the Releases UI.
 
 ## Pre-releases
 
-For the first public crates.io publish, prefer `v0.1.0-alpha.1` so downstream users can opt into an explicitly cautious preview before a final `v0.1.0`. Follow the same release flow above and check **Set as a pre-release** in the GitHub Release UI before publishing.
+For the first public crates.io publish, prefer `v0.1.0-alpha.1`
+so downstream users can opt into an explicitly cautious preview before a final `v0.1.0`.
+Follow the same release flow above
+and check **Set as a pre-release** in the GitHub Release UI before publishing.

@@ -35,8 +35,8 @@ pub trait MessagingFactory<T: Send + Sync + 'static>: Send + Sync {
 
 /// Application-owned registry of messaging adapter factories.
 ///
-/// Adapters are registered explicitly by application composition code. Importing
-/// an adapter module does not mutate global state or dial external services.
+/// Adapters are registered explicitly by application composition code.
+/// Importing an adapter module does not mutate global state or dial external services.
 pub struct MessagingRegistry<T: Send + Sync + 'static> {
     factories: BTreeMap<String, Arc<dyn MessagingFactory<T>>>,
 }

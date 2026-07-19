@@ -16,8 +16,8 @@ use crate::path::{absolute, safe_join};
 /// This helper uses blocking `std::fs` I/O. Use `tokio::task::spawn_blocking`
 /// or an equivalent blocking executor boundary when calling it from async code.
 ///
-/// Directory structure is preserved. Symlinks are skipped by default to avoid
-/// accidentally copying content outside the requested source tree.
+/// Directory structure is preserved.
+/// Symlinks are skipped by default to avoid accidentally copying content outside the requested source tree.
 pub fn copy_tree(source: &Path, dest: &Path, options: CopyTreeOptions) -> AppResult<()> {
     ensure_directory(source, options.follow_symlinks)?;
     ensure_destination_outside_source(source, dest)?;

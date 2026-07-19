@@ -25,8 +25,7 @@ impl Capabilities {
         Self { keys: false }
     }
 
-    /// Whether the terminal reads individual keys (live widgets) rather than
-    /// whole lines.
+    /// Whether the terminal reads individual keys (live widgets) rather than whole lines.
     #[must_use]
     pub const fn is_key_driven(self) -> bool {
         self.keys

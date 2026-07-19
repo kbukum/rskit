@@ -17,8 +17,9 @@ pub trait CacheStore: Send + Sync {
     async fn get(&self, key: &str) -> AppResult<Option<String>>;
     /// Store a string value with an optional TTL.
     ///
-    /// `Duration::ZERO` is invalid. Stores should honor sub-second TTLs with at least
-    /// millisecond precision; durations below one millisecond may be rounded up.
+    /// `Duration::ZERO` is invalid.
+    /// Stores should honor sub-second TTLs with at least millisecond precision;
+    /// durations below one millisecond may be rounded up.
     async fn set(&self, key: &str, val: &str, ttl: Option<Duration>) -> AppResult<()>;
     /// Delete a key and report whether it existed.
     async fn delete(&self, key: &str) -> AppResult<bool>;

@@ -16,8 +16,7 @@ pub struct BatchConfig {
     pub max_size: usize,
     /// Maximum time between automatic flushes.
     pub max_wait: Duration,
-    /// Maximum byte budget per batch (reserved for specialized
-    /// implementations; not enforced in the generic `BatchProducer`).
+    /// Maximum byte budget per batch (reserved for specialized implementations; not enforced in the generic `BatchProducer`).
     pub max_bytes: Option<u64>,
 }
 
@@ -68,8 +67,7 @@ pub struct BatchProducer<T: Send + Sync + Clone + 'static> {
 impl<T: Send + Sync + Clone + 'static> BatchProducer<T> {
     /// Create a new batch producer.
     ///
-    /// Spawns a background task that periodically flushes buffered
-    /// messages according to `config.max_wait`.
+    /// Spawns a background task that periodically flushes buffered messages according to `config.max_wait`.
     ///
     /// # Errors
     ///

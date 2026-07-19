@@ -18,8 +18,8 @@ const ADAPTER_NAME: &str = "memory";
 
 /// An in-memory message broker backed by a `tokio::sync::broadcast` channel.
 ///
-/// Create one broker and hand out producers / consumers via
-/// [`InMemoryBroker::producer`] and [`InMemoryBroker::consumer`].
+/// Create one broker and hand out producers / consumers via [`InMemoryBroker::producer`]
+/// and [`InMemoryBroker::consumer`].
 ///
 /// Every message sent through the broker is recorded in an internal history
 /// so that test assertion helpers can inspect what was published.
@@ -29,8 +29,7 @@ pub struct InMemoryBroker<T: Clone + Send + Sync + 'static> {
     history: Arc<Mutex<VecDeque<Message<T>>>>,
     history_limit: Option<usize>,
     topics: Arc<Mutex<HashSet<String>>>,
-    /// Notified after every publish so that [`wait_for_message`] can wake
-    /// without polling.
+    /// Notified after every publish so that [`wait_for_message`] can wake without polling.
     notify: Arc<tokio::sync::Notify>,
 }
 
@@ -61,8 +60,8 @@ impl<T: Clone + Send + Sync + 'static> InMemoryBroker<T> {
 
     /// Create a broker with explicit channel capacity and bounded history limit.
     ///
-    /// The default [`InMemoryBroker::new`] bounds history by channel capacity. Use this
-    /// constructor when tests need a different history limit.
+    /// The default [`InMemoryBroker::new`] bounds history by channel capacity.
+    /// Use this constructor when tests need a different history limit.
     #[must_use]
     pub fn with_history_limit(capacity: usize, history_limit: usize) -> Self {
         let capacity = capacity.max(1);

@@ -1,19 +1,19 @@
 //! Semantic terminal color with standard opt-out.
 //!
-//! A small, dependency-free color layer for CLI reporters: a [`ColorChoice`]
-//! (`auto`/`always`/`never`) resolves — together with the [`NO_COLOR`] standard
-//! and TTY detection — into an effective on/off [`Palette`]. The palette exposes
-//! semantic styles (success/error/warn/info/dim/bold) that emit ANSI SGR escapes
-//! when enabled and return the plain string when not, so the same rendering code
-//! stays byte-clean on pipes and honors user preference.
+//! A small, dependency-free color layer for CLI reporters:
+//! a [`ColorChoice`] (`auto`/`always`/`never`) resolves — together with the [`NO_COLOR`] standard
+//! and TTY detection — into an effective on/off [`Palette`].
+//! The palette exposes semantic styles (success/error/warn/info/dim/bold) that emit ANSI SGR escapes when enabled
+//! and return the plain string when not, so the same rendering code stays byte-clean on pipes
+//! and honors user preference.
 //!
 //! [`NO_COLOR`]: https://no-color.org
 
 use std::borrow::Cow;
 use std::io::IsTerminal;
 
-/// The environment variable that, when present (regardless of value), disables
-/// color regardless of any explicit choice ([the `NO_COLOR` standard](https://no-color.org)).
+/// The environment variable that, when present (regardless of value),
+/// disables color regardless of any explicit choice ([the `NO_COLOR` standard](https://no-color.org)).
 pub const NO_COLOR_ENV: &str = "NO_COLOR";
 
 /// A user's requested color policy, before environment/TTY resolution.
@@ -32,8 +32,8 @@ pub enum ColorChoice {
 impl ColorChoice {
     /// Parse a choice from its lowercase name (`auto`/`always`/`never`).
     ///
-    /// Returns `None` for any other value so the caller can raise its own typed
-    /// usage error naming the accepted values.
+    /// Returns `None` for any other value
+    /// so the caller can raise its own typed usage error naming the accepted values.
     #[must_use]
     pub fn from_name(name: &str) -> Option<Self> {
         match name {
@@ -57,17 +57,17 @@ impl ColorChoice {
 
 /// Resolve a [`ColorChoice`] into an effective on/off decision.
 ///
-/// Resolution order (the `NO_COLOR` standard takes precedence over an explicit
-/// request): if `NO_COLOR` is set → off; else `Always` → on, `Never` → off, and
-/// `Auto` follows `is_terminal`. Reads the process environment for `NO_COLOR`;
-/// use [`resolve_color_with`] for a fully injected, env-free decision.
+/// Resolution order (the `NO_COLOR` standard takes precedence over an explicit request):
+/// if `NO_COLOR` is set → off; else `Always` → on, `Never` → off, and `Auto` follows `is_terminal`.
+/// Reads the process environment for `NO_COLOR`; use [`resolve_color_with`] for a fully injected,
+/// env-free decision.
 #[must_use]
 pub fn resolve_color(choice: ColorChoice, is_terminal: bool) -> bool {
     resolve_color_with(choice, no_color_env_set(), is_terminal)
 }
 
-/// Pure resolver core: fold an explicit `NO_COLOR` presence and TTY detection
-/// into an effective on/off decision (env-free, so it is unit-testable).
+/// Pure resolver core: fold an explicit `NO_COLOR` presence
+/// and TTY detection into an effective on/off decision (env-free, so it is unit-testable).
 ///
 /// `NO_COLOR` wins over every choice; otherwise `Always`/`Never` are absolute
 /// and `Auto` follows `is_terminal`.
@@ -85,8 +85,8 @@ pub const fn resolve_color_with(choice: ColorChoice, no_color: bool, is_terminal
 
 /// Whether the `NO_COLOR` environment variable is present.
 ///
-/// Per [the `NO_COLOR` standard](https://no-color.org) any presence disables
-/// color, so an empty value (`NO_COLOR=`) still counts.
+/// Per [the `NO_COLOR` standard](https://no-color.org) any presence disables color,
+/// so an empty value (`NO_COLOR=`) still counts.
 #[must_use]
 pub fn no_color_env_set() -> bool {
     std::env::var_os(NO_COLOR_ENV).is_some()
@@ -94,10 +94,10 @@ pub fn no_color_env_set() -> bool {
 
 /// A resolved, semantic color palette.
 ///
-/// When disabled every style is the identity function, so callers render the
-/// same way regardless of terminal capability. Construct it from a resolved
-/// boolean via [`Palette::new`], or resolve a [`ColorChoice`] against a stream
-/// with [`Palette::for_stream`].
+/// When disabled every style is the identity function,
+/// so callers render the same way regardless of terminal capability.
+/// Construct it from a resolved boolean via [`Palette::new`],
+/// or resolve a [`ColorChoice`] against a stream with [`Palette::for_stream`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Palette {
     enabled: bool,
@@ -112,8 +112,7 @@ impl Palette {
 
     /// Resolve a palette for a specific output stream (e.g. `&std::io::stderr()`).
     ///
-    /// Folds `NO_COLOR`, the `choice`, and the stream's TTY status via
-    /// [`resolve_color`].
+    /// Folds `NO_COLOR`, the `choice`, and the stream's TTY status via [`resolve_color`].
     #[must_use]
     pub fn for_stream(choice: ColorChoice, stream: &impl IsTerminal) -> Self {
         Self::new(resolve_color(choice, stream.is_terminal()))
@@ -163,8 +162,8 @@ impl Palette {
 
     /// Wrap `text` in an SGR code + reset when enabled, else borrow it verbatim.
     ///
-    /// The disabled path returns a [`Cow::Borrowed`], so callers on pipes or
-    /// redirects render without any allocation.
+    /// The disabled path returns a [`Cow::Borrowed`], so callers on pipes
+    /// or redirects render without any allocation.
     fn paint<'a>(self, code: &str, text: &'a str) -> Cow<'a, str> {
         if self.enabled {
             Cow::Owned(format!("\u{1b}[{code}m{text}\u{1b}[0m"))
@@ -224,8 +223,8 @@ mod tests {
 
     #[test]
     fn never_choice_stays_disabled_through_the_env_aware_resolver() {
-        // `Never` is absolute regardless of `NO_COLOR` or TTY, so the env-reading
-        // resolver is deterministic here while still exercising the env probe.
+        // `Never` is absolute regardless of `NO_COLOR` or TTY,
+        // so the env-reading resolver is deterministic here while still exercising the env probe.
         assert!(!resolve_color(ColorChoice::Never, true));
         let _ = no_color_env_set();
     }

@@ -1,8 +1,7 @@
 //! Hardware-accelerated execution with automatic fallback.
 //!
-//! Contains the retry loop that first attempts an FFmpeg command with
-//! the configured hardware acceleration, then falls back to software
-//! decode on retryable failures (e.g., VideoToolbox AV1 issues).
+//! Contains the retry loop that first attempts an FFmpeg command with the configured hardware acceleration,
+//! then falls back to software decode on retryable failures (e.g., VideoToolbox AV1 issues).
 
 use std::sync::Arc;
 
@@ -65,8 +64,8 @@ impl FfmpegExecutor {
         // Build source hints by quick-probing when concat-style ops are present
         let hints = self.build_source_hints(source, ops, cancel.clone()).await?;
 
-        // Resolve duration-aware timeout: probe source duration and infer
-        // operation kind so the timeout scales with content length.
+        // Resolve duration-aware timeout: probe source duration and infer operation kind
+        // so the timeout scales with content length.
         let effective_config = self
             .resolve_effective_config(source, ops, cancel.clone())
             .await?;
@@ -115,8 +114,8 @@ impl FfmpegExecutor {
                     let mut fallback_config = effective_config.clone();
                     fallback_config.hw_accel = Some(HwAccel::None);
 
-                    // If stderr indicates AV1 decode failure, try to find a software
-                    // AV1 decoder (libdav1d preferred, libaom-av1 as alternative).
+                    // If stderr indicates AV1 decode failure,
+                    // try to find a software AV1 decoder (libdav1d preferred, libaom-av1 as alternative).
                     if Self::is_av1_decode_failure(&ffmpeg_err.stderr) {
                         if let Some(sw_decoder) =
                             Self::find_sw_av1_decoder(&self.config, cancel.clone()).await?
@@ -175,8 +174,8 @@ impl FfmpegExecutor {
                 || lower.contains("decode error rate"))
     }
 
-    /// Query FFmpeg for available software AV1 decoders.
-    /// Returns the best available one, or None if none are compiled in.
+    /// Query FFmpeg for available software AV1 decoders. Returns the best available one,
+    /// or None if none are compiled in.
     async fn find_sw_av1_decoder(
         config: &FfmpegConfig,
         cancel: CancellationToken,

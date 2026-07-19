@@ -17,8 +17,8 @@ const DEFAULT_URI: &str = "amqps://127.0.0.1:5671/%2f";
 
 /// Configuration for the `RabbitMQ` messaging adapter.
 ///
-/// Broker-agnostic fields live in [`BrokerConfig`]. Adapter fields are limited to AMQP
-/// connection, routing, queue declaration, acknowledgement, and prefetch knobs.
+/// Broker-agnostic fields live in [`BrokerConfig`]. Adapter fields are limited to AMQP connection,
+/// routing, queue declaration, acknowledgement, and prefetch knobs.
 #[derive(Clone)]
 pub struct RabbitMqConfig {
     /// Shared broker settings (adapter/name/enabled, delivery, retry, DLQ, etc.).

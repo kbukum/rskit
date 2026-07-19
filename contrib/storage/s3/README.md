@@ -2,7 +2,10 @@
 
 Amazon S3 and S3-compatible storage adapter for `rskit-storage`.
 
-`rskit-storage-s3` is an opt-in backend crate. The core `rskit-storage` crate contains the `FileStore` trait, `StorageRegistry`, and local filesystem backend; this crate owns the AWS SDK dependency and registers itself only when the application explicitly calls `register`.
+`rskit-storage-s3` is an opt-in backend crate.
+The core `rskit-storage` crate contains the `FileStore` trait, `StorageRegistry`,
+and local filesystem backend; this crate owns the AWS SDK dependency
+and registers itself only when the application explicitly calls `register`.
 
 ## Installation
 
@@ -43,4 +46,5 @@ let store = registry
 # }
 ```
 
-Importing this crate has no side effects. Applications own the registry and choose the backend through configuration.
+Importing this crate has no side effects. Applications own the registry
+and choose the backend through configuration.

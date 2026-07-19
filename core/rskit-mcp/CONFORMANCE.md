@@ -26,7 +26,8 @@ Remote MCP servers are tool sources, not skills. Skill manifests live in `rskit-
 
 ## 2025-11-25 gap analysis
 
-The current stable MCP revision is **2025-11-25**. `rskit-mcp` does not claim full conformance to that revision yet. The known gaps are:
+The current stable MCP revision is **2025-11-25**.
+`rskit-mcp` does not claim full conformance to that revision yet. The known gaps are:
 
 | Capability | Status | Notes |
 |---|---|---|

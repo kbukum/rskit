@@ -3,9 +3,8 @@ use serde::de::DeserializeOwned;
 
 /// Deserialize merged config into `T`, then apply programmatic defaults.
 ///
-/// This is the validation-free path: any `serde` type loads without depending
-/// on `rskit-validation`. Use [`decode_validated`] when the type opts into
-/// [`rskit_validation::Validate`].
+/// This is the validation-free path: any `serde` type loads without depending on `rskit-validation`.
+/// Use [`decode_validated`] when the type opts into [`rskit_validation::Validate`].
 pub(crate) fn decode_typed<T>(
     raw: config::Config,
     apply_defaults: impl FnOnce(&mut T),

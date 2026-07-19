@@ -25,8 +25,8 @@ struct RegisteredComponent {
 
 /// Ordered component registry.
 ///
-/// Components start in registration order and stop in reverse registration
-/// order, ensuring dependants shut down before their dependencies.
+/// Components start in registration order and stop in reverse registration order,
+/// ensuring dependants shut down before their dependencies.
 pub struct Registry {
     components: Arc<RwLock<Vec<RegisteredComponent>>>,
     config: RegistryConfig,
@@ -308,8 +308,7 @@ impl Registry {
         results
     }
 
-    /// Collect health for all registered components without holding the registry lock
-    /// while component health is evaluated.
+    /// Collect health for all registered components without holding the registry lock while component health is evaluated.
     #[must_use]
     pub fn health_all(&self) -> Vec<Health> {
         let snapshots = self.snapshots();

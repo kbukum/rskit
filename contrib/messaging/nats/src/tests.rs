@@ -294,8 +294,7 @@ async fn forwarding_task_stops_when_cancelled_while_send_is_backpressured() {
         task_finished.clone(),
     );
 
-    // Wait until the spawned task has started (it increments the counter
-    // before blocking on the backpressured send) without a wall-clock sleep.
+    // Wait until the spawned task has started (it increments the counter before blocking on the backpressured send) without a wall-clock sleep.
     while active_tasks.load(Ordering::SeqCst) == 0 {
         tokio::task::yield_now().await;
     }

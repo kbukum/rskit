@@ -78,11 +78,10 @@ pub struct Definition {
     /// Behavioral hints that are orthogonal to the executable permission envelope.
     #[serde(default)]
     pub annotations: Annotations,
-    /// Executable permission envelope — the single source of truth for what
-    /// the tool may do at runtime. It carries scopes, network/filesystem/
-    /// subprocess rules, safety classification, sensitive-invocation
-    /// predicates, and data-classification hints. Defaults deny network,
-    /// filesystem, and subprocess access.
+    /// Executable permission envelope — the single source of truth for what the tool may do at runtime.
+    /// It carries scopes, network/filesystem/ subprocess rules, safety classification,
+    /// sensitive-invocation predicates, and data-classification hints. Defaults deny network, filesystem,
+    /// and subprocess access.
     #[serde(default)]
     pub envelope: Envelope,
 }

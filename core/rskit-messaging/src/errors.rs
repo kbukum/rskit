@@ -4,18 +4,16 @@ use rskit_errors::AppError;
 
 /// Classifies errors for retry and circuit-breaker decisions.
 ///
-/// Broker adapters implement this trait so that generic retry policies and
-/// circuit breakers can decide how to handle a particular failure without
-/// knowing which broker produced it.
+/// Broker adapters implement this trait so that generic retry policies
+/// and circuit breakers can decide how to handle a particular failure without knowing which broker produced it.
 pub trait ErrorClassifier: Send + Sync {
-    /// Returns `true` when the error indicates the broker connection is down
-    /// (e.g. TCP reset, DNS failure, authentication timeout).
+    /// Returns `true` when the error indicates the broker connection is down (e.g. TCP reset, DNS failure, authentication timeout).
     fn is_connection_error(&self, err: &AppError) -> bool;
 
-    /// Returns `true` when the error is transient and the operation can be
-    /// retried (e.g. leader election in progress, throttling, temporary I/O
-    /// error).  Connection errors are typically retryable too, but the
-    /// distinction lets callers apply different back-off strategies.
+    /// Returns `true` when the error is transient
+    /// and the operation can be retried (e.g. leader election in progress, throttling, temporary I/O error).
+    /// Connection errors are typically retryable too,
+    /// but the distinction lets callers apply different back-off strategies.
     fn is_retryable_error(&self, err: &AppError) -> bool;
 }
 

@@ -2,14 +2,14 @@
 //!
 //! This crate provides capability-based traits for git operations:
 //! - [`Repository`] and [`Executor`] for core repository access and raw CLI execution
-//! - [`Differ`], [`IgnoreReader`], [`TreeReader`], [`LogReader`], [`Blamer`], and [`Inspector`] for read flows
+//! - [`Differ`], [`IgnoreReader`], [`TreeReader`], [`LogReader`], [`Blamer`],
+//!   and [`Inspector`] for read flows
 //! - [`IndexManager`], [`Committer`], and related write traits for mutating operations
 //! - [`RefManager`], [`RemoteManager`], [`ConfigReader`], and [`Maintainer`] for management
 //!
-//! The default backend uses `git2` (libgit2) for embedded operations and delegates several
-//! core mutating operations (merge, rebase, checkout, reset, stash, cherry-pick, maintenance)
-//! to the `git` CLI binary. **A `git` binary must be available on `PATH` at runtime.**
-//! Network operations (fetch, push) use the embedded `git2` backend.
+//! The default backend uses `git2` (libgit2) for embedded operations
+//! and delegates several core mutating operations (merge, rebase, checkout, reset, stash, cherry-pick, maintenance) to the `git` CLI binary.
+//! **A `git` binary must be available on `PATH` at runtime.** Network operations (fetch, push) use the embedded `git2` backend.
 //!
 //! # Usage
 //!

@@ -15,16 +15,15 @@ const METADATA_HOSTS: [&str; 4] = [
 
 /// Destination policy applied to initial request URLs and redirect targets.
 ///
-/// By default, HTTP and HTTPS URLs are allowed while link-local and common
-/// cloud metadata destinations are blocked. `allowed_hosts` is an allow-list:
-/// when it is empty, any non-blocked host is allowed; when it is non-empty, the
-/// URL host must match one of the configured entries. Host entries are exact
-/// matches unless they start with `*.`, in which case only dot-boundary
-/// subdomains match (for example, `*.example.com` matches `api.example.com` but
-/// not `badexample.com` or the apex `example.com`).
+/// By default, HTTP and HTTPS URLs are allowed while link-local
+/// and common cloud metadata destinations are blocked. `allowed_hosts` is an allow-list:
+/// when it is empty, any non-blocked host is allowed; when it is non-empty,
+/// the URL host must match one of the configured entries.
+/// Host entries are exact matches unless they start with `*.`,
+/// in which case only dot-boundary subdomains match (for example, `*.example.com` matches `api.example.com` but not `badexample.com` or the apex `example.com`).
 ///
-/// Hostname validation happens before DNS resolution. Use `allowed_hosts` for
-/// high-trust clients that must not follow attacker-controlled DNS names.
+/// Hostname validation happens before DNS resolution.
+/// Use `allowed_hosts` for high-trust clients that must not follow attacker-controlled DNS names.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct DestinationPolicy {
@@ -84,8 +83,7 @@ impl DestinationPolicy {
     /// Validate a request or redirect URL against this policy.
     ///
     /// # Errors
-    /// Returns an error when the URL scheme, host, or address literal violates
-    /// the configured policy.
+    /// Returns an error when the URL scheme, host, or address literal violates the configured policy.
     pub fn validate(&self, url: &Url) -> AppResult<()> {
         self.validate_scheme(url.scheme())?;
         let host = url

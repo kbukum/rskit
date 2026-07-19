@@ -4,8 +4,8 @@ use axum::Router;
 
 /// Canonical interceptor ordering shared across rskit transports.
 ///
-/// Request processing flows through these phases in order. Metrics wrap the
-/// handler completion so response observations happen after the handler returns.
+/// Request processing flows through these phases in order. Metrics wrap the handler completion
+/// so response observations happen after the handler returns.
 pub const HTTP_INTERCEPTOR_ORDER: [&str; 5] =
     ["tracing", "logging", "auth", "validation", "metrics"];
 
@@ -20,8 +20,7 @@ pub const HTTP_BASELINE_LAYER_ORDER: [&str; 5] = [
     "timeout",
 ];
 
-/// Boxed router transform used to inject transport middleware without exposing
-/// axum's concrete layer stack in the public API.
+/// Boxed router transform used to inject transport middleware without exposing axum's concrete layer stack in the public API.
 pub type RouterTransform = Arc<dyn Fn(Router) -> Router + Send + Sync + 'static>;
 
 /// Ordered HTTP middleware phases for service-facing servers.

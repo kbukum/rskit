@@ -9,8 +9,8 @@ pub const DEFAULT_MAX_DECODE_RATIO: u64 = 256;
 
 /// Configuration for the native image media backend.
 ///
-/// These limits are applied before or immediately after decoding so untrusted
-/// images cannot force unbounded reads or decompression-bomb style allocations.
+/// These limits are applied before or immediately after decoding
+/// so untrusted images cannot force unbounded reads or decompression-bomb style allocations.
 #[derive(Debug, Clone)]
 pub struct Config {
     /// Maximum compressed image source bytes read into memory before decoding.

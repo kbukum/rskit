@@ -1,13 +1,11 @@
 //! Cache abstraction with local core stores and opt-in remote stores.
 //!
-//! The core crate exports [`CacheStore`], [`CacheRegistry`], [`MemoryCache`],
-//! and [`TypedStore`]. Local, infrastructure-free adapters live in this crate:
-//! memory is always available, and filesystem storage is available with the
-//! `fs` feature. Remote infrastructure stores live in `contrib/` adapter
-//! crates and must be registered explicitly.
+//! The core crate exports [`CacheStore`], [`CacheRegistry`], [`MemoryCache`], and [`TypedStore`].
+//! Local, infrastructure-free adapters live in this crate: memory is always available,
+//! and filesystem storage is available with the `fs` feature.
+//! Remote infrastructure stores live in `contrib/` adapter crates and must be registered explicitly.
 //!
-//! No store is registered by default; construct and inject a registry at the
-//! composition boundary.
+//! No store is registered by default; construct and inject a registry at the composition boundary.
 
 #![warn(missing_docs)]
 

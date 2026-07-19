@@ -5,9 +5,9 @@ use rskit_errors::{AppError, AppResult};
 use super::{focus_down, focus_up, with_raw_mode};
 use crate::prompt::terminal::{Capabilities, ScriptedTerminal, Terminal};
 
-/// A terminal whose `end_interactive` fails a fixed number of times before
-/// succeeding, and that counts every teardown attempt, so tests can prove
-/// the `Drop` net retries after an explicit teardown fails.
+/// A terminal whose `end_interactive` fails a fixed number of times before succeeding,
+/// and that counts every teardown attempt,
+/// so tests can prove the `Drop` net retries after an explicit teardown fails.
 struct FlakyTeardown {
     fail_remaining: Cell<u32>,
     teardown_calls: Cell<u32>,
@@ -83,9 +83,9 @@ fn raw_mode_restored_on_normal_return() {
 
 #[test]
 fn raw_mode_restored_when_body_panics() {
-    // A caller may catch the unwind and keep the terminal alive; the RAII
-    // guard must still have run end_interactive() during unwinding so the
-    // terminal is not stranded in raw mode.
+    // A caller may catch the unwind and keep the terminal alive;
+    // the RAII guard must still have run end_interactive() during unwinding
+    // so the terminal is not stranded in raw mode.
     let mut term = ScriptedTerminal::key_driven();
     let unwound = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         with_raw_mode(&mut term, |_| -> rskit_errors::AppResult<()> {
@@ -98,12 +98,12 @@ fn raw_mode_restored_when_body_panics() {
 
 #[test]
 fn failed_teardown_is_retried_by_drop_net() {
-    // The explicit teardown on the normal path fails once; the guard must
-    // stay armed so Drop retries, ultimately restoring cooked mode.
+    // The explicit teardown on the normal path fails once; the guard must stay armed
+    // so Drop retries, ultimately restoring cooked mode.
     let mut term = FlakyTeardown::failing(1);
     let out = with_raw_mode(&mut term, |t| {
-        // Exercise the full terminal surface so the double is covered end to
-        // end: capabilities, both reads, both writes, flush, and clear.
+        // Exercise the full terminal surface so the double is covered end to end: capabilities,
+        // both reads, both writes, flush, and clear.
         assert!(t.capabilities().is_key_driven());
         t.write("x")?;
         t.write_line("y")?;

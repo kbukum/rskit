@@ -51,12 +51,12 @@ pub fn exists(path: &Path) -> AppResult<bool> {
 
 /// Return true when `path` resolves to a regular file the OS marks executable.
 ///
-/// Follows symlinks (so a symlinked launcher on `PATH` resolves to its target),
-/// and reports `false` — rather than erroring — for a missing path, so callers
-/// scanning a search path can simply skip non-executable candidates. On Unix,
-/// "executable" means any of the owner/group/other execute bits is set; on other
-/// platforms the concept is not modeled in the same way, so any regular file is
-/// treated as executable.
+/// Follows symlinks (so a symlinked launcher on `PATH` resolves to its target), and reports `false` —
+/// rather than erroring — for a missing path,
+/// so callers scanning a search path can simply skip non-executable candidates. On Unix,
+/// "executable" means any of the owner/group/other execute bits is set;
+/// on other platforms the concept is not modeled in the same way,
+/// so any regular file is treated as executable.
 pub fn is_executable(path: &Path) -> AppResult<bool> {
     match std::fs::metadata(path) {
         Ok(metadata) => Ok(metadata.is_file() && metadata_has_exec_bit(&metadata)),
@@ -223,9 +223,8 @@ pub fn write_atomic(dest: &Path, bytes: impl AsRef<[u8]>, temp_prefix: &str) -> 
 
 /// Atomically write bytes and replace an existing destination when supported.
 ///
-/// Replacing an existing destination is atomic on Unix-like platforms. On
-/// Windows, this helper removes the existing file before persisting the temp
-/// file because the platform rename operation cannot replace an existing file.
+/// Replacing an existing destination is atomic on Unix-like platforms. On Windows,
+/// this helper removes the existing file before persisting the temp file because the platform rename operation cannot replace an existing file.
 pub fn write_atomic_replace(
     dest: &Path,
     bytes: impl AsRef<[u8]>,

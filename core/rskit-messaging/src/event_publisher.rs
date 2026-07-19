@@ -1,9 +1,8 @@
 //! High-level event publishing facade.
 //!
-//! [`EventPublisher`] wraps any [`EventProducer`] with a pre-configured
-//! `source` name, so callers only need to provide the topic, event type,
-//! and payload — the envelope (ID, timestamp, version) is filled in
-//! automatically.
+//! [`EventPublisher`] wraps any [`EventProducer`] with a pre-configured `source` name,
+//! so callers only need to provide the topic, event type, and payload —
+//! the envelope (ID, timestamp, version) is filled in automatically.
 //!
 //! # Example
 //!
@@ -40,13 +39,12 @@ use serde::Serialize;
 use crate::event::Event;
 use crate::traits::EventProducer;
 
-/// A facade that simplifies event publishing by automatically constructing
-/// [`Event`] envelopes from typed payloads.
+/// A facade that simplifies event publishing by automatically constructing [`Event`] envelopes from typed payloads.
 ///
-/// Configured once with a `source` name (typically the service name) and an
-/// underlying [`EventProducer`]. Every call to [`publish`](Self::publish) or
-/// [`publish_keyed`](Self::publish_keyed) creates a new envelope with a fresh
-/// UUID, UTC timestamp, and the pre-configured source.
+/// Configured once with a `source` name (typically the service name)
+/// and an underlying [`EventProducer`]. Every call to [`publish`](Self::publish)
+/// or [`publish_keyed`](Self::publish_keyed) creates a new envelope with a fresh UUID, UTC timestamp,
+/// and the pre-configured source.
 pub struct EventPublisher<P> {
     producer: P,
     source: String,
@@ -83,9 +81,8 @@ impl<P: EventProducer> EventPublisher<P> {
 
     /// Publish a typed payload with an explicit partition key and subject.
     ///
-    /// Same as [`publish`](Self::publish) but also sets `Event::subject`
-    /// to the given `key`, which messaging adapters typically use as the
-    /// partition key for ordering guarantees.
+    /// Same as [`publish`](Self::publish) but also sets `Event::subject` to the given `key`,
+    /// which messaging adapters typically use as the partition key for ordering guarantees.
     pub async fn publish_keyed<T: Serialize + Send + Sync>(
         &self,
         topic: &str,

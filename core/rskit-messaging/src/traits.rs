@@ -41,15 +41,12 @@ pub trait MessageConsumer<T: Send + Sync>: Send + Sync {
 
     /// Receive the next message, waiting no longer than `timeout`.
     ///
-    /// `timeout` **must** be greater than zero; it bounds a blocking receive
-    /// rather than requesting a non-blocking poll. Implementations reject
-    /// [`Duration::ZERO`](std::time::Duration::ZERO) with
-    /// [`ErrorCode::InvalidInput`].
+    /// `timeout` **must** be greater than zero;
+    /// it bounds a blocking receive rather than requesting a non-blocking poll.
+    /// Implementations reject [`Duration::ZERO`](std::time::Duration::ZERO) with [`ErrorCode::InvalidInput`].
     ///
-    /// Implementations **must** return [`AppError`] with
-    /// [`ErrorCode::Timeout`] when the
-    /// deadline elapses before a message arrives. Callers rely on this code to
-    /// treat an idle receive as non-fatal and keep the consumer alive.
+    /// Implementations **must** return [`AppError`] with [`ErrorCode::Timeout`] when the deadline elapses before a message arrives.
+    /// Callers rely on this code to treat an idle receive as non-fatal and keep the consumer alive.
     async fn recv(&self, timeout: Duration) -> AppResult<Message<T>>;
 
     /// Close or shut down the consumer. Implementations with no persistent resources may no-op.
@@ -86,15 +83,12 @@ pub trait EventConsumer: Send + Sync {
 
     /// Receive the next event, waiting no longer than `timeout`.
     ///
-    /// `timeout` **must** be greater than zero; it bounds a blocking receive
-    /// rather than requesting a non-blocking poll. Implementations reject
-    /// [`Duration::ZERO`](std::time::Duration::ZERO) with
-    /// [`ErrorCode::InvalidInput`].
+    /// `timeout` **must** be greater than zero;
+    /// it bounds a blocking receive rather than requesting a non-blocking poll.
+    /// Implementations reject [`Duration::ZERO`](std::time::Duration::ZERO) with [`ErrorCode::InvalidInput`].
     ///
-    /// Implementations **must** return [`AppError`] with
-    /// [`ErrorCode::Timeout`] when the
-    /// deadline elapses before an event arrives. Callers rely on this code to
-    /// treat an idle receive as non-fatal and keep the consumer alive.
+    /// Implementations **must** return [`AppError`] with [`ErrorCode::Timeout`] when the deadline elapses before an event arrives.
+    /// Callers rely on this code to treat an idle receive as non-fatal and keep the consumer alive.
     async fn recv_event(&self, timeout: Duration) -> AppResult<Event>;
 }
 
@@ -102,17 +96,15 @@ pub trait EventConsumer: Send + Sync {
 
 /// Lifecycle management for a message-broker connection.
 ///
-/// This is intentionally simpler than the bootstrap `Component` trait — it
-/// captures the start / stop / health contract that every broker adapter
-/// needs without pulling in the full component registry.  Implementations
-/// can bridge to the bootstrap `Component` trait where needed.
+/// This is intentionally simpler than the bootstrap `Component` trait —
+/// it captures the start / stop / health contract that every broker adapter needs without pulling in the full component registry.
+/// Implementations can bridge to the bootstrap `Component` trait where needed.
 #[async_trait]
 pub trait BrokerComponent: Send + Sync {
     /// Establish the broker connection and perform any setup.
     async fn start(&self) -> AppResult<()>;
     /// Gracefully disconnect from the broker.
     async fn stop(&self) -> AppResult<()>;
-    /// Instant health check — returns `true` when the broker connection is
-    /// usable.
+    /// Instant health check — returns `true` when the broker connection is usable.
     fn is_healthy(&self) -> bool;
 }

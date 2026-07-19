@@ -1,7 +1,6 @@
 //! Analyse a WAV file through the media registry.
 //!
-//! Usage:
-//!   `cargo run --bin audio_analysis -- path/to/audio.wav`
+//! Usage: `cargo run --bin audio_analysis -- path/to/audio.wav`
 
 #[tokio::main]
 async fn main() -> rskit::AppResult<()> {

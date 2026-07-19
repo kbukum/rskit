@@ -1,21 +1,18 @@
-//! Local filesystem primitives for paths, files, directories, links, permissions,
-//! temporary files, and file trees.
+//! Local filesystem primitives for paths, files, directories, links, permissions, temporary files,
+//! and file trees.
 //!
-//! This crate intentionally stays below storage abstractions. Higher-level
-//! crates such as `rskit-storage`, `rskit-cache`, and `rskit-httpclient` use
-//! these primitives instead of each reimplementing path safety, temp files, and
-//! atomic file replacement.
+//! This crate intentionally stays below storage abstractions.
+//! Higher-level crates such as `rskit-storage`, `rskit-cache`,
+//! and `rskit-httpclient` use these primitives instead of each reimplementing path safety, temp files,
+//! and atomic file replacement.
 //!
 //! Security defaults:
 //! - use [`path::safe_join`] for user-provided relative paths before touching disk;
 //! - sync tree copy/list operations do not follow symlinks unless explicitly requested;
-//! - use `async_io::file::write_atomic` or `sync_io::file::write_atomic` for same-filesystem writes
-//!   without exposing partial files, and `write_atomic_replace` when existing files should be
-//!   replaced (existing-file replacement is atomic on Unix-like platforms; Windows replacement
-//!   removes the destination before renaming because the platform rename operation cannot replace
-//!   an existing file);
-//! - use [`permissions`] capability checks before performing optional user-facing operations when
-//!   the `async` feature is enabled.
+//! - use `async_io::file::write_atomic`
+//!   or `sync_io::file::write_atomic` for same-filesystem writes without exposing partial files,
+//!   and `write_atomic_replace` when existing files should be replaced (existing-file replacement is atomic on Unix-like platforms; Windows replacement removes the destination before renaming because the platform rename operation cannot replace an existing file);
+//! - use [`permissions`] capability checks before performing optional user-facing operations when the `async` feature is enabled.
 
 #![warn(missing_docs)]
 

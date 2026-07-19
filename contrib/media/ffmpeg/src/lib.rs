@@ -1,8 +1,8 @@
 //! FFmpeg CLI backend for video/audio processing.
 //!
-//! Registers [`MediaProbe`](rskit_media::MediaProbe) and
-//! [`MediaExecutor`](rskit_media::MediaExecutor) by shelling out
-//! to `ffprobe` and `ffmpeg` CLI tools.
+//! Registers [`MediaProbe`](rskit_media::MediaProbe)
+//! and [`MediaExecutor`](rskit_media::MediaExecutor) by shelling out to `ffprobe`
+//! and `ffmpeg` CLI tools.
 
 #![warn(missing_docs)]
 

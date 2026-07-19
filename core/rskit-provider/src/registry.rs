@@ -21,8 +21,7 @@ pub struct Binding<P> {
 ///
 /// Resolution:
 /// 1. Look up bindings by `operation_id`.
-/// 2. Filter to bindings whose `tiers` list is empty (wildcard) or contains the
-///    requested tier.
+/// 2. Filter to bindings whose `tiers` list is empty (wildcard) or contains the requested tier.
 /// 3. Return the binding with the lowest `priority` value.
 pub struct Registry<P> {
     bindings: HashMap<String, Vec<Binding<P>>>,
@@ -52,8 +51,7 @@ impl<P: Clone> Registry<P> {
 
     /// Resolve the best provider for `operation_id` given the caller's `tier`.
     ///
-    /// Returns the provider from the highest-priority (lowest `priority` value)
-    /// binding that matches the tier.
+    /// Returns the provider from the highest-priority (lowest `priority` value) binding that matches the tier.
     pub fn resolve(&self, operation_id: &str, tier: &str) -> AppResult<&P> {
         let bindings = self.bindings.get(operation_id).ok_or_else(|| {
             AppError::new(

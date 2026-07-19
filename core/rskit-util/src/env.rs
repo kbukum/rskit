@@ -4,16 +4,14 @@ use std::str::FromStr;
 
 /// Read a string environment variable.
 ///
-/// Returns `None` when the variable is not set or cannot be represented as
-/// Unicode.
+/// Returns `None` when the variable is not set or cannot be represented as Unicode.
 pub fn get(key: &str) -> Option<String> {
     std::env::var(key).ok()
 }
 
 /// Read a string environment variable and ignore empty values.
 ///
-/// Returns `None` when the variable is unset, non-Unicode, or set to an empty
-/// string.
+/// Returns `None` when the variable is unset, non-Unicode, or set to an empty string.
 pub fn get_non_empty(key: &str) -> Option<String> {
     get(key).filter(|value| !value.is_empty())
 }
@@ -49,9 +47,8 @@ where
         .and_then(|val| val.parse::<T>().ok())
 }
 
-/// Safely parse boolean variables.
-/// Recognizes "true", "1", "yes", "on" as true, and "false", "0", "no", "off" as false.
-/// If the variable is unset or unrecognized, returns the fallback value.
+/// Safely parse boolean variables. Recognizes "true", "1", "yes", "on" as true, and "false", "0", "no",
+/// "off" as false. If the variable is unset or unrecognized, returns the fallback value.
 ///
 /// # Examples
 ///

@@ -1,8 +1,8 @@
 use crate::prompt::render::Style;
 use crate::prompt::terminal::Terminal;
 
-/// Write the inline answer marker (`» [hint]: `, ASCII-safe via
-/// [`Glyphs`](crate::theme::Glyphs)) and flush, for line prompts.
+/// Write the inline answer marker (`» [hint]: `, ASCII-safe via [`Glyphs`](crate::theme::Glyphs))
+/// and flush, for line prompts.
 pub(crate) fn write_answer(
     terminal: &mut (impl Terminal + ?Sized),
     style: Style,

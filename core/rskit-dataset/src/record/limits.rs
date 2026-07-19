@@ -1,8 +1,7 @@
 //! Bounded JSON/CSV record limits.
 //!
-//! Dataset record readers accept untrusted structured input. This module keeps
-//! byte, nesting, field, array, and string limits in one place so JSON Lines and
-//! JSON array readers enforce the same policy.
+//! Dataset record readers accept untrusted structured input. This module keeps byte, nesting, field,
+//! array, and string limits in one place so JSON Lines and JSON array readers enforce the same policy.
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use serde_json::Value;

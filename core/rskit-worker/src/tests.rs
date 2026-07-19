@@ -56,8 +56,8 @@ impl Handler<i32, i32> for ProgressHandler {
         emit: mpsc::Sender<Event<i32>>,
         _cancel: CancellationToken,
     ) -> AppResult<i32> {
-        // Use a placeholder UUID; the pool assigns the real task_id, so here
-        // we just need any valid UUID for the emitted event.
+        // Use a placeholder UUID; the pool assigns the real task_id,
+        // so here we just need any valid UUID for the emitted event.
         let fake_id = uuid::Uuid::new_v4();
         let p = Progress::new(1, Some(1));
         let ev = Event::progress(fake_id, "progress-handler", p);

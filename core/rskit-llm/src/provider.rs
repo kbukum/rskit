@@ -1,13 +1,11 @@
 //! Provider trait — the canonical abstraction over LLM backends.
 //!
-//! This is the single full LLM provider trait. Implementors supply
-//! [`Provider::complete`], [`rskit_provider::Provider::name`], and
-//! [`rskit_provider::RequestResponse::execute`] (which typically delegates to
-//! `complete`).
+//! This is the single full LLM provider trait. Implementors supply [`Provider::complete`],
+//! [`rskit_provider::Provider::name`],
+//! and [`rskit_provider::RequestResponse::execute`] (which typically delegates to `complete`).
 //!
-//! The trait extends
-//! `rskit_provider::RequestResponse<CompletionRequest, CompletionResponse>` so
-//! any LLM provider is natively usable in `dag`, `pipeline`, `chain`, `worker`,
+//! The trait extends `rskit_provider::RequestResponse<CompletionRequest, CompletionResponse>`
+//! so any LLM provider is natively usable in `dag`, `pipeline`, `chain`, `worker`,
 //! and `process` consumers without adapter shims.
 
 use std::pin::Pin;
@@ -27,22 +25,16 @@ use crate::types::{CompletionRequest, CompletionResponse};
 /// A fully-featured LLM provider with streaming and capability introspection.
 ///
 /// An adapter MUST implement [`Provider::complete`],
-/// [`rskit_provider::Provider::name`] (`&'static str`), and
-/// [`rskit_provider::RequestResponse::execute`] (typically delegates to
-/// `complete`). The
-/// default [`Provider::stream`] synthesizes a
-/// four-event sequence (`message.start` → `text.delta` → `usage.delta` →
-/// `message.stop`) by awaiting `complete`. Adapters whose backend supports
-/// native streaming SHOULD override `stream` to emit incremental events.
+/// [`rskit_provider::Provider::name`] (`&'static str`),
+/// and [`rskit_provider::RequestResponse::execute`] (typically delegates to `complete`).
+/// The default [`Provider::stream`] synthesizes a four-event sequence (`message.start` → `text.delta` → `usage.delta` → `message.stop`) by awaiting `complete`.
+/// Adapters whose backend supports native streaming SHOULD override `stream` to emit incremental events.
 ///
 /// # Native provider shape
 ///
-/// This trait requires
-/// `rskit_provider::RequestResponse<CompletionRequest, CompletionResponse>` as
-/// supertrait, so every `llm::Provider` carries the canonical
-/// identity/availability + request/response contract natively. The optional
-/// [`LlmStream`] wrapper remains available for consumers that specifically need
-/// the provider `Stream` shape.
+/// This trait requires `rskit_provider::RequestResponse<CompletionRequest, CompletionResponse>` as supertrait,
+/// so every `llm::Provider` carries the canonical identity/availability + request/response contract natively.
+/// The optional [`LlmStream`] wrapper remains available for consumers that specifically need the provider `Stream` shape.
 #[async_trait]
 pub trait Provider: rskit_provider::RequestResponse<CompletionRequest, CompletionResponse> {
     /// Send a chat completion request and return the full response.
@@ -50,8 +42,7 @@ pub trait Provider: rskit_provider::RequestResponse<CompletionRequest, Completio
 
     /// Stream a chat completion as a series of stream event objects.
     ///
-    /// Default impl synthesizes events from [`Provider::complete`] for
-    /// adapters whose backend has no native streaming endpoint.
+    /// Default impl synthesizes events from [`Provider::complete`] for adapters whose backend has no native streaming endpoint.
     async fn stream(
         &self,
         request: CompletionRequest,
@@ -75,15 +66,14 @@ pub trait Provider: rskit_provider::RequestResponse<CompletionRequest, Completio
         Ok(Box::pin(futures::stream::iter(events)))
     }
 
-    /// Describe what this provider / model supports. Default returns an
-    /// empty [`Capabilities`]; adapters SHOULD override to advertise tool use,
-    /// streaming, vision, etc.
+    /// Describe what this provider / model supports. Default returns an empty [`Capabilities`];
+    /// adapters SHOULD override to advertise tool use, streaming, vision, etc.
     fn capabilities(&self) -> Capabilities {
         Capabilities::default()
     }
 
-    /// Estimate the number of tokens consumed by the given messages. Default
-    /// uses the shared whitespace-based approximation from `rskit_ai::chat`.
+    /// Estimate the number of tokens consumed by the given messages.
+    /// Default uses the shared whitespace-based approximation from `rskit_ai::chat`.
     fn count_tokens(&self, messages: &[Message]) -> usize {
         count_tokens_approx(messages)
     }
@@ -168,8 +158,7 @@ mod tests {
         assert_eq!(count_tokens_approx(&msgs), 0);
     }
 
-    /// `MockProvider` only implements `complete` to verify default impls
-    /// (stream, capabilities, `count_tokens`) compose correctly.
+    /// `MockProvider` only implements `complete` to verify default impls (stream, capabilities, `count_tokens`) compose correctly.
     struct MockProvider;
 
     #[async_trait]

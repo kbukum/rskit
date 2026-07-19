@@ -1,7 +1,7 @@
 //! OpenTelemetry tracing, metrics, and context propagation.
 //!
-//! This crate wires up the OpenTelemetry SDK with the `tracing` ecosystem
-//! so that spans and metrics are automatically exported via OTLP.
+//! This crate wires up the OpenTelemetry SDK with the `tracing` ecosystem so that spans
+//! and metrics are automatically exported via OTLP.
 
 #![warn(missing_docs)]
 

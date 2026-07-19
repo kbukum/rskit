@@ -1,11 +1,11 @@
-//! Bounded joining of blocking worker threads shared by the std-thread runners
-//! (`sync` and `persistent`).
+//! Bounded joining of blocking worker threads shared by the std-thread runners (`sync` and `persistent`).
 //!
-//! Both blocking runners spawn capture-reader and stdin-writer threads and must
-//! reap them once the child exits. A naive `JoinHandle::join()` blocks forever
-//! when a surviving descendant inherited and still holds the pipe open, so this
-//! module bounds the join by a grace period, detaching a straggler rather than
-//! hanging the runner. The straggler's bounded capture buffer caps its memory
+//! Both blocking runners spawn capture-reader and stdin-writer threads
+//! and must reap them once the child exits.
+//! A naive `JoinHandle::join()` blocks forever when a surviving descendant inherited
+//! and still holds the pipe open, so this module bounds the join by a grace period,
+//! detaching a straggler rather than hanging the runner.
+//! The straggler's bounded capture buffer caps its memory
 //! and it exits on its own once the pipe finally closes.
 
 use std::thread;
@@ -13,21 +13,18 @@ use std::time::{Duration, Instant};
 
 use crate::{AppError, AppResult, ErrorCode};
 
-/// How often [`join_within`] re-checks whether the worker has finished while
-/// waiting out the grace period.
+/// How often [`join_within`] re-checks whether the worker has finished while waiting out the grace period.
 const POLL_INTERVAL: Duration = Duration::from_millis(5);
 
 /// Join `handle` within `grace`, surfacing worker errors and mapping panics.
 ///
-/// Returns `Ok(())` when there is no handle or the worker finishes within
-/// `grace`. A worker still running after `grace` is detached (its handle is
-/// dropped) rather than joined forever.
+/// Returns `Ok(())` when there is no handle or the worker finishes within `grace`.
+/// A worker still running after `grace` is detached (its handle is dropped) rather than joined forever.
 ///
-/// The wait polls [`JoinHandle::is_finished`] instead of spawning a watchdog
-/// thread that blocks on `join()`: a detached straggler must not leave a second
-/// thread parked in `join()` behind it, or repeated runs would accumulate idle
-/// joiner threads. Once `is_finished()` reports `true`, the `join()` below
-/// returns without blocking.
+/// The wait polls [`JoinHandle::is_finished`] instead of spawning a watchdog thread that blocks on `join()`:
+/// a detached straggler must not leave a second thread parked in `join()` behind it,
+/// or repeated runs would accumulate idle joiner threads. Once `is_finished()` reports `true`,
+/// the `join()` below returns without blocking.
 ///
 /// [`JoinHandle::is_finished`]: std::thread::JoinHandle::is_finished
 pub(crate) fn join_within(
@@ -41,9 +38,8 @@ pub(crate) fn join_within(
     while !handle.is_finished() {
         let remaining = deadline.saturating_duration_since(Instant::now());
         if remaining.is_zero() {
-            // Detach the straggler: dropping the handle leaves the worker
-            // running, and its bounded capture buffer caps memory until it
-            // exits once the pipe finally closes.
+            // Detach the straggler: dropping the handle leaves the worker running,
+            // and its bounded capture buffer caps memory until it exits once the pipe finally closes.
             return Ok(());
         }
         thread::sleep(remaining.min(POLL_INTERVAL));
@@ -94,8 +90,8 @@ mod tests {
             let _ = unblock_rx.recv();
             Ok(())
         });
-        // The worker is still blocked, so the bounded join returns without error
-        // rather than hanging.
+        // The worker is still blocked,
+        // so the bounded join returns without error rather than hanging.
         join_within(Some(slow), Duration::from_millis(20)).unwrap();
         let _ = unblock_tx.send(());
     }

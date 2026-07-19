@@ -164,16 +164,15 @@ async fn run_process(
         )
     })?;
 
-    // Detach the child's pipe handles before the child moves into the scope
-    // guard, which then owns it for the rest of the run.
+    // Detach the child's pipe handles before the child moves into the scope guard,
+    // which then owns it for the rest of the run.
     let stdout_pipe = child.stdout.take();
     let stderr_pipe = child.stderr.take();
     let stdin_pipe = child.stdin.take();
 
-    // Own the child and the spawned I/O tasks in a scope guard: any early return
-    // below aborts the reader/stdin tasks and best-effort kills the child rather
-    // than detaching them (a dropped Tokio `JoinHandle` is detached, which would
-    // leak the task and keep the child's pipes alive).
+    // Own the child and the spawned I/O tasks in a scope guard:
+    // any early return below aborts the reader/stdin tasks
+    // and best-effort kills the child rather than detaching them (a dropped Tokio `JoinHandle` is detached, which would leak the task and keep the child's pipes alive).
     let mut scope = ChildScope::new(child);
 
     let max_output_bytes = output.and_then(|output| output.max_output_bytes);
@@ -205,10 +204,9 @@ async fn run_process(
 
     let completion = wait_for_completion(scope.child_mut(), spec, config, cancel).await?;
 
-    // The child has exited; drain the workers within the grace period. A reader
-    // still blocked because a surviving descendant holds the pipe open is
-    // aborted rather than awaited forever, and the partial bytes it captured are
-    // still recovered from the shared buffer.
+    // The child has exited; drain the workers within the grace period.
+    // A reader still blocked because a surviving descendant holds the pipe open is aborted rather than awaited forever,
+    // and the partial bytes it captured are still recovered from the shared buffer.
     let grace = config.signal.grace_period;
     join_within(stdin_task, grace).await?;
     join_within(stdout_task, grace).await?;

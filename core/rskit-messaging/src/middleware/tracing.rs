@@ -8,8 +8,8 @@ use rskit_errors::AppResult;
 use crate::handler::{HandlerMiddleware, MessageHandler};
 use crate::message::Message;
 
-/// Create a middleware that wraps each handler invocation in a
-/// [`tracing`] span containing the message topic and key.
+/// Create a middleware that wraps each handler invocation in a [`tracing`] span containing the message topic
+/// and key.
 pub fn tracing_middleware<T: Send + Sync + 'static>() -> impl HandlerMiddleware<T> {
     TracingMiddleware {
         _marker: std::marker::PhantomData,

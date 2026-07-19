@@ -1,7 +1,7 @@
 //! Domain-specific hook event types for the agentic pipeline.
 //!
-//! Each struct implements [`rskit_hook::Event`] so it can be emitted through
-//! a [`rskit_hook::HookRegistry`].
+//! Each struct implements [`rskit_hook::Event`]
+//! so it can be emitted through a [`rskit_hook::HookRegistry`].
 
 mod event_types;
 mod events;

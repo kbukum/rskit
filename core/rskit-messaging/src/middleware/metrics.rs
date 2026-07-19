@@ -12,8 +12,8 @@ use crate::metrics::MetricsCollector;
 
 /// Create a middleware that records handler processing metrics.
 ///
-/// Each handler invocation is timed and reported to the supplied
-/// [`MetricsCollector`] via `record_consume`.
+/// Each handler invocation is timed
+/// and reported to the supplied [`MetricsCollector`] via `record_consume`.
 pub fn instrument<T: Send + Sync + 'static>(
     metrics: Arc<dyn MetricsCollector>,
     topic: String,

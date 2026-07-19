@@ -142,8 +142,8 @@ pub fn get_short_version() -> String {
 
 /// Returns a detailed version string with optional branch and build time.
 ///
-/// Format: `{version}[-{short_commit}][-{branch}] (built {time})`
-/// Branches named `main` or `master` are omitted.
+/// Format: `{version}[-{short_commit}][-{branch}] (built {time})` Branches named `main`
+/// or `master` are omitted.
 pub fn get_full_version() -> String {
     get_version_info().full_version()
 }

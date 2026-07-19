@@ -1,8 +1,8 @@
 //! DAG task orchestrator with parallel execution and `as_tool` adapter.
 //!
-//! Provides a directed acyclic graph runner that schedules independent nodes in
-//! parallel and passes outputs downstream.  Includes an `as_tool` adapter so
-//! DAG workflows can be exposed as LLM tool-call targets.
+//! Provides a directed acyclic graph runner that schedules independent nodes in parallel
+//! and passes outputs downstream. Includes an `as_tool` adapter
+//! so DAG workflows can be exposed as LLM tool-call targets.
 
 mod as_tool;
 mod dag;

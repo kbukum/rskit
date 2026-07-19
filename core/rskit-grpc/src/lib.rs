@@ -3,10 +3,9 @@
 
 //! gRPC transport and status-mapping entrypoints for rskit.
 //!
-//! `rskit-grpc` always owns `tonic::Status` ↔ `rskit_errors::AppError`
-//! mapping so client and server crates share one canonical transport boundary.
-//! With the `client` feature enabled, it also owns lazy channels, TLS-aware
-//! dialing, and optional discovery integration.
+//! `rskit-grpc` always owns `tonic::Status` ↔ `rskit_errors::AppError` mapping so client
+//! and server crates share one canonical transport boundary. With the `client` feature enabled,
+//! it also owns lazy channels, TLS-aware dialing, and optional discovery integration.
 //!
 //! Lifecycle-managed gRPC servers are owned by `rskit-server`.
 

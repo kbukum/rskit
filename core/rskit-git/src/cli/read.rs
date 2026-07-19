@@ -103,8 +103,8 @@ fn parse_grep_match(line: &str, revision: &str, line_numbers: bool) -> AppResult
         );
         content = parts.next().ok_or_else(invalid_match)?.to_string();
     } else {
-        // Without -n the format is <path>:<content>.
-        // Split from left: path has no colons (relative), content may.
+        // Without -n the format is <path>:<content>. Split from left:
+        // path has no colons (relative), content may.
         let invalid_match = || AppError::invalid_format("grep match", "<path>:<content>");
         let mut parts = stripped.splitn(2, ':');
         path = parts.next().ok_or_else(invalid_match)?.to_string();

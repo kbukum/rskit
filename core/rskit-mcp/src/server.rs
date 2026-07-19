@@ -1,8 +1,7 @@
 //! MCP server backed by an rskit tool [`Registry`].
 //!
-//! Implements the MCP `ServerHandler` trait, delegating `tools/list` and
-//! `tools/call` to the registry while providing sensible defaults for the
-//! rest of the protocol.
+//! Implements the MCP `ServerHandler` trait, delegating `tools/list`
+//! and `tools/call` to the registry while providing sensible defaults for the rest of the protocol.
 
 use std::sync::Arc;
 

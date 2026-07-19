@@ -1,7 +1,7 @@
 //! Middleware stack builder for composing consumer handler pipelines.
 //!
-//! [`StackBuilder`] provides a fluent API to configure middleware and build
-//! a fully-wrapped handler in a standard order.
+//! [`StackBuilder`] provides a fluent API to configure middleware
+//! and build a fully-wrapped handler in a standard order.
 //!
 //! # Example
 //!
@@ -20,8 +20,8 @@ use crate::handler::{HandlerMiddleware, MessageHandler, chain_handlers};
 
 /// Fluent builder for composing messaging middleware into a handler pipeline.
 ///
-/// Middleware is applied in the order added — the first middleware added
-/// becomes the outermost wrapper and runs first on each message.
+/// Middleware is applied in the order added — the first middleware added becomes the outermost wrapper
+/// and runs first on each message.
 ///
 /// # Example
 ///
@@ -48,8 +48,7 @@ impl<T: Send + Sync + Clone + 'static> StackBuilder<T> {
 
     /// Add middleware to the stack.
     ///
-    /// Middleware is applied in the order added — the first middleware
-    /// added becomes the outermost wrapper.
+    /// Middleware is applied in the order added — the first middleware added becomes the outermost wrapper.
     #[must_use]
     pub fn with<M: HandlerMiddleware<T> + 'static>(mut self, mw: M) -> Self {
         self.middlewares.push(Arc::new(mw));

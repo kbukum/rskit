@@ -18,7 +18,8 @@ Server-Sent Events broadcast bus with bounded replay and Axum adapters.
 - Live subscribers receive events published after they subscribe.
 - Reconnecting subscribers can replay retained events with `Last-Event-ID`.
 - Per-subscriber ordering follows publish order for delivered events.
-- Slow subscribers may skip lagged live events; skipped events can be recovered only while they remain in the bounded replay buffer.
+- Slow subscribers may skip lagged live events;
+  skipped events can be recovered only while they remain in the bounded replay buffer.
 
 ## Usage
 

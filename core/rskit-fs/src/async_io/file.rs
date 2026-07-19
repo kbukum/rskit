@@ -154,9 +154,8 @@ pub async fn create(path: &Path) -> AppResult<AsyncFile> {
 
 /// Persist a temp file to `dest` using the platform rename operation.
 ///
-/// Replacing an existing destination is atomic on Unix-like platforms. On
-/// Windows, replacing an existing destination is not supported by this helper
-/// because `rename` fails when `dest` already exists.
+/// Replacing an existing destination is atomic on Unix-like platforms. On Windows,
+/// replacing an existing destination is not supported by this helper because `rename` fails when `dest` already exists.
 pub async fn persist_temp_file(temp_path: &Path, dest: &Path) -> AppResult<()> {
     tokio::fs::rename(temp_path, dest)
         .await
@@ -181,8 +180,8 @@ pub async fn rename(from: &Path, to: &Path) -> AppResult<()> {
 
 /// Move a file, falling back to copy+delete when a platform rename cannot cross filesystems.
 ///
-/// This fallback is not atomic across filesystems. Use [`rename`] when atomic
-/// same-filesystem replacement is required.
+/// This fallback is not atomic across filesystems.
+/// Use [`rename`] when atomic same-filesystem replacement is required.
 pub async fn move_file(from: &Path, to: &Path) -> AppResult<()> {
     create_parent_dir(to).await?;
     move_file_after_rename(from, to, tokio::fs::rename(from, to).await).await
@@ -232,9 +231,9 @@ pub async fn remove_if_exists(path: &Path) -> AppResult<bool> {
 
 /// Atomically write bytes by writing a sibling temp file and renaming it.
 ///
-/// Replacing an existing destination is atomic on Unix-like platforms. On
-/// Windows, this helper succeeds for new destinations and returns an error when
-/// replacing an existing destination.
+/// Replacing an existing destination is atomic on Unix-like platforms. On Windows,
+/// this helper succeeds for new destinations
+/// and returns an error when replacing an existing destination.
 pub async fn write_atomic(
     dest: &Path,
     bytes: impl AsRef<[u8]>,
@@ -245,9 +244,8 @@ pub async fn write_atomic(
 
 /// Atomically write bytes and replace an existing destination when supported.
 ///
-/// Replacing an existing destination is atomic on Unix-like platforms. On
-/// Windows, this helper removes the existing file before persisting the temp
-/// file because the platform rename operation cannot replace an existing file.
+/// Replacing an existing destination is atomic on Unix-like platforms. On Windows,
+/// this helper removes the existing file before persisting the temp file because the platform rename operation cannot replace an existing file.
 pub async fn write_atomic_replace(
     dest: &Path,
     bytes: impl AsRef<[u8]>,

@@ -1,10 +1,9 @@
-//! Shared bounded output capture used by every runner (async, blocking, and
-//! persistent).
+//! Shared bounded output capture used by every runner (async, blocking, and persistent).
 //!
-//! All three execution models retain child output up to a configured byte
-//! bound, tracking whether the bound was exceeded, and all three append an
-//! optional synthetic termination diagnostic to the retained stderr. This
-//! module owns that logic once so the runners cannot drift apart.
+//! All three execution models retain child output up to a configured byte bound,
+//! tracking whether the bound was exceeded,
+//! and all three append an optional synthetic termination diagnostic to the retained stderr.
+//! This module owns that logic once so the runners cannot drift apart.
 
 use std::sync::Arc;
 
@@ -39,10 +38,8 @@ impl BoundedOutput {
 
 /// A [`BoundedOutput`] shared between a reader task/thread and the orchestrator.
 ///
-/// The reader owns the write side and the orchestrator snapshots it after the
-/// child exits, so a bounded drain can recover whatever was captured even when
-/// the reader is abandoned (aborted task or detached thread) because a surviving
-/// descendant still holds the pipe open.
+/// The reader owns the write side and the orchestrator snapshots it after the child exits,
+/// so a bounded drain can recover whatever was captured even when the reader is abandoned (aborted task or detached thread) because a surviving descendant still holds the pipe open.
 pub(crate) type SharedOutput = Arc<Mutex<BoundedOutput>>;
 
 /// Create an empty shared output buffer.

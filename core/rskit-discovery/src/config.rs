@@ -1,7 +1,7 @@
 //! Service discovery configuration.
 //!
-//! Mirrors gokit's `discovery.Config` — all three kits use the same config
-//! shape so services are structurally identical regardless of language.
+//! Mirrors gokit's `discovery.Config` — all three kits use the same config shape
+//! so services are structurally identical regardless of language.
 
 use std::collections::HashMap;
 
@@ -17,8 +17,8 @@ pub struct DiscoveryConfig {
     pub enabled: bool,
     /// Discovery backend: `"consul"`, `"static"`, etc.
     pub provider: String,
-    /// Provider address (e.g. `"localhost:8500"` for Consul).
-    /// Generic — every remote provider needs an address.
+    /// Provider address (e.g. `"localhost:8500"` for Consul). Generic —
+    /// every remote provider needs an address.
     pub addr: String,
     /// URI scheme for the provider connection (`"http"`, `"https"`).
     pub scheme: String,
@@ -122,10 +122,9 @@ impl DiscoveryConfig {
 pub struct RegistrationConfig {
     /// Toggle self-registration.
     pub enabled: bool,
-    /// When true (the default), the service will retry with backoff and
-    /// fail to start if registration cannot be completed — appropriate for
-    /// staging/production. When false, logs a warning and continues in
-    /// degraded mode — convenient for local development.
+    /// When true (the default), the service will retry with backoff
+    /// and fail to start if registration cannot be completed — appropriate for staging/production.
+    /// When false, logs a warning and continues in degraded mode — convenient for local development.
     pub required: bool,
     /// Number of registration retries before giving up. Defaults to 3.
     pub max_retries: u32,

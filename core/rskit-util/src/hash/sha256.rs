@@ -1,19 +1,19 @@
 //! SHA-256 digests for wire-format and interop use cases.
 //!
-//! The canonical content hash for cache keys, change detection, and
-//! deduplication is BLAKE3 (see [`crate::hash::hash_hex`]). SHA-256 lives here only
-//! for **interop**: manifests, packs, and protocols that mandate a SHA-256
-//! field on the wire. Digests are rendered as lowercase hexadecimal. Do not
-//! reach for this when a stable internal identity is all that's needed —
-//! prefer BLAKE3.
+//! The canonical content hash for cache keys, change detection,
+//! and deduplication is BLAKE3 (see [`crate::hash::hash_hex`]).
+//! SHA-256 lives here only for **interop**: manifests, packs,
+//! and protocols that mandate a SHA-256 field on the wire.
+//! Digests are rendered as lowercase hexadecimal.
+//! Do not reach for this when a stable internal identity is all that's needed — prefer BLAKE3.
 
 use sha2::{Digest, Sha256};
 use std::fmt::Write as _;
 
 /// Incremental SHA-256 hasher producing a lowercase-hex digest.
 ///
-/// Feed bytes with [`update`](Self::update), then read the digest with
-/// [`finalize_hex`](Self::finalize_hex). Use only for wire-format interop;
+/// Feed bytes with [`update`](Self::update),
+/// then read the digest with [`finalize_hex`](Self::finalize_hex). Use only for wire-format interop;
 /// prefer [`super::ContentHasher`] (BLAKE3) for internal hashing.
 #[derive(Clone, Default)]
 pub struct Sha256Hasher {

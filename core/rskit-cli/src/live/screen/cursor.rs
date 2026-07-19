@@ -1,11 +1,10 @@
 //! [`Cursor`] — the bounded write position within a region's grid.
 //!
-//! All movement is pure position math with clamping to the grid geometry, kept
-//! here so the parser's [`Perform`](super::perform) mapping never has to reason
-//! about bounds. The cursor column may transiently equal `cols` to model the
-//! deferred wrap of a just-filled last column. The driver ([`Performer`]) calls
-//! [`Cursor::clear_pending_wrap`] before applying any explicit move or control,
-//! so those APIs always operate on an in-grid column.
+//! All movement is pure position math with clamping to the grid geometry, kept here
+//! so the parser's [`Perform`](super::perform) mapping never has to reason about bounds.
+//! The cursor column may transiently equal `cols` to model the deferred wrap of a just-filled last column.
+//! The driver ([`Performer`]) calls [`Cursor::clear_pending_wrap`] before applying any explicit move
+//! or control, so those APIs always operate on an in-grid column.
 //!
 //! [`Performer`]: super::perform
 
@@ -61,11 +60,10 @@ impl Cursor {
         self.col = self.col.saturating_sub(1);
     }
 
-    /// Clear a pending wrap by clamping the column back onto the last real
-    /// column when it sits at the `col == cols` sentinel. Applying an explicit
-    /// move or control from the sentinel would otherwise leave the column out
-    /// of range, forcing the next [`print`](super::perform) to wrap and
-    /// possibly scroll unexpectedly.
+    /// Clear a pending wrap by clamping the column back onto the last real column when it sits at the `col == cols` sentinel.
+    /// Applying an explicit move
+    /// or control from the sentinel would otherwise leave the column out of range,
+    /// forcing the next [`print`](super::perform) to wrap and possibly scroll unexpectedly.
     pub(super) const fn clear_pending_wrap(&mut self, cols: usize) {
         let last = cols.saturating_sub(1);
         if self.col > last {

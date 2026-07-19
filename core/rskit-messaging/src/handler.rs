@@ -9,8 +9,8 @@ use crate::message::Message;
 
 /// Handler for processing consumed messages.
 ///
-/// Implement this trait to define how incoming messages are processed.
-/// For simple cases, use [`FnHandler`] to wrap a closure.
+/// Implement this trait to define how incoming messages are processed. For simple cases,
+/// use [`FnHandler`] to wrap a closure.
 #[async_trait]
 pub trait MessageHandler<T: Send + Sync + 'static>: Send + Sync + 'static {
     /// Process a single message.
@@ -19,19 +19,16 @@ pub trait MessageHandler<T: Send + Sync + 'static>: Send + Sync + 'static {
 
 /// Middleware that wraps a handler with cross-cutting concerns.
 ///
-/// Each middleware receives the next handler in the chain and returns
-/// a new handler that adds behaviour around it (logging, metrics,
-/// error recovery, etc.).
+/// Each middleware receives the next handler in the chain
+/// and returns a new handler that adds behaviour around it (logging, metrics, error recovery, etc.).
 pub trait HandlerMiddleware<T: Send + Sync + 'static>: Send + Sync + 'static {
-    /// Wrap the given handler, returning a new handler that adds
-    /// middleware behaviour.
+    /// Wrap the given handler, returning a new handler that adds middleware behaviour.
     fn wrap(&self, next: Arc<dyn MessageHandler<T>>) -> Arc<dyn MessageHandler<T>>;
 }
 
 /// Chains middleware around a base handler.
 ///
-/// Middlewares are applied in order: the first middleware in the slice
-/// becomes the outermost wrapper.
+/// Middlewares are applied in order: the first middleware in the slice becomes the outermost wrapper.
 ///
 /// ```text
 /// chain_handlers(base, [mw_a, mw_b])

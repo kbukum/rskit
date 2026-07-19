@@ -20,9 +20,8 @@ pub trait RefManager {
     fn delete_branch(&self, name: &str) -> AppResult<()>;
 
     /// Creates a tag pointing at the given target revision.
-    /// `Some(message)` creates an annotated tag (with tagger and the given
-    /// message, which may be empty); `None` creates a lightweight tag (a plain
-    /// ref). Both backends must follow this convention.
+    /// `Some(message)` creates an annotated tag (with tagger and the given message, which may be empty);
+    /// `None` creates a lightweight tag (a plain ref). Both backends must follow this convention.
     fn create_tag(&self, name: &str, target: &str, message: Option<&str>) -> AppResult<()>;
 
     /// Deletes a tag.

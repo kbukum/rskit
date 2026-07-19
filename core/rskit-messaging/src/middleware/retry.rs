@@ -12,8 +12,8 @@ use crate::message::Message;
 /// Canonical retry configuration for messaging middleware.
 ///
 /// Messaging retries historically retried every handler failure by default.
-/// `RetryPolicy` defaults to retrying only errors marked retryable, so this
-/// wrapper encodes the messaging-specific always-retry default explicitly.
+/// `RetryPolicy` defaults to retrying only errors marked retryable,
+/// so this wrapper encodes the messaging-specific always-retry default explicitly.
 #[derive(Debug, Clone)]
 pub struct RetryConfig {
     policy: RetryPolicy,

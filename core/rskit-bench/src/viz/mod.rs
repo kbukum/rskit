@@ -1,7 +1,7 @@
 //! SVG chart rendering for benchmark results.
 //!
-//! Generates standalone SVG charts from benchmark curves and results.
-//! No external dependencies — pure string building.
+//! Generates standalone SVG charts from benchmark curves and results. No external dependencies —
+//! pure string building.
 
 mod calibration;
 mod comparison;

@@ -1,6 +1,7 @@
 # rskit-httpclient
 
-Async HTTP client for rskit with redacting auth, headers, injected resilience policies, destination hardening, and error handling.
+Async HTTP client for rskit with redacting auth, headers, injected resilience policies,
+destination hardening, and error handling.
 
 ## Features
 
@@ -8,7 +9,8 @@ Async HTTP client for rskit with redacting auth, headers, injected resilience po
 - Support for Bearer, Basic, and API key authentication with redacted secret storage
 - Configurable timeouts, headers, and redirect behavior
 - Explicit TLS trust, identity, and minimum-version configuration via `rskit-security`
-- Optional `rskit-resilience::Policy` integration for retry, timeout, circuit breaker, and rate limiting
+- Optional `rskit-resilience::Policy` integration for retry, timeout, circuit breaker,
+  and rate limiting
 - URL building with base URL support and outbound destination validation
 - Bounded response body reads to avoid unbounded memory growth
 - JSON request/response serialization via `serde`
@@ -85,7 +87,9 @@ let resp = client.send(
 ).await?;
 ```
 
-`Auth::header()` intentionally exposes credential values only at the final request-application boundary. Do not use `with_header` for bearer/API-key credentials; prefer `with_auth` or per-request auth helpers so debug output keeps credential fields redacted.
+`Auth::header()` intentionally exposes credential values only at the final request-application boundary.
+Do not use `with_header` for bearer/API-key credentials; prefer `with_auth`
+or per-request auth helpers so debug output keeps credential fields redacted.
 
 ## Transport hardening
 
@@ -109,11 +113,13 @@ let config = HttpClientConfig::new()
     .with_max_response_body_bytes(2 * 1024 * 1024);
 ```
 
-Hostname validation happens before DNS resolution, so host allow-lists are the preferred protection for high-trust clients that must not follow arbitrary destination names.
+Hostname validation happens before DNS resolution,
+so host allow-lists are the preferred protection for high-trust clients that must not follow arbitrary destination names.
 
 ## Error Handling
 
-All methods return `AppResult<T>` (alias for `Result<T, AppError>`). Errors are classified with appropriate `ErrorCode` values:
+All methods return `AppResult<T>` (alias for `Result<T, AppError>`).
+Errors are classified with appropriate `ErrorCode` values:
 
 - `Timeout` for request timeouts
 - `ConnectionFailed` for connection errors

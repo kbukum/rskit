@@ -1,8 +1,7 @@
 //! Chunked media processing — split, process in parallel, reassemble.
 //!
-//! This module provides the vocabulary types and strategy traits for chunked
-//! media processing. The actual splitting/reassembly is performed by backends
-//! (e.g., `rskit-media-ffmpeg`).
+//! This module provides the vocabulary types and strategy traits for chunked media processing.
+//! The actual splitting/reassembly is performed by backends (e.g., `rskit-media-ffmpeg`).
 //!
 //! # Overview
 //!

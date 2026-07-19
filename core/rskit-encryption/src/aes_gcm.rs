@@ -13,8 +13,8 @@ use crate::traits::{Algorithm, Encryptor};
 
 /// AES-256-GCM encryptor.
 ///
-/// Uses PBKDF2-SHA256 for key derivation with a random 16-byte salt per encryption.
-/// Output format: `base64(version[1] || algorithm[1] || salt[16] || nonce[12] || ciphertext)`.
+/// Uses PBKDF2-SHA256 for key derivation with a random 16-byte salt per encryption. Output format:
+/// `base64(version[1] || algorithm[1] || salt[16] || nonce[12] || ciphertext)`.
 pub struct AesGcmEncryptor {
     passphrase: Vec<u8>,
 }

@@ -2,8 +2,8 @@ use serde_json::Value;
 
 /// How to combine two arrays found at the same key during a merge.
 ///
-/// The strategy is chosen per key by the caller (see [`merge_with`]); the merge
-/// mechanism itself is policy-free — it does not know what any key "means".
+/// The strategy is chosen per key by the caller (see [`merge_with`]);
+/// the merge mechanism itself is policy-free — it does not know what any key "means".
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum ArrayStrategy {
@@ -15,9 +15,8 @@ pub enum ArrayStrategy {
 
 /// Deep-merge `overlay` onto `base`, replacing arrays wholesale.
 ///
-/// Objects merge recursively; on a key collision the overlay value wins
-/// (last-wins scalars). Every array is replaced by the overlay. Use
-/// [`merge_with`] to concatenate selected arrays instead.
+/// Objects merge recursively; on a key collision the overlay value wins (last-wins scalars).
+/// Every array is replaced by the overlay. Use [`merge_with`] to concatenate selected arrays instead.
 #[must_use]
 pub fn merge(base: Value, overlay: Value) -> Value {
     merge_with(base, overlay, |_| ArrayStrategy::Replace)
@@ -25,14 +24,14 @@ pub fn merge(base: Value, overlay: Value) -> Value {
 
 /// Deep-merge `overlay` onto `base`, choosing an array strategy per key.
 ///
-/// Objects merge recursively; on a key collision the overlay value wins. When
-/// both sides hold an array at the same key, `array_strategy` is consulted with
-/// that key to decide [`ArrayStrategy::Replace`] vs [`ArrayStrategy::Concat`].
+/// Objects merge recursively; on a key collision the overlay value wins.
+/// When both sides hold an array at the same key,
+/// `array_strategy` is consulted with that key to decide [`ArrayStrategy::Replace`] vs [`ArrayStrategy::Concat`].
 /// Type mismatches (for example object vs scalar) resolve to the overlay.
 ///
-/// The mechanism is framework-agnostic: identity rules, duplicate detection, and
-/// "which keys are mergeable lists" are caller policy expressed through
-/// `array_strategy`, not built in here.
+/// The mechanism is framework-agnostic: identity rules, duplicate detection,
+/// and "which keys are mergeable lists" are caller policy expressed through `array_strategy`,
+/// not built in here.
 #[must_use]
 pub fn merge_with<F>(base: Value, overlay: Value, mut array_strategy: F) -> Value
 where

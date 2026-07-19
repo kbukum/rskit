@@ -1,8 +1,7 @@
 //! Evaluator trait and adapters for bench.
 //!
-//! An [`Evaluator`] takes raw `Vec<u8>` input and produces a
-//! [`Prediction`]. This is the core abstraction
-//! that bench uses to run model evaluation.
+//! An [`Evaluator`] takes raw `Vec<u8>` input and produces a [`Prediction`].
+//! This is the core abstraction that bench uses to run model evaluation.
 
 use crate::types::Prediction;
 use rskit_errors::AppResult;
@@ -15,8 +14,8 @@ pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 /// An evaluator that produces predictions from raw input bytes.
 ///
-/// Standalone trait (not extending `Provider`) to ensure object safety
-/// via `#[async_trait]` — enables `Box<dyn Evaluator<L>>`.
+/// Standalone trait (not extending `Provider`) to ensure object safety via `#[async_trait]` —
+/// enables `Box<dyn Evaluator<L>>`.
 #[async_trait::async_trait]
 pub trait Evaluator<L = String>: Send + Sync
 where
@@ -110,9 +109,8 @@ where
 
     /// Attach an explicit availability check for the adapted evaluator.
     ///
-    /// Provider availability is intentionally not part of the canonical L2
-    /// provider contract. Domains that need it can supply a check at the
-    /// adapter boundary without forcing every provider to implement one.
+    /// Provider availability is intentionally not part of the canonical L2 provider contract.
+    /// Domains that need it can supply a check at the adapter boundary without forcing every provider to implement one.
     #[must_use]
     pub fn with_availability<F>(mut self, availability: F) -> Self
     where

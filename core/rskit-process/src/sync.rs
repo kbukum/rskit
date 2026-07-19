@@ -97,10 +97,10 @@ fn run_blocking(
         .map(|stream| spawn_reader(stream, stderr_capture.clone(), max_output_bytes));
     let stdin_thread = spawn_stdin_writer(child.stdin.take(), input);
 
-    // Own the child and its worker threads in a guard so any early return below
-    // (a wait error, for example) kills the child and reaps the threads rather
-    // than orphaning the child and detaching the readers, which would keep the
-    // pipes open and leak the threads.
+    // Own the child and its worker threads in a guard
+    // so any early return below (a wait error, for example) kills the child
+    // and reaps the threads rather than orphaning the child and detaching the readers,
+    // which would keep the pipes open and leak the threads.
     let mut scope = BlockingChildScope::new(child, config.signal, config.signal.grace_period);
     scope.attach(stdout_thread, stderr_thread, stdin_thread);
 
@@ -108,9 +108,8 @@ fn run_blocking(
     let (exit_code, timed_out, synthetic_stderr) =
         wait_with_timeout(scope.child_mut(), pid, config.timeout, config)?;
 
-    // The child has exited; drain the workers within the grace period. A worker
-    // still blocked because a surviving descendant holds the pipe open is
-    // detached rather than joined forever.
+    // The child has exited; drain the workers within the grace period.
+    // A worker still blocked because a surviving descendant holds the pipe open is detached rather than joined forever.
     scope.drain()?;
     scope.disarm();
 
@@ -139,10 +138,10 @@ fn run_blocking(
 /// Owns a spawned child and its capture/stdin worker threads so an early return
 /// or panic kills the child and reaps the threads instead of leaking them.
 ///
-/// While armed, dropping the guard best-effort kills the child (closing the
-/// pipes so the readers observe EOF) and then joins each worker within the grace
-/// period. [`disarm`](Self::disarm) after a normal drain hands ownership back to
-/// the already-captured shared output.
+/// While armed,
+/// dropping the guard best-effort kills the child (closing the pipes so the readers observe EOF)
+/// and then joins each worker within the grace period.
+/// [`disarm`](Self::disarm) after a normal drain hands ownership back to the already-captured shared output.
 struct BlockingChildScope {
     child: Child,
     stdout: Option<thread::JoinHandle<AppResult<()>>>,
@@ -181,8 +180,8 @@ impl BlockingChildScope {
         &mut self.child
     }
 
-    /// Join every worker thread within the grace period, surfacing worker
-    /// errors. A worker that outlives the grace period is detached.
+    /// Join every worker thread within the grace period, surfacing worker errors.
+    /// A worker that outlives the grace period is detached.
     fn drain(&mut self) -> AppResult<()> {
         join_within(self.stdin.take(), self.grace)?;
         join_within(self.stdout.take(), self.grace)?;
@@ -438,10 +437,8 @@ mod tests {
         scope.attach(Some(worker), None, None);
         drop(scope);
 
-        // The guard killed and reaped the child, so a fresh existence probe must
-        // fail with ESRCH.
-        // SAFETY: signal 0 performs an existence check without delivering a
-        // signal.
+        // The guard killed and reaped the child, so a fresh existence probe must fail with ESRCH.
+        // SAFETY: signal 0 performs an existence check without delivering a signal.
         let alive = unsafe { libc::kill(i32::try_from(pid).unwrap(), 0) };
         assert_eq!(alive, -1, "guard drop must kill the child");
     }

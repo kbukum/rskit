@@ -1,7 +1,7 @@
 //! Discovery-integrated server component.
 //!
-//! Wraps any server implementing the [`rskit_bootstrap::Component`] trait to automatically
-//! register with service discovery on start and deregister on stop.
+//! Wraps any server implementing the [`rskit_bootstrap::Component`] trait to automatically register with service discovery on start
+//! and deregister on stop.
 
 use std::sync::Arc;
 
@@ -13,8 +13,8 @@ use crate::{instance::ServiceInstance, traits::Registry};
 
 /// Wraps a server component with service discovery auto-registration.
 ///
-/// On `start()`, the inner server starts first, then the instance is registered.
-/// On `stop()`, the instance is deregistered first, then the inner server stops.
+/// On `start()`, the inner server starts first, then the instance is registered. On `stop()`,
+/// the instance is deregistered first, then the inner server stops.
 pub struct DiscoveryServer<S: Component + ?Sized> {
     inner: Arc<S>,
     registry: Arc<dyn Registry>,

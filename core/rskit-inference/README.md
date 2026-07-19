@@ -1,6 +1,9 @@
 # rskit-inference — model-serving runtime contracts
 
-`rskit-inference` is the model-serving runtime contract layer for Triton, vLLM raw, TGI, KServe v2, BentoML, ONNX Runtime Server, TFServing, and custom REST/gRPC serving APIs. Concrete serving adapters live in `contrib/inference/*`. It is not a chat completion abstraction; chat belongs to `rskit-llm` and `contrib/llm/*`.
+`rskit-inference` is the model-serving runtime contract layer for Triton, vLLM raw, TGI, KServe v2,
+BentoML, ONNX Runtime Server, TFServing, and custom REST/gRPC serving APIs.
+Concrete serving adapters live in `contrib/inference/*`. It is not a chat completion abstraction;
+chat belongs to `rskit-llm` and `contrib/llm/*`.
 
 ## Install
 
@@ -56,4 +59,5 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## When to use
 
-Use `rskit-inference` when you are integrating serving runtimes with typed inputs and outputs. If you want conversational LLM behavior, tool use, or canonical chat events, stay in `rskit-llm`.
+Use `rskit-inference` when you are integrating serving runtimes with typed inputs and outputs.
+If you want conversational LLM behavior, tool use, or canonical chat events, stay in `rskit-llm`.

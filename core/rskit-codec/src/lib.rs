@@ -1,26 +1,25 @@
 //! Pluggable structured-text codecs over a shared value tree.
 //!
 //! `rskit-codec` provides a small, object-safe [`Codec`] contract for encoding
-//! and decoding structured text formats (TOML, JSON, …) through one canonical
-//! value model — [`serde_json::Value`]. Any crate that reads or writes a config
-//! file, manifest, or document reuses these codecs instead of re-implementing
-//! "bounded read → parse → typed error" per format.
+//! and decoding structured text formats (TOML, JSON, …) through one canonical value model —
+//! [`serde_json::Value`]. Any crate that reads or writes a config file, manifest,
+//! or document reuses these codecs instead of re-implementing "bounded read → parse → typed error" per format.
 //!
 //! # Value model
 //!
 //! [`serde_json::Value`] is the canonical in-memory tree. It is format-neutral
 //! and the de-facto Rust interchange type, so TOML and JSON both decode into it
-//! and the [`value`] merge operates on it. One consequence: types without a JSON
-//! equivalent (notably TOML datetimes) are not part of the model — represent such
-//! values as strings.
+//! and the [`value`] merge operates on it. One consequence:
+//! types without a JSON equivalent (notably TOML datetimes) are not part of the model —
+//! represent such values as strings.
 //!
 //! # Object safety
 //!
-//! [`Codec`] is object-safe (`Arc<dyn Codec>`) so a codec can be selected at
-//! runtime (e.g. by file extension via [`select`]). The generic, type-driven
-//! conveniences [`encode`] and [`decode`] are free functions taking `&dyn Codec`,
-//! keeping the trait object-safe while still supporting `#[derive(Serialize,
-//! Deserialize)]` types. `decode::<T>` honors `#[serde(deny_unknown_fields)]`.
+//! [`Codec`] is object-safe (`Arc<dyn Codec>`)
+//! so a codec can be selected at runtime (e.g. by file extension via [`select`]). The generic,
+//! type-driven conveniences [`encode`] and [`decode`] are free functions taking `&dyn Codec`,
+//! keeping the trait object-safe while still supporting `#[derive(Serialize, Deserialize)]` types.
+//! `decode::<T>` honors `#[serde(deny_unknown_fields)]`.
 //!
 //! # Quick start
 //!

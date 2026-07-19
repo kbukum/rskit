@@ -1,15 +1,14 @@
 //! A raw-mode terminal over [crossterm], enabling live arrow-key navigation.
 //!
-//! `RichTerminal` is compiled only when the `interactive` feature is enabled. It
-//! puts the controlling terminal into raw mode for the duration of a key-driven
-//! prompt, decodes platform key events into rskit's own [`Key`] vocabulary, and
-//! redraws frames in place via cursor movement. Raw mode is restored on
-//! [`Terminal::end_interactive`] and, as a panic-safety net, on drop.
+//! `RichTerminal` is compiled only when the `interactive` feature is enabled.
+//! It puts the controlling terminal into raw mode for the duration of a key-driven prompt,
+//! decodes platform key events into rskit's own [`Key`] vocabulary,
+//! and redraws frames in place via cursor movement.
+//! Raw mode is restored on [`Terminal::end_interactive`] and, as a panic-safety net, on drop.
 //!
-//! Its raw-mode I/O path needs a real TTY, so that path is not exercised by
-//! unit tests; the shared prompt-kind logic is covered through
-//! [`ScriptedTerminal`](super::ScriptedTerminal). The pure key decoder is
-//! unit-tested at its boundary (see the `map_key` tests below).
+//! Its raw-mode I/O path needs a real TTY, so that path is not exercised by unit tests;
+//! the shared prompt-kind logic is covered through [`ScriptedTerminal`](super::ScriptedTerminal).
+//! The pure key decoder is unit-tested at its boundary (see the `map_key` tests below).
 
 use std::io::{self, IsTerminal, Write};
 
@@ -35,9 +34,8 @@ impl RichTerminal {
     ///
     /// # Errors
     ///
-    /// Returns an error unless both stderr and stdin are terminals: frames are
-    /// drawn to stderr, while raw-mode key input is read from stdin, so both
-    /// streams must be a real TTY.
+    /// Returns an error unless both stderr and stdin are terminals: frames are drawn to stderr,
+    /// while raw-mode key input is read from stdin, so both streams must be a real TTY.
     pub fn stderr() -> AppResult<Self> {
         let writer = io::stderr();
         if !writer.is_terminal() {
@@ -112,9 +110,8 @@ impl Terminal for RichTerminal {
     }
 
     fn write_line(&mut self, text: &str) -> AppResult<()> {
-        // Raw mode disables the kernel's LF->CRLF translation, so emit an
-        // explicit carriage return; in cooked mode a bare LF is correct (and a
-        // stray CR would misplace the cursor).
+        // Raw mode disables the kernel's LF->CRLF translation, so emit an explicit carriage return;
+        // in cooked mode a bare LF is correct (and a stray CR would misplace the cursor).
         let newline = if self.raw { "\r\n" } else { "\n" };
         write!(self.writer, "{text}{newline}").map_err(AppError::internal)
     }
@@ -145,9 +142,9 @@ impl Terminal for RichTerminal {
     }
 
     fn end_interactive(&mut self) -> AppResult<()> {
-        // Idempotent: only tear down (and clear the current line) when we were
-        // actually in raw mode, so a stray or repeated call can't clobber
-        // terminal output that we never rendered over.
+        // Idempotent:
+        // only tear down (and clear the current line) when we were actually in raw mode, so a stray
+        // or repeated call can't clobber terminal output that we never rendered over.
         if !self.raw {
             return Ok(());
         }
@@ -163,10 +160,10 @@ mod tests {
 
     #[test]
     fn requires_a_terminal_stderr() {
-        // RichTerminal needs both stdin (key input) and stderr (rendering) to be
-        // a TTY. The test harness usually redirects both, but under --nocapture
-        // or some CI runners they can be real terminals, so gate the assertion on
-        // the actual stream status to stay deterministic.
+        // RichTerminal needs both stdin (key input) and stderr (rendering) to be a TTY.
+        // The test harness usually redirects both, but under --nocapture
+        // or some CI runners they can be real terminals,
+        // so gate the assertion on the actual stream status to stay deterministic.
         use std::io::{IsTerminal, stderr, stdin};
 
         let result = RichTerminal::stderr();
@@ -187,10 +184,10 @@ mod tests {
 
     #[test]
     fn maps_space_bar_to_space_not_char() {
-        // Regression: the space bar arrives as KeyCode::Char(' '); it must decode
-        // to Key::Space so multi-select's toggle arm is reachable on a real TTY.
-        // Feeding Key::Space from a scripted double is not enough — the decoder
-        // itself must emit it.
+        // Regression: the space bar arrives as KeyCode::Char(' '); it must decode to Key::Space
+        // so multi-select's toggle arm is reachable on a real TTY.
+        // Feeding Key::Space from a scripted double is not enough —
+        // the decoder itself must emit it.
         let space = KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE);
         assert_eq!(map_key(space), Key::Space);
     }

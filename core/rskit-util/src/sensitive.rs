@@ -21,10 +21,9 @@ pub const DEFAULT_SECRET_KEY_NAMES: &[&str] = &[
 
 /// Matches normalized key names that commonly carry secret values.
 ///
-/// Names are compared case-insensitively after trimming leading dashes and
-/// normalizing `-` to `_`. A key matches when it equals a configured name or
-/// ends with `_<name>`, allowing names such as `db_password` while avoiding
-/// false positives such as `author`.
+/// Names are compared case-insensitively after trimming leading dashes and normalizing `-` to `_`.
+/// A key matches when it equals a configured name or ends with `_<name>`,
+/// allowing names such as `db_password` while avoiding false positives such as `author`.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct SecretKeyMatcher {
     names: Vec<String>,

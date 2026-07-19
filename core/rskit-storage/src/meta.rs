@@ -90,8 +90,7 @@ impl FileKind {
 
 /// Detect the MIME type of a file source.
 ///
-/// Uses magic-byte detection on the first bytes of the file,
-/// falling back to extension-based guessing.
+/// Uses magic-byte detection on the first bytes of the file, falling back to extension-based guessing.
 pub async fn detect_mime(source: &FileSource) -> AppResult<String> {
     // Try magic-byte detection first
     let bytes = match source {

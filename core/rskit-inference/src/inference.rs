@@ -5,10 +5,9 @@ use crate::types::{
     InferenceDescriptor, InferenceError, PredictRequest, PredictResponse, StreamEventRef,
 };
 
-/// Inference is the model-serving runtime trait. Adapters cover text
-/// generation (vLLM, TGI), classification/regression (Triton KServe v2),
-/// embeddings (BentoML, custom), image/audio inference, and arbitrary tensor
-/// protocols. NOT chat completion — that lives in `rskit-llm`.
+/// Inference is the model-serving runtime trait. Adapters cover text generation (vLLM, TGI),
+/// classification/regression (Triton KServe v2), embeddings (BentoML, custom), image/audio inference,
+/// and arbitrary tensor protocols. NOT chat completion — that lives in `rskit-llm`.
 ///
 /// This trait extends `rskit_provider::RequestResponse<PredictRequest, PredictResponse>`
 /// so inference adapters natively expose the canonical request/response shape.

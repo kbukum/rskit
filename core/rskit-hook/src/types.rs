@@ -32,9 +32,9 @@ impl fmt::Display for EventType {
 
 /// Trait that all hook and in-process bus events must implement.
 ///
-/// The public hook API dispatches on the concrete Rust event type. The
-/// [`EventType`] remains available as stable human-readable metadata for logs,
-/// metrics, and diagnostics.
+/// The public hook API dispatches on the concrete Rust event type.
+/// The [`EventType`] remains available as stable human-readable metadata for logs, metrics,
+/// and diagnostics.
 pub trait Event: Any + Send + Sync + 'static {
     /// Return the event type discriminator for this event.
     fn event_type(&self) -> EventType;

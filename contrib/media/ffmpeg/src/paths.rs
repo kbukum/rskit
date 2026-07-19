@@ -1,7 +1,6 @@
 //! Path confinement for FFmpeg local file inputs and outputs.
 //!
-//! All user-provided paths that become subprocess arguments pass through this
-//! module before reaching `rskit-process`.
+//! All user-provided paths that become subprocess arguments pass through this module before reaching `rskit-process`.
 
 use std::path::{Path, PathBuf};
 

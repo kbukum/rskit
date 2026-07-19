@@ -6,9 +6,8 @@ pub(crate) const DEFAULT_MAX_ENTRY_BYTES: u64 = 16 * 1024 * 1024;
 
 /// Filesystem cache configuration.
 ///
-/// The root path is supplied when registering the adapter because it is a
-/// deployment concern owned by the composition boundary, not common cache
-/// selection configuration.
+/// The root path is supplied when registering the adapter because it is a deployment concern owned by the composition boundary,
+/// not common cache selection configuration.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct FileCacheConfig {
     /// Root directory used to store cache entries.

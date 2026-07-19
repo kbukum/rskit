@@ -1,6 +1,8 @@
 # rskit-mcp — Model Context Protocol bridge
 
-`rskit-mcp` exposes an `rskit-tool` registry through MCP and can discover remote MCP tools for use inside rskit applications. It keeps tool execution policy in `rskit-tool::Envelope` while mapping MCP wire types at the boundary.
+`rskit-mcp` exposes an `rskit-tool` registry through MCP
+and can discover remote MCP tools for use inside rskit applications.
+It keeps tool execution policy in `rskit-tool::Envelope` while mapping MCP wire types at the boundary.
 
 ## Install
 
@@ -59,4 +61,5 @@ fn main() {
 
 ## When to use
 
-Use `rskit-mcp` when you need to expose a local tool registry through MCP or consume remote MCP tools without letting protocol concerns leak into the core tool layer.
+Use `rskit-mcp` when you need to expose a local tool registry through MCP
+or consume remote MCP tools without letting protocol concerns leak into the core tool layer.

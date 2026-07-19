@@ -1,7 +1,7 @@
 //! Curve data types for visualization.
 //!
-//! These types are populated by metrics and stored in `BenchRunResult.curves`
-//! for visualization by report and viz sub-modules.
+//! These types are populated by metrics
+//! and stored in `BenchRunResult.curves` for visualization by report and viz sub-modules.
 
 use serde::{Deserialize, Serialize};
 

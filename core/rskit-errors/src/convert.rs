@@ -5,11 +5,11 @@ use crate::{AppError, ErrorCode};
 impl From<std::io::Error> for AppError {
     fn from(e: std::io::Error) -> Self {
         use std::io::ErrorKind;
-        // Map common kinds to their semantic code so HTTP status and retry
-        // hints stay meaningful (e.g. a missing file is 404, not 500). The
-        // `io::Error` message is safe to surface for these classified kinds,
-        // but unclassified errors fall through to `internal` so their detail
-        // is preserved only as a (non-serialized) cause.
+        // Map common kinds to their semantic code so HTTP status
+        // and retry hints stay meaningful (e.g. a missing file is 404, not 500).
+        // The `io::Error` message is safe to surface for these classified kinds,
+        // but unclassified errors fall through to `internal`
+        // so their detail is preserved only as a (non-serialized) cause.
         let code = match e.kind() {
             ErrorKind::NotFound => ErrorCode::NotFound,
             ErrorKind::PermissionDenied => ErrorCode::Forbidden,

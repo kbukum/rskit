@@ -28,8 +28,7 @@ struct NodeExecution {
 ///
 /// Nodes are executed in topological order with maximum parallelism:
 /// all nodes whose dependencies are satisfied run concurrently.
-/// Use [`with_max_parallelism`](Dag::with_max_parallelism) to limit
-/// how many nodes execute simultaneously.
+/// Use [`with_max_parallelism`](Dag::with_max_parallelism) to limit how many nodes execute simultaneously.
 pub struct Dag {
     nodes: HashMap<String, Arc<dyn DagNode>>,
     /// Forward edges: `from_id` → downstream dependents

@@ -1,11 +1,11 @@
 //! ML benchmarking framework: evaluators, metrics, reports, visualization.
 //!
-//! Migrated from sentinel/rs-services/ruskit to use rskit-errors (AppResult/AppError)
-//! instead of anyhow, and rskit-provider for the Provider/RequestResponse traits.
+//! Migrated from sentinel/rs-services/ruskit to use rskit-errors (AppResult/AppError) instead of anyhow,
+//! and rskit-provider for the Provider/RequestResponse traits.
 //!
-//! Benchmark orchestration accepts injected clocks and storage. Use
-//! [`FixedClock`] and a test-owned [`RunStorage`] implementation for deterministic
-//! tests; use [`SystemClock`] and [`FileRunStorage`] for normal CLI runs.
+//! Benchmark orchestration accepts injected clocks and storage. Use [`FixedClock`]
+//! and a test-owned [`RunStorage`] implementation for deterministic tests; use [`SystemClock`]
+//! and [`FileRunStorage`] for normal CLI runs.
 
 pub mod cli;
 pub mod compare;

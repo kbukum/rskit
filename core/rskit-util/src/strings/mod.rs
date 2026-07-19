@@ -1,5 +1,5 @@
-//! String helpers: case conversion, UTF-8-safe truncation, unique-shorthand
-//! resolution, and "did you mean?" suggestions.
+//! String helpers: case conversion, UTF-8-safe truncation, unique-shorthand resolution,
+//! and "did you mean?" suggestions.
 
 mod case;
 mod resolve;

@@ -1,7 +1,6 @@
 //! Transcode a video using a pipeline.
 //!
-//! Usage:
-//!   cargo run --bin transcode -- input.mp4 output.mp4
+//! Usage: cargo run --bin transcode -- input.mp4 output.mp4
 //!
 //! File paths are confined to the current working directory.
 

@@ -1,10 +1,9 @@
 //! Subscriber setup — building and installing `tracing` subscribers.
 //!
-//! This module owns everything that depends on the `tracing` ecosystem:
-//! [`init_logging`] and friends, the [`LoggingGuard`], and the
-//! `EnvFilter`/output plumbing. It is gated behind the default-on `setup`
-//! feature so that consumers wanting only the configuration vocabulary
-//! (see [`crate::config`]) do not link `tracing-subscriber`.
+//! This module owns everything that depends on the `tracing` ecosystem: [`init_logging`] and friends,
+//! the [`LoggingGuard`], and the `EnvFilter`/output plumbing.
+//! It is gated behind the default-on `setup` feature
+//! so that consumers wanting only the configuration vocabulary (see [`crate::config`]) do not link `tracing-subscriber`.
 
 use std::collections::HashMap;
 use std::fs::OpenOptions;
@@ -93,10 +92,9 @@ impl<'a> LoggingSetup<'a> {
 
 /// Opaque guard — drop to restore the previous tracing subscriber.
 ///
-/// Keep this alive for the lifetime of your service (e.g. bind it to a
-/// variable in `main`). When OTLP export is enabled through `init_logging_full`,
-/// the guard also owns the OTLP provider and shuts it
-/// down on drop to flush pending records.
+/// Keep this alive for the lifetime of your service (e.g. bind it to a variable in `main`).
+/// When OTLP export is enabled through `init_logging_full`, the guard also owns the OTLP provider
+/// and shuts it down on drop to flush pending records.
 pub struct LoggingGuard {
     #[allow(dead_code)]
     guard: DefaultGuard,
@@ -141,9 +139,8 @@ impl Drop for LoggingGuard {
 /// - `LogFormat::Json` → newline-delimited JSON (production)
 /// - `LogFormat::Console` → human-readable with colour (development)
 ///
-/// Masking is **enabled by default** — sensitive fields are redacted before
-/// reaching the output sink.  Use [`init_logging_with_options`] for full
-/// control over masking, sampling, and per-module levels.
+/// Masking is **enabled by default** — sensitive fields are redacted before reaching the output sink.
+/// Use [`init_logging_with_options`] for full control over masking, sampling, and per-module levels.
 ///
 /// The `RUST_LOG` env var takes precedence over `cfg.level` when set.
 ///
@@ -198,10 +195,10 @@ fn init_logging_with_default_masking(cfg: &LoggingConfig) -> LoggingResult<Loggi
 
 /// Initialize logging with explicit masking configuration.
 ///
-/// When `masking_cfg.enabled` is `true`, all log output passes through a
-/// [`MaskingMakeWriter`](crate::masking::MaskingMakeWriter) that redacts
-/// secrets and PII before they reach the output sink.  When masking is
-/// disabled, logging goes directly to the configured output.
+/// When `masking_cfg.enabled` is `true`,
+/// all log output passes through a [`MaskingMakeWriter`](crate::masking::MaskingMakeWriter) that redacts secrets
+/// and PII before they reach the output sink. When masking is disabled,
+/// logging goes directly to the configured output.
 pub fn init_logging_with_masking(
     cfg: &LoggingConfig,
     masking_cfg: &masking::MaskingConfig,
@@ -216,23 +213,20 @@ pub fn init_logging_with_masking(
 
 /// Enhanced logging init with optional sampling, per-module levels, and masking.
 ///
-/// This is the primary initialisation entry point.  All other `init_logging*`
-/// functions delegate here.
+/// This is the primary initialisation entry point.  All other `init_logging*` functions delegate here.
 ///
-/// - **Sampling** — when `sampling` is `Some` and enabled, a
-///   [`SamplingLayer`](crate::sampling::SamplingLayer) is added to drop events
-///   exceeding per-level rate limits.
-/// - **Module levels** — when `module_levels` is `Some`, per-module filter directives
-///   are merged into the [`EnvFilter`].
-/// - **Masking** — when `masking_cfg` is `Some` and enabled, a
-///   [`MaskingMakeWriter`](crate::masking::MaskingMakeWriter) wraps the
-///   configured output to redact secrets.  Pass `None` to disable masking
-///   entirely.
+/// - **Sampling** — when `sampling` is `Some` and enabled,
+///   a [`SamplingLayer`](crate::sampling::SamplingLayer) is added to drop events exceeding per-level rate limits.
+/// - **Module levels** — when `module_levels` is `Some`,
+///   per-module filter directives are merged into the [`EnvFilter`].
+/// - **Masking** — when `masking_cfg` is `Some` and enabled,
+///   a [`MaskingMakeWriter`](crate::masking::MaskingMakeWriter) wraps the configured output to redact secrets.
+///   Pass `None` to disable masking entirely.
 ///
 /// # Errors
 ///
-/// Returns an error when a custom masking regex pattern is invalid or when the
-/// configured file output cannot be opened.
+/// Returns an error when a custom masking regex pattern is invalid
+/// or when the configured file output cannot be opened.
 pub fn init_logging_with_options(
     cfg: &LoggingConfig,
     sampling_cfg: Option<&SamplingConfig>,
@@ -339,15 +333,14 @@ fn build_output_writer(output: &LogOutput) -> LoggingResult<BoxMakeWriter> {
 /// 3. Format layer (JSON or console)
 /// 4. Optional [`OtlpProvider`](crate::otlp::OtlpProvider) layer — bridges events to OTel Logs SDK
 ///
-/// The returned [`LoggingGuard`] **must** be held for the lifetime of the
-/// service.  When dropped it restores the previous subscriber and (when OTLP
-/// is enabled) shuts down the provider, flushing pending logs.
+/// The returned [`LoggingGuard`] **must** be held for the lifetime of the service.
+/// When dropped it restores the previous subscriber and (when OTLP is enabled) shuts down the provider,
+/// flushing pending logs.
 ///
 /// # Errors
 ///
-/// Returns an error if the OTLP provider cannot be created (e.g. invalid
-/// endpoint or transport failure), or if a custom masking regex pattern is
-/// invalid.
+/// Returns an error if the OTLP provider cannot be created (e.g. invalid endpoint or transport failure),
+/// or if a custom masking regex pattern is invalid.
 #[cfg(feature = "otlp")]
 pub fn init_logging_full(setup: LoggingSetup<'_>) -> LoggingResult<LoggingGuard> {
     use crate::otlp;

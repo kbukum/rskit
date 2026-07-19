@@ -14,8 +14,8 @@ use crate::traits::MessageConsumer;
 /// Manages the consumption loop as a tokio task.
 ///
 /// Unlike [`ManagedConsumer`](crate::managed_consumer::ManagedConsumer),
-/// `ConsumerRunner` owns the task handle directly and provides a simpler
-/// run/stop interface without builder overhead.
+/// `ConsumerRunner` owns the task handle directly
+/// and provides a simpler run/stop interface without builder overhead.
 pub struct ConsumerRunner<T: Send + Sync + Clone + 'static> {
     consumer: Arc<dyn MessageConsumer<T>>,
     handler: Arc<dyn MessageHandler<T>>,

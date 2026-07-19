@@ -1,7 +1,6 @@
 //! Standard field names for the unified log schema.
 //!
-//! These constants ensure consistency across all kits (gokit, rskit, pykit)
-//! when emitting structured log fields.
+//! These constants ensure consistency across all kits (gokit, rskit, pykit) when emitting structured log fields.
 
 /// Standard field names for the unified log schema.
 pub mod names {

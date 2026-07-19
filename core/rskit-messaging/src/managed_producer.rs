@@ -1,5 +1,5 @@
-//! Managed producer that wraps any [`MessageProducer`] with lifecycle
-//! management and metrics collection.
+//! Managed producer that wraps any [`MessageProducer`] with lifecycle management
+//! and metrics collection.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};

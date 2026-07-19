@@ -9,10 +9,10 @@ use crate::prompt::key::Key;
 
 /// A line-driven [`Terminal`] over an injected reader and writer.
 ///
-/// It uses the operating system's cooked line discipline: the user types a whole
-/// line and presses Enter. It never enters raw mode, works over pipes, and needs
-/// no extra dependencies, so it is the default terminal. Bind it to real streams
-/// with [`LineTerminal::stdio`], or to in-memory buffers with [`LineTerminal::new`].
+/// It uses the operating system's cooked line discipline: the user types a whole line
+/// and presses Enter. It never enters raw mode, works over pipes, and needs no extra dependencies,
+/// so it is the default terminal. Bind it to real streams with [`LineTerminal::stdio`],
+/// or to in-memory buffers with [`LineTerminal::new`].
 pub struct LineTerminal<R, W> {
     reader: R,
     writer: W,
@@ -128,8 +128,8 @@ mod tests {
 
     #[test]
     fn stdio_binds_to_process_streams() {
-        // Constructing over the real process streams must succeed; capabilities
-        // stay line-driven without touching stdin/stderr.
+        // Constructing over the real process streams must succeed;
+        // capabilities stay line-driven without touching stdin/stderr.
         let term = LineTerminal::stdio();
         assert_eq!(term.capabilities(), Capabilities::line_driven());
     }

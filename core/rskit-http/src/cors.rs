@@ -8,8 +8,8 @@ use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer};
 
 /// Cross-origin resource sharing policy.
 ///
-/// The default is deny-by-default: no origins, methods, headers, or credentials
-/// are allowed unless explicitly configured.
+/// The default is deny-by-default: no origins, methods, headers,
+/// or credentials are allowed unless explicitly configured.
 #[derive(Debug, Clone, Default, serde::Deserialize)]
 #[serde(default)]
 pub struct CorsPolicy {

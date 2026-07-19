@@ -2,12 +2,12 @@
 //!
 //! # Layers
 //!
-//! - **Vocabulary (always available)** — [`config::LoggingConfig`] /
-//!   [`config::LogFormat`] / [`config::LogOutput`] describe logging
-//!   declaratively and carry no `tracing` dependency, so configuration crates
-//!   can compose them without linking the subscriber stack.
-//! - **Setup (`setup` feature, default-on)** — `init_logging` and friends, the
-//!   `LoggingGuard`, masking, sampling, per-module levels, and context helpers.
+//! - **Vocabulary (always available)** —
+//!   [`config::LoggingConfig`] / [`config::LogFormat`] / [`config::LogOutput`] describe logging declaratively
+//!   and carry no `tracing` dependency,
+//!   so configuration crates can compose them without linking the subscriber stack.
+//! - **Setup (`setup` feature, default-on)** — `init_logging` and friends, the `LoggingGuard`, masking,
+//!   sampling, per-module levels, and context helpers.
 //!   Everything built on `tracing`/`tracing-subscriber` lives here.
 //!
 //! # Usage
@@ -24,8 +24,8 @@
 //!
 //! There is intentionally no global logger registry (unlike gokit's `logger.Get(name)`).
 //! Callers use `tracing` directly and scope context via spans + `#[tracing::instrument]`.
-//! `init_logging` installs a scoped default subscriber; the returned guard restores
-//! the previous subscriber on drop.
+//! `init_logging` installs a scoped default subscriber;
+//! the returned guard restores the previous subscriber on drop.
 
 #![warn(missing_docs)]
 

@@ -12,7 +12,8 @@ File I/O, local storage, temp files, MIME detection, and the shared storage back
 - `detect_mime` / `detect_kind` — magic-byte + extension fallback
 - `FileStore` trait with a local filesystem backend
 - `StorageRegistry` for explicit, config-driven backend selection
-- local backend keys and write targets are confined under the configured root and reject `..`, absolute path escapes, and symlink traversal before creating parent directories
+- local backend keys and write targets are confined under the configured root and reject `..`,
+  absolute path escapes, and symlink traversal before creating parent directories
 - `TempFile` / `TempDir` — RAII-managed temporaries (auto-deleted on drop)
 - Async streaming reads and file transfers
 
@@ -21,7 +22,8 @@ Cloud backends live in opt-in adapter crates:
 - `rskit-storage-s3` for Amazon S3 and S3-compatible stores
 - `rskit-storage-gcs` for Google Cloud Storage
 
-Adapter crates register through an application-owned `StorageRegistry`; importing an adapter crate has no side effects.
+Adapter crates register through an application-owned `StorageRegistry`;
+importing an adapter crate has no side effects.
 
 ## Usage
 

@@ -21,8 +21,8 @@ use crate::io;
 
 /// Native image probe using the `image` crate.
 ///
-/// Extracts resolution, format, and color type from images without
-/// requiring FFmpeg. Faster than spawning an ffprobe process.
+/// Extracts resolution, format, and color type from images without requiring FFmpeg.
+/// Faster than spawning an ffprobe process.
 pub(crate) struct ImageProbe {
     config: Arc<Config>,
 }

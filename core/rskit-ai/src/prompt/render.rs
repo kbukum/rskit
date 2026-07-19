@@ -8,8 +8,8 @@ use crate::chat::{Message, SystemMessage};
 
 use super::template::{PromptError, PromptTemplate, RenderContext};
 
-/// Render a template string using `{{var}}` placeholders.
-/// Handles optional whitespace: `{{ var }}` and `{{var}}` are equivalent.
+/// Render a template string using `{{var}}` placeholders. Handles optional whitespace: `{{ var }}`
+/// and `{{var}}` are equivalent.
 pub fn render(template: &str, context: &RenderContext) -> Result<String, PromptError> {
     DynamicTemplate::parse(template)
         .render(|name| {

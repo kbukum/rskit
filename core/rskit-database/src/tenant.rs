@@ -2,15 +2,14 @@
 //!
 //! Mirrors gokit's `database/tenant.go`.  Provides:
 //!
-//! - [`TenantScope`] — a builder for constructing tenant-filtered query
-//!   predicate fragments.
+//! - [`TenantScope`] — a builder for constructing tenant-filtered query predicate fragments.
 
 use std::num::NonZeroUsize;
 
 /// Helper for building tenant-scoped SQL `WHERE` clauses.
 ///
-/// Mirrors gokit's `ScopeToTenant` by associating a field name with a tenant
-/// value. Adapter crates decide how to bind the returned value.
+/// Mirrors gokit's `ScopeToTenant` by associating a field name with a tenant value.
+/// Adapter crates decide how to bind the returned value.
 ///
 /// # Examples
 ///
@@ -35,8 +34,7 @@ impl TenantScope {
     /// Create a new [`TenantScope`] for the given column and value.
     ///
     /// # Errors
-    /// Returns an error when the column is not a safe SQL identifier path or
-    /// the tenant value is empty.
+    /// Returns an error when the column is not a safe SQL identifier path or the tenant value is empty.
     pub fn new(
         column: impl Into<String>,
         value: impl Into<String>,
@@ -55,8 +53,7 @@ impl TenantScope {
 
     /// Return a `WHERE` clause fragment like `"workspace_id = $1"`.
     ///
-    /// `param_index` is the positional parameter number for the bind
-    /// placeholder (1-based for PostgreSQL `$N` syntax).
+    /// `param_index` is the positional parameter number for the bind placeholder (1-based for PostgreSQL `$N` syntax).
     #[must_use]
     pub fn where_clause(&self, param_index: NonZeroUsize) -> String {
         let param_index = param_index.get();
@@ -77,8 +74,7 @@ impl TenantScope {
 
     /// Append a tenant-scoped `WHERE` clause to the given SQL query.
     ///
-    /// Returns the modified query with ` WHERE column = $N` appended, where
-    /// `N` is `param_index`.
+    /// Returns the modified query with ` WHERE column = $N` appended, where `N` is `param_index`.
     #[must_use]
     pub fn apply(&self, query: &str, param_index: NonZeroUsize) -> String {
         format!("{query} WHERE {}", self.where_clause(param_index))

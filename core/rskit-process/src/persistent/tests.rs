@@ -51,14 +51,15 @@ fn wait_for_fifo_byte(path: PathBuf) {
 }
 
 fn process_is_alive(pid: i32) -> bool {
-    // SAFETY: `kill(pid, 0)` only checks signalability for a pid captured from
-    // the child process itself. ESRCH means the process no longer exists.
+    // SAFETY:
+    // `kill(pid, 0)` only checks signalability for a pid captured from the child process itself.
+    // ESRCH means the process no longer exists.
     unsafe { libc::kill(pid, 0) == 0 }
 }
 
 fn kill_process(pid: i32) {
-    // SAFETY: The pid is read from a test-owned child process and cleaned up
-    // after verifying non-descendant shutdown behavior.
+    // SAFETY: The pid is read from a test-owned child process
+    // and cleaned up after verifying non-descendant shutdown behavior.
     unsafe {
         let _ = libc::kill(pid, libc::SIGKILL);
     }

@@ -1,8 +1,7 @@
 //! File I/O, storage backends, temp files, and MIME detection.
 //!
-//! `rskit-storage` provides generic file operations for any file type:
-//! read, write, copy, stream, detect type, manage temp files, and
-//! store through the [`FileStore`] trait.
+//! `rskit-storage` provides generic file operations for any file type: read, write, copy, stream,
+//! detect type, manage temp files, and store through the [`FileStore`] trait.
 
 #![warn(missing_docs)]
 

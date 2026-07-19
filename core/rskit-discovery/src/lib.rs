@@ -1,9 +1,9 @@
 //! Service discovery with load balancing strategies.
 //!
-//! Resolve [`ServiceInstance`]s through the [`Discovery`] trait and
-//! manage registrations via [`Registry`]. Pick an instance using one
-//! of the built-in load balancers: [`RoundRobin`], [`Random`], or
-//! [`LeastConnections`].
+//! Resolve [`ServiceInstance`]s through the [`Discovery`] trait
+//! and manage registrations via [`Registry`].
+//! Pick an instance using one of the built-in load balancers: [`RoundRobin`], [`Random`],
+//! or [`LeastConnections`].
 
 #![warn(missing_docs)]
 

@@ -1,17 +1,14 @@
 //! One-off status feedback lines for guided, multi-step CLI flows.
 //!
-//! Where [`crate::progress`] animates *ongoing* work and [`crate::prompt`] reads
-//! *input*, this renders the short, one-shot status lines a flow emits between
-//! steps: `✓ Detected Rust`, a `[1/4]` step counter, a section heading, a warn
-//! or error notice. It composes the two theme layers — a [`Palette`] for color
-//! and a [`Glyphs`] set for the leading symbol — so every line honours
-//! `NO_COLOR`, TTY detection, and UTF-8 capability exactly like the rest of the
-//! CLI surface.
+//! Where [`crate::progress`] animates *ongoing* work and [`crate::prompt`] reads *input*,
+//! this renders the short, one-shot status lines a flow emits between steps: `✓ Detected Rust`,
+//! a `[1/4]` step counter, a section heading, a warn or error notice. It composes the two theme layers
+//! — a [`Palette`] for color and a [`Glyphs`] set for the leading symbol —
+//! so every line honours `NO_COLOR`, TTY detection,
+//! and UTF-8 capability exactly like the rest of the CLI surface.
 //!
-//! The writer is injected, so callers bind it to a real stream with
-//! [`StatusReporter::from_env`] (stderr, matching the "diagnostics to stderr"
-//! convention) while tests assert on an in-memory buffer via
-//! [`StatusReporter::new`].
+//! The writer is injected,
+//! so callers bind it to a real stream with [`StatusReporter::from_env`] (stderr, matching the "diagnostics to stderr" convention) while tests assert on an in-memory buffer via [`StatusReporter::new`].
 
 use std::io::{self, Write};
 
@@ -29,9 +26,8 @@ pub struct StatusReporter<W> {
 impl StatusReporter<io::Stderr> {
     /// Build a reporter bound to process stderr.
     ///
-    /// The [`Palette`] resolves from `color` against stderr and the [`Glyphs`]
-    /// from the process locale, so color and symbols both honour redirection,
-    /// `NO_COLOR`, and terminal encoding.
+    /// The [`Palette`] resolves from `color` against stderr and the [`Glyphs`] from the process locale,
+    /// so color and symbols both honour redirection, `NO_COLOR`, and terminal encoding.
     #[must_use]
     pub fn from_env(color: ColorChoice) -> Self {
         let stderr = io::stderr();
@@ -224,8 +220,8 @@ mod tests {
 
     #[test]
     fn from_env_binds_to_stderr_without_writing() {
-        // Constructing over the process stderr must succeed regardless of TTY or
-        // NO_COLOR state; it resolves the palette and glyphs but emits nothing.
+        // Constructing over the process stderr must succeed regardless of TTY or NO_COLOR state;
+        // it resolves the palette and glyphs but emits nothing.
         let _reporter = StatusReporter::from_env(crate::theme::ColorChoice::Never);
     }
 }

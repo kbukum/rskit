@@ -1,17 +1,15 @@
 //! Process-current-directory guard for tests.
 //!
-//! The process working directory is global mutable state: a test that calls
-//! [`std::env::set_current_dir`] mutates a value every other test in the same
-//! binary observes. [`CurrentDirGuard`] makes that safe by
+//! The process working directory is global mutable state:
+//! a test that calls [`std::env::set_current_dir`] mutates a value every other test in the same binary observes.
+//! [`CurrentDirGuard`] makes that safe by
 //!
-//! 1. holding a process-wide lock for its lifetime, so concurrent tests in the
-//!    same binary cannot interleave their directory changes, and
-//! 2. restoring the previous working directory on drop, so a change never leaks
-//!    into a later test.
+//! 1. holding a process-wide lock for its lifetime,
+//!    so concurrent tests in the same binary cannot interleave their directory changes, and
+//! 2. restoring the previous working directory on drop, so a change never leaks into a later test.
 //!
-//! It is the working-directory analogue of the env-var mutex pattern: any test
-//! that depends on or mutates the current directory should hold a guard for the
-//! duration of that dependence.
+//! It is the working-directory analogue of the env-var mutex pattern: any test that depends on
+//! or mutates the current directory should hold a guard for the duration of that dependence.
 //!
 //! ```no_run
 //! use rskit_testutil::CurrentDirGuard;
@@ -29,23 +27,21 @@ use std::path::{Path, PathBuf};
 use parking_lot::{ReentrantMutex, ReentrantMutexGuard};
 use rskit_errors::{AppError, AppResult};
 
-/// Serializes every [`CurrentDirGuard`] across threads in the test binary so
-/// concurrent tests cannot interleave process-wide working-directory changes.
+/// Serializes every [`CurrentDirGuard`] across threads in the test binary
+/// so concurrent tests cannot interleave process-wide working-directory changes.
 ///
-/// The lock is reentrant: a single thread may hold nested guards (for example a
-/// helper that calls [`CurrentDirGuard::pin`] inside a test that already holds a
-/// guard) without deadlocking, while guards on *other* threads still block until
-/// every guard on the holding thread is dropped.
+/// The lock is reentrant:
+/// a single thread may hold nested guards (for example a helper that calls [`CurrentDirGuard::pin`] inside a test that already holds a guard) without deadlocking,
+/// while guards on *other* threads still block until every guard on the holding thread is dropped.
 static CWD_LOCK: ReentrantMutex<()> = ReentrantMutex::new(());
 
-/// An RAII guard that pins the process working directory for its lifetime and
-/// restores the previous directory when dropped.
+/// An RAII guard that pins the process working directory for its lifetime
+/// and restores the previous directory when dropped.
 ///
-/// Construct one with [`CurrentDirGuard::change_to`] (change the directory) or
-/// [`CurrentDirGuard::pin`] (hold the current directory without changing it).
-/// While the guard is alive it owns a process-wide reentrant lock, so guards on
-/// other threads block until it drops; nested guards on the same thread are
-/// allowed.
+/// Construct one with [`CurrentDirGuard::change_to`] (change the directory)
+/// or [`CurrentDirGuard::pin`] (hold the current directory without changing it).
+/// While the guard is alive it owns a process-wide reentrant lock,
+/// so guards on other threads block until it drops; nested guards on the same thread are allowed.
 #[derive(Debug)]
 #[must_use = "the working directory is restored when the guard is dropped; bind it to a name"]
 pub struct CurrentDirGuard {
@@ -54,8 +50,7 @@ pub struct CurrentDirGuard {
 }
 
 impl CurrentDirGuard {
-    /// Acquire the lock and pin the current working directory without changing
-    /// it, restoring it on drop.
+    /// Acquire the lock and pin the current working directory without changing it, restoring it on drop.
     ///
     /// # Errors
     /// Returns an error if the current working directory cannot be read.
@@ -73,8 +68,8 @@ impl CurrentDirGuard {
     /// The previous directory is restored when the guard drops.
     ///
     /// # Errors
-    /// Returns an error if the current directory cannot be read or if `dir`
-    /// cannot be set as the working directory.
+    /// Returns an error if the current directory cannot be read
+    /// or if `dir` cannot be set as the working directory.
     pub fn change_to(dir: impl AsRef<Path>) -> AppResult<Self> {
         let lock = CWD_LOCK.lock();
         let previous = current_dir()?;
@@ -95,12 +90,11 @@ impl CurrentDirGuard {
 impl Drop for CurrentDirGuard {
     fn drop(&mut self) {
         if let Err(error) = std::env::set_current_dir(&self.previous) {
-            // Restoring the previous directory is the guard's core contract, so a
-            // failure must be loud rather than leaking a broken cwd into later
-            // tests. The lock is still held until this guard finishes dropping, so
-            // no other guard observes the broken directory. Don't panic while
-            // already unwinding — a double panic aborts the process and hides the
-            // original failure.
+            // Restoring the previous directory is the guard's core contract,
+            // so a failure must be loud rather than leaking a broken cwd into later tests.
+            // The lock is still held until this guard finishes dropping,
+            // so no other guard observes the broken directory. Don't panic while already unwinding
+            // — a double panic aborts the process and hides the original failure.
             assert!(
                 std::thread::panicking(),
                 "CurrentDirGuard failed to restore the working directory to '{}': {error}",
@@ -177,8 +171,8 @@ mod tests {
         use std::sync::Barrier;
         use std::sync::atomic::{AtomicUsize, Ordering};
 
-        // Each thread holds a guard while incrementing a shared counter; if the
-        // process-wide lock serializes guards, the counter never exceeds one.
+        // Each thread holds a guard while incrementing a shared counter;
+        // if the process-wide lock serializes guards, the counter never exceeds one.
         const THREADS: usize = 8;
         let barrier = Arc::new(Barrier::new(THREADS));
         let live = Arc::new(AtomicUsize::new(0));
@@ -190,8 +184,7 @@ mod tests {
                 let live = Arc::clone(&live);
                 let peak = Arc::clone(&peak);
                 std::thread::spawn(move || {
-                    // Release every thread together to maximize contention
-                    // without depending on wall-clock sleeps.
+                    // Release every thread together to maximize contention without depending on wall-clock sleeps.
                     barrier.wait();
                     let _guard = CurrentDirGuard::pin().unwrap();
                     let now = live.fetch_add(1, Ordering::SeqCst) + 1;
@@ -220,8 +213,8 @@ mod tests {
 
     #[test]
     fn nested_guards_on_one_thread_do_not_deadlock() {
-        // The reentrant lock allows a thread to hold nested guards; a
-        // non-reentrant lock would deadlock here instead.
+        // The reentrant lock allows a thread to hold nested guards;
+        // a non-reentrant lock would deadlock here instead.
         let _outer = CurrentDirGuard::pin().unwrap();
         let _inner = CurrentDirGuard::pin().unwrap();
     }

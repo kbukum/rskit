@@ -4,8 +4,7 @@ use crate::ServiceConfig;
 
 /// Trait that every application config struct must implement.
 ///
-/// Typically implemented by a struct that embeds [`ServiceConfig`] and adds
-/// service-specific fields.
+/// Typically implemented by a struct that embeds [`ServiceConfig`] and adds service-specific fields.
 ///
 /// ```no_run
 /// use rskit_config::{AppConfig, ConfigLoader, SecretString, ServiceConfig};

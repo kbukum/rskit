@@ -1,7 +1,6 @@
 //! Audio loudness measurement — peak, RMS, and approximate EBU R128.
 //!
-//! Provides quick loudness analysis on decoded samples without requiring
-//! external tools.
+//! Provides quick loudness analysis on decoded samples without requiring external tools.
 
 use crate::wav::WavReader;
 
@@ -18,8 +17,8 @@ pub struct LoudnessInfo {
     pub rms_db: f32,
     /// Approximate integrated loudness in LUFS (simplified EBU R128).
     ///
-    /// This is a lightweight approximation — for broadcast-grade measurement
-    /// use a dedicated R128 analyser or FFmpeg's `loudnorm` filter.
+    /// This is a lightweight approximation — for broadcast-grade measurement use a dedicated R128 analyser
+    /// or FFmpeg's `loudnorm` filter.
     pub lufs: f32,
 }
 
@@ -85,8 +84,7 @@ impl LoudnessMeter {
             f32::NEG_INFINITY
         };
 
-        // Simplified LUFS ≈ RMS dB - 0.691 (K-weighting offset approximation)
-        // Real EBU R128 applies K-weighting filter + gating.
+        // Simplified LUFS ≈ RMS dB - 0.691 (K-weighting offset approximation) Real EBU R128 applies K-weighting filter + gating.
         let lufs = if rms > 0.0 {
             rms_db - 0.691
         } else {

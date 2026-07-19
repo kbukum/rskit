@@ -1,8 +1,7 @@
 //! Kafka adapter for `rskit-messaging`.
 //!
-//! Registration is explicit and side-effect free: call [`register`](fn@register) from
-//! application composition code to add Kafka factories to a
-//! [`MessagingRegistry`](rskit_messaging::MessagingRegistry).
+//! Registration is explicit and side-effect free:
+//! call [`register`](fn@register) from application composition code to add Kafka factories to a [`MessagingRegistry`](rskit_messaging::MessagingRegistry).
 
 #![warn(missing_docs)]
 

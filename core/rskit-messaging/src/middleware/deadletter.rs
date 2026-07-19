@@ -54,8 +54,8 @@ pub struct DeadLetterEnvelope<T> {
     pub timestamp: DateTime<Utc>,
     /// Redacted message headers/metadata.
     pub headers: HashMap<String, String>,
-    /// Original payload for typed in-process use. Serialized DLQ envelopes omit
-    /// this field so JSON adapters do not leak raw failed-message contents.
+    /// Original payload for typed in-process use. Serialized DLQ envelopes omit this field
+    /// so JSON adapters do not leak raw failed-message contents.
     #[serde(skip)]
     pub payload: T,
     /// Redacted string summary for logs, JSON adapters, and non-text payloads.
@@ -82,10 +82,10 @@ impl DeadLetterPayloadSummary for Vec<u8> {
 
 /// Create a dead-letter middleware that routes terminal failures to a DLQ.
 ///
-/// When the inner handler returns an error, a [`DeadLetterEnvelope`] is sent to
-/// `<original_topic><suffix>`. A successful DLQ publish swallows the terminal
-/// handler error so poison-pill messages do not stall loops. DLQ publish
-/// failures are propagated.
+/// When the inner handler returns an error,
+/// a [`DeadLetterEnvelope`] is sent to `<original_topic><suffix>`.
+/// A successful DLQ publish swallows the terminal handler error
+/// so poison-pill messages do not stall loops. DLQ publish failures are propagated.
 pub fn dead_letter<T: Send + Sync + Clone + DeadLetterPayloadSummary + 'static>(
     producer: Arc<dyn MessageProducer<DeadLetterEnvelope<T>>>,
     config: DeadLetterConfig,

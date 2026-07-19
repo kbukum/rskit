@@ -1,8 +1,7 @@
 //! vLLM inference adapter using the OAI-compatible `/v1/completions` endpoint.
 //!
-//! Optional bearer credentials are configured through [`Config::api_key`] as a
-//! redacting [`SecretString`](rskit_util::SecretString) and installed through `rskit-httpclient` auth
-//! rather than raw headers.
+//! Optional bearer credentials are configured through [`Config::api_key`] as a redacting [`SecretString`](rskit_util::SecretString)
+//! and installed through `rskit-httpclient` auth rather than raw headers.
 
 #![warn(missing_docs)]
 

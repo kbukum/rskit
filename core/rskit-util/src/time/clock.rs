@@ -8,8 +8,8 @@ pub type SharedClock = Arc<dyn Clock>;
 
 /// Clock used for wall-clock timestamps and monotonic elapsed durations.
 ///
-/// Production code normally uses [`SystemClock`]. Tests and reproducible
-/// harnesses can inject [`FixedClock`] or a domain-specific implementation.
+/// Production code normally uses [`SystemClock`]. Tests
+/// and reproducible harnesses can inject [`FixedClock`] or a domain-specific implementation.
 pub trait Clock: Send + Sync {
     /// Monotonic milliseconds used for elapsed-duration measurements.
     fn monotonic_millis(&self) -> u64;

@@ -1,22 +1,20 @@
 //! The keystroke vocabulary a key-driven [`Terminal`](crate::prompt::terminal::Terminal) yields.
 //!
-//! [`Key`] is rskit's own, minimal key abstraction so no third-party terminal
-//! type (crossterm, termion, …) leaks into the public prompt surface. The rich
-//! terminal maps platform events onto it; the scripted terminal feeds canned
-//! sequences of it in tests.
+//! [`Key`] is rskit's own, minimal key abstraction
+//! so no third-party terminal type (crossterm, termion, …) leaks into the public prompt surface.
+//! The rich terminal maps platform events onto it;
+//! the scripted terminal feeds canned sequences of it in tests.
 
 /// A single decoded keystroke from an interactive terminal.
 ///
-/// Only the keys the prompt widgets act on are modelled; anything else decodes
-/// to [`Key::Unknown`] so callers can ignore it without a catch-all on a
-/// platform enum.
+/// Only the keys the prompt widgets act on are modelled; anything else decodes to [`Key::Unknown`]
+/// so callers can ignore it without a catch-all on a platform enum.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Key {
     /// Confirm the current answer (Enter / Return).
     Enter,
-    /// Space bar — toggles the focused item in multi-select, or inserts a
-    /// literal space in text entry.
+    /// Space bar — toggles the focused item in multi-select, or inserts a literal space in text entry.
     Space,
     /// Delete the character before the cursor (Backspace).
     Backspace,

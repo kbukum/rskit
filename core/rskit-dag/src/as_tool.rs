@@ -28,9 +28,8 @@ pub struct DagTool<I, O> {
 
 /// Wrap a DAG execution as a [`RequestResponse`] provider.
 ///
-/// The returned [`DagTool`] maps an input of type `I` into initial DAG inputs
-/// via `config.input_fn`, executes the DAG, then extracts an output of type `O`
-/// via `config.output_fn`.
+/// The returned [`DagTool`] maps an input of type `I` into initial DAG inputs via `config.input_fn`,
+/// executes the DAG, then extracts an output of type `O` via `config.output_fn`.
 pub fn as_tool<I, O>(dag: Arc<Dag>, config: ToolConfig<I, O>) -> DagTool<I, O>
 where
     I: Send + 'static,

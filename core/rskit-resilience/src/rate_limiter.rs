@@ -75,8 +75,7 @@ impl std::fmt::Debug for RateLimiter {
 }
 
 impl RateLimiter {
-    /// Create a rate limiter that allows `per_second` requests/second with a
-    /// burst capacity of `burst`.
+    /// Create a rate limiter that allows `per_second` requests/second with a burst capacity of `burst`.
     ///
     /// # Errors
     ///
@@ -109,8 +108,8 @@ impl RateLimiter {
         })
     }
 
-    /// Non-blocking check: returns `Ok(())` if a token was acquired, or
-    /// `Err(AppError::rate_limited())` if the bucket is empty.
+    /// Non-blocking check: returns `Ok(())` if a token was acquired,
+    /// or `Err(AppError::rate_limited())` if the bucket is empty.
     ///
     /// # Errors
     ///
@@ -125,8 +124,7 @@ impl RateLimiter {
     ///
     /// # Errors
     ///
-    /// Returns an error when the cancellation token fires before a token is
-    /// available.
+    /// Returns an error when the cancellation token fires before a token is available.
     pub async fn until_ready(&self, cancel: Option<CancellationToken>) -> AppResult<()> {
         match cancel {
             Some(token) => {

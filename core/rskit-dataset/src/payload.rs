@@ -6,8 +6,8 @@ use crate::DatasetLimits;
 
 /// Payload for a single dataset item.
 ///
-/// In-memory payloads can only be constructed through checked constructors so
-/// large datasets do not accidentally bypass [`DatasetLimits`].
+/// In-memory payloads can only be constructed through checked constructors
+/// so large datasets do not accidentally bypass [`DatasetLimits`].
 #[derive(Debug, Clone)]
 pub struct DataPayload {
     kind: DataPayloadKind,

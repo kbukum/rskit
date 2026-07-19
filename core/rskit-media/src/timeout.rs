@@ -1,7 +1,7 @@
 //! Duration-aware timeout calculation for media operations.
 //!
-//! Instead of fixed timeouts that fail on long content, this module
-//! calculates timeouts dynamically based on:
+//! Instead of fixed timeouts that fail on long content,
+//! this module calculates timeouts dynamically based on:
 //! - Source media duration
 //! - Operation type (stream copy is fast, transcoding is slow)
 //! - Base timeout (minimum floor)
@@ -37,40 +37,32 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum OperationKind {
-    /// Stream copy (mux/demux only, no re-encoding).
-    /// Very fast — typically faster than real-time.
+    /// Stream copy (mux/demux only, no re-encoding). Very fast — typically faster than real-time.
     StreamCopy,
-    /// Audio extraction or audio-only processing.
-    /// Fast — audio is small relative to video.
+    /// Audio extraction or audio-only processing. Fast — audio is small relative to video.
     AudioProcess,
-    /// Video transcoding (re-encoding).
-    /// Slow — depends on codec, resolution, and complexity.
+    /// Video transcoding (re-encoding). Slow — depends on codec, resolution, and complexity.
     Transcode,
-    /// Video filter application (resize, crop, effects).
-    /// Similar to transcoding but may be faster for simple filters.
+    /// Video filter application (resize, crop, effects). Similar to transcoding
+    /// but may be faster for simple filters.
     Filter,
-    /// Subtitle burn-in (requires video re-encoding).
-    /// Similar speed to transcoding.
+    /// Subtitle burn-in (requires video re-encoding). Similar speed to transcoding.
     SubtitleBurn,
-    /// Thumbnail/frame extraction.
-    /// Very fast — single frame seeks.
+    /// Thumbnail/frame extraction. Very fast — single frame seeks.
     ThumbnailExtract,
-    /// Scene detection (analyzing every frame).
-    /// Medium — faster than transcoding but needs to decode all frames.
+    /// Scene detection (analyzing every frame). Medium — faster than transcoding
+    /// but needs to decode all frames.
     SceneDetect,
-    /// ML inference (transcription, sentiment, etc.).
-    /// Speed varies widely; use a generous multiplier.
+    /// ML inference (transcription, sentiment, etc.). Speed varies widely; use a generous multiplier.
     MlInference,
-    /// Media probe (ffprobe).
-    /// Nearly instant — fixed small timeout.
+    /// Media probe (ffprobe). Nearly instant — fixed small timeout.
     Probe,
 }
 
 impl OperationKind {
     /// Default timeout multiplier for this operation kind.
     ///
-    /// The multiplier is applied to the media duration to compute
-    /// the variable portion of the timeout.
+    /// The multiplier is applied to the media duration to compute the variable portion of the timeout.
     pub fn default_multiplier(&self) -> f64 {
         match self {
             Self::Probe => 0.0,            // Fixed timeout only
@@ -111,8 +103,8 @@ pub struct TimeoutCalculator {
     pub base_timeout: Duration,
     /// Maximum timeout — ceiling to prevent runaway processes.
     pub max_timeout: Duration,
-    /// Custom multiplier overrides per operation kind.
-    /// If not set, uses [`OperationKind::default_multiplier`].
+    /// Custom multiplier overrides per operation kind. If not set,
+    /// uses [`OperationKind::default_multiplier`].
     #[serde(default)]
     pub multiplier_overrides: Vec<(OperationKind, f64)>,
 }

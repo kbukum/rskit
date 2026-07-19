@@ -16,17 +16,17 @@ use crate::error_layer::ErrorLayer;
 // ---------------------------------------------------------------------------
 // Service adder trait
 //
-// We type-erase tonic services here. Rather than wrestling with the generic
-// `tonic::transport::Router<S>` type parameter (which is unnameable), we
-// store closures that apply a service to a `Server` builder and accumulate
-// them into a `tonic::transport::Router` incrementally.
+// We type-erase tonic services here.
+// Rather than wrestling with the generic `tonic::transport::Router<S>` type parameter (which is unnameable),
+// we store closures that apply a service to a `Server` builder
+// and accumulate them into a `tonic::transport::Router` incrementally.
 //
-// Each service closure returns an `ErasedRouter` — a boxed object that can
-// route requests without exposing the concrete Router type to the builder.
+// Each service closure returns an `ErasedRouter` —
+// a boxed object that can route requests without exposing the concrete Router type to the builder.
 // ---------------------------------------------------------------------------
 
-/// Type-erased function that adds one service to a tonic server and returns
-/// a closure capable of calling `serve_with_shutdown`.
+/// Type-erased function that adds one service to a tonic server
+/// and returns a closure capable of calling `serve_with_shutdown`.
 pub(crate) type ServeFn = Arc<
     dyn Fn(
             SocketAddr,
@@ -112,10 +112,10 @@ impl GrpcServerBuilder {
 
     /// Add a tonic-generated service.
     ///
-    /// The service is automatically wrapped with [`ErrorLayer`] so that all
-    /// gRPC error responses carry structured JSON details. If
-    /// [`with_reflection`](Self::with_reflection) was called, the reflection
-    /// service is automatically added alongside each user service.
+    /// The service is automatically wrapped with [`ErrorLayer`]
+    /// so that all gRPC error responses carry structured JSON details.
+    /// If [`with_reflection`](Self::with_reflection) was called,
+    /// the reflection service is automatically added alongside each user service.
     #[must_use]
     pub fn add_service<S>(mut self, svc: S) -> Self
     where
@@ -229,18 +229,16 @@ impl GrpcServerBuilder {
 
     /// Build the [`GrpcServer`] component.
     ///
-    /// Only the **last** registered service is used for the actual server (since
-    /// `tonic::transport::Router` can't be accumulated type-safely without the
-    /// concrete service type). For multiple services, compose them before calling
-    /// `add_service`, or use the raw tonic API.
+    /// Only the **last** registered service is used for the actual server (since `tonic::transport::Router` can't be accumulated type-safely without the concrete service type).
+    /// For multiple services, compose them before calling `add_service`, or use the raw tonic API.
     pub fn build(self) -> GrpcServer {
         let serve_fns = Arc::new(self.serve_fns);
 
         let start_fn = Arc::new(move |addr: SocketAddr, cancel: CancellationToken| {
             let fns = serve_fns.clone();
             tokio::spawn(async move {
-                // Clone before calling cancelled_owned() so the original is still
-                // usable in the else branch.
+                // Clone before calling cancelled_owned()
+                // so the original is still usable in the else branch.
                 let signal = Box::pin(cancel.clone().cancelled_owned());
 
                 // Use the last added service (simplest safe approach).

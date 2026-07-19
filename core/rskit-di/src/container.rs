@@ -49,10 +49,9 @@ impl SingletonRegistration {
         Ok(any)
     }
 
-    /// Return a handle to the singleton's closeable only if it has already been
-    /// constructed. Clones the `Arc` (the closeable stays in singleton state)
-    /// and never triggers construction, so an unresolved singleton contributes
-    /// nothing to [`Container::close`].
+    /// Return a handle to the singleton's closeable only if it has already been constructed.
+    /// Clones the `Arc` (the closeable stays in singleton state) and never triggers construction,
+    /// so an unresolved singleton contributes nothing to [`Container::close`].
     fn closeable_if_resolved(&self) -> Option<CloseableArc> {
         let guard = self.value.lock();
         guard
@@ -73,9 +72,9 @@ enum CloseableRegistration {
     Singleton(Arc<SingletonRegistration>),
 }
 
-/// One recorded closeable, tracked in registration order so [`Container::close`]
-/// can release them in reverse (LIFO): a dependency registered before the
-/// resources built on top of it is released after them.
+/// One recorded closeable, tracked in registration order
+/// so [`Container::close`] can release them in reverse (LIFO):
+/// a dependency registered before the resources built on top of it is released after them.
 struct CloseableEntry {
     type_name: &'static str,
     registration: CloseableRegistration,
@@ -126,8 +125,8 @@ pub trait Closeable: Send + Sync {
 
 /// Thread-safe runtime dependency injection container.
 ///
-/// Each dependency is keyed by its concrete Rust type (`TypeId`). Three
-/// registration modes are supported:
+/// Each dependency is keyed by its concrete Rust type (`TypeId`).
+/// Three registration modes are supported:
 ///
 /// | Mode | Fn | Description |
 /// |------|----|-|
@@ -136,7 +135,8 @@ pub trait Closeable: Send + Sync {
 /// | Singleton | [`register_singleton`](Self::register_singleton) | Called once; result cached |
 ///
 /// For values that implement [`Closeable`], use [`register_closeable`](Self::register_closeable)
-/// or [`register_singleton_closeable`](Self::register_singleton_closeable) so [`close`](Self::close) can clean them up.
+/// or [`register_singleton_closeable`](Self::register_singleton_closeable)
+/// so [`close`](Self::close) can clean them up.
 pub struct Container {
     registrations: RwLock<HashMap<TypeId, Registration>>,
     closeables: Mutex<Vec<CloseableEntry>>,
@@ -167,9 +167,10 @@ impl Container {
 
     /// Register a pre-built value that implements [`Closeable`].
     ///
-    /// The container owns the value's cleanup: [`close`](Self::close) releases it
-    /// in reverse registration order. Re-registering the same type records an
-    /// additional closeable, so a replaced resource is still closed.
+    /// The container owns the value's cleanup:
+    /// [`close`](Self::close) releases it in reverse registration order.
+    /// Re-registering the same type records an additional closeable,
+    /// so a replaced resource is still closed.
     pub fn register_closeable<T: Closeable + Send + Sync + 'static>(&self, value: Arc<T>) {
         self.registrations.write().insert(
             TypeId::of::<T>(),
@@ -212,10 +213,10 @@ impl Container {
 
     /// Register a singleton factory for a type that implements [`Closeable`].
     ///
-    /// The closeable slot is recorded at registration time and its disposer is
-    /// captured when the singleton is first resolved; [`close`](Self::close)
-    /// releases it in reverse registration order (LIFO). An unresolved singleton
-    /// constructs nothing and is not closed.
+    /// The closeable slot is recorded at registration time
+    /// and its disposer is captured when the singleton is first resolved;
+    /// [`close`](Self::close) releases it in reverse registration order (LIFO).
+    /// An unresolved singleton constructs nothing and is not closed.
     pub fn register_singleton_closeable<T, F>(&self, factory: F)
     where
         T: Closeable + Send + Sync + 'static,
@@ -264,13 +265,12 @@ impl Container {
         self.registrations.read().contains_key(&TypeId::of::<T>())
     }
 
-    /// Close every recorded closeable once, in reverse registration order
-    /// (LIFO), so a dependency is released after the resources built on top of
-    /// it. This drains the recorded closeables, so a second call closes only
-    /// closeables registered since the previous call (a no-op when none were).
-    /// All closeables are closed even if some fail; the returned error
-    /// aggregates every failure. Unresolved singletons construct nothing and
-    /// are skipped.
+    /// Close every recorded closeable once, in reverse registration order (LIFO),
+    /// so a dependency is released after the resources built on top of it.
+    /// This drains the recorded closeables,
+    /// so a second call closes only closeables registered since the previous call (a no-op when none were).
+    /// All closeables are closed even if some fail; the returned error aggregates every failure.
+    /// Unresolved singletons construct nothing and are skipped.
     pub async fn close(&self) -> AppResult<()> {
         let closeables = std::mem::take(&mut *self.closeables.lock());
         let mut errors: Vec<AppError> = Vec::new();
@@ -297,10 +297,9 @@ impl Container {
     }
 }
 
-/// Combine disposal failures into a single error. The first failure is returned
-/// as-is — preserving its code, retryability, HTTP status, cause, and structured
-/// details — with a summary of the remaining failures attached. Returns `None`
-/// when nothing failed.
+/// Combine disposal failures into a single error. The first failure is returned as-is —
+/// preserving its code, retryability, HTTP status, cause, and structured details —
+/// with a summary of the remaining failures attached. Returns `None` when nothing failed.
 fn aggregate_close_errors(errors: Vec<AppError>) -> Option<AppError> {
     let mut iter = errors.into_iter();
     let first = iter.next()?;

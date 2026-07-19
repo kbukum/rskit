@@ -1,11 +1,10 @@
 use crate::prompt::terminal::Terminal;
 
-/// Run `body` between [`Terminal::begin_interactive`] and
-/// [`Terminal::end_interactive`], restoring cooked mode on every exit path —
-/// normal return, error, or an unwinding panic — via an RAII guard. On the
-/// normal path teardown runs explicitly so `body`'s error is preferred over a
-/// teardown error; if `body` panics the guard runs teardown during unwind so
-/// the terminal is never left in raw mode.
+/// Run `body` between [`Terminal::begin_interactive`] and [`Terminal::end_interactive`],
+/// restoring cooked mode on every exit path — normal return, error, or an unwinding panic —
+/// via an RAII guard. On the normal path teardown runs explicitly
+/// so `body`'s error is preferred over a teardown error;
+/// if `body` panics the guard runs teardown during unwind so the terminal is never left in raw mode.
 pub(crate) fn with_raw_mode<T, R>(
     terminal: &mut T,
     body: impl FnOnce(&mut T) -> rskit_errors::AppResult<R>,
@@ -35,10 +34,9 @@ struct RawModeGuard<'a, T: Terminal + ?Sized> {
 }
 
 impl<T: Terminal + ?Sized> RawModeGuard<'_, T> {
-    /// Run teardown on the normal path, returning its result so callers can
-    /// surface it. Only disarms the `Drop` net when teardown *succeeds*, so a
-    /// failed teardown leaves the guard armed and `Drop` retries as a
-    /// best-effort net rather than leaving the terminal stuck in raw mode.
+    /// Run teardown on the normal path, returning its result so callers can surface it.
+    /// Only disarms the `Drop` net when teardown *succeeds*, so a failed teardown leaves the guard armed
+    /// and `Drop` retries as a best-effort net rather than leaving the terminal stuck in raw mode.
     fn disarm(&mut self) -> rskit_errors::AppResult<()> {
         let result = self.terminal.end_interactive();
         if result.is_ok() {

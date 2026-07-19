@@ -18,9 +18,9 @@ pub trait KeyValidator: Send + Sync {
 
 /// Tower Layer for API key validation.
 ///
-/// If the configured header is absent, the request is rejected unless
-/// [`ApiKeyLayer::accept_missing`] is enabled.
-/// If present but invalid, returns 401.
+/// If the configured header is absent,
+/// the request is rejected unless [`ApiKeyLayer::accept_missing`] is enabled. If present but invalid,
+/// returns 401.
 #[derive(Clone)]
 pub struct ApiKeyLayer<V> {
     validator: Arc<V>,

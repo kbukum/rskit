@@ -38,9 +38,8 @@ impl Verifier for WarnOnlyVerifier {
     }
 }
 
-/// `DenyVerifier` is the canonical operator-deny verifier: it rejects every
-/// manifest unconditionally. Use it as a safe default until a real signature
-/// verifier (e.g., Sigstore/cosign) adapter is wired in.
+/// `DenyVerifier` is the canonical operator-deny verifier: it rejects every manifest unconditionally.
+/// Use it as a safe default until a real signature verifier (e.g., Sigstore/cosign) adapter is wired in.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct DenyVerifier;
 

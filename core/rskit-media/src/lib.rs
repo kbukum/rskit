@@ -1,8 +1,7 @@
 //! Media types, codec/format registry, pipeline builder, and processing traits.
 //!
-//! `rskit-media` defines the vocabulary for media processing without any
-//! processing logic. Backends (FFmpeg, image crate) implement the traits
-//! defined here.
+//! `rskit-media` defines the vocabulary for media processing without any processing logic.
+//! Backends (FFmpeg, image crate) implement the traits defined here.
 
 #![warn(missing_docs)]
 

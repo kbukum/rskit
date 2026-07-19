@@ -1,7 +1,7 @@
 //! FFprobe JSON → [`MediaMetadata`] parsing.
 //!
-//! Extracts format info, track details (video, audio, subtitle), and metadata
-//! tags from ffprobe's JSON output.
+//! Extracts format info, track details (video, audio, subtitle),
+//! and metadata tags from ffprobe's JSON output.
 
 use std::collections::HashMap;
 use std::time::Duration;
