@@ -111,11 +111,16 @@ mod tests {
     use axum::routing::get;
     use rskit_bootstrap::Component;
     use rskit_errors::ErrorCode;
+    use rskit_security::TlsConfig;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio_util::sync::CancellationToken;
 
     use crate::http::HttpServerBuilder;
     use crate::http::test_support::local_config;
+
+    fn testdata(name: &str) -> String {
+        format!("{}/testdata/{name}", env!("CARGO_MANIFEST_DIR"))
+    }
 
     #[tokio::test]
     async fn lifecycle_sets_local_address_and_cancels_shutdown() {
@@ -190,5 +195,186 @@ mod tests {
         assert!(response.starts_with("HTTP/1.1 200 OK"), "{response}");
         assert!(response.contains("ok"), "{response}");
         server.stop().await.expect("stop http1 server");
+    }
+
+    #[tokio::test]
+    async fn https_listener_completes_tls_handshake_and_serves_request() {
+        use std::sync::Arc;
+
+        use rustls::RootCertStore;
+        use rustls::pki_types::{CertificateDer, ServerName, pem::PemObject};
+        use tokio_rustls::TlsConnector;
+
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+
+        let mut config = local_config();
+        config.tls = Some(TlsConfig {
+            cert_file: Some(testdata("cert.pem")),
+            key_file: Some(testdata("key.pem")),
+            ..Default::default()
+        });
+        let server = HttpServerBuilder::new(config, CancellationToken::new())
+            .with_router(Router::new().route("/secure", get(|| async { "encrypted" })))
+            .build()
+            .expect("build https server");
+
+        server.start().await.expect("start https server");
+        let addr = server.local_addr().expect("local address");
+
+        let mut roots = RootCertStore::empty();
+        roots
+            .add(CertificateDer::from_pem_file(testdata("cert.pem")).expect("load test cert"))
+            .expect("trust test cert");
+        let client_config = rustls::ClientConfig::builder()
+            .with_root_certificates(roots)
+            .with_no_client_auth();
+        let connector = TlsConnector::from(Arc::new(client_config));
+        let server_name = ServerName::try_from("localhost").expect("server name");
+
+        let tcp = tokio::net::TcpStream::connect(addr)
+            .await
+            .expect("connect to https server");
+        let mut stream = connector
+            .connect(server_name, tcp)
+            .await
+            .expect("tls handshake");
+        stream
+            .write_all(b"GET /secure HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+            .await
+            .expect("write request");
+        let mut response = String::new();
+        tokio::time::timeout(Duration::from_secs(2), stream.read_to_string(&mut response))
+            .await
+            .expect("response read timed out")
+            .expect("read response");
+
+        assert!(response.starts_with("HTTP/1.1 200 OK"), "{response}");
+        assert!(response.contains("encrypted"), "{response}");
+        server.stop().await.expect("stop https server");
+    }
+
+    #[tokio::test]
+    async fn start_reports_bind_failure_for_address_in_use() {
+        let occupied = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind probe listener");
+        let taken = occupied.local_addr().expect("probe local address");
+
+        let mut config = local_config();
+        config.port = taken.port();
+        let server = HttpServerBuilder::new(config, CancellationToken::new())
+            .build()
+            .expect("build server");
+
+        let error = server.start().await.expect_err("bind should fail");
+        assert_eq!(error.code(), ErrorCode::Internal);
+        assert!(
+            error.message().contains("bind failed"),
+            "{}",
+            error.message()
+        );
+        assert!(server.local_addr().is_none());
+    }
+
+    #[tokio::test]
+    async fn https_listener_times_out_stalled_handshake() {
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+
+        let mut config = local_config();
+        config.read_timeout = Duration::from_millis(50);
+        config.tls = Some(TlsConfig {
+            cert_file: Some(testdata("cert.pem")),
+            key_file: Some(testdata("key.pem")),
+            ..Default::default()
+        });
+        let server = HttpServerBuilder::new(config, CancellationToken::new())
+            .build()
+            .expect("build https server");
+
+        server.start().await.expect("start https server");
+        let addr = server.local_addr().expect("local address");
+        // Connect but never send a ClientHello so the handshake stalls and the
+        // server's read-timeout aborts it.
+        let _stream = tokio::net::TcpStream::connect(addr)
+            .await
+            .expect("connect to https server");
+        tokio::time::sleep(Duration::from_millis(150)).await;
+
+        server.stop().await.expect("stop https server");
+    }
+
+    async fn assert_serves_and_drains_on_shutdown(enable_h2c: bool) {
+        let mut config = local_config();
+        config.enable_h2c = enable_h2c;
+        let server = HttpServerBuilder::new(config, CancellationToken::new())
+            .with_router(Router::new().route("/keep", get(|| async { "ok" })))
+            .build()
+            .expect("build server");
+
+        server.start().await.expect("start server");
+        let addr = server.local_addr().expect("local address");
+        let mut stream = tokio::net::TcpStream::connect(addr)
+            .await
+            .expect("connect to local server");
+        // Keep-alive request (no `Connection: close`) leaves the server-side
+        // connection idle so that stopping the server exercises graceful drain.
+        stream
+            .write_all(b"GET /keep HTTP/1.1\r\nHost: localhost\r\n\r\n")
+            .await
+            .expect("write request");
+
+        let mut buf = vec![0u8; 1024];
+        let read = tokio::time::timeout(Duration::from_secs(2), stream.read(&mut buf))
+            .await
+            .expect("response read timed out")
+            .expect("read response");
+        let head = String::from_utf8_lossy(&buf[..read]);
+        assert!(head.starts_with("HTTP/1.1 200 OK"), "{head}");
+
+        server.stop().await.expect("stop server");
+
+        let mut rest = Vec::new();
+        let _ = tokio::time::timeout(Duration::from_secs(2), stream.read_to_end(&mut rest)).await;
+    }
+
+    #[tokio::test]
+    async fn h2c_connection_drains_on_graceful_shutdown() {
+        assert_serves_and_drains_on_shutdown(true).await;
+    }
+
+    #[tokio::test]
+    async fn http1_connection_drains_on_graceful_shutdown() {
+        assert_serves_and_drains_on_shutdown(false).await;
+    }
+
+    #[tokio::test]
+    async fn https_listener_survives_non_tls_client() {
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+
+        let mut config = local_config();
+        config.tls = Some(TlsConfig {
+            cert_file: Some(testdata("cert.pem")),
+            key_file: Some(testdata("key.pem")),
+            ..Default::default()
+        });
+        let server = HttpServerBuilder::new(config, CancellationToken::new())
+            .build()
+            .expect("build https server");
+
+        server.start().await.expect("start https server");
+        let addr = server.local_addr().expect("local address");
+        let mut stream = tokio::net::TcpStream::connect(addr)
+            .await
+            .expect("connect to https server");
+        // Plain-text bytes cannot complete the TLS handshake; the server must
+        // log and drop the connection without terminating the accept loop.
+        stream
+            .write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n")
+            .await
+            .expect("write plaintext request");
+        let mut buf = vec![0u8; 64];
+        let _ = tokio::time::timeout(Duration::from_millis(200), stream.read(&mut buf)).await;
+
+        server.stop().await.expect("stop https server");
     }
 }

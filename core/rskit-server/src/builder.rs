@@ -351,6 +351,48 @@ mod tests {
         server.stop().await.expect("stop service server");
     }
 
+    fn testdata(name: &str) -> String {
+        format!("{}/testdata/{name}", env!("CARGO_MANIFEST_DIR"))
+    }
+
+    #[tokio::test]
+    async fn builder_serves_with_valid_tls_material() {
+        let config = GrpcServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            tls: Some(crate::config::TlsConfig {
+                cert_path: testdata("cert.pem"),
+                key_path: testdata("key.pem"),
+            }),
+            ..GrpcServerConfig::default()
+        };
+        let server = GrpcServerBuilder::new(config)
+            .add_service(EmptyGrpcService)
+            .build();
+
+        server.start().await.expect("start tls service server");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        server.stop().await.expect("stop tls service server");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+
+    #[tokio::test]
+    async fn builder_serves_with_valid_reflection_descriptor() {
+        let config = GrpcServerConfig::new("127.0.0.1", 0);
+        let server = GrpcServerBuilder::new(config)
+            .with_reflection(&[])
+            .add_service(EmptyGrpcService)
+            .build();
+
+        server
+            .start()
+            .await
+            .expect("start reflection service server");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        server.stop().await.expect("stop reflection service server");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+
     #[derive(Clone)]
     struct EmptyGrpcService;
 
