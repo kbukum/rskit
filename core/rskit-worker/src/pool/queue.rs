@@ -51,17 +51,14 @@ impl<T> SubmitQueue<T> {
     }
 
     pub(super) async fn push_block(&self, item: T) -> Result<(), T> {
-        let mut item = Some(item);
         loop {
             let notified = {
                 let mut inner = self.state.inner.lock();
                 if inner.closed {
-                    return Err(item.take().unwrap_or_else(|| unreachable!("item present")));
+                    return Err(item);
                 }
                 if inner.items.len() < inner.capacity {
-                    inner
-                        .items
-                        .push_back(item.take().unwrap_or_else(|| unreachable!("item present")));
+                    inner.items.push_back(item);
                     self.state.not_empty.notify_one();
                     return Ok(());
                 }
