@@ -33,7 +33,7 @@ Legend: ✅ present · ➖ absent · ⏳ planned (skeleton pending).
 | L6 | vectorstore (+ qdrant) | ✅ | ✅ | aligned; both kits have memory default + qdrant adapter |
 | L6 | messaging (kafka/nats/rabbitmq/memory) | ✅ | ✅ | aligned |
 | L7 | ai / llm / embedding / inference | ✅ | ✅ | provider granularity differs (subdirs vs crates) |
-| L7 | agent / tool / mcp / skill | ✅ | ✅ | mcp redesign to protocol-shaped tracked |
+| L7 | agent / tool / mcp / skill | ✅ | ✅ | MCP redesigned to a protocol-shaped module |
 | L8 | media | ✅ | ✅ | gokit is a light **standalone module**: detection + metadata + cheap image ops + time/spatial + subtitle (SRT/VTT); heavy audio/video/matrix transcoding stays rskit by design |
 | L9 | bench / git / testutil | ✅ | ✅ | aligned |
 | L9 | workload | ✅ | ✅ | aligned: provider-based `Manager` + registry + component; backends stay in adapter crates |
