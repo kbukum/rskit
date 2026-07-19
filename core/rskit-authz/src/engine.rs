@@ -199,9 +199,8 @@ impl Engine {
     /// Evaluate a request.
     ///
     /// Deny policies are evaluated before role grants and allow policies.
-    /// Object-level constraints that should limit a role should be attached to
-    /// the role [`Permission`]; constraints that must override any broad grant
-    /// should be modeled as deny policies.
+    /// Object-level constraints that should limit a role should be attached to the role [`Permission`];
+    /// constraints that must override any broad grant should be modeled as deny policies.
     #[must_use]
     pub fn authorize(&self, request: &Request) -> Decision {
         // 1. Deny policies always take precedence.

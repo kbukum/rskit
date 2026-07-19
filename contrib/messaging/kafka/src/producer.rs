@@ -11,8 +11,8 @@ use crate::client_config::producer_config;
 use crate::config::validate_topic;
 use crate::error::{kafka_flush_error, kafka_producer_creation_error, kafka_send_error};
 
-/// Wall-clock bound applied to each message delivery so producer sends never
-/// block indefinitely on a stalled broker.
+/// Wall-clock bound applied to each message delivery
+/// so producer sends never block indefinitely on a stalled broker.
 const SEND_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Kafka-backed message producer wrapping an `rdkafka` `FutureProducer`.

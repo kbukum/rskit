@@ -1,25 +1,24 @@
 //! Identity rules for array-of-tables sections during include-merge.
 //!
-//! A [`MergeIdentity`] extracts a stable identity token from one array element so
-//! the merge layer can concatenate registered sections across documents and reject
-//! duplicate identities. [`IdentityKey`] covers the common "single named field"
-//! case; [`CompositeKey`] covers multi-field and nested identities (for example a
-//! cross-reference keyed by `{ from.ecosystem, from.module, to.ecosystem, to.module }`).
+//! A [`MergeIdentity`] extracts a stable identity token from one array element
+//! so the merge layer can concatenate registered sections across documents
+//! and reject duplicate identities. [`IdentityKey`] covers the common "single named field" case;
+//! [`CompositeKey`] covers multi-field
+//! and nested identities (for example a cross-reference keyed by `{ from.ecosystem, from.module, to.ecosystem, to.module }`).
 
 use serde_json::Value;
 
 /// Identity rule for an array-of-tables section during include-merge.
 ///
-/// Sections registered with an identity are concatenated across documents rather
-/// than overwritten, and duplicate identities are a hard error. Implement this
-/// trait for custom identity logic, or use [`IdentityKey`] / [`CompositeKey`].
+/// Sections registered with an identity are concatenated across documents rather than overwritten,
+/// and duplicate identities are a hard error. Implement this trait for custom identity logic,
+/// or use [`IdentityKey`] / [`CompositeKey`].
 pub trait MergeIdentity: Send + Sync {
     /// Human-facing label for the identity, used in duplicate-error messages.
     fn label(&self) -> &str;
 
-    /// Extract the identity token of `element`, or `None` when the element lacks
-    /// a complete identity (a missing/non-scalar field is a schema error surfaced
-    /// by the typed deserialize step, so the merge layer simply skips it here).
+    /// Extract the identity token of `element`,
+    /// or `None` when the element lacks a complete identity (a missing/non-scalar field is a schema error surfaced by the typed deserialize step, so the merge layer simply skips it here).
     fn identity_of(&self, element: &Value) -> Option<String>;
 }
 
@@ -46,13 +45,12 @@ impl MergeIdentity for IdentityKey {
 
 /// A [`MergeIdentity`] over several fields, each addressed by a dotted path.
 ///
-/// Use this when no single field identifies an element — for example an edge
-/// identified by both of its structured endpoints. Each field is a `.`-separated
-/// path walked through nested objects (`"from.ecosystem"` reads
-/// `element["from"]["ecosystem"]`); the resulting scalar tokens are combined
-/// into one injective composite identity. An element missing any field has no
-/// identity and is skipped (the typed schema step reports it); likewise a key
-/// built from an empty field list has no identity and never reports duplicates.
+/// Use this when no single field identifies an element —
+/// for example an edge identified by both of its structured endpoints.
+/// Each field is a `.`-separated path walked through nested objects (`"from.ecosystem"` reads `element["from"]["ecosystem"]`);
+/// the resulting scalar tokens are combined into one injective composite identity.
+/// An element missing any field has no identity and is skipped (the typed schema step reports it);
+/// likewise a key built from an empty field list has no identity and never reports duplicates.
 #[derive(Debug, Clone)]
 pub struct CompositeKey {
     fields: Vec<Vec<String>>,
@@ -84,10 +82,10 @@ impl MergeIdentity for CompositeKey {
     }
 
     fn identity_of(&self, element: &Value) -> Option<String> {
-        // An empty field list cannot identify anything: returning an empty token
-        // here would make every element collide as a "duplicate". Treat it as no
-        // identity (consistent with a missing field) so such a section simply
-        // concatenates instead of spuriously failing the merge.
+        // An empty field list cannot identify anything:
+        // returning an empty token here would make every element collide as a "duplicate".
+        // Treat it as no identity (consistent with a missing field)
+        // so such a section simply concatenates instead of spuriously failing the merge.
         if self.fields.is_empty() {
             return None;
         }
@@ -169,8 +167,8 @@ mod tests {
 
     #[test]
     fn composite_key_with_no_fields_has_no_identity() {
-        // An empty field list must not collapse every element to the same empty
-        // token, which would make any multi-element section look duplicated.
+        // An empty field list must not collapse every element to the same empty token,
+        // which would make any multi-element section look duplicated.
         let key = CompositeKey::new(Vec::<String>::new());
 
         assert_eq!(key.identity_of(&json!({ "name": "a" })), None);

@@ -19,22 +19,20 @@ use tokio::sync::OnceCell;
 
 /// Configuration for the S3 store.
 ///
-/// Supports AWS S3 and S3-compatible services (MinIO, LocalStack, etc.)
-/// via `endpoint`, `force_path_style`, and explicit credentials.
+/// Supports AWS S3 and S3-compatible services (MinIO, LocalStack, etc.) via `endpoint`,
+/// `force_path_style`, and explicit credentials.
 #[derive(Clone, Deserialize, Serialize)]
 pub struct Config {
     /// S3 bucket name.
     pub bucket: String,
-    /// AWS region (e.g., `"us-east-1"`). Falls back to `AWS_REGION` or
-    /// `AWS_DEFAULT_REGION` env vars if unset.
+    /// AWS region (e.g., `"us-east-1"`). Falls back to `AWS_REGION`
+    /// or `AWS_DEFAULT_REGION` env vars if unset.
     pub region: Option<String>,
-    /// Custom endpoint URL for S3-compatible services (e.g.,
-    /// `"http://localhost:9000"` for MinIO).
+    /// Custom endpoint URL for S3-compatible services (e.g., `"http://localhost:9000"` for MinIO).
     pub endpoint: Option<String>,
     /// Key prefix applied to all objects (e.g., `"uploads"`).
     pub prefix: Option<String>,
-    /// Use path-style access (`http://host/bucket/key`) instead of
-    /// virtual-hosted-style (`http://bucket.host/key`).
+    /// Use path-style access (`http://host/bucket/key`) instead of virtual-hosted-style (`http://bucket.host/key`).
     /// Required for MinIO and most S3-compatible services.
     #[serde(default)]
     pub force_path_style: bool,
@@ -80,8 +78,8 @@ type S3ClientBuilder = Box<dyn Fn() -> S3ClientFuture + Send + Sync>;
 impl S3Store {
     /// Create a new S3 store from config.
     ///
-    /// Resolves credentials from config fields, then env vars.
-    /// The client is lazily constructed and reused for all operations.
+    /// Resolves credentials from config fields, then env vars. The client is lazily constructed
+    /// and reused for all operations.
     fn new(config: Config) -> AppResult<Self> {
         let client_config = client_config_builder(&config)?.build();
         let builder = Box::new(move || {
@@ -107,8 +105,8 @@ impl S3Store {
 
 /// Build the AWS SDK configuration for a store from validated [`Config`].
 ///
-/// Kept separate from [`S3Store::new`] so tests can attach a wire-level mock
-/// HTTP client to the same builder the production path uses.
+/// Kept separate from [`S3Store::new`]
+/// so tests can attach a wire-level mock HTTP client to the same builder the production path uses.
 fn client_config_builder(config: &Config) -> AppResult<aws_sdk_s3::config::Builder> {
     let (access_key, secret_key) = resolve_credentials(config)?;
 
@@ -729,9 +727,9 @@ mod tests {
 
     // --- Wire-level operation tests -----------------------------------------
     //
-    // These exercise request construction and response/error mapping for every
-    // `FileStore` operation against an in-process mock HTTP client. No network,
-    // credentials, or live S3 service are involved.
+    // These exercise request construction
+    // and response/error mapping for every `FileStore` operation against an in-process mock HTTP client.
+    // No network, credentials, or live S3 service are involved.
 
     use aws_smithy_http_client::test_util::{ReplayEvent, StaticReplayClient};
     use aws_smithy_types::body::SdkBody;

@@ -179,8 +179,8 @@ where
         rate::debounce(self, delay)
     }
 
-    /// Accumulate items into a batch, emitting it once `quiet` elapses with no
-    /// new item (trailing-edge debounce that keeps every item, not just the last)
+    /// Accumulate items into a batch,
+    /// emitting it once `quiet` elapses with no new item (trailing-edge debounce that keeps every item, not just the last)
     /// or early once `max_items` accumulate.
     fn rdebounce_batch(
         self,

@@ -6,8 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 const RFC3339_MIN_YEAR: i64 = 0;
 const RFC3339_MAX_YEAR: i64 = 9999;
 
-/// Formats a Unix timestamp (whole seconds) as a UTC RFC 3339 string
-/// (`YYYY-MM-DDTHH:MM:SSZ`).
+/// Formats a Unix timestamp (whole seconds) as a UTC RFC 3339 string (`YYYY-MM-DDTHH:MM:SSZ`).
 ///
 /// Uses std-only integer arithmetic, so it is portable across platforms.
 ///
@@ -23,11 +22,10 @@ pub fn format_rfc3339(epoch_secs: i64) -> Option<String> {
     format_rfc3339_datetime(datetime_from_epoch_secs(epoch_secs))
 }
 
-/// Formats a Unix timestamp (whole seconds) as compact UTC
-/// `YYYYMMDD-HHMMSS`.
+/// Formats a Unix timestamp (whole seconds) as compact UTC `YYYYMMDD-HHMMSS`.
 ///
-/// This is intended for filenames and identifiers that need stable UTC ordering
-/// without RFC 3339 punctuation.
+/// This is intended for filenames
+/// and identifiers that need stable UTC ordering without RFC 3339 punctuation.
 #[must_use]
 pub fn format_compact_utc(epoch_secs: i64) -> Option<String> {
     let datetime = datetime_from_epoch_secs(epoch_secs);
@@ -46,8 +44,8 @@ pub fn format_compact_utc(epoch_secs: i64) -> Option<String> {
 
 /// Formats a valid UTC civil date/time as `YYYY-MM-DDTHH:MM:SSZ`.
 ///
-/// Returns `None` when the provided date/time fields are invalid or the year is
-/// outside RFC 3339's four-digit range.
+/// Returns `None` when the provided date/time fields are invalid
+/// or the year is outside RFC 3339's four-digit range.
 #[must_use]
 pub fn format_rfc3339_datetime(datetime: CivilDateTime) -> Option<String> {
     (datetime.is_valid() && is_rfc3339_year(datetime.date.year)).then(|| format_datetime(datetime))
@@ -55,9 +53,8 @@ pub fn format_rfc3339_datetime(datetime: CivilDateTime) -> Option<String> {
 
 /// Parses a canonical UTC RFC 3339 timestamp into Unix epoch seconds.
 ///
-/// Accepted input is `YYYY-MM-DDTHH:MM:SSZ` with whole-second precision. Lowercase
-/// `t` and `z` are also accepted. Offsets, fractional seconds, and leap seconds
-/// are rejected.
+/// Accepted input is `YYYY-MM-DDTHH:MM:SSZ` with whole-second precision. Lowercase `t`
+/// and `z` are also accepted. Offsets, fractional seconds, and leap seconds are rejected.
 #[must_use]
 pub fn parse_rfc3339_utc(s: &str) -> Option<i64> {
     epoch_secs_from_datetime(parse_rfc3339_utc_datetime(s)?)
@@ -65,9 +62,8 @@ pub fn parse_rfc3339_utc(s: &str) -> Option<i64> {
 
 /// Parses a canonical UTC RFC 3339 timestamp into a UTC civil date/time.
 ///
-/// Accepted input is `YYYY-MM-DDTHH:MM:SSZ` with whole-second precision. Lowercase
-/// `t` and `z` are also accepted. Offsets, fractional seconds, and leap seconds
-/// are rejected.
+/// Accepted input is `YYYY-MM-DDTHH:MM:SSZ` with whole-second precision. Lowercase `t`
+/// and `z` are also accepted. Offsets, fractional seconds, and leap seconds are rejected.
 #[must_use]
 pub fn parse_rfc3339_utc_datetime(s: &str) -> Option<CivilDateTime> {
     let bytes = s.as_bytes();
@@ -92,23 +88,23 @@ pub fn parse_rfc3339_utc_datetime(s: &str) -> Option<CivilDateTime> {
     )
 }
 
-/// Returns the current Unix epoch time in whole seconds, or `None` if the
-/// system clock is set before the Unix epoch or exceeds `i64`.
+/// Returns the current Unix epoch time in whole seconds,
+/// or `None` if the system clock is set before the Unix epoch or exceeds `i64`.
 #[must_use]
 pub fn now_epoch_secs() -> Option<i64> {
     let secs = SystemTime::now().duration_since(UNIX_EPOCH).ok()?.as_secs();
     i64::try_from(secs).ok()
 }
 
-/// Returns the current UTC civil date/time, or `None` if the system clock is set
-/// before the Unix epoch or exceeds `i64`.
+/// Returns the current UTC civil date/time, or `None` if the system clock is set before the Unix epoch
+/// or exceeds `i64`.
 #[must_use]
 pub fn now_utc() -> Option<CivilDateTime> {
     now_epoch_secs().map(datetime_from_epoch_secs)
 }
 
-/// Returns the current wall-clock time as a UTC RFC 3339 string, or `None` if
-/// the system clock is set before the Unix epoch or exceeds `i64`.
+/// Returns the current wall-clock time as a UTC RFC 3339 string,
+/// or `None` if the system clock is set before the Unix epoch or exceeds `i64`.
 ///
 /// # Examples
 ///

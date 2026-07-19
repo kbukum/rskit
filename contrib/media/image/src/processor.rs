@@ -13,8 +13,8 @@ use crate::io;
 
 /// Image-specific executor using the `image` crate.
 ///
-/// Handles image operations (Resize, Crop, Rotate, Flip, subset of Filters,
-/// Transcode). Returns `Err(unsupported)` for video/audio operations.
+/// Handles image operations (Resize, Crop, Rotate, Flip, subset of Filters, Transcode).
+/// Returns `Err(unsupported)` for video/audio operations.
 pub(crate) struct ImageProcessor {
     config: Arc<Config>,
 }

@@ -1,8 +1,8 @@
 //! Lifecycle-managed discovery component.
 //!
-//! Mirrors gokit's `discovery.Component` — handles provider creation,
-//! service registration on start, deregistration on stop, and health
-//! reporting. Services only need to add this component to the app registry.
+//! Mirrors gokit's `discovery.Component` — handles provider creation, service registration on start,
+//! deregistration on stop, and health reporting.
+//! Services only need to add this component to the app registry.
 
 use std::sync::Arc;
 
@@ -19,10 +19,9 @@ use crate::traits::{Discovery, Registry};
 
 /// A lifecycle-managed discovery component.
 ///
-/// Implements [`Component`] so it can be registered with the application
-/// component registry. On start it creates the provider via the factory,
-/// optionally registers the local service instance, and on stop it
-/// deregisters.
+/// Implements [`Component`] so it can be registered with the application component registry.
+/// On start it creates the provider via the factory, optionally registers the local service instance,
+/// and on stop it deregisters.
 pub struct DiscoveryComponent {
     config: DiscoveryConfig,
     providers: DiscoveryRegistry,

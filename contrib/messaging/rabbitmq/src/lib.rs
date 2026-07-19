@@ -1,7 +1,7 @@
 //! `RabbitMQ` adapter for `rskit-messaging`.
 //!
-//! The adapter uses AMQP queues named by message topic by default. Registration
-//! is explicit and side-effect free; network connections are opened lazily.
+//! The adapter uses AMQP queues named by message topic by default. Registration is explicit
+//! and side-effect free; network connections are opened lazily.
 
 #![warn(missing_docs)]
 

@@ -17,8 +17,8 @@ use crate::config::GrpcServerConfig;
 
 /// A running gRPC server managed as a bootstrap [`Component`].
 ///
-/// `GrpcServerBuilder::build()` produces this; it is then registered with
-/// [`rskit_bootstrap::Registry`] so the app lifecycle starts and stops it.
+/// `GrpcServerBuilder::build()` produces this; it is then registered with [`rskit_bootstrap::Registry`]
+/// so the app lifecycle starts and stops it.
 pub struct GrpcServer {
     name: String,
     config: GrpcServerConfig,

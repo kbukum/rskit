@@ -4,9 +4,8 @@ use std::time::Duration;
 
 /// Collects messaging operational metrics.
 ///
-/// Implementations record timing and success/failure information for
-/// publish and consume operations, enabling observability without
-/// coupling broker logic to a specific metrics adapter.
+/// Implementations record timing and success/failure information for publish and consume operations,
+/// enabling observability without coupling broker logic to a specific metrics adapter.
 pub trait MetricsCollector: Send + Sync + 'static {
     /// Records a publish operation outcome.
     fn record_publish(&self, topic: &str, duration: Duration, success: bool);
@@ -17,8 +16,7 @@ pub trait MetricsCollector: Send + Sync + 'static {
 
 /// No-op metrics collector for when metrics are disabled.
 ///
-/// Every method is a no-op, making this suitable as a default when no
-/// metrics adapter is configured.
+/// Every method is a no-op, making this suitable as a default when no metrics adapter is configured.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct NoopMetrics;
 

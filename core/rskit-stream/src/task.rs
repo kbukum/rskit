@@ -1,11 +1,11 @@
 //! Cancellable owned tasks.
 //!
-//! [`SpawnedTask`] is the canonical owner for a background task that must be
-//! cooperatively stopped: it bundles a `CancellationToken` with the
-//! `JoinHandle`, so every task has explicit ownership, cancellation, and a
-//! bounded, drain-then-abort shutdown. [`TaskGroup`] owns a set of such tasks
-//! and shuts them all down together. This replaces the hand-rolled
-//! `cancel + handle` pairs duplicated across consumers, watchers, and servers.
+//! [`SpawnedTask`] is the canonical owner for a background task that must be cooperatively stopped:
+//! it bundles a `CancellationToken` with the `JoinHandle`, so every task has explicit ownership,
+//! cancellation, and a bounded, drain-then-abort shutdown. [`TaskGroup`] owns a set of such tasks
+//! and shuts them all down together.
+//! This replaces the hand-rolled `cancel + handle` pairs duplicated across consumers, watchers,
+//! and servers.
 
 use std::time::Duration;
 
@@ -14,11 +14,10 @@ use tokio_util::sync::CancellationToken;
 
 /// A single background task with cooperative cancellation.
 ///
-/// Created by [`SpawnedTask::spawn`], which hands the body a child
-/// `CancellationToken` to `select!` on. Stop it with [`shutdown`](Self::shutdown)
-/// (cancel → await up to a grace period → abort) so a wedged task can never
-/// block shutdown indefinitely. Extra teardown (closing connections, flushing
-/// buffers) stays with the caller.
+/// Created by [`SpawnedTask::spawn`], which hands the body a child `CancellationToken` to `select!` on.
+/// Stop it with [`shutdown`](Self::shutdown) (cancel → await up to a grace period → abort)
+/// so a wedged task can never block shutdown indefinitely.
+/// Extra teardown (closing connections, flushing buffers) stays with the caller.
 #[derive(Debug)]
 pub struct SpawnedTask {
     cancel: CancellationToken,
@@ -48,9 +47,8 @@ impl SpawnedTask {
         Self { cancel, handle }
     }
 
-    /// Adopt an already-spawned `JoinHandle` paired with the token that
-    /// stops it. For callers that spawn the task themselves but still want
-    /// the bounded drain-then-abort shutdown.
+    /// Adopt an already-spawned `JoinHandle` paired with the token that stops it.
+    /// For callers that spawn the task themselves but still want the bounded drain-then-abort shutdown.
     #[must_use]
     pub const fn from_parts(cancel: CancellationToken, handle: JoinHandle<()>) -> Self {
         Self { cancel, handle }
@@ -73,8 +71,8 @@ impl SpawnedTask {
         self.cancel.clone()
     }
 
-    /// Cancel the task and wait up to `grace` for it to drain, aborting if it
-    /// overruns. Always resolves; never blocks shutdown indefinitely.
+    /// Cancel the task and wait up to `grace` for it to drain, aborting if it overruns. Always resolves;
+    /// never blocks shutdown indefinitely.
     pub async fn shutdown(self, grace: Duration) {
         self.cancel.cancel();
         let mut handle = self.handle;
@@ -97,9 +95,9 @@ impl SpawnedTask {
 
 /// A set of [`SpawnedTask`]s shut down together.
 ///
-/// Each task owns its own cancellation token; [`shutdown`](Self::shutdown)
-/// cancels all of them, then drains each within a per-task grace period,
-/// aborting stragglers so a single wedged task cannot stall teardown.
+/// Each task owns its own cancellation token; [`shutdown`](Self::shutdown) cancels all of them,
+/// then drains each within a per-task grace period, aborting stragglers
+/// so a single wedged task cannot stall teardown.
 #[derive(Debug, Default)]
 pub struct TaskGroup {
     tasks: Vec<SpawnedTask>,

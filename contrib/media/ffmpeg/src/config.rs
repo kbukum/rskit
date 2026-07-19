@@ -19,9 +19,9 @@ pub struct FfmpegConfig {
     pub(crate) temp_dir: Option<PathBuf>,
     /// Optional existing root for user-provided local media paths.
     ///
-    /// When configured, local `FileSource::Path` inputs and `FileSink::Path`
-    /// outputs must resolve under this root after canonicalization. Temporary
-    /// files created by the adapter are not confined by this setting.
+    /// When configured, local `FileSource::Path` inputs
+    /// and `FileSink::Path` outputs must resolve under this root after canonicalization.
+    /// Temporary files created by the adapter are not confined by this setting.
     pub(crate) path_root: Option<PathBuf>,
     /// Number of threads to use per FFmpeg process.
     pub(crate) threads: Option<u32>,
@@ -29,42 +29,38 @@ pub struct FfmpegConfig {
     pub(crate) hw_accel: Option<HwAccel>,
     /// Fixed execution timeout per FFmpeg invocation.
     ///
-    /// When a [`TimeoutCalculator`] is also configured, the calculator takes
-    /// precedence if source duration and operation kind are available. This
-    /// fixed timeout serves as the fallback when duration is unknown.
+    /// When a [`TimeoutCalculator`] is also configured, the calculator takes precedence if source duration
+    /// and operation kind are available.
+    /// This fixed timeout serves as the fallback when duration is unknown.
     pub(crate) timeout: Option<Duration>,
     /// Duration-aware timeout calculator.
     ///
     /// When set, timeouts are computed dynamically based on source duration
-    /// and operation type using `base + (duration × multiplier)`. Falls back
-    /// to the fixed `timeout` field when source duration is not available.
+    /// and operation type using `base + (duration × multiplier)`.
+    /// Falls back to the fixed `timeout` field when source duration is not available.
     #[serde(skip)]
     pub(crate) timeout_calculator: Option<TimeoutCalculator>,
     /// Whether to overwrite existing output files (`-y` flag).
     pub(crate) overwrite: bool,
     /// FFmpeg log level.
     pub(crate) log_level: FfmpegLogLevel,
-    /// Maximum number of concurrent FFmpeg processes.
-    /// Defaults to `num_cpus / 2` (minimum 1) if `None`.
+    /// Maximum number of concurrent FFmpeg processes. Defaults to `num_cpus / 2` (minimum 1) if `None`.
     pub(crate) max_concurrent: Option<usize>,
-    /// When `true`, if an FFmpeg invocation fails due to hardware acceleration
-    /// issues (e.g., macOS exit code 69 / VideoToolbox exhaustion), automatically
-    /// retry with software-only decoding (`-hwaccel none`).
-    /// Defaults to `true`.
+    /// When `true`,
+    /// if an FFmpeg invocation fails due to hardware acceleration issues (e.g., macOS exit code 69 / VideoToolbox exhaustion),
+    /// automatically retry with software-only decoding (`-hwaccel none`). Defaults to `true`.
     #[serde(default = "default_hw_accel_fallback")]
     pub(crate) hw_accel_fallback: bool,
-    /// Maximum number of retries for transient failures (hw accel exhaustion,
-    /// timeouts). Does not retry permanent failures (invalid input, bad codec).
-    /// Defaults to `1`.
+    /// Maximum number of retries for transient failures (hw accel exhaustion, timeouts).
+    /// Does not retry permanent failures (invalid input, bad codec). Defaults to `1`.
     #[serde(default = "default_max_retries")]
     pub(crate) max_retries: u32,
-    /// Maximum number of stderr lines to include in error messages.
-    /// Defaults to `100`.
+    /// Maximum number of stderr lines to include in error messages. Defaults to `100`.
     #[serde(default = "default_max_stderr_lines")]
     pub(crate) max_stderr_lines: usize,
-    /// Override the input video decoder (e.g., `"libdav1d"` for software AV1 decode).
-    /// When set, emits `-c:v <decoder>` before the input, forcing FFmpeg to use
-    /// this specific decoder instead of the default one.
+    /// Override the input video decoder (e.g., `"libdav1d"` for software AV1 decode). When set,
+    /// emits `-c:v <decoder>` before the input,
+    /// forcing FFmpeg to use this specific decoder instead of the default one.
     #[serde(default)]
     pub(crate) input_video_decoder: Option<String>,
 }
@@ -127,9 +123,9 @@ impl FfmpegConfig {
 
     /// Confine user-provided local input and output paths to an existing root.
     ///
-    /// Relative media paths are resolved under this root. Absolute media paths
-    /// are accepted only when they canonicalize under the root. Output paths may
-    /// be missing, but their nearest existing ancestor must stay under the root.
+    /// Relative media paths are resolved under this root.
+    /// Absolute media paths are accepted only when they canonicalize under the root.
+    /// Output paths may be missing, but their nearest existing ancestor must stay under the root.
     #[must_use]
     pub fn with_path_root(mut self, path: impl Into<PathBuf>) -> Self {
         self.path_root = Some(path.into());
@@ -316,8 +312,8 @@ impl FfmpegConfig {
     /// Resolve the effective timeout for an operation.
     ///
     /// Priority:
-    /// 1. If a [`TimeoutCalculator`] is configured and `source_duration` is
-    ///    provided, compute a duration-aware timeout based on the operation kind.
+    /// 1. If a [`TimeoutCalculator`] is configured and `source_duration` is provided,
+    ///    compute a duration-aware timeout based on the operation kind.
     /// 2. Otherwise, fall back to the fixed `timeout` field.
     /// 3. If neither is set, returns `None` (no timeout).
     #[must_use]

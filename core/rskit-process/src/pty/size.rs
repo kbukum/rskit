@@ -4,10 +4,8 @@ use std::os::unix::io::AsRawFd;
 
 /// Window size of a pseudoterminal, in character cells plus optional pixels.
 ///
-/// A child process attached to a PTY reads this through `TIOCGWINSZ` to lay out
-/// its output (wrapping, progress bars, table widths). Mirroring the size of the
-/// controlling terminal keeps rendered output identical to running the command
-/// directly.
+/// A child process attached to a PTY reads this through `TIOCGWINSZ` to lay out its output (wrapping, progress bars, table widths).
+/// Mirroring the size of the controlling terminal keeps rendered output identical to running the command directly.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub struct PtySize {
     /// Number of visible rows (character cells).
@@ -57,17 +55,17 @@ impl PtySize {
 
 /// Query the window size of the terminal backing `fd`.
 ///
-/// Returns `None` when `fd` is not a terminal (for example a pipe or a file, as
-/// under CI or output redirection) or the `TIOCGWINSZ` query fails. Callers use
-/// a `None` result to decide that no PTY should be allocated.
+/// Returns `None` when `fd` is not a terminal (for example a pipe or a file, as under CI or output redirection)
+/// or the `TIOCGWINSZ` query fails.
+/// Callers use a `None` result to decide that no PTY should be allocated.
 #[must_use]
 pub fn terminal_size(fd: &impl AsRawFd) -> Option<PtySize> {
-    // SAFETY: `winsize` is a plain C struct with no invariants, so an
-    // all-zero value is a valid initial state that `ioctl` fully overwrites.
+    // SAFETY: `winsize` is a plain C struct with no invariants,
+    // so an all-zero value is a valid initial state that `ioctl` fully overwrites.
     let mut winsize: libc::winsize = unsafe { std::mem::zeroed() };
-    // SAFETY: `TIOCGWINSZ` writes a `winsize` through the provided pointer,
-    // which is a valid, uniquely-borrowed local. A non-zero return means the
-    // fd is not a terminal, which we surface as `None`.
+    // SAFETY: `TIOCGWINSZ` writes a `winsize` through the provided pointer, which is a valid,
+    // uniquely-borrowed local. A non-zero return means the fd is not a terminal,
+    // which we surface as `None`.
     let result = unsafe { libc::ioctl(fd.as_raw_fd(), libc::TIOCGWINSZ, &raw mut winsize) };
     if result != 0 {
         return None;

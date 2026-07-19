@@ -1,10 +1,9 @@
 //! Leading-edge windowing and batching operators.
 //!
-//! These operators partition a stream into `Vec<T>` windows whose timers run
-//! **leading-edge**, from the first buffered item (`tumbling_window`, `batch`),
-//! or by item count (`sliding_window`). Contrast the trailing-edge rate
-//! operators in [`crate::operators::rate`], whose timers are driven by quiet gaps between
-//! arrivals.
+//! These operators partition a stream into `Vec<T>` windows whose timers run **leading-edge**,
+//! from the first buffered item (`tumbling_window`, `batch`), or by item count (`sliding_window`).
+//! Contrast the trailing-edge rate operators in [`crate::operators::rate`],
+//! whose timers are driven by quiet gaps between arrivals.
 
 use std::collections::VecDeque;
 use std::time::Duration;
@@ -59,8 +58,8 @@ where
 
 /// Collect up to `size` items into a batch.
 ///
-/// A batch is emitted either when `size` items arrive or when `timeout`
-/// elapses since the first item in the batch.
+/// A batch is emitted either when `size` items arrive
+/// or when `timeout` elapses since the first item in the batch.
 pub fn batch<S, T>(
     stream: S,
     size: usize,

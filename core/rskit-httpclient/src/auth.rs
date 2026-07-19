@@ -1,8 +1,8 @@
 //! Authentication types for HTTP requests.
 //!
-//! Credential values are stored as [`SecretString`]
-//! so debug output redacts bearer tokens, basic passwords, and API keys. Header
-//! values are exposed only by [`Auth::header`] when applying a request.
+//! Credential values are stored as [`SecretString`] so debug output redacts bearer tokens,
+//! basic passwords, and API keys.
+//! Header values are exposed only by [`Auth::header`] when applying a request.
 
 use base64::Engine;
 use http::header::AUTHORIZATION;
@@ -12,8 +12,7 @@ use std::fmt;
 
 /// Authentication method for HTTP requests.
 ///
-/// Secret-bearing variants redact their values in [`Debug`](std::fmt::Debug)
-/// output while preserving the plaintext for request header application.
+/// Secret-bearing variants redact their values in [`Debug`](std::fmt::Debug) output while preserving the plaintext for request header application.
 #[derive(Debug, Clone, Default)]
 #[non_exhaustive]
 pub enum Auth {

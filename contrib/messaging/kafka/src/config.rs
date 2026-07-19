@@ -18,8 +18,8 @@ pub(crate) const ADAPTER_NAME: &str = "kafka";
 
 /// Configuration for connecting to a Kafka cluster.
 ///
-/// Broker-agnostic fields live in [`BrokerConfig`]. This adapter owns only Kafka client
-/// knobs: bootstrap servers, compression, offset reset, batching, and security settings.
+/// Broker-agnostic fields live in [`BrokerConfig`]. This adapter owns only Kafka client knobs:
+/// bootstrap servers, compression, offset reset, batching, and security settings.
 #[derive(Clone)]
 pub struct KafkaConfig {
     /// Shared broker settings (adapter/name/enabled, delivery, retry, DLQ, etc.).

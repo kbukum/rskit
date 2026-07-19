@@ -14,8 +14,8 @@ impl FfmpegProgressParser {
         Self { total_duration }
     }
 
-    /// Parse a single FFmpeg stderr line. Returns `Some(Progress)` if the line
-    /// contains progress information.
+    /// Parse a single FFmpeg stderr line.
+    /// Returns `Some(Progress)` if the line contains progress information.
     ///
     /// FFmpeg outputs lines like:
     /// ```text

@@ -1,12 +1,11 @@
 //! Hugging Face Text Generation Inference (TGI) adapter via OAI-compatible endpoint.
 //!
 //! TGI exposes an OpenAI-compatible `/v1/chat/completions` endpoint from v2+.
-//! Older deployments may only expose `/generate`; this adapter targets the
-//! modern OAI-compatible path, which is the recommended production interface.
+//! Older deployments may only expose `/generate`; this adapter targets the modern OAI-compatible path,
+//! which is the recommended production interface.
 //!
-//! Optional bearer credentials are configured through [`Config::api_key`] as a
-//! redacting [`SecretString`](rskit_util::SecretString) and installed through `rskit-httpclient` auth
-//! rather than raw headers.
+//! Optional bearer credentials are configured through [`Config::api_key`] as a redacting [`SecretString`](rskit_util::SecretString)
+//! and installed through `rskit-httpclient` auth rather than raw headers.
 
 #![warn(missing_docs)]
 

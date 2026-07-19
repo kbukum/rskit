@@ -7,9 +7,10 @@ use crate::{DataPayload, DatasetLimits, Label, MediaType};
 
 /// Capability an item must provide to flow through the generic collection engine.
 ///
-/// The engine stays item-agnostic: it routes and counts items by [`label`](DatasetItem::label) and
-/// resumes sources from [`source_offset`](DatasetItem::source_offset), without knowing the concrete
-/// item type. Both blob samples ([`DataItem`]) and tabular records implement this trait.
+/// The engine stays item-agnostic: it routes and counts items by [`label`](DatasetItem::label)
+/// and resumes sources from [`source_offset`](DatasetItem::source_offset),
+/// without knowing the concrete item type. Both blob samples ([`DataItem`])
+/// and tabular records implement this trait.
 pub trait DatasetItem: Send + 'static {
     /// Classification label used to route and count the item. Defaults to [`Label::Real`].
     fn label(&self) -> Label {

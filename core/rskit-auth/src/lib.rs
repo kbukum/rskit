@@ -1,10 +1,10 @@
 //! Authentication — password hashing, API key management, request-context helpers,
 //! and optional JWT/OIDC support.
 //!
-//! Request middleware is fail-closed by default. [`BearerAuthLayer`] reads only
-//! `Authorization: Bearer ...` headers and emits a neutral
-//! `WWW-Authenticate: Bearer` challenge on rejected requests; applications can
-//! add realm/scope-specific challenge policy at their HTTP boundary if needed.
+//! Request middleware is fail-closed by default.
+//! [`BearerAuthLayer`] reads only `Authorization: Bearer ...` headers
+//! and emits a neutral `WWW-Authenticate: Bearer` challenge on rejected requests;
+//! applications can add realm/scope-specific challenge policy at their HTTP boundary if needed.
 
 #![warn(missing_docs)]
 

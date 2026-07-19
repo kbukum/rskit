@@ -15,9 +15,9 @@ struct State {
 
 /// In-memory writable config store.
 ///
-/// A process-local reference [`ConfigSink`] backed by a `BTreeMap`. Useful for
-/// tests, defaults, and composing override layers without touching disk or a
-/// remote backend. Cheaply cloneable; clones share the same underlying store.
+/// A process-local reference [`ConfigSink`] backed by a `BTreeMap`. Useful for tests, defaults,
+/// and composing override layers without touching disk or a remote backend. Cheaply cloneable;
+/// clones share the same underlying store.
 ///
 /// With the `watch` feature enabled it also implements
 #[cfg_attr(
@@ -45,9 +45,8 @@ impl InMemoryConfigSink {
 
     /// Return the masked value stored at `key`, if present.
     ///
-    /// The returned [`SecretString`] masks its plaintext in display, debug, and
-    /// serialization; use [`SecretString::expose`] to read the plaintext
-    /// intentionally.
+    /// The returned [`SecretString`] masks its plaintext in display, debug, and serialization;
+    /// use [`SecretString::expose`] to read the plaintext intentionally.
     #[must_use]
     pub fn get(&self, key: &str) -> Option<SecretString> {
         self.state.lock().values.get(key).cloned()
@@ -79,8 +78,8 @@ impl ConfigSink for InMemoryConfigSink {
 
     fn remove(&self, key: &str) -> AppResult<()> {
         let removed = self.state.lock().values.remove(key).is_some();
-        // Only emit a change event when state actually changed, so a no-op
-        // remove of an absent key never triggers a spurious reload for watchers.
+        // Only emit a change event when state actually changed,
+        // so a no-op remove of an absent key never triggers a spurious reload for watchers.
         #[cfg(feature = "watch")]
         if removed {
             self.broadcaster

@@ -91,8 +91,8 @@ impl BulkheadConfig {
         self
     }
 
-    /// Register a callback invoked when the bulkhead rejects a caller
-    /// because all slots are occupied and the wait timeout expires.
+    /// Register a callback invoked when the bulkhead rejects a caller because all slots are occupied
+    /// and the wait timeout expires.
     #[must_use]
     pub fn with_on_reject(mut self, f: impl Fn() + Send + Sync + 'static) -> Self {
         self.on_reject = Some(Arc::new(f));

@@ -26,8 +26,8 @@ impl Default for EventBusConfig {
 
 /// A bounded, typed, in-process publish/subscribe bus for event `E`.
 ///
-/// This bus is constructor-injected and process-local. Use `rskit-messaging`
-/// for broker-backed cross-process events.
+/// This bus is constructor-injected and process-local.
+/// Use `rskit-messaging` for broker-backed cross-process events.
 pub struct EventBus<E: Event> {
     sender: broadcast::Sender<Arc<E>>,
 }
@@ -51,8 +51,8 @@ impl<E: Event> EventBus<E> {
 
     /// Publish an event to all current subscribers.
     ///
-    /// Returns the number of subscribers that accepted the event. Publishing to
-    /// a bus with no subscribers succeeds and returns `0`.
+    /// Returns the number of subscribers that accepted the event.
+    /// Publishing to a bus with no subscribers succeeds and returns `0`.
     pub fn publish(&self, event: E) -> AppResult<usize> {
         self.sender.send(Arc::new(event)).or(Ok(0))
     }
@@ -107,8 +107,8 @@ pub struct Subscriber<E: Event> {
 impl<E: Event> Subscriber<E> {
     /// Receive the next event.
     ///
-    /// Returns a typed error when the sender is closed or this subscriber lagged
-    /// behind the bounded bus capacity.
+    /// Returns a typed error when the sender is closed
+    /// or this subscriber lagged behind the bounded bus capacity.
     pub async fn recv(&mut self) -> AppResult<Arc<E>> {
         self.receiver.recv().await.map_err(|error| match error {
             broadcast::error::RecvError::Closed => {

@@ -1,7 +1,7 @@
 //! Process execution for compiled FFmpeg commands.
 //!
-//! Handles spawning the `ffmpeg` process, stderr streaming for progress
-//! and error diagnostics, timeout enforcement, and process-group cleanup.
+//! Handles spawning the `ffmpeg` process, stderr streaming for progress and error diagnostics,
+//! timeout enforcement, and process-group cleanup.
 
 use std::collections::VecDeque;
 use std::sync::Arc;

@@ -7,8 +7,7 @@
 //! - Loudness measurement (peak, RMS, EBU R128 approximation)
 //! - Volume adjustment and fade effects
 //!
-//! For complex operations (encoding, format conversion, filters) use
-//! [`rskit-media-ffmpeg`](../rskit_media_ffmpeg) instead.
+//! For complex operations (encoding, format conversion, filters) use [`rskit-media-ffmpeg`](../rskit_media_ffmpeg) instead.
 
 #![warn(missing_docs)]
 

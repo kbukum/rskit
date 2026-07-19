@@ -1,17 +1,16 @@
 use std::collections::HashSet;
 use std::hash::Hash;
 
-/// Return the keys that occur more than once in `items`, in first-duplicate
-/// order.
+/// Return the keys that occur more than once in `items`, in first-duplicate order.
 ///
-/// `key_selector` extracts the identity key from each item. Each key that
-/// appears two or more times is reported exactly once, in the order its first
-/// duplicate occurrence is encountered. Items with unique keys are not reported.
+/// `key_selector` extracts the identity key from each item. Each key that appears two
+/// or more times is reported exactly once, in the order its first duplicate occurrence is encountered.
+/// Items with unique keys are not reported.
 ///
-/// This is the low-level primitive; see [`ensure_unique_by`] for a convenience
-/// that turns any duplicate into an error. The helper is error-policy-neutral —
-/// it returns the offending keys so the caller can wrap them in whatever domain
-/// error carries the right context.
+/// This is the low-level primitive;
+/// see [`ensure_unique_by`] for a convenience that turns any duplicate into an error.
+/// The helper is error-policy-neutral — it returns the offending keys
+/// so the caller can wrap them in whatever domain error carries the right context.
 ///
 /// # Examples
 ///
@@ -44,9 +43,8 @@ where
 
 /// Ensure every item in `items` has a unique key, returning the first duplicate.
 ///
-/// `key_selector` extracts the identity key from each item. Returns `Ok(())`
-/// when all keys are unique, or `Err(key)` with the first key seen twice. The
-/// caller maps the returned key to a domain error.
+/// `key_selector` extracts the identity key from each item. Returns `Ok(())` when all keys are unique,
+/// or `Err(key)` with the first key seen twice. The caller maps the returned key to a domain error.
 ///
 /// # Errors
 ///

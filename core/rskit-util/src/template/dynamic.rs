@@ -1,12 +1,11 @@
 //! Open-set, `{{var}}` brace templates with runtime-supplied variables.
 //!
 //! Unlike [`Template`](super::Template), which validates against a fixed,
-//! typed placeholder set known at compile time, a [`DynamicTemplate`] carries
-//! an open set of string-named variables resolved against a caller-supplied
-//! lookup at render time. Names are matched leniently: `{{ name }}` and
-//! `{{name}}` are equivalent, and any sequence that is not a well-formed
-//! placeholder is preserved verbatim. Use this for prompt-style templates
-//! whose variable set is data-driven rather than enumerated in code.
+//! typed placeholder set known at compile time,
+//! a [`DynamicTemplate`] carries an open set of string-named variables resolved against a caller-supplied lookup at render time.
+//! Names are matched leniently: `{{ name }}` and `{{name}}` are equivalent,
+//! and any sequence that is not a well-formed placeholder is preserved verbatim.
+//! Use this for prompt-style templates whose variable set is data-driven rather than enumerated in code.
 
 use std::collections::BTreeSet;
 
@@ -28,8 +27,8 @@ pub struct DynamicTemplate {
 }
 
 impl DynamicTemplate {
-    /// Parse a template string. Parsing is lenient and never fails: malformed
-    /// `{{` / `}}` runs and invalid names are kept as literal text.
+    /// Parse a template string. Parsing is lenient and never fails: malformed `{{` / `}}` runs
+    /// and invalid names are kept as literal text.
     #[must_use]
     pub fn parse(template: &str) -> Self {
         let mut parts = Vec::new();
@@ -70,8 +69,8 @@ impl DynamicTemplate {
             .collect()
     }
 
-    /// Render the template, resolving each variable via `lookup`. A variable
-    /// with no value yields [`TemplateError::MissingVariable`].
+    /// Render the template, resolving each variable via `lookup`.
+    /// A variable with no value yields [`TemplateError::MissingVariable`].
     pub fn render<F>(&self, mut lookup: F) -> Result<String, TemplateError>
     where
         F: FnMut(&str) -> Option<String>,

@@ -1,17 +1,15 @@
 //! BLAKE3 content hashing with optional domain-separated framing.
 //!
-//! Provides one canonical content-hash implementation (BLAKE3) behind a small,
-//! allocation-light API so callers depend on the concept of a "content hash"
-//! rather than on a specific hashing crate. Digests are rendered as lowercase
-//! hexadecimal, giving a stable, comparable identity for cache keys, change
-//! detection, and deduplication.
+//! Provides one canonical content-hash implementation (BLAKE3) behind a small, allocation-light API
+//! so callers depend on the concept of a "content hash" rather than on a specific hashing crate.
+//! Digests are rendered as lowercase hexadecimal, giving a stable, comparable identity for cache keys,
+//! change detection, and deduplication.
 //!
-//! [`ContentHasher::update_framed`] applies unambiguous, length-prefixed domain
-//! separation (each of `label` and `value` is preceded by its length) so
-//! independently folded fields cannot collide for *arbitrary* byte inputs —
-//! e.g. `("ab", "c")` and `("a", "bc")` hash differently, and so do
-//! `("a:b", "c")` and `("a", "b:c")`. Prefer it whenever several independent
-//! fields are folded into one digest.
+//! [`ContentHasher::update_framed`] applies unambiguous,
+//! length-prefixed domain separation (each of `label` and `value` is preceded by its length)
+//! so independently folded fields cannot collide for *arbitrary* byte inputs — e.g. `("ab", "c")`
+//! and `("a", "bc")` hash differently, and so do `("a:b", "c")` and `("a", "b:c")`.
+//! Prefer it whenever several independent fields are folded into one digest.
 //!
 //! # Example
 //!
@@ -34,10 +32,10 @@ use blake3::Hasher;
 
 /// Incremental content hasher producing a stable lowercase-hex digest.
 ///
-/// Backed by BLAKE3. Feed bytes with [`update`](Self::update) (raw) or
-/// [`update_framed`](Self::update_framed) (domain-separated), then read the
-/// digest with [`finalize_hex`](Self::finalize_hex). The hasher may be reused
-/// after finalizing; finalizing does not consume it.
+/// Backed by BLAKE3. Feed bytes with [`update`](Self::update) (raw)
+/// or [`update_framed`](Self::update_framed) (domain-separated),
+/// then read the digest with [`finalize_hex`](Self::finalize_hex).
+/// The hasher may be reused after finalizing; finalizing does not consume it.
 #[derive(Clone, Default)]
 pub struct ContentHasher {
     inner: Hasher,
@@ -62,11 +60,11 @@ impl ContentHasher {
 
     /// Fold a labelled `value` into the digest with unambiguous framing.
     ///
-    /// Each of `label` and `value` is folded length-prefixed (its length as a
-    /// little-endian `u64`, then its bytes), so field boundaries stay
-    /// unambiguous even when the inputs contain arbitrary bytes such as `:` or
-    /// `\0`. Independently folded fields therefore cannot alias one another.
-    /// Returns `&mut Self` so updates can be chained.
+    /// Each of `label`
+    /// and `value` is folded length-prefixed (its length as a little-endian `u64`, then its bytes),
+    /// so field boundaries stay unambiguous even when the inputs contain arbitrary bytes such as `:`
+    /// or `\0`. Independently folded fields therefore cannot alias one another. Returns `&mut Self`
+    /// so updates can be chained.
     pub fn update_framed(&mut self, label: &[u8], value: &[u8]) -> &mut Self {
         self.update_length_prefixed(label);
         self.update_length_prefixed(value);
@@ -82,8 +80,7 @@ impl ContentHasher {
 
     /// Render the current digest as a lowercase hexadecimal string.
     ///
-    /// Does not consume the hasher: further updates may follow and produce a
-    /// new digest.
+    /// Does not consume the hasher: further updates may follow and produce a new digest.
     #[must_use]
     pub fn finalize_hex(&self) -> String {
         self.inner.finalize().to_hex().to_string()

@@ -1,6 +1,8 @@
 # rskit Package Catalog
 
-rskit is distributed as focused crates instead of one monolithic package. Use the `rskit-suite` facade package when you want common modules behind feature flags, or depend directly on individual crates when you want a narrower dependency graph.
+rskit is distributed as focused crates instead of one monolithic package.
+Use the `rskit-suite` facade package when you want common modules behind feature flags,
+or depend directly on individual crates when you want a narrower dependency graph.
 
 The repository has three workspace manifests and intentionally no root `Cargo.toml`:
 
@@ -10,7 +12,9 @@ The repository has three workspace manifests and intentionally no root `Cargo.to
 | Contrib | Vendor and infrastructure adapters | [`contrib/Cargo.toml`](../contrib/Cargo.toml) |
 | Examples | Demo applications validated by CI, not published | [`examples/Cargo.toml`](../examples/Cargo.toml) |
 
-All publishable crates currently use the same pre-1.0 version from their owning workspace. See [Versioning](VERSIONING.md) for compatibility policy and [Releasing](RELEASING.md) for the mechanical release runbook.
+All publishable crates currently use the same pre-1.0 version from their owning workspace.
+See [Versioning](VERSIONING.md) for compatibility policy
+and [Releasing](RELEASING.md) for the mechanical release runbook.
 
 ## How to choose crates
 
@@ -118,7 +122,8 @@ make doc
 make deny
 ```
 
-For a single workspace, pass `W=core`, `W=contrib`, or `W=examples`. For one crate, pass `C=<crate-name>`:
+For a single workspace, pass `W=core`, `W=contrib`, or `W=examples`. For one crate,
+pass `C=<crate-name>`:
 
 ```sh
 make test W=core
@@ -136,4 +141,6 @@ cargo test --manifest-path examples/Cargo.toml --workspace
 
 ## Dependency direction
 
-Lower-level crates must not depend on higher-level crates. The canonical dependency policy is ADR [0001: Layered crate architecture](adr/0001-layered-crate-architecture.md), enforced by `make check-topology` and `make deny`.
+Lower-level crates must not depend on higher-level crates.
+The canonical dependency policy is ADR [0001: Layered crate architecture](adr/0001-layered-crate-architecture.md),
+enforced by `make check-topology` and `make deny`.

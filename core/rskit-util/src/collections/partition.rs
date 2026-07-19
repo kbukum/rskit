@@ -1,7 +1,7 @@
 /// Split a collection into two collections based on a predicate function.
 ///
-/// The first vector contains elements where the predicate is true, and the second
-/// vector contains elements where the predicate is false.
+/// The first vector contains elements where the predicate is true,
+/// and the second vector contains elements where the predicate is false.
 ///
 /// # Examples
 ///

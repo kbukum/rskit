@@ -2,16 +2,15 @@
 //!
 //! Each kind implements the same question three ways from one place:
 //!
-//! - **non-interactive** — resolve to the declared default or return a typed
-//!   error, without touching the terminal;
-//! - **line-driven** — print a numbered list (or plain prompt) once and parse a
-//!   typed answer, re-asking on invalid input;
-//! - **key-driven** — draw a live frame and update it in place as arrow keys
-//!   move focus and space toggles selection.
+//! - **non-interactive** — resolve to the declared default or return a typed error,
+//!   without touching the terminal;
+//! - **line-driven** — print a numbered list (or plain prompt) once and parse a typed answer,
+//!   re-asking on invalid input;
+//! - **key-driven** — draw a live frame and update it in place as arrow keys move focus
+//!   and space toggles selection.
 //!
-//! A kind chooses the interactive path by inspecting
-//! [`Terminal::capabilities`](crate::prompt::Terminal::capabilities), so the
-//! prompter never branches on a concrete terminal type.
+//! A kind chooses the interactive path by inspecting [`Terminal::capabilities`](crate::prompt::Terminal::capabilities),
+//! so the prompter never branches on a concrete terminal type.
 
 pub mod confirm;
 mod errors;

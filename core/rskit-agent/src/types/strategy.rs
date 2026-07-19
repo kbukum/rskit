@@ -5,8 +5,8 @@ use rskit_llm::types::Message;
 pub trait ContextStrategy: Send + Sync {
     /// Compact the message list toward `max_tokens`.
     ///
-    /// Strategies decide how aggressively to reduce history. Implementations
-    /// that cannot satisfy their own policy should return an error.
+    /// Strategies decide how aggressively to reduce history.
+    /// Implementations that cannot satisfy their own policy should return an error.
     fn compact(&self, messages: Vec<Message>, max_tokens: usize) -> Result<Vec<Message>, AppError>;
 }
 
@@ -28,8 +28,8 @@ impl ContextStrategy for FailStrategy {
 
 /// Keep only the system prompt (first message) and the last `keep_last` messages.
 ///
-/// This is a message-count strategy; `max_tokens` is accepted through the
-/// common strategy trait but is not used for token-aware trimming.
+/// This is a message-count strategy; `max_tokens` is accepted through the common strategy trait
+/// but is not used for token-aware trimming.
 pub struct TruncateStrategy {
     /// Number of recent messages to preserve.
     pub keep_last: usize,

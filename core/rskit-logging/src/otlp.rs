@@ -1,7 +1,7 @@
 //! OpenTelemetry Logs bridge with OTLP export.
 //!
-//! Bridges [`tracing`] events to the OpenTelemetry Logs SDK so they can be
-//! exported via OTLP (gRPC or HTTP) to a collector.
+//! Bridges [`tracing`] events to the OpenTelemetry Logs SDK
+//! so they can be exported via OTLP (gRPC or HTTP) to a collector.
 //!
 //! # Feature gate
 //!
@@ -42,8 +42,8 @@ pub struct OtlpConfig {
     pub protocol: String,
     /// Additional HTTP headers (e.g. auth tokens).
     ///
-    /// Supported only when [`OtlpConfig::protocol`] is `"http"` because the
-    /// underlying HTTP and gRPC OTLP exporters expose different header types.
+    /// Supported only when [`OtlpConfig::protocol`] is `"http"` because the underlying HTTP
+    /// and gRPC OTLP exporters expose different header types.
     pub headers: HashMap<String, String>,
 }
 
@@ -62,12 +62,10 @@ impl Default for OtlpConfig {
 
 /// Manages the OpenTelemetry [`SdkLoggerProvider`] for OTLP export.
 ///
-/// Create via [`OtlpProvider::new`], then call [`OtlpProvider::layer`] to
-/// obtain a [`tracing_subscriber::Layer`] that can be composed into the
-/// subscriber stack.
+/// Create via [`OtlpProvider::new`],
+/// then call [`OtlpProvider::layer`] to obtain a [`tracing_subscriber::Layer`] that can be composed into the subscriber stack.
 ///
-/// The provider **must** be shut down gracefully via [`OtlpProvider::shutdown`]
-/// (or by dropping the [`crate::LoggingGuard`]) to flush pending log records.
+/// The provider **must** be shut down gracefully via [`OtlpProvider::shutdown`] (or by dropping the [`crate::LoggingGuard`]) to flush pending log records.
 pub struct OtlpProvider {
     provider: SdkLoggerProvider,
 }
@@ -104,11 +102,10 @@ impl OtlpProvider {
         Ok(Some(Self { provider }))
     }
 
-    /// Get the OpenTelemetry tracing layer for use with
-    /// [`tracing_subscriber`].
+    /// Get the OpenTelemetry tracing layer for use with [`tracing_subscriber`].
     ///
-    /// The returned layer converts every [`tracing`] event into an
-    /// OpenTelemetry log record and forwards it to the OTLP exporter.
+    /// The returned layer converts every [`tracing`] event into an OpenTelemetry log record
+    /// and forwards it to the OTLP exporter.
     pub fn layer<S>(&self) -> OpenTelemetryTracingBridge<SdkLoggerProvider, SdkLogger>
     where
         S: Subscriber + for<'a> LookupSpan<'a>,

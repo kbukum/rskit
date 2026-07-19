@@ -11,9 +11,8 @@ use crate::registry::CacheStore;
 
 /// A generic, JSON-serialised store backed by a [`CacheStore`].
 ///
-/// Keys are automatically prefixed with the store's `prefix` so that
-/// multiple `TypedStore` instances can coexist on the same cache store without
-/// key collisions.
+/// Keys are automatically prefixed with the store's `prefix`
+/// so that multiple `TypedStore` instances can coexist on the same cache store without key collisions.
 pub struct TypedStore<T> {
     client: Arc<dyn CacheStore>,
     prefix: String,

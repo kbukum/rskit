@@ -5,9 +5,8 @@ use serde::Deserialize;
 
 /// Ollama provider configuration.
 ///
-/// Ollama exposes an OpenAI-compatible chat-completions endpoint at
-/// `<base_url>/v1/chat/completions`. No API key is required for a local
-/// instance, but one may be set for remote/proxied deployments.
+/// Ollama exposes an OpenAI-compatible chat-completions endpoint at `<base_url>/v1/chat/completions`.
+/// No API key is required for a local instance, but one may be set for remote/proxied deployments.
 #[derive(Clone, Debug, Deserialize)]
 pub struct Config {
     /// Base URL of the Ollama server (default: `http://localhost:11434`).
@@ -20,8 +19,8 @@ pub struct Config {
 
     /// Optional API key for remote/proxied Ollama instances.
     ///
-    /// The value is redacted in debug/display output, and adapters pass it to
-    /// `rskit-httpclient` as redacting auth state when configured.
+    /// The value is redacted in debug/display output,
+    /// and adapters pass it to `rskit-httpclient` as redacting auth state when configured.
     #[serde(default)]
     pub api_key: Option<SecretString>,
 }

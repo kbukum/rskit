@@ -1,7 +1,7 @@
 //! `core-cli` binary entry point.
 //!
-//! A command-line tool built entirely on rskit **core** crates — no transport
-//! or server crate, and no rskit facade. See `docs/CONSUMER-CLASSES.md`.
+//! A command-line tool built entirely on rskit **core** crates — no transport or server crate,
+//! and no rskit facade. See `docs/CONSUMER-CLASSES.md`.
 //!
 //! Usage:
 //!
@@ -11,11 +11,10 @@
 //! core-cli run <units>
 //! ```
 //!
-//! All routing, argument parsing, and exit-code mapping live in
-//! [`core_cli::cli`] so they can be tested with only core crates; this entry
-//! point is a thin shim around it. The `main` glue is gated behind
-//! `#[cfg(not(test))]` (as in `agent-demo`) so it is excluded from the
-//! coverage build rather than counted as permanently-uncovered lines.
+//! All routing, argument parsing, and exit-code mapping live in [`core_cli::cli`]
+//! so they can be tested with only core crates; this entry point is a thin shim around it.
+//! The `main` glue is gated behind `#[cfg(not(test))]` (as in `agent-demo`)
+//! so it is excluded from the coverage build rather than counted as permanently-uncovered lines.
 
 #[cfg(not(test))]
 use std::process::ExitCode as ProcessExit;

@@ -1,22 +1,22 @@
 //! Nearest-match suggestions for "did you mean?" command-line diagnostics.
 //!
-//! A generic, allocation-light helper that, given an unknown token and a set of
-//! valid candidates, returns the closest candidate by Damerau-style edit
-//! distance. It is case-insensitive with a light prefix boost so a leading typo
-//! (`Fmt` for `format`, `buld` for `build`) still resolves. The comparison is
-//! bounded by a caller-supplied maximum distance so far-off tokens yield no
-//! (noisy) suggestion rather than a misleading one.
+//! A generic, allocation-light helper that, given an unknown token and a set of valid candidates,
+//! returns the closest candidate by Damerau-style edit distance.
+//! It is case-insensitive with a light prefix boost
+//! so a leading typo (`Fmt` for `format`, `buld` for `build`) still resolves.
+//! The comparison is bounded by a caller-supplied maximum distance
+//! so far-off tokens yield no (noisy) suggestion rather than a misleading one.
 
 /// The default maximum edit distance for a suggestion to be offered.
 ///
-/// A distance of two catches single transpositions, one insertion plus one
-/// deletion, and most realistic typos while still rejecting unrelated tokens.
+/// A distance of two catches single transpositions, one insertion plus one deletion,
+/// and most realistic typos while still rejecting unrelated tokens.
 pub const DEFAULT_SUGGESTION_DISTANCE: usize = 2;
 
 /// Return the candidate nearest to `input` within [`DEFAULT_SUGGESTION_DISTANCE`].
 ///
-/// Convenience wrapper over [`nearest_within`] using the default threshold. See
-/// it for the full matching semantics.
+/// Convenience wrapper over [`nearest_within`] using the default threshold.
+/// See it for the full matching semantics.
 ///
 /// # Examples
 /// ```
@@ -34,16 +34,15 @@ where
 
 /// Return the candidate nearest to `input` within `max_distance` edits.
 ///
-/// Matching is case-insensitive. A candidate qualifies either by an Optimal
-/// String Alignment (restricted Damerau-Levenshtein) edit distance within
-/// `max_distance` — counting an adjacent transposition as a single edit — or, as
-/// a fallback, by being an abbreviation of `input` — `input` (of at least two
-/// characters) is a subsequence of a candidate no more than four times its
-/// length, e.g. `fmt` → `format`. Among qualifying candidates the smallest score
-/// wins; ties break first toward a candidate whose leading character matches
-/// `input`'s, then lexicographically, so the result is deterministic regardless
-/// of iteration order. Returns `None` when no candidate is close enough, so a
-/// far-off token yields no misleading hint.
+/// Matching is case-insensitive.
+/// A candidate qualifies either by an Optimal String Alignment (restricted Damerau-Levenshtein) edit distance within `max_distance`
+/// — counting an adjacent transposition as a single edit — or, as a fallback,
+/// by being an abbreviation of `input` —
+/// `input` (of at least two characters) is a subsequence of a candidate no more than four times its length,
+/// e.g. `fmt` → `format`. Among qualifying candidates the smallest score wins;
+/// ties break first toward a candidate whose leading character matches `input`'s,
+/// then lexicographically, so the result is deterministic regardless of iteration order.
+/// Returns `None` when no candidate is close enough, so a far-off token yields no misleading hint.
 ///
 /// # Examples
 /// ```
@@ -80,16 +79,15 @@ where
 
 /// Score a candidate against `input`, or `None` when it is not close enough.
 ///
-/// A direct edit within `max_distance` scores by that distance. Failing that, an
-/// *abbreviation* — `input` (of at least two characters) is a subsequence of a
-/// candidate no more than four times its length, e.g. `fmt` → `format` — scores
-/// at `max_distance`, the worst still-eligible edit, so a genuine short-hand
-/// resolves only when no closer edit exists rather than swamping close matches.
+/// A direct edit within `max_distance` scores by that distance. Failing that, an *abbreviation* —
+/// `input` (of at least two characters) is a subsequence of a candidate no more than four times its length,
+/// e.g. `fmt` → `format` — scores at `max_distance`, the worst still-eligible edit,
+/// so a genuine short-hand resolves only when no closer edit exists rather than swamping close matches.
 fn match_score(input: &str, candidate: &str, max_distance: usize) -> Option<usize> {
     let input_len = input.chars().count();
     let candidate_len = candidate.chars().count();
-    // A length gap wider than `max_distance` cannot be an edit match, so skip the
-    // (quadratic) OSA computation for obviously-distant candidates.
+    // A length gap wider than `max_distance` cannot be an edit match,
+    // so skip the (quadratic) OSA computation for obviously-distant candidates.
     if input_len.abs_diff(candidate_len) <= max_distance {
         let distance = osa_distance(input, candidate);
         if distance <= max_distance {
@@ -105,8 +103,7 @@ fn match_score(input: &str, candidate: &str, max_distance: usize) -> Option<usiz
     None
 }
 
-/// Whether every character of `needle` appears in `haystack` in order (an
-/// abbreviation match).
+/// Whether every character of `needle` appears in `haystack` in order (an abbreviation match).
 fn is_subsequence(needle: &str, haystack: &str) -> bool {
     let mut chars = haystack.chars();
     needle
@@ -114,9 +111,8 @@ fn is_subsequence(needle: &str, haystack: &str) -> bool {
         .all(|target| chars.by_ref().any(|c| c == target))
 }
 
-/// Tie-break preference: favor a candidate that shares `input`'s leading
-/// character, then the lexicographically smaller name for determinism (applied
-/// even when `input` is empty, so the result never depends on iteration order).
+/// Tie-break preference: favor a candidate that shares `input`'s leading character,
+/// then the lexicographically smaller name for determinism (applied even when `input` is empty, so the result never depends on iteration order).
 fn prefers(candidate: &str, incumbent: &str, lower_input: &str) -> bool {
     let leading = lower_input.chars().next();
     let candidate_prefix = leading.is_some_and(|c| leading_char_matches(candidate, c));
@@ -128,16 +124,15 @@ fn prefers(candidate: &str, incumbent: &str, lower_input: &str) -> bool {
     }
 }
 
-/// Whether `s`'s first character equals `leading` case-insensitively, without
-/// allocating a lowercased copy of the whole string.
+/// Whether `s`'s first character equals `leading` case-insensitively,
+/// without allocating a lowercased copy of the whole string.
 fn leading_char_matches(s: &str, leading: char) -> bool {
     s.chars()
         .next()
         .is_some_and(|first| first.to_lowercase().eq(leading.to_lowercase()))
 }
 
-/// Optimal String Alignment distance between two strings (adjacent
-/// transpositions cost one edit; no substring may be edited more than once).
+/// Optimal String Alignment distance between two strings (adjacent transpositions cost one edit; no substring may be edited more than once).
 fn osa_distance(a: &str, b: &str) -> usize {
     let a: Vec<char> = a.chars().collect();
     let b: Vec<char> = b.chars().collect();
@@ -207,15 +202,15 @@ mod tests {
 
     #[test]
     fn prefix_shared_with_input_breaks_ties() {
-        // Both `cat` and `bar` are distance 2 from `car`; the shared leading
-        // `c` wins deterministically.
+        // Both `cat` and `bar` are distance 2 from `car`;
+        // the shared leading `c` wins deterministically.
         assert_eq!(nearest_within("car", ["bar", "cat"], 2), Some("cat"));
     }
 
     #[test]
     fn empty_input_tie_break_is_deterministic() {
-        // No leading character to prefer, so ties fall to lexicographic order
-        // regardless of iteration order.
+        // No leading character to prefer,
+        // so ties fall to lexicographic order regardless of iteration order.
         assert_eq!(nearest_within("", ["bb", "aa"], 2), Some("aa"));
         assert_eq!(nearest_within("", ["aa", "bb"], 2), Some("aa"));
     }

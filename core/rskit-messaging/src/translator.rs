@@ -5,8 +5,8 @@ use serde::{Serialize, de::DeserializeOwned};
 
 /// Translates messages between wire format and domain types.
 ///
-/// `W` is the wire type carried inside [`Message<W>`](crate::Message) and
-/// `D` is the domain type the application works with.
+/// `W` is the wire type carried inside [`Message<W>`](crate::Message)
+/// and `D` is the domain type the application works with.
 pub trait MessageTranslator<W, D>: Send + Sync + 'static {
     /// Serializes a domain type to wire format.
     fn serialize(&self, domain: &D) -> AppResult<W>;

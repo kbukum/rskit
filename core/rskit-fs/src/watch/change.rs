@@ -5,20 +5,20 @@ use std::path::{Path, PathBuf};
 
 /// A debounced batch of filesystem changes observed within one window.
 ///
-/// Paths are deduplicated and kept in sorted order so a batch is deterministic
-/// regardless of the order the underlying OS events arrived. Each path is
-/// reported by the platform watcher as-is — typically matching the form of the
-/// root it was registered under (so absolute roots yield absolute paths) — and
-/// is *not* normalized or absolutized here; callers relativize or canonicalize
-/// them against their own roots as needed.
+/// Paths are deduplicated and kept in sorted order
+/// so a batch is deterministic regardless of the order the underlying OS events arrived.
+/// Each path is reported by the platform watcher as-is —
+/// typically matching the form of the root it was registered under (so absolute roots yield absolute paths)
+/// — and is *not* normalized or absolutized here; callers relativize
+/// or canonicalize them against their own roots as needed.
 ///
 /// A batch may additionally carry a **rescan** signal ([`rescan_requested`]):
-/// the platform watcher reported an error (typically a queue overflow) during
-/// the window, so some individual change notifications may have been dropped and
-/// the reported [`paths`] are potentially incomplete. Consumers driving an
-/// incremental rebuild should treat a rescan as "re-evaluate everything" rather
-/// than trusting the path list alone. A rescan-only batch (overflow with no
-/// surviving path events) has empty [`paths`] but is **not** [`is_empty`].
+/// the platform watcher reported an error (typically a queue overflow) during the window,
+/// so some individual change notifications may have been dropped
+/// and the reported [`paths`] are potentially incomplete.
+/// Consumers driving an incremental rebuild should treat a rescan as "re-evaluate everything" rather than trusting the path list alone.
+/// A rescan-only batch (overflow with no surviving path events) has empty [`paths`]
+/// but is **not** [`is_empty`].
 ///
 /// [`rescan_requested`]: Self::rescan_requested
 /// [`paths`]: Self::paths
@@ -30,8 +30,7 @@ pub struct FsChangeBatch {
 }
 
 impl FsChangeBatch {
-    /// Build a batch from an already-deduplicated set of changed paths, with no
-    /// rescan signal.
+    /// Build a batch from an already-deduplicated set of changed paths, with no rescan signal.
     #[must_use]
     pub const fn new(paths: BTreeSet<PathBuf>) -> Self {
         Self {
@@ -40,8 +39,7 @@ impl FsChangeBatch {
         }
     }
 
-    /// Set whether this batch requests a rescan (the watcher reported dropped
-    /// events during the window, so [`paths`](Self::paths) may be incomplete).
+    /// Set whether this batch requests a rescan (the watcher reported dropped events during the window, so [`paths`](Self::paths) may be incomplete).
     #[must_use]
     pub const fn with_rescan(mut self, rescan: bool) -> Self {
         self.rescan = rescan;
@@ -50,16 +48,15 @@ impl FsChangeBatch {
 
     /// The sorted, deduplicated changed paths in this batch.
     ///
-    /// May be empty even when the batch is meaningful — see
-    /// [`rescan_requested`](Self::rescan_requested).
+    /// May be empty even when the batch is meaningful — see [`rescan_requested`](Self::rescan_requested).
     #[must_use]
     pub const fn paths(&self) -> &BTreeSet<PathBuf> {
         &self.paths
     }
 
-    /// Whether the platform watcher dropped events during this window, so the
-    /// reported [`paths`](Self::paths) may be incomplete and consumers should
-    /// re-evaluate the watched tree from scratch.
+    /// Whether the platform watcher dropped events during this window,
+    /// so the reported [`paths`](Self::paths) may be incomplete
+    /// and consumers should re-evaluate the watched tree from scratch.
     #[must_use]
     pub const fn rescan_requested(&self) -> bool {
         self.rescan
@@ -76,8 +73,7 @@ impl FsChangeBatch {
         self.paths.len()
     }
 
-    /// Whether the batch carries no information — no changed paths and no rescan
-    /// signal.
+    /// Whether the batch carries no information — no changed paths and no rescan signal.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.paths.is_empty() && !self.rescan

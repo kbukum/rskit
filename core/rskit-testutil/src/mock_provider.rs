@@ -6,8 +6,7 @@ use rskit_errors::{AppError, AppResult};
 
 /// A generic mock that records calls and returns pre-configured responses.
 ///
-/// Useful for testing code that depends on a `RequestResponse`-style provider
-/// without reaching real infrastructure.
+/// Useful for testing code that depends on a `RequestResponse`-style provider without reaching real infrastructure.
 ///
 /// # Example
 ///

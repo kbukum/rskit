@@ -1,15 +1,15 @@
 //! Answer validation with interactive re-ask.
 //!
-//! A [`Validator`] inspects a candidate answer and either accepts it or returns
-//! a short human-readable reason. In an interactive prompt the reason is shown
-//! and the question is re-asked; in [`PromptMode::NonInteractive`](crate::prompt::PromptMode::NonInteractive)
-//! a rejected default is a typed error rather than a silent bad value.
+//! A [`Validator`] inspects a candidate answer and either accepts it
+//! or returns a short human-readable reason. In an interactive prompt the reason is shown
+//! and the question is re-asked;
+//! in [`PromptMode::NonInteractive`](crate::prompt::PromptMode::NonInteractive) a rejected default is a typed error rather than a silent bad value.
 //!
-//! Any `Fn(&str) -> Result<(), String>` is a `Validator`, so callers pass a
-//! closure directly; reusable rules can also implement the trait by hand.
+//! Any `Fn(&str) -> Result<(), String>` is a `Validator`, so callers pass a closure directly;
+//! reusable rules can also implement the trait by hand.
 
-/// The outcome of validating a candidate answer: `Ok(())` accepts it, `Err`
-/// carries a short reason to display before re-asking.
+/// The outcome of validating a candidate answer: `Ok(())` accepts it,
+/// `Err` carries a short reason to display before re-asking.
 pub type Validation = Result<(), String>;
 
 /// Inspects a candidate answer, accepting it or explaining why it is rejected.
@@ -33,8 +33,7 @@ where
 
 /// A validator that rejects empty or whitespace-only input with `message`.
 ///
-/// A convenience for the most common rule; equivalent to a closure that trims
-/// and checks for emptiness.
+/// A convenience for the most common rule; equivalent to a closure that trims and checks for emptiness.
 #[must_use]
 pub fn non_empty(message: impl Into<String>) -> impl Validator {
     let message = message.into();

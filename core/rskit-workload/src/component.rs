@@ -1,8 +1,8 @@
 //! Lifecycle-managed workload component.
 //!
-//! Mirrors gokit's `workload.Component`: wraps a [`Manager`] built from an
-//! injected [`WorkloadRegistry`] and participates in ordered startup, shutdown,
-//! and health reporting through [`rskit_component::Component`].
+//! Mirrors gokit's `workload.Component`:
+//! wraps a [`Manager`] built from an injected [`WorkloadRegistry`] and participates in ordered startup,
+//! shutdown, and health reporting through [`rskit_component::Component`].
 
 use std::sync::Arc;
 
@@ -18,11 +18,12 @@ use crate::registry::WorkloadRegistry;
 
 /// A lifecycle-managed workload component.
 ///
-/// On start it builds the configured backend from the injected registry and
-/// probes it with a health check so an unreachable backend fails startup rather
-/// than reporting healthy; on stop it releases the manager. When
-/// [`WorkloadConfig::enabled`] is `false` the component is a healthy no-op and
-/// never touches the registry.
+/// On start it builds the configured backend from the injected registry
+/// and probes it with a health check
+/// so an unreachable backend fails startup rather than reporting healthy;
+/// on stop it releases the manager.
+/// When [`WorkloadConfig::enabled`] is `false` the component is a healthy no-op
+/// and never touches the registry.
 pub struct WorkloadComponent {
     config: WorkloadConfig,
     providers: WorkloadRegistry,
@@ -32,8 +33,8 @@ pub struct WorkloadComponent {
 impl WorkloadComponent {
     /// Create a component with an empty provider registry.
     ///
-    /// Useful when the component is disabled; register providers via
-    /// [`WorkloadComponent::with_registry`] to run an enabled backend.
+    /// Useful when the component is disabled;
+    /// register providers via [`WorkloadComponent::with_registry`] to run an enabled backend.
     #[must_use]
     pub fn new(config: WorkloadConfig) -> Self {
         Self::with_registry(config, WorkloadRegistry::new())

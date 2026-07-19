@@ -1,10 +1,11 @@
 //! Typed sequential chain execution for rskit.
 //!
-//! A chain is a statically typed sequence where each step receives the previous
-//! step's output and returns the next step's input type. Execution short-circuits
-//! on the first [`AppError`](rskit_errors::AppError), checks cancellation between
-//! steps, and runs registered cleanup actions for already-completed steps when
-//! a later failure or cancellation interrupts the chain.
+//! A chain is a statically typed sequence where each step receives the previous step's output
+//! and returns the next step's input type.
+//! Execution short-circuits on the first [`AppError`](rskit_errors::AppError),
+//! checks cancellation between steps,
+//! and runs registered cleanup actions for already-completed steps when a later failure
+//! or cancellation interrupts the chain.
 //!
 //! # Quick start
 //!

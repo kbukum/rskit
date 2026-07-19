@@ -6,9 +6,9 @@ use rskit_errors::{AppError, AppResult, ErrorCode};
 
 /// Default maximum accepted payload size for a single frame (16 MiB).
 ///
-/// Generous enough for large structured payloads yet bounded so a corrupt
-/// length prefix cannot trigger an unbounded allocation. Callers may pass a
-/// tighter cap to [`read_frame`].
+/// Generous enough for large structured payloads yet bounded
+/// so a corrupt length prefix cannot trigger an unbounded allocation.
+/// Callers may pass a tighter cap to [`read_frame`].
 pub const DEFAULT_MAX_FRAME_BYTES: usize = 16 * 1024 * 1024;
 
 /// Width of the big-endian length prefix that precedes every payload.
@@ -18,8 +18,8 @@ const LEN_PREFIX_BYTES: usize = 4;
 ///
 /// # Errors
 ///
-/// Returns a typed [`AppError`] if `payload` exceeds `max_bytes` or the
-/// underlying writer fails (cause preserved).
+/// Returns a typed [`AppError`] if `payload` exceeds `max_bytes`
+/// or the underlying writer fails (cause preserved).
 pub fn write_frame<W: Write>(writer: &mut W, payload: &[u8], max_bytes: usize) -> AppResult<()> {
     if payload.len() > max_bytes {
         return Err(AppError::invalid_input(
@@ -46,14 +46,13 @@ pub fn write_frame<W: Write>(writer: &mut W, payload: &[u8], max_bytes: usize) -
 
 /// Read one length-delimited frame, bounded by `max_bytes`.
 ///
-/// Returns `Ok(None)` on a clean end-of-stream observed *before* any length
-/// byte (the peer closed the connection between frames). A partial prefix or
-/// payload is a hard transport error.
+/// Returns `Ok(None)` on a clean end-of-stream observed *before* any length byte (the peer closed the connection between frames).
+/// A partial prefix or payload is a hard transport error.
 ///
 /// # Errors
 ///
-/// Returns a typed [`AppError`] on a truncated frame, a length above
-/// `max_bytes`, or any underlying read failure (cause preserved).
+/// Returns a typed [`AppError`] on a truncated frame, a length above `max_bytes`,
+/// or any underlying read failure (cause preserved).
 pub fn read_frame<R: Read>(reader: &mut R, max_bytes: usize) -> AppResult<Option<Vec<u8>>> {
     let mut prefix = [0u8; LEN_PREFIX_BYTES];
     match read_exact_or_eof(reader, &mut prefix)? {

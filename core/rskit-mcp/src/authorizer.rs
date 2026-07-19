@@ -1,7 +1,7 @@
 //! Default [`ToolAuthorizer`] implementation backed by `rskit-authz`.
 //!
-//! Maps an MCP `ToolAuthorizationRequest` to a canonical `AuthzRequest` so the
-//! injected [`Decider`] can enforce policies for every `tools/call`.
+//! Maps an MCP `ToolAuthorizationRequest` to a canonical `AuthzRequest`
+//! so the injected [`Decider`] can enforce policies for every `tools/call`.
 //!
 //! The mapping is fixed (D14):
 //!   - `principal`  ← authorizer configuration, defaulting to `"anonymous"`
@@ -26,8 +26,8 @@ pub struct DeciderToolAuthorizer {
 
 impl DeciderToolAuthorizer {
     /// Construct a new authorizer with the canonical MCP action `tools/call`.
-    /// `principal` is used when the request does not carry one (anonymous
-    /// transports). Use [`Self::with_principal`] to override.
+    /// `principal` is used when the request does not carry one (anonymous transports).
+    /// Use [`Self::with_principal`] to override.
     #[must_use]
     pub fn new(decider: Arc<dyn Decider>) -> Self {
         Self {

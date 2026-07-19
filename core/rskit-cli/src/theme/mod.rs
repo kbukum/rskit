@@ -1,16 +1,15 @@
 //! Visual vocabulary shared by every renderer: color and status glyphs.
 //!
-//! The theme layer resolves *how* output looks against the environment and user
-//! preference, independent of *what* is being rendered:
+//! The theme layer resolves *how* output looks against the environment and user preference,
+//! independent of *what* is being rendered:
 //!
-//! - [`color`] — a semantic [`Palette`] (success/error/warn/info/dim/bold) that
-//!   honours [`NO_COLOR`] and TTY detection.
-//! - [`glyph`] — a semantic [`Glyphs`] set (✓ ✗ ⚠ ℹ • → …) with a pure-ASCII
-//!   fallback for terminals without UTF-8 support.
+//! - [`color`] — a semantic [`Palette`] (success/error/warn/info/dim/bold) that honours [`NO_COLOR`]
+//!   and TTY detection.
+//! - [`glyph`] —
+//!   a semantic [`Glyphs`] set (✓ ✗ ⚠ ℹ • → …) with a pure-ASCII fallback for terminals without UTF-8 support.
 //!
-//! Both resolve from a single boolean so callers render identically regardless
-//! of terminal capability, and both expose an env-free constructor for
-//! deterministic tests.
+//! Both resolve from a single boolean so callers render identically regardless of terminal capability,
+//! and both expose an env-free constructor for deterministic tests.
 //!
 //! [`NO_COLOR`]: https://no-color.org
 

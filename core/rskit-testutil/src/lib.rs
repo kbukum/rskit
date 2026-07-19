@@ -1,11 +1,10 @@
 //! Test utilities, mock providers, and assertion helpers.
 //!
-//! Designed for use in `#[cfg(test)]` blocks and integration tests across
-//! the rskit ecosystem.
+//! Designed for use in `#[cfg(test)]` blocks and integration tests across the rskit ecosystem.
 //!
-//! [`TestWorkspace`] is the generic fixture harness. Configure any fixture root
-//! with [`TestWorkspace::with_fixture_dir`], or use [`test_workspace!`] for the
-//! conventional `<crate>/tests/fixtures` layout.
+//! [`TestWorkspace`] is the generic fixture harness.
+//! Configure any fixture root with [`TestWorkspace::with_fixture_dir`],
+//! or use [`test_workspace!`] for the conventional `<crate>/tests/fixtures` layout.
 //!
 #![warn(missing_docs)]
 

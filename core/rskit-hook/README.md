@@ -2,7 +2,10 @@
 
 Typed in-process hooks and event bus primitives for rskit applications.
 
-`rskit-hook` provides a typed [`Event`] boundary, [`HookRegistry`] handler registration, and bounded [`EventBus`] delivery without domain-specific dependencies. It is intended for injected application composition where components need to emit or react to lifecycle and domain events without global registries.
+`rskit-hook` provides a typed [`Event`] boundary, [`HookRegistry`] handler registration,
+and bounded [`EventBus`] delivery without domain-specific dependencies.
+It is intended for injected application composition where components need to emit
+or react to lifecycle and domain events without global registries.
 
 ## Features
 

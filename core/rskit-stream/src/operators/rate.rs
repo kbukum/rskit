@@ -1,11 +1,11 @@
 //! Trailing-edge rate-limiting operators.
 //!
-//! These operators control *emission timing* rather than partitioning a stream
-//! into fixed windows: their timers are **trailing-edge**, driven by quiet gaps
-//! between arrivals (`debounce`, `debounce_batch`) or by a minimum spacing
-//! between emissions (`throttle`). Contrast the leading-edge windowing
-//! operators in [`crate::operators::windowing`], whose timers run from the first buffered
-//! item.
+//! These operators control *emission timing* rather than partitioning a stream into fixed windows:
+//! their timers are **trailing-edge**,
+//! driven by quiet gaps between arrivals (`debounce`, `debounce_batch`)
+//! or by a minimum spacing between emissions (`throttle`).
+//! Contrast the leading-edge windowing operators in [`crate::operators::windowing`],
+//! whose timers run from the first buffered item.
 
 use std::time::Duration;
 
@@ -50,21 +50,20 @@ where
     }
 }
 
-/// Accumulate items while they keep arriving, emitting the collected batch once
-/// `quiet` elapses with no new item (trailing-edge, timer reset per item), or
-/// early once `max_items` have accumulated.
+/// Accumulate items while they keep arriving,
+/// emitting the collected batch once `quiet` elapses with no new item (trailing-edge, timer reset per item),
+/// or early once `max_items` have accumulated.
 ///
-/// This is [`debounce`] that keeps *every* item seen during the burst instead of
-/// only the last: each arrival resets the quiet-window timer, and when the timer
-/// finally fires the whole accumulated window is emitted as one `Vec<T>` in
-/// arrival order. It differs from [`crate::operators::windowing::batch`] /
-/// [`crate::operators::windowing::tumbling_window`], whose timers run from the *first* item
-/// (leading-edge); here the timer is trailing-edge.
+/// This is [`debounce`] that keeps *every* item seen during the burst instead of only the last:
+/// each arrival resets the quiet-window timer,
+/// and when the timer finally fires the whole accumulated window is emitted as one `Vec<T>` in arrival order.
+/// It differs from [`crate::operators::windowing::batch`] / [`crate::operators::windowing::tumbling_window`],
+/// whose timers run from the *first* item (leading-edge); here the timer is trailing-edge.
 ///
-/// `max_items` (clamped to at least 1) is a safety cap that force-flushes the
-/// window: because the timer resets on every item, a sustained input rate faster
-/// than `quiet` would otherwise never reach a quiet window and grow the buffer
-/// without bound. Reaching `max_items` emits the accumulated window immediately
+/// `max_items` (clamped to at least 1) is a safety cap that force-flushes the window:
+/// because the timer resets on every item,
+/// a sustained input rate faster than `quiet` would otherwise never reach a quiet window
+/// and grow the buffer without bound. Reaching `max_items` emits the accumulated window immediately
 /// and starts a fresh one — mirroring the size cap on the windowing operators.
 pub fn debounce_batch<S, T>(
     stream: S,
@@ -79,9 +78,9 @@ where
         tokio::pin!(stream);
         let (max_items, initial_capacity) = window_capacity(max_items);
         let mut buf: Vec<T> = Vec::with_capacity(initial_capacity);
-        // `None` parks the timer arm on `pending()` while the buffer is empty, so
-        // a quiet stream never emits; the first item arms a trailing-edge deadline
-        // that every subsequent item pushes further out.
+        // `None` parks the timer arm on `pending()` while the buffer is empty,
+        // so a quiet stream never emits;
+        // the first item arms a trailing-edge deadline that every subsequent item pushes further out.
         let mut deadline: Option<tokio::time::Instant> = None;
 
         loop {
@@ -125,8 +124,8 @@ where
 {
     async_stream::stream! {
         tokio::pin!(stream);
-        // `None` until the first item is emitted, so the first arrival is always
-        // yielded without a potentially-underflowing `now - interval`.
+        // `None` until the first item is emitted,
+        // so the first arrival is always yielded without a potentially-underflowing `now - interval`.
         let mut last_emit: Option<tokio::time::Instant> = None;
         while let Some(item) = stream.next().await {
             let now = tokio::time::Instant::now();

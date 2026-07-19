@@ -1,5 +1,5 @@
-//! PTY-backed execution: allocate a pseudoterminal, run the child attached to
-//! it, and stream/capture the merged output.
+//! PTY-backed execution: allocate a pseudoterminal, run the child attached to it,
+//! and stream/capture the merged output.
 
 use std::io::ErrorKind;
 use std::os::unix::io::OwnedFd;
@@ -40,10 +40,10 @@ pub(in crate::runner) async fn run_pty_mode(
         ));
     }
     if !config.signal.create_process_group {
-        // Acquiring a controlling terminal requires the child to be a session
-        // leader, so PTY setup unconditionally calls `setsid()` (a new session,
-        // hence a new process group). `create_process_group = false` therefore
-        // cannot be honored here; reject it rather than silently ignoring it.
+        // Acquiring a controlling terminal requires the child to be a session leader,
+        // so PTY setup unconditionally calls `setsid()` (a new session, hence a new process group).
+        // `create_process_group = false` therefore cannot be honored here;
+        // reject it rather than silently ignoring it.
         return Err(AppError::invalid_input(
             "process.signal.create_process_group",
             "PTY mode always starts a new session (setsid) to own the terminal, so create_process_group cannot be disabled",
@@ -53,9 +53,9 @@ pub(in crate::runner) async fn run_pty_mode(
     let start = Instant::now();
     let PtyPair { master, slave } = open_pty(io.size)?;
 
-    // Wire the child's stdin/stdout/stderr to three independent handles onto the
-    // slave so the spawned command owns them; the parent drops its own slave
-    // handle right after spawn so only the child keeps the terminal open.
+    // Wire the child's stdin/stdout/stderr to three independent handles onto the slave
+    // so the spawned command owns them; the parent drops its own slave handle right after spawn
+    // so only the child keeps the terminal open.
     let child_stdin = slave_stdio(&slave)?;
     let child_stdout = slave_stdio(&slave)?;
     let child_stderr = slave_stdio(&slave)?;
@@ -75,8 +75,8 @@ pub(in crate::runner) async fn run_pty_mode(
             format!("failed to spawn process: {error}"),
         )
     })?;
-    // The child now holds its own dup'd stdio; the parent must not keep the
-    // slave open or the master read would never observe EOF.
+    // The child now holds its own dup'd stdio; the parent must not keep the slave open
+    // or the master read would never observe EOF.
     drop(slave);
 
     // Own the child and the spawned I/O tasks in a scope guard so any early
@@ -86,8 +86,8 @@ pub(in crate::runner) async fn run_pty_mode(
     // un-guarded early return would leak the task and keep the PTY fds alive.
     let mut scope = ChildScope::new(child);
 
-    // Optional input writer: a second handle onto the master so writes and reads
-    // proceed independently. Built before the reader takes ownership of `master`.
+    // Optional input writer: a second handle onto the master so writes
+    // and reads proceed independently. Built before the reader takes ownership of `master`.
     let stdin_writer = match &io.input {
         InputPolicy::Bytes(_) => Some(master.try_clone().map_err(AppError::internal)?),
         InputPolicy::Closed | InputPolicy::Inherit => None,
@@ -95,10 +95,10 @@ pub(in crate::runner) async fn run_pty_mode(
     let stdin_task = spawn_pty_stdin(stdin_writer, &io.input);
     scope.register(&stdin_task);
 
-    // The child's merged stdout+stderr arrives on the master; route it through
-    // the stdout observer callbacks and (optionally) capture it as stdout.
-    // Because the two streams are merged here, either capture flag opts the
-    // caller into retaining the combined output.
+    // The child's merged stdout+stderr arrives on the master;
+    // route it through the stdout observer callbacks and (optionally) capture it as stdout.
+    // Because the two streams are merged here,
+    // either capture flag opts the caller into retaining the combined output.
     let reader = PtyMaster::new(master).map_err(AppError::internal)?;
     let reader_capture = shared_output();
     let reader_task = spawn_reader(
@@ -113,10 +113,9 @@ pub(in crate::runner) async fn run_pty_mode(
 
     let completion = wait_for_completion(scope.child_mut(), spec, config, cancel).await?;
 
-    // The child has exited; drain the workers within the grace period. A reader
-    // still blocked because a surviving descendant holds the PTY open is aborted
-    // rather than awaited forever, and the partial bytes it captured are still
-    // recovered from the shared buffer.
+    // The child has exited; drain the workers within the grace period.
+    // A reader still blocked because a surviving descendant holds the PTY open is aborted rather than awaited forever,
+    // and the partial bytes it captured are still recovered from the shared buffer.
     let grace = config.signal.grace_period;
     join_within(stdin_task, grace).await?;
     join_within(reader_task, grace).await?;
@@ -126,8 +125,8 @@ pub(in crate::runner) async fn run_pty_mode(
     // so hand ownership back instead of aborting/killing on drop.
     scope.disarm();
 
-    // A PTY has no separate stderr stream; the only "stderr" is any synthetic
-    // termination diagnostic from the lifecycle layer.
+    // A PTY has no separate stderr stream;
+    // the only "stderr" is any synthetic termination diagnostic from the lifecycle layer.
     let mut stderr_bytes = Vec::new();
     let mut stderr_truncated = false;
     if let Some(extra_stderr) = completion.synthetic_stderr {

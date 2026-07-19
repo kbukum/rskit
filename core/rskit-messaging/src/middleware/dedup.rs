@@ -30,8 +30,8 @@ impl Default for DedupConfig {
 
 /// Create a deduplication middleware.
 ///
-/// Messages that carry a `message-id` header are tracked. If a duplicate
-/// ID arrives within the configured TTL window it is silently dropped.
+/// Messages that carry a `message-id` header are tracked.
+/// If a duplicate ID arrives within the configured TTL window it is silently dropped.
 /// Messages without a `message-id` header are always forwarded.
 pub fn dedup<T: Send + Sync + 'static>(config: DedupConfig) -> impl HandlerMiddleware<T> {
     DedupMiddleware {

@@ -64,8 +64,8 @@ fn duplicate_identity_within_single_document_is_rejected() {
 
 #[test]
 fn duplicate_identity_nested_inside_array_is_rejected() {
-    // The identity section lives inside an array element, so validation must
-    // recurse through arrays to catch it.
+    // The identity section lives inside an array element,
+    // so validation must recurse through arrays to catch it.
     let merge = IncludeMerge::new().with_identity("groups", IdentityKey::new("name"));
     let doc = json!({
         "tenants": [

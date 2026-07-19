@@ -1,8 +1,8 @@
 //! Configuration source pipeline.
 //!
-//! Sources are adapters ([`ConfigSource`]) collected into an ordered merge by
-//! [`ConfigLoader`]. The pipeline owns ordering, defaults, env merging, and
-//! overrides; adapters only return collected values.
+//! Sources are adapters ([`ConfigSource`]) collected into an ordered merge by [`ConfigLoader`].
+//! The pipeline owns ordering, defaults, env merging, and overrides;
+//! adapters only return collected values.
 
 mod contract;
 mod dotenv;

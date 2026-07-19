@@ -1,7 +1,7 @@
 //! MCP client that wraps remote tools as rskit [`Callable`] instances.
 //!
-//! Connects to an MCP server, discovers its tools, and wraps each one
-//! as a [`Callable`] so they can be registered in an rskit [`rskit_tool::Registry`].
+//! Connects to an MCP server, discovers its tools, and wraps each one as a [`Callable`]
+//! so they can be registered in an rskit [`rskit_tool::Registry`].
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -30,8 +30,8 @@ pub struct ClientConfig {
     pub prefix: String,
     /// Timeout applied to each remote MCP request (`tools/call`, `tools/list`).
     ///
-    /// A remote server that never responds must not block the caller
-    /// indefinitely; every remote call is bounded by this deadline.
+    /// A remote server that never responds must not block the caller indefinitely;
+    /// every remote call is bounded by this deadline.
     pub request_timeout: Duration,
 }
 
@@ -126,8 +126,8 @@ impl Callable for RemoteTool {
 
 /// Wrap discovered MCP tools as rskit [`Callable`] instances.
 ///
-/// Takes the tools list from an MCP server and the peer handle, returns
-/// boxed `Callable`s ready for registration in a [`rskit_tool::Registry`].
+/// Takes the tools list from an MCP server and the peer handle,
+/// returns boxed `Callable`s ready for registration in a [`rskit_tool::Registry`].
 pub fn wrap_tools(
     tools: &[Tool],
     peer: &Arc<Peer<RoleClient>>,
@@ -168,8 +168,8 @@ fn validation_result_from_error(err: &AppError) -> ValidationResult {
 /// 2. Lists the server's tools
 /// 3. Wraps each one as a `Callable`
 ///
-/// The caller is responsible for creating the transport and starting the service
-/// via `rmcp::serve_client`.
+/// The caller is responsible for creating the transport
+/// and starting the service via `rmcp::serve_client`.
 ///
 /// # Returns
 ///

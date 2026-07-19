@@ -7,7 +7,8 @@ Shared TLS, secret redaction, and HTTP security vocabulary for rskit transports.
 - `TlsConfig` — certificate, key, CA bundle, server name, and verification settings
 - `TlsVersion` — minimum TLS version policy
 - `SecretString` — redacting string wrapper for credential-bearing configuration
-- `BEARER_AUTH_SCHEME` / `BASIC_AUTH_SCHEME` — shared HTTP auth scheme constants for crates that build or parse `Authorization` values
+- `BEARER_AUTH_SCHEME` / `BASIC_AUTH_SCHEME` —
+  shared HTTP auth scheme constants for crates that build or parse `Authorization` values
 - `SecurityHeadersConfig` — secure-by-default response header policy
 
 ## Usage

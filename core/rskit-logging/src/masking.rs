@@ -1,11 +1,10 @@
 //! Sensitive data masking engine for structured log output.
 //!
-//! Provides a [`Masker`] trait (adapter pattern) and a [`DefaultMasker`]
-//! implementation that redacts common secrets, PII, and credentials from
-//! log output before it reaches any sink.
+//! Provides a [`Masker`] trait (adapter pattern)
+//! and a [`DefaultMasker`] implementation that redacts common secrets, PII,
+//! and credentials from log output before it reaches any sink.
 //!
-//! Masking is **on by default** — callers must explicitly disable it via
-//! [`MaskingConfig::enabled`].
+//! Masking is **on by default** — callers must explicitly disable it via [`MaskingConfig::enabled`].
 //!
 //! # Examples
 //!
@@ -42,9 +41,8 @@ pub trait Masker: Send + Sync {
 
     /// Mask sensitive data in a formatted log output string.
     ///
-    /// Applies both field-name and value-pattern masking to a complete
-    /// log line.  Used by [`MaskingMakeWriter`] to mask output before
-    /// writing to the underlying writer.
+    /// Applies both field-name and value-pattern masking to a complete log line.
+    /// Used by [`MaskingMakeWriter`] to mask output before writing to the underlying writer.
     fn mask_output<'v>(&self, line: &'v str) -> Cow<'v, str>;
 }
 
@@ -127,9 +125,8 @@ enum PatternKind {
 
 /// Hard-coded default value patterns with their replacement kinds.
 ///
-/// Each tuple is `(regex_source, kind_tag)`.  Ordering matters —
-/// bearer-token is checked before JWT so `Bearer <jwt>` is masked as a
-/// single unit.
+/// Each tuple is `(regex_source, kind_tag)`. Ordering matters — bearer-token is checked before JWT
+/// so `Bearer <jwt>` is masked as a single unit.
 const DEFAULT_VALUE_PATTERNS: &[(&str, u8)] = &[
     // 0 = Bearer token (case-insensitive)
     (r"(?i)Bearer\s+[a-zA-Z0-9._~+/=-]+", 0),
@@ -168,8 +165,8 @@ fn tag_to_kind(tag: u8) -> PatternKind {
 
 /// Production-ready masker with common patterns for PII and secrets.
 ///
-/// Masks by field name (e.g., `password`, `token`) and by value patterns
-/// (e.g., email addresses, credit card numbers, JWTs).
+/// Masks by field name (e.g., `password`, `token`)
+/// and by value patterns (e.g., email addresses, credit card numbers, JWTs).
 ///
 /// Thread-safe (`Send + Sync`) — create once, share via [`Arc`].
 ///
@@ -244,8 +241,7 @@ impl DefaultMasker {
         })
     }
 
-    /// Compile the hardcoded default value patterns (skipping any that
-    /// somehow fail to compile — verified by unit tests).
+    /// Compile the hardcoded default value patterns (skipping any that somehow fail to compile — verified by unit tests).
     fn default_value_patterns() -> Vec<MaskPattern> {
         DEFAULT_VALUE_PATTERNS
             .iter()
@@ -421,8 +417,8 @@ pub fn mask_value(key: &str, value: &str) -> String {
 
 /// A [`MakeWriter`] wrapper that masks sensitive data in log output.
 ///
-/// Wraps an inner writer and applies masking via the supplied [`Masker`]
-/// to every log line before it reaches the underlying output.
+/// Wraps an inner writer
+/// and applies masking via the supplied [`Masker`] to every log line before it reaches the underlying output.
 ///
 /// # Examples
 ///
@@ -470,9 +466,8 @@ impl<'a, W: MakeWriter<'a>> MakeWriter<'a> for MaskingMakeWriter<W> {
 
 /// A writer that buffers output and applies masking on flush / drop.
 ///
-/// Created by [`MaskingMakeWriter`].  Buffers all `write` calls and
-/// applies masking when the writer is flushed or dropped (at the end of
-/// each log event).
+/// Created by [`MaskingMakeWriter`]. Buffers all `write` calls
+/// and applies masking when the writer is flushed or dropped (at the end of each log event).
 pub struct MaskingWriter<W: io::Write> {
     inner: W,
     masker: Arc<dyn Masker>,
@@ -499,8 +494,8 @@ impl<W: io::Write> io::Write for MaskingWriter<W> {
 impl<W: io::Write> Drop for MaskingWriter<W> {
     fn drop(&mut self) {
         if !self.buffer.is_empty() {
-            // Best-effort flush; errors are silently ignored as is standard
-            // practice for log writers.
+            // Best-effort flush;
+            // errors are silently ignored as is standard practice for log writers.
             let output = String::from_utf8_lossy(&self.buffer);
             let masked = self.masker.mask_output(&output);
             let _ = self.inner.write_all(masked.as_bytes());

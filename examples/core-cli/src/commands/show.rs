@@ -13,8 +13,7 @@ use crate::settings::{self, Settings};
 ///
 /// # Errors
 ///
-/// Propagates any [`rskit_errors::AppError`] from config loading or logging
-/// initialisation.
+/// Propagates any [`rskit_errors::AppError`] from config loading or logging initialisation.
 pub fn execute(path: &str) -> AppResult<(LoggingGuard, String)> {
     let settings = settings::load(path)?;
     let guard = init_logging(&settings.logging)?;
@@ -24,8 +23,7 @@ pub fn execute(path: &str) -> AppResult<(LoggingGuard, String)> {
 
 /// Render [`Settings`] as a key-value block.
 ///
-/// Pure and side-effect free, so tests can assert on it without installing a
-/// global logging subscriber.
+/// Pure and side-effect free, so tests can assert on it without installing a global logging subscriber.
 #[must_use]
 pub fn render(settings: &Settings) -> String {
     let mut kv = OutputKV::new();

@@ -202,12 +202,11 @@ const RESERVED_PARAMS: &[&str] = &["page", "page_size", "pageSize", "per_page", 
 ///
 /// Reads:
 /// - `page` — 1-based page number (default 1, min 1).
-/// - `page_size` / `pageSize` / `per_page` — items per page (default from
-///   config, clamped to `1..=max_page_size`).
+/// - `page_size` / `pageSize` / `per_page` —
+///   items per page (default from config, clamped to `1..=max_page_size`).
 /// - `sort` — column to sort by (must be in `allowed_sorts` when non-empty).
 /// - `order` — `asc` or `desc` (default `asc`).
-/// - All other keys are treated as filters (must be in `allowed_filters` when
-///   non-empty).
+/// - All other keys are treated as filters (must be in `allowed_filters` when non-empty).
 pub fn parse_query_string(query: &str, config: &QueryConfig) -> QueryParams {
     let config = config.sanitized();
     let pairs = parse_pairs(query);

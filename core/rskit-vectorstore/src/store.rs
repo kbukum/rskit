@@ -21,8 +21,8 @@ pub enum PayloadValue {
     Integer(i64),
     /// Floating-point value.
     ///
-    /// Values are validated as finite by store/adaptor request validation before
-    /// they are accepted for storage or filtering.
+    /// Values are validated as finite by store/adaptor request validation before they are accepted for storage
+    /// or filtering.
     Float(f64),
     /// Boolean value.
     Bool(bool),

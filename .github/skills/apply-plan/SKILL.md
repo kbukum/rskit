@@ -9,9 +9,9 @@ description: >-
 
 # Applying a plan from its remaining steps
 
-`apply-plan` takes a plan folder (produced by the `create-plan` skill) and drives it to
-completion, **starting from the first step that is not yet done** so it can be run repeatedly to
-resume interrupted work.
+`apply-plan` takes a plan folder (produced by the `create-plan` skill) and drives it to completion,
+**starting from the first step that is not yet done**
+so it can be run repeatedly to resume interrupted work.
 
 ## Input
 
@@ -26,42 +26,44 @@ ls -d tmp/*/
 
 - Read `tmp/<plan>/README.md` first: the goal, the ordered step index, the **dependency order**,
   and the cross-cutting baseline rules that bind every step.
-- List the step files and find each one's progress signal — the `**Status:**` field and the
-  `- [ ]` / `- [x]` acceptance boxes that `create-plan` defines.
+- List the step files and find each one's progress signal — the `**Status:**` field
+  and the `- [ ]` / `- [x]` acceptance boxes that `create-plan` defines.
 
 ```bash
 ls tmp/<plan>/NN-*.md 2>/dev/null || ls tmp/<plan>/*.md
 grep -n '\*\*Status:\*\*' tmp/<plan>/*.md
 ```
 
-- **Remaining = every step not marked `done`.** The first remaining step in dependency order is
-  the resume point. A step is eligible only when the steps it *Depends on* are already `done`;
+- **Remaining = every step not marked `done`.** The first remaining step in dependency order is the resume point.
+  A step is eligible only when the steps it *Depends on* are already `done`;
   never start a step ahead of an unfinished dependency.
 
 ## 2. Apply each remaining step in order
 
-For each remaining step, in dependency order, run the **`apply-step` workflow** on that step file
-(read the README + all prior steps for context, apply the current step test-first, validate,
-then mark it done). Do not skip ahead; do not batch several steps into one undifferentiated
-change — each step stays a standalone, reviewable unit.
+For each remaining step, in dependency order,
+run the **`apply-step` workflow** on that step file (read the README + all prior steps for context, apply the current step test-first, validate, then mark it done).
+Do not skip ahead; do not batch several steps into one undifferentiated change —
+each step stays a standalone, reviewable unit.
 
 Between steps:
 
-- **Validate the affected crates** with the `validate` skill (make/cargo, scoped) — do not proceed
-  to the next step on a red one.
-- If a step's acceptance criteria cannot be met as written, **stop** and report the divergence
-  rather than forcing a green; the plan may need a `create-plan` revision. The baseline in
-  [`../../copilot-instructions.md`](../../copilot-instructions.md) wins over the plan text.
+- **Validate the affected crates** with the `validate` skill (make/cargo, scoped) —
+  do not proceed to the next step on a red one.
+- If a step's acceptance criteria cannot be met as written, **stop**
+  and report the divergence rather than forcing a green; the plan may need a `create-plan` revision.
+  The baseline in [`../../copilot-instructions.md`](../../copilot-instructions.md) wins over the plan text.
 
 ## 3. Baseline and review
 
 Every step is executed against rskit's engineering baseline, not a looser plan-local standard.
-After a step (or a coherent group of steps) lands, run the `review` skill's passes over the diff
-in a fresh, clean-context agent. Treat a green `validate` run as necessary but not sufficient.
+After a step (or a coherent group of steps) lands,
+run the `review` skill's passes over the diff in a fresh, clean-context agent.
+Treat a green `validate` run as necessary but not sufficient.
 
 ## Repo workflow
 
-Do the work on a branch — cut it with the `create-branch` skill (off an up-to-date main, named by
-the change, not by the plan or a step number). Apply steps and leave the edits **uncommitted**:
-the maintainer commits and pushes, and a PR is opened only when explicitly asked. Applying a plan
-never commits, pushes, or opens a PR on its own.
+Do the work on a branch —
+cut it with the `create-branch` skill (off an up-to-date main, named by the change, not by the plan or a step number).
+Apply steps and leave the edits **uncommitted**: the maintainer commits and pushes,
+and a PR is opened only when explicitly asked. Applying a plan never commits, pushes,
+or opens a PR on its own.

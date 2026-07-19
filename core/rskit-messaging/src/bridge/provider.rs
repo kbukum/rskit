@@ -59,9 +59,8 @@ pub fn producer_as_sink<T: Send + Sync + 'static>(
 
 /// Wraps a [`MessageConsumer`] as a [`Stream<(), Message<T>>`](Stream).
 ///
-/// Calling [`Stream::execute`] returns a backpressure-aware stream that receives
-/// one message at a time. Use [`consumer_as_bounded_stream`] when the stream
-/// should complete after a fixed number of messages.
+/// Calling [`Stream::execute`] returns a backpressure-aware stream that receives one message at a time.
+/// Use [`consumer_as_bounded_stream`] when the stream should complete after a fixed number of messages.
 pub struct ConsumerStream<T: Send + Sync + 'static> {
     name: &'static str,
     consumer: Arc<dyn MessageConsumer<T>>,
@@ -266,8 +265,8 @@ mod tests {
         let stream = cs.execute(()).await.unwrap();
         let collector = tokio::spawn(async move { stream.take(1).collect::<Vec<_>>().await });
 
-        // Let several per-recv timeouts elapse with no traffic; the stream must
-        // keep polling instead of terminating on the first idle second.
+        // Let several per-recv timeouts elapse with no traffic;
+        // the stream must keep polling instead of terminating on the first idle second.
         tokio::time::sleep(Duration::from_secs(3)).await;
         producer
             .send(Message::new("idle-t", "late".into()))

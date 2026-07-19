@@ -25,9 +25,9 @@ enum LoaderPolicy {
 
 /// Loads typed configuration from ordered source adapters.
 ///
-/// `ConfigLoader::app()` / `ConfigLoader::new()` keeps the service-oriented
-/// policy: defaults → TOML → profile dotenv → dotenv → adapter sources → env →
-/// overrides. `ConfigLoader::toml(path)` is deterministic file-only loading.
+/// `ConfigLoader::app()` / `ConfigLoader::new()` keeps the service-oriented policy:
+/// defaults → TOML → profile dotenv → dotenv → adapter sources → env → overrides.
+/// `ConfigLoader::toml(path)` is deterministic file-only loading.
 /// `ConfigLoader::custom()` only loads explicitly provided sources.
 #[derive(Debug)]
 pub struct ConfigLoader {
@@ -131,9 +131,8 @@ impl ConfigLoader {
 
     /// Set the configuration profile for app loading.
     ///
-    /// Loads `config/profiles/{profile}.env` before the main `.env` file. If an
-    /// empty string is passed, the profile name is read from the `ENVIRONMENT`
-    /// environment variable during loading.
+    /// Loads `config/profiles/{profile}.env` before the main `.env` file. If an empty string is passed,
+    /// the profile name is read from the `ENVIRONMENT` environment variable during loading.
     #[must_use]
     pub fn with_profile(mut self, profile: impl Into<String>) -> Self {
         let profile = profile.into();
@@ -147,9 +146,9 @@ impl ConfigLoader {
 
     /// Add an adapter source.
     ///
-    /// In app loading, adapter sources are evaluated after files/dotenv and
-    /// before process environment variables. In custom/TOML loading, adapter
-    /// sources are evaluated after the primary file and before overrides.
+    /// In app loading, adapter sources are evaluated after files/dotenv
+    /// and before process environment variables. In custom/TOML loading,
+    /// adapter sources are evaluated after the primary file and before overrides.
     #[must_use]
     pub fn with_source(mut self, source: impl ConfigSource) -> Self {
         self.sources.push(Box::new(source));
@@ -171,10 +170,9 @@ impl ConfigLoader {
 
     /// Load any typed config from this loader's source policy.
     ///
-    /// This path does not run validation; the type only needs to be
-    /// `Deserialize`. Use [`ConfigLoader::load_validated`] to additionally run
-    /// [`rskit_validation::Validate`], or [`ConfigLoader::load_app`] for the
-    /// service-application convenience.
+    /// This path does not run validation; the type only needs to be `Deserialize`.
+    /// Use [`ConfigLoader::load_validated`] to additionally run [`rskit_validation::Validate`],
+    /// or [`ConfigLoader::load_app`] for the service-application convenience.
     pub fn load<T>(&self) -> AppResult<T>
     where
         T: DeserializeOwned,

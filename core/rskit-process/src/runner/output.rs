@@ -41,12 +41,12 @@ where
 
 /// Await a reader/stdin task, bounding the wait by `grace`.
 ///
-/// On the normal path the child has already exited, so the pipe reaches EOF and
-/// the task finishes well within `grace`. A task still running after `grace` —
-/// a reader blocked because a surviving descendant inherited and holds the pipe
-/// open — is aborted (dropping our read end) rather than awaited forever. The
-/// bytes it captured before being abandoned remain available through the shared
-/// buffer, so the caller still recovers partial output.
+/// On the normal path the child has already exited, so the pipe reaches EOF
+/// and the task finishes well within `grace`. A task still running after `grace` —
+/// a reader blocked because a surviving descendant inherited and holds the pipe open —
+/// is aborted (dropping our read end) rather than awaited forever.
+/// The bytes it captured before being abandoned remain available through the shared buffer,
+/// so the caller still recovers partial output.
 pub(in crate::runner) async fn join_within(
     task: Option<JoinHandle<AppResult<()>>>,
     grace: Duration,

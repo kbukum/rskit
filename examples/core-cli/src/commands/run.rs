@@ -7,9 +7,9 @@ use rskit_logging::info;
 
 /// Process `units` of simulated work, stopping early if `token` is cancelled.
 ///
-/// Demonstrates cooperative cancellation and lifecycle ownership using only
-/// core crates — no service runtime required. Each step is bounded and races
-/// the cancellation token, so Ctrl+C winds the loop down promptly.
+/// Demonstrates cooperative cancellation and lifecycle ownership using only core crates —
+/// no service runtime required. Each step is bounded and races the cancellation token,
+/// so Ctrl+C winds the loop down promptly.
 pub async fn execute(units: u32, token: &CancellationToken) -> OutputKV {
     let mut processed = 0u32;
     for unit in 0..units {

@@ -1,10 +1,9 @@
 //! CPU and memory quantity parsing and formatting.
 //!
-//! Mirrors gokit's `workload` resource helpers. Memory parsing is delegated to
-//! the canonical [`rskit_util::bytes`] parser (binary suffixes `k`/`ki` …
-//! `t`/`ti`); CPU is expressed in cores or millicores and normalized to
-//! nanocores. Formatting produces the compact single-letter representation the
-//! workload vocabulary uses (`512m`, `2g`).
+//! Mirrors gokit's `workload` resource helpers.
+//! Memory parsing is delegated to the canonical [`rskit_util::bytes`] parser (binary suffixes `k`/`ki` … `t`/`ti`);
+//! CPU is expressed in cores or millicores and normalized to nanocores.
+//! Formatting produces the compact single-letter representation the workload vocabulary uses (`512m`, `2g`).
 
 use rskit_errors::{AppError, AppResult};
 
@@ -19,14 +18,14 @@ const NANOS_PER_MILLICORE: f64 = 1e6;
 
 /// Parse a human-readable memory string into bytes.
 ///
-/// Supported suffixes (case-insensitive): `k`/`ki` (KiB), `m`/`mi` (MiB),
-/// `g`/`gi` (GiB), `t`/`ti` (TiB), `p`/`pi` (PiB). A bare number is treated as
-/// bytes. All units are binary (1024-based).
+/// Supported suffixes (case-insensitive): `k`/`ki` (KiB), `m`/`mi` (MiB), `g`/`gi` (GiB),
+/// `t`/`ti` (TiB), `p`/`pi` (PiB). A bare number is treated as bytes.
+/// All units are binary (1024-based).
 ///
 /// # Errors
 ///
-/// Returns [`rskit_errors::ErrorCode::InvalidFormat`] when the string is empty,
-/// not a valid quantity, negative, or larger than [`i64::MAX`] bytes.
+/// Returns [`rskit_errors::ErrorCode::InvalidFormat`] when the string is empty, not a valid quantity,
+/// negative, or larger than [`i64::MAX`] bytes.
 pub fn parse_memory(s: &str) -> AppResult<i64> {
     let bytes = rskit_util::bytes::parse_bytes(s).ok_or_else(|| {
         AppError::invalid_format("memory", "quantity with optional binary suffix")
@@ -37,14 +36,13 @@ pub fn parse_memory(s: &str) -> AppResult<i64> {
 
 /// Parse a human-readable CPU string into nanocores.
 ///
-/// Supported formats (case-insensitive): cores (`"0.5"`, `"1"`) and millicores
-/// (`"500m"`).
+/// Supported formats (case-insensitive): cores (`"0.5"`, `"1"`) and millicores (`"500m"`).
 ///
 /// # Errors
 ///
-/// Returns [`rskit_errors::ErrorCode::InvalidFormat`] when the string is empty,
-/// not a valid number, negative, or at or above the [`i64::MAX`] nanocore
-/// boundary (values that would saturate a float-to-int cast).
+/// Returns [`rskit_errors::ErrorCode::InvalidFormat`] when the string is empty, not a valid number,
+/// negative, or at
+/// or above the [`i64::MAX`] nanocore boundary (values that would saturate a float-to-int cast).
 pub fn parse_cpu(s: &str) -> AppResult<i64> {
     let lower = s.trim().to_lowercase();
     if lower.is_empty() {
@@ -80,11 +78,10 @@ pub fn parse_cpu(s: &str) -> AppResult<i64> {
 
 /// Format a byte count as a human-readable memory string using binary suffixes.
 ///
-/// Picks the largest binary unit that divides the value exactly so a
-/// non-negative result round-trips through [`parse_memory`]; a value that is not
-/// an exact multiple of any unit (e.g. `1536`) is rendered as raw bytes rather
-/// than truncated. Negative inputs (which [`parse_memory`] rejects) render as
-/// raw signed integers.
+/// Picks the largest binary unit that divides the value exactly
+/// so a non-negative result round-trips through [`parse_memory`];
+/// a value that is not an exact multiple of any unit (e.g. `1536`) is rendered as raw bytes rather than truncated.
+/// Negative inputs (which [`parse_memory`] rejects) render as raw signed integers.
 #[must_use]
 pub fn format_memory(bytes: i64) -> String {
     for (unit, suffix) in [(PIB, 'p'), (TIB, 't'), (GIB, 'g'), (MIB, 'm'), (KIB, 'k')] {
@@ -97,11 +94,11 @@ pub fn format_memory(bytes: i64) -> String {
 
 /// Format a nanocore count as a human-readable CPU string.
 ///
-/// Whole cores and exact millicores use the compact `N`/`Nm` forms; any other
-/// value renders its exact nanocore remainder as fractional cores (up to 9
-/// decimals, trailing zeros trimmed), preserving sign, so a non-negative result
-/// round-trips through [`parse_cpu`] instead of collapsing to a truncated
-/// `0.000`. [`parse_cpu`] rejects negative inputs.
+/// Whole cores and exact millicores use the compact `N`/`Nm` forms;
+/// any other value renders its exact nanocore remainder as fractional cores (up to 9 decimals, trailing zeros trimmed),
+/// preserving sign,
+/// so a non-negative result round-trips through [`parse_cpu`] instead of collapsing to a truncated `0.000`.
+/// [`parse_cpu`] rejects negative inputs.
 #[must_use]
 pub fn format_cpu(nanocores: i64) -> String {
     if nanocores % 1_000_000_000 == 0 {

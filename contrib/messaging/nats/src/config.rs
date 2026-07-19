@@ -17,8 +17,9 @@ const DEFAULT_URL: &str = "tls://127.0.0.1:4222";
 
 /// Configuration for the NATS messaging adapter.
 ///
-/// Broker-agnostic fields live in [`BrokerConfig`]. NATS queue groups are configured via
-/// [`BrokerConfig::consumer_group`]; adapter fields are limited to NATS client/protocol knobs.
+/// Broker-agnostic fields live in [`BrokerConfig`].
+/// NATS queue groups are configured via [`BrokerConfig::consumer_group`];
+/// adapter fields are limited to NATS client/protocol knobs.
 #[derive(Clone)]
 pub struct NatsConfig {
     /// Shared broker settings (adapter/name/enabled, delivery, retry, DLQ, etc.).

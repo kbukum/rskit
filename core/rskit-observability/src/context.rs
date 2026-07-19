@@ -65,8 +65,8 @@ impl OperationContext {
 
     /// Identifier of the user initiating the request.
     ///
-    /// This is retained for caller-side correlation and is not emitted to spans
-    /// by default to avoid leaking user identifiers into telemetry backends.
+    /// This is retained for caller-side correlation
+    /// and is not emitted to spans by default to avoid leaking user identifiers into telemetry backends.
     #[must_use]
     pub fn user_id(&self) -> &str {
         &self.user_id

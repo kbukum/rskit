@@ -1,7 +1,6 @@
 //! Probe a media file and print its metadata.
 //!
-//! Usage:
-//!   cargo run --bin probe -- path/to/video.mp4
+//! Usage: cargo run --bin probe -- path/to/video.mp4
 //!
 //! File paths are confined to the current working directory.
 

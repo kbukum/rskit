@@ -23,8 +23,8 @@ pub trait Registry: Send + Sync {
 
 /// Optional extension — continuous service-set monitoring.
 ///
-/// Implementors emit an updated instance list whenever it changes, using
-/// mechanisms like Consul blocking queries, etcd watch, or polling.
+/// Implementors emit an updated instance list whenever it changes,
+/// using mechanisms like Consul blocking queries, etcd watch, or polling.
 #[async_trait]
 pub trait Watcher: Send + Sync {
     /// Returns a channel that fires whenever the instance list changes.

@@ -1,5 +1,5 @@
-//! Managed consumer that wraps any [`MessageConsumer`] with lifecycle
-//! management, handler dispatch, and graceful shutdown.
+//! Managed consumer that wraps any [`MessageConsumer`] with lifecycle management, handler dispatch,
+//! and graceful shutdown.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -14,8 +14,7 @@ use crate::handler::MessageHandler;
 use crate::metrics::{MetricsCollector, NoopMetrics};
 use crate::traits::MessageConsumer;
 
-/// Wraps a [`MessageConsumer`] with lifecycle, handler dispatch, and
-/// graceful shutdown.
+/// Wraps a [`MessageConsumer`] with lifecycle, handler dispatch, and graceful shutdown.
 ///
 /// Use [`ManagedConsumerBuilder`] to construct an instance.
 pub struct ManagedConsumer<T: Send + Sync + Clone + 'static> {
@@ -101,7 +100,8 @@ impl<T: Send + Sync + Clone + 'static> ManagedConsumer<T> {
                                     || err_msg.contains("unknown topic");
 
                                 if is_topic_missing {
-                                    // Topic-not-found is expected during startup; log sparingly at debug.
+                                    // Topic-not-found is expected during startup;
+                                    // log sparingly at debug.
                                     if consecutive_errors == 1 {
                                         tracing::debug!(
                                             consumer = %name,

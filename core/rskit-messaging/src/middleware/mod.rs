@@ -1,8 +1,8 @@
 //! Middleware stack for message handlers.
 //!
 //! Each middleware implements [`HandlerMiddleware`](crate::HandlerMiddleware)
-//! and wraps a handler with cross-cutting concerns such as retries, metrics,
-//! tracing, deduplication, dead-letter routing, and circuit breaking.
+//! and wraps a handler with cross-cutting concerns such as retries, metrics, tracing, deduplication,
+//! dead-letter routing, and circuit breaking.
 
 /// Circuit breaker middleware backed by `rskit-resilience`.
 pub mod circuit_breaker;

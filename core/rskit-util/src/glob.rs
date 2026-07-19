@@ -1,24 +1,24 @@
 //! Shell-style glob matching for single string segments.
 //!
 //! A minimal, dependency-free matcher for the two wildcards every shell shares:
-//! `*` matches any run of characters (including none) and `?` matches exactly one
-//! character. It operates on whole strings with no path or separator semantics —
-//! callers that want per-segment matching split first and match each segment — so
-//! it composes into identifiers, names, topic segments, or any other flat token
-//! set without smuggling in filesystem assumptions.
+//! `*` matches any run of characters (including none) and `?` matches exactly one character.
+//! It operates on whole strings with no path or separator semantics —
+//! callers that want per-segment matching split first and match each segment —
+//! so it composes into identifiers, names, topic segments,
+//! or any other flat token set without smuggling in filesystem assumptions.
 //!
-//! Matching is Unicode-`char`-oriented and case-sensitive: `?` matches exactly one
-//! Unicode scalar value, not one byte. The two-pointer algorithm uses constant
-//! backtracking state — worst case `O(pattern_len * text_len)`, never the
-//! exponential blow-up a naive recursive matcher can exhibit — so it stays bounded
-//! on untrusted input.
+//! Matching is Unicode-`char`-oriented and case-sensitive:
+//! `?` matches exactly one Unicode scalar value, not one byte.
+//! The two-pointer algorithm uses constant backtracking state — worst case `O(pattern_len * text_len)`,
+//! never the exponential blow-up a naive recursive matcher can exhibit —
+//! so it stays bounded on untrusted input.
 
 /// Whether `pattern` matches `text`, treating `*` and `?` as wildcards.
 ///
-/// `*` matches any sequence of characters (including the empty sequence) and `?`
-/// matches exactly one character; every other character matches itself. A pattern
-/// with no wildcards matches only its literal equal, so `glob_match("core",
-/// "core")` is `true` and `glob_match("core", "cores")` is `false`.
+/// `*` matches any sequence of characters (including the empty sequence)
+/// and `?` matches exactly one character; every other character matches itself.
+/// A pattern with no wildcards matches only its literal equal,
+/// so `glob_match("core", "core")` is `true` and `glob_match("core", "cores")` is `false`.
 ///
 /// # Examples
 /// ```
@@ -40,9 +40,8 @@ pub fn glob_match(pattern: &str, text: &str) -> bool {
 
 /// Whether `pattern` contains any wildcard metacharacter (`*` or `?`).
 ///
-/// Lets callers decide whether a token is an exact literal or a glob before
-/// deciding how to resolve it (e.g. treating an exact miss as an error but a glob
-/// miss as an empty set).
+/// Lets callers decide whether a token is an exact literal
+/// or a glob before deciding how to resolve it (e.g. treating an exact miss as an error but a glob miss as an empty set).
 ///
 /// # Examples
 /// ```
@@ -57,12 +56,12 @@ pub fn has_wildcard(pattern: &str) -> bool {
 
 /// A compiled glob pattern that can be matched against many candidates.
 ///
-/// Scans the source pattern for wildcards once. A wildcard pattern is parsed into
-/// its character sequence so reuse across a candidate set neither re-scans for
-/// wildcards nor re-parses the pattern per call — only each candidate's own
-/// characters are walked. A plain literal keeps no parsed form and compares
-/// directly, allocating nothing per match. Matching semantics are identical to
-/// [`glob_match`].
+/// Scans the source pattern for wildcards once.
+/// A wildcard pattern is parsed into its character sequence
+/// so reuse across a candidate set neither re-scans for wildcards nor re-parses the pattern per call —
+/// only each candidate's own characters are walked. A plain literal keeps no parsed form
+/// and compares directly, allocating nothing per match.
+/// Matching semantics are identical to [`glob_match`].
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Glob {
     pattern: String,
@@ -106,9 +105,8 @@ impl Glob {
 
 /// Two-pointer wildcard matcher supporting `*` (any run) and `?` (one char).
 ///
-/// Uses constant backtracking state — worst case `O(pattern_len * text_len)`,
-/// never exponential: on a mismatch after a `*` it rewinds the text pointer one
-/// character past the last `*` rather than recursing.
+/// Uses constant backtracking state — worst case `O(pattern_len * text_len)`, never exponential:
+/// on a mismatch after a `*` it rewinds the text pointer one character past the last `*` rather than recursing.
 fn wildcard(pattern: &[char], text: &[char]) -> bool {
     let (mut p, mut t) = (0, 0);
     let (mut star, mut mark) = (None, 0);

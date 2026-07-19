@@ -398,9 +398,8 @@ fn join_segments(base: &Url, segments: &[&str]) -> AppResult<Url> {
     Ok(url)
 }
 
-/// Classify a reqwest transport failure, preserving typed timeout and
-/// connection information instead of flattening everything to
-/// [`ErrorCode::ExternalService`].
+/// Classify a reqwest transport failure, preserving typed timeout
+/// and connection information instead of flattening everything to [`ErrorCode::ExternalService`].
 fn send_error_code(error: &reqwest::Error) -> ErrorCode {
     if error.is_timeout() {
         ErrorCode::Timeout
@@ -411,9 +410,8 @@ fn send_error_code(error: &reqwest::Error) -> ErrorCode {
     }
 }
 
-/// Map an HTTP response status to an [`ErrorCode`], mirroring the canonical
-/// mapping used across rskit so auth failures stay non-retryable while
-/// genuinely transient statuses remain retryable.
+/// Map an HTTP response status to an [`ErrorCode`], mirroring the canonical mapping used across rskit
+/// so auth failures stay non-retryable while genuinely transient statuses remain retryable.
 const fn status_to_error_code(status: reqwest::StatusCode) -> ErrorCode {
     match status.as_u16() {
         400 => ErrorCode::InvalidInput,

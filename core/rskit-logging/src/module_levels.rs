@@ -1,8 +1,7 @@
 //! Per-module log level overrides configured from YAML/config.
 //!
-//! Translates a `HashMap<String, String>` of module → level entries into a
-//! [`tracing_subscriber::EnvFilter`] so that noisy dependencies can be
-//! silenced without changing the global level.
+//! Translates a `HashMap<String, String>` of module → level entries into a [`tracing_subscriber::EnvFilter`]
+//! so that noisy dependencies can be silenced without changing the global level.
 //!
 //! # Example
 //!
@@ -35,10 +34,9 @@ pub struct ModuleLevelsConfig {
 
 /// Build an [`EnvFilter`] from a base level and per-module overrides.
 ///
-/// The `RUST_LOG` environment variable, when set, takes precedence and
-/// the returned filter reflects only `RUST_LOG`. When `RUST_LOG` is
-/// absent, the filter is assembled from `base_level` plus each entry in
-/// `module_levels`.
+/// The `RUST_LOG` environment variable, when set, takes precedence
+/// and the returned filter reflects only `RUST_LOG`. When `RUST_LOG` is absent,
+/// the filter is assembled from `base_level` plus each entry in `module_levels`.
 ///
 /// ```text
 /// base_level = "info"

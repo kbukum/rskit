@@ -70,8 +70,7 @@ impl RepoBuilder {
         Ok(self)
     }
 
-    /// Creates a tag at HEAD. `Some(message)` makes an annotated tag; `None`
-    /// makes a lightweight tag.
+    /// Creates a tag at HEAD. `Some(message)` makes an annotated tag; `None` makes a lightweight tag.
     #[must_use = "builder methods return the updated builder; chain or bind the result"]
     pub fn with_tag(self, name: &str, message: Option<&str>) -> AppResult<Self> {
         self.repo.create_tag(name, "HEAD", message)?;

@@ -10,8 +10,8 @@ use tokio::io::AsyncRead;
 
 use crate::TempFile;
 
-/// A reference to file content that can be read.
-/// Does NOT load content eagerly — all reads are lazy/streamed.
+/// A reference to file content that can be read. Does NOT load content eagerly —
+/// all reads are lazy/streamed.
 ///
 /// Serialization notes:
 /// - `Temp` serializes as `Path` (temp file's path).

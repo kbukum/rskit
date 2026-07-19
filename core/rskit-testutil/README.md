@@ -12,7 +12,9 @@ Test utilities, mock providers, and assertion helpers for rskit services.
 - `TestWorkspace` / `test_workspace!` — managed temp workspaces with fixture loading and copying
 - Thread-safe via `parking_lot::Mutex`
 
-`TestWorkspace` is the generic fixture harness for rskit tests. Use `with_fixture_dir` when fixtures live outside the default crate layout, or `test_workspace!` when a crate follows the conventional `tests/fixtures` directory.
+`TestWorkspace` is the generic fixture harness for rskit tests.
+Use `with_fixture_dir` when fixtures live outside the default crate layout,
+or `test_workspace!` when a crate follows the conventional `tests/fixtures` directory.
 
 ## Usage
 

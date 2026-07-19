@@ -32,8 +32,8 @@ pub struct ComponentHealth {
 
 /// Tracks aggregate health of service components.
 ///
-/// Thread-safe via `Arc<RwLock<...>>`. Register components and update their
-/// status; query overall health at any time.
+/// Thread-safe via `Arc<RwLock<...>>`. Register components and update their status;
+/// query overall health at any time.
 ///
 /// Mirrors Go's `observability.ServiceHealth`.
 #[derive(Clone)]

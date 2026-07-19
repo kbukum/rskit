@@ -1,10 +1,10 @@
 //! Human-in-the-loop (HITL) evaluation for tool dispatch.
 //!
-//! Per the locked AI/ML cross-kit decision D10, every tool invocation flows
-//! through stages: authz → sensitivity → (if `RequireApproval`) human approval
-//! → invoke. This module defines the `sensitivity` and `approval` stages.
-//! `authz` is owned by `rskit_authz::Decider` and wired at the boundary
-//! (e.g. `rskit-mcp::Server`), not here, to preserve module layering.
+//! Per the locked AI/ML cross-kit decision D10, every tool invocation flows through stages:
+//! authz → sensitivity → (if `RequireApproval`) human approval → invoke.
+//! This module defines the `sensitivity` and `approval` stages.
+//! `authz` is owned by `rskit_authz::Decider` and wired at the boundary (e.g. `rskit-mcp::Server`),
+//! not here, to preserve module layering.
 
 use async_trait::async_trait;
 use rskit_errors::{AppError, AppResult};
@@ -36,8 +36,8 @@ pub enum Decision {
 
 /// Evaluator for the *sensitivity* stage of HITL.
 ///
-/// Implementations decide whether a tool call is sensitive given the call's
-/// input and the tool's declared `Envelope.sensitive_invocations` predicates.
+/// Implementations decide whether a tool call is sensitive given the call's input
+/// and the tool's declared `Envelope.sensitive_invocations` predicates.
 #[async_trait]
 pub trait SensitivityEvaluator: Send + Sync {
     /// Evaluate a tool call against the given envelope.
@@ -49,12 +49,11 @@ pub trait SensitivityEvaluator: Send + Sync {
     ) -> AppResult<Decision>;
 }
 
-/// Default evaluator that denies any tool call whose input matches one of the
-/// envelope's `sensitive_invocations` predicates.
+/// Default evaluator that denies any tool call whose input matches one of the envelope's `sensitive_invocations` predicates.
 ///
 /// "Deny on sensitive" is the safe default per D10. To allow such calls,
-/// install a custom evaluator that returns `RequireApproval` and pair it with
-/// a non-default [`HumanApproval`].
+/// install a custom evaluator that returns `RequireApproval`
+/// and pair it with a non-default [`HumanApproval`].
 #[derive(Debug, Default, Clone)]
 pub struct DenyOnSensitive;
 
@@ -78,8 +77,7 @@ impl SensitivityEvaluator for DenyOnSensitive {
     }
 }
 
-/// Human approval gate consulted when [`SensitivityEvaluator`] returns
-/// [`Decision::RequireApproval`].
+/// Human approval gate consulted when [`SensitivityEvaluator`] returns [`Decision::RequireApproval`].
 #[async_trait]
 pub trait HumanApproval: Send + Sync {
     /// Return `true` to proceed with invocation, `false` to deny.
@@ -88,9 +86,8 @@ pub trait HumanApproval: Send + Sync {
 
 /// Default approval gate that always denies.
 ///
-/// Per D10, `DenyHumanApproval` is the canonical default — there is no
-/// auto-approval. Replace with a real gate (CLI prompt, web UI hand-off,
-/// async ticket queue) at composition time.
+/// Per D10, `DenyHumanApproval` is the canonical default — there is no auto-approval.
+/// Replace with a real gate (CLI prompt, web UI hand-off, async ticket queue) at composition time.
 #[derive(Debug, Default, Clone)]
 pub struct DenyHumanApproval;
 
@@ -101,8 +98,7 @@ impl HumanApproval for DenyHumanApproval {
     }
 }
 
-/// Translate a [`Decision::Deny`] (or post-approval rejection) into a typed
-/// `AppError` with the `Forbidden` code.
+/// Translate a [`Decision::Deny`] (or post-approval rejection) into a typed `AppError` with the `Forbidden` code.
 #[must_use]
 pub fn denied_error(reason: impl Into<String>) -> AppError {
     AppError::forbidden(reason.into())
@@ -146,8 +142,8 @@ fn select_jsonpath<'a>(value: &'a Json, path: &str) -> Option<&'a Json> {
 }
 
 fn regex_matches(pattern: &str, text: &str) -> bool {
-    // Compile-and-match without pulling in a regex crate dep — this is a small
-    // glob-style helper that supports `.` (any char) and `.*` (any run).
+    // Compile-and-match without pulling in a regex crate dep —
+    // this is a small glob-style helper that supports `.` (any char) and `.*` (any run).
     // Implementations that need full PCRE should provide a custom evaluator.
     glob_like_match(pattern, text)
 }

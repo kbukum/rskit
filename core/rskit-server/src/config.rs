@@ -28,8 +28,8 @@ pub struct GrpcServerConfig {
 
     /// Optional TLS configuration.
     ///
-    /// When configured, tonic/rustls modern defaults are used with TLS 1.3
-    /// preferred and TLS 1.2 as the minimum supported version.
+    /// When configured, tonic/rustls modern defaults are used with TLS 1.3 preferred
+    /// and TLS 1.2 as the minimum supported version.
     pub tls: Option<TlsConfig>,
 }
 

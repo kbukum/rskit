@@ -1,9 +1,8 @@
 //! Shared security configuration used across transports.
 //!
-//! This crate owns lower-level security vocabulary that multiple transport and
-//! auth crates need without depending on each other: TLS policy,
-//! [`SecretString`], secure HTTP response headers, and shared HTTP auth scheme
-//! constants.
+//! This crate owns lower-level security vocabulary that multiple transport
+//! and auth crates need without depending on each other: TLS policy, [`SecretString`],
+//! secure HTTP response headers, and shared HTTP auth scheme constants.
 
 #![warn(missing_docs)]
 

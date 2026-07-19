@@ -31,8 +31,8 @@ pub fn format_duration(d: Duration) -> String {
     }
 }
 
-/// Parses simple duration strings like `"5s"`, `"10m"`, `"1h"` into a `Duration`.
-/// Case-insensitive, supports optional space, and treats unit-less values as seconds.
+/// Parses simple duration strings like `"5s"`, `"10m"`, `"1h"` into a `Duration`. Case-insensitive,
+/// supports optional space, and treats unit-less values as seconds.
 ///
 /// # Examples
 ///

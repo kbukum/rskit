@@ -1,9 +1,8 @@
 //! Triton KServe v2 HTTP adapter for `rskit-inference`.
 //!
-//! This crate implements non-streaming [`rskit_inference::Inference`] against
-//! Triton's KServe v2 HTTP data plane. KServe v2 HTTP has no native streaming
-//! protocol, so this adapter intentionally does not implement
-//! [`rskit_inference::StreamingInference`].
+//! This crate implements non-streaming [`rskit_inference::Inference`] against Triton's KServe v2 HTTP data plane.
+//! KServe v2 HTTP has no native streaming protocol,
+//! so this adapter intentionally does not implement [`rskit_inference::StreamingInference`].
 
 #![warn(missing_docs)]
 

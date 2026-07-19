@@ -10,16 +10,16 @@ pub enum JsonStyle {
     /// Human-readable, indented output.
     #[default]
     Pretty,
-    /// Minimal single-line output for machine streams (newline-delimited JSON,
-    /// length-framed payloads) where size and one-value-per-line matter.
+    /// Minimal single-line output for machine streams (newline-delimited JSON, length-framed payloads) where size
+    /// and one-value-per-line matter.
     Compact,
 }
 
 /// Built-in JSON codec.
 ///
 /// Always available because [`serde_json`] backs the crate's value model.
-/// Defaults to pretty-printed output; [`JsonCodec::compact`] emits minimal
-/// single-line JSON for machine-readable streams.
+/// Defaults to pretty-printed output;
+/// [`JsonCodec::compact`] emits minimal single-line JSON for machine-readable streams.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct JsonCodec {
     style: JsonStyle,

@@ -1,15 +1,14 @@
 #![warn(missing_docs)]
 //! Symmetric encryption utilities with AES-256-GCM and ChaCha20-Poly1305 support.
 //!
-//! This crate provides a unified interface for symmetric encryption and decryption
-//! of sensitive data using either AES-256-GCM (default, with hardware acceleration)
+//! This crate provides a unified interface for symmetric encryption
+//! and decryption of sensitive data using either AES-256-GCM (default, with hardware acceleration)
 //! or ChaCha20-Poly1305 (modern, performant without AES-NI).
 //!
 //! Keys are derived from passphrases using PBKDF2-SHA256 with 600,000 iterations
 //! and a random 16-byte salt per encryption operation.
 //!
-//! Ciphertext format:
-//! `base64(version[1] || algorithm[1] || salt[16] || nonce[12] || ciphertext)`.
+//! Ciphertext format: `base64(version[1] || algorithm[1] || salt[16] || nonce[12] || ciphertext)`.
 //!
 //! # Examples
 //!

@@ -1,11 +1,10 @@
 //! VCS-ignore-aware tree walking.
 //!
-//! [`walk_tree_ignoring`] traverses a directory subtree while honouring
-//! `.gitignore` / `.ignore` rules (and, by default, skipping the `.git`
-//! directory and hidden entries), built on the canonical `ignore` crate. It is
-//! the traversal to use when a consumer wants only version-controlled or
-//! source-relevant files — content hashing, indexing, or packaging — rather
-//! than the raw on-disk tree that [`super::walk_tree`] yields.
+//! [`walk_tree_ignoring`] traverses a directory subtree while honouring `.gitignore` / `.ignore` rules (and, by default, skipping the `.git` directory and hidden entries),
+//! built on the canonical `ignore` crate.
+//! It is the traversal to use when a consumer wants only version-controlled or source-relevant files —
+//! content hashing, indexing, or packaging —
+//! rather than the raw on-disk tree that [`super::walk_tree`] yields.
 
 use std::ffi::OsStr;
 use std::path::Path;
@@ -18,11 +17,11 @@ use super::{TreeEntry, WalkControl, ensure_directory};
 /// Options controlling a VCS-ignore-aware walk.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IgnoreWalkOptions {
-    /// Honour versioned ignore files — `.gitignore`, `.ignore`, and nested or
-    /// parent ignore files discovered along the walk. When `false` only the
-    /// built-in and explicit skips apply. Per-machine, non-versioned sources
-    /// (the global gitignore and `.git/info/exclude`) are never consulted, so
-    /// results stay reproducible across developers and CI.
+    /// Honour versioned ignore files — `.gitignore`, `.ignore`, and nested
+    /// or parent ignore files discovered along the walk. When `false` only the built-in
+    /// and explicit skips apply. Per-machine,
+    /// non-versioned sources (the global gitignore and `.git/info/exclude`) are never consulted,
+    /// so results stay reproducible across developers and CI.
     pub respect_gitignore: bool,
     /// Skip dot-prefixed files and directories (e.g. `.git`, `.cache`).
     pub skip_hidden: bool,
@@ -40,22 +39,19 @@ impl Default for IgnoreWalkOptions {
     }
 }
 
-/// Walk `root`, invoking `visitor` for every regular file that survives the
-/// active ignore rules.
+/// Walk `root`, invoking `visitor` for every regular file that survives the active ignore rules.
 ///
-/// Directories and symlinks are never handed to the visitor; only regular
-/// files are, mirroring the file-oriented digests and indexers that consume
-/// this. Entries are yielded in the `ignore` crate's traversal order, so a
-/// caller that needs a stable identity must sort by [`TreeEntry::relative_path`].
+/// Directories and symlinks are never handed to the visitor; only regular files are,
+/// mirroring the file-oriented digests and indexers that consume this.
+/// Entries are yielded in the `ignore` crate's traversal order,
+/// so a caller that needs a stable identity must sort by [`TreeEntry::relative_path`].
 ///
-/// The visitor returns a [`WalkControl`], matching [`super::walk_tree`], so a
-/// consumer can stop early with [`WalkControl::Stop`]. Because only leaf files
-/// are visited, [`WalkControl::SkipSubtree`] has nothing to prune and behaves
-/// like [`WalkControl::Continue`].
+/// The visitor returns a [`WalkControl`], matching [`super::walk_tree`],
+/// so a consumer can stop early with [`WalkControl::Stop`]. Because only leaf files are visited,
+/// [`WalkControl::SkipSubtree`] has nothing to prune and behaves like [`WalkControl::Continue`].
 ///
-/// This helper uses blocking `std::fs` I/O. Run it through
-/// `tokio::task::spawn_blocking` or an equivalent blocking boundary when
-/// calling from async code.
+/// This helper uses blocking `std::fs` I/O. Run it through `tokio::task::spawn_blocking`
+/// or an equivalent blocking boundary when calling from async code.
 pub fn walk_tree_ignoring(
     root: &Path,
     options: IgnoreWalkOptions,
@@ -69,15 +65,15 @@ pub fn walk_tree_ignoring(
         .parents(options.respect_gitignore)
         .ignore(options.respect_gitignore)
         .git_ignore(options.respect_gitignore)
-        // The global gitignore (`core.excludesfile`) and `.git/info/exclude` are
-        // per-machine, non-versioned state; excluding them keeps digests
-        // reproducible regardless of who runs the walk.
+        // The global gitignore (`core.excludesfile`) and `.git/info/exclude` are per-machine,
+        // non-versioned state;
+        // excluding them keeps digests reproducible regardless of who runs the walk.
         .git_global(false)
         .git_exclude(false)
         .require_git(false)
         .follow_links(options.follow_symlinks);
-    // `.git` metadata is never source content; drop it even when git ignore
-    // handling is off so a digest cannot churn on repository state.
+    // `.git` metadata is never source content; drop it even when git ignore handling is off
+    // so a digest cannot churn on repository state.
     builder.filter_entry(|entry| entry.file_name() != OsStr::new(".git"));
 
     for result in builder.build() {
@@ -150,8 +146,7 @@ mod tests {
         let seen = collect(dir.path(), IgnoreWalkOptions::default());
 
         assert!(seen.contains(&PathBuf::from("src/lib.rs")));
-        // The default skips hidden entries, so the dot-prefixed `.gitignore`
-        // itself is not yielded.
+        // The default skips hidden entries, so the dot-prefixed `.gitignore` itself is not yielded.
         assert!(!seen.contains(&PathBuf::from(".gitignore")));
         assert!(!seen.iter().any(|p| p.starts_with("target")));
         assert!(!seen.contains(&PathBuf::from("run.log")));
@@ -159,8 +154,8 @@ mod tests {
 
     #[test]
     fn keeps_dotfiles_but_still_drops_git_and_ignored() {
-        // The digest use case: hidden config (`.cargo`, `.gitignore`) is source
-        // and must be hashed, but `.git` and gitignored build output must not.
+        // The digest use case: hidden config (`.cargo`, `.gitignore`) is source and must be hashed,
+        // but `.git` and gitignored build output must not.
         let dir = TempDir::new().unwrap();
         dir.write_file(".gitignore", b"target/\n").unwrap();
         dir.write_file(".cargo/config.toml", b"[build]").unwrap();
@@ -214,9 +209,9 @@ mod tests {
 
     #[test]
     fn ignores_non_versioned_git_exclude() {
-        // `.git/info/exclude` is per-repo, non-versioned state; honouring it
-        // would make digests depend on local machine state, so it must not
-        // filter the walk.
+        // `.git/info/exclude` is per-repo, non-versioned state;
+        // honouring it would make digests depend on local machine state,
+        // so it must not filter the walk.
         let dir = TempDir::new().unwrap();
         dir.write_file(".git/info/exclude", b"secret.rs\n").unwrap();
         dir.write_file("secret.rs", b"fn s() {}").unwrap();

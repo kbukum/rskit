@@ -7,11 +7,10 @@ use serde_json::Value;
 
 /// Object-safe contract for a structured-text codec over the [`Value`] model.
 ///
-/// Implementations encode and decode one on-disk/text representation (TOML,
-/// JSON, …) to and from [`serde_json::Value`]. The trait is intentionally
-/// object-safe so a codec can be held as `Arc<dyn Codec>` and selected at
-/// runtime; type-driven conversions live in the free functions [`encode`] and
-/// [`decode`].
+/// Implementations encode and decode one on-disk/text representation (TOML, JSON, …) to
+/// and from [`serde_json::Value`]. The trait is intentionally object-safe
+/// so a codec can be held as `Arc<dyn Codec>` and selected at runtime;
+/// type-driven conversions live in the free functions [`encode`] and [`decode`].
 pub trait Codec: fmt::Debug + Send + Sync + 'static {
     /// A short identifier for diagnostics (for example `"toml"`).
     fn name(&self) -> &'static str;
@@ -20,16 +19,14 @@ pub trait Codec: fmt::Debug + Send + Sync + 'static {
     ///
     /// # Errors
     ///
-    /// Returns a typed [`AppError`] (cause preserved) when `value` cannot be
-    /// represented in this format.
+    /// Returns a typed [`AppError`] (cause preserved) when `value` cannot be represented in this format.
     fn encode_value(&self, value: &Value) -> AppResult<String>;
 
     /// Decode text into a value tree.
     ///
     /// # Errors
     ///
-    /// Returns a typed [`AppError`] (cause preserved) when `contents` is
-    /// malformed for this format.
+    /// Returns a typed [`AppError`] (cause preserved) when `contents` is malformed for this format.
     fn decode_value(&self, contents: &str) -> AppResult<Value>;
 }
 
@@ -39,8 +36,8 @@ pub trait Codec: fmt::Debug + Send + Sync + 'static {
 ///
 /// # Errors
 ///
-/// Returns a typed [`AppError`] (cause preserved) when the value cannot be
-/// converted to the value model or encoded by `codec`.
+/// Returns a typed [`AppError`] (cause preserved) when the value cannot be converted to the value model
+/// or encoded by `codec`.
 pub fn encode<T>(codec: &dyn Codec, value: &T) -> AppResult<String>
 where
     T: Serialize + ?Sized,
@@ -54,14 +51,13 @@ where
 
 /// Decode text into any [`DeserializeOwned`] type using `codec`.
 ///
-/// The text is decoded to the canonical [`Value`] tree, then deserialized into
-/// `T`. This honors `#[serde(deny_unknown_fields)]` on `T`.
+/// The text is decoded to the canonical [`Value`] tree, then deserialized into `T`.
+/// This honors `#[serde(deny_unknown_fields)]` on `T`.
 ///
 /// # Errors
 ///
 /// Returns a typed [`AppError`] (cause preserved) when `contents` is malformed
-/// or does not match `T` (including unknown fields under
-/// `deny_unknown_fields`).
+/// or does not match `T` (including unknown fields under `deny_unknown_fields`).
 pub fn decode<T>(codec: &dyn Codec, contents: &str) -> AppResult<T>
 where
     T: DeserializeOwned,
@@ -101,8 +97,8 @@ mod tests {
     fn encode_reports_unrepresentable_values() {
         use std::collections::HashMap;
 
-        // A map keyed by a non-string type cannot be represented in the JSON
-        // value model, so conversion fails before the codec is invoked.
+        // A map keyed by a non-string type cannot be represented in the JSON value model,
+        // so conversion fails before the codec is invoked.
         let map: HashMap<(i32, i32), i32> = HashMap::from([((1, 2), 3)]);
         let err = encode(&JsonCodec::default(), &map).unwrap_err();
 

@@ -1,11 +1,11 @@
 //! Bridges between [`Handler`] and [`rskit_provider`] traits.
 //!
 //! - `from_provider` wraps a `RequestResponse<I,O>` as a `Handler<I,O>`.
-//!   The handler ignores the event channel (the provider has no concept of
-//!   intermediate events) and returns the provider's result directly.
+//!   The handler ignores the event channel (the provider has no concept of intermediate events)
+//!   and returns the provider's result directly.
 //!
-//! - `as_provider` wraps an `Arc<dyn Handler<I,O>>` behind a `RequestResponse`
-//!   adapter that submits one task, awaits its result, and returns it.
+//! - `as_provider` wraps an `Arc<dyn Handler<I,O>>` behind a `RequestResponse` adapter that submits one task,
+//!   awaits its result, and returns it.
 
 use std::sync::Arc;
 
@@ -46,8 +46,7 @@ where
 
 /// Wrap a [`RequestResponse`] provider as a [`Handler`].
 ///
-/// The handler passes no intermediate events — the provider produces only a
-/// final result.
+/// The handler passes no intermediate events — the provider produces only a final result.
 pub fn from_provider<I, O, P>(provider: Arc<P>) -> impl Handler<I, O>
 where
     I: Send + 'static,
@@ -90,8 +89,8 @@ where
         let (emit_tx, mut emit_rx) = mpsc::channel::<Event<O>>(64);
         let cancel = CancellationToken::new();
 
-        // Drain events in background — callers using the provider interface
-        // have no event subscription.
+        // Drain events in background —
+        // callers using the provider interface have no event subscription.
         tokio::spawn(async move { while emit_rx.recv().await.is_some() {} });
 
         self.handler.handle(input, emit_tx, cancel).await

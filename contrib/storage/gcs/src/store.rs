@@ -28,8 +28,8 @@ pub struct Config {
     pub prefix: Option<String>,
     /// Use unsigned requests for public buckets.
     ///
-    /// Defaults to authenticated requests using Google application default
-    /// credentials. Set this only for explicitly public buckets.
+    /// Defaults to authenticated requests using Google application default credentials.
+    /// Set this only for explicitly public buckets.
     #[serde(default)]
     pub anonymous: bool,
 }

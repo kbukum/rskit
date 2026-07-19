@@ -14,8 +14,8 @@ use super::frame::{read_frame, write_frame};
 ///
 /// # Errors
 ///
-/// Returns a typed [`AppError`] (cause preserved) if encoding or the frame
-/// write fails, or the payload exceeds `max_bytes`.
+/// Returns a typed [`AppError`] (cause preserved) if encoding or the frame write fails,
+/// or the payload exceeds `max_bytes`.
 pub fn write_value<W, T>(
     writer: &mut W,
     codec: &dyn Codec,
@@ -36,8 +36,8 @@ where
 ///
 /// # Errors
 ///
-/// Returns a typed [`AppError`] (cause preserved) on a transport failure or a
-/// payload that does not decode into `T`.
+/// Returns a typed [`AppError`] (cause preserved) on a transport failure
+/// or a payload that does not decode into `T`.
 pub fn read_value<R, T>(reader: &mut R, codec: &dyn Codec, max_bytes: usize) -> AppResult<Option<T>>
 where
     R: Read,
@@ -51,13 +51,13 @@ where
 
 /// Decode an already-read frame `payload` into `T` through `codec`.
 ///
-/// Split from [`read_value`] so a caller that must inspect one frame as more
-/// than one shape can decode the same bytes without re-reading the stream.
+/// Split from [`read_value`]
+/// so a caller that must inspect one frame as more than one shape can decode the same bytes without re-reading the stream.
 ///
 /// # Errors
 ///
-/// Returns a typed [`AppError`] (cause preserved) if the payload is not valid
-/// UTF-8 or does not decode into `T`.
+/// Returns a typed [`AppError`] (cause preserved) if the payload is not valid UTF-8
+/// or does not decode into `T`.
 pub fn decode_value<T>(codec: &dyn Codec, payload: &[u8]) -> AppResult<T>
 where
     T: DeserializeOwned,

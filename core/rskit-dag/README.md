@@ -26,11 +26,14 @@ Directed acyclic graph task orchestrator with parallel execution.
 
 ### Cycle-detection guarantee
 
-`Dag::add_edge` rejects any edge that would create a cycle. `Dag::execute` also runs a topological-sort validation before scheduling work.
+`Dag::add_edge` rejects any edge that would create a cycle.
+`Dag::execute` also runs a topological-sort validation before scheduling work.
 
 ### Parallel sibling execution
 
-Nodes whose dependencies are satisfied are spawned as siblings and run concurrently. By default, parallelism is bounded by the host's available parallelism. Use `Dag::with_max_parallelism(n)` to set the cap; `n` is clamped to at least one.
+Nodes whose dependencies are satisfied are spawned as siblings and run concurrently. By default,
+parallelism is bounded by the host's available parallelism.
+Use `Dag::with_max_parallelism(n)` to set the cap; `n` is clamped to at least one.
 
 ## Usage
 

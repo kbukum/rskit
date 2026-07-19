@@ -42,8 +42,8 @@ impl LogsHandle {
 
 /// Build an injectable OpenTelemetry log provider without touching global state.
 ///
-/// When `otlp_endpoint` is `None`, the provider is built without exporters and
-/// acts as an explicit no-export pipeline.
+/// When `otlp_endpoint` is `None`, the provider is built without exporters
+/// and acts as an explicit no-export pipeline.
 pub fn init_logs(cfg: &LogsConfig) -> AppResult<LogsHandle> {
     use opentelemetry::KeyValue;
     use opentelemetry_sdk::{Resource, logs::SdkLoggerProvider};

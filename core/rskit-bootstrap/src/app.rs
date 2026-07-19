@@ -33,9 +33,8 @@ pub struct Stopped;
 
 /// Builder for [`App`].
 ///
-/// The builder is the composition root for configuration validation,
-/// component registration, dependency injection, provider registration, and
-/// lifecycle hook ordering.
+/// The builder is the composition root for configuration validation, component registration,
+/// dependency injection, provider registration, and lifecycle hook ordering.
 pub struct AppBuilder<C: AppConfig> {
     config: C,
     graceful_timeout: Duration,

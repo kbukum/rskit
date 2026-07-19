@@ -60,17 +60,16 @@ pub fn safe_join(root: &Path, rel_path: impl AsRef<Path>) -> Result<PathBuf, Saf
 
 /// Normalize a repo-relative path to a canonical form, rejecting traversal.
 ///
-/// Strips `.` (current-directory) components so semantically equal inputs
-/// (`a/b` and `a/./b`) share one canonical value, while rejecting absolute,
-/// `..`, prefixed, or empty paths. A path consisting solely of `.` components
-/// collapses to the repo root `.`. Use this for identity-bearing repo-relative
-/// paths (module roots, manifests) that must be canonical and confined before
-/// being joined to a root.
+/// Strips `.` (current-directory) components
+/// so semantically equal inputs (`a/b` and `a/./b`) share one canonical value,
+/// while rejecting absolute, `..`, prefixed, or empty paths.
+/// A path consisting solely of `.` components collapses to the repo root `.`.
+/// Use this for identity-bearing repo-relative paths (module roots, manifests) that must be canonical
+/// and confined before being joined to a root.
 ///
 /// # Errors
 ///
-/// Returns [`SafePathError`] when the path is empty, absolute, prefixed, or
-/// contains a `..` segment.
+/// Returns [`SafePathError`] when the path is empty, absolute, prefixed, or contains a `..` segment.
 pub fn normalize_repo_relative_path(path: impl AsRef<Path>) -> Result<PathBuf, SafePathError> {
     let path = path.as_ref();
     if path.as_os_str().is_empty() {
@@ -103,18 +102,19 @@ pub fn absolute(path: &Path) -> AppResult<PathBuf> {
         .map_err(|error| AppError::new(ErrorCode::Internal, format!("failed to read cwd: {error}")))
 }
 
-/// Search `start` and each of its ancestor directories for a regular file named
-/// `file_name`, returning the path to the nearest match.
+/// Search `start` and each of its ancestor directories for a regular file named `file_name`,
+/// returning the path to the nearest match.
 ///
-/// This is the canonical "find the nearest config file" ascent: a loader locates
-/// a project manifest or dotenv file by walking up from a starting directory
-/// (typically the current working directory) until the file is found or the
-/// filesystem root is reached. The first ancestor that contains a regular file
-/// named `file_name` wins, so a nested directory's file shadows one higher up.
+/// This is the canonical "find the nearest config file" ascent: a loader locates a project manifest
+/// or dotenv file by walking up from a starting directory (typically the current working directory) until the file is found
+/// or the filesystem root is reached.
+/// The first ancestor that contains a regular file named `file_name` wins,
+/// so a nested directory's file shadows one higher up.
 ///
-/// `file_name` is normally a bare filename; a multi-component relative path is
-/// joined to each ancestor as-is. Symlinks are followed (a symlink to a regular
-/// file matches). Returns `None` when no ancestor contains the file.
+/// `file_name` is normally a bare filename;
+/// a multi-component relative path is joined to each ancestor as-is.
+/// Symlinks are followed (a symlink to a regular file matches).
+/// Returns `None` when no ancestor contains the file.
 #[must_use]
 pub fn find_in_ancestors(start: &Path, file_name: impl AsRef<Path>) -> Option<PathBuf> {
     let file_name = file_name.as_ref();
@@ -140,23 +140,22 @@ pub fn canonicalize(path: &Path) -> AppResult<PathBuf> {
 
 /// Resolve `root` against a base directory when relative, then canonicalize it.
 ///
-/// Common when a config or manifest file declares a `root` that is either
-/// absolute or relative to the file's own directory. A relative `root` is joined
-/// to `base_dir`; an absolute `root` is used as-is. The result is canonicalized,
-/// so the returned path always exists (canonicalization resolves symlinks and
-/// requires the target to exist). When `root` is `None`, the current directory
-/// (`"."`) is resolved against `base_dir`.
+/// Common when a config or manifest file declares a `root` that is either absolute
+/// or relative to the file's own directory. A relative `root` is joined to `base_dir`;
+/// an absolute `root` is used as-is. The result is canonicalized,
+/// so the returned path always exists (canonicalization resolves symlinks and requires the target to exist).
+/// When `root` is `None`, the current directory (`"."`) is resolved against `base_dir`.
 ///
 /// `field` names the source field for error reporting.
 ///
-/// This resolves and canonicalizes but does not confine: it does not reject a
-/// `root` that escapes `base_dir`. Use [`confine_path`] or [`confine_existing_path`]
-/// when the resolved path must stay within a trust boundary.
+/// This resolves and canonicalizes but does not confine:
+/// it does not reject a `root` that escapes `base_dir`. Use [`confine_path`]
+/// or [`confine_existing_path`] when the resolved path must stay within a trust boundary.
 ///
 /// # Errors
 ///
-/// Returns [`AppError`] when the resolved path cannot be canonicalized (for
-/// example, it does not exist), with the underlying cause preserved.
+/// Returns [`AppError`] when the resolved path cannot be canonicalized (for example, it does not exist),
+/// with the underlying cause preserved.
 pub fn resolve_root_relative_to(
     field: &str,
     base_dir: &Path,
@@ -179,16 +178,15 @@ pub fn resolve_root_relative_to(
 
 /// Canonicalize an existing `path` and reject it when it resolves outside `root`.
 ///
-/// Use this for existing untrusted file paths before handing them to lower-level IO
-/// or subprocess APIs. Both `root` and `path` are resolved through the filesystem so
-/// symlink escapes are rejected. Relative `path` values are interpreted under `root`;
-/// absolute `path` values are accepted only when their canonical destination is still
-/// within `root`.
+/// Use this for existing untrusted file paths before handing them to lower-level IO or subprocess APIs.
+/// Both `root` and `path` are resolved through the filesystem so symlink escapes are rejected.
+/// Relative `path` values are interpreted under `root`;
+/// absolute `path` values are accepted only when their canonical destination is still within `root`.
 ///
 /// # Errors
 ///
-/// Returns an error when `root` or `path` cannot be canonicalized, when `root`
-/// is not a directory, or when `path` resolves outside the canonical root.
+/// Returns an error when `root` or `path` cannot be canonicalized, when `root` is not a directory,
+/// or when `path` resolves outside the canonical root.
 pub fn confine_existing_path(root: &Path, path: &Path) -> AppResult<PathBuf> {
     let root = canonicalize_directory_root(root)?;
     let candidate = if path.is_absolute() {
@@ -203,16 +201,17 @@ pub fn confine_existing_path(root: &Path, path: &Path) -> AppResult<PathBuf> {
 
 /// Resolve `path` under `root` and reject escapes, allowing the final path to be missing.
 ///
-/// This is intended for output paths. The nearest existing ancestor is canonicalized to catch
-/// symlink escapes before new directories or files are created. Relative `path` values are
-/// interpreted under `root`; absolute `path` values are accepted only when their resolved
-/// existing ancestor remains within `root`.
+/// This is intended for output paths.
+/// The nearest existing ancestor is canonicalized to catch symlink escapes before new directories
+/// or files are created. Relative `path` values are interpreted under `root`;
+/// absolute `path` values are accepted only when their resolved existing ancestor remains within `root`.
 ///
 /// # Errors
 ///
-/// Returns an error when `root` cannot be canonicalized, `root` is not a directory, no existing
-/// ancestor can be found, an existing ancestor resolves outside `root`, a missing suffix would be
-/// appended below a non-directory ancestor, or a missing path segment is unsafe.
+/// Returns an error when `root` cannot be canonicalized, `root` is not a directory,
+/// no existing ancestor can be found, an existing ancestor resolves outside `root`,
+/// a missing suffix would be appended below a non-directory ancestor,
+/// or a missing path segment is unsafe.
 pub fn confine_path(root: &Path, path: &Path) -> AppResult<PathBuf> {
     let root = canonicalize_directory_root(root)?;
     let candidate = if path.is_absolute() {

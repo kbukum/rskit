@@ -93,8 +93,7 @@ pub enum HdrFormat {
 /// SMPTE ST 2086 mastering display metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MasteringDisplay {
-    /// Display primaries as CIE 1931 chromaticity coordinates (x, y)
-    /// in the order: Green, Blue, Red.
+    /// Display primaries as CIE 1931 chromaticity coordinates (x, y) in the order: Green, Blue, Red.
     pub primaries: Option<[(f64, f64); 3]>,
     /// White point as CIE 1931 chromaticity (x, y).
     pub white_point: Option<(f64, f64)>,

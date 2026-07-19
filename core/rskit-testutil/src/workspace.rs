@@ -7,9 +7,9 @@ use rskit_fs::{TempDir, safe_join, sync_io::file};
 
 /// Managed temporary workspace for unit and integration tests.
 ///
-/// The workspace is deleted when dropped. Fixture operations are rooted at an
-/// explicit fixture directory and reject absolute or parent-traversing relative
-/// paths through `rskit-fs` safe path handling.
+/// The workspace is deleted when dropped.
+/// Fixture operations are rooted at an explicit fixture directory and reject absolute
+/// or parent-traversing relative paths through `rskit-fs` safe path handling.
 #[derive(Debug)]
 pub struct TestWorkspace {
     inner: TempDir,
@@ -90,8 +90,8 @@ impl TestWorkspace {
 
 /// Create a [`TestWorkspace`] whose fixture root is `<caller>/tests/fixtures`.
 ///
-/// The caller manifest directory is captured at macro expansion time, so this
-/// can be used from any crate that depends on `rskit-testutil`.
+/// The caller manifest directory is captured at macro expansion time,
+/// so this can be used from any crate that depends on `rskit-testutil`.
 #[macro_export]
 macro_rules! test_workspace {
     ($label:expr) => {

@@ -14,11 +14,10 @@ use crate::result::ToolResult;
 
 /// Create a tool from an async handler function.
 ///
-/// Generates JSON Schemas from the input and output type parameters
-/// using schemars, and wraps the handler in a type-erased `Callable`.
+/// Generates JSON Schemas from the input and output type parameters using schemars,
+/// and wraps the handler in a type-erased `Callable`.
 ///
-/// The handler receives a `Context` reference and deserialized input,
-/// returning a `ToolResult`.
+/// The handler receives a `Context` reference and deserialized input, returning a `ToolResult`.
 ///
 /// # Example
 ///

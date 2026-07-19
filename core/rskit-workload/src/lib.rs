@@ -1,15 +1,14 @@
 //! Provider-based workload orchestration.
 //!
-//! `rskit-workload` mirrors gokit's `workload` package: a provider-agnostic
-//! [`Manager`] contract for deploying and managing workloads (containers, pods,
-//! or any long-running unit), an explicit backend [`WorkloadRegistry`], and a
-//! lifecycle-managed [`WorkloadComponent`] that plugs into the shared component
-//! registry.
+//! `rskit-workload` mirrors gokit's `workload` package:
+//! a provider-agnostic [`Manager`] contract for deploying
+//! and managing workloads (containers, pods, or any long-running unit),
+//! an explicit backend [`WorkloadRegistry`],
+//! and a lifecycle-managed [`WorkloadComponent`] that plugs into the shared component registry.
 //!
-//! The crate is foundational: it owns the *concept and vocabulary* of workload
-//! orchestration. Concrete backends (Docker, Kubernetes, …) live in separate
-//! adapter crates and register a [`ManagerFactory`] into a [`WorkloadRegistry`];
-//! no backend is wired in implicitly.
+//! The crate is foundational: it owns the *concept and vocabulary* of workload orchestration.
+//! Concrete backends (Docker, Kubernetes, …) live in separate adapter crates
+//! and register a [`ManagerFactory`] into a [`WorkloadRegistry`]; no backend is wired in implicitly.
 //!
 //! # Example
 //!

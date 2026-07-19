@@ -1,9 +1,8 @@
 //! Typed in-process hooks and event bus primitives.
 //!
-//! Domain-specific event payloads implement [`Event`] and are registered with
-//! [`HookRegistry::on`] using the concrete event type. This keeps hook payloads
-//! typed at the public API boundary while allowing a single injected registry
-//! to coordinate multiple event types.
+//! Domain-specific event payloads implement [`Event`]
+//! and are registered with [`HookRegistry::on`] using the concrete event type.
+//! This keeps hook payloads typed at the public API boundary while allowing a single injected registry to coordinate multiple event types.
 
 #![warn(missing_docs)]
 

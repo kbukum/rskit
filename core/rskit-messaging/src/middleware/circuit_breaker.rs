@@ -33,10 +33,9 @@ impl Default for CircuitBreakerConfig {
 
 /// Create a circuit breaker middleware.
 ///
-/// Wraps the inner handler with a [`CircuitBreaker`] from
-/// `rskit-resilience`. When consecutive failures exceed the configured
-/// threshold the breaker opens and subsequent messages are rejected
-/// immediately until the timeout elapses.
+/// Wraps the inner handler with a [`CircuitBreaker`] from `rskit-resilience`.
+/// When consecutive failures exceed the configured threshold the breaker opens
+/// and subsequent messages are rejected immediately until the timeout elapses.
 ///
 /// # Errors
 ///

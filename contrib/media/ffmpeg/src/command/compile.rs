@@ -9,8 +9,9 @@ use super::{FfmpegCommand, FfmpegInput, SourceHints};
 impl FfmpegCommand {
     /// Compile a list of media operations into an FFmpeg command.
     ///
-    /// Uses default [`SourceHints`] (assumes audio present). For more accurate
-    /// compilation when stream info is known, use [`compile_with_hints`](Self::compile_with_hints).
+    /// Uses default [`SourceHints`] (assumes audio present).
+    /// For more accurate compilation when stream info is known,
+    /// use [`compile_with_hints`](Self::compile_with_hints).
     pub(crate) fn compile(
         source: &FileSource,
         ops: &[MediaOp],

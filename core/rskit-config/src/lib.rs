@@ -2,18 +2,15 @@
 //!
 //! # Example
 //!
-//! The end-to-end app example below exercises the `validate`-gated App API
-//! (`AppConfig`/`ServiceConfig`/`Validate`), so it only compiles when the
-//! default `validate` feature is enabled.
+//! The end-to-end app example below exercises the `validate`-gated App API (`AppConfig`/`ServiceConfig`/`Validate`),
+//! so it only compiles when the default `validate` feature is enabled.
 //!
 #![cfg_attr(feature = "validate", doc = "```no_run")]
 #![cfg_attr(not(feature = "validate"), doc = "```ignore")]
 //! use rskit_config::{AppConfig, ConfigLoader, SecretString, ServiceConfig};
-//! use rskit_validation::Validate;
-//! use serde::Deserialize;
+//! use rskit_validation::Validate; use serde::Deserialize;
 //!
-//! #[derive(Debug, Deserialize)]
-//! struct MyConfig {
+//! #[derive(Debug, Deserialize)] struct MyConfig {
 //!     #[serde(flatten)]
 //!     service: ServiceConfig,
 //!     grpc_port: u16,

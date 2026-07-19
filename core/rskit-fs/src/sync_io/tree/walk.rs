@@ -15,8 +15,8 @@ use super::{
 /// This helper uses blocking `std::fs` I/O. Use `tokio::task::spawn_blocking`
 /// or an equivalent blocking executor boundary when calling it from async code.
 ///
-/// The callback receives entries in pre-order. Symlinks are not followed unless
-/// [`WalkOptions::follow_symlinks`] is enabled.
+/// The callback receives entries in pre-order.
+/// Symlinks are not followed unless [`WalkOptions::follow_symlinks`] is enabled.
 pub fn walk_tree(
     root: &Path,
     options: WalkOptions,

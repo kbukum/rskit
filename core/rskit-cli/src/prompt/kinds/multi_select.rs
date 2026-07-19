@@ -1,5 +1,5 @@
-//! Multi-choice selection: a checkbox list in key-driven mode, a comma-separated
-//! numbered list in line-driven mode.
+//! Multi-choice selection: a checkbox list in key-driven mode,
+//! a comma-separated numbered list in line-driven mode.
 
 use rskit_errors::AppResult;
 

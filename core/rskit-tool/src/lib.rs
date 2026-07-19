@@ -1,7 +1,7 @@
 //! Tool definition, auto-wiring, registry and middleware for agentic systems.
 //!
-//! Provides a type-safe framework for defining tools that can be used in
-//! agentic systems, LLM function calling, or MCP servers.
+//! Provides a type-safe framework for defining tools that can be used in agentic systems,
+//! LLM function calling, or MCP servers.
 
 mod callable;
 pub mod context;

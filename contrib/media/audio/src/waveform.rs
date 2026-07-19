@@ -35,8 +35,8 @@ pub struct WaveformPoint {
 
 /// Generate a waveform from a decoded WAV.
 ///
-/// Returns one [`WaveformPoint`] per bin. If the WAV has fewer samples than
-/// bins the output is truncated.
+/// Returns one [`WaveformPoint`] per bin.
+/// If the WAV has fewer samples than bins the output is truncated.
 pub fn generate_waveform(wav: &WavReader, config: &WaveformConfig) -> Vec<WaveformPoint> {
     let samples: Vec<f32> = match config.channel {
         Some(ch) => wav.channel_samples(ch),

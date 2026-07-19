@@ -11,8 +11,8 @@ use crate::prompt::validate::Validator;
 
 /// Ask for freeform text, dispatching on mode and terminal capability.
 ///
-/// When `validator` rejects an answer the reason is shown and the question is
-/// re-asked; in non-interactive mode a rejected default is a typed error.
+/// When `validator` rejects an answer the reason is shown and the question is re-asked;
+/// in non-interactive mode a rejected default is a typed error.
 pub fn run(
     terminal: &mut (impl Terminal + ?Sized),
     style: Style,
@@ -42,9 +42,8 @@ pub fn run(
 
 /// Resolve a raw answer against the default and validator.
 ///
-/// Returns `Ok(None)` when the answer is empty and there is no default (a value
-/// is required), `Ok(Some(value))` when accepted, or `Err(reason)` when the
-/// validator rejects it.
+/// Returns `Ok(None)` when the answer is empty and there is no default (a value is required),
+/// `Ok(Some(value))` when accepted, or `Err(reason)` when the validator rejects it.
 fn accept(
     value: &str,
     default: Option<&str>,

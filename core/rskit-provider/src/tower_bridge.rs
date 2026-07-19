@@ -1,7 +1,7 @@
 //! Bridge between `tower::Service` and [`RequestResponse`].
 //!
-//! Wraps any `tower::Service<I, Response=O, Error=AppError>` so it can be
-//! used wherever `RequestResponse<I, O>` is expected.
+//! Wraps any `tower::Service<I, Response=O, Error=AppError>`
+//! so it can be used wherever `RequestResponse<I, O>` is expected.
 
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -14,8 +14,7 @@ use crate::traits::{Provider, RequestResponse};
 
 /// Wraps a `tower::Service` as a `RequestResponse` provider.
 ///
-/// The inner service is kept behind a `Mutex` because `tower::Service::call`
-/// requires `&mut self`.
+/// The inner service is kept behind a `Mutex` because `tower::Service::call` requires `&mut self`.
 pub struct TowerProvider<S, I, O> {
     name: &'static str,
     service: Arc<Mutex<S>>,

@@ -82,8 +82,7 @@ impl TempFile {
         Ok(new)
     }
 
-    /// Persist this temporary file to the given target path.
-    /// The file will no longer be auto-deleted.
+    /// Persist this temporary file to the given target path. The file will no longer be auto-deleted.
     pub fn persist(self, target: impl AsRef<Path>) -> AppResult<PathBuf> {
         let target = target.as_ref().to_path_buf();
         self.inner.persist(&target).map_err(|e| {

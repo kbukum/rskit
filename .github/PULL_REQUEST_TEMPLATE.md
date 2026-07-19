@@ -4,7 +4,8 @@
 
 ## Motivation
 
-<!-- Why is this change needed? What problem does it solve? --> <!-- Link to related issues: Fixes #123 or Closes #456 -->
+<!-- Why is this change needed? What problem does it solve? --> <!-- Link to related issues:
+Fixes #123 or Closes #456 -->
 
 ## Type of Change
 
@@ -28,9 +29,7 @@
 
 <!-- List key changes in bullet points -->
 
--
--
--
+- - -
 
 ## Testing
 
@@ -58,9 +57,9 @@ $ make test C=rskit-<name>
 
 ## Sibling Parity
 
-<!-- rskit mirrors gokit and pykit. If this change touches a public abstraction
-(error codes, Component lifecycle, Provider, Pipeline, etc.), confirm parity
-or link the corresponding sibling issue. -->
+<!-- rskit mirrors gokit and pykit.
+If this change touches a public abstraction (error codes, Component lifecycle, Provider, Pipeline, etc.),
+confirm parity or link the corresponding sibling issue. -->
 
 - [ ] Sibling-parity not required (internal change)
 - [ ] Sibling-parity tracked: gokit#___, pykit#___

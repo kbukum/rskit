@@ -1,7 +1,6 @@
 //! Criterion benchmarks comparing the registered image backend vs raw `image` crate.
 //!
-//! Run:  cargo bench -p rskit-media-image
-//! Report: target/criterion/report/index.html
+//! Run:  cargo bench -p rskit-media-image Report: target/criterion/report/index.html
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use image::{Rgb, RgbImage, imageops};

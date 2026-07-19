@@ -18,9 +18,8 @@ const RECORD_CHANNEL_CAPACITY: usize = 128;
 
 /// Adapts any [`DatasetWriter`] into an [`ItemSink`] that streams records to one dataset file.
 ///
-/// Records are forwarded over a bounded channel to a background writer task started in
-/// [`prepare`](ItemSink::prepare), preserving backpressure; [`finish`](ItemSink::finish) closes the
-/// channel and awaits the writer.
+/// Records are forwarded over a bounded channel to a background writer task started in [`prepare`](ItemSink::prepare),
+/// preserving backpressure; [`finish`](ItemSink::finish) closes the channel and awaits the writer.
 pub struct RecordSink {
     writer: Arc<dyn DatasetWriter>,
     path: PathBuf,

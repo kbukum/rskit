@@ -1,10 +1,10 @@
 //! [`Sgr`] — the color and attribute state carried by every grid cell.
 //!
-//! This isolates ANSI *Select Graphic Rendition* handling: parsing the `m`
-//! parameters a child emits into a compact per-cell state, and serializing a
-//! row of styled cells back into a minimal ANSI string for the renderer. Keeping
-//! it separate lets both the tile render and the scrollback-eviction render
-//! share one styling implementation.
+//! This isolates ANSI *Select Graphic Rendition* handling:
+//! parsing the `m` parameters a child emits into a compact per-cell state,
+//! and serializing a row of styled cells back into a minimal ANSI string for the renderer.
+//! Keeping it separate lets both the tile render
+//! and the scrollback-eviction render share one styling implementation.
 
 use super::grid::Cell;
 
@@ -36,8 +36,8 @@ pub(super) struct Sgr {
     reverse: bool,
 }
 
-/// The SGR reset sequence, emitted to close a rendered row only when styling is
-/// still active at its end (a row ending in default state needs no reset).
+/// The SGR reset sequence,
+/// emitted to close a rendered row only when styling is still active at its end (a row ending in default state needs no reset).
 const RESET: &str = "\x1b[0m";
 
 /// Narrow an SGR parameter to a byte, saturating out-of-range values.
@@ -46,10 +46,10 @@ fn byte(value: u16) -> u8 {
 }
 
 impl Sgr {
-    /// The rendition an erase leaves behind: a blank keeps the active
-    /// background (background-color erase, as VT/xterm do) while dropping the
-    /// foreground and attributes, so `EL`/`ED` under a colored background fill
-    /// with that background instead of the terminal default.
+    /// The rendition an erase leaves behind:
+    /// a blank keeps the active background (background-color erase, as VT/xterm do) while dropping the foreground
+    /// and attributes,
+    /// so `EL`/`ED` under a colored background fill with that background instead of the terminal default.
     pub(super) fn erased(self) -> Self {
         Self {
             bg: self.bg,
@@ -59,10 +59,10 @@ impl Sgr {
 
     /// Apply an SGR (`CSI … m`) parameter list, mutating this state in place.
     ///
-    /// Handles the 16-color, 256-color (`38;5;n` / `38:5:n`), and truecolor
-    /// (`38;2;r;g;b` / `38:2:r:g:b`) forms, in both the semicolon and colon
-    /// sub-parameter encodings, plus the common attribute toggles. An empty
-    /// parameter list resets to the default state, matching a bare `CSI m`.
+    /// Handles the 16-color, 256-color (`38;5;n` / `38:5:n`),
+    /// and truecolor (`38;2;r;g;b` / `38:2:r:g:b`) forms, in both the semicolon
+    /// and colon sub-parameter encodings, plus the common attribute toggles.
+    /// An empty parameter list resets to the default state, matching a bare `CSI m`.
     pub(super) fn apply(&mut self, params: &vte::Params) {
         if params.is_empty() {
             *self = Self::default();
@@ -106,8 +106,8 @@ impl Sgr {
         }
     }
 
-    /// The full `CSI … m` sequence that establishes this state from the reset
-    /// default, always leading with a `0` reset so it is self-contained.
+    /// The full `CSI … m` sequence that establishes this state from the reset default,
+    /// always leading with a `0` reset so it is self-contained.
     fn escape(&self) -> String {
         let mut codes: Vec<String> = vec!["0".to_string()];
         if self.bold {
@@ -131,8 +131,8 @@ impl Sgr {
     }
 }
 
-/// Append the SGR codes for one color to `codes`; `background` selects the
-/// 40/48/100 range over the 30/38/90 range. A default color emits nothing.
+/// Append the SGR codes for one color to `codes`;
+/// `background` selects the 40/48/100 range over the 30/38/90 range. A default color emits nothing.
 fn push_color(codes: &mut Vec<String>, color: Color, background: bool) {
     let (base, bright_base, extended) = if background {
         (40u16, 100u16, 48u16)
@@ -152,16 +152,15 @@ fn push_color(codes: &mut Vec<String>, color: Color, background: bool) {
     }
 }
 
-/// Decode a `38`/`48` extended-color argument in either the colon form (all
-/// sub-parameters inside `param`) or the semicolon form (mode and channels in
-/// following parameters, pulled from `iter`).
+/// Decode a `38`/`48` extended-color argument in either the colon form (all sub-parameters inside `param`)
+/// or the semicolon form (mode and channels in following parameters, pulled from `iter`).
 fn extended_color<'a>(param: &[u16], iter: &mut impl Iterator<Item = &'a [u16]>) -> Option<Color> {
     if param.len() > 1 {
         return match param.get(1)? {
             5 => param.get(2).map(|&index| Color::Indexed(byte(index))),
             2 => {
-                // Some encoders insert a color-space id (`38:2::r:g:b`), so take
-                // the final three sub-parameters as the RGB channels.
+                // Some encoders insert a color-space id (`38:2::r:g:b`),
+                // so take the final three sub-parameters as the RGB channels.
                 let len = param.len();
                 if len < 5 {
                     return None;
@@ -193,9 +192,9 @@ fn extended_color<'a>(param: &[u16], iter: &mut impl Iterator<Item = &'a [u16]>)
 /// Serialize one grid row into a styled string with minimal SGR transitions.
 ///
 /// Trailing default cells are trimmed so blank tail space carries no styling,
-/// an SGR sequence is emitted only where a cell's state differs from the
-/// previous one, and a single reset closes the row only when styling is still
-/// active at its end — a row that returns to default state needs no reset.
+/// an SGR sequence is emitted only where a cell's state differs from the previous one,
+/// and a single reset closes the row only when styling is still active at its end —
+/// a row that returns to default state needs no reset.
 pub(super) fn render_row(cells: &[Cell]) -> String {
     let end = cells
         .iter()

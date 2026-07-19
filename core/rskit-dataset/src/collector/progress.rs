@@ -8,8 +8,7 @@ use crate::target::PublishResult;
 /// Called **only from the main event loop** — never from worker tasks.
 /// This means implementations do NOT need interior mutability or `Sync`.
 ///
-/// All methods have default no-op implementations, so you only override
-/// what you need.
+/// All methods have default no-op implementations, so you only override what you need.
 pub trait ProgressCallback: Send {
     /// Called when a source starts streaming.
     fn on_source_start(&self, _index: usize, _name: &str, _max_items: Option<usize>) {}

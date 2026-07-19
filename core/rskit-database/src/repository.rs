@@ -6,8 +6,9 @@ use rskit_errors::AppResult;
 
 /// Generic repository interface for CRUD operations.
 ///
-/// Implement this trait for each entity type. Backend-specific repository
-/// helpers belong in adapter crates so the core contract remains vendor-neutral.
+/// Implement this trait for each entity type.
+/// Backend-specific repository helpers belong in adapter crates
+/// so the core contract remains vendor-neutral.
 #[async_trait]
 pub trait Repository<T, ID>: Send + Sync
 where

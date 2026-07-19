@@ -11,9 +11,8 @@ use super::{Chapter, KeyframeInfo, MediaMetadata, SilenceInterval};
 /// Inspect media files — extract metadata without processing.
 ///
 /// Backends implement this trait to provide media analysis capabilities.
-/// All methods except [`probe`](MediaProbe::probe) have default
-/// implementations that return "not supported" errors, so backends can
-/// implement only what they support.
+/// All methods except [`probe`](MediaProbe::probe) have default implementations that return "not supported" errors,
+/// so backends can implement only what they support.
 #[async_trait::async_trait]
 pub trait MediaProbe: Send + Sync {
     /// Probe a media file and return its metadata.
@@ -37,8 +36,8 @@ pub trait MediaProbe: Send + Sync {
 
     /// Generate a thumbnail sprite sheet (contact sheet).
     ///
-    /// Returns a single image containing a grid of thumbnails at regular
-    /// intervals. Useful for video scrubbing UIs.
+    /// Returns a single image containing a grid of thumbnails at regular intervals.
+    /// Useful for video scrubbing UIs.
     async fn sprite_sheet(
         &self,
         _source: &FileSource,
@@ -54,8 +53,8 @@ pub trait MediaProbe: Send + Sync {
 
     /// Detect scene changes and return their timestamps.
     ///
-    /// `threshold` is 0.0–1.0 where lower values detect more scenes.
-    /// Typical values: 0.3 (sensitive) to 0.5 (conservative).
+    /// `threshold` is 0.0–1.0 where lower values detect more scenes. Typical values:
+    /// 0.3 (sensitive) to 0.5 (conservative).
     async fn scene_detect(
         &self,
         _source: &FileSource,
@@ -95,8 +94,8 @@ pub trait MediaProbe: Send + Sync {
     /// Detect silence intervals in the audio stream.
     ///
     /// * `min_duration` — Minimum silence length to report (e.g., 0.5s).
-    /// * `noise_threshold_db` — dB threshold below which audio is considered
-    ///   silence. Typical: -30 to -50 dB.
+    /// * `noise_threshold_db` — dB threshold below which audio is considered silence. Typical:
+    ///   -30 to -50 dB.
     async fn silence_detect(
         &self,
         _source: &FileSource,

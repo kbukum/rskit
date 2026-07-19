@@ -11,16 +11,15 @@ use super::types::{ChunkBoundary, ChunkId, ChunkPlan, ChunkedOperation, Reassemb
 
 /// Strategy for splitting media into processable chunks.
 ///
-/// Implementations determine where to place chunk boundaries based on
-/// the media metadata and operation requirements.
+/// Implementations determine where to place chunk boundaries based on the media metadata
+/// and operation requirements.
 pub trait ChunkStrategy: Send + Sync {
     /// Human-readable name of this strategy.
     fn name(&self) -> &str;
 
     /// Plan chunk boundaries for the given media.
     ///
-    /// Returns a complete [`ChunkedOperation`] with ordered chunk plans
-    /// and reassembly instructions.
+    /// Returns a complete [`ChunkedOperation`] with ordered chunk plans and reassembly instructions.
     fn plan(
         &self,
         metadata: &MediaMetadata,
@@ -36,8 +35,8 @@ pub trait ChunkStrategy: Send + Sync {
 
 /// Split media at fixed duration intervals.
 ///
-/// Simple strategy that creates equal-sized chunks. Chunk boundaries
-/// are snapped to the nearest provided boundary point (keyframe/silence).
+/// Simple strategy that creates equal-sized chunks.
+/// Chunk boundaries are snapped to the nearest provided boundary point (keyframe/silence).
 pub struct FixedDurationStrategy {
     /// Target duration per chunk.
     pub chunk_duration: Duration,
@@ -194,8 +193,7 @@ impl ChunkStrategy for FixedDurationStrategy {
 
 /// Split media at keyframe boundaries (for lossless video splitting).
 ///
-/// Attempts to place chunk boundaries on keyframes to avoid re-encoding
-/// at split points.
+/// Attempts to place chunk boundaries on keyframes to avoid re-encoding at split points.
 pub struct KeyframeStrategy {
     /// Target chunk count (will adjust based on available keyframes).
     pub target_chunks: usize,
@@ -325,8 +323,7 @@ impl ChunkStrategy for KeyframeStrategy {
 
 /// Split audio at silence boundaries (for transcription chunking).
 ///
-/// Uses silence detection points as chunk boundaries to produce
-/// natural-sounding splits without cutting mid-sentence.
+/// Uses silence detection points as chunk boundaries to produce natural-sounding splits without cutting mid-sentence.
 pub struct SilenceStrategy {
     /// Target chunk duration.
     pub target_chunk_duration: Duration,

@@ -6,8 +6,10 @@ Media types, codec/format registry, pipeline builder, and processing traits.
 
 ## Features
 
-- `MediaPipeline` — lazy, chainable pipeline builder (extract, resize, crop, rotate, volume, speed, transcode, …)
-- `MediaExecutor` / `MediaProbe` traits — backends implement these (see `rskit-media-ffmpeg`, `rskit-media-image`)
+- `MediaPipeline` — lazy,
+  chainable pipeline builder (extract, resize, crop, rotate, volume, speed, transcode, …)
+- `MediaExecutor` / `MediaProbe` traits —
+  backends implement these (see `rskit-media-ffmpeg`, `rskit-media-image`)
 - Rich type vocabulary: `Codec`, `Format`, `Resolution`, `TimeRange`, `OutputConfig`, `Filter`
 - `Registry` — codec/format compatibility checking
 - `Progress` reporting with position, percentage, speed, and ETA

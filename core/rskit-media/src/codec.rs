@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 
 /// An open codec identifier.
 ///
-/// Use well-known constants from the submodules ([`video`], [`audio`],
-/// [`image`], [`subtitle`]) or create custom identifiers.
+/// Use well-known constants from the submodules ([`video`], [`audio`], [`image`], [`subtitle`])
+/// or create custom identifiers.
 ///
 /// # Examples
 ///
@@ -137,8 +137,8 @@ pub mod subtitle {
 
 /// Codec profile for quality/compatibility targeting.
 ///
-/// Profiles define feature subsets of a codec. Higher profiles enable more
-/// features but require more processing power and may reduce compatibility.
+/// Profiles define feature subsets of a codec. Higher profiles enable more features
+/// but require more processing power and may reduce compatibility.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CodecProfile {
     // ── H.264 / AVC ─────────────────────────────────────────────────
@@ -242,8 +242,8 @@ impl CodecProfile {
 
     /// Parse from ffprobe's `profile` field.
     ///
-    /// ffprobe returns human-readable strings like "High", "Main", "Baseline",
-    /// "High 10", "High 4:4:4 Predictive", etc.
+    /// ffprobe returns human-readable strings like "High", "Main", "Baseline", "High 10",
+    /// "High 4:4:4 Predictive", etc.
     pub fn from_ffprobe(s: &str) -> Option<Self> {
         // Normalize for matching
         let lower = s.to_lowercase();
@@ -289,8 +289,8 @@ impl CodecProfile {
 
 /// Codec level constraining resolution, bitrate, and framerate.
 ///
-/// Levels are codec-specific. For H.264/H.265 they map directly to the
-/// standard levels (e.g., 3.0, 4.1, 5.1).
+/// Levels are codec-specific.
+/// For H.264/H.265 they map directly to the standard levels (e.g., 3.0, 4.1, 5.1).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct CodecLevel(Arc<str>);
 

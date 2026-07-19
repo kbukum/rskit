@@ -4,10 +4,10 @@
 //!
 //! - [`table`] — aligned [`OutputTable`]s for row/column data.
 //! - [`keyvalue`] — [`OutputKV`] blocks for headers and summaries.
-//! - [`error`] — [`OutputFormat`], the shared [`ExitCode`] convention, and an
-//!   [`ErrorRenderer`] that turns an `AppError` into consistent text/JSON/YAML.
-//! - [`status`] — one-off [`StatusReporter`] feedback lines (success/warn/step/
-//!   heading) for guided, multi-step flows.
+//! - [`error`] — [`OutputFormat`], the shared [`ExitCode`] convention,
+//!   and an [`ErrorRenderer`] that turns an `AppError` into consistent text/JSON/YAML.
+//! - [`status`] — one-off [`StatusReporter`] feedback lines (success/warn/step/ heading) for guided,
+//!   multi-step flows.
 
 pub mod error;
 pub mod keyvalue;

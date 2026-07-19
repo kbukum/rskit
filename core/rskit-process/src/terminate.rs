@@ -1,11 +1,10 @@
-//! Shared blocking termination for the std-thread runners (`sync` and
-//! `persistent`).
+//! Shared blocking termination for the std-thread runners (`sync` and `persistent`).
 //!
-//! Both blocking runners terminate a child the same way — deliver a graceful
-//! signal, wait a grace period, then escalate to `SIGKILL` — and both target the
-//! process group when the signal policy asks for descendant termination. This
-//! module owns that escalation once, routing every signal through
-//! [`crate::process_group`] so there is a single place that talks to the OS.
+//! Both blocking runners terminate a child the same way — deliver a graceful signal,
+//! wait a grace period, then escalate to `SIGKILL` —
+//! and both target the process group when the signal policy asks for descendant termination.
+//! This module owns that escalation once, routing every signal through [`crate::process_group`]
+//! so there is a single place that talks to the OS.
 
 use std::process::{Child, ExitStatus};
 use std::thread;
@@ -21,11 +20,10 @@ pub(crate) const fn targets_group(signal: SignalPolicy) -> bool {
     signal.create_process_group && signal.terminate_descendants
 }
 
-/// Wait up to `grace` for `child` to exit, escalating to `SIGKILL` when it does
-/// not.
+/// Wait up to `grace` for `child` to exit, escalating to `SIGKILL` when it does not.
 ///
-/// Assumes a graceful signal was already delivered. Returns the exit status and
-/// whether escalation to `SIGKILL` was required.
+/// Assumes a graceful signal was already delivered. Returns the exit status
+/// and whether escalation to `SIGKILL` was required.
 pub(crate) fn reap_within(
     child: &mut Child,
     pid: u32,
@@ -48,8 +46,8 @@ pub(crate) fn reap_within(
     }
 }
 
-/// Deliver a graceful termination signal, then reap within `grace`, escalating
-/// to `SIGKILL` if the child outlives the grace period.
+/// Deliver a graceful termination signal, then reap within `grace`,
+/// escalating to `SIGKILL` if the child outlives the grace period.
 ///
 /// Returns the exit status and whether escalation to `SIGKILL` was required.
 pub(crate) fn terminate_and_reap(
@@ -101,8 +99,8 @@ mod tests {
         use std::io::Read;
 
         // Ignore SIGTERM so the grace period expires and SIGKILL is required.
-        // The child prints a marker only after the trap is installed, so the
-        // test cannot race SIGTERM ahead of the trap.
+        // The child prints a marker only after the trap is installed,
+        // so the test cannot race SIGTERM ahead of the trap.
         let mut child = Command::new("/bin/sh")
             .arg("-c")
             .arg("trap '' TERM; echo ready; while :; do sleep 1; done")

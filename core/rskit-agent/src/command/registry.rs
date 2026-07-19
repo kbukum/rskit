@@ -10,8 +10,7 @@ pub trait CommandHandler: Send + Sync {
     fn execute(&self, args: &str) -> Result<String, AppError>;
 }
 
-/// Blanket implementation: any `Fn(&str) -> Result<String, AppError>` can be
-/// used as a handler.
+/// Blanket implementation: any `Fn(&str) -> Result<String, AppError>` can be used as a handler.
 impl<F> CommandHandler for F
 where
     F: Fn(&str) -> Result<String, AppError> + Send + Sync,
@@ -91,8 +90,7 @@ impl CommandRegistry {
                 .is_some_and(|c| c.is_ascii_alphabetic())
     }
 
-    /// Parse input into `(command_name, args)`.  Returns `None` if the input
-    /// is not a slash command.
+    /// Parse input into `(command_name, args)`.  Returns `None` if the input is not a slash command.
     pub fn parse_command(input: &str) -> Option<(&str, &str)> {
         let trimmed = input.trim();
         if !Self::is_command(trimmed) {

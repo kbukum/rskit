@@ -72,8 +72,8 @@ where
 
 /// Write-only (Kafka publish, webhook, S3 put, log sink).
 ///
-/// Implementations must apply downstream backpressure or return a typed error
-/// instead of buffering without a bound.
+/// Implementations must apply downstream backpressure
+/// or return a typed error instead of buffering without a bound.
 pub trait Sink<I>: Provider
 where
     I: Send + 'static,

@@ -46,8 +46,8 @@ impl FfmpegProbe {
 
     /// Extract keyframe positions via `ffprobe -show_frames`.
     ///
-    /// Runs ffprobe with frame-level output on the video stream to find
-    /// all I-frames / IDR frames. Only keyframes are included in the result.
+    /// Runs ffprobe with frame-level output on the video stream to find all I-frames / IDR frames.
+    /// Only keyframes are included in the result.
     pub(crate) async fn extract_keyframes(
         &self,
         source: &FileSource,

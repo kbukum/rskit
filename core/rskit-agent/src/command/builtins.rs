@@ -4,11 +4,10 @@ use rskit_errors::AppError;
 
 use super::{Command, CommandRegistry};
 
-/// Register the default built-in commands: `/help`, `/clear`, `/model`,
-/// `/compact`.
+/// Register the default built-in commands: `/help`, `/clear`, `/model`, `/compact`.
 ///
-/// These handlers return descriptive strings; the caller is responsible for
-/// hooking them into actual agent behaviour.
+/// These handlers return descriptive strings;
+/// the caller is responsible for hooking them into actual agent behaviour.
 pub fn register_builtins(registry: &mut CommandRegistry) -> Result<(), AppError> {
     registry.register(Command {
         name: "help".to_string(),

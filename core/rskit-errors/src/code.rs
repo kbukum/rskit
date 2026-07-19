@@ -53,8 +53,8 @@ pub enum ErrorCode {
     ExternalService,
 
     // ── Lifecycle ─────────────────────────────────────────────────────
-    /// The operation was cancelled by the caller or system before completion
-    /// (e.g., context cancellation, client disconnect).
+    /// The operation was cancelled by the caller
+    /// or system before completion (e.g., context cancellation, client disconnect).
     Cancelled,
 }
 
@@ -124,13 +124,12 @@ impl ErrorCode {
         }
     }
 
-    /// Parse the stable string produced by [`as_str`](Self::as_str) back into a
-    /// code — the inverse of `as_str`.
+    /// Parse the stable string produced by [`as_str`](Self::as_str) back into a code —
+    /// the inverse of `as_str`.
     ///
-    /// Returns `None` for an unrecognised string (for example a code introduced
-    /// by a newer peer over a versioned wire), letting callers choose a typed
-    /// fallback rather than guessing. The mapping is kept in lock-step with
-    /// `as_str` by a parity test.
+    /// Returns `None` for an unrecognised string (for example a code introduced by a newer peer over a versioned wire),
+    /// letting callers choose a typed fallback rather than guessing.
+    /// The mapping is kept in lock-step with `as_str` by a parity test.
     #[must_use]
     pub fn from_wire(value: &str) -> Option<Self> {
         Some(match value {
@@ -317,9 +316,9 @@ mod tests {
 
     // ── serde ↔ as_str parity ──────────────────────────────────────────────
     //
-    // `as_str()` is hand-maintained alongside serde's wire encoding; this guards
-    // against the two drifting. Every variant must appear here so a newly added
-    // code fails the test until its string mapping is verified.
+    // `as_str()` is hand-maintained alongside serde's wire encoding;
+    // this guards against the two drifting. Every variant must appear here
+    // so a newly added code fails the test until its string mapping is verified.
     #[test]
     fn serde_repr_matches_as_str_for_all_variants() {
         const ALL: &[ErrorCode] = &[

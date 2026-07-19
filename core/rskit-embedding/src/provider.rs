@@ -7,9 +7,8 @@ use crate::{EmbedRequest, EmbedResponse};
 
 /// Trait for canonical multimodal embedding providers.
 ///
-/// Extends [`rskit_provider::RequestResponse<EmbedRequest, EmbedResponse>`] so
-/// any embedding provider can be plugged directly into pipeline / dag / worker
-/// flows.
+/// Extends [`rskit_provider::RequestResponse<EmbedRequest, EmbedResponse>`]
+/// so any embedding provider can be plugged directly into pipeline / dag / worker flows.
 #[async_trait]
 pub trait Provider: rskit_provider::RequestResponse<EmbedRequest, EmbedResponse> {
     /// Generate embeddings for one request.

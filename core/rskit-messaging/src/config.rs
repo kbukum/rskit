@@ -7,8 +7,8 @@ use serde::Deserialize;
 
 /// Configuration shared by all message-broker adapters.
 ///
-/// Concrete broker configs embed this struct so generic code can work through
-/// [`BrokerConfigExt`] without knowing adapter-specific fields.
+/// Concrete broker configs embed this struct
+/// so generic code can work through [`BrokerConfigExt`] without knowing adapter-specific fields.
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct BrokerConfig {
     /// Adapter name used for registry selection.
@@ -128,8 +128,7 @@ impl Default for BrokerConfig {
     }
 }
 
-/// Partial broker config used by adapter crates to apply only user-provided
-/// shared settings over adapter-specific defaults.
+/// Partial broker config used by adapter crates to apply only user-provided shared settings over adapter-specific defaults.
 #[doc(hidden)]
 #[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
 pub struct BrokerConfigOverrides {
@@ -208,10 +207,9 @@ impl BrokerConfigOverrides {
 
 /// Extension trait for broker-specific configurations.
 ///
-/// Every adapter configuration struct should implement this so that generic
-/// infrastructure (retry policies, health checks, service discovery) can
-/// access the common [`BrokerConfig`] and perform validation without knowing
-/// the concrete broker type.
+/// Every adapter configuration struct should implement this
+/// so that generic infrastructure (retry policies, health checks, service discovery) can access the common [`BrokerConfig`]
+/// and perform validation without knowing the concrete broker type.
 pub trait BrokerConfigExt {
     /// Access the shared broker configuration.
     fn base(&self) -> &BrokerConfig;

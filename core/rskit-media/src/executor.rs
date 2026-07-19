@@ -28,9 +28,8 @@ pub trait MediaExecutor: Send + Sync {
 
     /// Execute with cancellation support.
     ///
-    /// The default implementation ignores the token and delegates to
-    /// [`execute`](MediaExecutor::execute). Backends should override this
-    /// to honour cancellation (e.g. kill a subprocess).
+    /// The default implementation ignores the token and delegates to [`execute`](MediaExecutor::execute).
+    /// Backends should override this to honour cancellation (e.g. kill a subprocess).
     async fn execute_cancellable(
         &self,
         source: &FileSource,

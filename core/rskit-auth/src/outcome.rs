@@ -17,8 +17,8 @@ pub enum MissingCredentialPolicy {
 pub enum AuthOutcome<C> {
     /// Credentials were present and valid.
     Authenticated(C),
-    /// Credentials were absent and the middleware was configured with
-    /// [`MissingCredentialPolicy::AcceptMissing`].
+    /// Credentials were absent
+    /// and the middleware was configured with [`MissingCredentialPolicy::AcceptMissing`].
     Missing,
 }
 

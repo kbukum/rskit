@@ -25,4 +25,6 @@ let status = repo.status()?;
 # Ok::<(), rskit_git::AppError>(())
 ```
 
-The CLI backend builds commands with `ProcessSpec::new("git").args(...)` and sets `GIT_TERMINAL_PROMPT=0` to avoid interactive credential prompts in automation. Command failures preserve argv, exit code, stdout/stderr, and truncation metadata.
+The CLI backend builds commands with `ProcessSpec::new("git").args(...)`
+and sets `GIT_TERMINAL_PROMPT=0` to avoid interactive credential prompts in automation.
+Command failures preserve argv, exit code, stdout/stderr, and truncation metadata.

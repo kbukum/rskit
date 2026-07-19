@@ -1,6 +1,7 @@
 # rskit-llm-anthropic — Anthropic provider adapter
 
-`rskit-llm-anthropic` registers an Anthropic Claude chat provider for the canonical `rskit-llm` registry. The adapter keeps Anthropic-specific API details behind the shared `rskit-llm::Provider` contract.
+`rskit-llm-anthropic` registers an Anthropic Claude chat provider for the canonical `rskit-llm` registry.
+The adapter keeps Anthropic-specific API details behind the shared `rskit-llm::Provider` contract.
 
 ## Install
 
@@ -49,4 +50,5 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## When to use
 
-Use this adapter when an application should talk to Anthropic through the provider-agnostic `rskit-llm` API. Keep Anthropic API keys in secret configuration fields and pass them as `SecretString`.
+Use this adapter when an application should talk to Anthropic through the provider-agnostic `rskit-llm` API.
+Keep Anthropic API keys in secret configuration fields and pass them as `SecretString`.

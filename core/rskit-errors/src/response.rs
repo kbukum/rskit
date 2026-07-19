@@ -14,8 +14,8 @@ pub const fn type_base_uri() -> &'static str {
 
 // ── ProblemDetail ─────────────────────────────────────────────────────────────
 
-/// RFC 9457 Problem Details — the single canonical error response envelope for
-/// transport error responses in rskit.
+/// RFC 9457 Problem Details —
+/// the single canonical error response envelope for transport error responses in rskit.
 ///
 /// Serialises to:
 /// ```json

@@ -1,6 +1,12 @@
-//! Dataset collection framework — streaming sources, transforms, and schema validation on a generic collection engine.
+//! Dataset collection framework — streaming sources, transforms,
+//! and schema validation on a generic collection engine.
 //!
-//! One generic [`Collector<T>`] drives collection for every item family: it is generic over any [`DatasetItem`], so [`DataItem`] blobs and [`DatasetRecord`] rows share the same worker pool, cancellation, and event loop. The engine stays item-agnostic — it never writes items itself. Per-item materialization lives behind an injected [`ItemSink<T>`] ([`LocalBlobSink`] writes [`DataItem`] samples to `real/` and `ai/`), and per-item validation is a pluggable [`Validator<T>`] that callers opt into (for example a schema-backed validator for tabular records).
+//! One generic [`Collector<T>`] drives collection for every item family:
+//! it is generic over any [`DatasetItem`], so [`DataItem`] blobs
+//! and [`DatasetRecord`] rows share the same worker pool, cancellation, and event loop.
+//! The engine stays item-agnostic — it never writes items itself.
+//! Per-item materialization lives behind an injected [`ItemSink<T>`] ([`LocalBlobSink`] writes [`DataItem`] samples to `real/` and `ai/`),
+//! and per-item validation is a pluggable [`Validator<T>`] that callers opt into (for example a schema-backed validator for tabular records).
 
 #![warn(missing_docs)]
 

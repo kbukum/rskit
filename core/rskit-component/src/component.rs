@@ -7,9 +7,8 @@ use crate::Health;
 
 /// Lifecycle-managed infrastructure component.
 ///
-/// Implement this trait for databases, caches, servers, message brokers, and
-/// other infrastructure that must participate in ordered startup, shutdown, and
-/// health reporting.
+/// Implement this trait for databases, caches, servers, message brokers,
+/// and other infrastructure that must participate in ordered startup, shutdown, and health reporting.
 ///
 /// # Example
 ///
@@ -55,9 +54,8 @@ pub trait Component: Send + Sync {
 
     /// Start the component.
     ///
-    /// Implementations must be cancel-safe: if the future is dropped because a
-    /// registry timeout expires, a subsequent [`Component::stop`] call must be
-    /// able to clean up any partially initialized resources.
+    /// Implementations must be cancel-safe: if the future is dropped because a registry timeout expires,
+    /// a subsequent [`Component::stop`] call must be able to clean up any partially initialized resources.
     async fn start(&self) -> AppResult<()>;
 
     /// Stop the component gracefully.

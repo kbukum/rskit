@@ -1,6 +1,7 @@
 # rskit-cache
 
-Cache abstraction with built-in local stores, explicit store registry, and typed JSON store. Remote infrastructure adapters live in `contrib/` crates.
+Cache abstraction with built-in local stores, explicit store registry, and typed JSON store.
+Remote infrastructure adapters live in `contrib/` crates.
 
 ```rust,no_run
 use rskit_cache::{CacheConfig, CacheRegistry, MemoryConfig, TypedStore, register_memory};

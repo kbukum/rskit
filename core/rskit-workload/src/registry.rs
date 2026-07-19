@@ -1,8 +1,8 @@
 //! Explicit workload backend registry.
 //!
-//! Backends register a [`ManagerFactory`] under a provider name; the component
-//! selects one by [`crate::WorkloadConfig::provider`]. No backend is registered
-//! implicitly — construction is always explicit and injected.
+//! Backends register a [`ManagerFactory`] under a provider name;
+//! the component selects one by [`crate::WorkloadConfig::provider`].
+//! No backend is registered implicitly — construction is always explicit and injected.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -15,8 +15,8 @@ use crate::manager::Manager;
 
 /// Builds a [`Manager`] for a specific backend from workload config.
 ///
-/// Provider-specific settings are captured inside the factory itself, keeping
-/// the shared config free of opaque provider data.
+/// Provider-specific settings are captured inside the factory itself,
+/// keeping the shared config free of opaque provider data.
 #[async_trait]
 pub trait ManagerFactory: Send + Sync {
     /// Construct a manager for the given `config`.
@@ -40,8 +40,8 @@ impl WorkloadRegistry {
     ///
     /// # Errors
     ///
-    /// Returns [`ErrorCode::InvalidInput`] for an empty name and
-    /// [`ErrorCode::AlreadyExists`] when the name is already registered.
+    /// Returns [`ErrorCode::InvalidInput`] for an empty name
+    /// and [`ErrorCode::AlreadyExists`] when the name is already registered.
     pub fn register(
         &mut self,
         name: impl Into<String>,
@@ -66,8 +66,7 @@ impl WorkloadRegistry {
 
     /// Return `true` when a provider is registered under `name`.
     ///
-    /// The name is trimmed before lookup, matching [`register`](Self::register)
-    /// and [`build`](Self::build).
+    /// The name is trimmed before lookup, matching [`register`](Self::register) and [`build`](Self::build).
     #[must_use]
     pub fn contains(&self, name: &str) -> bool {
         self.factories.contains_key(name.trim())
@@ -96,8 +95,8 @@ impl WorkloadRegistry {
     /// # Errors
     ///
     /// Returns [`ErrorCode::MissingField`] when the configured provider is empty
-    /// and [`ErrorCode::NotFound`] when it is not registered; otherwise the
-    /// factory's own error is propagated.
+    /// and [`ErrorCode::NotFound`] when it is not registered;
+    /// otherwise the factory's own error is propagated.
     pub async fn build(&self, config: &WorkloadConfig) -> AppResult<Arc<dyn Manager>> {
         config.validate()?;
         let provider = config.provider.trim();

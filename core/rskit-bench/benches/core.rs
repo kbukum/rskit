@@ -26,8 +26,8 @@ fn bench_btree_map_get(c: &mut Criterion) {
     });
 }
 
-// `rskit-errors` is a hot crate: an `AppError` is constructed on every failure
-// path. These benches make construction and response conversion measurable.
+// `rskit-errors` is a hot crate: an `AppError` is constructed on every failure path.
+// These benches make construction and response conversion measurable.
 fn bench_app_error_new(c: &mut Criterion) {
     use rskit_errors::{AppError, ErrorCode};
     c.bench_function("app_error_new", |b| {

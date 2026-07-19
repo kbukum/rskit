@@ -1,7 +1,6 @@
 //! Adapter factory: bridges Gemini [`Config`] → [`Provider`] via rskit-httpclient.
 //!
-//! Gemini authenticates via the `x-goog-api-key` HTTP header (never via
-//! query string).
+//! Gemini authenticates via the `x-goog-api-key` HTTP header (never via query string).
 
 use async_trait::async_trait;
 use rskit_component::{Component, Health};
@@ -24,8 +23,7 @@ struct GeminiAdapter {
     runner: ChatRunner,
 }
 
-/// Create a new [`Provider`] wired to Gemini with API key via the
-/// `x-goog-api-key` request header.
+/// Create a new [`Provider`] wired to Gemini with API key via the `x-goog-api-key` request header.
 fn new_adapter(cfg: &Config) -> AppResult<GeminiAdapter> {
     let http_cfg = HttpClientConfig::new()
         .with_base_url(&cfg.base_url)

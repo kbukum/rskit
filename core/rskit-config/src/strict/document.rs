@@ -12,22 +12,20 @@ const MAX_CONFIG_BYTES: u64 = 1024 * 1024;
 
 /// Strict, layered document loader.
 ///
-/// Loads a canonical config file, optionally merging in include files, and
-/// deserializes into a typed schema while honoring `#[serde(deny_unknown_fields)]`.
-/// Unlike the [`crate::ConfigLoader`] pipeline (built on the `config` crate's
-/// value tree), this path decodes through [`rskit_codec`] into the canonical
-/// [`Value`] tree and deserializes from it, so serde's unknown-field rejection
-/// fires and dynamic-keyed sections can be retained verbatim as
-/// [`crate::strict::RawValue`] for downstream parsing.
+/// Loads a canonical config file, optionally merging in include files,
+/// and deserializes into a typed schema while honoring `#[serde(deny_unknown_fields)]`.
+/// Unlike the [`crate::ConfigLoader`] pipeline (built on the `config` crate's value tree),
+/// this path decodes through [`rskit_codec`] into the canonical [`Value`] tree
+/// and deserializes from it, so serde's unknown-field rejection fires
+/// and dynamic-keyed sections can be retained verbatim as [`crate::strict::RawValue`] for downstream parsing.
 ///
-/// The on-disk format is pluggable via [`Codec`]: TOML is the built-in default
-/// ([`StrictLoader::new`]); any other codec (JSON, …) drops in through
-/// [`StrictLoader::with_codec`].
+/// The on-disk format is pluggable via [`Codec`]: TOML is the built-in default ([`StrictLoader::new`]);
+/// any other codec (JSON, …) drops in through [`StrictLoader::with_codec`].
 ///
-/// Include files are treated as defaults: the canonical file's values win over
-/// includes, and later includes win over earlier ones. Array-of-tables sections
-/// registered as identity-keyed (see [`IncludeMerge`]) are concatenated and
-/// hard-error on duplicate identity.
+/// Include files are treated as defaults: the canonical file's values win over includes,
+/// and later includes win over earlier ones.
+/// Array-of-tables sections registered as identity-keyed (see [`IncludeMerge`]) are concatenated
+/// and hard-error on duplicate identity.
 #[derive(Debug)]
 pub struct StrictLoader {
     path: PathBuf,
@@ -74,8 +72,8 @@ impl StrictLoader {
 
     /// Set the [`Codec`] used to decode the canonical file and every include.
     ///
-    /// Defaults to [`TomlCodec`]. Use this to load a strict JSON document, or any
-    /// user-supplied format, without changing the loader.
+    /// Defaults to [`TomlCodec`]. Use this to load a strict JSON document, or any user-supplied format,
+    /// without changing the loader.
     #[must_use]
     pub fn with_codec(mut self, codec: Arc<dyn Codec>) -> Self {
         self.codec = codec;
@@ -100,21 +98,19 @@ impl StrictLoader {
 
     /// Load and merge includes into a single raw value tree (no typed schema).
     ///
-    /// Validates identity-keyed sections but performs no schema typing, so
-    /// callers can inspect or hand off dynamic-keyed subtrees verbatim.
+    /// Validates identity-keyed sections but performs no schema typing, so callers can inspect
+    /// or hand off dynamic-keyed subtrees verbatim.
     pub fn load_raw(&self) -> AppResult<Value> {
         let canonical = self.read(&self.path)?;
         self.assemble(self.includes.iter().map(PathBuf::as_path), canonical)
     }
 
-    /// Load and deserialize into `T`, resolving include paths from the canonical
-    /// document itself.
+    /// Load and deserialize into `T`, resolving include paths from the canonical document itself.
     ///
-    /// Reads the canonical file exactly once, passes its decoded value tree to
-    /// `resolve` to obtain the include list (for configs that declare their own
-    /// includes, e.g. `[toven].include = [...]`), then merges those includes
-    /// beneath the canonical document. Any statically-registered
-    /// [`with_includes`](Self::with_includes) are ignored by this entry point.
+    /// Reads the canonical file exactly once,
+    /// passes its decoded value tree to `resolve` to obtain the include list (for configs that declare their own includes, e.g. `[toven].include = [...]`),
+    /// then merges those includes beneath the canonical document.
+    /// Any statically-registered [`with_includes`](Self::with_includes) are ignored by this entry point.
     ///
     /// Honors `#[serde(deny_unknown_fields)]`.
     pub fn load_resolving_includes<T, F>(&self, resolve: F) -> AppResult<T>
@@ -133,8 +129,8 @@ impl StrictLoader {
 
     /// Raw counterpart of [`load_resolving_includes`](Self::load_resolving_includes).
     ///
-    /// Reads the canonical file once, derives the include list from it via
-    /// `resolve`, and merges the includes beneath the canonical document.
+    /// Reads the canonical file once, derives the include list from it via `resolve`,
+    /// and merges the includes beneath the canonical document.
     pub fn load_raw_resolving_includes<F>(&self, resolve: F) -> AppResult<Value>
     where
         F: FnOnce(&Value) -> AppResult<Vec<PathBuf>>,

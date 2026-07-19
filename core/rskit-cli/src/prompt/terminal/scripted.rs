@@ -1,12 +1,11 @@
 //! A deterministic in-memory [`Terminal`] for tests and examples.
 //!
-//! `ScriptedTerminal` is a first-class injectable double, not a test-only escape
-//! hatch: it plays a canned sequence of [`Key`]s or lines and records everything
-//! written, so both the key-driven and line-driven prompt paths can be exercised
-//! without a real terminal. Choose the interaction model with
-//! [`ScriptedTerminal::key_driven`] or [`ScriptedTerminal::line_driven`], queue
-//! input with the `with_*` builders, then read back rendered output via
-//! [`ScriptedTerminal::output`].
+//! `ScriptedTerminal` is a first-class injectable double, not a test-only escape hatch:
+//! it plays a canned sequence of [`Key`]s or lines and records everything written,
+//! so both the key-driven and line-driven prompt paths can be exercised without a real terminal.
+//! Choose the interaction model with [`ScriptedTerminal::key_driven`]
+//! or [`ScriptedTerminal::line_driven`], queue input with the `with_*` builders,
+//! then read back rendered output via [`ScriptedTerminal::output`].
 
 use std::collections::VecDeque;
 

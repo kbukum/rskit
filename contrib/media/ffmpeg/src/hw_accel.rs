@@ -51,8 +51,8 @@ mod tests {
     #[test]
     fn none_emits_hwaccel_none_flag() {
         // HwAccel::None must emit "-hwaccel none" to explicitly force software decoding.
-        // Without this, FFmpeg may auto-select hardware decoders (e.g., VideoToolbox for AV1
-        // on macOS) even when the intent is a pure software fallback.
+        // Without this,
+        // FFmpeg may auto-select hardware decoders (e.g., VideoToolbox for AV1 on macOS) even when the intent is a pure software fallback.
         assert_eq!(HwAccel::None.ffmpeg_arg(), Some("none"));
     }
 

@@ -1,8 +1,8 @@
 //! Tower middleware for header-only bearer-token authentication.
 //!
-//! The layer rejects missing credentials unless [`BearerAuthLayer::accept_missing`]
-//! is selected explicitly. Rejections include a neutral `WWW-Authenticate:
-//! Bearer` challenge; this crate does not hard-code an application realm.
+//! The layer rejects missing credentials unless [`BearerAuthLayer::accept_missing`] is selected explicitly.
+//! Rejections include a neutral `WWW-Authenticate: Bearer` challenge;
+//! this crate does not hard-code an application realm.
 
 use std::{future::Future, marker::PhantomData, pin::Pin, sync::Arc};
 
@@ -14,10 +14,9 @@ use crate::{AuthClaims, AuthOutcome, MissingCredentialPolicy, traits::TokenValid
 
 /// Tower layer that validates `Authorization: Bearer <token>` headers.
 ///
-/// The layer stores successful claims in request extensions as
-/// [`AuthClaims<C>`](crate::AuthClaims) and
-/// [`AuthOutcome<C>`](crate::AuthOutcome). Invalid or rejected requests receive
-/// `401 Unauthorized` with `WWW-Authenticate: Bearer`.
+/// The layer stores successful claims in request extensions as [`AuthClaims<C>`](crate::AuthClaims)
+/// and [`AuthOutcome<C>`](crate::AuthOutcome). Invalid
+/// or rejected requests receive `401 Unauthorized` with `WWW-Authenticate: Bearer`.
 #[derive(Clone)]
 pub struct BearerAuthLayer<V, C> {
     validator: Arc<V>,

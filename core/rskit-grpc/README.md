@@ -26,8 +26,13 @@ let client = GrpcChannel::new(GrpcClientConfig::new("localhost:50051"));
 
 ## Discovery reconnect contract
 
-`DiscoveryChannel` only advances its cached target after a connection succeeds. Failed background reconnect attempts leave the previously connected target in place so watcher/poll updates keep retrying the same discovered endpoint until it becomes reachable.
+`DiscoveryChannel` only advances its cached target after a connection succeeds.
+Failed background reconnect attempts leave the previously connected target in place
+so watcher/poll updates keep retrying the same discovered endpoint until it becomes reachable.
 
 ## TLS policy
 
-Client TLS uses `rskit_security::TlsConfig` so CA bundles, server-name overrides, and client certificate/key material share the same shape as other transports. `skip_verify` is rejected for gRPC clients. tonic/rustls provides the protocol defaults: TLS 1.3 preferred, TLS 1.2 minimum, and no legacy protocols.
+Client TLS uses `rskit_security::TlsConfig` so CA bundles, server-name overrides,
+and client certificate/key material share the same shape as other transports.
+`skip_verify` is rejected for gRPC clients. tonic/rustls provides the protocol defaults:
+TLS 1.3 preferred, TLS 1.2 minimum, and no legacy protocols.

@@ -65,8 +65,7 @@ struct ConsulService {
 
 /// Consul-backed service discovery.
 ///
-/// Uses the Consul HTTP API v1 for service registration and health-based
-/// discovery.
+/// Uses the Consul HTTP API v1 for service registration and health-based discovery.
 pub struct ConsulDiscovery {
     client: HttpClient,
     /// Owns spawned watch tasks so they are cancelled and drained on drop.
@@ -103,8 +102,7 @@ impl ConsulDiscovery {
 
 impl Drop for ConsulDiscovery {
     fn drop(&mut self) {
-        // Stop long-poll watch tasks promptly rather than letting them block
-        // on Consul until the next observed change.
+        // Stop long-poll watch tasks promptly rather than letting them block on Consul until the next observed change.
         self.watch_tasks.lock().cancel_all();
     }
 }
@@ -214,11 +212,10 @@ const DEFAULT_POLL_INTERVAL: Duration = Duration::from_secs(5);
 
 /// Consul blocking-query based watcher.
 ///
-/// Uses the `?index=` long-poll parameter on the health endpoint.  When the
-/// Consul index doesn't advance within a cycle the response is treated as
-/// "no change" and no message is emitted.  If blocking queries are not
-/// supported (e.g. mock server), the implementation falls back to simple
-/// polling with change-detection.
+/// Uses the `?index=` long-poll parameter on the health endpoint.
+/// When the Consul index doesn't advance within a cycle the response is treated as "no change"
+/// and no message is emitted. If blocking queries are not supported (e.g. mock server),
+/// the implementation falls back to simple polling with change-detection.
 #[async_trait]
 impl Watcher for ConsulDiscovery {
     async fn watch(&self, service: &str) -> AppResult<mpsc::Receiver<Vec<ServiceInstance>>> {

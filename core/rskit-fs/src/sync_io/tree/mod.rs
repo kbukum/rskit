@@ -1,8 +1,7 @@
 //! File tree helpers.
 //!
-//! These helpers use blocking `std::fs` I/O. When calling them from async
-//! contexts, run them through `tokio::task::spawn_blocking` or an equivalent
-//! blocking executor boundary.
+//! These helpers use blocking `std::fs` I/O. When calling them from async contexts,
+//! run them through `tokio::task::spawn_blocking` or an equivalent blocking executor boundary.
 
 mod copy;
 mod ignore_walk;

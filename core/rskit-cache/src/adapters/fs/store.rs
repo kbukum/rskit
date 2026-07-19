@@ -76,8 +76,8 @@ impl FileCache {
     /// Remove expired cache entries, checking at most `max_entries` files.
     ///
     /// Reads stay non-destructive to avoid unlinking a concurrent fresh write.
-    /// Call this method from application-owned maintenance code when filesystem
-    /// cache entries use TTLs and the cache directory needs bounded cleanup.
+    /// Call this method from application-owned maintenance code when filesystem cache entries use TTLs
+    /// and the cache directory needs bounded cleanup.
     pub async fn cleanup_expired(&self, max_entries: usize) -> AppResult<usize> {
         if max_entries == 0 {
             return Ok(0);

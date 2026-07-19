@@ -217,8 +217,8 @@ async fn test_rparallel_propagates_errors() {
 
 /// `rfan_out` applies N functions to each item and collects results in order.
 ///
-/// We use non-capturing closures (which are Copy + Clone) so the
-/// `F: Clone` bound on `rfan_out` is satisfied without unstable features.
+/// We use non-capturing closures (which are Copy + Clone)
+/// so the `F: Clone` bound on `rfan_out` is satisfied without unstable features.
 #[tokio::test]
 async fn test_rfan_out_applies_all_functions() {
     // Non-capturing closures are Copy, so they satisfy Clone.
@@ -341,9 +341,8 @@ async fn test_rdebounce_emits_last_item() {
 
 // ── Rate: rdebounce_batch ─────────────────────────────────────────────
 
-/// A burst of items with no quiet gap collapses into one trailing-edge
-/// batch, in arrival order. Delays live inside the source so `start_paused`
-/// auto-advances the clock deterministically.
+/// A burst of items with no quiet gap collapses into one trailing-edge batch, in arrival order.
+/// Delays live inside the source so `start_paused` auto-advances the clock deterministically.
 #[tokio::test(start_paused = true)]
 async fn test_rdebounce_batch_collapses_a_burst() {
     let source = async_stream::stream! {
@@ -360,8 +359,7 @@ async fn test_rdebounce_batch_collapses_a_burst() {
     assert_eq!(result, vec![vec![1u32, 2, 3]]);
 }
 
-/// Items separated by a quiet gap wider than the window land in separate
-/// batches.
+/// Items separated by a quiet gap wider than the window land in separate batches.
 #[tokio::test(start_paused = true)]
 async fn test_rdebounce_batch_splits_separate_windows() {
     let source = async_stream::stream! {
@@ -377,8 +375,8 @@ async fn test_rdebounce_batch_splits_separate_windows() {
     assert_eq!(result, vec![vec![1u32], vec![2u32]]);
 }
 
-/// The source closing before the quiet window elapses still flushes the
-/// pending, not-yet-emitted window.
+/// The source closing before the quiet window elapses still flushes the pending,
+/// not-yet-emitted window.
 #[tokio::test(start_paused = true)]
 async fn test_rdebounce_batch_flushes_pending_on_close() {
     let source = async_stream::stream! { yield 7u32; };
@@ -389,12 +387,12 @@ async fn test_rdebounce_batch_flushes_pending_on_close() {
     assert_eq!(result, vec![vec![7u32]]);
 }
 
-/// The `max_items` safety cap force-flushes mid-burst so a sustained input
-/// rate faster than the quiet window cannot grow the buffer without bound.
+/// The `max_items` safety cap force-flushes mid-burst
+/// so a sustained input rate faster than the quiet window cannot grow the buffer without bound.
 #[tokio::test(start_paused = true)]
 async fn test_rdebounce_batch_force_flushes_at_cap() {
-    // A burst of 5 items with no quiet gap: a cap of 2 must split it into
-    // [1,2], [3,4], then flush the trailing [5] on close.
+    // A burst of 5 items with no quiet gap: a cap of 2 must split it into [1,2], [3,4],
+    // then flush the trailing [5] on close.
     let source = async_stream::stream! {
         for value in 1u32..=5 {
             yield value;
@@ -407,8 +405,8 @@ async fn test_rdebounce_batch_force_flushes_at_cap() {
     assert_eq!(result, vec![vec![1u32, 2], vec![3u32, 4], vec![5u32]]);
 }
 
-/// Dropping the consumer (the debounced stream) tears the pipeline down: it
-/// owns the source, so the source receiver is dropped and further sends fail.
+/// Dropping the consumer (the debounced stream) tears the pipeline down: it owns the source,
+/// so the source receiver is dropped and further sends fail.
 #[tokio::test]
 async fn test_rdebounce_batch_consumer_drop_ends_pipeline() {
     let (tx, rx) = tokio::sync::mpsc::channel::<u32>(16);
@@ -439,17 +437,16 @@ async fn test_rthrottle_drops_fast_items() {
     tokio::time::advance(Duration::from_millis(600)).await;
     let result = handle.await.unwrap();
 
-    // The first item is always emitted; subsequent items are dropped
-    // because the stream is synchronous and all items arrive "instantly"
-    // before the interval can pass.
+    // The first item is always emitted;
+    // subsequent items are dropped because the stream is synchronous
+    // and all items arrive "instantly" before the interval can pass.
     assert!(!result.is_empty());
     assert_eq!(result[0], 1u32);
     // All items after the first should have been throttled away.
     assert!(result.len() < 5);
 }
 
-/// `rthrottle` with an extreme interval still emits the first item without
-/// panicking (guards against an underflowing `now - interval` seed).
+/// `rthrottle` with an extreme interval still emits the first item without panicking (guards against an underflowing `now - interval` seed).
 #[tokio::test]
 async fn test_rthrottle_huge_interval_emits_first_without_panic() {
     tokio::time::pause();

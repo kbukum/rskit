@@ -1,10 +1,10 @@
 //! Shared choice/frame rendering for both line-driven and key-driven prompts.
 //!
-//! One place builds the styled strings a prompt shows, so the numbered list a
-//! [`LineTerminal`](super::terminal::LineTerminal) prints and the live frame a
-//! `RichTerminal` redraws stay visually
-//! consistent. Rendering only *builds* strings — writing and cursor movement are
-//! the terminal's job — so these helpers are pure and unit-testable.
+//! One place builds the styled strings a prompt shows,
+//! so the numbered list a [`LineTerminal`](super::terminal::LineTerminal) prints
+//! and the live frame a `RichTerminal` redraws stay visually consistent.
+//! Rendering only *builds* strings — writing and cursor movement are the terminal's job —
+//! so these helpers are pure and unit-testable.
 
 use crate::theme::{Glyphs, Palette};
 
@@ -12,8 +12,7 @@ use super::choice::Choice;
 
 use std::collections::HashSet;
 
-/// Styling context shared by every rendered frame: color [`Palette`] and the
-/// resolved [`Glyphs`] set.
+/// Styling context shared by every rendered frame: color [`Palette`] and the resolved [`Glyphs`] set.
 #[derive(Debug, Clone, Copy)]
 pub struct Style {
     palette: Palette,
@@ -97,13 +96,12 @@ pub fn numbered_rows(
         .collect()
 }
 
-/// Build the live frame a key-driven terminal redraws as focus and selection
-/// change.
+/// Build the live frame a key-driven terminal redraws as focus and selection change.
 ///
-/// `cursor` is the focused row. For single-select pass `selected` as `None` and
-/// each row shows a radio (`Glyphs::radio_on`/`radio_off`); for multi-select pass
-/// the chosen indices and each row shows a checkbox (`[x]`/`[ ]`). The focused row
-/// is marked with the pointer glyph and rendered bold.
+/// `cursor` is the focused row. For single-select pass `selected` as `None`
+/// and each row shows a radio (`Glyphs::radio_on`/`radio_off`);
+/// for multi-select pass the chosen indices and each row shows a checkbox (`[x]`/`[ ]`).
+/// The focused row is marked with the pointer glyph and rendered bold.
 #[must_use]
 pub fn frame_rows(
     style: Style,
@@ -114,8 +112,8 @@ pub fn frame_rows(
 ) -> Vec<String> {
     let multi = selected.is_some();
     let glyphs = style.glyphs();
-    // Precompute selected membership once so redraws stay O(n) rather than
-    // O(n^2) over the choice list (key-driven prompts redraw on every keypress).
+    // Precompute selected membership once
+    // so redraws stay O(n) rather than O(n^2) over the choice list (key-driven prompts redraw on every keypress).
     let chosen: HashSet<usize> = selected
         .map(|s| s.iter().copied().collect())
         .unwrap_or_default();
@@ -168,8 +166,7 @@ mod tests {
 
     #[test]
     fn numbered_rows_mark_a_non_recommended_default() {
-        // A single-select fallback default that is not the recommended choice is
-        // annotated `(default)` rather than `(recommended)`.
+        // A single-select fallback default that is not the recommended choice is annotated `(default)` rather than `(recommended)`.
         let plain = vec![Choice::new("a", "Alpha"), Choice::new("b", "Beta")];
         let rows = numbered_rows(style(), &plain, false, Some(0));
         assert!(rows[0].contains("(default)"));

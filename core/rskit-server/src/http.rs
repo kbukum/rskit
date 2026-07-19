@@ -111,8 +111,8 @@ impl HttpServerBuilder {
     /// Apply CORS from the server config (no-op if `cors` is `None`).
     ///
     /// # Errors
-    /// Returns an error when the configured CORS policy contains invalid origins,
-    /// methods, headers, or max-age values.
+    /// Returns an error when the configured CORS policy contains invalid origins, methods, headers,
+    /// or max-age values.
     #[must_use = "builder methods return a new builder; use the returned value"]
     pub fn with_cors(self) -> AppResult<Self> {
         if let Some(cors_cfg) = self.config.cors.as_ref() {
@@ -130,8 +130,7 @@ impl HttpServerBuilder {
     /// Add secure response headers using the default security policy.
     ///
     /// # Errors
-    /// Returns an error if the default security policy cannot be built (should never happen
-    /// in practice — this is a programming error guard).
+    /// Returns an error if the default security policy cannot be built (should never happen in practice — this is a programming error guard).
     #[must_use = "builder methods return a new builder; use the returned value"]
     pub fn with_security_headers(self) -> AppResult<Self> {
         self.with_security_headers_config(SecurityHeadersConfig::default())

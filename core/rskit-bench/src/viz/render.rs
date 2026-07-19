@@ -32,8 +32,7 @@ pub fn with_size(w: usize, h: usize) -> RenderOption {
 
 /// Render all available charts from a benchmark result.
 ///
-/// Returns a map of filename → SVG content.
-/// Only charts with sufficient data are included.
+/// Returns a map of filename → SVG content. Only charts with sufficient data are included.
 pub fn render_all(result: &BenchRunResult, opts: &[RenderOption]) -> HashMap<String, String> {
     let mut cfg = RenderConfig::default();
     for opt in opts {

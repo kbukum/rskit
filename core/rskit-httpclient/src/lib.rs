@@ -12,10 +12,9 @@
 //! - JSON request/response serialization
 //! - Integrated error handling with `rskit-errors`
 //!
-//! Authentication secrets are stored in [`rskit_security::SecretString`] inside
-//! [`Auth`], so [`Auth`] and [`HttpClientConfig`] debug output redacts bearer
-//! tokens, basic passwords, and API-key values. Prefer [`HttpClientConfig::with_auth`]
-//! or request auth helpers over raw credential headers.
+//! Authentication secrets are stored in [`rskit_security::SecretString`] inside [`Auth`], so [`Auth`]
+//! and [`HttpClientConfig`] debug output redacts bearer tokens, basic passwords, and API-key values.
+//! Prefer [`HttpClientConfig::with_auth`] or request auth helpers over raw credential headers.
 //!
 //! # Example
 //!

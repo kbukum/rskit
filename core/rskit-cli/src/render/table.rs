@@ -29,9 +29,9 @@ impl OutputTable {
 
     /// Append a row of cell values.
     ///
-    /// The row is normalized to the column count: extra cells are dropped and
-    /// missing cells are padded with empty strings, so every rendered row lines
-    /// up with the header and borders regardless of the caller's cell count.
+    /// The row is normalized to the column count: extra cells are dropped
+    /// and missing cells are padded with empty strings, so every rendered row lines up with the header
+    /// and borders regardless of the caller's cell count.
     pub fn add_row(&mut self, row: Vec<impl Into<String>>) {
         let mut cells: Vec<String> = row.into_iter().map(Into::into).collect();
         cells.truncate(self.columns.len());

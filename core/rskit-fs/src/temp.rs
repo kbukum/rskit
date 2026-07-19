@@ -1,9 +1,8 @@
 //! Temporary file and path helpers.
 //!
-//! Temp file and directory creation, cloning, persistence, and file-writing
-//! helpers use blocking filesystem I/O. When calling them from async contexts,
-//! run them through `tokio::task::spawn_blocking` or an equivalent blocking
-//! executor boundary.
+//! Temp file and directory creation, cloning, persistence,
+//! and file-writing helpers use blocking filesystem I/O. When calling them from async contexts,
+//! run them through `tokio::task::spawn_blocking` or an equivalent blocking executor boundary.
 #![allow(clippy::needless_pass_by_value)]
 
 use std::path::{Path, PathBuf};
@@ -207,11 +206,11 @@ impl std::fmt::Debug for TempDir {
 
 /// Build a collision-resistant temp path next to a destination path.
 ///
-/// `prefix` and `suffix` are sanitized before interpolation so the generated
-/// file name remains a single path component under `dest`'s parent directory.
+/// `prefix` and `suffix` are sanitized before interpolation
+/// so the generated file name remains a single path component under `dest`'s parent directory.
 ///
-/// The function only constructs a path; callers still own creation mode,
-/// streaming writes, fsync/flush, and final rename/persist policy.
+/// The function only constructs a path; callers still own creation mode, streaming writes, fsync/flush,
+/// and final rename/persist policy.
 #[must_use]
 pub fn sibling_temp_path(dest: &Path, prefix: &str, suffix: &str) -> PathBuf {
     let parent = parent_dir(dest).unwrap_or_else(|| Path::new("."));

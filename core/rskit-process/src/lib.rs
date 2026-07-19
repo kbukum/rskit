@@ -14,13 +14,13 @@
 //! It is deterministic for non-interactive commands, but it is not a terminal
 //! and cannot guarantee exact ordering between stdout and stderr.
 //!
-//! `ProcessIo::Observed` also uses separate pipes and supports live raw-byte or
-//! line callbacks with optional capture. Line observers split deterministically
-//! on `\n`, `\r`, and `\r\n`; invalid UTF-8 is reported lossily.
+//! `ProcessIo::Observed` also uses separate pipes and supports live raw-byte
+//! or line callbacks with optional capture. Line observers split deterministically on `\n`, `\r`,
+//! and `\r\n`; invalid UTF-8 is reported lossily.
 //!
-//! `ProcessIo::Inherited` gives the child the parent stdio handles. This is the
-//! right mode for normal terminal commands, but it does not provide structured
-//! output capture.
+//! `ProcessIo::Inherited` gives the child the parent stdio handles.
+//! This is the right mode for normal terminal commands,
+//! but it does not provide structured output capture.
 //!
 //! # Example
 //!

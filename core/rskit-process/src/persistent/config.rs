@@ -132,9 +132,10 @@ impl PersistentOutput {
 
 /// Byte observers for persistent process output.
 ///
-/// Callbacks run on stdout/stderr reader threads with arbitrary chunk boundaries. Keep them
-/// fast and non-blocking; offload synchronous I/O or heavier processing to another worker to avoid
-/// stalling the reader thread and backing up the child process pipe.
+/// Callbacks run on stdout/stderr reader threads with arbitrary chunk boundaries. Keep them fast
+/// and non-blocking; offload synchronous I/O
+/// or heavier processing to another worker to avoid stalling the reader thread
+/// and backing up the child process pipe.
 #[derive(Clone, Default)]
 pub struct PersistentOutputObserver {
     stdout_bytes: Option<OutputBytesCallback>,

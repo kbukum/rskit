@@ -1,5 +1,4 @@
-//! Single-choice selection: a radio list in key-driven mode, a numbered list in
-//! line-driven mode.
+//! Single-choice selection: a radio list in key-driven mode, a numbered list in line-driven mode.
 
 use rskit_errors::AppResult;
 

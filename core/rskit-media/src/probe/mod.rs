@@ -1,8 +1,7 @@
 //! Media probing traits and metadata types.
 //!
-//! Defines the [`MediaProbe`] trait for inspecting media files, along with
-//! all associated types: [`MediaMetadata`], [`KeyframeInfo`],
-//! [`SilenceInterval`], and [`Chapter`].
+//! Defines the [`MediaProbe`] trait for inspecting media files, along with all associated types:
+//! [`MediaMetadata`], [`KeyframeInfo`], [`SilenceInterval`], and [`Chapter`].
 
 mod analysis;
 mod media_probe;

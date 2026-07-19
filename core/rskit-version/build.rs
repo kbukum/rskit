@@ -1,12 +1,10 @@
-//! Build script that captures git and build metadata as compile-time
-//! environment variables.
+//! Build script that captures git and build metadata as compile-time environment variables.
 //!
-//! Build/version values are emitted via `cargo:rustc-env` and read back in
-//! `lib.rs` with `env!`. The build script intentionally avoids extra
-//! dependencies and external commands beyond `git`/`rustc`; the build
-//! timestamp is emitted as a Unix epoch (`BUILD_EPOCH`) and formatted to
-//! RFC 3339 at runtime by the library, which keeps the conversion testable and
-//! portable across platforms.
+//! Build/version values are emitted via `cargo:rustc-env` and read back in `lib.rs` with `env!`.
+//! The build script intentionally avoids extra dependencies and external commands beyond `git`/`rustc`;
+//! the build timestamp is emitted as a Unix epoch (`BUILD_EPOCH`)
+//! and formatted to RFC 3339 at runtime by the library, which keeps the conversion testable
+//! and portable across platforms.
 
 use std::env;
 use std::path::{Path, PathBuf};
@@ -28,8 +26,8 @@ fn run_git(args: &[&str]) -> String {
     command_stdout("git", args)
 }
 
-/// Seconds since the Unix epoch at build time, or empty if the clock is
-/// before the epoch (which should never happen in practice).
+/// Seconds since the Unix epoch at build time,
+/// or empty if the clock is before the epoch (which should never happen in practice).
 fn build_epoch() -> String {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -61,12 +59,11 @@ fn rerun_if_exists(path: &Path) {
     }
 }
 
-/// Watch the files that determine the resolved commit so a branch commit
-/// (which updates a ref, not `HEAD`) still refreshes the captured metadata.
+/// Watch the files that determine the resolved commit
+/// so a branch commit (which updates a ref, not `HEAD`) still refreshes the captured metadata.
 ///
-/// The git directory is resolved via git itself (`--absolute-git-dir`) because
-/// the build script runs from the crate directory, while `.git` typically lives
-/// at the workspace root. Best-effort: anything missing is simply skipped.
+/// The git directory is resolved via git itself (`--absolute-git-dir`) because the build script runs from the crate directory,
+/// while `.git` typically lives at the workspace root. Best-effort: anything missing is simply skipped.
 fn track_git_inputs() {
     let git_dir = run_git(&["rev-parse", "--absolute-git-dir"]);
     if git_dir.is_empty() {
@@ -98,8 +95,8 @@ fn track_git_inputs() {
 fn main() {
     let git_commit = run_git(&["rev-parse", "HEAD"]);
 
-    // `--abbrev-ref HEAD` yields the literal "HEAD" in detached-HEAD state
-    // (e.g. CI checkouts); normalize that to "no branch".
+    // `--abbrev-ref HEAD` yields the literal "HEAD" in detached-HEAD state (e.g. CI checkouts);
+    // normalize that to "no branch".
     let mut git_branch = run_git(&["rev-parse", "--abbrev-ref", "HEAD"]);
     if git_branch == "HEAD" {
         git_branch.clear();

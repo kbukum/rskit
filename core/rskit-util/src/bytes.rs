@@ -42,8 +42,8 @@ pub fn format_bytes(bytes: u64) -> String {
 /// Parses human-readable sizes (e.g. `"5MB"`, `"10KB"`, `"2GB"`) into a raw byte count (`u64`).
 /// Case-insensitive, supports optional space, and treats unit-less values as bytes.
 ///
-/// All units are binary (1024-based). The two-letter (`kb`), single-letter (`k`), and
-/// binary-explicit (`ki`) spellings are accepted as aliases for the same power of 1024.
+/// All units are binary (1024-based). The two-letter (`kb`), single-letter (`k`),
+/// and binary-explicit (`ki`) spellings are accepted as aliases for the same power of 1024.
 ///
 /// # Examples
 ///

@@ -1,9 +1,9 @@
 //! Build-time version and git metadata for rskit.
 //!
-//! Version, git commit, branch, and build time are captured at compile time
-//! via a `build.rs` script that runs `git` commands and emits `cargo:rustc-env`
-//! variables. The build timestamp is captured as a Unix epoch and formatted to
-//! RFC 3339 by the library, avoiding any external `date` command.
+//! Version, git commit, branch,
+//! and build time are captured at compile time via a `build.rs` script that runs `git` commands
+//! and emits `cargo:rustc-env` variables. The build timestamp is captured as a Unix epoch
+//! and formatted to RFC 3339 by the library, avoiding any external `date` command.
 //!
 //! # Quick Start
 //!

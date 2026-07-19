@@ -1,23 +1,21 @@
 //! [`RegionScreen`] — the public seam the renderer talks to.
 //!
-//! It owns a [`vte::Parser`] and the applied [`Performer`] state and exposes the
-//! whole virtual terminal through three methods: [`feed`](RegionScreen::feed)
-//! raw bytes and get back the rows that scrolled off the top,
-//! [`render`](RegionScreen::render) the current tile, and
-//! [`drain`](RegionScreen::drain) the rows still on screen when the stream ends.
-//! The grid, cursor, and SGR internals stay private behind it.
+//! It owns a [`vte::Parser`] and the applied [`Performer`] state
+//! and exposes the whole virtual terminal through three methods: [`feed`](RegionScreen::feed) raw bytes
+//! and get back the rows that scrolled off the top, [`render`](RegionScreen::render) the current tile,
+//! and [`drain`](RegionScreen::drain) the rows still on screen when the stream ends. The grid, cursor,
+//! and SGR internals stay private behind it.
 
 use super::perform::Performer;
 
 /// A bounded per-region virtual terminal.
 ///
-/// Feed a child's raw output bytes with [`feed`](Self::feed); ANSI cursor,
-/// erase, scroll, and color sequences are applied to a fixed `rows × cols` cell
-/// grid rather than passed through, so a child that redraws in place renders
-/// correctly and can never move the host terminal's cursor. Content past the
-/// last column truncates (the region does not auto-wrap). Rows that scroll off
-/// the top are returned so the caller can retain a bounded tail for a failure
-/// replay; on success they are simply dropped.
+/// Feed a child's raw output bytes with [`feed`](Self::feed); ANSI cursor, erase, scroll,
+/// and color sequences are applied to a fixed `rows × cols` cell grid rather than passed through,
+/// so a child that redraws in place renders correctly and can never move the host terminal's cursor.
+/// Content past the last column truncates (the region does not auto-wrap).
+/// Rows that scroll off the top are returned
+/// so the caller can retain a bounded tail for a failure replay; on success they are simply dropped.
 pub struct RegionScreen {
     parser: vte::Parser,
     performer: Performer,
@@ -44,10 +42,10 @@ impl RegionScreen {
 
     /// Feed raw output bytes, returning the rows evicted by scrolling.
     ///
-    /// Bytes are parsed as a VT stream and applied to the grid; multi-byte and
-    /// split UTF-8 sequences are reassembled across calls by the parser. Evicted
-    /// rows are returned oldest first, already styled, so the caller can retain
-    /// a bounded tail in order (for a failure replay) or drop them.
+    /// Bytes are parsed as a VT stream and applied to the grid; multi-byte
+    /// and split UTF-8 sequences are reassembled across calls by the parser.
+    /// Evicted rows are returned oldest first, already styled,
+    /// so the caller can retain a bounded tail in order (for a failure replay) or drop them.
     pub fn feed(&mut self, bytes: &[u8]) -> Vec<String> {
         self.parser.advance(&mut self.performer, bytes);
         self.performer.take_evicted()
@@ -59,8 +57,8 @@ impl RegionScreen {
         self.performer.render()
     }
 
-    /// Consume the screen, returning its remaining rows with trailing blank
-    /// rows trimmed, so evicted rows plus this drain reconstruct the transcript.
+    /// Consume the screen, returning its remaining rows with trailing blank rows trimmed,
+    /// so evicted rows plus this drain reconstruct the transcript.
     #[must_use]
     pub fn drain(self) -> Vec<String> {
         let mut rows = self.performer.render();
@@ -105,8 +103,9 @@ mod tests {
     #[test]
     fn regression_cargo_style_redraw_leaks_no_control_bytes() {
         let mut screen = RegionScreen::new(6, 20);
-        // A curses-style frame: erase-line + cursor-up/down that would corrupt a
-        // pass-through line buffer. The grid absorbs it into plain content.
+        // A curses-style frame:
+        // erase-line + cursor-up/down that would corrupt a pass-through line buffer.
+        // The grid absorbs it into plain content.
         let frame = b"Compiling\r\n\x1b[7A\r\x1b[2K\x1b[1BChecking\r\nDone";
         let evicted = screen.feed(frame);
         let mut rendered = evicted;

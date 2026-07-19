@@ -144,8 +144,8 @@ impl Inner {
 
 /// Asynchronous circuit breaker.
 ///
-/// `parking_lot::Mutex` is used for state; it is never held across `.await`
-/// points, so async code remains efficient.
+/// `parking_lot::Mutex` is used for state; it is never held across `.await` points,
+/// so async code remains efficient.
 ///
 /// # State machine
 ///

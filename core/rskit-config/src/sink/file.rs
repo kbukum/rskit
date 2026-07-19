@@ -12,8 +12,8 @@ use super::ConfigSink;
 
 /// Flat `key -> value` table that backs a [`FileConfigSink`].
 ///
-/// Keys are opaque strings (dots are not nesting); values are plaintext secret
-/// material persisted verbatim by the sink.
+/// Keys are opaque strings (dots are not nesting);
+/// values are plaintext secret material persisted verbatim by the sink.
 pub type ConfigTable = BTreeMap<String, String>;
 
 /// Upper bound on the backing file size accepted on read (1 MiB).
@@ -26,23 +26,21 @@ const TEMP_PREFIX: &str = "config";
 
 /// File-backed writable config store.
 ///
-/// A reference [`ConfigSink`] that persists keys to a flat table on disk. The
-/// on-disk representation is pluggable via [`Codec`]: TOML is the built-in
-/// default ([`FileConfigSink::new`]), and any other format (JSON, …) drops in
-/// through [`FileConfigSink::with_codec`] without changing the sink.
+/// A reference [`ConfigSink`] that persists keys to a flat table on disk.
+/// The on-disk representation is pluggable via [`Codec`]:
+/// TOML is the built-in default ([`FileConfigSink::new`]),
+/// and any other format (JSON, …) drops in through [`FileConfigSink::with_codec`] without changing the sink.
 ///
-/// Filesystem access goes through `rskit-fs` (bounded reads + atomic
-/// replacement), so a concurrent reader never observes a partial write.
+/// Filesystem access goes through `rskit-fs` (bounded reads + atomic replacement),
+/// so a concurrent reader never observes a partial write.
 ///
-/// Mutations (`set`/`remove`/`set_many`) are read-modify-write sequences
-/// serialized by a shared in-process lock, so concurrent writers — including
-/// separate clones, which share the same lock — never lose each other's
-/// updates. Cross-process coordination is out of scope; protect the file with
-/// OS-level mechanisms if multiple processes write it.
+/// Mutations (`set`/`remove`/`set_many`) are read-modify-write sequences serialized by a shared in-process lock,
+/// so concurrent writers — including separate clones, which share the same lock —
+/// never lose each other's updates. Cross-process coordination is out of scope;
+/// protect the file with OS-level mechanisms if multiple processes write it.
 ///
-/// Persisting writes the plaintext value to disk — this is the sink's explicit,
-/// intended persistence. Protect the file with appropriate permissions; the
-/// plaintext is never logged.
+/// Persisting writes the plaintext value to disk — this is the sink's explicit, intended persistence.
+/// Protect the file with appropriate permissions; the plaintext is never logged.
 #[derive(Debug, Clone)]
 pub struct FileConfigSink {
     path: PathBuf,
@@ -155,8 +153,8 @@ impl ConfigSink for FileConfigSink {
     fn remove(&self, key: &str) -> AppResult<()> {
         let _guard = self.mutation_lock.lock();
         let mut table = self.read_table()?;
-        // Removing an absent key is an idempotent no-op: avoid rewriting the
-        // file (which would create an empty file / bump mtime and wake watchers).
+        // Removing an absent key is an idempotent no-op:
+        // avoid rewriting the file (which would create an empty file / bump mtime and wake watchers).
         if table.remove(key).is_none() {
             return Ok(());
         }
@@ -201,8 +199,7 @@ mod tests {
         assert_eq!(sink.path(), path.as_path());
         assert_eq!(sink.codec().name(), "toml");
         assert!(sink.read_table().unwrap().is_empty());
-        // Removing from an absent file is a no-op success that does not create
-        // the backing file.
+        // Removing from an absent file is a no-op success that does not create the backing file.
         sink.remove("anything").unwrap();
         assert!(!path.exists());
     }
@@ -266,9 +263,9 @@ mod tests {
         let dir = tempdir().unwrap();
         let sink = FileConfigSink::new(dir.path().join("config.toml"));
 
-        // Many clones share the same backing file and mutation lock; each writes
-        // a distinct key concurrently. Without serialization, read-modify-write
-        // races would drop some keys.
+        // Many clones share the same backing file and mutation lock;
+        // each writes a distinct key concurrently. Without serialization,
+        // read-modify-write races would drop some keys.
         let handles: Vec<_> = (0..16)
             .map(|i| {
                 let sink = sink.clone();

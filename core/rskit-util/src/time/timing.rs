@@ -24,8 +24,7 @@ where
     (result, start.elapsed())
 }
 
-/// Returns the non-negative elapsed milliseconds between two monotonic
-/// millisecond readings.
+/// Returns the non-negative elapsed milliseconds between two monotonic millisecond readings.
 #[must_use]
 pub const fn elapsed_millis(start: u64, end: u64) -> u64 {
     end.saturating_sub(start)

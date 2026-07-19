@@ -1,21 +1,19 @@
 //! Ctrl+C / graceful shutdown over [`tokio_util::sync::CancellationToken`].
 //!
-//! rskit standardizes on `tokio_util`'s [`CancellationToken`] as its single
-//! cooperative-cancellation type: `rskit-worker` handlers and `rskit-process`
-//! already consume it directly, so the CLI layer uses the *same* type end-to-end
-//! rather than introducing a parallel wrapper. The token is re-exported here so a
-//! CLI can name it without depending on `tokio-util` directly, and [`on_ctrl_c`]
-//! installs the one-shot interrupt handler that drives it.
+//! rskit standardizes on `tokio_util`'s [`CancellationToken`] as its single cooperative-cancellation type:
+//! `rskit-worker` handlers and `rskit-process` already consume it directly,
+//! so the CLI layer uses the *same* type end-to-end rather than introducing a parallel wrapper.
+//! The token is re-exported here so a CLI can name it without depending on `tokio-util` directly,
+//! and [`on_ctrl_c`] installs the one-shot interrupt handler that drives it.
 
 pub use tokio_util::sync::CancellationToken;
 
 /// Install a first-Ctrl+C handler and return the cooperative cancellation token.
 ///
-/// Must be called from within a Tokio runtime: a background task awaits the
-/// interrupt signal and cancels the returned token on the first Ctrl+C. Clone the
-/// token and hand it to spawned tasks, an `rskit-worker` handler, or an
-/// `rskit-process` call; holders observe `is_cancelled()` / `cancelled()` and
-/// wind down gracefully.
+/// Must be called from within a Tokio runtime: a background task awaits the interrupt signal
+/// and cancels the returned token on the first Ctrl+C. Clone the token and hand it to spawned tasks,
+/// an `rskit-worker` handler, or an `rskit-process` call;
+/// holders observe `is_cancelled()` / `cancelled()` and wind down gracefully.
 #[must_use]
 pub fn on_ctrl_c() -> CancellationToken {
     let token = CancellationToken::new();

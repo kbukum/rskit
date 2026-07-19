@@ -5,8 +5,7 @@ use serde::{Deserialize, Serialize};
 /// Configuration for scene boundary detection.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SceneDetectConfig {
-    /// Scene change threshold (0.0–1.0). Lower values detect more scene changes.
-    /// Default: 0.3.
+    /// Scene change threshold (0.0–1.0). Lower values detect more scene changes. Default: 0.3.
     pub threshold: f32,
     /// Minimum duration in seconds between detected scenes.
     pub min_scene_duration: f64,

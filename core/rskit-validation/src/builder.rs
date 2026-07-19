@@ -6,8 +6,7 @@ use rskit_errors::{AppError, AppResult, ErrorCode};
 
 use crate::{FieldError, validate_email, validate_url, validate_uuid};
 
-/// Fluent builder that collects field errors and converts to [`AppError`] via
-/// [`Validator::validate`].
+/// Fluent builder that collects field errors and converts to [`AppError`] via [`Validator::validate`].
 #[derive(Debug, Default)]
 pub struct Validator {
     errors: Vec<FieldError>,
@@ -199,8 +198,8 @@ impl Validator {
         &self.errors
     }
 
-    /// Consume the validator and return `Ok(())` if no errors, or an
-    /// [`AppError::invalid_input`] containing all field errors.
+    /// Consume the validator and return `Ok(())` if no errors,
+    /// or an [`AppError::invalid_input`] containing all field errors.
     pub fn validate(self) -> AppResult<()> {
         if self.errors.is_empty() {
             return Ok(());

@@ -14,8 +14,8 @@ use super::{
 /// This helper uses blocking `std::fs` I/O. Use `tokio::task::spawn_blocking`
 /// or an equivalent blocking executor boundary when calling it from async code.
 ///
-/// Set `follow_symlinks` only when the caller intentionally trusts symlink
-/// targets. Leaving it `false` prevents traversal outside the requested tree.
+/// Set `follow_symlinks` only when the caller intentionally trusts symlink targets.
+/// Leaving it `false` prevents traversal outside the requested tree.
 pub fn list_tree(root: &Path, follow_symlinks: bool) -> AppResult<Vec<TreeEntry>> {
     ensure_directory(root, follow_symlinks)?;
 

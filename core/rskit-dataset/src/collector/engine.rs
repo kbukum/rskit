@@ -1,10 +1,10 @@
 //! Collector engine — orchestrates the worker pool and the single-owner main event loop.
 //!
 //! The engine is generic over any [`DatasetItem`] type and item-agnostic:
-//! - **Workers** pull sources from a shared channel, fetch items, apply transforms, validate, and
-//!   hand each item to the injected [`ItemSink`], sending lightweight events back via mpsc.
-//! - **Main loop** receives events, owns all mutable state (result, manifest, progress), and drives
-//!   the progress callback from a single context (no shared mutexes).
+//! - **Workers** pull sources from a shared channel, fetch items, apply transforms, validate,
+//!   and hand each item to the injected [`ItemSink`], sending lightweight events back via mpsc.
+//! - **Main loop** receives events, owns all mutable state (result, manifest, progress),
+//!   and drives the progress callback from a single context (no shared mutexes).
 //!
 //! Supports incremental builds via `.manifest.json` caching.
 
@@ -41,8 +41,8 @@ pub struct Collector<T: DatasetItem> {
 }
 
 impl<T: DatasetItem> Collector<T> {
-    /// Create a collector from explicit source, transform, sink, target, config, and progress
-    /// contracts. Validation is off by default; add it with [`with_validator`](Self::with_validator).
+    /// Create a collector from explicit source, transform, sink, target, config, and progress contracts.
+    /// Validation is off by default; add it with [`with_validator`](Self::with_validator).
     pub fn new(
         sources: Vec<Box<dyn Source<T>>>,
         transforms: Vec<Box<dyn Transform<T, T>>>,
@@ -71,8 +71,8 @@ impl<T: DatasetItem> Collector<T> {
 
     /// Execute the full collection pipeline with parallel source fetching.
     ///
-    /// Internally spawns a worker pool that communicates via channels.
-    /// The main loop owns all mutable state — no shared mutexes.
+    /// Internally spawns a worker pool that communicates via channels. The main loop owns all mutable state
+    /// — no shared mutexes.
     pub async fn run(self, cancel: &CancellationToken) -> AppResult<CollectorResult> {
         let start = Instant::now();
         let cfg = &self.config;
