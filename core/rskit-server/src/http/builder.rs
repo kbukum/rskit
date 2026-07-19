@@ -321,7 +321,6 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(calls.load(Ordering::SeqCst), 4);
-        assert_eq!(calls.load(Ordering::SeqCst), 4);
     }
 
     #[test]

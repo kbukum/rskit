@@ -1,4 +1,5 @@
 //! Shared in-memory fixtures for API key manager tests.
+#![cfg(test)]
 
 use std::collections::HashMap;
 

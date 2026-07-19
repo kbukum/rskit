@@ -43,8 +43,9 @@ impl HttpClient {
         let client = builder.build().map_err(|e| {
             AppError::new(
                 ErrorCode::Internal,
-                format!("failed to build http client: {}", e),
+                format!("failed to build http client: {e}"),
             )
+            .with_cause(e)
         })?;
 
         Ok(Self { client, config })
@@ -236,11 +237,13 @@ impl HttpClient {
                 (false, false) => format!("{}/{}", base, path),
             };
 
-            url.parse::<reqwest::Url>()
-                .map_err(|e| AppError::new(ErrorCode::InvalidInput, format!("invalid url: {}", e)))
+            url.parse::<reqwest::Url>().map_err(|e| {
+                AppError::new(ErrorCode::InvalidInput, format!("invalid url: {e}")).with_cause(e)
+            })
         } else {
-            path.parse::<reqwest::Url>()
-                .map_err(|e| AppError::new(ErrorCode::InvalidInput, format!("invalid url: {}", e)))
+            path.parse::<reqwest::Url>().map_err(|e| {
+                AppError::new(ErrorCode::InvalidInput, format!("invalid url: {e}")).with_cause(e)
+            })
         }
     }
 }

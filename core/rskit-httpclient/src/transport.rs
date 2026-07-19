@@ -80,7 +80,7 @@ pub(crate) fn map_transport_error(error: reqwest::Error) -> AppError {
     } else {
         ErrorCode::ExternalService
     };
-    AppError::new(code, format!("http request failed: {}", error))
+    AppError::new(code, format!("http request failed: {error}")).with_cause(error)
 }
 
 pub(crate) fn parse_header_name(name: &str) -> AppResult<reqwest::header::HeaderName> {
@@ -90,6 +90,7 @@ pub(crate) fn parse_header_name(name: &str) -> AppResult<reqwest::header::Header
                 ErrorCode::InvalidInput,
                 format!("invalid HTTP header name '{name}': {error}"),
             )
+            .with_cause(error)
         })
 }
 
@@ -104,5 +105,6 @@ pub(crate) fn parse_header_value(
                 ErrorCode::InvalidInput,
                 format!("invalid HTTP header value for '{name}': {error}"),
             )
+            .with_cause(error)
         })
 }
