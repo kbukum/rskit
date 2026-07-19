@@ -33,8 +33,8 @@ impl ProcessResult {
     #[must_use]
     #[allow(
         clippy::too_many_arguments,
-        reason = "distinct primitive completion fields of a public result; a parameter struct would \
-                  leak the crate-internal capture buffers into the public API"
+        reason = "distinct completion fields of a public result; grouping them would introduce a new \
+                  public parameter type solely to satisfy the lint"
     )]
     pub fn completed(
         exit_code: Option<i32>,

@@ -272,13 +272,19 @@ impl Dag {
             {
                 continue;
             }
-            let ready = run
-                .remaining_in_degree
-                .get_mut(dependent_id)
-                .is_some_and(|degree| {
-                    *degree = degree.saturating_sub(1);
-                    *degree == 0
-                });
+            let ready = match run.remaining_in_degree.get_mut(dependent_id) {
+                Some(degree) => {
+                    let next = degree.checked_sub(1).ok_or_else(|| {
+                        AppError::new(
+                            ErrorCode::Internal,
+                            format!("DAG in-degree underflow for node '{dependent_id}'"),
+                        )
+                    })?;
+                    *degree = next;
+                    next == 0
+                }
+                None => false,
+            };
             if ready {
                 let inputs = self.collect_inputs(
                     dependent_id,

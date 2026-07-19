@@ -5,7 +5,7 @@ use tokio::process::Command as TokioCommand;
 
 use crate::{EnvPolicy, ProcessConfig, ProcessSpec};
 
-/// The three OS pipe handles a child process is spawned with.
+/// The stdin/stdout/stderr configuration a child process is spawned with.
 pub(in crate::runner) struct PipeStdio {
     pub(in crate::runner) stdin: Stdio,
     pub(in crate::runner) stdout: Stdio,
