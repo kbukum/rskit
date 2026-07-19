@@ -76,9 +76,49 @@ fn load_private_key(path: &str) -> AppResult<PrivateKeyDer<'static>> {
 #[cfg(test)]
 mod tests {
     use rskit_errors::ErrorCode;
-    use rskit_security::TlsConfig;
+    use rskit_security::{TlsConfig, TlsVersion};
 
     use super::{build_tls_acceptor, load_certs, load_private_key};
+
+    fn testdata(name: &str) -> String {
+        format!("{}/testdata/{name}", env!("CARGO_MANIFEST_DIR"))
+    }
+
+    fn valid_tls_config() -> TlsConfig {
+        TlsConfig {
+            cert_file: Some(testdata("cert.pem")),
+            key_file: Some(testdata("key.pem")),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn tls_acceptor_builds_from_valid_certificate_and_key() {
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+        for min_version in [TlsVersion::Tls12, TlsVersion::Tls13] {
+            let tls = TlsConfig {
+                min_version,
+                ..valid_tls_config()
+            };
+            build_tls_acceptor(&tls).expect("valid TLS material builds an acceptor");
+        }
+    }
+
+    #[test]
+    fn tls_loader_reads_valid_certificate_and_key() {
+        let certs = load_certs(&testdata("cert.pem")).expect("load certificate chain");
+        assert_eq!(certs.len(), 1);
+        load_private_key(&testdata("key.pem")).expect("load private key");
+    }
+
+    #[test]
+    fn tls_loader_rejects_certificate_file_without_certificates() {
+        // key.pem contains only a PRIVATE KEY block, so the certificate loader
+        // yields an empty chain and must reject it.
+        let error = load_certs(&testdata("key.pem")).unwrap_err();
+        assert_eq!(error.code(), ErrorCode::InvalidInput);
+        assert!(error.message().contains("at least one certificate"));
+    }
 
     #[test]
     fn tls_acceptor_rejects_missing_certificate_paths() {
