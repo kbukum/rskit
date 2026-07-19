@@ -45,8 +45,8 @@ or an upward import is a **blocker**. The workspaces are split by role:
 - **Declare-only aggregator.** `lib.rs`/`mod.rs` carry only docs + submodule declarations + re-exports (crate-root `#![...]` attributes allowed).
   Logic or private items in an aggregator is a should-fix. Run `ast-grep scan` (`make structure`).
 - **Module cohesion & file-level structuring.** The inverse of the aggregator rule:
-  a single file that has grown **over-long
-  or mixes several distinct concerns** should be promoted to a folder —
+  a single file that has grown **over-long**, or that **mixes several distinct concerns**,
+  should be promoted to a folder —
   a declare-only `mod.rs` plus concern-named submodules (the `http/`, `discovery/`, `apikey/` shape),
   with shared test fixtures in a `#[cfg(test)] test_support` module. This is **criteria-driven,
   not a line count**: reorganize only where the split genuinely improves discoverability
