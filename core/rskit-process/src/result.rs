@@ -31,7 +31,11 @@ pub struct ProcessResult {
 impl ProcessResult {
     /// Build a process result from captured output bytes.
     #[must_use]
-    #[allow(clippy::too_many_arguments)]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "distinct completion fields of a public result; grouping them would introduce a new \
+                  public parameter type solely to satisfy the lint"
+    )]
     pub fn completed(
         exit_code: Option<i32>,
         stdout_bytes: Vec<u8>,

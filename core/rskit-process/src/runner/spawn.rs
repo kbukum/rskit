@@ -5,18 +5,23 @@ use tokio::process::Command as TokioCommand;
 
 use crate::{EnvPolicy, ProcessConfig, ProcessSpec};
 
+/// The stdin/stdout/stderr configuration a child process is spawned with.
+pub(in crate::runner) struct PipeStdio {
+    pub(in crate::runner) stdin: Stdio,
+    pub(in crate::runner) stdout: Stdio,
+    pub(in crate::runner) stderr: Stdio,
+}
+
 pub(in crate::runner) fn configure_command(
     cmd: &mut TokioCommand,
     spec: &ProcessSpec,
     config: &ProcessConfig,
-    stdin: Stdio,
-    stdout: Stdio,
-    stderr: Stdio,
+    stdio: PipeStdio,
 ) {
     cmd.args(&spec.args)
-        .stdin(stdin)
-        .stdout(stdout)
-        .stderr(stderr);
+        .stdin(stdio.stdin)
+        .stdout(stdio.stdout)
+        .stderr(stdio.stderr);
 
     if let Some(dir) = &spec.dir {
         cmd.current_dir(dir);

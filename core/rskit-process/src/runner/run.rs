@@ -19,7 +19,7 @@ use super::pipe_io::{PipeIo, inherited_config, pipe_stdin_stdio, spawn_stdin_wri
 use super::pty::run_pty_mode;
 use super::redaction::RedactedArgs;
 use super::scope::ChildScope;
-use super::spawn::configure_command;
+use super::spawn::{PipeStdio, configure_command};
 
 /// Execute a subprocess with the given configuration and cancellation token.
 pub async fn run_with_cancel(
@@ -113,12 +113,6 @@ async fn run_inherited_mode(
     .await
 }
 
-struct PipeStdio {
-    stdin: Stdio,
-    stdout: Stdio,
-    stderr: Stdio,
-}
-
 async fn run_process(
     spec: &ProcessSpec,
     config: &ProcessConfig,
@@ -147,14 +141,7 @@ async fn run_process(
         .and_then(|observer| observer.stderr_bytes.clone());
 
     let mut cmd = TokioCommand::new(&spec.program);
-    configure_command(
-        &mut cmd,
-        spec,
-        config,
-        stdio.stdin,
-        stdio.stdout,
-        stdio.stderr,
-    );
+    configure_command(&mut cmd, spec, config, stdio);
 
     debug!(program = %spec.program.display(), args = ?RedactedArgs::new(&spec.args, &config.arg_redaction), "spawning process");
     let mut child = cmd.spawn().map_err(|error| {

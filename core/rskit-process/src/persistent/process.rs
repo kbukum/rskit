@@ -144,30 +144,37 @@ impl Drop for PersistentProcess {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+/// The live handles and captured state produced by spawning a persistent process.
+///
+/// These pieces are assembled into a [`PersistentProcess`] once it satisfies its readiness policy,
+/// or cleaned up through the normal lifecycle if it fails one.
+pub(in crate::persistent) struct SpawnedProcess {
+    pub(in crate::persistent) child: Child,
+    pub(in crate::persistent) stdin_thread: StdinThread,
+    pub(in crate::persistent) stdout_thread: ReaderThread,
+    pub(in crate::persistent) stderr_thread: ReaderThread,
+    pub(in crate::persistent) cancel_thread: Option<CancelThread>,
+    pub(in crate::persistent) cancelled: Arc<AtomicBool>,
+    pub(in crate::persistent) stdout: Capture,
+    pub(in crate::persistent) stderr: Capture,
+    pub(in crate::persistent) start: Instant,
+}
+
 pub(in crate::persistent) fn new_process(
-    child: Child,
-    stdin_thread: StdinThread,
-    stdout_thread: ReaderThread,
-    stderr_thread: ReaderThread,
-    cancel_thread: Option<CancelThread>,
-    cancelled: Arc<AtomicBool>,
-    stdout: Capture,
-    stderr: Capture,
-    start: Instant,
+    spawned: SpawnedProcess,
     signal: SignalPolicy,
     shutdown_grace_period: Duration,
 ) -> PersistentProcess {
     PersistentProcess {
-        child,
-        stdin_thread,
-        stdout_thread,
-        stderr_thread,
-        cancel_thread,
-        cancelled,
-        stdout,
-        stderr,
-        start,
+        child: spawned.child,
+        stdin_thread: spawned.stdin_thread,
+        stdout_thread: spawned.stdout_thread,
+        stderr_thread: spawned.stderr_thread,
+        cancel_thread: spawned.cancel_thread,
+        cancelled: spawned.cancelled,
+        stdout: spawned.stdout,
+        stderr: spawned.stderr,
+        start: spawned.start,
         signal,
         shutdown_grace_period,
         stopped: false,

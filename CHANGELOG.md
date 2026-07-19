@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Reshape cohesive positional-argument clusters in `rskit-process`
+  and `rskit-dag` into named parameter/parts structs
+  (`SpawnedProcess`, a shared `PipeStdio`, and an `ExecutionRun` scheduler state)
+  for call-site clarity and non-breaking extension,
+  removing the corresponding `#[allow(clippy::too_many_arguments)]` markers.
+  `ProcessResult::completed` keeps its distinct public primitive fields
+  and now documents that choice with an explicit `reason`. Internal refactor only; no behavior
+  or public-surface change.
 - Adopt **semantic line breaks at a 100-column soft ceiling** as the prose standard for Markdown,
   `//!`/`///` rustdoc, and `//` comments, replacing the previous "one line per paragraph,
   never hard-wrapped" rule.
