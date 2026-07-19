@@ -10,9 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Reshape cohesive positional-argument clusters in `rskit-process`
-  and `rskit-dag` into named parameter/parts structs
-  (`SpawnedProcess`, a shared `PipeStdio`, and an `ExecutionRun` scheduler state)
-  for call-site clarity and non-breaking extension,
+  and `rskit-dag` into named parameter/parts structs (`SpawnedProcess`, a shared `PipeStdio`, and an `ExecutionRun` scheduler state) for call-site clarity
+  and non-breaking extension,
   removing the corresponding `#[allow(clippy::too_many_arguments)]` markers.
   `ProcessResult::completed` keeps its distinct public primitive fields
   and now documents that choice with an explicit `reason`. Internal refactor only; no behavior
@@ -42,6 +41,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Harden the release publisher (`scripts/rskit_tool/publish.py`):
   crates.io existence lookups now retry transient network faults (TLS handshake timeouts, dropped connections) with bounded exponential backoff instead of aborting the whole `make release-publish` run on the first blip.
   Definitive outcomes (404, other HTTP statuses) are still returned immediately without retry.
+- Reshape cohesive positional-argument clusters in the transport
+  and auth crates into named parameter structs for call-site clarity and non-breaking extension:
+  `rskit-server` threads an internal `ConnectionContext` (router, config, HTTP/2 flag) through its listener
+  and connection helpers,
+  and `rskit-grpc` groups the background reconnect state into an internal `ReconnectContext`.
+  `rskit-auth` replaces the six positional `Manager::issue_key` arguments with a `KeySpec` (`#[derive(Default)]`)
+  — a **breaking** change to the crate's public API, though key-issuing behavior is unchanged.
+  `rskit-server`'s `HttpServerBuilder` also drops the vestigial no-op `with_request_id`/`with_tracing`/`with_body_limit`/`with_timeout` methods
+  — another **breaking** change with no behavior impact,
+  since those transport layers are always applied when the server is built.
+  The reshaped `rskit-server` HTTP server, `rskit-grpc` discovery channel,
+  and `rskit-auth` API-key modules are also split into concern-named submodules (declare-only `mod.rs` aggregators) to keep files focused;
+  the split preserves the existing public paths. Completing the transport + auth reorg sweep,
+  `rskit-httpclient` splits its client into `transport` (redirect policy, bounded body reads, error/header mapping)
+  and `tls` (trust roots, client identity) helper modules,
+  and `rskit-authz` splits its `engine` into a `model` (policy types)
+  and `evaluate` (RBAC/ABAC decision logic) submodule pair;
+  cohesive single-concern files were left as-is.
 
 ## [v0.2.0-alpha.5] - 2026-07-18
 

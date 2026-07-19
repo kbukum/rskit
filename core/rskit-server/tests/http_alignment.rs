@@ -89,7 +89,6 @@ fn builder_accepts_ordered_middleware_stack() {
     let server = HttpServerBuilder::new(HttpServerConfig::default(), CancellationToken::new())
         .with_middleware_stack(HttpMiddlewareStack::new())
         .with_router(Router::new().route("/", get(|| async { "ok" })))
-        .with_request_id()
         .build()
         .unwrap();
     assert_eq!(server.bind_addr(), "0.0.0.0:8080");

@@ -55,6 +55,9 @@ pub mod destination;
 pub mod request;
 pub mod response;
 
+mod tls;
+mod transport;
+
 pub use auth::Auth;
 pub use client::HttpClient;
 pub use config::HttpClientConfig;

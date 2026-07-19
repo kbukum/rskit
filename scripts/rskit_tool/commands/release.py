@@ -149,7 +149,12 @@ def check_runtime_panic_hazards() -> list[str]:
     for source_root in (ROOT / "core", ROOT / "contrib"):
         for path in sorted(source_root.glob("**/src/**/*.rs")):
             relative = path.relative_to(ROOT)
+            if "target" in relative.parts:
+                continue
             if relative.parts[:2] == ("core", "rskit-testutil") or path.name in {"tests.rs", "fixture_tests.rs"}:
+                continue
+            text = path.read_text(encoding="utf-8")
+            if re.search(r"^\s*#!\[cfg\((?:.*\b)?test\b.*\)\]", text, re.MULTILINE):
                 continue
             brace_depth = 0
             pending_cfg_test = False
@@ -158,7 +163,7 @@ def check_runtime_panic_hazards() -> list[str]:
             test_block_depth: int | None = None
             test_fn_depth: int | None = None
             helper_fn_depth: int | None = None
-            for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            for line_no, line in enumerate(text.splitlines(), start=1):
                 stripped = line.strip()
                 in_test_scope = (
                     (test_block_depth is not None and brace_depth >= test_block_depth)

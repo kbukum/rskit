@@ -91,6 +91,11 @@ make these load-bearing (not decorative):
   or half-migrations.
 - **Readable files.** Split by concern into focused files — never pile into one file.
   The aggregator is declare-only: `lib.rs`/`mod.rs` declare submodules and re-export, no logic.
+  Scope any structure reorg **together with the change that touches it, per domain** —
+  when a step reshapes signatures or otherwise edits an over-long / concern-mixed file,
+  that same step promotes it to a folder (declare-only `mod.rs` + concern-named submodules).
+  Reorg is criteria-driven (piled-up or concern-mixed file, or a parent with many organizable siblings),
+  never a standalone deferred sweep and never arbitrary.
 - **Composition.** Injected registries/config; no import-time side effects,
   no mutable global registries; inject logger/tracer/policies.
 
