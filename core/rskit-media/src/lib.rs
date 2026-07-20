@@ -5,44 +5,51 @@
 
 #![warn(missing_docs)]
 
-/// Audio sample rate and channel layout types.
-pub mod audio;
+// Concern groupings: the encoding and stream vocabularies live in their own
+// folders. Their modules are re-exported at the crate root below so the public
+// paths stay `rskit_media::codec`, `rskit_media::time`, and so on.
+mod encoding;
+mod stream;
+
 /// Chunked media processing — split, process in parallel, reassemble.
 pub mod chunking;
-/// Codec identifiers, profiles, levels, and well-known constants.
-pub mod codec;
-/// Color space, color range, and pixel format types.
-pub mod color;
 /// Executor trait for media processing backends.
 pub mod executor;
 /// Filter types and convenience constructors.
 pub mod filter;
-/// Container/file format identifiers and well-known constants.
-pub mod format;
 /// Media operation types for pipeline building.
 pub mod ops;
-/// Output configuration, quality, and encoding settings.
-pub mod output;
 /// Pipeline builder for chaining media operations.
 pub mod pipeline;
-/// Preset output configurations for common formats.
-pub mod presets;
 /// Media probing traits and metadata types.
 pub mod probe;
-/// Codec/format compatibility registry.
-pub mod registry;
-/// Resolution and frame rate types.
-pub mod spatial;
-/// Subtitle types and SRT/VTT parsing.
-pub mod subtitle;
-/// Timestamp, time range, and segment types.
-pub mod time;
 /// Duration-aware timeout calculation for media operations.
 pub mod timeout;
+
+/// Codec identifiers, profiles, levels, and well-known constants.
+pub use encoding::codec;
+/// Color space, color range, and pixel format types.
+pub use encoding::color;
+/// Container/file format identifiers and well-known constants.
+pub use encoding::format;
+/// Output configuration, quality, and encoding settings.
+pub use encoding::output;
+/// Preset output configurations for common formats.
+pub use encoding::presets;
+/// Codec/format compatibility registry.
+pub use encoding::registry;
+/// Audio sample rate and channel layout types.
+pub use stream::audio;
+/// Resolution and frame rate types.
+pub use stream::spatial;
+/// Subtitle types and SRT/VTT parsing.
+pub use stream::subtitle;
+/// Timestamp, time range, and segment types.
+pub use stream::time;
 /// Track and track info types.
-pub mod track;
+pub use stream::track;
 /// Core media type enumerations.
-pub mod types;
+pub use stream::types;
 
 pub use audio::{ChannelLayout, SampleRate};
 pub use chunking::{
