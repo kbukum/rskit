@@ -6,8 +6,8 @@
 
 ```toml
 [dependencies]
-rskit-llm = "0.2.0-alpha.1"
-rskit-llm-ollama = "0.2.0-alpha.2"
+rskit-llm = "0.2.0-alpha.2"
+rskit-llm-ollama = "0.2.0-alpha.3"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 

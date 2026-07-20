@@ -1,6 +1,6 @@
 [package]
 name = "rskit-git"
-version = "0.2.0-alpha.2"
+version = "0.2.0-alpha.3"
 edition.workspace = true
 description = "Composable git repository interfaces backed by libgit2"
 license.workspace = true

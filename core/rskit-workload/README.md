@@ -19,7 +19,7 @@ Mirrors gokit's `workload` package: the same concept and vocabulary, in idiomati
 
 ```toml
 [dependencies]
-rskit-workload = "0.2.0-alpha.1"
+rskit-workload = "0.2.0-alpha.2"
 ```
 
 ```rust

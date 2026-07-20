@@ -19,7 +19,7 @@ Fluent field-level validator that collects errors and converts to `AppError`.
 
 ```toml
 [dependencies]
-rskit-validation = "0.2.0-alpha.1"
+rskit-validation = "0.2.0-alpha.2"
 ```
 
 ```rust

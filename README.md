@@ -60,7 +60,7 @@ CI still runs the full workspace; on pull requests the `changes` job also publis
 ```toml
 # Facade — always-on foundation modules plus opt-in features/adapters
 [dependencies]
-rskit-suite = "0.2.0-alpha.5"
+rskit-suite = "0.2.0-alpha.6"
 tokio = { version = "1", features = ["full"] }
 ```
 
@@ -68,16 +68,16 @@ Enable optional modules through facade features:
 
 ```toml
 [dependencies]
-rskit-suite = { version = "0.2.0-alpha.5", features = ["server", "cli", "storage-s3"] }
+rskit-suite = { version = "0.2.0-alpha.6", features = ["server", "cli", "storage-s3"] }
 ```
 
 Or pick only what you need:
 
 ```toml
 [dependencies]
-rskit-errors     = "0.2.0-alpha.3"
-rskit-resilience = "0.2.0-alpha.1"
-rskit-worker     = "0.2.0-alpha.2"
+rskit-errors     = "0.2.0-alpha.4"
+rskit-resilience = "0.2.0-alpha.2"
+rskit-worker     = "0.2.0-alpha.3"
 ```
 
 Requires **Rust 1.91+** (declared by workspace `rust-version`). The pinned development and CI toolchain in `rust-toolchain.toml` may be newer.
