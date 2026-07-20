@@ -1,5 +1,9 @@
-//! Bench runner — orchestrates the complete benchmark lifecycle.
+//! The [`BenchRunner`] — drives registered branches through the full run lifecycle.
 
+use super::evaluation::{
+    EvaluationHandler, EvaluationOutcome, SampleFailureContext, failed_sample_context,
+};
+use super::options::RunOptions;
 use crate::compare::RunComparator;
 use crate::dataset_loader::DatasetLoader;
 use crate::evaluator::Evaluator;
@@ -10,74 +14,19 @@ use crate::result::{BenchRunResult, BenchSampleResult, BranchResult, DatasetInfo
 use crate::run_id::generate_run_id;
 use crate::run_storage::RunStorage;
 use crate::schema;
-use crate::types::{BenchSample, Prediction, ScoredSample};
+use crate::types::ScoredSample;
 use futures::stream::{FuturesUnordered, StreamExt};
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_util::time::{SharedClock, elapsed_millis, format_rfc3339, system_clock};
-use rskit_worker::{Event, Handler, Pool};
+use rskit_worker::Pool;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::mpsc;
-use tokio_util::sync::CancellationToken;
 use tracing::Instrument;
 
 struct Branch<L> {
     name: String,
     evaluator: Arc<dyn Evaluator<L>>,
     tier: i32,
-}
-
-/// Options for configuring a benchmark run.
-pub struct RunOptions {
-    pub concurrency: usize,
-    pub timeout_secs: u64,
-    pub tag: String,
-    pub fail_on_regression: bool,
-    pub targets: HashMap<String, f64>,
-}
-
-impl Default for RunOptions {
-    fn default() -> Self {
-        Self {
-            concurrency: 4,
-            timeout_secs: 30,
-            tag: String::from("default"),
-            fail_on_regression: false,
-            targets: HashMap::new(),
-        }
-    }
-}
-
-impl RunOptions {
-    #[must_use]
-    pub fn with_concurrency(mut self, n: usize) -> Self {
-        self.concurrency = n;
-        self
-    }
-
-    #[must_use]
-    pub fn with_timeout(mut self, secs: u64) -> Self {
-        self.timeout_secs = secs;
-        self
-    }
-
-    #[must_use]
-    pub fn with_tag(mut self, tag: impl Into<String>) -> Self {
-        self.tag = tag.into();
-        self
-    }
-
-    #[must_use]
-    pub fn with_fail_on_regression(mut self, fail: bool) -> Self {
-        self.fail_on_regression = fail;
-        self
-    }
-
-    #[must_use]
-    pub fn with_target(mut self, metric: impl Into<String>, threshold: f64) -> Self {
-        self.targets.insert(metric.into(), threshold);
-        self
-    }
 }
 
 /// Main benchmark runner.
@@ -406,104 +355,5 @@ where
         }
 
         Ok(result)
-    }
-}
-
-struct EvaluationHandler<L> {
-    evaluator: Arc<dyn Evaluator<L>>,
-    branch_name: String,
-    timeout_secs: u64,
-    clock: SharedClock,
-}
-
-struct SampleFailureContext {
-    id: String,
-    label: String,
-}
-
-impl SampleFailureContext {
-    fn from_sample<L: std::fmt::Display>(sample: &BenchSample<L>) -> Self {
-        Self {
-            id: sample.id.clone(),
-            label: sample.label.to_string(),
-        }
-    }
-}
-
-#[derive(Clone)]
-enum EvaluationOutcome<L> {
-    Success {
-        sample: BenchSample<L>,
-        prediction: Prediction<L>,
-        duration_ms: u64,
-    },
-    Failure {
-        sample: BenchSample<L>,
-        duration_ms: u64,
-        error: String,
-    },
-}
-
-#[async_trait::async_trait]
-impl<L> Handler<BenchSample<L>, EvaluationOutcome<L>> for EvaluationHandler<L>
-where
-    L: Clone + Send + Sync + std::fmt::Display + 'static,
-{
-    async fn handle(
-        &self,
-        sample: BenchSample<L>,
-        _emit: mpsc::Sender<Event<EvaluationOutcome<L>>>,
-        cancel: CancellationToken,
-    ) -> AppResult<EvaluationOutcome<L>> {
-        let start = self.clock.monotonic_millis();
-        let input = sample.input.clone();
-        let timeout = tokio::time::Duration::from_secs(self.timeout_secs);
-        let eval = tokio::time::timeout(timeout, self.evaluator.evaluate(input));
-        let result = tokio::select! {
-            _ = cancel.cancelled() => {
-                return Ok(EvaluationOutcome::Failure {
-                    sample,
-                    duration_ms: elapsed_millis(start, self.clock.monotonic_millis()),
-                    error: "cancelled".to_string(),
-                });
-            }
-            result = eval => result,
-        };
-        let duration_ms = elapsed_millis(start, self.clock.monotonic_millis());
-
-        match result {
-            Ok(Ok(prediction)) => Ok(EvaluationOutcome::Success {
-                sample,
-                prediction,
-                duration_ms,
-            }),
-            Ok(Err(error)) => Ok(EvaluationOutcome::Failure {
-                sample,
-                duration_ms,
-                error: error.to_string(),
-            }),
-            Err(_) => Ok(EvaluationOutcome::Failure {
-                sample,
-                duration_ms,
-                error: format!("timeout in {}", self.branch_name),
-            }),
-        }
-    }
-}
-
-fn failed_sample_context(
-    sample: &SampleFailureContext,
-    duration_ms: u64,
-    error: String,
-) -> BenchSampleResult {
-    BenchSampleResult {
-        id: sample.id.clone(),
-        label: sample.label.clone(),
-        predicted: String::new(),
-        score: 0.0,
-        correct: false,
-        branch_scores: HashMap::new(),
-        duration_ms,
-        error,
     }
 }

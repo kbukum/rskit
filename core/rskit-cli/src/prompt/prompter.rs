@@ -90,6 +90,16 @@ impl<T: Terminal> Prompter<T> {
         &self.terminal
     }
 
+    /// Build the invariant presentation context for a prompt from the bound
+    /// style and mode.
+    const fn ask<'a>(&self, prompt: &'a str) -> kinds::Ask<'a> {
+        kinds::Ask {
+            style: self.style,
+            mode: self.mode,
+            prompt,
+        }
+    }
+
     /// Ask for exactly one choice.
     ///
     /// In [`PromptMode::NonInteractive`] this resolves to the recommended choice;
@@ -101,7 +111,8 @@ impl<T: Terminal> Prompter<T> {
     /// Returns an error when `choices` is empty, when a non-interactive prompt has no recommended default,
     /// when the user cancels, or when input closes early.
     pub fn select(&mut self, prompt: &str, choices: &[Choice]) -> AppResult<ChoiceId> {
-        kinds::select::run(&mut self.terminal, self.style, self.mode, prompt, choices)
+        let ask = self.ask(prompt);
+        kinds::select::run(&mut self.terminal, ask, choices)
     }
 
     /// Ask for zero or more choices.
@@ -114,7 +125,8 @@ impl<T: Terminal> Prompter<T> {
     ///
     /// Returns an error when `choices` is empty, when the user cancels, or when input closes early.
     pub fn multi_select(&mut self, prompt: &str, choices: &[Choice]) -> AppResult<Vec<ChoiceId>> {
-        kinds::multi_select::run(&mut self.terminal, self.style, self.mode, prompt, choices)
+        let ask = self.ask(prompt);
+        kinds::multi_select::run(&mut self.terminal, ask, choices)
     }
 
     /// Ask a yes/no question with an explicit default.
@@ -123,7 +135,8 @@ impl<T: Terminal> Prompter<T> {
     ///
     /// Returns an error when the user cancels or when input closes early.
     pub fn confirm(&mut self, prompt: &str, default: bool) -> AppResult<bool> {
-        kinds::confirm::run(&mut self.terminal, self.style, self.mode, prompt, default)
+        let ask = self.ask(prompt);
+        kinds::confirm::run(&mut self.terminal, ask, default)
     }
 
     /// Ask for freeform text with an optional default.
@@ -135,14 +148,8 @@ impl<T: Terminal> Prompter<T> {
     /// Returns an error when a non-interactive prompt has no default, when the user cancels,
     /// or when input closes early.
     pub fn text(&mut self, prompt: &str, default: Option<&str>) -> AppResult<String> {
-        kinds::text::run(
-            &mut self.terminal,
-            self.style,
-            self.mode,
-            prompt,
-            default,
-            None,
-        )
+        let ask = self.ask(prompt);
+        kinds::text::run(&mut self.terminal, ask, default, None)
     }
 
     /// Ask for freeform text validated by `validator`, re-asking on rejection.
@@ -159,14 +166,8 @@ impl<T: Terminal> Prompter<T> {
         default: Option<&str>,
         validator: &dyn Validator,
     ) -> AppResult<String> {
-        kinds::text::run(
-            &mut self.terminal,
-            self.style,
-            self.mode,
-            prompt,
-            default,
-            Some(validator),
-        )
+        let ask = self.ask(prompt);
+        kinds::text::run(&mut self.terminal, ask, default, Some(validator))
     }
 }
 
