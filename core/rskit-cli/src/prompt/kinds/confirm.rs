@@ -2,27 +2,24 @@
 
 use rskit_errors::AppResult;
 
-use super::{cancelled, closed_input, with_raw_mode};
+use super::{Ask, cancelled, closed_input, with_raw_mode};
 use crate::prompt::key::Key;
-use crate::prompt::mode::PromptMode;
-use crate::prompt::render::{self, Style};
+use crate::prompt::render::{self};
 use crate::prompt::terminal::Terminal;
 
 /// Ask a yes/no question, dispatching on mode and terminal capability.
-pub fn run(
+pub(crate) fn run(
     terminal: &mut (impl Terminal + ?Sized),
-    style: Style,
-    mode: PromptMode,
-    prompt: &str,
+    ask: Ask,
     default: bool,
 ) -> AppResult<bool> {
-    if !mode.is_interactive() {
+    if !ask.mode.is_interactive() {
         return Ok(default);
     }
     if terminal.capabilities().is_key_driven() {
-        key_driven(terminal, style, prompt, default)
+        key_driven(terminal, ask, default)
     } else {
-        line_driven(terminal, style, prompt, default)
+        line_driven(terminal, ask, default)
     }
 }
 
@@ -30,20 +27,19 @@ const fn suffix(default: bool) -> &'static str {
     if default { "[Y/n]" } else { "[y/N]" }
 }
 
-fn key_driven(
-    terminal: &mut (impl Terminal + ?Sized),
-    style: Style,
-    prompt: &str,
-    default: bool,
-) -> AppResult<bool> {
+fn key_driven(terminal: &mut (impl Terminal + ?Sized), ask: Ask, default: bool) -> AppResult<bool> {
     with_raw_mode(terminal, |terminal| {
-        let line = format!("{} {}", render::heading(style, prompt), suffix(default));
+        let line = format!(
+            "{} {}",
+            render::heading(ask.style, ask.prompt),
+            suffix(default)
+        );
         terminal.write_line(&line)?;
         terminal.flush()?;
         loop {
             match terminal.read_key()? {
                 Key::Enter => return Ok(default),
-                Key::Escape | Key::Interrupt => return Err(cancelled(prompt)),
+                Key::Escape | Key::Interrupt => return Err(cancelled(ask.prompt)),
                 Key::Char('y' | 'Y') => return Ok(true),
                 Key::Char('n' | 'N') => return Ok(false),
                 _ => {}
@@ -54,26 +50,26 @@ fn key_driven(
 
 fn line_driven(
     terminal: &mut (impl Terminal + ?Sized),
-    style: Style,
-    prompt: &str,
+    ask: Ask,
     default: bool,
 ) -> AppResult<bool> {
     loop {
         terminal.write(&format!(
             "{} {}: ",
-            render::heading(style, prompt),
+            render::heading(ask.style, ask.prompt),
             suffix(default)
         ))?;
         terminal.flush()?;
         let Some(line) = terminal.read_line()? else {
-            return Err(closed_input(prompt));
+            return Err(closed_input(ask.prompt));
         };
         match line.trim().to_ascii_lowercase().as_str() {
             "" => return Ok(default),
             "y" | "yes" => return Ok(true),
             "n" | "no" => return Ok(false),
             _ => {
-                let notice = style
+                let notice = ask
+                    .style
                     .palette()
                     .warn("please answer 'y' or 'n'")
                     .into_owned();

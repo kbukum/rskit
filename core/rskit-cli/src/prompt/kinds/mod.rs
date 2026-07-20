@@ -12,6 +12,7 @@
 //! A kind chooses the interactive path by inspecting [`Terminal::capabilities`](crate::prompt::Terminal::capabilities),
 //! so the prompter never branches on a concrete terminal type.
 
+mod ask;
 pub mod confirm;
 mod errors;
 pub mod multi_select;
@@ -23,6 +24,7 @@ pub mod select;
 mod tests;
 pub mod text;
 
+pub(crate) use ask::Ask;
 pub(crate) use errors::{cancelled, closed_input, non_interactive_error};
 pub(crate) use navigation::{focus_down, focus_up, parse_index};
 pub(crate) use output::{notice, write_answer};
