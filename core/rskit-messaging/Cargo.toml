@@ -1,7 +1,7 @@
 [package]
 name        = "rskit-messaging"
 description = "Message broker abstractions, registry, middleware, and in-memory adapter"
-version = "0.2.0-alpha.2"
+version = "0.2.0-alpha.3"
 edition.workspace     = true
 license.workspace     = true
 rust-version.workspace = true

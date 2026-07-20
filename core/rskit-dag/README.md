@@ -36,7 +36,7 @@ Nodes whose dependencies are satisfied are spawned as siblings and run concurren
 
 ```toml
 [dependencies]
-rskit-dag = "0.2.0-alpha.1"
+rskit-dag = "0.2.0-alpha.2"
 ```
 
 ```rust

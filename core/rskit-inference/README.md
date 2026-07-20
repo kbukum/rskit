@@ -6,7 +6,7 @@
 
 ```toml
 [dependencies]
-rskit-inference = "0.2.0-alpha.1"
+rskit-inference = "0.2.0-alpha.2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 

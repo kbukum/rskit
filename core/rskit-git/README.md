@@ -13,7 +13,7 @@ Composable git repository interfaces backed by libgit2 and the `git` CLI.
 
 ```toml
 [dependencies]
-rskit-git = "0.2.0-alpha.2"
+rskit-git = "0.2.0-alpha.3"
 ```
 
 ```rust

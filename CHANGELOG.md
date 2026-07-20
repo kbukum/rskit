@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.2.0-alpha.6] - 2026-07-19
+
 ### Changed
 
 - Reshape the `rskit-cli` prompt kinds' shared inputs and split the `rskit-bench` runner into concern-named submodules. `rskit-cli` groups the presentation trio threaded through every prompt kind — the rendering `Style`, the resolved `PromptMode`, and the question text — into an internal `Copy` `Ask` context, so each kind's `run`/`draw`/`line_driven`/`key_driven` helpers take the terminal plus one `Ask` instead of three separate positional arguments (the per-kind dispatch functions become `pub(crate)`, since `Prompter` is the crate's public prompt API). `rskit-bench` splits the concern-mixed `runner.rs` into a declare-only `runner/` aggregator plus `options` (`RunOptions` config), `evaluation` (the per-sample worker `EvaluationHandler` and its `EvaluationOutcome`), and `bench_runner` (the `BenchRunner` orchestration), preserving the `runner::{BenchRunner, RunOptions}` public paths. The `svg` drawing primitives keep their geometric coordinate arguments and cohesive files were left as-is. Internal refactor only; no public-surface change and no behavior change.
