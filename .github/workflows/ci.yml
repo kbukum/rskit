@@ -40,7 +40,7 @@ jobs:
       rust-code: ${{ steps.filter.outputs.rust-code }}
       affected: ${{ steps.domains.outputs.affected || 'all' }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 0
       - name: Check Python tooling runtime
@@ -92,7 +92,7 @@ jobs:
     if: needs.changes.outputs.rust-code == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - name: Check Python tooling runtime
         run: python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else "Python 3.11+ is required")'
       - name: Run Python tooling tests
@@ -107,7 +107,7 @@ jobs:
     if: needs.changes.outputs.rust-code == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c  # stable
         with:
           toolchain: "1.95"
@@ -126,7 +126,7 @@ jobs:
     needs: changes
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c  # stable
@@ -174,7 +174,7 @@ jobs:
           - os: macos-latest
             feature-mode: all
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c  # stable
@@ -190,7 +190,7 @@ jobs:
             core
             contrib
             examples
-      - uses: taiki-e/install-action@07b4745e0c39a41822af610387492e3e53aa222b  # v2
+      - uses: taiki-e/install-action@7572810d7dd469b651bb7793945692cf78da5dd7  # v2
         with:
           tool: cargo-nextest
       - name: Run selected tests
@@ -222,7 +222,7 @@ jobs:
       matrix:
         feature-mode: [default, all]
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c  # stable
@@ -262,7 +262,7 @@ jobs:
     env:
       RUSTDOCFLAGS: "-D warnings"
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c  # stable
         with:
           toolchain: "1.95"
@@ -288,7 +288,7 @@ jobs:
     needs: changes
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 0
       - name: Check Python tooling runtime
@@ -305,7 +305,7 @@ jobs:
             core
             contrib
             examples
-      - uses: taiki-e/install-action@07b4745e0c39a41822af610387492e3e53aa222b  # v2
+      - uses: taiki-e/install-action@7572810d7dd469b651bb7793945692cf78da5dd7  # v2
         with:
           tool: cargo-nextest,cargo-llvm-cov
       - name: Run coverage
@@ -337,7 +337,7 @@ jobs:
     needs: changes
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - name: Check Python tooling runtime
         run: python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else "Python 3.11+ is required")'
       - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c  # stable
@@ -362,13 +362,13 @@ jobs:
     needs: changes
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - name: Check Python tooling runtime
         run: python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else "Python 3.11+ is required")'
       - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c  # stable
         with:
           toolchain: "1.95"
-      - uses: taiki-e/install-action@07b4745e0c39a41822af610387492e3e53aa222b  # v2
+      - uses: taiki-e/install-action@7572810d7dd469b651bb7793945692cf78da5dd7  # v2
         with:
           tool: cargo-deny@0.20.2,cargo-audit
       - name: Install nightly for rustdoc JSON
