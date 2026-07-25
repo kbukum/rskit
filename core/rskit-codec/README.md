@@ -16,6 +16,7 @@ One consequence: types without a JSON equivalent (notably TOML datetimes) are no
 | --- | --- | --- |
 | `JsonCodec` | always on | `serde_json` backs the value model; `JsonCodec::compact()` for single-line machine output |
 | `TomlCodec` | `toml` (default) | top-level value must be a table |
+| `YamlCodec` | always on | top-level value must be a mapping, on decode and encode |
 
 [`Codec`] is object-safe, so a codec can be held as `Arc<dyn Codec>` and chosen at runtime — see [`select::codec_for_path`] for extension-based selection. The generic conveniences [`encode`] / [`decode`] take `&dyn Codec` and work with any `#[derive(Serialize, Deserialize)]` type; `decode::<T>` honors `#[serde(deny_unknown_fields)]`.
 
@@ -47,7 +48,7 @@ let merged = merge_with(
 );
 ```
 
-YAML and other formats drop in as additional `Codec` implementations behind their own features without changing the contract or the merge.
+Other formats drop in as additional `Codec` implementations without changing the contract or the merge.
 
 ## Length-delimited framing
 

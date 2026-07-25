@@ -3,7 +3,7 @@
 //! Returns an `Arc<dyn Codec>`
 //! so a caller (a file sink, a document loader) can pick a codec at runtime from a path's extension without knowing the concrete type.
 //! Only the codecs compiled in are selectable: the TOML codec requires the default-on `toml` feature;
-//! JSON is always available.
+//! JSON and YAML are always available.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -11,9 +11,10 @@ use std::sync::Arc;
 use crate::JsonCodec;
 #[cfg(feature = "toml")]
 use crate::TomlCodec;
+use crate::YamlCodec;
 use crate::codec::Codec;
 
-/// Return a codec for a lowercase format `name` (for example `"toml"`, `"json"`),
+/// Return a codec for a lowercase format `name` (for example `"toml"`, `"json"`, `"yaml"`),
 /// or `None` when no compiled-in codec matches.
 #[must_use]
 pub fn codec_for_name(name: &str) -> Option<Arc<dyn Codec>> {
@@ -21,6 +22,7 @@ pub fn codec_for_name(name: &str) -> Option<Arc<dyn Codec>> {
         #[cfg(feature = "toml")]
         "toml" => Some(Arc::new(TomlCodec)),
         "json" => Some(Arc::new(JsonCodec::default())),
+        "yaml" | "yml" => Some(Arc::new(YamlCodec)),
         _ => None,
     }
 }
@@ -59,8 +61,22 @@ mod tests {
     }
 
     #[test]
+    fn selects_yaml_by_name_and_path() {
+        assert_eq!(codec_for_name("yaml").unwrap().name(), "yaml");
+        assert_eq!(codec_for_name("yml").unwrap().name(), "yaml");
+        assert_eq!(
+            codec_for_path(Path::new("config.yaml")).unwrap().name(),
+            "yaml"
+        );
+        assert_eq!(
+            codec_for_path(Path::new("config.yml")).unwrap().name(),
+            "yaml"
+        );
+    }
+
+    #[test]
     fn returns_none_for_unknown_or_missing_extension() {
-        assert!(codec_for_name("yaml").is_none());
+        assert!(codec_for_name("ini").is_none());
         assert!(codec_for_path(Path::new("config")).is_none());
     }
 }

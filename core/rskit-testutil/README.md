@@ -10,6 +10,7 @@ Test utilities, mock providers, and assertion helpers for rskit services.
 - `assert_ok(result)` — unwrap `AppResult` or panic with context
 - `assert_err_code(result, code)` — assert a specific `ErrorCode`
 - `TestWorkspace` / `test_workspace!` — managed temp workspaces with fixture loading and copying
+- `golden` — golden/snapshot verification: caller-supplied normalization rules, matcher tiers (`Exact` / `Normalized` / `LineSet` / `Subset`), and a `Golden` file handle that compares or — with `RSKIT_BLESS` set — regenerates expected output
 - Thread-safe via `parking_lot::Mutex`
 
 `TestWorkspace` is the generic fixture harness for rskit tests. Use `with_fixture_dir` when fixtures live outside the default crate layout, or `test_workspace!` when a crate follows the conventional `tests/fixtures` directory.

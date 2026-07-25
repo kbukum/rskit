@@ -25,10 +25,12 @@ parking_lot    = { workspace = true }
 uuid           = { workspace = true }
 serde          = { workspace = true }
 validator      = { workspace = true }
+regex          = { workspace = true }
 
 # Internal
 rskit-errors = { workspace = true }
 rskit-fs = { workspace = true }
+rskit-util = { workspace = true }
 rskit-provider = { workspace = true }
 rskit-component = { workspace = true }
 rskit-hook = { workspace = true }
