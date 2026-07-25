@@ -1,6 +1,6 @@
 [package]
 name        = "rskit-codec"
-description = "Pluggable structured-text codecs (TOML/JSON) over a shared value tree, with value-tree merge"
+description = "Pluggable structured-text codecs (TOML/JSON/YAML) over a shared value tree, with value-tree merge"
 version = "0.2.0-alpha.2"
 edition.workspace      = true
 license.workspace      = true
@@ -11,7 +11,7 @@ homepage.workspace     = true
 documentation = "https://docs.rs/rskit-codec"
 readme = "README.md"
 categories = ["encoding", "parsing"]
-keywords   = ["codec", "toml", "json", "serde", "merge"]
+keywords   = ["codec", "toml", "json", "yaml", "serde"]
 
 [package.metadata.docs.rs]
 all-features = true
@@ -20,14 +20,16 @@ rustdoc-args = ["--cfg", "docsrs"]
 [features]
 default = ["toml"]
 # Built-in TOML codec (`TomlCodec`). The JSON codec is always available because
-# `serde_json::Value` is the crate's value model.
+# `serde_json::Value` is the crate's value model; the YAML codec is always
+# available as well.
 toml = ["dep:toml"]
 
 [dependencies]
 # External
-serde      = { workspace = true }
-serde_json = { workspace = true }
-toml       = { workspace = true, optional = true }
+serde        = { workspace = true }
+serde_json   = { workspace = true }
+serde_norway = { workspace = true }
+toml         = { workspace = true, optional = true }
 
 # Internal
 rskit-errors = { workspace = true }

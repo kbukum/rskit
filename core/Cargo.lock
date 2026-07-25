@@ -5316,6 +5316,7 @@ dependencies = [
  "rskit-errors",
  "serde",
  "serde_json",
+ "serde_norway",
  "toml",
 ]
 
@@ -6286,12 +6287,14 @@ version = "0.2.0-alpha.3"
 dependencies = [
  "async-trait",
  "parking_lot",
+ "regex",
  "rskit-component",
  "rskit-config",
  "rskit-errors",
  "rskit-fs",
  "rskit-hook",
  "rskit-provider",
+ "rskit-util",
  "rskit-validation",
  "serde",
  "tokio",

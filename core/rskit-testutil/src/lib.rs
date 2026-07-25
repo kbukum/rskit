@@ -16,6 +16,8 @@ pub mod component;
 pub mod config;
 /// Process working-directory guard for tests.
 pub mod current_dir;
+/// Golden/snapshot verification: normalization, matcher tiers, bless.
+pub mod golden;
 /// Hook and event-bus test helpers.
 pub mod hook;
 /// Generic mock provider for testing.
@@ -27,6 +29,7 @@ pub use assertions::{assert_err_code, assert_ok};
 pub use component::FakeComponent;
 pub use config::TestAppConfig;
 pub use current_dir::CurrentDirGuard;
+pub use golden::{BLESS_ENV, Golden, GoldenMode, GoldenOutcome, Match, Normalizer, Rule};
 pub use hook::TestEvent;
 pub use mock_provider::MockProvider;
 pub use workspace::TestWorkspace;
