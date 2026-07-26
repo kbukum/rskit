@@ -1,6 +1,6 @@
 mod helpers;
 
-use rskit_git::{Repository, discover, init, init_bare, open};
+use rskit_git::{InitOptions, Repository, discover, init, init_bare, init_with, open};
 
 use tempfile::TempDir;
 
@@ -31,6 +31,45 @@ fn init_creates_worktree_repository() {
 }
 
 #[test]
+fn init_pins_main_as_the_initial_branch() {
+    let dir = TempDir::new().expect("failed to create temp dir");
+
+    init(dir.path()).expect("init failed");
+
+    let head = std::fs::read_to_string(dir.path().join(".git/HEAD")).expect("read HEAD");
+    assert_eq!(head, "ref: refs/heads/main\n");
+}
+
+#[test]
+fn init_with_sets_an_explicit_initial_branch() {
+    let dir = TempDir::new().expect("failed to create temp dir");
+    let options = InitOptions::default().with_initial_branch("trunk");
+
+    init_with(dir.path(), &options).expect("init_with failed");
+
+    let head = std::fs::read_to_string(dir.path().join(".git/HEAD")).expect("read HEAD");
+    assert_eq!(head, "ref: refs/heads/trunk\n");
+}
+
+#[test]
+fn init_with_rejects_an_invalid_initial_branch() {
+    let dir = TempDir::new().expect("failed to create temp dir");
+    let options = InitOptions::default().with_initial_branch("bad branch");
+
+    let error = match init_with(dir.path(), &options) {
+        Ok(_) => panic!("invalid branch must fail"),
+        Err(error) => error,
+    };
+
+    assert!(
+        error
+            .to_string()
+            .contains("invalid branch name 'bad branch'")
+    );
+    assert!(!dir.path().join(".git").exists());
+}
+
+#[test]
 fn init_bare_creates_bare_repository_layout() {
     let dir = TempDir::new().expect("failed to create temp dir");
     let r = init_bare(dir.path()).expect("init_bare failed");
@@ -40,6 +79,16 @@ fn init_bare_creates_bare_repository_layout() {
     );
     assert!(dir.path().join("HEAD").is_file());
     assert!(!dir.path().join(".git").exists());
+}
+
+#[test]
+fn init_bare_pins_main_as_the_initial_branch() {
+    let dir = TempDir::new().expect("failed to create temp dir");
+
+    init_bare(dir.path()).expect("init_bare failed");
+
+    let head = std::fs::read_to_string(dir.path().join("HEAD")).expect("read HEAD");
+    assert_eq!(head, "ref: refs/heads/main\n");
 }
 
 #[test]

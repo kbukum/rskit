@@ -1,10 +1,11 @@
 use std::path::{Path, PathBuf};
 
-use rskit_errors::AppResult;
+use rskit_errors::{AppError, AppResult};
 
 use crate::core::Repository as RepositoryTrait;
 use crate::error::GitError;
-use crate::types::{Oid, Reference};
+use crate::options::InitOptions;
+use crate::types::{DEFAULT_BRANCH, Oid, Reference};
 
 use super::{map_head_error, oid_from_git2, reference_from_git2};
 
@@ -71,9 +72,31 @@ pub fn clone(url: &str, path: impl AsRef<Path>) -> AppResult<Git2Repository> {
 }
 
 /// Creates a new git repository at the given path.
+///
+/// The initial branch is [`DEFAULT_BRANCH`], pinned explicitly so the trunk
+/// name does not depend on the host's Git configuration.
 pub fn init(path: impl AsRef<Path>) -> AppResult<Git2Repository> {
+    init_with(
+        path,
+        &InitOptions::default().with_initial_branch(DEFAULT_BRANCH),
+    )
+}
+
+/// Creates a new git repository at the given path with explicit options.
+pub fn init_with(path: impl AsRef<Path>, options: &InitOptions) -> AppResult<Git2Repository> {
     let path = path.as_ref();
-    let repo = git2::Repository::init(path).map_err(GitError::Internal)?;
+    let mut git2_options = git2::RepositoryInitOptions::new();
+    if let Some(initial_branch) = &options.initial_branch {
+        let reference = format!("refs/heads/{initial_branch}");
+        if !git2::Reference::is_valid_name(&reference) {
+            return Err(AppError::invalid_input(
+                "initial_branch",
+                format!("invalid branch name '{initial_branch}'"),
+            ));
+        }
+        git2_options.initial_head(initial_branch);
+    }
+    let repo = git2::Repository::init_opts(path, &git2_options).map_err(GitError::Internal)?;
     let root = repo
         .workdir()
         .map(Path::to_path_buf)
@@ -82,9 +105,13 @@ pub fn init(path: impl AsRef<Path>) -> AppResult<Git2Repository> {
 }
 
 /// Creates a new bare git repository at the given path.
+///
+/// The initial branch is [`DEFAULT_BRANCH`], matching [`init`].
 pub fn init_bare(path: impl AsRef<Path>) -> AppResult<Git2Repository> {
     let path = path.as_ref();
-    let repo = git2::Repository::init_bare(path).map_err(GitError::Internal)?;
+    let mut options = git2::RepositoryInitOptions::new();
+    options.bare(true).initial_head(DEFAULT_BRANCH);
+    let repo = git2::Repository::init_opts(path, &options).map_err(GitError::Internal)?;
     Ok(Git2Repository {
         repo,
         root: path.to_path_buf(),
