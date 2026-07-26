@@ -7,6 +7,23 @@ use crate::types::Signature;
 /// Raw extra CLI-style arguments preserved for implementation-specific usage.
 pub type ExtraArgs = Vec<String>;
 
+/// Controls repository initialization.
+#[derive(Debug, Clone, Default)]
+pub struct InitOptions {
+    /// Explicit short branch name for the unborn initial HEAD. When absent,
+    /// libgit2 follows the caller's Git configuration.
+    pub initial_branch: Option<String>,
+}
+
+impl InitOptions {
+    /// Set the short branch name for the unborn initial HEAD.
+    #[must_use = "builder methods return the updated options; chain or bind the result"]
+    pub fn with_initial_branch(mut self, branch: impl Into<String>) -> Self {
+        self.initial_branch = Some(branch.into());
+        self
+    }
+}
+
 /// Controls log traversal.
 #[derive(Debug, Clone, Default)]
 pub struct LogOptions {

@@ -47,7 +47,7 @@ pub use manage::{ConfigReader, Maintainer, RefManager, RemoteManager};
 pub use options::*;
 pub use paths::{join_repo_path, repo_relative_path};
 pub use read::{Blamer, Differ, IgnoreReader, IndexReader, Inspector, LogReader, TreeReader};
-pub use repo::{Repo, clone, discover, init, init_bare, open};
+pub use repo::{Repo, clone, discover, init, init_bare, init_with, open};
 pub use rskit_errors::{AppError, AppResult};
 pub use types::*;
 pub use write::{

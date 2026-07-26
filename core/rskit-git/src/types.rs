@@ -42,6 +42,13 @@ impl fmt::Debug for Oid {
 /// OID of a tree object for content-addressed comparison.
 pub type TreeHash = Oid;
 
+/// Default initial branch name for newly initialized repositories.
+///
+/// Pinned explicitly rather than inherited from the host's Git configuration
+/// (`init.defaultBranch`, else `master`) so repository setup is deterministic
+/// and matches what a fresh `git init` produces on current toolchains.
+pub const DEFAULT_BRANCH: &str = "main";
+
 /// A git reference (branch, tag, or HEAD).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Reference {

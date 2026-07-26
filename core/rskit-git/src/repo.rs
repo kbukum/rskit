@@ -10,7 +10,7 @@ use crate::embedded;
 use crate::manage::{ConfigReader, Maintainer, RefManager, RemoteManager};
 use crate::options::{
     BlameOptions, CheckoutOptions, CleanOptions, CommitOptions, DescribeOptions, FetchOptions,
-    GrepOptions, LogOptions, MergeOptions, PushOptions, RebaseOptions,
+    GrepOptions, InitOptions, LogOptions, MergeOptions, PushOptions, RebaseOptions,
 };
 use crate::read::{Blamer, Differ, IgnoreReader, IndexReader, Inspector, LogReader, TreeReader};
 use crate::types::{
@@ -51,11 +51,21 @@ pub fn clone(url: &str, path: impl AsRef<Path>) -> AppResult<Repo> {
 }
 
 /// Initializes a new git repository at the given path.
+///
+/// The initial branch is [`DEFAULT_BRANCH`](crate::DEFAULT_BRANCH) regardless
+/// of the host's Git configuration; use [`init_with`] to choose another name.
 pub fn init(path: impl AsRef<Path>) -> AppResult<Repo> {
     embedded::init(path).map(Repo::new)
 }
 
+/// Initializes a new git repository at the given path with explicit options.
+pub fn init_with(path: impl AsRef<Path>, options: &InitOptions) -> AppResult<Repo> {
+    embedded::init_with(path, options).map(Repo::new)
+}
+
 /// Initializes a new bare git repository at the given path.
+///
+/// The initial branch is [`DEFAULT_BRANCH`](crate::DEFAULT_BRANCH), matching [`init`].
 pub fn init_bare(path: impl AsRef<Path>) -> AppResult<Repo> {
     embedded::init_bare(path).map(Repo::new)
 }
