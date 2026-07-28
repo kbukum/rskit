@@ -19,6 +19,10 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 testutil = ["dep:tempfile"]
+# Statically link a source-built OpenSSL into the embedded `git2` backend
+# instead of resolving one from the host. Opt in for portable or
+# cross-compiled builds where a target OpenSSL is not otherwise available.
+vendored-openssl = ["git2/vendored-openssl"]
 
 [dependencies]
 # External
