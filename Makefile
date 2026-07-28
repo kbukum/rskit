@@ -268,7 +268,7 @@ depgraphs:
 ## with the candidate Toven binary. Mutation-free — the native RSKIT_TOOL release
 ## path above stays authoritative until parity is proven. TOVEN selects the
 ## binary (see the TOVEN var).
-toven:
+toven-canary:
 	@$(TOVEN) modules
 	@$(TOVEN) release status
 	@$(TOVEN) release readiness
