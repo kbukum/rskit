@@ -352,6 +352,7 @@ fn is_symlink_open_error(error: &std::io::Error) -> bool {
     }
     #[cfg(not(unix))]
     {
+        let _ = error;
         false
     }
 }
