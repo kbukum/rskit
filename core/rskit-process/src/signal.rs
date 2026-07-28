@@ -22,6 +22,9 @@ impl ProcessSignal {
     }
 
     /// Platform signal value.
+    ///
+    /// Only defined on Unix, where the process-signaling helpers use it; other
+    /// platforms have no `kill(2)`-style signaling and never reference it.
     #[cfg(unix)]
     pub(crate) const fn as_raw(self) -> i32 {
         match self {
@@ -29,13 +32,6 @@ impl ProcessSignal {
             Self::Terminate => libc::SIGTERM,
             Self::Kill => libc::SIGKILL,
         }
-    }
-
-    /// Platform signal value placeholder for unsupported platforms.
-    #[cfg(not(unix))]
-    pub(crate) const fn as_raw(self) -> i32 {
-        let _ = self;
-        0
     }
 }
 

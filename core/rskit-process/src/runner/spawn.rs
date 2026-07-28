@@ -1,4 +1,3 @@
-use std::io;
 use std::process::Stdio;
 
 use tokio::process::Command as TokioCommand;
@@ -41,15 +40,21 @@ pub(in crate::runner) fn configure_command(
 
 fn isolate(cmd: &mut TokioCommand) {
     #[cfg(unix)]
-    // SAFETY: `pre_exec` runs in the child process after fork and before exec.
-    // The closure only calls the async-signal-safe `setpgid` libc function
-    // and returns an `io::Error` on failure, which is the supported usage pattern.
-    unsafe {
-        cmd.pre_exec(|| {
-            if libc::setpgid(0, 0) != 0 {
-                return Err(io::Error::last_os_error());
-            }
-            Ok(())
-        });
+    {
+        // SAFETY: `pre_exec` runs in the child process after fork and before exec.
+        // The closure only calls the async-signal-safe `setpgid` libc function
+        // and returns an `io::Error` on failure, which is the supported usage pattern.
+        unsafe {
+            cmd.pre_exec(|| {
+                if libc::setpgid(0, 0) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = cmd;
     }
 }

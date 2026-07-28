@@ -22,6 +22,10 @@ pub fn isolate(command: &mut StdCommand) {
             });
         }
     }
+    #[cfg(not(unix))]
+    {
+        let _ = command;
+    }
 }
 
 /// Request graceful interruption for the process group led by the provided child PID.
