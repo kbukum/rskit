@@ -9,6 +9,11 @@ Composable git repository interfaces backed by libgit2 and the `git` CLI.
 - `GitCli` backend for command-oriented workflows using argv-only subprocess execution.
 - Typed `GitError` variants converted into `AppError` for consistent rskit error handling.
 
+## Cargo features
+
+- `vendored-openssl` (off by default): statically link a source-built OpenSSL into the embedded `git2` backend instead of resolving one from the host. The default builds against the system OpenSSL so it stays on the platform's security updates; opt in for portable or cross-compiled release builds where a target OpenSSL is not available.
+- `testutil` (off by default): expose the in-crate test helpers.
+
 ## Usage
 
 ```toml
