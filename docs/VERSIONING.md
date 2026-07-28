@@ -126,6 +126,21 @@ The README badge documents the current MSRV. `rust-toolchain.toml` pins the deve
 4. Keep release mechanics in [`RELEASING.md`](RELEASING.md).
 5. Fix forward with a new version if crates.io publishing partially succeeds; published crate versions are immutable.
 
+## Toven versioning parity
+
+`toven.toml`'s `[ecosystems.rust.release]` block encodes the same independent per-crate, crates.io-targeted model this document describes, so the `toven` binary can preview the version cascade and the publish order before `rskit_tool` applies a bump.
+
+| Versioning behavior | Legacy source of truth | Toven preview | Expected output |
+|---|---|---|---|
+| Independent per-crate bump | `rskit_tool release bump` (`make release-bump`) | `toven release plan` | cascade table with a per-crate current → planned version and bump kind |
+| Breaking-minor cascade to dependents | `rskit_tool` caret-floor rewrite | `toven release plan` (`dependency cascade` reason column) | dependents shown as cascaded when a dependency takes a breaking bump |
+| Registry idempotency (skip already-published) | `rskit_tool` diff against crates.io max version | `toven release readiness` (`registry-idempotent`) + `toven release publish --dry-run` | `registry-idempotent: pass` when no crate is behind the registry; per-crate `already-published` verdicts |
+| Split-workspace discovery (`core`, `contrib`, `examples`) | `rskit_tool` per-workspace operation | `toven modules` | all workspace crates discovered under one graph |
+| Non-publishable crate exclusion | `publish = false` on the `examples/` demos and the `fuzz/` harness | `toven release status` / `toven release plan` | `agent-demo`, `core-cli`, `media-demo`, and `rskit-fuzz` are discovered by `toven modules` but explicitly `exclude`d from the release, so they never appear in the plan or reach crates.io |
+| Clean-tree requirement | maintainer rule + release preflight | `toven release readiness` (`clean-tree`) | `clean-tree` check, `fail` on a dirty tree |
+
+Toven's plan is a cross-check against `rskit_tool` during the migration, not a replacement: `make release-bump` still applies the manifest edits and the GitHub Release workflow still publishes to crates.io.
+
 ## References
 
 - [SemVer 2.0.0](https://semver.org/spec/v2.0.0.html)

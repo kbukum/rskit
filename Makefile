@@ -1,13 +1,17 @@
 .PHONY: all setup build test test-nextest test-doc test-python test-affected coverage coverage-changed test-coverage test-coverage-html lint fmt fmt-check check check-fast check-facade-features \
        check-core check-patterns check-crosscutting check-composition check-transport check-auth check-data check-ai \
        check-media check-infra doc deny check-l7-edges check-workspace-deps-sync check-topology check-public-api release-readiness release-coverage \
-       publish-dry-run release-publish release-bump release-sbom depgraphs clean help ci ci-test ci-lint ci-fmt ensure-act structure
+       publish-dry-run release-publish release-bump release-sbom depgraphs clean help ci ci-test ci-lint ci-fmt ensure-act structure toven-canary
 
 CORE_MANIFEST = core/Cargo.toml
 CONTRIB_MANIFEST = contrib/Cargo.toml
 EXAMPLES_MANIFEST = examples/Cargo.toml
 PYTHON ?= python3
 RSKIT_TOOL = $(PYTHON) ./scripts/rskit_tool.py
+# Candidate Toven binary for the read-only self-hosting canary. Defaults to a
+# `toven` on PATH; point it at a freshly built binary to dogfood a candidate,
+# e.g. `make TOVEN=../toven/target/release/toven toven-canary`.
+TOVEN ?= toven
 WORKSPACE_MANIFESTS = $(CORE_MANIFEST) $(CONTRIB_MANIFEST) $(EXAMPLES_MANIFEST)
 FORMAT_MANIFESTS = $(WORKSPACE_MANIFESTS)
 TEST_THREADS ?= 1
@@ -259,6 +263,15 @@ release-sbom:
 ## Requires: cargo-depgraph, Graphviz (dot)
 depgraphs:
 	@$(RSKIT_TOOL) release depgraphs
+
+## Read-only Toven self-hosting canary: discover modules and preview the release
+## with the candidate Toven binary. Mutation-free — the native RSKIT_TOOL release
+## path above stays authoritative until parity is proven. TOVEN selects the
+## binary (see the TOVEN var).
+toven-canary:
+	@$(TOVEN) modules
+	@$(TOVEN) release status
+	@$(TOVEN) release readiness
 
 ## Fast check: format + lint + build only (no tests) — for rapid iteration
 check-fast: fmt-check lint build

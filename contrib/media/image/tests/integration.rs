@@ -1182,29 +1182,36 @@ async fn perf_resize_comparison() {
     let fixture = create_gradient_png(1000, 1000);
     let source = FileSource::from_path(fixture.path());
 
-    // Warm up
     let backend = image_executor();
     let ops = vec![MediaOp::Resize(ResizeOp {
         resolution: Resolution::new(200, 200),
         mode: ResizeMode::Exact,
     })];
 
-    // Measure registered image backend
-    let start = std::time::Instant::now();
-    for _ in 0..5 {
-        let _ = backend.execute(&source, &ops, None).await.expect("resize");
-    }
-    let backend_time = start.elapsed() / 5;
+    // Warm up both paths so one-time costs don't land in a measured iteration.
+    let _ = backend.execute(&source, &ops, None).await.expect("resize");
+    let img = image::open(fixture.path()).expect("open");
+    let _ = img.resize_exact(200, 200, image::imageops::FilterType::Lanczos3);
 
-    // Measure raw image crate
-    let start = std::time::Instant::now();
-    for _ in 0..5 {
+    // Interleave both paths and keep the best per-iteration time of each.
+    // Averages of sequential loops are unreliable under parallel test load:
+    // neighboring test processes inflate whichever loop happens to run during
+    // a contention spike. The minimum discards those spikes.
+    const RUNS: u32 = 10;
+    let mut backend_time = std::time::Duration::MAX;
+    let mut raw_time = std::time::Duration::MAX;
+    for _ in 0..RUNS {
+        let start = std::time::Instant::now();
+        let _ = backend.execute(&source, &ops, None).await.expect("resize");
+        backend_time = backend_time.min(start.elapsed());
+
+        let start = std::time::Instant::now();
         let img = image::open(fixture.path()).expect("open");
         let _resized = img.resize_exact(200, 200, image::imageops::FilterType::Lanczos3);
+        raw_time = raw_time.min(start.elapsed());
     }
-    let raw_time = start.elapsed() / 5;
 
-    println!("=== Image Resize Performance (1000×1000 → 200×200, avg of 5) ===");
+    println!("=== Image Resize Performance (1000×1000 → 200×200, best of {RUNS}) ===");
     println!("  registered image backend:   {backend_time:?}");
     println!("  Raw image crate:  {raw_time:?}");
     let overhead_pct = if raw_time.as_nanos() > 0 {
@@ -1214,7 +1221,8 @@ async fn perf_resize_comparison() {
     };
     println!("  Overhead:         {overhead_pct:.1}%");
 
-    // registered image backend should not be more than 50% slower than raw
+    // registered image backend should stay well under 3x the raw crate even on
+    // a heavily loaded machine
     assert!(
         backend_time < raw_time * 3,
         "registered image backend is too slow: {backend_time:?} vs {raw_time:?}"
