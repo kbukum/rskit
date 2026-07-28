@@ -9,6 +9,45 @@ base_ref = "origin/main"
 [ecosystems.rust]
 manifests = "auto"
 
+[ecosystems.rust.coverage]
+changed_line = 85.0
+enforcement = "advisory"
+function = 80.0
+line = 80.0
+region = 70.0
+
+# rskit's publishable core and contrib crates publish to crates.io; a release is
+# gated on a clean tree and registry idempotency, supports an alpha prerelease
+# channel, and cuts a hosted GitHub Release after publishing.
+[ecosystems.rust.release]
+readiness = ["clean-tree", "registry-idempotent"]
+registry = "crates-io"
+
+[ecosystems.rust.release.host]
+forge = "github"
+
+[ecosystems.rust.release.prerelease]
+channels = ["alpha"]
+
+# The `examples/` demos (`agent-demo`, `core-cli`, `media-demo`) and the
+# `fuzz/` harness (`rskit-fuzz`) are `publish = false` in their manifests and
+# must never reach crates.io. Toven does not infer publishability from a
+# manifest's `publish = false`, so each non-publishable crate is classified
+# explicitly here as excluded from the release (no version bump, tag, registry
+# call, or hosted release). This keeps workspace discovery from sweeping the
+# demos and the fuzz target into the registry train.
+[modules."rust:agent-demo".release]
+exclude = true
+
+[modules."rust:core-cli".release]
+exclude = true
+
+[modules."rust:media-demo".release]
+exclude = true
+
+[modules."rust:rskit-fuzz".release]
+exclude = true
+
 [ecosystems.rust.tasks.build]
 argv = ["cargo", "build", "--manifest-path", "{module.manifest}", "{module.selector}", "{args}"]
 fan_out = "batchable"
@@ -21,8 +60,15 @@ fan_out = "batchable"
 selector = ["-p", "{module.package}"]
 shared_inputs = ["contrib/Cargo.lock", "core/Cargo.lock", "examples/Cargo.lock"]
 
+[ecosystems.rust.tasks.coverage]
+argv = ["cargo", "llvm-cov", "--manifest-path", "{module.manifest}", "--workspace", "--lcov", "--output-path", "target/toven/coverage/rust-{module.name}.lcov", "{args}"]
+cacheable = false
+fan_out = "whole-workspace"
+kind = "coverage"
+shared_inputs = ["contrib/Cargo.lock", "core/Cargo.lock", "examples/Cargo.lock"]
+
 [ecosystems.rust.tasks.doc]
-argv = ["cargo", "doc", "--no-deps", "--manifest-path", "{module.manifest}", "{module.selector}", "{args}"]
+argv = ["cargo", "doc", "--manifest-path", "{module.manifest}", "{module.selector}", "--no-deps", "{args}"]
 fan_out = "batchable"
 selector = ["-p", "{module.package}"]
 shared_inputs = ["contrib/Cargo.lock", "core/Cargo.lock", "examples/Cargo.lock"]
