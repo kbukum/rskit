@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Map a missing git identity to an actionable error in `rskit-git` instead of an opaque internal failure. When a commit relies on the repository's default signature and `user.name` / `user.email` are unset, libgit2 raises a `Config`/`NotFound` error that was previously collapsed into `GitError::Internal(git2::Error)` and serialized as the generic "internal server error". A new `GitError::IdentityMissing` variant now classifies that signature failure and maps to an `InvalidInput` `AppError` naming the missing key and telling the user how to set it (`git config user.name` / `git config user.email`). This most visibly affects CI checkouts that authenticate but configure no identity. The generic `AppError::internal` cause-hiding contract is left intact for genuinely internal git2 failures.
 - Deflake the `rskit-media-image` resize performance comparison test, which failed intermittently under parallel nextest load: the two sequential average-of-5 loops measured scheduler noise, so whichever loop hit a CPU contention window lost the ratio. The test now warms up both paths, interleaves the backend and raw-`image` measurements, and keeps the best per-iteration time of each, discarding contention spikes instead of averaging them in.
 
 ## [0.2.0-alpha.6] - 2026-07-19
