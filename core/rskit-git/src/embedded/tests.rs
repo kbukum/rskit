@@ -31,3 +31,19 @@ fn map_remote_error_distinguishes_network_from_internal_errors() {
     let other = git2::Error::from_str("other");
     assert!(matches!(map_remote_error(other), GitError::Internal(_)));
 }
+
+#[test]
+fn map_signature_error_distinguishes_missing_identity_from_internal_errors() {
+    let missing = git2::Error::new(
+        git2::ErrorCode::NotFound,
+        git2::ErrorClass::Config,
+        "config value 'user.email' was not found",
+    );
+    match map_signature_error(missing) {
+        GitError::IdentityMissing { key } => assert_eq!(key, "user.email"),
+        other => panic!("expected IdentityMissing, got {other:?}"),
+    }
+
+    let other = git2::Error::from_str("boom");
+    assert!(matches!(map_signature_error(other), GitError::Internal(_)));
+}

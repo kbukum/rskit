@@ -107,6 +107,17 @@ pub enum GitError {
     #[error("commit signing is not supported by the selected backend")]
     SigningNotSupported,
 
+    /// Git author/committer identity is not configured.
+    ///
+    /// libgit2 cannot build a default signature because `user.name` and/or
+    /// `user.email` are unset in the effective git configuration. This is an
+    /// actionable configuration problem, not an internal failure.
+    #[error("git identity is not configured: {key} is not set")]
+    IdentityMissing {
+        /// Missing identity config key (for example `user.name` or `user.email`).
+        key: String,
+    },
+
     /// Unsupported transport configuration.
     #[error("invalid transport configuration: {kind}")]
     InvalidTransport {
@@ -189,6 +200,13 @@ impl From<GitError> for AppError {
                 "sign",
                 "commit signing is not supported by the selected backend",
             ),
+            GitError::IdentityMissing { key } => {
+                AppError::invalid_input("git identity", format!("{key} is not configured"))
+                    .hint(
+                        "Set it with `git config user.name \"…\"` and \
+                         `git config user.email \"…\"` (add --global to apply it for every repository).",
+                    )
+            }
             GitError::InvalidTransport { kind } => AppError::invalid_input("transport", kind),
             GitError::Network(message) => {
                 AppError::external_service("git", io::Error::other(message))
@@ -308,6 +326,12 @@ mod tests {
             ),
             (GitError::SigningNotSupported, ErrorCode::InvalidInput),
             (
+                GitError::IdentityMissing {
+                    key: "user.name".to_string(),
+                },
+                ErrorCode::InvalidInput,
+            ),
+            (
                 GitError::InvalidTransport {
                     kind: "ssh".to_string(),
                 },
@@ -371,5 +395,18 @@ mod tests {
         assert!(detail.contains("exit code: 1"));
         assert!(detail.contains("stderr_truncated: true"));
         assert!(detail.contains("stdout: hint"));
+    }
+
+    #[test]
+    fn identity_missing_message_is_actionable() {
+        let app_error = AppError::from(GitError::IdentityMissing {
+            key: "user.email".to_string(),
+        });
+
+        assert_eq!(app_error.code(), ErrorCode::InvalidInput);
+        let message = app_error.message();
+        assert!(message.contains("user.email"));
+        assert!(message.contains("git config user.name"));
+        assert!(message.contains("git config user.email"));
     }
 }

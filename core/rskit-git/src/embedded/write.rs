@@ -10,7 +10,7 @@ use crate::options::CommitOptions;
 use crate::types::{EntryState, Oid, Signature, StatusEntry};
 use crate::write::{Committer, IndexManager};
 
-use super::{Git2Repository, oid_from_git2};
+use super::{Git2Repository, map_signature_error, oid_from_git2};
 
 impl IndexManager for Git2Repository {
     fn stage(&self, paths: &[&str]) -> AppResult<()> {
@@ -102,7 +102,7 @@ impl Committer for Git2Repository {
             let author = opts.author.as_ref().map(signature_to_git2).transpose()?;
             let committer = match opts.committer.as_ref() {
                 Some(signature) => Some(signature_to_git2(signature)?),
-                None => Some(self.repo.signature().map_err(GitError::Internal)?),
+                None => Some(self.repo.signature().map_err(map_signature_error)?),
             };
 
             head.amend(
@@ -117,11 +117,11 @@ impl Committer for Git2Repository {
         } else {
             let author = match opts.author.as_ref() {
                 Some(signature) => signature_to_git2(signature)?,
-                None => self.repo.signature().map_err(GitError::Internal)?,
+                None => self.repo.signature().map_err(map_signature_error)?,
             };
             let committer = match opts.committer.as_ref() {
                 Some(signature) => signature_to_git2(signature)?,
-                None => self.repo.signature().map_err(GitError::Internal)?,
+                None => self.repo.signature().map_err(map_signature_error)?,
             };
 
             let parents = self

@@ -69,6 +69,36 @@ fn local_workspace(name: &str) -> PathBuf {
     root
 }
 
+/// Point every ambient git config level at an empty directory so tests never
+/// inherit the developer's global `user.name` / `user.email`.
+///
+/// libgit2 exposes config search paths only as a process-global setting, so this
+/// runs exactly once per process. Every other test configures identity at the
+/// local level, which takes precedence, so the isolation is harmless for them
+/// and simply makes the suite hermetic and CI-faithful.
+fn ensure_isolated_git_config() {
+    use std::sync::OnceLock;
+
+    static ISOLATED: OnceLock<()> = OnceLock::new();
+    ISOLATED.get_or_init(|| {
+        let empty = local_workspace("empty-git-config");
+        for level in [
+            git2::ConfigLevel::System,
+            git2::ConfigLevel::Global,
+            git2::ConfigLevel::XDG,
+            git2::ConfigLevel::ProgramData,
+        ] {
+            // SAFETY: libgit2 search-path configuration is process-global. It is
+            // set once, before any identity-sensitive test reads config, and only
+            // ever redirects config discovery at an empty directory — never at a
+            // path that could grant an unexpected identity.
+            unsafe {
+                let _ = git2::opts::set_search_path(level, &empty);
+            }
+        }
+    });
+}
+
 #[test]
 fn repository_facade_manages_refs_config_and_remotes_locally() {
     let local = LocalRepo::new("manage");
@@ -281,4 +311,37 @@ fn commits_support_explicit_signatures_and_amend_without_signing() {
         )
         .expect_err("signing is unsupported");
     assert_eq!(signing.code(), rskit_errors::ErrorCode::InvalidInput);
+}
+
+#[test]
+fn commit_without_configured_identity_yields_actionable_error() {
+    ensure_isolated_git_config();
+
+    let root = local_workspace("missing-identity");
+    let repo = init(&root).expect("initialize local git repository");
+    // Intentionally leave user.name / user.email unset — mirroring a fresh CI
+    // checkout that authenticates but never configures a git identity.
+
+    fs::write(
+        root.join("file.txt"),
+        "one
+",
+    )
+    .expect("write repository file");
+    repo.stage(&["file.txt"]).expect("stage file");
+
+    let error = repo
+        .commit("initial", None)
+        .expect_err("commit without identity must fail");
+
+    assert_eq!(error.code(), rskit_errors::ErrorCode::InvalidInput);
+    let message = error.message();
+    assert!(
+        message.contains("git config user.name") && message.contains("git config user.email"),
+        "expected actionable identity guidance, got: {message}"
+    );
+    assert!(
+        !message.contains("internal server error"),
+        "identity failure must not surface as an opaque internal error: {message}"
+    );
 }
