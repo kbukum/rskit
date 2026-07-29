@@ -34,6 +34,7 @@ tempfile = { workspace = true, optional = true }
 rskit-errors = { workspace = true }
 rskit-fs = { workspace = true }
 rskit-process = { workspace = true }
+rskit-util = { workspace = true }
 
 [dev-dependencies]
 rskit-testutil = { workspace = true }
