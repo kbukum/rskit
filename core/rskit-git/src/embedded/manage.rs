@@ -230,13 +230,28 @@ impl RemoteManager for Git2Repository {
 
         let result = handle.push(&refspecs, Some(&mut push_opts));
 
-        if let Some((refname, reason)) = rejections.borrow().first() {
-            return Err(GitError::PushRejected {
-                refname: refname.clone(),
-                reason: redact_url_credentials(reason),
-            }
-            .into());
+        let rejections = rejections.borrow();
+        if !rejections.is_empty() {
+            // Name every rejected ref, and surface each distinct reason once —
+            // a protected branch typically rejects every ref with one reason.
+            let refname = rejections
+                .iter()
+                .map(|(name, _)| name.clone())
+                .collect::<Vec<_>>()
+                .join(", ");
+            let reason = rejections
+                .iter()
+                .map(|(_, reason)| redact_url_credentials(reason))
+                .fold(Vec::<String>::new(), |mut distinct, reason| {
+                    if !distinct.contains(&reason) {
+                        distinct.push(reason);
+                    }
+                    distinct
+                })
+                .join("; ");
+            return Err(GitError::PushRejected { refname, reason }.into());
         }
+        drop(rejections);
         result.map_err(|err| map_push_error(err, &refspecs))?;
         Ok(())
     }

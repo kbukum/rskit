@@ -74,10 +74,8 @@ fn destination_refs(refspecs: &[String]) -> String {
     refspecs
         .iter()
         .map(|spec| {
-            spec.strip_prefix('+')
-                .unwrap_or(spec)
-                .split_once(':')
-                .map_or(spec.as_str(), |(_, dst)| dst)
+            let src_dst = spec.strip_prefix('+').unwrap_or(spec);
+            src_dst.split_once(':').map_or(src_dst, |(_, dst)| dst)
         })
         .collect::<Vec<_>>()
         .join(", ")

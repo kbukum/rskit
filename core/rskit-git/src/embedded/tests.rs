@@ -110,6 +110,42 @@ fn map_push_error_redacts_url_credentials_in_ref_rejection() {
 }
 
 #[test]
+fn map_push_error_strips_force_prefix_and_joins_destination_refs() {
+    let non_ff = || {
+        git2::Error::new(
+            git2::ErrorCode::NotFastForward,
+            git2::ErrorClass::Reference,
+            "rejected",
+        )
+    };
+
+    // A colon-less force refspec must not leak its `+` into the message.
+    let colonless = ["+refs/heads/main".to_string()];
+    match map_push_error(non_ff(), &colonless) {
+        GitError::PushRejected { refname, .. } => assert_eq!(refname, "refs/heads/main"),
+        other => panic!("expected PushRejected, got {other:?}"),
+    }
+
+    let with_dst = ["+refs/heads/main:refs/heads/main".to_string()];
+    match map_push_error(non_ff(), &with_dst) {
+        GitError::PushRejected { refname, .. } => assert_eq!(refname, "refs/heads/main"),
+        other => panic!("expected PushRejected, got {other:?}"),
+    }
+
+    // Several refspecs join their destination refs.
+    let both = [
+        "refs/heads/main".to_string(),
+        "refs/tags/v1.0.0".to_string(),
+    ];
+    match map_push_error(non_ff(), &both) {
+        GitError::PushRejected { refname, .. } => {
+            assert_eq!(refname, "refs/heads/main, refs/tags/v1.0.0");
+        }
+        other => panic!("expected PushRejected, got {other:?}"),
+    }
+}
+
+#[test]
 fn redact_url_credentials_strips_userinfo_only() {
     // Build credentialed inputs at runtime so no literal secret sits in source.
     let user = "alice";
