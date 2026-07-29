@@ -234,6 +234,9 @@ impl RemoteManager for Git2Repository {
         if !rejections.is_empty() {
             // Name every rejected ref, and surface each distinct reason once —
             // a protected branch typically rejects every ref with one reason.
+            // The seen-set keeps the first-seen order at O(n) rather than a
+            // `Vec::contains` scan per reason.
+            let mut seen = std::collections::HashSet::new();
             let refname = rejections
                 .iter()
                 .map(|(name, _)| name.clone())
@@ -242,12 +245,8 @@ impl RemoteManager for Git2Repository {
             let reason = rejections
                 .iter()
                 .map(|(_, reason)| redact_url_credentials(reason))
-                .fold(Vec::<String>::new(), |mut distinct, reason| {
-                    if !distinct.contains(&reason) {
-                        distinct.push(reason);
-                    }
-                    distinct
-                })
+                .filter(|reason| seen.insert(reason.clone()))
+                .collect::<Vec<_>>()
                 .join("; ");
             return Err(GitError::PushRejected { refname, reason }.into());
         }
