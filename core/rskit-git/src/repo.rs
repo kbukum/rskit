@@ -1,9 +1,11 @@
 //! Repository orchestrator that delegates to libgit2 and Git CLI implementations.
 
 use std::path::Path;
+use std::sync::Arc;
 
 use rskit_errors::AppResult;
 
+use crate::auth::AuthProvider;
 use crate::cli;
 use crate::core::{Executor, Repository};
 use crate::embedded;
@@ -43,6 +45,20 @@ pub fn open(path: impl AsRef<Path>) -> AppResult<Repo> {
 /// Discovers a git repository by walking up from the given path.
 pub fn discover(path: impl AsRef<Path>) -> AppResult<Repo> {
     embedded::discover(path).map(Repo::new)
+}
+
+/// Opens a git repository at the given path with an explicit auth provider.
+///
+/// The provider supplies transport credentials (for example a token read from
+/// caller-named environment variables) to network operations such as push and
+/// fetch on the embedded backend.
+pub fn open_with_auth(path: impl AsRef<Path>, auth: Arc<dyn AuthProvider>) -> AppResult<Repo> {
+    embedded::open_with_auth(path, auth).map(Repo::new)
+}
+
+/// Discovers a git repository by walking up from `path` with an explicit auth provider.
+pub fn discover_with_auth(path: impl AsRef<Path>, auth: Arc<dyn AuthProvider>) -> AppResult<Repo> {
+    embedded::discover_with_auth(path, auth).map(Repo::new)
 }
 
 /// Clones a repository into the given path.

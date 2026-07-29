@@ -18,7 +18,7 @@ mod tests {
         apply_transport(None).expect("default CLI auth is accepted");
         apply_transport(Some(&TransportAuth::Token {
             username: Some("git".to_string()),
-            token: "secret".to_string(),
+            token: rskit_util::SecretString::new("secret"),
         }))
         .expect("token CLI auth is accepted for later command composition");
     }

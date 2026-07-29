@@ -192,9 +192,15 @@ impl RemoteManager for Git2Repository {
             .map(|opts| opts.refspecs.iter().map(String::as_str).collect::<Vec<_>>())
             .unwrap_or_default();
 
-        let mut fetch_opts = opts.map(fetch_options_to_git2).transpose()?;
+        let auth = self.auth.transport_auth(Some(remote))?;
+        let callbacks = crate::embedded::auth::remote_callbacks(auth.as_ref())?;
+        let mut fetch_opts = match opts {
+            Some(opts) => fetch_options_to_git2(opts)?,
+            None => git2::FetchOptions::new(),
+        };
+        fetch_opts.remote_callbacks(callbacks);
         handle
-            .fetch(&refspecs, fetch_opts.as_mut(), None)
+            .fetch(&refspecs, Some(&mut fetch_opts), None)
             .map_err(map_remote_error)?;
         Ok(())
     }
@@ -213,7 +219,11 @@ impl RemoteManager for Git2Repository {
         // rejection recorded here must therefore surface as a typed error rather
         // than a silent success.
         let rejections: Rc<RefCell<Vec<(String, String)>>> = Rc::new(RefCell::new(Vec::new()));
-        let mut callbacks = git2::RemoteCallbacks::new();
+        // Start from the auth-bearing callbacks (credentials) and merge the
+        // rejection recorder onto the same object so token auth and the typed
+        // `PushRejected` path both apply.
+        let auth = self.auth.transport_auth(Some(remote))?;
+        let mut callbacks = crate::embedded::auth::remote_callbacks(auth.as_ref())?;
         {
             let rejections = Rc::clone(&rejections);
             callbacks.push_update_reference(move |refname, status| {

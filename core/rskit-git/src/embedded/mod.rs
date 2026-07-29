@@ -16,4 +16,7 @@ pub(crate) use conversions::{
 pub(crate) use errors::{
     map_head_error, map_push_error, map_remote_error, map_signature_error, redact_url_credentials,
 };
-pub use repository::{Git2Repository, clone, discover, init, init_bare, init_with, open};
+pub use repository::{
+    Git2Repository, clone, discover, discover_with_auth, init, init_bare, init_with, open,
+    open_with_auth,
+};

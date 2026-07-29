@@ -5528,6 +5528,7 @@ dependencies = [
  "rskit-fs",
  "rskit-process",
  "rskit-testutil",
+ "rskit-util",
  "tempfile",
  "thiserror",
 ]

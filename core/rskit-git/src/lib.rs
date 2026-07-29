@@ -41,13 +41,19 @@ pub mod testutil;
 pub mod types;
 pub mod write;
 
+pub use auth::{
+    AuthProvider, ChainAuthProvider, DefaultAuthProvider, EnvTokenAuthProvider, SigningConfig,
+    StaticAuthProvider, TransportAuth,
+};
 pub use core::{Executor, Repository};
 pub use error::GitError;
 pub use manage::{ConfigReader, Maintainer, RefManager, RemoteManager};
 pub use options::*;
 pub use paths::{join_repo_path, repo_relative_path};
 pub use read::{Blamer, Differ, IgnoreReader, IndexReader, Inspector, LogReader, TreeReader};
-pub use repo::{Repo, clone, discover, init, init_bare, init_with, open};
+pub use repo::{
+    Repo, clone, discover, discover_with_auth, init, init_bare, init_with, open, open_with_auth,
+};
 pub use rskit_errors::{AppError, AppResult};
 pub use types::*;
 pub use write::{

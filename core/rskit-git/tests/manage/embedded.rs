@@ -209,6 +209,50 @@ fn non_fast_forward_push_is_a_typed_rejection_not_internal() {
 }
 
 #[test]
+fn push_with_auth_provider_preserves_typed_rejection() {
+    // Same non-fast-forward setup, but the repo is opened with an explicit auth
+    // provider so the credentials callback is present. The typed `PushRejected`
+    // path must still fire, proving the auth callbacks and the rejection
+    // recorder are merged onto one callbacks object rather than one clobbering
+    // the other.
+    let source = helpers::TestRepo::init();
+    let remote = helpers::TestRepo::init_bare();
+    let branch = source.current_branch();
+    source.add_remote("origin", remote.path().to_str().unwrap());
+    source.push_upstream("origin", &branch);
+
+    let other = helpers::TestRepo::empty_dir();
+    rskit_git::clone(remote.path().to_str().unwrap(), other.path()).unwrap();
+    other.config_set("user.email", "other@test.com");
+    other.config_set("user.name", "Other");
+    other.commit_file("advance.txt", "remote ahead", "advance remote");
+    other.push_upstream("origin", &branch);
+
+    source.commit_file("local.txt", "local work", "local commit");
+
+    let auth = std::sync::Arc::new(rskit_git::auth::StaticAuthProvider::new(
+        TransportAuth::Token {
+            username: Some("x-access-token".to_string()),
+            token: rskit_git::auth::SecretString::new("unused-for-local-transport"),
+        },
+    ));
+    let r = rskit_git::open_with_auth(source.path(), auth).unwrap();
+
+    let err = r
+        .push(
+            "origin",
+            Some(&PushOptions {
+                refspecs: vec![format!("refs/heads/{branch}:refs/heads/{branch}")],
+                ..Default::default()
+            }),
+        )
+        .expect_err("non-fast-forward push is rejected even with an auth provider");
+
+    assert_eq!(err.code(), ErrorCode::Conflict);
+    assert!(err.message().contains(&branch), "{err}");
+}
+
+#[test]
 fn config_get_all_missing_and_invalid_config_set_return_typed_errors() {
     let repo = helpers::TestRepo::init();
     let r = open(repo.path()).unwrap();
@@ -381,17 +425,17 @@ fn embedded_auth_callbacks_validate_without_network() {
         TransportAuth::Default,
         TransportAuth::UsernamePassword {
             username: "user".to_string(),
-            password: "password".to_string(),
+            password: rskit_git::auth::SecretString::new("password"),
         },
         TransportAuth::Token {
             username: None,
-            token: "token".to_string(),
+            token: rskit_git::auth::SecretString::new("token"),
         },
         TransportAuth::SshKey {
             username: "git".to_string(),
             public_key: None,
             private_key: repo_relative_key("id_ed25519"),
-            passphrase: Some("passphrase".to_string()),
+            passphrase: Some(rskit_git::auth::SecretString::new("passphrase")),
         },
         TransportAuth::SshAgent {
             username: "git".to_string(),
@@ -400,7 +444,6 @@ fn embedded_auth_callbacks_validate_without_network() {
 
     let _default_callbacks = rskit_git::embedded::auth::remote_callbacks(None).unwrap();
     for auth in variants {
-        rskit_git::embedded::auth::validate_transport(&auth).unwrap();
         let _callbacks = rskit_git::embedded::auth::remote_callbacks(Some(&auth)).unwrap();
     }
 }

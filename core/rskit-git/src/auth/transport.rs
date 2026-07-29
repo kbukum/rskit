@@ -2,8 +2,15 @@
 
 use std::path::PathBuf;
 
+use rskit_util::SecretString;
+
 /// Supported repository transport authentication strategies.
-#[derive(Debug, Clone, Default)]
+///
+/// Credential-bearing fields are wrapped in [`SecretString`] so tokens and
+/// passwords never leak through `Debug`, `Display`, or serialization; access the
+/// plaintext intentionally with [`SecretString::expose`] only at the point it is
+/// handed to `git2`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum TransportAuth {
     /// Use default environment-driven authentication.
@@ -14,14 +21,14 @@ pub enum TransportAuth {
         /// Login username.
         username: String,
         /// Login password.
-        password: String,
+        password: SecretString,
     },
     /// Use an HTTP token.
     Token {
-        /// Optional username override.
+        /// Optional username override; defaults to `x-access-token` when `None`.
         username: Option<String>,
         /// Token or password value.
-        token: String,
+        token: SecretString,
     },
     /// Use explicit SSH key material.
     SshKey {
@@ -32,7 +39,7 @@ pub enum TransportAuth {
         /// Private key path.
         private_key: PathBuf,
         /// Optional passphrase.
-        passphrase: Option<String>,
+        passphrase: Option<SecretString>,
     },
     /// Use the local SSH agent.
     SshAgent {
