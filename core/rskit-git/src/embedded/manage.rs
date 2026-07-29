@@ -1,5 +1,8 @@
 //! Management trait implementations for the libgit2 repository.
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use git2::{BranchType, FetchPrune};
 use rskit_errors::{AppError, AppResult};
 
@@ -8,7 +11,10 @@ use crate::manage::{ConfigReader, RefManager, RemoteManager};
 use crate::options::{FetchOptions, PushOptions};
 use crate::types::{Branch, BranchFilter, Remote, Tag};
 
-use super::{Git2Repository, map_remote_error, oid_from_git2, signature_from_git2};
+use super::{
+    Git2Repository, map_push_error, map_remote_error, oid_from_git2, redact_url_credentials,
+    signature_from_git2,
+};
 
 impl RefManager for Git2Repository {
     fn list_branches(&self, filter: BranchFilter) -> AppResult<Vec<Branch>> {
@@ -201,10 +207,37 @@ impl RemoteManager for Git2Repository {
                 name: remote.to_string(),
             })?;
         let refspecs = push_refspecs(&handle, opts)?;
+
+        // libgit2 reports a server-side per-ref rejection ("ng <ref> <reason>")
+        // through this callback while `remote.push` may still return `Ok`; a
+        // rejection recorded here must therefore surface as a typed error rather
+        // than a silent success.
+        let rejections: Rc<RefCell<Vec<(String, String)>>> = Rc::new(RefCell::new(Vec::new()));
+        let mut callbacks = git2::RemoteCallbacks::new();
+        {
+            let rejections = Rc::clone(&rejections);
+            callbacks.push_update_reference(move |refname, status| {
+                if let Some(reason) = status {
+                    rejections
+                        .borrow_mut()
+                        .push((refname.to_string(), reason.to_string()));
+                }
+                Ok(())
+            });
+        }
         let mut push_opts = git2::PushOptions::new();
-        handle
-            .push(&refspecs, Some(&mut push_opts))
-            .map_err(map_remote_error)?;
+        push_opts.remote_callbacks(callbacks);
+
+        let result = handle.push(&refspecs, Some(&mut push_opts));
+
+        if let Some((refname, reason)) = rejections.borrow().first() {
+            return Err(GitError::PushRejected {
+                refname: refname.clone(),
+                reason: redact_url_credentials(reason),
+            }
+            .into());
+        }
+        result.map_err(|err| map_push_error(err, &refspecs))?;
         Ok(())
     }
 

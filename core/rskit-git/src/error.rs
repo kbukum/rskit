@@ -129,6 +129,33 @@ pub enum GitError {
     #[error("network error: {0}")]
     Network(String),
 
+    /// Authentication or authorization failure during a remote operation.
+    ///
+    /// libgit2 reports the transport-level failure (bad credentials, expired
+    /// token, insufficient scope/permission) via an `Auth` code or an
+    /// `Http`/`Ssh`/`Callback` class. This is an actionable access problem, not
+    /// an internal failure, so its (credential-redacted) message is surfaced to
+    /// the user.
+    #[error("remote authentication failed: {message}")]
+    RemoteAuth {
+        /// Credential-redacted description of the authentication failure.
+        message: String,
+    },
+
+    /// The remote rejected the push of one or more references.
+    ///
+    /// Covers a non-fast-forward update, a protected-branch/hook rejection, and
+    /// any other server-reported ref rejection. The rejection is reported by
+    /// the remote (not an internal failure), so the offending ref and the
+    /// (credential-redacted) reason are surfaced to the user.
+    #[error("remote rejected push to {refname}: {reason}")]
+    PushRejected {
+        /// Fully-qualified destination reference the remote rejected.
+        refname: String,
+        /// Credential-redacted rejection reason reported by the remote.
+        reason: String,
+    },
+
     /// Git CLI command failure.
     #[error("git CLI command failed: git {args:?}: {stderr}")]
     CommandFailed {
@@ -210,6 +237,19 @@ impl From<GitError> for AppError {
             GitError::InvalidTransport { kind } => AppError::invalid_input("transport", kind),
             GitError::Network(message) => {
                 AppError::external_service("git", io::Error::other(message))
+            }
+            GitError::RemoteAuth { message } => {
+                AppError::unauthorized(format!("git remote authentication failed: {message}")).hint(
+                    "Check the remote credentials and that the token/key grants push access to \
+                     this repository (for a fine-grained token, the `contents: write` permission).",
+                )
+            }
+            GitError::PushRejected { refname, reason } => {
+                AppError::conflict(format!("remote rejected push to {refname}: {reason}")).hint(
+                    "The remote rejected the update. Integrate remote changes (fetch and rebase) \
+                     for a non-fast-forward, or, if the branch is protected, land the commit \
+                     through a pull request and push tags only.",
+                )
             }
             GitError::CommandFailed {
                 args,
@@ -342,6 +382,19 @@ mod tests {
                 ErrorCode::ExternalService,
             ),
             (
+                GitError::RemoteAuth {
+                    message: "401 Unauthorized".to_string(),
+                },
+                ErrorCode::Unauthorized,
+            ),
+            (
+                GitError::PushRejected {
+                    refname: "refs/heads/main".to_string(),
+                    reason: "protected branch".to_string(),
+                },
+                ErrorCode::Conflict,
+            ),
+            (
                 GitError::CommandFailed {
                     args: vec!["status".to_string()],
                     exit_code: Some(128),
@@ -408,5 +461,28 @@ mod tests {
         assert!(message.contains("user.email"));
         assert!(message.contains("git config user.name"));
         assert!(message.contains("git config user.email"));
+    }
+
+    #[test]
+    fn remote_auth_message_is_actionable() {
+        let app_error = AppError::from(GitError::RemoteAuth {
+            message: "403 Forbidden".to_string(),
+        });
+
+        assert_eq!(app_error.code(), ErrorCode::Unauthorized);
+        assert!(app_error.message().contains("403 Forbidden"));
+    }
+
+    #[test]
+    fn push_rejected_message_names_ref_and_reason() {
+        let app_error = AppError::from(GitError::PushRejected {
+            refname: "refs/heads/main".to_string(),
+            reason: "protected branch hook declined".to_string(),
+        });
+
+        assert_eq!(app_error.code(), ErrorCode::Conflict);
+        let message = app_error.message();
+        assert!(message.contains("refs/heads/main"));
+        assert!(message.contains("protected branch hook declined"));
     }
 }

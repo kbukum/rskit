@@ -173,6 +173,42 @@ fn push_uses_configured_refspecs_and_force_prefixes_defaults() {
 }
 
 #[test]
+fn non_fast_forward_push_is_a_typed_rejection_not_internal() {
+    // Publish an initial branch to a shared bare remote.
+    let source = helpers::TestRepo::init();
+    let remote = helpers::TestRepo::init_bare();
+    let branch = source.current_branch();
+    source.add_remote("origin", remote.path().to_str().unwrap());
+    source.push_upstream("origin", &branch);
+
+    // A second clone advances the remote branch beyond `source`.
+    let other = helpers::TestRepo::empty_dir();
+    rskit_git::clone(remote.path().to_str().unwrap(), other.path()).unwrap();
+    other.config_set("user.email", "other@test.com");
+    other.config_set("user.name", "Other");
+    other.commit_file("advance.txt", "remote ahead", "advance remote");
+    other.push_upstream("origin", &branch);
+
+    // `source` commits on top of the stale tip, so pushing it is non-fast-forward.
+    source.commit_file("local.txt", "local work", "local commit");
+    let r = open(source.path()).unwrap();
+
+    let err = r
+        .push(
+            "origin",
+            Some(&PushOptions {
+                refspecs: vec![format!("refs/heads/{branch}:refs/heads/{branch}")],
+                ..Default::default()
+            }),
+        )
+        .expect_err("non-fast-forward push is rejected");
+
+    assert_eq!(err.code(), ErrorCode::Conflict);
+    assert!(err.message().contains(&branch), "{err}");
+    assert_ne!(err.message(), "internal server error", "{err}");
+}
+
+#[test]
 fn config_get_all_missing_and_invalid_config_set_return_typed_errors() {
     let repo = helpers::TestRepo::init();
     let r = open(repo.path()).unwrap();
