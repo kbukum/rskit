@@ -14,9 +14,9 @@ use rskit_util::{SecretString, env};
 use super::{SigningConfig, TransportAuth};
 
 /// Default username used for token-as-password HTTP basic auth when the caller
-/// does not override it. This is a generic transport convention (accepted by
-/// GitHub Actions and fine-grained PATs, GitLab CI job tokens, and others), not
-/// a forge identifier.
+/// does not override it. This is a generic transport convention for carrying a
+/// token in the username field, not a forge identifier; callers override it per
+/// remote via [`TransportAuth::Token`].
 pub const DEFAULT_TOKEN_USERNAME: &str = "x-access-token";
 
 /// Supplies transport and signing configuration for git backends.

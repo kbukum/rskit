@@ -1,6 +1,6 @@
 //! `git2` authentication helpers.
 
-use crate::auth::TransportAuth;
+use crate::auth::{DEFAULT_TOKEN_USERNAME, TransportAuth};
 use rskit_errors::AppResult;
 
 /// Builds remote callbacks from the configured transport auth.
@@ -18,7 +18,7 @@ pub fn remote_callbacks(auth: Option<&TransportAuth>) -> AppResult<git2::RemoteC
             });
         }
         TransportAuth::Token { username, token } => {
-            let username = username.unwrap_or_else(|| "x-access-token".to_string());
+            let username = username.unwrap_or_else(|| DEFAULT_TOKEN_USERNAME.to_string());
             callbacks.credentials(move |_, _, _| {
                 git2::Cred::userpass_plaintext(&username, token.expose())
             });

@@ -25,7 +25,7 @@ pub enum TransportAuth {
     },
     /// Use an HTTP token.
     Token {
-        /// Optional username override; defaults to `x-access-token` when `None`.
+        /// Optional username override; defaults to [`DEFAULT_TOKEN_USERNAME`](super::DEFAULT_TOKEN_USERNAME) when `None`.
         username: Option<String>,
         /// Token or password value.
         token: SecretString,

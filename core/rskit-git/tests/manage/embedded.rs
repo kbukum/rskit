@@ -232,7 +232,7 @@ fn push_with_auth_provider_preserves_typed_rejection() {
 
     let auth = std::sync::Arc::new(rskit_git::auth::StaticAuthProvider::new(
         TransportAuth::Token {
-            username: Some("x-access-token".to_string()),
+            username: Some(rskit_git::auth::DEFAULT_TOKEN_USERNAME.to_string()),
             token: rskit_git::auth::SecretString::new("unused-for-local-transport"),
         },
     ));
