@@ -33,6 +33,103 @@ fn map_remote_error_distinguishes_network_from_internal_errors() {
 }
 
 #[test]
+fn map_remote_error_classifies_auth_failures() {
+    let http = git2::Error::new(
+        git2::ErrorCode::GenericError,
+        git2::ErrorClass::Http,
+        "401 Unauthorized",
+    );
+    assert!(matches!(
+        map_remote_error(http),
+        GitError::RemoteAuth { .. }
+    ));
+
+    let auth = git2::Error::new(
+        git2::ErrorCode::Auth,
+        git2::ErrorClass::None,
+        "authentication required",
+    );
+    assert!(matches!(
+        map_remote_error(auth),
+        GitError::RemoteAuth { .. }
+    ));
+}
+
+#[test]
+fn map_push_error_classifies_ref_rejection_auth_and_internal() {
+    let refspecs = ["refs/heads/main:refs/heads/main".to_string()];
+
+    let non_ff = git2::Error::new(
+        git2::ErrorCode::NotFastForward,
+        git2::ErrorClass::Reference,
+        "cannot push non-fast-forward",
+    );
+    match map_push_error(non_ff, &refspecs) {
+        GitError::PushRejected { refname, .. } => assert_eq!(refname, "refs/heads/main"),
+        other => panic!("expected PushRejected, got {other:?}"),
+    }
+
+    let forbidden = git2::Error::new(
+        git2::ErrorCode::GenericError,
+        git2::ErrorClass::Http,
+        "403 Forbidden",
+    );
+    assert!(matches!(
+        map_push_error(forbidden, &refspecs),
+        GitError::RemoteAuth { .. }
+    ));
+
+    let internal = git2::Error::from_str("boom");
+    assert!(matches!(
+        map_push_error(internal, &refspecs),
+        GitError::Internal(_)
+    ));
+}
+
+#[test]
+fn map_push_error_redacts_url_credentials_in_ref_rejection() {
+    let refspecs = ["refs/heads/main".to_string()];
+    // Build the credentialed URL at runtime so no literal secret sits in source.
+    let secret = "p4ssw0rd";
+    let url = format!("https://user:{secret}@github.com/o/r.git");
+    let rejected = git2::Error::new(
+        git2::ErrorCode::NotFastForward,
+        git2::ErrorClass::Reference,
+        format!("failed to push to {url}"),
+    );
+    match map_push_error(rejected, &refspecs) {
+        GitError::PushRejected { reason, .. } => {
+            assert!(
+                reason.contains("https://***@github.com/o/r.git"),
+                "{reason}"
+            );
+            assert!(!reason.contains(secret), "{reason}");
+        }
+        other => panic!("expected PushRejected, got {other:?}"),
+    }
+}
+
+#[test]
+fn redact_url_credentials_strips_userinfo_only() {
+    // Build credentialed inputs at runtime so no literal secret sits in source.
+    let user = "alice";
+    let pass = "t0ken";
+    let input = format!("push https://{user}:{pass}@host/x failed");
+    assert_eq!(
+        redact_url_credentials(&input),
+        "push https://***@host/x failed"
+    );
+    // No credentials: message is left untouched.
+    assert_eq!(
+        redact_url_credentials("https://github.com/o/r.git rejected"),
+        "https://github.com/o/r.git rejected"
+    );
+    // SSH-style userinfo without a password is still redacted.
+    let ssh = format!("ssh://{user}@github.com/o/r");
+    assert_eq!(redact_url_credentials(&ssh), "ssh://***@github.com/o/r");
+}
+
+#[test]
 fn map_signature_error_distinguishes_missing_identity_from_internal_errors() {
     let missing = git2::Error::new(
         git2::ErrorCode::NotFound,
