@@ -230,13 +230,27 @@ impl RemoteManager for Git2Repository {
 
         let result = handle.push(&refspecs, Some(&mut push_opts));
 
-        if let Some((refname, reason)) = rejections.borrow().first() {
-            return Err(GitError::PushRejected {
-                refname: refname.clone(),
-                reason: redact_url_credentials(reason),
-            }
-            .into());
+        let rejections = rejections.borrow();
+        if !rejections.is_empty() {
+            // Name every rejected ref, and surface each distinct reason once —
+            // a protected branch typically rejects every ref with one reason.
+            // The seen-set keeps the first-seen order at O(n) rather than a
+            // `Vec::contains` scan per reason.
+            let mut seen = std::collections::HashSet::new();
+            let refname = rejections
+                .iter()
+                .map(|(name, _)| name.clone())
+                .collect::<Vec<_>>()
+                .join(", ");
+            let reason = rejections
+                .iter()
+                .map(|(_, reason)| redact_url_credentials(reason))
+                .filter(|reason| seen.insert(reason.clone()))
+                .collect::<Vec<_>>()
+                .join("; ");
+            return Err(GitError::PushRejected { refname, reason }.into());
         }
+        drop(rejections);
         result.map_err(|err| map_push_error(err, &refspecs))?;
         Ok(())
     }

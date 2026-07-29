@@ -150,7 +150,8 @@ pub enum GitError {
     /// (credential-redacted) reason are surfaced to the user.
     #[error("remote rejected push to {refname}: {reason}")]
     PushRejected {
-        /// Fully-qualified destination reference the remote rejected.
+        /// Fully-qualified destination reference(s) the remote rejected; a
+        /// comma-separated list when several refs were pushed together.
         refname: String,
         /// Credential-redacted rejection reason reported by the remote.
         reason: String,
@@ -239,10 +240,12 @@ impl From<GitError> for AppError {
                 AppError::external_service("git", io::Error::other(message))
             }
             GitError::RemoteAuth { message } => {
-                AppError::unauthorized(format!("git remote authentication failed: {message}")).hint(
-                    "Check the remote credentials and that the token/key grants push access to \
-                     this repository (for a fine-grained token, the `contents: write` permission).",
-                )
+                AppError::unauthorized(format!("git remote authentication failed: {message}"))
+                    .hint(
+                        "Check the remote credentials and that the token/key grants push access \
+                         to this repository (e.g. on GitHub, a fine-grained token needs the \
+                         `contents: write` permission).",
+                    )
             }
             GitError::PushRejected { refname, reason } => {
                 AppError::conflict(format!("remote rejected push to {refname}: {reason}")).hint(
