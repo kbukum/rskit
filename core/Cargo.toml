@@ -84,6 +84,14 @@ notify = "8"
 # VCS-ignore-aware tree traversal (.gitignore semantics for walk_tree)
 ignore = "0.4"
 
+# Deterministic archive packaging (rskit-fs `archive` feature). `flate2` uses
+# the pure-Rust `miniz_oxide` backend (no zlib C dependency); `zip` is trimmed
+# to the `deflate` method so it pulls in no AES/bzip2/zstd backends. All three
+# are MIT OR Apache-2.0, within the deny.toml license allow-list.
+flate2 = "1"
+tar = "0.4"
+zip = { version = "8", default-features = false, features = ["deflate"] }
+
 # Futures / streams
 futures = "0.3"
 futures-util = "0.3"

@@ -18,6 +18,9 @@
 
 /// Platform application directory helpers.
 pub mod app_dirs;
+/// Deterministic archive packaging (`tar.gz` / `zip`).
+#[cfg(feature = "archive")]
+pub mod archive;
 /// Async filesystem operations.
 #[cfg(feature = "async")]
 pub mod async_io;
