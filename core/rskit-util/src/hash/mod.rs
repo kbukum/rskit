@@ -2,7 +2,7 @@
 //!
 //! - BLAKE3 content hashing ([`ContentHasher`], [`hash_hex`]) for stable cache keys, change detection,
 //!   and deduplication.
-//! - SHA-256 digests ([`sha256`]) for wire-format and interop use cases.
+//! - SHA-256 digests ([`sha256::sha256`], [`sha256::sha256_reader`]) for wire-format and interop use cases.
 
 mod content;
 pub use content::{ContentHasher, hash_hex};
