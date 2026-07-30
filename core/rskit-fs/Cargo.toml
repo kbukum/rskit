@@ -20,6 +20,12 @@ rustdoc-args = ["--cfg", "docsrs"]
 [features]
 default = ["async"]
 async = ["dep:tokio"]
+# Opt-in deterministic archive packaging (`archive::tar_gz` / `archive::zip`).
+# Off by default so the foundation crate stays lean; consumers that assemble
+# release artifacts enable it. Pulls in pure-Rust compression backends only
+# (`flate2`/`miniz_oxide`, `zip` restricted to the `deflate` method) so no zlib
+# C dependency leaks into the build.
+archive = ["dep:flate2", "dep:tar", "dep:zip"]
 # Opt-in recursive, debounced filesystem-tree change watching (`FsWatcher`).
 # One-shot tools leave this off; it pulls in `notify` and a bounded channel to
 # bridge the platform callback thread. Debouncing (`rdebounce_batch`) and
@@ -40,6 +46,10 @@ tempfile = { workspace = true }
 ignore = { workspace = true }
 notify = { workspace = true, optional = true }
 futures = { workspace = true, optional = true }
+
+flate2 = { workspace = true, optional = true }
+tar = { workspace = true, optional = true }
+zip = { workspace = true, optional = true }
 
 rskit-errors = { workspace = true }
 rskit-stream = { workspace = true, optional = true }
