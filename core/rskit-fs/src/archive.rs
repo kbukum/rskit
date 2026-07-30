@@ -76,9 +76,11 @@ pub fn tar_gz(entries: &[ArchiveEntry], out: &Path) -> AppResult<()> {
     let mut builder = tar::Builder::new(encoder);
     builder.mode(tar::HeaderMode::Deterministic);
     for entry in entries {
-        let bytes = read_source(&entry.source)?;
+        // Stream the source straight into the tar writer rather than buffering
+        // it, so peak memory stays bounded regardless of member size.
+        let (mut source, len) = open_source(&entry.source)?;
         let mut header = tar::Header::new_gnu();
-        header.set_size(bytes.len() as u64);
+        header.set_size(len);
         header.set_mode(entry.mode);
         header.set_mtime(UNIX_EPOCH_SECS);
         header.set_uid(0);
@@ -86,7 +88,7 @@ pub fn tar_gz(entries: &[ArchiveEntry], out: &Path) -> AppResult<()> {
         header.set_entry_type(tar::EntryType::Regular);
         header.set_cksum();
         builder
-            .append_data(&mut header, &entry.name, bytes.as_slice())
+            .append_data(&mut header, &entry.name, &mut source)
             .map_err(|error| archive_io_error(out, "append tar member", error))?;
     }
     let encoder = builder
@@ -126,17 +128,20 @@ pub fn zip(entries: &[ArchiveEntry], out: &Path) -> AppResult<()> {
         .with_cause(error)
     })?;
     for entry in entries {
-        let bytes = read_source(&entry.source)?;
+        // Stream the source into the zip writer instead of buffering it, and
+        // enable Zip64 only for members that need it (>= 4 GiB), so large
+        // release binaries still pack while small members stay compact. The
+        // choice is a pure function of member size, preserving determinism.
+        let (mut source, len) = open_source(&entry.source)?;
         let options = SimpleFileOptions::default()
             .compression_method(zip::CompressionMethod::Deflated)
             .unix_permissions(entry.mode)
             .last_modified_time(fixed_time)
-            .large_file(false);
+            .large_file(len >= u64::from(u32::MAX));
         writer
             .start_file(&entry.name, options)
             .map_err(|error| archive_zip_error(out, "start zip member", error))?;
-        writer
-            .write_all(&bytes)
+        std::io::copy(&mut source, &mut writer)
             .map_err(|error| archive_io_error(out, "write zip member", error))?;
     }
     writer
@@ -205,9 +210,11 @@ enum MemberPath {
 /// The extraction is hardened against hostile archives: a member whose path is
 /// absolute or escapes `dest` via `..` is rejected (tar-slip), symlink and hard
 /// link members are rejected outright (a symlink could redirect a later write
-/// outside `dest`), and the member count and total uncompressed size are
-/// bounded by `limits` (decompression bomb). Parent directories are created as
-/// needed and recorded Unix modes are re-applied on Unix.
+/// outside `dest`), each member's materialised path is re-checked to resolve
+/// within `dest` so a symlink already present in the destination tree cannot
+/// redirect a write outside it, and the member count and total uncompressed
+/// size are bounded by `limits` (decompression bomb). Parent directories are
+/// created as needed and recorded Unix modes are re-applied on Unix.
 ///
 /// # Errors
 /// Returns an [`ErrorCode::InvalidInput`] error when the archive is missing, a
@@ -225,6 +232,7 @@ pub fn extract_tar_gz(
     let entries = reader
         .entries()
         .map_err(|error| extract_io_error(archive, "read tar entries", error))?;
+    let root = extraction_root(archive, dest)?;
     let mut extracted = Vec::new();
     let mut written = 0_u64;
     for (index, entry) in entries.enumerate() {
@@ -245,12 +253,15 @@ pub fn extract_tar_gz(
             MemberPath::DirectoryMarker => continue,
             MemberPath::Safe(target) => target,
         };
+        let mode = member.header().mode().ok();
         if entry_type.is_dir() {
             create_all_dir(&target)?;
+            ensure_within_root(archive, &root, &target, &name)?;
+            apply_mode(&target, mode)?;
             continue;
         }
         create_parent(&target)?;
-        let mode = member.header().mode().ok();
+        ensure_parent_within_root(archive, &root, &target, &name)?;
         write_member_bounded(archive, &target, &mut member, limits, &mut written)?;
         apply_mode(&target, mode)?;
         extracted.push(target);
@@ -262,9 +273,11 @@ pub fn extract_tar_gz(
 /// the extracted file paths (in archive order).
 ///
 /// Hardened identically to [`extract_tar_gz`]: escaping members are rejected
-/// (zip-slip), symlink members are rejected, and `limits` bound the member
-/// count and total uncompressed size. Recorded Unix modes are re-applied on
-/// Unix.
+/// (zip-slip), symlink members are rejected, each member's materialised path is
+/// re-checked to resolve within `dest` so a pre-existing symlink in the
+/// destination tree cannot redirect a write outside it, and `limits` bound the
+/// member count and total uncompressed size. Recorded Unix modes are re-applied
+/// on Unix.
 ///
 /// # Errors
 /// Returns an [`ErrorCode::InvalidInput`] error when the archive is missing, a
@@ -278,6 +291,7 @@ pub fn extract_zip(archive: &Path, dest: &Path, limits: ExtractLimits) -> AppRes
     if reader.len() > limits.max_entries {
         return Err(too_many_entries_error(archive, limits.max_entries));
     }
+    let root = extraction_root(archive, dest)?;
     let mut extracted = Vec::new();
     let mut written = 0_u64;
     for index in 0..reader.len() {
@@ -294,12 +308,15 @@ pub fn extract_zip(archive: &Path, dest: &Path, limits: ExtractLimits) -> AppRes
             MemberPath::DirectoryMarker => continue,
             MemberPath::Safe(target) => target,
         };
+        let mode = member.unix_mode();
         if member.is_dir() {
             create_all_dir(&target)?;
+            ensure_within_root(archive, &root, &target, &name)?;
+            apply_mode(&target, mode)?;
             continue;
         }
         create_parent(&target)?;
-        let mode = member.unix_mode();
+        ensure_parent_within_root(archive, &root, &target, &name)?;
         write_member_bounded(archive, &target, &mut member, limits, &mut written)?;
         apply_mode(&target, mode)?;
         extracted.push(target);
@@ -320,6 +337,9 @@ fn safe_member_path(archive: &Path, dest: &Path, name: &Path) -> AppResult<Membe
                 target.push(part);
                 components += 1;
             }
+            // A `.` segment (e.g. `./foo`) is harmless — skip it without
+            // counting it as a real component.
+            std::path::Component::CurDir => {}
             // Reject anything that could escape `dest`: root, prefix, `..`.
             _ => return Err(escape_error(archive, &name.display().to_string())),
         }
@@ -376,6 +396,43 @@ fn create_parent(target: &Path) -> AppResult<()> {
         create_all_dir(parent)?;
     }
     Ok(())
+}
+
+/// Ensure `dest` exists and resolve it to a canonical containment root.
+///
+/// Members are confined to this resolved root, so a symlink already present
+/// under `dest` cannot redirect a write outside it (a symlink component
+/// resolves to a path that fails the containment check).
+fn extraction_root(archive: &Path, dest: &Path) -> AppResult<PathBuf> {
+    create_all_dir(dest)?;
+    std::fs::canonicalize(dest)
+        .map_err(|error| extract_io_error(archive, "resolve destination", error))
+}
+
+/// Reject a member whose materialised `dir` resolves outside `root`, defending
+/// against pre-existing symlinks in the destination tree.
+fn ensure_within_root(archive: &Path, root: &Path, dir: &Path, member: &Path) -> AppResult<()> {
+    let resolved = std::fs::canonicalize(dir)
+        .map_err(|error| extract_io_error(archive, "resolve member path", error))?;
+    if resolved.starts_with(root) {
+        Ok(())
+    } else {
+        Err(escape_error(archive, &member.display().to_string()))
+    }
+}
+
+/// Reject a member whose parent directory resolves outside `root` before its
+/// contents are written.
+fn ensure_parent_within_root(
+    archive: &Path,
+    root: &Path,
+    target: &Path,
+    member: &Path,
+) -> AppResult<()> {
+    target.parent().map_or_else(
+        || Ok(()),
+        |parent| ensure_within_root(archive, root, parent, member),
+    )
 }
 
 fn create_all_dir(dir: &Path) -> AppResult<()> {
@@ -467,14 +524,15 @@ fn extract_zip_error(archive: &Path, action: &str, error: zip::result::ZipError)
     .with_cause(error)
 }
 
-/// Read a source file fully into memory, mapping a missing file to an
-/// actionable input error.
-fn read_source(source: &Path) -> AppResult<Vec<u8>> {
-    let mut file = File::open(source).map_err(|error| open_source_error(source, error))?;
-    let mut bytes = Vec::new();
-    file.read_to_end(&mut bytes)
-        .map_err(|error| read_source_error(source, error))?;
-    Ok(bytes)
+/// Open a source file for streaming into an archive, returning the open handle
+/// and its length, and mapping a missing file to an actionable input error.
+fn open_source(source: &Path) -> AppResult<(File, u64)> {
+    let file = File::open(source).map_err(|error| open_source_error(source, error))?;
+    let len = file
+        .metadata()
+        .map_err(|error| read_source_error(source, error))?
+        .len();
+    Ok((file, len))
 }
 
 /// Create (truncating) the archive output file.
@@ -780,5 +838,75 @@ mod tests {
         let error =
             extract_tar_gz(&out, &dest, limits).expect_err("too many members must fail closed");
         assert_eq!(error.code(), rskit_errors::ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn extract_tar_gz_accepts_a_current_dir_prefixed_member() {
+        let dir = tempdir().unwrap();
+        let out = dir.path().join("dot.tar.gz");
+        write_raw_tar_gz(
+            &out,
+            |header| header.set_entry_type(tar::EntryType::Regular),
+            "./toven",
+            b"dot-bytes",
+        );
+        let dest = dir.path().join("dest");
+        let extracted = extract_tar_gz(&out, &dest, ExtractLimits::default())
+            .expect("a `./` prefix is harmless and must extract");
+        assert_eq!(extracted, vec![dest.join("toven")]);
+        assert_eq!(std::fs::read(dest.join("toven")).unwrap(), b"dot-bytes");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn extract_tar_gz_applies_directory_mode() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempdir().unwrap();
+        let out = dir.path().join("dir.tar.gz");
+        write_raw_tar_gz(
+            &out,
+            |header| {
+                header.set_entry_type(tar::EntryType::Directory);
+                header.set_mode(0o750);
+                header.set_size(0);
+            },
+            "nested/",
+            b"",
+        );
+        let dest = dir.path().join("dest");
+        extract_tar_gz(&out, &dest, ExtractLimits::default()).unwrap();
+        let mode = std::fs::metadata(dest.join("nested"))
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o777, 0o750, "directory mode must be re-applied");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn extract_tar_gz_rejects_a_symlink_in_the_destination_tree() {
+        let dir = tempdir().unwrap();
+        let outside = dir.path().join("outside");
+        std::fs::create_dir(&outside).unwrap();
+        let out = dir.path().join("via-link.tar.gz");
+        write_raw_tar_gz(
+            &out,
+            |header| header.set_entry_type(tar::EntryType::Regular),
+            "link/escape",
+            b"pwned",
+        );
+        let dest = dir.path().join("dest");
+        std::fs::create_dir(&dest).unwrap();
+        // Pre-place a symlink under dest that redirects `link/` outside it.
+        std::os::unix::fs::symlink(&outside, dest.join("link")).unwrap();
+
+        let error = extract_tar_gz(&out, &dest, ExtractLimits::default())
+            .expect_err("a pre-existing symlink in dest must be rejected");
+        assert_eq!(error.code(), rskit_errors::ErrorCode::InvalidInput);
+        assert!(
+            !outside.join("escape").exists(),
+            "nothing may be written through the symlink"
+        );
     }
 }
