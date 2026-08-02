@@ -6,9 +6,10 @@ use tokio_util::sync::CancellationToken;
 use tracing::debug;
 
 use crate::{
-    AppError, AppResult, ErrorCode, InheritedIo, InputPolicy, OutputPolicy, ProcessConfig,
-    ProcessIo, ProcessResult, ProcessSpec,
+    AppError, AppResult, InheritedIo, InputPolicy, OutputPolicy, ProcessConfig, ProcessIo,
+    ProcessResult, ProcessSpec,
     capture::{append_line_bounded, shared_output},
+    command::spawn_error,
 };
 
 use super::lifecycle::wait_for_completion;
@@ -144,12 +145,9 @@ async fn run_process(
     configure_command(&mut cmd, spec, config, stdio);
 
     debug!(program = %spec.program.display(), args = ?RedactedArgs::new(&spec.args, &config.arg_redaction), "spawning process");
-    let mut child = cmd.spawn().map_err(|error| {
-        AppError::new(
-            ErrorCode::Internal,
-            format!("failed to spawn process: {error}"),
-        )
-    })?;
+    let mut child = cmd
+        .spawn()
+        .map_err(|error| spawn_error("failed to spawn process", error))?;
 
     // Detach the child's pipe handles before the child moves into the scope guard,
     // which then owns it for the rest of the run.

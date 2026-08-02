@@ -10,7 +10,7 @@ use crate::process_group::kill_target;
 use crate::worker::join_within;
 use crate::{
     AppError, AppResult, EnvPolicy, ErrorCode, InputPolicy, OutputPolicy, ProcessConfig, ProcessIo,
-    ProcessResult, ProcessSpec, SignalPolicy, terminate,
+    ProcessResult, ProcessSpec, SignalPolicy, command::spawn_error, terminate,
 };
 
 const POLL_INTERVAL: Duration = Duration::from_millis(10);
@@ -77,12 +77,9 @@ fn run_blocking(
         crate::process_group::isolate(&mut cmd);
     }
 
-    let mut child = cmd.spawn().map_err(|error| {
-        AppError::new(
-            ErrorCode::Internal,
-            format!("failed to spawn process: {error}"),
-        )
-    })?;
+    let mut child = cmd
+        .spawn()
+        .map_err(|error| spawn_error("failed to spawn process", error))?;
 
     let max_output_bytes = output.and_then(|output| output.max_output_bytes);
     let stdout_capture = shared_output();
