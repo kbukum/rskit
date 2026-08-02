@@ -1,7 +1,7 @@
 [package]
 name        = "rskit-inference-triton"
 description = "Triton KServe v2 HTTP adapter for rskit-inference"
-version = "0.2.0-alpha.3"
+version = "0.2.0-alpha.4"
 edition.workspace      = true
 license.workspace      = true
 rust-version.workspace = true

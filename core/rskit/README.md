@@ -30,9 +30,9 @@ Add it directly as a `dev-dependency` when tests need shared fixtures or harness
 
 ```toml
 [dependencies]
-rskit-suite = "0.2.0-alpha.6"
+rskit-suite = "0.2.0-alpha.7"
 # or opt into higher-level modules/adapters:
-# rskit-suite = { version = "0.2.0-alpha.6", features = ["server", "cli", "storage-s3"] }
+# rskit-suite = { version = "0.2.0-alpha.7", features = ["server", "cli", "storage-s3"] }
 ```
 
 ```rust
