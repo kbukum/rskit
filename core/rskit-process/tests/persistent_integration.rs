@@ -98,6 +98,13 @@ fn persistent_spawn_and_empty_program_errors_are_classified() {
         persistent_start_error_kind(&missing),
         Some(PersistentStartErrorKind::SpawnFailed)
     );
+    assert_eq!(missing.code(), ErrorCode::NotFound);
+    assert!(
+        missing
+            .to_string()
+            .contains("failed to spawn persistent process"),
+        "the error must still indicate a spawn failure: {missing}"
+    );
 }
 
 #[test]
