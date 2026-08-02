@@ -1706,7 +1706,7 @@ checksum = "47b34b781b31e5d73e9fbc8689c70551fd1ade9a19e3e28cfec8580a79290cc4"
 
 [[package]]
 name = "rskit-bootstrap"
-version = "0.2.0-alpha.2"
+version = "0.2.0-alpha.3"
 dependencies = [
  "futures-util",
  "rskit-component",
@@ -1722,7 +1722,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-cli"
-version = "0.2.0-alpha.4"
+version = "0.2.0-alpha.5"
 dependencies = [
  "console",
  "indicatif",
@@ -1737,7 +1737,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-codec"
-version = "0.2.0-alpha.2"
+version = "0.2.0-alpha.3"
 dependencies = [
  "rskit-errors",
  "serde",
@@ -1748,7 +1748,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-component"
-version = "0.2.0-alpha.2"
+version = "0.2.0-alpha.3"
 dependencies = [
  "async-trait",
  "parking_lot",
@@ -1761,7 +1761,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-config"
-version = "0.2.0-alpha.3"
+version = "0.2.0-alpha.4"
 dependencies = [
  "config",
  "dotenvy",
@@ -1781,7 +1781,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-di"
-version = "0.2.0-alpha.3"
+version = "0.2.0-alpha.4"
 dependencies = [
  "async-trait",
  "parking_lot",
@@ -1791,7 +1791,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-errors"
-version = "0.2.0-alpha.4"
+version = "0.2.0-alpha.5"
 dependencies = [
  "http",
  "serde",
@@ -1800,7 +1800,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-fs"
-version = "0.2.0-alpha.6"
+version = "0.2.0-alpha.7"
 dependencies = [
  "ignore",
  "libc",
@@ -1811,7 +1811,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-hook"
-version = "0.2.0-alpha.2"
+version = "0.2.0-alpha.3"
 dependencies = [
  "parking_lot",
  "rskit-errors",
@@ -1821,7 +1821,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-logging"
-version = "0.2.0-alpha.2"
+version = "0.2.0-alpha.3"
 dependencies = [
  "parking_lot",
  "regex",
@@ -1833,7 +1833,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-media"
-version = "0.2.0-alpha.3"
+version = "0.2.0-alpha.4"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1846,7 +1846,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-media-audio"
-version = "0.2.0-alpha.3"
+version = "0.2.0-alpha.4"
 dependencies = [
  "async-trait",
  "bytes",
@@ -1859,7 +1859,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-media-ffmpeg"
-version = "0.2.0-alpha.3"
+version = "0.2.0-alpha.4"
 dependencies = [
  "async-trait",
  "bytes",
@@ -1880,7 +1880,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-media-image"
-version = "0.2.0-alpha.3"
+version = "0.2.0-alpha.4"
 dependencies = [
  "async-trait",
  "bytes",
@@ -1895,7 +1895,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-process"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 dependencies = [
  "libc",
  "parking_lot",
@@ -1908,7 +1908,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-provider"
-version = "0.2.0-alpha.3"
+version = "0.2.0-alpha.4"
 dependencies = [
  "async-trait",
  "futures",
@@ -1920,7 +1920,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-resilience"
-version = "0.2.0-alpha.2"
+version = "0.2.0-alpha.3"
 dependencies = [
  "governor",
  "parking_lot",
@@ -1934,7 +1934,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-storage"
-version = "0.2.0-alpha.3"
+version = "0.2.0-alpha.4"
 dependencies = [
  "async-trait",
  "bytes",
@@ -1954,7 +1954,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-stream"
-version = "0.2.0-alpha.5"
+version = "0.2.0-alpha.6"
 dependencies = [
  "async-stream",
  "futures",
@@ -1968,7 +1968,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-suite"
-version = "0.2.0-alpha.6"
+version = "0.2.0-alpha.7"
 dependencies = [
  "rskit-bootstrap",
  "rskit-cli",
@@ -1993,7 +1993,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-util"
-version = "0.2.0-alpha.4"
+version = "0.2.0-alpha.5"
 dependencies = [
  "blake3",
  "serde",
@@ -2004,7 +2004,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-validation"
-version = "0.2.0-alpha.2"
+version = "0.2.0-alpha.3"
 dependencies = [
  "chrono",
  "regex",
@@ -2017,7 +2017,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-version"
-version = "0.2.0-alpha.3"
+version = "0.2.0-alpha.4"
 dependencies = [
  "rskit-errors",
  "rskit-util",
@@ -2027,7 +2027,7 @@ dependencies = [
 
 [[package]]
 name = "rskit-worker"
-version = "0.2.0-alpha.3"
+version = "0.2.0-alpha.4"
 dependencies = [
  "async-trait",
  "chrono",

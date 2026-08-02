@@ -1,11 +1,12 @@
 .PHONY: all setup build test test-nextest test-doc test-python test-affected coverage coverage-changed test-coverage test-coverage-html lint fmt fmt-check check check-fast check-facade-features \
        check-core check-patterns check-crosscutting check-composition check-transport check-auth check-data check-ai \
        check-media check-infra doc deny check-l7-edges check-workspace-deps-sync check-topology check-public-api release-readiness release-coverage \
-       publish-dry-run release-publish release-bump release-sbom depgraphs clean help ci ci-test ci-lint ci-fmt ensure-act structure toven-canary
+       publish-dry-run release-publish release-bump release-sbom depgraphs clean help ci ci-test ci-lint ci-fmt ensure-act structure toven-canary lock
 
 CORE_MANIFEST = core/Cargo.toml
 CONTRIB_MANIFEST = contrib/Cargo.toml
 EXAMPLES_MANIFEST = examples/Cargo.toml
+FUZZ_MANIFEST = fuzz/Cargo.toml
 PYTHON ?= python3
 RSKIT_TOOL = $(PYTHON) ./scripts/rskit_tool.py
 # Candidate Toven binary for the read-only self-hosting canary. Defaults to a
@@ -13,6 +14,9 @@ RSKIT_TOOL = $(PYTHON) ./scripts/rskit_tool.py
 # e.g. `make TOVEN=../toven/target/release/toven toven-canary`.
 TOVEN ?= toven
 WORKSPACE_MANIFESTS = $(CORE_MANIFEST) $(CONTRIB_MANIFEST) $(EXAMPLES_MANIFEST)
+# Every workspace that owns a Cargo.lock, including the fuzz harness excluded
+# from the build/test train.
+LOCK_MANIFESTS = $(WORKSPACE_MANIFESTS) $(FUZZ_MANIFEST)
 FORMAT_MANIFESTS = $(WORKSPACE_MANIFESTS)
 TEST_THREADS ?= 1
 THRESHOLD ?=
@@ -82,6 +86,17 @@ build:
 	@echo "==> Building..."
 	$(call run_cargo_target,build,,$(WORKSPACE_MANIFESTS),$(FEATURES))
 	@echo "✓ Build succeeded"
+
+## Refresh every workspace Cargo.lock after version or dependency changes.
+## Re-resolves workspace members only (cargo update --workspace); pass
+## OFFLINE=1 to resolve without hitting the registry.
+lock:
+	@echo "==> Refreshing lockfiles..."
+	@set -e; \
+	for manifest in $(LOCK_MANIFESTS); do \
+		cargo update --workspace --manifest-path $$manifest $(if $(OFFLINE),--offline,); \
+	done
+	@echo "✓ Lockfiles refreshed"
 
 ## Run tests (C=<crate>, T=<test pattern>, W=core|contrib|examples)
 test:
@@ -360,6 +375,7 @@ help:
 	@echo "  make help                                  Show this help"
 	@echo "  make setup                                Install or verify local tooling"
 	@echo "  make build              [C=] [W=] [FEATURES=]                Build workspace(s)"
+	@echo "  make lock               [OFFLINE=1]        Refresh every workspace Cargo.lock (workspace members only)"
 	@echo "  make test               [C=] [T=] [W=] [FEATURES=]            Run tests; defaults to TEST_FEATURES=--all-features"
 	@echo "  make test-nextest       [PROFILE=] [W=] [FEATURES=]           Run tests with nextest; defaults to TEST_FEATURES=--all-features"
 	@echo "  make test-doc           [C=] [W=] [FEATURES=]                 Run doctests only; defaults to TEST_FEATURES=--all-features"
