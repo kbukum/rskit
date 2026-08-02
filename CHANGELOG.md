@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.2.0-alpha.7] - 2026-08-02
+
 ### Added
 
 - Add an opt-in `vendored-openssl` feature to `rskit-git` that forwards to `git2/vendored-openssl`, statically linking a source-built OpenSSL into the embedded `git2` backend so portable and cross-compiled builds compile OpenSSL per target instead of resolving one from the host. It is off by default — the standard build keeps linking the system OpenSSL and its security updates — and is intended for release/cross builds (e.g. `cross`, or building a non-native arch) where a target OpenSSL is otherwise unavailable.
@@ -184,7 +186,8 @@ Initial alpha release of rskit, a Rust infrastructure toolkit for building servi
 
 This is an **alpha preview** intended for early evaluation. APIs may change before the first stable release, especially while rskit is still aligning its foundational crates and adapter boundaries.
 
-[Unreleased]: https://github.com/kbukum/rskit/compare/v0.2.0-alpha.5...HEAD
+[Unreleased]: https://github.com/kbukum/rskit/compare/v0.2.0-alpha.7...HEAD
+[v0.2.0-alpha.7]: https://github.com/kbukum/rskit/compare/v0.2.0-alpha.5...v0.2.0-alpha.7
 [v0.2.0-alpha.5]: https://github.com/kbukum/rskit/compare/v0.2.0-alpha.4...v0.2.0-alpha.5
 [v0.2.0-alpha.1]: https://github.com/kbukum/rskit/compare/v0.1.0-alpha.3...v0.2.0-alpha.1
 [v0.1.0-alpha.3]: https://github.com/kbukum/rskit/compare/v0.1.0-alpha.2...v0.1.0-alpha.3
