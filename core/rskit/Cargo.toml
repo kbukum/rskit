@@ -1,7 +1,7 @@
 [package]
 name        = "rskit-suite"
 description = "Production Rust toolkit facade — modular entry point for rskit-* crates"
-version = "0.2.0-alpha.6"
+version = "0.2.0-alpha.7"
 edition.workspace     = true
 license.workspace     = true
 rust-version.workspace = true

@@ -6,8 +6,8 @@
 
 ```toml
 [dependencies]
-rskit-component = "0.2.0-alpha.2"
-rskit-errors = "0.2.0-alpha.4"
+rskit-component = "0.2.0-alpha.3"
+rskit-errors = "0.2.0-alpha.5"
 async-trait = "0.1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```

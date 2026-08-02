@@ -6,9 +6,9 @@
 
 ```toml
 [dependencies]
-rskit-llm = "0.2.0-alpha.2"
-rskit-llm-anthropic = "0.2.0-alpha.3"
-rskit-util = "0.2.0-alpha.4"
+rskit-llm = "0.2.0-alpha.3"
+rskit-llm-anthropic = "0.2.0-alpha.4"
+rskit-util = "0.2.0-alpha.5"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 

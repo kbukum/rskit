@@ -19,7 +19,7 @@ Test utilities, mock providers, and assertion helpers for rskit services.
 
 ```toml
 [dev-dependencies]
-rskit-testutil = "0.2.0-alpha.3"
+rskit-testutil = "0.2.0-alpha.4"
 ```
 
 ```rust

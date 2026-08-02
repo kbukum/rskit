@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [v0.2.0-alpha.7] - 2026-08-02
+
 ### Added
 
 - Add an opt-in `vendored-openssl` feature to `rskit-git` that forwards to `git2/vendored-openssl`, statically linking a source-built OpenSSL into the embedded `git2` backend so portable and cross-compiled builds compile OpenSSL per target instead of resolving one from the host. It is off by default — the standard build keeps linking the system OpenSSL and its security updates — and is intended for release/cross builds (e.g. `cross`, or building a non-native arch) where a target OpenSSL is otherwise unavailable.
@@ -23,7 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Map a missing git identity to an actionable error in `rskit-git` instead of an opaque internal failure. When a commit relies on the repository's default signature and `user.name` / `user.email` are unset, libgit2 raises a `Config`/`NotFound` error that was previously collapsed into `GitError::Internal(git2::Error)` and serialized as the generic "internal server error". A new `GitError::IdentityMissing` variant now classifies that signature failure and maps to an `InvalidInput` `AppError` naming the missing key and telling the user how to set it (`git config user.name` / `git config user.email`). This most visibly affects CI checkouts that authenticate but configure no identity. The generic `AppError::internal` cause-hiding contract is left intact for genuinely internal git2 failures.
 - Deflake the `rskit-media-image` resize performance comparison test, which failed intermittently under parallel nextest load: the two sequential average-of-5 loops measured scheduler noise, so whichever loop hit a CPU contention window lost the ratio. The test now warms up both paths, interleaves the backend and raw-`image` measurements, and keeps the best per-iteration time of each, discarding contention spikes instead of averaging them in.
 
-## [0.2.0-alpha.6] - 2026-07-19
+## [v0.2.0-alpha.6] - 2026-07-19
 
 ### Changed
 
@@ -184,7 +186,9 @@ Initial alpha release of rskit, a Rust infrastructure toolkit for building servi
 
 This is an **alpha preview** intended for early evaluation. APIs may change before the first stable release, especially while rskit is still aligning its foundational crates and adapter boundaries.
 
-[Unreleased]: https://github.com/kbukum/rskit/compare/v0.2.0-alpha.5...HEAD
+[Unreleased]: https://github.com/kbukum/rskit/compare/v0.2.0-alpha.7...HEAD
+[v0.2.0-alpha.7]: https://github.com/kbukum/rskit/compare/v0.2.0-alpha.6...v0.2.0-alpha.7
+[v0.2.0-alpha.6]: https://github.com/kbukum/rskit/compare/v0.2.0-alpha.5...v0.2.0-alpha.6
 [v0.2.0-alpha.5]: https://github.com/kbukum/rskit/compare/v0.2.0-alpha.4...v0.2.0-alpha.5
 [v0.2.0-alpha.1]: https://github.com/kbukum/rskit/compare/v0.1.0-alpha.3...v0.2.0-alpha.1
 [v0.1.0-alpha.3]: https://github.com/kbukum/rskit/compare/v0.1.0-alpha.2...v0.1.0-alpha.3

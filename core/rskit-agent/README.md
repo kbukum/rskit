@@ -6,10 +6,10 @@
 
 ```toml
 [dependencies]
-rskit-agent = "0.2.0-alpha.3"
-rskit-errors = "0.2.0-alpha.4"
-rskit-llm = "0.2.0-alpha.2"
-rskit-tool = "0.2.0-alpha.3"
+rskit-agent = "0.2.0-alpha.4"
+rskit-errors = "0.2.0-alpha.5"
+rskit-llm = "0.2.0-alpha.3"
+rskit-tool = "0.2.0-alpha.4"
 ```
 
 ## Architecture

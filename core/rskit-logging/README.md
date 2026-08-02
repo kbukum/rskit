@@ -29,13 +29,13 @@ Disable default features (`default-features = false`) to depend on only the trac
 
 ```toml
 [dependencies]
-rskit-logging = "0.2.0-alpha.2"
+rskit-logging = "0.2.0-alpha.3"
 
 # Vocabulary only — no tracing subscriber stack
-rskit-logging = { version = "0.2.0-alpha.2", default-features = false }
+rskit-logging = { version = "0.2.0-alpha.3", default-features = false }
 
 # With OTLP export support
-rskit-logging = { version = "0.2.0-alpha.2", features = ["otlp"] }
+rskit-logging = { version = "0.2.0-alpha.3", features = ["otlp"] }
 ```
 
 ## Quick Start
@@ -274,7 +274,7 @@ It uses `opentelemetry-appender-tracing` to convert every `tracing::Event` into 
 
 ```toml
 [dependencies]
-rskit-logging = { version = "0.2.0-alpha.2", features = ["otlp"] }
+rskit-logging = { version = "0.2.0-alpha.3", features = ["otlp"] }
 ```
 
 ### Setup

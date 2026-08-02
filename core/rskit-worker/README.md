@@ -16,7 +16,7 @@
 
 ```toml
 [dependencies]
-rskit-worker = "0.2.0-alpha.3"
+rskit-worker = "0.2.0-alpha.4"
 async-trait = "0.1"
 ```
 
