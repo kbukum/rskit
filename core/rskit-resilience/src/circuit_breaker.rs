@@ -441,6 +441,32 @@ mod tests {
         assert_eq!(cb.state(), CbState::Closed);
     }
 
+    #[tokio::test(start_paused = true)]
+    async fn half_open_probe_failure_reopens_breaker() {
+        let cb = CircuitBreaker::new(
+            CbConfig::new("reopen")
+                .with_max_failures(1)
+                .with_timeout(Duration::from_secs(1))
+                .with_half_open_max_calls(1),
+        )
+        .unwrap();
+
+        let _ = cb
+            .execute(|| async { Err::<(), AppError>(AppError::new(ErrorCode::Internal, "boom")) })
+            .await;
+        assert_eq!(cb.state(), CbState::Open);
+
+        tokio::time::advance(Duration::from_secs(2)).await;
+        let probe = cb
+            .execute(|| async {
+                Err::<(), AppError>(AppError::new(ErrorCode::Internal, "still bad"))
+            })
+            .await;
+
+        assert!(probe.is_err());
+        assert_eq!(cb.state(), CbState::Open);
+    }
+
     #[tokio::test]
     async fn open_to_half_open_transition_consumes_probe_slot() {
         let cb = CircuitBreaker::new(

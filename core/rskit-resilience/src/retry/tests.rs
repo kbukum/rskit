@@ -203,3 +203,112 @@ async fn execute_stops_before_elapsed_time_cap() {
     let err = result.unwrap_err();
     assert_eq!(err.attempts, 1);
 }
+
+#[tokio::test]
+async fn execute_invokes_on_retry_and_honors_retry_if() {
+    let retries = Arc::new(AtomicUsize::new(0));
+    let seen = Arc::clone(&retries);
+    let policy = RetryPolicy::new()
+        .with_max_attempts(3)
+        .with_initial_backoff(Duration::from_millis(1))
+        .with_jitter(false)
+        .with_retry_if(|e: &AppError| e.code() == ErrorCode::InvalidInput)
+        .with_on_retry(move |_attempt, _err| {
+            seen.fetch_add(1, Ordering::SeqCst);
+        });
+
+    let attempts = Arc::new(AtomicUsize::new(0));
+    let counter = Arc::clone(&attempts);
+    let result = policy
+        .execute(|| {
+            let counter = Arc::clone(&counter);
+            async move {
+                counter.fetch_add(1, Ordering::SeqCst);
+                Err::<(), AppError>(AppError::new(ErrorCode::InvalidInput, "retry me"))
+            }
+        })
+        .await;
+
+    assert!(result.is_err());
+    assert_eq!(attempts.load(Ordering::SeqCst), 3);
+    assert_eq!(retries.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn execute_retry_if_returning_false_stops_a_retryable_error() {
+    let policy = RetryPolicy::new()
+        .with_max_attempts(5)
+        .with_initial_backoff(Duration::from_millis(1))
+        .with_jitter(false)
+        .with_retry_if(|_e: &AppError| false);
+
+    let attempts = Arc::new(AtomicUsize::new(0));
+    let counter = Arc::clone(&attempts);
+    let result = policy
+        .execute(|| {
+            let counter = Arc::clone(&counter);
+            async move {
+                counter.fetch_add(1, Ordering::SeqCst);
+                Err::<(), AppError>(AppError::new(ErrorCode::ConnectionFailed, "conn"))
+            }
+        })
+        .await;
+
+    let err = result.unwrap_err();
+    assert_eq!(err.attempts, 1);
+    assert_eq!(attempts.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test(start_paused = true)]
+async fn execute_times_out_a_single_slow_attempt() {
+    let policy = RetryPolicy::new()
+        .with_max_attempts(3)
+        .with_max_elapsed_time(Duration::from_millis(50))
+        .with_jitter(false);
+
+    let result = policy
+        .execute(|| async {
+            tokio::time::sleep(Duration::from_secs(3600)).await;
+            Ok::<(), AppError>(())
+        })
+        .await;
+
+    let err = result.unwrap_err();
+    assert_eq!(err.attempts, 1);
+    assert_eq!(err.last_error.code(), ErrorCode::Timeout);
+}
+
+#[tokio::test]
+async fn execute_returns_error_for_invalid_policy() {
+    let policy = RetryPolicy::new().with_max_attempts(0);
+
+    let result = policy.execute(|| async { Ok::<(), AppError>(()) }).await;
+
+    let err = result.unwrap_err();
+    assert_eq!(err.attempts, 0);
+    assert_eq!(err.last_error.code(), ErrorCode::InvalidInput);
+}
+
+#[tokio::test]
+async fn execute_times_out_when_elapsed_budget_is_zero() {
+    let policy = RetryPolicy::new()
+        .with_max_attempts(3)
+        .with_max_elapsed_time(Duration::ZERO);
+
+    let attempts = Arc::new(AtomicUsize::new(0));
+    let counter = Arc::clone(&attempts);
+    let result = policy
+        .execute(|| {
+            let counter = Arc::clone(&counter);
+            async move {
+                counter.fetch_add(1, Ordering::SeqCst);
+                Ok::<(), AppError>(())
+            }
+        })
+        .await;
+
+    let err = result.unwrap_err();
+    assert_eq!(err.attempts, 0);
+    assert_eq!(err.last_error.code(), ErrorCode::Timeout);
+    assert_eq!(attempts.load(Ordering::SeqCst), 0);
+}

@@ -222,7 +222,9 @@ mod tests {
     use rskit_errors::{AppError, ErrorCode};
 
     use super::*;
-    use crate::{BulkheadConfig, CbConfig, ConstantBackoff, LinearBackoff, RateLimiterConfig};
+    use crate::{
+        BulkheadConfig, CbConfig, ConstantBackoff, LinearBackoff, RateLimiter, RateLimiterConfig,
+    };
 
     #[tokio::test]
     async fn policy_retries_until_success() {
@@ -361,5 +363,49 @@ mod tests {
 
         assert_eq!(attempts.load(Ordering::SeqCst), 1);
         assert_eq!(result.unwrap_err().code(), ErrorCode::ConnectionFailed);
+    }
+
+    #[tokio::test]
+    async fn policy_with_prebuilt_rate_limiter_enforces_burst() {
+        let limiter = RateLimiter::from_config(RateLimiterConfig::new("prebuilt", 1, 1)).unwrap();
+        let policy = Policy::new().with_rate_limiter(limiter);
+
+        let first = policy.execute(|| async { Ok::<_, AppError>(1) }).await;
+        assert_eq!(first.unwrap(), 1);
+
+        let second = policy.execute(|| async { Ok::<_, AppError>(2) }).await;
+        assert_eq!(second.unwrap_err().code(), ErrorCode::RateLimited);
+    }
+
+    #[tokio::test]
+    async fn policy_retry_invokes_on_retry_and_honors_retry_if() {
+        let retries = Arc::new(AtomicUsize::new(0));
+        let seen = Arc::clone(&retries);
+        let policy = Policy::new().with_retry(
+            RetryPolicy::new()
+                .with_max_attempts(3)
+                .with_constant_backoff(ConstantBackoff::new(Duration::from_millis(1)))
+                .with_jitter(false)
+                .with_retry_if(|e: &AppError| e.code() == ErrorCode::InvalidInput)
+                .with_on_retry(move |_attempt, _err| {
+                    seen.fetch_add(1, Ordering::SeqCst);
+                }),
+        );
+
+        let attempts = Arc::new(AtomicUsize::new(0));
+        let counter = Arc::clone(&attempts);
+        let result = policy
+            .execute(|| {
+                let counter = Arc::clone(&counter);
+                async move {
+                    counter.fetch_add(1, Ordering::SeqCst);
+                    Err::<(), AppError>(AppError::new(ErrorCode::InvalidInput, "retry me"))
+                }
+            })
+            .await;
+
+        assert!(result.is_err());
+        assert_eq!(attempts.load(Ordering::SeqCst), 3);
+        assert_eq!(retries.load(Ordering::SeqCst), 2);
     }
 }
