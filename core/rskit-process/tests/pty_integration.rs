@@ -9,8 +9,8 @@ use std::time::Duration;
 
 use parking_lot::Mutex;
 use rskit_process::{
-    InputPolicy, OutputObserver, OutputPolicy, ProcessConfig, ProcessIo, ProcessSpec, PtyIo,
-    PtySize, SignalPolicy, run_with_cancel,
+    ErrorCode, InputPolicy, OutputObserver, OutputPolicy, ProcessConfig, ProcessIo, ProcessSpec,
+    PtyIo, PtySize, SignalPolicy, run_with_cancel,
 };
 use tokio_util::sync::CancellationToken;
 
@@ -18,6 +18,27 @@ fn pty_config(io: PtyIo) -> ProcessConfig {
     ProcessConfig::default()
         .with_timeout(Some(Duration::from_secs(30)))
         .with_io(ProcessIo::pty(io))
+}
+
+#[tokio::test]
+async fn a_missing_program_on_a_pty_is_a_typed_not_found_spawn_failure() {
+    // PTY mode must classify a missing program the same way the pipe runners do:
+    // a NotFound spawn failure carrying a spawn-failure message, not an opaque
+    // internal error.
+    let spec = ProcessSpec::new("/definitely/not/rskit-process-missing");
+    let error = run_with_cancel(
+        &spec,
+        &pty_config(PtyIo::default()),
+        CancellationToken::new(),
+    )
+    .await
+    .expect_err("a missing program must fail to spawn");
+
+    assert_eq!(error.code(), ErrorCode::NotFound);
+    assert!(
+        error.to_string().contains("failed to spawn process"),
+        "the error must still indicate a spawn failure: {error}"
+    );
 }
 
 #[tokio::test]

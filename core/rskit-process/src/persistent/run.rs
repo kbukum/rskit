@@ -7,7 +7,7 @@ use std::{
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    AppError, AppResult, EnvPolicy, ErrorCode, InputPolicy, ProcessConfig, ProcessIo, ProcessSpec,
+    AppError, AppResult, EnvPolicy, InputPolicy, ProcessConfig, ProcessIo, ProcessSpec,
     SignalPolicy, process_group::isolate,
 };
 
@@ -196,12 +196,14 @@ fn spawn_child(
     }
 
     cmd.spawn().map_err(|error| {
+        let message = format!("failed to spawn persistent process: {error}");
+        let classified = AppError::from(error);
         persistent_start_error(
             PersistentStartErrorKind::SpawnFailed,
-            ErrorCode::Internal,
-            format!("failed to spawn persistent process: {error}"),
+            classified.code(),
+            message,
         )
-        .with_cause(error)
+        .with_cause(classified)
     })
 }
 

@@ -15,7 +15,7 @@ use tracing::debug;
 use crate::pty::{PtyIo, PtyMaster, PtyPair, install_controlling_tty, open_pty};
 use crate::{
     AppError, AppResult, EnvPolicy, ErrorCode, InputPolicy, ProcessConfig, ProcessResult,
-    ProcessSpec,
+    ProcessSpec, command::spawn_error,
 };
 
 use super::lifecycle::wait_for_completion;
@@ -69,12 +69,9 @@ pub(in crate::runner) async fn run_pty_mode(
         args = ?RedactedArgs::new(&spec.args, &config.arg_redaction),
         "spawning process on pseudoterminal"
     );
-    let child = cmd.spawn().map_err(|error| {
-        AppError::new(
-            ErrorCode::Internal,
-            format!("failed to spawn process: {error}"),
-        )
-    })?;
+    let child = cmd
+        .spawn()
+        .map_err(|error| spawn_error("failed to spawn process", error))?;
     // The child now holds its own dup'd stdio; the parent must not keep the slave open
     // or the master read would never observe EOF.
     drop(slave);

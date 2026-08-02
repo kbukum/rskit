@@ -86,7 +86,8 @@ async fn async_run_rejects_empty_program_and_reports_spawn_failure() {
     )
     .await
     .unwrap_err();
-    assert_eq!(missing.code(), ErrorCode::Internal);
+    assert_eq!(missing.code(), ErrorCode::NotFound);
+    assert!(missing.to_string().contains("failed to spawn process"));
 }
 
 #[tokio::test]
@@ -553,7 +554,8 @@ fn blocking_run_reports_spawn_failure() {
     )
     .unwrap_err();
 
-    assert_eq!(error.code(), ErrorCode::Internal);
+    assert_eq!(error.code(), ErrorCode::NotFound);
+    assert!(error.to_string().contains("failed to spawn process"));
 }
 
 #[test]

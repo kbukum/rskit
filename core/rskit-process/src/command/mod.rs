@@ -4,6 +4,7 @@ mod config;
 mod io;
 mod redaction;
 mod signal;
+mod spawn;
 mod spec;
 
 pub use config::ProcessConfig;
@@ -14,6 +15,8 @@ pub use io::{
 pub use redaction::ArgRedaction;
 pub use signal::SignalPolicy;
 pub use spec::{EnvPolicy, ProcessSpec, command};
+
+pub(crate) use spawn::spawn_error;
 
 #[cfg(test)]
 mod tests;
