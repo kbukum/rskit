@@ -26,16 +26,9 @@ pub trait RefManager {
 
     /// Creates a signed **annotated** tag pointing at `target`.
     ///
-    /// Signing is always annotated (a signed lightweight tag is not a thing), so
-    /// `message` is required. `opts` selects the signing backend and key: a
-    /// `None` field on [`SignOptions`](crate::options::SignOptions) inherits the
-    /// repository's configured `gpg.format` / `user.signingkey`, while an
-    /// explicit value pins it. The backend preflights that an effective signing
-    /// key is available and returns
+    /// Signing is always annotated (a signed lightweight tag is not a thing), so `message` is required. The git CLI backend signs with `git tag -s`; [`Repo`](crate::Repo) routes this call to that backend, while embedded-only backends return [`GitError::SigningNotSupported`](crate::error::GitError::SigningNotSupported). `opts` selects the signing backend and key: a `None` field on [`SignOptions`] inherits the repository's configured `gpg.format` / `user.signingkey`, while an explicit value pins it. The backend preflights that an effective signing key is available and returns
     /// [`GitError::SigningKeyMissing`](crate::error::GitError::SigningKeyMissing)
-    /// when none is, rather than surfacing a raw signer failure. Not every
-    /// backend can sign: a backend without a signing implementation returns
-    /// [`GitError::SigningNotSupported`](crate::error::GitError::SigningNotSupported).
+    /// when neither a non-blank explicit key nor configured `user.signingkey` is available, rather than surfacing a raw signer failure.
     fn create_signed_tag(
         &self,
         name: &str,

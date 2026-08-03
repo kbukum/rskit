@@ -5,10 +5,11 @@
 //! - [`Differ`], [`IgnoreReader`], [`TreeReader`], [`LogReader`], [`Blamer`],
 //!   and [`Inspector`] for read flows
 //! - [`IndexManager`], [`Committer`], and related write traits for mutating operations
-//! - [`RefManager`], [`RemoteManager`], [`ConfigReader`], and [`Maintainer`] for management
+//! - [`RefManager`], [`RemoteManager`], [`ConfigReader`], and [`Maintainer`] for refs, remotes, config, and maintenance
 //!
 //! The default backend uses `git2` (libgit2) for embedded operations
-//! and delegates several core mutating operations (merge, rebase, checkout, reset, stash, cherry-pick, maintenance) to the `git` CLI binary.
+//! and delegates several core mutating operations (merge, rebase, checkout, reset, stash, cherry-pick, maintenance, signed annotated tags) to the `git` CLI binary.
+//! Signed tags are created with `git tag -s`; [`Repo`] routes [`RefManager::create_signed_tag`] to the CLI backend, while the embedded backend returns [`GitError::SigningNotSupported`] when used directly.
 //! **A `git` binary must be available on `PATH` at runtime.** Network operations (fetch, push) use the embedded `git2` backend.
 //!
 //! # Usage

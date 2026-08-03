@@ -94,6 +94,9 @@ impl RefManager for GitCli {
         Ok(())
     }
 
+    /// Creates a signed annotated tag with `git tag -s`.
+    ///
+    /// Explicit `SignOptions` values are passed as `-c gpg.format=...` and `-c user.signingkey=...`; unset fields inherit git config. A blank explicit key is rejected, and an inherited key must exist in `user.signingkey` before the signer runs.
     fn create_signed_tag(
         &self,
         name: &str,

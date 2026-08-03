@@ -144,6 +144,9 @@ impl RefManager for Git2Repository {
         Ok(())
     }
 
+    /// Reports that libgit2 cannot create signed tag objects.
+    ///
+    /// Use [`Repo`](crate::Repo) when callers need the default embedded backend plus CLI-backed signed tags.
     fn create_signed_tag(
         &self,
         _name: &str,

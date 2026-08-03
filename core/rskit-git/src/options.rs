@@ -178,13 +178,10 @@ pub struct CleanOptions {
     pub extra_args: ExtraArgs,
 }
 
-/// Controls how a signed tag or commit is signed.
+/// Controls how a signed annotated tag is signed.
 ///
 /// Both fields are optional: a `None` field inherits the repository/global git
-/// configuration (`gpg.format` and `user.signingkey` respectively). Setting a
-/// field pins that aspect explicitly for deterministic, reproducible signing
-/// that does not depend on ambient config. The default (`SignOptions::default`)
-/// signs with whatever the repository is configured to use.
+/// configuration (`gpg.format` and `user.signingkey` respectively). Setting a field pins that aspect explicitly for deterministic, reproducible signing that does not depend on ambient config. The default (`SignOptions::default`) signs with whatever the repository is configured to use, but the CLI backend still requires an effective non-blank signing key before it invokes `git tag -s`.
 #[derive(Debug, Clone, Default)]
 pub struct SignOptions {
     /// Signing backend to select via `gpg.format`. `None` inherits git config.
@@ -201,7 +198,7 @@ impl SignOptions {
         self
     }
 
-    /// Pin the signing key (`user.signingkey`).
+    /// Pin the signing key (`user.signingkey`); blank values are rejected before the signer runs.
     #[must_use = "builder methods return the updated options; chain or bind the result"]
     pub fn with_key(mut self, key: impl Into<String>) -> Self {
         self.key = Some(key.into());

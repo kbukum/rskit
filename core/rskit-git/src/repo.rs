@@ -315,6 +315,9 @@ impl RefManager for Repo {
         self.embedded.create_tag(name, target, message)
     }
 
+    /// Creates a signed annotated tag by routing to the git CLI backend.
+    ///
+    /// Regular ref operations use the embedded backend, but signed tags require `git tag -s`, so `Repo` delegates this operation to `GitCli`.
     fn create_signed_tag(
         &self,
         name: &str,

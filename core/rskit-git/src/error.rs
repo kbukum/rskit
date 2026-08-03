@@ -103,17 +103,13 @@ pub enum GitError {
         b: String,
     },
 
-    /// Commit signing is not supported by the selected backend.
-    #[error("commit signing is not supported by the selected backend")]
+    /// Signing is not supported by the selected backend.
+    #[error("signing is not supported by the selected backend")]
     SigningNotSupported,
 
     /// A signing operation was requested but no signing key is configured.
     ///
-    /// `git tag -s` / `git commit -S` resolve the signer from `user.signingkey`
-    /// (falling back to the committer identity's default key). Toven's release
-    /// path requires an explicit signing key so the signer is deterministic, so
-    /// the backend preflights it and returns this actionable configuration
-    /// error instead of surfacing a raw gpg/ssh signer failure.
+    /// `git tag -s` resolves the signer from the explicit `user.signingkey` override or the repository/global `user.signingkey` config. The CLI backend preflights that effective key and returns this actionable configuration error instead of surfacing a raw signer failure.
     #[error("signing key is not configured: {key} is not set")]
     SigningKeyMissing {
         /// Missing signing-key config key (for example `user.signingkey`).
@@ -239,7 +235,7 @@ impl From<GitError> for AppError {
             }
             GitError::SigningNotSupported => AppError::invalid_input(
                 "sign",
-                "commit signing is not supported by the selected backend",
+                "signing is not supported by the selected backend",
             ),
             GitError::SigningKeyMissing { key } => {
                 AppError::invalid_input("sign", format!("{key} is not configured")).hint(
