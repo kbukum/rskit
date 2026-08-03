@@ -239,9 +239,10 @@ impl From<GitError> for AppError {
             ),
             GitError::SigningKeyMissing { key } => {
                 AppError::invalid_input("sign", format!("{key} is not configured")).hint(
-                    "Configure a signing key with `git config user.signingkey <key-id>` (add \
-                     --global to apply it for every repository), then retry the signed release \
-                     tag.",
+                    "Configure a signing key with `git config user.signingkey <key>` (for \
+                     example an OpenPGP key id, SSH private-key path, X.509 certificate, or \
+                     signer-specific key reference; add --global to apply it for every \
+                     repository), then retry the signed release tag.",
                 )
             }
             GitError::IdentityMissing { key } => {

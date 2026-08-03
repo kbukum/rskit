@@ -11,6 +11,7 @@ use crate::options::{CleanOptions, FetchOptions, PushOptions, SignOptions};
 use crate::types::{Branch, BranchFilter, Remote, Signature, Tag};
 
 use super::GitCli;
+use super::runner::SIGNING_TIMEOUT;
 
 impl GitCli {
     /// Preflight that a signing key is configured before a signed git operation.
@@ -137,8 +138,11 @@ impl RefManager for GitCli {
             target.to_string(),
         ]);
         let refs = args.iter().map(String::as_str).collect::<Vec<_>>();
-        self.run(&refs)?;
-        Ok(())
+        let output = self.run_result_with_timeout(&refs, Some(SIGNING_TIMEOUT))?;
+        if output.success() && !output.stdout_truncated && !output.stderr_truncated {
+            return Ok(());
+        }
+        Err(Self::command_failed(&refs, output))
     }
 
     fn delete_tag(&self, name: &str) -> AppResult<()> {

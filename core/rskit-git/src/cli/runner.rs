@@ -1,10 +1,13 @@
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use rskit_errors::AppResult;
 use rskit_process::{ProcessConfig, ProcessResult, ProcessSpec};
 
 use crate::core::Executor;
 use crate::error::GitError;
+
+pub(crate) const SIGNING_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Git CLI command runner rooted at a repository.
 pub struct GitCli {
@@ -32,11 +35,19 @@ impl GitCli {
     }
 
     pub(crate) fn run_result(&self, args: &[&str]) -> AppResult<ProcessResult> {
+        self.run_result_with_timeout(args, None)
+    }
+
+    pub(crate) fn run_result_with_timeout(
+        &self,
+        args: &[&str],
+        timeout: Option<Duration>,
+    ) -> AppResult<ProcessResult> {
         let command = ProcessSpec::new("git")
             .args(args.iter().copied())
             .dir(&self.root)
             .env("GIT_TERMINAL_PROMPT", "0");
-        let config = ProcessConfig::default().with_timeout(None);
+        let config = ProcessConfig::default().with_timeout(timeout);
         rskit_process::run(&command, &config)
     }
 

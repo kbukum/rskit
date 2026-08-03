@@ -2,6 +2,7 @@
 
 use rskit_errors::AppResult;
 
+use crate::error::GitError;
 use crate::options::{CleanOptions, FetchOptions, PushOptions, SignOptions};
 use crate::types::{Branch, BranchFilter, Remote, Tag};
 
@@ -26,16 +27,18 @@ pub trait RefManager {
 
     /// Creates a signed **annotated** tag pointing at `target`.
     ///
-    /// Signing is always annotated (a signed lightweight tag is not a thing), so `message` is required. The git CLI backend signs with `git tag -s`; [`Repo`](crate::Repo) routes this call to that backend, while embedded-only backends return [`GitError::SigningNotSupported`](crate::error::GitError::SigningNotSupported). `opts` selects the signing backend and key: a `None` field on [`SignOptions`] inherits the repository's configured `gpg.format` / `user.signingkey`, while an explicit value pins it. The backend preflights that an effective signing key is available and returns
-    /// [`GitError::SigningKeyMissing`](crate::error::GitError::SigningKeyMissing)
+    /// Signing is always annotated (a signed lightweight tag is not a thing), so `message` is required. The git CLI backend signs with `git tag -s` under a bounded timeout; [`Repo`](crate::Repo) routes this call to that backend, while embedded-only backends return [`GitError::SigningNotSupported`]. `opts` selects the signing backend and key: a `None` field on [`SignOptions`] inherits the repository's configured `gpg.format` / `user.signingkey`, while an explicit value pins it. The backend preflights that an effective signing key is available and returns
+    /// [`GitError::SigningKeyMissing`]
     /// when neither a non-blank explicit key nor configured `user.signingkey` is available, rather than surfacing a raw signer failure.
     fn create_signed_tag(
         &self,
-        name: &str,
-        target: &str,
-        message: &str,
-        opts: &SignOptions,
-    ) -> AppResult<()>;
+        _name: &str,
+        _target: &str,
+        _message: &str,
+        _opts: &SignOptions,
+    ) -> AppResult<()> {
+        Err(GitError::SigningNotSupported.into())
+    }
 
     /// Deletes a tag.
     fn delete_tag(&self, name: &str) -> AppResult<()>;
