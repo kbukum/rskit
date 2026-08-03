@@ -8,7 +8,7 @@ use rskit_errors::{AppError, AppResult};
 
 use crate::error::GitError;
 use crate::manage::{ConfigReader, RefManager, RemoteManager};
-use crate::options::{FetchOptions, PushOptions};
+use crate::options::{FetchOptions, PushOptions, SignOptions};
 use crate::types::{Branch, BranchFilter, Remote, Tag};
 
 use super::{
@@ -142,6 +142,18 @@ impl RefManager for Git2Repository {
                 .map_err(|err| map_exists_error("tag", name, err))?;
         }
         Ok(())
+    }
+
+    fn create_signed_tag(
+        &self,
+        _name: &str,
+        _target: &str,
+        _message: &str,
+        _opts: &SignOptions,
+    ) -> AppResult<()> {
+        // libgit2 cannot produce a signed tag object; signed tags are created
+        // through the git CLI backend (see `Repo::create_signed_tag`).
+        Err(GitError::SigningNotSupported.into())
     }
 
     fn delete_tag(&self, name: &str) -> AppResult<()> {

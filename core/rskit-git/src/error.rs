@@ -107,6 +107,19 @@ pub enum GitError {
     #[error("commit signing is not supported by the selected backend")]
     SigningNotSupported,
 
+    /// A signing operation was requested but no signing key is configured.
+    ///
+    /// `git tag -s` / `git commit -S` resolve the signer from `user.signingkey`
+    /// (falling back to the committer identity's default key). Toven's release
+    /// path requires an explicit signing key so the signer is deterministic, so
+    /// the backend preflights it and returns this actionable configuration
+    /// error instead of surfacing a raw gpg/ssh signer failure.
+    #[error("signing key is not configured: {key} is not set")]
+    SigningKeyMissing {
+        /// Missing signing-key config key (for example `user.signingkey`).
+        key: String,
+    },
+
     /// Git author/committer identity is not configured.
     ///
     /// libgit2 cannot build a default signature because `user.name` and/or
@@ -228,6 +241,13 @@ impl From<GitError> for AppError {
                 "sign",
                 "commit signing is not supported by the selected backend",
             ),
+            GitError::SigningKeyMissing { key } => {
+                AppError::invalid_input("sign", format!("{key} is not configured")).hint(
+                    "Configure a signing key with `git config user.signingkey <key-id>` (add \
+                     --global to apply it for every repository), then retry the signed release \
+                     tag.",
+                )
+            }
             GitError::IdentityMissing { key } => {
                 AppError::invalid_input("git identity", format!("{key} is not configured"))
                     .hint(
@@ -368,6 +388,12 @@ mod tests {
                 ErrorCode::NotFound,
             ),
             (GitError::SigningNotSupported, ErrorCode::InvalidInput),
+            (
+                GitError::SigningKeyMissing {
+                    key: "user.signingkey".to_string(),
+                },
+                ErrorCode::InvalidInput,
+            ),
             (
                 GitError::IdentityMissing {
                     key: "user.name".to_string(),

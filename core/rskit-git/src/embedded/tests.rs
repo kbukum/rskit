@@ -180,3 +180,24 @@ fn map_signature_error_distinguishes_missing_identity_from_internal_errors() {
     let other = git2::Error::from_str("boom");
     assert!(matches!(map_signature_error(other), GitError::Internal(_)));
 }
+
+#[test]
+fn embedded_backend_reports_signed_tags_as_unsupported() {
+    use crate::manage::RefManager;
+    use crate::options::SignOptions;
+
+    let root = rskit_testutil::test_workspace!("git2-signed-tag-unsupported");
+    let repo = init(root.path()).expect("init repo");
+
+    let unsupported = repo
+        .create_signed_tag(
+            "v1-signed",
+            "HEAD",
+            "signed release",
+            &SignOptions::default(),
+        )
+        .expect_err("libgit2 cannot sign tags");
+
+    assert_eq!(unsupported.code(), rskit_errors::ErrorCode::InvalidInput);
+    assert!(unsupported.message().contains("not supported"));
+}

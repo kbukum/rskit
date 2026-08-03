@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use rskit_process::{ProcessConfig, ProcessSpec, run};
 use tempfile::TempDir;
@@ -58,6 +58,11 @@ impl TestRepo {
         run_git(self.path(), &["tag", name]);
     }
 
+    /// Runs an arbitrary git command in the repo and returns stdout.
+    pub fn git(&self, args: &[&str]) -> String {
+        run_git(self.path(), args)
+    }
+
     pub fn create_annotated_tag(&self, name: &str, message: &str) {
         run_git(self.path(), &["tag", "-a", name, "-m", message]);
     }
@@ -88,6 +93,34 @@ impl TestRepo {
 
     pub fn config_set(&self, key: &str, value: &str) {
         run_git(self.path(), &["config", key, value]);
+    }
+
+    /// Generates a passphrase-less ed25519 SSH key inside the repo and returns
+    /// its private-key path, suitable for `user.signingkey` with `gpg.format=ssh`.
+    /// SSH signing works offline and deterministically, so it exercises the real
+    /// signing path without a GPG keyring or network.
+    pub fn create_ssh_signing_key(&self) -> PathBuf {
+        let key_path = self.path().join("signing_key");
+        let key_arg = key_path.to_str().expect("utf-8 key path");
+        let cmd = ProcessSpec::new("ssh-keygen")
+            .args([
+                "-q",
+                "-t",
+                "ed25519",
+                "-N",
+                "",
+                "-C",
+                "rskit-git-test",
+                "-f",
+                key_arg,
+            ])
+            .dir(self.path());
+        let out = run(&cmd, &ProcessConfig::default().with_timeout(None))
+            .expect("failed to run ssh-keygen");
+        if !out.success() {
+            panic!("ssh-keygen failed: {}", out.stderr);
+        }
+        key_path
     }
 
     pub fn config_add(&self, key: &str, value: &str) {

@@ -1,8 +1,9 @@
 use crate::helpers;
 
+use rskit_errors::ErrorCode;
 use rskit_git::{
     BranchFilter, CleanOptions, ConfigReader, FetchOptions, Maintainer, PushOptions, RefManager,
-    RemoteManager, Repository, cli::GitCli, open,
+    RemoteManager, Repository, SignFormat, SignOptions, cli::GitCli, open,
 };
 
 #[test]
@@ -101,6 +102,152 @@ fn create_tag_distinguishes_annotated_empty_message_from_lightweight() {
         lightweight.tagger.is_none(),
         "None must create a lightweight tag"
     );
+}
+
+#[test]
+fn signed_tag_preflights_a_configured_signing_key() {
+    let repo = helpers::TestRepo::init();
+    let cli = GitCli::new(repo.path().to_path_buf());
+
+    // A fresh test repo configures no signing key, so the preflight fails
+    // closed with an actionable error rather than a raw gpg failure. Both the
+    // CLI backend and the routed `Repo` surface the same typed error.
+    let cli_error = cli
+        .create_signed_tag(
+            "cli-signed",
+            "HEAD",
+            "signed release",
+            &SignOptions::default(),
+        )
+        .unwrap_err();
+    assert_eq!(cli_error.code(), ErrorCode::InvalidInput);
+    assert!(cli_error.message().contains("user.signingkey"));
+
+    let repo_error = open(repo.path())
+        .unwrap()
+        .create_signed_tag(
+            "repo-signed",
+            "HEAD",
+            "signed release",
+            &SignOptions::default(),
+        )
+        .unwrap_err();
+    assert_eq!(repo_error.code(), ErrorCode::InvalidInput);
+    assert!(repo_error.message().contains("user.signingkey"));
+}
+
+#[test]
+fn signed_tag_rejects_a_blank_explicit_key_without_touching_git_config() {
+    let repo = helpers::TestRepo::init();
+    let cli = GitCli::new(repo.path().to_path_buf());
+
+    // An explicit but blank key is a caller error and must fail closed the same
+    // way, regardless of what (if anything) git config holds.
+    let error = cli
+        .create_signed_tag(
+            "blank-key",
+            "HEAD",
+            "signed release",
+            &SignOptions::default().with_key("   "),
+        )
+        .unwrap_err();
+    assert_eq!(error.code(), ErrorCode::InvalidInput);
+    assert!(error.message().contains("user.signingkey"));
+}
+
+#[test]
+fn signed_tag_with_explicit_key_and_format_creates_a_verifiable_signed_tag() {
+    let repo = helpers::TestRepo::init();
+    let cli = GitCli::new(repo.path().to_path_buf());
+    let key = repo.create_ssh_signing_key();
+
+    // An explicit key and format pin the signer without touching git config, so
+    // the effective signing key preflight is satisfied and the SSH backend
+    // produces a real signature over the annotated tag object.
+    cli.create_signed_tag(
+        "v1-signed",
+        "HEAD",
+        "signed release",
+        &SignOptions::default()
+            .with_format(SignFormat::Ssh)
+            .with_key(key.to_str().expect("utf-8 key path")),
+    )
+    .expect("signed tag should be created");
+
+    // The tag is annotated, points at HEAD, and carries an SSH signature.
+    let tag_object = repo.git(&["cat-file", "-p", "v1-signed"]);
+    assert!(tag_object.contains("-----BEGIN SSH SIGNATURE-----"));
+    assert!(tag_object.contains("signed release"));
+    let tagged = repo.git(&["rev-list", "-n", "1", "v1-signed"]);
+    assert_eq!(tagged.trim(), repo.rev_parse("HEAD"));
+}
+
+#[test]
+fn signed_tag_inherits_a_configured_signing_key_and_format() {
+    let repo = helpers::TestRepo::init();
+    let key = repo.create_ssh_signing_key();
+    repo.config_set("gpg.format", "ssh");
+    repo.config_set("user.signingkey", key.to_str().expect("utf-8 key path"));
+
+    // With the signer configured in git and no explicit override, default
+    // options inherit `gpg.format` / `user.signingkey`; the preflight reads the
+    // configured key and the routed `Repo` produces a signed tag.
+    open(repo.path())
+        .unwrap()
+        .create_signed_tag(
+            "v1-inherited",
+            "HEAD",
+            "inherited signer",
+            &SignOptions::default(),
+        )
+        .expect("signed tag should be created from configured signer");
+
+    let tag_object = repo.git(&["cat-file", "-p", "v1-inherited"]);
+    assert!(tag_object.contains("-----BEGIN SSH SIGNATURE-----"));
+}
+
+#[test]
+fn signed_tag_rejects_an_empty_configured_signing_key() {
+    let repo = helpers::TestRepo::init();
+    let cli = GitCli::new(repo.path().to_path_buf());
+    // A configured-but-blank `user.signingkey` is as unusable as a missing one,
+    // so the preflight must fail closed rather than defer to a raw signer error.
+    repo.config_set("user.signingkey", "   ");
+
+    let error = cli
+        .create_signed_tag(
+            "v1-empty",
+            "HEAD",
+            "signed release",
+            &SignOptions::default(),
+        )
+        .unwrap_err();
+
+    assert_eq!(error.code(), ErrorCode::InvalidInput);
+    assert!(error.message().contains("user.signingkey"));
+}
+
+#[test]
+fn signed_tag_surfaces_a_config_read_failure_verbatim() {
+    let repo = helpers::TestRepo::init();
+    let cli = GitCli::new(repo.path().to_path_buf());
+    // A signing-key config read that fails for a reason other than "unset" (here
+    // a corrupt config file) is surfaced verbatim, not masked as a missing-key
+    // preflight error, so the operator sees the real cause.
+    std::fs::write(repo.path().join(".git/config"), "[user\nbroken")
+        .expect("failed to corrupt git config");
+
+    let error = cli
+        .create_signed_tag(
+            "v1-broken",
+            "HEAD",
+            "signed release",
+            &SignOptions::default(),
+        )
+        .unwrap_err();
+
+    assert_ne!(error.code(), ErrorCode::InvalidInput);
+    assert!(error.message().to_lowercase().contains("git"));
 }
 
 #[test]

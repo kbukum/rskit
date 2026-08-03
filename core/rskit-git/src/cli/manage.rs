@@ -2,15 +2,37 @@
 
 use std::time::{Duration, UNIX_EPOCH};
 
-use rskit_errors::{AppError, AppResult};
+use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_process::ProcessResult;
 
 use crate::error::GitError;
 use crate::manage::{ConfigReader, Maintainer, RefManager, RemoteManager};
-use crate::options::{CleanOptions, FetchOptions, PushOptions};
+use crate::options::{CleanOptions, FetchOptions, PushOptions, SignOptions};
 use crate::types::{Branch, BranchFilter, Remote, Signature, Tag};
 
 use super::GitCli;
+
+impl GitCli {
+    /// Preflight that a signing key is configured before a signed git operation.
+    ///
+    /// Returns [`GitError::SigningKeyMissing`] when `key` is unset or blank so
+    /// the caller fails with an actionable configuration error instead of a raw
+    /// gpg/ssh signer failure surfaced by `git`.
+    fn require_signing_key(&self, key: &str) -> AppResult<()> {
+        match self.config_get(key) {
+            Ok(value) if !value.trim().is_empty() => Ok(()),
+            Ok(_) => Err(GitError::SigningKeyMissing {
+                key: key.to_string(),
+            }
+            .into()),
+            Err(error) if error.code() == ErrorCode::NotFound => Err(GitError::SigningKeyMissing {
+                key: key.to_string(),
+            }
+            .into()),
+            Err(error) => Err(error),
+        }
+    }
+}
 
 impl RefManager for GitCli {
     fn list_branches(&self, filter: BranchFilter) -> AppResult<Vec<Branch>> {
@@ -69,6 +91,50 @@ impl RefManager for GitCli {
         } else {
             self.run(&["tag", "--", name, target])?;
         }
+        Ok(())
+    }
+
+    fn create_signed_tag(
+        &self,
+        name: &str,
+        target: &str,
+        message: &str,
+        opts: &SignOptions,
+    ) -> AppResult<()> {
+        // Preflight the effective signing key: an explicit key is trusted as-is,
+        // otherwise require a configured `user.signingkey` so we fail with an
+        // actionable error instead of a raw signer failure.
+        match opts.key.as_deref() {
+            Some(key) if !key.trim().is_empty() => {}
+            Some(_) => {
+                return Err(GitError::SigningKeyMissing {
+                    key: "user.signingkey".to_string(),
+                }
+                .into());
+            }
+            None => self.require_signing_key("user.signingkey")?,
+        }
+
+        let mut args: Vec<String> = Vec::new();
+        if let Some(format) = opts.format {
+            args.push("-c".to_string());
+            args.push(format!("gpg.format={}", format.as_git_config()));
+        }
+        if let Some(key) = opts.key.as_deref() {
+            args.push("-c".to_string());
+            args.push(format!("user.signingkey={key}"));
+        }
+        args.extend([
+            "tag".to_string(),
+            "-s".to_string(),
+            "-m".to_string(),
+            message.to_string(),
+            "--".to_string(),
+            name.to_string(),
+            target.to_string(),
+        ]);
+        let refs = args.iter().map(String::as_str).collect::<Vec<_>>();
+        self.run(&refs)?;
         Ok(())
     }
 

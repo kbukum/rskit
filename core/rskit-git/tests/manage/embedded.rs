@@ -8,7 +8,8 @@ use rskit_errors::ErrorCode;
 use rskit_git::auth::TransportAuth;
 use rskit_git::{
     BranchFilter, CommitOptions, Committer, ConfigReader, EntryState, FetchOptions, IndexManager,
-    LogOptions, LogReader, PushOptions, RefManager, RemoteManager, Repository, Signature, open,
+    LogOptions, LogReader, PushOptions, RefManager, RemoteManager, Repository, SignOptions,
+    Signature, open,
 };
 
 #[test]
@@ -80,6 +81,24 @@ fn invalid_ref_names_map_unexpected_git2_errors_to_internal() {
 
     let invalid_tag = r.create_tag("bad tag name", "HEAD", None).unwrap_err();
     assert_eq!(invalid_tag.code(), ErrorCode::Internal);
+}
+
+#[test]
+fn signed_tag_without_a_configured_key_is_a_typed_preflight_error() {
+    let repo = helpers::TestRepo::init();
+    let r = open(repo.path()).unwrap();
+
+    let missing_key = r
+        .create_signed_tag(
+            "v1-signed",
+            "HEAD",
+            "signed release",
+            &SignOptions::default(),
+        )
+        .unwrap_err();
+
+    assert_eq!(missing_key.code(), ErrorCode::InvalidInput);
+    assert!(missing_key.message().contains("user.signingkey"));
 }
 
 #[test]

@@ -2,7 +2,7 @@
 
 use std::time::SystemTime;
 
-use crate::types::Signature;
+use crate::types::{SignFormat, Signature};
 
 /// Raw extra CLI-style arguments preserved for implementation-specific usage.
 pub type ExtraArgs = Vec<String>;
@@ -176,4 +176,35 @@ pub struct CleanOptions {
     pub force: bool,
     /// Implementation-specific passthrough arguments.
     pub extra_args: ExtraArgs,
+}
+
+/// Controls how a signed tag or commit is signed.
+///
+/// Both fields are optional: a `None` field inherits the repository/global git
+/// configuration (`gpg.format` and `user.signingkey` respectively). Setting a
+/// field pins that aspect explicitly for deterministic, reproducible signing
+/// that does not depend on ambient config. The default (`SignOptions::default`)
+/// signs with whatever the repository is configured to use.
+#[derive(Debug, Clone, Default)]
+pub struct SignOptions {
+    /// Signing backend to select via `gpg.format`. `None` inherits git config.
+    pub format: Option<SignFormat>,
+    /// Signing key to use via `user.signingkey`. `None` inherits git config.
+    pub key: Option<String>,
+}
+
+impl SignOptions {
+    /// Pin the signing backend (`gpg.format`).
+    #[must_use = "builder methods return the updated options; chain or bind the result"]
+    pub fn with_format(mut self, format: SignFormat) -> Self {
+        self.format = Some(format);
+        self
+    }
+
+    /// Pin the signing key (`user.signingkey`).
+    #[must_use = "builder methods return the updated options; chain or bind the result"]
+    pub fn with_key(mut self, key: impl Into<String>) -> Self {
+        self.key = Some(key.into());
+        self
+    }
 }
