@@ -2,15 +2,16 @@
 
 rskit is distributed as focused crates instead of one monolithic package. Use the `rskit-suite` facade package when you want common modules behind feature flags, or depend directly on individual crates when you want a narrower dependency graph.
 
-The repository has three workspace manifests and intentionally no root `Cargo.toml`:
+The repository has four workspace manifests and intentionally no root `Cargo.toml`:
 
 | Workspace | Purpose | Manifest |
 |---|---|---|
 | Core | Foundation crates and the `rskit-suite` facade | [`core/Cargo.toml`](../core/Cargo.toml) |
 | Contrib | Vendor and infrastructure adapters | [`contrib/Cargo.toml`](../contrib/Cargo.toml) |
 | Examples | Demo applications validated by CI, not published | [`examples/Cargo.toml`](../examples/Cargo.toml) |
+| Fuzz | Fuzz targets and harness configuration, not published | [`fuzz/Cargo.toml`](../fuzz/Cargo.toml) |
 
-All publishable crates currently use the same pre-1.0 version from their owning workspace.
+Publishable crates use independent pre-1.0 versions with caret-pinned internal dependencies.
 See [Versioning](VERSIONING.md) for compatibility policy and [Releasing](RELEASING.md) for the mechanical release runbook.
 
 ## How to choose crates
@@ -36,6 +37,7 @@ See [Versioning](VERSIONING.md) for compatibility policy and [Releasing](RELEASI
 | [`rskit-util`](../core/rskit-util/README.md) | Domain-free utility primitives for secrets, templates, strings, collections, environment parsing, byte sizes, duration parsing, UTC formatting, and backoff helpers. |
 | [`rskit-fs`](../core/rskit-fs/README.md) | Local filesystem primitives for confined paths, files, directories, temp files, links, permissions, and atomic writes. |
 | [`rskit-version`](../core/rskit-version/README.md) | Build-time version and git metadata helpers. |
+| [`rskit-codec`](../core/rskit-codec/README.md) | JSON, TOML, YAML, and framing codecs with typed registry selection. |
 | [`rskit-errors`](../core/rskit-errors/README.md) | Structured application errors, error codes, RFC 9457 problem details, and HTTP status metadata. |
 | [`rskit-config`](../core/rskit-config/README.md) | Layered configuration loading, validation, dotenv/env precedence, and redacted secret fields. |
 | [`rskit-logging`](../core/rskit-logging/README.md) | Structured logging setup on `tracing`, including JSON/pretty output and optional OTLP integration. |
@@ -80,6 +82,7 @@ See [Versioning](VERSIONING.md) for compatibility policy and [Releasing](RELEASI
 | [`rskit-media`](../core/rskit-media/README.md) | Media types, codec/format registry, pipeline builder, and processing traits. |
 | [`rskit-mcp`](../core/rskit-mcp/README.md) | Bridge between the rskit tool registry and Model Context Protocol. |
 | [`rskit-cli`](../core/rskit-cli/README.md) | CLI framework helpers for progress bars, structured output, errors, and signals. |
+| [`rskit-workload`](../core/rskit-workload/README.md) | Workload management contracts, registry, lifecycle integration, and in-memory defaults. |
 | [`rskit-dataset`](../core/rskit-dataset/README.md) | Dataset collection framework with source, transform, target, collector, and bounded payloads. |
 | [`rskit-bench`](../core/rskit-bench/README.md) | ML benchmarking framework with evaluators, metrics, reports, visualization, and storage. |
 | [`rskit-testutil`](../core/rskit-testutil/README.md) | Test utilities, mock providers, assertions, and managed test workspaces. |
@@ -89,8 +92,10 @@ See [Versioning](VERSIONING.md) for compatibility policy and [Releasing](RELEASI
 | Crate | Role |
 |---|---|
 | [`rskit-cache-redis`](../contrib/cache/redis/README.md) | Redis adapter for `rskit-cache`. |
+| [`rskit-database-sqlite`](../contrib/database/sqlite/README.md) | SQLite adapter for `rskit-database`. |
 | [`rskit-storage-s3`](../contrib/storage/s3/README.md) | Amazon S3 and S3-compatible storage backend for `rskit-storage`. |
 | [`rskit-storage-gcs`](../contrib/storage/gcs/README.md) | Google Cloud Storage backend for `rskit-storage`. |
+| [`rskit-storage-supabase`](../contrib/storage/supabase/README.md) | Supabase Storage backend for `rskit-storage`. |
 | [`rskit-messaging-kafka`](../contrib/messaging/kafka/README.md) | Kafka adapter for `rskit-messaging`. |
 | [`rskit-messaging-nats`](../contrib/messaging/nats/README.md) | NATS adapter for `rskit-messaging`. |
 | [`rskit-messaging-rabbitmq`](../contrib/messaging/rabbitmq/README.md) | RabbitMQ adapter for `rskit-messaging`. |

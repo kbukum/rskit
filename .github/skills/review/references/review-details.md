@@ -22,7 +22,7 @@ The reviewer judges code as written, against the rules below and the baseline in
 
 Run **A first** (cheap, gates the rest). Then **B–F in parallel** where independent. Then **G last** (cross-references everything).
 
-Each subagent receives: its scope, the pass spec below, and nothing else. Each returns findings in the shared format. Scope `cargo`/`make` to the touched crate(s) with `C=<crate>` or `-p <crate>`; the unscoped workspace gates are slow across 50+ crates and belong to sign-off/CI.
+Each subagent receives: its scope, the pass spec below, and nothing else. Each returns findings in the shared format. Scope `cargo`/`make` to the touched crate(s) with `C=<crate>` or `-p <crate>`; the unscoped workspace gates are slow across 70+ publishable crates and belong to sign-off/CI.
 
 ### Pass A — Mechanical (always runs)
 

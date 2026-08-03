@@ -128,18 +128,18 @@ The README badge documents the current MSRV. `rust-toolchain.toml` pins the deve
 
 ## Toven versioning parity
 
-`toven.toml`'s `[ecosystems.rust.release]` block encodes the same independent per-crate, crates.io-targeted model this document describes, so the `toven` binary can preview the version cascade and the publish order before `rskit_tool` applies a bump.
+`toven.toml`'s `[ecosystems.rust.release]` block encodes the same independent per-crate, crates.io-targeted model this document describes. The `make toven-canary` target runs mutation-free previews (`modules`, `graph`, `release status`, `release plan`) beside the native release tooling.
 
-| Versioning behavior | Legacy source of truth | Toven preview | Expected output |
+| Versioning behavior | Native command | Toven preview | Expected output |
 |---|---|---|---|
 | Independent per-crate bump | `rskit_tool release bump` (`make release-bump`) | `toven release plan` | cascade table with a per-crate current → planned version and bump kind |
 | Breaking-minor cascade to dependents | `rskit_tool` caret-floor rewrite | `toven release plan` (`dependency cascade` reason column) | dependents shown as cascaded when a dependency takes a breaking bump |
-| Registry idempotency (skip already-published) | `rskit_tool` diff against crates.io max version | `toven release readiness` (`registry-idempotent`) + `toven release publish --dry-run` | `registry-idempotent: pass` when no crate is behind the registry; per-crate `already-published` verdicts |
+| Registry idempotency (skip already-published) | `rskit_tool` diff against crates.io max version | `toven release status` + `toven release plan` | per-crate published/planned verdicts that keep already-published versions out of the mutation plan |
 | Split-workspace discovery (`core`, `contrib`, `examples`) | `rskit_tool` per-workspace operation | `toven modules` | all workspace crates discovered under one graph |
 | Non-publishable crate exclusion | `publish = false` on the `examples/` demos and the `fuzz/` harness | `toven release status` / `toven release plan` | `agent-demo`, `core-cli`, `media-demo`, and `rskit-fuzz` are discovered by `toven modules` but explicitly `exclude`d from the release, so they never appear in the plan or reach crates.io |
-| Clean-tree requirement | maintainer rule + release preflight | `toven release readiness` (`clean-tree`) | `clean-tree` check, `fail` on a dirty tree |
+| Clean-tree requirement | `rskit_tool release readiness` (`make release-check`) | native release readiness gate | dirty trees fail before release mutation or publish |
 
-Toven's plan is a cross-check against `rskit_tool` during the migration, not a replacement: `make release-bump` still applies the manifest edits and the GitHub Release workflow still publishes to crates.io.
+Toven's release plan is a cross-check against `rskit_tool`: `make release-bump` applies the manifest edits, `rskit_tool release readiness` remains the release gate, and the GitHub Release workflow publishes to crates.io.
 
 ## References
 

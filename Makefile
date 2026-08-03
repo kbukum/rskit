@@ -279,14 +279,18 @@ release-sbom:
 depgraphs:
 	@$(RSKIT_TOOL) release depgraphs
 
-## Read-only Toven self-hosting canary: discover modules and preview the release
-## with the candidate Toven binary. Mutation-free — the native RSKIT_TOOL release
-## path above stays authoritative until parity is proven. TOVEN selects the
-## binary (see the TOVEN var).
+## Read-only Toven self-hosting canary: discover modules and the dependency
+## graph, then render the mutation-free release previews (status + plan) with the
+## candidate Toven binary. The native RSKIT_TOOL release path above stays
+## authoritative until parity is proven; `release readiness` stays on that native
+## path because its go/no-go verdict is a release gate (clean tree, registry
+## idempotency), not a binary-contract signal. TOVEN selects the binary (see the
+## TOVEN var).
 toven-canary:
 	@$(TOVEN) modules
+	@$(TOVEN) graph
 	@$(TOVEN) release status
-	@$(TOVEN) release readiness
+	@$(TOVEN) release plan
 
 ## Fast check: format + lint + build only (no tests) — for rapid iteration
 check-fast: fmt-check lint build

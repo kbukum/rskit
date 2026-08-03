@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- Update the read-only `make toven-canary` preview to run `toven modules`, `toven graph`, `toven release status`, and `toven release plan`; release readiness remains on the native `rskit_tool release readiness` gate.
+
 ## [v0.2.0-alpha.7] - 2026-08-02
 
 ### Added

@@ -49,7 +49,7 @@ severity (blocker / should-fix / nit) — file:line — what's wrong — which p
 
 ## Validation is via make/cargo (see the `validate` skill)
 
-**Scope every command to the changed crate(s)** — the full-workspace gates are slow across 50+ crates and belong to a project audit or CI sign-off, not a per-change review:
+**Scope every command to the changed crate(s)** — the full-workspace gates are slow across 70+ publishable crates and belong to a project audit or CI sign-off, not a per-change review:
 
 ```bash
 make fmt-check                       # fast, whole-tree formatting check

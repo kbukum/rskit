@@ -1,8 +1,7 @@
 # Deprecation Policy
 
 This policy applies once a crate reaches `1.0.0`.
-While in `0.x.y` we may remove APIs in any MINOR release (see [`SEMVER.md`](SEMVER.md)),
-but we still try to follow the spirit of this document where practical.
+In `0.x.y`, APIs may be removed in any MINOR release (see [`SEMVER.md`](SEMVER.md)); maintainers follow this process where practical.
 
 ## Lifecycle of a deprecated API
 

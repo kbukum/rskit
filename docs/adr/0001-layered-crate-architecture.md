@@ -6,24 +6,24 @@
 
 ## Context
 
-rskit is a split Cargo workspace family with 40+ crates across `core/` and `contrib/`. Without an enforced layering rule, foundation crates (e.g. `rskit-errors`) could accidentally depend on higher layers (e.g. `rskit-server`), creating cycles, slow rebuilds, and undermining the modular distribution model. The sibling repos ([`gokit`](https://github.com/kbukum/gokit), [`pykit`](https://github.com/kbukum/pykit)) faced the same problem and adopted multi-tier layering enforced by linters (`depguard`/`import-linter`).
+rskit is a split Cargo workspace family with 70+ publishable crates across `core/` and `contrib/`. Without an enforced layering rule, foundation crates (e.g. `rskit-errors`) could accidentally depend on higher layers (e.g. `rskit-server`), creating cycles, slow rebuilds, and undermining the modular distribution model. The sibling repos ([`gokit`](https://github.com/kbukum/gokit), [`pykit`](https://github.com/kbukum/pykit)) enforce the same multi-tier layering model with language-native linters (`depguard`/`import-linter`).
 
 We need a stable rule that engineers can apply without case-by-case debate, enforced automatically.
 
 ## Decision
 
-We will organize rskit crates into the following layers (lowest depends on nothing higher):
+The domain graph organizes rskit crates into the following layers (lowest depends on nothing higher):
 
-1. **Foundation** — `rskit-util`, `rskit-fs`, `rskit-errors`, `rskit-config`, `rskit-logging`, `rskit-validation`, `rskit-version`, `rskit-codec`, `rskit-stream`
-2. **Utilities** — `rskit-encryption`, `rskit-schema`, `rskit-storage`, `rskit-media`, `rskit-process`
-3. **Patterns** — `rskit-component`, `rskit-provider`, `rskit-resilience`, `rskit-hook`, `rskit-chain`, `rskit-stateful`
-4. **Frameworks** — `rskit-di`, `rskit-bootstrap`, `rskit-observability`
-5. **Data & Flow** — `rskit-dag`, `rskit-worker`, `rskit-sse`, `rskit-cache`, `rskit-database`, `rskit-messaging`
-6. **Security** — `rskit-auth`, `rskit-authz`, `rskit-security`
-7. **Transport** — `rskit-http`, `rskit-httpclient`, `rskit-grpc`, `rskit-server`, `rskit-discovery`
-8. **Infrastructure adapters** — `rskit-storage-s3`, `rskit-storage-gcs`, `rskit-cache-redis`, `rskit-messaging-kafka`, `rskit-messaging-nats`, `rskit-messaging-rabbitmq`
-9. **AI/ML** — `rskit-ai`, `rskit-llm`, `rskit-llm-*`, `rskit-embedding`, `rskit-inference`, `rskit-inference-*`, `rskit-vectorstore`, `rskit-vectorstore-qdrant`, `rskit-agent`, `rskit-tool`, `rskit-skill`, `rskit-mcp`, `rskit-bench`, `rskit-dataset`
-10. **Developer tooling** — `rskit-cli`, `rskit-git`, `rskit-testutil`
+1. **Core** — `rskit-errors`, `rskit-config`, `rskit-logging`, `rskit-validation`, `rskit-encryption`, `rskit-util`, `rskit-fs`, `rskit-version`, `rskit-schema`, `rskit-codec`, `rskit-stream`
+2. **Patterns** — `rskit-component`, `rskit-hook`, `rskit-provider`, `rskit-di`
+3. **Cross-cutting** — `rskit-observability`, `rskit-resilience`, `rskit-security`
+4. **Composition** — `rskit-bootstrap`, `rskit-dag`, `rskit-chain`, `rskit-worker`, `rskit-process`, `rskit-stateful`
+5. **Transport** — `rskit-server`, `rskit-httpclient`, `rskit-grpc`, `rskit-sse`, `rskit-http`, `rskit-discovery`
+6. **Auth** — `rskit-auth`, `rskit-authz`
+7. **Data** — `rskit-database`, `rskit-database-sqlite`, `rskit-cache`, `rskit-cache-redis`, `rskit-storage`, `rskit-storage-gcs`, `rskit-storage-s3`, `rskit-storage-supabase`, `rskit-vectorstore`, `rskit-vectorstore-qdrant`, `rskit-messaging`, `rskit-messaging-kafka`, `rskit-messaging-nats`, `rskit-messaging-rabbitmq`
+8. **AI** — `rskit-ai`, `rskit-llm`, `rskit-llm-*`, `rskit-embedding`, `rskit-inference`, `rskit-inference-*`, `rskit-agent`, `rskit-tool`, `rskit-skill`, `rskit-mcp`
+9. **Media** — `rskit-media`, `rskit-media-audio`, `rskit-media-ffmpeg`, `rskit-media-image`
+10. **Infra** — `rskit-bench`, `rskit-cli`, `rskit-dataset`, `rskit-git`, `rskit-testutil`, `rskit-workload`, `rskit-suite`
 
 When a foundation crate needs a service that lives in a higher layer (e.g. an HTTP transport for an SSE broadcaster), the foundation declares a **trait** for the operation it needs. Higher-layer types satisfy it explicitly via `impl Trait for Type`.
 
@@ -42,7 +42,7 @@ The layer contract is enforced via:
 
 ## Alternatives considered
 
-- **No layering (status quo)** — relied on convention; review showed it doesn't hold at this crate count.
-- **Three tiers (foundation / patterns / everything else)** — too coarse for 40+ crates; "everything else" would still need internal ordering.
+- **No layering** — convention alone does not hold at this crate count.
+- **Three tiers (foundation / patterns / everything else)** — too coarse for 70+ publishable crates; "everything else" would still need internal ordering.
 - **Per-crate allowlists** — too brittle; every new crate would require bilateral edits.
 - **Move enforcement to runtime** — Rust's compile-time orientation makes static enforcement strictly preferable.
