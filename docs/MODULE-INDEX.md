@@ -21,7 +21,7 @@ server · httpclient · grpc · sse · http · discovery
 auth · authz
 
 ## 💾 Data  (`make check-data`)
-database · cache · cache-redis · storage · storage-gcs · storage-s3 · vectorstore · vectorstore-qdrant · messaging · messaging-kafka · messaging-nats · messaging-rabbitmq
+database · database-sqlite · cache · cache-redis · storage · storage-gcs · storage-s3 · storage-supabase · vectorstore · vectorstore-qdrant · messaging · messaging-kafka · messaging-nats · messaging-rabbitmq
 
 ## 🧠 AI  (`make check-ai`)
 ai · llm · llm-common · llm-openai · llm-anthropic · llm-ollama · llm-gemini · embedding · inference · inference-tgi · inference-triton · inference-vllm · agent · tool · mcp · skill

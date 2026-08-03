@@ -24,7 +24,7 @@ Cross-kit parity weighs where each language is strongest — it is **not** a dem
 1. **Locate the counterpart.** Find the sibling crate/package/module in `../gokit` (and `../pykit`) and its public API, invariants, and error model.
 2. **Decide the mirroring level** (full / light / kit-only) using the rules above.
 3. **Propagate downward.** rskit is the source of truth: when a shared abstraction changes here, flag the sibling change needed (an issue/note in the sibling repo, referenced by **full URL**), or align it if that is in scope. Do not silently let the kits drift.
-4. **Update `docs/PARITY-MATRIX.md`.** Adjust the module-presence row (✅ present · ➖ absent · ⏳ planned) and any capability tables. The module-presence table is a shared cross-kit source — keep it consistent with the siblings' copies and note any intentional divergence.
+4. **Update `docs/PARITY-MATRIX.md`.** Adjust the module-presence row (✅ present · ➖ absent) and any capability tables. The module-presence table is a shared cross-kit source — keep it consistent with the siblings' copies and note any intentional divergence.
 5. **Keep rskit generic.** rskit is a foundational, multi-purpose framework that any project can consume — never make a capability consumer-specific (gokit-, pykit-, or Toven-specific) to satisfy one downstream. If a downstream exposes a gap, improve rskit generically.
 
 ## Naming and cross-references

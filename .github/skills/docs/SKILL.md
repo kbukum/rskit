@@ -7,7 +7,7 @@ description: >-
     fix stale links and dead references, drop history/plan narration, keep prose humanized and
     scannable with a task-first quickstart, and add mermaid diagrams where they clarify architecture
     or flow. Use when writing or auditing
-    docs, repairing AI-generated hard wraps, after a change that outdated docs, or before a release.
+    docs, repairing AI-generated hard wraps, after a change that makes documentation outdated, or before a release.
 user-invocable: true
 ---
 

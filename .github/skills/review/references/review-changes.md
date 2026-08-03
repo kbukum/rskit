@@ -43,7 +43,7 @@ See [`SKILL.md`](../SKILL.md) for severity definitions.
 
 ## Validation
 
-**Scope every command to the changed crate(s) — do not run the full workspace gates here.** rskit has 50+ crates; `make check` / `make test` / `make build` across the whole workspace are slow and are reserved for [`review-project.md`](./review-project.md) or final pre-merge sign-off (typically in CI). For a change set, run only:
+**Scope every command to the changed crate(s) — do not run the full workspace gates here.** rskit has 70+ publishable crates; `make check` / `make test` / `make build` across the whole workspace are slow and are reserved for [`review-project.md`](./review-project.md) or final pre-merge sign-off (typically in CI). For a change set, run only:
 
 ```bash
 make fmt-check                       # fast, whole-tree formatting check

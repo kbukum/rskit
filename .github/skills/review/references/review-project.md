@@ -12,7 +12,7 @@ Standing, re-runnable **whole-toolkit audit**, independent of any diff. Use it p
 
 ## Scope first to keep the audit manageable
 
-The whole workspace is large (50+ crates). Prefer auditing **one workspace or domain at a time** rather than everything at once:
+The whole workspace is large (70+ publishable crates). Prefer auditing **one workspace or domain at a time** rather than everything at once:
 
 - a single core crate or domain (`core/rskit-<name>`, `contrib/<domain>/`),
 - a whole workspace (`W=core`, `W=contrib`, `W=examples`), or

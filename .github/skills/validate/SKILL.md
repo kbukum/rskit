@@ -9,7 +9,7 @@ description: >-
 
 # Validating rskit changes with make/cargo
 
-rskit is a multi-workspace Rust monorepo (`core/`, `contrib/`, `examples/`) with 50+ crates. The `Makefile` is the canonical task runner: it wraps `cargo` with crate/workspace scoping and the placement/supply-chain guards. Prefer it over raw `cargo` for anything with a `make` target, and **always scope to what changed** — full-tree gates are slow and belong to audits/CI sign-off.
+rskit is a multi-workspace Rust monorepo (`core/`, `contrib/`, `examples/`, `fuzz/`) with 70+ publishable crates. The `Makefile` is the canonical task runner: it wraps `cargo` with crate/workspace scoping and the placement/supply-chain guards. Prefer it over raw `cargo` for anything with a `make` target, and **always scope to what changed** — full-tree gates are slow and belong to audits/CI sign-off.
 
 ## Golden rule: scope to what changed
 

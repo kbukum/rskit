@@ -35,7 +35,7 @@ See [Module Index](docs/MODULE-INDEX.md) for the full breakdown.
 | media | Media processing, transcription | `make check-media` |
 | infra | Workload, CLI, benchmarks, testing | `make check-infra` |
 
-CI still runs the full workspace; on pull requests the `changes` job also publishes an `affected` domain list from `./scripts/rskit_tool.py domains affected` so future workflow steps can inspect the same domains developers target locally with `make check-<domain>`.
+CI runs the full workspace; on pull requests the `changes` job publishes an `affected` domain list from `./scripts/rskit_tool.py domains affected` for workflow steps that consume the same domains developers target locally with `make check-<domain>`.
 
 ## Highlights
 
