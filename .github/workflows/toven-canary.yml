@@ -18,6 +18,9 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -47,14 +50,16 @@ jobs:
         id: toven
         # Pinned by immutable commit SHA; the `version` input independently pins
         # the installed binary. The action wraps the same `scripts/install.sh`
-        # contract — installing cosign and verifying the archive checksum and the
-        # Sigstore signature over SHA256SUMS before extraction.
-        uses: kbukum/toven/.github/actions/toven@ae73a40abc7bf1f85ee87b63df6a65fe28b2dec3 # v0.1.0-alpha.3
+        # contract: on a cache miss it installs cosign and verifies the archive
+        # checksum and the Sigstore signature over SHA256SUMS before extraction;
+        # a version-exact cache hit reuses the already-verified binary.
+        uses: kbukum/toven/.github/actions/toven@ae73a40abc7bf1f85ee87b63df6a65fe28b2dec3 # kbukum/toven install-and-run action
         with:
           version: ${{ env.TOVEN_VERSION }}
 
       - name: Show the installed Toven version
-        run: '"${{ steps.toven.outputs.toven }}" --version'
+        run: |
+          "${{ steps.toven.outputs.toven }}" --version
 
       - name: Toven canary (discovery + release previews)
         run: make TOVEN="${{ steps.toven.outputs.toven }}" toven-canary
