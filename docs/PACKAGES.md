@@ -66,7 +66,7 @@ See [Versioning](VERSIONING.md) for compatibility policy and [Releasing](RELEASI
 | [`rskit-vectorstore`](../core/rskit-vectorstore/README.md) | Vector store abstraction with typed payloads, limits, in-memory default, and adapter registry. |
 | [`rskit-observability`](../core/rskit-observability/README.md) | OpenTelemetry traces, metrics, logs, GenAI attributes, and context propagation. |
 | [`rskit-discovery`](../core/rskit-discovery/README.md) | Service discovery with load-balancing strategies and transport integration points. |
-| [`rskit-git`](../core/rskit-git/README.md) | Composable git repository interfaces backed by libgit2 and CLI implementations. |
+| [`rskit-git`](../core/rskit-git/README.md) | Composable git repository interfaces backed by libgit2 and CLI implementations, including CLI-backed signed annotated tags. |
 | [`rskit-grpc`](../core/rskit-grpc/README.md) | Tonic gRPC transport support and `AppError` status mapping. |
 | [`rskit-sse`](../core/rskit-sse/README.md) | Server-Sent Events bus with Axum integration. |
 | [`rskit-dag`](../core/rskit-dag/README.md) | DAG task orchestration with cycle detection and bounded parallel execution. |

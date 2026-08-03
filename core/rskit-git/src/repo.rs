@@ -12,7 +12,7 @@ use crate::embedded;
 use crate::manage::{ConfigReader, Maintainer, RefManager, RemoteManager};
 use crate::options::{
     BlameOptions, CheckoutOptions, CleanOptions, CommitOptions, DescribeOptions, FetchOptions,
-    GrepOptions, InitOptions, LogOptions, MergeOptions, PushOptions, RebaseOptions,
+    GrepOptions, InitOptions, LogOptions, MergeOptions, PushOptions, RebaseOptions, SignOptions,
 };
 use crate::read::{Blamer, Differ, IgnoreReader, IndexReader, Inspector, LogReader, TreeReader};
 use crate::types::{
@@ -313,6 +313,20 @@ impl RefManager for Repo {
 
     fn create_tag(&self, name: &str, target: &str, message: Option<&str>) -> AppResult<()> {
         self.embedded.create_tag(name, target, message)
+    }
+
+    /// Creates a signed annotated tag by routing to the git CLI backend.
+    ///
+    /// Regular ref operations use the embedded backend, but signed tags require `git tag -s`, so `Repo` delegates this operation to `GitCli`.
+    fn create_signed_tag(
+        &self,
+        name: &str,
+        target: &str,
+        message: &str,
+        opts: &SignOptions,
+    ) -> AppResult<()> {
+        // Signing requires the git CLI (`git tag -s`); libgit2 cannot sign.
+        self.cli.create_signed_tag(name, target, message, opts)
     }
 
     fn delete_tag(&self, name: &str) -> AppResult<()> {

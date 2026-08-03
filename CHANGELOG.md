@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Add `RefManager::create_signed_tag` to `rskit-git` for creating OpenPGP/SSH/X.509-signed **annotated** tags. Signing requires the git CLI backend (`git tag -s`, with optional `-c gpg.format=...` and `-c user.signingkey=...` overrides), so `Repo` routes it to the CLI runner while the libgit2 backend reports `GitError::SigningNotSupported`. The backend preflights that an effective signing key is available — an explicit non-blank key is trusted, otherwise configured `user.signingkey` is required — and returns the new `GitError::SigningKeyMissing`, an actionable, hinted configuration error, instead of surfacing a raw signer failure. This lets release tooling (Toven) create signed release tags through the canonical git owner rather than shelling out.
+
 ### Changed
 
 - Update the read-only `make toven-canary` preview to run `toven modules`, `toven graph`, `toven release status`, and `toven release plan`; release readiness remains on the native `rskit_tool release readiness` gate.

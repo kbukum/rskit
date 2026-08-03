@@ -103,9 +103,18 @@ pub enum GitError {
         b: String,
     },
 
-    /// Commit signing is not supported by the selected backend.
-    #[error("commit signing is not supported by the selected backend")]
+    /// Signing is not supported by the selected backend.
+    #[error("signing is not supported by the selected backend")]
     SigningNotSupported,
+
+    /// A signing operation was requested but no signing key is configured.
+    ///
+    /// `git tag -s` resolves the signer from the explicit `user.signingkey` override or the repository/global `user.signingkey` config. The CLI backend preflights that effective key and returns this actionable configuration error instead of surfacing a raw signer failure.
+    #[error("signing key is not configured: {key} is not set")]
+    SigningKeyMissing {
+        /// Missing signing-key config key (for example `user.signingkey`).
+        key: String,
+    },
 
     /// Git author/committer identity is not configured.
     ///
@@ -226,8 +235,16 @@ impl From<GitError> for AppError {
             }
             GitError::SigningNotSupported => AppError::invalid_input(
                 "sign",
-                "commit signing is not supported by the selected backend",
+                "signing is not supported by the selected backend",
             ),
+            GitError::SigningKeyMissing { key } => {
+                AppError::invalid_input("sign", format!("{key} is not configured")).hint(
+                    "Configure a signing key with `git config user.signingkey <key>` (for \
+                     example an OpenPGP key id, SSH private-key path, X.509 certificate, or \
+                     signer-specific key reference; add --global to apply it for every \
+                     repository), then retry the signed release tag.",
+                )
+            }
             GitError::IdentityMissing { key } => {
                 AppError::invalid_input("git identity", format!("{key} is not configured"))
                     .hint(
@@ -368,6 +385,12 @@ mod tests {
                 ErrorCode::NotFound,
             ),
             (GitError::SigningNotSupported, ErrorCode::InvalidInput),
+            (
+                GitError::SigningKeyMissing {
+                    key: "user.signingkey".to_string(),
+                },
+                ErrorCode::InvalidInput,
+            ),
             (
                 GitError::IdentityMissing {
                     key: "user.name".to_string(),

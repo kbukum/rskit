@@ -343,6 +343,34 @@ pub enum BranchFilter {
     All,
 }
 
+/// Object-signing backend, mapped onto git's `gpg.format` configuration.
+///
+/// Git can sign tags and commits with any of these backends; `create_signed_tag`
+/// selects one via [`SignOptions`](crate::options::SignOptions) or inherits the
+/// repository's configured `gpg.format` when left unset.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SignFormat {
+    /// OpenPGP signatures via `gpg` (git's default backend).
+    OpenPgp,
+    /// SSH signatures via `ssh-keygen -Y sign` (git >= 2.34).
+    Ssh,
+    /// X.509 / S-MIME signatures via `gpgsm`; also the backend the Sigstore
+    /// `gitsign` keyless signer plugs into.
+    X509,
+}
+
+impl SignFormat {
+    /// Returns the `gpg.format` config value git expects for this backend.
+    #[must_use]
+    pub fn as_git_config(self) -> &'static str {
+        match self {
+            Self::OpenPgp => "openpgp",
+            Self::Ssh => "ssh",
+            Self::X509 => "x509",
+        }
+    }
+}
+
 /// Controls repository reset behavior.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[non_exhaustive]
@@ -398,6 +426,13 @@ mod tests {
         assert_eq!(EntryKind::Blob.to_string(), "blob");
         assert_eq!(EntryKind::Tree.to_string(), "tree");
         assert_eq!(EntryKind::Submodule.to_string(), "submodule");
+    }
+
+    #[test]
+    fn sign_format_maps_to_git_gpg_format_config_values() {
+        assert_eq!(SignFormat::OpenPgp.as_git_config(), "openpgp");
+        assert_eq!(SignFormat::Ssh.as_git_config(), "ssh");
+        assert_eq!(SignFormat::X509.as_git_config(), "x509");
     }
 
     #[test]
