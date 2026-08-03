@@ -1,0 +1,60 @@
+name: Toven canary
+
+# Read-only, mutation-free Toven canary. It installs the pinned, published Toven
+# release through the reusable `kbukum/toven` action — a thin wrapper over the
+# same reference install contract (`scripts/install.sh`, bundled at the action's
+# pinned commit) that verifies the archive checksum and, with cosign present,
+# the keyless Sigstore signature over `SHA256SUMS` — then drives rskit's
+# discovery and release previews through that binary via `make toven-canary`.
+#
+# Both pins are independent and both are required: the action is pinned by
+# immutable commit SHA, and the installed binary is pinned by `TOVEN_VERSION`.
+#
+# This proves the published Toven artifact, its installation instructions, its
+# least-privilege permissions, and its command-line contract work in a real
+# downstream workflow. It never publishes and never mutates the repository: the
+# native RSKIT_TOOL / release.yml path stays authoritative for actual releases.
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: toven-canary-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Pin the canary to an immutable published Toven release. Bump deliberately.
+  TOVEN_VERSION: v0.1.0-alpha.3
+
+jobs:
+  canary:
+    name: Toven action canary
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history feeds the release-preview change detection and semver
+          # cascade; a shallow clone would hide the reachable tags they walk.
+          fetch-depth: 0
+
+      - name: Install the pinned Toven release
+        id: toven
+        # Pinned by immutable commit SHA; the `version` input independently pins
+        # the installed binary. The action wraps the same `scripts/install.sh`
+        # contract — installing cosign and verifying the archive checksum and the
+        # Sigstore signature over SHA256SUMS before extraction.
+        uses: kbukum/toven/.github/actions/toven@ae73a40abc7bf1f85ee87b63df6a65fe28b2dec3 # v0.1.0-alpha.3
+        with:
+          version: ${{ env.TOVEN_VERSION }}
+
+      - name: Show the installed Toven version
+        run: '"${{ steps.toven.outputs.toven }}" --version'
+
+      - name: Toven canary (discovery + release previews)
+        run: make TOVEN="${{ steps.toven.outputs.toven }}" toven-canary
