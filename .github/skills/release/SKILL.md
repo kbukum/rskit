@@ -2,14 +2,14 @@
 name: release
 description: >-
     Cut a release of the rskit multi-workspace monorepo — decide the semver bump, update the
-    CHANGELOG, apply independent per-crate version bumps, run the full pre-release gates and
-    supply-chain sweep, and publish to crates.io in dependency order. Use when preparing or
+    CHANGELOG, let Toven derive independent per-crate version bumps, run the full pre-release gates
+    and supply-chain sweep, and publish to crates.io in dependency order. Use when preparing or
     publishing an rskit release or checking release readiness.
 ---
 
 # Releasing rskit
 
-rskit has **split Cargo workspaces** (`core/`, `contrib/`, `examples/`) and **no root `Cargo.toml`**. Crates are versioned **independently** and published to crates.io in dependency order via the `rskit_tool` release tooling (driven through `make`). Full details live in [`docs/RELEASING.md`](../../../docs/RELEASING.md), [`docs/VERSIONING.md`](../../../docs/VERSIONING.md), [`docs/policy/SEMVER.md`](../../../docs/policy/SEMVER.md), and [`docs/policy/DEPRECATION.md`](../../../docs/policy/DEPRECATION.md).
+rskit has **split Cargo workspaces** (`core/`, `contrib/`, `examples/`) and **no root `Cargo.toml`**. Crates are versioned **independently** and published to crates.io in dependency order. [Toven](https://github.com/kbukum/toven) is the canonical release driver — it owns the version bump, release commit, signed tagging, crates.io publication, SBOM, and the readiness preflight; the `make release-*` targets delegate to it. Full details live in [`docs/RELEASING.md`](../../../docs/RELEASING.md), [`docs/VERSIONING.md`](../../../docs/VERSIONING.md), [`docs/policy/SEMVER.md`](../../../docs/policy/SEMVER.md), and [`docs/policy/DEPRECATION.md`](../../../docs/policy/DEPRECATION.md).
 
 ## Prerequisites
 
@@ -23,7 +23,7 @@ A release is the one time to run the **complete** gates rather than the affected
 
 ```bash
 make check                  # fmt-check + lint + build + test-nextest + test-doc + test-python
-make release-readiness      # supply-chain + API sweep (cargo-deny + cargo-audit)
+make release-readiness      # Toven fail-closed preflight (clean tree, changelog, deny + audit)
 make release-coverage       # per-package coverage gate (default line coverage >=90%)
 ```
 
@@ -46,27 +46,29 @@ Use [`docs/policy/SEMVER.md`](../../../docs/policy/SEMVER.md). While in `0.x`: a
 4. If the new `[vX.Y.Z]` section is empty, **refuse to release** — nothing to ship.
 5. Update the link references at the bottom if present.
 
-## Step 4 — Bump versions per workspace
+## Step 4 — Preview the release
 
-Crates bump independently — each only when it changed, plus the correct in-workspace cascade. Use the tooling, never hand-edit manifests:
+Toven derives per-crate versions, tags, and publish order from the dependency graph and the Conventional-Commit history since each crate's last tag — you never hand-edit versions. Preview before mutating:
 
 ```bash
-make release-bump W=core DRY=1                       # preview the plan, no writes
-make release-bump W=core MINOR="rskit-httpclient"    # apply; flag breaking crates with MINOR
-make release-bump W=contrib
+make release-plan     # bumped versions, tags, changelog, and publish order (read-only)
+make release-status   # declared vs published vs tagged versions (read-only)
 ```
 
-The tool is idempotent against the crates.io max published version and performs **no network writes** (manifest edits only).
+Toven writes the manifest bumps and refreshes caret floors when it cuts the release (Step 5); the plan is idempotent against the already-published versions.
 
 ## Step 5 — SBOM and publish
 
+Toven cuts and publishes. Preview, then cut:
+
 ```bash
 make release-sbom            # CycloneDX SBOMs under target/sbom
-make publish-dry-run         # dry-run publish in dependency order
-make release-publish         # publish to crates.io (idempotent, rate-aware, resumable)
+make publish-dry-run         # rehearse the full pipeline in dependency order (read-only)
+make release-tag             # bump manifests, commit, and create signed tags
+make release-publish         # full pipeline: commit, tag, push, publish to crates.io (idempotent)
 ```
 
-Then follow the remaining steps in `docs/RELEASING.md` (git tag, GitHub release with notes from the CHANGELOG section, signed artifacts). CI actions must be SHA-pinned.
+In CI, publishing a GitHub Release triggers `.github/workflows/release.yml`, which runs the same Toven-driven readiness, dry-run, SBOM, and publish steps through the pinned binary. Follow the remaining steps in `docs/RELEASING.md` (GitHub release with notes from the CHANGELOG section, signed artifacts). CI actions must be SHA-pinned.
 
 ## Guardrails
 
