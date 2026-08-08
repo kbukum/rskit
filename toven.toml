@@ -22,12 +22,26 @@ region = 70.0
 [ecosystems.rust.release]
 readiness = ["clean-tree", "registry-idempotent"]
 registry = "crates-io"
+# The hosted GitHub Release is a single umbrella (see rust:rskit-suite below),
+# created by the maintainer as the release entrypoint; Toven verifies it rather
+# than cutting one Release per crate.
+entrypoint = "maintainer"
 
 [ecosystems.rust.release.host]
 forge = "github"
 
 [ecosystems.rust.release.prerelease]
 channels = ["alpha"]
+
+# rskit-suite is the release train's umbrella: the facade crate whose version is
+# the workspace release version. Its hosted GitHub Release (tagged `vX.Y.Z`) is
+# the single umbrella Release the maintainer publishes to start CI; every other
+# crate publishes to crates.io with its own independent version and per-crate
+# tag but cuts no separate Release, aggregating its notes onto this one. The
+# `v{version}` tag matches the historical `rskit_tool` umbrella tag scheme.
+[modules."rust:rskit-suite".release]
+umbrella = true
+tag_format = "v{version}"
 
 # The `examples/` demos (`agent-demo`, `core-cli`, `media-demo`) and the
 # `fuzz/` harness (`rskit-fuzz`) are `publish = false` in their manifests and
@@ -108,3 +122,68 @@ shared_inputs = ["contrib/Cargo.lock", "core/Cargo.lock", "examples/Cargo.lock"]
 argv = ["cargo", "audit", "--file", "{workspace.root}/Cargo.lock", "{args}"]
 fan_out = "whole-workspace"
 shared_inputs = ["contrib/Cargo.lock", "core/Cargo.lock", "examples/Cargo.lock"]
+
+# nextest (the `test` task) cannot execute documentation tests, so `doctest`
+# runs `cargo test --doc`. A doctest is semantically a test, so `kind = "test"`
+# reuses the Test kind (coverage/affected grouping) while the distinct name
+# keeps it from colliding with the nextest `test` task.
+[ecosystems.rust.tasks.doctest]
+argv = ["cargo", "test", "--doc", "--manifest-path", "{module.manifest}", "{module.selector}", "{args}"]
+fan_out = "batchable"
+kind = "test"
+selector = ["-p", "{module.package}"]
+shared_inputs = ["contrib/Cargo.lock", "core/Cargo.lock", "examples/Cargo.lock"]
+
+# The `command` ecosystem is Toven's generic-tool adapter: tool-specific but
+# language-agnostic gates that have no cargo home. Declaring rskit's structural
+# and architectural guardrails here lets Toven drive the full validation gate,
+# not just the cargo tasks. One module rooted at the repo root owns them all.
+#
+# The `check-*`/`module-index` gates wrap `scripts/rskit_tool.py`: their bespoke
+# rules (L7 dependency edges, module topology, workspace dependency-version
+# sync, public-API diff, the release-readiness sweep, and the generated module
+# index) are rskit-specific policy that Toven orchestrates but does not itself
+# implement. `structure` is the ast-grep declare-only `lib.rs`/`mod.rs` guard.
+[[ecosystems.command.modules]]
+name = "repo"
+root = "."
+
+[ecosystems.command.tasks.structure]
+argv = ["ast-grep", "scan", "{args}"]
+fan_out = "whole-workspace"
+kind = "lint"
+
+[ecosystems.command.tasks.crowded-modules]
+argv = ["scripts/rskit_tool.py", "check", "crowded-modules", "{args}"]
+fan_out = "whole-workspace"
+kind = "lint"
+
+[ecosystems.command.tasks.topology]
+argv = ["scripts/rskit_tool.py", "check", "topology", "{args}"]
+fan_out = "whole-workspace"
+kind = "lint"
+
+[ecosystems.command.tasks.l7-edges]
+argv = ["scripts/rskit_tool.py", "check", "l7-edges", "{args}"]
+fan_out = "whole-workspace"
+kind = "lint"
+
+[ecosystems.command.tasks.workspace-deps-sync]
+argv = ["scripts/rskit_tool.py", "check", "workspace-deps-sync", "{args}"]
+fan_out = "whole-workspace"
+kind = "lint"
+
+[ecosystems.command.tasks.public-api]
+argv = ["scripts/rskit_tool.py", "check", "public-api", "{args}"]
+fan_out = "whole-workspace"
+kind = "lint"
+
+[ecosystems.command.tasks.readiness]
+argv = ["scripts/rskit_tool.py", "check", "readiness", "{args}"]
+fan_out = "whole-workspace"
+kind = "lint"
+
+[ecosystems.command.tasks.module-index]
+argv = ["scripts/rskit_tool.py", "domains", "module-index", "{args}"]
+fan_out = "whole-workspace"
+kind = "doc"

@@ -29,6 +29,10 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
+  # Pinned Toven release used to drive the structural/architectural guardrail
+  # gates (structure, topology, l7-edges, public-api, readiness) through the
+  # `command` ecosystem tasks declared in toven.toml.
+  TOVEN_VERSION: v0.1.0-alpha.4
 
 jobs:
   changes:
@@ -347,11 +351,18 @@ jobs:
         run: rustup toolchain install nightly --profile minimal
       - name: Install cargo-public-api
         run: cargo install cargo-public-api --version 0.52.0 --locked
-      - run: ./scripts/rskit_tool.py check topology
-      - run: ./scripts/rskit_tool.py check l7-edges
-      - run: ./scripts/rskit_tool.py check public-api
+      - name: Install the pinned Toven release
+        id: toven
+        # Pinned by immutable commit SHA; the `version` input independently pins
+        # the installed binary (checksum + keyless Sigstore signature verified).
+        uses: kbukum/toven/.github/actions/toven@ae73a40abc7bf1f85ee87b63df6a65fe28b2dec3 # kbukum/toven install-and-run action
+        with:
+          version: ${{ env.TOVEN_VERSION }}
+      - run: '"${{ steps.toven.outputs.toven }}" run topology'
+      - run: '"${{ steps.toven.outputs.toven }}" run l7-edges'
+      - run: '"${{ steps.toven.outputs.toven }}" run public-api'
       - name: Declare-only aggregator guard
-        run: make structure
+        run: make TOVEN="${{ steps.toven.outputs.toven }}" structure
 
   # ---------------------------------------------------------------------------
   # Supply-chain audit (cargo-deny + cargo-audit)
@@ -375,7 +386,12 @@ jobs:
         run: rustup toolchain install nightly --profile minimal
       - name: Install cargo-public-api
         run: cargo install cargo-public-api --version 0.52.0 --locked
-      - run: ./scripts/rskit_tool.py release readiness
+      - name: Install the pinned Toven release
+        id: toven
+        uses: kbukum/toven/.github/actions/toven@ae73a40abc7bf1f85ee87b63df6a65fe28b2dec3 # kbukum/toven install-and-run action
+        with:
+          version: ${{ env.TOVEN_VERSION }}
+      - run: '"${{ steps.toven.outputs.toven }}" run readiness'
 
   # ---------------------------------------------------------------------------
   # Gate: Aggregate status for branch protection

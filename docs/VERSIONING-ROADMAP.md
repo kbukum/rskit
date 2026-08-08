@@ -45,7 +45,7 @@ Modern multi-crate workspaces automate releases from **Conventional Commits** ra
 | [`cargo-release`](https://crates.io/crates/cargo-release) | CLI-first, local | Good for small teams / infrequent manual releases. Flexible but someone must drive it. |
 | [`cargo-smart-release`](https://github.com/GitoxideLabs/gitoxide) | CLI, change-aware | "Release only what changed + dependents"; less widely adopted than release-plz. |
 
-The rskit release flow is a custom `scripts/rskit_tool` publisher plus Make targets. It keeps the release path explicit while the crate graph and versioning policy settle.
+The rskit release flow is driven by [Toven](https://github.com/kbukum/toven) through the `make release-*` targets. It keeps the release path explicit while the crate graph and versioning policy settle.
 
 ## Current model and future options
 
@@ -53,8 +53,8 @@ The rskit release flow is a custom `scripts/rskit_tool` publisher plus Make targ
 
 - Each crate carries its **own** `version` (no `version.workspace = true`); all other `[workspace.package]` metadata is still inherited.
 - Internal deps keep their **caret** `{ path, version }` pins. A patch bump is absorbed by the caret (no cascade); a 0.x **minor** bump leaves the caret range and cascades to in-workspace dependents.
-- `core/` and `contrib/` are **independent release trains**; tooling operates **per workspace**. Cross-workspace propagation is deliberately minimal rather than absent: a breaking bump rewrites the affected dependency floor in **every** workspace manifest (e.g. a `core` breaking bump updates `contrib/Cargo.toml`), and the follow-up `release bump` for the dependent workspace selects the crates that inherit the changed floor and republishes them — there is no single combined pass that bumps both workspaces at once.
-- Bumps are computed by `make release-bump W=<workspace>` (the custom `rskit_tool release bump`): patch by default, `MINOR="<crate>"` for breaking changes, idempotent against the crates.io max published version. The existing idempotent publisher then republishes only the new `name@version`s.
+- `core/` and `contrib/` are **independent release trains**; tooling operates **per workspace**. Cross-workspace propagation is deliberately minimal rather than absent: a breaking bump rewrites the affected dependency floor in **every** workspace manifest (e.g. a `core` breaking bump updates `contrib/Cargo.toml`), and the follow-up release for the dependent workspace selects the crates that inherit the changed floor and republishes them — there is no single combined pass that bumps both workspaces at once.
+- Bumps are computed by Toven from the Conventional-Commit history (`toven release plan`, driven through `make release-plan`/`make release-tag`): patch by default, minor for a breaking change, idempotent against the crates.io max published version. Toven's publisher then republishes only the new `name@version`s.
 
 **Why:** republishing only changed crates (plus the correct minimal cascade) keeps releases fast and within rate limits, while caret pins keep version drift low — drift lives in patch, not in major/minor. This is the serde / clap / tracing model, chosen because the crate count makes full-suite republish the dominant cost even in 0.x.
 
@@ -83,7 +83,7 @@ The common case is **patch-local** (absorbed by carets), so the tooling needs no
 
 ### Optional decision — adopt `release-plz`
 
-The custom `release bump` + idempotent publisher covers the manual release flow. If Conventional-Commit-driven bumps, automated changelogs, and Release-PR flows become worthwhile, `release-plz` supports per-crate mode and can replace the custom bump without changing the publishing model.
+Toven already provides Conventional-Commit-driven bumps and an idempotent publisher over the current model. If automated changelogs and Release-PR flows become worthwhile beyond what Toven offers, `release-plz` supports per-crate mode and could complement or replace the bump computation without changing the publishing model.
 
 ## Decision points to revisit
 
@@ -97,7 +97,7 @@ The custom `release bump` + idempotent publisher covers the manual release flow.
 |---|---|---|
 | Version model | Independent per-crate | Independent per-crate |
 | Repos | one | core + contrib split |
-| Tooling | `rskit_tool release bump` | per-repo release |
+| Tooling | Toven (`make release-*`) | per-repo release |
 | Tags | one `v*` | per-repo |
 | Publishes | only changed + cascade | only changed + cascade |
 

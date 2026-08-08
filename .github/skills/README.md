@@ -26,5 +26,6 @@ Each skill is a folder with a `SKILL.md` (YAML frontmatter + workflow) and optio
 ## Conventions
 
 - Skills are discoverable in Copilot CLI via `/skills`; project skills live under `.github/skills/` (also `.claude/skills` / `.agents/skills` are honored), personal skills under `~/.copilot/skills`.
+- Claude Code slash commands under [`.claude/commands/`](../../.claude/commands/) are **thin routers** to these skills — each `/<name>` points at `.github/skills/<name>/SKILL.md`, which is the single source of truth. Edit the `SKILL.md`, never the router body.
 - Run reviews (`review`) in a **fresh, clean-context agent**, never inline in the session that wrote the code.
 - Validation is `make`/`cargo`-first, scoped to the changed crate(s) (`make lint C=<crate>`, `make test C=<crate> T=<pattern>`, `make test-affected`); full-tree gates are for audits and releases.
