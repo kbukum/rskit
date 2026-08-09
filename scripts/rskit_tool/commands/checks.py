@@ -5,9 +5,11 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import sys
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 
 from ..cargo import Package, discover_packages, package_manifest
 from ..errors import ToolError
@@ -63,6 +65,195 @@ def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) 
     public_api = check_sub.add_parser("public-api", help="Check public API diff/generation")
     public_api.add_argument("package", nargs="?", default="rskit-suite")
     public_api.set_defaults(func=run_public_api)
+
+    check_sub.add_parser(
+        "readiness",
+        help="Run the repository guardrail sweep (SHA-pin, panic/unsafe hazards, deny/audit, fuzz targets)",
+    ).set_defaults(func=run_readiness)
+
+
+# Fuzz targets that must exist for the parser/validator/auth/codec/schema surfaces
+# the security baseline requires continuous fuzzing for.
+REQUIRED_FUZZ_TARGETS = (
+    "auth_jwt_decode",
+    "encryption_envelope",
+    "errors_problem_detail",
+    "http_request_parse",
+    "jwt_parser",
+    "schema_validation",
+    "util_parsers",
+    "validation_inputs",
+)
+
+
+def run_readiness(args: argparse.Namespace) -> int:
+    """Run the repository guardrail sweep.
+
+    A per-change supply-chain and API gate distinct from Toven's release-readiness
+    preflight: it enforces the topology/L7/public-API guardrails, SHA-pinned
+    Actions, the no-runtime-panic and forbid-unsafe policies, dependency-version
+    sync, cargo-deny/cargo-audit, and the required fuzz-target set. Toven owns the
+    release preflight (clean tree, changelog, registry idempotency); this owns the
+    rskit-specific hazards Toven cannot know about.
+    """
+
+    print("==> Checking repository guardrails...")
+    for check_args, check in (
+        (args, run_topology),
+        (args, run_l7_edges),
+        (SimpleNamespace(package="rskit-suite"), run_public_api),
+    ):
+        status = check(check_args)
+        if status != 0:
+            return status
+
+    print("==> Checking GitHub Actions are SHA-pinned...")
+    completed = run(
+        [
+            "git",
+            "grep",
+            "-n",
+            "-E",
+            r"uses: [^[:space:]#@]+([[:space:]]*$|@((v[0-9][^[:space:]#]*)|main|master|stable)([[:space:]#]|$))",
+            "--",
+            ".github/workflows",
+        ],
+        capture=True,
+        check=False,
+    )
+    if completed.returncode == 0:
+        print(completed.stdout, end="")
+        print("error: unpinned GitHub Actions references found", file=sys.stderr)
+        return 1
+    if completed.returncode not in (0, 1):
+        print(completed.stderr, file=sys.stderr, end="")
+        return completed.returncode
+
+    for label, check in (
+        ("Sweeping library runtime panic and dynamic public API hazards", check_runtime_panic_hazards),
+        ("Checking unsafe policy", check_unsafe_policy),
+    ):
+        print(f"==> {label}...")
+        findings = check()
+        if findings:
+            print("\n".join(findings), file=sys.stderr)
+            print(f"error: release-blocking {label.lower()} found", file=sys.stderr)
+            return 1
+
+    print("==> Running cargo-deny...")
+    if run_workspace_deps_sync(args) != 0:
+        return 1
+    run(["cargo", "deny", "--manifest-path", "core/Cargo.toml", "--config", "deny.toml", "check", "licenses", "advisories", "sources", "bans"])
+    run(["cargo", "deny", "--manifest-path", "contrib/Cargo.toml", "--config", "deny.contrib.toml", "check", "licenses", "advisories", "sources", "bans"])
+    run(["cargo", "deny", "--manifest-path", "examples/Cargo.toml", "--config", "deny.examples.toml", "check", "licenses", "advisories", "sources", "bans"])
+
+    print("==> Running cargo-audit...")
+    run(["cargo", "audit", "--deny", "warnings", "--file", "core/Cargo.lock"])
+    run(["cargo", "audit", "--deny", "warnings", "--file", "contrib/Cargo.lock"])
+    run(["cargo", "audit", "--deny", "warnings", "--file", "examples/Cargo.lock"])
+
+    print("==> Checking fuzz targets exist...")
+    missing = [
+        target
+        for target in REQUIRED_FUZZ_TARGETS
+        if not (ROOT / "fuzz" / "fuzz_targets" / f"{target}.rs").exists()
+    ]
+    if missing:
+        for target in missing:
+            print(f"error: missing fuzz target fuzz/fuzz_targets/{target}.rs", file=sys.stderr)
+        return 1
+    print("✓ Repository guardrail sweep passed")
+    return 0
+
+
+def check_runtime_panic_hazards() -> list[str]:
+    """Find runtime unwrap/expect/panic hazards outside test scopes."""
+
+    hazard_re = re.compile(r"\b(?:unwrap|expect)\s*\(|panic!\s*\(")
+    findings: list[str] = []
+    for source_root in (ROOT / "core", ROOT / "contrib"):
+        for path in sorted(source_root.glob("**/src/**/*.rs")):
+            relative = path.relative_to(ROOT)
+            if "target" in relative.parts:
+                continue
+            if relative.parts[:2] == ("core", "rskit-testutil") or path.name in {"tests.rs", "fixture_tests.rs"}:
+                continue
+            text = path.read_text(encoding="utf-8")
+            if re.search(r"^\s*#!\[cfg\((?:.*\b)?test\b.*\)\]", text, re.MULTILINE):
+                continue
+            brace_depth = 0
+            pending_cfg_test = False
+            pending_test_attr = False
+            pending_helper_fn = False
+            test_block_depth: int | None = None
+            test_fn_depth: int | None = None
+            helper_fn_depth: int | None = None
+            for line_no, line in enumerate(text.splitlines(), start=1):
+                stripped = line.strip()
+                in_test_scope = (
+                    (test_block_depth is not None and brace_depth >= test_block_depth)
+                    or (test_fn_depth is not None and brace_depth >= test_fn_depth)
+                    or (helper_fn_depth is not None and brace_depth >= helper_fn_depth)
+                )
+                if re.match(r"#\[cfg\((?:.*\b)?test\b.*\)\]", stripped):
+                    pending_cfg_test = True
+                elif pending_cfg_test and re.search(r"\bmod\b", stripped):
+                    in_test_scope = True
+                    pending_cfg_test = False
+                    if "{" in stripped:
+                        test_block_depth = brace_depth + stripped.count("{")
+                elif stripped.startswith("#[test") or stripped.startswith("#[tokio::test"):
+                    pending_test_attr = True
+                elif pending_test_attr and re.search(r"\bfn\b", stripped):
+                    in_test_scope = True
+                    pending_test_attr = False
+                    if "{" in stripped:
+                        test_fn_depth = brace_depth + stripped.count("{")
+                elif pending_helper_fn:
+                    in_test_scope = True
+                    if "{" in stripped:
+                        helper_fn_depth = brace_depth + stripped.count("{")
+                        pending_helper_fn = False
+                elif re.search(r"\bpub\s+(async\s+)?fn\s+(assert_|wait_for_message\b)", stripped):
+                    in_test_scope = True
+                    if "{" in stripped:
+                        helper_fn_depth = brace_depth + stripped.count("{")
+                    else:
+                        pending_helper_fn = True
+                elif stripped and not stripped.startswith("#"):
+                    pending_cfg_test = False
+
+                if not in_test_scope and not stripped.startswith("#") and not stripped.startswith("//") and hazard_re.search(line):
+                    findings.append(f"{relative}:{line_no}:{line}")
+                brace_depth += line.count("{") - line.count("}")
+                if test_block_depth is not None and brace_depth < test_block_depth:
+                    test_block_depth = None
+                if test_fn_depth is not None and brace_depth < test_fn_depth:
+                    test_fn_depth = None
+                if helper_fn_depth is not None and brace_depth < helper_fn_depth:
+                    helper_fn_depth = None
+    return findings
+
+
+def check_unsafe_policy() -> list[str]:
+    """Find unsafe blocks/functions without nearby SAFETY comment."""
+
+    unsafe_re = re.compile(r"(^|[^A-Za-z0-9_])unsafe\s*(\{|fn\b|impl\b|trait\b)")
+    findings: list[str] = []
+    for source_root in (ROOT / "core", ROOT / "contrib"):
+        for path in sorted(source_root.glob("**/src/**/*.rs")):
+            relative = path.relative_to(ROOT)
+            if path.name in {"tests.rs", "fixture_tests.rs"}:
+                continue
+            lines = path.read_text(encoding="utf-8").splitlines()
+            for index, line in enumerate(lines):
+                stripped = line.strip()
+                if stripped.startswith("//") or stripped.startswith("#") or not unsafe_re.search(line):
+                    continue
+                window = lines[max(0, index - 4) : index + 1]
+                if not any("SAFETY:" in candidate for candidate in window):
+                    findings.append(f"{relative}:{index + 1}:{line}")
+    return findings
 
 
 def run_domain(args: argparse.Namespace) -> int:

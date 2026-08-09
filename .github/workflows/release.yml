@@ -1,5 +1,13 @@
 name: Release
 
+# Toven owns the authoritative rskit release. This workflow runs after a GitHub
+# Release is published (or via workflow_dispatch for a resume) and drives the
+# release-readiness sweep, publish dry-run, SBOM generation, and the idempotent
+# crates.io publication through the pinned, checksum-verified Toven binary — the
+# `make release-*` targets delegate to it. The general coverage gate stays on the
+# native rskit tooling. cargo (deny/audit/cyclonedx/publish) is still installed
+# because Toven shells out to it for those steps.
+
 on:
   release:
     types: [published]
@@ -12,6 +20,10 @@ on:
 
 permissions:
   contents: read
+
+env:
+  # Pin the release to an immutable published Toven binary. Bump deliberately.
+  TOVEN_VERSION: v0.1.0-alpha.4
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.release.tag_name || inputs.tag }}
@@ -71,14 +83,24 @@ jobs:
         run: sudo apt-get install -y mold
       - name: Install cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6  # v4.1.2
+      - name: Install the pinned Toven release
+        id: toven
+        # Pinned by immutable commit SHA; the `version` input independently pins
+        # the installed binary. The action wraps the reference install contract
+        # (checksum + keyless Sigstore signature over SHA256SUMS) before use.
+        uses: kbukum/toven/.github/actions/toven@ae73a40abc7bf1f85ee87b63df6a65fe28b2dec3 # kbukum/toven install-and-run action
+        with:
+          version: ${{ env.TOVEN_VERSION }}
+      - name: Show the installed Toven version
+        run: '"${{ steps.toven.outputs.toven }}" --version'
       - name: Release readiness
-        run: make release-readiness
+        run: make TOVEN="${{ steps.toven.outputs.toven }}" release-readiness
       - name: Coverage thresholds
         run: make release-coverage
       - name: Publish dry-run
-        run: make publish-dry-run
+        run: make TOVEN="${{ steps.toven.outputs.toven }}" publish-dry-run
       - name: Generate SBOM
-        run: make release-sbom
+        run: make TOVEN="${{ steps.toven.outputs.toven }}" release-sbom
       - name: Sign SBOMs
         env:
           COSIGN_EXPERIMENTAL: "1"
@@ -108,7 +130,8 @@ jobs:
         if: steps.crates-token.outputs.present == 'true'
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: make release-publish
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: make TOVEN="${{ steps.toven.outputs.toven }}" release-publish
       - name: Upload generated assets to GitHub release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

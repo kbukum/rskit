@@ -9,6 +9,11 @@ The mechanical steps to cut a release of `rskit`. For *what* counts as a breakin
 - Run `make setup` first; for local release pre-flight checks, also run `scripts/setup.sh --release`
   and ensure `git`, `gh`, `cargo`, `cargo-nextest`, `cargo-deny`, `cargo-audit`, `cargo-llvm-cov`,
   `cargo-cyclonedx`, and `cosign` are on your `$PATH`.
+- [Toven](https://github.com/kbukum/toven) drives the release: it owns the version bump, the
+  release commit, signed tagging, the crates.io publication, SBOM generation, and the readiness
+  gate. Install the pinned binary (`curl … scripts/install.sh | sh` from the toven repo, or the
+  `kbukum/toven` action in CI) so `toven` is on your `$PATH`; the `make release-*` targets delegate
+  to it. cargo (deny/audit/cyclonedx/publish) must still be installed because Toven shells out to it.
 - A repository Actions secret named `CARGO_REGISTRY_TOKEN` is configured for crates.io publishing.
   The release workflow skips crates.io publishing when this secret is absent.
 
@@ -43,28 +48,22 @@ Use the [SEMVER policy](./policy/SEMVER.md) to pick the next version. While in `
 
 As a maintainer rule, do not cut the release if `[Unreleased]` is the only populated section, or if `[vX.Y.Z]` for the version you're cutting doesn't exist in the file.
 
-## 3. Bump versions across the workspaces
+## 3. Preview the release
 
-Crates are versioned **independently**: each bumps only when it changes, plus the correct cascade. Use the bump tooling rather than hand-editing manifests.
+Toven derives per-crate versions, tags, and publish order from the dependency graph and the Conventional-Commit history since each crate's last tag. Preview it before mutating anything:
 
 ```sh
-# Preview the plan for a workspace (no writes):
-make release-bump W=core DRY=1
-# Apply it (patch by default; flag breaking crates with MINOR):
-make release-bump W=core MINOR="rskit-httpclient"
-make release-bump W=contrib
+make release-plan     # bumped versions, tags, changelog, and publish order (read-only)
+make release-status   # declared vs published vs tagged versions (read-only)
 ```
 
-The tool detects crates changed since the last release tag, applies a **patch** bump by default and a **minor** bump for crates listed in `MINOR`, cascades a breaking minor to its in-workspace dependents, and rewrites caret floors. It is idempotent against the crates.io max published version, so re-running is a no-op once manifests are up to date. It performs **no network writes** — manifest edits only.
+Crates are versioned **independently**: each bumps only when it changed, plus the correct dependency cascade. Toven writes the manifest bumps, refreshes the caret floors, and keeps the split lockfiles in sync when it cuts the release — you do not hand-edit versions.
 
-Then refresh the split lockfiles:
+The `[Unreleased]` CHANGELOG section you rotated in step 2 must be committed before cutting the release, because Toven's release commit stages only the manifests it bumps:
 
 ```sh
-cargo update --manifest-path core/Cargo.toml --workspace
-cargo update --manifest-path contrib/Cargo.toml --workspace
-cargo update --manifest-path examples/Cargo.toml --workspace
-git add core/Cargo.toml contrib/Cargo.toml core/Cargo.lock contrib/Cargo.lock examples/Cargo.lock CHANGELOG.md
-git commit -S -m "chore: prepare vX.Y.Z release"
+git add CHANGELOG.md
+git commit -S -m "docs: rotate changelog for vX.Y.Z"
 ```
 
 ## 4. Pre-flight checks
@@ -74,41 +73,46 @@ make check
 make deny
 make release-readiness
 make release-coverage
-make release-sbom
 make publish-dry-run
+make release-sbom
 ```
 
-If any check fails, fix it before publishing the GitHub Release.
+`make release-readiness` runs Toven's fail-closed go/no-go preflight (clean tree, changelog present, registry idempotency, and the configured `deny`/`audit` checks). `make publish-dry-run` rehearses the full pipeline — the per-crate would-publish / already-published verdicts and the dependency-ordered publish plan — without mutating anything. If any check fails, fix it before publishing.
 
-### First-release publish rehearsal
+### First-release note
 
-`cargo publish --dry-run` resolves registry dependencies from crates.io; it does not simulate publishing an unpublished internal dependency chain. When internal crates depend on a same-version sibling that is not yet on crates.io (e.g. the first release, where every crate is new), `make publish-dry-run` therefore:
+On the first release every crate is new, so `cargo publish --dry-run` cannot resolve an unpublished internal same-version sibling from crates.io. Toven's dry-run reports those crates as blocked-by-unpublished-dependency rather than failing, and the real publish (step 5) walks the dependency order so each crate is on crates.io before its dependents are published. The reliable first-release gate is the combination of the full build/test/docs/audit/coverage sweep, Toven's generated publish order, and the dependency-ordered publish itself.
 
-1. Runs `cargo publish --dry-run --locked` for crates whose internal same-version dependencies already exist on crates.io.
-2. Explicitly skips crates blocked by unpublished internal same-version dependencies and runs `cargo package --locked --list` as a packaging sanity check for each skipped crate.
-3. Prints a notice listing the skipped crates, so the rehearsal does not claim full crates.io dependency-chain validation.
+## 5. Cut and publish the release
 
-The reliable first-release gate is the combination of full workspace build/test/docs/audit/coverage, generated publish order, package-list sanity checks for blocked crates, and the GitHub Release workflow publishing crates in dependency order. If any real publish step fails, stop and fix forward before continuing the chain.
+Toven performs the mutation: it bumps the manifests, creates the release commit, and creates the signed tags. There are two entrypoints.
 
-## 5. Publish the GitHub Release
+**CI (recommended).** Create and push the signed tags first, then publish the umbrella GitHub Release as the trigger:
 
-Use the GitHub Release UI as the publishing entrypoint:
+1. On `main` with a clean tree, run `make release-tag`. This bumps the manifests, creates the `-S` release commit, and creates and pushes the signed per-crate tags together with the umbrella `vX.Y.Z` tag. Push the release commit to `main` if the target push does not.
+2. Open <https://github.com/kbukum/rskit/releases/new>.
+3. Set **Choose a tag** to the **existing** `vX.Y.Z` tag pushed in step 1 (do not create a new tag on publish).
+4. Set **Target** to `main`.
+5. Use **Generate release notes**.
+6. For pre-releases such as `v0.1.0-alpha.1`, check **Set as a pre-release**.
+7. Publish the release.
 
-1. Open <https://github.com/kbukum/rskit/releases/new>.
-2. Set **Choose a tag** to `vX.Y.Z`, then choose **Create new tag: vX.Y.Z on publish**.
-3. Set **Target** to `main`.
-4. Use **Generate release notes**.
-5. For pre-releases such as `v0.1.0-alpha.1`, check **Set as a pre-release**.
-6. Publish the release.
+Toven's maintainer entrypoint treats the tags as externally created inputs, so the per-crate tags from step 1 must exist before the workflow runs — that is what `toven release publish` verifies. Publishing the GitHub Release triggers `.github/workflows/release.yml` from the `release.published` event. The workflow installs the pinned Toven binary, verifies the tag starts with `v` and is reachable from `main`, then runs the Toven-driven gates and publish.
 
-Publishing the GitHub Release creates the `v*` tag and triggers `.github/workflows/release.yml` from the `release.published` event. The workflow verifies that the tag starts with `v` and is reachable from `main`, then runs the release gates, publishes crates, signs SBOMs, and uploads generated assets back to the same GitHub Release.
+**Local.** With `CARGO_REGISTRY_TOKEN` exported you can drive the same pipeline directly:
 
-Directly pushing a `v*` tag does not trigger publishing. The release workflow (`.github/workflows/release.yml`) is triggered by publishing a GitHub Release and will:
+```sh
+make release-tag       # bump manifests, commit, and create signed tags with the configured push
+make release-publish   # full pipeline: commit, tag, push, and publish to crates.io (idempotent)
+```
 
-- Re-run the full test + lint + audit suite on the tagged commit.
+Directly pushing a `v*` tag by hand does not trigger CI publishing. The release workflow (`.github/workflows/release.yml`) is triggered by publishing a GitHub Release and will:
+
+- Install the pinned, checksum-verified Toven binary through the `kbukum/toven` action.
+- Run `toven release readiness` (the fail-closed go/no-go preflight) on the tagged commit.
 - Generate release coverage reports and enforce release coverage thresholds.
-- Dry-run publishing where same-version internal dependencies already exist on crates.io, package-list crates blocked by unpublished internal dependencies, then publish every publishable workspace crate to crates.io in dependency order when `CARGO_REGISTRY_TOKEN` is configured.
-- Generate and attach a CycloneDX SBOM (`cargo-cyclonedx`).
+- Rehearse the publish with `toven release publish --dry-run`, then publish every publishable workspace crate to crates.io in dependency order via `toven release publish --yes` when `CARGO_REGISTRY_TOKEN` is configured.
+- Generate a CycloneDX SBOM per crate with `toven release sbom` (`cargo-cyclonedx`).
 - Sign the release SBOMs with [cosign](https://github.com/sigstore/cosign).
 - Upload generated assets to the GitHub Release that triggered the workflow.
 
@@ -123,6 +127,18 @@ gh run view "$RUN_ID" --log-failed
 
 If publishing fails after some crates were uploaded, do not delete or force-push the tag.
 Fix forward with a new version because crates.io versions are immutable.
+
+### Recovery from a partial or failed release
+
+crates.io versions and pushed `v*` tags are **immutable** — never yank-and-republish the same version, delete a tag, or force-push over one. Recover by fixing forward. Inspect the current state first:
+
+```sh
+toven release status   # declared vs published vs tagged versions, per crate
+```
+
+- **Publish failed partway through the train (some crates uploaded, others not).** `toven release publish` walks the dependency order and is idempotent per `name@version`: crates already on crates.io are skipped, so re-running the release workflow (or `make release-publish` locally with `CARGO_REGISTRY_TOKEN` set) resumes from the first unpublished crate. Do not bump versions to retry — a rerun of the same versions completes the train.
+- **Tag pushed but the workflow failed before publishing.** Re-run the failed `Release` workflow from the Actions tab; it reinstalls the pinned Toven binary and re-drives readiness, dry-run, and publish against the same tag.
+- **A crate was published with a defect.** crates.io versions cannot be replaced. Cut a new forward-fix version: rotate `CHANGELOG.md`, run `make release-plan` to confirm the cascade, then publish the next `vX.Y.Z` (via the Releases UI, or `make release-tag` + `make release-publish` locally). Yank the defective version on crates.io only to discourage new resolutions — yanking never deletes it.
 
 ## 7. Verify on crates.io and docs.rs
 

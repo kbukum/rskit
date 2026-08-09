@@ -1,7 +1,7 @@
 .PHONY: all setup build test test-nextest test-doc test-python test-affected coverage coverage-changed test-coverage test-coverage-html lint fmt fmt-check check check-fast check-facade-features \
        check-core check-patterns check-crosscutting check-composition check-transport check-auth check-data check-ai \
-       check-media check-infra doc deny check-l7-edges check-workspace-deps-sync check-topology check-public-api release-readiness release-coverage \
-       publish-dry-run release-publish release-bump release-sbom depgraphs clean help ci ci-test ci-lint ci-fmt ensure-act structure toven-canary lock
+       check-media check-infra doc deny check-l7-edges check-workspace-deps-sync check-topology check-public-api release-plan release-status release-readiness release-coverage \
+       release-tag publish-dry-run release-publish release-sbom depgraphs clean help ci ci-test ci-lint ci-fmt ensure-act structure toven-canary lock
 
 CORE_MANIFEST = core/Cargo.toml
 CONTRIB_MANIFEST = contrib/Cargo.toml
@@ -163,12 +163,14 @@ fmt-check:
 	@echo "✓ Format OK"
 
 ## Declare-only aggregator guard (lib.rs / mod.rs) + crowded-module advisory
+## Both gates run through Toven's `command` ecosystem (structure = ast-grep,
+## crowded-modules = rskit_tool); ensure-ast-grep provisions the ast-grep tool.
 structure:
 	@echo "==> Checking declare-only aggregators (lib.rs / mod.rs)..."
 	@./scripts/ensure-ast-grep.sh
-	@ast-grep scan
+	@$(TOVEN) run structure
 	@echo "==> Scanning for crowded modules (advisory)..."
-	@$(RSKIT_TOOL) check crowded-modules
+	@$(TOVEN) run crowded-modules
 
 ## Build documentation
 doc:
@@ -190,25 +192,25 @@ doc:
 ## Run L7 dependency edge checks
 check-l7-edges:
 	@echo "==> Checking L7 dependency edges..."
-	@$(RSKIT_TOOL) check l7-edges
+	@$(TOVEN) run l7-edges
 	@echo "✓ L7 dependency edges OK"
 
 ## Check shared core/contrib workspace dependency versions
 check-workspace-deps-sync:
 	@echo "==> Checking workspace dependency versions..."
-	@$(RSKIT_TOOL) check workspace-deps-sync
+	@$(TOVEN) run workspace-deps-sync
 	@echo "✓ Workspace dependency versions synced"
 
 ## Run module topology checks
 check-topology:
 	@echo "==> Checking module topology..."
-	@$(RSKIT_TOOL) check topology
+	@$(TOVEN) run topology
 	@echo "✓ Module topology OK"
 
 ## Check public API guardrails
 check-public-api:
 	@echo "==> Checking public API guardrails..."
-	@$(RSKIT_TOOL) check public-api
+	@$(TOVEN) run public-api
 	@echo "✓ Public API guardrails OK"
 
 ## Check facade feature combinations
@@ -242,42 +244,55 @@ deny: check-l7-edges check-workspace-deps-sync check-topology check-public-api
 	fi
 	@echo "✓ cargo-deny passed"
 
+## Preview the release plan: crates, versions, tags, and publish order (read-only)
+release-plan:
+	@$(TOVEN) release plan
+
+## Report release status: declared versions, tags, and published versions (read-only)
+release-status:
+	@$(TOVEN) release status
+
 ## Run the release-readiness supply-chain and API sweep
 ## Requires: cargo-deny, cargo-audit
+## Runs both preflights: the rskit-specific guardrail sweep (panic/unwrap,
+## unsafe-without-SAFETY, SHA-pinned Actions, required fuzz targets) via the
+## `readiness` command task, then Toven's native gate (clean tree, registry
+## idempotency).
 release-readiness: check
-	@$(RSKIT_TOOL) release readiness
+	@$(TOVEN) run readiness
+	@$(TOVEN) release readiness
 
 ## Run release coverage gates (default per-package line coverage >=90%)
 ## Requires: cargo-nextest, cargo-llvm-cov
 release-coverage:
 	$(call run_coverage_target,--mode release)
 
-## Dry-run publishing all publishable crates in dependency order
-publish-dry-run:
-	@$(RSKIT_TOOL) release publish-dry-run --dry-run
+## Cut the release: bump manifests, commit, and create signed tags with the configured push.
+## Toven owns the version bump, commit, and tag; run release-publish for the crates.io publication.
+release-tag:
+	@$(TOVEN) release tag --yes
 
-## Publish all crates to crates.io idempotently in dependency order (rate-aware, resumable)
+## Dry-run the full release pipeline (commit, tag, publish) in dependency order (read-only)
+publish-dry-run:
+	@$(TOVEN) release publish --dry-run
+
+## Run the full release pipeline: commit, tag, push, and publish to crates.io idempotently
 ## Requires: CARGO_REGISTRY_TOKEN
 release-publish:
-	@$(RSKIT_TOOL) release publish-dry-run --publish
+	@$(TOVEN) release publish --yes
 
-## Compute and apply independent per-crate version bumps for one workspace.
-## Usage: make release-bump W=core [MINOR="rskit-foo rskit-bar"] [DRY=1] [OFFLINE=1]
-release-bump:
-	@$(RSKIT_TOOL) release bump --workspace $(W) \
-		$(foreach crate,$(MINOR),--minor $(crate)) \
-		$(if $(filter minor,$(ALL)),--all-minor,) $(if $(filter major,$(ALL)),--all-major,) \
-		$(if $(DRY),--dry-run,) $(if $(OFFLINE),--offline,)
-
-## Generate CycloneDX SBOMs under target/sbom
+## Generate CycloneDX SBOMs under target/sbom across the all-features surface
+## rskit_tool owns the all-features rendering (Toven orchestrates the `sbom` task).
 ## Requires: cargo-cyclonedx
 release-sbom:
-	@$(RSKIT_TOOL) release sbom
+	@$(TOVEN) run sbom
 
 ## Regenerate workspace dependency-graph SVGs in docs/depgraphs (embedded in docs/DESIGN.md)
+## The domain-layer diagram is derived from domains.toml, so rskit_tool owns the
+## rendering (Toven orchestrates it as the `depgraphs` command task).
 ## Requires: cargo-depgraph, Graphviz (dot)
 depgraphs:
-	@$(RSKIT_TOOL) release depgraphs
+	@$(TOVEN) run depgraphs
 
 ## Read-only Toven self-hosting canary: discover modules and the dependency
 ## graph, then render the mutation-free release previews (status + plan) with the
@@ -400,11 +415,13 @@ help:
 	@echo "  make check-public-api                     Check public API guardrails"
 	@echo "  make check-facade-features                Check rskit facade feature combinations"
 	@echo "  make deny               [W=]               Run cargo-deny + L7 edge checks"
+	@echo "  make release-plan                         Preview the release plan (read-only)"
+	@echo "  make release-status                       Report release status (read-only)"
 	@echo "  make release-readiness                    Run final release-readiness sweep"
 	@echo "  make release-coverage                     Run per-package release coverage thresholds"
-	@echo "  make publish-dry-run                      Dry-run publishing in dependency order"
+	@echo "  make release-tag                          Bump manifests, commit, and create signed tags"
+	@echo "  make publish-dry-run                      Dry-run the full release pipeline in dependency order"
 	@echo "  make release-publish                      Publish crates to crates.io (idempotent, rate-aware)"
-	@echo "  make release-bump W=core [MINOR=...]      Apply independent per-crate version bumps"
 	@echo "  make release-sbom                         Generate CycloneDX SBOMs"
 	@echo "  make depgraphs                            Regenerate docs dependency graphs (docs/depgraphs)"
 	@echo "  make check-fast                           fmt + lint + build"

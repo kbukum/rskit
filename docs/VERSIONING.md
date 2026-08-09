@@ -79,7 +79,7 @@ rskit-errors = { path = "../core/rskit-errors", version = "0.1.0-alpha.1" }
 
 ## Release mechanics
 
-`scripts/rskit_tool.py release bump` (also `make release-bump`) detects the crates changed since the last release tag, applies a **patch** bump by default and a **minor** bump for crates flagged `--minor`, cascades breaking minors to in-workspace dependents, and rewrites caret floors. It is idempotent against the crates.io max published version. The idempotent publisher then republishes only the new `name@version`s. The full runbook lives in [`RELEASING.md`](RELEASING.md).
+[Toven](https://github.com/kbukum/toven) drives releases. It detects the crates changed since each crate's last release tag from the Conventional-Commit history, applies a **patch** bump by default and a **minor** bump for a breaking change, cascades breaking minors to in-workspace dependents, and rewrites caret floors. It is idempotent against the already-published crates.io versions, then publishes only the new `name@version`s in dependency order. The `make release-*` targets delegate to it; the full runbook lives in [`RELEASING.md`](RELEASING.md).
 
 ## Compatibility policy
 
@@ -120,26 +120,26 @@ The README badge documents the current MSRV. `rust-toolchain.toml` pins the deve
 
 ## Rules of thumb
 
-1. Bump only what changed: `make release-bump W=<workspace>`; flag breaking crates with `MINOR="rskit-foo"`.
+1. Preview what will change: `make release-plan`; Toven derives the per-crate bumps and cascade from commit history.
 2. Treat `0.x` minor releases as the place for documented breaking changes (they cascade to dependents).
 3. Never force-push release tags.
 4. Keep release mechanics in [`RELEASING.md`](RELEASING.md).
 5. Fix forward with a new version if crates.io publishing partially succeeds; published crate versions are immutable.
 
-## Toven versioning parity
+## Toven versioning
 
-`toven.toml`'s `[ecosystems.rust.release]` block encodes the same independent per-crate, crates.io-targeted model this document describes. The `make toven-canary` target runs mutation-free previews (`modules`, `graph`, `release status`, `release plan`) beside the native release tooling.
+`toven.toml`'s `[ecosystems.rust.release]` block encodes the independent per-crate, crates.io-targeted model this document describes, and Toven is the canonical driver for it. The read-only `make toven-canary` target runs mutation-free previews (`modules`, `graph`, `release status`, `release plan`) to prove the published binary against this repository ahead of each release.
 
-| Versioning behavior | Native command | Toven preview | Expected output |
-|---|---|---|---|
-| Independent per-crate bump | `rskit_tool release bump` (`make release-bump`) | `toven release plan` | cascade table with a per-crate current → planned version and bump kind |
-| Breaking-minor cascade to dependents | `rskit_tool` caret-floor rewrite | `toven release plan` (`dependency cascade` reason column) | dependents shown as cascaded when a dependency takes a breaking bump |
-| Registry idempotency (skip already-published) | `rskit_tool` diff against crates.io max version | `toven release status` + `toven release plan` | per-crate published/planned verdicts that keep already-published versions out of the mutation plan |
-| Split-workspace discovery (`core`, `contrib`, `examples`) | `rskit_tool` per-workspace operation | `toven modules` | all workspace crates discovered under one graph |
-| Non-publishable crate exclusion | `publish = false` on the `examples/` demos and the `fuzz/` harness | `toven release status` / `toven release plan` | `agent-demo`, `core-cli`, `media-demo`, and `rskit-fuzz` are discovered by `toven modules` but explicitly `exclude`d from the release, so they never appear in the plan or reach crates.io |
-| Clean-tree requirement | `rskit_tool release readiness` (`make release-check`) | native release readiness gate | dirty trees fail before release mutation or publish |
+| Versioning behavior | Toven command | Expected output |
+|---|---|---|
+| Independent per-crate bump | `toven release plan` | cascade table with a per-crate current → planned version and bump kind |
+| Breaking-minor cascade to dependents | `toven release plan` (`dependency cascade` reason column) | dependents shown as cascaded when a dependency takes a breaking bump |
+| Registry idempotency (skip already-published) | `toven release status` + `toven release plan` | per-crate published/planned verdicts that keep already-published versions out of the mutation plan |
+| Split-workspace discovery (`core`, `contrib`, `examples`) | `toven modules` | all workspace crates discovered under one graph |
+| Non-publishable crate exclusion | `toven release status` / `toven release plan` | `agent-demo`, `core-cli`, `media-demo`, and `rskit-fuzz` are discovered by `toven modules` but explicitly `exclude`d from the release, so they never appear in the plan or reach crates.io |
+| Clean-tree requirement | `toven release readiness` (`make release-readiness`) | dirty trees fail before release mutation or publish |
 
-Toven's release plan is a cross-check against `rskit_tool`: `make release-bump` applies the manifest edits, `rskit_tool release readiness` remains the release gate, and the GitHub Release workflow publishes to crates.io.
+`make release-tag` / `make release-publish` apply the manifest edits, `toven release readiness` is the release gate, and the GitHub Release workflow publishes to crates.io through the same binary.
 
 ## References
 

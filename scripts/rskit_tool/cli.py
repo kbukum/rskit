@@ -6,7 +6,7 @@ import argparse
 import sys
 from collections.abc import Sequence
 
-from .commands import checks, ci, coverage, domains, release, selftest
+from .commands import checks, ci, coverage, domains, sbom, selftest
 from .errors import ToolError
 
 
@@ -19,7 +19,7 @@ def build_parser() -> argparse.ArgumentParser:
     ci.add_parser(subparsers)
     checks.add_parser(subparsers)
     domains.add_parser(subparsers)
-    release.add_parser(subparsers)
+    sbom.add_parser(subparsers)
     selftest.add_parser(subparsers)
     return parser
 

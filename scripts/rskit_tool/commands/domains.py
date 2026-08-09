@@ -9,10 +9,10 @@ import tomllib
 from collections import deque
 from pathlib import Path, PurePosixPath
 
-from ..cargo import Package, discover_packages, package_by_name
+from ..cargo import Package, discover_packages, metadata, package_by_name
 from ..errors import ToolError
 from ..git import changed_paths
-from ..paths import ROOT
+from ..paths import ROOT, WORKSPACES
 from ..process import ParallelTask, command_exists, run, run_parallel
 
 DOMAIN_EMOJI = {
@@ -75,6 +75,10 @@ def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) 
 
     index = domain_sub.add_parser("module-index", help="Generate docs/MODULE-INDEX.md")
     index.set_defaults(func=run_module_index)
+
+    depgraphs = domain_sub.add_parser("depgraphs", help="Generate dependency graph SVGs")
+    depgraphs.add_argument("out_dir", nargs="?", default="docs/depgraphs")
+    depgraphs.set_defaults(func=run_depgraphs)
 
 
 def load_domains() -> dict[str, Domain]:
@@ -383,3 +387,130 @@ def package_selection_args(packages: list[Package]) -> list[str]:
     for package in packages:
         args.extend(["-p", package.name])
     return args
+
+
+def _domain_reachable(node: str, deps: dict[str, set[str]], seen: set[str]) -> set[str]:
+    """Collect every domain transitively depended on by ``node``."""
+
+    for child in deps.get(node, set()):
+        if child not in seen:
+            seen.add(child)
+            _domain_reachable(child, deps, seen)
+    return seen
+
+
+def _domain_reduced_edges(deps: dict[str, set[str]]) -> dict[str, list[str]]:
+    """Transitively reduce the domain ``depends_on`` DAG to its essential edges.
+
+    ``domains.toml`` lists the full set of ancestor domains for each entry, so a
+    naive rendering would draw every transitive edge. Keeping only edges that are
+    not reachable through another direct dependency yields a clean layer diagram.
+    """
+
+    reduced: dict[str, list[str]] = {}
+    for name, directs in deps.items():
+        keep: list[str] = []
+        for dependency in sorted(directs):
+            via_others: set[str] = set()
+            for other in directs - {dependency}:
+                _domain_reachable(other, deps, via_others)
+            if dependency not in via_others:
+                keep.append(dependency)
+        reduced[name] = keep
+    return reduced
+
+
+def build_domain_dot() -> str:
+    """Build a Graphviz layer diagram of inter-domain dependencies from domains.toml."""
+
+    domains = load_domains()
+    deps = {name: set(domain.depends_on) for name, domain in domains.items()}
+    reduced = _domain_reduced_edges(deps)
+    order = [name for name in DOMAIN_ORDER if name in domains]
+    order += [name for name in domains if name not in order]
+
+    lines = [
+        "digraph rskit_domains {",
+        "  rankdir=TB;",
+        "  splines=true;",
+        '  node [shape=box, style="rounded,filled", fillcolor="#eef3fb", '
+        'color="#5b6b7f", fontname="Helvetica"];',
+        '  edge [color="#5b6b7f"];',
+    ]
+    for name in order:
+        title = DOMAIN_TITLES.get(name, name)
+        count = len(domains[name].modules)
+        plural = "module" if count == 1 else "modules"
+        lines.append(f'  "{name}" [label="{title}\\n({count} {plural})"];')
+    for name in order:
+        for dependency in reduced.get(name, []):
+            lines.append(f'  "{name}" -> "{dependency}";')
+    lines.append("}")
+    return "\n".join(lines) + "\n"
+
+
+def _rskit_package_names(manifest: Path) -> list[str]:
+    """Return every resolved ``rskit-*`` package visible from ``manifest``."""
+
+    data = metadata(manifest, no_deps=False)
+    names = {
+        str(package["name"])
+        for package in data["packages"]  # type: ignore[index]
+        if str(package["name"]).startswith("rskit-")
+    }
+    return sorted(names)
+
+
+def run_depgraphs(args: argparse.Namespace) -> int:
+    """Generate dependency graph SVGs embedded in docs/DESIGN.md.
+
+    The domain-layer diagram is derived from ``domains.toml`` (an rskit-specific
+    grouping Toven does not model), so this asset stays owned by rskit tooling
+    like the module index; Toven orchestrates it as a ``command`` task.
+    """
+
+    if not command_exists("cargo"):
+        raise ToolError("error: cargo is not installed or not in PATH")
+    if not command_exists("dot"):
+        raise ToolError("error: dot (Graphviz) is not installed or not in PATH")
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    print(f"Generating dependency graphs into: {out_dir}")
+
+    # Big-picture layer diagram: domains with their reduced depends_on edges.
+    domains_file = out_dir / "graph-domains.svg"
+    print(f"-> generating {domains_file}")
+    with domains_file.open("w", encoding="utf-8") as output:
+        run(
+            ["dot", "-Grankdir=TB", "-Tsvg"],
+            stdin=build_domain_dot(),
+            stdout=output,
+        )
+    print(f"   done: {domains_file}")
+
+    # Crate-level detail: contrib adapters and the core crates they build on.
+    # `--workspace-only` would hide every core crate, so instead include all
+    # resolved rskit crates and let `dot` draw the contrib -> core edges.
+    contrib_file = out_dir / "graph-contrib.svg"
+    print(f"-> generating {contrib_file}")
+    names = _rskit_package_names(WORKSPACES["contrib"])
+    include_args: list[str] = []
+    for name in names:
+        include_args.extend(("--include", name))
+    depgraph = run(
+        [
+            "cargo",
+            "depgraph",
+            "--manifest-path",
+            str(WORKSPACES["contrib"]),
+            *include_args,
+            "--dedup-transitive-deps",
+        ],
+        capture=True,
+    )
+    with contrib_file.open("w", encoding="utf-8") as output:
+        run(["dot", "-Grankdir=LR", "-Nshape=box", "-Tsvg"], stdin=depgraph.stdout, stdout=output)
+    print(f"   done: {contrib_file}")
+
+    print("All graphs generated successfully.")
+    return 0
