@@ -55,17 +55,35 @@ make release-plan     # bumped versions, tags, changelog, and publish order (rea
 make release-status   # declared vs published vs tagged versions (read-only)
 ```
 
-Toven writes the manifest bumps and refreshes caret floors when it cuts the release (Step 5); the plan is idempotent against the already-published versions.
+Toven writes the manifest bumps and refreshes caret floors during the bump phase (Step 5); the plan is idempotent against the already-published versions.
 
-## Step 5 — SBOM and publish
+## Step 5 — Bump (PR), tag, publish
 
-Toven cuts and publishes. Preview, then cut:
+`main` is protected, so the release runs as three ordered phases. Toven's `[ecosystems.rust.release]` sets `push_branch = false`, so the tag/publish phases push tags only — the version bump commit must land through a reviewed PR.
+
+**Phase 1 — Bump (reviewed PR).** On a release branch, rotate the CHANGELOG (Step 3), then let Toven write and commit the manifest bumps and open a PR:
 
 ```bash
-make release-sbom            # CycloneDX SBOMs under target/sbom
+git switch -c release/vX.Y.Z
+git add CHANGELOG.md
+make release-bump            # toven release bump: manifest bumps + floors + release commit (no tag/push/publish)
+git push -u origin release/vX.Y.Z
+gh pr create --fill          # CI runs on the bumped commit; review + merge into main
+```
+
+**Phase 2 — Tag (after merge).** On merged `main`, clean tree:
+
+```bash
+git switch main && git pull --ff-only
+make release-sbom            # CycloneDX SBOMs under target/sbom (read-only)
 make publish-dry-run         # rehearse the full pipeline in dependency order (read-only)
-make release-tag             # bump manifests, commit, and create signed tags
-make release-publish         # full pipeline: commit, tag, push, publish to crates.io (idempotent)
+make release-tag             # create + push signed per-crate + umbrella tags on the merged commit (tags only)
+```
+
+**Phase 3 — Publish.** Publish the umbrella GitHub Release on the existing `vX.Y.Z` tag (recommended — triggers CI), or locally:
+
+```bash
+make release-publish         # verifies tags, then publishes to crates.io in dependency order (idempotent)
 ```
 
 In CI, publishing a GitHub Release triggers `.github/workflows/release.yml`, which runs the same Toven-driven readiness, dry-run, SBOM, and publish steps through the pinned binary. Follow the remaining steps in `docs/RELEASING.md` (GitHub release with notes from the CHANGELOG section, signed artifacts). CI actions must be SHA-pinned.
@@ -73,5 +91,6 @@ In CI, publishing a GitHub Release triggers `.github/workflows/release.yml`, whi
 ## Guardrails
 
 - **Never** run destructive git commands (`reset --hard`, `checkout -- .`, `clean`) on uncommitted work without explicit permission.
-- Per repo workflow, the agent prepares the branch/CHANGELOG/bump edits; **the maintainer commits, pushes, and runs the actual publish** unless explicitly asked otherwise. Open a PR only when explicitly requested, following the PR template.
+- **Never** push the bump commit directly to `main` — it lands through a reviewed PR (phase 1). Only tags reach `main` directly (phase 2), and only because `push_branch = false`.
+- Per repo workflow, the agent prepares the branch/CHANGELOG/bump edits; **the maintainer merges the PR, tags, and runs the actual publish** unless explicitly asked otherwise. Open a PR only when explicitly requested, following the PR template.
 - Reference other-repo items with full URLs, never bare `#123`.

@@ -1,7 +1,7 @@
 .PHONY: all setup build test test-nextest test-doc test-python test-affected coverage coverage-changed test-coverage test-coverage-html lint fmt fmt-check check check-fast check-facade-features \
        check-core check-patterns check-crosscutting check-composition check-transport check-auth check-data check-ai \
        check-media check-infra doc deny check-l7-edges check-workspace-deps-sync check-topology check-public-api release-plan release-status release-readiness release-coverage \
-       release-tag publish-dry-run release-publish release-sbom depgraphs clean help ci ci-test ci-lint ci-fmt ensure-act structure toven-canary lock
+       release-bump release-tag publish-dry-run release-publish release-sbom depgraphs clean help ci ci-test ci-lint ci-fmt ensure-act structure toven-canary lock
 
 CORE_MANIFEST = core/Cargo.toml
 CONTRIB_MANIFEST = contrib/Cargo.toml
@@ -267,8 +267,16 @@ release-readiness: check
 release-coverage:
 	$(call run_coverage_target,--mode release)
 
-## Cut the release: bump manifests, commit, and create signed tags with the configured push.
-## Toven owns the version bump, commit, and tag; run release-publish for the crates.io publication.
+## Phase 1 — bump: write per-crate manifest version bumps + dependency floors and
+## commit the release commit on a release branch, for a reviewed PR into main.
+## Never tags, pushes, or publishes; land it via pull request (`main` is protected).
+release-bump:
+	@$(TOVEN) release bump --yes
+
+## Phase 2 — tag (run only after the release-bump PR merges into main): create and
+## push the signed per-crate + umbrella tags on the merged commit. With
+## `push_branch = false` (toven.toml) it pushes only tags, never a branch commit.
+## Toven owns the tag; run release-publish for the crates.io publication.
 release-tag:
 	@$(TOVEN) release tag --yes
 
@@ -419,7 +427,8 @@ help:
 	@echo "  make release-status                       Report release status (read-only)"
 	@echo "  make release-readiness                    Run final release-readiness sweep"
 	@echo "  make release-coverage                     Run per-package release coverage thresholds"
-	@echo "  make release-tag                          Bump manifests, commit, and create signed tags"
+	@echo "  make release-bump                         Phase 1: write manifest bumps + commit on a branch for a PR into main"
+	@echo "  make release-tag                          Phase 2 (after the bump PR merges): create + push signed tags on main"
 	@echo "  make publish-dry-run                      Dry-run the full release pipeline in dependency order"
 	@echo "  make release-publish                      Publish crates to crates.io (idempotent, rate-aware)"
 	@echo "  make release-sbom                         Generate CycloneDX SBOMs"

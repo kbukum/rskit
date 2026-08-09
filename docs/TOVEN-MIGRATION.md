@@ -6,7 +6,7 @@
 
 | Area | Driver | Status |
 |---|---|---|
-| Release (plan, status, readiness, tag, publish, sbom, depgraphs) | `toven release …` | Migrated |
+| Release (plan, status, readiness, bump, tag, publish, sbom, depgraphs) | `toven release …` | Migrated |
 | Read-only canary (modules, graph, release previews) | `toven` | Migrated |
 | Structural guardrail (`structure` / declare-only aggregators) | `toven run structure` | Migrated |
 | Architectural guardrails (`topology`, `l7-edges`, `workspace-deps-sync`, `public-api`) | `toven run <task>` | Migrated (Toven orchestrates; `scripts/rskit_tool.py` still owns the rule logic) |
