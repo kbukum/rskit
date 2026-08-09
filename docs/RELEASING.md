@@ -72,7 +72,7 @@ make release-plan     # bumped versions, tags, changelog, and publish order (rea
 make release-status   # declared vs published vs tagged versions (read-only)
 ```
 
-Crates are versioned **independently**: each bumps only when it changed, plus the correct dependency cascade. Toven writes the manifest bumps, refreshes the caret floors, and keeps the split lockfiles in sync during the bump phase — you do not hand-edit versions. The CHANGELOG rotation from step 2 and Toven's manifest bumps are committed together on the release branch in step 5 (phase 1), then reviewed as one PR.
+Crates are versioned **independently**: each bumps only when it changed, plus the correct dependency cascade. Toven writes the manifest bumps, refreshes the caret floors, re-syncs the README install-snippet version pins, and keeps the split lockfiles in sync during the bump phase — you do not hand-edit versions. The CHANGELOG rotation from step 2 and Toven's manifest bumps are committed together on the release branch in step 5 (phase 1), then reviewed as one PR.
 
 ## 4. Pre-flight checks
 
@@ -101,7 +101,7 @@ The release runs as three ordered phases. `main` is protected, so the version bu
 
 ```sh
 git switch -c release/vX.Y.Z         # you create the branch (clean tree)
-make release-bump                    # toven release bump --no-commit: writes per-crate version bumps + floors, NO commit
+make release-bump                    # toven release bump --yes: stages per-crate version bumps + floors + README pins, NO commit
 # rotate CHANGELOG.md per step 2, then commit everything yourself:
 git add -A
 git commit -S -m "chore(release): vX.Y.Z"
@@ -109,7 +109,9 @@ git push -u origin release/vX.Y.Z
 gh pr create --fill                  # open the PR; CI runs on the bumped commit
 ```
 
-`make release-bump` uses `--no-commit`, so it only rewrites the manifest versions and dependency floors and leaves them in your working tree — no commit, no tag, no push, no publish. The bump is **change-aware**: only crates with releasable changes bump, plus the correct dependency cascade; untouched crates keep their version. Review and merge the PR into `main` the normal way. The bumped versions are now on `main`, reviewed and CI-green.
+`make release-bump` runs `toven release bump --yes`, which is **stage-only**: it rewrites the manifest versions and dependency floors, re-syncs the README install-snippet version pins (via the `on_resolved` hook — see below), and stages them in your working tree — no commit, no tag, no push, no publish. The bump is **change-gated**: only crates with a real diff since their baseline bump, plus the correct dependency cascade; untouched crates keep their version. Review and merge the PR into `main` the normal way. The bumped versions are now on `main`, reviewed and CI-green.
+
+The README install-snippet pins (every crate `README.md` under the repo root, `core/`, and `contrib/`) track the crate versions automatically. Toven's native `version_references` sync is line-anchored to simple `crate = "x.y.z"` pins; rskit's snippets also use table-attribute (`crate = { version = "x.y.z", features = [..] }`) and column-aligned pins, so the umbrella's bump `on_resolved` hook runs `scripts/rskit_tool.py sync-readme-versions`, handed Toven's authoritative resolved-version map, to rewrite every pin shape. Those edits are staged with the manifests, so you never hand-edit README versions.
 
 ### Phase 2 — Tag (on the merged commit)
 

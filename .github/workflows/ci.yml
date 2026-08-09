@@ -32,7 +32,7 @@ env:
   # Pinned Toven release used to drive the structural/architectural guardrail
   # gates (structure, topology, l7-edges, public-api, readiness) through the
   # `command` ecosystem tasks declared in toven.toml.
-  TOVEN_VERSION: v0.1.0-alpha.4
+  TOVEN_VERSION: v0.1.0-alpha.5
 
 jobs:
   changes:

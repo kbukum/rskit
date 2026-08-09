@@ -268,12 +268,15 @@ release-coverage:
 	$(call run_coverage_target,--mode release)
 
 ## Phase 1 — bump: write per-crate manifest version bumps + dependency floors into
-## the working tree, WITHOUT committing (`--no-commit`). Run it on a release branch
-## you created; you then commit and open the PR yourself. Toven never creates the
-## branch, the commit, or the PR, and never tags/pushes/publishes here.
-## Change-aware: only crates with releasable changes bump, plus the dependency cascade.
+## the working tree and stage them, WITHOUT committing (stage-only is the default;
+## `--yes` confirms the mutation). Run it on a release branch you created; you then
+## commit and open the PR yourself. Toven never creates the branch, the commit, or
+## the PR, and never tags/pushes/publishes here. Change-aware: only crates with a
+## real diff since baseline bump, plus the dependency cascade; the configured
+## on-resolved hook re-syncs the README install-snippet version pins in the same
+## staged change.
 release-bump:
-	@$(TOVEN) release bump --no-commit --yes
+	@$(TOVEN) release bump --yes
 
 ## Phase 2 — tag (run only after the release-bump PR merges into main): create and
 ## push the signed per-crate + umbrella tags on the merged commit. With
@@ -432,7 +435,7 @@ help:
 	@echo "  make release-status                       Report release status (read-only)"
 	@echo "  make release-readiness                    Run final release-readiness sweep"
 	@echo "  make release-coverage                     Run per-package release coverage thresholds"
-	@echo "  make release-bump                         Phase 1: write manifest bumps + commit on a branch for a PR into main"
+	@echo "  make release-bump                         Phase 1: stage manifest bumps + README pins on a branch for a PR into main (no commit)"
 	@echo "  make release-tag                          Phase 2 (after the bump PR merges): create + push signed tags on main"
 	@echo "  make publish-dry-run                      Rehearse the crates.io publication in dependency order (read-only)"
 	@echo "  make release-publish                      Publish crates to crates.io (idempotent, rate-aware)"
