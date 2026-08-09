@@ -25,8 +25,10 @@ registry = "crates-io"
 # Per-crate and umbrella tags are annotated and GPG-signed with the maintainer's
 # configured git signing key (the same key used for the `-S` release commit), so
 # every tag Toven creates via `release tag` is verifiable. Toven defaults
-# `sign_tags` to false, so it is enabled explicitly here.
+# `sign_tags` to false and signed tags are always annotated, so enable it
+# explicitly and give the annotation a per-module `tag_message` template.
 sign_tags = true
+tag_message = "release {module} {version}"
 # The hosted GitHub Release is a single umbrella (see rust:rskit-suite below),
 # created by the maintainer as the release entrypoint; Toven verifies it rather
 # than cutting one Release per crate. The maintainer runs `make release-tag`
