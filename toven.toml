@@ -29,13 +29,23 @@ registry = "crates-io"
 # explicitly and give the annotation a per-module `tag_message` template.
 sign_tags = true
 tag_message = "release {module} {version}"
+# `main` is protected and rejects direct pushes, so the version/changelog bump
+# commit must land through a reviewed pull request — never a direct push. Setting
+# `push_branch = false` makes `release tag`/`release publish` push only the
+# release tags and leave the branch ref untouched: the maintainer runs
+# `make release-bump` (`toven release bump`) on a release branch to write the
+# manifest bumps and open a PR, and only after that PR merges into `main` does
+# `make release-tag` create and push the signed per-crate + umbrella tags on the
+# merged commit. Defaults to `true`; keep it `false` while `main` is protected.
+push_branch = false
 # The hosted GitHub Release is a single umbrella (see rust:rskit-suite below),
 # created by the maintainer as the release entrypoint; Toven verifies it rather
-# than cutting one Release per crate. The maintainer runs `make release-tag`
-# (`toven release tag`) first to bump manifests, commit, and create + push the
-# signed per-crate tags and the umbrella `vX.Y.Z` tag; the GitHub Release is then
-# published on that existing umbrella tag, which is what `release publish`
-# verifies. See docs/RELEASING.md.
+# than cutting one Release per crate. The bump commit reaches `main` through a
+# reviewed PR (`make release-bump`), then `make release-tag` (`toven release
+# tag`) creates and pushes the signed per-crate tags and the umbrella `vX.Y.Z`
+# tag on that merged commit; the GitHub Release is then published on that
+# existing umbrella tag, which is what `release publish` verifies. See
+# docs/RELEASING.md.
 entrypoint = "maintainer"
 
 [ecosystems.rust.release.host]
