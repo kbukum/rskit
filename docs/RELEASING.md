@@ -87,16 +87,17 @@ On the first release every crate is new, so `cargo publish --dry-run` cannot res
 
 Toven performs the mutation: it bumps the manifests, creates the release commit, and creates the signed tags. There are two entrypoints.
 
-**CI (recommended).** Publish a GitHub Release from the UI as the entrypoint:
+**CI (recommended).** Create and push the signed tags first, then publish the umbrella GitHub Release as the trigger:
 
-1. Open <https://github.com/kbukum/rskit/releases/new>.
-2. Set **Choose a tag** to `vX.Y.Z`, then choose **Create new tag: vX.Y.Z on publish**.
-3. Set **Target** to `main`.
-4. Use **Generate release notes**.
-5. For pre-releases such as `v0.1.0-alpha.1`, check **Set as a pre-release**.
-6. Publish the release.
+1. On `main` with a clean tree, run `make release-tag`. This bumps the manifests, creates the `-S` release commit, and creates and pushes the signed per-crate tags together with the umbrella `vX.Y.Z` tag. Push the release commit to `main` if the target push does not.
+2. Open <https://github.com/kbukum/rskit/releases/new>.
+3. Set **Choose a tag** to the **existing** `vX.Y.Z` tag pushed in step 1 (do not create a new tag on publish).
+4. Set **Target** to `main`.
+5. Use **Generate release notes**.
+6. For pre-releases such as `v0.1.0-alpha.1`, check **Set as a pre-release**.
+7. Publish the release.
 
-Publishing the GitHub Release creates the `v*` tag and triggers `.github/workflows/release.yml` from the `release.published` event. The workflow installs the pinned Toven binary, verifies the tag starts with `v` and is reachable from `main`, then runs the Toven-driven gates and publish.
+Toven's maintainer entrypoint treats the tags as externally created inputs, so the per-crate tags from step 1 must exist before the workflow runs — that is what `toven release publish` verifies. Publishing the GitHub Release triggers `.github/workflows/release.yml` from the `release.published` event. The workflow installs the pinned Toven binary, verifies the tag starts with `v` and is reachable from `main`, then runs the Toven-driven gates and publish.
 
 **Local.** With `CARGO_REGISTRY_TOKEN` exported you can drive the same pipeline directly:
 

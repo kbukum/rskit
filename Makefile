@@ -281,15 +281,18 @@ publish-dry-run:
 release-publish:
 	@$(TOVEN) release publish --yes
 
-## Generate CycloneDX SBOMs under target/sbom
+## Generate CycloneDX SBOMs under target/sbom across the all-features surface
+## rskit_tool owns the all-features rendering (Toven orchestrates the `sbom` task).
 ## Requires: cargo-cyclonedx
 release-sbom:
-	@$(TOVEN) release sbom --out-dir target/sbom
+	@$(TOVEN) run sbom
 
 ## Regenerate workspace dependency-graph SVGs in docs/depgraphs (embedded in docs/DESIGN.md)
+## The domain-layer diagram is derived from domains.toml, so rskit_tool owns the
+## rendering (Toven orchestrates it as the `depgraphs` command task).
 ## Requires: cargo-depgraph, Graphviz (dot)
 depgraphs:
-	@$(TOVEN) release depgraphs
+	@$(TOVEN) run depgraphs
 
 ## Read-only Toven self-hosting canary: discover modules and the dependency
 ## graph, then render the mutation-free release previews (status + plan) with the

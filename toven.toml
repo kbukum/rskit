@@ -22,9 +22,18 @@ region = 70.0
 [ecosystems.rust.release]
 readiness = ["clean-tree", "registry-idempotent"]
 registry = "crates-io"
+# Per-crate and umbrella tags are annotated and GPG-signed with the maintainer's
+# configured git signing key (the same key used for the `-S` release commit), so
+# every tag Toven creates via `release tag` is verifiable. Toven defaults
+# `sign_tags` to false, so it is enabled explicitly here.
+sign_tags = true
 # The hosted GitHub Release is a single umbrella (see rust:rskit-suite below),
 # created by the maintainer as the release entrypoint; Toven verifies it rather
-# than cutting one Release per crate.
+# than cutting one Release per crate. The maintainer runs `make release-tag`
+# (`toven release tag`) first to bump manifests, commit, and create + push the
+# signed per-crate tags and the umbrella `vX.Y.Z` tag; the GitHub Release is then
+# published on that existing umbrella tag, which is what `release publish`
+# verifies. See docs/RELEASING.md.
 entrypoint = "maintainer"
 
 [ecosystems.rust.release.host]
@@ -185,5 +194,23 @@ kind = "lint"
 
 [ecosystems.command.tasks.module-index]
 argv = ["scripts/rskit_tool.py", "domains", "module-index", "{args}"]
+fan_out = "whole-workspace"
+kind = "doc"
+
+# `depgraphs` renders the domain-layer and contrib dependency SVGs embedded in
+# docs/DESIGN.md. The domain diagram is derived from `domains.toml` — an
+# rskit-specific grouping Toven does not model — so the rendering stays owned by
+# `scripts/rskit_tool.py` (like `module-index`); Toven only orchestrates it.
+# `sbom` renders the CycloneDX SBOMs across rskit's `--all-features` surface —
+# the surface it validates and ships. Toven's native SBOM step omits
+# `--all-features`, so the all-features wrapper stays owned by `rskit_tool`;
+# Toven orchestrates it as a `command` task.
+[ecosystems.command.tasks.sbom]
+argv = ["scripts/rskit_tool.py", "sbom", "{args}"]
+fan_out = "whole-workspace"
+kind = "doc"
+
+[ecosystems.command.tasks.depgraphs]
+argv = ["scripts/rskit_tool.py", "domains", "depgraphs", "{args}"]
 fan_out = "whole-workspace"
 kind = "doc"
