@@ -4,6 +4,12 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PYTHON_BIN="${PYTHON:-python3}"
 TOVEN_BIN="${TOVEN:-toven}"
+# Single source of truth for the Toven release pin used by local `make`
+# guardrails and the release targets. Keep this in sync with the `TOVEN_VERSION`
+# env in .github/workflows/{ci,release,toven-canary}.yml. Set TOVEN_ALLOW_ANY_VERSION=1
+# to develop against an unpinned Toven on PATH.
+TOVEN_VERSION="${TOVEN_VERSION:-v0.1.0-alpha.4}"
+TOVEN_ALLOW_ANY_VERSION="${TOVEN_ALLOW_ANY_VERSION:-0}"
 INSTALL_SYSTEM_TOOLS="${INSTALL_SYSTEM_TOOLS:-0}"
 INSTALL_RELEASE_TOOLS="${INSTALL_RELEASE_TOOLS:-0}"
 CHECK_ONLY=0
@@ -19,6 +25,7 @@ Installs or verifies local rskit development tooling:
   - nightly rustdoc JSON toolchain for cargo-public-api
   - Cargo tools used by Make/release checks
   - the pinned Toven binary that drives Make guardrail/structure and release tasks
+    (verified against, or installed at, the checksum-verified pinned release)
 
 Options:
   --check-only  Verify tools without installing missing Cargo/Rust tools.
@@ -28,6 +35,8 @@ Options:
 Environment:
   PYTHON=<bin>                 Python binary to validate (default: python3)
   TOVEN=<bin>                  Toven binary to verify (default: toven)
+  TOVEN_VERSION=<tag>          Pinned Toven release to verify/install (default: v0.1.0-alpha.4)
+  TOVEN_ALLOW_ANY_VERSION=1    Accept an unpinned Toven on PATH (development override)
   INSTALL_SYSTEM_TOOLS=1       Same as --system
   INSTALL_RELEASE_TOOLS=1      Same as --release
   CARGO_PUBLIC_API_VERSION=... cargo-public-api version (default: 0.52.0)
@@ -169,16 +178,55 @@ check_system_tools() {
   command -v dot >/dev/null 2>&1 || echo "warning: dot (Graphviz) not found; release depgraphs need it" >&2
 }
 
+toven_installed_version() {
+  # Prints the bare semver of the Toven on PATH (e.g. 0.1.0-alpha.4), or nothing.
+  # Strips a leading `v` so the comparison is tolerant of either tag style.
+  command -v "$TOVEN_BIN" >/dev/null 2>&1 || return 0
+  "$TOVEN_BIN" --version 2>/dev/null | tr -d '\r' | awk '{v=$NF; sub(/^v/, "", v); print v}'
+}
+
 ensure_toven() {
-  echo "==> Checking Toven..."
-  if command -v "$TOVEN_BIN" >/dev/null 2>&1; then
-    echo "✓ $TOVEN_BIN ($("$TOVEN_BIN" --version 2>/dev/null || echo 'version unknown'))"
+  echo "==> Checking Toven (${TOVEN_VERSION})..."
+  local want="${TOVEN_VERSION#v}"
+  local have
+  have="$(toven_installed_version)"
+
+  if [ "$have" = "$want" ]; then
+    echo "✓ $TOVEN_BIN $have"
     return 0
   fi
-  echo "error: Toven not found on PATH (looked for '$TOVEN_BIN')." >&2
-  echo "  Toven drives 'make check' guardrail/structure tasks and the release." >&2
-  echo "  Install the pinned binary from https://github.com/kbukum/toven" >&2
-  echo "  (curl … scripts/install.sh | sh) or set TOVEN=<path> for the Make targets." >&2
+
+  # Explicit development override: accept whatever Toven is on PATH.
+  if [ "$TOVEN_ALLOW_ANY_VERSION" = "1" ]; then
+    if [ -n "$have" ]; then
+      echo "warning: using unpinned Toven $have (expected $want; TOVEN_ALLOW_ANY_VERSION=1)" >&2
+      return 0
+    fi
+    echo "error: TOVEN_ALLOW_ANY_VERSION=1 but no Toven found on PATH (looked for '$TOVEN_BIN')" >&2
+    return 1
+  fi
+
+  if [ "$CHECK_ONLY" -eq 1 ]; then
+    echo "error: Toven ${TOVEN_VERSION} required; found '${have:-none}' via '$TOVEN_BIN'." >&2
+    echo "  Install it (below) or set TOVEN_ALLOW_ANY_VERSION=1 to override for development." >&2
+    return 1
+  fi
+
+  # Install the pinned release. The installer is fetched at the pinned tag and
+  # verifies the download against its SHA-256 checksum (and the keyless Sigstore
+  # signature over SHA256SUMS when cosign is present) before trusting it.
+  echo "==> Installing Toven ${TOVEN_VERSION} (checksum-verified)..."
+  need_command curl
+  curl -fsSL "https://raw.githubusercontent.com/kbukum/toven/${TOVEN_VERSION}/scripts/install.sh" \
+    | sh -s -- --version "${TOVEN_VERSION}"
+
+  have="$(toven_installed_version)"
+  if [ "$have" = "$want" ]; then
+    echo "✓ $TOVEN_BIN $have"
+    return 0
+  fi
+  echo "error: installed Toven ${TOVEN_VERSION} but it is not on PATH (found '${have:-none}')." >&2
+  echo "  Add the installer's bin dir (default: \$HOME/.toven/bin) to PATH, or set TOVEN=<path>." >&2
   return 1
 }
 
