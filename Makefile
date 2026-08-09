@@ -267,11 +267,13 @@ release-readiness: check
 release-coverage:
 	$(call run_coverage_target,--mode release)
 
-## Phase 1 — bump: write per-crate manifest version bumps + dependency floors and
-## commit the release commit on a release branch, for a reviewed PR into main.
-## Never tags, pushes, or publishes; land it via pull request (`main` is protected).
+## Phase 1 — bump: write per-crate manifest version bumps + dependency floors into
+## the working tree, WITHOUT committing (`--no-commit`). Run it on a release branch
+## you created; you then commit and open the PR yourself. Toven never creates the
+## branch, the commit, or the PR, and never tags/pushes/publishes here.
+## Change-aware: only crates with releasable changes bump, plus the dependency cascade.
 release-bump:
-	@$(TOVEN) release bump --yes
+	@$(TOVEN) release bump --no-commit --yes
 
 ## Phase 2 — tag (run only after the release-bump PR merges into main): create and
 ## push the signed per-crate + umbrella tags on the merged commit. With

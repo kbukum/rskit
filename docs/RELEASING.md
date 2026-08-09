@@ -97,18 +97,19 @@ The release runs as three ordered phases. `main` is protected, so the version bu
 
 ### Phase 1 — Bump (reviewed PR into `main`)
 
-On a fresh release branch, rotate the CHANGELOG (step 2) and let Toven write the manifest bumps, then open a PR:
+**You** create the release branch, commit, and open the PR — Toven only computes and *writes* the version bumps into the working tree, it never creates the branch, the commit, or the PR:
 
 ```sh
-git switch -c release/vX.Y.Z
-# rotate CHANGELOG.md per step 2, then stage it:
-git add CHANGELOG.md
-make release-bump        # toven release bump: writes per-crate version bumps + floors, commits the release commit
+git switch -c release/vX.Y.Z         # you create the branch (clean tree)
+make release-bump                    # toven release bump --no-commit: writes per-crate version bumps + floors, NO commit
+# rotate CHANGELOG.md per step 2, then commit everything yourself:
+git add -A
+git commit -S -m "chore(release): vX.Y.Z"
 git push -u origin release/vX.Y.Z
-gh pr create --fill      # open the PR; CI runs on the bumped commit
+gh pr create --fill                  # open the PR; CI runs on the bumped commit
 ```
 
-`make release-bump` never tags, pushes tags, or publishes — it only writes the manifest/version mutation and the release commit. Review and merge the PR into `main` the normal way. The bumped versions are now on `main`, reviewed and CI-green.
+`make release-bump` uses `--no-commit`, so it only rewrites the manifest versions and dependency floors and leaves them in your working tree — no commit, no tag, no push, no publish. The bump is **change-aware**: only crates with releasable changes bump, plus the correct dependency cascade; untouched crates keep their version. Review and merge the PR into `main` the normal way. The bumped versions are now on `main`, reviewed and CI-green.
 
 ### Phase 2 — Tag (on the merged commit)
 

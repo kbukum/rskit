@@ -61,14 +61,16 @@ Toven writes the manifest bumps and refreshes caret floors during the bump phase
 
 `main` is protected, so the release runs as three ordered phases. Toven's `[ecosystems.rust.release]` sets `push_branch = false`, so the tag/publish phases push tags only — the version bump commit must land through a reviewed PR.
 
-**Phase 1 — Bump (reviewed PR).** On a release branch, rotate the CHANGELOG (Step 3), then let Toven write and commit the manifest bumps and open a PR:
+**Phase 1 — Bump (reviewed PR).** *You* create the release branch, commit, and open the PR; Toven only writes the version bumps into the working tree (`--no-commit`) — it never creates the branch, commit, or PR:
 
 ```bash
-git switch -c release/vX.Y.Z
-git add CHANGELOG.md
-make release-bump            # toven release bump: manifest bumps + floors + release commit (no tag/push/publish)
+git switch -c release/vX.Y.Z         # you create the branch (clean tree)
+make release-bump                    # toven release bump --no-commit: change-aware manifest bumps + floors, NO commit
+# rotate CHANGELOG (Step 3), then commit everything yourself:
+git add -A
+git commit -S -m "chore(release): vX.Y.Z"
 git push -u origin release/vX.Y.Z
-gh pr create --fill          # CI runs on the bumped commit; review + merge into main
+gh pr create --fill                  # CI runs on the bumped commit; review + merge into main
 ```
 
 **Phase 2 — Tag (after merge).** On merged `main`, clean tree:
