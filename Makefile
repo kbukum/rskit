@@ -254,7 +254,12 @@ release-status:
 
 ## Run the release-readiness supply-chain and API sweep
 ## Requires: cargo-deny, cargo-audit
+## Runs both preflights: the rskit-specific guardrail sweep (panic/unwrap,
+## unsafe-without-SAFETY, SHA-pinned Actions, required fuzz targets) via the
+## `readiness` command task, then Toven's native gate (clean tree, registry
+## idempotency).
 release-readiness: check
+	@$(TOVEN) run readiness
 	@$(TOVEN) release readiness
 
 ## Run release coverage gates (default per-package line coverage >=90%)

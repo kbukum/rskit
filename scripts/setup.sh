@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PYTHON_BIN="${PYTHON:-python3}"
+TOVEN_BIN="${TOVEN:-toven}"
 INSTALL_SYSTEM_TOOLS="${INSTALL_SYSTEM_TOOLS:-0}"
 INSTALL_RELEASE_TOOLS="${INSTALL_RELEASE_TOOLS:-0}"
 CHECK_ONLY=0
@@ -17,6 +18,7 @@ Installs or verifies local rskit development tooling:
   - pinned Rust toolchain, clippy, rustfmt, llvm-tools-preview
   - nightly rustdoc JSON toolchain for cargo-public-api
   - Cargo tools used by Make/release checks
+  - the pinned Toven binary that drives Make guardrail/structure and release tasks
 
 Options:
   --check-only  Verify tools without installing missing Cargo/Rust tools.
@@ -25,6 +27,7 @@ Options:
 
 Environment:
   PYTHON=<bin>                 Python binary to validate (default: python3)
+  TOVEN=<bin>                  Toven binary to verify (default: toven)
   INSTALL_SYSTEM_TOOLS=1       Same as --system
   INSTALL_RELEASE_TOOLS=1      Same as --release
   CARGO_PUBLIC_API_VERSION=... cargo-public-api version (default: 0.52.0)
@@ -166,10 +169,20 @@ check_system_tools() {
   command -v dot >/dev/null 2>&1 || echo "warning: dot (Graphviz) not found; release depgraphs need it" >&2
 }
 
-check_release_tools() {
-  if [ "$INSTALL_RELEASE_TOOLS" != "1" ]; then
+ensure_toven() {
+  echo "==> Checking Toven..."
+  if command -v "$TOVEN_BIN" >/dev/null 2>&1; then
+    echo "✓ $TOVEN_BIN ($("$TOVEN_BIN" --version 2>/dev/null || echo 'version unknown'))"
     return 0
   fi
+  echo "error: Toven not found on PATH (looked for '$TOVEN_BIN')." >&2
+  echo "  Toven drives 'make check' guardrail/structure tasks and the release." >&2
+  echo "  Install the pinned binary from https://github.com/kbukum/toven" >&2
+  echo "  (curl … scripts/install.sh | sh) or set TOVEN=<path> for the Make targets." >&2
+  return 1
+}
+
+check_release_tools() {
 
   echo "==> Checking release tools..."
   command -v gh >/dev/null 2>&1 || echo "warning: gh not found; install GitHub CLI for release asset operations" >&2
@@ -200,6 +213,7 @@ ensure_python
 load_rust_toolchain
 ensure_rust_toolchains
 ensure_cargo_tools
+ensure_toven
 "$PYTHON_BIN" "$ROOT/scripts/rskit_tool.py" self-test
 install_system_tools
 check_system_tools
