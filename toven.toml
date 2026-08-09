@@ -247,3 +247,4 @@ kind = "doc"
 argv = ["scripts/rskit_tool.py", "sync-readme-versions", "{args}"]
 cacheable = false
 fan_out = "whole-workspace"
+kind = "run"
