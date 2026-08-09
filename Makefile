@@ -280,11 +280,14 @@ release-bump:
 release-tag:
 	@$(TOVEN) release tag --yes
 
-## Dry-run the full release pipeline (commit, tag, publish) in dependency order (read-only)
+## Phase 3 (dry-run): rehearse the crates.io publication in dependency order — the
+## per-crate would-publish / already-published verdicts — without mutating anything.
 publish-dry-run:
 	@$(TOVEN) release publish --dry-run
 
-## Run the full release pipeline: commit, tag, push, and publish to crates.io idempotently
+## Phase 3 — publish: verify the tags pushed in phase 2, then publish each crate to
+## crates.io in dependency order (idempotent). Does not create commits or tags; CI
+## runs this against the checked-out release tag. Run after the release-tag phase.
 ## Requires: CARGO_REGISTRY_TOKEN
 release-publish:
 	@$(TOVEN) release publish --yes
@@ -429,7 +432,7 @@ help:
 	@echo "  make release-coverage                     Run per-package release coverage thresholds"
 	@echo "  make release-bump                         Phase 1: write manifest bumps + commit on a branch for a PR into main"
 	@echo "  make release-tag                          Phase 2 (after the bump PR merges): create + push signed tags on main"
-	@echo "  make publish-dry-run                      Dry-run the full release pipeline in dependency order"
+	@echo "  make publish-dry-run                      Rehearse the crates.io publication in dependency order (read-only)"
 	@echo "  make release-publish                      Publish crates to crates.io (idempotent, rate-aware)"
 	@echo "  make release-sbom                         Generate CycloneDX SBOMs"
 	@echo "  make depgraphs                            Regenerate docs dependency graphs (docs/depgraphs)"
