@@ -63,6 +63,16 @@ channels = ["alpha"]
 [modules."rust:rskit-suite".release]
 umbrella = true
 tag_format = "v{version}"
+# rskit's README install snippets pin crate versions in shapes Toven's native,
+# line-anchored `version_references` sync cannot rewrite — table-attribute pins
+# (`crate = { version = "x", features = [..] }`) and column-aligned whitespace.
+# The umbrella cascades on every release, so its bump `on_resolved` hook is the
+# one place the whole-tree README pin sync runs. Toven resolves every crate's
+# post-bump version, materializes the authoritative `key -> version` map to a
+# generated file outside the repo, and hands its path to this task argv-first
+# (spliced at `{args}`); the task rewrites the pins and the edits join the same
+# staged set as the manifests. A hook failure aborts the bump atomically.
+on_resolved = ["sync-readme-versions"]
 
 # The `examples/` demos (`agent-demo`, `core-cli`, `media-demo`) and the
 # `fuzz/` harness (`rskit-fuzz`) are `publish = false` in their manifests and
@@ -226,3 +236,14 @@ kind = "doc"
 argv = ["scripts/rskit_tool.py", "domains", "depgraphs", "{args}"]
 fan_out = "whole-workspace"
 kind = "doc"
+
+# `sync-readme-versions` is the bump `on_resolved` hook target (see the
+# `rust:rskit-suite` module block): during `toven release bump` Toven appends
+# the resolved `key -> version` map path at `{args}` and this task rewrites the
+# README install-snippet pins Toven's native `version_references` cannot express
+# (table-attribute and column-aligned pins), staging them with the manifests.
+# It mutates the working tree, so it is never cached.
+[ecosystems.command.tasks.sync-readme-versions]
+argv = ["scripts/rskit_tool.py", "sync-readme-versions", "{args}"]
+cacheable = false
+fan_out = "whole-workspace"

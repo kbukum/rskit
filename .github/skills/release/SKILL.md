@@ -61,17 +61,19 @@ Toven writes the manifest bumps and refreshes caret floors during the bump phase
 
 `main` is protected, so the release runs as three ordered phases. Toven's `[ecosystems.rust.release]` sets `push_branch = false`, so the tag/publish phases push tags only — the version bump commit must land through a reviewed PR.
 
-**Phase 1 — Bump (reviewed PR).** *You* create the release branch, commit, and open the PR; Toven only writes the version bumps into the working tree (`--no-commit`) — it never creates the branch, commit, or PR:
+**Phase 1 — Bump (reviewed PR).** *You* create the release branch, commit, and open the PR; Toven only stages the version bumps into the working tree (`toven release bump --yes` is stage-only — no commit) — it never creates the branch, commit, or PR:
 
 ```bash
 git switch -c release/vX.Y.Z         # you create the branch (clean tree)
-make release-bump                    # toven release bump --no-commit: change-aware manifest bumps + floors, NO commit
+make release-bump                    # toven release bump --yes: change-gated manifest bumps + floors + README pins, staged, NO commit
 # rotate CHANGELOG (Step 3), then commit everything yourself:
 git add -A
 git commit -S -m "chore(release): vX.Y.Z"
 git push -u origin release/vX.Y.Z
 gh pr create --fill                  # CI runs on the bumped commit; review + merge into main
 ```
+
+`release bump` is **stage-only by default** (`--yes` confirms the mutation; there is no `--no-commit` flag) and **change-gated**: only crates with a real diff since baseline bump, plus the dependency cascade. It also re-syncs the README install-snippet version pins via the umbrella's `on_resolved` hook (`scripts/rskit_tool.py sync-readme-versions`), staged with the manifests.
 
 **Phase 2 — Tag (after merge).** On merged `main`, clean tree:
 
