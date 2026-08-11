@@ -82,6 +82,29 @@ fn invalid_revisions_and_tree_paths_return_typed_errors() {
 }
 
 #[test]
+fn file_at_bounded_reads_within_limit_and_rejects_oversized_blobs() {
+    let repo = helpers::TestRepo::init();
+    let r = open(repo.path()).unwrap();
+    let content = r.file_at("HEAD", "README.md").unwrap();
+    let len = content.len() as u64;
+
+    // A limit at or above the blob size returns identical content to `file_at`.
+    assert_eq!(
+        r.file_at_bounded("HEAD", "README.md", len).unwrap(),
+        content
+    );
+    // A blob larger than the budget is a typed invalid-input error, not a
+    // materialized oversized object.
+    assert_invalid_input(r.file_at_bounded("HEAD", "README.md", len - 1), "README.md");
+    // Absent paths and unresolvable revisions keep `file_at`'s typed errors.
+    assert_invalid_input(r.file_at_bounded("HEAD", "missing.md", len), "missing.md");
+    assert_not_found(
+        r.file_at_bounded("missing-ref", "README.md", len),
+        "missing-ref",
+    );
+}
+
+#[test]
 fn diff_status_and_tree_entries_cover_deleted_conflicted_and_submodule_states() {
     let repo = helpers::TestRepo::init();
     repo.commit_file("deleted.txt", "gone\n", "add deleted file");

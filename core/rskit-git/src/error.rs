@@ -5,6 +5,22 @@ use std::path::PathBuf;
 
 use rskit_errors::{AppError, ErrorCode};
 
+/// Detail key marking a git error's classification.
+const RSKIT_GIT_ERROR: &str = "rskit_git_error";
+/// Detail value for a blob that exceeded a bounded-read budget.
+const FILE_TOO_LARGE: &str = "file_too_large";
+
+/// Return true when `error` was created by bounded git blob-read size
+/// enforcement (for example [`TreeReader::file_at_bounded`](crate::read::TreeReader::file_at_bounded)).
+#[must_use]
+pub fn is_file_too_large_error(error: &AppError) -> bool {
+    error
+        .details()
+        .get(RSKIT_GIT_ERROR)
+        .and_then(|value| value.as_str())
+        == Some(FILE_TOO_LARGE)
+}
+
 /// Git domain errors.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
@@ -197,6 +213,19 @@ pub enum GitError {
         operation: &'static str,
     },
 
+    /// A tree blob exceeds the caller's byte budget.
+    #[error("file {path} at {revision} is {size} bytes, exceeding the {max} byte limit")]
+    FileTooLarge {
+        /// Repository-relative path of the oversized blob.
+        path: String,
+        /// Revision the blob was read at.
+        revision: String,
+        /// Actual blob size in bytes.
+        size: u64,
+        /// Caller's byte budget.
+        max: u64,
+    },
+
     /// Internal git2 error.
     #[error(transparent)]
     Internal(#[from] git2::Error),
@@ -229,6 +258,16 @@ impl From<GitError> for AppError {
                 AppError::invalid_input("line range", format!("{start}..{end}"))
             }
             GitError::InvalidPath { path } => AppError::invalid_input("path", path),
+            GitError::FileTooLarge {
+                path,
+                revision,
+                size,
+                max,
+            } => AppError::invalid_input(
+                "path",
+                format!("file '{path}' at '{revision}' is {size} bytes, exceeding limit {max} bytes"),
+            )
+            .with_detail(RSKIT_GIT_ERROR, FILE_TOO_LARGE),
             GitError::InvalidConfigKey { key } => AppError::invalid_input("key", key),
             GitError::NoMergeBase { a, b } => {
                 AppError::not_found("merge base", Some(&format!("{a}..{b}")))

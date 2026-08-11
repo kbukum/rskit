@@ -139,6 +139,10 @@ impl TreeReader for Repo {
         self.embedded.file_at(revision, path)
     }
 
+    fn file_at_bounded(&self, revision: &str, path: &str, max_bytes: u64) -> AppResult<Vec<u8>> {
+        self.embedded.file_at_bounded(revision, path, max_bytes)
+    }
+
     fn list_entries(&self, revision: &str, path: &str) -> AppResult<Vec<TreeEntry>> {
         self.embedded.list_entries(revision, path)
     }

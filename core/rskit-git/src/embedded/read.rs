@@ -105,25 +105,28 @@ impl TreeReader for Git2Repository {
     }
 
     fn file_at(&self, revision: &str, path: &str) -> AppResult<Vec<u8>> {
-        let obj = self
-            .repo
-            .revparse_single(revision)
-            .map_err(|_| GitError::RefNotFound {
-                refname: revision.to_string(),
-            })?;
-        let commit = obj.peel_to_commit().map_err(|_| GitError::RefNotFound {
-            refname: revision.to_string(),
-        })?;
-        let tree = commit.tree().map_err(GitError::Internal)?;
-        let entry = tree
-            .get_path(Path::new(path))
-            .map_err(|_| GitError::InvalidPath {
+        let entry_id = self.blob_oid_at(revision, path)?;
+        let blob = self.repo.find_blob(entry_id).map_err(GitError::Internal)?;
+        Ok(blob.content().to_vec())
+    }
+
+    fn file_at_bounded(&self, revision: &str, path: &str, max_bytes: u64) -> AppResult<Vec<u8>> {
+        let entry_id = self.blob_oid_at(revision, path)?;
+        // Consult the object-database header for the blob's size before reading
+        // its content, so an oversized repository-controlled file is rejected
+        // rather than copied into memory during planning.
+        let odb = self.repo.odb().map_err(GitError::Internal)?;
+        let (size, _kind) = odb.read_header(entry_id).map_err(GitError::Internal)?;
+        if size as u64 > max_bytes {
+            return Err(GitError::FileTooLarge {
                 path: path.to_string(),
-            })?;
-        let blob = self
-            .repo
-            .find_blob(entry.id())
-            .map_err(GitError::Internal)?;
+                revision: revision.to_string(),
+                size: size as u64,
+                max: max_bytes,
+            }
+            .into());
+        }
+        let blob = self.repo.find_blob(entry_id).map_err(GitError::Internal)?;
         Ok(blob.content().to_vec())
     }
 
@@ -291,6 +294,20 @@ impl Git2Repository {
                 refname: revision.to_string(),
             })
             .map_err(Into::into)
+    }
+
+    /// Resolve the blob OID for `path` at `revision`, mapping a missing path to
+    /// [`GitError::InvalidPath`] and an unresolvable revision to
+    /// [`GitError::RefNotFound`].
+    fn blob_oid_at(&self, revision: &str, path: &str) -> AppResult<git2::Oid> {
+        let commit = self.resolve_commit(revision)?;
+        let tree = commit.tree().map_err(GitError::Internal)?;
+        let entry = tree
+            .get_path(Path::new(path))
+            .map_err(|_| GitError::InvalidPath {
+                path: path.to_string(),
+            })?;
+        Ok(entry.id())
     }
 
     fn resolve_tree<'repo>(
