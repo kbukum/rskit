@@ -42,6 +42,15 @@ pub trait TreeReader {
     /// Returns the content of a file at the given revision and path.
     fn file_at(&self, revision: &str, path: &str) -> AppResult<Vec<u8>>;
 
+    /// Returns the content of a file at the given revision and path, failing
+    /// when the blob exceeds `max_bytes` instead of materializing an unbounded
+    /// object.
+    ///
+    /// The blob size is checked against the object database header before the
+    /// content is read, so an oversized, repository-controlled file is rejected
+    /// without being copied into memory.
+    fn file_at_bounded(&self, revision: &str, path: &str, max_bytes: u64) -> AppResult<Vec<u8>>;
+
     /// Returns the entries in a tree at the given revision and path.
     fn list_entries(&self, revision: &str, path: &str) -> AppResult<Vec<TreeEntry>>;
 }

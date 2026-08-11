@@ -47,7 +47,7 @@ pub use auth::{
     StaticAuthProvider, TransportAuth,
 };
 pub use core::{Executor, Repository};
-pub use error::GitError;
+pub use error::{GitError, is_file_too_large_error};
 pub use manage::{ConfigReader, Maintainer, RefManager, RemoteManager};
 pub use options::*;
 pub use paths::{join_repo_path, repo_relative_path};

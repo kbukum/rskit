@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Add a bounded tree blob reader to `rskit-git`: `TreeReader::file_at_bounded(revision, path, max_bytes)` consults the object-database header for a blob's size before reading its content, so an oversized, repository-controlled file is rejected with the new typed `GitError::FileTooLarge` (an `InvalidInput` `AppError`) rather than being copied into memory. A companion `is_file_too_large_error` predicate lets callers classify the budget breach, and absent paths / unresolvable revisions keep `file_at`'s existing typed errors. This lets planning-time consumers read repository files under a hard byte budget.
 - Add `RefManager::create_signed_tag` to `rskit-git` for creating OpenPGP/SSH/X.509-signed **annotated** tags. Signing requires the git CLI backend (`git tag -s`, with optional `-c gpg.format=...` and `-c user.signingkey=...` overrides), so `Repo` routes it to the CLI runner while the libgit2 backend reports `GitError::SigningNotSupported`. The backend preflights that an effective signing key is available — an explicit non-blank key is trusted, otherwise configured `user.signingkey` is required — and returns the new `GitError::SigningKeyMissing`, an actionable, hinted configuration error, instead of surfacing a raw signer failure. This lets release tooling (Toven) create signed release tags through the canonical git owner rather than shelling out.
 
 ### Changed
