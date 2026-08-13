@@ -41,7 +41,7 @@ pub struct PersistentProcess {
     start: Instant,
     signal: LifecyclePolicy,
     registration: Option<RegistrationGuard>,
-    _supervisor: ProcessSupervisor,
+    _supervisor: Option<ProcessSupervisor>,
     shutdown_grace_period: Duration,
     stopped: bool,
 }
@@ -166,7 +166,7 @@ pub(in crate::persistent) struct SpawnedProcess {
     pub(in crate::persistent) stderr: Capture,
     pub(in crate::persistent) start: Instant,
     pub(in crate::persistent) registration: RegistrationGuard,
-    pub(in crate::persistent) supervisor: ProcessSupervisor,
+    pub(in crate::persistent) supervisor: Option<ProcessSupervisor>,
 }
 
 pub(in crate::persistent) fn new_process(

@@ -71,8 +71,7 @@ pub(super) async fn fan_out_shutdown(
             .map_err(AppError::internal)?;
         tasks.push(tokio::spawn(async move {
             let _permit = permit;
-            let terminated =
-                terminate_registered_pid(child.pid, child.process_group, policy).await;
+            let terminated = terminate_registered_pid(child.pid, child.process_group, policy).await;
             (child.pid, terminated)
         }));
     }

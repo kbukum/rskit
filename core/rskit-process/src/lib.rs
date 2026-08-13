@@ -67,7 +67,8 @@ pub use command::{
 pub use persistent::{
     PersistentConfig, PersistentOutput, PersistentOutputObserver, PersistentOutputStream,
     PersistentProcess, PersistentReadiness, PersistentRun, PersistentStartErrorKind,
-    PersistentStartup, ShutdownOutcome, persistent_start_error_kind, start_persistent_with_cancel,
+    PersistentStartup, ShutdownOutcome, persistent_start_error_kind, start_persistent_supervised,
+    start_persistent_with_cancel,
 };
 pub use process_group::{
     interrupt as interrupt_process_group, isolate as isolate_process_group,
@@ -77,12 +78,12 @@ pub use process_group::{
 #[cfg(unix)]
 pub use pty::{PtyIo, PtySize, terminal_size};
 pub use result::ProcessResult;
-pub use runner::{OutputObserver, run_with_cancel};
+pub use runner::{OutputObserver, run_with_cancel, run_with_cancel_supervised};
 pub use supervisor::{
     ProcessSupervisor, RegistrationGuard, ShutdownSubscription, SupervisedAsyncChild,
     SupervisedBlockingChild,
 };
-pub use sync::run;
+pub use sync::{run, run_supervised};
 
 /// Re-export error types
 pub use rskit_errors::{AppError, AppResult, ErrorCode};

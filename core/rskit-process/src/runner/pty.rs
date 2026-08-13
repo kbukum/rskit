@@ -25,6 +25,7 @@ use super::scope::ChildScope;
 use crate::capture::{append_line_bounded, shared_output};
 
 pub(in crate::runner) async fn run_pty_mode(
+    supervisor: &ProcessSupervisor,
     spec: &ProcessSpec,
     config: &ProcessConfig,
     cancel: CancellationToken,
@@ -72,7 +73,6 @@ pub(in crate::runner) async fn run_pty_mode(
     let child = cmd
         .spawn()
         .map_err(|error| spawn_error("failed to spawn process", error))?;
-    let supervisor = ProcessSupervisor::new(config.lifecycle);
     let registration = supervisor.register_pid(child.id().unwrap_or_default());
     // The child now holds its own dup'd stdio; the parent must not keep the slave open
     // or the master read would never observe EOF.
@@ -228,9 +228,11 @@ mod tests {
     fn pty_mode_rejects_invalid_program_input_and_signal_policy() {
         let runtime = tokio::runtime::Runtime::new().unwrap();
         runtime.block_on(async {
+            let supervisor = ProcessSupervisor::new(crate::LifecyclePolicy::default());
             let config = ProcessConfig::default();
             let io = PtyIo::default();
             let error = run_pty_mode(
+                &supervisor,
                 &ProcessSpec::new(""),
                 &config,
                 CancellationToken::new(),
@@ -241,6 +243,7 @@ mod tests {
             assert_eq!(error.code(), ErrorCode::InvalidInput);
 
             let error = run_pty_mode(
+                &supervisor,
                 &ProcessSpec::new("cat"),
                 &config,
                 CancellationToken::new(),
@@ -254,6 +257,7 @@ mod tests {
                 crate::LifecyclePolicy::default().with_isolate_process_group(false),
             );
             let error = run_pty_mode(
+                &supervisor,
                 &ProcessSpec::new("cat"),
                 &disabled_group,
                 CancellationToken::new(),

@@ -75,8 +75,13 @@ pub(crate) async fn terminate_and_wait_async(
                 signal = ProcessSignal::Kill.name(),
                 "grace period expired, sending signal"
             );
-            escalate_after_grace(child, pid, policy, &format!("grace period expired after {reason}"))
-                .await
+            escalate_after_grace(
+                child,
+                pid,
+                policy,
+                &format!("grace period expired after {reason}"),
+            )
+            .await
         }
     }
 }
@@ -94,10 +99,7 @@ async fn escalate_after_grace(
     context: &str,
 ) -> (Option<i32>, Option<String>) {
     if !policy.kill_after_grace {
-        return (
-            None,
-            Some(format!("{context}; kill escalation disabled")),
-        );
+        return (None, Some(format!("{context}; kill escalation disabled")));
     }
     if !pid.is_some_and(|pid| kill_target(pid, policy.targets_group())) {
         let _ = child.start_kill();

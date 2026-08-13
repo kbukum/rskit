@@ -111,10 +111,7 @@ impl ProcessSupervisor {
     ///
     /// Returns an error if called outside a Tokio runtime, since the watcher runs as a spawned
     /// task; this keeps a synchronous, blocking-child-capable supervisor from panicking.
-    pub fn subscribe_shutdown(
-        &self,
-        token: CancellationToken,
-    ) -> AppResult<ShutdownSubscription> {
+    pub fn subscribe_shutdown(&self, token: CancellationToken) -> AppResult<ShutdownSubscription> {
         tokio::runtime::Handle::try_current().map_err(|error| {
             AppError::new(
                 ErrorCode::Internal,

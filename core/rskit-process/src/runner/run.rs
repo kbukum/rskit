@@ -23,23 +23,56 @@ use super::scope::ChildScope;
 use super::spawn::{PipeStdio, configure_command};
 
 /// Execute a subprocess with the given configuration and cancellation token.
+///
+/// Spawns through a throwaway per-call [`ProcessSupervisor`], so the child is
+/// reaped on completion, timeout, cancellation, and future drop but is not
+/// visible to any process-level shutdown backstop. Callers that want a shared
+/// supervisor to reap the child on process shutdown use
+/// [`run_with_cancel_supervised`].
 pub async fn run_with_cancel(
     spec: &ProcessSpec,
     config: &ProcessConfig,
     cancel: CancellationToken,
 ) -> AppResult<ProcessResult> {
+    let supervisor = ProcessSupervisor::new(config.lifecycle);
+    run_with_cancel_supervised(&supervisor, spec, config, cancel).await
+}
+
+/// Execute a subprocess, registering the spawned child with `supervisor`.
+///
+/// Identical to [`run_with_cancel`] except the injected `supervisor` owns the
+/// registration: the child is tracked in the supervisor's shared registry for
+/// the duration of the run, so a process-level [`ProcessSupervisor::shutdown`]
+/// (or a shutdown-handle subscription) reaps its group even when no run future
+/// observes the signal. Normal completion still unregisters the child through
+/// its guard, so a later backstop over it is a clean no-op.
+pub async fn run_with_cancel_supervised(
+    supervisor: &ProcessSupervisor,
+    spec: &ProcessSpec,
+    config: &ProcessConfig,
+    cancel: CancellationToken,
+) -> AppResult<ProcessResult> {
     match &config.io {
-        ProcessIo::Captured(io) => run_pipe_mode(spec, config, cancel, io, None).await,
+        ProcessIo::Captured(io) => run_pipe_mode(supervisor, spec, config, cancel, io, None).await,
         ProcessIo::Observed(io) => {
-            run_pipe_mode(spec, config, cancel, io, Some(io.observer.clone())).await
+            run_pipe_mode(
+                supervisor,
+                spec,
+                config,
+                cancel,
+                io,
+                Some(io.observer.clone()),
+            )
+            .await
         }
-        ProcessIo::Inherited(io) => run_inherited_mode(spec, config, cancel, io).await,
+        ProcessIo::Inherited(io) => run_inherited_mode(supervisor, spec, config, cancel, io).await,
         #[cfg(unix)]
-        ProcessIo::Pty(io) => run_pty_mode(spec, config, cancel, io).await,
+        ProcessIo::Pty(io) => run_pty_mode(supervisor, spec, config, cancel, io).await,
     }
 }
 
 async fn run_pipe_mode(
+    supervisor: &ProcessSupervisor,
     spec: &ProcessSpec,
     config: &ProcessConfig,
     cancel: CancellationToken,
@@ -79,18 +112,22 @@ async fn run_pipe_mode(
     };
 
     run_process(
+        supervisor,
         spec,
         config,
         cancel,
-        stdio,
-        io.input(),
-        Some(output),
-        observer,
+        RunIo {
+            stdio,
+            input: io.input(),
+            output: Some(output),
+            observer,
+        },
     )
     .await
 }
 
 async fn run_inherited_mode(
+    supervisor: &ProcessSupervisor,
     spec: &ProcessSpec,
     config: &ProcessConfig,
     cancel: CancellationToken,
@@ -103,26 +140,44 @@ async fn run_inherited_mode(
         stderr: Stdio::inherit(),
     };
     run_process(
+        supervisor,
         spec,
         &inherited_config,
         cancel,
-        stdio,
-        &io.input,
-        None,
-        None,
+        RunIo {
+            stdio,
+            input: &io.input,
+            output: None,
+            observer: None,
+        },
     )
     .await
 }
 
+/// The stdio wiring, input/output policy, and observer for one run.
+///
+/// Grouped so [`run_process`] takes the spawn request (supervisor, spec, config,
+/// cancel) plus this single IO value rather than a long positional list.
+struct RunIo<'a> {
+    stdio: PipeStdio,
+    input: &'a InputPolicy,
+    output: Option<&'a OutputPolicy>,
+    observer: Option<OutputObserver>,
+}
+
 async fn run_process(
+    supervisor: &ProcessSupervisor,
     spec: &ProcessSpec,
     config: &ProcessConfig,
     cancel: CancellationToken,
-    stdio: PipeStdio,
-    input: &InputPolicy,
-    output: Option<&OutputPolicy>,
-    observer: Option<OutputObserver>,
+    io: RunIo<'_>,
 ) -> AppResult<ProcessResult> {
+    let RunIo {
+        stdio,
+        input,
+        output,
+        observer,
+    } = io;
     if spec.program.as_os_str().is_empty() {
         return Err(AppError::invalid_input("program", "must not be empty"));
     }
@@ -145,7 +200,6 @@ async fn run_process(
     configure_command(&mut cmd, spec, config, stdio);
 
     debug!(program = %spec.program.display(), args = ?RedactedArgs::new(&spec.args, &config.arg_redaction), "spawning process");
-    let supervisor = ProcessSupervisor::new(config.lifecycle);
     let mut child = cmd
         .spawn()
         .map_err(|error| spawn_error("failed to spawn process", error))?;

@@ -12,4 +12,4 @@ mod scope;
 mod spawn;
 
 pub use observer::{OutputBytesCallback, OutputObserver};
-pub use run::run_with_cancel;
+pub use run::{run_with_cancel, run_with_cancel_supervised};

@@ -18,13 +18,34 @@ use crate::{
 const POLL_INTERVAL: Duration = Duration::from_millis(10);
 
 /// Execute a subprocess on the current thread using captured or inherited I/O mode.
+///
+/// Spawns through a throwaway per-call [`ProcessSupervisor`]. Callers that want
+/// a shared supervisor to reap the child on process shutdown use
+/// [`run_supervised`].
 pub fn run(spec: &ProcessSpec, config: &ProcessConfig) -> AppResult<ProcessResult> {
+    let supervisor = ProcessSupervisor::new(config.lifecycle);
+    run_supervised(&supervisor, spec, config)
+}
+
+/// Execute a subprocess on the current thread, registering the spawned child
+/// with `supervisor`.
+///
+/// Identical to [`run`] except the injected `supervisor` owns the registration,
+/// so a process-level [`ProcessSupervisor::shutdown`] reaps the child even while
+/// this blocking call is still waiting on it. Normal completion unregisters the
+/// child through its guard.
+pub fn run_supervised(
+    supervisor: &ProcessSupervisor,
+    spec: &ProcessSpec,
+    config: &ProcessConfig,
+) -> AppResult<ProcessResult> {
     if spec.program.as_os_str().is_empty() {
         return Err(AppError::invalid_input("program", "must not be empty"));
     }
 
     match &config.io {
         ProcessIo::Captured(io) => run_blocking(
+            supervisor,
             spec,
             config,
             &io.input,
@@ -32,6 +53,7 @@ pub fn run(spec: &ProcessSpec, config: &ProcessConfig) -> AppResult<ProcessResul
             pipe_stdin_stdio(&io.input)?,
         ),
         ProcessIo::Inherited(io) => run_blocking(
+            supervisor,
             spec,
             &inherited_config(config),
             &io.input,
@@ -51,6 +73,7 @@ pub fn run(spec: &ProcessSpec, config: &ProcessConfig) -> AppResult<ProcessResul
 }
 
 fn run_blocking(
+    supervisor: &ProcessSupervisor,
     spec: &ProcessSpec,
     config: &ProcessConfig,
     input: &InputPolicy,
@@ -82,7 +105,6 @@ fn run_blocking(
     let mut child = cmd
         .spawn()
         .map_err(|error| spawn_error("failed to spawn process", error))?;
-    let supervisor = ProcessSupervisor::new(config.lifecycle);
     let registration = supervisor.register_pid(child.id());
 
     let max_output_bytes = output.and_then(|output| output.max_output_bytes);

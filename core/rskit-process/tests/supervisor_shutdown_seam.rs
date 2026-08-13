@@ -91,7 +91,9 @@ async fn tripping_shutdown_handle_reaps_all_registered_groups_without_run_future
     assert_eq!(supervisor.registry_len(), 3);
 
     let token = CancellationToken::new();
-    let _subscription = supervisor.subscribe_shutdown(token.clone()).expect("subscribe within runtime");
+    let _subscription = supervisor
+        .subscribe_shutdown(token.clone())
+        .expect("subscribe within runtime");
     token.cancel();
 
     for pid in grandchildren {
@@ -124,7 +126,9 @@ async fn cooperative_teardown_before_backstop_leaves_a_clean_no_op() {
 
     // The backstop over an already-reaped registry is a clean no-op: no error, no double-kill.
     let token = CancellationToken::new();
-    let _subscription = supervisor.subscribe_shutdown(token.clone()).expect("subscribe within runtime");
+    let _subscription = supervisor
+        .subscribe_shutdown(token.clone())
+        .expect("subscribe within runtime");
     token.cancel();
     supervisor
         .shutdown("post-cooperative backstop")
@@ -153,7 +157,9 @@ async fn concurrent_cancel_and_fan_out_complete_within_a_bounded_budget() {
     wait_for_files(&pid_files).await;
 
     let token = CancellationToken::new();
-    let _subscription = supervisor.subscribe_shutdown(token.clone()).expect("subscribe within runtime");
+    let _subscription = supervisor
+        .subscribe_shutdown(token.clone())
+        .expect("subscribe within runtime");
 
     let started = Instant::now();
     // First-signal cancel drives the backstop; both must settle inside the budget.

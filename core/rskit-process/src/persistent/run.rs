@@ -23,11 +23,49 @@ use super::readiness::{
 use super::types::{PersistentRun, PersistentStartup};
 
 /// Start a persistent process and wait for its readiness policy.
+///
+/// Spawns through a throwaway per-call [`ProcessSupervisor`] that the returned
+/// process owns for its lifetime, so drop reaps the child. Callers that want a
+/// shared supervisor to reap the process on shutdown use
+/// [`start_persistent_supervised`].
 pub fn start_persistent_with_cancel(
     spec: &ProcessSpec,
     process_config: &ProcessConfig,
     persistent_config: &PersistentConfig,
     cancel: CancellationToken,
+) -> AppResult<PersistentRun> {
+    start_persistent_impl(spec, process_config, persistent_config, cancel, None)
+}
+
+/// Start a persistent process, registering it with the injected `supervisor`.
+///
+/// Identical to [`start_persistent_with_cancel`] except the shared `supervisor`
+/// owns the registration, so a process-level [`ProcessSupervisor::shutdown`]
+/// reaps the persistent group even while it is still running. The returned
+/// process holds no supervisor of its own; its registration guard unregisters on
+/// shutdown, so a backstop over an already-stopped process is a clean no-op.
+pub fn start_persistent_supervised(
+    supervisor: &ProcessSupervisor,
+    spec: &ProcessSpec,
+    process_config: &ProcessConfig,
+    persistent_config: &PersistentConfig,
+    cancel: CancellationToken,
+) -> AppResult<PersistentRun> {
+    start_persistent_impl(
+        spec,
+        process_config,
+        persistent_config,
+        cancel,
+        Some(supervisor),
+    )
+}
+
+fn start_persistent_impl(
+    spec: &ProcessSpec,
+    process_config: &ProcessConfig,
+    persistent_config: &PersistentConfig,
+    cancel: CancellationToken,
+    injected: Option<&ProcessSupervisor>,
 ) -> AppResult<PersistentRun> {
     if spec.program.as_os_str().is_empty() {
         return Err(AppError::invalid_input("program", "must not be empty"));
@@ -39,9 +77,18 @@ pub fn start_persistent_with_cancel(
 
     let start = Instant::now();
     let input = process_input(process_config)?;
-    let supervisor = ProcessSupervisor::new(process_config.lifecycle);
     let mut child = spawn_child(spec, process_config, input)?;
-    let registration = supervisor.register_pid(child.id());
+    // An injected supervisor owns the registration (shared registry, reaped by a
+    // process-level shutdown). Otherwise the process owns a local supervisor for
+    // its lifetime so drop reaps the child.
+    let (supervisor, registration) = match injected {
+        Some(supervisor) => (None, supervisor.register_pid(child.id())),
+        None => {
+            let local = ProcessSupervisor::new(process_config.lifecycle);
+            let registration = local.register_pid(child.id());
+            (Some(local), registration)
+        }
+    };
     let stdout = new_capture();
     let stderr = new_capture();
     let cancelled = Arc::new(AtomicBool::new(false));

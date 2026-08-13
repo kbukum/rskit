@@ -75,7 +75,9 @@ async fn child_wedged_backstop() {
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null());
     let _child = supervisor.spawn_async(&mut command).expect("child spawns");
-    let _subscription = supervisor.subscribe_shutdown(controller.token()).expect("subscribe within runtime");
+    let _subscription = supervisor
+        .subscribe_shutdown(controller.token())
+        .expect("subscribe within runtime");
 
     emit(CHILD_READY);
     controller.token().cancelled().await;
