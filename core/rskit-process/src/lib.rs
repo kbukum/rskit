@@ -8,7 +8,7 @@
 //! - Environment variable control
 //! - Working directory configuration
 //!
-//! Isolated spawns set `kill_on_drop(true)` for Tokio children. On Linux they also request `PR_SET_PDEATHSIG=SIGKILL` in the pre-exec child so a hard parent death kills the child group. Other platforms cannot provide that parent-death hard-kill guarantee; they still perform best-effort cleanup for graceful shutdown and Rust-side drops.
+//! Isolated spawns place the child in its own process group and set `kill_on_drop(true)` for Tokio children, so a dropped child handle tears the group down. Cleanup on a hard parent death (for example `SIGKILL` of the parent, which runs no destructors) is best-effort and not guaranteed on any platform; supervise long-lived children explicitly through [`ProcessSupervisor`] rather than relying on kernel parent-death signalling.
 //!
 //! # I/O modes
 //!
@@ -79,8 +79,8 @@ pub use pty::{PtyIo, PtySize, terminal_size};
 pub use result::ProcessResult;
 pub use runner::{OutputObserver, run_with_cancel};
 pub use supervisor::{
-    ProcessSupervisor, RegistrationGuard, ShutdownReason, ShutdownSubscription,
-    SupervisedAsyncChild, SupervisedBlockingChild,
+    ProcessSupervisor, RegistrationGuard, ShutdownSubscription, SupervisedAsyncChild,
+    SupervisedBlockingChild,
 };
 pub use sync::run;
 

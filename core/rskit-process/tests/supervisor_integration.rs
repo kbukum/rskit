@@ -1,13 +1,12 @@
 #![allow(missing_docs)]
 
+use std::path::Path;
 use std::time::Duration;
 
 use rskit_process::{
     LifecyclePolicy, ProcessConfig, ProcessSpec, ProcessSupervisor, run_with_cancel,
 };
 use rskit_testutil::TestWorkspace;
-#[cfg(target_os = "linux")]
-use tokio::io::AsyncReadExt;
 use tokio_util::sync::CancellationToken;
 
 #[cfg(unix)]
@@ -17,6 +16,36 @@ fn pid_exists(pid: u32) -> bool {
     };
     // SAFETY: signal 0 performs an existence check without delivering a signal.
     unsafe { libc::kill(pid, 0) == 0 }
+}
+
+/// Read a pid a child writes to `path`, tolerating the window between file
+/// creation (`>` truncates first) and the pid being written.
+#[cfg(unix)]
+fn read_pid(path: &Path) -> u32 {
+    for _ in 0..500 {
+        if let Ok(text) = std::fs::read_to_string(path)
+            && let Ok(pid) = text.trim().parse::<u32>()
+        {
+            return pid;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    panic!("pid file never became a valid pid: {}", path.display());
+}
+
+/// Async variant of [`read_pid`] that yields to the runtime while waiting, so a
+/// child spawned on the same current-thread runtime can make progress.
+#[cfg(unix)]
+async fn read_pid_async(path: &Path) -> u32 {
+    for _ in 0..500 {
+        if let Ok(text) = std::fs::read_to_string(path)
+            && let Ok(pid) = text.trim().parse::<u32>()
+        {
+            return pid;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("pid file never became a valid pid: {}", path.display());
 }
 
 #[tokio::test]
@@ -30,7 +59,7 @@ async fn graceful_signal_reaps_child_and_grandchild_group() {
     let command = ProcessSpec::new("/bin/sh").args([
         "-c",
         &format!(
-            "printf %s \"$$\" > '{}'; (printf %s \"$!\" > '{}'; sleep 30) & wait",
+            "printf %s \"$$\" > '{}'; sleep 30 >/dev/null 2>&1 & printf %s \"$!\" > '{}'; wait",
             child_pid_file.display(),
             grandchild_pid_file.display()
         ),
@@ -45,16 +74,8 @@ async fn graceful_signal_reaps_child_and_grandchild_group() {
         .await
         .expect("run completes");
 
-    let child_pid: u32 = std::fs::read_to_string(child_pid_file)
-        .expect("child pid")
-        .trim()
-        .parse()
-        .expect("numeric child pid");
-    let grandchild_pid: u32 = std::fs::read_to_string(grandchild_pid_file)
-        .expect("grandchild pid")
-        .trim()
-        .parse()
-        .expect("numeric grandchild pid");
+    let child_pid = read_pid(&child_pid_file);
+    let grandchild_pid = read_pid(&grandchild_pid_file);
     assert!(result.timed_out);
     assert!(!pid_exists(child_pid));
     assert!(!pid_exists(grandchild_pid));
@@ -96,14 +117,7 @@ async fn dropping_run_future_mid_flight_reaps_child_group() {
         let _ = run_with_cancel(&command, &config, CancellationToken::new()).await;
     });
 
-    while !pid_file.exists() {
-        tokio::task::yield_now().await;
-    }
-    let pid: u32 = std::fs::read_to_string(pid_file)
-        .expect("pid")
-        .trim()
-        .parse()
-        .expect("numeric pid");
+    let pid = read_pid_async(&pid_file).await;
     handle.abort();
     let _ = handle.await;
     for _ in 0..50 {
@@ -147,11 +161,7 @@ fn panic_while_child_is_live_reaps_via_supervisor_drop() {
         panic!("force unwind");
     });
     assert!(result.is_err());
-    let pid: u32 = std::fs::read_to_string(pid_file)
-        .expect("pid")
-        .trim()
-        .parse()
-        .expect("numeric pid");
+    let pid = read_pid(&pid_file);
     assert!(!pid_exists(pid));
 }
 
@@ -186,58 +196,6 @@ async fn shutdown_reaps_all_tracked_groups_concurrently() {
 }
 
 #[tokio::test]
-#[cfg(target_os = "linux")]
-async fn linux_parent_death_sigkills_isolated_child() {
-    let mut parent = tokio::process::Command::new(std::env::current_exe().expect("current exe"));
-    parent
-        .args([
-            "--exact",
-            "linux_parent_death_helper",
-            "--nocapture",
-            "--test-threads=1",
-        ])
-        .env("RSKIT_PDEATH_HELPER", "1")
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null());
-    let mut child = parent.spawn().expect("parent spawns");
-    let mut stdout = child.stdout.take().expect("stdout");
-    let mut bytes = Vec::new();
-    stdout.read_to_end(&mut bytes).await.expect("read pid");
-    let status = child.wait().await.expect("parent exits");
-    assert!(status.success());
-    let pid: u32 = String::from_utf8(bytes)
-        .expect("utf8")
-        .trim()
-        .parse()
-        .expect("numeric pid");
-    for _ in 0..50 {
-        if !pid_exists(pid) {
-            return;
-        }
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
-    assert!(!pid_exists(pid), "parent death should SIGKILL the child");
-}
-
-#[test]
-#[cfg(target_os = "linux")]
-fn linux_parent_death_helper() {
-    if std::env::var_os("RSKIT_PDEATH_HELPER").is_none() {
-        return;
-    }
-    let mut command = std::process::Command::new("/bin/sleep");
-    command
-        .arg("30")
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null());
-    rskit_process::isolate_process_group(&mut command);
-    let child = command.spawn().expect("child spawns");
-    println!("{}", child.id());
-    std::mem::forget(child);
-}
-
-#[tokio::test]
 #[cfg(unix)]
 async fn lifecycle_policy_isolation_changes_descendant_cleanup_behavior() {
     let workspace = TestWorkspace::new("supervisor-policy");
@@ -245,7 +203,7 @@ async fn lifecycle_policy_isolation_changes_descendant_cleanup_behavior() {
     let command = ProcessSpec::new("/bin/sh").args([
         "-c",
         &format!(
-            "(printf %s \"$!\" > '{}'; sleep 30) & exit 0",
+            "sleep 30 >/dev/null 2>&1 & printf %s \"$!\" > '{}'; exit 0",
             kept_pid_file.display()
         ),
     ]);
@@ -260,11 +218,7 @@ async fn lifecycle_policy_isolation_changes_descendant_cleanup_behavior() {
         .await
         .expect("run succeeds");
     assert!(result.success());
-    let pid: u32 = std::fs::read_to_string(kept_pid_file)
-        .expect("pid")
-        .trim()
-        .parse()
-        .expect("numeric pid");
+    let pid = read_pid(&kept_pid_file);
     assert!(pid_exists(pid));
     // SAFETY: the test intentionally cleans up the process that the non-descendant policy left alive.
     unsafe {

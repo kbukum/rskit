@@ -111,3 +111,38 @@ async fn await_escalation(
 fn force_exit(exit_code: NonZeroI32) -> ! {
     std::process::exit(exit_code.get());
 }
+
+/// Install a first-Ctrl+C handler and return the cooperative cancellation token.
+///
+/// A convenience wrapper over [`ShutdownController`] for the common single-signal case. Must be
+/// called from within a Tokio runtime: a background task awaits the interrupt signal and cancels
+/// the returned token on the first Ctrl+C. Clone the token and hand it to spawned tasks, an
+/// `rskit-worker` handler, or an `rskit-process` call; holders observe `is_cancelled()` /
+/// `cancelled()` and wind down gracefully. For drain deadlines, second-signal force-exit, or a
+/// custom signal set, install a [`ShutdownController`] directly.
+#[must_use]
+pub fn on_ctrl_c() -> CancellationToken {
+    let token = CancellationToken::new();
+    let child = token.clone();
+    tokio::spawn(async move {
+        if tokio::signal::ctrl_c().await.is_ok() {
+            child.cancel();
+        }
+    });
+    token
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn on_ctrl_c_returns_a_live_uncancelled_token() {
+        let token = on_ctrl_c();
+        assert!(!token.is_cancelled());
+        // Local cancellation still works; the interrupt handler is just one source.
+        token.cancel();
+        token.cancelled().await;
+        assert!(token.is_cancelled());
+    }
+}

@@ -9,6 +9,6 @@ mod unix;
 #[cfg(windows)]
 mod windows;
 
-pub use controller::ShutdownController;
+pub use controller::{ShutdownController, on_ctrl_c};
 pub use policy::{ShutdownPolicy, ShutdownSignal};
 pub use tokio_util::sync::CancellationToken;

@@ -10,29 +10,13 @@ use super::registry::{LiveChildRegistry, RegistrationGuard};
 use super::shutdown::{ShutdownSubscription, fan_out_shutdown, subscribe};
 use crate::command::LifecyclePolicy;
 use crate::process_group::{isolate, isolate_async, kill_target};
-use crate::{AppResult, command::spawn_error};
+use crate::{AppError, AppResult, ErrorCode, command::spawn_error};
 use tokio_util::sync::CancellationToken;
-
-/// Reason supplied to a supervisor shutdown request.
-#[derive(Debug, Clone, Eq, PartialEq)]
-#[non_exhaustive]
-pub struct ShutdownReason {
-    message: String,
-}
-
-impl ShutdownReason {
-    /// Create a shutdown reason from caller-facing text.
-    #[must_use]
-    pub fn new(message: impl Into<String>) -> Self {
-        Self {
-            message: message.into(),
-        }
-    }
-}
+use tracing::debug;
 
 /// Owns spawned-child lifetime for one caller scope.
 ///
-/// A supervisor registers each spawned child by process-group id (or child pid when isolation is disabled), can fan out graceful shutdown to every registered target, and best-effort kills any remaining targets on drop. Normal run paths unregister on reap through the returned registration guard; double cleanup is safe.
+/// A supervisor registers each spawned child by process-group id (or child pid when isolation is disabled). The child-owning wrapper it returns ([`SupervisedBlockingChild`] / [`SupervisedAsyncChild`]) is what best-effort kills its child on drop — including on panic unwinding — so lifetime is guaranteed as long as the wrapper is held. The supervisor's own [`Drop`] is a backstop that kills any target still registered when the supervisor itself is dropped (for example externally [`track_pid`](Self::track_pid)-ed pids). Normal run paths unregister on reap through the returned registration guard; double cleanup is safe.
 #[derive(Debug)]
 pub struct ProcessSupervisor {
     registry: Arc<LiveChildRegistry>,
@@ -90,7 +74,8 @@ impl ProcessSupervisor {
     ///
     /// Shutdown fans out with bounded concurrency, sends graceful termination, waits the policy grace period, escalates to `SIGKILL` when enabled, and unregisters the target. Runners that own child handles still perform the actual wait/reap on their normal paths.
     pub async fn shutdown(&self, reason: impl Into<String>) -> AppResult<()> {
-        let _reason = ShutdownReason::new(reason);
+        let reason = reason.into();
+        debug!(reason = %reason, "supervisor shutdown requested");
         fan_out_shutdown(&self.registry, self.lifecycle).await
     }
 
@@ -121,9 +106,23 @@ impl ProcessSupervisor {
     ///
     /// The returned [`ShutdownSubscription`] owns the watcher task; dropping it stops watching
     /// without disturbing any reaping already in progress.
-    #[must_use]
-    pub fn subscribe_shutdown(&self, token: CancellationToken) -> ShutdownSubscription {
-        subscribe(Arc::clone(&self.registry), self.lifecycle, token)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if called outside a Tokio runtime, since the watcher runs as a spawned
+    /// task; this keeps a synchronous, blocking-child-capable supervisor from panicking.
+    pub fn subscribe_shutdown(
+        &self,
+        token: CancellationToken,
+    ) -> AppResult<ShutdownSubscription> {
+        tokio::runtime::Handle::try_current().map_err(|error| {
+            AppError::new(
+                ErrorCode::Internal,
+                "subscribe_shutdown must be called from within a Tokio runtime",
+            )
+            .with_cause(error)
+        })?;
+        Ok(subscribe(Arc::clone(&self.registry), self.lifecycle, token))
     }
 
     /// Register an externally spawned pid under this supervisor.

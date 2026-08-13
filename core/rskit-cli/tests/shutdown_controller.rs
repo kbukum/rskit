@@ -1,17 +1,29 @@
 #![allow(missing_docs)]
 
+use rskit_cli::{ShutdownController, ShutdownPolicy};
+
+#[cfg(unix)]
 use std::io::{BufRead, BufReader, Write};
+#[cfg(unix)]
 use std::num::NonZeroI32;
+#[cfg(unix)]
 use std::process::{Command, ExitStatus, Stdio};
+#[cfg(unix)]
 use std::time::Duration;
 
-use rskit_cli::{ShutdownController, ShutdownPolicy, ShutdownSignal};
+#[cfg(unix)]
+use rskit_cli::ShutdownSignal;
+#[cfg(unix)]
 use rskit_errors::ErrorCode;
 
 const CHILD_MODE: &str = "RSKIT_CLI_SHUTDOWN_CHILD";
+#[cfg(unix)]
 const SIGNAL_NAME: &str = "RSKIT_CLI_SHUTDOWN_SIGNAL";
+#[cfg(unix)]
 const CHILD_READY: &str = "ready";
+#[cfg(unix)]
 const CHILD_CANCELLED: &str = "cancelled";
+#[cfg(unix)]
 const EXIT_CODE: i32 = 77;
 
 #[cfg(unix)]
@@ -94,18 +106,25 @@ fn shutdown_harness_entrypoint() {
         return;
     };
 
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .expect("test runtime");
-    runtime.block_on(async move {
-        match mode.as_str() {
-            "first-signal" => child_first_signal().await,
-            "second-signal" => child_second_signal().await,
-            "drain-deadline" => child_drain_deadline().await,
-            other => panic!("unknown child mode: {other}"),
-        }
-    });
+    #[cfg(unix)]
+    {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("test runtime");
+        runtime.block_on(async move {
+            match mode.as_str() {
+                "first-signal" => child_first_signal().await,
+                "second-signal" => child_second_signal().await,
+                "drain-deadline" => child_drain_deadline().await,
+                other => panic!("unknown child mode: {other}"),
+            }
+        });
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = mode;
+    }
 }
 
 #[cfg(unix)]
@@ -120,6 +139,7 @@ fn assert_first_signal_cancels(signal_name: &str) {
     assert!(child.wait().expect("child wait").success());
 }
 
+#[cfg(unix)]
 fn child_signal() -> ShutdownSignal {
     match std::env::var(SIGNAL_NAME).expect("signal env").as_str() {
         "sigint" => ShutdownSignal::interrupt(),
@@ -129,6 +149,7 @@ fn child_signal() -> ShutdownSignal {
     }
 }
 
+#[cfg(unix)]
 async fn child_first_signal() {
     let controller =
         ShutdownController::install(ShutdownPolicy::default().with_signals([child_signal()]))
@@ -140,6 +161,7 @@ async fn child_first_signal() {
     child_emit(CHILD_CANCELLED);
 }
 
+#[cfg(unix)]
 async fn child_second_signal() {
     let controller = ShutdownController::install(
         ShutdownPolicy::default()
@@ -155,6 +177,7 @@ async fn child_second_signal() {
     std::future::pending::<()>().await;
 }
 
+#[cfg(unix)]
 async fn child_drain_deadline() {
     tokio::time::pause();
     let controller = ShutdownController::install(
@@ -173,6 +196,7 @@ async fn child_drain_deadline() {
     std::future::pending::<()>().await;
 }
 
+#[cfg(unix)]
 fn spawn_child(mode: &str, signal_name: Option<&str>) -> std::process::Child {
     let mut command = Command::new(std::env::current_exe().expect("current test executable"));
     command
@@ -188,18 +212,22 @@ fn spawn_child(mode: &str, signal_name: Option<&str>) -> std::process::Child {
     command.spawn().expect("spawn shutdown harness")
 }
 
+#[cfg(unix)]
 fn child_stdout(child: &mut std::process::Child) -> BufReader<std::process::ChildStdout> {
     BufReader::new(child.stdout.take().expect("child stdout"))
 }
 
+#[cfg(unix)]
 fn assert_ready(stdout: &mut impl BufRead) {
     assert_child_line(stdout, CHILD_READY);
 }
 
+#[cfg(unix)]
 fn assert_cancelled(stdout: &mut impl BufRead) {
     assert_child_line(stdout, CHILD_CANCELLED);
 }
 
+#[cfg(unix)]
 fn assert_child_line(stdout: &mut impl BufRead, expected: &str) {
     loop {
         let mut line = String::new();
@@ -222,10 +250,12 @@ fn send_signal(pid: u32, signal: &str) {
     assert!(status.success(), "failed to send {signal} to pid {pid}");
 }
 
+#[cfg(unix)]
 fn assert_exit_code(status: ExitStatus, expected: i32) {
     assert_eq!(status.code(), Some(expected));
 }
 
+#[cfg(unix)]
 fn child_emit(line: &str) {
     let mut stdout = std::io::stdout().lock();
     writeln!(stdout, "{line}").expect("write child line");

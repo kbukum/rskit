@@ -20,13 +20,6 @@ pub fn isolate(command: &mut StdCommand) {
                 if libc::setpgid(0, 0) != 0 {
                     return Err(std::io::Error::last_os_error());
                 }
-                #[cfg(target_os = "linux")]
-                {
-                    // SAFETY: `prctl(PR_SET_PDEATHSIG, SIGKILL)` is async-signal-safe in this pre-exec child and requests kernel-enforced cleanup if the parent dies before exec.
-                    if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) != 0 {
-                        return Err(std::io::Error::last_os_error());
-                    }
-                }
                 Ok(())
             });
         }
@@ -44,18 +37,11 @@ pub fn isolate_async(command: &mut TokioCommand) {
     {
         command.kill_on_drop(true);
         // SAFETY: `pre_exec` runs in the child process after fork and before exec.
-        // The closure only calls async-signal-safe libc functions (`setpgid` and, on Linux, `prctl(PR_SET_PDEATHSIG, SIGKILL)`) and returns an `io::Error` on failure, which is the supported usage pattern.
+        // The closure only calls the async-signal-safe `setpgid` libc function and returns an `io::Error` on failure, which is the supported usage pattern.
         unsafe {
             command.pre_exec(|| {
                 if libc::setpgid(0, 0) != 0 {
                     return Err(std::io::Error::last_os_error());
-                }
-                #[cfg(target_os = "linux")]
-                {
-                    // SAFETY: `prctl(PR_SET_PDEATHSIG, SIGKILL)` is async-signal-safe in this pre-exec child and requests kernel-enforced cleanup if the parent dies before exec.
-                    if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) != 0 {
-                        return Err(std::io::Error::last_os_error());
-                    }
                 }
                 Ok(())
             });
@@ -91,6 +77,36 @@ pub(crate) fn terminate_target(pid: u32, process_group: bool) -> bool {
 
 pub(crate) fn kill_target(pid: u32, process_group: bool) -> bool {
     signal_target(pid, ProcessSignal::Kill, process_group)
+}
+
+/// Best-effort liveness probe for a still-signalable target pid.
+///
+/// Returns `true` while a process with this pid exists (or exists but is owned by
+/// another user), and `false` once it is gone. This is a liveness check only — it
+/// cannot distinguish an original child from an unrelated process that reused the pid.
+pub(crate) fn target_alive(pid: u32) -> bool {
+    if pid == 0 {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        let Ok(pid) = i32::try_from(pid) else {
+            return false;
+        };
+        // SAFETY: signal 0 performs an existence check without delivering a signal.
+        // EPERM means the process exists but is owned by another user.
+        unsafe {
+            if libc::kill(pid, 0) == 0 {
+                return true;
+            }
+            std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = pid;
+        false
+    }
 }
 
 fn signal(pid: u32, signal: ProcessSignal) -> bool {

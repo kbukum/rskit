@@ -7,6 +7,6 @@ mod types;
 
 pub use registry::RegistrationGuard;
 pub use shutdown::ShutdownSubscription;
-pub use types::{ProcessSupervisor, ShutdownReason, SupervisedAsyncChild, SupervisedBlockingChild};
+pub use types::{ProcessSupervisor, SupervisedAsyncChild, SupervisedBlockingChild};
 
 pub(crate) use termination::{terminate_and_reap, terminate_and_wait_async};

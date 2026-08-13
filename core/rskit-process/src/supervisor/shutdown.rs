@@ -16,8 +16,10 @@ const SHUTDOWN_FANOUT: usize = 32;
 
 /// Backstop subscription bound to a caller-owned shutdown handle.
 ///
-/// The subscription owns the watcher task that reaps every tracked group once the handle
-/// is cancelled. Dropping it stops watching without disturbing any reaping already underway.
+/// The subscription owns the watcher task that *waits* for the handle to be cancelled and then
+/// launches the backstop fan-out. Dropping it stops watching for a not-yet-fired handle, but never
+/// interrupts a fan-out that has already begun — once cancellation fires the reaping runs to
+/// completion on its own detached task.
 #[derive(Debug)]
 pub struct ShutdownSubscription {
     watcher: JoinHandle<()>,
@@ -37,9 +39,13 @@ pub(super) fn subscribe(
 ) -> ShutdownSubscription {
     let watcher = tokio::spawn(async move {
         token.cancelled().await;
-        if let Err(error) = fan_out_shutdown(&registry, policy).await {
-            warn!("supervisor shutdown backstop failed: {error}");
-        }
+        // Detach the reaping onto its own task so that dropping the subscription (which aborts
+        // only this watcher) cannot cancel a fan-out that has already started.
+        tokio::spawn(async move {
+            if let Err(error) = fan_out_shutdown(&registry, policy).await {
+                warn!("supervisor shutdown backstop failed: {error}");
+            }
+        });
     });
     ShutdownSubscription { watcher }
 }
@@ -48,7 +54,9 @@ pub(super) fn subscribe(
 ///
 /// Fan-out is capped at [`SHUTDOWN_FANOUT`] concurrent terminations and every spawned task is
 /// drained before this returns. Groups already reaped cooperatively are absent from the
-/// snapshot, so the fan-out is idempotent and shutting an empty registry is a clean no-op.
+/// snapshot, so the fan-out is idempotent and shutting an empty registry is a clean no-op. A
+/// target is unregistered only once termination is confirmed (or a force kill was issued); a
+/// child that deliberately survives with escalation disabled stays registered for a later retry.
 pub(super) async fn fan_out_shutdown(
     registry: &LiveChildRegistry,
     policy: LifecyclePolicy,
@@ -63,13 +71,16 @@ pub(super) async fn fan_out_shutdown(
             .map_err(AppError::internal)?;
         tasks.push(tokio::spawn(async move {
             let _permit = permit;
-            terminate_registered_pid(child.pid, child.process_group, policy).await;
-            child.pid
+            let terminated =
+                terminate_registered_pid(child.pid, child.process_group, policy).await;
+            (child.pid, terminated)
         }));
     }
     for task in tasks {
-        let pid = task.await.map_err(AppError::internal)?;
-        registry.unregister(pid);
+        let (pid, terminated) = task.await.map_err(AppError::internal)?;
+        if terminated {
+            registry.unregister(pid);
+        }
     }
     Ok(())
 }

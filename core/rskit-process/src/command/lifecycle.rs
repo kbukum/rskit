@@ -4,7 +4,7 @@ use std::time::Duration;
 
 /// Policy for spawned-child lifetime, isolation, and shutdown escalation.
 ///
-/// The policy is consumed by sync, async, persistent, and supervised spawns. When isolation is enabled the child is placed in its own process group and, on Linux, configured with a parent-death `SIGKILL` so hard parent loss does not leave the group behind. Non-Linux platforms cannot emulate the parent-death hard-kill guarantee; they still reap children on normal shutdown, timeout, cancellation, future drop, and supervisor drop.
+/// The policy is consumed by sync, async, persistent, and supervised spawns. When isolation is enabled the child is placed in its own process group so termination can target the whole group. Cleanup relies on Rust-side drops and explicit supervision: on a hard parent death (which runs no destructors) no platform can guarantee the group is reaped, so long-lived children should be supervised explicitly. Children are otherwise reaped on normal shutdown, timeout, cancellation, future drop, and supervisor drop.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 #[non_exhaustive]
 pub struct LifecyclePolicy {
