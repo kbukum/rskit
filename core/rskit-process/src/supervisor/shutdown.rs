@@ -7,8 +7,9 @@ use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
 use super::registry::LiveChildRegistry;
+use super::target::TargetOutcome;
 use crate::command::LifecyclePolicy;
-use crate::{AppError, AppResult};
+use crate::{AppError, AppResult, ErrorCode};
 
 /// Maximum number of targets terminated concurrently during a fan-out.
 const SHUTDOWN_FANOUT: usize = 32;
@@ -65,8 +66,13 @@ pub(super) async fn fan_out_shutdown(
     registry: &LiveChildRegistry,
     policy: LifecyclePolicy,
 ) -> AppResult<()> {
+    // Serialize concurrent shutdown passes: without this, a second caller could
+    // observe the first caller's claimed (but not yet terminated) entries as
+    // "drained" and return before those children are reaped.
+    let _gate = registry.shutdown_gate().await;
     registry.start_shutdown();
     let semaphore = Arc::new(tokio::sync::Semaphore::new(SHUTDOWN_FANOUT));
+    let mut unsupported = 0usize;
     loop {
         let batch = registry.claim_live();
         let mut tasks = Vec::with_capacity(batch.len());
@@ -83,16 +89,32 @@ pub(super) async fn fan_out_shutdown(
         }
         for task in tasks {
             let (id, outcome) = task.await.map_err(AppError::internal)?;
-            if outcome.is_terminated() {
-                registry.remove(id);
-            } else {
-                registry.mark_survived(id);
+            match outcome {
+                TargetOutcome::Terminated => registry.remove(id),
+                TargetOutcome::Survived => registry.mark_survived(id),
+                TargetOutcome::Unsupported => {
+                    // Keep the entry registered and record that this platform
+                    // could not terminate it, so shutdown reports the failure
+                    // instead of silently returning success.
+                    registry.mark_survived(id);
+                    unsupported += 1;
+                }
             }
         }
         if registry.finish_shutdown_if_drained() {
-            return Ok(());
+            break;
         }
     }
+    if unsupported > 0 {
+        return Err(AppError::new(
+            ErrorCode::Internal,
+            format!(
+                "process supervision shutdown cannot terminate {unsupported} target(s) on this \
+                 platform: no signalling primitive and no owned child handle"
+            ),
+        ));
+    }
+    Ok(())
 }
 
 #[cfg(all(test, unix))]
@@ -192,6 +214,43 @@ mod tests {
         fan_out_shutdown(&registry, policy).await.expect("fan-out");
 
         assert_eq!(registry.len(), 0);
+        for target in &targets {
+            poll_until_gone(target).await;
+        }
+        drop(guards);
+    }
+
+    /// Two concurrent shutdown passes never let one caller return while the other
+    /// caller's claimed children are still terminating: the shutdown gate
+    /// serializes the passes, so both observe a fully drained registry.
+    #[tokio::test]
+    async fn concurrent_shutdowns_do_not_return_before_children_terminate() {
+        let registry = Arc::new(LiveChildRegistry::default());
+        let mut guards = Vec::new();
+        let mut targets = Vec::new();
+        for _ in 0..4 {
+            let child = spawn_tokio("sleep 30");
+            let pid = child.id().expect("live pid");
+            let guard = registry.register(pid, false);
+            let id = guard.entry_id_for_test();
+            targets.push(registry.target_for_test(id).expect("target"));
+            registry.attach_child(id, OwnedChild::Tokio(child));
+            guards.push(guard);
+        }
+
+        let policy = LifecyclePolicy::default().with_grace_period(Duration::from_millis(50));
+        let a = {
+            let registry = Arc::clone(&registry);
+            tokio::spawn(async move { fan_out_shutdown(&registry, policy).await })
+        };
+        let b = {
+            let registry = Arc::clone(&registry);
+            tokio::spawn(async move { fan_out_shutdown(&registry, policy).await })
+        };
+        a.await.expect("join a").expect("fan-out a");
+        b.await.expect("join b").expect("fan-out b");
+
+        assert_eq!(registry.len(), 0, "both passes leave the registry drained");
         for target in &targets {
             poll_until_gone(target).await;
         }

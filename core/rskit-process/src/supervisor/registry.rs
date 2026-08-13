@@ -38,6 +38,10 @@ pub(super) struct LiveChildRegistry {
     entries: Mutex<HashMap<u64, Arc<Entry>>>,
     next_id: AtomicU64,
     shutting_down: AtomicBool,
+    /// Serializes whole shutdown passes so a second concurrent `shutdown()` never
+    /// observes another pass's in-flight claimed entries as "drained" and returns
+    /// before those children finish terminating.
+    shutdown_gate: tokio::sync::Mutex<()>,
 }
 
 impl Default for LiveChildRegistry {
@@ -46,6 +50,7 @@ impl Default for LiveChildRegistry {
             entries: Mutex::new(HashMap::new()),
             next_id: AtomicU64::new(1),
             shutting_down: AtomicBool::new(false),
+            shutdown_gate: tokio::sync::Mutex::new(()),
         }
     }
 }
@@ -108,6 +113,11 @@ impl LiveChildRegistry {
     /// Number of tracked children in any state.
     pub(super) fn len(&self) -> usize {
         self.entries.lock().len()
+    }
+
+    /// Acquire the exclusive shutdown gate, serializing whole fan-out passes.
+    pub(super) async fn shutdown_gate(&self) -> tokio::sync::MutexGuard<'_, ()> {
+        self.shutdown_gate.lock().await
     }
 
     /// Begin a shutdown pass: mark the registry shutting down and reset any

@@ -82,10 +82,15 @@ fn start_persistent_impl(
     // process-level shutdown). Otherwise the process owns a local supervisor for
     // its lifetime so drop reaps the child.
     let (supervisor, registration) = match injected {
-        Some(supervisor) => (None, supervisor.register_pid(child.id())),
+        Some(supervisor) => (
+            None,
+            supervisor
+                .register_pid_with_group(child.id(), process_config.lifecycle.targets_group()),
+        ),
         None => {
             let local = ProcessSupervisor::new(process_config.lifecycle);
-            let registration = local.register_pid(child.id());
+            let registration =
+                local.register_pid_with_group(child.id(), process_config.lifecycle.targets_group());
             (Some(local), registration)
         }
     };

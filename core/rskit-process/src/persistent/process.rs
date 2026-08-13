@@ -10,7 +10,7 @@ use crate::worker::join_within;
 use crate::{
     AppError, AppResult, ErrorCode, LifecyclePolicy, ProcessResult, ProcessSupervisor,
     RegistrationGuard,
-    supervisor::{SyncReap, terminate_and_reap},
+    supervisor::{OwnedChild, SyncReap, terminate_and_reap},
 };
 
 use super::{
@@ -32,7 +32,7 @@ pub enum ShutdownOutcome {
 #[derive(Debug)]
 pub struct PersistentProcess {
     // Keep field order stable: drop order is part of the lifecycle safety story.
-    child: Child,
+    child: Option<Child>,
     stdin_thread: StdinThread,
     stdout_thread: ReaderThread,
     stderr_thread: ReaderThread,
@@ -66,12 +66,15 @@ impl PersistentProcess {
                 "persistent process already stopped",
             ));
         }
-        let reap = wait_for_exit(
-            &mut self.child,
-            &self.cancel_thread,
-            self.signal,
-            self.shutdown_grace_period,
-        )?;
+        let signal = self.signal;
+        let grace = self.shutdown_grace_period;
+        let child = self.child.as_mut().ok_or_else(|| {
+            AppError::new(
+                ErrorCode::Conflict,
+                "persistent process child handle is no longer owned here",
+            )
+        })?;
+        let reap = wait_for_exit(child, &self.cancel_thread, signal, grace)?;
         self.stopped = true;
         self.stop_cancel_thread()?;
         let cancelled = self.cancelled.load(Ordering::SeqCst);
@@ -85,7 +88,7 @@ impl PersistentProcess {
                 "persistent process already stopped",
             ));
         }
-        if let Some(status) = self.child.try_wait().map_err(AppError::internal)? {
+        if let Some(status) = self.child_mut()?.try_wait().map_err(AppError::internal)? {
             self.stopped = true;
             self.stop_cancel_thread()?;
             self.unregister();
@@ -96,7 +99,9 @@ impl PersistentProcess {
         }
 
         self.stop_cancel_thread()?;
-        let reap = terminate_and_reap(&mut self.child, self.signal, self.shutdown_grace_period)?;
+        let signal = self.signal;
+        let grace = self.shutdown_grace_period;
+        let reap = terminate_and_reap(self.child_mut()?, signal, grace)?;
         self.stopped = true;
         let cancelled = self.cancelled.load(Ordering::SeqCst);
         self.finish_reap(reap, false, cancelled)
@@ -123,10 +128,10 @@ impl PersistentProcess {
             ),
         };
         if note.is_some() {
-            // The child deliberately survived: keep the registration so a shared
-            // supervisor's shutdown or drop can still reach it, rather than
-            // dropping ownership as though it had exited.
-            self.retain_registration();
+            // The child deliberately survived: hand the live handle to its owned
+            // target and keep the registration, so a shared supervisor's shutdown
+            // or drop can still reap it instead of leaving a zombie.
+            self.relinquish_survivor();
         } else {
             self.unregister();
         }
@@ -176,12 +181,27 @@ impl PersistentProcess {
         }
     }
 
-    /// Keep the registry entry while disarming the guard, so ownership of a
-    /// deliberately-surviving child stays with a shared supervisor.
-    fn retain_registration(&mut self) {
-        if let Some(registration) = self.registration.take() {
-            registration.retain();
+    /// Hand a deliberately-surviving child to its owned target and disarm the
+    /// guard, so a shared supervisor keeps the ability to signal *and* reap it
+    /// rather than the handle being discarded when this process is dropped.
+    fn relinquish_survivor(&mut self) {
+        match (self.registration.take(), self.child.take()) {
+            (Some(registration), Some(child)) => {
+                registration.relinquish_child(OwnedChild::Std(child));
+            }
+            (Some(registration), None) => registration.retain(),
+            (None, _) => {}
         }
+    }
+
+    /// Borrow the live child, or fail if it was already relinquished/reaped.
+    fn child_mut(&mut self) -> AppResult<&mut Child> {
+        self.child.as_mut().ok_or_else(|| {
+            AppError::new(
+                ErrorCode::Conflict,
+                "persistent process child handle is no longer owned here",
+            )
+        })
     }
 }
 
@@ -217,7 +237,7 @@ pub(in crate::persistent) fn new_process(
     shutdown_grace_period: Duration,
 ) -> PersistentProcess {
     PersistentProcess {
-        child: spawned.child,
+        child: Some(spawned.child),
         stdin_thread: spawned.stdin_thread,
         stdout_thread: spawned.stdout_thread,
         stderr_thread: spawned.stderr_thread,

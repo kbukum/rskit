@@ -7,16 +7,20 @@
 //! aimed at an unrelated process that later reused the numeric pid. On other
 //! Unix targets the identity falls back to the pid (and process-group id when
 //! descendant termination is requested) with a documented best-effort
-//! guarantee. On non-Unix targets there is no `kill(2)`-style primitive, so the
-//! target reports honestly that it cannot signal — it never claims a
-//! termination that did not happen.
+//! guarantee. On non-Unix targets there is no `kill(2)`-style primitive: the
+//! target can still force-kill and reap a child handle it *owns* (through
+//! [`std::process::Child`]/[`tokio::process::Child`], which work on every
+//! platform), but for a child owned elsewhere it cannot signal at all and
+//! reports [`TargetOutcome::Unsupported`] so shutdown surfaces the limitation
+//! rather than claiming a termination that did not happen.
 //!
 //! Direct-child signalling is fully reuse-proof through the pidfd. Descendant
 //! (process-group) signalling still goes through the numeric process-group id
-//! because Linux exposes no group file descriptor; it is gated on the pidfd
-//! liveness check of the group leader so the group signal is only sent while the
-//! leader — our own direct child — is still alive and therefore still owns the
-//! group id. This is the accepted best-effort boundary for group cleanup.
+//! because Linux exposes no group file descriptor; the group is signalled first,
+//! while a pidfd liveness check confirms the group leader — our own direct child
+//! — is still alive and therefore still owns the group id, and only then is the
+//! exact leader signalled through its pidfd. This is the accepted best-effort
+//! boundary for group cleanup.
 
 use std::process::ExitStatus;
 use std::time::{Duration, Instant};
@@ -75,15 +79,14 @@ impl OwnedChild {
 pub(super) enum TargetOutcome {
     /// The target is confirmed gone (or was never a real process); unregister it.
     Terminated,
-    /// The target deliberately survived (`kill_after_grace = false`) or could not
-    /// be signalled on this platform; keep it registered for a later attempt.
+    /// The target deliberately survived (`kill_after_grace = false`); keep it
+    /// registered so a later shutdown or drop can act.
     Survived,
-}
-
-impl TargetOutcome {
-    pub(super) fn is_terminated(self) -> bool {
-        matches!(self, Self::Terminated)
-    }
+    /// The platform has no way to signal the target and no owned child handle to
+    /// kill, so termination could not even be attempted. The entry is kept
+    /// registered and the caller reports the failure honestly rather than
+    /// claiming a success that did not happen.
+    Unsupported,
 }
 
 /// A Linux pidfd owning a stable, reuse-proof reference to one process.
@@ -227,14 +230,16 @@ impl OwnedTarget {
         }
         #[cfg(target_os = "linux")]
         if let Some(pidfd) = &self.pidfd {
-            let leader = pidfd.send(signal.as_raw());
             if self.process_group && pidfd.is_alive() {
                 // The leader is our own direct child and still alive, so the
-                // process-group id it owns cannot have been recycled: reaching
-                // descendants through it is safe.
+                // process-group id it owns cannot have been recycled. Signal the
+                // whole group first — before the leader-specific signal — so
+                // descendants are reached even if the leader exits immediately
+                // after this liveness check.
                 let _ = signal_target(self.pid, signal, true);
             }
-            return leader;
+            // Then signal the exact leader through its reuse-proof pidfd.
+            return pidfd.send(signal.as_raw());
         }
         // Non-Linux Unix (and Linux without pidfd support): best-effort by pid /
         // process-group id, gated on a liveness probe for the group case.
@@ -263,18 +268,26 @@ impl OwnedTarget {
     /// Sends graceful termination, waits the grace period, and confirms exit
     /// through the reuse-proof identity. A target that is still alive with
     /// escalation disabled survives untouched and stays registered. With
-    /// escalation enabled a still-alive target is force-killed; on platforms
-    /// that cannot signal at all the target is reported [`Survived`] so it is not
-    /// dropped from the registry as though it were reaped.
+    /// escalation enabled a still-alive target is force-killed. On a platform
+    /// with no signalling primitive the target can still be killed if this
+    /// [`OwnedTarget`] owns its child handle; otherwise termination cannot even
+    /// be attempted and the target is reported [`Unsupported`] so the caller
+    /// surfaces the platform limitation rather than claiming a false success.
     ///
-    /// [`Survived`]: TargetOutcome::Survived
+    /// [`Unsupported`]: TargetOutcome::Unsupported
     pub(super) async fn terminate(&self, policy: LifecyclePolicy) -> TargetOutcome {
         if self.pid == 0 {
             return TargetOutcome::Terminated;
         }
         if !cfg!(unix) {
-            // No signalling primitive exists; never claim a termination.
-            return TargetOutcome::Survived;
+            // No signalling primitive exists on this platform. If this target
+            // owns the child handle it can still be force-killed and reaped;
+            // otherwise termination cannot be attempted here at all.
+            return if self.force_reap_owned_child().await {
+                TargetOutcome::Terminated
+            } else {
+                TargetOutcome::Unsupported
+            };
         }
         self.signal(ProcessSignal::Terminate);
         tokio::time::sleep(policy.grace_period).await;
@@ -288,6 +301,22 @@ impl OwnedTarget {
         self.signal(ProcessSignal::Kill);
         self.reap().await;
         TargetOutcome::Terminated
+    }
+
+    /// Kill and reap an owned child handle, returning `true` when one was owned.
+    ///
+    /// Used on platforms without a signalling primitive: `Child::kill`/`wait`
+    /// work regardless of platform, so a relinquished child can still be torn
+    /// down through the handle even when there is no `kill(2)`.
+    async fn force_reap_owned_child(&self) -> bool {
+        let child = self.child.lock().take();
+        if let Some(mut child) = child {
+            child.start_kill();
+            child.reap().await;
+            true
+        } else {
+            false
+        }
     }
 
     /// Reap the owned child, if any, so no zombie is left behind.

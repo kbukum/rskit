@@ -203,7 +203,10 @@ async fn run_process(
     let mut child = cmd
         .spawn()
         .map_err(|error| spawn_error("failed to spawn process", error))?;
-    let registration = supervisor.register_pid(child.id().unwrap_or_default());
+    let registration = supervisor.register_pid_with_group(
+        child.id().unwrap_or_default(),
+        config.lifecycle.targets_group(),
+    );
 
     // Detach the child's pipe handles before the child moves into the scope guard,
     // which then owns it for the rest of the run.

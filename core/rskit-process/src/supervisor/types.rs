@@ -17,7 +17,8 @@ use tracing::debug;
 ///
 /// A supervisor tracks each spawned child through an owned, reuse-proof identity
 /// (a Linux pidfd for the direct child where available, otherwise the pid and
-/// process-group id). Termination and shutdown act on that identity, so a delayed
+/// process-group id) registered with the topology the child was actually spawned
+/// under. Termination and shutdown act on that identity, so a delayed
 /// escalation always targets the exact original process and never a pid the OS
 /// recycled. The child-owning wrapper it returns ([`SupervisedBlockingChild`] /
 /// [`SupervisedAsyncChild`]) best-effort kills its child on drop — including on
@@ -28,6 +29,14 @@ use tracing::debug;
 /// deliberately outlives its grace period (`kill_after_grace = false`) is handed
 /// to its owned target and stays registered so a later shutdown or supervisor
 /// drop can still reap it. Double cleanup is safe.
+///
+/// On platforms without a `kill(2)`-style primitive (non-Unix), the supervisor
+/// can still tear down a child whose handle it owns, but [`shutdown`] returns an
+/// error for any registered child it can neither signal nor own, rather than
+/// silently reporting success. Full process-supervision guarantees therefore
+/// hold on Unix; other platforms are best-effort and honest about it.
+///
+/// [`shutdown`]: Self::shutdown
 #[derive(Debug)]
 pub struct ProcessSupervisor {
     registry: Arc<LiveChildRegistry>,
@@ -77,8 +86,30 @@ impl ProcessSupervisor {
     }
 
     /// Register an existing child pid, capturing an owned target for it.
+    ///
+    /// Uses the supervisor's own lifecycle topology; for children spawned with a
+    /// different policy the runners call [`register_pid_with_group`] with the
+    /// actual spawn topology so the owned target signals the right identity.
+    ///
+    /// [`register_pid_with_group`]: Self::register_pid_with_group
     pub(crate) fn register_pid(&self, pid: u32) -> RegistrationGuard {
-        self.registry.register(pid, self.lifecycle.targets_group())
+        self.register_pid_with_group(pid, self.lifecycle.targets_group())
+    }
+
+    /// Register an existing child pid with the topology it was actually spawned
+    /// under.
+    ///
+    /// A supervised runner configures its spawn from its own `ProcessConfig`,
+    /// which may differ from the supervisor's policy. Registering with the
+    /// spawn's real `targets_group` value keeps the owned target's group
+    /// signalling consistent with how the child was created, so shutdown never
+    /// treats a leader-only child as a group (or vice versa).
+    pub(crate) fn register_pid_with_group(
+        &self,
+        pid: u32,
+        targets_group: bool,
+    ) -> RegistrationGuard {
+        self.registry.register(pid, targets_group)
     }
 
     /// Shut down every currently tracked child target.
@@ -89,6 +120,15 @@ impl ProcessSupervisor {
     /// the target only once its termination is confirmed. A target that survives
     /// with escalation disabled stays registered. Runners that own live child
     /// handles still perform the actual wait/reap on their normal paths.
+    /// Concurrent shutdown passes are serialized, so a second caller never
+    /// returns while another pass's claimed children are still terminating.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a tracked child cannot be terminated on this platform
+    /// — for example a non-Unix target with no signalling primitive and no owned
+    /// child handle. The affected entries stay registered rather than being
+    /// dropped as though they had exited.
     pub async fn shutdown(&self, reason: impl Into<String>) -> AppResult<()> {
         let reason = reason.into();
         debug!(reason = %reason, "supervisor shutdown requested");

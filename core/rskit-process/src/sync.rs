@@ -105,7 +105,8 @@ fn run_blocking(
     let mut child = cmd
         .spawn()
         .map_err(|error| spawn_error("failed to spawn process", error))?;
-    let registration = supervisor.register_pid(child.id());
+    let registration =
+        supervisor.register_pid_with_group(child.id(), config.lifecycle.targets_group());
 
     let max_output_bytes = output.and_then(|output| output.max_output_bytes);
     let stdout_capture = shared_output();

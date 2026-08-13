@@ -73,7 +73,10 @@ pub(in crate::runner) async fn run_pty_mode(
     let child = cmd
         .spawn()
         .map_err(|error| spawn_error("failed to spawn process", error))?;
-    let registration = supervisor.register_pid(child.id().unwrap_or_default());
+    let registration = supervisor.register_pid_with_group(
+        child.id().unwrap_or_default(),
+        config.lifecycle.targets_group(),
+    );
     // The child now holds its own dup'd stdio; the parent must not keep the slave open
     // or the master read would never observe EOF.
     drop(slave);
