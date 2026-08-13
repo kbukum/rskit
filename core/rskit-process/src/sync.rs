@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 use crate::capture::{SharedOutput, append_line_bounded, shared_output, take_shared};
 use crate::process_group::kill_target;
-use crate::supervisor::terminate_and_reap;
+use crate::supervisor::{OwnedChild, SyncReap, terminate_and_reap};
 use crate::worker::join_within;
 use crate::{
     AppError, AppResult, EnvPolicy, ErrorCode, InputPolicy, LifecyclePolicy, OutputPolicy,
@@ -132,13 +132,21 @@ fn run_blocking(
     );
     scope.attach(stdout_thread, stderr_thread, stdin_thread);
 
-    let (exit_code, timed_out, synthetic_stderr) =
+    let (exit_code, timed_out, synthetic_stderr, survived) =
         wait_with_timeout(scope.child_mut(), config.timeout, config)?;
 
-    // The child has exited; drain the workers within the grace period.
-    // A worker still blocked because a surviving descendant holds the pipe open is detached rather than joined forever.
+    // Drain the workers within the grace period. A worker still blocked because a
+    // surviving descendant holds the pipe open is detached rather than joined forever.
     scope.drain()?;
-    scope.disarm();
+
+    // If the child exited it is reaped, so unregister on disarm. If it deliberately
+    // survived its grace period (`kill_after_grace = false`), relinquish the still-live
+    // child to its owned target so a later shutdown or supervisor drop reaps it.
+    if survived {
+        scope.relinquish();
+    } else {
+        scope.disarm();
+    }
 
     let stdout_output = take_shared(&stdout_capture);
     let mut stderr_output = take_shared(&stderr_capture);
@@ -170,7 +178,7 @@ fn run_blocking(
 /// and then joins each worker within the grace period.
 /// [`disarm`](Self::disarm) after a normal drain hands ownership back to the already-captured shared output.
 struct BlockingChildScope {
-    child: Child,
+    child: Option<Child>,
     registration: Option<RegistrationGuard>,
     stdout: Option<thread::JoinHandle<AppResult<()>>>,
     stderr: Option<thread::JoinHandle<AppResult<()>>>,
@@ -188,7 +196,7 @@ impl BlockingChildScope {
         grace: Duration,
     ) -> Self {
         Self {
-            child,
+            child: Some(child),
             registration: Some(registration),
             stdout: None,
             stderr: None,
@@ -211,7 +219,12 @@ impl BlockingChildScope {
     }
 
     fn child_mut(&mut self) -> &mut Child {
-        &mut self.child
+        match &mut self.child {
+            Some(child) => child,
+            // The child is removed only in `relinquish` or `Drop`, after which no
+            // method is invoked on the scope, so this arm is structurally unreachable.
+            None => unreachable!("BlockingChildScope::child_mut called after the child was taken"),
+        }
     }
 
     /// Join every worker thread within the grace period, surfacing worker errors.
@@ -228,6 +241,15 @@ impl BlockingChildScope {
             registration.unregister();
         }
     }
+
+    /// Relinquish a still-live child (it survived its grace period with escalation
+    /// disabled) to its owned target without killing or unregistering.
+    fn relinquish(&mut self) {
+        self.armed = false;
+        if let (Some(registration), Some(child)) = (self.registration.take(), self.child.take()) {
+            registration.relinquish_child(OwnedChild::Std(child));
+        }
+    }
 }
 
 impl Drop for BlockingChildScope {
@@ -235,11 +257,13 @@ impl Drop for BlockingChildScope {
         if !self.armed {
             return;
         }
-        let group = self.signal.targets_group();
-        if !kill_target(self.child.id(), group) {
-            let _ = self.child.kill();
+        if let Some(mut child) = self.child.take() {
+            let group = self.signal.targets_group();
+            if !kill_target(child.id(), group) {
+                let _ = child.kill();
+            }
+            let _ = child.wait();
         }
-        let _ = self.child.wait();
         let _ = join_within(self.stdout.take(), self.grace);
         let _ = join_within(self.stderr.take(), self.grace);
         let _ = join_within(self.stdin.take(), self.grace);
@@ -337,7 +361,7 @@ fn wait_with_timeout(
     child: &mut Child,
     timeout: Option<Duration>,
     config: &ProcessConfig,
-) -> AppResult<(Option<i32>, bool, Option<String>)> {
+) -> AppResult<(Option<i32>, bool, Option<String>, bool)> {
     let Some(timeout) = timeout else {
         let status = child.wait().map_err(|error| {
             AppError::new(
@@ -345,7 +369,7 @@ fn wait_with_timeout(
                 format!("process execution error: {error}"),
             )
         })?;
-        return Ok((status.code(), false, None));
+        return Ok((status.code(), false, None, false));
     };
 
     let deadline = Instant::now() + timeout;
@@ -356,14 +380,29 @@ fn wait_with_timeout(
                 format!("process execution error: {error}"),
             )
         })? {
-            return Ok((status.code(), false, None));
+            return Ok((status.code(), false, None, false));
         }
         if Instant::now() >= deadline {
-            let (status, escalated) =
-                terminate_and_reap(child, config.lifecycle, config.lifecycle.grace_period)?;
-            let synthetic =
-                escalated.then(|| "process killed by SIGKILL after timeout".to_string());
-            return Ok((status.code(), true, synthetic));
+            return Ok(match terminate_and_reap(
+                child,
+                config.lifecycle,
+                config.lifecycle.grace_period,
+            )? {
+                SyncReap::Reaped { status, escalated } => {
+                    let synthetic = escalated
+                        .then(|| "process killed by SIGKILL after timeout".to_string());
+                    (status.code(), true, synthetic, false)
+                }
+                SyncReap::Survived => (
+                    None,
+                    true,
+                    Some(
+                        "grace period expired after timeout; kill escalation disabled, process left running"
+                            .to_string(),
+                    ),
+                    true,
+                ),
+            });
         }
         thread::sleep(POLL_INTERVAL);
     }

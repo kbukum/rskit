@@ -120,9 +120,15 @@ pub(in crate::runner) async fn run_pty_mode(
     join_within(reader_task, grace).await?;
     let captured_output = captured(&reader_capture);
 
-    // The run completed normally: the tasks are joined and the child is reaped,
-    // so hand ownership back instead of aborting/killing on drop.
-    scope.disarm();
+    // The run completed: the tasks are joined. If the child exited it is reaped,
+    // so hand ownership back on disarm. If it deliberately survived its grace
+    // period (`kill_after_grace = false`), relinquish the still-live child to its
+    // owned target so a later shutdown or supervisor drop reaps it.
+    if completion.survived {
+        scope.relinquish();
+    } else {
+        scope.disarm();
+    }
 
     // A PTY has no separate stderr stream;
     // the only "stderr" is any synthetic termination diagnostic from the lifecycle layer.

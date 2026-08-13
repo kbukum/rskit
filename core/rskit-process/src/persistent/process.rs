@@ -1,14 +1,16 @@
 use std::{
-    process::{Child, ExitStatus},
+    process::Child,
     sync::{Arc, atomic::AtomicBool, atomic::Ordering},
     thread,
     time::{Duration, Instant},
 };
 
+use crate::capture::append_line_bounded;
 use crate::worker::join_within;
 use crate::{
     AppError, AppResult, ErrorCode, LifecyclePolicy, ProcessResult, ProcessSupervisor,
-    RegistrationGuard, supervisor::terminate_and_reap,
+    RegistrationGuard,
+    supervisor::{SyncReap, terminate_and_reap},
 };
 
 use super::{
@@ -64,7 +66,7 @@ impl PersistentProcess {
                 "persistent process already stopped",
             ));
         }
-        let status = wait_for_exit(
+        let reap = wait_for_exit(
             &mut self.child,
             &self.cancel_thread,
             self.signal,
@@ -72,9 +74,8 @@ impl PersistentProcess {
         )?;
         self.stopped = true;
         self.stop_cancel_thread()?;
-        self.unregister();
         let cancelled = self.cancelled.load(Ordering::SeqCst);
-        self.completed_result(status, false, cancelled)
+        self.finish_reap(reap, false, cancelled)
     }
 
     pub(in crate::persistent) fn shutdown_inner(&mut self) -> AppResult<ShutdownOutcome> {
@@ -90,23 +91,52 @@ impl PersistentProcess {
             self.unregister();
             let cancelled = self.cancelled.load(Ordering::SeqCst);
             return self
-                .completed_result(status, false, cancelled)
+                .completed_result(status.code(), None, false, cancelled)
                 .map(ShutdownOutcome::AlreadyExited);
         }
 
         self.stop_cancel_thread()?;
-        let (status, _escalated) =
-            terminate_and_reap(&mut self.child, self.signal, self.shutdown_grace_period)?;
+        let reap = terminate_and_reap(&mut self.child, self.signal, self.shutdown_grace_period)?;
         self.stopped = true;
-        self.unregister();
         let cancelled = self.cancelled.load(Ordering::SeqCst);
-        self.completed_result(status, false, cancelled)
+        self.finish_reap(reap, false, cancelled)
             .map(ShutdownOutcome::Stopped)
+    }
+
+    /// Turn a reap outcome into a result, keeping ownership of a deliberate
+    /// survivor (`kill_after_grace = false`) so a later shutdown or supervisor
+    /// drop can still act, and reporting honestly what happened.
+    fn finish_reap(
+        &mut self,
+        reap: SyncReap,
+        timed_out: bool,
+        cancelled: bool,
+    ) -> AppResult<ProcessResult> {
+        let (code, note) = match reap {
+            SyncReap::Reaped { status, .. } => (status.code(), None),
+            SyncReap::Survived => (
+                None,
+                Some(
+                    "shutdown grace expired; kill escalation disabled, process left running"
+                        .to_string(),
+                ),
+            ),
+        };
+        if note.is_some() {
+            // The child deliberately survived: keep the registration so a shared
+            // supervisor's shutdown or drop can still reach it, rather than
+            // dropping ownership as though it had exited.
+            self.retain_registration();
+        } else {
+            self.unregister();
+        }
+        self.completed_result(code, note, timed_out, cancelled)
     }
 
     fn completed_result(
         &mut self,
-        status: ExitStatus,
+        exit_code: Option<i32>,
+        note: Option<String>,
         timed_out: bool,
         cancelled: bool,
     ) -> AppResult<ProcessResult> {
@@ -115,13 +145,17 @@ impl PersistentProcess {
         join_within(self.stdout_thread.take(), grace)?;
         join_within(self.stderr_thread.take(), grace)?;
         let stdout = take_capture(&self.stdout);
-        let stderr = take_capture(&self.stderr);
+        let mut stderr = take_capture(&self.stderr);
+        let mut stderr_truncated = stderr.truncated;
+        if let Some(note) = note {
+            stderr_truncated |= append_line_bounded(&mut stderr.bytes, note.as_bytes(), None);
+        }
         Ok(ProcessResult::completed(
-            status.code(),
+            exit_code,
             stdout.bytes,
             stderr.bytes,
             stdout.truncated,
-            stderr.truncated,
+            stderr_truncated,
             self.start.elapsed(),
             timed_out,
             cancelled,
@@ -139,6 +173,14 @@ impl PersistentProcess {
     fn unregister(&mut self) {
         if let Some(registration) = self.registration.take() {
             registration.unregister();
+        }
+    }
+
+    /// Keep the registry entry while disarming the guard, so ownership of a
+    /// deliberately-surviving child stays with a shared supervisor.
+    fn retain_registration(&mut self) {
+        if let Some(registration) = self.registration.take() {
+            registration.retain();
         }
     }
 }
@@ -205,16 +247,19 @@ fn wait_for_exit(
     cancel_thread: &Option<CancelThread>,
     signal: LifecyclePolicy,
     grace_period: Duration,
-) -> AppResult<ExitStatus> {
+) -> AppResult<SyncReap> {
     loop {
         if let Some(status) = child.try_wait().map_err(AppError::internal)? {
-            return Ok(status);
+            return Ok(SyncReap::Reaped {
+                status,
+                escalated: false,
+            });
         }
         if cancel_thread
             .as_ref()
             .is_some_and(CancelThread::is_cancel_requested)
         {
-            return terminate_and_reap(child, signal, grace_period).map(|(status, _)| status);
+            return terminate_and_reap(child, signal, grace_period);
         }
         thread::sleep(Duration::from_millis(10));
     }

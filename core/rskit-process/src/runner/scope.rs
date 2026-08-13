@@ -5,8 +5,9 @@ use tokio::process::Child;
 use tokio::runtime::Handle;
 use tokio::task::{AbortHandle, JoinHandle};
 
-use crate::{LifecyclePolicy, RegistrationGuard, process_group::kill_target};
-
+use crate::{
+    LifecyclePolicy, RegistrationGuard, process_group::kill_target, supervisor::OwnedChild,
+};
 /// Owns a spawned child and the run's I/O tasks' abort handles
 /// so an early return abandons them cleanly.
 ///
@@ -67,6 +68,19 @@ impl ChildScope {
         self.armed = false;
         if let Some(registration) = self.registration.take() {
             registration.unregister();
+        }
+    }
+
+    /// Relinquish a still-live child (it survived its grace period with
+    /// escalation disabled) to its owned target without killing or unregistering.
+    ///
+    /// The child moves into the registered target so a later shutdown or
+    /// supervisor drop reaps it; the guard is retained so scope drop neither kills
+    /// the child nor removes the entry.
+    pub(super) fn relinquish(&mut self) {
+        self.armed = false;
+        if let (Some(registration), Some(child)) = (self.registration.take(), self.child.take()) {
+            registration.relinquish_child(OwnedChild::Tokio(child));
         }
     }
 }

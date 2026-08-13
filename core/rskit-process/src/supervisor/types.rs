@@ -15,7 +15,19 @@ use tracing::debug;
 
 /// Owns spawned-child lifetime for one caller scope.
 ///
-/// A supervisor registers each spawned child by process-group id (or child pid when isolation is disabled). The child-owning wrapper it returns ([`SupervisedBlockingChild`] / [`SupervisedAsyncChild`]) is what best-effort kills its child on drop — including on panic unwinding — so lifetime is guaranteed as long as the wrapper is held. The supervisor's own [`Drop`] is a backstop that kills any target still registered when the supervisor itself is dropped (for example externally [`track_pid`](Self::track_pid)-ed pids). Normal run paths unregister on reap through the returned registration guard; double cleanup is safe.
+/// A supervisor tracks each spawned child through an owned, reuse-proof identity
+/// (a Linux pidfd for the direct child where available, otherwise the pid and
+/// process-group id). Termination and shutdown act on that identity, so a delayed
+/// escalation always targets the exact original process and never a pid the OS
+/// recycled. The child-owning wrapper it returns ([`SupervisedBlockingChild`] /
+/// [`SupervisedAsyncChild`]) best-effort kills its child on drop — including on
+/// panic unwinding — so lifetime is guaranteed while the wrapper is held. The
+/// supervisor's own [`Drop`] is a backstop that force-kills and reaps any target
+/// still registered when the supervisor itself is dropped. Normal run paths
+/// unregister on reap through the returned registration guard; a child that
+/// deliberately outlives its grace period (`kill_after_grace = false`) is handed
+/// to its owned target and stays registered so a later shutdown or supervisor
+/// drop can still reap it. Double cleanup is safe.
 #[derive(Debug)]
 pub struct ProcessSupervisor {
     registry: Arc<LiveChildRegistry>,
@@ -64,14 +76,19 @@ impl ProcessSupervisor {
         })
     }
 
-    /// Register an existing child pid.
+    /// Register an existing child pid, capturing an owned target for it.
     pub(crate) fn register_pid(&self, pid: u32) -> RegistrationGuard {
         self.registry.register(pid, self.lifecycle.targets_group())
     }
 
     /// Shut down every currently tracked child target.
     ///
-    /// Shutdown fans out with bounded concurrency, sends graceful termination, waits the policy grace period, escalates to `SIGKILL` when enabled, and unregisters the target. Runners that own child handles still perform the actual wait/reap on their normal paths.
+    /// Shutdown fans out with bounded concurrency, atomically claims each live
+    /// target, sends graceful termination through its reuse-proof identity, waits
+    /// the policy grace period, escalates to `SIGKILL` when enabled, and removes
+    /// the target only once its termination is confirmed. A target that survives
+    /// with escalation disabled stays registered. Runners that own live child
+    /// handles still perform the actual wait/reap on their normal paths.
     pub async fn shutdown(&self, reason: impl Into<String>) -> AppResult<()> {
         let reason = reason.into();
         debug!(reason = %reason, "supervisor shutdown requested");
@@ -96,12 +113,12 @@ impl ProcessSupervisor {
     ///    this way unregister through their [`RegistrationGuard`], so the backstop never
     ///    sees them.
     /// 2. **Backstop (phase two).** When the handle is cancelled, the supervisor fans out
-    ///    graceful termination to every *still-registered* group, escalates per policy, and
-    ///    unregisters each. Reaping is idempotent, so a group already torn down cooperatively
-    ///    is a clean no-op — no double-kill and no deadlock against phase one.
+    ///    graceful termination to every *still-registered* target, escalates per policy, and
+    ///    removes each on a confirmed reap. Reaping is idempotent, so a target already torn
+    ///    down cooperatively is a clean no-op — no double-kill and no deadlock against phase one.
     /// 3. **Force-exit (escalation).** A caller's force-exit path (for example a second signal
     ///    driving `std::process::exit`) is independent of this backstop and always wins, even
-    ///    while a slow group is still draining.
+    ///    while a slow target is still draining.
     ///
     /// The returned [`ShutdownSubscription`] owns the watcher task; dropping it stops watching
     /// without disturbing any reaping already in progress.
@@ -129,15 +146,15 @@ impl ProcessSupervisor {
 
     /// Unregister an externally tracked pid.
     pub fn unregister_pid(&self, pid: u32) {
-        self.registry.unregister(pid);
+        self.registry.remove_pid(pid);
     }
 }
 
 impl Drop for ProcessSupervisor {
     fn drop(&mut self) {
-        for child in self.registry.snapshot() {
-            let _ = kill_target(child.pid, child.process_group);
-            self.registry.unregister(child.pid);
+        for (id, target) in self.registry.drain_targets() {
+            target.kill_blocking();
+            self.registry.remove(id);
         }
     }
 }

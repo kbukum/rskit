@@ -257,10 +257,16 @@ async fn run_process(
     let stdout_truncated = stdout_output.truncated;
     let stderr_output = captured(&stderr_capture);
 
-    // The run completed normally: the tasks are joined and the child is reaped,
-    // so hand ownership back instead of aborting/killing on drop.
-    scope.disarm();
-
+    // The run completed: the tasks are joined. If the child exited it is reaped,
+    // so hand ownership back and unregister on disarm. If it deliberately survived
+    // its grace period (`kill_after_grace = false`), relinquish the still-live
+    // child to its owned target so a later shutdown or supervisor drop reaps it,
+    // keeping it registered rather than force-killing or abandoning it.
+    if completion.survived {
+        scope.relinquish();
+    } else {
+        scope.disarm();
+    }
     let mut stderr_bytes = stderr_output.bytes;
     let mut stderr_truncated = stderr_output.truncated;
     if let Some(extra_stderr) = completion.synthetic_stderr {
