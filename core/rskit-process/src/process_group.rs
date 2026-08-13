@@ -109,27 +109,6 @@ pub(crate) fn target_alive(pid: u32) -> bool {
     }
 }
 
-/// Positively confirm a target pid has exited.
-///
-/// Returns `true` only when the process is *known* to be gone. On platforms
-/// without a liveness probe it returns `false` — exit cannot be confirmed — so
-/// callers must not treat an unconfirmed target as reaped. A `pid` of `0` is
-/// never a real target and is reported as exited.
-pub(crate) fn target_exited(pid: u32) -> bool {
-    if pid == 0 {
-        return true;
-    }
-    #[cfg(unix)]
-    {
-        !target_alive(pid)
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = pid;
-        false
-    }
-}
-
 fn signal(pid: u32, signal: ProcessSignal) -> bool {
     signal_target(pid, signal, true)
 }
