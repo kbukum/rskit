@@ -152,11 +152,13 @@ impl PidFd {
         std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH)
     }
 
-    /// Return `true` while the referenced process still exists.
+    /// Return `true` while the referenced process still exists in the table.
     ///
     /// Uses signal `0`, which performs delivery checks without sending a signal.
-    /// A terminated-but-unreaped process (zombie) reports `ESRCH`, so this is a
-    /// truthful "has the exact original process exited" probe.
+    /// A reaped process reports `ESRCH`. A terminated-but-unreaped process
+    /// (zombie) still answers signal `0`; distinguishing that case is the
+    /// caller's job ([`OwnedTarget::is_alive`]), which pairs this with a `/proc`
+    /// state read now that the pidfd has proven the pid is not yet recycled.
     fn is_alive(&self) -> bool {
         use std::os::fd::AsRawFd;
 
@@ -219,7 +221,13 @@ impl OwnedTarget {
         }
         #[cfg(target_os = "linux")]
         if let Some(pidfd) = &self.pidfd {
-            return pidfd.is_alive();
+            // The pidfd reports a reaped process as gone. A process still in the
+            // table may be a terminated-but-unreaped zombie; the pidfd proves
+            // `self.pid` is not yet recycled, so the `/proc` state read names this
+            // exact process. Treat a zombie as gone for parity with macOS so
+            // shutdown confirms termination instead of escalating against a dead
+            // process.
+            return pidfd.is_alive() && !crate::process_group::pid_is_zombie(self.pid);
         }
         target_alive(self.pid)
     }

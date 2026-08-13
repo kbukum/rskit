@@ -94,14 +94,18 @@ pub(crate) fn target_alive(pid: u32) -> bool {
     }
     #[cfg(all(unix, not(target_os = "macos")))]
     {
-        let Ok(pid) = i32::try_from(pid) else {
+        let Ok(signed_pid) = i32::try_from(pid) else {
             return false;
         };
         // SAFETY: signal 0 performs an existence check without delivering a signal.
         // EPERM means the process exists but is owned by another user.
         unsafe {
-            if libc::kill(pid, 0) == 0 {
-                return true;
+            if libc::kill(signed_pid, 0) == 0 {
+                // A terminated-but-unreaped process (a zombie) still answers
+                // `kill(pid, 0)` yet has already exited; treat it as gone so
+                // Linux matches the macOS `SZOMB` check and shutdown can confirm
+                // termination instead of escalating against a dead process.
+                return !pid_is_zombie(pid);
             }
             std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
         }
@@ -193,6 +197,28 @@ pub(crate) fn target_alive(pid: u32) -> bool {
         let _ = pid;
         false
     }
+}
+
+/// Whether `pid` is a terminated-but-unreaped process (a zombie).
+///
+/// A zombie still answers existence probes (`kill(pid, 0)` and a `pidfd` signal
+/// `0`) until it is reaped, yet it has already exited. Reading its `/proc` state
+/// lets the Linux liveness probes treat it as gone, matching the macOS `SZOMB`
+/// check so shutdown confirms termination instead of escalating against a dead
+/// process. On Unix targets without a Linux-style `/proc` the read fails and the
+/// probe conservatively reports "not a zombie".
+#[cfg(all(unix, not(target_os = "macos")))]
+pub(crate) fn pid_is_zombie(pid: u32) -> bool {
+    let Ok(stat) = std::fs::read_to_string(format!("/proc/{pid}/stat")) else {
+        return false;
+    };
+    // `/proc/<pid>/stat` is "pid (comm) state ...". `comm` can itself contain
+    // spaces and parentheses, so the state field is the first token after the
+    // final ')'.
+    let Some((_, after_comm)) = stat.rsplit_once(')') else {
+        return false;
+    };
+    after_comm.trim_start().starts_with('Z')
 }
 
 fn signal(pid: u32, signal: ProcessSignal) -> bool {
