@@ -1,11 +1,9 @@
 use tokio::{process::Child, time::timeout};
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, warn};
+use tracing::debug;
 
-use crate::process_group::{kill_target, terminate_target};
-use crate::{
-    AppError, AppResult, ErrorCode, ProcessConfig, ProcessSpec, signal::ProcessSignal, terminate,
-};
+use crate::supervisor::terminate_and_wait_async;
+use crate::{AppError, AppResult, ErrorCode, ProcessConfig, ProcessSpec};
 
 pub(in crate::runner) struct Completion {
     pub(in crate::runner) exit_code: Option<i32>,
@@ -27,7 +25,7 @@ pub(in crate::runner) async fn wait_for_completion(
         tokio::select! {
             _ = cancel.cancelled() => {
                 debug!(program = %spec.program.display(), "process cancelled, sending SIGTERM");
-                let (exit_code, stderr) = terminate_and_wait(child, pid, config, "cancellation").await;
+                let (exit_code, stderr) = terminate_and_wait_async(child, pid, config.lifecycle, "cancellation").await;
                 (exit_code, false, true, stderr)
             }
             wait_result = timeout(timeout_duration, child.wait()) => {
@@ -41,7 +39,7 @@ pub(in crate::runner) async fn wait_for_completion(
                     }
                     Err(_) => {
                         debug!(program = %spec.program.display(), timeout = ?timeout_duration, "process timeout, sending SIGTERM");
-                        let (exit_code, stderr) = terminate_and_wait(child, pid, config, "timeout").await;
+                        let (exit_code, stderr) = terminate_and_wait_async(child, pid, config.lifecycle, "timeout").await;
                         (exit_code, true, false, stderr)
                     }
                 }
@@ -51,7 +49,7 @@ pub(in crate::runner) async fn wait_for_completion(
         tokio::select! {
             _ = cancel.cancelled() => {
                 debug!(program = %spec.program.display(), "process cancelled, sending SIGTERM");
-                let (exit_code, stderr) = terminate_and_wait(child, pid, config, "cancellation").await;
+                let (exit_code, stderr) = terminate_and_wait_async(child, pid, config.lifecycle, "cancellation").await;
                 (exit_code, false, true, stderr)
             }
             wait_result = child.wait() => {
@@ -74,48 +72,4 @@ pub(in crate::runner) async fn wait_for_completion(
         cancelled,
         synthetic_stderr,
     })
-}
-
-async fn terminate_and_wait(
-    child: &mut Child,
-    pid: Option<u32>,
-    config: &ProcessConfig,
-    reason: &str,
-) -> (Option<i32>, Option<String>) {
-    let group = terminate::targets_group(config.signal);
-    if !pid.is_some_and(|pid| terminate_target(pid, group)) {
-        let _ = child.start_kill();
-    }
-    match timeout(config.signal.grace_period, child.wait()).await {
-        Ok(Ok(status)) => (status.code(), None),
-        Ok(Err(error)) => {
-            warn!(
-                signal = ProcessSignal::Terminate.name(),
-                "error waiting for process after signal: {error}"
-            );
-            if !pid.is_some_and(|pid| kill_target(pid, group)) {
-                let _ = child.start_kill();
-            }
-            (
-                None,
-                Some(format!(
-                    "process killed (error during grace period after {reason}: {error})"
-                )),
-            )
-        }
-        Err(_) => {
-            debug!(
-                signal = ProcessSignal::Kill.name(),
-                "grace period expired, sending signal"
-            );
-            if !pid.is_some_and(|pid| kill_target(pid, group)) {
-                let _ = child.start_kill();
-            }
-            let _ = child.wait().await;
-            (
-                None,
-                Some(format!("process killed by SIGKILL after {reason}")),
-            )
-        }
-    }
 }

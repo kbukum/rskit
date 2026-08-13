@@ -2,7 +2,7 @@ use std::process::Stdio;
 
 use tokio::process::Command as TokioCommand;
 
-use crate::{EnvPolicy, ProcessConfig, ProcessSpec};
+use crate::{EnvPolicy, ProcessConfig, ProcessSpec, process_group::isolate_async};
 
 /// The stdin/stdout/stderr configuration a child process is spawned with.
 pub(in crate::runner) struct PipeStdio {
@@ -33,28 +33,7 @@ pub(in crate::runner) fn configure_command(
         cmd.env(key, value);
     }
 
-    if config.signal.create_process_group {
-        isolate(cmd);
-    }
-}
-
-fn isolate(cmd: &mut TokioCommand) {
-    #[cfg(unix)]
-    {
-        // SAFETY: `pre_exec` runs in the child process after fork and before exec.
-        // The closure only calls the async-signal-safe `setpgid` libc function
-        // and returns an `io::Error` on failure, which is the supported usage pattern.
-        unsafe {
-            cmd.pre_exec(|| {
-                if libc::setpgid(0, 0) != 0 {
-                    return Err(std::io::Error::last_os_error());
-                }
-                Ok(())
-            });
-        }
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = cmd;
+    if config.lifecycle.isolate_process_group {
+        isolate_async(cmd);
     }
 }

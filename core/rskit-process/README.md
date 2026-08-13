@@ -92,7 +92,7 @@ assert!(result.stdout.is_empty());
 
 ## Timeout and process groups
 
-By default, rskit-process creates an isolated process group where the platform supports it. On timeout or cancellation, it sends a graceful termination signal, waits for `SignalPolicy::grace_period`, then escalates to kill. `Inherited` mode is the exception: it does not create a new process group, because terminal-native commands should remain in the parent's foreground terminal context unless a future terminal-control mode provides stronger guarantees.
+By default, rskit-process creates an isolated process group where the platform supports it. On timeout or cancellation, it sends a graceful termination signal, waits for `LifecyclePolicy::grace_period`, then escalates to kill. `Inherited` mode is the exception: it does not create a new process group, because terminal-native commands should remain in the parent's foreground terminal context unless a future terminal-control mode provides stronger guarantees. Isolated children are also registered with a `ProcessSupervisor`; normal completion unregisters them on reap, supervisor shutdown fans out termination to every tracked group, and dropping a supervisor or armed child scope best-effort kills anything still live. On Linux, isolated spawns set `PR_SET_PDEATHSIG=SIGKILL`; other Unix platforms cannot prevent children from surviving an uncatchable hard kill of the parent, so callers still need an external process manager for that residual case.
 
 Separate stdout and stderr pipes are read concurrently, so each stream is ordered internally, but exact ordering across streams is not guaranteed.
 

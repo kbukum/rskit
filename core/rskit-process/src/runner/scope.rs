@@ -5,6 +5,8 @@ use tokio::process::Child;
 use tokio::runtime::Handle;
 use tokio::task::{AbortHandle, JoinHandle};
 
+use crate::{LifecyclePolicy, RegistrationGuard, process_group::kill_target};
+
 /// Owns a spawned child and the run's I/O tasks' abort handles
 /// so an early return abandons them cleanly.
 ///
@@ -17,16 +19,24 @@ use tokio::task::{AbortHandle, JoinHandle};
 /// [`disarm`](Self::disarm) after a normal completion hands ownership back to the joined results.
 pub(super) struct ChildScope {
     child: Option<Child>,
+    registration: Option<RegistrationGuard>,
     aborts: Vec<AbortHandle>,
+    lifecycle: LifecyclePolicy,
     armed: bool,
 }
 
 impl ChildScope {
     /// Take ownership of the spawned child, armed by default.
-    pub(super) fn new(child: Child) -> Self {
+    pub(super) fn new(
+        child: Child,
+        registration: RegistrationGuard,
+        lifecycle: LifecyclePolicy,
+    ) -> Self {
         Self {
             child: Some(child),
+            registration: Some(registration),
             aborts: Vec::new(),
+            lifecycle,
             armed: true,
         }
     }
@@ -55,6 +65,9 @@ impl ChildScope {
     /// Mark the run as completed normally so drop neither aborts nor kills.
     pub(super) fn disarm(&mut self) {
         self.armed = false;
+        if let Some(registration) = self.registration.take() {
+            registration.unregister();
+        }
     }
 }
 
@@ -73,12 +86,18 @@ impl Drop for ChildScope {
         // `start_kill` already fired, so even without a running runtime the child is killed
         // and Tokio's orphan reaper collects it.
         if let Some(mut child) = self.child.take() {
+            if let Some(pid) = child.id() {
+                let _ = kill_target(pid, self.lifecycle.targets_group());
+            }
             let _ = child.start_kill();
             if let Ok(handle) = Handle::try_current() {
                 handle.spawn(async move {
                     let _ = child.wait().await;
                 });
             }
+        }
+        if let Some(registration) = self.registration.take() {
+            registration.unregister();
         }
     }
 }
@@ -90,6 +109,7 @@ mod tests {
     use tokio::process::Command;
 
     use super::ChildScope;
+    use crate::{LifecyclePolicy, ProcessSupervisor};
 
     /// Spawn a long-lived child that will outlive the test unless killed.
     fn spawn_sleeper() -> tokio::process::Child {
@@ -107,7 +127,9 @@ mod tests {
             tokio::time::sleep(Duration::from_secs(30)).await;
         }));
 
-        let mut scope = ChildScope::new(child);
+        let supervisor = ProcessSupervisor::new(LifecyclePolicy::default());
+        let registration = supervisor.track_pid(child.id().unwrap_or_default());
+        let mut scope = ChildScope::new(child, registration, LifecyclePolicy::default());
         scope.register(&some_task);
         drop(scope);
 
@@ -126,7 +148,10 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }));
 
-        let mut scope = ChildScope::new(spawn_sleeper());
+        let supervisor = ProcessSupervisor::new(LifecyclePolicy::default());
+        let child = spawn_sleeper();
+        let registration = supervisor.track_pid(child.id().unwrap_or_default());
+        let mut scope = ChildScope::new(child, registration, LifecyclePolicy::default());
         scope.register(&some_task);
         scope.disarm();
 

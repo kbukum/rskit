@@ -7,7 +7,8 @@ use std::{
 
 use crate::worker::join_within;
 use crate::{
-    AppError, AppResult, ErrorCode, ProcessResult, SignalPolicy, terminate::terminate_and_reap,
+    AppError, AppResult, ErrorCode, LifecyclePolicy, ProcessResult, ProcessSupervisor,
+    RegistrationGuard, supervisor::terminate_and_reap,
 };
 
 use super::{
@@ -38,7 +39,9 @@ pub struct PersistentProcess {
     stdout: Capture,
     stderr: Capture,
     start: Instant,
-    signal: SignalPolicy,
+    signal: LifecyclePolicy,
+    registration: Option<RegistrationGuard>,
+    _supervisor: ProcessSupervisor,
     shutdown_grace_period: Duration,
     stopped: bool,
 }
@@ -69,6 +72,7 @@ impl PersistentProcess {
         )?;
         self.stopped = true;
         self.stop_cancel_thread()?;
+        self.unregister();
         let cancelled = self.cancelled.load(Ordering::SeqCst);
         self.completed_result(status, false, cancelled)
     }
@@ -83,6 +87,7 @@ impl PersistentProcess {
         if let Some(status) = self.child.try_wait().map_err(AppError::internal)? {
             self.stopped = true;
             self.stop_cancel_thread()?;
+            self.unregister();
             let cancelled = self.cancelled.load(Ordering::SeqCst);
             return self
                 .completed_result(status, false, cancelled)
@@ -90,14 +95,10 @@ impl PersistentProcess {
         }
 
         self.stop_cancel_thread()?;
-        let pid = self.child.id();
-        let (status, _escalated) = terminate_and_reap(
-            &mut self.child,
-            pid,
-            self.signal,
-            self.shutdown_grace_period,
-        )?;
+        let (status, _escalated) =
+            terminate_and_reap(&mut self.child, self.signal, self.shutdown_grace_period)?;
         self.stopped = true;
+        self.unregister();
         let cancelled = self.cancelled.load(Ordering::SeqCst);
         self.completed_result(status, false, cancelled)
             .map(ShutdownOutcome::Stopped)
@@ -134,6 +135,12 @@ impl PersistentProcess {
             Ok(())
         }
     }
+
+    fn unregister(&mut self) {
+        if let Some(registration) = self.registration.take() {
+            registration.unregister();
+        }
+    }
 }
 
 impl Drop for PersistentProcess {
@@ -158,11 +165,13 @@ pub(in crate::persistent) struct SpawnedProcess {
     pub(in crate::persistent) stdout: Capture,
     pub(in crate::persistent) stderr: Capture,
     pub(in crate::persistent) start: Instant,
+    pub(in crate::persistent) registration: RegistrationGuard,
+    pub(in crate::persistent) supervisor: ProcessSupervisor,
 }
 
 pub(in crate::persistent) fn new_process(
     spawned: SpawnedProcess,
-    signal: SignalPolicy,
+    signal: LifecyclePolicy,
     shutdown_grace_period: Duration,
 ) -> PersistentProcess {
     PersistentProcess {
@@ -176,6 +185,8 @@ pub(in crate::persistent) fn new_process(
         stderr: spawned.stderr,
         start: spawned.start,
         signal,
+        registration: Some(spawned.registration),
+        _supervisor: spawned.supervisor,
         shutdown_grace_period,
         stopped: false,
     }
@@ -183,17 +194,16 @@ pub(in crate::persistent) fn new_process(
 
 pub(in crate::persistent) fn cleanup_spawned_child(
     child: &mut Child,
-    signal: SignalPolicy,
+    signal: LifecyclePolicy,
     grace_period: Duration,
 ) -> AppResult<()> {
-    let pid = child.id();
-    terminate_and_reap(child, pid, signal, grace_period).map(|_| ())
+    terminate_and_reap(child, signal, grace_period).map(|_| ())
 }
 
 fn wait_for_exit(
     child: &mut Child,
     cancel_thread: &Option<CancelThread>,
-    signal: SignalPolicy,
+    signal: LifecyclePolicy,
     grace_period: Duration,
 ) -> AppResult<ExitStatus> {
     loop {
@@ -204,8 +214,7 @@ fn wait_for_exit(
             .as_ref()
             .is_some_and(CancelThread::is_cancel_requested)
         {
-            let pid = child.id();
-            return terminate_and_reap(child, pid, signal, grace_period).map(|(status, _)| status);
+            return terminate_and_reap(child, signal, grace_period).map(|(status, _)| status);
         }
         thread::sleep(Duration::from_millis(10));
     }
@@ -288,8 +297,8 @@ mod tests {
 
         cleanup_spawned_child(
             &mut child,
-            SignalPolicy::default()
-                .with_create_process_group(false)
+            LifecyclePolicy::default()
+                .with_isolate_process_group(false)
                 .with_terminate_descendants(false),
             Duration::from_millis(20),
         )

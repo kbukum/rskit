@@ -1,0 +1,109 @@
+//! Unified SIGTERM → grace → SIGKILL escalation and reaping.
+
+use std::process::{Child, ExitStatus};
+use std::thread;
+use std::time::{Duration, Instant};
+
+use tokio::{process::Child as TokioChild, time::timeout};
+use tracing::{debug, warn};
+
+use crate::command::LifecyclePolicy;
+use crate::process_group::{kill_target, signal_target, terminate_target};
+use crate::signal::ProcessSignal;
+use crate::{AppError, AppResult};
+
+const POLL_INTERVAL: Duration = Duration::from_millis(10);
+
+pub(crate) fn reap_within(
+    child: &mut Child,
+    policy: LifecyclePolicy,
+    grace: Duration,
+) -> AppResult<(ExitStatus, bool)> {
+    let deadline = Instant::now() + grace;
+    loop {
+        if let Some(status) = child.try_wait().map_err(AppError::internal)? {
+            return Ok((status, false));
+        }
+        if Instant::now() >= deadline {
+            if policy.kill_after_grace && !kill_target(child.id(), policy.targets_group()) {
+                child.kill().map_err(AppError::internal)?;
+            }
+            let status = child.wait().map_err(AppError::internal)?;
+            return Ok((status, policy.kill_after_grace));
+        }
+        thread::sleep(POLL_INTERVAL);
+    }
+}
+
+pub(crate) fn terminate_and_reap(
+    child: &mut Child,
+    policy: LifecyclePolicy,
+    grace: Duration,
+) -> AppResult<(ExitStatus, bool)> {
+    if !terminate_target(child.id(), policy.targets_group()) {
+        child.kill().map_err(AppError::internal)?;
+    }
+    reap_within(child, policy, grace)
+}
+
+pub(crate) async fn terminate_and_wait_async(
+    child: &mut TokioChild,
+    pid: Option<u32>,
+    policy: LifecyclePolicy,
+    reason: &str,
+) -> (Option<i32>, Option<String>) {
+    if !pid.is_some_and(|pid| terminate_target(pid, policy.targets_group())) {
+        let _ = child.start_kill();
+    }
+    match timeout(policy.grace_period, child.wait()).await {
+        Ok(Ok(status)) => (status.code(), None),
+        Ok(Err(error)) => {
+            warn!(
+                signal = ProcessSignal::Terminate.name(),
+                "error waiting for process after signal: {error}"
+            );
+            if policy.kill_after_grace
+                && !pid.is_some_and(|pid| kill_target(pid, policy.targets_group()))
+            {
+                let _ = child.start_kill();
+            }
+            (
+                None,
+                Some(format!(
+                    "process killed (error during grace period after {reason}: {error})"
+                )),
+            )
+        }
+        Err(_) => {
+            debug!(
+                signal = ProcessSignal::Kill.name(),
+                "grace period expired, sending signal"
+            );
+            if policy.kill_after_grace
+                && !pid.is_some_and(|pid| kill_target(pid, policy.targets_group()))
+            {
+                let _ = child.start_kill();
+            }
+            let _ = child.wait().await;
+            (
+                None,
+                Some(format!("process killed by SIGKILL after {reason}")),
+            )
+        }
+    }
+}
+
+pub(crate) async fn terminate_registered_pid(
+    pid: u32,
+    process_group: bool,
+    policy: LifecyclePolicy,
+) {
+    if pid == 0 {
+        return;
+    }
+    let _ = signal_target(pid, ProcessSignal::Terminate, process_group);
+    tokio::time::sleep(policy.grace_period).await;
+    if policy.kill_after_grace {
+        let _ = signal_target(pid, ProcessSignal::Kill, process_group);
+    }
+}

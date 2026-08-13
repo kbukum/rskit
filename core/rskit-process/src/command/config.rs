@@ -3,8 +3,8 @@
 use std::time::Duration;
 
 use super::io::{InputPolicy, ProcessIo};
+use super::lifecycle::LifecyclePolicy;
 use super::redaction::ArgRedaction;
-use super::signal::SignalPolicy;
 
 /// Configuration for subprocess execution behavior.
 #[derive(Debug, Clone)]
@@ -14,8 +14,8 @@ pub struct ProcessConfig {
     pub timeout: Option<Duration>,
     /// Explicit I/O strategy.
     pub io: ProcessIo,
-    /// Signal and process-tree termination policy.
-    pub signal: SignalPolicy,
+    /// Child lifecycle, isolation, and termination policy.
+    pub lifecycle: LifecyclePolicy,
     /// Redaction policy for command-line arguments emitted in spawn logs.
     pub arg_redaction: ArgRedaction,
 }
@@ -25,7 +25,7 @@ impl Default for ProcessConfig {
         Self {
             timeout: Some(Duration::from_secs(30)),
             io: ProcessIo::default(),
-            signal: SignalPolicy::default(),
+            lifecycle: LifecyclePolicy::default(),
             arg_redaction: ArgRedaction::default(),
         }
     }
@@ -46,10 +46,10 @@ impl ProcessConfig {
         self
     }
 
-    /// Set the signal policy.
+    /// Set the lifecycle policy.
     #[must_use]
-    pub fn with_signal_policy(mut self, signal: SignalPolicy) -> Self {
-        self.signal = signal;
+    pub fn with_lifecycle_policy(mut self, lifecycle: LifecyclePolicy) -> Self {
+        self.lifecycle = lifecycle;
         self
     }
 

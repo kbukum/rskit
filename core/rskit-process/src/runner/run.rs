@@ -7,7 +7,7 @@ use tracing::debug;
 
 use crate::{
     AppError, AppResult, InheritedIo, InputPolicy, OutputPolicy, ProcessConfig, ProcessIo,
-    ProcessResult, ProcessSpec,
+    ProcessResult, ProcessSpec, ProcessSupervisor,
     capture::{append_line_bounded, shared_output},
     command::spawn_error,
 };
@@ -145,9 +145,11 @@ async fn run_process(
     configure_command(&mut cmd, spec, config, stdio);
 
     debug!(program = %spec.program.display(), args = ?RedactedArgs::new(&spec.args, &config.arg_redaction), "spawning process");
+    let supervisor = ProcessSupervisor::new(config.lifecycle);
     let mut child = cmd
         .spawn()
         .map_err(|error| spawn_error("failed to spawn process", error))?;
+    let registration = supervisor.register_pid(child.id().unwrap_or_default());
 
     // Detach the child's pipe handles before the child moves into the scope guard,
     // which then owns it for the rest of the run.
@@ -158,7 +160,7 @@ async fn run_process(
     // Own the child and the spawned I/O tasks in a scope guard:
     // any early return below aborts the reader/stdin tasks
     // and best-effort kills the child rather than detaching them (a dropped Tokio `JoinHandle` is detached, which would leak the task and keep the child's pipes alive).
-    let mut scope = ChildScope::new(child);
+    let mut scope = ChildScope::new(child, registration, config.lifecycle);
 
     let max_output_bytes = output.and_then(|output| output.max_output_bytes);
     let capture_stdout = output.is_some_and(|output| output.capture_stdout);
@@ -192,7 +194,7 @@ async fn run_process(
     // The child has exited; drain the workers within the grace period.
     // A reader still blocked because a surviving descendant holds the pipe open is aborted rather than awaited forever,
     // and the partial bytes it captured are still recovered from the shared buffer.
-    let grace = config.signal.grace_period;
+    let grace = config.lifecycle.grace_period;
     join_within(stdin_task, grace).await?;
     join_within(stdout_task, grace).await?;
     join_within(stderr_task, grace).await?;

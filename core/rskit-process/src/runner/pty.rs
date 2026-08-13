@@ -15,7 +15,7 @@ use tracing::debug;
 use crate::pty::{PtyIo, PtyMaster, PtyPair, install_controlling_tty, open_pty};
 use crate::{
     AppError, AppResult, EnvPolicy, ErrorCode, InputPolicy, ProcessConfig, ProcessResult,
-    ProcessSpec, command::spawn_error,
+    ProcessSpec, ProcessSupervisor, command::spawn_error,
 };
 
 use super::lifecycle::wait_for_completion;
@@ -39,14 +39,14 @@ pub(in crate::runner) async fn run_pty_mode(
             "inherited stdin requires inherited I/O mode; PTY mode owns the child's terminal",
         ));
     }
-    if !config.signal.create_process_group {
+    if !config.lifecycle.isolate_process_group {
         // Acquiring a controlling terminal requires the child to be a session leader,
         // so PTY setup unconditionally calls `setsid()` (a new session, hence a new process group).
-        // `create_process_group = false` therefore cannot be honored here;
+        // `isolate_process_group = false` therefore cannot be honored here;
         // reject it rather than silently ignoring it.
         return Err(AppError::invalid_input(
-            "process.signal.create_process_group",
-            "PTY mode always starts a new session (setsid) to own the terminal, so create_process_group cannot be disabled",
+            "process.lifecycle.isolate_process_group",
+            "PTY mode always starts a new session (setsid) to own the terminal, so isolate_process_group cannot be disabled",
         ));
     }
 
@@ -72,6 +72,8 @@ pub(in crate::runner) async fn run_pty_mode(
     let child = cmd
         .spawn()
         .map_err(|error| spawn_error("failed to spawn process", error))?;
+    let supervisor = ProcessSupervisor::new(config.lifecycle);
+    let registration = supervisor.register_pid(child.id().unwrap_or_default());
     // The child now holds its own dup'd stdio; the parent must not keep the slave open
     // or the master read would never observe EOF.
     drop(slave);
@@ -81,7 +83,7 @@ pub(in crate::runner) async fn run_pty_mode(
     // error — aborts the background tasks and best-effort kills the child rather
     // than detaching them. A dropped Tokio `JoinHandle` is detached, so an
     // un-guarded early return would leak the task and keep the PTY fds alive.
-    let mut scope = ChildScope::new(child);
+    let mut scope = ChildScope::new(child, registration, config.lifecycle);
 
     // Optional input writer: a second handle onto the master so writes
     // and reads proceed independently. Built before the reader takes ownership of `master`.
@@ -113,7 +115,7 @@ pub(in crate::runner) async fn run_pty_mode(
     // The child has exited; drain the workers within the grace period.
     // A reader still blocked because a surviving descendant holds the PTY open is aborted rather than awaited forever,
     // and the partial bytes it captured are still recovered from the shared buffer.
-    let grace = config.signal.grace_period;
+    let grace = config.lifecycle.grace_period;
     join_within(stdin_task, grace).await?;
     join_within(reader_task, grace).await?;
     let captured_output = captured(&reader_capture);
@@ -248,8 +250,8 @@ mod tests {
             .unwrap_err();
             assert_eq!(error.code(), ErrorCode::InvalidInput);
 
-            let disabled_group = ProcessConfig::default().with_signal_policy(
-                crate::SignalPolicy::default().with_create_process_group(false),
+            let disabled_group = ProcessConfig::default().with_lifecycle_policy(
+                crate::LifecyclePolicy::default().with_isolate_process_group(false),
             );
             let error = run_pty_mode(
                 &ProcessSpec::new("cat"),

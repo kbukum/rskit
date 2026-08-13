@@ -7,10 +7,12 @@ use std::time::{Duration, Instant};
 
 use crate::capture::{SharedOutput, append_line_bounded, shared_output, take_shared};
 use crate::process_group::kill_target;
+use crate::supervisor::terminate_and_reap;
 use crate::worker::join_within;
 use crate::{
-    AppError, AppResult, EnvPolicy, ErrorCode, InputPolicy, OutputPolicy, ProcessConfig, ProcessIo,
-    ProcessResult, ProcessSpec, SignalPolicy, command::spawn_error, terminate,
+    AppError, AppResult, EnvPolicy, ErrorCode, InputPolicy, LifecyclePolicy, OutputPolicy,
+    ProcessConfig, ProcessIo, ProcessResult, ProcessSpec, ProcessSupervisor, RegistrationGuard,
+    command::spawn_error,
 };
 
 const POLL_INTERVAL: Duration = Duration::from_millis(10);
@@ -73,13 +75,15 @@ fn run_blocking(
         cmd.env(key, value);
     }
 
-    if config.signal.create_process_group {
+    if config.lifecycle.isolate_process_group {
         crate::process_group::isolate(&mut cmd);
     }
 
     let mut child = cmd
         .spawn()
         .map_err(|error| spawn_error("failed to spawn process", error))?;
+    let supervisor = ProcessSupervisor::new(config.lifecycle);
+    let registration = supervisor.register_pid(child.id());
 
     let max_output_bytes = output.and_then(|output| output.max_output_bytes);
     let stdout_capture = shared_output();
@@ -98,12 +102,16 @@ fn run_blocking(
     // so any early return below (a wait error, for example) kills the child
     // and reaps the threads rather than orphaning the child and detaching the readers,
     // which would keep the pipes open and leak the threads.
-    let mut scope = BlockingChildScope::new(child, config.signal, config.signal.grace_period);
+    let mut scope = BlockingChildScope::new(
+        child,
+        registration,
+        config.lifecycle,
+        config.lifecycle.grace_period,
+    );
     scope.attach(stdout_thread, stderr_thread, stdin_thread);
 
-    let pid = scope.child_mut().id();
     let (exit_code, timed_out, synthetic_stderr) =
-        wait_with_timeout(scope.child_mut(), pid, config.timeout, config)?;
+        wait_with_timeout(scope.child_mut(), config.timeout, config)?;
 
     // The child has exited; drain the workers within the grace period.
     // A worker still blocked because a surviving descendant holds the pipe open is detached rather than joined forever.
@@ -141,18 +149,25 @@ fn run_blocking(
 /// [`disarm`](Self::disarm) after a normal drain hands ownership back to the already-captured shared output.
 struct BlockingChildScope {
     child: Child,
+    registration: Option<RegistrationGuard>,
     stdout: Option<thread::JoinHandle<AppResult<()>>>,
     stderr: Option<thread::JoinHandle<AppResult<()>>>,
     stdin: Option<thread::JoinHandle<AppResult<()>>>,
-    signal: SignalPolicy,
+    signal: LifecyclePolicy,
     grace: Duration,
     armed: bool,
 }
 
 impl BlockingChildScope {
-    fn new(child: Child, signal: SignalPolicy, grace: Duration) -> Self {
+    fn new(
+        child: Child,
+        registration: RegistrationGuard,
+        signal: LifecyclePolicy,
+        grace: Duration,
+    ) -> Self {
         Self {
             child,
+            registration: Some(registration),
             stdout: None,
             stderr: None,
             stdin: None,
@@ -187,6 +202,9 @@ impl BlockingChildScope {
 
     fn disarm(&mut self) {
         self.armed = false;
+        if let Some(registration) = self.registration.take() {
+            registration.unregister();
+        }
     }
 }
 
@@ -195,7 +213,7 @@ impl Drop for BlockingChildScope {
         if !self.armed {
             return;
         }
-        let group = terminate::targets_group(self.signal);
+        let group = self.signal.targets_group();
         if !kill_target(self.child.id(), group) {
             let _ = self.child.kill();
         }
@@ -203,6 +221,9 @@ impl Drop for BlockingChildScope {
         let _ = join_within(self.stdout.take(), self.grace);
         let _ = join_within(self.stderr.take(), self.grace);
         let _ = join_within(self.stdin.take(), self.grace);
+        if let Some(registration) = self.registration.take() {
+            registration.unregister();
+        }
     }
 }
 
@@ -267,9 +288,9 @@ fn pipe_stdin_stdio(input: &InputPolicy) -> AppResult<Stdio> {
 
 fn inherited_config(config: &ProcessConfig) -> ProcessConfig {
     let mut config = config.clone();
-    config.signal = config
-        .signal
-        .with_create_process_group(false)
+    config.lifecycle = config
+        .lifecycle
+        .with_isolate_process_group(false)
         .with_terminate_descendants(false);
     config
 }
@@ -292,7 +313,6 @@ fn stderr_stdio(output: Option<&OutputPolicy>) -> Stdio {
 
 fn wait_with_timeout(
     child: &mut Child,
-    pid: u32,
     timeout: Option<Duration>,
     config: &ProcessConfig,
 ) -> AppResult<(Option<i32>, bool, Option<String>)> {
@@ -317,12 +337,8 @@ fn wait_with_timeout(
             return Ok((status.code(), false, None));
         }
         if Instant::now() >= deadline {
-            let (status, escalated) = terminate::terminate_and_reap(
-                child,
-                pid,
-                config.signal,
-                config.signal.grace_period,
-            )?;
+            let (status, escalated) =
+                terminate_and_reap(child, config.lifecycle, config.lifecycle.grace_period)?;
             let synthetic =
                 escalated.then(|| "process killed by SIGKILL after timeout".to_string());
             return Ok((status.code(), true, synthetic));
@@ -367,8 +383,8 @@ mod tests {
             .with_timeout(None);
         let inherited = inherited_config(&config);
 
-        assert!(!inherited.signal.create_process_group);
-        assert!(!inherited.signal.terminate_descendants);
+        assert!(!inherited.lifecycle.isolate_process_group);
+        assert!(!inherited.lifecycle.terminate_descendants);
         assert_eq!(inherited.timeout, None);
     }
 
@@ -424,10 +440,17 @@ mod tests {
             thread::sleep(Duration::from_millis(20));
             Ok(())
         });
+        let supervisor = ProcessSupervisor::new(
+            LifecyclePolicy::default()
+                .with_isolate_process_group(false)
+                .with_terminate_descendants(false),
+        );
+        let registration = supervisor.track_pid(pid);
         let mut scope = BlockingChildScope::new(
             child,
-            SignalPolicy::default()
-                .with_create_process_group(false)
+            registration,
+            LifecyclePolicy::default()
+                .with_isolate_process_group(false)
                 .with_terminate_descendants(false),
             Duration::from_millis(500),
         );

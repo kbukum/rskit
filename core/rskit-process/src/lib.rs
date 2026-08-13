@@ -3,10 +3,12 @@
 //! This crate provides functionality to execute external processes with:
 //! - Timeout support with configurable grace period
 //! - SIGTERM → SIGKILL escalation for graceful shutdown
-//! - Process group isolation to ensure child processes are properly terminated
+//! - Process group isolation and [`ProcessSupervisor`] tracking to ensure child processes are properly terminated on normal completion, timeout, cancellation, future drop, panic unwinding through a supervisor, and explicit supervisor shutdown
 //! - Explicit captured, observed, and inherited stdio modes
 //! - Environment variable control
 //! - Working directory configuration
+//!
+//! Isolated spawns set `kill_on_drop(true)` for Tokio children. On Linux they also request `PR_SET_PDEATHSIG=SIGKILL` in the pre-exec child so a hard parent death kills the child group. Other platforms cannot provide that parent-death hard-kill guarantee; they still perform best-effort cleanup for graceful shutdown and Rust-side drops.
 //!
 //! # I/O modes
 //!
@@ -54,13 +56,13 @@ mod pty;
 mod result;
 mod runner;
 mod signal;
+mod supervisor;
 mod sync;
-mod terminate;
 mod worker;
 
 pub use command::{
     ArgRedaction, CapturedIo, DEFAULT_MAX_OUTPUT_BYTES, EnvPolicy, InheritedIo, InputPolicy,
-    ObservedIo, OutputPolicy, ProcessConfig, ProcessIo, ProcessSpec, SignalPolicy, command,
+    LifecyclePolicy, ObservedIo, OutputPolicy, ProcessConfig, ProcessIo, ProcessSpec, command,
 };
 pub use persistent::{
     PersistentConfig, PersistentOutput, PersistentOutputObserver, PersistentOutputStream,
@@ -69,12 +71,17 @@ pub use persistent::{
 };
 pub use process_group::{
     interrupt as interrupt_process_group, isolate as isolate_process_group,
-    kill as kill_process_group, terminate as terminate_process_group,
+    isolate_async as isolate_process_group_async, kill as kill_process_group,
+    terminate as terminate_process_group,
 };
 #[cfg(unix)]
 pub use pty::{PtyIo, PtySize, terminal_size};
 pub use result::ProcessResult;
 pub use runner::{OutputObserver, run_with_cancel};
+pub use supervisor::{
+    ProcessSupervisor, RegistrationGuard, ShutdownReason, ShutdownSubscription,
+    SupervisedAsyncChild, SupervisedBlockingChild,
+};
 pub use sync::run;
 
 /// Re-export error types

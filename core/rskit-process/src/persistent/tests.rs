@@ -11,8 +11,8 @@ use super::{PersistentConfig, PersistentReadiness, ShutdownOutcome, start_persis
 #[cfg(unix)]
 use crate::pty::PtyIo;
 use crate::{
-    ErrorCode, InheritedIo, InputPolicy, ObservedIo, OutputObserver, ProcessConfig, ProcessIo,
-    ProcessSpec, SignalPolicy,
+    ErrorCode, InheritedIo, InputPolicy, LifecyclePolicy, ObservedIo, OutputObserver,
+    ProcessConfig, ProcessIo, ProcessSpec,
 };
 
 static FIFO_ID: AtomicUsize = AtomicUsize::new(0);
@@ -415,8 +415,8 @@ fn persistent_rejects_inherited_stdin_for_captured_mode() {
 fn persistent_shutdown_can_leave_descendants_running_when_configured() {
     let pid_file = descendant_pid_file("descendant-shutdown");
     let command = descendant_command(&pid_file);
-    let signal = SignalPolicy::default().with_terminate_descendants(false);
-    let process_config = ProcessConfig::default().with_signal_policy(signal);
+    let signal = LifecyclePolicy::default().with_terminate_descendants(false);
+    let process_config = ProcessConfig::default().with_lifecycle_policy(signal);
     let config = PersistentConfig::default()
         .with_readiness(PersistentReadiness::OutputContains("ready".to_string()))
         .with_shutdown_grace_period(Duration::from_millis(50));
@@ -435,8 +435,8 @@ fn persistent_shutdown_can_leave_descendants_running_when_configured() {
 fn persistent_shutdown_without_process_group_leaves_descendants_running() {
     let pid_file = descendant_pid_file("descendant-no-process-group");
     let command = descendant_command(&pid_file);
-    let signal = SignalPolicy::default().with_create_process_group(false);
-    let process_config = ProcessConfig::default().with_signal_policy(signal);
+    let signal = LifecyclePolicy::default().with_isolate_process_group(false);
+    let process_config = ProcessConfig::default().with_lifecycle_policy(signal);
     let config = PersistentConfig::default()
         .with_readiness(PersistentReadiness::OutputContains("ready".to_string()))
         .with_shutdown_grace_period(Duration::from_millis(50));
@@ -455,8 +455,8 @@ fn persistent_shutdown_without_process_group_leaves_descendants_running() {
 fn persistent_wait_cancel_can_leave_descendants_running_when_configured() {
     let pid_file = descendant_pid_file("descendant-wait-cancel");
     let command = descendant_command(&pid_file);
-    let signal = SignalPolicy::default().with_terminate_descendants(false);
-    let process_config = ProcessConfig::default().with_signal_policy(signal);
+    let signal = LifecyclePolicy::default().with_terminate_descendants(false);
+    let process_config = ProcessConfig::default().with_lifecycle_policy(signal);
     let config = PersistentConfig::default()
         .with_readiness(PersistentReadiness::OutputContains("ready".to_string()))
         .with_shutdown_grace_period(Duration::from_millis(50));
@@ -475,8 +475,8 @@ fn persistent_wait_cancel_can_leave_descendants_running_when_configured() {
 fn persistent_start_cleanup_can_leave_descendants_running_when_configured() {
     let pid_file = descendant_pid_file("descendant-start-cleanup");
     let command = descendant_command(&pid_file);
-    let signal = SignalPolicy::default().with_terminate_descendants(false);
-    let process_config = ProcessConfig::default().with_signal_policy(signal);
+    let signal = LifecyclePolicy::default().with_terminate_descendants(false);
+    let process_config = ProcessConfig::default().with_lifecycle_policy(signal);
     let config = PersistentConfig::default()
         .with_readiness(PersistentReadiness::OutputContains(
             "never-ready".to_string(),

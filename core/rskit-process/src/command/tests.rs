@@ -79,7 +79,7 @@ fn io_policy_builders_update_nested_fields() {
 }
 
 #[test]
-fn redaction_signal_and_config_builders_are_chainable() {
+fn redaction_lifecycle_and_config_builders_are_chainable() {
     let redaction = ArgRedaction::new()
         .with_name("token")
         .with_names(["password", "client-secret"]);
@@ -91,25 +91,25 @@ fn redaction_signal_and_config_builders_are_chainable() {
     assert!(replacement.is_sensitive_arg_name("api-key"));
     assert!(!replacement.is_sensitive_arg_name("token"));
 
-    let signal = SignalPolicy::default()
+    let signal = LifecyclePolicy::default()
         .with_grace_period(Duration::from_millis(25))
-        .with_create_process_group(false)
+        .with_isolate_process_group(false)
         .with_terminate_descendants(false);
     assert_eq!(signal.grace_period, Duration::from_millis(25));
-    assert!(!signal.create_process_group);
+    assert!(!signal.isolate_process_group);
     assert!(!signal.terminate_descendants);
 
     let captured = ProcessConfig::default()
         .with_timeout(None)
         .with_arg_redaction(redaction)
         .with_sensitive_arg_name("session")
-        .with_signal_policy(signal)
+        .with_lifecycle_policy(signal)
         .with_max_output_bytes(3)
         .with_unbounded_output()
         .with_input(InputPolicy::Bytes(vec![1, 2, 3]));
     assert_eq!(captured.timeout, None);
     assert!(captured.arg_redaction.is_sensitive_arg_name("session"));
-    assert_eq!(captured.signal, signal);
+    assert_eq!(captured.lifecycle, signal);
     match captured.io {
         ProcessIo::Captured(io) => {
             assert_eq!(io.input, InputPolicy::Bytes(vec![1, 2, 3]));

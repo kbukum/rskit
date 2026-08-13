@@ -2,6 +2,8 @@
 
 use std::process::Command as StdCommand;
 
+use tokio::process::Command as TokioCommand;
+
 use crate::signal::ProcessSignal;
 
 /// Configure a command so the spawned child becomes the leader of a new process group.
@@ -17,6 +19,43 @@ pub fn isolate(command: &mut StdCommand) {
             command.pre_exec(|| {
                 if libc::setpgid(0, 0) != 0 {
                     return Err(std::io::Error::last_os_error());
+                }
+                #[cfg(target_os = "linux")]
+                {
+                    // SAFETY: `prctl(PR_SET_PDEATHSIG, SIGKILL)` is async-signal-safe in this pre-exec child and requests kernel-enforced cleanup if the parent dies before exec.
+                    if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) != 0 {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                }
+                Ok(())
+            });
+        }
+    }
+
+    #[cfg(not(unix))]
+    {
+        let _ = command;
+    }
+}
+
+/// Configure a Tokio command so the spawned child becomes the leader of a new process group.
+pub fn isolate_async(command: &mut TokioCommand) {
+    #[cfg(unix)]
+    {
+        command.kill_on_drop(true);
+        // SAFETY: `pre_exec` runs in the child process after fork and before exec.
+        // The closure only calls async-signal-safe libc functions (`setpgid` and, on Linux, `prctl(PR_SET_PDEATHSIG, SIGKILL)`) and returns an `io::Error` on failure, which is the supported usage pattern.
+        unsafe {
+            command.pre_exec(|| {
+                if libc::setpgid(0, 0) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                #[cfg(target_os = "linux")]
+                {
+                    // SAFETY: `prctl(PR_SET_PDEATHSIG, SIGKILL)` is async-signal-safe in this pre-exec child and requests kernel-enforced cleanup if the parent dies before exec.
+                    if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) != 0 {
+                        return Err(std::io::Error::last_os_error());
+                    }
                 }
                 Ok(())
             });
@@ -58,7 +97,7 @@ fn signal(pid: u32, signal: ProcessSignal) -> bool {
     signal_target(pid, signal, true)
 }
 
-fn signal_target(pid: u32, signal: ProcessSignal, process_group: bool) -> bool {
+pub(crate) fn signal_target(pid: u32, signal: ProcessSignal, process_group: bool) -> bool {
     if pid == 0 {
         return false;
     }

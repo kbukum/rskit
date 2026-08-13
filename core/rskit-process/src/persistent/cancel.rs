@@ -7,8 +7,7 @@ use std::{
 use tokio_util::sync::CancellationToken;
 
 use crate::process_group::{kill_target, terminate_target};
-use crate::terminate::targets_group;
-use crate::{AppError, AppResult, ErrorCode, SignalPolicy};
+use crate::{AppError, AppResult, ErrorCode, LifecyclePolicy};
 
 const POLL_INTERVAL: Duration = Duration::from_millis(10);
 
@@ -47,20 +46,22 @@ pub(in crate::persistent) fn spawn_cancel_thread(
     pid: u32,
     cancel: CancellationToken,
     cancelled: Arc<AtomicBool>,
-    signal: SignalPolicy,
+    signal: LifecyclePolicy,
     grace_period: Duration,
 ) -> AppResult<CancelThread> {
     let stop = Arc::new(AtomicBool::new(false));
     let thread_stop = Arc::clone(&stop);
     let thread_cancel = cancel.clone();
     let thread_cancelled = Arc::clone(&cancelled);
-    let group = targets_group(signal);
+    let group = signal.targets_group();
     let thread = thread::spawn(move || {
         while !thread_stop.load(Ordering::SeqCst) {
             if thread_cancel.is_cancelled() {
                 thread_cancelled.store(true, Ordering::SeqCst);
                 let _ = terminate_target(pid, group);
-                escalate_after_grace(&thread_stop, pid, group, grace_period);
+                if signal.kill_after_grace {
+                    escalate_after_grace(&thread_stop, pid, group, grace_period);
+                }
                 return Ok(());
             }
             thread::sleep(POLL_INTERVAL);
@@ -100,7 +101,7 @@ mod tests {
             0,
             cancel.clone(),
             Arc::clone(&cancelled),
-            SignalPolicy::default(),
+            LifecyclePolicy::default(),
             Duration::from_millis(1),
         )
         .unwrap();
