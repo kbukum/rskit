@@ -18,6 +18,20 @@ fn pid_exists(pid: u32) -> bool {
     unsafe { libc::kill(pid, 0) == 0 }
 }
 
+/// Assert `pid` is reaped, tolerating the window between a kill signal and the
+/// OS tearing the process down (a reparented grandchild is reaped by init
+/// asynchronously, so its pid can linger briefly after the group is signaled).
+#[cfg(unix)]
+fn assert_pid_reaped(pid: u32) {
+    for _ in 0..250 {
+        if !pid_exists(pid) {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    panic!("pid {pid} was not reaped");
+}
+
 /// Read a pid a child writes to `path`, tolerating the window between file
 /// creation (`>` truncates first) and the pid being written.
 #[cfg(unix)]
@@ -77,8 +91,8 @@ async fn graceful_signal_reaps_child_and_grandchild_group() {
     let child_pid = read_pid(&child_pid_file);
     let grandchild_pid = read_pid(&grandchild_pid_file);
     assert!(result.timed_out);
-    assert!(!pid_exists(child_pid));
-    assert!(!pid_exists(grandchild_pid));
+    assert_pid_reaped(child_pid);
+    assert_pid_reaped(grandchild_pid);
 }
 
 #[tokio::test]
