@@ -37,3 +37,25 @@ fn registry_concurrent_register_unregister_is_race_clean() {
     }
     assert_eq!(supervisor.registry_len(), 0);
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn externally_tracked_pid_defaults_to_direct_signalling() {
+    let mut child = std::process::Command::new("/bin/sh")
+        .args(["-c", "sleep 30"])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .expect("child spawns");
+    let supervisor = ProcessSupervisor::new(
+        LifecyclePolicy::default().with_grace_period(std::time::Duration::from_millis(50)),
+    );
+    let guard = supervisor.track_pid(child.id());
+
+    supervisor.shutdown("test").await.expect("shutdown");
+    let status = child.wait().expect("child reaps");
+
+    assert!(!status.success(), "the direct child was terminated");
+    drop(guard);
+}

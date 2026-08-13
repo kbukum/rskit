@@ -14,6 +14,33 @@ use crate::{AppError, AppResult, ErrorCode};
 /// Maximum number of targets terminated concurrently during a fan-out.
 const SHUTDOWN_FANOUT: usize = 32;
 
+struct ClaimGuard<'a> {
+    registry: &'a LiveChildRegistry,
+    outstanding: Vec<(u64, Arc<super::target::OwnedTarget>)>,
+}
+
+impl<'a> ClaimGuard<'a> {
+    fn new(
+        registry: &'a LiveChildRegistry,
+        claimed: &[(u64, Arc<super::target::OwnedTarget>)],
+    ) -> Self {
+        Self {
+            registry,
+            outstanding: claimed.to_vec(),
+        }
+    }
+
+    fn complete(&mut self, id: u64) {
+        self.outstanding.retain(|(candidate, _)| *candidate != id);
+    }
+}
+
+impl Drop for ClaimGuard<'_> {
+    fn drop(&mut self) {
+        self.registry.release_claims(&self.outstanding);
+    }
+}
+
 /// Backstop subscription bound to a caller-owned shutdown handle.
 ///
 /// The subscription owns the watcher task that *waits* for the handle to be cancelled and then
@@ -71,35 +98,30 @@ pub(super) async fn fan_out_shutdown(
     // "drained" and return before those children are reaped.
     let _gate = registry.shutdown_gate().await;
     registry.start_shutdown();
-    let semaphore = Arc::new(tokio::sync::Semaphore::new(SHUTDOWN_FANOUT));
     let mut unsupported = 0usize;
+    let mut failed = 0usize;
     loop {
-        let batch = registry.claim_live();
-        let mut tasks = Vec::with_capacity(batch.len());
+        let batch = registry.claim_live(SHUTDOWN_FANOUT);
+        let mut claims = ClaimGuard::new(registry, &batch);
+        let mut tasks = tokio::task::JoinSet::new();
         for (id, target) in batch {
-            let permit = Arc::clone(&semaphore)
-                .acquire_owned()
-                .await
-                .map_err(AppError::internal)?;
-            tasks.push(tokio::spawn(async move {
-                let _permit = permit;
-                let outcome = target.terminate(policy).await;
-                (id, outcome)
-            }));
+            tasks.spawn(async move { (id, target.terminate(policy).await) });
         }
-        for task in tasks {
-            let (id, outcome) = task.await.map_err(AppError::internal)?;
+        while let Some(task) = tasks.join_next().await {
+            let (id, outcome) = task.map_err(AppError::internal)?;
             match outcome {
-                TargetOutcome::Terminated => registry.remove(id),
-                TargetOutcome::Survived => registry.mark_survived(id),
+                TargetOutcome::Terminated => registry.complete_claim(id, false),
+                TargetOutcome::Survived => registry.complete_claim(id, true),
                 TargetOutcome::Unsupported => {
-                    // Keep the entry registered and record that this platform
-                    // could not terminate it, so shutdown reports the failure
-                    // instead of silently returning success.
-                    registry.mark_survived(id);
+                    registry.complete_claim(id, true);
                     unsupported += 1;
                 }
+                TargetOutcome::Failed => {
+                    registry.complete_claim(id, true);
+                    failed += 1;
+                }
             }
+            claims.complete(id);
         }
         if registry.finish_shutdown_if_drained() {
             break;
@@ -114,6 +136,14 @@ pub(super) async fn fan_out_shutdown(
             ),
         ));
     }
+    if failed > 0 {
+        return Err(AppError::new(
+            ErrorCode::Internal,
+            format!(
+                "process supervision shutdown could not confirm termination of {failed} target(s)"
+            ),
+        ));
+    }
     Ok(())
 }
 
@@ -124,6 +154,7 @@ mod tests {
     use crate::supervisor::target::{OwnedChild, OwnedTarget};
     use std::process::Stdio;
     use std::time::Duration;
+    use tokio::io::AsyncReadExt;
 
     fn spawn_tokio(script: &str) -> tokio::process::Child {
         tokio::process::Command::new("/bin/sh")
@@ -133,6 +164,26 @@ mod tests {
             .stderr(Stdio::null())
             .spawn()
             .expect("child spawns")
+    }
+
+    async fn spawn_stubborn_tokio() -> tokio::process::Child {
+        let mut child = tokio::process::Command::new("/bin/sh")
+            .args(["-c", "trap '' TERM; printf ready; sleep 30"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("child spawns");
+        let mut ready = [0_u8; 5];
+        child
+            .stdout
+            .as_mut()
+            .expect("stdout")
+            .read_exact(&mut ready)
+            .await
+            .expect("read readiness");
+        assert_eq!(&ready, b"ready");
+        child
     }
 
     async fn poll_until_gone(target: &OwnedTarget) {
@@ -153,7 +204,11 @@ mod tests {
         let child = spawn_tokio("sleep 30");
         let pid = child.id().expect("live pid");
         let guard = registry.register(pid, false);
-        registry.attach_child(guard.entry_id_for_test(), OwnedChild::Tokio(child));
+        assert!(
+            registry
+                .attach_child(guard.entry_id_for_test(), OwnedChild::Tokio(child))
+                .is_none()
+        );
 
         let policy = LifecyclePolicy::default().with_grace_period(Duration::from_millis(50));
         fan_out_shutdown(&registry, policy).await.expect("fan-out");
@@ -167,10 +222,14 @@ mod tests {
     #[tokio::test]
     async fn fan_out_retains_kill_after_grace_false_survivor() {
         let registry = Arc::new(LiveChildRegistry::default());
-        let child = spawn_tokio("trap '' TERM; sleep 30");
+        let child = spawn_stubborn_tokio().await;
         let pid = child.id().expect("live pid");
         let guard = registry.register(pid, false);
-        registry.attach_child(guard.entry_id_for_test(), OwnedChild::Tokio(child));
+        assert!(
+            registry
+                .attach_child(guard.entry_id_for_test(), OwnedChild::Tokio(child))
+                .is_none()
+        );
 
         let policy = LifecyclePolicy {
             kill_after_grace: false,
@@ -205,7 +264,11 @@ mod tests {
             let guard = registry.register(pid, false);
             let id = guard.entry_id_for_test();
             let target = registry.target_for_test(id).expect("target");
-            registry.attach_child(id, OwnedChild::Tokio(child));
+            assert!(
+                registry
+                    .attach_child(id, OwnedChild::Tokio(child))
+                    .is_none()
+            );
             guards.push(guard);
             targets.push(target);
         }
@@ -234,7 +297,11 @@ mod tests {
             let guard = registry.register(pid, false);
             let id = guard.entry_id_for_test();
             targets.push(registry.target_for_test(id).expect("target"));
-            registry.attach_child(id, OwnedChild::Tokio(child));
+            assert!(
+                registry
+                    .attach_child(id, OwnedChild::Tokio(child))
+                    .is_none()
+            );
             guards.push(guard);
         }
 
@@ -255,5 +322,43 @@ mod tests {
             poll_until_gone(target).await;
         }
         drop(guards);
+    }
+
+    /// Cancelling a public shutdown future restores every unfinished claim, so
+    /// a later shutdown can retry and reap the same children.
+    #[tokio::test(start_paused = true)]
+    async fn cancelled_shutdown_releases_claims_for_retry() {
+        let registry = Arc::new(LiveChildRegistry::default());
+        let child = spawn_stubborn_tokio().await;
+        let pid = child.id().expect("live pid");
+        let guard = registry.register(pid, false);
+        assert!(
+            registry
+                .attach_child(guard.entry_id_for_test(), OwnedChild::Tokio(child))
+                .is_none()
+        );
+
+        let slow = LifecyclePolicy::default().with_grace_period(Duration::from_secs(30));
+        let first = {
+            let registry = Arc::clone(&registry);
+            tokio::spawn(async move { fan_out_shutdown(&registry, slow).await })
+        };
+        tokio::task::yield_now().await;
+        first.abort();
+        assert!(
+            first
+                .await
+                .expect_err("shutdown is cancelled")
+                .is_cancelled()
+        );
+
+        tokio::time::resume();
+        let retry = LifecyclePolicy::default().with_grace_period(Duration::from_millis(50));
+        fan_out_shutdown(&registry, retry)
+            .await
+            .expect("retry shutdown");
+
+        assert_eq!(registry.len(), 0, "retry reaps the restored claim");
+        drop(guard);
     }
 }

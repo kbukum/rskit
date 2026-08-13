@@ -187,7 +187,12 @@ impl PersistentProcess {
     fn relinquish_survivor(&mut self) {
         match (self.registration.take(), self.child.take()) {
             (Some(registration), Some(child)) => {
-                registration.relinquish_child(OwnedChild::Std(child));
+                if let Some(OwnedChild::Std(mut child)) =
+                    registration.relinquish_child(OwnedChild::Std(child))
+                {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                }
             }
             (Some(registration), None) => registration.retain(),
             (None, _) => {}

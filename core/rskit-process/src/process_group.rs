@@ -88,13 +88,99 @@ pub(crate) fn target_alive(pid: u32) -> bool {
     if pid == 0 {
         return false;
     }
-    #[cfg(unix)]
+    #[cfg(target_os = "macos")]
+    {
+        return macos_target_alive(pid);
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
     {
         let Ok(pid) = i32::try_from(pid) else {
             return false;
         };
         // SAFETY: signal 0 performs an existence check without delivering a signal.
         // EPERM means the process exists but is owned by another user.
+        unsafe {
+            if libc::kill(pid, 0) == 0 {
+                return true;
+            }
+            std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    fn macos_target_alive(pid: u32) -> bool {
+        const PROC_PIDTBSDINFO: libc::c_int = 3;
+        const SZOMB: u32 = 5;
+
+        #[repr(C)]
+        struct ProcBsdInfo {
+            flags: u32,
+            status: u32,
+            xstatus: u32,
+            pid: u32,
+            ppid: u32,
+            uid: libc::uid_t,
+            gid: libc::gid_t,
+            ruid: libc::uid_t,
+            rgid: libc::gid_t,
+            svuid: libc::uid_t,
+            svgid: libc::gid_t,
+            reserved: u32,
+            command: [libc::c_char; 16],
+            name: [libc::c_char; 32],
+            file_count: u32,
+            process_group: u32,
+            job_control_count: u32,
+            controlling_terminal: u32,
+            terminal_process_group: u32,
+            nice: i32,
+            start_seconds: u64,
+            start_microseconds: u64,
+        }
+
+        #[link(name = "proc")]
+        unsafe extern "C" {
+            fn proc_pidinfo(
+                pid: libc::c_int,
+                flavor: libc::c_int,
+                arg: u64,
+                buffer: *mut libc::c_void,
+                buffer_size: libc::c_int,
+            ) -> libc::c_int;
+        }
+
+        let Ok(pid) = i32::try_from(pid) else {
+            return false;
+        };
+        let mut process = std::mem::MaybeUninit::<ProcBsdInfo>::uninit();
+        let Ok(buffer_size) = libc::c_int::try_from(std::mem::size_of::<ProcBsdInfo>()) else {
+            return unix_target_alive(pid);
+        };
+        // SAFETY: `process` is a writable buffer of the exact declared size for
+        // `PROC_PIDTBSDINFO`; the call initializes it on a full-size result.
+        let bytes = unsafe {
+            proc_pidinfo(
+                pid,
+                PROC_PIDTBSDINFO,
+                0,
+                process.as_mut_ptr().cast(),
+                buffer_size,
+            )
+        };
+        if bytes == 0 {
+            return std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM);
+        }
+        if bytes != buffer_size {
+            return unix_target_alive(pid);
+        }
+        // SAFETY: a full-size result initialized the complete structure.
+        let process = unsafe { process.assume_init() };
+        process.status != SZOMB
+    }
+
+    #[cfg(target_os = "macos")]
+    fn unix_target_alive(pid: libc::pid_t) -> bool {
+        // SAFETY: signal 0 performs an existence check without delivering a signal.
         unsafe {
             if libc::kill(pid, 0) == 0 {
                 return true;

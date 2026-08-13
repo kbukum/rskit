@@ -1,12 +1,13 @@
 //! Process supervisor public API and child wrappers.
 
-use std::process::{Child, Command as StdCommand};
+use std::process::Command as StdCommand;
 use std::sync::Arc;
 
-use tokio::process::{Child as TokioChild, Command as TokioCommand};
+use tokio::process::Command as TokioCommand;
 
 use super::registry::{LiveChildRegistry, RegistrationGuard};
 use super::shutdown::{ShutdownSubscription, fan_out_shutdown, subscribe};
+use super::target::OwnedChild;
 use crate::command::LifecyclePolicy;
 use crate::process_group::{isolate, isolate_async, kill_target};
 use crate::{AppError, AppResult, ErrorCode, command::spawn_error};
@@ -61,9 +62,14 @@ impl ProcessSupervisor {
         let child = command
             .spawn()
             .map_err(|error| spawn_error("failed to spawn process", error))?;
-        let guard = self.register_pid(child.id());
+        let pid = child.id();
+        let guard = self.registry.register_owned(
+            pid,
+            self.lifecycle.targets_group(),
+            OwnedChild::Std(child),
+        );
         Ok(SupervisedBlockingChild {
-            child,
+            pid,
             guard: Some(guard),
             lifecycle: self.lifecycle,
         })
@@ -77,23 +83,17 @@ impl ProcessSupervisor {
         let child = command
             .spawn()
             .map_err(|error| spawn_error("failed to spawn process", error))?;
-        let guard = self.register_pid(child.id().unwrap_or_default());
+        let pid = child.id().unwrap_or_default();
+        let guard = self.registry.register_owned(
+            pid,
+            self.lifecycle.targets_group(),
+            OwnedChild::Tokio(child),
+        );
         Ok(SupervisedAsyncChild {
-            child,
+            pid,
             guard: Some(guard),
             lifecycle: self.lifecycle,
         })
-    }
-
-    /// Register an existing child pid, capturing an owned target for it.
-    ///
-    /// Uses the supervisor's own lifecycle topology; for children spawned with a
-    /// different policy the runners call [`register_pid_with_group`] with the
-    /// actual spawn topology so the owned target signals the right identity.
-    ///
-    /// [`register_pid_with_group`]: Self::register_pid_with_group
-    pub(crate) fn register_pid(&self, pid: u32) -> RegistrationGuard {
-        self.register_pid_with_group(pid, self.lifecycle.targets_group())
     }
 
     /// Register an existing child pid with the topology it was actually spawned
@@ -179,9 +179,12 @@ impl ProcessSupervisor {
     }
 
     /// Register an externally spawned pid under this supervisor.
+    ///
+    /// External processes default to direct-pid signalling because the
+    /// supervisor did not create or verify a process group for them.
     #[must_use]
     pub fn track_pid(&self, pid: u32) -> RegistrationGuard {
-        self.register_pid(pid)
+        self.registry.register(pid, false)
     }
 
     /// Unregister an externally tracked pid.
@@ -202,17 +205,16 @@ impl Drop for ProcessSupervisor {
 /// A blocking child paired with its registry guard.
 #[derive(Debug)]
 pub struct SupervisedBlockingChild {
-    child: Child,
+    pid: u32,
     guard: Option<RegistrationGuard>,
     lifecycle: LifecyclePolicy,
 }
 
 impl Drop for SupervisedBlockingChild {
     fn drop(&mut self) {
-        let _ = kill_target(self.child.id(), self.lifecycle.targets_group());
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        let _ = kill_target(self.pid, self.lifecycle.targets_group());
         if let Some(guard) = self.guard.take() {
+            guard.kill_owned_child();
             guard.unregister();
         }
     }
@@ -221,18 +223,16 @@ impl Drop for SupervisedBlockingChild {
 /// An async child paired with its registry guard.
 #[derive(Debug)]
 pub struct SupervisedAsyncChild {
-    child: TokioChild,
+    pid: u32,
     guard: Option<RegistrationGuard>,
     lifecycle: LifecyclePolicy,
 }
 
 impl Drop for SupervisedAsyncChild {
     fn drop(&mut self) {
-        if let Some(pid) = self.child.id() {
-            let _ = kill_target(pid, self.lifecycle.targets_group());
-        }
-        let _ = self.child.start_kill();
+        let _ = kill_target(self.pid, self.lifecycle.targets_group());
         if let Some(guard) = self.guard.take() {
+            guard.kill_owned_child();
             guard.unregister();
         }
     }

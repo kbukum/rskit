@@ -77,10 +77,14 @@ impl ChildScope {
     /// The child moves into the registered target so a later shutdown or
     /// supervisor drop reaps it; the guard is retained so scope drop neither kills
     /// the child nor removes the entry.
-    pub(super) fn relinquish(&mut self) {
+    pub(super) async fn relinquish(&mut self) {
         self.armed = false;
-        if let (Some(registration), Some(child)) = (self.registration.take(), self.child.take()) {
-            registration.relinquish_child(OwnedChild::Tokio(child));
+        if let (Some(registration), Some(child)) = (self.registration.take(), self.child.take())
+            && let Some(OwnedChild::Tokio(mut child)) =
+                registration.relinquish_child(OwnedChild::Tokio(child))
+        {
+            let _ = child.start_kill();
+            let _ = child.wait().await;
         }
     }
 }

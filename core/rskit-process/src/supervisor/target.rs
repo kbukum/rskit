@@ -23,6 +23,7 @@
 //! boundary for group cleanup.
 
 use std::process::ExitStatus;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
@@ -87,6 +88,9 @@ pub(super) enum TargetOutcome {
     /// registered and the caller reports the failure honestly rather than
     /// claiming a success that did not happen.
     Unsupported,
+    /// Signalling failed or termination could not be confirmed within the
+    /// bounded escalation budget; keep the entry and surface an error.
+    Failed,
 }
 
 /// A Linux pidfd owning a stable, reuse-proof reference to one process.
@@ -178,6 +182,7 @@ pub(super) struct OwnedTarget {
     #[cfg(target_os = "linux")]
     pidfd: Option<PidFd>,
     child: Mutex<Option<OwnedChild>>,
+    confirmed_gone: AtomicBool,
 }
 
 impl OwnedTarget {
@@ -189,6 +194,7 @@ impl OwnedTarget {
             #[cfg(target_os = "linux")]
             pidfd: (pid != 0).then(|| PidFd::open(pid)).flatten(),
             child: Mutex::new(None),
+            confirmed_gone: AtomicBool::new(pid == 0),
         }
     }
 
@@ -208,7 +214,7 @@ impl OwnedTarget {
 
     /// Return `true` while the exact original process is still alive.
     pub(super) fn is_alive(&self) -> bool {
-        if self.pid == 0 {
+        if self.confirmed_gone.load(Ordering::Acquire) || self.pid == 0 {
             return false;
         }
         #[cfg(target_os = "linux")]
@@ -218,6 +224,17 @@ impl OwnedTarget {
         target_alive(self.pid)
     }
 
+    /// Record that this target has been reaped so no later delayed signal can
+    /// act on its numeric process identity.
+    pub(super) fn mark_reaped(&self) {
+        self.confirmed_gone.store(true, Ordering::Release);
+    }
+
+    /// Whether termination or a normal waiter has confirmed this target gone.
+    pub(super) fn confirmed_gone(&self) -> bool {
+        self.confirmed_gone.load(Ordering::Acquire)
+    }
+
     /// Send `signal` to the target's leader (reuse-proof on Linux) and, when
     /// descendant termination is requested, to its process group.
     ///
@@ -225,7 +242,7 @@ impl OwnedTarget {
     /// already exited. The group signal is best-effort and gated on the leader
     /// still being alive so a reused process-group id is never targeted.
     fn signal(&self, signal: ProcessSignal) -> bool {
-        if self.pid == 0 {
+        if self.pid == 0 || self.confirmed_gone() {
             return false;
         }
         #[cfg(target_os = "linux")]
@@ -277,7 +294,11 @@ impl OwnedTarget {
     /// [`Unsupported`]: TargetOutcome::Unsupported
     pub(super) async fn terminate(&self, policy: LifecyclePolicy) -> TargetOutcome {
         if self.pid == 0 {
-            return TargetOutcome::Terminated;
+            return if self.force_reap_owned_child().await {
+                TargetOutcome::Terminated
+            } else {
+                TargetOutcome::Unsupported
+            };
         }
         if !cfg!(unix) {
             // No signalling primitive exists on this platform. If this target
@@ -289,18 +310,53 @@ impl OwnedTarget {
                 TargetOutcome::Unsupported
             };
         }
-        self.signal(ProcessSignal::Terminate);
-        tokio::time::sleep(policy.grace_period).await;
-        if !self.is_alive() {
+        if !self.signal(ProcessSignal::Terminate) && self.is_alive() {
+            return TargetOutcome::Failed;
+        }
+        if self.wait_until_gone(policy.grace_period).await {
             self.reap().await;
+            self.mark_reaped();
             return TargetOutcome::Terminated;
         }
         if !policy.kill_after_grace {
             return TargetOutcome::Survived;
         }
-        self.signal(ProcessSignal::Kill);
+        if !self.signal(ProcessSignal::Kill) && self.is_alive() {
+            return TargetOutcome::Failed;
+        }
+        if !self.wait_until_gone(policy.grace_period).await {
+            return TargetOutcome::Failed;
+        }
         self.reap().await;
+        self.mark_reaped();
         TargetOutcome::Terminated
+    }
+
+    async fn wait_until_gone(&self, budget: Duration) -> bool {
+        let deadline = tokio::time::Instant::now() + budget;
+        loop {
+            if self
+                .child
+                .lock()
+                .as_mut()
+                .is_some_and(|child| child.try_reap().is_some())
+            {
+                self.mark_reaped();
+                return true;
+            }
+            if !self.is_alive() {
+                self.mark_reaped();
+                return true;
+            }
+            let now = tokio::time::Instant::now();
+            if now >= deadline {
+                return false;
+            }
+            tokio::time::sleep(
+                Duration::from_millis(10).min(deadline.saturating_duration_since(now)),
+            )
+            .await;
+        }
     }
 
     /// Kill and reap an owned child handle, returning `true` when one was owned.
@@ -313,6 +369,7 @@ impl OwnedTarget {
         if let Some(mut child) = child {
             child.start_kill();
             child.reap().await;
+            self.mark_reaped();
             true
         } else {
             false
@@ -328,6 +385,7 @@ impl OwnedTarget {
         let child = self.child.lock().take();
         if let Some(mut child) = child {
             child.reap().await;
+            self.mark_reaped();
         }
     }
 
@@ -337,16 +395,16 @@ impl OwnedTarget {
     /// synchronous [`Drop`] never blocks indefinitely on a process that ignores
     /// signalling.
     pub(super) fn kill_blocking(&self) {
-        if self.pid == 0 {
-            return;
+        if self.pid != 0 {
+            self.signal(ProcessSignal::Kill);
         }
-        self.signal(ProcessSignal::Kill);
         let child = self.child.lock().take();
         if let Some(mut child) = child {
             child.start_kill();
             let deadline = Instant::now() + Duration::from_secs(5);
             loop {
                 if child.try_reap().is_some() {
+                    self.mark_reaped();
                     return;
                 }
                 if Instant::now() >= deadline {
@@ -362,6 +420,7 @@ impl OwnedTarget {
 mod tests {
     use super::*;
     use std::process::{Command, Stdio};
+    use tokio::io::AsyncReadExt;
 
     fn spawn_std(args: &[&str]) -> std::process::Child {
         Command::new("/bin/sh")
@@ -419,13 +478,22 @@ mod tests {
     /// registry keeps owning it instead of dropping it as though it exited.
     #[tokio::test]
     async fn stubborn_child_survives_without_force_kill() {
-        let child = tokio::process::Command::new("/bin/sh")
-            .args(["-c", "trap '' TERM; sleep 30"])
+        let mut child = tokio::process::Command::new("/bin/sh")
+            .args(["-c", "trap '' TERM; printf ready; sleep 30"])
             .stdin(Stdio::null())
-            .stdout(Stdio::null())
+            .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .spawn()
             .expect("child spawns");
+        let mut ready = [0_u8; 5];
+        child
+            .stdout
+            .as_mut()
+            .expect("stdout")
+            .read_exact(&mut ready)
+            .await
+            .expect("read readiness");
+        assert_eq!(&ready, b"ready");
         let pid = child.id().expect("live pid");
         let target = OwnedTarget::new(pid, false);
         target.attach_child(OwnedChild::Tokio(child));

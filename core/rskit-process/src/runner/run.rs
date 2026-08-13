@@ -266,7 +266,7 @@ async fn run_process(
     // child to its owned target so a later shutdown or supervisor drop reaps it,
     // keeping it registered rather than force-killing or abandoning it.
     if completion.survived {
-        scope.relinquish();
+        scope.relinquish().await;
     } else {
         scope.disarm();
     }

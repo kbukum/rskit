@@ -24,6 +24,8 @@ const STATE_CLAIMED: u8 = 1;
 /// Deliberately survived this shutdown pass (for example `kill_after_grace = false`);
 /// excluded from further claims until the next shutdown resets it.
 const STATE_SURVIVED: u8 = 2;
+/// Reaped by the normal child owner while a shutdown claim was in flight.
+const STATE_REAPED: u8 = 3;
 
 /// A registered child: its owned target plus a claim state machine.
 #[derive(Debug)]
@@ -82,10 +84,42 @@ impl LiveChildRegistry {
         }
     }
 
+    /// Atomically register a spawned child together with its owned handle.
+    pub(super) fn register_owned(
+        self: &Arc<Self>,
+        pid: u32,
+        process_group: bool,
+        child: OwnedChild,
+    ) -> RegistrationGuard {
+        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
+        let target = Arc::new(OwnedTarget::new(pid, process_group));
+        target.attach_child(child);
+        let entry = Arc::new(Entry {
+            target,
+            state: AtomicU8::new(STATE_LIVE),
+        });
+        self.entries.lock().insert(id, entry);
+        RegistrationGuard {
+            registry: Arc::clone(self),
+            id,
+            armed: AtomicBool::new(true),
+        }
+    }
+
     /// Remove the entry with the given generation id, if still present.
     pub(super) fn remove(&self, id: u64) {
-        if id != 0 {
-            self.entries.lock().remove(&id);
+        if id == 0 {
+            return;
+        }
+        let mut entries = self.entries.lock();
+        let Some(entry) = entries.get(&id) else {
+            return;
+        };
+        if entry.state.load(Ordering::Acquire) == STATE_CLAIMED {
+            entry.target.mark_reaped();
+            entry.state.store(STATE_REAPED, Ordering::Release);
+        } else {
+            entries.remove(&id);
         }
     }
 
@@ -97,16 +131,47 @@ impl LiveChildRegistry {
         if pid == 0 {
             return;
         }
-        self.entries
-            .lock()
-            .retain(|_, entry| entry.target.pid() != pid);
+        let mut entries = self.entries.lock();
+        entries.retain(|_, entry| {
+            if entry.target.pid() != pid {
+                return true;
+            }
+            if entry.state.load(Ordering::Acquire) == STATE_CLAIMED {
+                entry.target.mark_reaped();
+                entry.state.store(STATE_REAPED, Ordering::Release);
+                true
+            } else {
+                false
+            }
+        });
     }
 
     /// Attach a relinquished child to the target with the given id so a later
     /// termination can reap it.
-    pub(super) fn attach_child(&self, id: u64, child: OwnedChild) {
-        if let Some(entry) = self.entries.lock().get(&id) {
-            entry.target.attach_child(child);
+    pub(super) fn attach_child(&self, id: u64, child: OwnedChild) -> Option<OwnedChild> {
+        let entries = self.entries.lock();
+        let Some(entry) = entries.get(&id) else {
+            return Some(child);
+        };
+        if !matches!(
+            entry.state.load(Ordering::Acquire),
+            STATE_LIVE | STATE_SURVIVED
+        ) {
+            return Some(child);
+        }
+        entry.target.attach_child(child);
+        None
+    }
+
+    /// Force-kill and reap the child owned by one entry.
+    pub(super) fn kill_owned(&self, id: u64) {
+        let target = self
+            .entries
+            .lock()
+            .get(&id)
+            .map(|entry| Arc::clone(&entry.target));
+        if let Some(target) = target {
+            target.kill_blocking();
         }
     }
 
@@ -140,10 +205,13 @@ impl LiveChildRegistry {
     /// Claiming under the registry lock excludes concurrent waiters and later
     /// registrations from the same entries, so a fan-out owns each target it
     /// signals until it either removes or releases it.
-    pub(super) fn claim_live(&self) -> Vec<(u64, Arc<OwnedTarget>)> {
+    pub(super) fn claim_live(&self, limit: usize) -> Vec<(u64, Arc<OwnedTarget>)> {
         let entries = self.entries.lock();
         let mut claimed = Vec::new();
         for (id, entry) in entries.iter() {
+            if claimed.len() == limit {
+                break;
+            }
             if entry
                 .state
                 .compare_exchange(
@@ -160,11 +228,35 @@ impl LiveChildRegistry {
         claimed
     }
 
-    /// Mark a claimed entry as a survivor so it stays registered but is not
-    /// re-claimed by the remainder of this shutdown pass.
-    pub(super) fn mark_survived(&self, id: u64) {
-        if let Some(entry) = self.entries.lock().get(&id) {
+    /// Complete one shutdown claim and remove or retain the entry according to
+    /// its outcome.
+    pub(super) fn complete_claim(&self, id: u64, survived: bool) {
+        let mut entries = self.entries.lock();
+        let Some(entry) = entries.get(&id) else {
+            return;
+        };
+        if entry.state.load(Ordering::Acquire) == STATE_REAPED || !survived {
+            entries.remove(&id);
+        } else {
             entry.state.store(STATE_SURVIVED, Ordering::Release);
+        }
+    }
+
+    /// Restore unfinished claims after a shutdown future is cancelled.
+    ///
+    /// Entries reaped by their normal owner while claimed are removed; all
+    /// others become live so the next shutdown can retry them.
+    pub(super) fn release_claims(&self, claims: &[(u64, Arc<OwnedTarget>)]) {
+        let mut entries = self.entries.lock();
+        for (id, target) in claims {
+            let Some(entry) = entries.get(id) else {
+                continue;
+            };
+            if entry.state.load(Ordering::Acquire) == STATE_REAPED || target.confirmed_gone() {
+                entries.remove(id);
+            } else {
+                entry.state.store(STATE_LIVE, Ordering::Release);
+            }
         }
     }
 
@@ -236,15 +328,20 @@ impl RegistrationGuard {
         self.armed.store(false, Ordering::Release);
     }
 
+    /// Force-kill and reap the child owned by this registration.
+    pub(crate) fn kill_owned_child(&self) {
+        self.registry.kill_owned(self.id);
+    }
+
     /// Hand a still-live child to the registered target and keep the entry.
     ///
     /// Used when a run path's child deliberately survived its grace period
     /// (`kill_after_grace = false`): the child moves into its owned target so a
     /// later shutdown or supervisor drop reaps it, and the guard is disarmed so
     /// its drop neither removes the entry nor double-reaps the child.
-    pub(crate) fn relinquish_child(&self, child: OwnedChild) {
+    pub(crate) fn relinquish_child(&self, child: OwnedChild) -> Option<OwnedChild> {
         self.armed.store(false, Ordering::Release);
-        self.registry.attach_child(self.id, child);
+        self.registry.attach_child(self.id, child)
     }
 
     /// The generation id of the registered entry (test-only accessor).
@@ -288,7 +385,7 @@ mod tests {
         let id = guard.id;
 
         registry.start_shutdown();
-        let claimed = registry.claim_live();
+        let claimed = registry.claim_live(usize::MAX);
         assert_eq!(claimed.len(), 1);
         let (claimed_id, target) = &claimed[0];
         assert_eq!(*claimed_id, id);
@@ -297,11 +394,18 @@ mod tests {
         let _ = child.kill();
         let _ = child.wait();
         registry.remove(id);
-        assert_eq!(registry.len(), 0, "waiter removed the entry");
+        assert_eq!(
+            registry.len(),
+            1,
+            "the claimed entry remains until the fan-out observes the reap"
+        );
 
         // The fan-out still owns the claimed target and sees the exact original
-        // process is gone, so no live bystander is ever signalled.
+        // process is gone, so no live bystander is ever signalled. Completing
+        // the claim then removes the waiter-reaped entry.
         assert!(!target.is_alive());
+        registry.complete_claim(id, false);
+        assert_eq!(registry.len(), 0);
     }
 
     /// A child registered while a fan-out is draining is not lost: it enters the
@@ -325,9 +429,9 @@ mod tests {
             "a live late registration keeps the pass running"
         );
 
-        let claimed = registry.claim_live();
+        let claimed = registry.claim_live(usize::MAX);
         assert_eq!(claimed.len(), 1, "the late child is claimed, not missed");
-        registry.remove(claimed[0].0);
+        registry.complete_claim(claimed[0].0, false);
         assert!(
             registry.finish_shutdown_if_drained(),
             "the pass ends only once the late child is drained"
@@ -348,26 +452,51 @@ mod tests {
         let id = guard.id;
 
         registry.start_shutdown();
-        let claimed = registry.claim_live();
+        let claimed = registry.claim_live(usize::MAX);
         assert_eq!(claimed.len(), 1);
-        registry.mark_survived(id);
+        registry.complete_claim(id, true);
 
         assert!(
-            registry.claim_live().is_empty(),
+            registry.claim_live(usize::MAX).is_empty(),
             "a survivor is not re-claimed within the same pass"
         );
         assert!(registry.finish_shutdown_if_drained());
 
         registry.start_shutdown();
         assert_eq!(
-            registry.claim_live().len(),
+            registry.claim_live(usize::MAX).len(),
             1,
             "the next shutdown resets the survivor to live"
         );
-        registry.remove(id);
+        registry.complete_claim(id, false);
 
         drop(guard);
         let _ = child.kill();
         let _ = child.wait();
+    }
+
+    /// A survivor handoff cannot attach behind an in-flight shutdown claim. The
+    /// child is returned to its current owner for local cleanup instead of being
+    /// silently dropped after the claimed entry is removed.
+    #[test]
+    fn attach_returns_child_when_shutdown_already_claimed_entry() {
+        let registry = Arc::new(LiveChildRegistry::default());
+        let (child, pid) = spawn();
+        let guard = registry.register(pid, false);
+        let id = guard.id;
+
+        registry.start_shutdown();
+        assert_eq!(registry.claim_live(1).len(), 1);
+
+        let returned = registry
+            .attach_child(id, OwnedChild::Std(child))
+            .expect("claimed entry rejects a late child handoff");
+        let OwnedChild::Std(mut child) = returned else {
+            panic!("blocking child is returned unchanged");
+        };
+        let _ = child.kill();
+        let _ = child.wait();
+        registry.complete_claim(id, false);
+        drop(guard);
     }
 }

@@ -247,8 +247,12 @@ impl BlockingChildScope {
     /// disabled) to its owned target without killing or unregistering.
     fn relinquish(&mut self) {
         self.armed = false;
-        if let (Some(registration), Some(child)) = (self.registration.take(), self.child.take()) {
-            registration.relinquish_child(OwnedChild::Std(child));
+        if let (Some(registration), Some(child)) = (self.registration.take(), self.child.take())
+            && let Some(OwnedChild::Std(mut child)) =
+                registration.relinquish_child(OwnedChild::Std(child))
+        {
+            let _ = child.kill();
+            let _ = child.wait();
         }
     }
 }

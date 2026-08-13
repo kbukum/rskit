@@ -128,7 +128,7 @@ pub(in crate::runner) async fn run_pty_mode(
     // period (`kill_after_grace = false`), relinquish the still-live child to its
     // owned target so a later shutdown or supervisor drop reaps it.
     if completion.survived {
-        scope.relinquish();
+        scope.relinquish().await;
     } else {
         scope.disarm();
     }
