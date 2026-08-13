@@ -8,7 +8,7 @@ use tokio::{process::Child as TokioChild, time::timeout};
 use tracing::{debug, warn};
 
 use crate::command::LifecyclePolicy;
-use crate::process_group::{kill_target, signal_target, target_alive, terminate_target};
+use crate::process_group::{kill_target, signal_target, target_exited, terminate_target};
 use crate::signal::ProcessSignal;
 use crate::{AppError, AppResult};
 
@@ -110,11 +110,15 @@ async fn escalate_after_grace(
 
 /// Terminate a registered target and report whether it can be unregistered.
 ///
-/// Sends graceful termination, waits the grace period, and — when escalation is enabled —
-/// force-kills, returning `true` in that case because a best-effort kill was issued. When
-/// escalation is disabled the target may deliberately survive `SIGTERM`, so this returns
-/// `true` only once the target is confirmed gone; otherwise the caller keeps it registered
-/// so a later shutdown or supervisor drop can retry.
+/// Sends graceful termination and waits the grace period. A target confirmed gone
+/// is reported terminated without a further signal — its pid may have been reused
+/// during the grace window, so a blind `SIGKILL` could hit an unrelated process.
+/// When it is still alive and escalation is enabled, a best-effort force kill is
+/// issued; that discharges the supervisor's duty on platforms that can signal
+/// (even if the pid is now a zombie or was already reaped), but where signaling is
+/// unsupported the kill is a genuine no-op, so the target stays registered for a
+/// later retry. With escalation disabled a target that survives `SIGTERM` likewise
+/// stays registered.
 pub(crate) async fn terminate_registered_pid(
     pid: u32,
     process_group: bool,
@@ -125,9 +129,12 @@ pub(crate) async fn terminate_registered_pid(
     }
     let _ = signal_target(pid, ProcessSignal::Terminate, process_group);
     tokio::time::sleep(policy.grace_period).await;
-    if policy.kill_after_grace {
-        let _ = signal_target(pid, ProcessSignal::Kill, process_group);
+    if target_exited(pid) {
         return true;
     }
-    !target_alive(pid)
+    if !policy.kill_after_grace {
+        return false;
+    }
+    let killed = signal_target(pid, ProcessSignal::Kill, process_group);
+    cfg!(unix) || killed
 }

@@ -1,6 +1,5 @@
 //! Process supervisor public API and child wrappers.
 
-use std::mem::ManuallyDrop;
 use std::process::{Child, Command as StdCommand};
 use std::sync::Arc;
 
@@ -151,21 +150,6 @@ pub struct SupervisedBlockingChild {
     lifecycle: LifecyclePolicy,
 }
 
-impl SupervisedBlockingChild {
-    /// Split the wrapper into the child handle and registration guard.
-    #[must_use]
-    pub fn into_parts(self) -> (Child, RegistrationGuard) {
-        let mut this = ManuallyDrop::new(self);
-        let guard = this
-            .guard
-            .take()
-            .unwrap_or_else(|| ProcessSupervisor::new(this.lifecycle).register_pid(0));
-        // SAFETY: `this` is wrapped in `ManuallyDrop`, and `child` is read exactly once to transfer ownership to the caller. The wrapper destructor will not run afterward.
-        let child = unsafe { std::ptr::read(&this.child) };
-        (child, guard)
-    }
-}
-
 impl Drop for SupervisedBlockingChild {
     fn drop(&mut self) {
         let _ = kill_target(self.child.id(), self.lifecycle.targets_group());
@@ -183,21 +167,6 @@ pub struct SupervisedAsyncChild {
     child: TokioChild,
     guard: Option<RegistrationGuard>,
     lifecycle: LifecyclePolicy,
-}
-
-impl SupervisedAsyncChild {
-    /// Split the wrapper into the child handle and registration guard.
-    #[must_use]
-    pub fn into_parts(self) -> (TokioChild, RegistrationGuard) {
-        let mut this = ManuallyDrop::new(self);
-        let guard = this
-            .guard
-            .take()
-            .unwrap_or_else(|| ProcessSupervisor::new(this.lifecycle).register_pid(0));
-        // SAFETY: `this` is wrapped in `ManuallyDrop`, and `child` is read exactly once to transfer ownership to the caller. The wrapper destructor will not run afterward.
-        let child = unsafe { std::ptr::read(&this.child) };
-        (child, guard)
-    }
 }
 
 impl Drop for SupervisedAsyncChild {
