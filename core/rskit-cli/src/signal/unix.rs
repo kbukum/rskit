@@ -1,63 +1,44 @@
 use rskit_errors::{AppError, AppResult, ErrorCode};
+use std::collections::HashSet;
 
 use super::ShutdownSignal;
 
 pub(super) struct SignalStreams {
-    interrupt: Option<tokio::signal::unix::Signal>,
-    terminate: Option<tokio::signal::unix::Signal>,
-    hangup: Option<tokio::signal::unix::Signal>,
-    raw: Vec<tokio::signal::unix::Signal>,
+    streams: Vec<tokio::signal::unix::Signal>,
 }
 
 impl SignalStreams {
     pub(super) fn install(signals: &[ShutdownSignal]) -> AppResult<Self> {
-        let mut streams = Self {
-            interrupt: None,
-            terminate: None,
-            hangup: None,
-            raw: Vec::new(),
-        };
-
-        for signal in signals {
-            match *signal {
-                ShutdownSignal::Interrupt => {
-                    streams.interrupt = Some(install_signal(
-                        *signal,
-                        tokio::signal::unix::SignalKind::interrupt(),
-                    )?);
-                }
-                ShutdownSignal::Terminate => {
-                    streams.terminate = Some(install_signal(
-                        *signal,
-                        tokio::signal::unix::SignalKind::terminate(),
-                    )?);
-                }
-                ShutdownSignal::Hangup => {
-                    streams.hangup = Some(install_signal(
-                        *signal,
-                        tokio::signal::unix::SignalKind::hangup(),
-                    )?);
-                }
-                ShutdownSignal::UnixRaw(raw) => {
-                    streams.raw.push(install_signal(
-                        *signal,
-                        tokio::signal::unix::SignalKind::from_raw(raw),
-                    )?);
-                }
-            }
+        let mut streams = Vec::new();
+        for (signal, number) in unique_signal_numbers(signals) {
+            streams.push(install_signal(
+                signal,
+                tokio::signal::unix::SignalKind::from_raw(number),
+            )?);
         }
 
-        Ok(streams)
+        Ok(Self { streams })
     }
 
     pub(super) async fn recv(&mut self) {
-        tokio::select! {
-            () = recv_optional(&mut self.interrupt) => {}
-            () = recv_optional(&mut self.terminate) => {}
-            () = recv_optional(&mut self.hangup) => {}
-            () = recv_raw(&mut self.raw) => {}
-        }
+        recv_any(&mut self.streams).await;
     }
+}
+
+fn unique_signal_numbers(signals: &[ShutdownSignal]) -> Vec<(ShutdownSignal, i32)> {
+    let mut seen = HashSet::new();
+    signals
+        .iter()
+        .filter_map(|signal| {
+            let number = match *signal {
+                ShutdownSignal::Interrupt => libc::SIGINT,
+                ShutdownSignal::Terminate => libc::SIGTERM,
+                ShutdownSignal::Hangup => libc::SIGHUP,
+                ShutdownSignal::UnixRaw(number) => number,
+            };
+            seen.insert(number).then_some((*signal, number))
+        })
+        .collect()
 }
 
 fn install_signal(
@@ -73,16 +54,7 @@ fn install_signal(
     })
 }
 
-async fn recv_optional(stream: &mut Option<tokio::signal::unix::Signal>) {
-    match stream {
-        Some(stream) => {
-            let _ = stream.recv().await;
-        }
-        None => std::future::pending::<()>().await,
-    }
-}
-
-async fn recv_raw(streams: &mut [tokio::signal::unix::Signal]) {
+async fn recv_any(streams: &mut [tokio::signal::unix::Signal]) {
     if streams.is_empty() {
         std::future::pending::<()>().await;
         return;
@@ -97,4 +69,30 @@ async fn recv_raw(streams: &mut [tokio::signal::unix::Signal]) {
         std::task::Poll::Pending
     })
     .await;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn effective_signal_numbers_are_canonicalized() {
+        let signals = [
+            ShutdownSignal::Interrupt,
+            ShutdownSignal::unix_raw(libc::SIGINT),
+            ShutdownSignal::Terminate,
+            ShutdownSignal::unix_raw(libc::SIGTERM),
+            ShutdownSignal::Hangup,
+            ShutdownSignal::unix_raw(libc::SIGHUP),
+        ];
+
+        assert_eq!(
+            unique_signal_numbers(&signals),
+            vec![
+                (ShutdownSignal::Interrupt, libc::SIGINT),
+                (ShutdownSignal::Terminate, libc::SIGTERM),
+                (ShutdownSignal::Hangup, libc::SIGHUP),
+            ]
+        );
+    }
 }

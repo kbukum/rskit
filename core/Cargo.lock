@@ -5320,6 +5320,7 @@ dependencies = [
  "console",
  "crossterm",
  "indicatif",
+ "libc",
  "rskit-errors",
  "serde",
  "serde_json",
