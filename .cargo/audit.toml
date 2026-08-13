@@ -12,4 +12,12 @@ ignore = [
     # cargo-deny does not flag this informational advisory; only lockfile-based
     # cargo-audit does. Revisit once a fixed anyhow ships.
     "RUSTSEC-2026-0190",
+    # RUSTSEC-2026-0253: "unsound" advisory for `lru`'s `LruCache::pop()` panic
+    # safety (use-after-free only when `catch_unwind` is used with key types whose
+    # `Drop` can panic). lru is a transitive dependency of aws-sdk-s3, which pins
+    # `lru = "^0.16.3"`, so the patched 0.18.2 is out of range without a major SDK
+    # bump; the SDK's internal caches use plain key types that cannot trigger the
+    # unwinding path. cargo-deny does not flag this informational advisory; only
+    # lockfile-based cargo-audit does. Revisit once aws-sdk-s3 allows a fixed lru.
+    "RUSTSEC-2026-0253",
 ]
