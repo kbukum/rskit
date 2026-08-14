@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::capture::append_line_bounded;
-use crate::process_group::group_alive;
+use crate::process_group::{group_alive, kill_target};
 use crate::worker::join_within;
 use crate::{
     AppError, AppResult, ErrorCode, LifecyclePolicy, ProcessResult, ProcessSupervisor,
@@ -232,12 +232,36 @@ impl PersistentProcess {
             )
         })
     }
+
+    /// Force-kill and reap a still-owned child after graceful shutdown failed.
+    ///
+    /// A `std::process::Child` neither kills nor reaps on drop, and the
+    /// registration guard only unregisters, so a swallowed [`Self::shutdown_inner`]
+    /// error would otherwise leak the process. This is the drop-path backstop:
+    /// signal the target (its group when descendants are targeted, else the
+    /// leader), reap it, and then unregister so the registry does not retain a
+    /// dead entry.
+    fn force_reap_on_drop(&mut self) {
+        if let Some(mut child) = self.child.take() {
+            if !kill_target(child.id(), self.signal.targets_group()) {
+                let _ = child.kill();
+            }
+            let _ = child.wait();
+        }
+        self.unregister();
+    }
 }
 
 impl Drop for PersistentProcess {
     fn drop(&mut self) {
-        if !self.stopped {
-            let _ = self.shutdown_inner();
+        if self.stopped {
+            return;
+        }
+        // Graceful shutdown owns the reap on success. If it fails before reaping,
+        // force-kill and reap the still-owned child here so the swallowed error
+        // cannot leak the process past drop.
+        if self.shutdown_inner().is_err() {
+            self.force_reap_on_drop();
         }
     }
 }
@@ -397,5 +421,60 @@ mod tests {
             Duration::from_millis(20),
         )
         .expect("cleanup should stop spawned child");
+    }
+
+    #[test]
+    fn drop_backstop_force_reaps_a_child_when_graceful_shutdown_is_bypassed() {
+        // `std::process::Child` neither kills nor reaps on drop, and the
+        // registration guard only unregisters. If graceful shutdown fails before
+        // reaping, the drop backstop must force-kill and reap the still-owned
+        // child; otherwise the process leaks past drop despite the supervised
+        // lifetime guarantee.
+        let pid_file = std::env::temp_dir().join(format!(
+            "rskit-process-drop-backstop-{}.pid",
+            std::process::id()
+        ));
+        let mut process = start_ready_process(&format!(
+            "printf %s \"$$\" > '{}'; printf ready; while :; do sleep 1; done",
+            pid_file.display()
+        ));
+
+        let mut pid = None;
+        for _ in 0..500 {
+            if let Ok(text) = std::fs::read_to_string(&pid_file)
+                && let Ok(parsed) = text.trim().parse::<i32>()
+            {
+                pid = Some(parsed);
+                break;
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+        let pid = pid.expect("child records its pid");
+        // SAFETY: signal 0 only probes existence for a pid the child recorded itself.
+        assert_eq!(
+            unsafe { libc::kill(pid, 0) },
+            0,
+            "the child is running before the backstop"
+        );
+
+        // Exercise the swallowed-error branch of `Drop`: graceful shutdown did not
+        // reap the child, so the backstop runs directly.
+        process.force_reap_on_drop();
+        process.stopped = true;
+
+        let mut reaped = false;
+        for _ in 0..250 {
+            // SAFETY: signal 0 only probes existence; ESRCH means the pid is gone.
+            if unsafe { libc::kill(pid, 0) } == -1 {
+                reaped = true;
+                break;
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert!(
+            reaped,
+            "the drop backstop must force-reap the still-owned child, not leak it"
+        );
+        let _ = std::fs::remove_file(pid_file);
     }
 }
