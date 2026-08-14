@@ -8,7 +8,6 @@ use tracing::warn;
 
 use super::registry::LiveChildRegistry;
 use super::target::TargetOutcome;
-use crate::command::LifecyclePolicy;
 use crate::{AppError, AppResult, ErrorCode};
 
 /// Maximum number of targets terminated concurrently during a fan-out.
@@ -61,7 +60,6 @@ impl Drop for ShutdownSubscription {
 /// Spawn the watcher that runs the backstop fan-out when `token` is cancelled.
 pub(super) fn subscribe(
     registry: Arc<LiveChildRegistry>,
-    policy: LifecyclePolicy,
     token: CancellationToken,
 ) -> ShutdownSubscription {
     let watcher = tokio::spawn(async move {
@@ -69,7 +67,7 @@ pub(super) fn subscribe(
         // Detach the reaping onto its own task so that dropping the subscription (which aborts
         // only this watcher) cannot cancel a fan-out that has already started.
         tokio::spawn(async move {
-            if let Err(error) = fan_out_shutdown(&registry, policy).await {
+            if let Err(error) = fan_out_shutdown(&registry).await {
                 warn!("supervisor shutdown backstop failed: {error}");
             }
         });
@@ -85,15 +83,16 @@ pub(super) fn subscribe(
 /// escalation), terminates the claimed targets with bounded concurrency, and
 /// then either removes a confirmed-terminated target or marks a deliberate
 /// survivor (`kill_after_grace = false`) so it stays registered for a later
-/// attempt. The pass repeats until no live entry remains, so a child registered
-/// while the fan-out is draining is still caught; because claiming, registration,
-/// and the drained check all take the registry lock, no late registration is
-/// lost. Targets already reaped cooperatively are absent, so the fan-out is
-/// idempotent and shutting an empty registry is a clean no-op.
-pub(super) async fn fan_out_shutdown(
-    registry: &LiveChildRegistry,
-    policy: LifecyclePolicy,
-) -> AppResult<()> {
+/// attempt. Each claimed target is terminated under *its own* registered
+/// [`LifecyclePolicy`](crate::LifecyclePolicy), so two children registered with
+/// different grace or kill-escalation intent are honored distinctly in the same
+/// pass rather than being flattened to one supervisor-wide policy. The pass repeats until no live
+/// entry remains, so a child registered while the fan-out is draining is still
+/// caught; because claiming, registration, and the drained check all take the
+/// registry lock, no late registration is lost. Targets already reaped
+/// cooperatively are absent, so the fan-out is idempotent and shutting an empty
+/// registry is a clean no-op.
+pub(super) async fn fan_out_shutdown(registry: &LiveChildRegistry) -> AppResult<()> {
     // Serialize concurrent shutdown passes: without this, a second caller could
     // observe the first caller's claimed (but not yet terminated) entries as
     // "drained" and return before those children are reaped.
@@ -106,7 +105,7 @@ pub(super) async fn fan_out_shutdown(
         let mut claims = ClaimGuard::new(registry, &batch);
         let mut tasks = tokio::task::JoinSet::new();
         for (id, target) in batch {
-            tasks.spawn(async move { (id, target.terminate(policy).await) });
+            tasks.spawn(async move { (id, target.terminate().await) });
         }
         while let Some(task) = tasks.join_next().await {
             let (id, outcome) = task.map_err(AppError::internal)?;
@@ -151,7 +150,8 @@ pub(super) async fn fan_out_shutdown(
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
-    use crate::supervisor::registry::LiveChildRegistry;
+    use crate::command::LifecyclePolicy;
+    use crate::supervisor::registry::{LiveChildRegistry, RegistrationGuard};
     use crate::supervisor::target::{OwnedChild, OwnedTarget};
     use std::process::Stdio;
     use std::time::Duration;
@@ -197,59 +197,99 @@ mod tests {
         panic!("target was not reaped in time");
     }
 
+    /// Register a tokio child under `policy` and hand it its owned handle.
+    fn register_child(
+        registry: &Arc<LiveChildRegistry>,
+        child: tokio::process::Child,
+        policy: LifecyclePolicy,
+    ) -> RegistrationGuard {
+        let pid = child.id().expect("live pid");
+        let guard = registry.register(pid, false, policy);
+        assert!(
+            registry
+                .attach_child(guard.entry_id_for_test(), OwnedChild::Tokio(child))
+                .is_none()
+        );
+        guard
+    }
+
     /// A cooperative child registered in the registry is signalled, reaped, and
     /// removed by the fan-out.
     #[tokio::test]
     async fn fan_out_reaps_registered_child() {
         let registry = Arc::new(LiveChildRegistry::default());
-        let child = spawn_tokio("sleep 30");
-        let pid = child.id().expect("live pid");
-        let guard = registry.register(pid, false);
-        assert!(
-            registry
-                .attach_child(guard.entry_id_for_test(), OwnedChild::Tokio(child))
-                .is_none()
-        );
-
         let policy = LifecyclePolicy::default().with_grace_period(Duration::from_millis(50));
-        fan_out_shutdown(&registry, policy).await.expect("fan-out");
+        let _guard = register_child(&registry, spawn_tokio("sleep 30"), policy);
+
+        fan_out_shutdown(&registry).await.expect("fan-out");
 
         assert_eq!(registry.len(), 0, "the reaped child is removed");
     }
 
-    /// A child that ignores `SIGTERM` under `kill_after_grace = false` is never
-    /// force-killed by the fan-out and stays registered (owned) for a later
-    /// escalation, rather than being silently dropped.
+    /// A child registered with `kill_after_grace = false` is never force-killed by
+    /// the fan-out and stays registered (owned) across repeated passes, because
+    /// the backstop honors that child's *own* policy rather than a supervisor-wide
+    /// one. Its owner (guard drop) still reaps it, so it never leaks.
     #[tokio::test]
-    async fn fan_out_retains_kill_after_grace_false_survivor() {
+    async fn fan_out_honors_a_childs_kill_after_grace_false_policy() {
         let registry = Arc::new(LiveChildRegistry::default());
-        let child = spawn_stubborn_tokio().await;
-        let pid = child.id().expect("live pid");
-        let guard = registry.register(pid, false);
-        assert!(
-            registry
-                .attach_child(guard.entry_id_for_test(), OwnedChild::Tokio(child))
-                .is_none()
-        );
-
         let policy = LifecyclePolicy {
             kill_after_grace: false,
             ..LifecyclePolicy::default()
         }
         .with_grace_period(Duration::from_millis(50));
-        fan_out_shutdown(&registry, policy).await.expect("fan-out");
+        let guard = register_child(&registry, spawn_stubborn_tokio().await, policy);
 
+        fan_out_shutdown(&registry).await.expect("fan-out");
         assert_eq!(
             registry.len(),
             1,
             "the surviving child is retained, not dropped"
         );
 
-        // A follow-up shutdown with escalation enabled reaps it, proving
-        // ownership was never lost.
-        let kill = LifecyclePolicy::default().with_grace_period(Duration::from_millis(50));
-        fan_out_shutdown(&registry, kill).await.expect("fan-out");
-        assert_eq!(registry.len(), 0, "escalation later reaps the survivor");
+        // A second pass still honors the child's own policy — it is not escalated
+        // by a later shutdown, proving the policy is per-child, not per-pass.
+        fan_out_shutdown(&registry).await.expect("fan-out");
+        assert_eq!(
+            registry.len(),
+            1,
+            "the child's own kill_after_grace = false is honored on every pass"
+        );
+
+        // The owner reaps it on drop, so ownership was never lost.
+        drop(guard);
+    }
+
+    /// Two children registered in the same registry with *different* lifecycle
+    /// policies are honored distinctly in a single shutdown pass: a
+    /// `kill_after_grace = false` child survives while a `kill_after_grace = true`
+    /// child is reaped — the fix for one supervisor-wide policy flattening both.
+    #[tokio::test]
+    async fn fan_out_honors_distinct_per_child_policies_in_one_pass() {
+        let registry = Arc::new(LiveChildRegistry::default());
+        let survivor_policy = LifecyclePolicy {
+            kill_after_grace: false,
+            ..LifecyclePolicy::default()
+        }
+        .with_grace_period(Duration::from_millis(50));
+        let killed_policy = LifecyclePolicy::default().with_grace_period(Duration::from_millis(50));
+
+        let survivor = register_child(&registry, spawn_stubborn_tokio().await, survivor_policy);
+        let killed_guard = register_child(&registry, spawn_tokio("sleep 30"), killed_policy);
+        let killed = registry
+            .target_for_test(killed_guard.entry_id_for_test())
+            .expect("target");
+
+        fan_out_shutdown(&registry).await.expect("fan-out");
+
+        assert_eq!(
+            registry.len(),
+            1,
+            "the killed child is reaped while the survivor is retained"
+        );
+        poll_until_gone(&killed).await;
+        drop(killed_guard);
+        drop(survivor);
     }
 
     /// The registry drains only once every live child is claimed and reaped, so a
@@ -257,25 +297,20 @@ mod tests {
     #[tokio::test]
     async fn fan_out_drains_all_registered_children() {
         let registry = Arc::new(LiveChildRegistry::default());
+        let policy = LifecyclePolicy::default().with_grace_period(Duration::from_millis(50));
         let mut guards = Vec::new();
         let mut targets = Vec::new();
         for _ in 0..3 {
-            let child = spawn_tokio("sleep 30");
-            let pid = child.id().expect("live pid");
-            let guard = registry.register(pid, false);
-            let id = guard.entry_id_for_test();
-            let target = registry.target_for_test(id).expect("target");
-            assert!(
+            let guard = register_child(&registry, spawn_tokio("sleep 30"), policy);
+            targets.push(
                 registry
-                    .attach_child(id, OwnedChild::Tokio(child))
-                    .is_none()
+                    .target_for_test(guard.entry_id_for_test())
+                    .expect("target"),
             );
             guards.push(guard);
-            targets.push(target);
         }
 
-        let policy = LifecyclePolicy::default().with_grace_period(Duration::from_millis(50));
-        fan_out_shutdown(&registry, policy).await.expect("fan-out");
+        fan_out_shutdown(&registry).await.expect("fan-out");
 
         assert_eq!(registry.len(), 0);
         for target in &targets {
@@ -290,30 +325,26 @@ mod tests {
     #[tokio::test]
     async fn concurrent_shutdowns_do_not_return_before_children_terminate() {
         let registry = Arc::new(LiveChildRegistry::default());
+        let policy = LifecyclePolicy::default().with_grace_period(Duration::from_millis(50));
         let mut guards = Vec::new();
         let mut targets = Vec::new();
         for _ in 0..4 {
-            let child = spawn_tokio("sleep 30");
-            let pid = child.id().expect("live pid");
-            let guard = registry.register(pid, false);
-            let id = guard.entry_id_for_test();
-            targets.push(registry.target_for_test(id).expect("target"));
-            assert!(
+            let guard = register_child(&registry, spawn_tokio("sleep 30"), policy);
+            targets.push(
                 registry
-                    .attach_child(id, OwnedChild::Tokio(child))
-                    .is_none()
+                    .target_for_test(guard.entry_id_for_test())
+                    .expect("target"),
             );
             guards.push(guard);
         }
 
-        let policy = LifecyclePolicy::default().with_grace_period(Duration::from_millis(50));
         let a = {
             let registry = Arc::clone(&registry);
-            tokio::spawn(async move { fan_out_shutdown(&registry, policy).await })
+            tokio::spawn(async move { fan_out_shutdown(&registry).await })
         };
         let b = {
             let registry = Arc::clone(&registry);
-            tokio::spawn(async move { fan_out_shutdown(&registry, policy).await })
+            tokio::spawn(async move { fan_out_shutdown(&registry).await })
         };
         a.await.expect("join a").expect("fan-out a");
         b.await.expect("join b").expect("fan-out b");
@@ -330,19 +361,12 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn cancelled_shutdown_releases_claims_for_retry() {
         let registry = Arc::new(LiveChildRegistry::default());
-        let child = spawn_stubborn_tokio().await;
-        let pid = child.id().expect("live pid");
-        let guard = registry.register(pid, false);
-        assert!(
-            registry
-                .attach_child(guard.entry_id_for_test(), OwnedChild::Tokio(child))
-                .is_none()
-        );
+        let policy = LifecyclePolicy::default().with_grace_period(Duration::from_millis(50));
+        let guard = register_child(&registry, spawn_stubborn_tokio().await, policy);
 
-        let slow = LifecyclePolicy::default().with_grace_period(Duration::from_secs(30));
         let first = {
             let registry = Arc::clone(&registry);
-            tokio::spawn(async move { fan_out_shutdown(&registry, slow).await })
+            tokio::spawn(async move { fan_out_shutdown(&registry).await })
         };
         tokio::task::yield_now().await;
         first.abort();
@@ -354,10 +378,7 @@ mod tests {
         );
 
         tokio::time::resume();
-        let retry = LifecyclePolicy::default().with_grace_period(Duration::from_millis(50));
-        fan_out_shutdown(&registry, retry)
-            .await
-            .expect("retry shutdown");
+        fan_out_shutdown(&registry).await.expect("retry shutdown");
 
         assert_eq!(registry.len(), 0, "retry reaps the restored claim");
         drop(guard);
