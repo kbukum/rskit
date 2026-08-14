@@ -9,7 +9,19 @@ use tokio_util::sync::CancellationToken;
 use super::ShutdownPolicy;
 
 /// Installed shutdown signal controller and cooperative cancellation handle.
+///
+/// Installing a controller registers process-wide signal handlers through Tokio.
+/// On Unix that registration is permanent for the life of the process: Tokio
+/// does not restore a signal's default disposition when the streams are dropped.
+/// Dropping the controller therefore aborts the background task that watches for
+/// signals and cancels the token, leaving `SIGINT`/`SIGTERM`/`SIGHUP` captured
+/// with nothing left to act on them. Hold the controller for as long as
+/// coordinated shutdown is required — typically the whole lifetime of the
+/// process — rather than letting it drop at the end of a scope.
 #[derive(Debug)]
+#[must_use = "dropping the ShutdownController aborts its signal handler task and leaves the \
+              installed signals captured with no task to cancel the token or force-exit; hold it \
+              for the lifetime of the process"]
 pub struct ShutdownController {
     token: CancellationToken,
     supervisor: JoinHandle<()>,
@@ -17,6 +29,13 @@ pub struct ShutdownController {
 
 impl ShutdownController {
     /// Install the configured shutdown signal handlers inside the current Tokio runtime.
+    ///
+    /// The returned controller must be retained: its background task owns the
+    /// only receiver for the installed signals and cancels the token (or
+    /// force-exits on a second signal). Because the underlying registration is
+    /// process-wide and permanent on Unix, discarding the controller does not
+    /// restore default signal handling — it only abandons the coordinated
+    /// shutdown behavior.
     pub fn install(policy: ShutdownPolicy) -> AppResult<Self> {
         let handle = Handle::try_current().map_err(|err| {
             AppError::new(
