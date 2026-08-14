@@ -106,3 +106,22 @@ use rskit_process::{ArgRedaction, ProcessConfig};
 let config = ProcessConfig::default()
     .with_arg_redaction(ArgRedaction::default().with_name("license-key"));
 ```
+
+## Supervised child lifetime
+
+`run` and `run_with_cancel` spawn through a throwaway per-call supervisor. To reap children on a process-wide shutdown — even while a blocking call is still waiting on one — share a `ProcessSupervisor` and spawn through `run_supervised` / `run_with_cancel_supervised`. A single `ProcessSupervisor::shutdown` then fans out termination to every tracked group.
+
+```rust
+use rskit_process::{ProcessConfig, ProcessSpec, ProcessSupervisor, run_supervised};
+
+# fn example() -> Result<(), Box<dyn std::error::Error>> {
+let supervisor = ProcessSupervisor::new(ProcessConfig::default().lifecycle);
+let spec = ProcessSpec::new("echo").arg("hello");
+
+let result = run_supervised(&supervisor, &spec, &ProcessConfig::default())?;
+result.check()?;
+# Ok(())
+# }
+```
+
+Each child is tracked through an owned, reuse-proof identity (a Linux pidfd where available, otherwise the pid plus process-group id), so a delayed escalation always targets the original process and never a pid the OS recycled. Normal completion unregisters through a guard; the supervisor's own `Drop` is a backstop that force-kills anything still registered. Full guarantees hold on Unix; on other platforms `shutdown` is best-effort and returns an error for a registered child it can neither signal nor own rather than reporting a false success.

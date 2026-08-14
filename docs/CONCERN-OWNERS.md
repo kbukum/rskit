@@ -21,7 +21,8 @@ Start here, then reconcile each low-level operation against that pass.
 | Logging / tracing | `rskit-logging` / `rskit-observability` | `println!`, direct exporter wiring | `tracing`, injected subscriber/meter |
 | Resilience (retry/timeout/circuit-break) | `rskit-resilience` | hand-rolled loops, scattered timeouts + custom backoff | idempotent ops only, bounded + jittered |
 | HTTP client / server | `rskit-httpclient` / `rskit-server` / `rskit-http` | raw client with custom retry/timeout | |
-| Subprocess | `rskit-process` | bare `std::process::Command` | argv-only, no shell |
+| Subprocess | `rskit-process` | bare `std::process::Command` | argv-only, no shell; `ProcessSupervisor` owns spawned-child lifetime |
+| Graceful shutdown / OS signals | `rskit-cli` | ad-hoc `signal-hook` / `ctrlc` handlers per binary | caller-declared `ShutdownPolicy` installed via `ShutdownController` over `CancellationToken` |
 | Dependency injection | `rskit-di` | service-locator / string-keyed resolution | typed resolution |
 | Encryption / security | `rskit-encryption` / `rskit-security` | ad-hoc crypto, custom header sets | current algorithms only |
 | Git operations | `rskit-git` | bare `Command::new("git")` | |

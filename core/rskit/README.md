@@ -17,8 +17,8 @@ Adapter features also enable their owning core abstraction when needed.
 |---------------|----------|
 | Transport/service | `server`, `grpc`, `http`, `httpclient`, `sse` |
 | Security/composition | `auth`, `authz`, `security`, `encryption`, `di`, `observability`, `discovery` |
-| Data/integration | `database`, `cache`, `cache-fs`, `cache-redis`, `messaging`, `messaging-kafka`, `messaging-nats`, `messaging-rabbitmq`, `storage`, `storage-s3`, `storage-gcs`, `vectorstore`, `vectorstore-qdrant` |
-| Workflow/runtime | `dag`, `chain`, `process`, `stateful`, `version`, `schema`, `hook` |
+| Data/integration | `database`, `database-sqlite`, `cache`, `cache-fs`, `cache-redis`, `messaging`, `messaging-kafka`, `messaging-nats`, `messaging-rabbitmq`, `storage`, `storage-s3`, `storage-gcs`, `storage-supabase`, `vectorstore`, `vectorstore-qdrant` |
+| Workflow/runtime | `dag`, `chain`, `process`, `stateful`, `workload`, `version`, `schema`, `hook` |
 | AI/media | `genai`, `prompt`, `llm`, `llm-openai`, `llm-anthropic`, `llm-ollama`, `llm-gemini`, `embedding`, `inference`, `inference-triton`, `inference-vllm`, `inference-tgi`, `skill`, `tool`, `agent`, `mcp`, `media`, `media-ffmpeg`, `media-image`, `media-audio`, `media-full` |
 | Tooling | `cli`, `git`, `dataset`, `bench` |
 | Aggregate | `full` enables every optional feature |
