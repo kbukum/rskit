@@ -68,6 +68,7 @@ impl ProcessSupervisor {
         let guard = self.registry.register_owned(
             pid,
             self.lifecycle.targets_group(),
+            self.lifecycle,
             OwnedChild::Std(child),
         );
         Ok(SupervisedBlockingChild { guard: Some(guard) })
@@ -85,6 +86,7 @@ impl ProcessSupervisor {
         let guard = self.registry.register_owned(
             pid,
             self.lifecycle.targets_group(),
+            self.lifecycle,
             OwnedChild::Tokio(child),
         );
         Ok(SupervisedAsyncChild { guard: Some(guard) })
@@ -95,15 +97,17 @@ impl ProcessSupervisor {
     ///
     /// A supervised runner configures its spawn from its own `ProcessConfig`,
     /// which may differ from the supervisor's policy. Registering with the
-    /// spawn's real `targets_group` value keeps the owned target's group
-    /// signalling consistent with how the child was created, so shutdown never
-    /// treats a leader-only child as a group (or vice versa).
+    /// spawn's real [`LifecyclePolicy`] keeps the owned target's group signalling
+    /// consistent with how the child was created (so shutdown never treats a
+    /// leader-only child as a group, or vice versa) *and* records that child's
+    /// own grace/kill-escalation intent, so the shutdown backstop honors each
+    /// registered child by its own policy rather than one supervisor-wide policy.
     pub(crate) fn register_pid_with_group(
         &self,
         pid: u32,
-        targets_group: bool,
+        policy: LifecyclePolicy,
     ) -> RegistrationGuard {
-        self.registry.register(pid, targets_group)
+        self.registry.register(pid, policy.targets_group(), policy)
     }
 
     /// Shut down every currently tracked child target.
@@ -126,7 +130,7 @@ impl ProcessSupervisor {
     pub async fn shutdown(&self, reason: impl Into<String>) -> AppResult<()> {
         let reason = reason.into();
         debug!(reason = %reason, "supervisor shutdown requested");
-        fan_out_shutdown(&self.registry, self.lifecycle).await
+        fan_out_shutdown(&self.registry).await
     }
 
     /// Return the number of tracked children.
@@ -169,7 +173,7 @@ impl ProcessSupervisor {
             )
             .with_cause(error)
         })?;
-        Ok(subscribe(Arc::clone(&self.registry), self.lifecycle, token))
+        Ok(subscribe(Arc::clone(&self.registry), token))
     }
 
     /// Register an externally spawned pid under this supervisor.
@@ -178,7 +182,7 @@ impl ProcessSupervisor {
     /// supervisor did not create or verify a process group for them.
     #[must_use]
     pub fn track_pid(&self, pid: u32) -> RegistrationGuard {
-        self.registry.register(pid, false)
+        self.registry.register(pid, false, self.lifecycle)
     }
 
     /// Unregister an externally tracked pid.

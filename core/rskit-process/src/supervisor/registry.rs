@@ -16,6 +16,7 @@ use std::sync::{
 use parking_lot::Mutex;
 
 use super::target::{OwnedChild, OwnedTarget};
+use crate::command::LifecyclePolicy;
 
 /// Available for a waiter or a shutdown fan-out to claim.
 const STATE_LIVE: u8 = 0;
@@ -63,7 +64,12 @@ impl LiveChildRegistry {
     /// A pid of `0` (an async child with no reported pid, or an explicit
     /// zero-pid registration) has no signalable identity, so no entry is created
     /// and the returned guard is inert.
-    pub(super) fn register(self: &Arc<Self>, pid: u32, process_group: bool) -> RegistrationGuard {
+    pub(super) fn register(
+        self: &Arc<Self>,
+        pid: u32,
+        process_group: bool,
+        policy: LifecyclePolicy,
+    ) -> RegistrationGuard {
         if pid == 0 {
             return RegistrationGuard {
                 registry: Arc::clone(self),
@@ -73,7 +79,7 @@ impl LiveChildRegistry {
         }
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let entry = Arc::new(Entry {
-            target: Arc::new(OwnedTarget::new(pid, process_group)),
+            target: Arc::new(OwnedTarget::new(pid, process_group, policy)),
             state: AtomicU8::new(STATE_LIVE),
         });
         self.entries.lock().insert(id, entry);
@@ -89,10 +95,11 @@ impl LiveChildRegistry {
         self: &Arc<Self>,
         pid: u32,
         process_group: bool,
+        policy: LifecyclePolicy,
         child: OwnedChild,
     ) -> RegistrationGuard {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
-        let target = Arc::new(OwnedTarget::new(pid, process_group));
+        let target = Arc::new(OwnedTarget::new(pid, process_group, policy));
         target.attach_child(child);
         let entry = Arc::new(Entry {
             target,
@@ -381,7 +388,7 @@ mod tests {
     fn claim_owns_targets_independently_of_waiter_removal() {
         let registry = Arc::new(LiveChildRegistry::default());
         let (mut child, pid) = spawn();
-        let guard = registry.register(pid, false);
+        let guard = registry.register(pid, false, LifecyclePolicy::default());
         let id = guard.id;
 
         registry.start_shutdown();
@@ -423,7 +430,7 @@ mod tests {
         // registration arrives before the pass could end.
         registry.start_shutdown();
         let (mut child, pid) = spawn();
-        let guard = registry.register(pid, false);
+        let guard = registry.register(pid, false, LifecyclePolicy::default());
         assert!(
             !registry.finish_shutdown_if_drained(),
             "a live late registration keeps the pass running"
@@ -448,7 +455,7 @@ mod tests {
     fn survivor_is_excluded_then_reset_on_next_shutdown() {
         let registry = Arc::new(LiveChildRegistry::default());
         let (mut child, pid) = spawn();
-        let guard = registry.register(pid, false);
+        let guard = registry.register(pid, false, LifecyclePolicy::default());
         let id = guard.id;
 
         registry.start_shutdown();
@@ -482,7 +489,7 @@ mod tests {
     fn attach_returns_child_when_shutdown_already_claimed_entry() {
         let registry = Arc::new(LiveChildRegistry::default());
         let (child, pid) = spawn();
-        let guard = registry.register(pid, false);
+        let guard = registry.register(pid, false, LifecyclePolicy::default());
         let id = guard.id;
 
         registry.start_shutdown();

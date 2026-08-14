@@ -189,6 +189,10 @@ impl PidFd {
 pub(super) struct OwnedTarget {
     pid: u32,
     process_group: bool,
+    /// This child's own lifecycle policy, honored at shutdown so the backstop
+    /// escalates each registered child by its own grace/kill intent rather than
+    /// a single supervisor-wide policy.
+    policy: LifecyclePolicy,
     #[cfg(target_os = "linux")]
     pidfd: Option<PidFd>,
     child: Mutex<Option<OwnedChild>>,
@@ -197,10 +201,11 @@ pub(super) struct OwnedTarget {
 
 impl OwnedTarget {
     /// Build a target for `pid`, capturing a pidfd on Linux where available.
-    pub(super) fn new(pid: u32, process_group: bool) -> Self {
+    pub(super) fn new(pid: u32, process_group: bool, policy: LifecyclePolicy) -> Self {
         Self {
             pid,
             process_group,
+            policy,
             #[cfg(target_os = "linux")]
             pidfd: (pid != 0).then(|| PidFd::open(pid)).flatten(),
             child: Mutex::new(None),
@@ -318,12 +323,13 @@ impl OwnedTarget {
     /// surfaces the platform limitation rather than claiming a false success.
     ///
     /// [`Unsupported`]: TargetOutcome::Unsupported
-    pub(super) async fn terminate(&self, policy: LifecyclePolicy) -> TargetOutcome {
+    pub(super) async fn terminate(&self) -> TargetOutcome {
+        let policy = self.policy;
         if self.pid == 0 || !cfg!(unix) {
             // No reuse-proof signalling identity (`pid == 0`) or no signalling
             // primitive on this platform. Resolve the target through its owned
             // child handle instead, honouring `kill_after_grace(false)`.
-            return self.terminate_without_signalling(policy).await;
+            return self.terminate_without_signalling().await;
         }
         if !self.signal(ProcessSignal::Terminate) && self.is_alive() {
             return TargetOutcome::Failed;
@@ -454,7 +460,8 @@ impl OwnedTarget {
     /// [`Survived`](TargetOutcome::Survived). A target with neither a signalling
     /// primitive nor an owned handle cannot even attempt termination and is
     /// reported [`Unsupported`](TargetOutcome::Unsupported).
-    async fn terminate_without_signalling(&self, policy: LifecyclePolicy) -> TargetOutcome {
+    async fn terminate_without_signalling(&self) -> TargetOutcome {
+        let policy = self.policy;
         if self.reap_if_owned_child_exited() {
             return TargetOutcome::Terminated;
         }
@@ -584,7 +591,7 @@ mod tests {
     fn target_reports_not_alive_after_reap() {
         let child = spawn_std(&["-c", "sleep 30"]);
         let pid = child.id();
-        let target = OwnedTarget::new(pid, false);
+        let target = OwnedTarget::new(pid, false, LifecyclePolicy::default());
         target.attach_child(OwnedChild::Std(child));
         assert!(target.is_alive(), "freshly spawned child is alive");
 
@@ -608,11 +615,11 @@ mod tests {
             .spawn()
             .expect("child spawns");
         let pid = child.id().expect("live pid");
-        let target = OwnedTarget::new(pid, false);
+        let policy = LifecyclePolicy::default().with_grace_period(Duration::from_millis(50));
+        let target = OwnedTarget::new(pid, false, policy);
         target.attach_child(OwnedChild::Tokio(child));
 
-        let policy = LifecyclePolicy::default().with_grace_period(Duration::from_millis(50));
-        let outcome = target.terminate(policy).await;
+        let outcome = target.terminate().await;
 
         assert_eq!(outcome, TargetOutcome::Terminated);
         assert!(!target.is_alive(), "reaped child is gone");
@@ -640,15 +647,15 @@ mod tests {
             .expect("read readiness");
         assert_eq!(&ready, b"ready");
         let pid = child.id().expect("live pid");
-        let target = OwnedTarget::new(pid, false);
-        target.attach_child(OwnedChild::Tokio(child));
-
         let policy = LifecyclePolicy {
             kill_after_grace: false,
             ..LifecyclePolicy::default()
         }
         .with_grace_period(Duration::from_millis(50));
-        let outcome = target.terminate(policy).await;
+        let target = OwnedTarget::new(pid, false, policy);
+        target.attach_child(OwnedChild::Tokio(child));
+
+        let outcome = target.terminate().await;
 
         assert_eq!(
             outcome,
@@ -663,40 +670,55 @@ mod tests {
     }
 
     /// Without a reuse-proof signalling identity (`pid == 0`, mirroring platforms
-    /// that lack a `kill(2)` primitive), `kill_after_grace(false)` must retain a
-    /// live owned child and report [`TargetOutcome::Survived`] rather than
-    /// force-killing it through the handle.
+    /// that lack a `kill(2)` primitive), the per-target policy still governs the
+    /// outcome: a `kill_after_grace(false)` target retains its live owned child
+    /// and reports [`TargetOutcome::Survived`], while a `kill_after_grace(true)`
+    /// target tears its child down through the handle. Two targets in the same
+    /// pass therefore reach opposite verdicts from their own policies.
     #[tokio::test]
-    async fn no_signalling_target_survives_without_force_kill() {
-        let child = tokio::process::Command::new("/bin/sh")
-            .args(["-c", "sleep 30"])
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .expect("child spawns");
-        let target = OwnedTarget::new(0, false);
-        target.attach_child(OwnedChild::Tokio(child));
-
-        let policy = LifecyclePolicy {
-            kill_after_grace: false,
-            ..LifecyclePolicy::default()
+    async fn no_signalling_targets_follow_their_own_policy() {
+        let spawn = || {
+            tokio::process::Command::new("/bin/sh")
+                .args(["-c", "sleep 30"])
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .expect("child spawns")
         };
-        let outcome = target.terminate(policy).await;
 
+        let survivor = OwnedTarget::new(
+            0,
+            false,
+            LifecyclePolicy {
+                kill_after_grace: false,
+                ..LifecyclePolicy::default()
+            },
+        );
+        survivor.attach_child(OwnedChild::Tokio(spawn()));
         assert_eq!(
-            outcome,
+            survivor.terminate().await,
             TargetOutcome::Survived,
             "no signalling primitive and escalation disabled: keep the child"
         );
 
-        // Escalation enabled tears the same still-owned child down through its
-        // handle, confirming ownership was retained rather than dropped.
-        let killed = LifecyclePolicy {
-            kill_after_grace: true,
-            ..LifecyclePolicy::default()
-        };
-        assert_eq!(target.terminate(killed).await, TargetOutcome::Terminated);
+        let killed = OwnedTarget::new(
+            0,
+            false,
+            LifecyclePolicy {
+                kill_after_grace: true,
+                ..LifecyclePolicy::default()
+            },
+        );
+        killed.attach_child(OwnedChild::Tokio(spawn()));
+        assert_eq!(
+            killed.terminate().await,
+            TargetOutcome::Terminated,
+            "escalation enabled tears the child down through its handle"
+        );
+
+        // The retained survivor is still owned, so its backstop reaps it.
+        survivor.kill_blocking();
     }
 
     /// A group leader that exits cleanly while a backgrounded descendant keeps
@@ -707,11 +729,11 @@ mod tests {
     #[tokio::test]
     async fn terminate_escalates_to_a_group_that_outlives_its_leader() {
         let (child, pid) = spawn_stubborn_group().await;
-        let target = OwnedTarget::new(pid, true);
+        let policy = LifecyclePolicy::default().with_grace_period(Duration::from_millis(50));
+        let target = OwnedTarget::new(pid, true, policy);
         target.attach_child(OwnedChild::Tokio(child));
 
-        let policy = LifecyclePolicy::default().with_grace_period(Duration::from_millis(50));
-        let outcome = target.terminate(policy).await;
+        let outcome = target.terminate().await;
 
         assert_eq!(
             outcome,
@@ -730,15 +752,15 @@ mod tests {
     #[tokio::test]
     async fn group_that_outlives_its_leader_survives_without_force_kill() {
         let (child, pid) = spawn_stubborn_group().await;
-        let target = OwnedTarget::new(pid, true);
-        target.attach_child(OwnedChild::Tokio(child));
-
         let policy = LifecyclePolicy {
             kill_after_grace: false,
             ..LifecyclePolicy::default()
         }
         .with_grace_period(Duration::from_millis(50));
-        let outcome = target.terminate(policy).await;
+        let target = OwnedTarget::new(pid, true, policy);
+        target.attach_child(OwnedChild::Tokio(child));
+
+        let outcome = target.terminate().await;
 
         assert_eq!(
             outcome,

@@ -84,13 +84,11 @@ fn start_persistent_impl(
     let (supervisor, registration) = match injected {
         Some(supervisor) => (
             None,
-            supervisor
-                .register_pid_with_group(child.id(), process_config.lifecycle.targets_group()),
+            supervisor.register_pid_with_group(child.id(), process_config.lifecycle),
         ),
         None => {
             let local = ProcessSupervisor::new(process_config.lifecycle);
-            let registration =
-                local.register_pid_with_group(child.id(), process_config.lifecycle.targets_group());
+            let registration = local.register_pid_with_group(child.id(), process_config.lifecycle);
             (Some(local), registration)
         }
     };

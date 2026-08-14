@@ -106,8 +106,7 @@ fn run_blocking(
         .spawn()
         .map_err(|error| spawn_error("failed to spawn process", error))?;
     let leader_pid = child.id();
-    let registration =
-        supervisor.register_pid_with_group(leader_pid, config.lifecycle.targets_group());
+    let registration = supervisor.register_pid_with_group(leader_pid, config.lifecycle);
 
     let max_output_bytes = output.and_then(|output| output.max_output_bytes);
     let stdout_capture = shared_output();
