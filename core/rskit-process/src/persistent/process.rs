@@ -6,6 +6,7 @@ use std::{
 };
 
 use crate::capture::append_line_bounded;
+use crate::process_group::group_alive;
 use crate::worker::join_within;
 use crate::{
     AppError, AppResult, ErrorCode, LifecyclePolicy, ProcessResult, ProcessSupervisor,
@@ -91,7 +92,14 @@ impl PersistentProcess {
         if let Some(status) = self.child_mut()?.try_wait().map_err(AppError::internal)? {
             self.stopped = true;
             self.stop_cancel_thread()?;
-            self.unregister();
+            // A group target whose subtree outlived the reaped leader is retained
+            // (relinquished) so a shared supervisor can still reap the survivors,
+            // rather than unregistered and leaked.
+            if self.group_survives() {
+                self.relinquish_survivor();
+            } else {
+                self.unregister();
+            }
             let cancelled = self.cancelled.load(Ordering::SeqCst);
             return self
                 .completed_result(status.code(), None, false, cancelled)
@@ -131,6 +139,10 @@ impl PersistentProcess {
             // The child deliberately survived: hand the live handle to its owned
             // target and keep the registration, so a shared supervisor's shutdown
             // or drop can still reap it instead of leaving a zombie.
+            self.relinquish_survivor();
+        } else if self.group_survives() {
+            // The leader was reaped but its group subtree is still alive: retain
+            // ownership so the surviving descendants can still be reaped later.
             self.relinquish_survivor();
         } else {
             self.unregister();
@@ -173,6 +185,18 @@ impl PersistentProcess {
         } else {
             Ok(())
         }
+    }
+
+    /// True when this is a group target whose subtree outlived the reaped leader,
+    /// so ownership must be retained (relinquished to the owned target) rather than
+    /// unregistered, exactly as for a deliberate `kill_after_grace = false`
+    /// survivor. The leader's pid doubles as the process-group id.
+    fn group_survives(&self) -> bool {
+        self.signal.targets_group()
+            && self
+                .child
+                .as_ref()
+                .is_some_and(|child| group_alive(child.id()))
     }
 
     fn unregister(&mut self) {

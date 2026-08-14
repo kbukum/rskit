@@ -6,7 +6,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::capture::{SharedOutput, append_line_bounded, shared_output, take_shared};
-use crate::process_group::kill_target;
+use crate::process_group::{group_alive, kill_target};
 use crate::supervisor::{OwnedChild, SyncReap, terminate_and_reap};
 use crate::worker::join_within;
 use crate::{
@@ -105,8 +105,9 @@ fn run_blocking(
     let mut child = cmd
         .spawn()
         .map_err(|error| spawn_error("failed to spawn process", error))?;
+    let leader_pid = child.id();
     let registration =
-        supervisor.register_pid_with_group(child.id(), config.lifecycle.targets_group());
+        supervisor.register_pid_with_group(leader_pid, config.lifecycle.targets_group());
 
     let max_output_bytes = output.and_then(|output| output.max_output_bytes);
     let stdout_capture = shared_output();
@@ -141,9 +142,10 @@ fn run_blocking(
     scope.drain()?;
 
     // If the child exited it is reaped, so unregister on disarm. If it deliberately
-    // survived its grace period (`kill_after_grace = false`), relinquish the still-live
-    // child to its owned target so a later shutdown or supervisor drop reaps it.
-    if survived {
+    // survived its grace period (`kill_after_grace = false`), or if it is a group
+    // target whose subtree outlived the reaped leader, relinquish to the owned
+    // target so a later shutdown or supervisor drop reaps the survivor.
+    if survived || (config.lifecycle.targets_group() && group_alive(leader_pid)) {
         scope.relinquish();
     } else {
         scope.disarm();
@@ -243,8 +245,12 @@ impl BlockingChildScope {
         }
     }
 
-    /// Relinquish a still-live child (it survived its grace period with escalation
-    /// disabled) to its owned target without killing or unregistering.
+    /// Relinquish a survivor to its owned target without killing or unregistering.
+    ///
+    /// Used both when the child deliberately survived its grace period
+    /// (`kill_after_grace = false`) and when a group target's leader was reaped but
+    /// its subtree is still alive, so a later shutdown or supervisor drop reaps the
+    /// survivor rather than it being force-killed or unregistered here.
     fn relinquish(&mut self) {
         self.armed = false;
         if let (Some(registration), Some(child)) = (self.registration.take(), self.child.take())

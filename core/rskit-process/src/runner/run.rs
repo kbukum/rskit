@@ -10,6 +10,7 @@ use crate::{
     ProcessResult, ProcessSpec, ProcessSupervisor,
     capture::{append_line_bounded, shared_output},
     command::spawn_error,
+    process_group::group_alive,
 };
 
 use super::lifecycle::wait_for_completion;
@@ -203,10 +204,9 @@ async fn run_process(
     let mut child = cmd
         .spawn()
         .map_err(|error| spawn_error("failed to spawn process", error))?;
-    let registration = supervisor.register_pid_with_group(
-        child.id().unwrap_or_default(),
-        config.lifecycle.targets_group(),
-    );
+    let leader_pid = child.id().unwrap_or_default();
+    let registration =
+        supervisor.register_pid_with_group(leader_pid, config.lifecycle.targets_group());
 
     // Detach the child's pipe handles before the child moves into the scope guard,
     // which then owns it for the rest of the run.
@@ -262,10 +262,11 @@ async fn run_process(
 
     // The run completed: the tasks are joined. If the child exited it is reaped,
     // so hand ownership back and unregister on disarm. If it deliberately survived
-    // its grace period (`kill_after_grace = false`), relinquish the still-live
-    // child to its owned target so a later shutdown or supervisor drop reaps it,
-    // keeping it registered rather than force-killing or abandoning it.
-    if completion.survived {
+    // its grace period (`kill_after_grace = false`), or if it is a group target
+    // whose subtree outlived the reaped leader, relinquish to the owned target so a
+    // later shutdown or supervisor drop reaps the survivor, keeping it registered
+    // rather than force-killing or abandoning it.
+    if completion.survived || (config.lifecycle.targets_group() && group_alive(leader_pid)) {
         scope.relinquish().await;
     } else {
         scope.disarm();

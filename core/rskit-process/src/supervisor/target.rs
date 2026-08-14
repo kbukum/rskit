@@ -15,12 +15,15 @@
 //! rather than claiming a termination that did not happen.
 //!
 //! Direct-child signalling is fully reuse-proof through the pidfd. Descendant
-//! (process-group) signalling still goes through the numeric process-group id
-//! because Linux exposes no group file descriptor; the group is signalled first,
-//! while a pidfd liveness check confirms the group leader — our own direct child
-//! — is still alive and therefore still owns the group id, and only then is the
-//! exact leader signalled through its pidfd. This is the accepted best-effort
-//! boundary for group cleanup.
+//! (process-group) signalling goes through the numeric process-group id because
+//! Linux exposes no group file descriptor; it is gated on a `kill(-pgid, 0)`
+//! probe that the group is still non-empty. POSIX keeps a process-group id
+//! reserved while any member survives, so a non-empty group can be signalled
+//! safely even after its leader has exited — which is what lets escalation reach
+//! a descendant that outlived the leader. Liveness of the *subtree* is therefore
+//! tracked through the group probe, distinct from liveness of the leader (its
+//! pidfd/pid), and a group target is only considered gone once its whole group
+//! is empty.
 
 use std::process::ExitStatus;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -31,7 +34,7 @@ use parking_lot::Mutex;
 use crate::command::LifecyclePolicy;
 #[cfg(unix)]
 use crate::process_group::signal_target;
-use crate::process_group::target_alive;
+use crate::process_group::{group_alive, target_alive};
 use crate::signal::ProcessSignal;
 
 /// A child handle owned by the registry so it can be reaped after a confirmed
@@ -246,36 +249,39 @@ impl OwnedTarget {
     /// Send `signal` to the target's leader (reuse-proof on Linux) and, when
     /// descendant termination is requested, to its process group.
     ///
-    /// Returns `true` when the leader signal was delivered or the leader has
-    /// already exited. The group signal is best-effort and gated on the leader
-    /// still being alive so a reused process-group id is never targeted.
+    /// Returns `true` when the signal was delivered or the target has already
+    /// exited. The group signal is gated on the *group* still being non-empty
+    /// (`kill(-pgid, 0)`), not on the leader still being alive: POSIX keeps a
+    /// process-group id reserved while any member survives, so signalling a
+    /// non-empty group never targets a recycled id even after the leader itself
+    /// has exited. This is what lets escalation reach a descendant that outlived
+    /// its group leader.
     fn signal(&self, signal: ProcessSignal) -> bool {
         if self.pid == 0 || self.confirmed_gone() {
             return false;
         }
         #[cfg(target_os = "linux")]
         if let Some(pidfd) = &self.pidfd {
-            if self.process_group && pidfd.is_alive() {
-                // The leader is our own direct child and still alive, so the
-                // process-group id it owns cannot have been recycled. Signal the
-                // whole group first — before the leader-specific signal — so
-                // descendants are reached even if the leader exits immediately
-                // after this liveness check.
+            if self.process_group && group_alive(self.pid) {
+                // The group still has a member, so its id cannot have been
+                // recycled. Signal the whole group first — before the
+                // leader-specific signal — so descendants are reached even when
+                // the leader has already exited.
                 let _ = signal_target(self.pid, signal, true);
             }
             // Then signal the exact leader through its reuse-proof pidfd.
             return pidfd.send(signal.as_raw());
         }
         // Non-Linux Unix (and Linux without pidfd support): best-effort by pid /
-        // process-group id, gated on a liveness probe for the group case.
+        // process-group id, gated on the group liveness probe for the group case.
         #[cfg(unix)]
         {
             if self.process_group {
-                if target_alive(self.pid) {
+                if group_alive(self.pid) {
                     return signal_target(self.pid, signal, true);
                 }
-                // The leader is gone; signal the pid directly rather than a
-                // possibly-recycled group id.
+                // The group is empty; fall back to signalling the leader pid
+                // directly rather than a possibly-recycled group id.
                 return signal_target(self.pid, signal, false);
             }
             signal_target(self.pid, signal, self.process_group)
@@ -332,27 +338,61 @@ impl OwnedTarget {
         if !self.signal(ProcessSignal::Kill) && self.is_alive() {
             return TargetOutcome::Failed;
         }
-        if !self.wait_until_gone(policy.grace_period).await {
-            return TargetOutcome::Failed;
-        }
+        // `SIGKILL` was delivered to the whole group and is guaranteed lethal. A
+        // bounded wait lets the subtree drain for determinism, but timing out only
+        // means an external reaper (init/a subreaper) has not yet collected the
+        // orphaned descendant zombies — which we neither own nor can reap. The
+        // group is terminated regardless, so this must not be reported as a
+        // failure to confirm.
+        self.wait_until_gone(policy.grace_period).await;
         self.reap().await;
         self.mark_reaped();
         TargetOutcome::Terminated
     }
 
+    /// Whether this target may be unregistered: the leader is gone and, for a
+    /// group target, the whole process group is empty.
+    ///
+    /// This is the group-aware liveness verdict that separates *leader* death
+    /// from *subtree* death. A leader-only view ([`is_alive`](Self::is_alive))
+    /// reports gone the moment the direct child exits; but a group target owns a
+    /// subtree, so it is only truly gone once the last member of its process
+    /// group has left. The leader pidfd/pid stays the reuse-proof handle for the
+    /// one process we parented, while [`group_alive`] decides the subtree.
+    fn is_gone(&self) -> bool {
+        if self.confirmed_gone() {
+            return true;
+        }
+        if self.is_alive() {
+            return false;
+        }
+        // The leader is gone; a group target is only done once its subtree is
+        // empty. `group_alive` is `false` on non-group targets and non-Unix, so
+        // this reduces to leader liveness there.
+        !(self.process_group && group_alive(self.pid))
+    }
+
+    /// Reap the owned leader child handle if it has already exited, without
+    /// marking the whole target gone.
+    ///
+    /// A group target may still have live descendants after its leader exits, so
+    /// reaping the leader here keeps it from lingering as a zombie (which would
+    /// otherwise keep the group probe reporting the subtree alive) while leaving
+    /// the group-empty verdict to [`is_gone`](Self::is_gone).
+    fn try_reap_leader(&self) {
+        if let Some(child) = self.child.lock().as_mut() {
+            let _ = child.try_reap();
+        }
+    }
+
     async fn wait_until_gone(&self, budget: Duration) -> bool {
         let deadline = tokio::time::Instant::now() + budget;
         loop {
-            if self
-                .child
-                .lock()
-                .as_mut()
-                .is_some_and(|child| child.try_reap().is_some())
-            {
-                self.mark_reaped();
-                return true;
-            }
-            if !self.is_alive() {
+            // Reap the leader as soon as it exits so a leader zombie never keeps
+            // the group probe reporting the subtree alive; the group-empty check
+            // then governs a group target's final verdict.
+            self.try_reap_leader();
+            if self.is_gone() {
                 self.mark_reaped();
                 return true;
             }
@@ -429,6 +469,39 @@ mod tests {
     use super::*;
     use std::process::{Command, Stdio};
     use tokio::io::AsyncReadExt;
+
+    /// Spawn a process-group leader that backgrounds a `SIGTERM`-ignoring
+    /// descendant and then exits cleanly, so the group outlives its leader.
+    ///
+    /// The handshake is race-free: the descendant installs its `trap` and only
+    /// then marks a temp file, the leader waits for that mark before printing
+    /// `ready` and exiting, and the returned child is not resolved until `ready`
+    /// is read. The descendant redirects its own stdio to `/dev/null`, so it
+    /// never holds the leader's `ready` pipe open.
+    async fn spawn_stubborn_group() -> (tokio::process::Child, u32) {
+        let script = "F=$(mktemp); \
+             (trap '' TERM; echo 1 > \"$F\"; while :; do sleep 30; done) >/dev/null 2>&1 & \
+             until [ -s \"$F\" ]; do :; done; rm -f \"$F\"; printf ready; exit 0";
+        let mut command = tokio::process::Command::new("/bin/sh");
+        command
+            .args(["-c", script])
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null());
+        crate::process_group::isolate_async(&mut command);
+        let mut child = command.spawn().expect("group-leader child spawns");
+        let pid = child.id().expect("live pid");
+        let mut ready = [0_u8; 5];
+        child
+            .stdout
+            .take()
+            .expect("stdout")
+            .read_exact(&mut ready)
+            .await
+            .expect("read readiness");
+        assert_eq!(&ready, b"ready");
+        (child, pid)
+    }
 
     fn spawn_std(args: &[&str]) -> std::process::Child {
         Command::new("/bin/sh")
@@ -523,6 +596,65 @@ mod tests {
         // The target still owns the child, so the drop backstop reaps it.
         target.kill_blocking();
         assert!(!target.is_alive(), "backstop reaps the retained child");
+    }
+
+    /// A group leader that exits cleanly while a backgrounded descendant keeps
+    /// its process group alive — and the descendant ignores `SIGTERM` — is *not*
+    /// reported terminated on leader exit: `SIGKILL` escalation reaches the
+    /// surviving group and the target is only terminated once the whole subtree
+    /// is gone.
+    #[tokio::test]
+    async fn terminate_escalates_to_a_group_that_outlives_its_leader() {
+        let (child, pid) = spawn_stubborn_group().await;
+        let target = OwnedTarget::new(pid, true);
+        target.attach_child(OwnedChild::Tokio(child));
+
+        let policy = LifecyclePolicy::default().with_grace_period(Duration::from_millis(50));
+        let outcome = target.terminate(policy).await;
+
+        assert_eq!(
+            outcome,
+            TargetOutcome::Terminated,
+            "the surviving group is escalated to and reaped"
+        );
+        assert!(
+            !group_alive(pid),
+            "the whole process group is gone, not just the leader"
+        );
+    }
+
+    /// With `kill_after_grace = false` a `SIGTERM`-ignoring group that outlives
+    /// its leader is a deliberate survivor: it is never force-killed and stays
+    /// owned so a later shutdown or the drop backstop can reap the whole group.
+    #[tokio::test]
+    async fn group_that_outlives_its_leader_survives_without_force_kill() {
+        let (child, pid) = spawn_stubborn_group().await;
+        let target = OwnedTarget::new(pid, true);
+        target.attach_child(OwnedChild::Tokio(child));
+
+        let policy = LifecyclePolicy {
+            kill_after_grace: false,
+            ..LifecyclePolicy::default()
+        }
+        .with_grace_period(Duration::from_millis(50));
+        let outcome = target.terminate(policy).await;
+
+        assert_eq!(
+            outcome,
+            TargetOutcome::Survived,
+            "the surviving group is retained, not force-killed"
+        );
+        assert!(group_alive(pid), "the descendant is still running");
+
+        // The backstop force-kills the whole group.
+        target.kill_blocking();
+        for _ in 0..500 {
+            if !group_alive(pid) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert!(!group_alive(pid), "backstop reaps the surviving group");
     }
 
     /// On Linux the pidfd is a stable, reuse-proof identity: after the original

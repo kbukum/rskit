@@ -71,12 +71,14 @@ impl ChildScope {
         }
     }
 
-    /// Relinquish a still-live child (it survived its grace period with
-    /// escalation disabled) to its owned target without killing or unregistering.
+    /// Relinquish a survivor to its owned target without killing or unregistering.
     ///
-    /// The child moves into the registered target so a later shutdown or
-    /// supervisor drop reaps it; the guard is retained so scope drop neither kills
-    /// the child nor removes the entry.
+    /// Used both when the child deliberately survived its grace period
+    /// (`kill_after_grace = false`) and when a group target's leader was reaped but
+    /// its subtree is still alive. The (possibly already-reaped) leader handle
+    /// moves into the registered target so a later shutdown or supervisor drop
+    /// reaps the survivor; the guard is retained so scope drop neither kills the
+    /// child nor removes the entry.
     pub(super) async fn relinquish(&mut self) {
         self.armed = false;
         if let (Some(registration), Some(child)) = (self.registration.take(), self.child.take())

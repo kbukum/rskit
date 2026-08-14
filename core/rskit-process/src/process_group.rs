@@ -85,6 +85,53 @@ pub(crate) fn kill_target(pid: u32, process_group: bool) -> bool {
 /// another user), and `false` once it is gone. This is a liveness check only — it
 /// cannot distinguish an original child from an unrelated process that reused the pid.
 pub(crate) fn target_alive(pid: u32) -> bool {
+    target_alive_inner(pid)
+}
+
+/// Whether any process remains in the process group led by `pgid`.
+///
+/// Probes the whole group with `kill(-pgid, 0)`: it returns `true` while the
+/// group has at least one member (or a member owned by another user, reported as
+/// `EPERM`) and `false` once the group is empty (`ESRCH`). This is the group
+/// analogue of [`target_alive`] and the reuse-proof way to decide whether a
+/// supervised subtree is gone: POSIX guarantees a process-group id is not reused
+/// while the group still has a member, so a non-empty result always names the
+/// original group and never a recycled id. Unlike a Linux pidfd it is portable to
+/// every Unix, which is why group liveness — as opposed to leader liveness — is
+/// modelled through it.
+///
+/// A group member that has exited but not yet been reaped (a zombie) still
+/// answers the probe until it is reaped; this only makes the probe conservative
+/// (it briefly reports the group alive), never falsely empty, so a bounded poll
+/// converges once the last member is reaped.
+pub(crate) fn group_alive(pgid: u32) -> bool {
+    if pgid == 0 {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        let Ok(pgid) = i32::try_from(pgid) else {
+            return false;
+        };
+        // SAFETY: signal 0 performs an existence check without delivering a
+        // signal. A negative target names the process group. ESRCH means the
+        // group is empty; EPERM means a member exists but is owned by another
+        // user, which still counts as alive.
+        unsafe {
+            if libc::kill(-pgid, 0) == 0 {
+                return true;
+            }
+            std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = pgid;
+        false
+    }
+}
+
+fn target_alive_inner(pid: u32) -> bool {
     if pid == 0 {
         return false;
     }
@@ -302,6 +349,49 @@ mod tests {
         assert!(!kill(0));
         assert!(!terminate_target(0, false));
         assert!(!kill_target(0, false));
+        assert!(!group_alive(0));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn group_alive_tracks_the_whole_group_not_just_the_leader() {
+        // The leader exits immediately but backgrounds a descendant that keeps
+        // the process group non-empty. A leader-only liveness view would call the
+        // group gone the moment the leader exits; the group probe must not. The
+        // descendant's stdio is detached so it does not hold the leader's pipes
+        // open past the leader's own exit.
+        let mut command = StdCommand::new("/bin/sh");
+        command
+            .args(["-c", "sleep 30 >/dev/null 2>&1 & exit 0"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        isolate(&mut command);
+        let mut leader = command.spawn().expect("group-leader child spawns");
+        let pgid = leader.id();
+
+        // Reap the leader so it is no longer a group member; the backgrounded
+        // descendant still holds the group open.
+        let status = leader.wait().expect("leader reaped");
+        assert!(status.success(), "leader exits cleanly");
+        assert!(
+            group_alive(pgid),
+            "the group is still alive through its surviving descendant"
+        );
+
+        // Terminating the group reaches the descendant even though the leader is
+        // already gone, and the group empties once it exits.
+        assert!(kill(pgid), "killing the surviving group succeeds");
+        for _ in 0..500 {
+            if !group_alive(pgid) {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(
+            !group_alive(pgid),
+            "the group is empty once its last member is gone"
+        );
     }
 
     #[test]
