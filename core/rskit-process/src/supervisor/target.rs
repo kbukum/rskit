@@ -39,7 +39,7 @@ use parking_lot::Mutex;
 use crate::command::LifecyclePolicy;
 #[cfg(unix)]
 use crate::process_group::signal_target;
-use crate::process_group::{group_alive, target_alive};
+use crate::process_group::{group_alive, group_has_live_member, target_alive};
 use crate::signal::ProcessSignal;
 
 /// A child handle owned by the registry so it can be reaped after a confirmed
@@ -339,13 +339,25 @@ impl OwnedTarget {
         if !self.signal(ProcessSignal::Kill) && self.is_alive() {
             return TargetOutcome::Failed;
         }
-        // `SIGKILL` was delivered to the whole group and is guaranteed lethal. A
-        // bounded wait lets the subtree drain for determinism, but timing out only
-        // means an external reaper (init/a subreaper) has not yet collected the
-        // orphaned descendant zombies — which we neither own nor can reap. The
-        // group is terminated regardless, so this must not be reported as a
-        // failure to confirm.
-        self.wait_until_gone(policy.grace_period).await;
+        // `SIGKILL` was delivered to the whole group. A bounded wait lets the
+        // subtree drain; `wait_until_gone` reaps the leader as it goes, so it
+        // never lingers as a zombie. If the group is still present past the
+        // budget (for example a descendant stuck in uninterruptible sleep),
+        // termination is not confirmed: keep ownership of the target and report
+        // `Failed` so a later shutdown or the drop backstop retries, rather than
+        // unregistering a group we cannot prove is gone.
+        if !self.wait_until_gone(policy.grace_period).await {
+            // The bounded drain expired. `group_alive` is conservative — it still
+            // answers while dead-but-unreaped zombies linger — so distinguish a
+            // group of only zombies (already exited, awaiting an external reaper:
+            // confirmed gone) from one with a genuinely live member (for example a
+            // descendant stuck in uninterruptible sleep: not gone). Keep ownership
+            // and report `Failed` only for the latter, so a later shutdown or the
+            // drop backstop retries rather than unregistering a live subtree.
+            if group_has_live_member(self.pid) {
+                return TargetOutcome::Failed;
+            }
+        }
         self.reap().await;
         self.mark_reaped();
         TargetOutcome::Terminated

@@ -138,6 +138,104 @@ pub(crate) fn group_alive(pgid: u32) -> bool {
     }
 }
 
+/// Whether the process group led by `pgid` still has a *genuinely live* member —
+/// one that has not exited.
+///
+/// [`group_alive`] is deliberately conservative: a member that has exited but
+/// not yet been reaped (a zombie) keeps answering its probe until reaped, so it
+/// briefly reports a group of only-dead members as alive. That is the right
+/// verdict for escalation timing, but not for *confirming termination*: once
+/// `SIGKILL` has been delivered, a lingering zombie is already dead and merely
+/// awaiting an external reaper, whereas a member still running (or stuck in
+/// uninterruptible sleep) genuinely survives. This enumerates the group and
+/// returns `true` only when at least one member is not a zombie, so shutdown can
+/// tell "confirmed gone — only zombies remain" from "not gone — a live member
+/// persists". On non-Unix targets there are no process groups, so it is `false`.
+pub(crate) fn group_has_live_member(pgid: u32) -> bool {
+    if pgid == 0 {
+        return false;
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let target = pgid.to_string();
+        let Ok(dir) = std::fs::read_dir("/proc") else {
+            return false;
+        };
+        for entry in dir.flatten() {
+            let name = entry.file_name();
+            let Some(name) = name.to_str() else {
+                continue;
+            };
+            if name.parse::<u32>().is_err() {
+                continue;
+            }
+            let Ok(stat) = std::fs::read_to_string(format!("/proc/{name}/stat")) else {
+                continue;
+            };
+            // `/proc/<pid>/stat` is "pid (comm) state ppid pgrp ...". `comm` may
+            // contain spaces and parentheses, so the fields after the final ')'
+            // are: state, ppid, pgrp, ...
+            let Some((_, after_comm)) = stat.rsplit_once(')') else {
+                continue;
+            };
+            let mut fields = after_comm.split_whitespace();
+            let state = fields.next();
+            let _ppid = fields.next();
+            if fields.next() == Some(target.as_str()) && state != Some("Z") {
+                return true;
+            }
+        }
+        false
+    }
+    #[cfg(target_os = "macos")]
+    {
+        // libproc's `PROC_PGRP_ONLY` lists the pids in a process group; the
+        // per-pid zombie-aware [`target_alive`] then decides which are genuinely
+        // live. (`proc_listpgrppids` is unreliable here, returning nothing for
+        // valid groups, so the underlying `proc_listpids` is used directly.)
+        const PROC_PGRP_ONLY: u32 = 2;
+
+        #[link(name = "proc")]
+        unsafe extern "C" {
+            fn proc_listpids(
+                r#type: u32,
+                typeinfo: u32,
+                buffer: *mut libc::c_void,
+                buffersize: libc::c_int,
+            ) -> libc::c_int;
+        }
+
+        // SAFETY: a null buffer with size 0 asks libproc for the byte count
+        // needed to list the group's pids without writing anything.
+        let needed = unsafe { proc_listpids(PROC_PGRP_ONLY, pgid, std::ptr::null_mut(), 0) };
+        let Ok(needed) = usize::try_from(needed) else {
+            return false;
+        };
+        let count = needed / std::mem::size_of::<libc::pid_t>();
+        if count == 0 {
+            return false;
+        }
+        let mut pids = vec![0 as libc::pid_t; count];
+        let Ok(buffer_size) = libc::c_int::try_from(std::mem::size_of_val(pids.as_slice())) else {
+            return false;
+        };
+        // SAFETY: `pids` is a writable buffer of exactly `buffer_size` bytes.
+        let filled =
+            unsafe { proc_listpids(PROC_PGRP_ONLY, pgid, pids.as_mut_ptr().cast(), buffer_size) };
+        let Ok(filled) = usize::try_from(filled) else {
+            return false;
+        };
+        let filled = (filled / std::mem::size_of::<libc::pid_t>()).min(pids.len());
+        pids.iter()
+            .take(filled)
+            .any(|&pid| u32::try_from(pid).is_ok_and(|pid| pid != 0 && target_alive(pid)))
+    }
+    #[cfg(not(unix))]
+    {
+        false
+    }
+}
+
 fn target_alive_inner(pid: u32) -> bool {
     if pid == 0 {
         return false;
@@ -399,6 +497,48 @@ mod tests {
             !group_alive(pgid),
             "the group is empty once its last member is gone"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn group_has_live_member_distinguishes_live_members_from_zombies() {
+        // A group leader that backgrounds a live descendant and then exits leaves
+        // the group with a live member: `group_has_live_member` must see it.
+        let mut command = StdCommand::new("/bin/sh");
+        command
+            .args(["-c", "sleep 30 >/dev/null 2>&1 & exit 0"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        isolate(&mut command);
+        let mut leader = command.spawn().expect("group-leader child spawns");
+        let pgid = leader.id();
+        leader.wait().expect("leader reaped");
+
+        assert!(
+            group_has_live_member(pgid),
+            "a live backgrounded descendant is a live group member"
+        );
+
+        // Kill the group; once only unreaped zombies (or nothing) remain, no
+        // member is genuinely live even while `group_alive` may still be
+        // conservatively true.
+        assert!(kill(pgid), "killing the group succeeds");
+        for _ in 0..500 {
+            if !group_has_live_member(pgid) {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(
+            !group_has_live_member(pgid),
+            "a killed group has no genuinely live member"
+        );
+    }
+
+    #[test]
+    fn group_has_live_member_rejects_zero_pgid() {
+        assert!(!group_has_live_member(0));
     }
 
     #[test]
