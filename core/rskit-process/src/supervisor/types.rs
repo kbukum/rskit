@@ -70,9 +70,7 @@ impl ProcessSupervisor {
             self.lifecycle.targets_group(),
             OwnedChild::Std(child),
         );
-        Ok(SupervisedBlockingChild {
-            guard: Some(guard),
-        })
+        Ok(SupervisedBlockingChild { guard: Some(guard) })
     }
 
     /// Spawn an async child and register it for supervised cleanup.
@@ -89,9 +87,7 @@ impl ProcessSupervisor {
             self.lifecycle.targets_group(),
             OwnedChild::Tokio(child),
         );
-        Ok(SupervisedAsyncChild {
-            guard: Some(guard),
-        })
+        Ok(SupervisedAsyncChild { guard: Some(guard) })
     }
 
     /// Register an existing child pid with the topology it was actually spawned
