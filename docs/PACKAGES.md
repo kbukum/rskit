@@ -46,7 +46,7 @@ See [Versioning](VERSIONING.md) for compatibility policy and [Releasing](RELEASI
 | [`rskit-provider`](../core/rskit-provider/README.md) | Request/response, stream, sink, duplex provider traits and a Tower bridge. |
 | [`rskit-stream`](../core/rskit-stream/README.md) | Foundational async stream toolkit: bounded fan-out broadcaster, sources, cancellable tasks, and `futures::Stream` extension operators. |
 | [`rskit-resilience`](../core/rskit-resilience/README.md) | Retry, circuit breaker, bulkhead, rate limiter, timeout, and Tower layers. |
-| [`rskit-process`](../core/rskit-process/README.md) | Subprocess execution with cancellation, timeout, process-group isolation, and bounded output. |
+| [`rskit-process`](../core/rskit-process/README.md) | Subprocess execution with cancellation, timeout, process-group isolation, supervised child lifetime, and bounded output. |
 | [`rskit-worker`](../core/rskit-worker/README.md) | Task worker pools with `JoinSet`, typed events, provider bridges, and backpressure. |
 | [`rskit-chain`](../core/rskit-chain/README.md) | Sequential chain execution pattern for typed operations. |
 | [`rskit-stateful`](../core/rskit-stateful/README.md) | Stateful accumulators with triggers, measurers, and TTL cleanup. |

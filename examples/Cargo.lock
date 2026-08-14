@@ -1726,6 +1726,7 @@ version = "0.2.0-alpha.5"
 dependencies = [
  "console",
  "indicatif",
+ "libc",
  "rskit-errors",
  "serde",
  "serde_json",

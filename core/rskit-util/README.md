@@ -23,7 +23,9 @@ Use `rskit-util` for reusable helpers that have no service, transport, config, s
 | `collections` | `chunk`, `group_by`, `index_by`, and `partition` helpers |
 | `env` | Environment variable lookup, non-empty filtering, parsing, and defaults |
 | `glob` | Shell-style `*`/`?` matching over single string segments (no path semantics) |
+| `hash` | Content hashing: BLAKE3 `ContentHasher` for internal use, and an incremental SHA-256 hasher with a `sha256_reader` streaming helper for wire-format interop |
 | `secret` | Secret string masking for logs, debug output, and serialization |
+| `sensitive` | `SecretKeyMatcher` and a default key-name set for detecting secret-bearing field/argument names |
 | `strings` | Case conversion, UTF-8-safe truncation, unique-shorthand resolution, and "did you mean?" suggestions |
 | `template` | Typed `{placeholder}` template parsing and rendering |
 | `time` | Duration formatting/parsing, UTC civil date/time conversion, RFC 3339/compact UTC helpers, injectable clocks, and timing helpers |

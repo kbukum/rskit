@@ -32,7 +32,7 @@ depends_on = ["core", "patterns", "crosscutting", "transport"]
 
 [domains.data]
 description = "Database, cache, storage, vectorstore, messaging"
-modules = ["database", "cache", "cache-redis", "storage", "storage-gcs", "storage-s3", "vectorstore", "vectorstore-qdrant", "messaging", "messaging-kafka", "messaging-nats", "messaging-rabbitmq"]
+modules = ["database", "database-sqlite", "cache", "cache-redis", "storage", "storage-gcs", "storage-s3", "storage-supabase", "vectorstore", "vectorstore-qdrant", "messaging", "messaging-kafka", "messaging-nats", "messaging-rabbitmq"]
 depends_on = ["core", "patterns", "crosscutting", "composition", "transport", "auth"]
 
 [domains.ai]

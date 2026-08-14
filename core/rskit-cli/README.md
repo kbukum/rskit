@@ -10,7 +10,7 @@ Parser-agnostic CLI UX toolkit: theming, structured output, progress, interactiv
 - `render` — structured, non-interactive display: `OutputTable`, `OutputKV`, the `ErrorRenderer`/`ExitCode` convention, and one-off `StatusReporter` feedback lines (success/warn/step/heading) for guided flows.
 - `progress` — `ProgressBar` / `MultiProgress` preset styles (Bar, Spinner, Download, Finished) over `indicatif`.
 - `prompt` — interactive prompts (`select`, `multi_select`, `confirm`, `text`/`text_with`) that speak through a `Terminal` seam: a line-driven numbered list over pipes, a rich raw-mode arrow-key widget on a TTY (radio `◉`/`○` and checkbox `[x]`/`[ ]` lists, behind the `interactive` feature), or a scripted double in tests — with a non-interactive fallback that resolves to declared defaults and never hangs.
-- `signal` — `CancellationToken` cooperative Ctrl+C handling for async tasks.
+- `signal` — caller-declared graceful shutdown: `ShutdownController` installs a `ShutdownPolicy` (which signals begin shutdown, cooperative drain budget, second-signal exit code) over a `CancellationToken`, with `on_ctrl_c` kept for the single-signal case.
 
 ## Features
 
@@ -72,6 +72,27 @@ let choice = prompter.select(
     ],
 ).expect("a choice");
 assert_eq!(choice.as_str(), "go");
+```
+
+Install a graceful-shutdown controller: the first signal cancels the token so tasks can drain; a drain deadline or a second signal force-exits with the configured code.
+
+```rust
+use std::time::Duration;
+use rskit_cli::{ShutdownController, ShutdownPolicy, ShutdownSignal};
+
+# async fn example() -> Result<(), Box<dyn std::error::Error>> {
+let policy = ShutdownPolicy::default()
+    .with_signal(ShutdownSignal::Interrupt)
+    .with_drain_deadline(Duration::from_secs(10));
+
+// Hold the controller for the life of the process; dropping it abandons shutdown.
+let controller = ShutdownController::install(policy)?;
+let cancel = controller.token();
+
+// Hand `cancel` to spawned tasks, an `rskit-worker` handler, or an `rskit-process` call.
+cancel.cancelled().await;
+# Ok(())
+# }
 ```
 
 ## See Also

@@ -15,6 +15,7 @@ Local filesystem primitives for rskit.
 | `temp` | Managed temp files/dirs and sibling temp path generation |
 | `link` | Hard links and symbolic links |
 | `permissions` | Read-only flags, capability checks, and Unix mode helpers |
+| `archive` | Deterministic `tar.gz` / `zip` packaging (`archive` feature): byte-stable output pins member times, ownership, and mode so identical inputs checksum the same |
 
 ## Security defaults
 
