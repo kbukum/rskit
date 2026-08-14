@@ -1,13 +1,17 @@
 use std::{
-    process::{Child, ExitStatus},
+    process::Child,
     sync::{Arc, atomic::AtomicBool, atomic::Ordering},
     thread,
     time::{Duration, Instant},
 };
 
+use crate::capture::append_line_bounded;
+use crate::process_group::{group_alive, kill_target};
 use crate::worker::join_within;
 use crate::{
-    AppError, AppResult, ErrorCode, ProcessResult, SignalPolicy, terminate::terminate_and_reap,
+    AppError, AppResult, ErrorCode, LifecyclePolicy, ProcessResult, ProcessSupervisor,
+    RegistrationGuard,
+    supervisor::{OwnedChild, SyncReap, terminate_and_reap},
 };
 
 use super::{
@@ -29,7 +33,7 @@ pub enum ShutdownOutcome {
 #[derive(Debug)]
 pub struct PersistentProcess {
     // Keep field order stable: drop order is part of the lifecycle safety story.
-    child: Child,
+    child: Option<Child>,
     stdin_thread: StdinThread,
     stdout_thread: ReaderThread,
     stderr_thread: ReaderThread,
@@ -38,7 +42,9 @@ pub struct PersistentProcess {
     stdout: Capture,
     stderr: Capture,
     start: Instant,
-    signal: SignalPolicy,
+    signal: LifecyclePolicy,
+    registration: Option<RegistrationGuard>,
+    _supervisor: Option<ProcessSupervisor>,
     shutdown_grace_period: Duration,
     stopped: bool,
 }
@@ -61,16 +67,19 @@ impl PersistentProcess {
                 "persistent process already stopped",
             ));
         }
-        let status = wait_for_exit(
-            &mut self.child,
-            &self.cancel_thread,
-            self.signal,
-            self.shutdown_grace_period,
-        )?;
+        let signal = self.signal;
+        let grace = self.shutdown_grace_period;
+        let child = self.child.as_mut().ok_or_else(|| {
+            AppError::new(
+                ErrorCode::Conflict,
+                "persistent process child handle is no longer owned here",
+            )
+        })?;
+        let reap = wait_for_exit(child, &self.cancel_thread, signal, grace)?;
         self.stopped = true;
         self.stop_cancel_thread()?;
         let cancelled = self.cancelled.load(Ordering::SeqCst);
-        self.completed_result(status, false, cancelled)
+        self.finish_reap(reap, false, cancelled)
     }
 
     pub(in crate::persistent) fn shutdown_inner(&mut self) -> AppResult<ShutdownOutcome> {
@@ -80,32 +89,71 @@ impl PersistentProcess {
                 "persistent process already stopped",
             ));
         }
-        if let Some(status) = self.child.try_wait().map_err(AppError::internal)? {
+        if let Some(status) = self.child_mut()?.try_wait().map_err(AppError::internal)? {
             self.stopped = true;
             self.stop_cancel_thread()?;
+            // A group target whose subtree outlived the reaped leader is retained
+            // (relinquished) so a shared supervisor can still reap the survivors,
+            // rather than unregistered and leaked.
+            if self.group_survives() {
+                self.relinquish_survivor();
+            } else {
+                self.unregister();
+            }
             let cancelled = self.cancelled.load(Ordering::SeqCst);
             return self
-                .completed_result(status, false, cancelled)
+                .completed_result(status.code(), None, false, cancelled)
                 .map(ShutdownOutcome::AlreadyExited);
         }
 
         self.stop_cancel_thread()?;
-        let pid = self.child.id();
-        let (status, _escalated) = terminate_and_reap(
-            &mut self.child,
-            pid,
-            self.signal,
-            self.shutdown_grace_period,
-        )?;
+        let signal = self.signal;
+        let grace = self.shutdown_grace_period;
+        let reap = terminate_and_reap(self.child_mut()?, signal, grace)?;
         self.stopped = true;
         let cancelled = self.cancelled.load(Ordering::SeqCst);
-        self.completed_result(status, false, cancelled)
+        self.finish_reap(reap, false, cancelled)
             .map(ShutdownOutcome::Stopped)
+    }
+
+    /// Turn a reap outcome into a result, keeping ownership of a deliberate
+    /// survivor (`kill_after_grace = false`) so a later shutdown or supervisor
+    /// drop can still act, and reporting honestly what happened.
+    fn finish_reap(
+        &mut self,
+        reap: SyncReap,
+        timed_out: bool,
+        cancelled: bool,
+    ) -> AppResult<ProcessResult> {
+        let (code, note) = match reap {
+            SyncReap::Reaped { status, .. } => (status.code(), None),
+            SyncReap::Survived => (
+                None,
+                Some(
+                    "shutdown grace expired; kill escalation disabled, process left running"
+                        .to_string(),
+                ),
+            ),
+        };
+        if note.is_some() {
+            // The child deliberately survived: hand the live handle to its owned
+            // target and keep the registration, so a shared supervisor's shutdown
+            // or drop can still reap it instead of leaving a zombie.
+            self.relinquish_survivor();
+        } else if self.group_survives() {
+            // The leader was reaped but its group subtree is still alive: retain
+            // ownership so the surviving descendants can still be reaped later.
+            self.relinquish_survivor();
+        } else {
+            self.unregister();
+        }
+        self.completed_result(code, note, timed_out, cancelled)
     }
 
     fn completed_result(
         &mut self,
-        status: ExitStatus,
+        exit_code: Option<i32>,
+        note: Option<String>,
         timed_out: bool,
         cancelled: bool,
     ) -> AppResult<ProcessResult> {
@@ -114,13 +162,17 @@ impl PersistentProcess {
         join_within(self.stdout_thread.take(), grace)?;
         join_within(self.stderr_thread.take(), grace)?;
         let stdout = take_capture(&self.stdout);
-        let stderr = take_capture(&self.stderr);
+        let mut stderr = take_capture(&self.stderr);
+        let mut stderr_truncated = stderr.truncated;
+        if let Some(note) = note {
+            stderr_truncated |= append_line_bounded(&mut stderr.bytes, note.as_bytes(), None);
+        }
         Ok(ProcessResult::completed(
-            status.code(),
+            exit_code,
             stdout.bytes,
             stderr.bytes,
             stdout.truncated,
-            stderr.truncated,
+            stderr_truncated,
             self.start.elapsed(),
             timed_out,
             cancelled,
@@ -134,12 +186,82 @@ impl PersistentProcess {
             Ok(())
         }
     }
+
+    /// True when this is a group target whose subtree outlived the reaped leader,
+    /// so ownership must be retained (relinquished to the owned target) rather than
+    /// unregistered, exactly as for a deliberate `kill_after_grace = false`
+    /// survivor. The leader's pid doubles as the process-group id.
+    fn group_survives(&self) -> bool {
+        self.signal.targets_group()
+            && self
+                .child
+                .as_ref()
+                .is_some_and(|child| group_alive(child.id()))
+    }
+
+    fn unregister(&mut self) {
+        if let Some(registration) = self.registration.take() {
+            registration.unregister();
+        }
+    }
+
+    /// Hand a deliberately-surviving child to its owned target and disarm the
+    /// guard, so a shared supervisor keeps the ability to signal *and* reap it
+    /// rather than the handle being discarded when this process is dropped.
+    fn relinquish_survivor(&mut self) {
+        match (self.registration.take(), self.child.take()) {
+            (Some(registration), Some(child)) => {
+                if let Some(OwnedChild::Std(mut child)) =
+                    registration.relinquish_child(OwnedChild::Std(child))
+                {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                }
+            }
+            (Some(registration), None) => registration.retain(),
+            (None, _) => {}
+        }
+    }
+
+    /// Borrow the live child, or fail if it was already relinquished/reaped.
+    fn child_mut(&mut self) -> AppResult<&mut Child> {
+        self.child.as_mut().ok_or_else(|| {
+            AppError::new(
+                ErrorCode::Conflict,
+                "persistent process child handle is no longer owned here",
+            )
+        })
+    }
+
+    /// Force-kill and reap a still-owned child after graceful shutdown failed.
+    ///
+    /// A `std::process::Child` neither kills nor reaps on drop, and the
+    /// registration guard only unregisters, so a swallowed [`Self::shutdown_inner`]
+    /// error would otherwise leak the process. This is the drop-path backstop:
+    /// signal the target (its group when descendants are targeted, else the
+    /// leader), reap it, and then unregister so the registry does not retain a
+    /// dead entry.
+    fn force_reap_on_drop(&mut self) {
+        if let Some(mut child) = self.child.take() {
+            if !kill_target(child.id(), self.signal.targets_group()) {
+                let _ = child.kill();
+            }
+            let _ = child.wait();
+        }
+        self.unregister();
+    }
 }
 
 impl Drop for PersistentProcess {
     fn drop(&mut self) {
-        if !self.stopped {
-            let _ = self.shutdown_inner();
+        if self.stopped {
+            return;
+        }
+        // Graceful shutdown owns the reap on success. If it fails before reaping,
+        // force-kill and reap the still-owned child here so the swallowed error
+        // cannot leak the process past drop.
+        if self.shutdown_inner().is_err() {
+            self.force_reap_on_drop();
         }
     }
 }
@@ -158,15 +280,17 @@ pub(in crate::persistent) struct SpawnedProcess {
     pub(in crate::persistent) stdout: Capture,
     pub(in crate::persistent) stderr: Capture,
     pub(in crate::persistent) start: Instant,
+    pub(in crate::persistent) registration: RegistrationGuard,
+    pub(in crate::persistent) supervisor: Option<ProcessSupervisor>,
 }
 
 pub(in crate::persistent) fn new_process(
     spawned: SpawnedProcess,
-    signal: SignalPolicy,
+    signal: LifecyclePolicy,
     shutdown_grace_period: Duration,
 ) -> PersistentProcess {
     PersistentProcess {
-        child: spawned.child,
+        child: Some(spawned.child),
         stdin_thread: spawned.stdin_thread,
         stdout_thread: spawned.stdout_thread,
         stderr_thread: spawned.stderr_thread,
@@ -176,6 +300,8 @@ pub(in crate::persistent) fn new_process(
         stderr: spawned.stderr,
         start: spawned.start,
         signal,
+        registration: Some(spawned.registration),
+        _supervisor: spawned.supervisor,
         shutdown_grace_period,
         stopped: false,
     }
@@ -183,29 +309,35 @@ pub(in crate::persistent) fn new_process(
 
 pub(in crate::persistent) fn cleanup_spawned_child(
     child: &mut Child,
-    signal: SignalPolicy,
+    signal: LifecyclePolicy,
     grace_period: Duration,
 ) -> AppResult<()> {
-    let pid = child.id();
-    terminate_and_reap(child, pid, signal, grace_period).map(|_| ())
+    // Startup-error cleanup aborts the spawn: the child never became a
+    // `PersistentProcess`, and its registration and any local supervisor are
+    // about to be dropped, so nothing will reap a survivor afterwards. Force the
+    // kill-after-grace escalation even when the policy disables it, otherwise a
+    // SIGTERM-ignoring child leaks past this error path.
+    terminate_and_reap(child, signal.with_kill_after_grace(true), grace_period).map(|_| ())
 }
 
 fn wait_for_exit(
     child: &mut Child,
     cancel_thread: &Option<CancelThread>,
-    signal: SignalPolicy,
+    signal: LifecyclePolicy,
     grace_period: Duration,
-) -> AppResult<ExitStatus> {
+) -> AppResult<SyncReap> {
     loop {
         if let Some(status) = child.try_wait().map_err(AppError::internal)? {
-            return Ok(status);
+            return Ok(SyncReap::Reaped {
+                status,
+                escalated: false,
+            });
         }
         if cancel_thread
             .as_ref()
             .is_some_and(CancelThread::is_cancel_requested)
         {
-            let pid = child.id();
-            return terminate_and_reap(child, pid, signal, grace_period).map(|(status, _)| status);
+            return terminate_and_reap(child, signal, grace_period);
         }
         thread::sleep(Duration::from_millis(10));
     }
@@ -288,11 +420,98 @@ mod tests {
 
         cleanup_spawned_child(
             &mut child,
-            SignalPolicy::default()
-                .with_create_process_group(false)
+            LifecyclePolicy::default()
+                .with_isolate_process_group(false)
                 .with_terminate_descendants(false),
             Duration::from_millis(20),
         )
         .expect("cleanup should stop spawned child");
+    }
+
+    #[test]
+    fn cleanup_spawned_child_force_reaps_sigterm_ignoring_child() {
+        // Startup-error cleanup aborts the spawn even under
+        // `kill_after_grace = false`: a child that ignores SIGTERM must still be
+        // force-killed and reaped here, because its registration and supervisor are
+        // dropped right after and nothing else would clean it up.
+        let mut child = std::process::Command::new("/bin/sh")
+            .arg("-c")
+            .arg("trap '' TERM; while :; do sleep 1; done")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("child starts");
+        let pid = child.id();
+
+        cleanup_spawned_child(
+            &mut child,
+            LifecyclePolicy::default()
+                .with_isolate_process_group(false)
+                .with_terminate_descendants(false)
+                .with_kill_after_grace(false),
+            Duration::from_millis(20),
+        )
+        .expect("cleanup should force-reap the stubborn child");
+
+        // The child was reaped in place; a second wait confirms no zombie remains.
+        assert!(
+            child.try_wait().expect("wait succeeds").is_some(),
+            "pid {pid} must be reaped after startup cleanup"
+        );
+    }
+
+    #[test]
+    fn drop_backstop_force_reaps_a_child_when_graceful_shutdown_is_bypassed() {
+        // `std::process::Child` neither kills nor reaps on drop, and the
+        // registration guard only unregisters. If graceful shutdown fails before
+        // reaping, the drop backstop must force-kill and reap the still-owned
+        // child; otherwise the process leaks past drop despite the supervised
+        // lifetime guarantee.
+        let pid_file = std::env::temp_dir().join(format!(
+            "rskit-process-drop-backstop-{}.pid",
+            std::process::id()
+        ));
+        let mut process = start_ready_process(&format!(
+            "printf %s \"$$\" > '{}'; printf ready; while :; do sleep 1; done",
+            pid_file.display()
+        ));
+
+        let mut pid = None;
+        for _ in 0..500 {
+            if let Ok(text) = std::fs::read_to_string(&pid_file)
+                && let Ok(parsed) = text.trim().parse::<i32>()
+            {
+                pid = Some(parsed);
+                break;
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+        let pid = pid.expect("child records its pid");
+        // SAFETY: signal 0 only probes existence for a pid the child recorded itself.
+        assert_eq!(
+            unsafe { libc::kill(pid, 0) },
+            0,
+            "the child is running before the backstop"
+        );
+
+        // Exercise the swallowed-error branch of `Drop`: graceful shutdown did not
+        // reap the child, so the backstop runs directly.
+        process.force_reap_on_drop();
+        process.stopped = true;
+
+        let mut reaped = false;
+        for _ in 0..250 {
+            // SAFETY: signal 0 only probes existence; ESRCH means the pid is gone.
+            if unsafe { libc::kill(pid, 0) } == -1 {
+                reaped = true;
+                break;
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert!(
+            reaped,
+            "the drop backstop must force-reap the still-owned child, not leak it"
+        );
+        let _ = std::fs::remove_file(pid_file);
     }
 }

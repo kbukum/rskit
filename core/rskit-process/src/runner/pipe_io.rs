@@ -54,9 +54,9 @@ pub(super) fn pipe_stdin_stdio(input: &InputPolicy) -> AppResult<Stdio> {
 
 pub(super) fn inherited_config(config: &ProcessConfig) -> ProcessConfig {
     let mut config = config.clone();
-    config.signal = config
-        .signal
-        .with_create_process_group(false)
+    config.lifecycle = config
+        .lifecycle
+        .with_isolate_process_group(false)
         .with_terminate_descendants(false);
     config
 }

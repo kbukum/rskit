@@ -16,7 +16,7 @@
 //!   multi-region live terminal rendering ([`LiveConsole`]) for streaming several concurrent outputs as bounded tiles.
 //! - [`prompt`] —
 //!   interactive prompts (line, rich raw-mode, and scripted media) with a non-interactive fallback.
-//! - [`signal`] — Ctrl+C / graceful shutdown via [`CancellationToken`].
+//! - [`signal`] — caller-declared graceful shutdown via [`ShutdownController`] and [`CancellationToken`], plus the [`on_ctrl_c`] convenience for the single-signal case.
 
 pub mod live;
 pub mod progress;
@@ -32,7 +32,9 @@ pub use prompt::{
     Terminal, Validation, Validator, non_empty,
 };
 pub use render::{ErrorRenderer, ExitCode, OutputFormat, OutputKV, OutputTable, StatusReporter};
-pub use signal::{CancellationToken, on_ctrl_c};
+pub use signal::{
+    CancellationToken, ShutdownController, ShutdownPolicy, ShutdownSignal, on_ctrl_c,
+};
 pub use theme::{
     ColorChoice, Glyphs, NO_COLOR_ENV, Palette, resolve_color, resolve_color_with,
     unicode_env_enabled,

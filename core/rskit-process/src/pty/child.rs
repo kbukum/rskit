@@ -18,13 +18,13 @@ use tokio::process::Command as TokioCommand;
 /// this hook intentionally replaces the plain `setpgid` isolation used for pipe-backed modes;
 /// the resulting group id still equals the child pid.
 /// `setsid` is mandatory for acquiring a controlling terminal, so PTY mode always starts a new session
-/// and process group: it requires [`SignalPolicy::create_process_group`] to be enabled
+/// and process group: it requires [`LifecyclePolicy::isolate_process_group`] to be enabled
 /// and rejects the run otherwise (see `run_pty_mode`). Given that,
 /// the group layout matches the pipe-backed path,
-/// so group-targeted termination under [`SignalPolicy`] behaves identically to the non-PTY modes.
+/// so group-targeted termination under [`LifecyclePolicy`] behaves identically to the non-PTY modes.
 ///
-/// [`SignalPolicy`]: crate::SignalPolicy
-/// [`SignalPolicy::create_process_group`]: crate::SignalPolicy::create_process_group
+/// [`LifecyclePolicy`]: crate::LifecyclePolicy
+/// [`LifecyclePolicy::isolate_process_group`]: crate::LifecyclePolicy::isolate_process_group
 pub(crate) fn install_controlling_tty(cmd: &mut TokioCommand) {
     // SAFETY: the closure runs in the forked child before `exec`. It calls only
     // async-signal-safe syscalls (`setsid`, `ioctl`) and returns an `io::Error`

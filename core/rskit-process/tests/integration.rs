@@ -51,8 +51,8 @@ async fn async_run_with_no_timeout_observes_cancellation() {
             &command,
             &ProcessConfig::default()
                 .with_timeout(None)
-                .with_signal_policy(
-                    rskit_process::SignalPolicy::default()
+                .with_lifecycle_policy(
+                    rskit_process::LifecyclePolicy::default()
                         .with_grace_period(Duration::from_millis(10)),
                 ),
             child_cancel,
@@ -292,10 +292,10 @@ async fn observer_treats_carriage_return_as_line_boundary() {
 async fn timeout_escalates_and_marks_result() {
     let command = ProcessSpec::new("/bin/sh").args(["-c", "printf 123456789abcdef >&2; sleep 2"]);
     let signal =
-        rskit_process::SignalPolicy::default().with_grace_period(Duration::from_millis(10));
+        rskit_process::LifecyclePolicy::default().with_grace_period(Duration::from_millis(10));
     let config = ProcessConfig::default()
         .with_timeout(Some(Duration::from_millis(50)))
-        .with_signal_policy(signal)
+        .with_lifecycle_policy(signal)
         .with_max_output_bytes(8);
 
     let result = run_with_cancel(&command, &config, CancellationToken::new())
@@ -312,10 +312,10 @@ async fn async_timeout_accepts_successful_sigterm_handler_as_timed_out() {
     let command =
         ProcessSpec::new("/bin/sh").args(["-c", "trap 'exit 42' TERM; while :; do sleep 1; done"]);
     let signal =
-        rskit_process::SignalPolicy::default().with_grace_period(Duration::from_millis(500));
+        rskit_process::LifecyclePolicy::default().with_grace_period(Duration::from_millis(500));
     let config = ProcessConfig::default()
         .with_timeout(Some(Duration::from_millis(50)))
-        .with_signal_policy(signal);
+        .with_lifecycle_policy(signal);
 
     let result = run_with_cancel(&command, &config, CancellationToken::new())
         .await
@@ -330,13 +330,13 @@ async fn async_timeout_accepts_successful_sigterm_handler_as_timed_out() {
 async fn async_timeout_with_direct_child_signalling_marks_result() {
     let command =
         ProcessSpec::new("/bin/sh").args(["-c", "trap '' TERM; while :; do sleep 1; done"]);
-    let signal = rskit_process::SignalPolicy::default()
-        .with_create_process_group(false)
+    let signal = rskit_process::LifecyclePolicy::default()
+        .with_isolate_process_group(false)
         .with_terminate_descendants(false)
         .with_grace_period(Duration::from_millis(10));
     let config = ProcessConfig::default()
         .with_timeout(Some(Duration::from_millis(50)))
-        .with_signal_policy(signal);
+        .with_lifecycle_policy(signal);
 
     let result = run_with_cancel(&command, &config, CancellationToken::new())
         .await
@@ -353,10 +353,10 @@ async fn timeout_does_not_discard_captured_stderr_at_limit() {
         "trap '' TERM; printf 1234567 >&2; while :; do sleep 1; done",
     ]);
     let signal =
-        rskit_process::SignalPolicy::default().with_grace_period(Duration::from_millis(10));
+        rskit_process::LifecyclePolicy::default().with_grace_period(Duration::from_millis(10));
     let config = ProcessConfig::default()
         .with_timeout(Some(Duration::from_millis(50)))
-        .with_signal_policy(signal)
+        .with_lifecycle_policy(signal)
         .with_max_output_bytes(8);
 
     let result = run_with_cancel(&command, &config, CancellationToken::new())
@@ -490,13 +490,13 @@ fn blocking_run_applies_working_directory_empty_env_and_overrides() {
 fn blocking_timeout_with_direct_child_signalling_marks_result() {
     let command =
         ProcessSpec::new("/bin/sh").args(["-c", "trap '' TERM; while :; do sleep 1; done"]);
-    let signal = rskit_process::SignalPolicy::default()
-        .with_create_process_group(false)
+    let signal = rskit_process::LifecyclePolicy::default()
+        .with_isolate_process_group(false)
         .with_terminate_descendants(false)
         .with_grace_period(Duration::from_millis(10));
     let config = ProcessConfig::default()
         .with_timeout(Some(Duration::from_millis(50)))
-        .with_signal_policy(signal);
+        .with_lifecycle_policy(signal);
 
     let result = run(&command, &config).unwrap();
 
@@ -593,10 +593,10 @@ fn blocking_timeout_does_not_discard_captured_stderr_at_limit() {
         "trap '' TERM; printf 1234567 >&2; while :; do sleep 1; done",
     ]);
     let signal =
-        rskit_process::SignalPolicy::default().with_grace_period(Duration::from_millis(10));
+        rskit_process::LifecyclePolicy::default().with_grace_period(Duration::from_millis(10));
     let config = ProcessConfig::default()
         .with_timeout(Some(Duration::from_millis(50)))
-        .with_signal_policy(signal)
+        .with_lifecycle_policy(signal)
         .with_max_output_bytes(8);
 
     let result = run(&command, &config).unwrap();
@@ -610,10 +610,10 @@ fn blocking_timeout_accepts_successful_sigterm_handler_as_timed_out() {
     let command =
         ProcessSpec::new("/bin/sh").args(["-c", "trap 'exit 42' TERM; while :; do sleep 1; done"]);
     let signal =
-        rskit_process::SignalPolicy::default().with_grace_period(Duration::from_millis(500));
+        rskit_process::LifecyclePolicy::default().with_grace_period(Duration::from_millis(500));
     let config = ProcessConfig::default()
         .with_timeout(Some(Duration::from_millis(50)))
-        .with_signal_policy(signal);
+        .with_lifecycle_policy(signal);
 
     let result = run(&command, &config).unwrap();
 
@@ -643,8 +643,8 @@ async fn async_drain_does_not_hang_when_a_descendant_holds_the_pipe() {
     // bounded drain must abort the reader after the grace period and still
     // return the `hello` that was captured before the child exited.
     let command = ProcessSpec::new("/bin/sh").args(["-c", "sleep 30 & printf hello; exit 0"]);
-    let config = ProcessConfig::default().with_signal_policy(
-        rskit_process::SignalPolicy::default().with_grace_period(Duration::from_millis(200)),
+    let config = ProcessConfig::default().with_lifecycle_policy(
+        rskit_process::LifecyclePolicy::default().with_grace_period(Duration::from_millis(200)),
     );
 
     let start = std::time::Instant::now();
@@ -667,8 +667,8 @@ async fn async_drain_does_not_hang_when_a_descendant_holds_the_pipe() {
 #[test]
 fn blocking_drain_does_not_hang_when_a_descendant_holds_the_pipe() {
     let command = ProcessSpec::new("/bin/sh").args(["-c", "sleep 30 & printf hello; exit 0"]);
-    let config = ProcessConfig::default().with_signal_policy(
-        rskit_process::SignalPolicy::default().with_grace_period(Duration::from_millis(200)),
+    let config = ProcessConfig::default().with_lifecycle_policy(
+        rskit_process::LifecyclePolicy::default().with_grace_period(Duration::from_millis(200)),
     );
 
     let start = std::time::Instant::now();

@@ -2,8 +2,8 @@
 
 mod config;
 mod io;
+mod lifecycle;
 mod redaction;
-mod signal;
 mod spawn;
 mod spec;
 
@@ -12,8 +12,8 @@ pub use io::{
     CapturedIo, DEFAULT_MAX_OUTPUT_BYTES, InheritedIo, InputPolicy, ObservedIo, OutputPolicy,
     ProcessIo,
 };
+pub use lifecycle::LifecyclePolicy;
 pub use redaction::ArgRedaction;
-pub use signal::SignalPolicy;
 pub use spec::{EnvPolicy, ProcessSpec, command};
 
 pub(crate) use spawn::spawn_error;

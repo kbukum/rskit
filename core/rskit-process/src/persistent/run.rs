@@ -7,8 +7,8 @@ use std::{
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    AppError, AppResult, EnvPolicy, InputPolicy, ProcessConfig, ProcessIo, ProcessSpec,
-    SignalPolicy, process_group::isolate,
+    AppError, AppResult, EnvPolicy, InputPolicy, LifecyclePolicy, ProcessConfig, ProcessIo,
+    ProcessSpec, ProcessSupervisor, process_group::isolate,
 };
 
 use super::cancel::spawn_cancel_thread;
@@ -23,11 +23,49 @@ use super::readiness::{
 use super::types::{PersistentRun, PersistentStartup};
 
 /// Start a persistent process and wait for its readiness policy.
+///
+/// Spawns through a throwaway per-call [`ProcessSupervisor`] that the returned
+/// process owns for its lifetime, so drop reaps the child. Callers that want a
+/// shared supervisor to reap the process on shutdown use
+/// [`start_persistent_supervised`].
 pub fn start_persistent_with_cancel(
     spec: &ProcessSpec,
     process_config: &ProcessConfig,
     persistent_config: &PersistentConfig,
     cancel: CancellationToken,
+) -> AppResult<PersistentRun> {
+    start_persistent_impl(spec, process_config, persistent_config, cancel, None)
+}
+
+/// Start a persistent process, registering it with the injected `supervisor`.
+///
+/// Identical to [`start_persistent_with_cancel`] except the shared `supervisor`
+/// owns the registration, so a process-level [`ProcessSupervisor::shutdown`]
+/// reaps the persistent group even while it is still running. The returned
+/// process holds no supervisor of its own; its registration guard unregisters on
+/// shutdown, so a backstop over an already-stopped process is a clean no-op.
+pub fn start_persistent_supervised(
+    supervisor: &ProcessSupervisor,
+    spec: &ProcessSpec,
+    process_config: &ProcessConfig,
+    persistent_config: &PersistentConfig,
+    cancel: CancellationToken,
+) -> AppResult<PersistentRun> {
+    start_persistent_impl(
+        spec,
+        process_config,
+        persistent_config,
+        cancel,
+        Some(supervisor),
+    )
+}
+
+fn start_persistent_impl(
+    spec: &ProcessSpec,
+    process_config: &ProcessConfig,
+    persistent_config: &PersistentConfig,
+    cancel: CancellationToken,
+    injected: Option<&ProcessSupervisor>,
 ) -> AppResult<PersistentRun> {
     if spec.program.as_os_str().is_empty() {
         return Err(AppError::invalid_input("program", "must not be empty"));
@@ -40,6 +78,22 @@ pub fn start_persistent_with_cancel(
     let start = Instant::now();
     let input = process_input(process_config)?;
     let mut child = spawn_child(spec, process_config, input)?;
+    // An injected supervisor owns the registration (shared registry, reaped by a
+    // process-level shutdown). Otherwise the process owns a local supervisor for
+    // its lifetime so drop reaps the child.
+    let (supervisor, registration) = match injected {
+        Some(supervisor) => (
+            None,
+            supervisor
+                .register_pid_with_group(child.id(), process_config.lifecycle.targets_group()),
+        ),
+        None => {
+            let local = ProcessSupervisor::new(process_config.lifecycle);
+            let registration =
+                local.register_pid_with_group(child.id(), process_config.lifecycle.targets_group());
+            (Some(local), registration)
+        }
+    };
     let stdout = new_capture();
     let stderr = new_capture();
     let cancelled = Arc::new(AtomicBool::new(false));
@@ -47,14 +101,14 @@ pub fn start_persistent_with_cancel(
         child.id(),
         cancel.clone(),
         Arc::clone(&cancelled),
-        process_config.signal,
+        process_config.lifecycle,
         persistent_config.shutdown_grace_period,
     ) {
         Ok(thread) => Some(thread),
         Err(error) => {
             let _ = cleanup_spawned_child(
                 &mut child,
-                process_config.signal,
+                process_config.lifecycle,
                 persistent_config.shutdown_grace_period,
             );
             return Err(error);
@@ -75,6 +129,8 @@ pub fn start_persistent_with_cancel(
         stdout,
         stderr,
         start,
+        registration,
+        supervisor,
     };
 
     match &persistent_config.readiness {
@@ -90,7 +146,7 @@ pub fn start_persistent_with_cancel(
                 cancel.clone(),
             ) {
                 let mut process =
-                    persistent_process(spawned, process_config.signal, persistent_config);
+                    persistent_process(spawned, process_config.lifecycle, persistent_config);
                 // Reuse the normal lifecycle cleanup
                 // so partially-started processes are terminated the same way as explicit shutdown.
                 let _ = process.shutdown_inner();
@@ -109,7 +165,7 @@ pub fn start_persistent_with_cancel(
         &spawned.cancelled,
     ) {
         let readiness_error = readiness_wait_error(&mut spawned.child, error, &spawned.cancelled)?;
-        let mut process = persistent_process(spawned, process_config.signal, persistent_config);
+        let mut process = persistent_process(spawned, process_config.lifecycle, persistent_config);
         // Reuse the normal lifecycle cleanup so readiness failures do not leak the child.
         let _ = process.shutdown_inner();
         return Err(readiness_error);
@@ -117,7 +173,7 @@ pub fn start_persistent_with_cancel(
 
     let stdout_startup = take_capture(&spawned.stdout);
     let stderr_startup = take_capture(&spawned.stderr);
-    let process = persistent_process(spawned, process_config.signal, persistent_config);
+    let process = persistent_process(spawned, process_config.lifecycle, persistent_config);
 
     Ok(PersistentRun {
         startup: PersistentStartup {
@@ -191,7 +247,7 @@ fn spawn_child(
     for (key, value) in &spec.env {
         cmd.env(key, value);
     }
-    if config.signal.create_process_group {
+    if config.lifecycle.isolate_process_group {
         isolate(&mut cmd);
     }
 
@@ -209,7 +265,7 @@ fn spawn_child(
 
 fn persistent_process(
     spawned: SpawnedProcess,
-    signal: SignalPolicy,
+    signal: LifecyclePolicy,
     config: &PersistentConfig,
 ) -> PersistentProcess {
     new_process(spawned, signal, config.shutdown_grace_period)

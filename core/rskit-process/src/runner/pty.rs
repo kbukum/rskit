@@ -15,7 +15,7 @@ use tracing::debug;
 use crate::pty::{PtyIo, PtyMaster, PtyPair, install_controlling_tty, open_pty};
 use crate::{
     AppError, AppResult, EnvPolicy, ErrorCode, InputPolicy, ProcessConfig, ProcessResult,
-    ProcessSpec, command::spawn_error,
+    ProcessSpec, ProcessSupervisor, command::spawn_error,
 };
 
 use super::lifecycle::wait_for_completion;
@@ -25,6 +25,7 @@ use super::scope::ChildScope;
 use crate::capture::{append_line_bounded, shared_output};
 
 pub(in crate::runner) async fn run_pty_mode(
+    supervisor: &ProcessSupervisor,
     spec: &ProcessSpec,
     config: &ProcessConfig,
     cancel: CancellationToken,
@@ -39,14 +40,14 @@ pub(in crate::runner) async fn run_pty_mode(
             "inherited stdin requires inherited I/O mode; PTY mode owns the child's terminal",
         ));
     }
-    if !config.signal.create_process_group {
+    if !config.lifecycle.isolate_process_group {
         // Acquiring a controlling terminal requires the child to be a session leader,
         // so PTY setup unconditionally calls `setsid()` (a new session, hence a new process group).
-        // `create_process_group = false` therefore cannot be honored here;
+        // `isolate_process_group = false` therefore cannot be honored here;
         // reject it rather than silently ignoring it.
         return Err(AppError::invalid_input(
-            "process.signal.create_process_group",
-            "PTY mode always starts a new session (setsid) to own the terminal, so create_process_group cannot be disabled",
+            "process.lifecycle.isolate_process_group",
+            "PTY mode always starts a new session (setsid) to own the terminal, so isolate_process_group cannot be disabled",
         ));
     }
 
@@ -72,6 +73,10 @@ pub(in crate::runner) async fn run_pty_mode(
     let child = cmd
         .spawn()
         .map_err(|error| spawn_error("failed to spawn process", error))?;
+    let registration = supervisor.register_pid_with_group(
+        child.id().unwrap_or_default(),
+        config.lifecycle.targets_group(),
+    );
     // The child now holds its own dup'd stdio; the parent must not keep the slave open
     // or the master read would never observe EOF.
     drop(slave);
@@ -81,7 +86,7 @@ pub(in crate::runner) async fn run_pty_mode(
     // error — aborts the background tasks and best-effort kills the child rather
     // than detaching them. A dropped Tokio `JoinHandle` is detached, so an
     // un-guarded early return would leak the task and keep the PTY fds alive.
-    let mut scope = ChildScope::new(child);
+    let mut scope = ChildScope::new(child, registration, config.lifecycle);
 
     // Optional input writer: a second handle onto the master so writes
     // and reads proceed independently. Built before the reader takes ownership of `master`.
@@ -113,14 +118,20 @@ pub(in crate::runner) async fn run_pty_mode(
     // The child has exited; drain the workers within the grace period.
     // A reader still blocked because a surviving descendant holds the PTY open is aborted rather than awaited forever,
     // and the partial bytes it captured are still recovered from the shared buffer.
-    let grace = config.signal.grace_period;
+    let grace = config.lifecycle.grace_period;
     join_within(stdin_task, grace).await?;
     join_within(reader_task, grace).await?;
     let captured_output = captured(&reader_capture);
 
-    // The run completed normally: the tasks are joined and the child is reaped,
-    // so hand ownership back instead of aborting/killing on drop.
-    scope.disarm();
+    // The run completed: the tasks are joined. If the child exited it is reaped,
+    // so hand ownership back on disarm. If it deliberately survived its grace
+    // period (`kill_after_grace = false`), relinquish the still-live child to its
+    // owned target so a later shutdown or supervisor drop reaps it.
+    if completion.survived {
+        scope.relinquish().await;
+    } else {
+        scope.disarm();
+    }
 
     // A PTY has no separate stderr stream;
     // the only "stderr" is any synthetic termination diagnostic from the lifecycle layer.
@@ -226,9 +237,11 @@ mod tests {
     fn pty_mode_rejects_invalid_program_input_and_signal_policy() {
         let runtime = tokio::runtime::Runtime::new().unwrap();
         runtime.block_on(async {
+            let supervisor = ProcessSupervisor::new(crate::LifecyclePolicy::default());
             let config = ProcessConfig::default();
             let io = PtyIo::default();
             let error = run_pty_mode(
+                &supervisor,
                 &ProcessSpec::new(""),
                 &config,
                 CancellationToken::new(),
@@ -239,6 +252,7 @@ mod tests {
             assert_eq!(error.code(), ErrorCode::InvalidInput);
 
             let error = run_pty_mode(
+                &supervisor,
                 &ProcessSpec::new("cat"),
                 &config,
                 CancellationToken::new(),
@@ -248,10 +262,11 @@ mod tests {
             .unwrap_err();
             assert_eq!(error.code(), ErrorCode::InvalidInput);
 
-            let disabled_group = ProcessConfig::default().with_signal_policy(
-                crate::SignalPolicy::default().with_create_process_group(false),
+            let disabled_group = ProcessConfig::default().with_lifecycle_policy(
+                crate::LifecyclePolicy::default().with_isolate_process_group(false),
             );
             let error = run_pty_mode(
+                &supervisor,
                 &ProcessSpec::new("cat"),
                 &disabled_group,
                 CancellationToken::new(),

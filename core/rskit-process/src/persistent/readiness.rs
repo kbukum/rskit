@@ -137,7 +137,7 @@ pub(in crate::persistent) fn run_readiness_command(
 ) -> AppResult<()> {
     let mut config = process_config.clone();
     config.timeout = Some(timeout);
-    config.signal = config.signal.with_grace_period(shutdown_grace_period);
+    config.lifecycle = config.lifecycle.with_grace_period(shutdown_grace_period);
     let spec = spec.clone();
     let result = thread::spawn(move || {
         let runtime = tokio::runtime::Builder::new_current_thread()
@@ -215,8 +215,8 @@ mod tests {
 
     #[test]
     fn readiness_command_reports_failure_and_timeout_kinds() {
-        let config = ProcessConfig::default().with_signal_policy(
-            crate::SignalPolicy::default().with_grace_period(Duration::from_millis(10)),
+        let config = ProcessConfig::default().with_lifecycle_policy(
+            crate::LifecyclePolicy::default().with_grace_period(Duration::from_millis(10)),
         );
         let failed = run_readiness_command(
             &ProcessSpec::new("python3").args(["-c", "import sys; sys.exit(7)"]),

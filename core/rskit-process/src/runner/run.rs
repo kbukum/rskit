@@ -7,9 +7,10 @@ use tracing::debug;
 
 use crate::{
     AppError, AppResult, InheritedIo, InputPolicy, OutputPolicy, ProcessConfig, ProcessIo,
-    ProcessResult, ProcessSpec,
+    ProcessResult, ProcessSpec, ProcessSupervisor,
     capture::{append_line_bounded, shared_output},
     command::spawn_error,
+    process_group::group_alive,
 };
 
 use super::lifecycle::wait_for_completion;
@@ -23,23 +24,56 @@ use super::scope::ChildScope;
 use super::spawn::{PipeStdio, configure_command};
 
 /// Execute a subprocess with the given configuration and cancellation token.
+///
+/// Spawns through a throwaway per-call [`ProcessSupervisor`], so the child is
+/// reaped on completion, timeout, cancellation, and future drop but is not
+/// visible to any process-level shutdown backstop. Callers that want a shared
+/// supervisor to reap the child on process shutdown use
+/// [`run_with_cancel_supervised`].
 pub async fn run_with_cancel(
     spec: &ProcessSpec,
     config: &ProcessConfig,
     cancel: CancellationToken,
 ) -> AppResult<ProcessResult> {
+    let supervisor = ProcessSupervisor::new(config.lifecycle);
+    run_with_cancel_supervised(&supervisor, spec, config, cancel).await
+}
+
+/// Execute a subprocess, registering the spawned child with `supervisor`.
+///
+/// Identical to [`run_with_cancel`] except the injected `supervisor` owns the
+/// registration: the child is tracked in the supervisor's shared registry for
+/// the duration of the run, so a process-level [`ProcessSupervisor::shutdown`]
+/// (or a shutdown-handle subscription) reaps its group even when no run future
+/// observes the signal. Normal completion still unregisters the child through
+/// its guard, so a later backstop over it is a clean no-op.
+pub async fn run_with_cancel_supervised(
+    supervisor: &ProcessSupervisor,
+    spec: &ProcessSpec,
+    config: &ProcessConfig,
+    cancel: CancellationToken,
+) -> AppResult<ProcessResult> {
     match &config.io {
-        ProcessIo::Captured(io) => run_pipe_mode(spec, config, cancel, io, None).await,
+        ProcessIo::Captured(io) => run_pipe_mode(supervisor, spec, config, cancel, io, None).await,
         ProcessIo::Observed(io) => {
-            run_pipe_mode(spec, config, cancel, io, Some(io.observer.clone())).await
+            run_pipe_mode(
+                supervisor,
+                spec,
+                config,
+                cancel,
+                io,
+                Some(io.observer.clone()),
+            )
+            .await
         }
-        ProcessIo::Inherited(io) => run_inherited_mode(spec, config, cancel, io).await,
+        ProcessIo::Inherited(io) => run_inherited_mode(supervisor, spec, config, cancel, io).await,
         #[cfg(unix)]
-        ProcessIo::Pty(io) => run_pty_mode(spec, config, cancel, io).await,
+        ProcessIo::Pty(io) => run_pty_mode(supervisor, spec, config, cancel, io).await,
     }
 }
 
 async fn run_pipe_mode(
+    supervisor: &ProcessSupervisor,
     spec: &ProcessSpec,
     config: &ProcessConfig,
     cancel: CancellationToken,
@@ -79,18 +113,22 @@ async fn run_pipe_mode(
     };
 
     run_process(
+        supervisor,
         spec,
         config,
         cancel,
-        stdio,
-        io.input(),
-        Some(output),
-        observer,
+        RunIo {
+            stdio,
+            input: io.input(),
+            output: Some(output),
+            observer,
+        },
     )
     .await
 }
 
 async fn run_inherited_mode(
+    supervisor: &ProcessSupervisor,
     spec: &ProcessSpec,
     config: &ProcessConfig,
     cancel: CancellationToken,
@@ -103,26 +141,44 @@ async fn run_inherited_mode(
         stderr: Stdio::inherit(),
     };
     run_process(
+        supervisor,
         spec,
         &inherited_config,
         cancel,
-        stdio,
-        &io.input,
-        None,
-        None,
+        RunIo {
+            stdio,
+            input: &io.input,
+            output: None,
+            observer: None,
+        },
     )
     .await
 }
 
+/// The stdio wiring, input/output policy, and observer for one run.
+///
+/// Grouped so [`run_process`] takes the spawn request (supervisor, spec, config,
+/// cancel) plus this single IO value rather than a long positional list.
+struct RunIo<'a> {
+    stdio: PipeStdio,
+    input: &'a InputPolicy,
+    output: Option<&'a OutputPolicy>,
+    observer: Option<OutputObserver>,
+}
+
 async fn run_process(
+    supervisor: &ProcessSupervisor,
     spec: &ProcessSpec,
     config: &ProcessConfig,
     cancel: CancellationToken,
-    stdio: PipeStdio,
-    input: &InputPolicy,
-    output: Option<&OutputPolicy>,
-    observer: Option<OutputObserver>,
+    io: RunIo<'_>,
 ) -> AppResult<ProcessResult> {
+    let RunIo {
+        stdio,
+        input,
+        output,
+        observer,
+    } = io;
     if spec.program.as_os_str().is_empty() {
         return Err(AppError::invalid_input("program", "must not be empty"));
     }
@@ -148,6 +204,9 @@ async fn run_process(
     let mut child = cmd
         .spawn()
         .map_err(|error| spawn_error("failed to spawn process", error))?;
+    let leader_pid = child.id().unwrap_or_default();
+    let registration =
+        supervisor.register_pid_with_group(leader_pid, config.lifecycle.targets_group());
 
     // Detach the child's pipe handles before the child moves into the scope guard,
     // which then owns it for the rest of the run.
@@ -158,7 +217,7 @@ async fn run_process(
     // Own the child and the spawned I/O tasks in a scope guard:
     // any early return below aborts the reader/stdin tasks
     // and best-effort kills the child rather than detaching them (a dropped Tokio `JoinHandle` is detached, which would leak the task and keep the child's pipes alive).
-    let mut scope = ChildScope::new(child);
+    let mut scope = ChildScope::new(child, registration, config.lifecycle);
 
     let max_output_bytes = output.and_then(|output| output.max_output_bytes);
     let capture_stdout = output.is_some_and(|output| output.capture_stdout);
@@ -192,7 +251,7 @@ async fn run_process(
     // The child has exited; drain the workers within the grace period.
     // A reader still blocked because a surviving descendant holds the pipe open is aborted rather than awaited forever,
     // and the partial bytes it captured are still recovered from the shared buffer.
-    let grace = config.signal.grace_period;
+    let grace = config.lifecycle.grace_period;
     join_within(stdin_task, grace).await?;
     join_within(stdout_task, grace).await?;
     join_within(stderr_task, grace).await?;
@@ -201,10 +260,17 @@ async fn run_process(
     let stdout_truncated = stdout_output.truncated;
     let stderr_output = captured(&stderr_capture);
 
-    // The run completed normally: the tasks are joined and the child is reaped,
-    // so hand ownership back instead of aborting/killing on drop.
-    scope.disarm();
-
+    // The run completed: the tasks are joined. If the child exited it is reaped,
+    // so hand ownership back and unregister on disarm. If it deliberately survived
+    // its grace period (`kill_after_grace = false`), or if it is a group target
+    // whose subtree outlived the reaped leader, relinquish to the owned target so a
+    // later shutdown or supervisor drop reaps the survivor, keeping it registered
+    // rather than force-killing or abandoning it.
+    if completion.survived || (config.lifecycle.targets_group() && group_alive(leader_pid)) {
+        scope.relinquish().await;
+    } else {
+        scope.disarm();
+    }
     let mut stderr_bytes = stderr_output.bytes;
     let mut stderr_truncated = stderr_output.truncated;
     if let Some(extra_stderr) = completion.synthetic_stderr {

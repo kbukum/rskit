@@ -7,12 +7,15 @@ use std::{
 
 use tokio_util::sync::CancellationToken;
 
-use super::{PersistentConfig, PersistentReadiness, ShutdownOutcome, start_persistent_with_cancel};
+use super::{
+    PersistentConfig, PersistentReadiness, ShutdownOutcome, start_persistent_supervised,
+    start_persistent_with_cancel,
+};
 #[cfg(unix)]
 use crate::pty::PtyIo;
 use crate::{
-    ErrorCode, InheritedIo, InputPolicy, ObservedIo, OutputObserver, ProcessConfig, ProcessIo,
-    ProcessSpec, SignalPolicy,
+    ErrorCode, InheritedIo, InputPolicy, LifecyclePolicy, ObservedIo, OutputObserver,
+    ProcessConfig, ProcessIo, ProcessSpec, ProcessSupervisor,
 };
 
 static FIFO_ID: AtomicUsize = AtomicUsize::new(0);
@@ -412,11 +415,56 @@ fn persistent_rejects_inherited_stdin_for_captured_mode() {
 }
 
 #[test]
+fn persistent_survivor_leader_is_relinquished_to_shared_supervisor() {
+    // A leader that ignores SIGTERM under kill_after_grace = false survives the
+    // persistent shutdown. With an injected supervisor the live child handle must
+    // move into the supervisor's owned target, so the supervisor can later reap it
+    // instead of the handle being discarded and leaking a zombie.
+    let pid_file = descendant_pid_file("survivor-relinquish");
+    let command = ProcessSpec::new("sh").arg("-c").arg(format!(
+        "trap '' TERM; printf %s $$ > {}; printf ready; sleep 30",
+        shell_path(&pid_file)
+    ));
+    let lifecycle = LifecyclePolicy::default().with_kill_after_grace(false);
+    let process_config = ProcessConfig::default().with_lifecycle_policy(lifecycle);
+    let config = PersistentConfig::default()
+        .with_readiness(PersistentReadiness::OutputContains("ready".to_string()))
+        .with_shutdown_grace_period(Duration::from_millis(50));
+
+    let supervisor = ProcessSupervisor::new(LifecyclePolicy::default());
+    let run = start_persistent_supervised(
+        &supervisor,
+        &command,
+        &process_config,
+        &config,
+        CancellationToken::new(),
+    )
+    .expect("process starts");
+    let leader_pid = read_descendant_pid(&pid_file);
+
+    // The stubborn leader is left running by the no-force-kill shutdown.
+    let _ = run.process.shutdown().expect("shutdown succeeds");
+    assert!(
+        process_is_alive(leader_pid),
+        "kill_after_grace = false leaves the leader running"
+    );
+
+    // Dropping the shared supervisor must reap the relinquished child, leaving no
+    // zombie: a discarded handle would keep the pid signalable forever.
+    drop(supervisor);
+    assert!(
+        !process_is_alive(leader_pid),
+        "the supervisor reaps the relinquished survivor on drop"
+    );
+    let _ = std::fs::remove_file(pid_file);
+}
+
+#[test]
 fn persistent_shutdown_can_leave_descendants_running_when_configured() {
     let pid_file = descendant_pid_file("descendant-shutdown");
     let command = descendant_command(&pid_file);
-    let signal = SignalPolicy::default().with_terminate_descendants(false);
-    let process_config = ProcessConfig::default().with_signal_policy(signal);
+    let signal = LifecyclePolicy::default().with_terminate_descendants(false);
+    let process_config = ProcessConfig::default().with_lifecycle_policy(signal);
     let config = PersistentConfig::default()
         .with_readiness(PersistentReadiness::OutputContains("ready".to_string()))
         .with_shutdown_grace_period(Duration::from_millis(50));
@@ -435,8 +483,8 @@ fn persistent_shutdown_can_leave_descendants_running_when_configured() {
 fn persistent_shutdown_without_process_group_leaves_descendants_running() {
     let pid_file = descendant_pid_file("descendant-no-process-group");
     let command = descendant_command(&pid_file);
-    let signal = SignalPolicy::default().with_create_process_group(false);
-    let process_config = ProcessConfig::default().with_signal_policy(signal);
+    let signal = LifecyclePolicy::default().with_isolate_process_group(false);
+    let process_config = ProcessConfig::default().with_lifecycle_policy(signal);
     let config = PersistentConfig::default()
         .with_readiness(PersistentReadiness::OutputContains("ready".to_string()))
         .with_shutdown_grace_period(Duration::from_millis(50));
@@ -455,8 +503,8 @@ fn persistent_shutdown_without_process_group_leaves_descendants_running() {
 fn persistent_wait_cancel_can_leave_descendants_running_when_configured() {
     let pid_file = descendant_pid_file("descendant-wait-cancel");
     let command = descendant_command(&pid_file);
-    let signal = SignalPolicy::default().with_terminate_descendants(false);
-    let process_config = ProcessConfig::default().with_signal_policy(signal);
+    let signal = LifecyclePolicy::default().with_terminate_descendants(false);
+    let process_config = ProcessConfig::default().with_lifecycle_policy(signal);
     let config = PersistentConfig::default()
         .with_readiness(PersistentReadiness::OutputContains("ready".to_string()))
         .with_shutdown_grace_period(Duration::from_millis(50));
@@ -475,8 +523,8 @@ fn persistent_wait_cancel_can_leave_descendants_running_when_configured() {
 fn persistent_start_cleanup_can_leave_descendants_running_when_configured() {
     let pid_file = descendant_pid_file("descendant-start-cleanup");
     let command = descendant_command(&pid_file);
-    let signal = SignalPolicy::default().with_terminate_descendants(false);
-    let process_config = ProcessConfig::default().with_signal_policy(signal);
+    let signal = LifecyclePolicy::default().with_terminate_descendants(false);
+    let process_config = ProcessConfig::default().with_lifecycle_policy(signal);
     let config = PersistentConfig::default()
         .with_readiness(PersistentReadiness::OutputContains(
             "never-ready".to_string(),

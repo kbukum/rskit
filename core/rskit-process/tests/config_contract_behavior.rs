@@ -6,8 +6,8 @@ use std::time::Duration;
 
 use parking_lot::Mutex;
 use rskit_process::{
-    ArgRedaction, CapturedIo, EnvPolicy, InheritedIo, InputPolicy, ObservedIo, OutputObserver,
-    OutputPolicy, ProcessConfig, ProcessIo, ProcessResult, ProcessSpec, SignalPolicy, command,
+    ArgRedaction, CapturedIo, EnvPolicy, InheritedIo, InputPolicy, LifecyclePolicy, ObservedIo,
+    OutputObserver, OutputPolicy, ProcessConfig, ProcessIo, ProcessResult, ProcessSpec, command,
     interrupt_process_group, kill_process_group, run, run_with_cancel, terminate_process_group,
 };
 use tokio_util::sync::CancellationToken;
@@ -65,12 +65,12 @@ fn io_and_output_policies_are_explicit_and_chainable() {
 
 #[test]
 fn signal_redaction_and_process_config_builders_update_nested_policy() {
-    let signal = SignalPolicy::default()
+    let signal = LifecyclePolicy::default()
         .with_grace_period(Duration::from_millis(25))
-        .with_create_process_group(false)
+        .with_isolate_process_group(false)
         .with_terminate_descendants(false);
     assert_eq!(signal.grace_period, Duration::from_millis(25));
-    assert!(!signal.create_process_group);
+    assert!(!signal.isolate_process_group);
     assert!(!signal.terminate_descendants);
 
     let redaction = ArgRedaction::from_names(["password"])
@@ -82,7 +82,7 @@ fn signal_redaction_and_process_config_builders_update_nested_policy() {
 
     let config = ProcessConfig::default()
         .with_timeout(None)
-        .with_signal_policy(signal)
+        .with_lifecycle_policy(signal)
         .with_arg_redaction(redaction)
         .with_sensitive_arg_name("api-key")
         .with_max_output_bytes(2)
@@ -277,8 +277,8 @@ async fn async_run_reports_cancelled_process() {
             &ProcessSpec::new("python3").args(["-c", "import time; time.sleep(5)"]),
             &ProcessConfig::default()
                 .with_timeout(Some(Duration::from_secs(30)))
-                .with_signal_policy(
-                    SignalPolicy::default().with_grace_period(Duration::from_millis(10)),
+                .with_lifecycle_policy(
+                    LifecyclePolicy::default().with_grace_period(Duration::from_millis(10)),
                 ),
             child_cancel,
         )
@@ -340,8 +340,8 @@ fn blocking_run_timeout_marks_result_and_appends_synthetic_stderr() {
         &ProcessSpec::new("python3").args(["-c", "import time; time.sleep(5)"]),
         &ProcessConfig::default()
             .with_timeout(Some(Duration::from_millis(20)))
-            .with_signal_policy(
-                SignalPolicy::default().with_grace_period(Duration::from_millis(10)),
+            .with_lifecycle_policy(
+                LifecyclePolicy::default().with_grace_period(Duration::from_millis(10)),
             )
             .with_unbounded_output(),
     )
