@@ -52,6 +52,30 @@ impl LifecyclePolicy {
     }
 
     /// Set whether shutdown escalates to a force kill after the grace period expires.
+    ///
+    /// Setting this to `false` requests "leave a still-running process alone rather
+    /// than `SIGKILL` it after the grace period". This is only honored end-to-end
+    /// under an **injected, long-lived supervisor**: the survivor is relinquished to
+    /// that supervisor and reaped on its shutdown or drop, so it is left running for
+    /// the supervisor's lifetime instead of being force-killed — leak-safe, never
+    /// detached forever.
+    ///
+    /// The call-scoped APIs [`crate::run`] and [`crate::run_with_cancel`] create a
+    /// per-call supervisor that owns the child for the duration of the call and
+    /// reaps any still-registered survivor when it drops as the call returns. With
+    /// `kill_after_grace = false` such a survivor is therefore reaped on return
+    /// rather than escalated mid-call — the default supervisor "just works" and does
+    /// not leak, but a call-scoped spawn cannot outlive the call that made it.
+    ///
+    /// A persistent spawn without an injected supervisor ([`start_persistent`])
+    /// likewise creates its own supervisor, but the returned handle owns it for the
+    /// handle's lifetime, so a `kill_after_grace = false` survivor is reaped when
+    /// the handle is dropped rather than at any single call boundary.
+    ///
+    /// To keep a process alive independently of a single call or handle, inject a
+    /// long-lived supervisor that owns it.
+    ///
+    /// [`start_persistent`]: crate::start_persistent_with_cancel
     #[must_use]
     pub fn with_kill_after_grace(mut self, kill_after_grace: bool) -> Self {
         self.kill_after_grace = kill_after_grace;
