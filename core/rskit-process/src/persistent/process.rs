@@ -312,7 +312,12 @@ pub(in crate::persistent) fn cleanup_spawned_child(
     signal: LifecyclePolicy,
     grace_period: Duration,
 ) -> AppResult<()> {
-    terminate_and_reap(child, signal, grace_period).map(|_| ())
+    // Startup-error cleanup aborts the spawn: the child never became a
+    // `PersistentProcess`, and its registration and any local supervisor are
+    // about to be dropped, so nothing will reap a survivor afterwards. Force the
+    // kill-after-grace escalation even when the policy disables it, otherwise a
+    // SIGTERM-ignoring child leaks past this error path.
+    terminate_and_reap(child, signal.with_kill_after_grace(true), grace_period).map(|_| ())
 }
 
 fn wait_for_exit(
@@ -421,6 +426,38 @@ mod tests {
             Duration::from_millis(20),
         )
         .expect("cleanup should stop spawned child");
+    }
+
+    #[test]
+    fn cleanup_spawned_child_force_reaps_sigterm_ignoring_child() {
+        // Startup-error cleanup aborts the spawn even under
+        // `kill_after_grace = false`: a child that ignores SIGTERM must still be
+        // force-killed and reaped here, because its registration and supervisor are
+        // dropped right after and nothing else would clean it up.
+        let mut child = std::process::Command::new("/bin/sh")
+            .arg("-c")
+            .arg("trap '' TERM; while :; do sleep 1; done")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("child starts");
+        let pid = child.id();
+
+        cleanup_spawned_child(
+            &mut child,
+            LifecyclePolicy::default()
+                .with_isolate_process_group(false)
+                .with_terminate_descendants(false)
+                .with_kill_after_grace(false),
+            Duration::from_millis(20),
+        )
+        .expect("cleanup should force-reap the stubborn child");
+
+        // The child was reaped in place; a second wait confirms no zombie remains.
+        assert!(
+            child.try_wait().expect("wait succeeds").is_some(),
+            "pid {pid} must be reaped after startup cleanup"
+        );
     }
 
     #[test]
