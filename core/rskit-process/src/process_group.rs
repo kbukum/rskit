@@ -155,11 +155,14 @@ pub(crate) fn group_has_live_member(pgid: u32) -> bool {
     if pgid == 0 {
         return false;
     }
-    #[cfg(all(unix, not(target_os = "macos")))]
+    #[cfg(target_os = "linux")]
     {
         let target = pgid.to_string();
         let Ok(dir) = std::fs::read_dir("/proc") else {
-            return false;
+            // The process table cannot be enumerated; fall back to the
+            // conservative group probe rather than falsely reporting the group
+            // gone.
+            return group_alive(pgid);
         };
         for entry in dir.flatten() {
             let name = entry.file_name();
@@ -186,6 +189,15 @@ pub(crate) fn group_has_live_member(pgid: u32) -> bool {
             }
         }
         false
+    }
+    #[cfg(all(unix, not(target_os = "macos"), not(target_os = "linux")))]
+    {
+        // No portable zombie-aware group enumeration on this Unix (for example
+        // FreeBSD, where `/proc` may be absent or use a different `stat` layout).
+        // Fall back to the conservative group liveness probe so a still-present
+        // group is never reported gone — at worst this keeps ownership and
+        // retries against a group of only zombies.
+        group_alive(pgid)
     }
     #[cfg(target_os = "macos")]
     {
