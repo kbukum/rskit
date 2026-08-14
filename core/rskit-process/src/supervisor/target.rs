@@ -18,10 +18,15 @@
 //! (process-group) signalling goes through the numeric process-group id because
 //! Linux exposes no group file descriptor; it is gated on a `kill(-pgid, 0)`
 //! probe that the group is still non-empty. POSIX keeps a process-group id
-//! reserved while any member survives, so a non-empty group can be signalled
-//! safely even after its leader has exited — which is what lets escalation reach
-//! a descendant that outlived the leader. Liveness of the *subtree* is therefore
-//! tracked through the group probe, distinct from liveness of the leader (its
+//! reserved while any member survives, so probing a non-empty group names the
+//! original group even after its leader has exited — which is what lets
+//! escalation reach a descendant that outlived the leader. This makes descendant
+//! signalling best-effort rather than reuse-proof: the probe and the follow-up
+//! `-pgid` signal are not atomic, so if the group empties in between the id can
+//! be recycled and the signal reach an unrelated group. Closing that residual
+//! window portably is not possible without a group-level ownership handle (a
+//! Linux cgroup or a job object). Liveness of the *subtree* is therefore tracked
+//! through the group probe, distinct from liveness of the leader (its
 //! pidfd/pid), and a group target is only considered gone once its whole group
 //! is empty.
 
@@ -247,15 +252,19 @@ impl OwnedTarget {
     }
 
     /// Send `signal` to the target's leader (reuse-proof on Linux) and, when
-    /// descendant termination is requested, to its process group.
+    /// descendant termination is requested, to its process group (best-effort).
     ///
     /// Returns `true` when the signal was delivered or the target has already
     /// exited. The group signal is gated on the *group* still being non-empty
     /// (`kill(-pgid, 0)`), not on the leader still being alive: POSIX keeps a
-    /// process-group id reserved while any member survives, so signalling a
-    /// non-empty group never targets a recycled id even after the leader itself
-    /// has exited. This is what lets escalation reach a descendant that outlived
-    /// its group leader.
+    /// process-group id reserved while any member survives, so a non-empty probe
+    /// names the original group even after the leader itself has exited, which is
+    /// what lets escalation reach a descendant that outlived its group leader.
+    /// The probe and the follow-up `-pgid` signal are not atomic, so this stays
+    /// best-effort: if the group empties in between, a recycled id could reach an
+    /// unrelated group. No portable primitive signals a group by a stable handle
+    /// (a cgroup/job object would be required), so that residual window cannot be
+    /// closed here; the leader signal stays exact through the pidfd.
     fn signal(&self, signal: ProcessSignal) -> bool {
         if self.pid == 0 || self.confirmed_gone() {
             return false;
@@ -263,10 +272,13 @@ impl OwnedTarget {
         #[cfg(target_os = "linux")]
         if let Some(pidfd) = &self.pidfd {
             if self.process_group && group_alive(self.pid) {
-                // The group still has a member, so its id cannot have been
-                // recycled. Signal the whole group first — before the
+                // The group still has a member, so at this instant its id names
+                // the original group. Signal the whole group first — before the
                 // leader-specific signal — so descendants are reached even when
-                // the leader has already exited.
+                // the leader has already exited. This probe-then-signal is not
+                // atomic, so it is best-effort: an id recycled in the gap could be
+                // signalled instead. The leader signal below stays exact via the
+                // pidfd.
                 let _ = signal_target(self.pid, signal, true);
             }
             // Then signal the exact leader through its reuse-proof pidfd.

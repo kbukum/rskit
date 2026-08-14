@@ -93,12 +93,19 @@ pub(crate) fn target_alive(pid: u32) -> bool {
 /// Probes the whole group with `kill(-pgid, 0)`: it returns `true` while the
 /// group has at least one member (or a member owned by another user, reported as
 /// `EPERM`) and `false` once the group is empty (`ESRCH`). This is the group
-/// analogue of [`target_alive`] and the reuse-proof way to decide whether a
-/// supervised subtree is gone: POSIX guarantees a process-group id is not reused
-/// while the group still has a member, so a non-empty result always names the
-/// original group and never a recycled id. Unlike a Linux pidfd it is portable to
-/// every Unix, which is why group liveness — as opposed to leader liveness — is
+/// analogue of [`target_alive`] for deciding whether a supervised subtree is
+/// gone: POSIX keeps a process-group id reserved while the group still has a
+/// member, so a non-empty result names the original group at the instant of the
+/// probe — never a recycled id. Unlike a Linux pidfd it is portable to every
+/// Unix, which is why group liveness — as opposed to leader liveness — is
 /// modelled through it.
+///
+/// The reservation guarantee is point-in-time: it makes the *probe* accurate but
+/// does not make a later numeric group signal atomic with it. Once the group
+/// empties its id can be recycled, so a caller that probes and then signals
+/// `-pgid` still races that window — group signalling is best-effort, not
+/// reuse-proof, because no portable primitive signals a group by a stable handle
+/// (a Linux cgroup or a job object would be required).
 ///
 /// A group member that has exited but not yet been reaped (a zombie) still
 /// answers the probe until it is reaped; this only makes the probe conservative

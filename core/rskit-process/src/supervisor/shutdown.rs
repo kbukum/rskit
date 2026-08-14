@@ -77,7 +77,8 @@ pub(super) fn subscribe(
     ShutdownSubscription { watcher }
 }
 
-/// Terminate every registered target through its owned, reuse-proof identity.
+/// Terminate every registered target through its owned identity — reuse-proof
+/// for the leader (pidfd/owned handle), best-effort for the process group.
 ///
 /// Each pass atomically *claims* every currently-live entry before signalling
 /// (so a concurrent waiter cannot reap-and-recycle a pid underneath the delayed
