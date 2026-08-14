@@ -319,22 +319,11 @@ impl OwnedTarget {
     ///
     /// [`Unsupported`]: TargetOutcome::Unsupported
     pub(super) async fn terminate(&self, policy: LifecyclePolicy) -> TargetOutcome {
-        if self.pid == 0 {
-            return if self.force_reap_owned_child().await {
-                TargetOutcome::Terminated
-            } else {
-                TargetOutcome::Unsupported
-            };
-        }
-        if !cfg!(unix) {
-            // No signalling primitive exists on this platform. If this target
-            // owns the child handle it can still be force-killed and reaped;
-            // otherwise termination cannot be attempted here at all.
-            return if self.force_reap_owned_child().await {
-                TargetOutcome::Terminated
-            } else {
-                TargetOutcome::Unsupported
-            };
+        if self.pid == 0 || !cfg!(unix) {
+            // No reuse-proof signalling identity (`pid == 0`) or no signalling
+            // primitive on this platform. Resolve the target through its owned
+            // child handle instead, honouring `kill_after_grace(false)`.
+            return self.terminate_without_signalling(policy).await;
         }
         if !self.signal(ProcessSignal::Terminate) && self.is_alive() {
             return TargetOutcome::Failed;
@@ -416,6 +405,57 @@ impl OwnedTarget {
                 Duration::from_millis(10).min(deadline.saturating_duration_since(now)),
             )
             .await;
+        }
+    }
+
+    /// Whether this target still holds an owned child handle.
+    fn owns_child(&self) -> bool {
+        self.child.lock().is_some()
+    }
+
+    /// Reap the owned child if it already exited on its own, returning `true`
+    /// when one was found already-exited and reaped.
+    ///
+    /// Unlike [`force_reap_owned_child`](Self::force_reap_owned_child) this never
+    /// kills a live child, so it is safe on the no-signalling path under
+    /// `kill_after_grace(false)`.
+    fn reap_if_owned_child_exited(&self) -> bool {
+        let mut guard = self.child.lock();
+        if let Some(child) = guard.as_mut()
+            && child.try_reap().is_some()
+        {
+            *guard = None;
+            drop(guard);
+            self.mark_reaped();
+            return true;
+        }
+        false
+    }
+
+    /// Resolve a target that has no reuse-proof signalling identity — either
+    /// `pid == 0` or a platform without a `kill(2)` primitive — through its owned
+    /// child handle.
+    ///
+    /// An already-exited child is reaped regardless of policy. A still-live owned
+    /// child is force-killed only when escalation is enabled; with
+    /// `kill_after_grace(false)` it is left registered and reported
+    /// [`Survived`](TargetOutcome::Survived). A target with neither a signalling
+    /// primitive nor an owned handle cannot even attempt termination and is
+    /// reported [`Unsupported`](TargetOutcome::Unsupported).
+    async fn terminate_without_signalling(&self, policy: LifecyclePolicy) -> TargetOutcome {
+        if self.reap_if_owned_child_exited() {
+            return TargetOutcome::Terminated;
+        }
+        if !self.owns_child() {
+            return TargetOutcome::Unsupported;
+        }
+        if !policy.kill_after_grace {
+            return TargetOutcome::Survived;
+        }
+        if self.force_reap_owned_child().await {
+            TargetOutcome::Terminated
+        } else {
+            TargetOutcome::Unsupported
         }
     }
 
@@ -608,6 +648,43 @@ mod tests {
         // The target still owns the child, so the drop backstop reaps it.
         target.kill_blocking();
         assert!(!target.is_alive(), "backstop reaps the retained child");
+    }
+
+    /// Without a reuse-proof signalling identity (`pid == 0`, mirroring platforms
+    /// that lack a `kill(2)` primitive), `kill_after_grace(false)` must retain a
+    /// live owned child and report [`TargetOutcome::Survived`] rather than
+    /// force-killing it through the handle.
+    #[tokio::test]
+    async fn no_signalling_target_survives_without_force_kill() {
+        let child = tokio::process::Command::new("/bin/sh")
+            .args(["-c", "sleep 30"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("child spawns");
+        let target = OwnedTarget::new(0, false);
+        target.attach_child(OwnedChild::Tokio(child));
+
+        let policy = LifecyclePolicy {
+            kill_after_grace: false,
+            ..LifecyclePolicy::default()
+        };
+        let outcome = target.terminate(policy).await;
+
+        assert_eq!(
+            outcome,
+            TargetOutcome::Survived,
+            "no signalling primitive and escalation disabled: keep the child"
+        );
+
+        // Escalation enabled tears the same still-owned child down through its
+        // handle, confirming ownership was retained rather than dropped.
+        let killed = LifecyclePolicy {
+            kill_after_grace: true,
+            ..LifecyclePolicy::default()
+        };
+        assert_eq!(target.terminate(killed).await, TargetOutcome::Terminated);
     }
 
     /// A group leader that exits cleanly while a backgrounded descendant keeps

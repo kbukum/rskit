@@ -136,6 +136,20 @@ pub(crate) fn terminate_and_reap(
     grace: Duration,
 ) -> AppResult<SyncReap> {
     if !terminate_target(child.id(), policy.targets_group()) {
+        // Graceful signalling is unavailable (for example on Windows, where
+        // `terminate_target` always fails). Reap a child that already exited on
+        // its own, but only fall back to a hard kill when escalation is enabled;
+        // otherwise honour `kill_after_grace(false)` and leave the running child
+        // alive rather than force-killing it here.
+        if let Some(status) = child.try_wait().map_err(AppError::internal)? {
+            return Ok(SyncReap::Reaped {
+                status,
+                escalated: false,
+            });
+        }
+        if !policy.kill_after_grace {
+            return Ok(SyncReap::Survived);
+        }
         child.kill().map_err(AppError::internal)?;
     }
     reap_within(child, policy, grace)
@@ -148,7 +162,13 @@ pub(crate) async fn terminate_and_wait_async(
     reason: &str,
 ) -> AsyncReap {
     if !pid.is_some_and(|pid| terminate_target(pid, policy.targets_group())) {
-        let _ = child.start_kill();
+        // Graceful signalling is unavailable. Only fall back to a hard kill when
+        // escalation is enabled; otherwise leave the child for the grace-period
+        // wait below, which reaps it if it exits and reports `Survived` under
+        // `kill_after_grace(false)` instead of force-killing it.
+        if policy.kill_after_grace {
+            let _ = child.start_kill();
+        }
     }
     match timeout(policy.grace_period, child.wait()).await {
         Ok(Ok(status)) => {
