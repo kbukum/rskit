@@ -9,7 +9,7 @@ use super::registry::{LiveChildRegistry, RegistrationGuard};
 use super::shutdown::{ShutdownSubscription, fan_out_shutdown, subscribe};
 use super::target::OwnedChild;
 use crate::command::LifecyclePolicy;
-use crate::process_group::{isolate, isolate_async, kill_target};
+use crate::process_group::{isolate, isolate_async};
 use crate::{AppError, AppResult, ErrorCode, command::spawn_error};
 use tokio_util::sync::CancellationToken;
 use tracing::debug;
@@ -22,8 +22,10 @@ use tracing::debug;
 /// under. Termination and shutdown act on that identity, so a delayed
 /// escalation always targets the exact original process and never a pid the OS
 /// recycled. The child-owning wrapper it returns ([`SupervisedBlockingChild`] /
-/// [`SupervisedAsyncChild`]) best-effort kills its child on drop — including on
-/// panic unwinding — so lifetime is guaranteed while the wrapper is held. The
+/// [`SupervisedAsyncChild`]) reaps its child on drop through that same
+/// registered, reuse-proof target — including on panic unwinding — so lifetime
+/// is guaranteed while the wrapper is held, and the drop is a clean no-op once a
+/// shutdown or supervisor drop already reaped and removed the entry. The
 /// supervisor's own [`Drop`] is a backstop that force-kills and reaps any target
 /// still registered when the supervisor itself is dropped. Normal run paths
 /// unregister on reap through the returned registration guard; a child that
@@ -69,9 +71,7 @@ impl ProcessSupervisor {
             OwnedChild::Std(child),
         );
         Ok(SupervisedBlockingChild {
-            pid,
             guard: Some(guard),
-            lifecycle: self.lifecycle,
         })
     }
 
@@ -90,9 +90,7 @@ impl ProcessSupervisor {
             OwnedChild::Tokio(child),
         );
         Ok(SupervisedAsyncChild {
-            pid,
             guard: Some(guard),
-            lifecycle: self.lifecycle,
         })
     }
 
@@ -205,14 +203,11 @@ impl Drop for ProcessSupervisor {
 /// A blocking child paired with its registry guard.
 #[derive(Debug)]
 pub struct SupervisedBlockingChild {
-    pid: u32,
     guard: Option<RegistrationGuard>,
-    lifecycle: LifecyclePolicy,
 }
 
 impl Drop for SupervisedBlockingChild {
     fn drop(&mut self) {
-        let _ = kill_target(self.pid, self.lifecycle.targets_group());
         if let Some(guard) = self.guard.take() {
             guard.kill_owned_child();
             guard.unregister();
@@ -223,14 +218,11 @@ impl Drop for SupervisedBlockingChild {
 /// An async child paired with its registry guard.
 #[derive(Debug)]
 pub struct SupervisedAsyncChild {
-    pid: u32,
     guard: Option<RegistrationGuard>,
-    lifecycle: LifecyclePolicy,
 }
 
 impl Drop for SupervisedAsyncChild {
     fn drop(&mut self) {
-        let _ = kill_target(self.pid, self.lifecycle.targets_group());
         if let Some(guard) = self.guard.take() {
             guard.kill_owned_child();
             guard.unregister();
