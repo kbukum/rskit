@@ -229,9 +229,10 @@ mod tests {
     /// A child registered with `kill_after_grace = false` is never force-killed by
     /// the fan-out and stays registered (owned) across repeated passes, because
     /// the backstop honors that child's *own* policy rather than a supervisor-wide
-    /// one. Its owner (guard drop) still reaps it, so it never leaks.
+    /// one. A retained survivor is still owned, so the test reaps it explicitly —
+    /// dropping the guard only unregisters the entry, it does not kill the child.
     #[tokio::test]
-    async fn fan_out_honors_a_childs_kill_after_grace_false_policy() {
+    async fn fan_out_honors_a_child_kill_after_grace_false_policy() {
         let registry = Arc::new(LiveChildRegistry::default());
         let policy = LifecyclePolicy {
             kill_after_grace: false,
@@ -256,7 +257,9 @@ mod tests {
             "the child's own kill_after_grace = false is honored on every pass"
         );
 
-        // The owner reaps it on drop, so ownership was never lost.
+        // The retained survivor is still owned; reap it explicitly, since
+        // dropping the guard only unregisters the entry.
+        guard.kill_owned_child();
         drop(guard);
     }
 
@@ -289,6 +292,9 @@ mod tests {
         );
         poll_until_gone(&killed).await;
         drop(killed_guard);
+        // The retained survivor is still owned; reap it explicitly, since
+        // dropping the guard only unregisters the entry.
+        survivor.kill_owned_child();
         drop(survivor);
     }
 
