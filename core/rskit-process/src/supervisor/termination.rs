@@ -170,20 +170,31 @@ pub(crate) async fn terminate_and_wait_async(
             let _ = child.start_kill();
         }
     }
+    let deadline = tokio::time::Instant::now() + policy.grace_period;
     match timeout(policy.grace_period, child.wait()).await {
         Ok(Ok(status)) => {
             // The leader exited within the grace period. A group target owns a
             // subtree, so confirm the whole process group drained; if a
-            // descendant outlived the leader, escalate against the surviving
-            // group (or report it survived under `kill_after_grace = false`).
+            // descendant outlived the leader, keep polling group liveness until
+            // the *original* grace deadline before escalating, so a descendant
+            // still performing its own SIGTERM cleanup is not force-killed early.
             if policy.targets_group() && group_alive(pid.unwrap_or_default()) {
-                escalate_after_grace(
-                    child,
-                    pid,
-                    policy,
-                    &format!("group outlived leader after {reason}"),
-                )
-                .await
+                let pgid = pid.unwrap_or_default();
+                let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+                if wait_group_gone_async(pgid, remaining).await {
+                    AsyncReap::Reaped {
+                        code: status.code(),
+                        note: None,
+                    }
+                } else {
+                    escalate_after_grace(
+                        child,
+                        pid,
+                        policy,
+                        &format!("group outlived leader after {reason}"),
+                    )
+                    .await
+                }
             } else {
                 AsyncReap::Reaped {
                     code: status.code(),
@@ -274,6 +285,13 @@ mod tests {
     /// leader.
     const STUBBORN_GROUP: &str = "F=$(mktemp); \
          (trap '' TERM; echo 1 > \"$F\"; while :; do sleep 30; done) >/dev/null 2>&1 & \
+         until [ -s \"$F\" ]; do :; done; rm -f \"$F\"; printf ready; exit 0";
+
+    /// A group whose leader exits cleanly and whose backgrounded descendant
+    /// handles `SIGTERM` gracefully (exits on the signal rather than ignoring it).
+    /// It should drain within the grace period without any `SIGKILL`.
+    const GRACEFUL_GROUP: &str = "F=$(mktemp); \
+         (trap 'exit 0' TERM; echo 1 > \"$F\"; while :; do sleep 30; done) >/dev/null 2>&1 & \
          until [ -s \"$F\" ]; do :; done; rm -f \"$F\"; printf ready; exit 0";
 
     fn read_ready_blocking(child: &mut Child) {
@@ -384,6 +402,37 @@ mod tests {
         assert!(
             !group_alive(pgid),
             "the group must be gone after escalation"
+        );
+    }
+
+    /// When the leader exits early but a descendant is still doing its own
+    /// graceful `SIGTERM` cleanup, the group must be polled until the *original*
+    /// grace deadline rather than force-killed immediately. The descendant here
+    /// exits on `SIGTERM`, so the group drains gracefully with no `SIGKILL`.
+    #[tokio::test]
+    async fn terminate_and_wait_async_lets_a_descendant_finish_graceful_cleanup() {
+        let mut command = tokio::process::Command::new("/bin/sh");
+        command
+            .args(["-c", GRACEFUL_GROUP])
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null());
+        isolate_async(&mut command);
+        let mut child = command.spawn().expect("group-leader child spawns");
+        let pgid = child.id().expect("live pid");
+        read_ready_async(&mut child).await;
+
+        let reap = terminate_and_wait_async(&mut child, Some(pgid), group_policy(), "test").await;
+        match reap {
+            AsyncReap::Reaped { note, .. } => assert!(
+                note.is_none(),
+                "the descendant must exit on SIGTERM, so no SIGKILL escalation occurs"
+            ),
+            other => panic!("expected a graceful reap, got {other:?}"),
+        }
+        assert!(
+            !group_alive(pgid),
+            "the group drains once the descendant handles SIGTERM"
         );
     }
 }
