@@ -49,7 +49,7 @@ jobs:
           fetch-depth: 0
       - name: Check Python tooling runtime
         run: python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else "Python 3.11+ is required")'
-      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706  # v4.0.2
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d  # v4.0.3
         id: filter
         with:
           filters: |
@@ -139,7 +139,7 @@ jobs:
           components: clippy
       - name: Install mold linker
         run: sudo apt-get install -y mold
-      - uses: Swatinem/rust-cache@72d126e709cad40056a62344eee609d696d62d33  # v2.7.8
+      - uses: Swatinem/rust-cache@258712b0b7b1ddf8bddc9fc3b0faca682b2736c3  # v2.7.8
         with:
           workspaces: |
             core
@@ -187,14 +187,14 @@ jobs:
       - name: Install mold linker (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get install -y mold
-      - uses: Swatinem/rust-cache@72d126e709cad40056a62344eee609d696d62d33  # v2.7.8
+      - uses: Swatinem/rust-cache@258712b0b7b1ddf8bddc9fc3b0faca682b2736c3  # v2.7.8
         with:
           key: ${{ matrix.os }}-1.95-${{ matrix.feature-mode }}
           workspaces: |
             core
             contrib
             examples
-      - uses: taiki-e/install-action@cb33e69fad06166ca28a42b2575e4dadabf62ee8  # v2
+      - uses: taiki-e/install-action@7f4eb899022d8fe70b20c4f3de697aa85c309026  # v2
         with:
           tool: cargo-nextest
       - name: Run selected tests
@@ -234,7 +234,7 @@ jobs:
           toolchain: "1.91"
       - name: Install mold linker
         run: sudo apt-get install -y mold
-      - uses: Swatinem/rust-cache@72d126e709cad40056a62344eee609d696d62d33  # v2.7.8
+      - uses: Swatinem/rust-cache@258712b0b7b1ddf8bddc9fc3b0faca682b2736c3  # v2.7.8
         with:
           key: ubuntu-latest-1.91-msrv-${{ matrix.feature-mode }}
           workspaces: |
@@ -272,7 +272,7 @@ jobs:
           toolchain: "1.95"
       - name: Install mold linker
         run: sudo apt-get install -y mold
-      - uses: Swatinem/rust-cache@72d126e709cad40056a62344eee609d696d62d33  # v2.7.8
+      - uses: Swatinem/rust-cache@258712b0b7b1ddf8bddc9fc3b0faca682b2736c3  # v2.7.8
         with:
           workspaces: |
             core
@@ -303,13 +303,13 @@ jobs:
           components: llvm-tools-preview
       - name: Install mold linker
         run: sudo apt-get install -y mold
-      - uses: Swatinem/rust-cache@72d126e709cad40056a62344eee609d696d62d33  # v2.7.8
+      - uses: Swatinem/rust-cache@258712b0b7b1ddf8bddc9fc3b0faca682b2736c3  # v2.7.8
         with:
           workspaces: |
             core
             contrib
             examples
-      - uses: taiki-e/install-action@cb33e69fad06166ca28a42b2575e4dadabf62ee8  # v2
+      - uses: taiki-e/install-action@7f4eb899022d8fe70b20c4f3de697aa85c309026  # v2
         with:
           tool: cargo-nextest,cargo-llvm-cov
       - name: Run coverage
@@ -379,7 +379,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772  # stable
         with:
           toolchain: "1.95"
-      - uses: taiki-e/install-action@cb33e69fad06166ca28a42b2575e4dadabf62ee8  # v2
+      - uses: taiki-e/install-action@7f4eb899022d8fe70b20c4f3de697aa85c309026  # v2
         with:
           tool: cargo-deny@0.20.2,cargo-audit
       - name: Install nightly for rustdoc JSON
