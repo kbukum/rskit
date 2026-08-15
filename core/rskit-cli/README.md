@@ -6,7 +6,7 @@ Parser-agnostic CLI UX toolkit: theming, structured output, progress, interactiv
 
 ## Modules
 
-- `theme` — visual vocabulary: `Palette` semantic color and `Glyphs` status symbols (✓ ✗ ⚠ ℹ • → …), both honouring `NO_COLOR`, TTY detection, and UTF-8 capability (with a pure-ASCII glyph fallback).
+- `theme` — visual vocabulary: `Palette` semantic color and `Glyphs` status symbols (✓ ✗ ⚠ ℹ • → …), both honouring `NO_COLOR`, TTY detection, and UTF-8 capability (with a pure-ASCII glyph fallback), plus a `Theme` that renders bold headings and right-aligned, Cargo-like action lines keyed by a semantic `Tone`.
 - `render` — structured, non-interactive display: `OutputTable`, `OutputKV`, the `ErrorRenderer`/`ExitCode` convention, and one-off `StatusReporter` feedback lines (success/warn/step/heading) for guided flows.
 - `progress` — `ProgressBar` / `MultiProgress` preset styles (Bar, Spinner, Download, Finished) over `indicatif`.
 - `prompt` — interactive prompts (`select`, `multi_select`, `confirm`, `text`/`text_with`) that speak through a `Terminal` seam: a line-driven numbered list over pipes, a rich raw-mode arrow-key widget on a TTY (radio `◉`/`○` and checkbox `[x]`/`[ ]` lists, behind the `interactive` feature), or a scripted double in tests — with a non-interactive fallback that resolves to declared defaults and never hangs.
