@@ -51,8 +51,18 @@ entrypoint = "maintainer"
 [ecosystems.rust.release.host]
 forge = "github"
 
+# rskit is in its pre-stable alpha line, so releases stay on the `alpha`
+# prerelease channel by default rather than finalizing to a stable version. The
+# default is declared here, not passed as a flag: `channels` is the allowed set,
+# and `branch_channels` maps the release branch to the channel that `toven
+# release bump/tag/publish` cuts from with no `--pre` argument. rskit runs the
+# release phases from `main`, so `main` maps to `alpha`; the alpha line advances
+# (…-alpha.N → …-alpha.N+1) automatically. To graduate to a stable `X.Y.Z`,
+# intentionally override with an explicit stable cut (e.g. `--set-version`) or
+# remove the mapping — the config never silently finalizes the prerelease.
 [ecosystems.rust.release.prerelease]
 channels = ["alpha"]
+branch_channels = { main = "alpha" }
 
 # rskit-suite is the release train's umbrella: the facade crate whose version is
 # the workspace release version. Its hosted GitHub Release (tagged `vX.Y.Z`) is
