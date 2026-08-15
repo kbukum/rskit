@@ -58,9 +58,14 @@ impl Theme {
     }
 
     /// Render a right-aligned, bold semantic action label followed by unstyled detail.
+    ///
+    /// The label is right-aligned to [`action_width`](Self::with_action_width) *terminal columns* (via [`console::measure_text_width`]), so wide (CJK / emoji) or combining labels stay aligned rather than being padded by Unicode scalar count.
     #[must_use]
     pub fn action(self, label: &str, detail: &str, tone: Tone) -> String {
-        let aligned = format!("{label:>width$}", width = self.action_width);
+        let pad = self
+            .action_width
+            .saturating_sub(console::measure_text_width(label));
+        let aligned = format!("{blank:pad$}{label}", blank = "");
         let colored = match tone {
             Tone::Success => self.palette.success(&aligned),
             Tone::Error => self.palette.error(&aligned),
@@ -92,6 +97,24 @@ mod tests {
             Tone::Success,
         );
         assert_eq!(output, "    Done crate");
+    }
+
+    #[test]
+    fn wide_labels_align_to_terminal_columns_not_scalar_count() {
+        // "構築" is two scalars but four terminal columns, so a 12-column field
+        // leaves eight spaces — a scalar-count pad would wrongly leave ten.
+        let output = Theme::new(Palette::new(false)).action("構築", "crate", Tone::Info);
+        assert_eq!(output, "        構築 crate");
+    }
+
+    #[test]
+    fn overlong_label_is_not_truncated_and_gets_no_padding() {
+        let output = Theme::new(Palette::new(false)).with_action_width(4).action(
+            "Compiling",
+            "crate",
+            Tone::Info,
+        );
+        assert_eq!(output, "Compiling crate");
     }
 
     #[test]
