@@ -36,7 +36,7 @@ pub use signal::{
     CancellationToken, ShutdownController, ShutdownPolicy, ShutdownSignal, on_ctrl_c,
 };
 pub use theme::{
-    ColorChoice, Glyphs, NO_COLOR_ENV, Palette, resolve_color, resolve_color_with,
+    ColorChoice, Glyphs, NO_COLOR_ENV, Palette, Theme, Tone, resolve_color, resolve_color_with,
     unicode_env_enabled,
 };
 
