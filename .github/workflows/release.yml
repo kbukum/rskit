@@ -23,7 +23,7 @@ permissions:
 
 env:
   # Pin the release to an immutable published Toven binary. Bump deliberately.
-  TOVEN_VERSION: v0.1.0-alpha.5
+  TOVEN_VERSION: v0.1.0-alpha.6
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.release.tag_name || inputs.tag }}
