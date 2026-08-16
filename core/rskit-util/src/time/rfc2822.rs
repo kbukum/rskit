@@ -4,15 +4,21 @@
 //! This is the textual date first defined for email in RFC 822 and carried
 //! forward by RFC 2822 and RFC 5322 — `Wdy, DD Mon YYYY HH:MM:SS ±ZZZZ`, e.g.
 //! `Sun, 06 Nov 1994 08:49:37 -0500`. It is protocol-neutral: email headers,
-//! HTTP's `Date`/`Retry-After`, log lines, and many APIs all use it. The codec
-//! knows nothing about any particular transport.
+//! log lines, and many APIs all use it. HTTP's `Date`/`Retry-After` use a close
+//! IMF-fixdate variant (`... GMT`) that this parser accepts, but the formatter
+//! always emits the RFC 2822 numeric `+0000` zone rather than the literal `GMT`
+//! an HTTP header requires — do not emit this output directly into an HTTP
+//! header. The codec knows nothing about any particular transport.
 //!
 //! Parsing follows RFC 2822 §3.3 and its obsolete forms (§4.3):
 //!
 //! - The leading day-of-week is optional; when present it must be a valid
 //!   `Mon`..`Sun` name that agrees with the date, otherwise the input is
 //!   rejected.
-//! - Seconds are optional (`HH:MM` is accepted and read as `:00`).
+//! - Seconds are optional (`HH:MM` is accepted and read as `:00`). Each of the
+//!   hour, minute, and second fields is exactly two digits; the day is one or
+//!   two digits. A leap-second value (`:60`) is rejected, matching the RFC 3339
+//!   sibling.
 //! - The zone is a numeric offset (`+HHMM` / `-HHMM`) or a named zone. Numeric
 //!   offsets and the North-American named zones (`UT`/`GMT`, `EST`/`EDT`,
 //!   `CST`/`CDT`, `MST`/`MDT`, `PST`/`PDT`) are honored; every value is
@@ -123,11 +129,14 @@ pub fn parse_rfc2822(s: &str) -> Option<i64> {
     let date = CivilDate::new(
         normalize_year(year)?,
         month_from_name(month)?,
-        parse_uint(day)?,
+        // RFC 2822 day-of-month is one or two digits.
+        parse_uint_bounded(day, 1, 2)?,
     )?;
     if let Some(name) = weekday {
-        // 1970-01-01 (day 0) was a Thursday, index 4 in `WEEKDAYS`.
-        let expected = (days_from_civil(date)? + 4).rem_euclid(7);
+        // 1970-01-01 (day 0) was a Thursday, index 4 in `WEEKDAYS`. Reduce the
+        // day count modulo 7 before adding the offset so an extreme year cannot
+        // overflow `i64` on the addition.
+        let expected = (days_from_civil(date)?.rem_euclid(7) + 4).rem_euclid(7);
         if weekday_index(name)? != expected {
             return None;
         }
@@ -167,13 +176,15 @@ fn collect_five(s: &str) -> Option<[&str; 5]> {
     Some(tokens)
 }
 
-/// Parses an `HH:MM[:SS]` token; a missing seconds field defaults to `0`.
+/// Parses an `HH:MM[:SS]` token; a missing seconds field defaults to `0`. Each
+/// present component is exactly two digits per RFC 2822, so widths such as
+/// `8:49` or `08:049` are rejected.
 fn parse_time(s: &str) -> Option<(i64, i64, i64)> {
     let mut fields = s.splitn(3, ':');
-    let hour = parse_uint(fields.next()?)?;
-    let minute = parse_uint(fields.next()?)?;
+    let hour = parse_uint_bounded(fields.next()?, 2, 2)?;
+    let minute = parse_uint_bounded(fields.next()?, 2, 2)?;
     let second = match fields.next() {
-        Some(sec) => parse_uint(sec)?,
+        Some(sec) => parse_uint_bounded(sec, 2, 2)?,
         None => 0,
     };
     Some((hour, minute, second))
@@ -186,13 +197,16 @@ fn parse_time(s: &str) -> Option<(i64, i64, i64)> {
 fn zone_offset_seconds(token: &str) -> Option<i64> {
     let bytes = token.as_bytes();
     if matches!(bytes.first(), Some(b'+' | b'-')) {
-        if bytes.len() != 5 {
+        // A numeric zone is exactly `±HHMM` with ASCII digits. Verifying the
+        // four digits are ASCII up front keeps the byte-index slices below on
+        // char boundaries, so a non-ASCII token such as `+aéa` returns `None`
+        // instead of panicking.
+        if bytes.len() != 5 || !bytes[1..].iter().all(u8::is_ascii_digit) {
             return None;
         }
-        let digits = &token[1..];
-        let hours = parse_uint(&digits[0..2])?;
-        let minutes = parse_uint(&digits[2..4])?;
-        if minutes >= 60 {
+        let hours = parse_uint(&token[1..3])?;
+        let minutes = parse_uint(&token[3..5])?;
+        if hours >= 24 || minutes >= 60 {
             return None;
         }
         let magnitude = hours * SECONDS_PER_HOUR + minutes * 60;
@@ -209,7 +223,7 @@ fn zone_offset_seconds(token: &str) -> Option<i64> {
     // by offset would obscure which zone maps where.
     #[allow(clippy::match_same_arms)]
     Some(match upper.as_str() {
-        "UT" | "GMT" | "UTC" | "Z" => 0,
+        "UT" | "GMT" => 0,
         "EST" => -5 * SECONDS_PER_HOUR,
         "EDT" => -4 * SECONDS_PER_HOUR,
         "CST" => -6 * SECONDS_PER_HOUR,
@@ -267,6 +281,16 @@ fn parse_uint(s: &str) -> Option<i64> {
         return None;
     }
     s.parse::<i64>().ok()
+}
+
+/// Parses a run of ASCII digits whose length is within `min_len..=max_len`,
+/// rejecting tokens outside that width so zero-padded forms such as `000006`
+/// (day) or `049` (a time component) do not slip past the RFC 2822 grammar.
+fn parse_uint_bounded(s: &str, min_len: usize, max_len: usize) -> Option<i64> {
+    if s.len() < min_len || s.len() > max_len {
+        return None;
+    }
+    parse_uint(s)
 }
 
 #[cfg(test)]
@@ -428,5 +452,42 @@ mod tests {
         assert_eq!(parse_rfc2822(", 06 Nov 1994 08:49:37 GMT"), None); // empty weekday
         assert_eq!(parse_rfc2822(""), None);
         assert_eq!(parse_rfc2822("not a date"), None);
+    }
+
+    #[test]
+    fn rejects_over_wide_field_widths() {
+        // RFC 2822 day is one or two digits; time components are exactly two.
+        assert_eq!(parse_rfc2822("Sun, 000006 Nov 1994 08:49:37 GMT"), None);
+        assert_eq!(parse_rfc2822("Sun, 06 Nov 1994 008:049:037 GMT"), None);
+        assert_eq!(parse_rfc2822("Sun, 06 Nov 1994 08:049 GMT"), None);
+        assert_eq!(parse_rfc2822("Sun, 06 Nov 1994 8:49:37 GMT"), None);
+    }
+
+    #[test]
+    fn rejects_out_of_range_numeric_zone_hours() {
+        // RFC 5322 numeric zone hours are 00..=23 and minutes 00..=59.
+        assert_eq!(parse_rfc2822("Sun, 06 Nov 1994 08:49:37 +2400"), None);
+        assert_eq!(parse_rfc2822("Sun, 06 Nov 1994 08:49:37 -9900"), None);
+        assert_eq!(parse_rfc2822("Sun, 06 Nov 1994 08:49:37 +0060"), None);
+    }
+
+    #[test]
+    fn rejects_non_ascii_zone_without_panicking() {
+        // A five-byte non-ASCII zone must return `None`, not panic on a
+        // non-char-boundary slice.
+        assert_eq!(parse_rfc2822("Sun, 06 Nov 1994 08:49:37 +aéa"), None);
+        assert_eq!(parse_rfc2822("Sun, 06 Nov 1994 08:49:37 +xéx"), None);
+    }
+
+    #[test]
+    fn rejects_the_non_rfc_utc_named_zone() {
+        // `UTC` is not an RFC 2822 named zone; `UT`/`GMT` are.
+        assert_eq!(parse_rfc2822("Sun, 06 Nov 1994 08:49:37 UTC"), None);
+    }
+
+    #[test]
+    fn rejects_leap_second_values() {
+        // RFC 2822 permits `:60`, but the codec narrows to 0..=59 like RFC 3339.
+        assert_eq!(parse_rfc2822("Sat, 31 Dec 2016 23:59:60 +0000"), None);
     }
 }

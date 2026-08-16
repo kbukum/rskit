@@ -279,12 +279,12 @@ release-bump:
 	@$(TOVEN) release bump --yes
 
 ## Phase 2 — tag (run only after the release-bump PR merges into main): the
-## maintainer cuts the single signed umbrella `vX.Y.Z` tag and the GitHub Release
-## by hand on the merged commit (entrypoint = "maintainer"). This target then
-## VERIFIES that umbrella tag exists at HEAD — Toven never creates or moves a
-## maintainer-owned tag, and `tag_mode = "umbrella"` means only the one umbrella
-## tag is checked, never per-crate tags. Run release-publish for the crates.io
-## publication.
+## maintainer cuts the single signed umbrella `vX.Y.Z` tag by hand on the merged
+## commit (entrypoint = "maintainer"). This target then VERIFIES that umbrella
+## tag exists at HEAD — Toven never creates or moves a maintainer-owned tag, and
+## `tag_mode = "umbrella"` means only the one umbrella tag is checked, never
+## per-crate tags. The hosted GitHub Release is published separately in Phase 3;
+## run release-publish for the crates.io publication.
 release-tag:
 	@$(TOVEN) release tag --yes
 

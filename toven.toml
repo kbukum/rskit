@@ -18,7 +18,8 @@ region = 70.0
 
 # rskit's publishable core and contrib crates publish to crates.io; a release is
 # gated on a clean tree and registry idempotency, supports an alpha prerelease
-# channel, and cuts a hosted GitHub Release after publishing.
+# channel, and publishes a hosted GitHub Release whose `release.published` event
+# triggers the crates.io publication.
 [ecosystems.rust.release]
 readiness = ["clean-tree", "registry-idempotent"]
 registry = "crates-io"
@@ -52,10 +53,11 @@ tag_message = "release {module} {version}"
 push_branch = false
 # The release entrypoint is the maintainer: after the bump PR merges into `main`,
 # the maintainer creates the single umbrella `vX.Y.Z` tag (see rust:rskit-suite
-# below) and the hosted GitHub Release by hand on the merged commit. Toven's tag
-# and publish phases then *verify* that umbrella tag exists at HEAD — Toven never
-# creates or moves a maintainer-owned tag — and `release publish` publishes each
-# crate to crates.io against it. See docs/RELEASING.md.
+# below) by hand on the merged commit. Toven's tag and publish phases then
+# *verify* that umbrella tag exists at HEAD — Toven never creates or moves a
+# maintainer-owned tag. Publishing the hosted GitHub Release on that tag then
+# triggers `release publish`, which publishes each crate to crates.io against it.
+# See docs/RELEASING.md.
 entrypoint = "maintainer"
 
 [ecosystems.rust.release.host]
