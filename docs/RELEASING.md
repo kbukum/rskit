@@ -28,13 +28,13 @@ There is intentionally no root `Cargo.toml`.
 
 ## Flow at a glance
 
-`main` is protected and rejects direct pushes, so the version bump commit must land through a reviewed pull request — never a direct push. Toven's `[ecosystems.rust.release]` sets `push_branch = false` and `entrypoint = "maintainer"`, so the maintainer cuts the single signed umbrella `vX.Y.Z` tag by hand on the merged commit and `release tag`/`release publish` only *verify* that tag — Toven never creates, moves, or pushes it. The release therefore runs as three ordered phases, each previewable and applied on its own:
+`main` is protected and rejects direct pushes, so the version bump commit must land through a reviewed pull request — never a direct push. Toven's `[ecosystems.rust.release]` sets `push_branch = false` and `entrypoint = "maintainer"`, so the maintainer cuts and signs the single umbrella `vX.Y.Z` tag by hand on the merged commit — and verifies its signature — while `release tag`/`release publish` only confirm that tag exists and points at HEAD; Toven never creates, moves, pushes, or signature-verifies it. The release therefore runs as three ordered phases, each previewable and applied on its own:
 
 ```mermaid
 flowchart LR
     A["Preview<br/>make release-plan / release-status"] --> B["Phase 1 — Bump<br/>rotate CHANGELOG + make release-bump<br/>on release/vX.Y.Z branch"]
     B --> C["Open PR → CI on the bumped commit → review → merge into main"]
-    C --> D["Phase 2 — Tag<br/>maintainer cuts the signed umbrella tag;<br/>make release-tag verifies it on merged main"]
+    C --> D["Phase 2 — Tag<br/>maintainer cuts + verifies the signed umbrella tag;<br/>make release-tag confirms it exists at HEAD"]
     D --> E["Phase 3 — Publish<br/>publish the umbrella GitHub Release<br/>→ CI runs toven release publish"]
 ```
 
@@ -115,15 +115,17 @@ The README install-snippet pins (every crate `README.md` under the repo root, `c
 
 ### Phase 2 — Tag (on the merged commit)
 
-With your local `main` fast-forwarded to the merged release commit and a clean tree, the maintainer creates the single signed umbrella tag by hand, then verifies it:
+With your local `main` fast-forwarded to the merged release commit and a clean tree, the maintainer creates the single signed umbrella tag by hand and verifies its signature before pushing:
 
 ```sh
 git switch main && git pull --ff-only
-git tag -s vX.Y.Z -m "release rskit-suite X.Y.Z" && git push origin vX.Y.Z
-make release-tag         # verifies the maintainer's signed umbrella vX.Y.Z tag is at HEAD
+git tag -s vX.Y.Z -m "release rskit-suite X.Y.Z"
+git verify-tag vX.Y.Z    # confirm the signature and signer before publishing
+git push origin vX.Y.Z
+make release-tag         # confirms the umbrella vX.Y.Z tag exists and points at HEAD
 ```
 
-Because the manifests already carry the target versions, the bump phase inside `release tag` is a no-op; under `entrypoint = "maintainer"` Toven never creates or moves the tag — it only confirms the maintainer's umbrella `vX.Y.Z` tag exists at HEAD. This satisfies the CI reachability check (`tag reachable from origin/main`).
+Because the manifests already carry the target versions, the bump phase inside `release tag` is a no-op; under `entrypoint = "maintainer"` Toven never creates or moves the tag — it only confirms the umbrella `vX.Y.Z` tag exists and points at HEAD (existence and reachability). Toven does **not** verify the tag's signature, so signing and signature verification are the maintainer's manual step (`git verify-tag` above). This satisfies the CI reachability check (`tag reachable from origin/main`).
 
 ### Phase 3 — Publish
 

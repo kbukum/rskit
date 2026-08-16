@@ -34,10 +34,12 @@ registry = "crates-io"
 baseline = "registry+umbrella"
 tag_mode = "umbrella"
 # The umbrella tag is annotated and GPG-signed with the maintainer's configured
-# git signing key. Under `entrypoint = "maintainer"` (below) Toven never creates
-# or moves a tag — the maintainer cuts the signed umbrella tag by hand — so these
-# keys state the tag policy the umbrella `vX.Y.Z` tag follows; `release tag` /
-# `release publish` verify that tag exists at HEAD rather than creating it.
+# git signing key. Under `entrypoint = "maintainer"` (below) Toven never creates,
+# moves, or signature-verifies a tag — the maintainer cuts and signs the umbrella
+# tag by hand (and checks it with `git verify-tag`) — so these keys are
+# documentary here, recording the signing policy the maintainer applies; `release
+# tag` / `release publish` only confirm the tag exists and points at HEAD
+# (existence and reachability, not its signature) rather than creating it.
 sign_tags = true
 tag_message = "release {module} {version}"
 # `main` is protected and rejects direct pushes, so the version/changelog bump
