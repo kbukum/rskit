@@ -278,10 +278,13 @@ release-coverage:
 release-bump:
 	@$(TOVEN) release bump --yes
 
-## Phase 2 — tag (run only after the release-bump PR merges into main): create and
-## push the signed per-crate + umbrella tags on the merged commit. With
-## `push_branch = false` (toven.toml) it pushes only tags, never a branch commit.
-## Toven owns the tag; run release-publish for the crates.io publication.
+## Phase 2 — tag (run only after the release-bump PR merges into main): the
+## maintainer cuts the single signed umbrella `vX.Y.Z` tag by hand on the merged
+## commit (entrypoint = "maintainer"). This target then VERIFIES that umbrella
+## tag exists at HEAD — Toven never creates or moves a maintainer-owned tag, and
+## `tag_mode = "umbrella"` means only the one umbrella tag is checked, never
+## per-crate tags. The hosted GitHub Release is published separately in Phase 3;
+## run release-publish for the crates.io publication.
 release-tag:
 	@$(TOVEN) release tag --yes
 
@@ -290,9 +293,10 @@ release-tag:
 publish-dry-run:
 	@$(TOVEN) release publish --dry-run
 
-## Phase 3 — publish: verify the tags pushed in phase 2, then publish each crate to
-## crates.io in dependency order (idempotent). Does not create commits or tags; CI
-## runs this against the checked-out release tag. Run after the release-tag phase.
+## Phase 3 — publish: verify the maintainer's umbrella tag from phase 2 points at
+## HEAD, then publish each crate to crates.io in dependency order (idempotent).
+## Does not create commits or tags; CI runs this against the checked-out release
+## tag. Run after the release-tag phase.
 ## Requires: CARGO_REGISTRY_TOKEN
 release-publish:
 	@$(TOVEN) release publish --yes
@@ -436,7 +440,7 @@ help:
 	@echo "  make release-readiness                    Run final release-readiness sweep"
 	@echo "  make release-coverage                     Run per-package release coverage thresholds"
 	@echo "  make release-bump                         Phase 1: stage manifest bumps + README pins on a branch for a PR into main (no commit)"
-	@echo "  make release-tag                          Phase 2 (after the bump PR merges): create + push signed tags on main"
+	@echo "  make release-tag                          Phase 2 (after the bump PR merges): confirm the maintainer's umbrella tag exists at HEAD (existence only, not signature)"
 	@echo "  make publish-dry-run                      Rehearse the crates.io publication in dependency order (read-only)"
 	@echo "  make release-publish                      Publish crates to crates.io (idempotent, rate-aware)"
 	@echo "  make release-sbom                         Generate CycloneDX SBOMs"

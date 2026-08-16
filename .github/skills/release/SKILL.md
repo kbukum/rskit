@@ -75,13 +75,16 @@ gh pr create --fill                  # CI runs on the bumped commit; review + me
 
 `release bump` is **stage-only by default** (`--yes` confirms the mutation; there is no `--no-commit` flag) and **change-gated**: only crates with a real diff since baseline bump, plus the dependency cascade. It also re-syncs the README install-snippet version pins via the umbrella's `on_resolved` hook (`scripts/rskit_tool.py sync-readme-versions`), staged with the manifests.
 
-**Phase 2 — Tag (after merge).** On merged `main`, clean tree:
+**Phase 2 — Tag (after merge).** On merged `main`, clean tree, the maintainer cuts and verifies the single signed umbrella tag by hand — under `entrypoint = "maintainer"` Toven never creates, moves, or pushes it:
 
 ```bash
 git switch main && git pull --ff-only
 make release-sbom            # CycloneDX SBOMs under target/sbom (read-only)
 make publish-dry-run         # rehearse the full pipeline in dependency order (read-only)
-make release-tag             # create + push signed per-crate + umbrella tags on the merged commit (tags only)
+git tag -s vX.Y.Z -m "release rskit-suite X.Y.Z"
+git verify-tag vX.Y.Z        # confirm the signature and signer before pushing
+git push origin vX.Y.Z
+make release-tag             # confirms the umbrella vX.Y.Z tag exists and points at HEAD (verify only)
 ```
 
 **Phase 3 — Publish.** Publish the umbrella GitHub Release on the existing `vX.Y.Z` tag (recommended — triggers CI), or locally:

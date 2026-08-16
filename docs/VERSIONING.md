@@ -139,7 +139,7 @@ The README badge documents the current MSRV. `rust-toolchain.toml` pins the deve
 | Non-publishable crate exclusion | `toven release status` / `toven release plan` | `agent-demo`, `core-cli`, `media-demo`, and `rskit-fuzz` are discovered by `toven modules` but explicitly `exclude`d from the release, so they never appear in the plan or reach crates.io |
 | Clean-tree requirement | `toven release readiness` (`make release-readiness`) | dirty trees fail before release mutation or publish |
 
-`make release-tag` / `make release-publish` apply the manifest edits, `toven release readiness` is the release gate, and the GitHub Release workflow publishes to crates.io through the same binary.
+`make release-bump` applies the manifest edits, `make release-tag` verifies the maintainer's single umbrella `vX.Y.Z` tag exists at HEAD (it never creates, moves, or pushes it), `toven release readiness` is the release gate, and the GitHub Release workflow publishes to crates.io through the same binary.
 
 ## References
 
