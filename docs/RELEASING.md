@@ -28,17 +28,17 @@ There is intentionally no root `Cargo.toml`.
 
 ## Flow at a glance
 
-`main` is protected and rejects direct pushes, so the version bump commit must land through a reviewed pull request — never a direct push. Toven's `[ecosystems.rust.release]` sets `push_branch = false`, so `release tag`/`release publish` push only the release *tags* and leave the branch ref untouched. The release therefore runs as three ordered phases, each previewable and applied on its own:
+`main` is protected and rejects direct pushes, so the version bump commit must land through a reviewed pull request — never a direct push. Toven's `[ecosystems.rust.release]` sets `push_branch = false` and `entrypoint = "maintainer"`, so the maintainer cuts the single signed umbrella `vX.Y.Z` tag by hand on the merged commit and `release tag`/`release publish` only *verify* that tag — Toven never creates, moves, or pushes it. The release therefore runs as three ordered phases, each previewable and applied on its own:
 
 ```mermaid
 flowchart LR
     A["Preview<br/>make release-plan / release-status"] --> B["Phase 1 — Bump<br/>rotate CHANGELOG + make release-bump<br/>on release/vX.Y.Z branch"]
     B --> C["Open PR → CI on the bumped commit → review → merge into main"]
-    C --> D["Phase 2 — Tag<br/>make release-tag on merged main<br/>(pushes tags only)"]
+    C --> D["Phase 2 — Tag<br/>maintainer cuts the signed umbrella tag;<br/>make release-tag verifies it on merged main"]
     D --> E["Phase 3 — Publish<br/>publish the umbrella GitHub Release<br/>→ CI runs toven release publish"]
 ```
 
-The phases map one-to-one onto Toven verbs: **bump** (`toven release bump`, no tag/push/publish), **tag** (`toven release tag`, tags only), **publish** (`toven release publish`, crates.io). Each is independent and idempotent; running a later phase never re-does an earlier one.
+The phases map one-to-one onto Toven verbs: **bump** (`toven release bump`, no tag/push/publish), **tag** (`toven release tag`, verifies the umbrella tag exists at HEAD), **publish** (`toven release publish`, crates.io). Each is independent and idempotent; running a later phase never re-does an earlier one.
 
 ## 1. Decide the version
 
@@ -115,14 +115,15 @@ The README install-snippet pins (every crate `README.md` under the repo root, `c
 
 ### Phase 2 — Tag (on the merged commit)
 
-With your local `main` fast-forwarded to the merged release commit and a clean tree:
+With your local `main` fast-forwarded to the merged release commit and a clean tree, the maintainer creates the single signed umbrella tag by hand, then verifies it:
 
 ```sh
 git switch main && git pull --ff-only
-make release-tag         # creates + pushes the signed per-crate + umbrella vX.Y.Z tags on the merged commit
+git tag -s vX.Y.Z -m "release rskit-suite X.Y.Z" && git push origin vX.Y.Z
+make release-tag         # verifies the maintainer's signed umbrella vX.Y.Z tag is at HEAD
 ```
 
-Because the manifests already carry the target versions, the bump phase inside `release tag` is a no-op; with `push_branch = false` it pushes only the tags and touches no branch ref. This satisfies the CI reachability check (`tag reachable from origin/main`).
+Because the manifests already carry the target versions, the bump phase inside `release tag` is a no-op; under `entrypoint = "maintainer"` Toven never creates or moves the tag — it only confirms the maintainer's umbrella `vX.Y.Z` tag exists at HEAD. This satisfies the CI reachability check (`tag reachable from origin/main`).
 
 ### Phase 3 — Publish
 
@@ -135,12 +136,12 @@ Because the manifests already carry the target versions, the bump phase inside `
 5. For pre-releases such as `v0.1.0-alpha.1`, check **Set as a pre-release**.
 6. Publish the release.
 
-Toven's maintainer entrypoint treats the tags as externally created inputs, so the per-crate tags from phase 2 must exist before the workflow runs — that is what `toven release publish` verifies. Publishing the GitHub Release triggers `.github/workflows/release.yml` from the `release.published` event. The workflow installs the pinned Toven binary, verifies the tag starts with `v` and is reachable from `main`, then runs the Toven-driven gates and publish.
+Toven's maintainer entrypoint treats the umbrella tag as an externally created input, so the single `vX.Y.Z` tag from phase 2 must exist before the workflow runs — that is what `toven release publish` verifies. Publishing the GitHub Release triggers `.github/workflows/release.yml` from the `release.published` event. The workflow installs the pinned Toven binary, verifies the tag starts with `v` and is reachable from `main`, then runs the Toven-driven gates and publish.
 
 **Local.** With `CARGO_REGISTRY_TOKEN` exported you can drive the crates.io publication directly after phase 2:
 
 ```sh
-make release-publish   # full pipeline: verifies tags, then publishes to crates.io in dependency order (idempotent)
+make release-publish   # full pipeline: verifies the umbrella tag, then publishes to crates.io in dependency order (idempotent)
 ```
 
 Directly pushing a `v*` tag by hand does not trigger CI publishing. The release workflow (`.github/workflows/release.yml`) is triggered by publishing a GitHub Release and will:

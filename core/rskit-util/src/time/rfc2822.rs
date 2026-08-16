@@ -9,8 +9,9 @@
 //!
 //! Parsing follows RFC 2822 §3.3 and its obsolete forms (§4.3):
 //!
-//! - The leading day-of-week is optional and, when present, informational (it is
-//!   not cross-checked against the date).
+//! - The leading day-of-week is optional; when present it must be a valid
+//!   `Mon`..`Sun` name that agrees with the date, otherwise the input is
+//!   rejected.
 //! - Seconds are optional (`HH:MM` is accepted and read as `:00`).
 //! - The zone is a numeric offset (`+HHMM` / `-HHMM`) or a named zone. Numeric
 //!   offsets and the North-American named zones (`UT`/`GMT`, `EST`/`EDT`,
@@ -109,17 +110,12 @@ pub fn format_rfc2822_datetime(datetime: CivilDateTime) -> Option<String> {
 #[must_use]
 pub fn parse_rfc2822(s: &str) -> Option<i64> {
     let trimmed = s.trim();
-    // The optional leading day-of-week is delimited by a comma; when present it
-    // must be a bare alphabetic token (informational, not validated further).
-    let rest = match trimmed.split_once(',') {
-        Some((weekday, tail)) => {
-            let weekday = weekday.trim();
-            if weekday.is_empty() || !weekday.bytes().all(|byte| byte.is_ascii_alphabetic()) {
-                return None;
-            }
-            tail
-        }
-        None => trimmed,
+    // The leading day-of-week is optional; when present RFC 2822 requires a
+    // valid `Mon`..`Sun` name, so it is captured here and cross-checked against
+    // the parsed date below.
+    let (weekday, rest) = match trimmed.split_once(',') {
+        Some((weekday, tail)) => (Some(weekday.trim()), tail),
+        None => (None, trimmed),
     };
 
     let tokens: [&str; 5] = collect_five(rest)?;
@@ -129,11 +125,20 @@ pub fn parse_rfc2822(s: &str) -> Option<i64> {
         month_from_name(month)?,
         parse_uint(day)?,
     )?;
+    if let Some(name) = weekday {
+        // 1970-01-01 (day 0) was a Thursday, index 4 in `WEEKDAYS`.
+        let expected = (days_from_civil(date)? + 4).rem_euclid(7);
+        if weekday_index(name)? != expected {
+            return None;
+        }
+    }
     let (hour, minute, second) = parse_time(time)?;
     let local = CivilDateTime::new(date, hour, minute, second)?;
     // Interpret the wall-clock fields as UTC, then subtract the zone offset to
-    // recover the true UTC instant the local time denotes.
-    Some(epoch_secs_from_datetime(local)? - zone_offset_seconds(zone)?)
+    // recover the true UTC instant the local time denotes. `checked_sub` guards
+    // the `i64` epoch boundary so an extreme date plus a nonzero zone yields
+    // `None` rather than panicking or wrapping.
+    epoch_secs_from_datetime(local)?.checked_sub(zone_offset_seconds(zone)?)
 }
 
 /// Parses an RFC 2822 date-time into a UTC-normalized civil date/time.
@@ -214,9 +219,11 @@ fn zone_offset_seconds(token: &str) -> Option<i64> {
         "PST" => -8 * SECONDS_PER_HOUR,
         "PDT" => -7 * SECONDS_PER_HOUR,
         // RFC 2822 §4.3: the obsolete single-letter military zones were
-        // historically specified with the wrong sign, so a parser must treat any
-        // of them as `-0000` — an unknown offset, i.e. UTC.
-        _ if upper.len() == 1 && upper.as_bytes()[0].is_ascii_alphabetic() => 0,
+        // historically specified with the wrong sign, so a parser must treat
+        // them as `-0000` — an unknown offset, i.e. UTC. `J`/`j` is explicitly
+        // excluded from the grammar and is therefore rejected rather than
+        // normalized.
+        _ if upper.len() == 1 && upper.as_bytes()[0].is_ascii_alphabetic() && upper != "J" => 0,
         _ => return None,
     })
 }
@@ -232,6 +239,15 @@ fn normalize_year(token: &str) -> Option<i64> {
         len if len >= 4 => Some(value),
         _ => None,
     }
+}
+
+/// Maps a three-letter English day-of-week abbreviation (case-insensitive) to
+/// its index in `WEEKDAYS` (`Sun` = 0 … `Sat` = 6), rejecting any other token.
+fn weekday_index(name: &str) -> Option<i64> {
+    WEEKDAYS
+        .iter()
+        .position(|weekday| weekday.eq_ignore_ascii_case(name))
+        .and_then(|index| i64::try_from(index).ok())
 }
 
 /// Maps a three-letter English month abbreviation (case-insensitive) to its
@@ -335,10 +351,30 @@ mod tests {
     #[test]
     fn parses_the_crates_io_retry_after_instant() {
         // crates.io renders its rate-limit deadline in this exact shape.
+        // 2026-08-16 is a Sunday, so the day-of-week agrees with the date.
         assert_eq!(
-            parse_rfc2822_datetime("Wed, 16 Aug 2026 14:19:08 GMT"),
+            parse_rfc2822_datetime("Sun, 16 Aug 2026 14:19:08 GMT"),
             CivilDateTime::new(CivilDate::new(2026, 8, 16).unwrap(), 14, 19, 8)
         );
+    }
+
+    #[test]
+    fn rejects_a_day_of_week_that_disagrees_with_the_date() {
+        // 1994-11-06 is a Sunday; any other named weekday is inconsistent input.
+        assert_eq!(parse_rfc2822("Wed, 06 Nov 1994 08:49:37 GMT"), None);
+    }
+
+    #[test]
+    fn rejects_an_unknown_day_of_week_token() {
+        // A non-weekday alphabetic token is not a valid RFC 2822 day-of-week.
+        assert_eq!(parse_rfc2822("Banana, 06 Nov 1994 08:49:37 GMT"), None);
+    }
+
+    #[test]
+    fn rejects_the_excluded_military_zone_j() {
+        // RFC 2822 §4.3 excludes `J`/`j` from the military-zone grammar.
+        assert_eq!(parse_rfc2822("Sun, 06 Nov 1994 08:49:37 J"), None);
+        assert_eq!(parse_rfc2822("Sun, 06 Nov 1994 08:49:37 j"), None);
     }
 
     #[test]

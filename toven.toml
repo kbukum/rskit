@@ -24,9 +24,11 @@ readiness = ["clean-tree", "registry-idempotent"]
 registry = "crates-io"
 # rskit ships as one release train under a single umbrella tag: change-gating
 # anchors each crate on `max(crates.io published version, the crate's own
-# version at the umbrella tag commit)` (`registry+umbrella`), and `release tag`
-# creates only the single umbrella `vX.Y.Z` tag (`tag_mode = "umbrella"`), never
-# a tag per crate. Both are the Rust adapter's defaults for a train with one
+# version at the umbrella tag commit)` (`registry+umbrella`), and the release
+# scopes to the single umbrella `vX.Y.Z` tag (`tag_mode = "umbrella"`), never a
+# tag per crate. Under `entrypoint = "maintainer"` (below) the maintainer cuts
+# that umbrella tag by hand and `release tag` only verifies it — it is never
+# created by Toven. Both are the Rust adapter's defaults for a train with one
 # umbrella module except `tag_mode`, whose adapter default is `both`; they are
 # stated explicitly here so the layout is legible from the config alone.
 baseline = "registry+umbrella"
