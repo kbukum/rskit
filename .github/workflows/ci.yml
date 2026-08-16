@@ -355,7 +355,7 @@ jobs:
         id: toven
         # Pinned by immutable commit SHA; the `version` input independently pins
         # the installed binary (checksum + keyless Sigstore signature verified).
-        uses: kbukum/toven/.github/actions/toven@ae73a40abc7bf1f85ee87b63df6a65fe28b2dec3 # kbukum/toven install-and-run action
+        uses: kbukum/toven/.github/actions/toven@6f402bda741196b895bc6fbcb02a34b4065baedb # kbukum/toven install-and-run action
         with:
           version: ${{ env.TOVEN_VERSION }}
       - run: '"${{ steps.toven.outputs.toven }}" run topology'
@@ -388,7 +388,7 @@ jobs:
         run: cargo install cargo-public-api --version 0.52.0 --locked
       - name: Install the pinned Toven release
         id: toven
-        uses: kbukum/toven/.github/actions/toven@ae73a40abc7bf1f85ee87b63df6a65fe28b2dec3 # kbukum/toven install-and-run action
+        uses: kbukum/toven/.github/actions/toven@6f402bda741196b895bc6fbcb02a34b4065baedb # kbukum/toven install-and-run action
         with:
           version: ${{ env.TOVEN_VERSION }}
       - run: '"${{ steps.toven.outputs.toven }}" run readiness'
