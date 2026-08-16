@@ -278,10 +278,13 @@ release-coverage:
 release-bump:
 	@$(TOVEN) release bump --yes
 
-## Phase 2 — tag (run only after the release-bump PR merges into main): create and
-## push the signed per-crate + umbrella tags on the merged commit. With
-## `push_branch = false` (toven.toml) it pushes only tags, never a branch commit.
-## Toven owns the tag; run release-publish for the crates.io publication.
+## Phase 2 — tag (run only after the release-bump PR merges into main): the
+## maintainer cuts the single signed umbrella `vX.Y.Z` tag and the GitHub Release
+## by hand on the merged commit (entrypoint = "maintainer"). This target then
+## VERIFIES that umbrella tag exists at HEAD — Toven never creates or moves a
+## maintainer-owned tag, and `tag_mode = "umbrella"` means only the one umbrella
+## tag is checked, never per-crate tags. Run release-publish for the crates.io
+## publication.
 release-tag:
 	@$(TOVEN) release tag --yes
 
@@ -290,9 +293,10 @@ release-tag:
 publish-dry-run:
 	@$(TOVEN) release publish --dry-run
 
-## Phase 3 — publish: verify the tags pushed in phase 2, then publish each crate to
-## crates.io in dependency order (idempotent). Does not create commits or tags; CI
-## runs this against the checked-out release tag. Run after the release-tag phase.
+## Phase 3 — publish: verify the maintainer's umbrella tag from phase 2 points at
+## HEAD, then publish each crate to crates.io in dependency order (idempotent).
+## Does not create commits or tags; CI runs this against the checked-out release
+## tag. Run after the release-tag phase.
 ## Requires: CARGO_REGISTRY_TOKEN
 release-publish:
 	@$(TOVEN) release publish --yes

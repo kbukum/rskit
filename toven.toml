@@ -22,30 +22,36 @@ region = 70.0
 [ecosystems.rust.release]
 readiness = ["clean-tree", "registry-idempotent"]
 registry = "crates-io"
-# Per-crate and umbrella tags are annotated and GPG-signed with the maintainer's
-# configured git signing key (the same key used for the `-S` release commit), so
-# every tag Toven creates via `release tag` is verifiable. Toven defaults
-# `sign_tags` to false and signed tags are always annotated, so enable it
-# explicitly and give the annotation a per-module `tag_message` template.
+# rskit ships as one release train under a single umbrella tag: change-gating
+# anchors each crate on `max(crates.io published version, the crate's own
+# version at the umbrella tag commit)` (`registry+umbrella`), and `release tag`
+# creates only the single umbrella `vX.Y.Z` tag (`tag_mode = "umbrella"`), never
+# a tag per crate. Both are the Rust adapter's defaults for a train with one
+# umbrella module except `tag_mode`, whose adapter default is `both`; they are
+# stated explicitly here so the layout is legible from the config alone.
+baseline = "registry+umbrella"
+tag_mode = "umbrella"
+# The umbrella tag is annotated and GPG-signed with the maintainer's configured
+# git signing key. Under `entrypoint = "maintainer"` (below) Toven never creates
+# or moves a tag — the maintainer cuts the signed umbrella tag by hand — so these
+# keys state the tag policy the umbrella `vX.Y.Z` tag follows; `release tag` /
+# `release publish` verify that tag exists at HEAD rather than creating it.
 sign_tags = true
 tag_message = "release {module} {version}"
 # `main` is protected and rejects direct pushes, so the version/changelog bump
 # commit must land through a reviewed pull request — never a direct push. Setting
-# `push_branch = false` makes `release tag`/`release publish` push only the
-# release tags and leave the branch ref untouched: the maintainer runs
-# `make release-bump` (`toven release bump`) on a release branch to write the
-# manifest bumps and open a PR, and only after that PR merges into `main` does
-# `make release-tag` create and push the signed per-crate + umbrella tags on the
+# `push_branch = false` keeps `release tag`/`release publish` from ever pushing a
+# branch ref: the maintainer runs `make release-bump` (`toven release bump`) on a
+# release branch to write the manifest bumps and open a PR, and only after that
+# PR merges into `main` does the maintainer cut the signed umbrella tag on the
 # merged commit. Defaults to `true`; keep it `false` while `main` is protected.
 push_branch = false
-# The hosted GitHub Release is a single umbrella (see rust:rskit-suite below),
-# created by the maintainer as the release entrypoint; Toven verifies it rather
-# than cutting one Release per crate. The bump commit reaches `main` through a
-# reviewed PR (`make release-bump`), then `make release-tag` (`toven release
-# tag`) creates and pushes the signed per-crate tags and the umbrella `vX.Y.Z`
-# tag on that merged commit; the GitHub Release is then published on that
-# existing umbrella tag, which is what `release publish` verifies. See
-# docs/RELEASING.md.
+# The release entrypoint is the maintainer: after the bump PR merges into `main`,
+# the maintainer creates the single umbrella `vX.Y.Z` tag (see rust:rskit-suite
+# below) and the hosted GitHub Release by hand on the merged commit. Toven's tag
+# and publish phases then *verify* that umbrella tag exists at HEAD — Toven never
+# creates or moves a maintainer-owned tag — and `release publish` publishes each
+# crate to crates.io against it. See docs/RELEASING.md.
 entrypoint = "maintainer"
 
 [ecosystems.rust.release.host]
@@ -61,10 +67,12 @@ branch_channels = { main = "alpha" }
 
 # rskit-suite is the release train's umbrella: the facade crate whose version is
 # the workspace release version. Its hosted GitHub Release (tagged `vX.Y.Z`) is
-# the single umbrella Release the maintainer publishes to start CI; every other
-# crate publishes to crates.io with its own independent version and per-crate
-# tag but cuts no separate Release, aggregating its notes onto this one. The
-# `v{version}` tag matches the historical `rskit_tool` umbrella tag scheme.
+# the single umbrella Release the maintainer publishes to start CI, and the
+# umbrella `vX.Y.Z` tag is the only tag the train creates (`tag_mode =
+# "umbrella"` above). Every other crate publishes to crates.io with its own
+# independent version but cuts no separate tag or Release, aggregating its notes
+# onto this one. The `v{version}` tag matches the historical `rskit_tool`
+# umbrella tag scheme.
 [modules."rust:rskit-suite".release]
 umbrella = true
 tag_format = "v{version}"
