@@ -2,6 +2,48 @@
 
 The mechanical steps to cut a release of `rskit`. For *what* counts as a breaking change vs a feature vs a fix, see [`policy/SEMVER.md`](policy/SEMVER.md) and [`policy/DEPRECATION.md`](policy/DEPRECATION.md).
 
+## Quickstart
+
+The normal-release command sequence for a maintainer with `toven` and the pre-flight tooling on `$PATH` (see [Prerequisites](#prerequisites)). Each step links to its full explanation below; read those before your first release. `vX.Y.Z` is the version you picked in [step 1](#1-decide-the-version).
+
+```sh
+# 0. Preview (read-only) — see "Preview the release"
+make release-plan
+make release-status
+
+# 1. Pre-flight gates (read-only) — see "Pre-flight checks"
+make check && make deny && make release-readiness && make release-coverage && make publish-dry-run
+
+# 2. Phase 1 — Bump: land the version bump + CHANGELOG through a reviewed PR.
+#    Run `make release-bump` while still on `main`: the prerelease channel is
+#    resolved from the *current* branch via `branch_channels` (only `main` maps
+#    to `alpha`), so bumping on a `release/*` branch would finalize the alpha
+#    train to a stable version. Bump on `main` (stage-only, no commit), then cut
+#    the branch carrying the staged change.
+#    rotate CHANGELOG.md: [Unreleased] -> [vX.Y.Z] - YYYY-MM-DD, add a fresh empty [Unreleased] (step 2)
+make release-bump                         # on main: stages manifest bumps + floors + README pins (no commit)
+git switch -c release/vX.Y.Z              # carries the staged bump + CHANGELOG onto the release branch
+git add -A && git commit -S -m "chore(release): vX.Y.Z"
+git push -u origin release/vX.Y.Z && gh pr create --fill
+#    -> get CI green, review, and merge the PR into main
+
+# 3. Phase 2 — Tag: cut the signed umbrella tag on the merged commit
+git switch main && git pull --ff-only
+git tag -s vX.Y.Z -m "release rskit-suite X.Y.Z"
+git verify-tag vX.Y.Z                     # confirm signature + signer before pushing
+git push origin vX.Y.Z
+make release-tag                          # verifies the umbrella tag exists at HEAD
+
+# 4. Phase 3 — Publish: publish the GitHub Release on the EXISTING tag,
+#    targeting main, which triggers .github/workflows/release.yml to publish to crates.io.
+#    (Local alternative, with CARGO_REGISTRY_TOKEN exported: `make release-publish`.)
+
+# 5. Verify — see "Verify the workflow release" and "Verify on crates.io and docs.rs"
+gh run watch "$(gh run list --workflow Release --limit 1 --json databaseId --jq '.[0].databaseId')"
+```
+
+If anything fails partway through, **do not** delete or move a tag or republish a crates.io version — both are immutable. Fix forward with a new version; see [Recovery from a partial or failed release](#recovery-from-a-partial-or-failed-release).
+
 ## Prerequisites
 
 - You are listed in `MAINTAINERS.md` and have push access to `kbukum/rskit`.
@@ -32,7 +74,7 @@ There is intentionally no root `Cargo.toml`.
 
 ```mermaid
 flowchart LR
-    A["Preview<br/>make release-plan / release-status"] --> B["Phase 1 — Bump<br/>rotate CHANGELOG + make release-bump<br/>on release/vX.Y.Z branch"]
+    A["Preview<br/>make release-plan / release-status"] --> B["Phase 1 — Bump<br/>rotate CHANGELOG + make release-bump on main<br/>then cut release/vX.Y.Z carrying the staged change"]
     B --> C["Open PR → CI on the bumped commit → review → merge into main"]
     C --> D["Phase 2 — Tag<br/>maintainer cuts + verifies the signed umbrella tag;<br/>make release-tag confirms it exists at HEAD"]
     D --> E["Phase 3 — Publish<br/>publish the umbrella GitHub Release<br/>→ CI runs toven release publish"]
@@ -97,12 +139,12 @@ The release runs as three ordered phases. `main` is protected, so the version bu
 
 ### Phase 1 — Bump (reviewed PR into `main`)
 
-**You** create the release branch, commit, and open the PR — Toven only computes and *writes* the version bumps into the working tree, it never creates the branch, the commit, or the PR:
+**You** create the release branch, commit, and open the PR — Toven only computes and *writes* the version bumps into the working tree, it never creates the branch, the commit, or the PR. Run `make release-bump` **while still on `main`**: the prerelease channel is resolved from the *current* git branch via `branch_channels` (exact-match, and only `main` maps to `alpha`), and `toven release bump` takes no channel override. Bumping on a `release/*` branch would find no mapping and finalize the alpha train to a stable version — so bump on `main` (stage-only, so protected `main` is never committed to), then cut the branch carrying the staged change:
 
 ```sh
-git switch -c release/vX.Y.Z         # you create the branch (clean tree)
+# on main, up to date and clean; rotate CHANGELOG.md per step 2 first
 make release-bump                    # toven release bump --yes: stages per-crate version bumps + floors + README pins, NO commit
-# rotate CHANGELOG.md per step 2, then commit everything yourself:
+git switch -c release/vX.Y.Z         # carries the staged bump + CHANGELOG onto the branch you create
 git add -A
 git commit -S -m "chore(release): vX.Y.Z"
 git push -u origin release/vX.Y.Z
