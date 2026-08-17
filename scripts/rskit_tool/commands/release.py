@@ -161,6 +161,11 @@ def run_sync_readme_versions(args: argparse.Namespace) -> int:
     """Sync README install-snippet pins from Toven's resolved-version map."""
 
     versions = normalize_version_map(load_version_map(Path(args.version_map)))
+    if not versions:
+        raise ToolError(
+            "error: version map contained no rskit crate versions; refusing to report "
+            f"README pins in sync from an empty/malformed map: {args.version_map}"
+        )
     changed = sync_readme_versions(versions)
     if changed:
         print(f"==> Synced README version pins in {len(changed)} file(s):")

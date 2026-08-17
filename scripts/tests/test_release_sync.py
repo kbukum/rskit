@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import unittest
 from pathlib import Path
@@ -144,6 +145,27 @@ class NormalizeVersionMapTests(unittest.TestCase):
         out, changed = release.set_readme_dependency_versions(text, versions)
         self.assertTrue(changed)
         self.assertEqual(out, 'rskit-suite = "0.2.0-alpha.8"\n')
+
+
+class RunSyncReadmeVersionsTests(unittest.TestCase):
+    def _run(self, raw_map: dict[str, str]) -> int:
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "versions.json"
+            path.write_text(json.dumps(raw_map), encoding="utf-8")
+            args = argparse.Namespace(version_map=str(path))
+            with mock.patch.object(release, "sync_readme_versions", return_value=[]):
+                return release.run_sync_readme_versions(args)
+
+    def test_empty_map_aborts(self) -> None:
+        with self.assertRaises(ToolError):
+            self._run({})
+
+    def test_map_without_rskit_keys_aborts(self) -> None:
+        with self.assertRaises(ToolError):
+            self._run({"rust:tokio": "1.0.0"})
+
+    def test_map_with_rskit_key_succeeds(self) -> None:
+        self.assertEqual(self._run({"rust:rskit-suite": "0.2.0-alpha.8"}), 0)
 
 
 if __name__ == "__main__":
