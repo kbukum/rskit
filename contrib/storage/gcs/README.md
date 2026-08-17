@@ -14,8 +14,8 @@ Set `Config::anonymous` only for explicitly public buckets that require unsigned
 
 ```toml
 [dependencies]
-rskit-storage = "0.2.0-alpha.4"
-rskit-storage-gcs = "0.2.0-alpha.4"
+rskit-storage = "0.2.0-alpha.5"
+rskit-storage-gcs = "0.2.0-alpha.5"
 ```
 
 ## Usage

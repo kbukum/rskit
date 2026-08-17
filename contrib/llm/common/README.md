@@ -8,10 +8,10 @@ Most applications should not depend on this crate directly. Use one of the provi
 
 ```toml
 [dependencies]
-rskit-llm-openai = "0.2.0-alpha.4"
-rskit-llm-anthropic = "0.2.0-alpha.4"
-rskit-llm-gemini = "0.2.0-alpha.4"
-rskit-llm-ollama = "0.2.0-alpha.4"
+rskit-llm-openai = "0.2.0-alpha.5"
+rskit-llm-anthropic = "0.2.0-alpha.5"
+rskit-llm-gemini = "0.2.0-alpha.5"
+rskit-llm-ollama = "0.2.0-alpha.5"
 ```
 
 ## When to use

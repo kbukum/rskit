@@ -269,7 +269,11 @@ release-coverage:
 
 ## Phase 1 — bump: write per-crate manifest version bumps + dependency floors into
 ## the working tree and stage them, WITHOUT committing (stage-only is the default;
-## `--yes` confirms the mutation). Run it on a release branch you created; you then
+## `--yes` confirms the mutation). Run it on a CLEAN `main`: the bump gate rejects
+## an uncommitted/staged tree, and the prerelease channel is resolved from the
+## current branch (`branch_channels`, only `main` maps to `alpha`), so bumping on
+## a `release/*` branch would finalize the alpha train to a stable version. Bump on
+## main, then rotate the CHANGELOG and cut the release branch carrying both; you
 ## commit and open the PR yourself. Toven never creates the branch, the commit, or
 ## the PR, and never tags/pushes/publishes here. Change-aware: only crates with a
 ## real diff since baseline bump, plus the dependency cascade; the configured
@@ -439,7 +443,7 @@ help:
 	@echo "  make release-status                       Report release status (read-only)"
 	@echo "  make release-readiness                    Run final release-readiness sweep"
 	@echo "  make release-coverage                     Run per-package release coverage thresholds"
-	@echo "  make release-bump                         Phase 1: stage manifest bumps + README pins on a branch for a PR into main (no commit)"
+	@echo "  make release-bump                         Phase 1: stage manifest bumps + README pins on clean main (branch after the bump) for a PR into main (no commit)"
 	@echo "  make release-tag                          Phase 2 (after the bump PR merges): confirm the maintainer's umbrella tag exists at HEAD (existence only, not signature)"
 	@echo "  make publish-dry-run                      Rehearse the crates.io publication in dependency order (read-only)"
 	@echo "  make release-publish                      Publish crates to crates.io (idempotent, rate-aware)"

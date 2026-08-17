@@ -46,10 +46,13 @@ tag_message = "release {module} {version}"
 # `main` is protected and rejects direct pushes, so the version/changelog bump
 # commit must land through a reviewed pull request — never a direct push. Setting
 # `push_branch = false` keeps `release tag`/`release publish` from ever pushing a
-# branch ref: the maintainer runs `make release-bump` (`toven release bump`) on a
-# release branch to write the manifest bumps and open a PR, and only after that
-# PR merges into `main` does the maintainer cut the signed umbrella tag on the
-# merged commit. Defaults to `true`; keep it `false` while `main` is protected.
+# branch ref: the maintainer runs `make release-bump` (`toven release bump`) while
+# on `main` to write and stage the manifest bumps (bump is stage-only and never
+# commits, so protected `main` is untouched; see the `branch_channels` note below
+# for why the bump runs on `main`), then cuts a `release/vX.Y.Z` branch carrying
+# the staged change to open a PR, and only after that PR merges into `main` does
+# the maintainer cut the signed umbrella tag on the merged commit. Defaults to
+# `true`; keep it `false` while `main` is protected.
 push_branch = false
 # The release entrypoint is the maintainer: after the bump PR merges into `main`,
 # the maintainer creates the single umbrella `vX.Y.Z` tag (see rust:rskit-suite
@@ -64,8 +67,9 @@ entrypoint = "maintainer"
 forge = "github"
 
 # rskit is in its pre-stable alpha line, so releases stay on the `alpha` prerelease channel by default rather than finalizing to a stable version.
-# The default is declared here, not passed as a flag: `channels` is the allowed set, and `branch_channels` maps the release branch to the channel that `toven release bump/tag/publish` cuts from with no `--pre` argument.
-# rskit runs the release phases from `main`, so `main` maps to `alpha`; the alpha line advances (…-alpha.N → …-alpha.N+1) automatically.
+# The default is declared here, not passed as a flag: `channels` is the allowed set, and `branch_channels` maps a branch name to the channel that `toven release bump/tag/publish` cuts from with no `--pre` argument.
+# The channel is resolved from the *current* git branch by **exact** name (no globs), and `toven release bump` accepts no `--pre` override (it is tag/publish-only). Because `release/vX.Y.Z` branch names are version-specific they cannot be enumerated here, so `make release-bump` must run on `main` (mapped below); the maintainer then cuts the release branch carrying the staged bump. Running the bump on a `release/*` branch finds no mapping and finalizes the alpha train to a stable version.
+# rskit runs the bump from `main`, so `main` maps to `alpha`; the alpha line advances (…-alpha.N → …-alpha.N+1) automatically.
 # To graduate to a stable `X.Y.Z`, intentionally override with an explicit stable cut (e.g. `--set-version`) or remove the mapping — the config never silently finalizes the prerelease.
 [ecosystems.rust.release.prerelease]
 channels = ["alpha"]

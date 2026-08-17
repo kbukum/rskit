@@ -16,7 +16,7 @@ Typestate `App<S,C>` builder, `Component` trait, ordered `Registry`, and `Health
 
 ```toml
 [dependencies]
-rskit-bootstrap = "0.2.0-alpha.3"
+rskit-bootstrap = "0.2.0-alpha.4"
 ```
 
 ```rust

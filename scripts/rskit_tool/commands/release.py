@@ -52,10 +52,10 @@ def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) 
 def load_version_map(path: Path) -> dict[str, str]:
     """Load Toven's resolved ``key -> version`` JSON map.
 
-    Toven keys each module by its canonical ``ecosystem:name`` plus every
-    unambiguous alias (bare crate name, package name). rskit crate names are
-    globally unique, so the bare ``rskit-<name>`` key is always present and is
-    what the README pins reference.
+    Toven keys each module by its canonical ``ecosystem:name`` identifier (e.g.
+    ``rust:rskit-suite``). The raw keys are returned verbatim here;
+    :func:`normalize_version_map` re-indexes them by the bare ``rskit-<name>``
+    the README pins reference.
     """
 
     try:
@@ -69,6 +69,33 @@ def load_version_map(path: Path) -> dict[str, str]:
     ):
         raise ToolError(f"error: version map must be a JSON object of string versions: {path}")
     return raw
+
+
+def normalize_version_map(raw: Mapping[str, str]) -> dict[str, str]:
+    """Re-index Toven's resolved-version map by bare crate name.
+
+    Toven keys each module by its canonical ``<ecosystem>:<name>`` identifier
+    (e.g. ``rust:rskit-suite``) and may additionally emit bare aliases. README
+    install-snippet pins reference the bare crate name (``rskit-suite``), so any
+    leading ``<ecosystem>:`` segment is stripped and only ``rskit-`` crates are
+    kept. rskit crate names are globally unique, so a bare key and a prefixed
+    alias for the same crate must agree; a conflicting version for one bare name
+    is a tooling error and aborts the sync rather than picking a version at
+    random.
+    """
+
+    normalized: dict[str, str] = {}
+    for key, version in raw.items():
+        bare = key.rsplit(":", 1)[-1]
+        if not bare.startswith("rskit-"):
+            continue
+        existing = normalized.get(bare)
+        if existing is not None and existing != version:
+            raise ToolError(
+                f"error: conflicting versions for {bare} in version map: {existing} vs {version}"
+            )
+        normalized[bare] = version
+    return normalized
 
 
 def set_readme_dependency_versions(text: str, versions: Mapping[str, str]) -> tuple[str, bool]:
@@ -133,7 +160,12 @@ def sync_readme_versions(versions: Mapping[str, str]) -> list[Path]:
 def run_sync_readme_versions(args: argparse.Namespace) -> int:
     """Sync README install-snippet pins from Toven's resolved-version map."""
 
-    versions = load_version_map(Path(args.version_map))
+    versions = normalize_version_map(load_version_map(Path(args.version_map)))
+    if not versions:
+        raise ToolError(
+            "error: version map contained no rskit crate versions; refusing to report "
+            f"README pins in sync from an empty/malformed map: {args.version_map}"
+        )
     changed = sync_readme_versions(versions)
     if changed:
         print(f"==> Synced README version pins in {len(changed)} file(s):")
