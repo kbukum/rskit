@@ -112,9 +112,13 @@ jobs:
             echo "error: no SBOM files found in target/sbom" >&2
             exit 1
           fi
-          for file in "${sboms[@]}"; do
-            cosign sign-blob --yes --bundle "${file}.bundle" "$file"
-          done
+          # Keyless signing is per-file and independent, so sign in bounded
+          # parallel (8-wide) rather than serially. The bound keeps concurrent
+          # Fulcio/Rekor calls well under any throttling while cutting the step
+          # from ~72 serial signings to ~1/8 the wall time. `xargs` fails the
+          # step if any signing exits non-zero.
+          printf '%s\0' "${sboms[@]}" | xargs -0 -P 8 -I {} \
+            cosign sign-blob --yes --bundle "{}.bundle" "{}"
       - name: Check crates.io token
         id: crates-token
         env:
