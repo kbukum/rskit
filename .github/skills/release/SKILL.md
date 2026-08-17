@@ -9,7 +9,7 @@ description: >-
 
 # Releasing rskit
 
-rskit has **split Cargo workspaces** (`core/`, `contrib/`, `examples/`) and **no root `Cargo.toml`**. Crates are versioned **independently** and published to crates.io in dependency order. [Toven](https://github.com/kbukum/toven) is the canonical release driver — it owns the version bump, release commit, signed tagging, crates.io publication, SBOM, and the readiness preflight; the `make release-*` targets delegate to it. Full details live in [`docs/RELEASING.md`](../../../docs/RELEASING.md), [`docs/VERSIONING.md`](../../../docs/VERSIONING.md), [`docs/policy/SEMVER.md`](../../../docs/policy/SEMVER.md), and [`docs/policy/DEPRECATION.md`](../../../docs/policy/DEPRECATION.md).
+rskit has **split Cargo workspaces** (`core/`, `contrib/`, `examples/`) and **no root `Cargo.toml`**. Crates are versioned **independently** and published to crates.io in dependency order. [Toven](https://github.com/kbukum/toven) is the canonical release driver — it computes and stages the version bump, verifies the maintainer's umbrella tag, publishes to crates.io in dependency order, generates the SBOM, and runs the readiness preflight. It is **stage-only** for the bump and never creates the release commit or the signed tag (`entrypoint = "maintainer"`, `push_branch = false`) — you create those by hand. The `make release-*` targets delegate to it. Full details live in [`docs/RELEASING.md`](../../../docs/RELEASING.md), [`docs/VERSIONING.md`](../../../docs/VERSIONING.md), [`docs/policy/SEMVER.md`](../../../docs/policy/SEMVER.md), and [`docs/policy/DEPRECATION.md`](../../../docs/policy/DEPRECATION.md).
 
 ## Prerequisites
 
@@ -61,12 +61,13 @@ Toven writes the manifest bumps and refreshes caret floors during the bump phase
 
 `main` is protected, so the release runs as three ordered phases. Toven's `[ecosystems.rust.release]` sets `push_branch = false`, so the tag/publish phases push tags only — the version bump commit must land through a reviewed PR.
 
-**Phase 1 — Bump (reviewed PR).** *You* create the release branch, commit, and open the PR; Toven only stages the version bumps into the working tree (`toven release bump --yes` is stage-only — no commit) — it never creates the branch, commit, or PR:
+**Phase 1 — Bump (reviewed PR).** *You* create the release branch, commit, and open the PR; Toven only stages the version bumps into the working tree (`toven release bump --yes` is stage-only — no commit) — it never creates the branch, commit, or PR. Run the bump on a **clean `main`**: the bump gate rejects an uncommitted/staged tree, and the prerelease channel is resolved from the *current* branch via `branch_channels` (exact-match, only `main` maps to `alpha`), so bumping on a `release/*` branch would find no mapping and finalize the alpha train to a stable version. Bump on `main`, **then** rotate the CHANGELOG, then cut the branch carrying both:
 
 ```bash
-git switch -c release/vX.Y.Z         # you create the branch (clean tree)
+# on main, up to date and clean:
 make release-bump                    # toven release bump --yes: change-gated manifest bumps + floors + README pins, staged, NO commit
-# rotate CHANGELOG (Step 3), then commit everything yourself:
+# rotate CHANGELOG (Step 3) AFTER the bump — the bump gate needs a clean tree:
+git switch -c release/vX.Y.Z         # carries the staged bump + CHANGELOG onto the branch you create
 git add -A
 git commit -S -m "chore(release): vX.Y.Z"
 git push -u origin release/vX.Y.Z

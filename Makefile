@@ -443,7 +443,7 @@ help:
 	@echo "  make release-status                       Report release status (read-only)"
 	@echo "  make release-readiness                    Run final release-readiness sweep"
 	@echo "  make release-coverage                     Run per-package release coverage thresholds"
-	@echo "  make release-bump                         Phase 1: stage manifest bumps + README pins on a branch for a PR into main (no commit)"
+	@echo "  make release-bump                         Phase 1: stage manifest bumps + README pins on clean main (branch after the bump) for a PR into main (no commit)"
 	@echo "  make release-tag                          Phase 2 (after the bump PR merges): confirm the maintainer's umbrella tag exists at HEAD (existence only, not signature)"
 	@echo "  make publish-dry-run                      Rehearse the crates.io publication in dependency order (read-only)"
 	@echo "  make release-publish                      Publish crates to crates.io (idempotent, rate-aware)"
