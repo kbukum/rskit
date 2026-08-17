@@ -101,5 +101,50 @@ class SyncReadmeVersionsTests(unittest.TestCase):
             self.assertEqual(readme.read_text(encoding="utf-8"), 'rskit-errors = "0.2.0"\n')
 
 
+class NormalizeVersionMapTests(unittest.TestCase):
+    def test_strips_ecosystem_prefix(self) -> None:
+        self.assertEqual(
+            release.normalize_version_map({"rust:rskit-suite": "0.2.0-alpha.8"}),
+            {"rskit-suite": "0.2.0-alpha.8"},
+        )
+
+    def test_keeps_bare_key(self) -> None:
+        self.assertEqual(
+            release.normalize_version_map({"rskit-suite": "0.2.0-alpha.8"}),
+            {"rskit-suite": "0.2.0-alpha.8"},
+        )
+
+    def test_prefixed_and_bare_alias_agree(self) -> None:
+        self.assertEqual(
+            release.normalize_version_map(
+                {"rust:rskit-suite": "0.2.0-alpha.8", "rskit-suite": "0.2.0-alpha.8"}
+            ),
+            {"rskit-suite": "0.2.0-alpha.8"},
+        )
+
+    def test_ignores_non_rskit_keys(self) -> None:
+        self.assertEqual(
+            release.normalize_version_map(
+                {"rust:rskit-suite": "0.2.0-alpha.8", "rust:tokio": "1.0.0"}
+            ),
+            {"rskit-suite": "0.2.0-alpha.8"},
+        )
+
+    def test_conflicting_versions_raise(self) -> None:
+        with self.assertRaises(ToolError):
+            release.normalize_version_map(
+                {"rust:rskit-suite": "0.2.0-alpha.8", "rskit-suite": "0.2.0-alpha.7"}
+            )
+
+    def test_normalized_map_syncs_prefixed_toven_keys(self) -> None:
+        """End-to-end: a `rust:`-prefixed Toven map rewrites bare README pins."""
+
+        text = 'rskit-suite = "0.2.0-alpha.7"\n'
+        versions = release.normalize_version_map({"rust:rskit-suite": "0.2.0-alpha.8"})
+        out, changed = release.set_readme_dependency_versions(text, versions)
+        self.assertTrue(changed)
+        self.assertEqual(out, 'rskit-suite = "0.2.0-alpha.8"\n')
+
+
 if __name__ == "__main__":
     unittest.main()
