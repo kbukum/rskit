@@ -29,7 +29,7 @@ importing an adapter crate has no side effects.
 
 ```toml
 [dependencies]
-rskit-storage = "0.2.0-alpha.4"
+rskit-storage = "0.2.0-alpha.5"
 ```
 
 ```rust

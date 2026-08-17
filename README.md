@@ -60,7 +60,7 @@ CI runs the full workspace; on pull requests the `changes` job publishes an `aff
 ```toml
 # Facade — always-on foundation modules plus opt-in features/adapters
 [dependencies]
-rskit-suite = "0.2.0-alpha.7"
+rskit-suite = "0.2.0-alpha.8"
 tokio = { version = "1", features = ["full"] }
 ```
 
@@ -68,7 +68,7 @@ Enable optional modules through facade features:
 
 ```toml
 [dependencies]
-rskit-suite = { version = "0.2.0-alpha.7", features = ["server", "cli", "storage-s3"] }
+rskit-suite = { version = "0.2.0-alpha.8", features = ["server", "cli", "storage-s3"] }
 ```
 
 Or pick only what you need:

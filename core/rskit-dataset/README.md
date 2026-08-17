@@ -22,7 +22,7 @@ Streaming dataset collection framework: one generic collection engine drives bot
 
 ```toml
 [dependencies]
-rskit-dataset = "0.2.0-alpha.4"
+rskit-dataset = "0.2.0-alpha.5"
 ```
 
 ```rust
