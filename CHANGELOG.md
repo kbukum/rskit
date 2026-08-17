@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [v0.2.0-alpha.8] - 2026-08-16
+
 ### Added
 
 - Add a protocol-neutral RFC 2822 / 5322 date-time codec to `rskit-util`'s `time` module (`parse_rfc2822`, `parse_rfc2822_datetime`, `format_rfc2822`, `format_rfc2822_datetime`), built on std-only integer arithmetic over the existing `civil` core. Parsing accepts the canonical `Wdy, DD Mon YYYY HH:MM:SS ±ZZZZ` form and RFC 2822's obsolete variants — an optional day-of-week (validated against the date when present), optional seconds, numeric `±HHMM` and named zones (`UT`/`GMT`, `EST`/`EDT`, `CST`/`CDT`, `MST`/`MDT`, `PST`/`PDT`, and single-letter military zones as `-0000` except the excluded `J`), and two/three-digit year expansion — normalizing every instant to UTC; formatting always emits the canonical numeric `+0000` zone. This is the reusable owner of the internet-message date format (email headers, HTTP `Date`/`Retry-After`, log lines) alongside the RFC 3339 sibling.
@@ -204,7 +206,8 @@ Initial alpha release of rskit, a Rust infrastructure toolkit for building servi
 
 This is an **alpha preview** intended for early evaluation. APIs may change before the first stable release, especially while rskit is still aligning its foundational crates and adapter boundaries.
 
-[Unreleased]: https://github.com/kbukum/rskit/compare/v0.2.0-alpha.7...HEAD
+[Unreleased]: https://github.com/kbukum/rskit/compare/v0.2.0-alpha.8...HEAD
+[v0.2.0-alpha.8]: https://github.com/kbukum/rskit/compare/v0.2.0-alpha.7...v0.2.0-alpha.8
 [v0.2.0-alpha.7]: https://github.com/kbukum/rskit/compare/v0.2.0-alpha.6...v0.2.0-alpha.7
 [v0.2.0-alpha.6]: https://github.com/kbukum/rskit/compare/v0.2.0-alpha.5...v0.2.0-alpha.6
 [v0.2.0-alpha.5]: https://github.com/kbukum/rskit/compare/v0.2.0-alpha.4...v0.2.0-alpha.5
