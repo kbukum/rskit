@@ -269,7 +269,11 @@ release-coverage:
 
 ## Phase 1 — bump: write per-crate manifest version bumps + dependency floors into
 ## the working tree and stage them, WITHOUT committing (stage-only is the default;
-## `--yes` confirms the mutation). Run it on a release branch you created; you then
+## `--yes` confirms the mutation). Run it on a CLEAN `main`: the bump gate rejects
+## an uncommitted/staged tree, and the prerelease channel is resolved from the
+## current branch (`branch_channels`, only `main` maps to `alpha`), so bumping on
+## a `release/*` branch would finalize the alpha train to a stable version. Bump on
+## main, then rotate the CHANGELOG and cut the release branch carrying both; you
 ## commit and open the PR yourself. Toven never creates the branch, the commit, or
 ## the PR, and never tags/pushes/publishes here. Change-aware: only crates with a
 ## real diff since baseline bump, plus the dependency cascade; the configured

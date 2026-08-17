@@ -15,13 +15,14 @@ make release-status
 make check && make deny && make release-readiness && make release-coverage && make publish-dry-run
 
 # 2. Phase 1 — Bump: land the version bump + CHANGELOG through a reviewed PR.
-#    Run `make release-bump` while still on `main`: the prerelease channel is
-#    resolved from the *current* branch via `branch_channels` (only `main` maps
-#    to `alpha`), so bumping on a `release/*` branch would finalize the alpha
-#    train to a stable version. Bump on `main` (stage-only, no commit), then cut
-#    the branch carrying the staged change.
-#    rotate CHANGELOG.md: [Unreleased] -> [vX.Y.Z] - YYYY-MM-DD, add a fresh empty [Unreleased] (step 2)
-make release-bump                         # on main: stages manifest bumps + floors + README pins (no commit)
+#    Run `make release-bump` on a CLEAN `main`: the bump gate rejects any
+#    uncommitted/staged change, and the prerelease channel is resolved from the
+#    *current* branch via `branch_channels` (only `main` maps to `alpha`), so
+#    bumping on a `release/*` branch would finalize the alpha train to a stable
+#    version. Bump first (stage-only, no commit), THEN rotate the CHANGELOG, then
+#    cut the branch carrying both.
+make release-bump                         # on clean main: stages manifest bumps + floors + README pins (no commit)
+#    now rotate CHANGELOG.md: [Unreleased] -> [vX.Y.Z] - YYYY-MM-DD, add a fresh empty [Unreleased] (step 2)
 git switch -c release/vX.Y.Z              # carries the staged bump + CHANGELOG onto the release branch
 git add -A && git commit -S -m "chore(release): vX.Y.Z"
 git push -u origin release/vX.Y.Z && gh pr create --fill
@@ -52,8 +53,11 @@ If anything fails partway through, **do not** delete or move a tag or republish 
   and ensure `git`, `gh`, `cargo`, `cargo-nextest`, `cargo-deny`, `cargo-audit`, `cargo-llvm-cov`,
   `cargo-cyclonedx`, and `cosign` are on your `$PATH`.
 - [Toven](https://github.com/kbukum/toven) drives the release through three separable phases —
-  **bump**, **tag**, and **publish**. It owns the version bump, the release commit, signed tagging,
-  the crates.io publication, SBOM generation, and the readiness gate. Install the pinned binary
+  **bump**, **tag**, and **publish**. It computes and stages the version bump, verifies the
+  maintainer's umbrella tag, publishes to crates.io, generates the SBOM, and runs the readiness
+  gate. It is **stage-only** for the bump and never creates the release commit or the tag — under
+  `entrypoint = "maintainer"` / `push_branch = false` you create the release commit and cut the
+  signed umbrella tag by hand. Install the pinned binary
   (`curl … scripts/install.sh | sh` from the toven repo, or the `kbukum/toven` action in CI) so
   `toven` is on your `$PATH`; the `make release-*` targets delegate to it. cargo
   (deny/audit/cyclonedx/publish) must still be installed because Toven shells out to it.
@@ -74,7 +78,7 @@ There is intentionally no root `Cargo.toml`.
 
 ```mermaid
 flowchart LR
-    A["Preview<br/>make release-plan / release-status"] --> B["Phase 1 — Bump<br/>rotate CHANGELOG + make release-bump on main<br/>then cut release/vX.Y.Z carrying the staged change"]
+    A["Preview<br/>make release-plan / release-status"] --> B["Phase 1 — Bump<br/>make release-bump on clean main, then rotate CHANGELOG<br/>then cut release/vX.Y.Z carrying both"]
     B --> C["Open PR → CI on the bumped commit → review → merge into main"]
     C --> D["Phase 2 — Tag<br/>maintainer cuts + verifies the signed umbrella tag;<br/>make release-tag confirms it exists at HEAD"]
     D --> E["Phase 3 — Publish<br/>publish the umbrella GitHub Release<br/>→ CI runs toven release publish"]
@@ -139,11 +143,12 @@ The release runs as three ordered phases. `main` is protected, so the version bu
 
 ### Phase 1 — Bump (reviewed PR into `main`)
 
-**You** create the release branch, commit, and open the PR — Toven only computes and *writes* the version bumps into the working tree, it never creates the branch, the commit, or the PR. Run `make release-bump` **while still on `main`**: the prerelease channel is resolved from the *current* git branch via `branch_channels` (exact-match, and only `main` maps to `alpha`), and `toven release bump` takes no channel override. Bumping on a `release/*` branch would find no mapping and finalize the alpha train to a stable version — so bump on `main` (stage-only, so protected `main` is never committed to), then cut the branch carrying the staged change:
+**You** create the release branch, commit, and open the PR — Toven only computes and *writes* the version bumps into the working tree, it never creates the branch, the commit, or the PR. Run `make release-bump` on a **clean `main`**: the bump gate rejects any uncommitted or staged working-tree change before it mutates, and the prerelease channel is resolved from the *current* git branch via `branch_channels` (exact-match, and only `main` maps to `alpha`) with no `--pre` override on `toven release bump`. Bumping on a `release/*` branch would find no mapping and finalize the alpha train to a stable version. So bump on clean `main` (stage-only, so protected `main` is never committed to), **then** rotate the CHANGELOG, then cut the branch carrying both:
 
 ```sh
-# on main, up to date and clean; rotate CHANGELOG.md per step 2 first
+# on main, up to date and clean:
 make release-bump                    # toven release bump --yes: stages per-crate version bumps + floors + README pins, NO commit
+# now rotate CHANGELOG.md per step 2 (the bump gate needs a clean tree, so rotate AFTER the bump)
 git switch -c release/vX.Y.Z         # carries the staged bump + CHANGELOG onto the branch you create
 git add -A
 git commit -S -m "chore(release): vX.Y.Z"
