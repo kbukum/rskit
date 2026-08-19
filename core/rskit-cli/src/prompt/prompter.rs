@@ -925,11 +925,14 @@ mod tests {
 
     #[test]
     fn from_env_builds_a_prompter_and_reports_its_mode() {
-        // Under a test harness neither stream is a TTY,
-        // so the environment prompter is non-interactive;
+        // The environment prompter's mode must match what the process streams imply. Deriving the
+        // expectation keeps the test stable whether or not the suite runs attached to a terminal;
         // building it also exercises terminal selection over the process streams.
+        use std::io::{self, IsTerminal};
+        let expected =
+            PromptMode::from_stdio(io::stdin().is_terminal(), io::stderr().is_terminal());
         let prompter = Prompter::from_env(ColorChoice::Never);
-        assert_eq!(prompter.mode(), PromptMode::NonInteractive);
+        assert_eq!(prompter.mode(), expected);
     }
 
     #[test]
