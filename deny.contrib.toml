@@ -60,11 +60,13 @@ skip = [
     { name = "http", reason = "AWS SDK still carries http 0.2 while hyper/reqwest/tonic use http 1.x" },
     { name = "http-body", reason = "AWS SDK still carries http-body 0.4 while hyper/reqwest/tonic use http-body 1.x" },
     { name = "nom", reason = "AMQP protocol and ASN.1 parser stacks depend on different stable nom lines" },
+    { name = "num-bigint", reason = "redis 1.6 uses num-bigint 0.5 while AWS protocol-test and x509-parser stacks still use num-bigint 0.4" },
     { name = "rand", reason = "async-nats/nkeys use rand 0.8, shared resilience/telemetry paths use rand 0.9, and Google/RabbitMQ transitive paths use rand 0.10" },
     { name = "rand_chacha", reason = "async-nats/nkeys use rand_chacha 0.3 through rand 0.8 while shared rand 0.9 paths use rand_chacha 0.9" },
     { name = "rand_core", reason = "adapter crypto stacks, rand 0.8/0.9 consumers, and Google/RabbitMQ rand 0.10 paths use different rand_core lines" },
     { name = "sha1", reason = "AWS/AMQP/PKI transitive stacks and current crypto crates use different stable sha1 lines" },
     { name = "sha2", reason = "AWS/AMQP/PKI transitive stacks and direct workspace code use different stable sha2 lines" },
+    { name = "syn", reason = "proc-macro crates are mid-migration from syn 2 to syn 3; async-trait and other derives pull syn 3 while the wider ecosystem still uses syn 2" },
     { name = "spin", reason = "ring and PKI parser stacks depend on different stable spin lines" },
 ]
 
