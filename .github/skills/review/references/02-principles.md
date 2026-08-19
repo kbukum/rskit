@@ -33,7 +33,7 @@ No broad `Any` / `Box<dyn Any>` / unchecked escape hatches in public surfaces. A
 
 ## Keep code current
 
-Current idioms and standards, not old habits (also enforced in pass `01`). Flag patterns superseded by edition 2024 / msrv 1.91 idioms.
+Current idioms and standards, not old habits (also enforced in pass `01`). Flag patterns superseded by edition 2024 / msrv 1.97 idioms.
 
 ## AI / model features (only if the change touches them)
 

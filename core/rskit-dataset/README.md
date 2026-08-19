@@ -2,7 +2,7 @@
 
 Streaming dataset collection framework: one generic collection engine drives both `DataItem` blobs and `DatasetRecord` rows through streaming sources, transforms, per-item sinks, and schema validation.
 
-[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/rskit-dataset.svg)](https://crates.io/crates/rskit-dataset) [![docs.rs](https://docs.rs/rskit-dataset/badge.svg)](https://docs.rs/rskit-dataset) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/kbukum/rskit/blob/main/LICENSE) [![MSRV: 1.91](https://img.shields.io/badge/MSRV-1.91-orange.svg)](https://github.com/kbukum/rskit/blob/main/core/Cargo.toml)
+[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/rskit-dataset.svg)](https://crates.io/crates/rskit-dataset) [![docs.rs](https://docs.rs/rskit-dataset/badge.svg)](https://docs.rs/rskit-dataset) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/kbukum/rskit/blob/main/LICENSE) [![MSRV: 1.97](https://img.shields.io/badge/MSRV-1.97-orange.svg)](https://github.com/kbukum/rskit/blob/main/core/Cargo.toml)
 
 ## Features
 

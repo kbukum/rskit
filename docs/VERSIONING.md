@@ -52,7 +52,7 @@ Each split workspace declares shared package metadata once — but **not** the v
 ```toml
 [workspace.package]
 edition = "2024"
-rust-version = "1.91"
+rust-version = "1.97"
 ```
 
 Member crates carry their own version and inherit the rest:

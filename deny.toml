@@ -54,6 +54,7 @@ skip = [
     { name = "hashbrown", reason = "dashmap/governor, jsonschema/referencing, and indexmap depend on different stable hashbrown lines" },
     { name = "openssl-probe", reason = "git2 and rustls-native-certs depend on different openssl-probe lines" },
     { name = "rand_core", reason = "current stable crypto crates use rand_core 0.6 while rand 0.9 consumers use rand_core 0.9" },
+    { name = "syn", reason = "proc-macro crates are mid-migration from syn 2 to syn 3; async-trait and other derives pull syn 3 while the wider ecosystem still uses syn 2" },
 ]
 
 # L7 dependency direction: rskit-ai is the only shared AI/ML vocabulary crate.

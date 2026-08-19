@@ -2,7 +2,7 @@
 
 JWT signing/verification, OIDC validation, password hashing, API-key helpers, and request-context auth extractors.
 
-[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/rskit-auth.svg)](https://crates.io/crates/rskit-auth) [![docs.rs](https://docs.rs/rskit-auth/badge.svg)](https://docs.rs/rskit-auth) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/kbukum/rskit/blob/main/LICENSE) [![MSRV: 1.91](https://img.shields.io/badge/MSRV-1.91-orange.svg)](https://github.com/kbukum/rskit/blob/main/core/Cargo.toml)
+[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/rskit-auth.svg)](https://crates.io/crates/rskit-auth) [![docs.rs](https://docs.rs/rskit-auth/badge.svg)](https://docs.rs/rskit-auth) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/kbukum/rskit/blob/main/LICENSE) [![MSRV: 1.97](https://img.shields.io/badge/MSRV-1.97-orange.svg)](https://github.com/kbukum/rskit/blob/main/core/Cargo.toml)
 
 ## Features
 

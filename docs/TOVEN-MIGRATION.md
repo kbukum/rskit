@@ -33,7 +33,7 @@ These are directly expressible with the current Toven task surface; the migratio
 | `rskit_tool.py ci lint --scope all --feature-mode all` | `toven lint -- --all-targets --all-features -- -D warnings` |
 | `rskit_tool.py ci test --scope changed --changed-base B --feature-mode all --profile ci` | `toven test --base B --merge-base -- --profile ci --all-features` |
 | `rskit_tool.py ci test --scope all --feature-mode default --profile ci` | `toven test -- --profile ci` |
-| `rskit_tool.py ci msrv --scope all --feature-mode all` | `toven check -- --all-features` (run inside the 1.91-toolchain job; see gap 3) |
+| `rskit_tool.py ci msrv --scope all --feature-mode all` | `toven check -- --all-features` (run inside the 1.97-toolchain job; see gap 3) |
 | `rskit_tool.py coverage --mode coverage --changed --changed-base B --line-threshold 70` | `toven coverage --base B --merge-base --line 70` |
 | `rskit_tool.py coverage --mode coverage --clean full --line-threshold 90` | `toven coverage --line 90` (cache/artifact `--clean` has no Toven analog; see gap 5) |
 
@@ -63,9 +63,9 @@ rskit validates each gate under multiple feature sets (`default` and `--all-feat
 
 ### 3. Per-task toolchain selection (MSRV) — low priority
 
-rskit's MSRV job compiles on Rust 1.91. This works under Toven by activating 1.91 in the job and letting Toven use the ambient `cargo`, but there is no Toven-native "run task X on toolchain 1.91" knob.
+rskit's MSRV job compiles on Rust 1.97. This works under Toven by activating 1.97 in the job and letting Toven use the ambient `cargo`, but there is no Toven-native "run task X on toolchain 1.97" knob.
 
-**Requested:** optional per-task/per-run toolchain pin (e.g. `toolchain = "1.91"` or `--toolchain 1.91`).
+**Requested:** optional per-task/per-run toolchain pin (e.g. `toolchain = "1.97"` or `--toolchain 1.97`).
 
 ### 4. Per-workspace task argv / config overrides (cargo-deny) — medium priority
 

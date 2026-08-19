@@ -46,6 +46,7 @@ skip = [
     # not silently accumulate adapter-only duplicate families.
     { name = "getrandom", reason = "governor/rand 0.9 and tempfile/uuid currently use different maintained getrandom lines" },
     { name = "hashbrown", reason = "dashmap/governor, indexmap, and tower depend on different stable hashbrown lines" },
+    { name = "syn", reason = "proc-macro crates are mid-migration from syn 2 to syn 3; async-trait and other derives pull syn 3 while the wider ecosystem still uses syn 2" },
 ]
 
 # ---------------------------------------------------------------------------

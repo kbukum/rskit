@@ -2,7 +2,7 @@
 
 Production-ready structured logging built on the [tracing](https://docs.rs/tracing) ecosystem.
 
-[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/rskit-logging.svg)](https://crates.io/crates/rskit-logging) [![docs.rs](https://docs.rs/rskit-logging/badge.svg)](https://docs.rs/rskit-logging) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/kbukum/rskit/blob/main/LICENSE) [![MSRV: 1.91](https://img.shields.io/badge/MSRV-1.91-orange.svg)](https://github.com/kbukum/rskit/blob/main/core/Cargo.toml)
+[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/rskit-logging.svg)](https://crates.io/crates/rskit-logging) [![docs.rs](https://docs.rs/rskit-logging/badge.svg)](https://docs.rs/rskit-logging) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/kbukum/rskit/blob/main/LICENSE) [![MSRV: 1.97](https://img.shields.io/badge/MSRV-1.97-orange.svg)](https://github.com/kbukum/rskit/blob/main/core/Cargo.toml)
 
 ## Features
 

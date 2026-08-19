@@ -17,7 +17,7 @@ pub struct VersionInfo {
     pub git_branch: String,
     /// UTC build timestamp in RFC 3339 format, or empty if unavailable.
     pub build_time: String,
-    /// Rust compiler version string (e.g. `"rustc 1.91.0 ..."`).
+    /// Rust compiler version string (e.g. `"rustc 1.97.0 ..."`).
     pub rust_version: String,
     /// `true` when `version` is not `"dev"` and does not contain `"dirty"`.
     pub is_release: bool,

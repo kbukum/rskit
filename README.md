@@ -4,7 +4,7 @@
 [![Crates.io](https://img.shields.io/crates/v/rskit-suite.svg?include_prereleases)](https://crates.io/crates/rskit-suite)
 [![docs.rs](https://img.shields.io/docsrs/rskit-suite)](https://docs.rs/rskit-suite)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![MSRV: 1.91](https://img.shields.io/badge/MSRV-1.91-orange.svg)](core/Cargo.toml)
+[![MSRV: 1.97](https://img.shields.io/badge/MSRV-1.97-orange.svg)](core/Cargo.toml)
 
 **A production-grade Rust toolkit for building scalable, resilient services.** Structured errors, layered config, OpenTelemetry observability, typestate lifecycle, tower-based resilience, async pipelines, worker pools, security policy, and tonic gRPC — composable building blocks built on the standard Rust async ecosystem.
 
@@ -80,7 +80,7 @@ rskit-resilience = "0.2.0-alpha.3"
 rskit-worker     = "0.2.0-alpha.4"
 ```
 
-Requires **Rust 1.91+** (declared by workspace `rust-version`). The pinned development and CI toolchain in `rust-toolchain.toml` may be newer.
+Requires **Rust 1.97+** (declared by workspace `rust-version`). The pinned development and CI toolchain in `rust-toolchain.toml` may be newer.
 See [`docs/VERSIONING.md`](docs/VERSIONING.md) for the split-workspace versioning policy.
 
 ## Quickstart

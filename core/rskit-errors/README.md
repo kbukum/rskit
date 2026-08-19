@@ -2,7 +2,7 @@
 
 `AppError` + `ErrorCode` enum + `AppResult<T>` with RFC 9457 problem details and lightweight HTTP status metadata.
 
-[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/rskit-errors.svg)](https://crates.io/crates/rskit-errors) [![docs.rs](https://docs.rs/rskit-errors/badge.svg)](https://docs.rs/rskit-errors) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/kbukum/rskit/blob/main/LICENSE) [![MSRV: 1.91](https://img.shields.io/badge/MSRV-1.91-orange.svg)](https://github.com/kbukum/rskit/blob/main/core/Cargo.toml)
+[![CI](https://github.com/kbukum/rskit/actions/workflows/ci.yml/badge.svg)](https://github.com/kbukum/rskit/actions/workflows/ci.yml) [![crates.io](https://img.shields.io/crates/v/rskit-errors.svg)](https://crates.io/crates/rskit-errors) [![docs.rs](https://docs.rs/rskit-errors/badge.svg)](https://docs.rs/rskit-errors) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/kbukum/rskit/blob/main/LICENSE) [![MSRV: 1.97](https://img.shields.io/badge/MSRV-1.97-orange.svg)](https://github.com/kbukum/rskit/blob/main/core/Cargo.toml)
 
 ## Features
 

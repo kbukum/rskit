@@ -57,7 +57,7 @@ Be respectful, constructive, and patient. We follow the [Contributor Covenant v2
 
 ## Development Setup
 
-**Minimum Rust version:** 1.91 (declared by workspace `rust-version`).
+**Minimum Rust version:** 1.97 (declared by workspace `rust-version`).
 The repository pins a newer development toolchain in `rust-toolchain.toml`.
 
 ```sh

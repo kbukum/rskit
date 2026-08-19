@@ -11,9 +11,9 @@ Catch debt and drift that compiles cleanly but should not land. None of this is 
 - **Root-cause over patches.** Pre-stable: no compatibility shims. Prefer a clean redesign over a symptom patch; flag shims as should-fix with a redesign suggestion.
 - **Dead / useless code.** No-caller code, speculative generality (one impl, no near-term second), commented-out blocks, leftover scaffolding. Remove.
 - **Maintainability.** Obvious to the next reader without the author? Do names match rskit vocabulary? No hidden coupling across crates? Prefer focused, well-named modules/files over piling logic into one large file.
-- **Outdated patterns.** Edition 2024 / msrv 1.91 is the floor — flag patterns superseded by current idioms (manual impls where `derive` suffices, needless clones clippy-pedantic would catch).
+- **Outdated patterns.** Edition 2024 / msrv 1.97 is the floor — flag patterns superseded by current idioms (manual impls where `derive` suffices, needless clones clippy-pedantic would catch).
 - **Style gates.**
-  - `cargo fmt` (edition 2024, max_width 100) and clippy clean (`-D warnings`, msrv 1.91).
+  - `cargo fmt` (edition 2024, max_width 100) and clippy clean (`-D warnings`, msrv 1.97).
   - `#![warn(missing_docs)]` satisfied — all public items documented.
   - `#[must_use]` on `with_*` builders; `#[non_exhaustive]` on public enums that may grow.
   - `parking_lot::Mutex`, never `std::sync::Mutex`.
