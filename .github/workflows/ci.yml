@@ -114,7 +114,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772  # stable
         with:
-          toolchain: "1.95"
+          toolchain: "1.97"
           components: rustfmt
       - run: |
           cd core && cargo fmt --all --check
@@ -135,7 +135,7 @@ jobs:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772  # stable
         with:
-          toolchain: "1.95"
+          toolchain: "1.97"
           components: clippy
       - name: Install mold linker
         run: sudo apt-get install -y mold
@@ -163,7 +163,7 @@ jobs:
   # Tests — behavioral tests on the pinned development toolchain
   # ---------------------------------------------------------------------------
   test:
-    name: Test (${{ matrix.os }} / 1.95 / ${{ matrix.feature-mode }})
+    name: Test (${{ matrix.os }} / 1.97 / ${{ matrix.feature-mode }})
     if: needs.changes.outputs.rust-code == 'true'
     needs: changes
     runs-on: ${{ matrix.os }}
@@ -183,13 +183,13 @@ jobs:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772  # stable
         with:
-          toolchain: "1.95"
+          toolchain: "1.97"
       - name: Install mold linker (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get install -y mold
       - uses: Swatinem/rust-cache@258712b0b7b1ddf8bddc9fc3b0faca682b2736c3  # v2.7.8
         with:
-          key: ${{ matrix.os }}-1.95-${{ matrix.feature-mode }}
+          key: ${{ matrix.os }}-1.97-${{ matrix.feature-mode }}
           workspaces: |
             core
             contrib
@@ -217,7 +217,7 @@ jobs:
   # duplicating the full behavioral test matrix.
   # ---------------------------------------------------------------------------
   msrv:
-    name: MSRV (ubuntu-latest / 1.91 / ${{ matrix.feature-mode }})
+    name: MSRV (ubuntu-latest / 1.97 / ${{ matrix.feature-mode }})
     if: needs.changes.outputs.rust-code == 'true'
     needs: changes
     runs-on: ubuntu-latest
@@ -231,12 +231,12 @@ jobs:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772  # stable
         with:
-          toolchain: "1.91"
+          toolchain: "1.97"
       - name: Install mold linker
         run: sudo apt-get install -y mold
       - uses: Swatinem/rust-cache@258712b0b7b1ddf8bddc9fc3b0faca682b2736c3  # v2.7.8
         with:
-          key: ubuntu-latest-1.91-msrv-${{ matrix.feature-mode }}
+          key: ubuntu-latest-1.97-msrv-${{ matrix.feature-mode }}
           workspaces: |
             core
             contrib
@@ -269,7 +269,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772  # stable
         with:
-          toolchain: "1.95"
+          toolchain: "1.97"
       - name: Install mold linker
         run: sudo apt-get install -y mold
       - uses: Swatinem/rust-cache@258712b0b7b1ddf8bddc9fc3b0faca682b2736c3  # v2.7.8
@@ -299,7 +299,7 @@ jobs:
         run: python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else "Python 3.11+ is required")'
       - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772  # stable
         with:
-          toolchain: "1.95"
+          toolchain: "1.97"
           components: llvm-tools-preview
       - name: Install mold linker
         run: sudo apt-get install -y mold
@@ -346,7 +346,7 @@ jobs:
         run: python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else "Python 3.11+ is required")'
       - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772  # stable
         with:
-          toolchain: "1.95"
+          toolchain: "1.97"
       - name: Install nightly for rustdoc JSON
         run: rustup toolchain install nightly --profile minimal
       - name: Install cargo-public-api
@@ -378,7 +378,7 @@ jobs:
         run: python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else "Python 3.11+ is required")'
       - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772  # stable
         with:
-          toolchain: "1.95"
+          toolchain: "1.97"
       - uses: taiki-e/install-action@7f4eb899022d8fe70b20c4f3de697aa85c309026  # v2
         with:
           tool: cargo-deny@0.20.2,cargo-audit

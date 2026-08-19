@@ -24,7 +24,7 @@ Standing, re-runnable development skills encoding this baseline live in [`.githu
 ## Build, Test, and Lint
 
 Requires:
-Rust 1.91+ (declared by workspace `rust-version`; development toolchain pinned via `rust-toolchain.toml`).
+Rust 1.97+ (declared by workspace `rust-version`; development toolchain pinned via `rust-toolchain.toml`).
 
 ```bash
 make check              # Full validation: fmt-check + lint + build + test
@@ -55,7 +55,7 @@ When adding a new foundation crate: create it under `core/rskit-<name>/`, add it
 
 ## Code Style
 
-- `cargo fmt` (`rustfmt.toml`: edition 2024, max_width 100) + `cargo clippy` (`clippy.toml`: msrv 1.91)
+- `cargo fmt` (`rustfmt.toml`: edition 2024, max_width 100) + `cargo clippy` (`clippy.toml`: msrv 1.97)
 - `lib.rs`/`mod.rs` are **declare-only** (submodule declarations + re-exports; no logic or private items) — split crate logic into concern-named modules. Enforced by the `ast-grep` rule `scripts/sg-rules/declare-only-aggregator.yml` (`make structure`). Reorg is criteria-driven, never automatic — a prompt to look, not a mandate to split. Two signals: (1) a single non-test file grows past roughly **300–400 lines of real code** (code only — exclude test code including `#[cfg(test)]`/`#[test]`, comments, and blanks; a soft average) **and** mixes several distinct concerns, so a reader must scan it all; length alone is never the verdict, concern-mixing is. (2) A single module/crate accumulates **more than ~10 non-test files** (excluding `test_support`/`tests`) that fall into **2–3+ separable concern groups** which are not tightly coupled — lift each cohesive group into its own concern-named submodule folder (nested `mod.rs`), so a reader lands in the right file *and folder* from the layout alone. Keep it criteria-driven — only where the groups are genuinely separable and it improves maintainability; a cohesive single-concern file/module is fine at any size. The declare-only gate is enforced; the reorg triggers are advisory (reviewer judgment).
 - `#![warn(missing_docs)]` on all crates
 - `#[must_use]` on all `with_*` builder methods

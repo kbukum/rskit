@@ -59,7 +59,7 @@ members = [
 [workspace.package]
 edition = "2024"
 license = "MIT"
-rust-version = "1.91"
+rust-version = "1.97"
 authors = ["kbukum contributors"]
 repository = "https://github.com/kbukum/rskit"
 homepage = "https://github.com/kbukum/rskit"
