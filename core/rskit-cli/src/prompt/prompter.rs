@@ -925,9 +925,7 @@ mod tests {
 
     #[test]
     fn from_env_builds_a_prompter_and_reports_its_mode() {
-        // The environment prompter's mode must match what the process streams imply. Deriving the
-        // expectation keeps the test stable whether or not the suite runs attached to a terminal;
-        // building it also exercises terminal selection over the process streams.
+        // The environment prompter's mode must match what the process streams imply. Deriving the expectation keeps the test stable whether or not the suite runs attached to a terminal; building it also exercises terminal selection over the process streams.
         use std::io::{self, IsTerminal};
         let expected =
             PromptMode::from_stdio(io::stdin().is_terminal(), io::stderr().is_terminal());

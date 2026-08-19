@@ -73,9 +73,7 @@ mod tests {
 
     #[test]
     fn from_env_resolves_against_the_process_stdio() {
-        // `from_env` must agree with `from_stdio` fed the process's own TTY statuses. Asserting a
-        // fixed value would be environment-dependent (running the suite from an interactive
-        // terminal leaves stdin/stderr as TTYs), so derive the expectation from the same streams.
+        // `from_env` must agree with `from_stdio` fed the process's own TTY statuses. Asserting a fixed value would be environment-dependent (running the suite from an interactive terminal leaves stdin/stderr as TTYs), so derive the expectation from the same streams.
         use std::io::{self, IsTerminal};
         let expected =
             PromptMode::from_stdio(io::stdin().is_terminal(), io::stderr().is_terminal());
