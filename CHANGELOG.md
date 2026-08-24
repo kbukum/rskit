@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Add an in-process HTTP server test harness to `rskit-testutil` (`FakeHttpServer`, `FakeResponse`, `CapturedRequest`). `FakeHttpServer::serve_once` binds an ephemeral loopback port, accepts a single connection, captures the raw request (Content-Length-aware, resilient to a header terminator split across reads), and replies with a programmed status/headers/body; `captured_request` returns the recorded request for assertions, with typed helpers (`request_line`, `header`, `contains`). It lets HTTP-client, discovery, and adapter tests exercise real request/response wire behavior without a network dependency or a per-crate hand-rolled listener — `rskit-discovery`'s consul tests now use it in place of a bespoke TCP server.
+
 ## [v0.2.0-alpha.8] - 2026-08-16
 
 ### Added
